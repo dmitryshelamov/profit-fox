@@ -21,7 +21,7 @@ public class MigrationTests
 
     // Jobs created before the column existed must read as never interrupted.
     [Test]
-    public async Task Import_jobs_count_interruptions_from_zero()
+    public async Task Import_jobs_count_stalled_restarts_from_zero()
     {
         await using NpgsqlDataSource dataSource = await MarketDataDatabase.CreateAsync();
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
@@ -30,7 +30,7 @@ public class MigrationTests
             """
             SELECT data_type, is_nullable, column_default
             FROM information_schema.columns
-            WHERE table_name = 'candle_import_jobs' AND column_name = 'interruptions_without_progress'
+            WHERE table_name = 'candle_import_jobs' AND column_name = 'stalled_restarts'
             """);
 
         column.ShouldBe(("integer", "NO", "0"));

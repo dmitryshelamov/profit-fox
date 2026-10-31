@@ -39,14 +39,14 @@ public class RetryCandleImportTests
                 Error = "Bybit request failed after 5 retries: HTTP 503",
                 StartedAt = Started,
                 FinishedAt = Started.AddMinutes(5),
-                InterruptionsWithoutProgress = 2
+                StalledRestarts = 2
             });
 
         await RetryAsync(failed.Id);
 
         await _jobs.Received(1)
             .UpdateAsync(
-                failed with { Status = CandleImportStatus.Pending, Error = null, FinishedAt = null, InterruptionsWithoutProgress = 0 },
+                failed with { Status = CandleImportStatus.Pending, Error = null, FinishedAt = null, StalledRestarts = 0 },
                 Arg.Any<CancellationToken>());
         await _queue.Received(1).EnqueueAsync(failed.Id, Arg.Any<CancellationToken>());
     }

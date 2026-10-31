@@ -13,9 +13,9 @@ public sealed class RequeueInterruptedImportsCommandHandler(ICandleImportJobRepo
     public const string InterruptedByRestart = "Interrupted by service restart.";
 
     // A job that keeps stopping the service before it stores anything would otherwise restart it forever.
-    private const int MaxInterruptionsWithoutProgress = 3;
+    private const int MaxStalledRestarts = 3;
 
-    /// <summary>Queues the jobs in the order they were created; a running job counts one more interruption.</summary>
+    /// <summary>Queues the jobs in the order they were created; a running job counts one more stalled restart.</summary>
     public async Task Handle(RequeueInterruptedImportsCommand request, CancellationToken cancellationToken)
     {
         foreach (CandleImportJob unfinished in await jobs.GetUnfinishedAsync(cancellationToken))
@@ -24,9 +24,9 @@ public sealed class RequeueInterruptedImportsCommandHandler(ICandleImportJobRepo
 
             if (job.Status == CandleImportStatus.Running)
             {
-                job = job with { Status = CandleImportStatus.Pending, InterruptionsWithoutProgress = job.InterruptionsWithoutProgress + 1 };
+                job = job with { Status = CandleImportStatus.Pending, StalledRestarts = job.StalledRestarts + 1 };
 
-                if (job.InterruptionsWithoutProgress == MaxInterruptionsWithoutProgress)
+                if (job.StalledRestarts == MaxStalledRestarts)
                 {
                     job = job with { Status = CandleImportStatus.Failed, Error = InterruptedByRestart, FinishedAt = time.GetUtcNow() };
                 }

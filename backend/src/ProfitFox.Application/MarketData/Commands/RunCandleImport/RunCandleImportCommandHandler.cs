@@ -19,7 +19,7 @@ public sealed class RunCandleImportCommandHandler(
 
     /// <summary>
     ///     Loads the closed candles of <c>[From, To)</c> that are not stored yet, page by page; saved pages survive a failure. While the
-    ///     exchange is unavailable, the job tries again after each pause; a stored candle starts the pauses and the interruptions over.
+    ///     exchange is unavailable, the job tries again after each pause; a stored candle starts the pauses and the stalled restarts over.
     /// </summary>
     public async Task Handle(RunCandleImportCommand request, CancellationToken cancellationToken)
     {
@@ -70,7 +70,7 @@ public sealed class RunCandleImportCommandHandler(
                     if (closed.Count > 0)
                     {
                         pauses = 0;
-                        job = job with { InterruptionsWithoutProgress = 0 };
+                        job = job with { StalledRestarts = 0 };
                     }
 
                     // The page is stored: its count must be saved even if a shutdown cancels the job meanwhile.

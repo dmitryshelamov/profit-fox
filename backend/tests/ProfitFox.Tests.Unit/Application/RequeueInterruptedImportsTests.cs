@@ -32,14 +32,14 @@ public class RequeueInterruptedImportsTests
 
     // Scenario "Перезапуск во время загрузки".
     [Test]
-    public async Task Running_job_is_queued_again_as_pending_with_one_more_interruption()
+    public async Task Running_job_is_queued_again_as_pending_with_one_more_stalled_restart()
     {
-        CandleImportJob running = Running(interruptionsWithoutProgress: 1);
+        CandleImportJob running = Running(stalledRestarts: 1);
         Unfinished(running);
 
         await RequeueAsync();
 
-        await _jobs.Received(1).UpdateAsync(running with { Status = CandleImportStatus.Pending, InterruptionsWithoutProgress = 2 }, Arg.Any<CancellationToken>());
+        await _jobs.Received(1).UpdateAsync(running with { Status = CandleImportStatus.Pending, StalledRestarts = 2 }, Arg.Any<CancellationToken>());
         QueuedJobs().ShouldBe([running.Id]);
     }
 
@@ -61,7 +61,7 @@ public class RequeueInterruptedImportsTests
     public async Task Jobs_are_queued_in_the_order_they_were_read()
     {
         CandleImportJob olderPending = CandleImportJobGenerator.Generate(CandleImportStatus.Pending);
-        CandleImportJob newerRunning = Running(interruptionsWithoutProgress: 0);
+        CandleImportJob newerRunning = Running(stalledRestarts: 0);
         Unfinished(olderPending, newerRunning);
 
         await RequeueAsync();
@@ -71,9 +71,9 @@ public class RequeueInterruptedImportsTests
 
     // Scenario "Задача без продвижения".
     [Test]
-    public async Task Third_interruption_without_progress_fails_the_job()
+    public async Task Third_stalled_restart_fails_the_job()
     {
-        CandleImportJob running = Running(interruptionsWithoutProgress: 2);
+        CandleImportJob running = Running(stalledRestarts: 2);
         Unfinished(running);
 
         await RequeueAsync();
@@ -85,19 +85,19 @@ public class RequeueInterruptedImportsTests
                     Status = CandleImportStatus.Failed,
                     Error = RequeueInterruptedImportsCommandHandler.InterruptedByRestart,
                     FinishedAt = Now,
-                    InterruptionsWithoutProgress = 3
+                    StalledRestarts = 3
                 },
                 Arg.Any<CancellationToken>());
         QueuedJobs().ShouldBeEmpty();
     }
 
-    private static CandleImportJob Running(int interruptionsWithoutProgress)
+    private static CandleImportJob Running(int stalledRestarts)
     {
         return CandleImportJobGenerator.Generate(CandleImportStatus.Running) with
         {
             StartedAt = Now.AddHours(-1),
             ImportedCandles = 10,
-            InterruptionsWithoutProgress = interruptionsWithoutProgress
+            StalledRestarts = stalledRestarts
         };
     }
 

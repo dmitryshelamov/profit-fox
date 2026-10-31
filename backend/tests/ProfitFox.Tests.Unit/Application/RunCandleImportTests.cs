@@ -273,25 +273,25 @@ public class RunCandleImportTests
 
     // Scenario "Задача с продвижением".
     [Test]
-    public async Task Stored_candle_clears_the_interruptions()
+    public async Task Stored_candle_clears_the_stalled_restarts()
     {
-        CandleImportJob job = PendingJob("2024-01-01T00:00:00Z", "2024-01-01T03:00:00Z", interruptionsWithoutProgress: 2);
+        CandleImportJob job = PendingJob("2024-01-01T00:00:00Z", "2024-01-01T03:00:00Z", stalledRestarts: 2);
         ServePages(job, job.From, job.To, () => Candles("2024-01-01T02:00:00Z"));
 
         await RunAsync(job);
 
-        SavedStates()[1].ShouldBe(job with { Status = CandleImportStatus.Running, ImportedCandles = 1, StartedAt = Now, InterruptionsWithoutProgress = 0 });
+        SavedStates()[1].ShouldBe(job with { Status = CandleImportStatus.Running, ImportedCandles = 1, StartedAt = Now, StalledRestarts = 0 });
     }
 
     [Test]
-    public async Task Page_without_a_stored_candle_keeps_the_interruptions()
+    public async Task Page_without_a_stored_candle_keeps_the_stalled_restarts()
     {
-        CandleImportJob job = PendingJob("2024-03-10T10:00:00Z", "2024-03-10T12:30:00Z", interruptionsWithoutProgress: 2);
+        CandleImportJob job = PendingJob("2024-03-10T10:00:00Z", "2024-03-10T12:30:00Z", stalledRestarts: 2);
         ServePages(job, job.From, job.To, () => Candles("2024-03-10T12:00:00Z"));
 
         await RunAsync(job);
 
-        SavedStates()[1].InterruptionsWithoutProgress.ShouldBe(2);
+        SavedStates()[1].StalledRestarts.ShouldBe(2);
     }
 
     [Test]
@@ -334,7 +334,7 @@ public class RunCandleImportTests
         await _jobs.Received().UpdateAsync(Arg.Is<CandleImportJob>(state => state!.ImportedCandles == 1), CancellationToken.None);
     }
 
-    private CandleImportJob PendingJob(string from, string to, int interruptionsWithoutProgress = 0)
+    private CandleImportJob PendingJob(string from, string to, int stalledRestarts = 0)
     {
         var job = new CandleImportJob(
             Guid.NewGuid(),
@@ -348,7 +348,7 @@ public class RunCandleImportTests
             Now,
             StartedAt: null,
             FinishedAt: null,
-            interruptionsWithoutProgress);
+            stalledRestarts);
         _jobs.GetAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
 
         return job;

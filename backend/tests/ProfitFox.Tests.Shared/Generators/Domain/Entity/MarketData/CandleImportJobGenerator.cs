@@ -12,7 +12,7 @@ public static class CandleImportJobGenerator
 {
     private static readonly Fixture Fixture = new Fixture();
 
-    /// <summary>A job with a non-empty period, no start or finish time and no interruptions; set those when the status needs them.</summary>
+    /// <summary>A job with a non-empty period, no start or finish time and no stalled restarts; set those when the status needs them.</summary>
     public static CandleImportJob Generate(CandleImportStatus status)
     {
         DateTimeOffset from = DateTimeOffsetGenerator.Generate();
@@ -29,6 +29,6 @@ public static class CandleImportJobGenerator
             DateTimeOffsetGenerator.Generate(),
             StartedAt: null,
             FinishedAt: null,
-            InterruptionsWithoutProgress: 0);
+            StalledRestarts: 0);
     }
 }

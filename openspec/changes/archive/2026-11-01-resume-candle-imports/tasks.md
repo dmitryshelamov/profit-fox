@@ -44,7 +44,7 @@
 
 ## 4. Возобновление после перезапуска
 
-- [x] 4.1 Поле `CandleImportJob.InterruptionsWithoutProgress`, миграция колонки `interruptions_without_progress
+- [x] 4.1 Поле `CandleImportJob.StalledRestarts`, миграция колонки `stalled_restarts
   integer NOT NULL DEFAULT 0`, чтение и запись в `CandleImportJobRepository`; генератор `CandleImportJobGenerator`
   учитывает поле; интеграционные тесты: колонка есть после миграции, значение сохраняется и читается
 - [x] 4.2 `RunCandleImport` обнуляет счётчик в обновлении задачи после страницы хотя бы с одной сохранённой свечой

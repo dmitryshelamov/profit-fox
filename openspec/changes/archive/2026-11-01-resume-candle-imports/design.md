@@ -103,13 +103,13 @@
 
 `FailInterruptedImports` заменяется командой `RequeueInterruptedImports`, которую вызывает тот же
 `CandleImportInitializationService` до приёма запросов. Хранилище отдаёт задачи `Pending` и `Running` по `CreatedAt`
-(`GetUnfinishedAsync` вместо `FailUnfinishedAsync`). Для задачи `Running` счётчик `InterruptionsWithoutProgress`
+(`GetUnfinishedAsync` вместо `FailUnfinishedAsync`). Для задачи `Running` счётчик `StalledRestarts`
 увеличивается на 1: при значении 3 задача становится `Failed` с причиной `Interrupted by service restart.` и
 `FinishedAt` = текущий момент, как прежний `FailUnfinishedAsync`; иначе — `Pending`. Задача `Pending` не меняется. Все
 задачи, не ставшие `Failed`, ставятся в очередь в том же порядке. Константа причины переезжает из удаляемого
 `FailInterruptedImportsCommandHandler` в обработчик `RequeueInterruptedImports`.
 
-- Счётчик — новое поле `CandleImportJob.InterruptionsWithoutProgress` и колонка `interruptions_without_progress integer
+- Счётчик — новое поле `CandleImportJob.StalledRestarts` и колонка `stalled_restarts integer
   NOT NULL DEFAULT 0`. Обнуляется при сохранённой свече (решение 2) и при ручном повторе (решение 5).
 - Задачи `Pending` не считаются: они не начинали выполняться, и перезапуск ничего о них не говорит.
 - Плавная остановка сервиса — тоже прерывание. Если отмена пришла через `CancellationToken` фонового обработчика,
@@ -127,7 +127,7 @@
 `POST /api/market-data/candle-imports/{id}/retry` → команда `RetryCandleImport(jobId)`. Неизвестная задача — новое
 `NotFoundException`, задача не в статусе `Failed` — новое `ConflictException` (оба в `Application/Exceptions`,
 наследники `BaseApplicationException`). Иначе задача получает `Pending`, `Error` и `FinishedAt` = `null`,
-`InterruptionsWithoutProgress` = 0, сохраняется и ставится в очередь. Контроллер отвечает как `POST` создания:
+`StalledRestarts` = 0, сохраняется и ставится в очередь. Контроллер отвечает как `POST` создания:
 `202 Accepted`, `Location` на задачу, тело — задача, прочитанная запросом `GetCandleImport`; `404` — `NotFound()`, как
 `GET`; `409` — `ProblemDetails` с текстом исключения.
 
@@ -146,7 +146,7 @@
   `MarketData/Commands/RetryCandleImport`, изменённый `RunCandleImport`; исключения `ExchangeUnavailableException`,
   `NotFoundException`, `ConflictException`.
 - `Infrastructure`: адаптер Bybit и `ExchangeResilienceExecutor` бросают `ExchangeUnavailableException`, адаптер
-  пробрасывает отмену; запросы хранилища; миграция `AddCandleImportJobInterruptionsMigration`;
+  пробрасывает отмену; запросы хранилища; миграция `AddCandleImportJobStalledRestartsMigration`;
   `CandleImportInitializationService` вызывает новую команду; `CandleImportBackgroundService` не логирует отмену при
   остановке как ошибку.
 - `Presentation`: действие `Retry` в `CandleImportsController`.

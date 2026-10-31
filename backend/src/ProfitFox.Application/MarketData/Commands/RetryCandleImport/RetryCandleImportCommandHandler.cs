@@ -24,7 +24,7 @@ public sealed class RetryCandleImportCommandHandler(ICandleImportJobRepository j
         }
 
         await jobs.UpdateAsync(
-            job with { Status = CandleImportStatus.Pending, Error = null, FinishedAt = null, InterruptionsWithoutProgress = 0 },
+            job with { Status = CandleImportStatus.Pending, Error = null, FinishedAt = null, StalledRestarts = 0 },
             cancellationToken);
         await queue.EnqueueAsync(job.Id, cancellationToken);
     }

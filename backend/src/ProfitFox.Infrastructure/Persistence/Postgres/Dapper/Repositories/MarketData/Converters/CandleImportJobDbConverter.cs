@@ -24,7 +24,7 @@ internal static class CandleImportJobDbConverter
             CreatedAt = job.CreatedAt,
             StartedAt = job.StartedAt,
             FinishedAt = job.FinishedAt,
-            InterruptionsWithoutProgress = job.InterruptionsWithoutProgress
+            StalledRestarts = job.StalledRestarts
         };
     }
 
@@ -45,6 +45,6 @@ internal static class CandleImportJobDbConverter
             job.CreatedAt,
             job.StartedAt,
             job.FinishedAt,
-            job.InterruptionsWithoutProgress);
+            job.StalledRestarts);
     }
 }

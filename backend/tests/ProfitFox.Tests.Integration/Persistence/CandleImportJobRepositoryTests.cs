@@ -46,7 +46,7 @@ public class CandleImportJobRepositoryTests
     }
 
     [Test]
-    public async Task Update_saves_status_progress_error_times_and_interruptions()
+    public async Task Update_saves_status_progress_error_times_and_stalled_restarts()
     {
         CandleImportJob job = NewJob(CandleImportStatus.Pending);
         await _store.AddAsync(job, CancellationToken.None);
@@ -57,7 +57,7 @@ public class CandleImportJobRepositoryTests
             Error = "params error",
             StartedAt = Created.AddMinutes(1),
             FinishedAt = Created.AddMinutes(2),
-            InterruptionsWithoutProgress = 2
+            StalledRestarts = 2
         };
 
         await _store.UpdateAsync(failed, CancellationToken.None);

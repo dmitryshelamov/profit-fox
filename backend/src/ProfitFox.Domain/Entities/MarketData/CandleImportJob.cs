@@ -5,7 +5,7 @@ namespace ProfitFox.Domain.Entities.MarketData;
 
 /// <summary>
 ///     A request to load candles of one instrument and interval for <c>[From, To)</c>, executed in the background.
-///     <see cref="InterruptionsWithoutProgress" /> counts restarts in a row that stopped the running job before it stored a candle.
+///     <see cref="StalledRestarts" /> counts restarts in a row that stopped the running job before it stored a candle.
 /// </summary>
 public sealed record CandleImportJob(
     Guid Id,
@@ -19,4 +19,4 @@ public sealed record CandleImportJob(
     DateTimeOffset CreatedAt,
     DateTimeOffset? StartedAt,
     DateTimeOffset? FinishedAt,
-    int InterruptionsWithoutProgress = 0);
+    int StalledRestarts = 0);
