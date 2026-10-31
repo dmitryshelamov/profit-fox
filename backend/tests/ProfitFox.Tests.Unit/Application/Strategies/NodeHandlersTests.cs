@@ -51,7 +51,7 @@ public class NodeHandlersTests
     {
         Guid id = await new CreateNodeCommandHandler(_repository, _time).Handle(new CreateNodeCommand("Новый", Json(SignalDefinition())), CancellationToken.None);
 
-        await _repository.Received(1).SaveCompositeAsync(Arg.Is<CompositeNode>(node => node.Id == id && node.Name == "Новый"), 3, Arg.Any<CancellationToken>());
+        await _repository.Received(1).SaveCompositeAsync(Arg.Is<CompositeNode>(node => node!.Id == id && node.Name == "Новый"), 3, Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -78,7 +78,7 @@ public class NodeHandlersTests
     {
         await new UpdateNodeCommandHandler(_repository, _time).Handle(new UpdateNodeCommand(Signal.ToString(), "Сигнал 2", Json(SignalDefinition())), CancellationToken.None);
 
-        await _repository.Received(1).SaveCompositeAsync(Arg.Is<CompositeNode>(node => node.Id == Signal && node.Name == "Сигнал 2" && node.UpdatedAt == Now), 3, Arg.Any<CancellationToken>());
+        await _repository.Received(1).SaveCompositeAsync(Arg.Is<CompositeNode>(node => node!.Id == Signal && node.Name == "Сигнал 2" && node.UpdatedAt == Now), 3, Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -131,9 +131,9 @@ public class NodeHandlersTests
         Guid named = await handler.Handle(new CloneNodeCommand(Signal.ToString(), "Свой"), CancellationToken.None);
         Guid custom = await handler.Handle(new CloneNodeCommand(Signal.ToString(), null), CancellationToken.None);
 
-        await _repository.Received(1).SaveCompositeAsync(Arg.Is<CompositeNode>(node => node.Id == ladder && node.Name == "Ladder (копия)"), 3, Arg.Any<CancellationToken>());
-        await _repository.Received(1).SaveCompositeAsync(Arg.Is<CompositeNode>(node => node.Id == named && node.Name == "Свой"), 3, Arg.Any<CancellationToken>());
-        await _repository.Received(1).SaveCompositeAsync(Arg.Is<CompositeNode>(node => node.Id == custom && node.Name == "Мой сигнал (копия)"), 3, Arg.Any<CancellationToken>());
+        await _repository.Received(1).SaveCompositeAsync(Arg.Is<CompositeNode>(node => node!.Id == ladder && node.Name == "Ladder (копия)"), 3, Arg.Any<CancellationToken>());
+        await _repository.Received(1).SaveCompositeAsync(Arg.Is<CompositeNode>(node => node!.Id == named && node.Name == "Свой"), 3, Arg.Any<CancellationToken>());
+        await _repository.Received(1).SaveCompositeAsync(Arg.Is<CompositeNode>(node => node!.Id == custom && node.Name == "Мой сигнал (копия)"), 3, Arg.Any<CancellationToken>());
     }
 
     [TestCase("")]

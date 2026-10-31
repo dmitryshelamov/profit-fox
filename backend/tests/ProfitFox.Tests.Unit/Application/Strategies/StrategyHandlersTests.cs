@@ -45,7 +45,7 @@ public class StrategyHandlersTests
         Guid id = await new CreateStrategyCommandHandler(_repository, _time).Handle(new CreateStrategyCommand("Моя EMA", StrategyFixtures.Element("ema")), CancellationToken.None);
 
         await _repository.Received(1).SaveStrategyAsync(
-            Arg.Is<Strategy>(strategy => strategy.Id == id && strategy.Name == "Моя EMA" && strategy.CreatedAt == Now),
+            Arg.Is<Strategy>(strategy => strategy!.Id == id && strategy.Name == "Моя EMA" && strategy.CreatedAt == Now),
             7,
             Arg.Any<CancellationToken>());
     }
@@ -98,7 +98,7 @@ public class StrategyHandlersTests
         await new UpdateStrategyCommandHandler(_repository, _time).Handle(new UpdateStrategyCommand(Existing, "EMA 2", StrategyFixtures.Element("ema")), CancellationToken.None);
 
         await _repository.Received(1).SaveStrategyAsync(
-            Arg.Is<Strategy>(strategy => strategy.Id == Existing && strategy.Name == "EMA 2" && strategy.UpdatedAt == Now),
+            Arg.Is<Strategy>(strategy => strategy!.Id == Existing && strategy.Name == "EMA 2" && strategy.UpdatedAt == Now),
             7,
             Arg.Any<CancellationToken>());
     }
