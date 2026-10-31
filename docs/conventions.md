@@ -58,6 +58,8 @@ enforces a rule, the check is the source of truth.
 ## Tests
 
 - `Tests.Unit` mirrors the `src` folders. `Tests.Integration` covers the database and HTTP with Testcontainers.
+  `ProfitFoxFactory` runs the service in the `Testing` environment: test-only settings go to
+  `ProfitFox.Presentation/appsettings.Testing.json`, the connection string comes from the container.
   `Tests.Shared` holds AutoFixture generators under `Generators/Base` and
   `Generators/Domain/{Entity,ValueObject}/<Area>`, each a static `<Type>Generator.Generate(...)`.
 - Ports are replaced with NSubstitute mocks; there are no hand-written fakes. Hand-written stubs exist only for HTTP

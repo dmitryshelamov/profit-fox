@@ -96,4 +96,5 @@ or `.editorconfig`; CI (`.github/workflows/ci.yml`) also runs the tests, once mo
 - Do not read or change `.env.prod*`, `docker-compose.prod.yml` or the production server without
   the owner's approval (see above).
 - Never commit secrets: exchange keys, tokens and passwords go only through environment variables
-  or user secrets, never into code or configs in git.
+  or user secrets, never into code or configs in git. The one exception is the local development
+  database from `docker-compose.yml`: its credentials in `appsettings.Development.json` are not a secret.
