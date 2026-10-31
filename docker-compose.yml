@@ -1,13 +1,14 @@
 # Local development database. Integration tests use the same image tag via Testcontainers.
+# The credentials are local-only and match appsettings.Development.json; the port is bound to localhost.
 services:
   timescaledb:
     image: timescale/timescaledb:2.30.2-pg17
     environment:
       POSTGRES_DB: profitfox
       POSTGRES_USER: profitfox
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_PASSWORD: profitfox
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - timescaledb-data:/var/lib/postgresql/data
 

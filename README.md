@@ -9,13 +9,7 @@ Trading strategy designer, backtesting and live trading.
 
 ## Local database
 
-TimescaleDB for development runs from `docker-compose.yml`. The password comes from `.env`, which is not committed:
-
-```bash
-cp .env.example .env
-```
-
-Set `POSTGRES_PASSWORD` in `.env`, then start the database:
+TimescaleDB for development runs from `docker-compose.yml`, listening on `localhost:5432` only:
 
 ```bash
 docker compose up -d
@@ -23,12 +17,13 @@ docker compose up -d
 
 ## Configuration
 
-The service reads the database connection string from `ConnectionStrings:MarketData`. Keep it out of git:
-either set the `ConnectionStrings__MarketData` environment variable or store it in user secrets:
+The service reads the database connection string from `ConnectionStrings:MarketData`. In Development it comes from
+`appsettings.Development.json` and matches the local database from `docker-compose.yml`; these credentials are
+local-only and not a secret. Any other environment gets the connection string from the `ConnectionStrings__MarketData`
+environment variable, never from a file in git.
 
-```bash
-dotnet user-secrets set "ConnectionStrings:MarketData" "Host=localhost;Port=5432;Database=profitfox;Username=profitfox;Password=<POSTGRES_PASSWORD from .env>" --project backend/src/ProfitFox.Presentation
-```
+Integration tests run the service in the `Testing` environment: `appsettings.Testing.json` sets their log levels, and
+each test gets its own database from Testcontainers, so tests never touch the development database or user secrets.
 
 Market data comes from the public Bybit v5 API through the Bybit.Net client (`CryptoClients.Net`). No API key is
 needed and no orders are sent.

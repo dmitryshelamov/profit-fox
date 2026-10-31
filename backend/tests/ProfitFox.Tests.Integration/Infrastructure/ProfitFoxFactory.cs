@@ -31,8 +31,8 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
     /// <summary>False keeps created jobs out of the background service, so they stay <c>Pending</c>.</summary>
     public bool RunImports { get; init; } = true;
 
-    /// <summary>The host environment; unset keeps the factory default, Development.</summary>
-    public string? Environment { get; init; }
+    /// <summary>The host environment: Testing reads appsettings.Testing.json and never the Development settings or user secrets.</summary>
+    public string Environment { get; init; } = "Testing";
 
     /// <summary>Receives every event the app's logger writes.</summary>
     public ILogEventSink? LogSink { get; init; }
@@ -42,11 +42,8 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        builder.UseEnvironment(Environment);
         builder.UseSetting("ConnectionStrings:MarketData", connectionString);
-        if (Environment is not null)
-        {
-            builder.UseEnvironment(Environment);
-        }
 
         builder.ConfigureTestServices(services =>
         {
