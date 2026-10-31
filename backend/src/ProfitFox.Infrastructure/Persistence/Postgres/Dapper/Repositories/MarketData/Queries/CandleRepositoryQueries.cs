@@ -27,6 +27,13 @@ internal static class CandleRepositoryQueries
                                   LIMIT @Limit
                                   """;
 
+    private const string GetOpenTimesSql = """
+                                           SELECT open_time
+                                           FROM candles
+                                           WHERE category = @Category AND symbol = @Symbol AND "interval" = @Interval AND open_time >= @From AND open_time < @To
+                                           ORDER BY open_time
+                                           """;
+
     internal static NpgsqlCommand Upsert(NpgsqlDataSource dataSource, IReadOnlyCollection<CandleDb> candles)
     {
         NpgsqlCommand command = dataSource.CreateCommand(UpsertSql);
@@ -55,6 +62,20 @@ internal static class CandleRepositoryQueries
         return new CommandDefinition(
             GetSql,
             new { Category = category, Symbol = symbol, Interval = interval, From = from, To = to, Limit = limit },
+            cancellationToken: cancellationToken);
+    }
+
+    internal static CommandDefinition GetOpenTimes(
+        string category,
+        string symbol,
+        string interval,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            GetOpenTimesSql,
+            new { Category = category, Symbol = symbol, Interval = interval, From = from, To = to },
             cancellationToken: cancellationToken);
     }
 }

@@ -19,13 +19,14 @@ internal sealed class CandleImportBackgroundService(
     {
         await foreach (Guid jobId in queue.ReadAllAsync(stoppingToken))
         {
-            // An escaping exception would stop the whole host; the job stays as last saved and fails on the next start.
+            // An escaping exception would stop the whole host; the job stays as last saved and resumes on the next start.
+            // A shutdown cancels the job on purpose, so that is no failure to log.
             try
             {
                 await using AsyncServiceScope scope = scopes.CreateAsyncScope();
                 await scope.ServiceProvider.GetRequiredService<ISender>().Send(new RunCandleImportCommand(jobId), stoppingToken);
             }
-            catch (Exception exception)
+            catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
             {
                 logger.LogError(exception, "Candle import job {JobId} failed outside its own error handling.", jobId);
             }

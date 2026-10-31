@@ -17,4 +17,12 @@ public interface ICandleRepository
         DateTimeOffset to,
         int limit,
         CancellationToken cancellationToken);
+
+    /// <summary>Open times of the stored candles in <c>[from, to)</c>, oldest first.</summary>
+    Task<IReadOnlyList<DateTimeOffset>> GetOpenTimesAsync(
+        Instrument instrument,
+        Interval interval,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken);
 }

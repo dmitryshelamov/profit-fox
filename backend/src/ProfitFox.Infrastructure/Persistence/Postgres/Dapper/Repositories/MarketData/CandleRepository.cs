@@ -36,4 +36,19 @@ internal sealed class CandleRepository(NpgsqlDataSource dataSource) : ICandleRep
 
         return candles.Select(CandleDbConverter.ToDomain).ToList();
     }
+
+    public async Task<IReadOnlyList<DateTimeOffset>> GetOpenTimesAsync(
+        Instrument instrument,
+        Interval interval,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        // Npgsql reads timestamptz as a UTC DateTime; Dapper converts it to DateTimeOffset only for members, not for scalars.
+        IEnumerable<DateTime> openTimes = await connection.QueryAsync<DateTime>(
+            CandleRepositoryQueries.GetOpenTimes(instrument.Category.ToCode(), instrument.Symbol, interval.ToCode(), from, to, cancellationToken));
+
+        return openTimes.Select(openTime => new DateTimeOffset(openTime)).ToList();
+    }
 }

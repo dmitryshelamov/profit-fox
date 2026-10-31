@@ -22,4 +22,35 @@ public static class IntervalExtensions
             _ => openTime.AddMonths(1)
         };
     }
+
+    /// <summary>
+    ///     Ranges of <c>[from, to)</c> that no stored candle covers, oldest first; <paramref name="storedOpenTimes" /> are the open
+    ///     times stored in the period, ascending. The next candle opens where the previous one ends, so no grid is needed.
+    /// </summary>
+    public static IReadOnlyList<(DateTimeOffset From, DateTimeOffset To)> MissingRanges(
+        this Interval interval,
+        IReadOnlyList<DateTimeOffset> storedOpenTimes,
+        DateTimeOffset from,
+        DateTimeOffset to)
+    {
+        var missing = new List<(DateTimeOffset From, DateTimeOffset To)>();
+        DateTimeOffset covered = from;
+
+        foreach (DateTimeOffset openTime in storedOpenTimes)
+        {
+            if (openTime > covered)
+            {
+                missing.Add((covered, openTime));
+            }
+
+            covered = interval.CandleEnd(openTime);
+        }
+
+        if (covered < to)
+        {
+            missing.Add((covered, to));
+        }
+
+        return missing;
+    }
 }

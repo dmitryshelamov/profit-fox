@@ -26,7 +26,7 @@ public class ExchangeResilienceExecutorTests
     {
         await FailAsync(times: 10, () => new TransientExchangeException("HTTP 503"));
 
-        await Should.ThrowAsync<ExchangeException>(() => CallAsync().AsTask());
+        await Should.ThrowAsync<ExchangeUnavailableException>(() => CallAsync().AsTask());
         _calls.ShouldBe(10);
     }
 

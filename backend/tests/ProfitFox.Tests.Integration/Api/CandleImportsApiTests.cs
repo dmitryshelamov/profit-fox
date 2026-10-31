@@ -2,7 +2,13 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 
+using Npgsql;
+
+using ProfitFox.Domain.Entities.MarketData;
+using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.MarketData;
 using ProfitFox.Tests.Integration.Infrastructure;
+using ProfitFox.Tests.Shared.Generators.Domain.Entity.MarketData;
 
 using Shouldly;
 
@@ -149,5 +155,54 @@ public class CandleImportsApiTests
         HttpResponseMessage response = await _client.GetAsync($"{Imports}/{Guid.NewGuid()}");
 
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    // Scenario "Повтор упавшей задачи". Imports do not run here, so the retried job stays Pending.
+    [Test]
+    public async Task Failed_job_retry_is_accepted_as_a_pending_job()
+    {
+        await using var factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { RunImports = false };
+        using HttpClient client = factory.CreateClient();
+        CandleImportJob failed = await AddJobAsync(
+            factory,
+            CandleImportJobGenerator.Generate(CandleImportStatus.Failed) with { Error = "params error", FinishedAt = factory.Time.GetUtcNow() });
+
+        HttpResponseMessage response = await client.PostAsync($"{Imports}/{failed.Id}/retry", null);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Accepted);
+        response.Headers.Location!.ToString().ShouldEndWith($"{Imports}/{failed.Id}");
+        JsonElement job = await response.Content.ReadFromJsonAsync<JsonElement>();
+        job.GetProperty("id").GetGuid().ShouldBe(failed.Id);
+        job.GetProperty("status").GetString().ShouldBe("Pending");
+        job.GetProperty("error").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    // Scenario "Повтор незавершённой или успешной задачи".
+    [Test]
+    public async Task Retry_of_a_job_that_has_not_failed_is_a_conflict()
+    {
+        CandleImportJob succeeded = await AddJobAsync(_factory, CandleImportJobGenerator.Generate(CandleImportStatus.Succeeded));
+
+        HttpResponseMessage response = await _client.PostAsync($"{Imports}/{succeeded.Id}/retry", null);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        response.Content.Headers.ContentType!.MediaType.ShouldBe("application/problem+json");
+    }
+
+    // Scenario "Повтор неизвестной задачи".
+    [Test]
+    public async Task Retry_of_an_unknown_job_is_not_found()
+    {
+        HttpResponseMessage response = await _client.PostAsync($"{Imports}/{Guid.NewGuid()}/retry", null);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    private static async Task<CandleImportJob> AddJobAsync(ProfitFoxFactory factory, CandleImportJob job)
+    {
+        await using var dataSource = NpgsqlDataSource.Create(factory.ConnectionString);
+        await new CandleImportJobRepository(dataSource).AddAsync(job, CancellationToken.None);
+
+        return job;
     }
 }
