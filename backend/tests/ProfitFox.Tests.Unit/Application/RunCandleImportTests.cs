@@ -1,13 +1,16 @@
 using Microsoft.Extensions.Time.Testing;
+
 using NSubstitute;
+
 using ProfitFox.Application.Exceptions;
-using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.MarketData.Commands.RunCandleImport;
+using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.MarketData;
 using ProfitFox.Tests.Shared.Generators.Domain.ValueObject.MarketData;
+
 using Shouldly;
 
 namespace ProfitFox.Tests.Unit.Application;
@@ -33,7 +36,7 @@ public class RunCandleImportTests
     [Test]
     public async Task Job_is_running_from_the_start_of_execution()
     {
-        var job = PendingJob("2024-01-01T00:00:00Z", "2024-01-01T03:00:00Z");
+        CandleImportJob job = PendingJob("2024-01-01T00:00:00Z", "2024-01-01T03:00:00Z");
         ServePages(job);
 
         await _handler.Handle(new RunCandleImportCommand(job.Id), CancellationToken.None);
@@ -45,7 +48,7 @@ public class RunCandleImportTests
     [Test]
     public async Task Stores_candles_of_the_period_and_succeeds()
     {
-        var job = PendingJob("2024-01-01T00:00:00Z", "2024-01-01T03:00:00Z");
+        CandleImportJob job = PendingJob("2024-01-01T00:00:00Z", "2024-01-01T03:00:00Z");
         ServePages(
             job,
             () => Candles("2024-01-01T03:00:00Z", "2024-01-01T02:00:00Z", "2024-01-01T01:00:00Z"),
@@ -61,7 +64,7 @@ public class RunCandleImportTests
     [Test]
     public async Task Drops_the_candle_that_is_not_closed_yet()
     {
-        var job = PendingJob("2024-03-10T10:00:00Z", "2024-03-10T12:30:00Z");
+        CandleImportJob job = PendingJob("2024-03-10T10:00:00Z", "2024-03-10T12:30:00Z");
         ServePages(job, () => Candles("2024-03-10T12:00:00Z", "2024-03-10T11:00:00Z", "2024-03-10T10:00:00Z"));
 
         await _handler.Handle(new RunCandleImportCommand(job.Id), CancellationToken.None);
@@ -72,7 +75,7 @@ public class RunCandleImportTests
     [Test]
     public async Task Progress_is_saved_after_each_page()
     {
-        var job = PendingJob("2024-01-01T00:00:00Z", "2024-01-01T03:00:00Z");
+        CandleImportJob job = PendingJob("2024-01-01T00:00:00Z", "2024-01-01T03:00:00Z");
         long importedBeforeSecondPage = -1;
         ServePages(
             job,
@@ -92,7 +95,7 @@ public class RunCandleImportTests
     [Test]
     public async Task Period_before_listing_succeeds_with_no_candles()
     {
-        var job = PendingJob("2010-01-01T00:00:00Z", "2010-02-01T00:00:00Z");
+        CandleImportJob job = PendingJob("2010-01-01T00:00:00Z", "2010-02-01T00:00:00Z");
         ServePages(job);
 
         await _handler.Handle(new RunCandleImportCommand(job.Id), CancellationToken.None);
@@ -105,7 +108,7 @@ public class RunCandleImportTests
     [Test]
     public async Task Bybit_error_fails_the_job_and_keeps_saved_candles()
     {
-        var job = PendingJob("2024-01-01T00:00:00Z", "2024-01-01T03:00:00Z");
+        CandleImportJob job = PendingJob("2024-01-01T00:00:00Z", "2024-01-01T03:00:00Z");
         ServePages(
             job,
             () => Candles("2024-01-01T02:00:00Z"),
@@ -128,7 +131,7 @@ public class RunCandleImportTests
     {
         var job = new CandleImportJob(
             Guid.NewGuid(), InstrumentGenerator.Generate(), Interval.OneHour, DateTimeOffset.Parse(from), DateTimeOffset.Parse(to),
-            CandleImportStatus.Pending, 0, null, Now, null, null);
+            CandleImportStatus.Pending, ImportedCandles: 0, Error: null, Now, StartedAt: null, FinishedAt: null);
         _jobs.GetAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
         return job;
     }
@@ -139,7 +142,7 @@ public class RunCandleImportTests
 
     private static async IAsyncEnumerable<IReadOnlyList<Candle>> Pages(Func<IReadOnlyList<Candle>>[] pages)
     {
-        foreach (var page in pages)
+        foreach (Func<IReadOnlyList<Candle>> page in pages)
         {
             await Task.Yield();
             yield return page();

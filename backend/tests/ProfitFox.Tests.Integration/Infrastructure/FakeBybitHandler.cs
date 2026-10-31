@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using System.Net;
 using System.Web;
 
@@ -22,11 +23,11 @@ public class FakeBybitHandler : HttpMessageHandler
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
         }
 
-        var query = HttpUtility.ParseQueryString(request.RequestUri!.Query);
-        var result = request.RequestUri.AbsolutePath switch
+        NameValueCollection query = HttpUtility.ParseQueryString(request.RequestUri!.Query);
+        string result = request.RequestUri.AbsolutePath switch
         {
             "/v5/market/instruments-info" => InstrumentsInfo(query["category"]!, query["symbol"]!),
-            "/v5/market/kline" => Kline(KlinePages.TryDequeue(out var page) ? page : []),
+            "/v5/market/kline" => Kline(KlinePages.TryDequeue(out string[][]? page) ? page : []),
             _ => throw new InvalidOperationException($"Unexpected Bybit request {request.RequestUri}"),
         };
         var json = $$"""{"retCode":0,"retMsg":"OK","result":{{result}},"retExtInfo":{},"time":0}""";
@@ -40,7 +41,7 @@ public class FakeBybitHandler : HttpMessageHandler
 
     private static string Kline(string[][] rows)
     {
-        var items = rows.Select(row =>
+        IEnumerable<string> items = rows.Select(row =>
             $"[\"{DateTimeOffset.Parse(row[0]).ToUnixTimeMilliseconds()}\",{string.Join(",", row.Skip(1).Select(value => $"\"{value}\""))}]");
         return $$"""{"list":[{{string.Join(",", items)}}]}""";
     }

@@ -1,4 +1,5 @@
 using MediatR;
+
 using ProfitFox.Domain.Repositories;
 
 namespace ProfitFox.Application.MarketData.Commands.FailInterruptedImports;

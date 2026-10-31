@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
+
 using NSubstitute;
+
 using ProfitFox.Application.MarketData.Commands.FailInterruptedImports;
 using ProfitFox.Domain.Repositories;
 
@@ -13,7 +15,7 @@ public class FailInterruptedImportsTests
     [Test]
     public async Task Unfinished_jobs_fail_as_interrupted_by_restart()
     {
-        var jobs = Substitute.For<ICandleImportJobRepository>();
+        ICandleImportJobRepository jobs = Substitute.For<ICandleImportJobRepository>();
         var handler = new FailInterruptedImportsCommandHandler(jobs, new FakeTimeProvider(Now));
 
         await handler.Handle(new FailInterruptedImportsCommand(), CancellationToken.None);

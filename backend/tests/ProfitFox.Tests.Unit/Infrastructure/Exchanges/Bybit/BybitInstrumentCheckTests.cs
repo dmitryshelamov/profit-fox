@@ -1,8 +1,11 @@
 using System.Net;
+
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Infrastructure.Exchanges.Bybit;
 using ProfitFox.Infrastructure.Exchanges.Retry;
+
 using Shouldly;
 
 namespace ProfitFox.Tests.Unit.Infrastructure.Exchanges.Bybit;
@@ -15,10 +18,10 @@ public class BybitInstrumentCheckTests
     [TestCase(MarketCategory.Linear, "linear")]
     public async Task Known_symbol_exists(MarketCategory category, string code)
     {
-        using var handler = new StubHttpHandler().RespondJson(
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(
             $$"""{"retCode":0,"retMsg":"OK","result":{"category":"{{code}}","list":[{"symbol":"ETHUSDT","status":"Trading"}]},"retExtInfo":{},"time":0}""");
 
-        var exists = await InstrumentExistsAsync(handler, new Instrument(category, "ETHUSDT"));
+        bool exists = await InstrumentExistsAsync(handler, new Instrument(category, "ETHUSDT"));
 
         exists.ShouldBeTrue();
         BybitRequests.Describe(handler.Requests.Single()).ShouldBe(BybitRequests.Describe($"/v5/market/instruments-info?category={code}&symbol=ETHUSDT"));
@@ -27,10 +30,10 @@ public class BybitInstrumentCheckTests
     [Test]
     public async Task Unknown_symbol_does_not_exist()
     {
-        using var handler = new StubHttpHandler().RespondJson(
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(
             """{"retCode":0,"retMsg":"OK","result":{"category":"spot","list":[]},"retExtInfo":{},"time":0}""");
 
-        var exists = await InstrumentExistsAsync(handler, EthSpot);
+        bool exists = await InstrumentExistsAsync(handler, EthSpot);
 
         exists.ShouldBeFalse();
     }
@@ -39,7 +42,7 @@ public class BybitInstrumentCheckTests
     [Test]
     public async Task Server_error_means_bybit_is_unavailable()
     {
-        using var handler = new StubHttpHandler().Respond(HttpStatusCode.ServiceUnavailable);
+        using StubHttpHandler handler = new StubHttpHandler().Respond(HttpStatusCode.ServiceUnavailable);
 
         await Should.ThrowAsync<ExchangeException>(() => InstrumentExistsAsync(handler, EthSpot));
         handler.Requests.Count.ShouldBe(1);
@@ -48,7 +51,7 @@ public class BybitInstrumentCheckTests
     [Test]
     public async Task Connection_failure_means_bybit_is_unavailable()
     {
-        using var handler = new StubHttpHandler().Respond(() => throw new HttpRequestException("connection refused"));
+        using StubHttpHandler handler = new StubHttpHandler().Respond(() => throw new HttpRequestException("connection refused"));
 
         await Should.ThrowAsync<ExchangeException>(() => InstrumentExistsAsync(handler, EthSpot));
         handler.Requests.Count.ShouldBe(1);
@@ -57,7 +60,7 @@ public class BybitInstrumentCheckTests
     [Test]
     public async Task Timeout_means_bybit_is_unavailable()
     {
-        using var handler = new StubHttpHandler().Respond(() => throw new TaskCanceledException("timeout"));
+        using StubHttpHandler handler = new StubHttpHandler().Respond(() => throw new TaskCanceledException("timeout"));
 
         await Should.ThrowAsync<ExchangeException>(() => InstrumentExistsAsync(handler, EthSpot));
         handler.Requests.Count.ShouldBe(1);
@@ -66,7 +69,7 @@ public class BybitInstrumentCheckTests
     [Test]
     public async Task Non_zero_ret_code_means_bybit_is_unavailable()
     {
-        using var handler = new StubHttpHandler().RespondJson(BybitJson.Error(10006, "Too many visits!"));
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(BybitJson.Error(retCode: 10006, "Too many visits!"));
 
         await Should.ThrowAsync<ExchangeException>(() => InstrumentExistsAsync(handler, EthSpot));
         handler.Requests.Count.ShouldBe(1);
@@ -82,7 +85,7 @@ public class BybitInstrumentCheckTests
             handler.Respond(HttpStatusCode.ServiceUnavailable);
         }
 
-        var client = BybitClients.Create(handler, new ExchangeResilienceExecutor(TimeProvider.System));
+        BybitMarketDataClient client = BybitClients.Create(handler, new ExchangeResilienceExecutor(TimeProvider.System));
         for (var i = 0; i < 10; i++)
         {
             await Should.ThrowAsync<ExchangeException>(() => client.InstrumentExistsAsync(EthSpot, CancellationToken.None));

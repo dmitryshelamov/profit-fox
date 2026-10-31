@@ -9,7 +9,7 @@ public static class DateTimeOffsetGenerator
     /// <summary>A UTC moment with millisecond precision: PostgreSQL keeps microseconds and Bybit reports milliseconds.</summary>
     public static DateTimeOffset Generate()
     {
-        var value = Fixture.Create<DateTimeOffset>().ToUniversalTime();
+        DateTimeOffset value = Fixture.Create<DateTimeOffset>().ToUniversalTime();
         return value.AddTicks(-(value.Ticks % TimeSpan.TicksPerMillisecond));
     }
 }

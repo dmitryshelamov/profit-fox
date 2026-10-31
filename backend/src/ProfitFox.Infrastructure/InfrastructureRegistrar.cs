@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Infrastructure.BackgroundServices;
 using ProfitFox.Infrastructure.Exchanges.Bybit;

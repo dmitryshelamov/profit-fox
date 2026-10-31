@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
+
 using ProfitFox.Infrastructure;
 using ProfitFox.Infrastructure.Persistence.Postgres.FluentMigrator.Extensions;
 
@@ -8,7 +9,7 @@ public class Program
 {
     public static async Task Main(string[] args)
     {
-        var builder = WebApplication.CreateBuilder(args);
+        WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
         // Add services to the container.
 
@@ -21,7 +22,7 @@ public class Program
 
         InfrastructureRegistrar.Configure(builder.Configuration, builder.Services);
 
-        var app = builder.Build();
+        WebApplication app = builder.Build();
 
         app.Services.MigrateToLatestVersion();
 

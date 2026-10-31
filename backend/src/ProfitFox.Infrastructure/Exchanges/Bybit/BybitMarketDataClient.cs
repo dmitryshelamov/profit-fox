@@ -1,14 +1,18 @@
 using System.Net;
 using System.Runtime.CompilerServices;
+
 using Bybit.Net.Interfaces.Clients;
 using Bybit.Net.Objects.Models.V5;
+
 using CryptoExchange.Net.Objects;
 using CryptoExchange.Net.Objects.Errors;
+
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Exchanges.Retry;
+
 using Interval = ProfitFox.Domain.Entities.MarketData.Enums.Interval;
 using MarketCategory = ProfitFox.Domain.Entities.MarketData.Enums.MarketCategory;
 
@@ -27,10 +31,10 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         // Bybit's end is inclusive and pages come newest first, so walk back from just before `to`.
-        var end = to.AddMilliseconds(-1);
+        DateTimeOffset end = to.AddMilliseconds(-1);
         while (true)
         {
-            var page = await GetPageAsync(instrument, interval, from, end, cancellationToken);
+            IReadOnlyList<Candle> page = await GetPageAsync(instrument, interval, from, end, cancellationToken);
             if (page.Count == 0)
             {
                 yield break;
@@ -38,7 +42,7 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
 
             yield return page;
 
-            var earliest = page[^1].OpenTime;
+            DateTimeOffset earliest = page[^1].OpenTime;
             if (earliest <= from)
             {
                 yield break;
@@ -71,7 +75,7 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
     {
         try
         {
-            var klines = await resilience.ExecuteWithRetriesAsync(
+            BybitResponse<BybitKline> klines = await resilience.ExecuteWithRetriesAsync(
                 async token => Unwrap(await bybit.V5Api.ExchangeData.GetKlinesAsync(
                     instrument.Category.ToBybit(), instrument.Symbol, interval.ToBybit(), from.UtcDateTime, end.UtcDateTime, PageSize, token)),
                 cancellationToken);

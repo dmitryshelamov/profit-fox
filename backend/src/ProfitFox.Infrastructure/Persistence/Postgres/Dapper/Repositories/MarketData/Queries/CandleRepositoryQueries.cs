@@ -1,5 +1,7 @@
 using Dapper;
+
 using Npgsql;
+
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.MarketData.Contracts;
 
 namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.MarketData.Queries;
@@ -27,7 +29,7 @@ internal static class CandleRepositoryQueries
 
     internal static NpgsqlCommand Upsert(NpgsqlDataSource dataSource, IReadOnlyCollection<CandleDb> candles)
     {
-        var command = dataSource.CreateCommand(UpsertSql);
+        NpgsqlCommand command = dataSource.CreateCommand(UpsertSql);
         command.Parameters.AddRange(new NpgsqlParameter[]
         {
             new("categories", candles.Select(c => c.Category).ToArray()),

@@ -1,13 +1,16 @@
 using Microsoft.Extensions.Time.Testing;
+
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+
 using ProfitFox.Application.Exceptions;
-using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.MarketData.Commands.CreateCandleImport;
+using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.MarketData;
+
 using Shouldly;
 
 namespace ProfitFox.Tests.Unit.Application;
@@ -37,10 +40,10 @@ public class CreateCandleImportTests
     [Test]
     public async Task Valid_request_creates_a_pending_job_and_queues_it()
     {
-        var id = await _handler.Handle(new CreateCandleImportCommand("linear", "btcusdt", "60", "2024-01-01T00:00:00Z", "2024-02-01T00:00:00Z"), CancellationToken.None);
+        Guid id = await _handler.Handle(new CreateCandleImportCommand("linear", "btcusdt", "60", "2024-01-01T00:00:00Z", "2024-02-01T00:00:00Z"), CancellationToken.None);
 
         var expected = new CandleImportJob(
-            id, new Instrument(MarketCategory.Linear, "BTCUSDT"), Interval.OneHour, From, To, CandleImportStatus.Pending, 0, null, Now, null, null);
+            id, new Instrument(MarketCategory.Linear, "BTCUSDT"), Interval.OneHour, From, To, CandleImportStatus.Pending, ImportedCandles: 0, Error: null, Now, StartedAt: null, FinishedAt: null);
         await _jobs.Received(1).AddAsync(expected, Arg.Any<CancellationToken>());
         await _queue.Received(1).EnqueueAsync(id, Arg.Any<CancellationToken>());
     }
@@ -49,7 +52,7 @@ public class CreateCandleImportTests
     [Test]
     public async Task Missing_end_of_period_means_now()
     {
-        await _handler.Handle(new CreateCandleImportCommand("linear", "BTCUSDT", "60", "2024-01-01T00:00:00Z", null), CancellationToken.None);
+        await _handler.Handle(new CreateCandleImportCommand("linear", "BTCUSDT", "60", "2024-01-01T00:00:00Z", To: null), CancellationToken.None);
 
         AddedJob().To.ShouldBe(Now);
     }
@@ -61,7 +64,7 @@ public class CreateCandleImportTests
             new CreateCandleImportCommand("linear", "BTCUSDT", "60", "2024-01-01T03:00:00+03:00", "2024-02-01T03:00:00+03:00"),
             CancellationToken.None);
 
-        var job = AddedJob();
+        CandleImportJob job = AddedJob();
         (job.From.Offset, job.To.Offset).ShouldBe((TimeSpan.Zero, TimeSpan.Zero));
         (job.From, job.To).ShouldBe((From, To));
     }
@@ -75,7 +78,7 @@ public class CreateCandleImportTests
     [TestCase("linear", "60", "2024-01-01T00:00:00Z", "2024-02-01T00:00:00", "to")]
     public async Task Invalid_parameter_is_rejected_without_creating_a_job(string category, string interval, string from, string to, string invalidField)
     {
-        var error = await Should.ThrowAsync<ValidationFailedException>(() => _handler.Handle(
+        ValidationFailedException error = await Should.ThrowAsync<ValidationFailedException>(() => _handler.Handle(
             new CreateCandleImportCommand(category, "BTCUSDT", interval, from, to), CancellationToken.None));
 
         error.Errors.Keys.ShouldBe([invalidField]);
@@ -88,7 +91,7 @@ public class CreateCandleImportTests
     [Test]
     public async Task Unknown_symbol_is_rejected_without_creating_a_job()
     {
-        var error = await Should.ThrowAsync<ValidationFailedException>(() =>
+        ValidationFailedException error = await Should.ThrowAsync<ValidationFailedException>(() =>
             _handler.Handle(new CreateCandleImportCommand("spot", "NOSUCHUSDT", "60", "2024-01-01T00:00:00Z", "2024-02-01T00:00:00Z"), CancellationToken.None));
 
         error.Errors.Keys.ShouldBe(["symbol"]);

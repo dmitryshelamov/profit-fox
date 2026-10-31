@@ -1,5 +1,8 @@
+using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Infrastructure.Exchanges.Bybit;
+
 using Shouldly;
 
 namespace ProfitFox.Tests.Unit.Infrastructure.Exchanges.Bybit;
@@ -12,16 +15,16 @@ public class BybitPaginationTests
     [Test]
     public async Task Walks_pages_from_end_of_period_back_until_an_empty_page()
     {
-        var handler = new StubHttpHandler()
+        StubHttpHandler handler = new StubHttpHandler()
             .RespondJson(BybitJson.Kline("2024-01-01T05:00:00Z", "2024-01-01T04:00:00Z"))
             .RespondJson(BybitJson.Kline("2024-01-01T03:00:00Z", "2024-01-01T02:00:00Z"))
             .RespondJson(BybitJson.Kline("2024-01-01T01:00:00Z", "2024-01-01T00:00:00Z"))
             .RespondJson(BybitJson.Kline());
-        var client = BybitClients.Create(handler, TimeProvider.System);
+        BybitMarketDataClient client = BybitClients.Create(handler, TimeProvider.System);
         var from = DateTimeOffset.Parse("2023-12-31T00:00:00Z");
         var to = DateTimeOffset.Parse("2024-01-01T06:00:00Z");
 
-        var pages = await client.GetCandlePagesAsync(BtcLinear, Hour, from, to, CancellationToken.None).ToListAsync();
+        List<IReadOnlyList<Candle>> pages = await client.GetCandlePagesAsync(BtcLinear, Hour, from, to, CancellationToken.None).ToListAsync();
 
         pages.Select(page => page.Count).ShouldBe(new[] { 2, 2, 2 });
         handler.Requests.Select(BybitRequests.Describe).ShouldBe(new[]
@@ -36,11 +39,11 @@ public class BybitPaginationTests
     [Test]
     public async Task Stops_once_a_page_reaches_start_of_period()
     {
-        var handler = new StubHttpHandler()
+        StubHttpHandler handler = new StubHttpHandler()
             .RespondJson(BybitJson.Kline("2024-01-01T01:00:00Z", "2024-01-01T00:00:00Z"));
-        var client = BybitClients.Create(handler, TimeProvider.System);
+        BybitMarketDataClient client = BybitClients.Create(handler, TimeProvider.System);
 
-        var pages = await client.GetCandlePagesAsync(
+        List<IReadOnlyList<Candle>> pages = await client.GetCandlePagesAsync(
             BtcLinear, Hour, DateTimeOffset.Parse("2024-01-01T00:00:00Z"), DateTimeOffset.Parse("2024-01-01T02:00:00Z"), CancellationToken.None).ToListAsync();
 
         pages.Count.ShouldBe(1);

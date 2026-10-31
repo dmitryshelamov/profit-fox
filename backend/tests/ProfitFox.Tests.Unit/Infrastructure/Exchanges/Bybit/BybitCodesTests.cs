@@ -1,7 +1,10 @@
 using Bybit.Net.Enums;
+
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
+
 using Shouldly;
+
 using Interval = ProfitFox.Domain.Entities.MarketData.Enums.Interval;
 
 namespace ProfitFox.Tests.Unit.Infrastructure.Exchanges.Bybit;

@@ -1,6 +1,8 @@
 using MediatR;
+
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+
 using ProfitFox.Application.MarketData.Commands.FailInterruptedImports;
 
 namespace ProfitFox.Infrastructure.BackgroundServices;
@@ -13,7 +15,7 @@ internal sealed class CandleImportInitializationService(IServiceScopeFactory sco
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        await using var scope = scopes.CreateAsyncScope();
+        await using AsyncServiceScope scope = scopes.CreateAsyncScope();
         await scope.ServiceProvider.GetRequiredService<ISender>().Send(new FailInterruptedImportsCommand(), cancellationToken);
     }
 

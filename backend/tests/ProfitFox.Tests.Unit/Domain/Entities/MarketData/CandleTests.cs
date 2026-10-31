@@ -1,5 +1,7 @@
+using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.MarketData;
+
 using Shouldly;
 
 namespace ProfitFox.Tests.Unit.Domain.Entities.MarketData;
@@ -14,7 +16,7 @@ public class CandleTests
     [TestCase("2024-03-10T11:00:00Z", "2024-03-10T12:00:00Z", true)]
     public void Candle_is_closed_once_its_interval_has_ended(string openTime, string now, bool expected)
     {
-        var candle = CandleGenerator.Generate(DateTimeOffset.Parse(openTime));
+        Candle candle = CandleGenerator.Generate(DateTimeOffset.Parse(openTime));
 
         candle.IsClosedAt(Hour, DateTimeOffset.Parse(now)).ShouldBe(expected);
     }

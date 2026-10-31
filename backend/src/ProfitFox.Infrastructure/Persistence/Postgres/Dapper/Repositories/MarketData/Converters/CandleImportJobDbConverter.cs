@@ -26,8 +26,8 @@ internal static class CandleImportJobDbConverter
 
     internal static CandleImportJob ToDomain(CandleImportJobDb job)
     {
-        MarketDataCodes.TryParseCategory(job.Category, out var category);
-        MarketDataCodes.TryParseInterval(job.Interval, out var interval);
+        MarketDataCodes.TryParseCategory(job.Category, out MarketCategory category);
+        MarketDataCodes.TryParseInterval(job.Interval, out Interval interval);
         return new CandleImportJob(
             job.Id,
             new Instrument(category, job.Symbol),

@@ -1,9 +1,13 @@
 using System.Net;
+
 using Microsoft.Extensions.Time.Testing;
+
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Infrastructure.Exchanges.Bybit;
+
 using Shouldly;
 
 namespace ProfitFox.Tests.Unit.Infrastructure.Exchanges.Bybit;
@@ -33,7 +37,7 @@ public class BybitRetryTests
     {
         _handler.Respond(HttpStatusCode.TooManyRequests).RespondJson(OnePage);
 
-        var pages = await LoadAsync();
+        List<IReadOnlyList<Candle>> pages = await LoadAsync();
 
         pages.Count.ShouldBe(1);
         _handler.Requests.Count.ShouldBe(2);
@@ -42,9 +46,9 @@ public class BybitRetryTests
     [Test]
     public async Task Retries_after_rate_limit_ret_code()
     {
-        _handler.RespondJson(BybitJson.Error(10006, "Too many visits!")).RespondJson(OnePage);
+        _handler.RespondJson(BybitJson.Error(retCode: 10006, "Too many visits!")).RespondJson(OnePage);
 
-        var pages = await LoadAsync();
+        List<IReadOnlyList<Candle>> pages = await LoadAsync();
 
         pages.Count.ShouldBe(1);
     }
@@ -54,7 +58,7 @@ public class BybitRetryTests
     {
         _handler.Respond(() => throw new TaskCanceledException("timeout")).RespondJson(OnePage);
 
-        var pages = await LoadAsync();
+        List<IReadOnlyList<Candle>> pages = await LoadAsync();
 
         pages.Count.ShouldBe(1);
     }
@@ -64,7 +68,7 @@ public class BybitRetryTests
     {
         _handler.Respond(() => throw new HttpRequestException("connection refused")).RespondJson(OnePage);
 
-        var pages = await LoadAsync();
+        List<IReadOnlyList<Candle>> pages = await LoadAsync();
 
         pages.Count.ShouldBe(1);
         _handler.Requests.Count.ShouldBe(2);
@@ -79,7 +83,7 @@ public class BybitRetryTests
         }
 
         _handler.RespondJson(OnePage);
-        var start = _time.GetUtcNow();
+        DateTimeOffset start = _time.GetUtcNow();
 
         await LoadAsync();
 
@@ -94,7 +98,7 @@ public class BybitRetryTests
             _handler.Respond(HttpStatusCode.ServiceUnavailable);
         }
 
-        var error = await Should.ThrowAsync<ExchangeException>(LoadAsync);
+        ExchangeException error = await Should.ThrowAsync<ExchangeException>(LoadAsync);
 
         error.Message.ShouldContain("503");
         _handler.Requests.Count.ShouldBe(6);
@@ -108,7 +112,7 @@ public class BybitRetryTests
             _handler.Respond(() => throw new TaskCanceledException("timeout"));
         }
 
-        var error = await Should.ThrowAsync<ExchangeException>(LoadAsync);
+        ExchangeException error = await Should.ThrowAsync<ExchangeException>(LoadAsync);
 
         error.Message.ShouldBe("Bybit request failed after 5 retries: Request timed out");
         _handler.Requests.Count.ShouldBe(6);
@@ -117,9 +121,9 @@ public class BybitRetryTests
     [Test]
     public async Task Fails_immediately_on_other_ret_code()
     {
-        _handler.RespondJson(BybitJson.Error(10001, "params error"));
+        _handler.RespondJson(BybitJson.Error(retCode: 10001, "params error"));
 
-        var error = await Should.ThrowAsync<ExchangeException>(LoadAsync);
+        ExchangeException error = await Should.ThrowAsync<ExchangeException>(LoadAsync);
 
         error.Message.ShouldBe("params error");
         _handler.Requests.Count.ShouldBe(1);
@@ -136,8 +140,8 @@ public class BybitRetryTests
 
     private async Task<List<IReadOnlyList<Candle>>> LoadAsync()
     {
-        var client = BybitClients.Create(_handler, _time);
-        var load = client.GetCandlePagesAsync(BtcLinear, Interval.OneHour, From, To, CancellationToken.None).ToListAsync().AsTask();
+        BybitMarketDataClient client = BybitClients.Create(_handler, _time);
+        Task<List<IReadOnlyList<Candle>>> load = client.GetCandlePagesAsync(BtcLinear, Interval.OneHour, From, To, CancellationToken.None).ToListAsync().AsTask();
 
         // Move fake time forward in whole seconds, giving the client a moment to react after each step.
         while (!load.IsCompleted)

@@ -1,13 +1,16 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+
 using Npgsql;
+
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.MarketData;
 using ProfitFox.Tests.Integration.Infrastructure;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.MarketData;
+
 using Shouldly;
 
 namespace ProfitFox.Tests.Integration.Api;
@@ -40,7 +43,7 @@ public class CandlesApiTests
     {
         await StoreHourlyCandlesAsync(3);
 
-        var candles = await GetCandlesAsync($"{Candles}&from=2024-01-01T01:00:00Z&to=2024-01-01T03:00:00Z");
+        List<JsonElement> candles = await GetCandlesAsync($"{Candles}&from=2024-01-01T01:00:00Z&to=2024-01-01T03:00:00Z");
 
         candles.Select(c => c.GetProperty("openTime").GetDateTimeOffset()).ShouldBe(new[] { Day.AddHours(1), Day.AddHours(2) });
     }
@@ -50,7 +53,7 @@ public class CandlesApiTests
     {
         await StoreHourlyCandlesAsync(3);
 
-        var candles = await GetCandlesAsync($"{Candles}&from=2024-01-01T04:00:00%2B03:00&to=2024-01-01T06:00:00%2B03:00");
+        List<JsonElement> candles = await GetCandlesAsync($"{Candles}&from=2024-01-01T04:00:00%2B03:00&to=2024-01-01T06:00:00%2B03:00");
 
         candles.Select(c => c.GetProperty("openTime").GetDateTimeOffset()).ShouldBe(new[] { Day.AddHours(1), Day.AddHours(2) });
     }
@@ -59,7 +62,7 @@ public class CandlesApiTests
     [Test]
     public async Task Returns_an_empty_list_when_nothing_was_loaded()
     {
-        var candles = await GetCandlesAsync($"{Candles}&from=2024-01-01T00:00:00Z&to=2024-01-02T00:00:00Z");
+        List<JsonElement> candles = await GetCandlesAsync($"{Candles}&from=2024-01-01T00:00:00Z&to=2024-01-02T00:00:00Z");
 
         candles.ShouldBeEmpty();
     }
@@ -72,7 +75,7 @@ public class CandlesApiTests
             new Candle(Day, new Price(42000.1m), new Price(42300.5m), new Price(41950m), new Price(42123.45m), new Volume(0.000123m), new Volume(5.18m)),
         ]);
 
-        var candle = (await GetCandlesAsync($"{Candles}&from=2024-01-01T00:00:00Z&to=2024-01-02T00:00:00Z")).Single();
+        JsonElement candle = (await GetCandlesAsync($"{Candles}&from=2024-01-01T00:00:00Z&to=2024-01-02T00:00:00Z")).Single();
 
         (new[] { "open", "high", "low", "close", "volume", "turnover" }.Select(name => candle.GetProperty(name).GetString())).ShouldBe(new[] { "42000.1", "42300.5", "41950", "42123.45", "0.000123", "5.18" });
     }
@@ -83,7 +86,7 @@ public class CandlesApiTests
     {
         await StoreHourlyCandlesAsync(1500);
 
-        var candles = await GetCandlesAsync($"{Candles}&from=2024-01-01T00:00:00Z&to=2025-01-01T00:00:00Z");
+        List<JsonElement> candles = await GetCandlesAsync($"{Candles}&from=2024-01-01T00:00:00Z&to=2025-01-01T00:00:00Z");
 
         candles.Count.ShouldBe(1000);
         candles[^1].GetProperty("openTime").GetDateTimeOffset().ShouldBe(Day.AddHours(999));
@@ -94,7 +97,7 @@ public class CandlesApiTests
     {
         await StoreHourlyCandlesAsync(3);
 
-        var candles = await GetCandlesAsync($"{Candles}&from=2024-01-01T00:00:00Z&to=2024-01-02T00:00:00Z&limit=2");
+        List<JsonElement> candles = await GetCandlesAsync($"{Candles}&from=2024-01-01T00:00:00Z&to=2024-01-02T00:00:00Z&limit=2");
 
         candles.Count.ShouldBe(2);
     }
@@ -112,16 +115,16 @@ public class CandlesApiTests
     [TestCase("category=linear&symbol=BTCUSDT&interval=60&from=2024-01-01T00:00:00Z&to=2024-01-02T00:00:00Z&limit=0", "limit")]
     public async Task Invalid_request_is_rejected_with_the_invalid_parameter(string query, string invalidField)
     {
-        var response = await _client.GetAsync($"/api/market-data/candles?{query}");
+        HttpResponseMessage response = await _client.GetAsync($"/api/market-data/candles?{query}");
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        JsonElement problem = await response.Content.ReadFromJsonAsync<JsonElement>();
         problem.GetProperty("errors").EnumerateObject().Select(error => error.Name).ShouldBe(new[] { invalidField });
     }
 
     private async Task<List<JsonElement>> GetCandlesAsync(string url)
     {
-        var response = await _client.GetAsync(url);
+        HttpResponseMessage response = await _client.GetAsync(url);
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         return (await response.Content.ReadFromJsonAsync<List<JsonElement>>())!;
     }

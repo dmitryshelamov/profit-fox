@@ -1,7 +1,10 @@
 using FluentMigrator.Runner;
+
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+
 using Npgsql;
+
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.MarketData;
 

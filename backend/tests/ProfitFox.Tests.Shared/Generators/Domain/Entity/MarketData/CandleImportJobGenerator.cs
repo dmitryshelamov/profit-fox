@@ -1,4 +1,5 @@
 using AutoFixture;
+
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Tests.Shared.Generators.Base;
@@ -14,7 +15,7 @@ public static class CandleImportJobGenerator
     /// <summary>A job with a non-empty period and no start or finish time; set those when the status needs them.</summary>
     public static CandleImportJob Generate(CandleImportStatus status)
     {
-        var from = DateTimeOffsetGenerator.Generate();
+        DateTimeOffset from = DateTimeOffsetGenerator.Generate();
         return new CandleImportJob(
             Guid.NewGuid(),
             InstrumentGenerator.Generate(),
@@ -22,10 +23,10 @@ public static class CandleImportJobGenerator
             from,
             from.AddHours(Fixture.Create<byte>() + 1),
             status,
-            0,
-            null,
+            ImportedCandles: 0,
+            Error: null,
             DateTimeOffsetGenerator.Generate(),
-            null,
-            null);
+            StartedAt: null,
+            FinishedAt: null);
     }
 }

@@ -2,6 +2,7 @@ using ProfitFox.Application.Exceptions;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.ValueObjects.MarketData;
+
 using Shouldly;
 
 namespace ProfitFox.Tests.Unit.Infrastructure.Exchanges.Bybit;
@@ -15,7 +16,7 @@ public class BybitKlineMappingTests
     [Test]
     public async Task Candles_keep_exact_decimal_values()
     {
-        using var handler = new StubHttpHandler().RespondJson("""
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson("""
             {
               "retCode": 0,
               "retMsg": "OK",
@@ -32,7 +33,7 @@ public class BybitKlineMappingTests
             }
             """);
 
-        var pages = await BybitClients.Create(handler, TimeProvider.System).GetCandlePagesAsync(BtcLinear, Interval.OneHour, From, To, CancellationToken.None).ToListAsync();
+        List<IReadOnlyList<Candle>> pages = await BybitClients.Create(handler, TimeProvider.System).GetCandlePagesAsync(BtcLinear, Interval.OneHour, From, To, CancellationToken.None).ToListAsync();
 
         pages.Single().ShouldBe(new[]
         {
@@ -48,10 +49,10 @@ public class BybitKlineMappingTests
     [Test]
     public async Task Non_zero_ret_code_is_an_error_with_bybit_message()
     {
-        using var handler = new StubHttpHandler().RespondJson(
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(
             """{"retCode":10001,"retMsg":"params error: symbol invalid","result":{},"retExtInfo":{},"time":1704074400000}""");
 
-        var error = await Should.ThrowAsync<ExchangeException>(
+        ExchangeException error = await Should.ThrowAsync<ExchangeException>(
             BybitClients.Create(handler, TimeProvider.System).GetCandlePagesAsync(BtcLinear, Interval.OneHour, From, To, CancellationToken.None).ToListAsync().AsTask());
 
         error.Message.ShouldBe("params error: symbol invalid");

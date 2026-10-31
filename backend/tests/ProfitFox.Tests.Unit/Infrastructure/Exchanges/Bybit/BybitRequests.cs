@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using System.Web;
 
 namespace ProfitFox.Tests.Unit.Infrastructure.Exchanges.Bybit;
@@ -7,7 +8,7 @@ public static class BybitRequests
 {
     public static string Describe(Uri uri)
     {
-        var query = HttpUtility.ParseQueryString(uri.Query);
+        NameValueCollection query = HttpUtility.ParseQueryString(uri.Query);
         return uri.AbsolutePath + " " + string.Join("&", query.AllKeys.Order().Select(key => $"{key}={query[key]}"));
     }
 
