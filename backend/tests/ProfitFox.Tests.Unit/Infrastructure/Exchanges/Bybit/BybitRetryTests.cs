@@ -101,7 +101,7 @@ public class BybitRetryTests
             _handler.Respond(HttpStatusCode.ServiceUnavailable);
         }
 
-        ExchangeException error = await Should.ThrowAsync<ExchangeException>(LoadAsync);
+        ExchangeUnavailableException error = await Should.ThrowAsync<ExchangeUnavailableException>(LoadAsync);
 
         error.Message.ShouldContain("503");
         _handler.Requests.Count.ShouldBe(6);
@@ -115,7 +115,7 @@ public class BybitRetryTests
             _handler.Respond(() => throw new TaskCanceledException("timeout"));
         }
 
-        ExchangeException error = await Should.ThrowAsync<ExchangeException>(LoadAsync);
+        ExchangeUnavailableException error = await Should.ThrowAsync<ExchangeUnavailableException>(LoadAsync);
 
         error.Message.ShouldBe("Bybit request failed after 5 retries: Request timed out");
         _handler.Requests.Count.ShouldBe(6);
@@ -128,6 +128,7 @@ public class BybitRetryTests
 
         ExchangeException error = await Should.ThrowAsync<ExchangeException>(LoadAsync);
 
+        error.ShouldNotBeOfType<ExchangeUnavailableException>();
         error.Message.ShouldBe("params error");
         _handler.Requests.Count.ShouldBe(1);
     }
@@ -139,6 +140,40 @@ public class BybitRetryTests
 
         await Should.ThrowAsync<ExchangeException>(LoadAsync);
         _handler.Requests.Count.ShouldBe(1);
+    }
+
+    // A shutdown cancels the request in flight; the job must see a cancellation, not an exchange failure.
+    [Test]
+    public async Task Cancellation_during_a_request_is_not_an_exchange_failure()
+    {
+        using var cancellation = new CancellationTokenSource();
+        _handler.Respond(() =>
+        {
+            cancellation.Cancel();
+
+            throw new TaskCanceledException("cancelled", null, cancellation.Token);
+        });
+        BybitMarketDataClient client = BybitClients.Create(_handler, _time);
+
+        Exception error = await Should.ThrowAsync<Exception>(() =>
+            client.GetCandlePagesAsync(BtcLinear, Interval.OneHour, From, To, cancellation.Token).ToListAsync().AsTask());
+
+        error.ShouldBeAssignableTo<OperationCanceledException>();
+        _handler.Requests.Count.ShouldBe(1);
+    }
+
+    [Test]
+    public async Task Cancellation_before_a_request_is_not_an_exchange_failure()
+    {
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+        _handler.RespondJson(OnePage);
+        BybitMarketDataClient client = BybitClients.Create(_handler, _time);
+
+        Exception error = await Should.ThrowAsync<Exception>(() =>
+            client.GetCandlePagesAsync(BtcLinear, Interval.OneHour, From, To, cancellation.Token).ToListAsync().AsTask());
+
+        error.ShouldBeAssignableTo<OperationCanceledException>();
     }
 
     private async Task<List<IReadOnlyList<Candle>>> LoadAsync()

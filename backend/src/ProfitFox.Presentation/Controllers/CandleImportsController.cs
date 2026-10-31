@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.MarketData.Commands.CreateCandleImport;
+using ProfitFox.Application.MarketData.Commands.RetryCandleImport;
 using ProfitFox.Application.MarketData.Queries.GetCandleImport;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Presentation.Contracts.MarketData;
@@ -33,6 +34,28 @@ public sealed class CandleImportsController(ISender sender) : ControllerBase
         }
 
         // The background service may already have picked the job up, so its status is not necessarily Pending here.
+        CandleImportJob? job = await sender.Send(new GetCandleImportQuery(id), cancellationToken);
+
+        return AcceptedAtAction(nameof(Get), new { id }, CandleImportJobResponse.Of(job!));
+    }
+
+    [HttpPost("{id:guid}/retry")]
+    public async Task<IActionResult> Retry(Guid id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await sender.Send(new RetryCandleImportCommand(id), cancellationToken);
+        }
+        catch (NotFoundException)
+        {
+            return NotFound();
+        }
+        catch (ConflictException exception)
+        {
+            return Problem(exception.Message, statusCode: StatusCodes.Status409Conflict);
+        }
+
+        // As after creation, the background service may already have picked the job up.
         CandleImportJob? job = await sender.Send(new GetCandleImportQuery(id), cancellationToken);
 
         return AcceptedAtAction(nameof(Get), new { id }, CandleImportJobResponse.Of(job!));

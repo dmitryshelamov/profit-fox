@@ -2,7 +2,7 @@ using FluentMigrator;
 
 namespace ProfitFox.Infrastructure.Persistence.Postgres.FluentMigrator.Migrations;
 
-[Migration(202611010001)]
+[Migration(202611010002)]
 public sealed class CreateStrategyLibraryTablesMigration : ForwardOnlyMigration
 {
     // One revision row guards the whole library: every save checks and bumps it in the same transaction.

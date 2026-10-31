@@ -11,10 +11,13 @@ public class FakeBybitHandler : HttpMessageHandler
     public HashSet<(string Category, string Symbol)> Instruments { get; } = [];
 
     /// <summary>
-    ///     Kline pages served in order, each a list of rows <c>[openTime ISO, open, high, low, close, volume, turnover]</c>, newest first.
-    ///     Once they run out, Bybit returns empty pages.
+    ///     The candle history Bybit knows, rows <c>[openTime ISO, open, high, low, close, volume, turnover]</c> in any order. A kline
+    ///     request gets the rows with open time in its inclusive <c>[start, end]</c>, newest first, at most <c>limit</c> of them.
     /// </summary>
-    public Queue<string[][]> KlinePages { get; } = new Queue<string[][]>();
+    public List<string[]> Klines { get; } = [];
+
+    /// <summary>The <c>[start, end]</c> of every kline request, in order.</summary>
+    public List<(DateTimeOffset Start, DateTimeOffset End)> KlineRequests { get; } = [];
 
     public bool Unavailable { get; set; }
 
@@ -29,7 +32,7 @@ public class FakeBybitHandler : HttpMessageHandler
         string result = request.RequestUri.AbsolutePath switch
         {
             "/v5/market/instruments-info" => InstrumentsInfo(query["category"]!, query["symbol"]!),
-            "/v5/market/kline" => Kline(KlinePages.TryDequeue(out string[][]? page) ? page : []),
+            "/v5/market/kline" => Kline(query),
             _ => throw new InvalidOperationException($"Unexpected Bybit request {request.RequestUri}")
         };
         var json = $$"""{"retCode":0,"retMsg":"OK","result":{{result}},"retExtInfo":{},"time":0}""";
@@ -44,10 +47,17 @@ public class FakeBybitHandler : HttpMessageHandler
             : $$"""{"category":"{{category}}","list":[]}""";
     }
 
-    private static string Kline(string[][] rows)
+    private string Kline(NameValueCollection query)
     {
-        IEnumerable<string> items = rows.Select(row =>
-            $"[\"{DateTimeOffset.Parse(row[0]).ToUnixTimeMilliseconds()}\",{string.Join(",", row.Skip(1).Select(value => $"\"{value}\""))}]");
+        var start = DateTimeOffset.FromUnixTimeMilliseconds(long.Parse(query["start"]!));
+        var end = DateTimeOffset.FromUnixTimeMilliseconds(long.Parse(query["end"]!));
+        KlineRequests.Add((start, end));
+        IEnumerable<string> items = Klines
+            .Select(row => (OpenTime: DateTimeOffset.Parse(row[0]), Row: row))
+            .Where(candle => candle.OpenTime >= start && candle.OpenTime <= end)
+            .OrderByDescending(candle => candle.OpenTime)
+            .Take(int.Parse(query["limit"]!))
+            .Select(candle => $"[\"{candle.OpenTime.ToUnixTimeMilliseconds()}\",{string.Join(",", candle.Row.Skip(1).Select(value => $"\"{value}\""))}]");
 
         return $$"""{"list":[{{string.Join(",", items)}}]}""";
     }

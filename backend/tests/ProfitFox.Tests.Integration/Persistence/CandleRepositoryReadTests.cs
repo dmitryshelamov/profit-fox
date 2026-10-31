@@ -104,6 +104,47 @@ public class CandleRepositoryReadTests
         candles.ShouldBeEmpty();
     }
 
+    [Test]
+    public async Task Returns_open_times_of_the_period_oldest_first()
+    {
+        IReadOnlyList<DateTimeOffset> openTimes = await _store.GetOpenTimesAsync(
+            BtcLinear,
+            Hour,
+            At("2024-01-01T01:00:00Z"),
+            At("2024-01-01T03:00:00Z"),
+            CancellationToken.None);
+
+        openTimes.ShouldBe(new[] { At("2024-01-01T01:00:00Z"), At("2024-01-01T02:00:00Z") });
+    }
+
+    [Test]
+    public async Task Open_times_end_of_period_is_exclusive()
+    {
+        IReadOnlyList<DateTimeOffset> openTimes = await _store.GetOpenTimesAsync(
+            BtcLinear,
+            Hour,
+            At("2024-01-01T00:00:00Z"),
+            At("2024-01-01T02:00:00Z"),
+            CancellationToken.None);
+
+        openTimes.ShouldBe(new[] { At("2024-01-01T00:00:00Z"), At("2024-01-01T01:00:00Z") });
+    }
+
+    [TestCase(MarketCategory.Spot, "BTCUSDT", Interval.OneHour)]
+    [TestCase(MarketCategory.Linear, "ETHUSDT", Interval.OneHour)]
+    [TestCase(MarketCategory.Linear, "BTCUSDT", Interval.OneDay)]
+    public async Task Returns_only_open_times_of_the_requested_instrument_and_interval(MarketCategory category, string symbol, Interval interval)
+    {
+        IReadOnlyList<DateTimeOffset> openTimes = await _store.GetOpenTimesAsync(
+            new Instrument(category, symbol),
+            interval,
+            At("2024-01-01T00:00:00Z"),
+            At("2024-01-02T00:00:00Z"),
+            CancellationToken.None);
+
+        openTimes.ShouldBeEmpty();
+    }
+
     private static Candle Candle(string openTime)
     {
         return new Candle(At(openTime), new Price(1m), new Price(2m), new Price(0.5m), new Price(1.5m), new Volume(0.000123m), new Volume(42123.45m));

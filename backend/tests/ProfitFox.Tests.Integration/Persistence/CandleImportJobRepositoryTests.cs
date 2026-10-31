@@ -46,7 +46,7 @@ public class CandleImportJobRepositoryTests
     }
 
     [Test]
-    public async Task Update_saves_status_progress_error_and_times()
+    public async Task Update_saves_status_progress_error_times_and_stalled_restarts()
     {
         CandleImportJob job = NewJob(CandleImportStatus.Pending);
         await _store.AddAsync(job, CancellationToken.None);
@@ -56,7 +56,8 @@ public class CandleImportJobRepositoryTests
             ImportedCandles = 1500,
             Error = "params error",
             StartedAt = Created.AddMinutes(1),
-            FinishedAt = Created.AddMinutes(2)
+            FinishedAt = Created.AddMinutes(2),
+            StalledRestarts = 2
         };
 
         await _store.UpdateAsync(failed, CancellationToken.None);
@@ -65,25 +66,20 @@ public class CandleImportJobRepositoryTests
     }
 
     [Test]
-    public async Task Unfinished_jobs_become_failed_with_the_reason()
+    public async Task Unfinished_jobs_are_read_oldest_first()
     {
-        CandleImportJob pending = NewJob(CandleImportStatus.Pending);
-        CandleImportJob running = NewJob(CandleImportStatus.Running) with { StartedAt = Created };
-        CandleImportJob succeeded = NewJob(CandleImportStatus.Succeeded) with { StartedAt = Created, FinishedAt = Created, ImportedCandles = 3 };
+        CandleImportJob newerRunning = NewJob(CandleImportStatus.Running) with { CreatedAt = Created.AddMinutes(2), StartedAt = Created.AddMinutes(3) };
+        CandleImportJob olderPending = NewJob(CandleImportStatus.Pending) with { CreatedAt = Created };
+        CandleImportJob middlePending = NewJob(CandleImportStatus.Pending) with { CreatedAt = Created.AddMinutes(1) };
+        CandleImportJob succeeded = NewJob(CandleImportStatus.Succeeded) with { CreatedAt = Created, StartedAt = Created, FinishedAt = Created };
+        CandleImportJob failed = NewJob(CandleImportStatus.Failed) with { CreatedAt = Created, Error = "params error", FinishedAt = Created };
 
-        foreach (CandleImportJob? job in new[] { pending, running, succeeded })
+        foreach (CandleImportJob job in new[] { newerRunning, olderPending, succeeded, middlePending, failed })
         {
             await _store.AddAsync(job, CancellationToken.None);
         }
 
-        DateTimeOffset now = Created.AddHours(1);
-        await _store.FailUnfinishedAsync("interrupted", now, CancellationToken.None);
-
-        (await _store.GetAsync(pending.Id, CancellationToken.None)).ShouldBe(
-            pending with { Status = CandleImportStatus.Failed, Error = "interrupted", FinishedAt = now });
-        (await _store.GetAsync(running.Id, CancellationToken.None)).ShouldBe(
-            running with { Status = CandleImportStatus.Failed, Error = "interrupted", FinishedAt = now });
-        (await _store.GetAsync(succeeded.Id, CancellationToken.None)).ShouldBe(succeeded);
+        (await _store.GetUnfinishedAsync(CancellationToken.None)).ShouldBe([olderPending, middlePending, newerRunning]);
     }
 
     private static CandleImportJob NewJob(CandleImportStatus status)

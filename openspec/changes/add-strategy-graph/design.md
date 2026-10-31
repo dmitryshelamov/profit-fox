@@ -225,7 +225,7 @@ EMA» `ema-cross`, `ladder`, `dca`) — графы, построенные в к
 
 ### 10. Хранилище
 
-Миграция `202611010001`: таблицы `strategy_library` (одна строка, `revision bigint`), `strategies` (`id uuid`, `name`,
+Миграция `202611010002`: таблицы `strategy_library` (одна строка, `revision bigint`), `strategies` (`id uuid`, `name`,
 `definition jsonb`, `created_at`, `updated_at`; направление — внутри `definition`) и `strategy_composite_nodes` (`id uuid`, `name`,
 `definition jsonb`, `created_at`, `updated_at`). Время — из `TimeProvider`. Репозиторий `IStrategyLibraryRepository`
 загружает библиотеку целиком и сохраняет одно изменение с проверкой ревизии; чтение одной стратегии или узла для `GET`

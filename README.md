@@ -46,8 +46,9 @@ the `Serilog` section of `appsettings*.json` and can be overridden with environm
 ## Market data API
 
 Start loading hourly `linear` BTCUSDT candles for a period `[from, to)`; `to` defaults to now. Times are ISO 8601 with
-an offset or `Z`; a time without one is rejected. The response is the job, and `Location` points to it; the job may
-already be `Running` or finished by the time the response is built:
+an offset or `Z`; a time without one is rejected. The job asks Bybit only for the candles not stored yet and never
+changes stored ones. The response is the job, and `Location` points to it; the job may already be `Running` or finished
+by the time the response is built:
 
 ```bash
 curl -i -X POST http://localhost:5242/api/market-data/candle-imports -H 'Content-Type: application/json' -d '{"category":"linear","symbol":"BTCUSDT","interval":"60","from":"2024-01-01T00:00:00Z","to":"2024-01-02T00:00:00Z"}'
@@ -57,6 +58,13 @@ Check the job: its status goes `Pending` → `Running` → `Succeeded` or `Faile
 
 ```bash
 curl http://localhost:5242/api/market-data/candle-imports/<job id>
+```
+
+While Bybit is unavailable, a job tries again after 1, 5, 15, 30 and 60 seconds before it fails. A job interrupted by a
+restart of the service continues after the start. Retry a `Failed` job; it continues from what is already stored:
+
+```bash
+curl -i -X POST http://localhost:5242/api/market-data/candle-imports/<job id>/retry
 ```
 
 Read stored candles, oldest first; `limit` is 1000 by default and 5000 at most:
