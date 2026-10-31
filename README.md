@@ -41,6 +41,13 @@ dotnet run --project backend/src/ProfitFox.Presentation --launch-profile http
 
 The service applies database migrations on start and listens on `http://localhost:5242`.
 
+The API is described by the OpenAPI document at `/openapi/v1.json`, and Swagger UI at `/swagger` lets you call it
+from the browser. Both are served in every environment, including Production; the API has no authorization yet.
+
+Logs go to the console only: text in Development, one JSON object per line elsewhere. Levels and format are set in
+the `Serilog` section of `appsettings*.json` and can be overridden with environment variables such as
+`Serilog__MinimumLevel__Default=Debug`.
+
 ## Market data API
 
 Start loading hourly `linear` BTCUSDT candles for a period `[from, to)`; `to` defaults to now. Times are ISO 8601 with
