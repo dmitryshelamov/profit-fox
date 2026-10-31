@@ -7,6 +7,7 @@ using Npgsql;
 
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.MarketData;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Strategies;
 
 namespace ProfitFox.Infrastructure.Persistence.Postgres;
 
@@ -18,6 +19,7 @@ internal static class PostgresRegistrar
         services.AddSingleton(_ => NpgsqlDataSource.Create(ConnectionString(configuration)));
         services.AddScoped<ICandleRepository, CandleRepository>();
         services.AddScoped<ICandleImportJobRepository, CandleImportJobRepository>();
+        services.AddScoped<IStrategyLibraryRepository, StrategyLibraryRepository>();
         services
             .AddFluentMigratorCore()
             .ConfigureRunner(runner => runner
