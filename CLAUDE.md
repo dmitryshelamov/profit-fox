@@ -56,24 +56,24 @@ or `.editorconfig`; CI (`.github/workflows/ci.yml`) also runs the tests, once mo
   2. `/opsx:propose` — builds on the decisions agreed in the conversation.
   3. The owner reviews the artifacts; revisions go through `/opsx:update`.
   4. `/opsx:apply` — done when build, tests and format pass.
-  5. `/opsx:archive` before the merge request, so code and updated `openspec/specs` land in
+  5. `/opsx:archive` before the pull request, so code and updated `openspec/specs` land in
      `main` as one squash commit.
 - Record decisions in the change's `design.md`; the archived `design.md` is the decision log.
   No ADRs in `docs/adr/` for now.
 - Reply to the user in Russian.
 - OpenSpec artifacts are in Russian; code, identifiers, code comments and commits are in English.
-- The repository is on GitLab (`gitlab.com/dmitry_shelamov/profit-fox`), not GitHub.
+- The repository is on GitHub (`github.com/dmitryshelamov/profit-fox`).
 
 ## Git
 
-- Never commit or push to `main` directly: work in a branch and merge only through a GitLab merge request.
-- Merge requests are merged with squash: one MR becomes one commit in `main`. The squash commit
-  message comes from the MR title, so the MR title follows the commit format below.
+- Never commit or push to `main` directly: work in a branch and merge only through a GitHub pull request.
+- Pull requests are merged with squash: one PR becomes one commit in `main`. The squash commit
+  message comes from the PR title, so the PR title follows the commit format below.
 - Branches: `<type>/<kebab-case-name>`, where type is feat | fix | refactor | test | docs | chore.
   For an OpenSpec change, use the change name: `feat/add-backtest-engine`.
 - Commits follow Conventional Commits: `<type>(<scope>): <summary>` — imperative mood, lowercase,
   no trailing period, summary up to 72 characters. Scope is optional.
-- One logical change per merge request; every MR passes build and tests.
+- One logical change per pull request; every PR passes build and tests.
 
 ## Exchange and production access
 
