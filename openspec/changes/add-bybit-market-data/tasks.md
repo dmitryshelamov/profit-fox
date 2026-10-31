@@ -5,7 +5,7 @@
 ## 1. Окружение и зависимости
 
 - [x] 1.1 Удалить шаблонный код скаффолда (`WeatherForecast*`, `Class1.cs`, `UnitTest1.cs`, шаблонный `.http`) и проверить, что `dotnet build backend/ProfitFox.sln` проходит
-- [x] 1.2 Добавить `docker-compose.yml` с TimescaleDB (фиксированный тег), `.env.example`, `.env` в `.gitignore`; проверить, что `docker compose up -d` поднимает БД и `psql` видит расширение `timescaledb`
+- [ ] 1.2 Добавить `docker-compose.yml` с TimescaleDB (фиксированный тег), `.env.example`, `.env` в `.gitignore`; проверить, что `docker compose up -d` поднимает БД и `psql` видит расширение `timescaledb`
 - [ ] 1.3 Добавить NuGet-пакеты (Npgsql EF Core provider, `Microsoft.Extensions.TimeProvider.Testing`, Testcontainers.PostgreSql, `Microsoft.AspNetCore.Mvc.Testing`) и ссылки тестовых проектов на нужные слои; проверить сборку
 - [ ] 1.4 Создать в `Tests.Integration` общий фикстур: TimescaleDB в Testcontainers + `WebApplicationFactory` с подменой HTTP Bybit; проверить пустым smoke-тестом, что контейнер стартует и приложение поднимается
 
