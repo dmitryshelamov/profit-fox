@@ -29,6 +29,6 @@
 
 - **Код:** все четыре слоя `backend/src` (`Domain`, `Application`, `Infrastructure`, `Presentation`) и оба тестовых проекта получают первую предметную логику; шаблонный код удаляется.
 - **API:** новые эндпоинты под `/api/market-data/` (создание и статус задачи загрузки, чтение свечей).
-- **Внешние зависимости:** публичный REST API Bybit v5 (`api.bybit.com`, без ключа, только рыночные данные — ордера не отправляются); PostgreSQL + TimescaleDB; NuGet-пакеты Npgsql/EF Core, Testcontainers, `Microsoft.AspNetCore.Mvc.Testing`.
+- **Внешние зависимости:** публичный REST API Bybit v5 (`api.bybit.com`, без ключа, только рыночные данные — ордера не отправляются); PostgreSQL + TimescaleDB; NuGet-пакеты Npgsql, Dapper, FluentMigrator, MediatR, `CryptoClients.Net` (Bybit.Net), Polly, Testcontainers, `Microsoft.AspNetCore.Mvc.Testing`; только в тестах — NSubstitute, Shouldly, AutoFixture.
 - **Инфраструктура:** `docker-compose.yml` для локальной разработки; для интеграционных тестов нужен Docker. Production-сервер не затрагивается.
 - **Конфигурация:** строка подключения к БД через переменные окружения / user secrets, не в git.

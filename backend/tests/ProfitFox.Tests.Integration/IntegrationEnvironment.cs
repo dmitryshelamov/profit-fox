@@ -1,0 +1,37 @@
+using Npgsql;
+using Testcontainers.PostgreSql;
+
+namespace ProfitFox.Tests.Integration;
+
+/// <summary>Starts one TimescaleDB container for the whole test assembly; each test gets its own database.</summary>
+[SetUpFixture]
+public class IntegrationEnvironment
+{
+    // Keep in sync with docker-compose.yml.
+    public const string TimescaleImage = "timescale/timescaledb:2.30.2-pg17";
+
+    private static PostgreSqlContainer _container = null!;
+
+    [OneTimeSetUp]
+    public async Task StartContainer()
+    {
+        _container = new PostgreSqlBuilder(TimescaleImage).Build();
+        await _container.StartAsync();
+    }
+
+    [OneTimeTearDown]
+    public async Task StopContainer() => await _container.DisposeAsync();
+
+    public static async Task<string> CreateDatabaseAsync()
+    {
+        var name = $"test_{Guid.NewGuid():N}";
+        await using (var connection = new NpgsqlConnection(_container.GetConnectionString()))
+        {
+            await connection.OpenAsync();
+            await using var command = new NpgsqlCommand($"CREATE DATABASE {name}", connection);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        return new NpgsqlConnectionStringBuilder(_container.GetConnectionString()) { Database = name }.ConnectionString;
+    }
+}

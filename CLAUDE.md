@@ -26,8 +26,10 @@ After cloning, enable the repo's git hooks once: `git config core.hooksPath .git
 
 ## Architecture
 
-The solution is still empty. New projects, layers and external dependencies (databases, brokers,
-data sources) are introduced only through an OpenSpec design, not while implementing a task.
+- New projects, layers and external dependencies (databases, brokers, data sources) are introduced
+  only through an OpenSpec design, not while implementing a task.
+- One top-level type per file, named after the type. A type used only by its enclosing class may
+  stay nested in it.
 
 ## Tests
 
