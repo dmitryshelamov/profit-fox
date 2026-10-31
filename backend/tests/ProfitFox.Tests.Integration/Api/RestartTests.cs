@@ -37,6 +37,7 @@ public class RestartTests
         CandleImportJob job = CandleImportJobGenerator.Generate(CandleImportStatus.Running) with { StartedAt = factory.Time.GetUtcNow() };
         await using var dataSource = NpgsqlDataSource.Create(connectionString);
         await new CandleImportJobRepository(dataSource).AddAsync(job, CancellationToken.None);
+
         return job;
     }
 }

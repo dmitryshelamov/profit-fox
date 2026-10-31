@@ -12,11 +12,15 @@ namespace ProfitFox.Tests.Unit.Infrastructure.Exchanges.Bybit;
 /// <summary>The adapter over Bybit.Net with HTTP served by the stub; the SDK rate limiter is off, it would wait in real time.</summary>
 public static class BybitClients
 {
-    internal static BybitMarketDataClient Create(StubHttpHandler handler, TimeProvider time) =>
-        Create(handler, new ExchangeResilienceExecutor(time));
+    internal static BybitMarketDataClient Create(StubHttpHandler handler, TimeProvider time)
+    {
+        return Create(handler, new ExchangeResilienceExecutor(time));
+    }
 
-    internal static BybitMarketDataClient Create(StubHttpHandler handler, ExchangeResilienceExecutor resilience) =>
-        new(
+    internal static BybitMarketDataClient Create(StubHttpHandler handler, ExchangeResilienceExecutor resilience)
+    {
+        return new BybitMarketDataClient(
             new BybitRestClient(handler.CreateClient(), NullLoggerFactory.Instance, Options.Create(new BybitRestOptions { RateLimiterEnabled = false })),
             resilience);
+    }
 }

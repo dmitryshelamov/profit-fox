@@ -18,10 +18,10 @@ public sealed class CandleImportsController(ISender sender) : ControllerBase
     public async Task<IActionResult> Create(CreateCandleImportBody body, CancellationToken cancellationToken)
     {
         Guid id;
+
         try
         {
-            id = await sender.Send(
-                new CreateCandleImportCommand(body.Category, body.Symbol, body.Interval, body.From, body.To), cancellationToken);
+            id = await sender.Send(new CreateCandleImportCommand(body.Category, body.Symbol, body.Interval, body.From, body.To), cancellationToken);
         }
         catch (ValidationFailedException exception)
         {
@@ -34,6 +34,7 @@ public sealed class CandleImportsController(ISender sender) : ControllerBase
 
         // The background service may already have picked the job up, so its status is not necessarily Pending here.
         CandleImportJob? job = await sender.Send(new GetCandleImportQuery(id), cancellationToken);
+
         return AcceptedAtAction(nameof(Get), new { id }, CandleImportJobResponse.Of(job!));
     }
 
@@ -41,6 +42,7 @@ public sealed class CandleImportsController(ISender sender) : ControllerBase
     public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken)
     {
         CandleImportJob? job = await sender.Send(new GetCandleImportQuery(id), cancellationToken);
+
         return job is null ? NotFound() : Ok(CandleImportJobResponse.Of(job));
     }
 }

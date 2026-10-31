@@ -10,12 +10,13 @@ namespace ProfitFox.Tests.Shared.Generators.Domain.Entity.MarketData;
 
 public static class CandleImportJobGenerator
 {
-    private static readonly Fixture Fixture = new();
+    private static readonly Fixture Fixture = new Fixture();
 
     /// <summary>A job with a non-empty period and no start or finish time; set those when the status needs them.</summary>
     public static CandleImportJob Generate(CandleImportStatus status)
     {
         DateTimeOffset from = DateTimeOffsetGenerator.Generate();
+
         return new CandleImportJob(
             Guid.NewGuid(),
             InstrumentGenerator.Generate(),

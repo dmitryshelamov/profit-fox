@@ -19,6 +19,7 @@ public static class MarketDataDatabase
             .Build();
         var services = new ServiceCollection();
         PostgresRegistrar.Configure(configuration, services);
+
         await using (ServiceProvider provider = services.BuildServiceProvider())
         {
             provider.MigrateToLatestVersion();

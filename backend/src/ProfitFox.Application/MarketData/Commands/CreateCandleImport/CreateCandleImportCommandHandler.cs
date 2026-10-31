@@ -21,6 +21,7 @@ public sealed class CreateCandleImportCommandHandler(
     public async Task<Guid> Handle(CreateCandleImportCommand request, CancellationToken cancellationToken)
     {
         var errors = new Dictionary<string, string>();
+
         if (!MarketDataCodes.TryParseCategory(request.Category, out MarketCategory category))
         {
             errors["category"] = "Category must be spot or linear.";
@@ -32,6 +33,7 @@ public sealed class CreateCandleImportCommandHandler(
         }
 
         DateTimeOffset now = time.GetUtcNow();
+
         if (!ApiTimestamps.TryParse(request.From, out DateTimeOffset from))
         {
             errors["from"] = ApiTimestamps.Invalid("from");
@@ -39,6 +41,7 @@ public sealed class CreateCandleImportCommandHandler(
 
         DateTimeOffset to = now;
         bool toIsTime = request.To is null || ApiTimestamps.TryParse(request.To, out to);
+
         if (!toIsTime)
         {
             errors["to"] = ApiTimestamps.Invalid("to");
@@ -47,6 +50,7 @@ public sealed class CreateCandleImportCommandHandler(
         // An unparsed `from` stays at its minimum and never fails the period checks.
         from = from.ToUniversalTime();
         to = to.ToUniversalTime();
+
         if (toIsTime && from >= to)
         {
             errors["from"] = "from must be earlier than to.";
@@ -62,14 +66,27 @@ public sealed class CreateCandleImportCommandHandler(
         }
 
         var instrument = new Instrument(category, request.Symbol);
+
         if (!await marketHistory.InstrumentExistsAsync(instrument, cancellationToken))
         {
             throw new ValidationFailedException(new Dictionary<string, string> { ["symbol"] = $"Bybit has no {instrument.Symbol} in {request.Category}." });
         }
 
-        var job = new CandleImportJob(Guid.NewGuid(), instrument, interval, from, to, CandleImportStatus.Pending, ImportedCandles: 0, Error: null, now, StartedAt: null, FinishedAt: null);
+        var job = new CandleImportJob(
+            Guid.NewGuid(),
+            instrument,
+            interval,
+            from,
+            to,
+            CandleImportStatus.Pending,
+            ImportedCandles: 0,
+            Error: null,
+            now,
+            StartedAt: null,
+            FinishedAt: null);
         await jobs.AddAsync(job, cancellationToken);
         await queue.EnqueueAsync(job.Id, cancellationToken);
+
         return job.Id;
     }
 }

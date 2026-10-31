@@ -7,6 +7,8 @@ namespace ProfitFox.Application.MarketData.Queries.GetCandleImport;
 
 public sealed class GetCandleImportQueryHandler(ICandleImportJobRepository jobs) : IRequestHandler<GetCandleImportQuery, CandleImportJob?>
 {
-    public Task<CandleImportJob?> Handle(GetCandleImportQuery request, CancellationToken cancellationToken) =>
-        jobs.GetAsync(request.Id, cancellationToken);
+    public Task<CandleImportJob?> Handle(GetCandleImportQuery request, CancellationToken cancellationToken)
+    {
+        return jobs.GetAsync(request.Id, cancellationToken);
+    }
 }

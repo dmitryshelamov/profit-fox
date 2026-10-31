@@ -8,26 +8,30 @@ namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Mark
 
 internal static class CandleImportJobDbConverter
 {
-    internal static CandleImportJobDb FromDomain(CandleImportJob job) => new()
+    internal static CandleImportJobDb FromDomain(CandleImportJob job)
     {
-        Id = job.Id,
-        Category = job.Instrument.Category.ToCode(),
-        Symbol = job.Instrument.Symbol,
-        Interval = job.Interval.ToCode(),
-        From = job.From,
-        To = job.To,
-        Status = job.Status.ToString(),
-        ImportedCandles = job.ImportedCandles,
-        Error = job.Error,
-        CreatedAt = job.CreatedAt,
-        StartedAt = job.StartedAt,
-        FinishedAt = job.FinishedAt,
-    };
+        return new CandleImportJobDb
+        {
+            Id = job.Id,
+            Category = job.Instrument.Category.ToCode(),
+            Symbol = job.Instrument.Symbol,
+            Interval = job.Interval.ToCode(),
+            From = job.From,
+            To = job.To,
+            Status = job.Status.ToString(),
+            ImportedCandles = job.ImportedCandles,
+            Error = job.Error,
+            CreatedAt = job.CreatedAt,
+            StartedAt = job.StartedAt,
+            FinishedAt = job.FinishedAt
+        };
+    }
 
     internal static CandleImportJob ToDomain(CandleImportJobDb job)
     {
         MarketDataCodes.TryParseCategory(job.Category, out MarketCategory category);
         MarketDataCodes.TryParseInterval(job.Interval, out Interval interval);
+
         return new CandleImportJob(
             job.Id,
             new Instrument(category, job.Symbol),

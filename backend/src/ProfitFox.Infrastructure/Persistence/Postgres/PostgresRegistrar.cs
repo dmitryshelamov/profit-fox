@@ -23,8 +23,12 @@ internal static class PostgresRegistrar
             .ConfigureRunner(runner => runner
                 .AddPostgres()
                 .WithGlobalConnectionString(_ => ConnectionString(configuration))
-                .ScanIn(typeof(PostgresRegistrar).Assembly).For.Migrations());
+                .ScanIn(typeof(PostgresRegistrar).Assembly)
+                .For.Migrations());
     }
 
-    private static string ConnectionString(IConfiguration configuration) => configuration.GetConnectionString("MarketData")!;
+    private static string ConnectionString(IConfiguration configuration)
+    {
+        return configuration.GetConnectionString("MarketData")!;
+    }
 }

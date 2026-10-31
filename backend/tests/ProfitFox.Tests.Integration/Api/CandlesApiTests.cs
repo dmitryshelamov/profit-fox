@@ -71,13 +71,15 @@ public class CandlesApiTests
     [Test]
     public async Task Values_are_exact_decimal_strings()
     {
-        await StoreAsync([
-            new Candle(Day, new Price(42000.1m), new Price(42300.5m), new Price(41950m), new Price(42123.45m), new Volume(0.000123m), new Volume(5.18m)),
+        await StoreAsync(
+        [
+            new Candle(Day, new Price(42000.1m), new Price(42300.5m), new Price(41950m), new Price(42123.45m), new Volume(0.000123m), new Volume(5.18m))
         ]);
 
         JsonElement candle = (await GetCandlesAsync($"{Candles}&from=2024-01-01T00:00:00Z&to=2024-01-02T00:00:00Z")).Single();
 
-        (new[] { "open", "high", "low", "close", "volume", "turnover" }.Select(name => candle.GetProperty(name).GetString())).ShouldBe(new[] { "42000.1", "42300.5", "41950", "42123.45", "0.000123", "5.18" });
+        new[] { "open", "high", "low", "close", "volume", "turnover" }.Select(name => candle.GetProperty(name).GetString())
+            .ShouldBe(new[] { "42000.1", "42300.5", "41950", "42123.45", "0.000123", "5.18" });
     }
 
     // Scenario "Свечей больше лимита".
@@ -126,13 +128,17 @@ public class CandlesApiTests
     {
         HttpResponseMessage response = await _client.GetAsync(url);
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
+
         return (await response.Content.ReadFromJsonAsync<List<JsonElement>>())!;
     }
 
-    private Task StoreHourlyCandlesAsync(int count) =>
-        StoreAsync(Enumerable.Range(0, count)
-            .Select(hour => CandleGenerator.Generate(Day.AddHours(hour)))
-            .ToList());
+    private Task StoreHourlyCandlesAsync(int count)
+    {
+        return StoreAsync(
+            Enumerable.Range(start: 0, count)
+                .Select(hour => CandleGenerator.Generate(Day.AddHours(hour)))
+                .ToList());
+    }
 
     private async Task StoreAsync(IReadOnlyCollection<Candle> candles)
     {

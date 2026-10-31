@@ -17,6 +17,7 @@ public sealed class CandlesController(ISender sender) : ControllerBase
         GetCandlesResult result = await sender.Send(
             new GetCandlesQuery(parameters.Category, parameters.Symbol, parameters.Interval, parameters.From, parameters.To, parameters.Limit),
             cancellationToken);
+
         if (result.Candles is null)
         {
             return ValidationProblem(new ValidationProblemDetails(result.Errors.ToDictionary(error => error.Key, error => new[] { error.Value })));

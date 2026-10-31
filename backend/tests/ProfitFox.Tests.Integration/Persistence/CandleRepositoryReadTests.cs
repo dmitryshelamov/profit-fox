@@ -11,7 +11,7 @@ namespace ProfitFox.Tests.Integration.Persistence;
 
 public class CandleRepositoryReadTests
 {
-    private static readonly Instrument BtcLinear = new(MarketCategory.Linear, "BTCUSDT");
+    private static readonly Instrument BtcLinear = new Instrument(MarketCategory.Linear, "BTCUSDT");
     private static readonly Interval Hour = Interval.OneHour;
 
     private NpgsqlDataSource _dataSource = null!;
@@ -22,18 +22,32 @@ public class CandleRepositoryReadTests
     {
         _dataSource = await MarketDataDatabase.CreateAsync();
         _store = new CandleRepository(_dataSource);
+
         // Stored newest first, the way Bybit pages arrive.
-        await _store.UpsertAsync(BtcLinear, Hour, [Candle("2024-01-01T02:00:00Z"), Candle("2024-01-01T01:00:00Z"), Candle("2024-01-01T00:00:00Z")], CancellationToken.None);
+        await _store.UpsertAsync(
+            BtcLinear,
+            Hour,
+            [Candle("2024-01-01T02:00:00Z"), Candle("2024-01-01T01:00:00Z"), Candle("2024-01-01T00:00:00Z")],
+            CancellationToken.None);
     }
 
     [TearDown]
-    public async Task TearDown() => await _dataSource.DisposeAsync();
+    public async Task TearDown()
+    {
+        await _dataSource.DisposeAsync();
+    }
 
     // Scenario "Свечи есть".
     [Test]
     public async Task Returns_candles_of_the_period_oldest_first()
     {
-        IReadOnlyList<Candle> candles = await _store.GetAsync(BtcLinear, Hour, At("2024-01-01T01:00:00Z"), At("2024-01-01T03:00:00Z"), limit: 1000, CancellationToken.None);
+        IReadOnlyList<Candle> candles = await _store.GetAsync(
+            BtcLinear,
+            Hour,
+            At("2024-01-01T01:00:00Z"),
+            At("2024-01-01T03:00:00Z"),
+            limit: 1000,
+            CancellationToken.None);
 
         candles.Select(c => c.OpenTime).ShouldBe(new[] { At("2024-01-01T01:00:00Z"), At("2024-01-01T02:00:00Z") });
     }
@@ -41,7 +55,13 @@ public class CandleRepositoryReadTests
     [Test]
     public async Task End_of_period_is_exclusive()
     {
-        IReadOnlyList<Candle> candles = await _store.GetAsync(BtcLinear, Hour, At("2024-01-01T00:00:00Z"), At("2024-01-01T02:00:00Z"), limit: 1000, CancellationToken.None);
+        IReadOnlyList<Candle> candles = await _store.GetAsync(
+            BtcLinear,
+            Hour,
+            At("2024-01-01T00:00:00Z"),
+            At("2024-01-01T02:00:00Z"),
+            limit: 1000,
+            CancellationToken.None);
 
         candles.Count.ShouldBe(2);
     }
@@ -57,7 +77,13 @@ public class CandleRepositoryReadTests
     [Test]
     public async Task Returns_full_candle_values()
     {
-        IReadOnlyList<Candle> candles = await _store.GetAsync(BtcLinear, Hour, At("2024-01-01T00:00:00Z"), At("2024-01-01T01:00:00Z"), limit: 1000, CancellationToken.None);
+        IReadOnlyList<Candle> candles = await _store.GetAsync(
+            BtcLinear,
+            Hour,
+            At("2024-01-01T00:00:00Z"),
+            At("2024-01-01T01:00:00Z"),
+            limit: 1000,
+            CancellationToken.None);
 
         candles.ShouldBe(new[] { Candle("2024-01-01T00:00:00Z") });
     }
@@ -67,13 +93,24 @@ public class CandleRepositoryReadTests
     [TestCase(MarketCategory.Linear, "BTCUSDT", Interval.OneDay)]
     public async Task Returns_only_candles_of_the_requested_instrument_and_interval(MarketCategory category, string symbol, Interval interval)
     {
-        IReadOnlyList<Candle> candles = await _store.GetAsync(new Instrument(category, symbol), interval, At("2024-01-01T00:00:00Z"), At("2024-01-02T00:00:00Z"), limit: 1000, CancellationToken.None);
+        IReadOnlyList<Candle> candles = await _store.GetAsync(
+            new Instrument(category, symbol),
+            interval,
+            At("2024-01-01T00:00:00Z"),
+            At("2024-01-02T00:00:00Z"),
+            limit: 1000,
+            CancellationToken.None);
 
         candles.ShouldBeEmpty();
     }
 
-    private static Candle Candle(string openTime) =>
-        new(At(openTime), new Price(1m), new Price(2m), new Price(0.5m), new Price(1.5m), new Volume(0.000123m), new Volume(42123.45m));
+    private static Candle Candle(string openTime)
+    {
+        return new Candle(At(openTime), new Price(1m), new Price(2m), new Price(0.5m), new Price(1.5m), new Volume(0.000123m), new Volume(42123.45m));
+    }
 
-    private static DateTimeOffset At(string time) => DateTimeOffset.Parse(time);
+    private static DateTimeOffset At(string time)
+    {
+        return DateTimeOffset.Parse(time);
+    }
 }

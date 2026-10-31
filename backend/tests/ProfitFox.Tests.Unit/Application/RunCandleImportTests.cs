@@ -83,6 +83,7 @@ public class RunCandleImportTests
             () =>
             {
                 importedBeforeSecondPage = SavedStates()[^1].ImportedCandles;
+
                 return Candles("2024-01-01T00:00:00Z");
             });
 
@@ -116,53 +117,74 @@ public class RunCandleImportTests
 
         await _handler.Handle(new RunCandleImportCommand(job.Id), CancellationToken.None);
 
-        SavedStates()[^1].ShouldBe(job with
-        {
-            Status = CandleImportStatus.Failed,
-            ImportedCandles = 1,
-            Error = "Bybit request failed after 5 retries: HTTP 503",
-            StartedAt = Now,
-            FinishedAt = Now,
-        });
+        SavedStates()[^1]
+            .ShouldBe(
+                job with
+                {
+                    Status = CandleImportStatus.Failed,
+                    ImportedCandles = 1,
+                    Error = "Bybit request failed after 5 retries: HTTP 503",
+                    StartedAt = Now,
+                    FinishedAt = Now
+                });
         StoredOpenTimes().ShouldBe(["2024-01-01T02:00:00Z"]);
     }
 
     private CandleImportJob PendingJob(string from, string to)
     {
         var job = new CandleImportJob(
-            Guid.NewGuid(), InstrumentGenerator.Generate(), Interval.OneHour, DateTimeOffset.Parse(from), DateTimeOffset.Parse(to),
-            CandleImportStatus.Pending, ImportedCandles: 0, Error: null, Now, StartedAt: null, FinishedAt: null);
+            Guid.NewGuid(),
+            InstrumentGenerator.Generate(),
+            Interval.OneHour,
+            DateTimeOffset.Parse(from),
+            DateTimeOffset.Parse(to),
+            CandleImportStatus.Pending,
+            ImportedCandles: 0,
+            Error: null,
+            Now,
+            StartedAt: null,
+            FinishedAt: null);
         _jobs.GetAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
+
         return job;
     }
 
     /// <summary>Bybit serves the pages in order; a page may run code first, e.g. throw to simulate a Bybit error.</summary>
-    private void ServePages(CandleImportJob job, params Func<IReadOnlyList<Candle>>[] pages) =>
+    private void ServePages(CandleImportJob job, params Func<IReadOnlyList<Candle>>[] pages)
+    {
         _marketHistory.GetCandlePagesAsync(job.Instrument, job.Interval, job.From, job.To, Arg.Any<CancellationToken>()).Returns(Pages(pages));
+    }
 
     private static async IAsyncEnumerable<IReadOnlyList<Candle>> Pages(Func<IReadOnlyList<Candle>>[] pages)
     {
         foreach (Func<IReadOnlyList<Candle>> page in pages)
         {
             await Task.Yield();
+
             yield return page();
         }
     }
 
-    private static IReadOnlyList<Candle> Candles(params string[] openTimes) =>
-        openTimes.Select(time => CandleGenerator.Generate(DateTimeOffset.Parse(time))).ToList();
+    private static IReadOnlyList<Candle> Candles(params string[] openTimes)
+    {
+        return openTimes.Select(time => CandleGenerator.Generate(DateTimeOffset.Parse(time))).ToList();
+    }
 
     /// <summary>Every state of the job the handler saved, in order.</summary>
-    private List<CandleImportJob> SavedStates() =>
-        _jobs.ReceivedCalls()
+    private List<CandleImportJob> SavedStates()
+    {
+        return _jobs.ReceivedCalls()
             .Where(call => call.GetMethodInfo().Name == nameof(ICandleImportJobRepository.UpdateAsync))
             .Select(call => (CandleImportJob)call.GetArguments()[0]!)
             .ToList();
+    }
 
-    private List<string> StoredOpenTimes() =>
-        _candles.ReceivedCalls()
+    private List<string> StoredOpenTimes()
+    {
+        return _candles.ReceivedCalls()
             .Where(call => call.GetMethodInfo().Name == nameof(ICandleRepository.UpsertAsync))
             .SelectMany(call => (IReadOnlyCollection<Candle>)call.GetArguments()[2]!)
             .Select(candle => candle.OpenTime.ToString("yyyy-MM-ddTHH:mm:ssZ"))
             .ToList();
+    }
 }

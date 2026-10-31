@@ -12,7 +12,7 @@ namespace ProfitFox.Tests.Unit.Infrastructure.Exchanges.Bybit;
 
 public class BybitInstrumentCheckTests
 {
-    private static readonly Instrument EthSpot = new(MarketCategory.Spot, "ETHUSDT");
+    private static readonly Instrument EthSpot = new Instrument(MarketCategory.Spot, "ETHUSDT");
 
     [TestCase(MarketCategory.Spot, "spot")]
     [TestCase(MarketCategory.Linear, "linear")]
@@ -80,23 +80,34 @@ public class BybitInstrumentCheckTests
     public async Task Open_circuit_fails_requests_without_reaching_bybit()
     {
         using var handler = new StubHttpHandler();
+
         for (var i = 0; i < 10; i++)
         {
             handler.Respond(HttpStatusCode.ServiceUnavailable);
         }
 
         BybitMarketDataClient client = BybitClients.Create(handler, new ExchangeResilienceExecutor(TimeProvider.System));
+
         for (var i = 0; i < 10; i++)
         {
             await Should.ThrowAsync<ExchangeException>(() => client.InstrumentExistsAsync(EthSpot, CancellationToken.None));
         }
 
         await Should.ThrowAsync<ExchangeException>(() => client.InstrumentExistsAsync(EthSpot, CancellationToken.None));
-        await Should.ThrowAsync<ExchangeException>(client.GetCandlePagesAsync(
-            EthSpot, Interval.OneHour, DateTimeOffset.Parse("2024-01-01T00:00:00Z"), DateTimeOffset.Parse("2024-01-01T01:00:00Z"), CancellationToken.None).ToListAsync().AsTask());
+        await Should.ThrowAsync<ExchangeException>(
+            client.GetCandlePagesAsync(
+                    EthSpot,
+                    Interval.OneHour,
+                    DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                    DateTimeOffset.Parse("2024-01-01T01:00:00Z"),
+                    CancellationToken.None)
+                .ToListAsync()
+                .AsTask());
         handler.Requests.Count.ShouldBe(10);
     }
 
-    private static Task<bool> InstrumentExistsAsync(StubHttpHandler handler, Instrument instrument) =>
-        BybitClients.Create(handler, TimeProvider.System).InstrumentExistsAsync(instrument, CancellationToken.None);
+    private static Task<bool> InstrumentExistsAsync(StubHttpHandler handler, Instrument instrument)
+    {
+        return BybitClients.Create(handler, TimeProvider.System).InstrumentExistsAsync(instrument, CancellationToken.None);
+    }
 }

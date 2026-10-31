@@ -6,7 +6,10 @@ namespace ProfitFox.Tests.Shared.Generators.Domain.Entity.MarketData.Enums;
 
 public static class MarketCategoryGenerator
 {
-    private static readonly Fixture Fixture = new();
+    private static readonly Fixture Fixture = new Fixture();
 
-    public static MarketCategory Generate() => Fixture.Create<MarketCategory>();
+    public static MarketCategory Generate()
+    {
+        return Fixture.Create<MarketCategory>();
+    }
 }

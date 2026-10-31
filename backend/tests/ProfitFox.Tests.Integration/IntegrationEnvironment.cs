@@ -24,11 +24,15 @@ public class IntegrationEnvironment
     }
 
     [OneTimeTearDown]
-    public async Task StopContainer() => await Container.DisposeAsync();
+    public async Task StopContainer()
+    {
+        await Container.DisposeAsync();
+    }
 
     public static async Task<string> CreateDatabaseAsync()
     {
         var name = $"test_{Guid.NewGuid():N}";
+
         await using (var connection = new NpgsqlConnection(Container.GetConnectionString()))
         {
             await connection.OpenAsync();

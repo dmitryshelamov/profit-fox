@@ -54,17 +54,27 @@ public class ExchangeResilienceExecutorTests
     {
         for (var i = 0; i < times; i++)
         {
-            await Should.ThrowAsync<Exception>(() => _executor.ExecuteOnceAsync<int>(_ =>
-            {
-                _calls++;
-                throw failure();
-            }, CancellationToken.None).AsTask());
+            await Should.ThrowAsync<Exception>(() => _executor.ExecuteOnceAsync<int>(
+                    _ =>
+                    {
+                        _calls++;
+
+                        throw failure();
+                    },
+                    CancellationToken.None)
+                .AsTask());
         }
     }
 
-    private ValueTask<int> CallAsync() => _executor.ExecuteOnceAsync(_ =>
+    private ValueTask<int> CallAsync()
     {
-        _calls++;
-        return ValueTask.FromResult(42);
-    }, CancellationToken.None);
+        return _executor.ExecuteOnceAsync(
+            _ =>
+            {
+                _calls++;
+
+                return ValueTask.FromResult(42);
+            },
+            CancellationToken.None);
+    }
 }
