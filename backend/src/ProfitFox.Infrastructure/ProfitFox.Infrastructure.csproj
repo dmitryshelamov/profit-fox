@@ -1,11 +1,5 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-    <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
-    </PropertyGroup>
-
     <ItemGroup>
       <FrameworkReference Include="Microsoft.AspNetCore.App" />
     </ItemGroup>
@@ -15,11 +9,11 @@
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="CryptoClients.Net" Version="5.9.0" />
-      <PackageReference Include="Dapper" Version="2.1.89" />
-      <PackageReference Include="FluentMigrator.Runner.Postgres" Version="8.0.1" />
-      <PackageReference Include="Npgsql" Version="10.0.3" />
-      <PackageReference Include="Polly" Version="8.8.0" />
+      <PackageReference Include="CryptoClients.Net" />
+      <PackageReference Include="Dapper" />
+      <PackageReference Include="FluentMigrator.Runner.Postgres" />
+      <PackageReference Include="Npgsql" />
+      <PackageReference Include="Polly" />
     </ItemGroup>
 
     <ItemGroup>

@@ -8,8 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <!-- 5.0.0 loads in every .NET 10 SDK; newer versions need a newer compiler and are silently skipped by older SDKs. -->
-        <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.0.0" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers" />
+        <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers" />
         <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
     </ItemGroup>
 
