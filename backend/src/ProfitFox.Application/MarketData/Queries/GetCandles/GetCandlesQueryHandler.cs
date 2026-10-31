@@ -1,4 +1,7 @@
 using MediatR;
+
+using ProfitFox.Domain.Entities.MarketData;
+using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
@@ -12,22 +15,22 @@ public sealed class GetCandlesQueryHandler(ICandleRepository candles) : IRequest
     public async Task<GetCandlesResult> Handle(GetCandlesQuery request, CancellationToken cancellationToken)
     {
         var errors = new Dictionary<string, string>();
-        if (!MarketDataCodes.TryParseCategory(request.Category, out var category))
+        if (!MarketDataCodes.TryParseCategory(request.Category, out MarketCategory category))
         {
             errors["category"] = "Category must be spot or linear.";
         }
 
-        if (!MarketDataCodes.TryParseInterval(request.Interval, out var interval))
+        if (!MarketDataCodes.TryParseInterval(request.Interval, out Interval interval))
         {
             errors["interval"] = "Interval must be one of Bybit intervals: 1, 3, 5, 15, 30, 60, 120, 240, 360, 720, D, W, M.";
         }
 
-        if (!ApiTimestamps.TryParse(request.From, out var from))
+        if (!ApiTimestamps.TryParse(request.From, out DateTimeOffset from))
         {
             errors["from"] = ApiTimestamps.Invalid("from");
         }
 
-        var toIsTime = ApiTimestamps.TryParse(request.To, out var to);
+        bool toIsTime = ApiTimestamps.TryParse(request.To, out DateTimeOffset to);
         if (!toIsTime)
         {
             errors["to"] = ApiTimestamps.Invalid("to");
@@ -39,7 +42,7 @@ public sealed class GetCandlesQueryHandler(ICandleRepository candles) : IRequest
             errors["from"] = "from must be earlier than to.";
         }
 
-        var limit = request.Limit ?? DefaultLimit;
+        int limit = request.Limit ?? DefaultLimit;
         if (limit is < 1 or > MaxLimit)
         {
             errors["limit"] = $"limit must be from 1 to {MaxLimit}.";
@@ -47,10 +50,10 @@ public sealed class GetCandlesQueryHandler(ICandleRepository candles) : IRequest
 
         if (errors.Count > 0)
         {
-            return new GetCandlesResult(null, errors);
+            return new GetCandlesResult(Candles: null, errors);
         }
 
-        var found = await candles.GetAsync(
+        IReadOnlyList<Candle> found = await candles.GetAsync(
             new Instrument(category, request.Symbol), interval, from.ToUniversalTime(), to.ToUniversalTime(), limit, cancellationToken);
         return new GetCandlesResult(found, errors);
     }

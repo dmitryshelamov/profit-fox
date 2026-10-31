@@ -1,4 +1,5 @@
 using Dapper;
+
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.MarketData.Contracts;
 

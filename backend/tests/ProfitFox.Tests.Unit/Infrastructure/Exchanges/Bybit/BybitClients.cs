@@ -1,7 +1,9 @@
 using Bybit.Net.Clients;
 using Bybit.Net.Objects.Options;
+
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+
 using ProfitFox.Infrastructure.Exchanges.Bybit;
 using ProfitFox.Infrastructure.Exchanges.Retry;
 

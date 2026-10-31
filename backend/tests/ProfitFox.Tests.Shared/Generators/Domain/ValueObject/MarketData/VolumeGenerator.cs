@@ -1,4 +1,5 @@
 using AutoFixture;
+
 using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Tests.Shared.Generators.Domain.ValueObject.MarketData;

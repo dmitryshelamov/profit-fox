@@ -1,8 +1,10 @@
 using Npgsql;
+
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.MarketData;
+
 using Shouldly;
 
 namespace ProfitFox.Tests.Integration.Persistence;
@@ -31,7 +33,7 @@ public class CandleRepositoryReadTests
     [Test]
     public async Task Returns_candles_of_the_period_oldest_first()
     {
-        var candles = await _store.GetAsync(BtcLinear, Hour, At("2024-01-01T01:00:00Z"), At("2024-01-01T03:00:00Z"), 1000, CancellationToken.None);
+        IReadOnlyList<Candle> candles = await _store.GetAsync(BtcLinear, Hour, At("2024-01-01T01:00:00Z"), At("2024-01-01T03:00:00Z"), limit: 1000, CancellationToken.None);
 
         candles.Select(c => c.OpenTime).ShouldBe(new[] { At("2024-01-01T01:00:00Z"), At("2024-01-01T02:00:00Z") });
     }
@@ -39,7 +41,7 @@ public class CandleRepositoryReadTests
     [Test]
     public async Task End_of_period_is_exclusive()
     {
-        var candles = await _store.GetAsync(BtcLinear, Hour, At("2024-01-01T00:00:00Z"), At("2024-01-01T02:00:00Z"), 1000, CancellationToken.None);
+        IReadOnlyList<Candle> candles = await _store.GetAsync(BtcLinear, Hour, At("2024-01-01T00:00:00Z"), At("2024-01-01T02:00:00Z"), limit: 1000, CancellationToken.None);
 
         candles.Count.ShouldBe(2);
     }
@@ -47,7 +49,7 @@ public class CandleRepositoryReadTests
     [Test]
     public async Task Returns_at_most_limit_candles_starting_from_the_earliest()
     {
-        var candles = await _store.GetAsync(BtcLinear, Hour, At("2024-01-01T00:00:00Z"), At("2024-01-02T00:00:00Z"), 2, CancellationToken.None);
+        IReadOnlyList<Candle> candles = await _store.GetAsync(BtcLinear, Hour, At("2024-01-01T00:00:00Z"), At("2024-01-02T00:00:00Z"), limit: 2, CancellationToken.None);
 
         candles.Select(c => c.OpenTime).ShouldBe(new[] { At("2024-01-01T00:00:00Z"), At("2024-01-01T01:00:00Z") });
     }
@@ -55,7 +57,7 @@ public class CandleRepositoryReadTests
     [Test]
     public async Task Returns_full_candle_values()
     {
-        var candles = await _store.GetAsync(BtcLinear, Hour, At("2024-01-01T00:00:00Z"), At("2024-01-01T01:00:00Z"), 1000, CancellationToken.None);
+        IReadOnlyList<Candle> candles = await _store.GetAsync(BtcLinear, Hour, At("2024-01-01T00:00:00Z"), At("2024-01-01T01:00:00Z"), limit: 1000, CancellationToken.None);
 
         candles.ShouldBe(new[] { Candle("2024-01-01T00:00:00Z") });
     }
@@ -65,7 +67,7 @@ public class CandleRepositoryReadTests
     [TestCase(MarketCategory.Linear, "BTCUSDT", Interval.OneDay)]
     public async Task Returns_only_candles_of_the_requested_instrument_and_interval(MarketCategory category, string symbol, Interval interval)
     {
-        var candles = await _store.GetAsync(new Instrument(category, symbol), interval, At("2024-01-01T00:00:00Z"), At("2024-01-02T00:00:00Z"), 1000, CancellationToken.None);
+        IReadOnlyList<Candle> candles = await _store.GetAsync(new Instrument(category, symbol), interval, At("2024-01-01T00:00:00Z"), At("2024-01-02T00:00:00Z"), limit: 1000, CancellationToken.None);
 
         candles.ShouldBeEmpty();
     }

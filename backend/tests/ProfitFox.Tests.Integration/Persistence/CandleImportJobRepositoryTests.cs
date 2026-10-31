@@ -1,8 +1,10 @@
 using Npgsql;
+
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.MarketData;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.MarketData;
+
 using Shouldly;
 
 namespace ProfitFox.Tests.Integration.Persistence;
@@ -27,7 +29,7 @@ public class CandleImportJobRepositoryTests
     [Test]
     public async Task Created_job_is_read_back_with_all_parameters()
     {
-        var job = NewJob(CandleImportStatus.Pending);
+        CandleImportJob job = NewJob(CandleImportStatus.Pending);
 
         await _store.AddAsync(job, CancellationToken.None);
 
@@ -43,9 +45,9 @@ public class CandleImportJobRepositoryTests
     [Test]
     public async Task Update_saves_status_progress_error_and_times()
     {
-        var job = NewJob(CandleImportStatus.Pending);
+        CandleImportJob job = NewJob(CandleImportStatus.Pending);
         await _store.AddAsync(job, CancellationToken.None);
-        var failed = job with
+        CandleImportJob failed = job with
         {
             Status = CandleImportStatus.Failed,
             ImportedCandles = 1500,
@@ -62,15 +64,15 @@ public class CandleImportJobRepositoryTests
     [Test]
     public async Task Unfinished_jobs_become_failed_with_the_reason()
     {
-        var pending = NewJob(CandleImportStatus.Pending);
-        var running = NewJob(CandleImportStatus.Running) with { StartedAt = Created };
-        var succeeded = NewJob(CandleImportStatus.Succeeded) with { StartedAt = Created, FinishedAt = Created, ImportedCandles = 3 };
-        foreach (var job in new[] { pending, running, succeeded })
+        CandleImportJob pending = NewJob(CandleImportStatus.Pending);
+        CandleImportJob running = NewJob(CandleImportStatus.Running) with { StartedAt = Created };
+        CandleImportJob succeeded = NewJob(CandleImportStatus.Succeeded) with { StartedAt = Created, FinishedAt = Created, ImportedCandles = 3 };
+        foreach (CandleImportJob? job in new[] { pending, running, succeeded })
         {
             await _store.AddAsync(job, CancellationToken.None);
         }
 
-        var now = Created.AddHours(1);
+        DateTimeOffset now = Created.AddHours(1);
         await _store.FailUnfinishedAsync("interrupted", now, CancellationToken.None);
 
         (await _store.GetAsync(pending.Id, CancellationToken.None)).ShouldBe(pending with { Status = CandleImportStatus.Failed, Error = "interrupted", FinishedAt = now });

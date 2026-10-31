@@ -1,8 +1,11 @@
 using MediatR;
+
 using Microsoft.AspNetCore.Mvc;
+
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.MarketData.Commands.CreateCandleImport;
 using ProfitFox.Application.MarketData.Queries.GetCandleImport;
+using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Presentation.Contracts.MarketData;
 
 namespace ProfitFox.Presentation.Controllers;
@@ -30,14 +33,14 @@ public sealed class CandleImportsController(ISender sender) : ControllerBase
         }
 
         // The background service may already have picked the job up, so its status is not necessarily Pending here.
-        var job = await sender.Send(new GetCandleImportQuery(id), cancellationToken);
+        CandleImportJob? job = await sender.Send(new GetCandleImportQuery(id), cancellationToken);
         return AcceptedAtAction(nameof(Get), new { id }, CandleImportJobResponse.Of(job!));
     }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken)
     {
-        var job = await sender.Send(new GetCandleImportQuery(id), cancellationToken);
+        CandleImportJob? job = await sender.Send(new GetCandleImportQuery(id), cancellationToken);
         return job is null ? NotFound() : Ok(CandleImportJobResponse.Of(job));
     }
 }

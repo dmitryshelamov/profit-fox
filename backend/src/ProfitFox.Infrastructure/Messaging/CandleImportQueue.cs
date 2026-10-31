@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+
 using ProfitFox.Application.Ports.MarketData;
 
 namespace ProfitFox.Infrastructure.Messaging;

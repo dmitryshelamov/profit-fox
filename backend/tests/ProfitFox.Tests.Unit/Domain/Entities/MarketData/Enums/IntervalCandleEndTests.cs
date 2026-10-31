@@ -1,4 +1,5 @@
 using ProfitFox.Domain.Entities.MarketData.Enums;
+
 using Shouldly;
 
 namespace ProfitFox.Tests.Unit.Domain.Entities.MarketData.Enums;

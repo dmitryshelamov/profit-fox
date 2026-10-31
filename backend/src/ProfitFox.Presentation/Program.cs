@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
+
 using ProfitFox.Infrastructure;
 using ProfitFox.Infrastructure.Persistence.Postgres.FluentMigrator.Extensions;
 

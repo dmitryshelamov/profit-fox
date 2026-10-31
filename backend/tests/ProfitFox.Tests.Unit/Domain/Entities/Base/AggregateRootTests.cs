@@ -1,5 +1,6 @@
 using ProfitFox.Domain.Entities.Base;
 using ProfitFox.Domain.Events;
+
 using Shouldly;
 
 namespace ProfitFox.Tests.Unit.Domain.Entities.Base;

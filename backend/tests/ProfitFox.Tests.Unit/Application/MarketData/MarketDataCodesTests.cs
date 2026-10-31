@@ -1,5 +1,6 @@
 using ProfitFox.Application.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
+
 using Shouldly;
 
 namespace ProfitFox.Tests.Unit.Application.MarketData;
@@ -10,7 +11,7 @@ public class MarketDataCodesTests
     [TestCase("linear", MarketCategory.Linear)]
     public void Category_code_maps_both_ways(string code, MarketCategory category)
     {
-        MarketDataCodes.TryParseCategory(code, out var parsed).ShouldBeTrue();
+        MarketDataCodes.TryParseCategory(code, out MarketCategory parsed).ShouldBeTrue();
         parsed.ShouldBe(category);
         category.ToCode().ShouldBe(code);
     }
@@ -36,7 +37,7 @@ public class MarketDataCodesTests
     [TestCase("M", Interval.OneMonth)]
     public void Interval_code_maps_both_ways(string code, Interval interval)
     {
-        MarketDataCodes.TryParseInterval(code, out var parsed).ShouldBeTrue();
+        MarketDataCodes.TryParseInterval(code, out Interval parsed).ShouldBeTrue();
         parsed.ShouldBe(interval);
         interval.ToCode().ShouldBe(code);
     }

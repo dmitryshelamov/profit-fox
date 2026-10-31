@@ -1,11 +1,15 @@
 using MediatR;
+
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+
 using ProfitFox.Application.MarketData.Commands.RunCandleImport;
 using ProfitFox.Infrastructure.BackgroundServices;
 using ProfitFox.Infrastructure.Messaging;
+
 using Shouldly;
 
 namespace ProfitFox.Tests.Unit.Infrastructure.BackgroundServices;
@@ -17,7 +21,7 @@ public class CandleImportBackgroundServiceTests
     {
         var failing = Guid.NewGuid();
         var next = Guid.NewGuid();
-        var sender = Substitute.For<ISender>();
+        ISender sender = Substitute.For<ISender>();
         sender.Send(new RunCandleImportCommand(failing), Arg.Any<CancellationToken>()).ThrowsAsync(new InvalidOperationException("database is down"));
         var nextRan = new TaskCompletionSource();
         sender.Send(new RunCandleImportCommand(next), Arg.Any<CancellationToken>()).Returns(_ =>
@@ -25,7 +29,7 @@ public class CandleImportBackgroundServiceTests
             nextRan.SetResult();
             return Task.CompletedTask;
         });
-        await using var services = new ServiceCollection().AddSingleton(sender).BuildServiceProvider();
+        await using ServiceProvider services = new ServiceCollection().AddSingleton(sender).BuildServiceProvider();
         var queue = new CandleImportQueue();
         using var service = new CandleImportBackgroundService(
             queue, services.GetRequiredService<IServiceScopeFactory>(), NullLogger<CandleImportBackgroundService>.Instance);

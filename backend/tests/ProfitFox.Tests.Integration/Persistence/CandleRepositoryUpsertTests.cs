@@ -1,11 +1,14 @@
 using Dapper;
+
 using Npgsql;
+
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.MarketData.Contracts;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.MarketData;
+
 using Shouldly;
 
 namespace ProfitFox.Tests.Integration.Persistence;
@@ -33,7 +36,7 @@ public class CandleRepositoryUpsertTests
 
         await store.UpsertAsync(ethSpot, Day, [Candle("2024-01-01T00:00:00Z", close: 10m), Candle("2024-01-02T00:00:00Z", close: 20m)], CancellationToken.None);
 
-        var closes = await QueryAsync<decimal>("SELECT close FROM candles ORDER BY open_time");
+        List<decimal> closes = await QueryAsync<decimal>("SELECT close FROM candles ORDER BY open_time");
         closes.ShouldBe(new[] { 10m, 20m });
     }
 
@@ -42,12 +45,12 @@ public class CandleRepositoryUpsertTests
     public async Task Same_symbol_in_spot_and_linear_is_stored_independently()
     {
         var store = new CandleRepository(_dataSource);
-        var candles = new[] { Candle("2024-01-01T00:00:00Z", close: 1m) };
+        Candle[] candles = new[] { Candle("2024-01-01T00:00:00Z", close: 1m) };
 
         await store.UpsertAsync(new Instrument(MarketCategory.Spot, "BTCUSDT"), Hour, candles, CancellationToken.None);
         await store.UpsertAsync(new Instrument(MarketCategory.Linear, "BTCUSDT"), Hour, candles, CancellationToken.None);
 
-        var categories = await QueryAsync<string>("SELECT category FROM candles ORDER BY category");
+        List<string> categories = await QueryAsync<string>("SELECT category FROM candles ORDER BY category");
         categories.ShouldBe(new[] { "linear", "spot" });
     }
 
@@ -62,7 +65,7 @@ public class CandleRepositoryUpsertTests
 
         await store.UpsertAsync(new Instrument(MarketCategory.Linear, "BTCUSDT"), Hour, [candle], CancellationToken.None);
 
-        var row = (await QueryAsync<CandleDb>(
+        CandleDb row = (await QueryAsync<CandleDb>(
             """SELECT category, symbol, "interval", open_time AS "OpenTime", open, high, low, close, volume, turnover FROM candles""")).Single();
         (new[] { row.Open, row.High, row.Low, row.Close, row.Volume, row.Turnover }.Select(value => value.ToString(System.Globalization.CultureInfo.InvariantCulture))).ShouldBe(new[] { "42000.1", "42300.5", "41950", "42123.45", "0.000123", "5.18" });
         row.OpenTime.ShouldBe(candle.OpenTime);
@@ -71,7 +74,7 @@ public class CandleRepositoryUpsertTests
 
     private async Task<List<T>> QueryAsync<T>(string sql)
     {
-        await using var connection = await _dataSource.OpenConnectionAsync();
+        await using NpgsqlConnection connection = await _dataSource.OpenConnectionAsync();
         return (await connection.QueryAsync<T>(sql)).ToList();
     }
 

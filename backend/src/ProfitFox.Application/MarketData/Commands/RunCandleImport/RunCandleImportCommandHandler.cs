@@ -1,5 +1,7 @@
 using MediatR;
+
 using ProfitFox.Application.Ports.MarketData;
+using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 
@@ -14,13 +16,13 @@ public sealed class RunCandleImportCommandHandler(
     /// <summary>Loads the job's period page by page, storing only closed candles of <c>[From, To)</c>; saved pages survive a failure.</summary>
     public async Task Handle(RunCandleImportCommand request, CancellationToken cancellationToken)
     {
-        var job = (await jobs.GetAsync(request.JobId, cancellationToken))!;
-        var now = time.GetUtcNow();
+        CandleImportJob job = (await jobs.GetAsync(request.JobId, cancellationToken))!;
+        DateTimeOffset now = time.GetUtcNow();
         job = job with { Status = CandleImportStatus.Running, StartedAt = now };
         await jobs.UpdateAsync(job, cancellationToken);
         try
         {
-            await foreach (var page in marketHistory.GetCandlePagesAsync(job.Instrument, job.Interval, job.From, job.To, cancellationToken))
+            await foreach (IReadOnlyList<Candle> page in marketHistory.GetCandlePagesAsync(job.Instrument, job.Interval, job.From, job.To, cancellationToken))
             {
                 var closed = page
                     .Where(c => c.OpenTime >= job.From && c.OpenTime < job.To && c.IsClosedAt(job.Interval, now))

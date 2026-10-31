@@ -1,6 +1,7 @@
 using Polly;
 using Polly.CircuitBreaker;
 using Polly.Retry;
+
 using ProfitFox.Application.Exceptions;
 
 namespace ProfitFox.Infrastructure.Exchanges.Retry;

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+
 using ProfitFox.Application.MarketData.Commands.CreateCandleImport;
 
 namespace ProfitFox.Infrastructure.Mediatr;

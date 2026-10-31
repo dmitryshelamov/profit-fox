@@ -1,7 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+
 using ProfitFox.Tests.Integration.Infrastructure;
+
 using Shouldly;
 
 namespace ProfitFox.Tests.Integration.Api;
@@ -34,9 +36,9 @@ public class CandleImportsApiTests
     {
         await using var factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { RunImports = false };
         factory.Bybit.Instruments.Add(("linear", "BTCUSDT"));
-        using var client = factory.CreateClient();
+        using HttpClient client = factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync(Imports, new
+        HttpResponseMessage response = await client.PostAsJsonAsync(Imports, new
         {
             category = "linear",
             symbol = "BTCUSDT",
@@ -46,7 +48,7 @@ public class CandleImportsApiTests
         });
 
         response.StatusCode.ShouldBe(HttpStatusCode.Accepted);
-        var job = await response.Content.ReadFromJsonAsync<JsonElement>();
+        JsonElement job = await response.Content.ReadFromJsonAsync<JsonElement>();
         job.GetProperty("status").GetString().ShouldBe("Pending");
         job.GetProperty("category").GetString().ShouldBe("linear");
         job.GetProperty("interval").GetString().ShouldBe("60");
@@ -56,7 +58,7 @@ public class CandleImportsApiTests
     [Test]
     public async Task Created_job_is_found_by_its_id()
     {
-        var created = await (await _client.PostAsJsonAsync(Imports, new
+        JsonElement created = await (await _client.PostAsJsonAsync(Imports, new
         {
             category = "linear",
             symbol = "btcusdt",
@@ -65,10 +67,10 @@ public class CandleImportsApiTests
             to = "2024-02-01T00:00:00Z",
         })).Content.ReadFromJsonAsync<JsonElement>();
 
-        var response = await _client.GetAsync($"{Imports}/{created.GetProperty("id").GetGuid()}");
+        HttpResponseMessage response = await _client.GetAsync($"{Imports}/{created.GetProperty("id").GetGuid()}");
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        var job = await response.Content.ReadFromJsonAsync<JsonElement>();
+        JsonElement job = await response.Content.ReadFromJsonAsync<JsonElement>();
         job.GetProperty("symbol").GetString().ShouldBe("BTCUSDT");
         job.GetProperty("from").GetDateTimeOffset().ShouldBe(DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
     }
@@ -83,10 +85,10 @@ public class CandleImportsApiTests
     [TestCase("linear", "BTCUSDT", "60", "2024-01-01T00:00:00", "from")]
     public async Task Invalid_request_is_rejected_with_the_invalid_parameter(string category, string symbol, string interval, string? from, string invalidField)
     {
-        var response = await _client.PostAsJsonAsync(Imports, new { category, symbol, interval, from, to = "2024-02-01T00:00:00Z" });
+        HttpResponseMessage response = await _client.PostAsJsonAsync(Imports, new { category, symbol, interval, from, to = "2024-02-01T00:00:00Z" });
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        JsonElement problem = await response.Content.ReadFromJsonAsync<JsonElement>();
         problem.GetProperty("errors").EnumerateObject().Select(error => error.Name).ShouldBe(new[] { invalidField });
     }
 
@@ -97,10 +99,10 @@ public class CandleImportsApiTests
     {
         _factory.Bybit.Unavailable = true;
 
-        var response = await _client.PostAsJsonAsync(Imports, new { category = "linear", symbol, interval = "60", from = "2024-01-01T00:00:00Z" });
+        HttpResponseMessage response = await _client.PostAsJsonAsync(Imports, new { category = "linear", symbol, interval = "60", from = "2024-01-01T00:00:00Z" });
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        JsonElement problem = await response.Content.ReadFromJsonAsync<JsonElement>();
         problem.GetProperty("errors").EnumerateObject().Select(error => error.Name).ShouldBe(new[] { "symbol" });
     }
 
@@ -108,10 +110,10 @@ public class CandleImportsApiTests
     [Test]
     public async Task Missing_parameter_is_reported_by_its_name()
     {
-        var response = await _client.PostAsJsonAsync(Imports, new { category = "linear", interval = "60", from = "2024-01-01T00:00:00Z" });
+        HttpResponseMessage response = await _client.PostAsJsonAsync(Imports, new { category = "linear", interval = "60", from = "2024-01-01T00:00:00Z" });
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        JsonElement problem = await response.Content.ReadFromJsonAsync<JsonElement>();
         problem.GetProperty("errors").EnumerateObject().Select(error => error.Name).ShouldBe(new[] { "symbol" });
     }
 
@@ -121,7 +123,7 @@ public class CandleImportsApiTests
     {
         _factory.Bybit.Unavailable = true;
 
-        var response = await _client.PostAsJsonAsync(Imports, new
+        HttpResponseMessage response = await _client.PostAsJsonAsync(Imports, new
         {
             category = "linear",
             symbol = "BTCUSDT",
@@ -138,7 +140,7 @@ public class CandleImportsApiTests
     [Test]
     public async Task Unknown_job_is_not_found()
     {
-        var response = await _client.GetAsync($"{Imports}/{Guid.NewGuid()}");
+        HttpResponseMessage response = await _client.GetAsync($"{Imports}/{Guid.NewGuid()}");
 
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }

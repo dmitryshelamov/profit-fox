@@ -1,7 +1,9 @@
 using MediatR;
+
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+
 using ProfitFox.Application.MarketData.Commands.RunCandleImport;
 using ProfitFox.Infrastructure.Messaging;
 
@@ -13,12 +15,12 @@ internal sealed class CandleImportBackgroundService(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var jobId in queue.ReadAllAsync(stoppingToken))
+        await foreach (Guid jobId in queue.ReadAllAsync(stoppingToken))
         {
             // An escaping exception would stop the whole host; the job stays as last saved and fails on the next start.
             try
             {
-                await using var scope = scopes.CreateAsyncScope();
+                await using AsyncServiceScope scope = scopes.CreateAsyncScope();
                 await scope.ServiceProvider.GetRequiredService<ISender>().Send(new RunCandleImportCommand(jobId), stoppingToken);
             }
             catch (Exception exception)

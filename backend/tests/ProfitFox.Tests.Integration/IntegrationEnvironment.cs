@@ -1,5 +1,7 @@
 using Npgsql;
+
 using ProfitFox.Tests.Shared.Network;
+
 using Testcontainers.PostgreSql;
 
 namespace ProfitFox.Tests.Integration;
@@ -11,29 +13,29 @@ public class IntegrationEnvironment
     // Keep in sync with docker-compose.yml.
     public const string TimescaleImage = "timescale/timescaledb:2.30.2-pg17";
 
-    private static PostgreSqlContainer _container = null!;
+    private static PostgreSqlContainer Container = null!;
 
     [OneTimeSetUp]
     public async Task StartContainer()
     {
         OutboundHttpGuard.Install();
-        _container = new PostgreSqlBuilder(TimescaleImage).Build();
-        await _container.StartAsync();
+        Container = new PostgreSqlBuilder(TimescaleImage).Build();
+        await Container.StartAsync();
     }
 
     [OneTimeTearDown]
-    public async Task StopContainer() => await _container.DisposeAsync();
+    public async Task StopContainer() => await Container.DisposeAsync();
 
     public static async Task<string> CreateDatabaseAsync()
     {
         var name = $"test_{Guid.NewGuid():N}";
-        await using (var connection = new NpgsqlConnection(_container.GetConnectionString()))
+        await using (var connection = new NpgsqlConnection(Container.GetConnectionString()))
         {
             await connection.OpenAsync();
             await using var command = new NpgsqlCommand($"CREATE DATABASE {name}", connection);
             await command.ExecuteNonQueryAsync();
         }
 
-        return new NpgsqlConnectionStringBuilder(_container.GetConnectionString()) { Database = name }.ConnectionString;
+        return new NpgsqlConnectionStringBuilder(Container.GetConnectionString()) { Database = name }.ConnectionString;
     }
 }

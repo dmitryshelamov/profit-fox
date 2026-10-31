@@ -1,4 +1,5 @@
 using AutoFixture;
+
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.MarketData.Enums;
 

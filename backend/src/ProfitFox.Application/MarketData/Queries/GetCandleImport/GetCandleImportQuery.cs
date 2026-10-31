@@ -1,4 +1,5 @@
 using MediatR;
+
 using ProfitFox.Domain.Entities.MarketData;
 
 namespace ProfitFox.Application.MarketData.Queries.GetCandleImport;
