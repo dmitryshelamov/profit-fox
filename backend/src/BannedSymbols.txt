@@ -1,0 +1,5 @@
+P:System.DateTime.Now;Use TimeProvider.GetUtcNow(): time is UTC only and comes from TimeProvider
+P:System.DateTime.Today;Use TimeProvider.GetUtcNow(): time is UTC only and comes from TimeProvider
+P:System.DateTimeOffset.Now;Use TimeProvider.GetUtcNow(): time is UTC only and comes from TimeProvider
+M:System.DateTime.Parse(System.String);Pass CultureInfo.InvariantCulture and DateTimeStyles.AssumeUniversal: the default reads text without an offset as local time
+M:System.DateTimeOffset.Parse(System.String);Pass CultureInfo.InvariantCulture and DateTimeStyles.AssumeUniversal: the default reads text without an offset as local time

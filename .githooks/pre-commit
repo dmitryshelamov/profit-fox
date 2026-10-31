@@ -1,0 +1,12 @@
+#!/bin/sh
+# Fast checks before a commit: build (with analyzers) and format. Tests run in CI.
+# Enable once per clone: git config core.hooksPath .githooks
+set -e
+
+# Skip commits that touch nothing the .NET build reads.
+if ! git diff --cached --name-only | grep -qE '^(backend/|\.editorconfig$)'; then
+    exit 0
+fi
+
+dotnet build backend/ProfitFox.sln --nologo -v:q
+dotnet format backend/ProfitFox.sln --verify-no-changes --no-restore
