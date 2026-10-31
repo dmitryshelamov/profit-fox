@@ -32,9 +32,11 @@ internal sealed class CandleImportJobRepository(NpgsqlDataSource dataSource) : I
         await connection.ExecuteAsync(CandleImportJobRepositoryQueries.Update(CandleImportJobDbConverter.FromDomain(job), cancellationToken));
     }
 
-    public async Task FailUnfinishedAsync(string reason, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<CandleImportJob>> GetUnfinishedAsync(CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await connection.ExecuteAsync(CandleImportJobRepositoryQueries.FailUnfinished(reason, now, cancellationToken));
+        IEnumerable<CandleImportJobDb> jobs = await connection.QueryAsync<CandleImportJobDb>(CandleImportJobRepositoryQueries.GetUnfinished(cancellationToken));
+
+        return jobs.Select(CandleImportJobDbConverter.ToDomain).ToList();
     }
 }

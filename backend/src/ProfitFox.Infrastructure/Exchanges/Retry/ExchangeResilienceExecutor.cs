@@ -62,7 +62,7 @@ internal sealed class ExchangeResilienceExecutor
         }
         catch (BrokenCircuitException)
         {
-            throw new ExchangeException("The exchange is temporarily unavailable after repeated failures.");
+            throw new ExchangeUnavailableException("The exchange is temporarily unavailable after repeated failures.");
         }
     }
 }

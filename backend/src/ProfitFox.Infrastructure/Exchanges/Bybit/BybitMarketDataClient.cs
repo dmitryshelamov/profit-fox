@@ -97,7 +97,7 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
         }
         catch (TransientExchangeException exception)
         {
-            throw new ExchangeException($"Bybit request failed after {resilience.RetryCount} retries: {exception.Message}");
+            throw new ExchangeUnavailableException($"Bybit request failed after {resilience.RetryCount} retries: {exception.Message}");
         }
     }
 
