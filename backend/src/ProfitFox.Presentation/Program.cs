@@ -1,19 +1,29 @@
+using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
+using ProfitFox.Infrastructure;
+using ProfitFox.Infrastructure.Persistence.Postgres.FluentMigrator.Extensions;
+
 namespace ProfitFox.Presentation;
 
 public class Program
 {
-    public static void Main(string[] args)
+    public static async Task Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
 
         // Add services to the container.
 
-        builder.Services.AddControllers();
+        // Validation errors are keyed by JSON names (`from`), the same names the API accepts.
+        builder.Services.AddControllers(options =>
+            options.ModelMetadataDetailsProviders.Add(new SystemTextJsonValidationMetadataProvider()));
 
         // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
         builder.Services.AddOpenApi();
 
+        InfrastructureRegistrar.Configure(builder.Configuration, builder.Services);
+
         var app = builder.Build();
+
+        app.Services.MigrateToLatestVersion();
 
         // Configure the HTTP request pipeline.
         if (app.Environment.IsDevelopment())
@@ -27,6 +37,6 @@ public class Program
 
         app.MapControllers();
 
-        app.Run();
+        await app.RunAsync();
     }
 }

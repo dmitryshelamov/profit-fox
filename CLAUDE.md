@@ -26,8 +26,10 @@ After cloning, enable the repo's git hooks once: `git config core.hooksPath .git
 
 ## Architecture
 
-The solution is still empty. New projects, layers and external dependencies (databases, brokers,
-data sources) are introduced only through an OpenSpec design, not while implementing a task.
+- New projects, layers and external dependencies (databases, brokers, data sources) are introduced
+  only through an OpenSpec design, not while implementing a task.
+- Before adding a type, folder or project under `backend/`, read `docs/conventions.md`: the layout,
+  naming and test setup the owner expects.
 
 ## Tests
 
