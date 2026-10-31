@@ -44,7 +44,11 @@ enforces a rule, the check is the source of truth.
 - `Controllers` holds controllers only; request and response types go to `Contracts/<Area>`.
 - Mark required contract members with `[Required]`, not the C# `required` keyword: a missing JSON property is then
   reported under its own name, not under `$`.
-- `Program` calls `InfrastructureRegistrar.Configure` and `MigrateToLatestVersion`; there is no other registration.
+- Application services are registered only through `InfrastructureRegistrar.Configure`. `Program` calls it and
+  `MigrateToLatestVersion` and configures the host itself: controllers, Serilog, the OpenAPI document and Swagger UI,
+  and the middleware pipeline.
+- Log levels and format live in the `Serilog` section of `appsettings*.json`, not in code: JSON by default, text in
+  `appsettings.Development.json`.
 
 ## Files
 
