@@ -35,4 +35,15 @@ public class MigrationTests
 
         column.ShouldBe(("integer", "NO", "0"));
     }
+
+    [Test]
+    public async Task Strategy_library_starts_at_revision_zero_without_graphs()
+    {
+        await using NpgsqlDataSource dataSource = await MarketDataDatabase.CreateAsync();
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
+
+        (await connection.QueryAsync<long>("SELECT revision FROM strategy_library")).ShouldBe([0L]);
+        (await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM strategies")).ShouldBe(0L);
+        (await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM strategy_composite_nodes")).ShouldBe(0L);
+    }
 }

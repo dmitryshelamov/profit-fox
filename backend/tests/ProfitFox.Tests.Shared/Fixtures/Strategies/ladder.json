@@ -1,0 +1,61 @@
+{
+  "formatVersion": 1,
+  "direction": "long",
+  "parameters": [
+    {
+      "name": "limitPerOrder",
+      "type": "number",
+      "default": 100,
+      "min": 0
+    },
+    {
+      "name": "limitDeposit",
+      "type": "number",
+      "default": 300,
+      "min": 0
+    },
+    {
+      "name": "priceDropForBuy",
+      "type": "number",
+      "default": 0.01,
+      "min": 0,
+      "max": 1
+    },
+    {
+      "name": "priceRiseForSell",
+      "type": "number",
+      "default": 0.01,
+      "min": 0
+    }
+  ],
+  "nodes": [
+    {
+      "id": "params",
+      "kind": "parameters"
+    },
+    {
+      "id": "ladder",
+      "kind": "composite",
+      "ref": "ladder"
+    }
+  ],
+  "wires": [
+    {
+      "from": "params.limitPerOrder",
+      "to": "ladder.limitPerOrder"
+    },
+    {
+      "from": "params.limitDeposit",
+      "to": "ladder.limitDeposit"
+    },
+    {
+      "from": "params.priceDropForBuy",
+      "to": "ladder.priceDropForBuy"
+    },
+    {
+      "from": "params.priceRiseForSell",
+      "to": "ladder.priceRiseForSell"
+    }
+  ],
+  "layout": {}
+}

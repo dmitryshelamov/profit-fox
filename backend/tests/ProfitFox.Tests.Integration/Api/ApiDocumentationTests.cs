@@ -37,6 +37,17 @@ public class ApiDocumentationTests
         document.RootElement.GetProperty("paths").TryGetProperty("/api/market-data/candles", out _).ShouldBeTrue();
     }
 
+    [Test]
+    public async Task OpenApi_document_lists_the_strategy_endpoints()
+    {
+        using var document = JsonDocument.Parse(await _client.GetStringAsync("/openapi/v1.json"));
+        JsonElement paths = document.RootElement.GetProperty("paths");
+
+        string[] expected = ["/api/strategies", "/api/strategies/{id}", "/api/strategy-nodes", "/api/strategy-nodes/{id}", "/api/strategy-nodes/{id}/clone"];
+        string[] documented = [.. paths.EnumerateObject().Select(path => path.Name)];
+        expected.Except(documented).ShouldBeEmpty();
+    }
+
     // Scenario "Страница в Production".
     [Test]
     public async Task Swagger_ui_is_served_in_production()

@@ -1,0 +1,49 @@
+{
+  "formatVersion": 1,
+  "direction": "long",
+  "parameters": [
+    {
+      "name": "limitPerOrder",
+      "type": "number",
+      "default": 100,
+      "min": 0
+    },
+    {
+      "name": "limitDeposit",
+      "type": "number",
+      "default": 250,
+      "min": 0
+    },
+    {
+      "name": "purchaseInterval",
+      "type": "duration",
+      "default": "01:00:00"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "params",
+      "kind": "parameters"
+    },
+    {
+      "id": "dca",
+      "kind": "composite",
+      "ref": "dca"
+    }
+  ],
+  "wires": [
+    {
+      "from": "params.limitPerOrder",
+      "to": "dca.limitPerOrder"
+    },
+    {
+      "from": "params.limitDeposit",
+      "to": "dca.limitDeposit"
+    },
+    {
+      "from": "params.purchaseInterval",
+      "to": "dca.purchaseInterval"
+    }
+  ],
+  "layout": {}
+}

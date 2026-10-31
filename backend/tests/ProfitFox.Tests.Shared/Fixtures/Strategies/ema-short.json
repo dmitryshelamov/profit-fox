@@ -1,0 +1,119 @@
+{
+  "formatVersion": 1,
+  "direction": "short",
+  "parameters": [
+    {
+      "name": "fast",
+      "type": "number",
+      "default": 12,
+      "min": 2,
+      "max": 200,
+      "integer": true
+    },
+    {
+      "name": "slow",
+      "type": "number",
+      "default": 26,
+      "min": 2,
+      "max": 400,
+      "integer": true
+    },
+    {
+      "name": "amount",
+      "type": "number",
+      "default": 100,
+      "min": 0
+    }
+  ],
+  "nodes": [
+    {
+      "id": "params",
+      "kind": "parameters"
+    },
+    {
+      "id": "candle",
+      "kind": "candle"
+    },
+    {
+      "id": "position",
+      "kind": "position"
+    },
+    {
+      "id": "cross",
+      "kind": "composite",
+      "ref": "ema-cross"
+    },
+    {
+      "id": "flat",
+      "kind": "not"
+    },
+    {
+      "id": "entry",
+      "kind": "and"
+    },
+    {
+      "id": "enter",
+      "kind": "market-order",
+      "settings": {
+        "side": "sell",
+        "size": "amount"
+      }
+    },
+    {
+      "id": "exit",
+      "kind": "close-position"
+    }
+  ],
+  "wires": [
+    {
+      "from": "candle.close",
+      "to": "cross.source"
+    },
+    {
+      "from": "params.fast",
+      "to": "cross.fast"
+    },
+    {
+      "from": "params.slow",
+      "to": "cross.slow"
+    },
+    {
+      "from": "position.hasPosition",
+      "to": "flat.value"
+    },
+    {
+      "from": "cross.down",
+      "to": "entry.a"
+    },
+    {
+      "from": "flat.result",
+      "to": "entry.b"
+    },
+    {
+      "from": "entry.result",
+      "to": "enter.when"
+    },
+    {
+      "from": "params.amount",
+      "to": "enter.size"
+    },
+    {
+      "from": "cross.up",
+      "to": "exit.when"
+    }
+  ],
+  "layout": {
+    "params": {
+      "x": 0,
+      "y": 0
+    },
+    "cross": {
+      "x": 240,
+      "y": 0
+    },
+    "enter": {
+      "x": 480,
+      "y": 0
+    }
+  }
+}

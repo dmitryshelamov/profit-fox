@@ -9,6 +9,11 @@ enforces a rule, the check is the source of truth.
   domain extensions (`Interval`, `IntervalExtensions.CandleEnd`); `Entities/Base` holds `AggregateRoot`.
 - `ValueObjects/<Area>` holds value objects (`Instrument`, `Price`, `Volume`).
 - `Repositories` holds storage ports, named `I<Name>Repository`. `Events` holds domain events.
+- `Services/<Area>` holds domain logic that has no state of its own in the database, split into folders by purpose
+  (`Services/Strategies/Nodes`, `BuiltIns`, `Validation`, `Execution`). Logic that belongs to an entity or a value object
+  stays on it.
+- `Exceptions` holds domain exceptions: a broken domain rule that the caller reports to the user
+  (`GraphValidationException`, `NodeInUseException`).
 - The domain knows no wire codes and no vendor names: enums, not strings. Codes are mapped at the boundaries:
   API and storage codes in Application, vendor codes in the vendor adapter.
 
@@ -21,7 +26,9 @@ enforces a rule, the check is the source of truth.
 - `Ports/<Area>` holds ports to external systems and mechanisms (`IMarketHistoryClient`, `ICandleImportQueue`). Port
   names say what the port does, never which vendor implements it.
 - `Exceptions` holds `BaseApplicationException` and its subclasses, also vendor-neutral (`ExchangeException`).
-- Parsing of API input lives here: `MarketDataCodes` for codes, `ApiTimestamps` for times. Times in the API carry an
+- Parsing of API input lives here: `MarketDataCodes` for codes, `ApiTimestamps` for times, `StrategyJson` for strategy
+  and composite node definitions. A JSON document that is both the API body and the stored `jsonb` value has one codec
+  here, used by Presentation and Infrastructure alike. Times in the API carry an
   offset or `Z`; without one, parsers assume the server's time zone.
 
 ## Infrastructure (`ProfitFox.Infrastructure`)
@@ -61,7 +68,9 @@ enforces a rule, the check is the source of truth.
   `ProfitFoxFactory` runs the service in the `Testing` environment: test-only settings go to
   `ProfitFox.Presentation/appsettings.Testing.json`, the connection string comes from the container.
   `Tests.Shared` holds AutoFixture generators under `Generators/Base` and
-  `Generators/Domain/{Entity,ValueObject}/<Area>`, each a static `<Type>Generator.Generate(...)`.
+  `Generators/Domain/{Entity,ValueObject}/<Area>`, each a static `<Type>Generator.Generate(...)`. `Builders/<Area>` holds
+  fluent builders for structures a generator cannot randomize meaningfully (`GraphBuilder` for strategy graphs), and
+  `Fixtures/<Area>` holds reference documents as embedded resources (the reference strategies EMA, EMA Short, DCA, Ladder).
 - Ports are replaced with NSubstitute mocks; there are no hand-written fakes. Hand-written stubs exist only for HTTP
   transport (`StubHttpHandler`, `FakeBybitHandler`), because NSubstitute cannot replace the protected `SendAsync`.
 - Assertions use Shouldly.
