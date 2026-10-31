@@ -1,4 +1,5 @@
 using Npgsql;
+using ProfitFox.Tests.Shared.Network;
 using Testcontainers.PostgreSql;
 
 namespace ProfitFox.Tests.Integration;
@@ -15,6 +16,7 @@ public class IntegrationEnvironment
     [OneTimeSetUp]
     public async Task StartContainer()
     {
+        OutboundHttpGuard.Install();
         _container = new PostgreSqlBuilder(TimescaleImage).Build();
         await _container.StartAsync();
     }
