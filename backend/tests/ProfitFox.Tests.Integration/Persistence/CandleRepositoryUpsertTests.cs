@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Dapper;
 
 using Npgsql;
@@ -21,10 +23,16 @@ public class CandleRepositoryUpsertTests
     private NpgsqlDataSource _dataSource = null!;
 
     [SetUp]
-    public async Task SetUp() => _dataSource = await MarketDataDatabase.CreateAsync();
+    public async Task SetUp()
+    {
+        _dataSource = await MarketDataDatabase.CreateAsync();
+    }
 
     [TearDown]
-    public async Task TearDown() => await _dataSource.DisposeAsync();
+    public async Task TearDown()
+    {
+        await _dataSource.DisposeAsync();
+    }
 
     // Scenario "Повторная загрузка".
     [Test]
@@ -61,13 +69,19 @@ public class CandleRepositoryUpsertTests
         var store = new CandleRepository(_dataSource);
         var candle = new Candle(
             DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
-            new Price(42000.1m), new Price(42300.5m), new Price(41950m), new Price(42123.45m), new Volume(0.000123m), new Volume(5.18m));
+            new Price(42000.1m),
+            new Price(42300.5m),
+            new Price(41950m),
+            new Price(42123.45m),
+            new Volume(0.000123m),
+            new Volume(5.18m));
 
         await store.UpsertAsync(new Instrument(MarketCategory.Linear, "BTCUSDT"), Hour, [candle], CancellationToken.None);
 
         CandleDb row = (await QueryAsync<CandleDb>(
             """SELECT category, symbol, "interval", open_time AS "OpenTime", open, high, low, close, volume, turnover FROM candles""")).Single();
-        (new[] { row.Open, row.High, row.Low, row.Close, row.Volume, row.Turnover }.Select(value => value.ToString(System.Globalization.CultureInfo.InvariantCulture))).ShouldBe(new[] { "42000.1", "42300.5", "41950", "42123.45", "0.000123", "5.18" });
+        new[] { row.Open, row.High, row.Low, row.Close, row.Volume, row.Turnover }.Select(value => value.ToString(CultureInfo.InvariantCulture))
+            .ShouldBe(new[] { "42000.1", "42300.5", "41950", "42123.45", "0.000123", "5.18" });
         row.OpenTime.ShouldBe(candle.OpenTime);
         (row.Symbol, row.Interval).ShouldBe(("BTCUSDT", "60"));
     }
@@ -75,8 +89,12 @@ public class CandleRepositoryUpsertTests
     private async Task<List<T>> QueryAsync<T>(string sql)
     {
         await using NpgsqlConnection connection = await _dataSource.OpenConnectionAsync();
+
         return (await connection.QueryAsync<T>(sql)).ToList();
     }
 
-    private static Candle Candle(string openTime, decimal close) => CandleGenerator.Generate(DateTimeOffset.Parse(openTime), new Price(close));
+    private static Candle Candle(string openTime, decimal close)
+    {
+        return CandleGenerator.Generate(DateTimeOffset.Parse(openTime), new Price(close));
+    }
 }

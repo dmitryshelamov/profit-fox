@@ -22,6 +22,7 @@ internal sealed class CandleImportJobRepository(NpgsqlDataSource dataSource) : I
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
         CandleImportJobDb? job = await connection.QuerySingleOrDefaultAsync<CandleImportJobDb>(CandleImportJobRepositoryQueries.Get(id, cancellationToken));
+
         return job is null ? null : CandleImportJobDbConverter.ToDomain(job);
     }
 

@@ -24,7 +24,10 @@ public class CandleImportJobRepositoryTests
     }
 
     [TearDown]
-    public async Task TearDown() => await _dataSource.DisposeAsync();
+    public async Task TearDown()
+    {
+        await _dataSource.DisposeAsync();
+    }
 
     [Test]
     public async Task Created_job_is_read_back_with_all_parameters()
@@ -53,7 +56,7 @@ public class CandleImportJobRepositoryTests
             ImportedCandles = 1500,
             Error = "params error",
             StartedAt = Created.AddMinutes(1),
-            FinishedAt = Created.AddMinutes(2),
+            FinishedAt = Created.AddMinutes(2)
         };
 
         await _store.UpdateAsync(failed, CancellationToken.None);
@@ -67,6 +70,7 @@ public class CandleImportJobRepositoryTests
         CandleImportJob pending = NewJob(CandleImportStatus.Pending);
         CandleImportJob running = NewJob(CandleImportStatus.Running) with { StartedAt = Created };
         CandleImportJob succeeded = NewJob(CandleImportStatus.Succeeded) with { StartedAt = Created, FinishedAt = Created, ImportedCandles = 3 };
+
         foreach (CandleImportJob? job in new[] { pending, running, succeeded })
         {
             await _store.AddAsync(job, CancellationToken.None);
@@ -75,10 +79,15 @@ public class CandleImportJobRepositoryTests
         DateTimeOffset now = Created.AddHours(1);
         await _store.FailUnfinishedAsync("interrupted", now, CancellationToken.None);
 
-        (await _store.GetAsync(pending.Id, CancellationToken.None)).ShouldBe(pending with { Status = CandleImportStatus.Failed, Error = "interrupted", FinishedAt = now });
-        (await _store.GetAsync(running.Id, CancellationToken.None)).ShouldBe(running with { Status = CandleImportStatus.Failed, Error = "interrupted", FinishedAt = now });
+        (await _store.GetAsync(pending.Id, CancellationToken.None)).ShouldBe(
+            pending with { Status = CandleImportStatus.Failed, Error = "interrupted", FinishedAt = now });
+        (await _store.GetAsync(running.Id, CancellationToken.None)).ShouldBe(
+            running with { Status = CandleImportStatus.Failed, Error = "interrupted", FinishedAt = now });
         (await _store.GetAsync(succeeded.Id, CancellationToken.None)).ShouldBe(succeeded);
     }
 
-    private static CandleImportJob NewJob(CandleImportStatus status) => CandleImportJobGenerator.Generate(status);
+    private static CandleImportJob NewJob(CandleImportStatus status)
+    {
+        return CandleImportJobGenerator.Generate(status);
+    }
 }

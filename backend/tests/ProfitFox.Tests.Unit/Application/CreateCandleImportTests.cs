@@ -43,7 +43,17 @@ public class CreateCandleImportTests
         Guid id = await _handler.Handle(new CreateCandleImportCommand("linear", "btcusdt", "60", "2024-01-01T00:00:00Z", "2024-02-01T00:00:00Z"), CancellationToken.None);
 
         var expected = new CandleImportJob(
-            id, new Instrument(MarketCategory.Linear, "BTCUSDT"), Interval.OneHour, From, To, CandleImportStatus.Pending, ImportedCandles: 0, Error: null, Now, StartedAt: null, FinishedAt: null);
+            id,
+            new Instrument(MarketCategory.Linear, "BTCUSDT"),
+            Interval.OneHour,
+            From,
+            To,
+            CandleImportStatus.Pending,
+            ImportedCandles: 0,
+            Error: null,
+            Now,
+            StartedAt: null,
+            FinishedAt: null);
         await _jobs.Received(1).AddAsync(expected, Arg.Any<CancellationToken>());
         await _queue.Received(1).EnqueueAsync(id, Arg.Any<CancellationToken>());
     }
@@ -79,12 +89,13 @@ public class CreateCandleImportTests
     public async Task Invalid_parameter_is_rejected_without_creating_a_job(string category, string interval, string from, string to, string invalidField)
     {
         ValidationFailedException error = await Should.ThrowAsync<ValidationFailedException>(() => _handler.Handle(
-            new CreateCandleImportCommand(category, "BTCUSDT", interval, from, to), CancellationToken.None));
+            new CreateCandleImportCommand(category, "BTCUSDT", interval, from, to),
+            CancellationToken.None));
 
         error.Errors.Keys.ShouldBe([invalidField]);
-        await _jobs.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
-        await _queue.DidNotReceiveWithAnyArgs().EnqueueAsync(default, default);
-        await _marketHistory.DidNotReceiveWithAnyArgs().InstrumentExistsAsync(default!, default);
+        await _jobs.DidNotReceiveWithAnyArgs().AddAsync(default!, cancellationToken: default);
+        await _queue.DidNotReceiveWithAnyArgs().EnqueueAsync(jobId: default, cancellationToken: default);
+        await _marketHistory.DidNotReceiveWithAnyArgs().InstrumentExistsAsync(default!, cancellationToken: default);
     }
 
     // Scenario "Неизвестный символ".
@@ -95,8 +106,8 @@ public class CreateCandleImportTests
             _handler.Handle(new CreateCandleImportCommand("spot", "NOSUCHUSDT", "60", "2024-01-01T00:00:00Z", "2024-02-01T00:00:00Z"), CancellationToken.None));
 
         error.Errors.Keys.ShouldBe(["symbol"]);
-        await _jobs.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
-        await _queue.DidNotReceiveWithAnyArgs().EnqueueAsync(default, default);
+        await _jobs.DidNotReceiveWithAnyArgs().AddAsync(default!, cancellationToken: default);
+        await _queue.DidNotReceiveWithAnyArgs().EnqueueAsync(jobId: default, cancellationToken: default);
     }
 
     // Scenario "Bybit недоступен при проверке".
@@ -107,9 +118,11 @@ public class CreateCandleImportTests
 
         await Should.ThrowAsync<ExchangeException>(() =>
             _handler.Handle(new CreateCandleImportCommand("linear", "BTCUSDT", "60", "2024-01-01T00:00:00Z", "2024-02-01T00:00:00Z"), CancellationToken.None));
-        await _jobs.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
+        await _jobs.DidNotReceiveWithAnyArgs().AddAsync(default!, cancellationToken: default);
     }
 
-    private CandleImportJob AddedJob() =>
-        (CandleImportJob)_jobs.ReceivedCalls().Single(call => call.GetMethodInfo().Name == nameof(ICandleImportJobRepository.AddAsync)).GetArguments()[0]!;
+    private CandleImportJob AddedJob()
+    {
+        return (CandleImportJob)_jobs.ReceivedCalls().Single(call => call.GetMethodInfo().Name == nameof(ICandleImportJobRepository.AddAsync)).GetArguments()[0]!;
+    }
 }

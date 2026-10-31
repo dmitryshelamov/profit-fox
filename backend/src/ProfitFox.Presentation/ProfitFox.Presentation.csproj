@@ -1,17 +1,17 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
     <PropertyGroup>
-      <UserSecretsId>852d78a8-8aac-447d-a33f-fe4ebe15efcc</UserSecretsId>
-  </PropertyGroup>
+        <UserSecretsId>852d78a8-8aac-447d-a33f-fe4ebe15efcc</UserSecretsId>
+    </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
-        <PackageReference Include="Serilog.AspNetCore" />
-        <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi"/>
+        <PackageReference Include="Serilog.AspNetCore"/>
+        <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI"/>
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\ProfitFox.Infrastructure\ProfitFox.Infrastructure.csproj" />
+        <ProjectReference Include="..\ProfitFox.Infrastructure\ProfitFox.Infrastructure.csproj"/>
     </ItemGroup>
 
 </Project>

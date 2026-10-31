@@ -9,14 +9,15 @@ namespace ProfitFox.Tests.Unit.Infrastructure.Exchanges.Bybit;
 
 public class BybitKlineMappingTests
 {
-    private static readonly Instrument BtcLinear = new(MarketCategory.Linear, "BTCUSDT");
+    private static readonly Instrument BtcLinear = new Instrument(MarketCategory.Linear, "BTCUSDT");
     private static readonly DateTimeOffset From = DateTimeOffset.Parse("2024-01-01T00:00:00Z");
     private static readonly DateTimeOffset To = DateTimeOffset.Parse("2024-01-01T02:00:00Z");
 
     [Test]
     public async Task Candles_keep_exact_decimal_values()
     {
-        using StubHttpHandler handler = new StubHttpHandler().RespondJson("""
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(
+            """
             {
               "retCode": 0,
               "retMsg": "OK",
@@ -33,17 +34,31 @@ public class BybitKlineMappingTests
             }
             """);
 
-        List<IReadOnlyList<Candle>> pages = await BybitClients.Create(handler, TimeProvider.System).GetCandlePagesAsync(BtcLinear, Interval.OneHour, From, To, CancellationToken.None).ToListAsync();
+        List<IReadOnlyList<Candle>> pages = await BybitClients.Create(handler, TimeProvider.System)
+            .GetCandlePagesAsync(BtcLinear, Interval.OneHour, From, To, CancellationToken.None)
+            .ToListAsync();
 
-        pages.Single().ShouldBe(new[]
-        {
-            new Candle(
-                DateTimeOffset.Parse("2024-01-01T01:00:00Z"),
-                new Price(42200m), new Price(42300.5m), new Price(42100m), new Price(42123.45m), new Volume(0.000123m), new Volume(5.18m)),
-            new Candle(
-                DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
-                new Price(42000.1m), new Price(42250m), new Price(41950m), new Price(42200m), new Volume(12.5m), new Volume(525000.75m)),
-        });
+        pages.Single()
+            .ShouldBe(
+                new[]
+                {
+                    new Candle(
+                        DateTimeOffset.Parse("2024-01-01T01:00:00Z"),
+                        new Price(42200m),
+                        new Price(42300.5m),
+                        new Price(42100m),
+                        new Price(42123.45m),
+                        new Volume(0.000123m),
+                        new Volume(5.18m)),
+                    new Candle(
+                        DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                        new Price(42000.1m),
+                        new Price(42250m),
+                        new Price(41950m),
+                        new Price(42200m),
+                        new Volume(12.5m),
+                        new Volume(525000.75m))
+                });
     }
 
     [Test]

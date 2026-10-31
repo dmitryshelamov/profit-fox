@@ -15,5 +15,5 @@ public enum Interval
     TwelveHours,
     OneDay,
     OneWeek,
-    OneMonth,
+    OneMonth
 }

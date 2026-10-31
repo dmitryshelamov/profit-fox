@@ -38,14 +38,16 @@ public class CandleImportsApiTests
         factory.Bybit.Instruments.Add(("linear", "BTCUSDT"));
         using HttpClient client = factory.CreateClient();
 
-        HttpResponseMessage response = await client.PostAsJsonAsync(Imports, new
-        {
-            category = "linear",
-            symbol = "BTCUSDT",
-            interval = "60",
-            from = "2024-01-01T00:00:00Z",
-            to = "2024-02-01T00:00:00Z",
-        });
+        HttpResponseMessage response = await client.PostAsJsonAsync(
+            Imports,
+            new
+            {
+                category = "linear",
+                symbol = "BTCUSDT",
+                interval = "60",
+                from = "2024-01-01T00:00:00Z",
+                to = "2024-02-01T00:00:00Z"
+            });
 
         response.StatusCode.ShouldBe(HttpStatusCode.Accepted);
         JsonElement job = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -58,14 +60,16 @@ public class CandleImportsApiTests
     [Test]
     public async Task Created_job_is_found_by_its_id()
     {
-        JsonElement created = await (await _client.PostAsJsonAsync(Imports, new
-        {
-            category = "linear",
-            symbol = "btcusdt",
-            interval = "60",
-            from = "2024-01-01T00:00:00Z",
-            to = "2024-02-01T00:00:00Z",
-        })).Content.ReadFromJsonAsync<JsonElement>();
+        JsonElement created = await (await _client.PostAsJsonAsync(
+            Imports,
+            new
+            {
+                category = "linear",
+                symbol = "btcusdt",
+                interval = "60",
+                from = "2024-01-01T00:00:00Z",
+                to = "2024-02-01T00:00:00Z"
+            })).Content.ReadFromJsonAsync<JsonElement>();
 
         HttpResponseMessage response = await _client.GetAsync($"{Imports}/{created.GetProperty("id").GetGuid()}");
 
@@ -123,14 +127,16 @@ public class CandleImportsApiTests
     {
         _factory.Bybit.Unavailable = true;
 
-        HttpResponseMessage response = await _client.PostAsJsonAsync(Imports, new
-        {
-            category = "linear",
-            symbol = "BTCUSDT",
-            interval = "60",
-            from = "2024-01-01T00:00:00Z",
-            to = "2024-02-01T00:00:00Z",
-        });
+        HttpResponseMessage response = await _client.PostAsJsonAsync(
+            Imports,
+            new
+            {
+                category = "linear",
+                symbol = "BTCUSDT",
+                interval = "60",
+                from = "2024-01-01T00:00:00Z",
+                to = "2024-02-01T00:00:00Z"
+            });
 
         response.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable);
         response.Content.Headers.ContentType!.MediaType.ShouldBe("application/problem+json");

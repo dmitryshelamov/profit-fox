@@ -24,15 +24,19 @@ public class CandleImportBackgroundServiceTests
         ISender sender = Substitute.For<ISender>();
         sender.Send(new RunCandleImportCommand(failing), Arg.Any<CancellationToken>()).ThrowsAsync(new InvalidOperationException("database is down"));
         var nextRan = new TaskCompletionSource();
-        sender.Send(new RunCandleImportCommand(next), Arg.Any<CancellationToken>()).Returns(_ =>
-        {
-            nextRan.SetResult();
-            return Task.CompletedTask;
-        });
+        sender.Send(new RunCandleImportCommand(next), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                nextRan.SetResult();
+
+                return Task.CompletedTask;
+            });
         await using ServiceProvider services = new ServiceCollection().AddSingleton(sender).BuildServiceProvider();
         var queue = new CandleImportQueue();
         using var service = new CandleImportBackgroundService(
-            queue, services.GetRequiredService<IServiceScopeFactory>(), NullLogger<CandleImportBackgroundService>.Instance);
+            queue,
+            services.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<CandleImportBackgroundService>.Instance);
 
         await service.StartAsync(CancellationToken.None);
         await queue.EnqueueAsync(failing, CancellationToken.None);

@@ -9,13 +9,13 @@ namespace ProfitFox.Infrastructure.Exchanges.Bybit;
 /// <summary>Bybit.Net enums for domain values; they are Bybit's contract and may change on their own.</summary>
 internal static class BybitCodes
 {
-    private static readonly Dictionary<MarketCategory, Category> Categories = new()
+    private static readonly Dictionary<MarketCategory, Category> Categories = new Dictionary<MarketCategory, Category>
     {
         [MarketCategory.Spot] = Category.Spot,
-        [MarketCategory.Linear] = Category.Linear,
+        [MarketCategory.Linear] = Category.Linear
     };
 
-    private static readonly Dictionary<Interval, KlineInterval> Intervals = new()
+    private static readonly Dictionary<Interval, KlineInterval> Intervals = new Dictionary<Interval, KlineInterval>
     {
         [Interval.OneMinute] = KlineInterval.OneMinute,
         [Interval.ThreeMinutes] = KlineInterval.ThreeMinutes,
@@ -29,10 +29,16 @@ internal static class BybitCodes
         [Interval.TwelveHours] = KlineInterval.TwelveHours,
         [Interval.OneDay] = KlineInterval.OneDay,
         [Interval.OneWeek] = KlineInterval.OneWeek,
-        [Interval.OneMonth] = KlineInterval.OneMonth,
+        [Interval.OneMonth] = KlineInterval.OneMonth
     };
 
-    internal static Category ToBybit(this MarketCategory category) => Categories[category];
+    internal static Category ToBybit(this MarketCategory category)
+    {
+        return Categories[category];
+    }
 
-    internal static KlineInterval ToBybit(this Interval interval) => Intervals[interval];
+    internal static KlineInterval ToBybit(this Interval interval)
+    {
+        return Intervals[interval];
+    }
 }

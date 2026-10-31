@@ -14,14 +14,20 @@ public sealed record CandleResponse(
     string Volume,
     string Turnover)
 {
-    public static CandleResponse Of(Candle candle) => new(
-        candle.OpenTime,
-        Format(candle.Open.Value),
-        Format(candle.High.Value),
-        Format(candle.Low.Value),
-        Format(candle.Close.Value),
-        Format(candle.Volume.Value),
-        Format(candle.Turnover.Value));
+    public static CandleResponse Of(Candle candle)
+    {
+        return new CandleResponse(
+            candle.OpenTime,
+            Format(candle.Open.Value),
+            Format(candle.High.Value),
+            Format(candle.Low.Value),
+            Format(candle.Close.Value),
+            Format(candle.Volume.Value),
+            Format(candle.Turnover.Value));
+    }
 
-    private static string Format(decimal value) => value.ToString(CultureInfo.InvariantCulture);
+    private static string Format(decimal value)
+    {
+        return value.ToString(CultureInfo.InvariantCulture);
+    }
 }

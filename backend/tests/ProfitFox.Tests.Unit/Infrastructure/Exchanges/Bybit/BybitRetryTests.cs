@@ -14,7 +14,7 @@ namespace ProfitFox.Tests.Unit.Infrastructure.Exchanges.Bybit;
 
 public class BybitRetryTests
 {
-    private static readonly Instrument BtcLinear = new(MarketCategory.Linear, "BTCUSDT");
+    private static readonly Instrument BtcLinear = new Instrument(MarketCategory.Linear, "BTCUSDT");
     private static readonly DateTimeOffset From = DateTimeOffset.Parse("2024-01-01T00:00:00Z");
     private static readonly DateTimeOffset To = DateTimeOffset.Parse("2024-01-01T01:00:00Z");
     private static readonly string OnePage = BybitJson.Kline("2024-01-01T00:00:00Z");
@@ -30,7 +30,10 @@ public class BybitRetryTests
     }
 
     [TearDown]
-    public void TearDown() => _handler.Dispose();
+    public void TearDown()
+    {
+        _handler.Dispose();
+    }
 
     [Test]
     public async Task Retries_after_too_many_requests()

@@ -20,6 +20,7 @@ public sealed class RunCandleImportCommandHandler(
         DateTimeOffset now = time.GetUtcNow();
         job = job with { Status = CandleImportStatus.Running, StartedAt = now };
         await jobs.UpdateAsync(job, cancellationToken);
+
         try
         {
             await foreach (IReadOnlyList<Candle> page in marketHistory.GetCandlePagesAsync(job.Instrument, job.Interval, job.From, job.To, cancellationToken))

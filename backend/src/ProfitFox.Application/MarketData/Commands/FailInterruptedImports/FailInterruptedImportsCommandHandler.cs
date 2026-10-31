@@ -9,6 +9,8 @@ public sealed class FailInterruptedImportsCommandHandler(ICandleImportJobReposit
 {
     public const string InterruptedByRestart = "Interrupted by service restart.";
 
-    public Task Handle(FailInterruptedImportsCommand request, CancellationToken cancellationToken) =>
-        jobs.FailUnfinishedAsync(InterruptedByRestart, time.GetUtcNow(), cancellationToken);
+    public Task Handle(FailInterruptedImportsCommand request, CancellationToken cancellationToken)
+    {
+        return jobs.FailUnfinishedAsync(InterruptedByRestart, time.GetUtcNow(), cancellationToken);
+    }
 }

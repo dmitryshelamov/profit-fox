@@ -7,12 +7,15 @@ namespace ProfitFox.Tests.Shared.Generators.Domain.Entity.MarketData;
 
 public static class CandleGenerator
 {
-    public static Candle Generate(DateTimeOffset? openTime = null, Price? close = null) => new(
-        openTime ?? DateTimeOffsetGenerator.Generate(),
-        PriceGenerator.Generate(),
-        PriceGenerator.Generate(),
-        PriceGenerator.Generate(),
-        close ?? PriceGenerator.Generate(),
-        VolumeGenerator.Generate(),
-        VolumeGenerator.Generate());
+    public static Candle Generate(DateTimeOffset? openTime = null, Price? close = null)
+    {
+        return new Candle(
+            openTime ?? DateTimeOffsetGenerator.Generate(),
+            PriceGenerator.Generate(),
+            PriceGenerator.Generate(),
+            PriceGenerator.Generate(),
+            close ?? PriceGenerator.Generate(),
+            VolumeGenerator.Generate(),
+            VolumeGenerator.Generate());
+    }
 }

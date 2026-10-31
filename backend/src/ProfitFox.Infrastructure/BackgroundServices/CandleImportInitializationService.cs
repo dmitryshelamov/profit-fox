@@ -8,8 +8,8 @@ using ProfitFox.Application.MarketData.Commands.FailInterruptedImports;
 namespace ProfitFox.Infrastructure.BackgroundServices;
 
 /// <summary>
-/// Fails jobs the previous process left unfinished. It is an <see cref="IHostedService"/>, not a <see cref="BackgroundService"/>:
-/// the host awaits <see cref="StartAsync"/> before the server takes requests, so a newly created job is never failed by mistake.
+///     Fails jobs the previous process left unfinished. It is an <see cref="IHostedService" />, not a <see cref="BackgroundService" />:
+///     the host awaits <see cref="StartAsync" /> before the server takes requests, so a newly created job is never failed by mistake.
 /// </summary>
 internal sealed class CandleImportInitializationService(IServiceScopeFactory scopes) : IHostedService
 {
@@ -19,5 +19,8 @@ internal sealed class CandleImportInitializationService(IServiceScopeFactory sco
         await scope.ServiceProvider.GetRequiredService<ISender>().Send(new FailInterruptedImportsCommand(), cancellationToken);
     }
 
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        return Task.CompletedTask;
+    }
 }
