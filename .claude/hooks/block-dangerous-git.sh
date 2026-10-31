@@ -2,8 +2,12 @@
 # PreToolUse hook for Bash: blocks git commands that bypass pull requests or destroy work.
 # Exit code 2 blocks the tool call and shows stderr to the agent.
 
-command=$(jq -r '.tool_input.command // empty')
+input=$(cat)
+command=$(jq -r '.tool_input.command // empty' <<<"$input")
 [[ "$command" == *git* ]] || exit 0
+
+# The folder the command runs in: in a git worktree its branch differs from the branch of the project folder.
+cwd=$(jq -r '.cwd // empty' <<<"$input")
 
 block() {
   echo "BLOCKED by .claude/hooks/block-dangerous-git.sh: $1. Work in a feature branch and merge through a GitHub pull request; ask the owner if this command is really needed." >&2
@@ -46,7 +50,7 @@ for entry in "${patterns[@]}"; do
 done
 
 if [[ "$command" =~ ${git}(commit|push) ]]; then
-  branch=$(git -C "${CLAUDE_PROJECT_DIR:-.}" branch --show-current 2>/dev/null)
+  branch=$(git -C "${cwd:-${CLAUDE_PROJECT_DIR:-.}}" branch --show-current 2>/dev/null)
   [[ "$branch" == "main" ]] && block "commit or push while on main"
 fi
 
