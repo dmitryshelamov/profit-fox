@@ -23,11 +23,17 @@ internal sealed class CandleRepository(NpgsqlDataSource dataSource) : ICandleRep
     }
 
     public async Task<IReadOnlyList<Candle>> GetAsync(
-        Instrument instrument, Interval interval, DateTimeOffset from, DateTimeOffset to, int limit, CancellationToken cancellationToken)
+        Instrument instrument,
+        Interval interval,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        int limit,
+        CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
         IEnumerable<CandleDb> candles = await connection.QueryAsync<CandleDb>(
             CandleRepositoryQueries.Get(instrument.Category.ToCode(), instrument.Symbol, interval.ToCode(), from, to, limit, cancellationToken));
+
         return candles.Select(CandleDbConverter.ToDomain).ToList();
     }
 }

@@ -7,7 +7,10 @@ namespace ProfitFox.Tests.Shared.Generators.Domain.ValueObject.MarketData;
 
 public static class InstrumentGenerator
 {
-    private static readonly Fixture Fixture = new();
+    private static readonly Fixture Fixture = new Fixture();
 
-    public static Instrument Generate() => new(MarketCategoryGenerator.Generate(), Fixture.Create<string>());
+    public static Instrument Generate()
+    {
+        return new Instrument(MarketCategoryGenerator.Generate(), Fixture.Create<string>());
+    }
 }

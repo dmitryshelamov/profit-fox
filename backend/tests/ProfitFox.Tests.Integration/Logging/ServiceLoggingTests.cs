@@ -23,6 +23,7 @@ public class ServiceLoggingTests
         var console = new StringWriter();
         TextWriter original = Console.Out;
         Console.SetOut(console);
+
         try
         {
             await using (var factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { Environment = "Production" })
@@ -36,8 +37,9 @@ public class ServiceLoggingTests
             Console.SetOut(original);
         }
 
-        string[] lines = console.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        string[] lines = console.ToString().Split(separator: '\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         lines.ShouldNotBeEmpty();
+
         foreach (string line in lines)
         {
             using var logEvent = JsonDocument.Parse(line);
@@ -51,6 +53,7 @@ public class ServiceLoggingTests
     public async Task Each_http_request_is_logged_once_with_method_path_status_and_elapsed_time()
     {
         ILogEventSink sink = Substitute.For<ILogEventSink>();
+
         // Disposing the factory waits for the request pipeline, so the request event is written before the assertions.
         await using (var factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { LogSink = sink })
         {
@@ -76,6 +79,7 @@ public class ServiceLoggingTests
     public async Task Migrations_on_a_fresh_database_log_nothing_below_warning()
     {
         ILogEventSink sink = Substitute.For<ILogEventSink>();
+
         await using (var factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { LogSink = sink })
         {
             factory.CreateClient().Dispose();
@@ -95,7 +99,7 @@ public class ServiceLoggingTests
         ILogEventSink sink = Substitute.For<ILogEventSink>();
         await using var factory = new ProfitFoxFactory("Host=127.0.0.1;Port=1;Database=none;Username=none;Password=none;Timeout=1")
         {
-            LogSink = sink,
+            LogSink = sink
         };
 
         Should.Throw<Exception>(() => factory.CreateClient());
@@ -112,6 +116,7 @@ public class ServiceLoggingTests
         var console = new StringWriter();
         TextWriter original = Console.Out;
         Console.SetOut(console);
+
         try
         {
             await using var factory = new FailingBuildFactory(await IntegrationEnvironment.CreateDatabaseAsync());
@@ -125,8 +130,10 @@ public class ServiceLoggingTests
         console.ToString().ShouldContain(FailingBuildFactory.Message);
     }
 
-    private static IEnumerable<LogEvent> Events(ILogEventSink sink) =>
-        sink.ReceivedCalls().Select(call => (LogEvent)call.GetArguments()[0]!);
+    private static IEnumerable<LogEvent> Events(ILogEventSink sink)
+    {
+        return sink.ReceivedCalls().Select(call => (LogEvent)call.GetArguments()[0]!);
+    }
 
     private sealed class FailingBuildFactory(string connectionString) : ProfitFoxFactory(connectionString)
     {

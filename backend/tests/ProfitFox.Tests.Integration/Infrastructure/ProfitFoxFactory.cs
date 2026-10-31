@@ -23,10 +23,10 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
 {
     public string ConnectionString => connectionString;
 
-    public FakeBybitHandler Bybit { get; } = new();
+    public FakeBybitHandler Bybit { get; } = new FakeBybitHandler();
 
     /// <summary>The app's clock; it moves only when a test advances it.</summary>
-    public FakeTimeProvider Time { get; } = new(DateTimeOffset.Parse("2024-03-10T12:30:00Z"));
+    public FakeTimeProvider Time { get; } = new FakeTimeProvider(DateTimeOffset.Parse("2024-03-10T12:30:00Z"));
 
     /// <summary>False keeps created jobs out of the background service, so they stay <c>Pending</c>.</summary>
     public bool RunImports { get; init; } = true;
@@ -37,12 +37,15 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
     /// <summary>Receives every event the app's logger writes.</summary>
     public ILogEventSink? LogSink { get; init; }
 
-    public static async Task<ProfitFoxFactory> CreateAsync() =>
-        new(await IntegrationEnvironment.CreateDatabaseAsync());
+    public static async Task<ProfitFoxFactory> CreateAsync()
+    {
+        return new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync());
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("ConnectionStrings:MarketData", connectionString);
+
         if (Environment is not null)
         {
             builder.UseEnvironment(Environment);
@@ -51,11 +54,13 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
         builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<TimeProvider>(Time);
+
             // Bybit.Net configures its own primary handler, so replace the whole client: no test may reach the real Bybit.
             services.AddSingleton<IBybitRestClient>(_ => new BybitRestClient(
                 new HttpClient(Bybit, disposeHandler: false),
                 NullLoggerFactory.Instance,
                 Options.Create(new BybitRestOptions { RateLimiterEnabled = false })));
+
             if (!RunImports)
             {
                 services.AddSingleton(Substitute.For<ICandleImportQueue>());

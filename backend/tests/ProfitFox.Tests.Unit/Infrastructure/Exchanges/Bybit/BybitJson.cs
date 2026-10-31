@@ -8,9 +8,12 @@ public static class BybitJson
     {
         IEnumerable<string> items = openTimes.Select(time =>
             $"""["{DateTimeOffset.Parse(time).ToUnixTimeMilliseconds()}","1","1","1","1","1","1"]""");
+
         return $$"""{"retCode":0,"retMsg":"OK","result":{"list":[{{string.Join(",", items)}}]},"retExtInfo":{},"time":0}""";
     }
 
-    public static string Error(int retCode, string retMsg) =>
-        $$"""{"retCode":{{retCode}},"retMsg":"{{retMsg}}","result":{},"retExtInfo":{},"time":0}""";
+    public static string Error(int retCode, string retMsg)
+    {
+        return $$"""{"retCode":{{retCode}},"retMsg":"{{retMsg}}","result":{},"retExtInfo":{},"time":0}""";
+    }
 }

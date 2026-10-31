@@ -9,7 +9,7 @@ namespace ProfitFox.Tests.Unit.Infrastructure.Exchanges.Bybit;
 
 public class BybitPaginationTests
 {
-    private static readonly Instrument BtcLinear = new(MarketCategory.Linear, "BTCUSDT");
+    private static readonly Instrument BtcLinear = new Instrument(MarketCategory.Linear, "BTCUSDT");
     private static readonly Interval Hour = Interval.OneHour;
 
     [Test]
@@ -27,13 +27,15 @@ public class BybitPaginationTests
         List<IReadOnlyList<Candle>> pages = await client.GetCandlePagesAsync(BtcLinear, Hour, from, to, CancellationToken.None).ToListAsync();
 
         pages.Select(page => page.Count).ShouldBe(new[] { 2, 2, 2 });
-        handler.Requests.Select(BybitRequests.Describe).ShouldBe(new[]
-        {
-            KlineQuery(from, "2024-01-01T06:00:00Z"),
-            KlineQuery(from, "2024-01-01T04:00:00Z"),
-            KlineQuery(from, "2024-01-01T02:00:00Z"),
-            KlineQuery(from, "2024-01-01T00:00:00Z"),
-        });
+        handler.Requests.Select(BybitRequests.Describe)
+            .ShouldBe(
+                new[]
+                {
+                    KlineQuery(from, "2024-01-01T06:00:00Z"),
+                    KlineQuery(from, "2024-01-01T04:00:00Z"),
+                    KlineQuery(from, "2024-01-01T02:00:00Z"),
+                    KlineQuery(from, "2024-01-01T00:00:00Z")
+                });
     }
 
     [Test]
@@ -44,14 +46,22 @@ public class BybitPaginationTests
         BybitMarketDataClient client = BybitClients.Create(handler, TimeProvider.System);
 
         List<IReadOnlyList<Candle>> pages = await client.GetCandlePagesAsync(
-            BtcLinear, Hour, DateTimeOffset.Parse("2024-01-01T00:00:00Z"), DateTimeOffset.Parse("2024-01-01T02:00:00Z"), CancellationToken.None).ToListAsync();
+                BtcLinear,
+                Hour,
+                DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
+                DateTimeOffset.Parse("2024-01-01T02:00:00Z"),
+                CancellationToken.None)
+            .ToListAsync();
 
         pages.Count.ShouldBe(1);
         handler.Requests.Count.ShouldBe(1);
     }
 
     // Bybit's end is inclusive, so each request ends 1 ms before the exclusive bound.
-    private static string KlineQuery(DateTimeOffset from, string exclusiveEnd) => BybitRequests.Describe(
-        $"/v5/market/kline?category=linear&symbol=BTCUSDT&interval=60&start={from.ToUnixTimeMilliseconds()}" +
-        $"&end={DateTimeOffset.Parse(exclusiveEnd).ToUnixTimeMilliseconds() - 1}&limit=1000");
+    private static string KlineQuery(DateTimeOffset from, string exclusiveEnd)
+    {
+        return BybitRequests.Describe(
+            $"/v5/market/kline?category=linear&symbol=BTCUSDT&interval=60&start={from.ToUnixTimeMilliseconds()}" +
+            $"&end={DateTimeOffset.Parse(exclusiveEnd).ToUnixTimeMilliseconds() - 1}&limit=1000");
+    }
 }

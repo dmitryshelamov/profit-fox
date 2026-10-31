@@ -9,8 +9,12 @@ public static class BybitRequests
     public static string Describe(Uri uri)
     {
         NameValueCollection query = HttpUtility.ParseQueryString(uri.Query);
+
         return uri.AbsolutePath + " " + string.Join("&", query.AllKeys.Order().Select(key => $"{key}={query[key]}"));
     }
 
-    public static string Describe(string pathAndQuery) => Describe(new Uri(new Uri("https://bybit.test"), pathAndQuery));
+    public static string Describe(string pathAndQuery)
+    {
+        return Describe(new Uri(new Uri("https://bybit.test"), pathAndQuery));
+    }
 }

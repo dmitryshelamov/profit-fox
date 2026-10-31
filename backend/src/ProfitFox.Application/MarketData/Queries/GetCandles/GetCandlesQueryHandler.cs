@@ -15,6 +15,7 @@ public sealed class GetCandlesQueryHandler(ICandleRepository candles) : IRequest
     public async Task<GetCandlesResult> Handle(GetCandlesQuery request, CancellationToken cancellationToken)
     {
         var errors = new Dictionary<string, string>();
+
         if (!MarketDataCodes.TryParseCategory(request.Category, out MarketCategory category))
         {
             errors["category"] = "Category must be spot or linear.";
@@ -31,6 +32,7 @@ public sealed class GetCandlesQueryHandler(ICandleRepository candles) : IRequest
         }
 
         bool toIsTime = ApiTimestamps.TryParse(request.To, out DateTimeOffset to);
+
         if (!toIsTime)
         {
             errors["to"] = ApiTimestamps.Invalid("to");
@@ -43,6 +45,7 @@ public sealed class GetCandlesQueryHandler(ICandleRepository candles) : IRequest
         }
 
         int limit = request.Limit ?? DefaultLimit;
+
         if (limit is < 1 or > MaxLimit)
         {
             errors["limit"] = $"limit must be from 1 to {MaxLimit}.";
@@ -54,7 +57,13 @@ public sealed class GetCandlesQueryHandler(ICandleRepository candles) : IRequest
         }
 
         IReadOnlyList<Candle> found = await candles.GetAsync(
-            new Instrument(category, request.Symbol), interval, from.ToUniversalTime(), to.ToUniversalTime(), limit, cancellationToken);
+            new Instrument(category, request.Symbol),
+            interval,
+            from.ToUniversalTime(),
+            to.ToUniversalTime(),
+            limit,
+            cancellationToken);
+
         return new GetCandlesResult(found, errors);
     }
 }

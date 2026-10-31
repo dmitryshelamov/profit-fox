@@ -11,7 +11,9 @@ namespace ProfitFox.Infrastructure.BackgroundServices;
 
 /// <summary>Runs queued import jobs one at a time, which keeps Bybit load far below its rate limit.</summary>
 internal sealed class CandleImportBackgroundService(
-    CandleImportQueue queue, IServiceScopeFactory scopes, ILogger<CandleImportBackgroundService> logger) : BackgroundService
+    CandleImportQueue queue,
+    IServiceScopeFactory scopes,
+    ILogger<CandleImportBackgroundService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

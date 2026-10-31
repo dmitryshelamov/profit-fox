@@ -13,5 +13,8 @@ public sealed record Candle(
     Volume Volume,
     Volume Turnover)
 {
-    public bool IsClosedAt(Interval interval, DateTimeOffset now) => interval.CandleEnd(OpenTime) <= now;
+    public bool IsClosedAt(Interval interval, DateTimeOffset now)
+    {
+        return interval.CandleEnd(OpenTime) <= now;
+    }
 }

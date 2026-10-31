@@ -6,6 +6,8 @@ namespace ProfitFox.Infrastructure.Mediatr;
 
 internal static class MediatrRegistrar
 {
-    internal static void Configure(IServiceCollection services) =>
+    internal static void Configure(IServiceCollection services)
+    {
         services.AddMediatR(configuration => configuration.RegisterServicesFromAssemblyContaining<CreateCandleImportCommand>());
+    }
 }

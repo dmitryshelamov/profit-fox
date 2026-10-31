@@ -55,6 +55,7 @@ public class Program
         catch (Exception exception)
         {
             Log.Fatal(exception, "Host terminated unexpectedly.");
+
             throw;
         }
     }

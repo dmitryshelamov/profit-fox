@@ -6,7 +6,7 @@ using ProfitFox.Application.Exceptions;
 
 namespace ProfitFox.Infrastructure.Exchanges.Retry;
 
-/// <summary>Resilience of exchange requests; pauses run on <see cref="TimeProvider"/>, so tests do not wait for real time.</summary>
+/// <summary>Resilience of exchange requests; pauses run on <see cref="TimeProvider" />, so tests do not wait for real time.</summary>
 internal sealed class ExchangeResilienceExecutor
 {
     private static readonly TimeSpan[] RetryDelays =
@@ -15,38 +15,44 @@ internal sealed class ExchangeResilienceExecutor
     private readonly ResiliencePipeline _circuitBreaker;
     private readonly ResiliencePipeline _retry;
 
+    public int RetryCount => RetryDelays.Length;
+
     public ExchangeResilienceExecutor(TimeProvider time)
     {
         // Counts every attempt; one operation makes at most 6, so it alone never opens the circuit.
         _circuitBreaker = new ResiliencePipelineBuilder { TimeProvider = time }
-            .AddCircuitBreaker(new CircuitBreakerStrategyOptions
-            {
-                FailureRatio = 0.5,
-                MinimumThroughput = 10,
-                SamplingDuration = TimeSpan.FromSeconds(60),
-                BreakDuration = TimeSpan.FromSeconds(15),
-                ShouldHandle = new PredicateBuilder().Handle<TransientExchangeException>(),
-            })
+            .AddCircuitBreaker(
+                new CircuitBreakerStrategyOptions
+                {
+                    FailureRatio = 0.5,
+                    MinimumThroughput = 10,
+                    SamplingDuration = TimeSpan.FromSeconds(60),
+                    BreakDuration = TimeSpan.FromSeconds(15),
+                    ShouldHandle = new PredicateBuilder().Handle<TransientExchangeException>()
+                })
             .Build();
         _retry = new ResiliencePipelineBuilder { TimeProvider = time }
-            .AddRetry(new RetryStrategyOptions
-            {
-                MaxRetryAttempts = RetryDelays.Length,
-                DelayGenerator = arguments => ValueTask.FromResult<TimeSpan?>(RetryDelays[arguments.AttemptNumber]),
-                ShouldHandle = new PredicateBuilder().Handle<TransientExchangeException>(),
-            })
+            .AddRetry(
+                new RetryStrategyOptions
+                {
+                    MaxRetryAttempts = RetryDelays.Length,
+                    DelayGenerator = arguments => ValueTask.FromResult<TimeSpan?>(RetryDelays[arguments.AttemptNumber]),
+                    ShouldHandle = new PredicateBuilder().Handle<TransientExchangeException>()
+                })
             .Build();
     }
 
-    public int RetryCount => RetryDelays.Length;
-
     /// <summary>A single attempt through the circuit breaker.</summary>
-    public ValueTask<T> ExecuteOnceAsync<T>(Func<CancellationToken, ValueTask<T>> action, CancellationToken cancellationToken) =>
-        ThroughCircuitBreakerAsync(action, cancellationToken);
+    public ValueTask<T> ExecuteOnceAsync<T>(Func<CancellationToken, ValueTask<T>> action, CancellationToken cancellationToken)
+    {
+        return ThroughCircuitBreakerAsync(action, cancellationToken);
+    }
 
-    /// <summary>Retries a <see cref="TransientExchangeException"/> after 1, 2, 4, 8 and 16 s; the last one propagates.</summary>
-    public ValueTask<T> ExecuteWithRetriesAsync<T>(Func<CancellationToken, ValueTask<T>> action, CancellationToken cancellationToken) =>
-        _retry.ExecuteAsync(token => ThroughCircuitBreakerAsync(action, token), cancellationToken);
+    /// <summary>Retries a <see cref="TransientExchangeException" /> after 1, 2, 4, 8 and 16 s; the last one propagates.</summary>
+    public ValueTask<T> ExecuteWithRetriesAsync<T>(Func<CancellationToken, ValueTask<T>> action, CancellationToken cancellationToken)
+    {
+        return _retry.ExecuteAsync(token => ThroughCircuitBreakerAsync(action, token), cancellationToken);
+    }
 
     private async ValueTask<T> ThroughCircuitBreakerAsync<T>(Func<CancellationToken, ValueTask<T>> action, CancellationToken cancellationToken)
     {

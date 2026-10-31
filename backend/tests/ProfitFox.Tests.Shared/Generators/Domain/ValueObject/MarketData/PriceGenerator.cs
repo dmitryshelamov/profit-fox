@@ -6,7 +6,10 @@ namespace ProfitFox.Tests.Shared.Generators.Domain.ValueObject.MarketData;
 
 public static class PriceGenerator
 {
-    private static readonly Fixture Fixture = new();
+    private static readonly Fixture Fixture = new Fixture();
 
-    public static Price Generate() => new(Fixture.Create<decimal>());
+    public static Price Generate()
+    {
+        return new Price(Fixture.Create<decimal>());
+    }
 }

@@ -6,5 +6,8 @@ namespace ProfitFox.Tests.Unit;
 public class TestAssemblySetup
 {
     [OneTimeSetUp]
-    public void BlockOutboundHttp() => OutboundHttpGuard.Install();
+    public void BlockOutboundHttp()
+    {
+        OutboundHttpGuard.Install();
+    }
 }

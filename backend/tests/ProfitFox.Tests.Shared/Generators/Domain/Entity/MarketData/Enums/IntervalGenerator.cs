@@ -6,7 +6,10 @@ namespace ProfitFox.Tests.Shared.Generators.Domain.Entity.MarketData.Enums;
 
 public static class IntervalGenerator
 {
-    private static readonly Fixture Fixture = new();
+    private static readonly Fixture Fixture = new Fixture();
 
-    public static Interval Generate() => Fixture.Create<Interval>();
+    public static Interval Generate()
+    {
+        return Fixture.Create<Interval>();
+    }
 }

@@ -5,5 +5,5 @@ public enum CandleImportStatus
     Pending,
     Running,
     Succeeded,
-    Failed,
+    Failed
 }

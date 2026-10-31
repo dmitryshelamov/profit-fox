@@ -32,9 +32,11 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
     {
         // Bybit's end is inclusive and pages come newest first, so walk back from just before `to`.
         DateTimeOffset end = to.AddMilliseconds(-1);
+
         while (true)
         {
             IReadOnlyList<Candle> page = await GetPageAsync(instrument, interval, from, end, cancellationToken);
+
             if (page.Count == 0)
             {
                 yield break;
@@ -43,6 +45,7 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
             yield return page;
 
             DateTimeOffset earliest = page[^1].OpenTime;
+
             if (earliest <= from)
             {
                 yield break;
@@ -60,8 +63,7 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
             return await resilience.ExecuteOnceAsync(
                 async token => instrument.Category == MarketCategory.Spot
                     ? Unwrap(await bybit.V5Api.ExchangeData.GetSpotSymbolsAsync(instrument.Symbol, token)).List.Length > 0
-                    : Unwrap(await bybit.V5Api.ExchangeData.GetLinearInverseSymbolsAsync(
-                        instrument.Category.ToBybit(), instrument.Symbol, ct: token)).List.Length > 0,
+                    : Unwrap(await bybit.V5Api.ExchangeData.GetLinearInverseSymbolsAsync(instrument.Category.ToBybit(), instrument.Symbol, ct: token)).List.Length > 0,
                 cancellationToken);
         }
         catch (TransientExchangeException exception)
@@ -71,14 +73,26 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
     }
 
     private async Task<IReadOnlyList<Candle>> GetPageAsync(
-        Instrument instrument, Interval interval, DateTimeOffset from, DateTimeOffset end, CancellationToken cancellationToken)
+        Instrument instrument,
+        Interval interval,
+        DateTimeOffset from,
+        DateTimeOffset end,
+        CancellationToken cancellationToken)
     {
         try
         {
             BybitResponse<BybitKline> klines = await resilience.ExecuteWithRetriesAsync(
-                async token => Unwrap(await bybit.V5Api.ExchangeData.GetKlinesAsync(
-                    instrument.Category.ToBybit(), instrument.Symbol, interval.ToBybit(), from.UtcDateTime, end.UtcDateTime, PageSize, token)),
+                async token => Unwrap(
+                    await bybit.V5Api.ExchangeData.GetKlinesAsync(
+                        instrument.Category.ToBybit(),
+                        instrument.Symbol,
+                        interval.ToBybit(),
+                        from.UtcDateTime,
+                        end.UtcDateTime,
+                        PageSize,
+                        token)),
                 cancellationToken);
+
             return klines.List.Select(ToCandle).ToList();
         }
         catch (TransientExchangeException exception)
@@ -87,7 +101,7 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
         }
     }
 
-    /// <summary>The data of a successful call; a failure worth retrying is a <see cref="TransientExchangeException"/>, any other an <see cref="ExchangeException"/>.</summary>
+    /// <summary>The data of a successful call; a failure worth retrying is a <see cref="TransientExchangeException" />, any other an <see cref="ExchangeException" />.</summary>
     private static T Unwrap<T>(HttpResult<T> result)
     {
         if (result.Success)
@@ -106,17 +120,22 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
     }
 
     // The SDK leaves the message of HTTP 429 empty and writes the others as "<code>: <message>" with an empty code.
-    private static string Describe<T>(HttpResult<T> result) =>
-        result.ResponseStatusCode is { } status && status != HttpStatusCode.OK
+    private static string Describe<T>(HttpResult<T> result)
+    {
+        return result.ResponseStatusCode is { } status && status != HttpStatusCode.OK
             ? $"HTTP {(int)status}"
             : result.Error!.Message!.TrimStart(':', ' ');
+    }
 
-    private static Candle ToCandle(BybitKline kline) => new(
-        new DateTimeOffset(DateTime.SpecifyKind(kline.StartTime, DateTimeKind.Utc)),
-        new Price(kline.OpenPrice),
-        new Price(kline.HighPrice),
-        new Price(kline.LowPrice),
-        new Price(kline.ClosePrice),
-        new Volume(kline.Volume),
-        new Volume(kline.QuoteVolume));
+    private static Candle ToCandle(BybitKline kline)
+    {
+        return new Candle(
+            new DateTimeOffset(DateTime.SpecifyKind(kline.StartTime, DateTimeKind.Utc)),
+            new Price(kline.OpenPrice),
+            new Price(kline.HighPrice),
+            new Price(kline.LowPrice),
+            new Price(kline.ClosePrice),
+            new Volume(kline.Volume),
+            new Volume(kline.QuoteVolume));
+    }
 }

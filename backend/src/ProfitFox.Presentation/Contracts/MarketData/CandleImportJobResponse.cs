@@ -17,17 +17,20 @@ public sealed record CandleImportJobResponse(
     DateTimeOffset? StartedAt,
     DateTimeOffset? FinishedAt)
 {
-    public static CandleImportJobResponse Of(CandleImportJob job) => new(
-        job.Id,
-        job.Instrument.Category.ToCode(),
-        job.Instrument.Symbol,
-        job.Interval.ToCode(),
-        job.From,
-        job.To,
-        job.Status.ToString(),
-        job.ImportedCandles,
-        job.Error,
-        job.CreatedAt,
-        job.StartedAt,
-        job.FinishedAt);
+    public static CandleImportJobResponse Of(CandleImportJob job)
+    {
+        return new CandleImportJobResponse(
+            job.Id,
+            job.Instrument.Category.ToCode(),
+            job.Instrument.Symbol,
+            job.Interval.ToCode(),
+            job.From,
+            job.To,
+            job.Status.ToString(),
+            job.ImportedCandles,
+            job.Error,
+            job.CreatedAt,
+            job.StartedAt,
+            job.FinishedAt);
+    }
 }

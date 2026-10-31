@@ -5,11 +5,11 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="AutoFixture" />
+        <PackageReference Include="AutoFixture"/>
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\ProfitFox.Application\ProfitFox.Application.csproj" />
+        <ProjectReference Include="..\..\src\ProfitFox.Application\ProfitFox.Application.csproj"/>
     </ItemGroup>
 
 </Project>

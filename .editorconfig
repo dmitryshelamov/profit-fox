@@ -4,8 +4,10 @@
 #   - Roslyn keys (dotnet_*, csharp_*, standard EditorConfig keys) are read by Rider, Visual Studio
 #     and `dotnet format`; CI checks them with `dotnet format backend/ProfitFox.sln --verify-no-changes`.
 #     `dotnet format` fixes and verifies rules with severity warning or error and skips suggestion/silent.
-#   - ReSharper keys (resharper_*) are read only by Rider/ReSharper; CI does not check them.
+#   - ReSharper keys (resharper_*, ij_*) are read only by Rider/ReSharper; CI does not check them.
 # Roslyn severities mirror the ReSharper inspection severities from the same settings file.
+# Rider falls back to its own defaults for keys not set here. Keys marked "Rider default" pin those defaults,
+# so that Code Cleanup gives the same result on any machine.
 
 root = true
 
@@ -16,6 +18,8 @@ trim_trailing_whitespace = true
 [*.cs]
 indent_size = 4
 max_line_length = 170
+# No line feed at the end of a file (Rider default)
+insert_final_newline = false
 
 #### Roslyn: code style ####
 
@@ -49,6 +53,17 @@ csharp_style_implicit_object_creation_when_type_is_apparent = false:error
 
 # Expression body for local functions (LOCAL_FUNCTION_BODY = ExpressionBody)
 csharp_style_expression_bodied_local_functions = true:suggestion
+
+# Block body for methods, operators and constructors, expression body for properties, indexers and accessors
+# (METHOD_OR_OPERATOR_BODY, CONSTRUCTOR_OR_DESTRUCTOR_BODY = BlockBody, ACCESSOR_OWNER_BODY = ExpressionBody: Rider defaults;
+# ArrangeMethodOrOperatorBody, ArrangeConstructorOrDestructorBody, ArrangeAccessorOwnerBody = ERROR)
+csharp_style_expression_bodied_methods = false:error
+csharp_style_expression_bodied_operators = false:error
+csharp_style_expression_bodied_conversion_operators = false:error
+csharp_style_expression_bodied_constructors = false:error
+csharp_style_expression_bodied_properties = true:error
+csharp_style_expression_bodied_indexers = true:error
+csharp_style_expression_bodied_accessors = true:error
 
 #### Roslyn: formatting ####
 
@@ -107,6 +122,14 @@ resharper_csharp_braces_for_while = required
 
 resharper_csharp_object_creation_when_type_evident = explicitly_typed
 resharper_csharp_local_function_body = expression_body
+# Rider defaults
+resharper_csharp_method_or_operator_body = block_body
+resharper_csharp_constructor_or_destructor_body = block_body
+resharper_csharp_accessor_owner_body = expression_body
+
+# No trailing comma after the last item of enums, initializers and switch expressions (Rider default)
+resharper_csharp_trailing_comma_in_multiline_lists = false
+resharper_csharp_trailing_comma_in_singleline_lists = false
 
 # Named arguments for literal values, except for a single argument
 resharper_csharp_arguments_literal = named
@@ -148,9 +171,18 @@ resharper_csharp_wrap_before_extends_colon = true
 resharper_csharp_wrap_before_first_type_parameter_constraint = true
 resharper_csharp_wrap_before_linq_expression = true
 resharper_csharp_align_multiline_binary_expressions_chain = false
+# Array items fill a line before wrapping, unlike arguments and parameters (Rider default)
+resharper_csharp_wrap_array_initializer_style = wrap_if_long
+
+# Lines of a multiline raw string literal ("""...""") are aligned with its opening quotes (Rider default)
+resharper_csharp_indent_raw_literal_string = align
 
 # Spaces
 resharper_csharp_space_within_single_line_array_initializer_braces = true
+
+# XML doc comments: `<see cref="X" />`, text inside a multiline tag indented by one level (Rider defaults)
+resharper_xmldoc_space_before_self_closing = true
+resharper_xmldoc_indent_text = one_indent
 
 #### ReSharper: inspection severities (Rider only, not checked by dotnet format) ####
 
@@ -194,3 +226,16 @@ resharper_suggest_var_or_type_elsewhere_highlighting = error
 resharper_suggest_var_or_type_simple_types_highlighting = error
 resharper_tabs_are_disallowed_highlighting = warning
 resharper_unnecessary_whitespace_highlighting = error
+
+[*.{csproj,props,targets}]
+indent_size = 4
+# `<Foo />` is written as `<Foo/>` (Rider default)
+resharper_xml_space_before_self_closing = false
+
+[*.md]
+# Rider hard-wraps long lines at 120 and puts a blank line around headings and block elements (Rider defaults).
+# A wrapped line that starts with "<number>. " becomes a list item: rephrase or move the number to the previous line.
+max_line_length = 120
+ij_markdown_wrap_text_if_long = true
+ij_markdown_min_lines_around_header = 1
+ij_markdown_min_lines_around_block_elements = 1
