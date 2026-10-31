@@ -74,6 +74,11 @@ or `.editorconfig`; CI (`.github/workflows/ci.yml`) also runs the tests, once mo
 - Commits follow Conventional Commits: `<type>(<scope>): <summary>` — imperative mood, lowercase,
   no trailing period, summary up to 72 characters. Scope is optional.
 - One logical change per pull request; every PR passes build and tests.
+- Once a PR is merged into `main`, delete its branch locally and on `origin`, then switch to `main`
+  and pull. A squash-merged branch is not an ancestor of `main`, so `git branch -d` refuses it.
+  Run `git branch -D <branch>` and `git push origin --delete <branch>` as separate commands, in
+  exactly this form: the git hook allows them only when the PR is merged and the branch tip is
+  still the PR head.
 
 ## Exchange and production access
 

@@ -13,6 +13,22 @@ block() {
 # `git` plus any global options before the subcommand, e.g. `git -C . push`, `git -c k=v --no-pager reset`.
 git='git([[:space:]]+(-[Cc]|--git-dir|--work-tree|--namespace)[[:space:]]+[^[:space:]]+|[[:space:]]+-[^[:space:]]+)*[[:space:]]+'
 
+# Deleting the branch of a merged PR is allowed, one branch per command, when the branch tip is still the
+# PR head, so no commits made after the merge are lost: `git branch -D <b>`, `git push origin --delete <b>`.
+name='[A-Za-z0-9._/-]+'
+if [[ "$command" =~ ^[[:space:]]*git[[:space:]]+(branch[[:space:]]+-D|push[[:space:]]+origin[[:space:]]+--delete)[[:space:]]+(${name})[[:space:]]*$ ]]; then
+  branch=${BASH_REMATCH[2]}
+  cd "${CLAUDE_PROJECT_DIR:-.}" || exit 2
+  if [[ "${BASH_REMATCH[1]}" == branch* ]]; then
+    tip=$(git rev-parse --verify --quiet "refs/heads/$branch")
+  else
+    tip=$(git ls-remote origin "refs/heads/$branch" | cut -f1)
+  fi
+  pr=$(gh pr view "$branch" --json state,headRefOid --jq '.state + " " + .headRefOid' 2>/dev/null)
+  [[ "$branch" != "main" && -n "$tip" && "$pr" == "MERGED $tip" ]] && exit 0
+  block "deleting branch '$branch' whose PR is not merged or whose tip differs from the merged PR head"
+fi
+
 patterns=(
   "${git}"'push.*(--force|--force-with-lease|--mirror|--delete|[[:space:]]-f([[:space:]]|$))|force push or remote deletion'
   "${git}"'push.*([[:space:]]|:|\+)main([[:space:]]|$)|push to main'
