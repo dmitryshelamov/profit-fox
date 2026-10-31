@@ -1,12 +1,12 @@
 #!/bin/bash
-# PreToolUse hook for Bash: blocks git commands that bypass merge requests or destroy work.
+# PreToolUse hook for Bash: blocks git commands that bypass pull requests or destroy work.
 # Exit code 2 blocks the tool call and shows stderr to the agent.
 
 command=$(jq -r '.tool_input.command // empty')
 [[ "$command" == *git* ]] || exit 0
 
 block() {
-  echo "BLOCKED by .claude/hooks/block-dangerous-git.sh: $1. Work in a feature branch and merge through a GitLab merge request; ask the owner if this command is really needed." >&2
+  echo "BLOCKED by .claude/hooks/block-dangerous-git.sh: $1. Work in a feature branch and merge through a GitHub pull request; ask the owner if this command is really needed." >&2
   exit 2
 }
 
