@@ -89,7 +89,7 @@
   «Переопределённый баланс»
 - [x] 6.3 `IInstrumentRulesProvider` в `BybitMarketDataClient` для `spot` и `linear`; integration-тест с
   `FakeBybitHandler`: правила разобраны, недоступность — `ExchangeUnavailableException`
-- [ ] 6.4 Миграция `backtests` и `backtest_results`, `IBacktestRepository`, `BacktestCodes`, каскад от бота;
+- [x] 6.4 Миграция `backtests` и `backtest_results`, `IBacktestRepository`, `BacktestCodes`, каскад от бота;
   integration-тесты: бэктест и результаты читаются без потери точности, повторная вставка результата ничего не
   дублирует, «Бот с бэктестами»
 

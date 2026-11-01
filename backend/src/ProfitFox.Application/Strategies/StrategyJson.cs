@@ -251,7 +251,7 @@ public static partial class StrategyJson
         }
     }
 
-    private static JsonNode? WriteValue(NodeValue value)
+    public static JsonNode? WriteValue(NodeValue value)
     {
         return value switch
         {
