@@ -29,7 +29,7 @@ public class ReplaySequenceTests
 
         Received.InOrder(() =>
         {
-            observer.Filled(Arg.Is<ReplayFill>(fill => fill.At == Start && fill.Price == 99m && fill.Side == OrderSide.Buy));
+            observer.Filled(Arg.Is<ReplayFill>(fill => fill!.At == Start && fill.Price == 99m && fill.Side == OrderSide.Buy));
             observer.BarClosed(Start.AddHours(1), Arg.Any<Candle>());
         });
     }
