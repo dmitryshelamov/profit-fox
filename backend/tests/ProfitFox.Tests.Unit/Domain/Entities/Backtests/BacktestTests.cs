@@ -1,6 +1,5 @@
 using ProfitFox.Domain.Entities.Backtests;
 using ProfitFox.Domain.Entities.Backtests.Enums;
-using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.Backtests;
 
@@ -66,25 +65,6 @@ public class BacktestTests
         Backtest failed = BacktestGenerator.Generate(BacktestStatus.LoadingCandles).Fail("Bybit is unavailable.", Now);
 
         (failed.Status, failed.Error, failed.FinishedAt).ShouldBe((BacktestStatus.Failed, "Bybit is unavailable.", Now));
-    }
-
-    [TestCase(BacktestStatus.Pending)]
-    [TestCase(BacktestStatus.LoadingCandles)]
-    [TestCase(BacktestStatus.Running)]
-    public void Unfinished_backtest_is_cancelled(BacktestStatus status)
-    {
-        Backtest cancelled = BacktestGenerator.Generate(status).Cancel(Now);
-
-        (cancelled.Status, cancelled.FinishedAt).ShouldBe((BacktestStatus.Cancelled, Now));
-    }
-
-    // Scenario "Отмена завершённого".
-    [TestCase(BacktestStatus.Succeeded)]
-    [TestCase(BacktestStatus.Failed)]
-    [TestCase(BacktestStatus.Cancelled)]
-    public void Finished_backtest_is_not_cancelled(BacktestStatus status)
-    {
-        Should.Throw<BacktestFinishedException>(() => BacktestGenerator.Generate(status).Cancel(Now));
     }
 
     // Scenario "Бэктест без продвижения": the third restart in a row without a new result fails the backtest.

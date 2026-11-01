@@ -23,6 +23,18 @@ public interface IBacktestRepository
     Task<bool> UpdateAsync(Backtest backtest, BacktestStatus expected, CancellationToken cancellationToken);
 
     /// <summary>
+    ///     Moves the backtest to <paramref name="status" />, finished at <paramref name="finishedAt" />, if the stored one is in one of
+    ///     <paramref name="expected" />: the check and the write are one statement, so a run that moves the backtest meanwhile never
+    ///     loses the change. Returns <c>false</c> when there is no such backtest or it is in another status.
+    /// </summary>
+    Task<bool> UpdateStatusAsync(
+        Guid id,
+        IReadOnlyCollection<BacktestStatus> expected,
+        BacktestStatus status,
+        DateTimeOffset finishedAt,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     ///     Saves the progress of a running backtest with new results in one transaction; a result already stored stays as it was. Nothing is
     ///     written when the stored backtest is no longer running.
     /// </summary>

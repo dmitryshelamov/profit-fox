@@ -69,6 +69,15 @@ internal static class BacktestRepositoryQueries
         return new CommandDefinition(UpdateSql, parameters, transaction, cancellationToken: cancellationToken);
     }
 
+    // Npgsql sends the array as one parameter.
+    internal static CommandDefinition UpdateStatus(Guid id, IEnumerable<string> expected, string status, DateTimeOffset finishedAt, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            "UPDATE backtests SET status = @Status, finished_at = @FinishedAt WHERE id = @Id AND status = ANY(@Expected)",
+            new { Id = id, Expected = expected.ToArray(), Status = status, FinishedAt = finishedAt },
+            cancellationToken: cancellationToken);
+    }
+
     internal static CommandDefinition InsertResult(BacktestResultDb result, IDbTransaction transaction, CancellationToken cancellationToken)
     {
         return new CommandDefinition(InsertResultSql, result, transaction, cancellationToken: cancellationToken);

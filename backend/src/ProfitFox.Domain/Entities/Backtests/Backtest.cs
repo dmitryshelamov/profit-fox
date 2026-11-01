@@ -45,6 +45,9 @@ public sealed record Backtest(
 {
     public const string InterruptedByRestart = "Interrupted by service restart.";
 
+    /// <summary>Statuses of a backtest that has not ended yet: it can still be cancelled.</summary>
+    public static readonly IReadOnlyList<BacktestStatus> Unfinished = [BacktestStatus.Pending, BacktestStatus.LoadingCandles, BacktestStatus.Running];
+
     // A backtest that keeps stopping the service before it saves anything would otherwise restart it forever.
     private const int MaxStalledRestarts = 3;
 
@@ -214,17 +217,6 @@ public sealed record Backtest(
     public Backtest Fail(string reason, DateTimeOffset now)
     {
         return this with { Status = BacktestStatus.Failed, Error = reason, FinishedAt = now };
-    }
-
-    /// <exception cref="BacktestFinishedException">The backtest has already finished.</exception>
-    public Backtest Cancel(DateTimeOffset now)
-    {
-        if (Status is BacktestStatus.Succeeded or BacktestStatus.Failed or BacktestStatus.Cancelled)
-        {
-            throw new BacktestFinishedException();
-        }
-
-        return this with { Status = BacktestStatus.Cancelled, FinishedAt = now };
     }
 
     /// <summary>A value is checked as a value of a bot, a range by its own rules; every spec must name a parameter of the strategy.</summary>

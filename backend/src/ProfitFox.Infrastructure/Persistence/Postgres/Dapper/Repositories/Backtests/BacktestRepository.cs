@@ -49,6 +49,19 @@ internal sealed class BacktestRepository(NpgsqlDataSource dataSource) : IBacktes
         return await connection.ExecuteAsync(BacktestRepositoryQueries.Update(BacktestDbConverter.FromDomain(backtest), expected.ToCode(), null, cancellationToken)) > 0;
     }
 
+    public async Task<bool> UpdateStatusAsync(
+        Guid id,
+        IReadOnlyCollection<BacktestStatus> expected,
+        BacktestStatus status,
+        DateTimeOffset finishedAt,
+        CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        CommandDefinition update = BacktestRepositoryQueries.UpdateStatus(id, expected.Select(code => code.ToCode()), status.ToCode(), finishedAt, cancellationToken);
+
+        return await connection.ExecuteAsync(update) > 0;
+    }
+
     public async Task<bool> SaveProgressAsync(Backtest backtest, IReadOnlyList<BacktestResult> results, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);

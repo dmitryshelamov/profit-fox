@@ -108,10 +108,46 @@ public class BacktestRepositoryTests
         Backtest backtest = Backtest(Created);
         await _repository.AddAsync(backtest, CancellationToken.None);
 
-        (await _repository.UpdateAsync(backtest.Cancel(Created), BacktestStatus.Running, CancellationToken.None)).ShouldBeFalse();
+        (await _repository.UpdateAsync(backtest.StartLoading(Created), BacktestStatus.Running, CancellationToken.None)).ShouldBeFalse();
+        (await _repository.GetAsync(backtest.Id, CancellationToken.None))!.Status.ShouldBe(BacktestStatus.Pending);
         (await _repository.UpdateAsync(backtest.StartLoading(Created), BacktestStatus.Pending, CancellationToken.None)).ShouldBeTrue();
 
         (await _repository.GetAsync(backtest.Id, CancellationToken.None))!.Status.ShouldBe(BacktestStatus.LoadingCandles);
+    }
+
+    [TestCase(BacktestStatus.Pending)]
+    [TestCase(BacktestStatus.LoadingCandles)]
+    [TestCase(BacktestStatus.Running)]
+    public async Task Status_changes_from_one_of_the_expected_statuses_with_the_time_it_finished(BacktestStatus status)
+    {
+        Backtest backtest = Backtest(Created) with { Status = status };
+        await _repository.AddAsync(backtest, CancellationToken.None);
+
+        bool changed = await _repository.UpdateStatusAsync(
+            backtest.Id,
+            [BacktestStatus.Pending, BacktestStatus.LoadingCandles, BacktestStatus.Running],
+            BacktestStatus.Cancelled,
+            Created.AddMinutes(3),
+            CancellationToken.None);
+
+        changed.ShouldBeTrue();
+        Backtest cancelled = (await _repository.GetAsync(backtest.Id, CancellationToken.None))!;
+        (cancelled.Status, cancelled.FinishedAt).ShouldBe((BacktestStatus.Cancelled, Created.AddMinutes(3)));
+    }
+
+    [Test]
+    public async Task Status_of_a_backtest_in_another_status_or_of_none_does_not_change()
+    {
+        Backtest backtest = Backtest(Created) with { Status = BacktestStatus.Succeeded, FinishedAt = Created.AddMinutes(1) };
+        await _repository.AddAsync(backtest, CancellationToken.None);
+
+        (await _repository.UpdateStatusAsync(backtest.Id, [BacktestStatus.Running], BacktestStatus.Cancelled, Created.AddMinutes(3), CancellationToken.None))
+            .ShouldBeFalse();
+        (await _repository.UpdateStatusAsync(Guid.NewGuid(), [BacktestStatus.Running], BacktestStatus.Cancelled, Created.AddMinutes(3), CancellationToken.None))
+            .ShouldBeFalse();
+
+        Backtest stored = (await _repository.GetAsync(backtest.Id, CancellationToken.None))!;
+        (stored.Status, stored.FinishedAt).ShouldBe((BacktestStatus.Succeeded, Created.AddMinutes(1)));
     }
 
     [Test]
