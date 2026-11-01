@@ -13,9 +13,13 @@ namespace ProfitFox.Domain.Services.Strategies.Execution;
 /// <param name="minQuantity">A position left below it after an exit cannot be sold, so it is closed.</param>
 internal sealed class Account(StrategyDirection direction, decimal balance, decimal minQuantity)
 {
-    private decimal _collateral;
-
     public decimal Cash { get; private set; } = balance;
+
+    /// <summary>What a short holds in the cash it paid for its entries.</summary>
+    public decimal Collateral { get; private set; }
+
+    /// <summary>Coins left over by positions closed below the minimum quantity; they stay on the account.</summary>
+    public decimal Dust { get; private set; }
 
     public decimal Quantity { get; private set; }
 
@@ -31,7 +35,7 @@ internal sealed class Account(StrategyDirection direction, decimal balance, deci
     {
         decimal quoteFee = asset == FeeAsset.Quote ? fee : 0m;
         Cash -= quantity * price + quoteFee;
-        _collateral += quantity * price;
+        Collateral += quantity * price;
         Quantity += asset == FeeAsset.Base ? quantity - fee : quantity;
         Invested += quantity * price + (direction == StrategyDirection.Long ? quoteFee : -quoteFee);
         LastEntryPrice = price;
@@ -51,17 +55,18 @@ internal sealed class Account(StrategyDirection direction, decimal balance, deci
             return;
         }
 
-        decimal collateral = _collateral * exited / Quantity;
-        Cash += direction == StrategyDirection.Long ? exited * price - fee : collateral + (collateral - exited * price) - fee;
-        _collateral -= collateral;
+        decimal returned = Collateral * exited / Quantity;
+        Cash += direction == StrategyDirection.Long ? exited * price - fee : returned + (returned - exited * price) - fee;
+        Collateral -= returned;
         Invested -= AveragePrice!.Value * exited;
         Quantity -= exited;
 
         if (Quantity < minQuantity || Quantity == 0m)
         {
+            Dust += Quantity;
             Quantity = 0m;
             Invested = 0m;
-            _collateral = 0m;
+            Collateral = 0m;
             LastEntryPrice = null;
             LastEntryAt = null;
         }

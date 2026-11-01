@@ -51,7 +51,7 @@ public sealed class BacktestReplay(
 
                 DateTimeOffset end = interval.CandleEnd(candle.OpenTime);
                 Handle(new BarClosed(end, new Bar(candle.Open.Value, candle.High.Value, candle.Low.Value, candle.Close.Value, candle.Volume.Value)), index + 1);
-                observer.BarClosed(end, candle);
+                observer.BarClosed(end, candle, run.State);
             }
         }
 
@@ -108,7 +108,7 @@ public sealed class BacktestReplay(
             decimal fee = asset == FeeAsset.Base ? quantity * rate : price * quantity * rate;
             var fill = new ReplayFill(at, order.Id, order.Side, order.Type, price, quantity, fee, asset);
             Handle(new OrderFilled(at, order.Id, quantity, price, IsComplete: true, fill.Fee, fill.FeeAsset), index + 1);
-            observer.Filled(fill);
+            observer.Filled(fill, run.State);
         }
 
         private static decimal Down(decimal value, decimal step)

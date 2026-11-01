@@ -17,6 +17,7 @@ public sealed class StrategyRun
     private readonly Dictionary<string, ActiveOrder> _orders = [];
     private readonly Account _account;
     private readonly OrderSide _entrySide;
+    private readonly StrategyDirection _direction;
     private readonly FeeSchedule _fees;
     private readonly InstrumentRules _rules;
     private readonly List<OrderCommand> _commands = [];
@@ -28,6 +29,7 @@ public sealed class StrategyRun
     {
         _entrySide = direction == StrategyDirection.Long ? OrderSide.Buy : OrderSide.Sell;
         _account = new Account(direction, conditions.Balance, conditions.Rules.MinQuantity);
+        _direction = direction;
         _fees = conditions.Fees;
         _rules = conditions.Rules;
         _nodes = nodes;
@@ -84,6 +86,16 @@ public sealed class StrategyRun
 
     /// <summary>How many times an order node did not place an entry because free money or the exchange minimum did not allow it.</summary>
     public long SkippedOrders { get; private set; }
+
+    public RunState State => new RunState(
+        _direction,
+        _account.Cash,
+        _account.Quantity,
+        _account.Invested,
+        _account.Collateral,
+        _account.Dust,
+        _account.Cash - Free(),
+        SkippedOrders);
 
     /// <summary>Value of an output after the last event; <c>null</c> when it has no value.</summary>
     public NodeValue? ValueOf(string path, string pin)

@@ -72,6 +72,7 @@ public class OrderMinimumTests
         run.ValueOf("position", "hasPosition").ShouldBe(Values.Boolean(false));
         run.ValueOf("position", "quantity").ShouldBe(Values.Number(0m));
         run.ValueOf("position", "invested").ShouldBe(Values.Number(0m));
+        run.State.Dust.ShouldBe(0.0005m);
 
         run.Handle(new OrderFilled(Start, "o-3", 1m, 120m, IsComplete: true));
         run.ValueOf("position", "quantity").ShouldBe(Values.Number(1m));

@@ -7,6 +7,7 @@ using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Services.Backtests;
 using ProfitFox.Domain.Services.Strategies.BuiltIns;
+using ProfitFox.Domain.Services.Strategies.Execution;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Tests.Shared.Builders.Strategies;
@@ -29,8 +30,8 @@ public class ReplaySequenceTests
 
         Received.InOrder(() =>
         {
-            observer.Filled(Arg.Is<ReplayFill>(fill => fill!.At == Start && fill.Price == 99m && fill.Side == OrderSide.Buy));
-            observer.BarClosed(Start.AddHours(1), Arg.Any<Candle>());
+            observer.Filled(Arg.Is<ReplayFill>(fill => fill!.At == Start && fill.Price == 99m && fill.Side == OrderSide.Buy), Arg.Any<RunState>());
+            observer.BarClosed(Start.AddHours(1), Arg.Any<Candle>(), Arg.Any<RunState>());
         });
     }
 
