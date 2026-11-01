@@ -55,6 +55,19 @@ describe('strategy canvas', () => {
     expect(within(parameters).getByTitle('priceRiseForSell')).toHaveClass('truncate');
   });
 
+  // A long title would wrap and make the node taller than the layout counts.
+  it('cuts a long node title to one line and gives it in full in a tooltip', async () => {
+    fakeApi({
+      [`GET /api/strategies/${emaSummary.id}`]: () => json(savedStrategy(emaSummary, ema)),
+      'GET /api/strategy-nodes': () => json(catalog),
+    });
+
+    renderApp(`/strategies/${emaSummary.id}`);
+
+    const cross = await screen.findByRole('group', { name: 'Пересечение EMA' });
+    expect(within(cross).getByTitle('Пересечение EMA')).toHaveClass('truncate');
+  });
+
   it('says so when there is no such strategy', async () => {
     fakeApi({
       [`GET /api/strategies/${emaSummary.id}`]: () => problem(404, 'Not Found'),

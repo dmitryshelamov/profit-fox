@@ -45,7 +45,9 @@ export function GraphNodeView({ id, data, selected }: NodeProps<GraphFlowNode>) 
         className="flex items-center justify-between gap-3 rounded-t-[7px] px-2.5 py-1.5 text-[12.5px] font-semibold text-white"
         style={{ background: colorOf(node.kind) }}
       >
-        <span>{title}</span>
+        <span className="truncate" title={title}>
+          {title}
+        </span>
         {node.kind === 'composite' && <span aria-label="составной узел">◆</span>}
       </div>
       {issues.length > 0 && (
