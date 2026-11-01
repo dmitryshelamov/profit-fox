@@ -1,3 +1,5 @@
+using System.Collections;
+
 using Microsoft.Extensions.Time.Testing;
 
 using NSubstitute;
@@ -8,6 +10,7 @@ using ProfitFox.Application.Strategies;
 using ProfitFox.Application.Workers;
 using ProfitFox.Domain.Entities.Backtests;
 using ProfitFox.Domain.Entities.Backtests.Enums;
+using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Domain.Repositories;
@@ -17,6 +20,7 @@ using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Tests.Shared.Fixtures.Strategies;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.Backtests;
+using ProfitFox.Tests.Shared.Generators.Domain.Entity.MarketData;
 
 using Shouldly;
 
@@ -41,7 +45,7 @@ public class RunNextBacktestWorkTests
         _library = Substitute.For<IStrategyLibraryRepository>();
         _candles = Substitute.For<ICandleRepository>();
         _time = new FakeTimeProvider(Now);
-        _backtests.GetCalculatedCombinationsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns([]);
+        _backtests.GetCalculatedCombinationsAsync(Arg.Any<BacktestChunk>(), Arg.Any<CancellationToken>()).Returns([]);
         _backtests.SaveChunkProgressAsync(
                 Arg.Any<BacktestChunk>(),
                 Arg.Any<Guid>(),
@@ -105,7 +109,7 @@ public class RunNextBacktestWorkTests
         Unfinished(backtest);
         Chunks(backtest, new BacktestChunk(backtest.Id, 0, 0, 1));
         var calculated = new TaskCompletionSource<IReadOnlyList<long>>();
-        _backtests.GetCalculatedCombinationsAsync(backtest.Id, Arg.Any<CancellationToken>()).Returns(_ => calculated.Task);
+        _backtests.GetCalculatedCombinationsAsync(Arg.Any<BacktestChunk>(), Arg.Any<CancellationToken>()).Returns(_ => calculated.Task);
         _backtests.RenewChunkLeaseAsync(Arg.Any<BacktestChunk>(), Arg.Any<Guid>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(false);
 
         Task<bool> run = _handler.Handle(new RunNextBacktestWorkCommand(), CancellationToken.None);
@@ -120,6 +124,35 @@ public class RunNextBacktestWorkTests
         (await run).ShouldBeTrue();
         await _backtests.DidNotReceiveWithAnyArgs().SaveChunkProgressAsync(default!, default, default!, default, default, default);
         await _backtests.DidNotReceiveWithAnyArgs().CompleteChunkAsync(default!, default, default);
+    }
+
+    // Combinations already started run to their end: the Worker waits for them before it takes the next chunk on the same threads.
+    [Test]
+    public async Task Worker_that_lost_its_chunk_waits_for_the_combinations_it_started()
+    {
+        Backtest backtest = Running();
+        Unfinished(backtest);
+        Chunks(backtest, new BacktestChunk(backtest.Id, 0, 0, 1));
+        var replay = new BlockingCandles();
+        _candles.GetAsync(Arg.Any<Instrument>(), Arg.Any<Interval>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(replay);
+        _backtests.RenewChunkLeaseAsync(Arg.Any<BacktestChunk>(), Arg.Any<Guid>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(false);
+
+        Task<bool> run = _handler.Handle(new RunNextBacktestWorkCommand(), CancellationToken.None);
+        await replay.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        while (!_backtests.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IBacktestRepository.RenewChunkLeaseAsync)))
+        {
+            _time.Advance(TimeSpan.FromSeconds(1));
+            await Task.Delay(5);
+        }
+
+        await Task.Delay(200);
+        bool returnedWhileComputing = run.IsCompleted;
+        replay.Release.Set();
+
+        returnedWhileComputing.ShouldBeFalse();
+        (await run.WaitAsync(TimeSpan.FromSeconds(5))).ShouldBeTrue();
     }
 
     /// <summary>A running backtest of one combination whose strategy version is the reference Ladder.</summary>
@@ -144,5 +177,38 @@ public class RunNextBacktestWorkTests
     {
         _backtests.ClaimChunkAsync(backtest.Id, Arg.Any<Guid>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns(chunks[0], [.. chunks.Skip(1).Cast<BacktestChunk?>(), null]);
+    }
+
+    /// <summary>One candle whose replay waits until the test releases it, as a long combination does.</summary>
+    private sealed class BlockingCandles : IReadOnlyList<Candle>
+    {
+        private readonly Candle _candle = CandleGenerator.Generate(Now);
+
+        public TaskCompletionSource Started { get; } = new TaskCompletionSource();
+
+        public ManualResetEventSlim Release { get; } = new ManualResetEventSlim();
+
+        public int Count => 1;
+
+        public Candle this[int index]
+        {
+            get
+            {
+                Started.TrySetResult();
+                Release.Wait(TimeSpan.FromSeconds(10));
+
+                return _candle;
+            }
+        }
+
+        public IEnumerator<Candle> GetEnumerator()
+        {
+            yield return this[0];
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
     }
 }

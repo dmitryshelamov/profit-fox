@@ -221,6 +221,8 @@ public sealed class BacktestScenario(ProfitFoxFactory factory, HttpClient client
             .Returns(call => stored.RenewChunkLeaseAsync(call.Arg<BacktestChunk>()!, call.Arg<Guid>(), call.Arg<DateTimeOffset>(), call.Arg<CancellationToken>()));
         spy.GetCalculatedCombinationsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(call => stored.GetCalculatedCombinationsAsync(call.Arg<Guid>(), call.Arg<CancellationToken>()));
+        spy.GetCalculatedCombinationsAsync(Arg.Any<BacktestChunk>(), Arg.Any<CancellationToken>())
+            .Returns(call => stored.GetCalculatedCombinationsAsync(call.Arg<BacktestChunk>()!, call.Arg<CancellationToken>()));
         spy.CompleteChunkAsync(Arg.Any<BacktestChunk>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(call => stored.CompleteChunkAsync(call.Arg<BacktestChunk>()!, call.Arg<Guid>(), call.Arg<CancellationToken>()));
         spy.SucceedIfCompleteAsync(Arg.Any<Guid>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())

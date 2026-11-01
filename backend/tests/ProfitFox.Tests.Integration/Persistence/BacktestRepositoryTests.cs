@@ -259,6 +259,20 @@ public class BacktestRepositoryTests
         (taken.LostLeases, again.LostLeases, afterSave.LostLeases).ShouldBe((1, 2, 1));
     }
 
+    // A chunk reads only the results of its own combinations, not those of the whole grid.
+    [Test]
+    public async Task Calculated_combinations_of_a_chunk_are_those_inside_its_range()
+    {
+        Backtest backtest = await RunningAsync(Backtest(Created) with { TotalCombinations = 8 }, chunkSize: 8);
+        var owner = Guid.NewGuid();
+        BacktestChunk chunk = (await ClaimAsync(backtest, owner, Created))!;
+        await SaveAsync(chunk, owner, Created, Result(backtest.Id, 1), Result(backtest.Id, 2), Result(backtest.Id, 4), Result(backtest.Id, 5));
+
+        IReadOnlyList<long> inRange = await _repository.GetCalculatedCombinationsAsync(new BacktestChunk(backtest.Id, 0, 2, 3), CancellationToken.None);
+
+        inRange.ShouldBe([2L, 4L]);
+    }
+
     // Scenario "Прогресс двух Worker'ов".
     [Test]
     public async Task Backtest_counts_the_results_of_every_chunk_and_sums_the_speed_of_chunks_with_a_live_lease()

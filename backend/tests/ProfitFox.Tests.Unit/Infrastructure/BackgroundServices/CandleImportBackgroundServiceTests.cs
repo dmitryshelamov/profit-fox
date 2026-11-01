@@ -7,6 +7,7 @@ using Microsoft.Extensions.Time.Testing;
 
 using NSubstitute;
 
+using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.MarketData.Commands.RunNextCandleImport;
 using ProfitFox.Application.Workers;
 using ProfitFox.Infrastructure.BackgroundServices;
@@ -121,6 +122,36 @@ public class CandleImportBackgroundServiceTests
         await service.StopAsync(CancellationToken.None);
 
         service.ExecuteTask!.Status.ShouldBe(TaskStatus.RanToCompletion);
+    }
+
+    // Requirement "Лог Worker'а".
+    [Test]
+    public async Task Failed_job_is_logged_with_its_id()
+    {
+        var job = Guid.NewGuid();
+        var cause = new InvalidOperationException("The database is down.");
+        var nextRan = new TaskCompletionSource();
+        _sender.Send(Arg.Any<RunNextCandleImportCommand>(), Arg.Any<CancellationToken>()).Returns(
+            _ => throw new CandleImportWorkException(job, cause),
+            _ =>
+            {
+                nextRan.TrySetResult();
+
+                return Task.FromResult(false);
+            });
+        ILogger log = Substitute.For<ILogger>();
+        log.IsEnabled(Arg.Any<LogLevel>()).Returns(true);
+        ILoggerFactory loggers = Substitute.For<ILoggerFactory>();
+        loggers.CreateLogger(Arg.Any<string>()).Returns(log);
+        using CandleImportBackgroundService service = Service(new Logger<CandleImportBackgroundService>(loggers));
+
+        await service.StartAsync(CancellationToken.None);
+        await AdvanceUntilAsync(nextRan.Task);
+        await service.StopAsync(CancellationToken.None);
+
+        object?[] logged = log.ReceivedCalls().Where(call => call.GetMethodInfo().Name == nameof(ILogger.Log)).ShouldHaveSingleItem().GetArguments();
+        ((LogLevel)logged[0]!, (Exception?)logged[3]).ShouldBe((LogLevel.Error, cause));
+        ((IReadOnlyList<KeyValuePair<string, object?>>)logged[2]!).ShouldContain(new KeyValuePair<string, object?>("JobId", job));
     }
 
     // The job stays Running and its lease expires for any Worker, so a shutdown is no failure of the job.

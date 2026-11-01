@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
+using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.MarketData.Commands.RunNextCandleImport;
 using ProfitFox.Application.Workers;
 
@@ -18,7 +19,17 @@ internal sealed class CandleImportBackgroundService(
     {
         return WorkerLoop.RunAsync(
             new RunNextCandleImportCommand(),
-            exception => logger.LogError(exception, "A candle import job failed outside its own error handling."),
+            exception =>
+            {
+                if (exception is CandleImportWorkException work)
+                {
+                    logger.LogError(work.InnerException, "Candle import job {JobId} failed outside its own error handling.", work.JobId);
+                }
+                else
+                {
+                    logger.LogError(exception, "A candle import job failed outside its own error handling.");
+                }
+            },
             scopes,
             settings.PollInterval,
             time,

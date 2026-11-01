@@ -83,6 +83,9 @@ public interface IBacktestRepository
     /// <summary>Numbers of the combinations that have a result, ascending.</summary>
     Task<IReadOnlyList<long>> GetCalculatedCombinationsAsync(Guid backtestId, CancellationToken cancellationToken);
 
+    /// <summary>Numbers of the combinations of the chunk that have a result, ascending.</summary>
+    Task<IReadOnlyList<long>> GetCalculatedCombinationsAsync(BacktestChunk chunk, CancellationToken cancellationToken);
+
     /// <summary>A page of results sorted by <paramref name="sort" />, a missing value last, equal values by combination.</summary>
     Task<IReadOnlyList<BacktestResult>> GetResultsAsync(
         Guid backtestId,

@@ -34,6 +34,7 @@ public static class InfrastructureRegistrar
         }
 
         ConfigureCommon(configuration, services);
+        services.AddHostedService<WorkerStartLogService>();
         services.AddHostedService<CandleImportBackgroundService>();
         services.AddHostedService<BacktestBackgroundService>();
     }

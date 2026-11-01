@@ -35,11 +35,25 @@ public sealed class RunNextCandleImportCommandHandler(
             return false;
         }
 
+        try
+        {
+            await RunClaimedAsync(claimed, now, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            throw new CandleImportWorkException(claimed.Id, exception);
+        }
+
+        return true;
+    }
+
+    private async Task RunClaimedAsync(CandleImportJob claimed, DateTimeOffset now, CancellationToken cancellationToken)
+    {
         CandleImportJob job = claimed.TakenOver(now);
 
         if (!await jobs.UpdateLeasedAsync(job, worker.Id, cancellationToken) || job.Status == CandleImportStatus.Failed)
         {
-            return true;
+            return;
         }
 
         using var work = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -59,8 +73,6 @@ public sealed class RunNextCandleImportCommandHandler(
             await done.CancelAsync();
             await keeping;
         }
-
-        return true;
 
         async Task RunAsync(CancellationTokenSource running)
         {

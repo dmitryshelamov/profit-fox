@@ -258,6 +258,18 @@ internal static class BacktestRepositoryQueries
         return new CommandDefinition(InsertResultSql, result, transaction, cancellationToken: cancellationToken);
     }
 
+    internal static CommandDefinition CalculatedCombinations(BacktestChunk chunk, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            """
+            SELECT combination FROM backtest_results
+            WHERE backtest_id = @BacktestId AND combination >= @First AND combination < @First + @Combinations
+            ORDER BY combination
+            """,
+            new { chunk.BacktestId, chunk.First, chunk.Combinations },
+            cancellationToken: cancellationToken);
+    }
+
     internal static CommandDefinition CalculatedCombinations(Guid backtestId, CancellationToken cancellationToken)
     {
         return new CommandDefinition(

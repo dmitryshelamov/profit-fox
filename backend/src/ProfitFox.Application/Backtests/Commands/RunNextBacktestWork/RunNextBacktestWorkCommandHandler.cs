@@ -55,6 +55,9 @@ public sealed class RunNextBacktestWorkCommandHandler(
 
             if (chunk is null)
             {
+                // A Worker may stop between handing in the last chunk and ending the backtest; the check succeeds only when every chunk is done.
+                await backtests.SucceedIfCompleteAsync(backtest.Id, now, cancellationToken);
+
                 continue;
             }
 
@@ -173,7 +176,7 @@ public sealed class RunNextBacktestWorkCommandHandler(
     private async Task ComputeAsync(Backtest backtest, BacktestChunk chunk, CancellationTokenSource work)
     {
         BacktestInputs input = await inputs.GetAsync(backtest.Id, () => LoadAsync(backtest, work.Token));
-        HashSet<long> calculated = [.. await backtests.GetCalculatedCombinationsAsync(backtest.Id, work.Token)];
+        HashSet<long> calculated = [.. await backtests.GetCalculatedCombinationsAsync(chunk, work.Token)];
         ParameterGrid grid = backtest.Grid();
         var results = Channel.CreateUnbounded<BacktestResult>();
         IEnumerable<long> pending = Enumerable.Range(0, chunk.Combinations).Select(offset => chunk.First + offset).Where(combination => !calculated.Contains(combination));
@@ -205,17 +208,28 @@ public sealed class RunNextBacktestWorkCommandHandler(
         long calculatedInRun = 0;
         var batch = new List<BacktestResult>();
 
-        await foreach (BacktestResult result in results.Reader.ReadAllAsync(work.Token))
+        try
         {
-            batch.Add(result);
-
-            if (time.GetUtcNow() - lastSave >= SaveInterval && !await SaveAsync())
+            await foreach (BacktestResult result in results.Reader.ReadAllAsync(work.Token))
             {
-                await work.CancelAsync();
-                await computing.ContinueWith(_ => { }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                batch.Add(result);
 
-                return;
+                if (time.GetUtcNow() - lastSave >= SaveInterval && !await SaveAsync())
+                {
+                    await work.CancelAsync();
+                    await StoppedAsync();
+
+                    return;
+                }
             }
+        }
+        catch (OperationCanceledException) when (work.IsCancellationRequested)
+        {
+            // A replay does not watch the token: the combinations already started run to their end, and the next chunk must not share the
+            // threads with them.
+            await StoppedAsync();
+
+            throw;
         }
 
         try
@@ -250,6 +264,11 @@ public sealed class RunNextBacktestWorkCommandHandler(
             lastSave = now;
 
             return saved;
+        }
+
+        Task StoppedAsync()
+        {
+            return computing.ContinueWith(_ => { }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         }
     }
 

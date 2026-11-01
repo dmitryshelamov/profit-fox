@@ -4,31 +4,31 @@ using System.Text;
 using System.Text.Json;
 
 using ProfitFox.Application.Strategies;
+using ProfitFox.Domain.Entities.Backtests;
 using ProfitFox.Domain.Entities.Backtests.Enums;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Services.Backtests;
 using ProfitFox.Domain.Services.Strategies.BuiltIns;
+using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Tests.Shared.Builders.Strategies;
 using ProfitFox.Tests.Shared.Fixtures.Backtests;
 using ProfitFox.Tests.Shared.Fixtures.Strategies;
+using ProfitFox.Tests.Shared.Generators.Domain.Entity.Backtests;
 
 using Shouldly;
 
 namespace ProfitFox.Tests.Unit.Domain.Services.Backtests;
 
 /// <summary>
-///     Requirement "Версия движка": the results of the reference strategies on the hourly candle fixture are fingerprinted, and every
+///     Requirement "Версия движка": the results of grids of the reference strategies on the hourly candle fixture are fingerprinted, and every
 ///     fingerprint belongs to one engine version. A change of the results without a new engine version fails here.
 /// </summary>
 public class EngineVersionTests
 {
     private static readonly DateTimeOffset Start = DateTimeOffset.Parse("2024-03-01T00:00:00Z");
-
-    // The instrument and fees of the reference backtests: linear BTCUSDT at the base rates of Bybit.
-    private static readonly TradingConditions Linear = Conditions.Reference with { Fees = new FeeSchedule(0.0002m, 0.00055m, MarketCategory.Linear) };
 
     // Scenario "Изменение расчёта без новой версии".
     [Test]
@@ -51,30 +51,71 @@ public class EngineVersionTests
         history.Select(entry => entry.Fingerprint).Distinct().Count().ShouldBe(history.Count);
     }
 
-    /// <summary>SHA-256 of the details of every reference strategy, one JSON line each in a fixed order.</summary>
+    /// <summary>
+    ///     SHA-256 of the details of every combination of a small grid of each reference strategy, one JSON line each in a fixed order,
+    ///     through the code a Worker runs: the grid numbers the combinations and the backtest turns its percent settings into fractions.
+    ///     Each grid runs with the base fees of Bybit, once filling limits on a breakout without slippage and once on a touch with it.
+    /// </summary>
     private static string Fingerprint()
     {
         IReadOnlyList<Candle> candles = [.. CandleFixtures.Hourly().Select(Candle)];
-        var two = new Dictionary<string, NodeValue> { ["fast"] = Values.Number(2m), ["slow"] = Values.Number(3m) };
-        var defaults = new Dictionary<string, NodeValue>();
-        IEnumerable<string> lines =
+        var emaGrid = new Dictionary<string, ParameterSpec>
+        {
+            ["fast"] = ParameterSpec.Between(Values.Number(2m), Values.Number(3m), Values.Number(1m)),
+            ["slow"] = ParameterSpec.Between(Values.Number(3m), Values.Number(4m), Values.Number(1m))
+        };
+        var ladderGrid = new Dictionary<string, ParameterSpec>
+        {
+            ["priceDropForBuy"] = ParameterSpec.Between(Values.Number(0.01m), Values.Number(0.02m), Values.Number(0.01m))
+        };
+        (string Strategy, IReadOnlyDictionary<string, ParameterSpec> Grid)[] grids =
         [
-            Details("ema", two, candles),
-            Details("ema-short", two, candles),
-            Details("dca", defaults, candles),
-            Details("ladder", defaults, candles)
+            ("ema", emaGrid),
+            ("ema-short", emaGrid),
+            ("dca", new Dictionary<string, ParameterSpec>()),
+            ("ladder", ladderGrid)
         ];
+        SimulationSettings[] simulations =
+        [
+            new SimulationSettings(1000m, 0.02m, 0.055m, 0m, LimitFillMode.Breakout),
+            new SimulationSettings(1000m, 0.02m, 0.055m, 0.05m, LimitFillMode.Touch)
+        ];
+        IEnumerable<string> lines =
+            from grid in grids
+            from simulation in simulations
+            from line in Details(grid.Strategy, grid.Grid, simulation, candles)
+            select line;
 
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', lines))));
     }
 
-    private static string Details(string strategy, IReadOnlyDictionary<string, NodeValue> values, IReadOnlyList<Candle> candles)
+    private static IEnumerable<string> Details(
+        string strategy,
+        IReadOnlyDictionary<string, ParameterSpec> parameters,
+        SimulationSettings simulation,
+        IReadOnlyList<Candle> candles)
     {
         var snapshot = StrategySnapshot.Of(StrategyJson.ParseStrategy(StrategyFixtures.Element(strategy)), BuiltInComposites.Catalog);
-        var details = new DetailsObserver(Linear.Balance);
-        new BacktestReplay(snapshot, values, Linear, 0m, LimitFillMode.Breakout, Interval.OneHour).Run(Start, candles, details);
+        Backtest backtest = BacktestGenerator.Generate(BacktestStatus.Running) with
+        {
+            Instrument = new Instrument(MarketCategory.Linear, "BTCUSDT"),
+            Interval = Interval.OneHour,
+            From = Start,
+            To = Start.AddHours(candles.Count),
+            Parameters = parameters,
+            Simulation = simulation,
+            Rules = Conditions.Reference.Rules
+        };
+        ParameterGrid grid = backtest.Grid();
 
-        return JsonSerializer.Serialize(details.Details());
+        for (long combination = 0; combination < grid.Count!.Value; combination++)
+        {
+            IReadOnlyDictionary<string, NodeValue> values = grid.Combination(combination);
+            var details = new DetailsObserver(simulation.Balance);
+            backtest.Replay(snapshot, values).Run(Start, candles, details);
+
+            yield return $"{strategy} {combination} {JsonSerializer.Serialize(details.Details())}";
+        }
     }
 
     private static Candle Candle(string[] row)

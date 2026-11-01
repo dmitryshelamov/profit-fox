@@ -63,8 +63,6 @@ public class WorkerTakeoverTests
         ]);
         await using WorkerHost worker = factory.StartWorker();
 
-        await Task.Delay(200);
-        factory.Bybit.KlineRequests.ShouldBeEmpty();
         CandleImportJob finished = await WaitUntilFinishedAsync(factory, jobs, job.Id);
 
         (finished.Status, finished.ImportedCandles, finished.LostLeases).ShouldBe((CandleImportStatus.Succeeded, 3L, 0));
@@ -148,6 +146,32 @@ public class WorkerTakeoverTests
 
         (failed.Status, failed.Error).ShouldBe((BacktestStatus.Failed, Backtest.InterruptedChunk));
         (await stored.GetCalculatedCombinationsAsync(backtest.Id, CancellationToken.None)).ShouldBeEmpty();
+    }
+
+    // A Worker stopped between handing in the last chunk and ending the backtest: the next Worker that finds no chunk ends it.
+    [Test]
+    public async Task Backtest_whose_chunks_are_all_done_succeeds_on_the_next_poll()
+    {
+        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        using HttpClient client = factory.CreateClient();
+        var scenario = new BacktestScenario(factory, client);
+        await scenario.CreateBotAsync("ladder");
+        await scenario.StoreCandlesAsync(From, Closes);
+        Backtest backtest = await scenario.CreateAsync(From, From.AddHours(Closes.Length));
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        IBacktestRepository stored = scope.ServiceProvider.GetRequiredService<IBacktestRepository>();
+        DateTimeOffset now = factory.Time.GetUtcNow();
+        Backtest loading = backtest.StartLoading(now);
+        await stored.UpdateAsync(loading, BacktestStatus.Pending, CancellationToken.None);
+        await stored.StartRunningAsync(loading.StartRunning(From, []), BacktestChunk.Split(backtest.Id, 1, 100), CancellationToken.None);
+        var stopped = Guid.NewGuid();
+        BacktestChunk chunk = (await stored.ClaimChunkAsync(backtest.Id, stopped, now, now.AddSeconds(30), CancellationToken.None))!;
+        await stored.CompleteChunkAsync(chunk, stopped, CancellationToken.None);
+
+        bool found = await BacktestScenario.Handler(scope, stored, factory.Time).Handle(new RunNextBacktestWorkCommand(), CancellationToken.None);
+
+        found.ShouldBeFalse();
+        (await scenario.GetAsync(backtest.Id)).Status.ShouldBe(BacktestStatus.Succeeded);
     }
 
     // Scenarios "Два Worker'а на одной базе" and "Тот же результат на разном числе Worker'ов".

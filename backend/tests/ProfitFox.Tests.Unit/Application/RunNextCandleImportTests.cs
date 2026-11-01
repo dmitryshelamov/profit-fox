@@ -435,6 +435,19 @@ public class RunNextCandleImportTests
         await _jobs.Received().RenewLeaseAsync(job.Id, _worker.Id, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
 
+    // Requirement "Лог Worker'а": a failure outside the job's own error handling names the job.
+    [Test]
+    public async Task Failure_after_the_job_is_taken_names_the_job()
+    {
+        CandleImportJob job = PendingJob("2024-01-01T00:00:00Z", "2024-01-01T03:00:00Z");
+        var cause = new InvalidOperationException("The database is down.");
+        _jobs.UpdateLeasedAsync(Arg.Any<CandleImportJob>(), _worker.Id, Arg.Any<CancellationToken>()).Returns<bool>(_ => throw cause);
+
+        CandleImportWorkException failure = await Should.ThrowAsync<CandleImportWorkException>(() => RunAsync());
+
+        (failure.JobId, failure.InnerException).ShouldBe((job.Id, cause));
+    }
+
     private CandleImportJob PendingJob(string from, string to, int lostLeases = 0)
     {
         var job = new CandleImportJob(
