@@ -32,6 +32,19 @@ public class MetricsObserverTests
         (metrics.Fills, metrics.Candles, metrics.ClosedTrades, metrics.WinRatePercent).ShouldBe((1, 1, 0, null));
     }
 
+    // Scenario "Резерв не уменьшает капитал".
+    [Test]
+    public void Standing_limit_buy_does_not_lower_the_equity()
+    {
+        StrategyDefinition holdBuy = StrategyDefinitions.Long(new GraphBuilder()
+            .Node("buy", SimpleNodeKind.HoldLimit, new NodeSettings(Side: OrderSide.Buy, SizeMode: OrderSizeMode.Quantity), ("when", Values.Boolean(true)), ("price", Values.Number(99m)), ("size", Values.Number(1m)))
+            .Build());
+
+        BacktestMetrics metrics = Run(holdBuy, 1000m, Flat(0, 100m));
+
+        (metrics.EndEquity, metrics.MaxDrawdownPercent, metrics.MaxCapitalUsed).ShouldBe((1000m, 0m, 99m));
+    }
+
     // Scenario "Просадка от пика".
     [Test]
     public void Drawdown_is_the_largest_fall_of_equity_at_closes_from_its_previous_peak()
