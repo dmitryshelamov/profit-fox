@@ -1,5 +1,6 @@
 using MediatR;
 
+using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.Entities.Backtests;
 using ProfitFox.Domain.Entities.Backtests.Enums;
 using ProfitFox.Domain.Entities.MarketData;
@@ -16,8 +17,12 @@ public sealed class RunBacktestCommandHandler(
     IBacktestRepository backtests,
     IStrategyLibraryRepository library,
     ICandleRepository candles,
+    ICandleImportJobRepository jobs,
+    ICandleImportQueue imports,
     TimeProvider time) : IRequestHandler<RunBacktestCommand>
 {
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
+
     /// <summary>Takes the backtest through its statuses from where it is: loading candles, then the combinations without a result.</summary>
     public async Task Handle(RunBacktestCommand request, CancellationToken cancellationToken)
     {
@@ -32,14 +37,77 @@ public sealed class RunBacktestCommandHandler(
 
         if (backtest.Status == BacktestStatus.LoadingCandles)
         {
-            IReadOnlyList<DateTimeOffset> stored = await candles.GetOpenTimesAsync(backtest.Instrument, backtest.Interval, backtest.From, backtest.To, cancellationToken);
-            IReadOnlyList<CandleGap> gaps = [.. backtest.Interval.MissingRanges(stored, backtest.From, backtest.To).Select(gap => new CandleGap(gap.From, gap.To))];
-            Backtest running = backtest.StartRunning(stored.Count > 0 ? stored[0] : null, gaps);
-            await backtests.UpdateAsync(running, BacktestStatus.LoadingCandles, cancellationToken);
-            backtest = running;
+            backtest = await LoadCandlesAsync(backtest, cancellationToken);
         }
 
-        await RunAsync(backtest, cancellationToken);
+        if (backtest.Status == BacktestStatus.Running)
+        {
+            await RunAsync(backtest, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    ///     Missing candles are loaded by an import job in the import queue, so that after a restart the job runs once and the backtest
+    ///     waits for the same job; the backtest polls the job and counts the stored candles meanwhile. Candles still missing after a
+    ///     successful import are not on the exchange: the backtest runs on what is stored and reports the gaps.
+    /// </summary>
+    private async Task<Backtest> LoadCandlesAsync(Backtest backtest, CancellationToken cancellationToken)
+    {
+        long expected = backtest.Interval.CandleCount(backtest.From, backtest.To);
+        IReadOnlyList<DateTimeOffset> stored = await StoredAsync(backtest, cancellationToken);
+
+        if (backtest.ImportJobId is null && backtest.Interval.MissingRanges(stored, backtest.From, backtest.To).Count > 0)
+        {
+            var job = new CandleImportJob(
+                Guid.NewGuid(),
+                backtest.Instrument,
+                backtest.Interval,
+                backtest.From,
+                backtest.To,
+                CandleImportStatus.Pending,
+                ImportedCandles: 0,
+                Error: null,
+                time.GetUtcNow(),
+                StartedAt: null,
+                FinishedAt: null);
+            await jobs.AddAsync(job, cancellationToken);
+            await imports.EnqueueAsync(job.Id, cancellationToken);
+            backtest = backtest.WaitForImport(job.Id);
+        }
+
+        while (backtest.ImportJobId is { } jobId)
+        {
+            CandleImportJob job = (await jobs.GetAsync(jobId, cancellationToken))!;
+            stored = await StoredAsync(backtest, cancellationToken);
+            backtest = backtest.Loaded(stored.Count, expected);
+
+            if (job.Status == CandleImportStatus.Failed)
+            {
+                Backtest failed = backtest.Fail(job.Error!, time.GetUtcNow());
+                await backtests.UpdateAsync(failed, BacktestStatus.LoadingCandles, cancellationToken);
+
+                return failed;
+            }
+
+            if (job.Status == CandleImportStatus.Succeeded)
+            {
+                break;
+            }
+
+            await backtests.UpdateAsync(backtest, BacktestStatus.LoadingCandles, cancellationToken);
+            await Task.Delay(PollInterval, time, cancellationToken);
+        }
+
+        IReadOnlyList<CandleGap> gaps = [.. backtest.Interval.MissingRanges(stored, backtest.From, backtest.To).Select(gap => new CandleGap(gap.From, gap.To))];
+        Backtest running = backtest.Loaded(stored.Count, expected).StartRunning(stored.Count > 0 ? stored[0] : null, gaps);
+        await backtests.UpdateAsync(running, BacktestStatus.LoadingCandles, cancellationToken);
+
+        return running;
+    }
+
+    private Task<IReadOnlyList<DateTimeOffset>> StoredAsync(Backtest backtest, CancellationToken cancellationToken)
+    {
+        return candles.GetOpenTimesAsync(backtest.Instrument, backtest.Interval, backtest.From, backtest.To, cancellationToken);
     }
 
     private async Task RunAsync(Backtest backtest, CancellationToken cancellationToken)

@@ -24,11 +24,22 @@ public class FakeBybitHandler : HttpMessageHandler
 
     public bool Unavailable { get; set; }
 
+    /// <summary>Kline requests get an error Bybit does not ask to retry.</summary>
+    public bool RejectKlines { get; set; }
+
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         if (Unavailable)
         {
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        }
+
+        if (RejectKlines && request.RequestUri!.AbsolutePath == "/v5/market/kline")
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"retCode":10001,"retMsg":"params error: symbol invalid","result":{},"retExtInfo":{},"time":0}""")
+            });
         }
 
         NameValueCollection query = HttpUtility.ParseQueryString(request.RequestUri!.Query);

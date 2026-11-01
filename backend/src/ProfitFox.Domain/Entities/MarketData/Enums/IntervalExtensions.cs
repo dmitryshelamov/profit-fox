@@ -23,6 +23,19 @@ public static class IntervalExtensions
         };
     }
 
+    /// <summary>How many candles open in <c>[from, to)</c>, the first one at <paramref name="from" />.</summary>
+    public static long CandleCount(this Interval interval, DateTimeOffset from, DateTimeOffset to)
+    {
+        long count = 0;
+
+        for (DateTimeOffset openTime = from; openTime < to; openTime = interval.CandleEnd(openTime))
+        {
+            count++;
+        }
+
+        return count;
+    }
+
     /// <summary>
     ///     Ranges of <c>[from, to)</c> that no stored candle covers, oldest first; <paramref name="storedOpenTimes" /> are the open
     ///     times stored in the period, ascending. The next candle opens where the previous one ends, so no grid is needed.
