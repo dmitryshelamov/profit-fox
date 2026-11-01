@@ -6,7 +6,7 @@
 
 ## 1. Соглашения и настройки
 
-- [ ] 1.1 Добавить в `docs/conventions.md` области `Bots` и `Backtests`, папку `Domain/Services/Backtests` и раздел
+- [x] 1.1 Добавить в `docs/conventions.md` области `Bots` и `Backtests`, папку `Domain/Services/Backtests` и раздел
   настроек `Backtests` (design, решения 8 и 11); проверить, что документ описывает каждую новую папку из дизайна
 
 ## 2. Версии стратегий
