@@ -1,3 +1,5 @@
+using System.Threading.Channels;
+
 using MediatR;
 
 using ProfitFox.Application.Ports.MarketData;
@@ -19,9 +21,11 @@ public sealed class RunBacktestCommandHandler(
     ICandleRepository candles,
     ICandleImportJobRepository jobs,
     ICandleImportQueue imports,
+    BacktestSettings settings,
     TimeProvider time) : IRequestHandler<RunBacktestCommand>
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan SaveInterval = TimeSpan.FromSeconds(1);
 
     /// <summary>Takes the backtest through its statuses from where it is: loading candles, then the combinations without a result.</summary>
     public async Task Handle(RunBacktestCommand request, CancellationToken cancellationToken)
@@ -110,24 +114,74 @@ public sealed class RunBacktestCommandHandler(
         return candles.GetOpenTimesAsync(backtest.Instrument, backtest.Interval, backtest.From, backtest.To, cancellationToken);
     }
 
+    /// <summary>
+    ///     Combinations without a result are shared between threads over candles read once. Results are saved in batches with the
+    ///     progress, at least once a second while they come; the speed counts the candles of this run a second.
+    /// </summary>
     private async Task RunAsync(Backtest backtest, CancellationToken cancellationToken)
     {
         StrategyVersion version = (await library.GetVersionAsync(backtest.StrategyId, backtest.StrategyVersion, cancellationToken))!;
         IReadOnlyList<Candle> period = await candles.GetAsync(backtest.Instrument, backtest.Interval, backtest.From, backtest.To, int.MaxValue, cancellationToken);
+        HashSet<long> calculated = [.. await backtests.GetCalculatedCombinationsAsync(backtest.Id, cancellationToken)];
         ParameterGrid grid = backtest.Grid();
-        var results = new List<BacktestResult>();
+        var results = Channel.CreateUnbounded<BacktestResult>();
+        IEnumerable<long> pending = Enumerable.Range(0, (int)backtest.TotalCombinations).Select(combination => (long)combination).Where(combination => !calculated.Contains(combination));
+        var options = new ParallelOptions { MaxDegreeOfParallelism = settings.Threads, CancellationToken = cancellationToken };
 
-        for (long combination = 0; combination < backtest.TotalCombinations; combination++)
+        var computing = Task.Run(
+            async () =>
+            {
+                try
+                {
+                    await Parallel.ForEachAsync(pending, options, async (combination, token) =>
+                    {
+                        long started = time.GetTimestamp();
+                        IReadOnlyDictionary<string, NodeValue> values = grid.Combination(combination);
+                        var metrics = new MetricsObserver(backtest.Simulation.Balance);
+                        backtest.Replay(version.Snapshot, values).Run(backtest.From, period, metrics);
+                        await results.Writer.WriteAsync(new BacktestResult(backtest.Id, combination, values, metrics.Metrics(), time.GetElapsedTime(started)), token);
+                    });
+                }
+                finally
+                {
+                    results.Writer.Complete();
+                }
+            },
+            cancellationToken);
+
+        DateTimeOffset runStarted = time.GetUtcNow();
+        DateTimeOffset lastSave = runStarted;
+        long calculatedInRun = 0;
+        var batch = new List<BacktestResult>();
+
+        await foreach (BacktestResult result in results.Reader.ReadAllAsync(cancellationToken))
         {
-            long started = time.GetTimestamp();
-            IReadOnlyDictionary<string, NodeValue> values = grid.Combination(combination);
-            var metrics = new MetricsObserver(backtest.Simulation.Balance);
-            backtest.Replay(version.Snapshot, values).Run(backtest.From, period, metrics);
-            results.Add(new BacktestResult(backtest.Id, combination, values, metrics.Metrics(), time.GetElapsedTime(started)));
+            batch.Add(result);
+
+            if (time.GetUtcNow() - lastSave >= SaveInterval)
+            {
+                await SaveAsync();
+            }
         }
 
-        Backtest calculated = backtest.Progress(results.Count, null);
-        await backtests.SaveProgressAsync(calculated, results, cancellationToken);
-        await backtests.UpdateAsync(calculated.Succeed(time.GetUtcNow()), BacktestStatus.Running, cancellationToken);
+        await computing;
+
+        if (batch.Count > 0)
+        {
+            await SaveAsync();
+        }
+
+        await backtests.UpdateAsync(backtest.Succeed(time.GetUtcNow()), BacktestStatus.Running, cancellationToken);
+
+        async Task SaveAsync()
+        {
+            calculatedInRun += batch.Count;
+            DateTimeOffset now = time.GetUtcNow();
+            decimal seconds = (decimal)(now - runStarted).TotalSeconds;
+            backtest = backtest.Progress(calculated.Count + calculatedInRun, seconds > 0m ? calculatedInRun * period.Count / seconds : null);
+            await backtests.SaveProgressAsync(backtest, [.. batch], CancellationToken.None);
+            batch.Clear();
+            lastSave = now;
+        }
     }
 }

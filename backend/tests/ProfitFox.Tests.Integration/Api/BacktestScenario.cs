@@ -65,6 +65,16 @@ public sealed class BacktestScenario(ProfitFoxFactory factory, HttpClient client
     /// <summary>Saves a pending backtest of the bot and queues it, as creating it through the API does.</summary>
     public async Task<Backtest> QueueAsync(DateTimeOffset from, DateTimeOffset to, IReadOnlyDictionary<string, ParameterSpec>? parameters = null)
     {
+        Backtest backtest = await CreateAsync(from, to, parameters);
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<IBacktestQueue>().EnqueueAsync(backtest.Id, CancellationToken.None);
+
+        return backtest;
+    }
+
+    /// <summary>Saves a pending backtest of the bot without queueing it.</summary>
+    public async Task<Backtest> CreateAsync(DateTimeOffset from, DateTimeOffset to, IReadOnlyDictionary<string, ParameterSpec>? parameters = null)
+    {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         IStrategyLibraryRepository library = scope.ServiceProvider.GetRequiredService<IStrategyLibraryRepository>();
         Bot bot = (await library.GetBotAsync(BotId, CancellationToken.None))!;
@@ -82,7 +92,6 @@ public sealed class BacktestScenario(ProfitFoxFactory factory, HttpClient client
             Rules,
             factory.Time.GetUtcNow());
         await scope.ServiceProvider.GetRequiredService<IBacktestRepository>().AddAsync(backtest, CancellationToken.None);
-        await scope.ServiceProvider.GetRequiredService<IBacktestQueue>().EnqueueAsync(backtest.Id, CancellationToken.None);
 
         return backtest;
     }

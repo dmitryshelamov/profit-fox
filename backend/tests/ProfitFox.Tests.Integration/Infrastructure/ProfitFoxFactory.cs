@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Bybit.Net.Clients;
 using Bybit.Net.Interfaces.Clients;
 using Bybit.Net.Objects.Options;
@@ -34,6 +36,9 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
     /// <summary>The host environment: Testing reads appsettings.Testing.json and never the Development settings or user secrets.</summary>
     public string Environment { get; init; } = "Testing";
 
+    /// <summary>Threads of a backtest; without it the service takes its default.</summary>
+    public int? BacktestThreads { get; init; }
+
     /// <summary>Receives every event the app's logger writes.</summary>
     public ILogEventSink? LogSink { get; init; }
 
@@ -46,6 +51,11 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
     {
         builder.UseEnvironment(Environment);
         builder.UseSetting("ConnectionStrings:MarketData", connectionString);
+
+        if (BacktestThreads is { } threads)
+        {
+            builder.UseSetting("Backtests:MaxParallelism", threads.ToString(CultureInfo.InvariantCulture));
+        }
 
         builder.ConfigureTestServices(services =>
         {
