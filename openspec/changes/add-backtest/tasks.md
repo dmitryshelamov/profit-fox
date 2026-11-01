@@ -39,7 +39,7 @@
   «Удаление стратегии с ботами»
 - [x] 3.4 Таблица `bots` и запись ботов через метод изменения библиотеки; integration-тест «Конкурирующие сохранения»
   для бота и стратегии
-- [ ] 3.5 Команды и запросы ботов, проверка символа через `IMarketHistoryClient.InstrumentExistsAsync`, `BotsController`
+- [x] 3.5 Команды и запросы ботов, проверка символа через `IMarketHistoryClient.InstrumentExistsAsync`, `BotsController`
   и контракты; integration-тесты: создание, чтение, список, изменение, 404, «Символа нет на бирже», 503 при
   недоступной бирже, 409 с `bots` у `PUT` и `DELETE /api/strategies/{id}`
 

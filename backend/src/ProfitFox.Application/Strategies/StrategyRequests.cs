@@ -65,6 +65,20 @@ public static class StrategyRequests
             .ToDictionary(group => group.Key, group => string.Join(" ", group.Select(error => error.Reason)));
     }
 
+    /// <summary>Runs a strategy change or removal and reports the bots that stand in the way.</summary>
+    /// <exception cref="StateConflictException">A bot of the strategy stands in the way.</exception>
+    public static T WithBots<T>(Func<T> operation)
+    {
+        try
+        {
+            return operation();
+        }
+        catch (BotsAffectedException exception)
+        {
+            throw new StateConflictException("Bots of the strategy stand in the way.", [], exception.Bots);
+        }
+    }
+
     /// <exception cref="StateConflictException">The save found a newer revision.</exception>
     public static void EnsureSaved(bool saved)
     {

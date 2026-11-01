@@ -11,12 +11,12 @@ public sealed class UpdateStrategyCommandHandler(IStrategyLibraryRepository repo
 {
     /// <exception cref="NotFoundException">There is no such strategy.</exception>
     /// <exception cref="ValidationFailedException">The name is empty, or the definition is malformed or invalid.</exception>
-    /// <exception cref="StateConflictException">The library changed while the strategy was being saved.</exception>
+    /// <exception cref="StateConflictException">A bot of the strategy would break, or the library changed while the strategy was being saved.</exception>
     public async Task Handle(UpdateStrategyCommand request, CancellationToken cancellationToken)
     {
         StrategyDefinition definition = StrategyRequests.Read(request.Name, request.Definition, StrategyJson.ParseStrategy);
         StrategyLibrary library = await repository.LoadAsync(cancellationToken);
-        _ = StrategyRequests.Check(() => library.UpdateStrategy(request.Id, request.Name, definition, time.GetUtcNow()))
+        _ = StrategyRequests.WithBots(() => StrategyRequests.Check(() => library.UpdateStrategy(request.Id, request.Name, definition, time.GetUtcNow())))
             ?? throw new NotFoundException($"There is no strategy {request.Id}.");
         StrategyRequests.EnsureSaved(await repository.SaveAsync(library.Change, library.Revision, cancellationToken));
     }

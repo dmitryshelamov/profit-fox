@@ -9,12 +9,12 @@ namespace ProfitFox.Application.Strategies.Commands.DeleteStrategy;
 public sealed class DeleteStrategyCommandHandler(IStrategyLibraryRepository repository) : IRequestHandler<DeleteStrategyCommand>
 {
     /// <exception cref="NotFoundException">There is no such strategy.</exception>
-    /// <exception cref="StateConflictException">The library changed while the strategy was being deleted.</exception>
+    /// <exception cref="StateConflictException">The strategy has bots, or the library changed while the strategy was being deleted.</exception>
     public async Task Handle(DeleteStrategyCommand request, CancellationToken cancellationToken)
     {
         StrategyLibrary library = await repository.LoadAsync(cancellationToken);
 
-        if (!library.RemoveStrategy(request.Id))
+        if (!StrategyRequests.WithBots(() => library.RemoveStrategy(request.Id)))
         {
             throw new NotFoundException($"There is no strategy {request.Id}.");
         }
