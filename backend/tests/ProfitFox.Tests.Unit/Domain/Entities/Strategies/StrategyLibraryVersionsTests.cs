@@ -104,6 +104,21 @@ public class StrategyLibraryVersionsTests
     }
 
     [Test]
+    public void Strategy_without_versions_gets_version_one_and_one_with_versions_keeps_them()
+    {
+        StrategyDefinition dca = Fixture("dca");
+        var unversioned = new Strategy(Guid.NewGuid(), "DCA", dca, Now, Now);
+        StrategyLibrary library = Saved("ema", out StrategyVersion ema);
+        library = new StrategyLibrary(1, [.. library.Strategies, unversioned], [], [ema]);
+
+        library.CreateMissingVersions(Now.AddDays(1));
+
+        library.Change.NewVersions.ShouldBe([new StrategyVersion(unversioned.Id, 1, StrategySnapshot.Of(dca, BuiltInComposites.Catalog), Now.AddDays(1))]);
+        library.LatestVersion(Id).ShouldBe(ema);
+        library.Change.SavedStrategies.ShouldBeEmpty();
+    }
+
+    [Test]
     public void Unknown_strategy_has_no_version()
     {
         new StrategyLibrary(0, [], []).LatestVersion(Id).ShouldBeNull();

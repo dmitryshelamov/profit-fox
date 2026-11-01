@@ -102,6 +102,17 @@ public sealed class StrategyLibrary : AggregateRoot
         return true;
     }
 
+    /// <summary>Strategies saved before versions existed get version 1 of their current graph.</summary>
+    public void CreateMissingVersions(DateTimeOffset now)
+    {
+        CompositeCatalog catalog = Catalog();
+
+        foreach (Strategy strategy in _strategies.Where(strategy => LatestVersion(strategy.Id) is null))
+        {
+            Version(strategy, catalog, now);
+        }
+    }
+
     /// <exception cref="GraphValidationException">The composite graph is invalid.</exception>
     public CompositeNode AddComposite(Guid id, string name, CompositeDefinition definition, DateTimeOffset now)
     {

@@ -23,6 +23,8 @@ public static class InfrastructureRegistrar
         services.AddSingleton<ExchangeResilienceExecutor>();
         services.AddTransient<IMarketHistoryClient, BybitMarketDataClient>();
 
+        services.AddHostedService<StrategyVersionsInitializationService>();
+
         services.AddSingleton<CandleImportQueue>();
         services.AddSingleton<ICandleImportQueue>(provider => provider.GetRequiredService<CandleImportQueue>());
         services.AddHostedService<CandleImportInitializationService>();
