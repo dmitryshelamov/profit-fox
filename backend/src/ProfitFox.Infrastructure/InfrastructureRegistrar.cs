@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
+using ProfitFox.Application.Ports.Backtests;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Infrastructure.BackgroundServices;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
@@ -30,5 +31,9 @@ public static class InfrastructureRegistrar
         services.AddSingleton<ICandleImportQueue>(provider => provider.GetRequiredService<CandleImportQueue>());
         services.AddHostedService<CandleImportInitializationService>();
         services.AddHostedService<CandleImportBackgroundService>();
+
+        services.AddSingleton<BacktestQueue>();
+        services.AddSingleton<IBacktestQueue>(provider => provider.GetRequiredService<BacktestQueue>());
+        services.AddHostedService<BacktestBackgroundService>();
     }
 }

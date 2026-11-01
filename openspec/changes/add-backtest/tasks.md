@@ -95,7 +95,7 @@
 
 ## 7. Выполнение в фоне
 
-- [ ] 7.1 `IBacktestQueue`, `BacktestBackgroundService`, `RunBacktestCommand` с очередью по одному; integration-тесты
+- [x] 7.1 `IBacktestQueue`, `BacktestBackgroundService`, `RunBacktestCommand` с очередью по одному; integration-тесты
   «Успешный бэктест» и «Очередь»
 - [ ] 7.2 `LoadingCandles`: задача загрузки недостающих свечей, ожидание с прогрессом, фактическое начало и пропуски;
   integration-тесты «Свечей не хватает», «Загрузка упала», «Период до листинга»

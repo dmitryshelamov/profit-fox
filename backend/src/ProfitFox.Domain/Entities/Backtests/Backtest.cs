@@ -152,6 +152,25 @@ public sealed record Backtest(
             FinishedAt: null);
     }
 
+    public ParameterGrid Grid()
+    {
+        return new ParameterGrid(Parameters);
+    }
+
+    /// <summary>A replay of one combination with the settings and the instrument rules of the backtest, fees and slippage as fractions.</summary>
+    public BacktestReplay Replay(StrategySnapshot snapshot, IReadOnlyDictionary<string, NodeValue> values)
+    {
+        var fees = new FeeSchedule(Simulation.LimitFeePercent / 100m, Simulation.MarketFeePercent / 100m, Instrument.Category);
+
+        return new BacktestReplay(
+            snapshot,
+            values,
+            new TradingConditions(Simulation.Balance, Rules, fees),
+            Simulation.SlippagePercent / 100m,
+            Simulation.LimitFillMode,
+            Interval);
+    }
+
     public Backtest StartLoading(DateTimeOffset now)
     {
         return this with { Status = BacktestStatus.LoadingCandles, StartedAt = now };
