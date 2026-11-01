@@ -1,6 +1,7 @@
 import type { Edge, Node } from '@xyflow/react';
 
-import type { GraphDef, GraphNodeDef, Position, WireDef } from './types';
+import { layoutGraph } from './layout';
+import type { AnyDef, CatalogNode, GraphNodeDef, WireDef } from './types';
 
 export interface GraphNodeData extends Record<string, unknown> {
   readonly node: GraphNodeDef;
@@ -11,22 +12,20 @@ export interface GraphNodeData extends Record<string, unknown> {
 export type GraphFlowNode = Node<GraphNodeData, 'graph'>;
 export type GraphFlowEdge = Edge;
 
-const column = 240;
-const row = 200;
-const perRow = 4;
-
-/** The canvas of a definition: a node per graph node and an edge per wire, from output pin to input pin. */
-export function toFlow(definition: GraphDef): { nodes: GraphFlowNode[]; edges: GraphFlowEdge[] } {
+/**
+ * The canvas of a definition: a node per graph node and an edge per wire, from output pin to input pin. A node stands
+ * at its saved position, the others where the layout by stages puts them.
+ */
+export function toFlow(
+  definition: AnyDef,
+  catalog: readonly CatalogNode[],
+): { nodes: GraphFlowNode[]; edges: GraphFlowEdge[] } {
   const layout = definition.layout ?? {};
-  const below = Math.max(0, ...Object.values(layout).map((position) => position.y)) + row;
-  let unplaced = 0;
+  const staged = layoutGraph(definition, catalog);
 
   const nodes = definition.nodes.map((node): GraphFlowNode => {
     const saved = layout[node.id];
-    const position: Position = saved ?? {
-      x: (unplaced % perRow) * column,
-      y: below + Math.floor(unplaced++ / perRow) * row,
-    };
+    const position = saved ?? staged[node.id]!;
 
     return { id: node.id, type: 'graph', position, data: { node, placed: saved !== undefined } };
   });

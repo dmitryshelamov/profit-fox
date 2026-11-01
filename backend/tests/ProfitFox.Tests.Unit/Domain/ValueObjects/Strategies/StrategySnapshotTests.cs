@@ -16,17 +16,17 @@ public class StrategySnapshotTests
     private static readonly CustomNodeId Inner = new CustomNodeId(Guid.Parse("00000000-0000-0000-0000-000000000001"));
 
     [Test]
-    public void Snapshot_of_ladder_holds_the_built_in_ladder_node()
+    public void Snapshot_of_ema_holds_the_built_in_ema_cross_node()
     {
-        StrategyDefinition ladder = StrategyJson.ParseStrategy(StrategyFixtures.Element("ladder"));
+        StrategyDefinition ema = StrategyJson.ParseStrategy(StrategyFixtures.Element("ema"));
 
-        var snapshot = StrategySnapshot.Of(ladder, BuiltInComposites.Catalog);
+        var snapshot = StrategySnapshot.Of(ema, BuiltInComposites.Catalog);
 
         SnapshotComposite composite = snapshot.Composites.ShouldHaveSingleItem();
-        composite.Id.ShouldBe(new BuiltInNodeId(BuiltInNode.Ladder));
+        composite.Id.ShouldBe(new BuiltInNodeId(BuiltInNode.EmaCross));
         composite.Definition.Inputs.ShouldBe(BuiltInComposites.Catalog.Find(composite.Id)!.Inputs);
-        snapshot.Catalog().Find(new BuiltInNodeId(BuiltInNode.Ladder)).ShouldBe(composite.Definition);
-        snapshot.Catalog().Find(new BuiltInNodeId(BuiltInNode.Dca)).ShouldBeNull();
+        snapshot.Catalog().Find(new BuiltInNodeId(BuiltInNode.EmaCross)).ShouldBe(composite.Definition);
+        snapshot.Catalog().Find(Inner).ShouldBeNull();
     }
 
     [Test]
@@ -44,19 +44,17 @@ public class StrategySnapshotTests
     {
         StrategyDefinition strategy = StrategyDefinitions.Long(new GraphBuilder()
             .Composite("custom", Inner)
-            .Composite("dca", new BuiltInNodeId(BuiltInNode.Dca))
             .Composite("cross", new BuiltInNodeId(BuiltInNode.EmaCross))
             .Build());
         var catalog = new CompositeCatalog(new Dictionary<CompositeNodeId, CompositeDefinition>
         {
             [Inner] = Doubler(2m),
-            [new BuiltInNodeId(BuiltInNode.Dca)] = BuiltInComposites.Catalog.Find(new BuiltInNodeId(BuiltInNode.Dca))!,
             [new BuiltInNodeId(BuiltInNode.EmaCross)] = BuiltInComposites.Catalog.Find(new BuiltInNodeId(BuiltInNode.EmaCross))!
         });
 
         var snapshot = StrategySnapshot.Of(strategy, catalog);
 
-        snapshot.Composites.Select(composite => composite.Id).ShouldBe([new BuiltInNodeId(BuiltInNode.EmaCross), new BuiltInNodeId(BuiltInNode.Dca), Inner]);
+        snapshot.Composites.Select(composite => composite.Id).ShouldBe([new BuiltInNodeId(BuiltInNode.EmaCross), Inner]);
     }
 
     [Test]

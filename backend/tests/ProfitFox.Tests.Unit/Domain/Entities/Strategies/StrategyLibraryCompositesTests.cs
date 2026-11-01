@@ -127,21 +127,21 @@ public class StrategyLibraryCompositesTests
     [Test]
     public void Built_in_composites_are_in_the_catalog()
     {
-        new StrategyLibrary(0, [], []).Catalog().Find(new BuiltInNodeId(BuiltInNode.Ladder)).ShouldNotBeNull();
+        new StrategyLibrary(0, [], []).Catalog().Find(new BuiltInNodeId(BuiltInNode.EmaCross)).ShouldNotBeNull();
     }
 
     [Test]
     public void Clone_of_a_built_in_composite_is_an_independent_custom_node()
     {
         var library = new StrategyLibrary(0, [], []);
-        CompositeDefinition ladder = library.Catalog().Find(new BuiltInNodeId(BuiltInNode.Ladder))!;
+        CompositeDefinition emaCross = library.Catalog().Find(new BuiltInNodeId(BuiltInNode.EmaCross))!;
 
-        CompositeNode clone = library.CloneComposite(new BuiltInNodeId(BuiltInNode.Ladder), CloneId, "Ladder (копия)", Now)!;
-        library.UpdateComposite(CloneId, "Моя лесенка", ladder with { Inputs = [.. ladder.Inputs, new PinDeclaration("extra", PinType.Number)] }, Now);
+        CompositeNode clone = library.CloneComposite(new BuiltInNodeId(BuiltInNode.EmaCross), CloneId, "Пересечение EMA (копия)", Now)!;
+        library.UpdateComposite(CloneId, "Моё пересечение", emaCross with { Inputs = [.. emaCross.Inputs, new PinDeclaration("extra", PinType.Number)] }, Now);
 
-        clone.Definition.ShouldBe(ladder);
-        library.Catalog().Find(new BuiltInNodeId(BuiltInNode.Ladder)).ShouldBe(ladder);
-        library.Composites.Single().Name.ShouldBe("Моя лесенка");
+        clone.Definition.ShouldBe(emaCross);
+        library.Catalog().Find(new BuiltInNodeId(BuiltInNode.EmaCross)).ShouldBe(emaCross);
+        library.Composites.Single().Name.ShouldBe("Моё пересечение");
     }
 
     [Test]

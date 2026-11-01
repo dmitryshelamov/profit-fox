@@ -4,7 +4,7 @@ using ProfitFox.Domain.ValueObjects.Strategies;
 
 namespace ProfitFox.Application.Strategies;
 
-/// <summary>Node ids of the API: a built-in code such as <c>ladder</c> or the <see cref="Guid" /> of a custom node.</summary>
+/// <summary>Node ids of the API: a built-in code such as <c>ema-cross</c> or the <see cref="Guid" /> of a custom node.</summary>
 internal static class NodeIds
 {
     /// <exception cref="StateConflictException">The id names a built-in node, which cannot be changed.</exception>

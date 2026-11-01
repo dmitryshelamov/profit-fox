@@ -98,9 +98,9 @@ test('builds EMA from scratch and saves it as the reference', async ({ page, req
   expect(normalized(saved.definition)).toEqual(normalized(reference('ema')));
 });
 
-// Scenario "Эталонные стратегии открываются полностью".
+// Scenarios "Эталонные стратегии открываются полностью" and "Провода идут слева направо".
 for (const name of ['ema', 'ema-short', 'dca', 'ladder'] as const) {
-  test(`opens the reference strategy ${name} with all nodes and wires`, async ({
+  test(`opens the reference strategy ${name} with all nodes and wires, laid out by stages`, async ({
     page,
     request,
   }) => {
@@ -111,6 +111,16 @@ for (const name of ['ema', 'ema-short', 'dca', 'ladder'] as const) {
 
     await expect(page.locator('.react-flow__node')).toHaveCount(definition.nodes.length);
     await expect(page.locator('.react-flow__edge')).toHaveCount(definition.wires?.length ?? 0);
+    if (name === 'dca' || name === 'ladder') {
+      await expect(page.getByLabel('составной узел')).toHaveCount(0);
+    }
+    const left = async (reference: string) =>
+      (await page
+        .locator(`.react-flow__node[data-id="${reference.slice(0, reference.indexOf('.'))}"]`)
+        .boundingBox())!.x;
+    for (const { from, to } of definition.wires ?? []) {
+      expect(await left(from), `${from} -> ${to}`).toBeLessThan(await left(to));
+    }
   });
 }
 
@@ -207,7 +217,7 @@ test('names the strategy a breaking edit of a composite node would break', async
 
 // Scenario "Клонировать и править".
 test('clones a built-in node and edits the clone', async ({ page }) => {
-  await page.goto('/nodes/ladder');
+  await page.goto('/nodes/ema-cross');
   await expect(page.getByRole('note')).toContainText('Встроенный узел нельзя править');
 
   await page.getByRole('button', { name: 'Клонировать и править' }).click();

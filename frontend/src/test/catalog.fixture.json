@@ -447,53 +447,5 @@
     ],
     "settings": [],
     "definition": null
-  },
-  {
-    "id": "ladder",
-    "title": "Ladder",
-    "group": "builtIn",
-    "inputs": [
-      {
-        "name": "limitPerOrder",
-        "type": "number"
-      },
-      {
-        "name": "limitDeposit",
-        "type": "number"
-      },
-      {
-        "name": "priceDropForBuy",
-        "type": "number"
-      },
-      {
-        "name": "priceRiseForSell",
-        "type": "number"
-      }
-    ],
-    "outputs": [],
-    "settings": [],
-    "definition": null
-  },
-  {
-    "id": "dca",
-    "title": "DCA",
-    "group": "builtIn",
-    "inputs": [
-      {
-        "name": "limitPerOrder",
-        "type": "number"
-      },
-      {
-        "name": "limitDeposit",
-        "type": "number"
-      },
-      {
-        "name": "purchaseInterval",
-        "type": "duration"
-      }
-    ],
-    "outputs": [],
-    "settings": [],
-    "definition": null
   }
 ]

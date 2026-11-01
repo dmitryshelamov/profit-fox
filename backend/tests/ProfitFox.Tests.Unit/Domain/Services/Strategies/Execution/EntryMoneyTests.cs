@@ -29,7 +29,7 @@ public class EntryMoneyTests
         run.Handle(new RunStarted(Start)).ShouldHaveSingleItem();
 
         run.Handle(new OrderFilled(Start, "o-1", 1m, 100m, IsComplete: true))
-            .ShouldBe([new PlaceOrder("o-2", "ladder/sell", OrderSide.Sell, OrderType.Limit, 101m, 1m, null)]);
+            .ShouldBe([new PlaceOrder("o-2", "sell", OrderSide.Sell, OrderType.Limit, 101m, 1m, null)]);
         run.SkippedOrders.ShouldBe(1);
 
         run.Handle(new BarClosed(Start.AddHours(1), new Bar(100m, 100m, 100m, 100m, 1m))).ShouldBeEmpty();

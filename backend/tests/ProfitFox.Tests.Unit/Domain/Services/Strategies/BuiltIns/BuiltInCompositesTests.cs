@@ -13,11 +13,11 @@ public class BuiltInCompositesTests
 {
     private static readonly DateTimeOffset Start = DateTimeOffset.Parse("2024-01-01T00:00:00Z");
 
+    // Scenario "Ladder и DCA не встроены".
     [Test]
-    public void Built_in_composites_are_ema_cross_ladder_and_dca()
+    public void Ema_cross_is_the_only_built_in_composite()
     {
-        BuiltInComposites.All.Select(composite => (composite.Node, composite.Title))
-            .ShouldBe([(BuiltInNode.EmaCross, "Пересечение EMA"), (BuiltInNode.Ladder, "Ladder"), (BuiltInNode.Dca, "DCA")]);
+        BuiltInComposites.All.Select(composite => (composite.Node, composite.Title)).ShouldBe([(BuiltInNode.EmaCross, "Пересечение EMA")]);
     }
 
     [Test]
@@ -28,10 +28,8 @@ public class BuiltInCompositesTests
     }
 
     [Test]
-    public void Ladder_and_dca_take_their_settings_as_inputs()
+    public void Ema_cross_takes_its_source_and_periods_as_inputs()
     {
-        Inputs(BuiltInNode.Ladder).ShouldBe("limitPerOrder:Number limitDeposit:Number priceDropForBuy:Number priceRiseForSell:Number");
-        Inputs(BuiltInNode.Dca).ShouldBe("limitPerOrder:Number limitDeposit:Number purchaseInterval:Duration");
         Inputs(BuiltInNode.EmaCross).ShouldBe("source:Number fast:Number slow:Number");
     }
 

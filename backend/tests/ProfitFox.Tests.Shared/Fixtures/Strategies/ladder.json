@@ -34,27 +34,159 @@
       "kind": "parameters"
     },
     {
-      "id": "ladder",
-      "kind": "composite",
-      "ref": "ladder"
+      "id": "position",
+      "kind": "position"
+    },
+    {
+      "id": "flat",
+      "kind": "not"
+    },
+    {
+      "id": "riseFactor",
+      "kind": "add",
+      "inputs": {
+        "a": 1
+      }
+    },
+    {
+      "id": "sellPrice",
+      "kind": "multiply"
+    },
+    {
+      "id": "dropFactor",
+      "kind": "subtract",
+      "inputs": {
+        "a": 1
+      }
+    },
+    {
+      "id": "buyPrice",
+      "kind": "multiply"
+    },
+    {
+      "id": "nextInvested",
+      "kind": "add"
+    },
+    {
+      "id": "budget",
+      "kind": "compare",
+      "settings": {
+        "operation": "le"
+      }
+    },
+    {
+      "id": "canAverage",
+      "kind": "and"
+    },
+    {
+      "id": "entry",
+      "kind": "market-order",
+      "settings": {
+        "side": "buy",
+        "size": "amount"
+      }
+    },
+    {
+      "id": "sell",
+      "kind": "hold-limit",
+      "settings": {
+        "side": "sell",
+        "size": "quantity"
+      }
+    },
+    {
+      "id": "buy",
+      "kind": "hold-limit",
+      "settings": {
+        "side": "buy",
+        "size": "amount"
+      }
     }
   ],
   "wires": [
     {
-      "from": "params.limitPerOrder",
-      "to": "ladder.limitPerOrder"
-    },
-    {
-      "from": "params.limitDeposit",
-      "to": "ladder.limitDeposit"
-    },
-    {
-      "from": "params.priceDropForBuy",
-      "to": "ladder.priceDropForBuy"
+      "from": "position.hasPosition",
+      "to": "flat.value"
     },
     {
       "from": "params.priceRiseForSell",
-      "to": "ladder.priceRiseForSell"
+      "to": "riseFactor.b"
+    },
+    {
+      "from": "position.averagePrice",
+      "to": "sellPrice.a"
+    },
+    {
+      "from": "riseFactor.result",
+      "to": "sellPrice.b"
+    },
+    {
+      "from": "params.priceDropForBuy",
+      "to": "dropFactor.b"
+    },
+    {
+      "from": "position.lastEntryPrice",
+      "to": "buyPrice.a"
+    },
+    {
+      "from": "dropFactor.result",
+      "to": "buyPrice.b"
+    },
+    {
+      "from": "position.invested",
+      "to": "nextInvested.a"
+    },
+    {
+      "from": "params.limitPerOrder",
+      "to": "nextInvested.b"
+    },
+    {
+      "from": "nextInvested.result",
+      "to": "budget.a"
+    },
+    {
+      "from": "params.limitDeposit",
+      "to": "budget.b"
+    },
+    {
+      "from": "position.hasPosition",
+      "to": "canAverage.a"
+    },
+    {
+      "from": "budget.result",
+      "to": "canAverage.b"
+    },
+    {
+      "from": "flat.result",
+      "to": "entry.when"
+    },
+    {
+      "from": "params.limitPerOrder",
+      "to": "entry.size"
+    },
+    {
+      "from": "position.hasPosition",
+      "to": "sell.when"
+    },
+    {
+      "from": "sellPrice.result",
+      "to": "sell.price"
+    },
+    {
+      "from": "position.quantity",
+      "to": "sell.size"
+    },
+    {
+      "from": "canAverage.result",
+      "to": "buy.when"
+    },
+    {
+      "from": "buyPrice.result",
+      "to": "buy.price"
+    },
+    {
+      "from": "params.limitPerOrder",
+      "to": "buy.size"
     }
   ],
   "layout": {}

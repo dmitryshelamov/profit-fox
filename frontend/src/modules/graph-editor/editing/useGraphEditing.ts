@@ -6,7 +6,8 @@ import { drafts } from '../drafts/drafts';
 import { createDraftWriter } from '../drafts/writer';
 import { compareDrafts, type Difference, sameEdit } from '../model/compare';
 import { type Issue, issuesOf } from '../model/issues';
-import type { AnyDef } from '../model/types';
+import { keepPlaces } from '../model/layout';
+import type { AnyDef, CatalogNode } from '../model/types';
 import { createChecker } from './checker';
 
 export interface Edited<T extends AnyDef> {
@@ -46,12 +47,15 @@ export function useGraphEditing<T extends AnyDef>({
   initial,
   draftKey,
   validate,
+  catalog,
 }: {
   saved: Edited<T>;
   /** Where editing starts instead of what is saved, such as the draft of a strategy the server does not have yet. */
   initial?: Edited<T>;
   draftKey: string;
   validate: (edited: Edited<T>, signal: AbortSignal) => Promise<Report>;
+  /** The library the graph is laid out with, to pin the nodes where they stand. */
+  catalog: readonly CatalogNode[];
 }) {
   const [baseline, setBaseline] = useState(saved);
   const [edited, setEdited] = useState(initial ?? saved);
@@ -150,7 +154,11 @@ export function useGraphEditing<T extends AnyDef>({
     offer,
     canSave: dirty && !checking && !saving && errorCount === 0,
     setName: (name: string) => change({ ...edited, name }),
-    setDefinition: (definition: T) => change({ ...edited, definition }),
+    /** Takes an edit of the graph and pins every node where it stood before, so later edits move nothing. */
+    setDefinition: (definition: T) =>
+      change({ ...edited, definition: keepPlaces(edited.definition, definition, catalog) }),
+    /** Drops the layout, so the graph is laid out by stages again; an edit like any other. */
+    relayout: () => change({ ...edited, definition: { ...edited.definition, layout: {} } }),
     /** Drops the edits and their draft and returns to what is saved. */
     discard: () => reset(baseline),
     restoreDraft() {

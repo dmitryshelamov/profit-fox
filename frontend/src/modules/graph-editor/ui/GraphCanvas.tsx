@@ -48,6 +48,8 @@ export interface GraphCanvasProps<T extends AnyDef> {
   readonly issues: readonly Issue[];
   readonly readOnly: boolean;
   readonly onChange: (definition: T) => void;
+  /** Drops the layout of the graph: "Выстроить". */
+  readonly onRelayout: () => void;
   readonly onSelect: (nodeId: string | undefined) => void;
   readonly onInit?: (instance: ReactFlowInstance<GraphFlowNode, GraphFlowEdge>) => void;
 }
@@ -58,10 +60,11 @@ export function GraphCanvas<T extends AnyDef>({
   issues,
   readOnly,
   onChange,
+  onRelayout,
   onSelect,
   onInit,
 }: GraphCanvasProps<T>) {
-  const flow = useMemo(() => toFlow(definition), [definition]);
+  const flow = useMemo(() => toFlow(definition, catalog), [definition, catalog]);
   const [nodes, setNodes] = useState(flow.nodes);
   const [instance, setInstance] = useState<ReactFlowInstance<GraphFlowNode, GraphFlowEdge>>();
   const context = useMemo(() => contextOf(definition), [definition]);
@@ -219,6 +222,7 @@ export function GraphCanvas<T extends AnyDef>({
             onAdd={(item, position) =>
               onChange(addNode(definition, catalog, item, position).definition)
             }
+            onRelayout={onRelayout}
             onFind={(text) => {
               const found = findNode(definition, catalog, text);
               onSelect(found);

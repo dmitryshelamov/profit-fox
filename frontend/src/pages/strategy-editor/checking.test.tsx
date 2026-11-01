@@ -37,7 +37,7 @@ describe('errors of the check', () => {
 
     const node = screen.getByRole('group', { name: 'Рыночный ордер' });
     await waitFor(() => expect(node).toHaveAttribute('aria-invalid', 'true'));
-    expect(within(node).getByText('when')).toHaveClass('text-err');
+    expect(within(node).getByText('when').closest('.text-err')).not.toBeNull();
     const errors = screen.getByRole('button', { name: /Ошибки/ });
     expect(errors).toHaveTextContent('1');
 

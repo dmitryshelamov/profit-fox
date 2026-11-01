@@ -83,10 +83,10 @@ public class ReferenceStrategiesTests
     {
         StrategyRun run = Run("dca");
 
-        run.Handle(new RunStarted(Start)).ShouldBe([Market("o-1", "dca/buy", 100m)]);
+        run.Handle(new RunStarted(Start)).ShouldBe([Market("o-1", "buy", 100m)]);
         run.Handle(new OrderFilled(Start, "o-1", 1m, 100m, IsComplete: true)).ShouldBeEmpty();
         run.Handle(new BarClosed(Start.AddMinutes(30), Bar(100m))).ShouldBeEmpty();
-        run.Handle(new BarClosed(Start.AddHours(1), Bar(100m))).ShouldBe([Market("o-2", "dca/buy", 100m)]);
+        run.Handle(new BarClosed(Start.AddHours(1), Bar(100m))).ShouldBe([Market("o-2", "buy", 100m)]);
         run.Handle(new OrderFilled(Start.AddHours(1), "o-2", 1m, 100m, IsComplete: true)).ShouldBeEmpty();
         run.Handle(new BarClosed(Start.AddHours(2), Bar(100m))).ShouldBeEmpty();
         run.Handle(new BarClosed(Start.AddHours(3), Bar(100m))).ShouldBeEmpty();
@@ -97,19 +97,19 @@ public class ReferenceStrategiesTests
     {
         StrategyRun run = Run("ladder");
 
-        run.Handle(new RunStarted(Start)).ShouldBe([Market("o-1", "ladder/entry", 100m)]);
+        run.Handle(new RunStarted(Start)).ShouldBe([Market("o-1", "entry", 100m)]);
 
         run.Handle(new OrderFilled(Start, "o-1", 1m, 100m, IsComplete: true)).ShouldBe(
-            [Limit("o-2", "ladder/buy", OrderSide.Buy, 99m, 1.010m), Limit("o-3", "ladder/sell", OrderSide.Sell, 101m, 1m)],
+            [Limit("o-2", "buy", OrderSide.Buy, 99m, 1.010m), Limit("o-3", "sell", OrderSide.Sell, 101m, 1m)],
             ignoreOrder: true);
 
         run.Handle(new OrderFilled(Start, "o-2", 1.010m, 99m, IsComplete: true)).ShouldBe(
-            [new CancelOrder("o-3"), Limit("o-4", "ladder/buy", OrderSide.Buy, 98.01m, 1.020m)],
+            [new CancelOrder("o-3"), Limit("o-4", "buy", OrderSide.Buy, 98.01m, 1.020m)],
             ignoreOrder: true);
 
         // Average price 199.99 / 2.010 = 99.4975…, plus 1 % is 100.4924…, rounded up to the tick.
         run.Handle(new OrderCancelled(Start, "o-3"))
-            .ShouldBe([Limit("o-5", "ladder/sell", OrderSide.Sell, 100.50m, 2.010m)]);
+            .ShouldBe([Limit("o-5", "sell", OrderSide.Sell, 100.50m, 2.010m)]);
     }
 
     [Test]
@@ -140,7 +140,7 @@ public class ReferenceStrategiesTests
 
         IReadOnlyList<OrderCommand> commands = run.Handle(new OrderFilled(Start, "o-3", 1m, 101m, IsComplete: true));
 
-        commands.ShouldBe([new CancelOrder("o-2"), Market("o-4", "ladder/entry", 100m)], ignoreOrder: true);
+        commands.ShouldBe([new CancelOrder("o-2"), Market("o-4", "entry", 100m)], ignoreOrder: true);
     }
 
     private static StrategyRun Run(string name, params (string Name, decimal Value)[] values)

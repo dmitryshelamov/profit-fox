@@ -1,6 +1,7 @@
 import { Handle, type NodeProps, Position } from '@xyflow/react';
 
 import type { GraphFlowNode } from '../model/flow';
+import { nodeWidth } from '../model/layout';
 import { pinsOf } from '../model/pins';
 import type { Pin } from '../model/types';
 import { useGraphEnvironment } from './GraphContext';
@@ -37,13 +38,16 @@ export function GraphNodeView({ id, data, selected }: NodeProps<GraphFlowNode>) 
       role="group"
       aria-label={title}
       aria-invalid={issues.length > 0}
-      className={`relative min-w-40 rounded-lg border bg-node text-xs shadow-xl ${outline}`}
+      className={`relative rounded-lg border bg-node text-xs shadow-xl ${outline}`}
+      style={{ width: nodeWidth }}
     >
       <div
         className="flex items-center justify-between gap-3 rounded-t-[7px] px-2.5 py-1.5 text-[12.5px] font-semibold text-white"
         style={{ background: colorOf(node.kind) }}
       >
-        <span>{title}</span>
+        <span className="truncate" title={title}>
+          {title}
+        </span>
         {node.kind === 'composite' && <span aria-label="составной узел">◆</span>}
       </div>
       {issues.length > 0 && (
@@ -75,8 +79,8 @@ export function GraphNodeView({ id, data, selected }: NodeProps<GraphFlowNode>) 
               <span />
             )}
             {pins.outputs[index] && (
-              <span>
-                {pins.outputs[index].name}
+              <span className="flex min-w-0">
+                <PinName name={pins.outputs[index].name} />
                 <Handle
                   type="source"
                   id={pins.outputs[index].name}
@@ -103,7 +107,7 @@ function Input({ nodeId, pin, bad }: { nodeId: string; pin: Pin; bad: boolean })
   const value = node?.inputs?.[pin.name];
 
   return (
-    <span className={`flex items-center gap-2 ${bad ? 'font-semibold text-err' : ''}`}>
+    <span className={`flex min-w-0 items-center gap-2 ${bad ? 'font-semibold text-err' : ''}`}>
       <Handle
         type="target"
         id={pin.name}
@@ -111,11 +115,11 @@ function Input({ nodeId, pin, bad }: { nodeId: string; pin: Pin; bad: boolean })
         isConnectable={!environment.readOnly}
         style={pinStyle(pin, connected, bad)}
       />
-      {pin.name}
+      <PinName name={pin.name} />
       {!connected && (
         <input
           aria-label={`Значение ${nodeId}.${pin.name}`}
-          className="nodrag h-[18px] w-14 rounded border border-line bg-panel-2 px-1 font-mono text-[11px] text-text"
+          className="nodrag h-[18px] w-14 shrink-0 rounded border border-line bg-panel-2 px-1 font-mono text-[11px] text-text"
           defaultValue={formatValue(value)}
           key={formatValue(value)}
           readOnly={environment.readOnly}
@@ -128,6 +132,15 @@ function Input({ nodeId, pin, bad }: { nodeId: string; pin: Pin; bad: boolean })
           }}
         />
       )}
+    </span>
+  );
+}
+
+/** A pin name cut to the fixed width of the node, in full in its tooltip. */
+function PinName({ name }: { name: string }) {
+  return (
+    <span className="truncate" title={name}>
+      {name}
     </span>
   );
 }

@@ -88,19 +88,30 @@ public class StrategyNodesApiTests
     [Test]
     public async Task Built_in_node_is_read_with_its_definition()
     {
-        JsonElement ladder = await _client.GetFromJsonAsync<JsonElement>($"{Nodes}/ladder");
+        JsonElement emaCross = await _client.GetFromJsonAsync<JsonElement>($"{Nodes}/ema-cross");
 
-        ladder.GetProperty("inputs").EnumerateArray().Select(pin => pin.GetProperty("name").GetString())
-            .ShouldBe(["limitPerOrder", "limitDeposit", "priceDropForBuy", "priceRiseForSell"]);
-        ladder.GetProperty("definition").GetProperty("nodes").GetArrayLength().ShouldBeGreaterThan(0);
+        emaCross.GetProperty("inputs").EnumerateArray().Select(pin => pin.GetProperty("name").GetString()).ShouldBe(["source", "fast", "slow"]);
+        emaCross.GetProperty("outputs").EnumerateArray().Select(pin => pin.GetProperty("name").GetString()).ShouldBe(["up", "down"]);
+        emaCross.GetProperty("definition").GetProperty("nodes").GetArrayLength().ShouldBeGreaterThan(0);
         (await _client.GetAsync($"{Nodes}/nope")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    // Scenario "Ladder и DCA не встроены".
+    [TestCase("ladder")]
+    [TestCase("dca")]
+    public async Task Ladder_and_dca_are_not_built_in_nodes(string id)
+    {
+        (await _client.GetAsync($"{Nodes}/{id}")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        JsonElement catalog = await _client.GetFromJsonAsync<JsonElement>(Nodes);
+        catalog.EnumerateArray().ShouldNotContain(node => node.GetProperty("id").GetString() == id);
     }
 
     [Test]
     public async Task Built_in_node_cannot_be_changed_or_deleted()
     {
-        (await _client.PutAsJsonAsync($"{Nodes}/ladder", Body("x", Signal))).StatusCode.ShouldBe(HttpStatusCode.Conflict);
-        (await _client.DeleteAsync($"{Nodes}/ladder")).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await _client.PutAsJsonAsync($"{Nodes}/ema-cross", Body("x", Signal))).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await _client.DeleteAsync($"{Nodes}/ema-cross")).StatusCode.ShouldBe(HttpStatusCode.Conflict);
     }
 
     // Scenario "Ломающая правка" of the check without saving.
@@ -145,7 +156,7 @@ public class StrategyNodesApiTests
     [Test]
     public async Task Check_of_a_change_of_a_built_in_or_unknown_node_is_answered_like_the_change()
     {
-        (await _client.PostAsJsonAsync($"{Nodes}/ladder/validate", Body("x", Signal))).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await _client.PostAsJsonAsync($"{Nodes}/ema-cross/validate", Body("x", Signal))).StatusCode.ShouldBe(HttpStatusCode.Conflict);
         (await _client.PostAsJsonAsync($"{Nodes}/{Guid.NewGuid()}/validate", Body("x", Signal))).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
@@ -189,12 +200,12 @@ public class StrategyNodesApiTests
     [Test]
     public async Task Clone_of_a_built_in_node_is_a_custom_node()
     {
-        HttpResponseMessage response = await _client.PostAsJsonAsync($"{Nodes}/ladder/clone", new { });
+        HttpResponseMessage response = await _client.PostAsJsonAsync($"{Nodes}/ema-cross/clone", new { });
 
         response.StatusCode.ShouldBe(HttpStatusCode.Created);
         Guid id = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         JsonElement clone = await _client.GetFromJsonAsync<JsonElement>($"{Nodes}/{id}");
-        (clone.GetProperty("group").GetString(), clone.GetProperty("title").GetString()).ShouldBe(("custom", "Ladder (копия)"));
+        (clone.GetProperty("group").GetString(), clone.GetProperty("title").GetString()).ShouldBe(("custom", "Пересечение EMA (копия)"));
         (await _client.PostAsJsonAsync($"{Nodes}/nope/clone", new { })).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
