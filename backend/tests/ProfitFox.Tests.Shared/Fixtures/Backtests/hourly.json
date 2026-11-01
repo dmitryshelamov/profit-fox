@@ -1,0 +1,218 @@
+[
+  {
+    "openTime": "2024-03-01T00:00:00Z",
+    "open": "100",
+    "high": "100.5",
+    "low": "99.5",
+    "close": "100",
+    "volume": "1",
+    "turnover": "100"
+  },
+  {
+    "openTime": "2024-03-01T01:00:00Z",
+    "open": "100",
+    "high": "100.5",
+    "low": "98.5",
+    "close": "99",
+    "volume": "1",
+    "turnover": "99"
+  },
+  {
+    "openTime": "2024-03-01T02:00:00Z",
+    "open": "99",
+    "high": "99.5",
+    "low": "97.5",
+    "close": "98",
+    "volume": "1",
+    "turnover": "98"
+  },
+  {
+    "openTime": "2024-03-01T03:00:00Z",
+    "open": "98",
+    "high": "98.5",
+    "low": "96.5",
+    "close": "97",
+    "volume": "1",
+    "turnover": "97"
+  },
+  {
+    "openTime": "2024-03-01T04:00:00Z",
+    "open": "97",
+    "high": "98.5",
+    "low": "96.5",
+    "close": "98",
+    "volume": "1",
+    "turnover": "98"
+  },
+  {
+    "openTime": "2024-03-01T05:00:00Z",
+    "open": "98",
+    "high": "100.5",
+    "low": "97.5",
+    "close": "100",
+    "volume": "1",
+    "turnover": "100"
+  },
+  {
+    "openTime": "2024-03-01T06:00:00Z",
+    "open": "100",
+    "high": "102.5",
+    "low": "99.5",
+    "close": "102",
+    "volume": "1",
+    "turnover": "102"
+  },
+  {
+    "openTime": "2024-03-01T07:00:00Z",
+    "open": "102",
+    "high": "102.5",
+    "low": "100.5",
+    "close": "101",
+    "volume": "1",
+    "turnover": "101"
+  },
+  {
+    "openTime": "2024-03-01T08:00:00Z",
+    "open": "101",
+    "high": "101.5",
+    "low": "98.5",
+    "close": "99",
+    "volume": "1",
+    "turnover": "99"
+  },
+  {
+    "openTime": "2024-03-01T09:00:00Z",
+    "open": "99",
+    "high": "99.5",
+    "low": "96.5",
+    "close": "97",
+    "volume": "1",
+    "turnover": "97"
+  },
+  {
+    "openTime": "2024-03-01T10:00:00Z",
+    "open": "97",
+    "high": "97.5",
+    "low": "95.5",
+    "close": "96",
+    "volume": "1",
+    "turnover": "96"
+  },
+  {
+    "openTime": "2024-03-01T11:00:00Z",
+    "open": "96",
+    "high": "96.5",
+    "low": "94.5",
+    "close": "95",
+    "volume": "1",
+    "turnover": "95"
+  },
+  {
+    "openTime": "2024-03-01T12:00:00Z",
+    "open": "95",
+    "high": "96.5",
+    "low": "94.5",
+    "close": "96",
+    "volume": "1",
+    "turnover": "96"
+  },
+  {
+    "openTime": "2024-03-01T13:00:00Z",
+    "open": "96",
+    "high": "98.5",
+    "low": "95.5",
+    "close": "98",
+    "volume": "1",
+    "turnover": "98"
+  },
+  {
+    "openTime": "2024-03-01T14:00:00Z",
+    "open": "98",
+    "high": "100.5",
+    "low": "97.5",
+    "close": "100",
+    "volume": "1",
+    "turnover": "100"
+  },
+  {
+    "openTime": "2024-03-01T15:00:00Z",
+    "open": "100",
+    "high": "103.5",
+    "low": "99.5",
+    "close": "103",
+    "volume": "1",
+    "turnover": "103"
+  },
+  {
+    "openTime": "2024-03-01T16:00:00Z",
+    "open": "103",
+    "high": "104.5",
+    "low": "102.5",
+    "close": "104",
+    "volume": "1",
+    "turnover": "104"
+  },
+  {
+    "openTime": "2024-03-01T17:00:00Z",
+    "open": "104",
+    "high": "104.5",
+    "low": "101.5",
+    "close": "102",
+    "volume": "1",
+    "turnover": "102"
+  },
+  {
+    "openTime": "2024-03-01T18:00:00Z",
+    "open": "102",
+    "high": "102.5",
+    "low": "99.5",
+    "close": "100",
+    "volume": "1",
+    "turnover": "100"
+  },
+  {
+    "openTime": "2024-03-01T19:00:00Z",
+    "open": "100",
+    "high": "100.5",
+    "low": "97.5",
+    "close": "98",
+    "volume": "1",
+    "turnover": "98"
+  },
+  {
+    "openTime": "2024-03-01T20:00:00Z",
+    "open": "98",
+    "high": "99.5",
+    "low": "97.5",
+    "close": "99",
+    "volume": "1",
+    "turnover": "99"
+  },
+  {
+    "openTime": "2024-03-01T21:00:00Z",
+    "open": "99",
+    "high": "101.5",
+    "low": "98.5",
+    "close": "101",
+    "volume": "1",
+    "turnover": "101"
+  },
+  {
+    "openTime": "2024-03-01T22:00:00Z",
+    "open": "101",
+    "high": "103.5",
+    "low": "100.5",
+    "close": "103",
+    "volume": "1",
+    "turnover": "103"
+  },
+  {
+    "openTime": "2024-03-01T23:00:00Z",
+    "open": "103",
+    "high": "103.5",
+    "low": "101.5",
+    "close": "102",
+    "volume": "1",
+    "turnover": "102"
+  }
+]
