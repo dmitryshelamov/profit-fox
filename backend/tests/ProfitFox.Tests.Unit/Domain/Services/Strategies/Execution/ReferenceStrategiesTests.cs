@@ -11,7 +11,10 @@ using Shouldly;
 
 namespace ProfitFox.Tests.Unit.Domain.Services.Strategies.Execution;
 
-/// <summary>Reference strategies from the JSON fixtures on reference event sequences with precomputed commands.</summary>
+/// <summary>
+///     Reference strategies from the JSON fixtures on reference event sequences with precomputed commands, on the reference
+///     instrument: prices on a tick of 0.01, quantities on a step of 0.001.
+/// </summary>
 public class ReferenceStrategiesTests
 {
     private static readonly DateTimeOffset Start = DateTimeOffset.Parse("2024-01-01T00:00:00Z");
@@ -97,18 +100,16 @@ public class ReferenceStrategiesTests
         run.Handle(new RunStarted(Start)).ShouldBe([Market("o-1", "ladder/entry", 100m)]);
 
         run.Handle(new OrderFilled(Start, "o-1", 1m, 100m, IsComplete: true)).ShouldBe(
-            [Limit("o-2", "ladder/buy", OrderSide.Buy, 99m, 100m / 99m), Limit("o-3", "ladder/sell", OrderSide.Sell, 101m, 1m)],
+            [Limit("o-2", "ladder/buy", OrderSide.Buy, 99m, 1.010m), Limit("o-3", "ladder/sell", OrderSide.Sell, 101m, 1m)],
             ignoreOrder: true);
 
-        decimal bought = 100m / 99m;
-        run.Handle(new OrderFilled(Start, "o-2", bought, 99m, IsComplete: true)).ShouldBe(
-            [new CancelOrder("o-3"), Limit("o-4", "ladder/buy", OrderSide.Buy, 98.01m, 100m / 98.01m)],
+        run.Handle(new OrderFilled(Start, "o-2", 1.010m, 99m, IsComplete: true)).ShouldBe(
+            [new CancelOrder("o-3"), Limit("o-4", "ladder/buy", OrderSide.Buy, 98.01m, 1.020m)],
             ignoreOrder: true);
 
-        decimal quantity = 1m + bought;
-        decimal invested = 100m + bought * 99m;
+        // Average price 199.99 / 2.010 = 99.4975…, plus 1 % is 100.4924…, rounded up to the tick.
         run.Handle(new OrderCancelled(Start, "o-3"))
-            .ShouldBe([Limit("o-5", "ladder/sell", OrderSide.Sell, invested / quantity * 1.01m, quantity)]);
+            .ShouldBe([Limit("o-5", "ladder/sell", OrderSide.Sell, 100.50m, 2.010m)]);
     }
 
     [Test]
@@ -118,7 +119,7 @@ public class ReferenceStrategiesTests
         [
             new RunStarted(Start),
             new OrderFilled(Start, "o-1", 1m, 100m, IsComplete: true),
-            new OrderFilled(Start, "o-2", 100m / 99m, 99m, IsComplete: true),
+            new OrderFilled(Start, "o-2", 1.010m, 99m, IsComplete: true),
             new OrderCancelled(Start, "o-3"),
             new BarClosed(Start.AddHours(1), Bar(98m))
         ];
@@ -146,7 +147,11 @@ public class ReferenceStrategiesTests
     {
         StrategyDefinition definition = StrategyJson.ParseStrategy(StrategyFixtures.Element(name));
 
-        return StrategyRun.Start(definition, BuiltInComposites.Catalog, values.ToDictionary(value => value.Name, value => (NodeValue)new NumberValue(value.Value)), Conditions.Neutral);
+        return StrategyRun.Start(
+            definition,
+            BuiltInComposites.Catalog,
+            values.ToDictionary(value => value.Name, value => (NodeValue)new NumberValue(value.Value)),
+            Conditions.Reference);
     }
 
     private static IReadOnlyList<OrderCommand> Close(StrategyRun run, int bar, decimal close)
