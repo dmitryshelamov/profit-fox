@@ -1,11 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
 
+using ProfitFox.Application.Bots;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Strategies;
 
 namespace ProfitFox.Presentation.Contracts.Strategies;
 
-/// <summary>Answers of the strategy endpoints to application exceptions.</summary>
+/// <summary>Answers of the strategy, node and bot endpoints to application exceptions.</summary>
 public static class StrategyProblems
 {
     /// <summary>The answer to a known exception, or <c>null</c> to let the exception through.</summary>
@@ -28,7 +29,17 @@ public static class StrategyProblems
                     errors = StrategyRequests.Errors(usage.Errors)
                 });
 
+                if (conflict.Bots is { } bots)
+                {
+                    problem.Extensions["bots"] = bots.Select(bot => new { id = bot.Id, name = bot.Name, errors = BotRequests.Errors(bot.Errors) });
+                }
+
                 return new ConflictObjectResult(problem);
+            case ExchangeException unavailable:
+                return new ObjectResult(new ProblemDetails { Status = StatusCodes.Status503ServiceUnavailable, Detail = unavailable.Message })
+                {
+                    StatusCode = StatusCodes.Status503ServiceUnavailable
+                };
             default:
                 return null;
         }

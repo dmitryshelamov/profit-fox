@@ -92,6 +92,60 @@ public static partial class StrategyJson
         return json;
     }
 
+    /// <summary>A strategy version: <c>{ "strategy": …, "composites": [ { "ref": …, "definition": … } ] }</c>.</summary>
+    public static JsonObject WriteSnapshot(StrategySnapshot snapshot)
+    {
+        return new JsonObject
+        {
+            ["strategy"] = WriteStrategy(snapshot.Definition),
+            ["composites"] = new JsonArray(
+            [
+                .. snapshot.Composites.Select(composite => new JsonObject { ["ref"] = ToCode(composite.Id), ["definition"] = WriteComposite(composite.Definition) })
+            ])
+        };
+    }
+
+    /// <summary>Reads a stored version; it was valid when written, so it is not checked again.</summary>
+    public static StrategySnapshot ParseSnapshot(JsonElement json)
+    {
+        IReadOnlyList<SnapshotComposite> composites =
+        [
+            .. json.GetProperty("composites").EnumerateArray().Select(composite =>
+            {
+                TryParseNodeId(composite.GetProperty("ref").GetString()!, out CompositeNodeId? id);
+
+                return new SnapshotComposite(id!, ParseComposite(composite.GetProperty("definition")));
+            })
+        ];
+
+        return StrategySnapshot.Restore(ParseStrategy(json.GetProperty("strategy")), composites);
+    }
+
+    /// <summary>Parameter values of a bot or a backtest: <c>{ "fast": 10, "every": "01:00:00" }</c>.</summary>
+    public static JsonObject WriteValues(IReadOnlyDictionary<string, NodeValue> values)
+    {
+        return new JsonObject(values.Select(value => KeyValuePair.Create(value.Key, WriteValue(value.Value))));
+    }
+
+    /// <summary>A number, <c>true</c>/<c>false</c> or a duration such as <c>01:00:00</c>; <c>null</c> for anything else.</summary>
+    public static NodeValue? ParseValue(JsonElement json)
+    {
+        return json.ValueKind switch
+        {
+            JsonValueKind.Number => new NumberValue(json.GetDecimal()),
+            JsonValueKind.True or JsonValueKind.False => new BooleanValue(json.GetBoolean()),
+            JsonValueKind.String when TimeSpan.TryParseExact(json.GetString(), DurationFormat, CultureInfo.InvariantCulture, out TimeSpan duration) =>
+                new DurationValue(duration),
+            _ => null
+        };
+    }
+
+    /// <summary>Reads stored values; they were valid when written.</summary>
+    public static IReadOnlyDictionary<string, NodeValue> ParseValues(JsonElement json)
+    {
+        return json.EnumerateObject().ToDictionary(value => value.Name, value => ParseValue(value.Value)!);
+    }
+
     /// <summary>Code of a composite node id in a graph reference: the built-in code or the custom <see cref="Guid" />.</summary>
     public static string ToCode(CompositeNodeId id)
     {
@@ -197,7 +251,7 @@ public static partial class StrategyJson
         }
     }
 
-    private static JsonNode? WriteValue(NodeValue value)
+    public static JsonNode? WriteValue(NodeValue value)
     {
         return value switch
         {
@@ -442,14 +496,7 @@ public static partial class StrategyJson
         /// <summary>A number, <c>true</c>/<c>false</c> or a duration such as <c>01:00:00</c>; <paramref name="expected" /> narrows it to one type.</summary>
         private NodeValue Value(JsonElement json, string path, PinType? expected)
         {
-            NodeValue? value = json.ValueKind switch
-            {
-                JsonValueKind.Number => new NumberValue(json.GetDecimal()),
-                JsonValueKind.True or JsonValueKind.False => new BooleanValue(json.GetBoolean()),
-                JsonValueKind.String when TimeSpan.TryParseExact(json.GetString(), DurationFormat, CultureInfo.InvariantCulture, out TimeSpan duration) =>
-                    new DurationValue(duration),
-                _ => null
-            };
+            NodeValue? value = ParseValue(json);
 
             if (value is null || (expected is { } type && value.Type != type))
             {

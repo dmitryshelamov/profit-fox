@@ -23,7 +23,8 @@ public static class SimpleNodeCatalog
                 [
                     new PinDeclaration("hasPosition", PinType.Boolean),
                     .. Numbers("quantity", "averagePrice", "invested", "lastEntryPrice"),
-                    new PinDeclaration("sinceLastEntry", PinType.Duration)
+                    new PinDeclaration("sinceLastEntry", PinType.Duration),
+                    new PinDeclaration("free", PinType.Number)
                 ]),
             SimpleNodeKind.Ema => new NodePins(Numbers("source", "period"), Numbers("value")),
             SimpleNodeKind.Cross => new NodePins(Numbers("a", "b"), Booleans("up", "down")),

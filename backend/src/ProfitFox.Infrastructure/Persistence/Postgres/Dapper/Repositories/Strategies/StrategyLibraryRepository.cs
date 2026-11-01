@@ -4,6 +4,7 @@ using Dapper;
 
 using Npgsql;
 
+using ProfitFox.Domain.Entities.Bots;
 using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Strategies.Contracts;
@@ -12,7 +13,7 @@ using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Strategi
 
 namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Strategies;
 
-/// <summary>Every write bumps the library revision in the same transaction and writes nothing when the revision has moved on.</summary>
+/// <summary>Every save bumps the library revision in the same transaction and writes nothing when the revision has moved on.</summary>
 internal sealed class StrategyLibraryRepository(NpgsqlDataSource dataSource) : IStrategyLibraryRepository
 {
     /// <summary>One snapshot, so the revision matches the graphs it was read with.</summary>
@@ -23,43 +24,70 @@ internal sealed class StrategyLibraryRepository(NpgsqlDataSource dataSource) : I
         long revision = await connection.ExecuteScalarAsync<long>(StrategyLibraryRepositoryQueries.Revision(transaction, cancellationToken));
         IEnumerable<StrategyDb> strategies = await connection.QueryAsync<StrategyDb>(StrategyLibraryRepositoryQueries.Strategies(transaction, cancellationToken));
         IEnumerable<CompositeNodeDb> composites = await connection.QueryAsync<CompositeNodeDb>(StrategyLibraryRepositoryQueries.Composites(transaction, cancellationToken));
+        IEnumerable<StrategyVersionDb> versions = await connection.QueryAsync<StrategyVersionDb>(StrategyLibraryRepositoryQueries.LatestVersions(transaction, cancellationToken));
+        IEnumerable<BotDb> bots = await connection.QueryAsync<BotDb>(StrategyLibraryRepositoryQueries.Bots(transaction, cancellationToken));
         await transaction.CommitAsync(cancellationToken);
 
-        return new StrategyLibrary(revision, strategies.Select(StrategyDbConverter.ToDomain), composites.Select(CompositeNodeDbConverter.ToDomain));
+        return new StrategyLibrary(
+            revision,
+            strategies.Select(StrategyDbConverter.ToDomain),
+            composites.Select(CompositeNodeDbConverter.ToDomain),
+            versions.Select(StrategyVersionDbConverter.ToDomain),
+            bots.Select(BotDbConverter.ToDomain));
     }
 
-    public Task<bool> SaveStrategyAsync(Strategy strategy, long expectedRevision, CancellationToken cancellationToken)
+    /// <summary>
+    ///     Strategies go before the bots and versions that refer to them, removed bots before their strategies; a deleted strategy
+    ///     takes its versions along.
+    /// </summary>
+    public async Task<bool> SaveAsync(StrategyLibraryChange change, long expectedRevision, CancellationToken cancellationToken)
     {
-        return WriteAsync(
-            expectedRevision,
-            (connection, transaction) => connection.ExecuteAsync(
-                StrategyLibraryRepositoryQueries.UpsertStrategy(StrategyDbConverter.FromDomain(strategy), transaction, cancellationToken)),
-            cancellationToken);
-    }
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
 
-    public Task<bool> DeleteStrategyAsync(Guid id, long expectedRevision, CancellationToken cancellationToken)
-    {
-        return WriteAsync(
-            expectedRevision,
-            (connection, transaction) => connection.ExecuteAsync(StrategyLibraryRepositoryQueries.DeleteStrategy(id, transaction, cancellationToken)),
-            cancellationToken);
-    }
+        if (await connection.ExecuteAsync(StrategyLibraryRepositoryQueries.Bump(expectedRevision, transaction, cancellationToken)) == 0)
+        {
+            return false;
+        }
 
-    public Task<bool> SaveCompositeAsync(CompositeNode composite, long expectedRevision, CancellationToken cancellationToken)
-    {
-        return WriteAsync(
-            expectedRevision,
-            (connection, transaction) => connection.ExecuteAsync(
-                StrategyLibraryRepositoryQueries.UpsertComposite(CompositeNodeDbConverter.FromDomain(composite), transaction, cancellationToken)),
-            cancellationToken);
-    }
+        foreach (CompositeNode composite in change.SavedComposites)
+        {
+            await connection.ExecuteAsync(StrategyLibraryRepositoryQueries.UpsertComposite(CompositeNodeDbConverter.FromDomain(composite), transaction, cancellationToken));
+        }
 
-    public Task<bool> DeleteCompositeAsync(Guid id, long expectedRevision, CancellationToken cancellationToken)
-    {
-        return WriteAsync(
-            expectedRevision,
-            (connection, transaction) => connection.ExecuteAsync(StrategyLibraryRepositoryQueries.DeleteComposite(id, transaction, cancellationToken)),
-            cancellationToken);
+        foreach (Strategy strategy in change.SavedStrategies)
+        {
+            await connection.ExecuteAsync(StrategyLibraryRepositoryQueries.UpsertStrategy(StrategyDbConverter.FromDomain(strategy), transaction, cancellationToken));
+        }
+
+        foreach (Bot bot in change.SavedBots)
+        {
+            await connection.ExecuteAsync(StrategyLibraryRepositoryQueries.UpsertBot(BotDbConverter.FromDomain(bot), transaction, cancellationToken));
+        }
+
+        foreach (Guid id in change.RemovedBots)
+        {
+            await connection.ExecuteAsync(StrategyLibraryRepositoryQueries.DeleteBot(id, transaction, cancellationToken));
+        }
+
+        foreach (Guid id in change.RemovedStrategies)
+        {
+            await connection.ExecuteAsync(StrategyLibraryRepositoryQueries.DeleteStrategy(id, transaction, cancellationToken));
+        }
+
+        foreach (Guid id in change.RemovedComposites)
+        {
+            await connection.ExecuteAsync(StrategyLibraryRepositoryQueries.DeleteComposite(id, transaction, cancellationToken));
+        }
+
+        foreach (StrategyVersion version in change.NewVersions)
+        {
+            await connection.ExecuteAsync(StrategyLibraryRepositoryQueries.InsertVersion(StrategyVersionDbConverter.FromDomain(version), transaction, cancellationToken));
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return true;
     }
 
     public async Task<Strategy?> GetStrategyAsync(Guid id, CancellationToken cancellationToken)
@@ -92,19 +120,33 @@ internal sealed class StrategyLibraryRepository(NpgsqlDataSource dataSource) : I
         return [.. (await connection.QueryAsync<CompositeNodeDb>(StrategyLibraryRepositoryQueries.Composites(null, cancellationToken))).Select(CompositeNodeDbConverter.ToDomain)];
     }
 
-    private async Task<bool> WriteAsync(long expectedRevision, Func<NpgsqlConnection, NpgsqlTransaction, Task<int>> write, CancellationToken cancellationToken)
+    public async Task<Bot?> GetBotAsync(Guid id, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+        BotDb? bot = await connection.QuerySingleOrDefaultAsync<BotDb>(StrategyLibraryRepositoryQueries.Bot(id, cancellationToken));
 
-        if (await connection.ExecuteAsync(StrategyLibraryRepositoryQueries.Bump(expectedRevision, transaction, cancellationToken)) == 0)
-        {
-            return false;
-        }
+        return bot is null ? null : BotDbConverter.ToDomain(bot);
+    }
 
-        await write(connection, transaction);
-        await transaction.CommitAsync(cancellationToken);
+    public async Task<IReadOnlyList<Bot>> GetBotsAsync(CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
-        return true;
+        return [.. (await connection.QueryAsync<BotDb>(StrategyLibraryRepositoryQueries.Bots(null, cancellationToken))).Select(BotDbConverter.ToDomain)];
+    }
+
+    public async Task<int?> GetLatestVersionNumberAsync(Guid strategyId, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        return await connection.ExecuteScalarAsync<int?>(StrategyLibraryRepositoryQueries.LatestVersionNumber(strategyId, cancellationToken));
+    }
+
+    public async Task<StrategyVersion?> GetVersionAsync(Guid strategyId, int number, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        StrategyVersionDb? version = await connection.QuerySingleOrDefaultAsync<StrategyVersionDb>(StrategyLibraryRepositoryQueries.Version(strategyId, number, cancellationToken));
+
+        return version is null ? null : StrategyVersionDbConverter.ToDomain(version);
     }
 }

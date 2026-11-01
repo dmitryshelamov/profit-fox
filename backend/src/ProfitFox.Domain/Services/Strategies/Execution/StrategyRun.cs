@@ -1,6 +1,7 @@
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Services.Strategies.Validation;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
 
 namespace ProfitFox.Domain.Services.Strategies.Execution;
@@ -14,16 +15,23 @@ public sealed class StrategyRun
     private readonly Dictionary<string, NodeValue?>[] _outputs;
     private readonly object[] _states;
     private readonly Dictionary<string, ActiveOrder> _orders = [];
-    private readonly PositionBook _position = new PositionBook();
+    private readonly Account _account;
     private readonly OrderSide _entrySide;
+    private readonly StrategyDirection _direction;
+    private readonly FeeSchedule _fees;
+    private readonly InstrumentRules _rules;
     private readonly List<OrderCommand> _commands = [];
     private int _lastOrderNumber;
     private StrategyEvent _event = null!;
     private Bar? _lastBar;
 
-    private StrategyRun(IReadOnlyList<RunNode> nodes, IReadOnlyDictionary<string, NodeValue> parameters, StrategyDirection direction)
+    private StrategyRun(IReadOnlyList<RunNode> nodes, IReadOnlyDictionary<string, NodeValue> parameters, StrategyDirection direction, TradingConditions conditions)
     {
         _entrySide = direction == StrategyDirection.Long ? OrderSide.Buy : OrderSide.Sell;
+        _account = new Account(direction, conditions.Balance, conditions.Rules.MinQuantity);
+        _direction = direction;
+        _fees = conditions.Fees;
+        _rules = conditions.Rules;
         _nodes = nodes;
         _parameters = parameters;
         _indexByPath = nodes.Select((node, index) => (node.Path, index)).ToDictionary(entry => entry.Path, entry => entry.index);
@@ -42,35 +50,24 @@ public sealed class StrategyRun
     }
 
     /// <exception cref="GraphValidationException">A parameter value is unknown or breaks the parameter's limits.</exception>
-    public static StrategyRun Start(StrategyDefinition definition, CompositeCatalog catalog, IReadOnlyDictionary<string, NodeValue> parameterValues)
+    public static StrategyRun Start(
+        StrategyDefinition definition,
+        CompositeCatalog catalog,
+        IReadOnlyDictionary<string, NodeValue> parameterValues,
+        TradingConditions conditions)
     {
-        var errors = new List<GraphError>();
-
-        foreach (StrategyParameter parameter in definition.Parameters)
-        {
-            string? reason = parameterValues.TryGetValue(parameter.Name, out NodeValue? value) ? parameter.Reject(value) : null;
-
-            if (reason is not null)
-            {
-                errors.Add(new GraphError("", parameter.Name, $"Value {reason}"));
-            }
-        }
-
-        foreach (string unknown in parameterValues.Keys.Where(name => definition.Parameters.All(parameter => parameter.Name != name)))
-        {
-            errors.Add(new GraphError("", unknown, "No such parameter."));
-        }
+        IReadOnlyList<(string Parameter, string Reason)> errors = ParameterValueRules.Check(definition.Parameters, parameterValues);
 
         if (errors.Count > 0)
         {
-            throw new GraphValidationException(errors);
+            throw new GraphValidationException([.. errors.Select(error => new GraphError("", error.Parameter, error.Reason))]);
         }
 
         var parameters = definition.Parameters.ToDictionary(
             parameter => parameter.Name,
             parameter => parameterValues.GetValueOrDefault(parameter.Name, parameter.Default));
 
-        return new StrategyRun(GraphExpander.Expand(definition, catalog), parameters, definition.Direction);
+        return new StrategyRun(GraphExpander.Expand(definition, catalog), parameters, definition.Direction, conditions);
     }
 
     public IReadOnlyList<OrderCommand> Handle(StrategyEvent @event)
@@ -86,6 +83,20 @@ public sealed class StrategyRun
 
         return [.. _commands];
     }
+
+    /// <summary>How many times an order node did not place an entry because free money or the exchange minimum did not allow it.</summary>
+    public long SkippedOrders { get; private set; }
+
+    public RunState State => new RunState(
+        _direction,
+        _account.Cash,
+        _account.Quantity,
+        _account.Invested,
+        _account.Collateral,
+        _account.Dust,
+        _account.DustCollateral,
+        _account.Cash - Free(),
+        SkippedOrders);
 
     /// <summary>Value of an output after the last event; <c>null</c> when it has no value.</summary>
     public NodeValue? ValueOf(string path, string pin)
@@ -119,11 +130,11 @@ public sealed class StrategyRun
 
         if (order.Side == _entrySide)
         {
-            _position.Enter(filled.Quantity, filled.Price, filled.At);
+            _account.Enter(filled.Quantity, filled.Price, filled.Fee, filled.FeeAsset, filled.At);
         }
         else
         {
-            _position.Exit(filled.Quantity);
+            _account.Exit(filled.Quantity, filled.Price, filled.Fee);
         }
 
         if (filled.IsComplete)
@@ -161,12 +172,13 @@ public sealed class StrategyRun
 
                 break;
             case SimpleNodeKind.Position:
-                outputs["hasPosition"] = new BooleanValue(_position.Quantity > 0m);
-                outputs["quantity"] = new NumberValue(_position.Quantity);
-                outputs["averagePrice"] = Number(_position.AveragePrice);
-                outputs["invested"] = new NumberValue(_position.Invested);
-                outputs["lastEntryPrice"] = Number(_position.LastEntryPrice);
-                outputs["sinceLastEntry"] = _position.LastEntryAt is { } at ? new DurationValue(_event.At - at) : null;
+                outputs["hasPosition"] = new BooleanValue(_account.Quantity > 0m);
+                outputs["quantity"] = new NumberValue(_account.Quantity);
+                outputs["averagePrice"] = Number(_account.AveragePrice);
+                outputs["invested"] = new NumberValue(_account.Invested);
+                outputs["lastEntryPrice"] = Number(_account.LastEntryPrice);
+                outputs["sinceLastEntry"] = _account.LastEntryAt is { } at ? new DurationValue(_event.At - at) : null;
+                outputs["free"] = new NumberValue(Free());
 
                 break;
             case SimpleNodeKind.Ema:
@@ -225,24 +237,24 @@ public sealed class StrategyRun
 
         if (side == _entrySide)
         {
-            Place(index, node, side, byAmount ? null : size, byAmount ? size : null);
+            Place(index, node, side, byAmount ? null : Down(size, _rules.QuantityStep), byAmount ? size : null);
 
             return;
         }
 
         decimal? quantity = !byAmount ? size : _lastBar is { Close: > 0m } bar ? size / bar.Close : null;
 
-        if (_position.Quantity > 0m && quantity is { } wanted)
+        if (_account.Quantity > 0m && quantity is { } wanted)
         {
-            Place(index, node, side, Math.Min(wanted, _position.Quantity), null);
+            Place(index, node, side, Math.Min(Down(wanted, _rules.QuantityStep), ExitableQuantity()), null);
         }
     }
 
     private void ClosePosition(int index, RunNode node)
     {
-        if (!HasOrder(index) && IsTrue(node, "when") && _position.Quantity > 0m)
+        if (!HasOrder(index) && IsTrue(node, "when") && _account.Quantity > 0m)
         {
-            Place(index, node, _entrySide == OrderSide.Buy ? OrderSide.Sell : OrderSide.Buy, _position.Quantity, null);
+            Place(index, node, _entrySide == OrderSide.Buy ? OrderSide.Sell : OrderSide.Buy, ExitableQuantity(), null);
         }
     }
 
@@ -279,21 +291,73 @@ public sealed class StrategyRun
         }
     }
 
+    /// <summary>
+    ///     The order on the steps of the instrument: a buy price rounds down, a sell price up, a quantity down. A price that rounds
+    ///     to zero counts as a missing value.
+    /// </summary>
     private (decimal Price, decimal Quantity)? WantedLimit(RunNode node, OrderSide side)
     {
-        if (!IsTrue(node, "when") || Positive(node, "price") is not { } price || Positive(node, "size") is not { } size)
+        if (!IsTrue(node, "when") || Positive(node, "price") is not { } wantedPrice || Positive(node, "size") is not { } size)
         {
             return null;
         }
 
-        decimal quantity = node.Settings.SizeMode == OrderSizeMode.Amount ? size / price : size;
+        decimal price = side == OrderSide.Buy ? Down(wantedPrice, _rules.TickSize) : Up(wantedPrice, _rules.TickSize);
+
+        // A buy below one tick rounds down to no price at all.
+        if (price == 0m)
+        {
+            return null;
+        }
+        decimal quantity = Down(node.Settings.SizeMode == OrderSizeMode.Amount ? size / price : size, _rules.QuantityStep);
 
         if (side == _entrySide)
         {
             return (price, quantity);
         }
 
-        return _position.Quantity > 0m ? (price, Math.Min(quantity, _position.Quantity)) : null;
+        return _account.Quantity > 0m ? (price, Math.Min(quantity, ExitableQuantity())) : null;
+    }
+
+    /// <summary>An exit sells at most the position rounded down to the quantity step.</summary>
+    private decimal ExitableQuantity()
+    {
+        return Down(_account.Quantity, _rules.QuantityStep);
+    }
+
+    // The remainder never overflows, unlike a division by a fine step.
+    private static decimal Down(decimal value, decimal step)
+    {
+        return value - value % step;
+    }
+
+    private static decimal Up(decimal value, decimal step)
+    {
+        decimal rest = value % step;
+
+        return rest == 0m ? value : value - rest + step;
+    }
+
+    /// <summary>Value of an entry with its fee in the quote asset.</summary>
+    private decimal? WithFee(OrderType type, decimal? value)
+    {
+        decimal rate = _fees.AssetOf(_entrySide) == FeeAsset.Base ? 0m : type == OrderType.Limit ? _fees.LimitRate : _fees.MarketRate;
+
+        return value * (1m + rate);
+    }
+
+    /// <summary>
+    ///     The cash less what unfinished entries hold back: a standing limit entry its value and the fee in the quote asset, an
+    ///     unfilled market entry its value when it was placed with that fee, so several entries of one event never spend more.
+    /// </summary>
+    private decimal Free()
+    {
+        decimal rate = _fees.AssetOf(_entrySide) == FeeAsset.Quote ? _fees.LimitRate : 0m;
+        decimal reserved = _orders.Values
+            .Where(order => order.Side == _entrySide && order.Price is not null)
+            .Sum(order => order.Price!.Value * order.Remaining!.Value * (1m + rate));
+
+        return _account.Cash - reserved - _orders.Values.Sum(order => order.Reserve);
     }
 
     private bool HasOrder(int index)
@@ -306,10 +370,24 @@ public sealed class StrategyRun
         Place(index, node, side, OrderType.Market, null, quantity, amount);
     }
 
+    /// <summary>
+    ///     An order below the exchange minimum, or an entry that free money does not pay for, is skipped as if its condition were false,
+    ///     and counted. A value that cannot be known yet, of a market order by quantity before the first bar, passes both checks.
+    /// </summary>
     private void Place(int index, RunNode node, OrderSide side, OrderType type, decimal? price, decimal? quantity, decimal? amount)
     {
+        decimal? value = amount ?? quantity * (price ?? _lastBar?.Close);
+
+        if (quantity < _rules.MinQuantity || value < _rules.MinAmount || (side == _entrySide && WithFee(type, value) > Free()))
+        {
+            SkippedOrders++;
+
+            return;
+        }
+
         string id = $"o-{++_lastOrderNumber}";
-        _orders[id] = new ActiveOrder(index, side, price, type == OrderType.Limit ? quantity : null);
+        decimal reserve = type == OrderType.Market && side == _entrySide ? WithFee(type, value) ?? 0m : 0m;
+        _orders[id] = new ActiveOrder(index, side, price, type == OrderType.Limit ? quantity : null, Reserve: reserve);
         _commands.Add(new PlaceOrder(id, node.Path, side, type, price, quantity, amount));
     }
 

@@ -4,6 +4,8 @@ using System.Text.Json.Nodes;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Strategies;
 using ProfitFox.Domain.Entities.Strategies.Enums;
+using ProfitFox.Domain.Services.Strategies.BuiltIns;
+using ProfitFox.Domain.Services.Strategies.Validation;
 using ProfitFox.Domain.ValueObjects.Strategies;
 
 using Shouldly;
@@ -45,6 +47,26 @@ public class StrategyJsonTests
         StrategyDefinition definition = StrategyJson.ParseStrategy(Parse(Ema));
 
         JsonNode.DeepEquals(StrategyJson.WriteStrategy(definition), JsonNode.Parse(Ema)).ShouldBeTrue();
+    }
+
+    [Test]
+    public void Snapshot_is_written_as_the_strategy_and_its_nodes_and_read_back_equal()
+    {
+        var custom = new CustomNodeId(Guid.Parse("0b8f2c1e-5d4a-4e3b-9c2d-1a2b3c4d5e6f"));
+        var node = new CompositeDefinition([new PinDeclaration("x", PinType.Number)], [], new Graph([], [], new Dictionary<string, NodePosition>()));
+        StrategyDefinition strategy = StrategyJson.ParseStrategy(Parse(Ema));
+        var snapshot = StrategySnapshot.Of(strategy, new CompositeCatalog(new Dictionary<CompositeNodeId, CompositeDefinition>
+        {
+            [custom] = node,
+            [new BuiltInNodeId(BuiltInNode.EmaCross)] = BuiltInComposites.Catalog.Find(new BuiltInNodeId(BuiltInNode.EmaCross))!
+        }));
+
+        JsonObject json = StrategyJson.WriteSnapshot(snapshot);
+
+        json["strategy"]!["nodes"]!.AsArray().Count.ShouldBe(8);
+        json["composites"]!.AsArray().Select(item => item!["ref"]!.GetValue<string>()).ShouldBe(["ema-cross", custom.Value.ToString()]);
+        JsonNode.DeepEquals(json["composites"]![1]!["definition"], StrategyJson.WriteComposite(node)).ShouldBeTrue();
+        StrategyJson.ParseSnapshot(Parse(json.ToJsonString())).ShouldBe(snapshot);
     }
 
     [Test]

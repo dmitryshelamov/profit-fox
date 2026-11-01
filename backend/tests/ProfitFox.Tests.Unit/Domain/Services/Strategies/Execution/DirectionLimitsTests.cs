@@ -19,7 +19,7 @@ public class DirectionLimitsTests
         Graph graph = new GraphBuilder()
             .Node("exit", SimpleNodeKind.MarketOrder, Settings(exit, OrderSizeMode.Quantity), ("when", Values.Boolean(true)), ("size", Values.Number(1m)))
             .Build();
-        var run = StrategyRun.Start(new StrategyDefinition(direction, [], graph), CompositeCatalog.Empty, NoValues);
+        var run = StrategyRun.Start(new StrategyDefinition(direction, [], graph), CompositeCatalog.Empty, NoValues, Conditions.Neutral);
 
         run.Handle(new RunStarted(Start)).ShouldBeEmpty();
     }
@@ -76,7 +76,7 @@ public class DirectionLimitsTests
             .Wire("flat.result", "enter.when")
             .Wire("position.hasPosition", "close.when")
             .Build();
-        var run = StrategyRun.Start(new StrategyDefinition(direction, [], graph), CompositeCatalog.Empty, NoValues);
+        var run = StrategyRun.Start(new StrategyDefinition(direction, [], graph), CompositeCatalog.Empty, NoValues, Conditions.Neutral);
         run.Handle(new RunStarted(Start)).ShouldBe([new PlaceOrder("o-1", "enter", entry, OrderType.Market, null, 0.5m, null)]);
 
         run.Handle(new OrderFilled(Start, "o-1", 0.5m, 100m, IsComplete: true))
@@ -102,7 +102,7 @@ public class DirectionLimitsTests
             .Wire("candle.close", "cheap.a")
             .Wire("cheap.result", "stop.when")
             .Build();
-        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, NoValues);
+        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, NoValues, Conditions.Neutral);
         run.Handle(new RunStarted(Start));
         run.Handle(new OrderFilled(Start, "o-1", 2m, 100m, IsComplete: true));
         run.Handle(new BarClosed(Start, new Bar(85m, 85m, 85m, 85m, 1m)));
@@ -126,7 +126,7 @@ public class DirectionLimitsTests
             .Wire("position.hasPosition", "exit.when")
             .Build();
 
-        return StrategyRun.Start(new StrategyDefinition(direction, [], graph), CompositeCatalog.Empty, NoValues);
+        return StrategyRun.Start(new StrategyDefinition(direction, [], graph), CompositeCatalog.Empty, NoValues, Conditions.Neutral);
     }
 
     private static NodeSettings Settings(OrderSide side, OrderSizeMode size)

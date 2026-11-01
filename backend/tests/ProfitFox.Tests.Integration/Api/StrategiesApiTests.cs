@@ -124,6 +124,59 @@ public class StrategiesApiTests
             JsonNode.Parse(StrategyFixtures.Json("ema"))).ShouldBeTrue();
     }
 
+    // Scenario "Номер версии".
+    [Test]
+    public async Task Strategy_changed_once_is_read_at_version_two()
+    {
+        Guid id = await CreateIdAsync("EMA", StrategyFixtures.Element("ema"));
+        (await _client.GetFromJsonAsync<JsonElement>($"{Strategies}/{id}")).GetProperty("version").GetInt32().ShouldBe(1);
+
+        await _client.PutAsJsonAsync($"{Strategies}/{id}", new { name = "EMA", definition = WithAmount(10) });
+
+        (await _client.GetFromJsonAsync<JsonElement>($"{Strategies}/{id}")).GetProperty("version").GetInt32().ShouldBe(2);
+    }
+
+    // Scenario "Чтение старой версии".
+    [Test]
+    public async Task Old_version_gives_the_graph_as_it_was_and_the_nodes_it_used()
+    {
+        Guid id = await CreateIdAsync("EMA", StrategyFixtures.Element("ema"));
+        await _client.PutAsJsonAsync($"{Strategies}/{id}", new { name = "EMA", definition = WithAmount(10) });
+
+        JsonElement version = await _client.GetFromJsonAsync<JsonElement>($"{Strategies}/{id}/versions/1");
+
+        version.GetProperty("number").GetInt32().ShouldBe(1);
+        version.GetProperty("createdAt").GetString().ShouldBe("2024-03-10T12:30:00+00:00");
+        JsonNode expected = JsonNode.Parse(StrategyFixtures.Json("ema"))!;
+        expected["layout"] = new JsonObject();
+        JsonNode.DeepEquals(JsonNode.Parse(version.GetProperty("definition").GetRawText()), expected).ShouldBeTrue();
+        JsonElement node = version.GetProperty("composites").EnumerateArray().ShouldHaveSingleItem();
+        node.GetProperty("ref").GetString().ShouldBe("ema-cross");
+        node.GetProperty("definition").GetProperty("nodes").GetArrayLength().ShouldBe(5);
+    }
+
+    [Test]
+    public async Task Unknown_version_or_strategy_is_not_found()
+    {
+        Guid id = await CreateIdAsync("EMA", StrategyFixtures.Element("ema"));
+
+        (await _client.GetAsync($"{Strategies}/{id}/versions/2")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await _client.GetAsync($"{Strategies}/{Guid.NewGuid()}/versions/1")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    private static JsonElement WithAmount(decimal amount)
+    {
+        JsonNode definition = JsonNode.Parse(StrategyFixtures.Json("ema"))!;
+        definition["parameters"]![2]!["default"] = amount;
+
+        return JsonDocument.Parse(definition.ToJsonString()).RootElement;
+    }
+
+    private async Task<Guid> CreateIdAsync(string name, JsonElement definition)
+    {
+        return (await (await Create(name, definition)).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+    }
+
     private Task<HttpResponseMessage> Create(string name, JsonElement definition)
     {
         return _client.PostAsJsonAsync(Strategies, new { name, definition });

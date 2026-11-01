@@ -20,6 +20,6 @@ public sealed class DeleteNodeCommandHandler(IStrategyLibraryRepository reposito
             throw NodeIds.NotFound(request.Id);
         }
 
-        StrategyRequests.EnsureSaved(await repository.DeleteCompositeAsync(id, library.Revision, cancellationToken));
+        StrategyRequests.EnsureSaved(await repository.SaveAsync(library.Change, library.Revision, cancellationToken));
     }
 }

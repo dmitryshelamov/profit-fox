@@ -35,8 +35,7 @@ public class StrategyHandlersTests
         _library.AddStrategy(Existing, "EMA", ApplicationStrategiesFixtures.Ema(), Now.AddDays(-1));
         _repository = Substitute.For<IStrategyLibraryRepository>();
         _repository.LoadAsync(Arg.Any<CancellationToken>()).Returns(_ => _library);
-        _repository.SaveStrategyAsync(Arg.Any<Strategy>(), Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(true);
-        _repository.DeleteStrategyAsync(Arg.Any<Guid>(), Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(true);
+        _repository.SaveAsync(Arg.Any<StrategyLibraryChange>(), Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(true);
     }
 
     [Test]
@@ -44,8 +43,10 @@ public class StrategyHandlersTests
     {
         Guid id = await new CreateStrategyCommandHandler(_repository, _time).Handle(new CreateStrategyCommand("Моя EMA", StrategyFixtures.Element("ema")), CancellationToken.None);
 
-        await _repository.Received(1).SaveStrategyAsync(
-            Arg.Is<Strategy>(strategy => strategy!.Id == id && strategy.Name == "Моя EMA" && strategy.CreatedAt == Now),
+        await _repository.Received(1).SaveAsync(
+            Arg.Is<StrategyLibraryChange>(change => change!.SavedStrategies.Single(strategy => strategy.Id == id).Name == "Моя EMA"
+                && change.SavedStrategies.Single(strategy => strategy.Id == id).CreatedAt == Now
+                && change.NewVersions.Single(version => version.StrategyId == id).Number == 1),
             7,
             Arg.Any<CancellationToken>());
     }
@@ -69,7 +70,7 @@ public class StrategyHandlersTests
             new CreateStrategyCommandHandler(_repository, _time).Handle(new CreateStrategyCommand("x", definition), CancellationToken.None));
 
         exception.Errors.Keys.ShouldBe(["graph.mul.a", "graph.mul.b"], ignoreOrder: true);
-        _repository.ReceivedCalls().ShouldNotContain(call => call.GetMethodInfo().Name == nameof(IStrategyLibraryRepository.SaveStrategyAsync));
+        _repository.ReceivedCalls().ShouldNotContain(call => call.GetMethodInfo().Name == nameof(IStrategyLibraryRepository.SaveAsync));
     }
 
     [Test]
@@ -86,7 +87,7 @@ public class StrategyHandlersTests
     [Test]
     public void Save_on_a_changed_library_is_a_conflict()
     {
-        _repository.SaveStrategyAsync(Arg.Any<Strategy>(), Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(false);
+        _repository.SaveAsync(Arg.Any<StrategyLibraryChange>(), Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(false);
 
         Should.Throw<StateConflictException>(() =>
             new CreateStrategyCommandHandler(_repository, _time).Handle(new CreateStrategyCommand("x", StrategyFixtures.Element("ema")), CancellationToken.None));
@@ -97,8 +98,9 @@ public class StrategyHandlersTests
     {
         await new UpdateStrategyCommandHandler(_repository, _time).Handle(new UpdateStrategyCommand(Existing, "EMA 2", StrategyFixtures.Element("ema")), CancellationToken.None);
 
-        await _repository.Received(1).SaveStrategyAsync(
-            Arg.Is<Strategy>(strategy => strategy!.Id == Existing && strategy.Name == "EMA 2" && strategy.UpdatedAt == Now),
+        await _repository.Received(1).SaveAsync(
+            Arg.Is<StrategyLibraryChange>(change => change!.SavedStrategies.Single(strategy => strategy.Id == Existing).Name == "EMA 2"
+                && change.SavedStrategies.Single(strategy => strategy.Id == Existing).UpdatedAt == Now),
             7,
             Arg.Any<CancellationToken>());
     }
@@ -115,7 +117,7 @@ public class StrategyHandlersTests
     {
         await new DeleteStrategyCommandHandler(_repository).Handle(new DeleteStrategyCommand(Existing), CancellationToken.None);
 
-        await _repository.Received(1).DeleteStrategyAsync(Existing, 7, Arg.Any<CancellationToken>());
+        await _repository.Received(1).SaveAsync(Arg.Is<StrategyLibraryChange>(change => change!.RemovedStrategies.SequenceEqual(new[] { Existing })), 7, Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -127,7 +129,7 @@ public class StrategyHandlersTests
     [Test]
     public void Delete_on_a_changed_library_is_a_conflict()
     {
-        _repository.DeleteStrategyAsync(Arg.Any<Guid>(), Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(false);
+        _repository.SaveAsync(Arg.Any<StrategyLibraryChange>(), Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(false);
 
         Should.Throw<StateConflictException>(() => new DeleteStrategyCommandHandler(_repository).Handle(new DeleteStrategyCommand(Existing), CancellationToken.None));
     }
@@ -138,8 +140,10 @@ public class StrategyHandlersTests
         Strategy strategy = _library.Strategies.Single();
         _repository.GetStrategyAsync(Existing, Arg.Any<CancellationToken>()).Returns(strategy);
         _repository.GetStrategiesAsync(Arg.Any<CancellationToken>()).Returns([strategy]);
+        _repository.GetLatestVersionNumberAsync(Existing, Arg.Any<CancellationToken>()).Returns(3);
 
-        (await new GetStrategyQueryHandler(_repository).Handle(new GetStrategyQuery(Existing), CancellationToken.None)).ShouldBe(strategy);
+        (await new GetStrategyQueryHandler(_repository).Handle(new GetStrategyQuery(Existing), CancellationToken.None)).ShouldBe(new GetStrategyResult(strategy, 3));
+        (await new GetStrategyQueryHandler(_repository).Handle(new GetStrategyQuery(Guid.NewGuid()), CancellationToken.None)).ShouldBeNull();
         (await new GetStrategiesQueryHandler(_repository).Handle(new GetStrategiesQuery(), CancellationToken.None)).ShouldBe([strategy]);
     }
 }

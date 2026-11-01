@@ -59,7 +59,7 @@ public class HoldLimitTests
             .Wire("candle.close", "price.b")
             .Wire("price.result", "hold.price")
             .Build();
-        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, NoValues);
+        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, NoValues, Conditions.Neutral);
         Close(run, 4m);
 
         Close(run, 0m).ShouldBe([new CancelOrder("o-1")]);
@@ -92,7 +92,7 @@ public class HoldLimitTests
             .Node("hold", SimpleNodeKind.HoldLimit, Settings(OrderSide.Buy, OrderSizeMode.Quantity), ("when", Values.Boolean(true)), ("price", Values.Number(100m)))
             .Wire("position.averagePrice", "hold.size")
             .Build();
-        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, NoValues);
+        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, NoValues, Conditions.Neutral);
 
         run.Handle(new RunStarted(Start)).ShouldBeEmpty();
     }
@@ -128,7 +128,7 @@ public class HoldLimitTests
             .Wire("position.hasPosition", "flat.value")
             .Wire("flat.result", "enter.when")
             .Build();
-        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, NoValues);
+        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, NoValues, Conditions.Neutral);
 
         run.Handle(new RunStarted(Start)).ShouldBe([new PlaceOrder("o-1", "enter", OrderSide.Buy, OrderType.Market, null, 2m, null)]);
         run.Handle(new OrderFilled(Start, "o-1", 2m, 100m, IsComplete: true)).ShouldBe([Limit("o-2", OrderSide.Sell, 110m, 2m, "hold")]);
@@ -147,7 +147,7 @@ public class HoldLimitTests
             .Wire("candle.close", "hold.price")
             .Build();
 
-        return StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, NoValues);
+        return StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, NoValues, Conditions.Neutral);
     }
 
     private static IReadOnlyList<OrderCommand> Close(StrategyRun run, decimal close)

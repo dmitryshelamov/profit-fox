@@ -39,7 +39,7 @@ public class IndicatorNodesTests
             .Wire("candle.close", "ema.source")
             .Wire("ema.value", "cmp.b")
             .Build();
-        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, new Dictionary<string, NodeValue>());
+        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, new Dictionary<string, NodeValue>(), Conditions.Neutral);
 
         Close(run, 1m);
         Close(run, 2m);
@@ -86,7 +86,7 @@ public class IndicatorNodesTests
 
         foreach (Graph graph in new[] { noPeriod, noSource })
         {
-            var run = StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, new Dictionary<string, NodeValue>());
+            var run = StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, new Dictionary<string, NodeValue>(), Conditions.Neutral);
             Close(run, 1m);
             run.ValueOf("ema", "value").ShouldBeNull();
         }
@@ -140,7 +140,7 @@ public class IndicatorNodesTests
             .Wire("candle.close", "ema.source")
             .Build();
 
-        return StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, new Dictionary<string, NodeValue>());
+        return StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, new Dictionary<string, NodeValue>(), Conditions.Neutral);
     }
 
     private static StrategyRun Cross()
@@ -151,7 +151,7 @@ public class IndicatorNodesTests
             .Wire("candle.close", "cross.a")
             .Build();
 
-        return StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, new Dictionary<string, NodeValue>());
+        return StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, new Dictionary<string, NodeValue>(), Conditions.Neutral);
     }
 
     private static List<decimal?> Values(StrategyRun run, params decimal[] closes)

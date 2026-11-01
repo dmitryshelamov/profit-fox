@@ -1,0 +1,81 @@
+using ProfitFox.Domain.Entities.Strategies.Enums;
+
+namespace ProfitFox.Domain.Services.Strategies.Execution;
+
+/// <summary>
+///     The money of the bot and the position built from fills. An entry adds quantity and invested amount, an exit takes them away at
+///     the average price. A fee in the coin comes off the quantity; a fee in the quote asset comes off the cash, adds to the invested
+///     amount of a long and takes from it of a short, so the average price includes the entry fees. A short holds the value of its
+///     entries as collateral, leverage 1.
+/// </summary>
+/// <param name="direction"></param>
+/// <param name="balance"></param>
+/// <param name="minQuantity">A position left below it after an exit cannot be sold, so it is closed.</param>
+internal sealed class Account(StrategyDirection direction, decimal balance, decimal minQuantity)
+{
+    public decimal Cash { get; private set; } = balance;
+
+    /// <summary>What a short holds in the cash it paid for its entries.</summary>
+    public decimal Collateral { get; private set; }
+
+    /// <summary>
+    ///     What positions closed below the minimum quantity left over: coins of a long, which stay on the account, or contracts of
+    ///     a short, which stay sold.
+    /// </summary>
+    public decimal Dust { get; private set; }
+
+    /// <summary>The collateral of the contracts a short left over in <see cref="Dust" />.</summary>
+    public decimal DustCollateral { get; private set; }
+
+    public decimal Quantity { get; private set; }
+
+    public decimal Invested { get; private set; }
+
+    public decimal? LastEntryPrice { get; private set; }
+
+    public DateTimeOffset? LastEntryAt { get; private set; }
+
+    public decimal? AveragePrice => Quantity > 0m ? Invested / Quantity : null;
+
+    public void Enter(decimal quantity, decimal price, decimal fee, FeeAsset asset, DateTimeOffset at)
+    {
+        decimal quoteFee = asset == FeeAsset.Quote ? fee : 0m;
+        Cash -= quantity * price + quoteFee;
+        Collateral += quantity * price;
+        Quantity += asset == FeeAsset.Base ? quantity - fee : quantity;
+        Invested += quantity * price + (direction == StrategyDirection.Long ? quoteFee : -quoteFee);
+        LastEntryPrice = price;
+        LastEntryAt = at;
+    }
+
+    /// <summary>
+    ///     An exit never takes more than the position holds: two exit orders may both fill when one of them was being
+    ///     cancelled, and the part beyond the position is not a position of this strategy.
+    /// </summary>
+    public void Exit(decimal quantity, decimal price, decimal fee)
+    {
+        decimal exited = Math.Min(quantity, Quantity);
+
+        if (exited == 0m)
+        {
+            return;
+        }
+
+        decimal returned = Collateral * exited / Quantity;
+        Cash += direction == StrategyDirection.Long ? exited * price - fee : returned + (returned - exited * price) - fee;
+        Collateral -= returned;
+        Invested -= AveragePrice!.Value * exited;
+        Quantity -= exited;
+
+        if (Quantity < minQuantity || Quantity == 0m)
+        {
+            Dust += Quantity;
+            DustCollateral += Collateral;
+            Quantity = 0m;
+            Invested = 0m;
+            Collateral = 0m;
+            LastEntryPrice = null;
+            LastEntryAt = null;
+        }
+    }
+}
