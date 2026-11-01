@@ -4,7 +4,12 @@ using System.Text.Json;
 
 using Microsoft.Extensions.DependencyInjection;
 
+using NSubstitute;
+
+using ProfitFox.Application.Backtests;
+using ProfitFox.Application.Backtests.Commands.RunBacktest;
 using ProfitFox.Application.Ports.Backtests;
+using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.Entities.Backtests;
 using ProfitFox.Domain.Entities.Backtests.Enums;
 using ProfitFox.Domain.Entities.Bots;
@@ -139,5 +144,38 @@ public sealed class BacktestScenario(ProfitFoxFactory factory, HttpClient client
     public Task<Backtest> WaitUntilFinishedAsync(Guid id)
     {
         return WaitForAsync(id, BacktestStatus.Succeeded, BacktestStatus.Failed, BacktestStatus.Cancelled);
+    }
+
+    /// <summary>A handler with one thread over the services of the scope and the given repository and clock.</summary>
+    public static RunBacktestCommandHandler Handler(AsyncServiceScope scope, IBacktestRepository backtests, TimeProvider time)
+    {
+        return new RunBacktestCommandHandler(
+            backtests,
+            scope.ServiceProvider.GetRequiredService<IStrategyLibraryRepository>(),
+            scope.ServiceProvider.GetRequiredService<ICandleRepository>(),
+            scope.ServiceProvider.GetRequiredService<ICandleImportJobRepository>(),
+            scope.ServiceProvider.GetRequiredService<ICandleImportQueue>(),
+            new BacktestSettings { MaxParallelism = 1 },
+            time);
+    }
+
+    /// <summary>Passes every call to the stored repository and tells of each saved progress and whether it was written.</summary>
+    public static IBacktestRepository Spy(IBacktestRepository stored, Action<Backtest, bool> saved)
+    {
+        IBacktestRepository spy = Substitute.For<IBacktestRepository>();
+        spy.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(call => stored.GetAsync(call.Arg<Guid>(), call.Arg<CancellationToken>()));
+        spy.UpdateAsync(Arg.Any<Backtest>(), Arg.Any<BacktestStatus>(), Arg.Any<CancellationToken>())
+            .Returns(call => stored.UpdateAsync(call.Arg<Backtest>()!, call.Arg<BacktestStatus>(), call.Arg<CancellationToken>()));
+        spy.GetCalculatedCombinationsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(call => stored.GetCalculatedCombinationsAsync(call.Arg<Guid>(), call.Arg<CancellationToken>()));
+        spy.SaveProgressAsync(Arg.Any<Backtest>(), Arg.Any<IReadOnlyList<BacktestResult>>(), Arg.Any<CancellationToken>()).Returns(async call =>
+        {
+            bool written = await stored.SaveProgressAsync(call.Arg<Backtest>()!, call.Arg<IReadOnlyList<BacktestResult>>()!, call.Arg<CancellationToken>());
+            saved(call.Arg<Backtest>()!, written);
+
+            return written;
+        });
+
+        return spy;
     }
 }

@@ -1,11 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 
-using NSubstitute;
-
-using ProfitFox.Application.Backtests;
 using ProfitFox.Application.Backtests.Commands.RunBacktest;
-using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.Entities.Backtests;
 using ProfitFox.Domain.Entities.Backtests.Enums;
 using ProfitFox.Domain.Repositories;
@@ -35,16 +31,10 @@ public class BacktestParallelTests
         Backtest backtest = await scenario.CreateAsync(From, From.AddHours(Closes.Length), Grid());
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         IBacktestRepository stored = scope.ServiceProvider.GetRequiredService<IBacktestRepository>();
-        IBacktestRepository spy = Spy(stored, out List<Backtest> progress);
+        var progress = new List<Backtest>();
+        IBacktestRepository spy = BacktestScenario.Spy(stored, (saved, _) => progress.Add(saved));
         var time = new FakeTimeProvider(factory.Time.GetUtcNow()) { AutoAdvanceAmount = TimeSpan.FromSeconds(1) };
-        var handler = new RunBacktestCommandHandler(
-            spy,
-            scope.ServiceProvider.GetRequiredService<IStrategyLibraryRepository>(),
-            scope.ServiceProvider.GetRequiredService<ICandleRepository>(),
-            scope.ServiceProvider.GetRequiredService<ICandleImportJobRepository>(),
-            scope.ServiceProvider.GetRequiredService<ICandleImportQueue>(),
-            new BacktestSettings { MaxParallelism = 1 },
-            time);
+        RunBacktestCommandHandler handler = BacktestScenario.Handler(scope, spy, time);
 
         await handler.Handle(new RunBacktestCommand(backtest.Id), CancellationToken.None);
 
@@ -91,26 +81,5 @@ public class BacktestParallelTests
             ["priceDropForBuy"] = ParameterSpec.Between(new NumberValue(0.01m), new NumberValue(0.03m), new NumberValue(0.01m)),
             ["priceRiseForSell"] = ParameterSpec.Between(new NumberValue(0.005m), new NumberValue(0.02m), new NumberValue(0.005m))
         };
-    }
-
-    /// <summary>Passes every call to the stored repository and keeps each backtest whose progress it saves.</summary>
-    private static IBacktestRepository Spy(IBacktestRepository stored, out List<Backtest> progress)
-    {
-        var saved = new List<Backtest>();
-        progress = saved;
-        IBacktestRepository spy = Substitute.For<IBacktestRepository>();
-        spy.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(call => stored.GetAsync(call.Arg<Guid>(), call.Arg<CancellationToken>()));
-        spy.UpdateAsync(Arg.Any<Backtest>(), Arg.Any<BacktestStatus>(), Arg.Any<CancellationToken>())
-            .Returns(call => stored.UpdateAsync(call.Arg<Backtest>(), call.Arg<BacktestStatus>(), call.Arg<CancellationToken>()));
-        spy.GetCalculatedCombinationsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(call => stored.GetCalculatedCombinationsAsync(call.Arg<Guid>(), call.Arg<CancellationToken>()));
-        spy.SaveProgressAsync(Arg.Any<Backtest>(), Arg.Any<IReadOnlyList<BacktestResult>>(), Arg.Any<CancellationToken>()).Returns(call =>
-        {
-            saved.Add(call.Arg<Backtest>());
-
-            return stored.SaveProgressAsync(call.Arg<Backtest>(), call.Arg<IReadOnlyList<BacktestResult>>(), call.Arg<CancellationToken>());
-        });
-
-        return spy;
     }
 }

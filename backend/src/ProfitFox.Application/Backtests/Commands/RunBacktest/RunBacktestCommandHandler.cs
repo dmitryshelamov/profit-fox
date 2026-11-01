@@ -27,24 +27,27 @@ public sealed class RunBacktestCommandHandler(
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan SaveInterval = TimeSpan.FromSeconds(1);
 
-    /// <summary>Takes the backtest through its statuses from where it is: loading candles, then the combinations without a result.</summary>
+    /// <summary>
+    ///     Takes the backtest through its statuses from where it is: loading candles, then the combinations without a result. Every write
+    ///     expects the status the run left; when a cancel or the deletion of the bot changed it meanwhile, the run stops. One mechanism
+    ///     for any process, with no registry of runs in memory.
+    /// </summary>
     public async Task Handle(RunBacktestCommand request, CancellationToken cancellationToken)
     {
-        Backtest backtest = (await backtests.GetAsync(request.BacktestId, cancellationToken))!;
+        Backtest? backtest = await backtests.GetAsync(request.BacktestId, cancellationToken);
 
-        if (backtest.Status == BacktestStatus.Pending)
+        if (backtest?.Status == BacktestStatus.Pending)
         {
             Backtest loading = backtest.StartLoading(time.GetUtcNow());
-            await backtests.UpdateAsync(loading, BacktestStatus.Pending, cancellationToken);
-            backtest = loading;
+            backtest = await backtests.UpdateAsync(loading, BacktestStatus.Pending, cancellationToken) ? loading : null;
         }
 
-        if (backtest.Status == BacktestStatus.LoadingCandles)
+        if (backtest?.Status == BacktestStatus.LoadingCandles)
         {
             backtest = await LoadCandlesAsync(backtest, cancellationToken);
         }
 
-        if (backtest.Status == BacktestStatus.Running)
+        if (backtest?.Status == BacktestStatus.Running)
         {
             await RunAsync(backtest, cancellationToken);
         }
@@ -55,7 +58,8 @@ public sealed class RunBacktestCommandHandler(
     ///     waits for the same job; the backtest polls the job and counts the stored candles meanwhile. Candles still missing after a
     ///     successful import are not on the exchange: the backtest runs on what is stored and reports the gaps.
     /// </summary>
-    private async Task<Backtest> LoadCandlesAsync(Backtest backtest, CancellationToken cancellationToken)
+    /// <returns>The backtest as it went on, or <c>null</c> when it stopped being loaded meanwhile.</returns>
+    private async Task<Backtest?> LoadCandlesAsync(Backtest backtest, CancellationToken cancellationToken)
     {
         long expected = backtest.Interval.CandleCount(backtest.From, backtest.To);
         IReadOnlyList<DateTimeOffset> stored = await StoredAsync(backtest, cancellationToken);
@@ -98,15 +102,18 @@ public sealed class RunBacktestCommandHandler(
                 break;
             }
 
-            await backtests.UpdateAsync(backtest, BacktestStatus.LoadingCandles, cancellationToken);
+            if (!await backtests.UpdateAsync(backtest, BacktestStatus.LoadingCandles, cancellationToken))
+            {
+                return null;
+            }
+
             await Task.Delay(PollInterval, time, cancellationToken);
         }
 
         IReadOnlyList<CandleGap> gaps = [.. backtest.Interval.MissingRanges(stored, backtest.From, backtest.To).Select(gap => new CandleGap(gap.From, gap.To))];
         Backtest running = backtest.Loaded(stored.Count, expected).StartRunning(stored.Count > 0 ? stored[0] : null, gaps);
-        await backtests.UpdateAsync(running, BacktestStatus.LoadingCandles, cancellationToken);
 
-        return running;
+        return await backtests.UpdateAsync(running, BacktestStatus.LoadingCandles, cancellationToken) ? running : null;
     }
 
     private Task<IReadOnlyList<DateTimeOffset>> StoredAsync(Backtest backtest, CancellationToken cancellationToken)
@@ -126,7 +133,8 @@ public sealed class RunBacktestCommandHandler(
         ParameterGrid grid = backtest.Grid();
         var results = Channel.CreateUnbounded<BacktestResult>();
         IEnumerable<long> pending = Enumerable.Range(0, (int)backtest.TotalCombinations).Select(combination => (long)combination).Where(combination => !calculated.Contains(combination));
-        var options = new ParallelOptions { MaxDegreeOfParallelism = settings.Threads, CancellationToken = cancellationToken };
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var options = new ParallelOptions { MaxDegreeOfParallelism = settings.Threads, CancellationToken = stop.Token };
 
         var computing = Task.Run(
             async () =>
@@ -158,9 +166,12 @@ public sealed class RunBacktestCommandHandler(
         {
             batch.Add(result);
 
-            if (time.GetUtcNow() - lastSave >= SaveInterval)
+            if (time.GetUtcNow() - lastSave >= SaveInterval && !await SaveAsync())
             {
-                await SaveAsync();
+                await stop.CancelAsync();
+                await computing.ContinueWith(_ => { }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+
+                return;
             }
         }
 
@@ -171,17 +182,20 @@ public sealed class RunBacktestCommandHandler(
             await SaveAsync();
         }
 
+        // A cancel that came after the last save finds the backtest Cancelled, and the run does not overwrite it.
         await backtests.UpdateAsync(backtest.Succeed(time.GetUtcNow()), BacktestStatus.Running, cancellationToken);
 
-        async Task SaveAsync()
+        async Task<bool> SaveAsync()
         {
             calculatedInRun += batch.Count;
             DateTimeOffset now = time.GetUtcNow();
             decimal seconds = (decimal)(now - runStarted).TotalSeconds;
             backtest = backtest.Progress(calculated.Count + calculatedInRun, seconds > 0m ? calculatedInRun * period.Count / seconds : null);
-            await backtests.SaveProgressAsync(backtest, [.. batch], CancellationToken.None);
+            bool saved = await backtests.SaveProgressAsync(backtest, [.. batch], CancellationToken.None);
             batch.Clear();
             lastSave = now;
+
+            return saved;
         }
     }
 }

@@ -8,6 +8,7 @@ namespace ProfitFox.Domain.Services.Backtests;
 /// <summary>Collects the metrics of one combination while it runs, with no list of events kept.</summary>
 public sealed class MetricsObserver(decimal balance) : IReplayObserver
 {
+    private readonly decimal _balance = balance;
     private RunState? _last;
     private decimal _lastClose;
     private decimal _endEquity = balance;
@@ -29,7 +30,7 @@ public sealed class MetricsObserver(decimal balance) : IReplayObserver
 
     public void Filled(ReplayFill fill, RunState state)
     {
-        RunState before = _last ?? state with { Cash = balance, Quantity = 0m, Dust = 0m };
+        RunState before = _last ?? state with { Cash = _balance, Quantity = 0m, Dust = 0m };
         _fills++;
         _fees += fill.FeeAsset == FeeAsset.Quote ? fill.Fee : fill.Fee * fill.Price;
 
@@ -67,12 +68,12 @@ public sealed class MetricsObserver(decimal balance) : IReplayObserver
 
     public BacktestMetrics Metrics()
     {
-        decimal pnl = _endEquity - balance;
+        decimal pnl = _endEquity - _balance;
         decimal unrealized = _last is { Quantity: > 0m } state ? state.Unrealized(_lastClose) : 0m;
-        decimal returnPercent = pnl / balance * 100m;
+        decimal returnPercent = pnl / _balance * 100m;
 
         return new BacktestMetrics(
-            balance,
+            _balance,
             _endEquity,
             pnl,
             pnl - unrealized,
@@ -85,7 +86,7 @@ public sealed class MetricsObserver(decimal balance) : IReplayObserver
             _fills,
             _fees,
             _maxPositionCost,
-            _maxPositionCost / balance * 100m,
+            _maxPositionCost / _balance * 100m,
             _maxCapitalUsed,
             Share(_inPosition),
             Share(_underWater),
