@@ -79,6 +79,9 @@ public sealed class StrategyRun
         return [.. _commands];
     }
 
+    /// <summary>How many times an order node did not place an entry because free money or the exchange minimum did not allow it.</summary>
+    public long SkippedOrders { get; private set; }
+
     /// <summary>Value of an output after the last event; <c>null</c> when it has no value.</summary>
     public NodeValue? ValueOf(string path, string pin)
     {
@@ -289,6 +292,18 @@ public sealed class StrategyRun
         return _account.Quantity > 0m ? (price, Math.Min(quantity, _account.Quantity)) : null;
     }
 
+    /// <summary>
+    ///     Value of an entry with its fee in the quote asset. A market entry by quantity is valued at the last close; before the first
+    ///     bar there is no price to value it at, so it costs nothing.
+    /// </summary>
+    private decimal EntryCost(OrderType type, decimal? price, decimal? quantity, decimal? amount)
+    {
+        decimal rate = _fees.AssetOf(_entrySide) == FeeAsset.Base ? 0m : type == OrderType.Limit ? _fees.LimitRate : _fees.MarketRate;
+        decimal value = amount ?? quantity!.Value * (price ?? _lastBar?.Close ?? 0m);
+
+        return value * (1m + rate);
+    }
+
     /// <summary>The cash less what standing limit entries reserve: their value and the fee they pay in the quote asset.</summary>
     private decimal Free()
     {
@@ -310,8 +325,16 @@ public sealed class StrategyRun
         Place(index, node, side, OrderType.Market, null, quantity, amount);
     }
 
+    /// <summary>An entry that free money does not pay for is skipped as if its condition were false, and counted.</summary>
     private void Place(int index, RunNode node, OrderSide side, OrderType type, decimal? price, decimal? quantity, decimal? amount)
     {
+        if (side == _entrySide && EntryCost(type, price, quantity, amount) > Free())
+        {
+            SkippedOrders++;
+
+            return;
+        }
+
         string id = $"o-{++_lastOrderNumber}";
         _orders[id] = new ActiveOrder(index, side, price, type == OrderType.Limit ? quantity : null);
         _commands.Add(new PlaceOrder(id, node.Path, side, type, price, quantity, amount));
