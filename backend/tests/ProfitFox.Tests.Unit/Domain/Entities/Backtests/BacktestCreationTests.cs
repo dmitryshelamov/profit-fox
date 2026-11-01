@@ -48,6 +48,15 @@ public class BacktestCreationTests
             .ShouldBe([new BacktestError(BacktestField.To, null, "to must not be in the future.")]);
     }
 
+    [Test]
+    public void Period_that_ends_inside_a_candle_not_closed_yet_is_rejected()
+    {
+        // Now is 12:30: the hourly candle of 12:00 closes at 13:00.
+        Errors(() => Backtest.Create(Id, Ema(MarketCategory.Spot), Version(), Now.AddHours(-2.5), Now.AddMinutes(-15), NoSpecs, NoOverrides, Policy, Rules, Now))
+            .ShouldBe([new BacktestError(BacktestField.To, null, "to must not be later than the end of the last closed candle.")]);
+        Backtest.Create(Id, Ema(MarketCategory.Spot), Version(), Now.AddHours(-2.5), Now.AddMinutes(-30), NoSpecs, NoOverrides, Policy, Rules, Now).To.ShouldBe(Now.AddMinutes(-30));
+    }
+
     // Scenario "Некорректный период".
     [TestCase(0)]
     [TestCase(1)]
@@ -151,6 +160,14 @@ public class BacktestCreationTests
             new BacktestError(BacktestField.LimitFee, null, "Fee rate must not be negative."),
             new BacktestError(BacktestField.MarketFee, null, "Fee rate must not be negative.")
         ]);
+    }
+
+    [TestCase(-0.01)]
+    [TestCase(100)]
+    public void Slippage_below_zero_or_of_100_percent_and_more_is_rejected(decimal slippage)
+    {
+        Errors(() => Backtest.Create(Id, Ema(MarketCategory.Spot), Version(), From, To, NoSpecs, new SimulationRequest(null, null, null, slippage, null), Policy, Rules, Now))
+            .ShouldBe([new BacktestError(BacktestField.Slippage, null, "Slippage must be from 0 up to 100 percent.")]);
     }
 
     private static readonly Guid BotId = Guid.Parse("00000000-0000-0000-0000-0000000000b1");

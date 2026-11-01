@@ -9,5 +9,6 @@ public enum BacktestField
     Combinations,
     Balance,
     LimitFee,
-    MarketFee
+    MarketFee,
+    Slippage
 }

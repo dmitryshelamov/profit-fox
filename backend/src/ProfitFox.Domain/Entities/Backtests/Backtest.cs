@@ -79,6 +79,11 @@ public sealed record Backtest(
         {
             errors.Add(new BacktestError(BacktestField.To, null, "to must not be in the future."));
         }
+        else if (bot.Interval.LastCandleEnd(from, to) > now)
+        {
+            // Only closed candles are stored: one still open would be missing from the run and turn up in later details.
+            errors.Add(new BacktestError(BacktestField.To, null, "to must not be later than the end of the last closed candle."));
+        }
 
         int parameterErrors = errors.Count;
         errors.AddRange(ParameterErrors(definition.Parameters, specs));
@@ -119,6 +124,12 @@ public sealed record Backtest(
         if (settings.MarketFeePercent < 0m)
         {
             errors.Add(new BacktestError(BacktestField.MarketFee, null, "Fee rate must not be negative."));
+        }
+
+        // A better fill than the open, or a buy at no price, is no slippage.
+        if (settings.SlippagePercent is < 0m or >= 100m)
+        {
+            errors.Add(new BacktestError(BacktestField.Slippage, null, "Slippage must be from 0 up to 100 percent."));
         }
 
         if (errors.Count > 0)

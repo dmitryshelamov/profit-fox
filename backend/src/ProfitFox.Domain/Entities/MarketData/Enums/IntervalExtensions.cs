@@ -23,6 +23,19 @@ public static class IntervalExtensions
         };
     }
 
+    /// <summary>End of the last candle that opens in <c>[from, to)</c>, the first one at <paramref name="from" />; <paramref name="to" /> may lie inside it.</summary>
+    public static DateTimeOffset LastCandleEnd(this Interval interval, DateTimeOffset from, DateTimeOffset to)
+    {
+        DateTimeOffset end = interval.CandleEnd(from);
+
+        while (end < to)
+        {
+            end = interval.CandleEnd(end);
+        }
+
+        return end;
+    }
+
     /// <summary>How many candles open in <c>[from, to)</c>, the first one at <paramref name="from" />.</summary>
     public static long CandleCount(this Interval interval, DateTimeOffset from, DateTimeOffset to)
     {

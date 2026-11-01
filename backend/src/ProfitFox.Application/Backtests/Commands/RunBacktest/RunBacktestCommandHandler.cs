@@ -175,7 +175,17 @@ public sealed class RunBacktestCommandHandler(
             }
         }
 
-        await computing;
+        try
+        {
+            await computing;
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            // The results saved so far stay; the backtest ends instead of waiting in Running for a restart that fails it again.
+            await backtests.UpdateAsync(backtest.Fail($"A combination failed: {exception.Message}", time.GetUtcNow()), BacktestStatus.Running, CancellationToken.None);
+
+            return;
+        }
 
         if (batch.Count > 0)
         {

@@ -2,10 +2,15 @@ using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
 
+using Microsoft.Extensions.DependencyInjection;
+
 using ProfitFox.Domain.Entities.Backtests;
 using ProfitFox.Domain.Entities.Backtests.Enums;
 using ProfitFox.Domain.Entities.MarketData;
+using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.Backtests;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Tests.Integration.Infrastructure;
 
@@ -98,6 +103,24 @@ public class BacktestRunTests
         backtest.Status.ShouldBe(BacktestStatus.Succeeded);
         backtest.ActualStart.ShouldBeNull();
         (await _scenario.ResultsAsync(backtest)).ShouldHaveSingleItem().Metrics.EndEquity.ShouldBe(1000m);
+    }
+
+    [Test]
+    public async Task Backtest_whose_combination_fails_ends_failed_with_the_reason()
+    {
+        // The entry of the cross up fills at the open of the seventh candle, and a buy by amount at no price cannot be sized.
+        Candle[] candles = [.. BacktestScenario.Candles(From, 10m, 9m, 8m, 7m, 8m, 10m, 12m, 11m, 9m, 7m)];
+        candles[6] = candles[6] with { Open = new Price(0m) };
+        await using (AsyncServiceScope scope = _factory.Services.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<ICandleRepository>().UpsertAsync(BacktestScenario.BtcLinear, Interval.OneHour, candles, CancellationToken.None);
+        }
+
+        Backtest queued = await _scenario.QueueAsync(From, From.AddHours(10));
+        Backtest backtest = await _scenario.WaitUntilFinishedAsync(queued.Id);
+
+        backtest.Status.ShouldBe(BacktestStatus.Failed);
+        backtest.Error.ShouldStartWith("A combination failed: ");
     }
 
     private static IEnumerable<string[]> Rows(IEnumerable<Candle> candles)

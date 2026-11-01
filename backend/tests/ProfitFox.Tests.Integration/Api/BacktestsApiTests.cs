@@ -99,6 +99,7 @@ public class BacktestsApiTests
     [TestCase("simulation", """{ "balance": 0 }""", "simulation.balance")]
     [TestCase("simulation", """{ "limitFeePercent": -1 }""", "simulation.limitFeePercent")]
     [TestCase("simulation", """{ "marketFeePercent": -1 }""", "simulation.marketFeePercent")]
+    [TestCase("simulation", """{ "slippagePercent": 100 }""", "simulation.slippagePercent")]
     public async Task Invalid_backtest_is_rejected_with_an_error_by_field(string field, string value, string error)
     {
         JsonObject body = Body();

@@ -107,7 +107,8 @@ public static class BacktestRequests
             BacktestField.Combinations => "parameters",
             BacktestField.Balance => "simulation.balance",
             BacktestField.LimitFee => "simulation.limitFeePercent",
-            _ => "simulation.marketFeePercent"
+            BacktestField.MarketFee => "simulation.marketFeePercent",
+            _ => "simulation.slippagePercent"
         };
     }
 }
