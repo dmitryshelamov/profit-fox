@@ -46,10 +46,10 @@ internal static class BacktestDbConverter
             CalculatedCombinations = backtest.CalculatedCombinations,
             TotalCombinations = backtest.TotalCombinations,
             Speed = backtest.Speed,
-            StalledRestarts = backtest.StalledRestarts,
             CreatedAt = backtest.CreatedAt,
             StartedAt = backtest.StartedAt,
-            FinishedAt = backtest.FinishedAt
+            FinishedAt = backtest.FinishedAt,
+            EngineVersion = backtest.EngineVersion
         };
     }
 
@@ -84,9 +84,9 @@ internal static class BacktestDbConverter
             backtest.CalculatedCombinations,
             backtest.TotalCombinations,
             backtest.Speed,
-            backtest.StalledRestarts,
             backtest.CreatedAt,
             backtest.StartedAt,
-            backtest.FinishedAt);
+            backtest.FinishedAt,
+            backtest.EngineVersion);
     }
 }

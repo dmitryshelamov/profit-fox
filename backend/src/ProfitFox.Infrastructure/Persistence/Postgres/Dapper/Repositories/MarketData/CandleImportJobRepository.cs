@@ -32,11 +32,29 @@ internal sealed class CandleImportJobRepository(NpgsqlDataSource dataSource) : I
         await connection.ExecuteAsync(CandleImportJobRepositoryQueries.Update(CandleImportJobDbConverter.FromDomain(job), cancellationToken));
     }
 
-    public async Task<IReadOnlyList<CandleImportJob>> GetUnfinishedAsync(CancellationToken cancellationToken)
+    public async Task<CandleImportJob?> ClaimNextAsync(Guid owner, DateTimeOffset now, DateTimeOffset leasedUntil, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        IEnumerable<CandleImportJobDb> jobs = await connection.QueryAsync<CandleImportJobDb>(CandleImportJobRepositoryQueries.GetUnfinished(cancellationToken));
+        await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await connection.ExecuteAsync(CandleImportJobRepositoryQueries.LockClaims(transaction, cancellationToken));
+        CandleImportJobDb? job = await connection.QuerySingleOrDefaultAsync<CandleImportJobDb>(
+            CandleImportJobRepositoryQueries.ClaimNext(owner, now, leasedUntil, transaction, cancellationToken));
+        await transaction.CommitAsync(cancellationToken);
 
-        return jobs.Select(CandleImportJobDbConverter.ToDomain).ToList();
+        return job is null ? null : CandleImportJobDbConverter.ToDomain(job);
+    }
+
+    public async Task<bool> RenewLeaseAsync(Guid id, Guid owner, DateTimeOffset leasedUntil, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        return await connection.ExecuteAsync(CandleImportJobRepositoryQueries.RenewLease(id, owner, leasedUntil, cancellationToken)) > 0;
+    }
+
+    public async Task<bool> UpdateLeasedAsync(CandleImportJob job, Guid owner, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        return await connection.ExecuteAsync(CandleImportJobRepositoryQueries.UpdateLeased(CandleImportJobDbConverter.FromDomain(job), owner, cancellationToken)) > 0;
     }
 }

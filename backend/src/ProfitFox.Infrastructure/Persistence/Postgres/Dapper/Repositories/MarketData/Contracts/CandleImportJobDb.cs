@@ -26,5 +26,5 @@ internal sealed class CandleImportJobDb
 
     public DateTimeOffset? FinishedAt { get; init; }
 
-    public int StalledRestarts { get; init; }
+    public int LostLeases { get; init; }
 }

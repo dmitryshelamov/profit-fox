@@ -4,14 +4,18 @@ using ProfitFox.Application.Strategies;
 using ProfitFox.Domain.Entities.Backtests;
 using ProfitFox.Domain.Entities.Backtests.Enums;
 using ProfitFox.Domain.Entities.Bots;
+using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies;
+using ProfitFox.Domain.Services.Backtests;
 using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Backtests;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Strategies;
 using ProfitFox.Tests.Shared.Fixtures.Strategies;
+using ProfitFox.Tests.Shared.Generators.Domain.Entity.MarketData;
 
 using Shouldly;
 
@@ -58,7 +62,6 @@ public class BacktestRepositoryTests
             ExpectedCandles = 7,
             CalculatedCombinations = 2,
             Speed = 1234.5678901234567890m,
-            StalledRestarts = 1,
             StartedAt = Created.AddMinutes(1),
             FinishedAt = Created.AddMinutes(2)
         };
@@ -75,12 +78,13 @@ public class BacktestRepositoryTests
     [Test]
     public async Task Result_is_read_back_without_losing_precision_and_a_second_insert_adds_nothing()
     {
-        Backtest backtest = Backtest(Created) with { Status = BacktestStatus.Running };
-        await _repository.AddAsync(backtest, CancellationToken.None);
+        Backtest backtest = await RunningAsync(Backtest(Created));
+        var owner = Guid.NewGuid();
+        BacktestChunk chunk = (await ClaimAsync(backtest, owner, Created))!;
         BacktestResult result = Result(backtest.Id, 3);
 
-        (await _repository.SaveProgressAsync(backtest.Progress(1, null), [result], CancellationToken.None)).ShouldBeTrue();
-        (await _repository.SaveProgressAsync(backtest.Progress(1, null), [result with { Metrics = result.Metrics with { Pnl = 0m } }], CancellationToken.None)).ShouldBeTrue();
+        (await SaveAsync(chunk, owner, Created, result)).ShouldBeTrue();
+        (await SaveAsync(chunk, owner, Created, result with { Metrics = result.Metrics with { Pnl = 0m } })).ShouldBeTrue();
 
         BacktestResult loaded = (await _repository.GetResultAsync(backtest.Id, 3, CancellationToken.None))!;
         loaded.ShouldBe(result with { ParameterValues = loaded.ParameterValues });
@@ -92,11 +96,12 @@ public class BacktestRepositoryTests
     [Test]
     public async Task Progress_of_a_backtest_that_is_no_longer_running_writes_nothing()
     {
-        Backtest backtest = Backtest(Created) with { Status = BacktestStatus.Cancelled };
-        await _repository.AddAsync(backtest, CancellationToken.None);
+        Backtest backtest = await RunningAsync(Backtest(Created));
+        var owner = Guid.NewGuid();
+        BacktestChunk chunk = (await ClaimAsync(backtest, owner, Created))!;
+        await _repository.UpdateStatusAsync(backtest.Id, [BacktestStatus.Running], BacktestStatus.Cancelled, Created, CancellationToken.None);
 
-        (await _repository.SaveProgressAsync(backtest with { Status = BacktestStatus.Running, CalculatedCombinations = 1 }, [Result(backtest.Id, 0)], CancellationToken.None))
-            .ShouldBeFalse();
+        (await SaveAsync(chunk, owner, Created, Result(backtest.Id, 0))).ShouldBeFalse();
 
         (await _repository.GetCalculatedCombinationsAsync(backtest.Id, CancellationToken.None)).ShouldBeEmpty();
         (await _repository.GetAsync(backtest.Id, CancellationToken.None))!.Status.ShouldBe(BacktestStatus.Cancelled);
@@ -161,18 +166,18 @@ public class BacktestRepositoryTests
         await _repository.AddAsync(finished, CancellationToken.None);
 
         (await _repository.GetByBotAsync(_bot.Id, CancellationToken.None)).Select(backtest => backtest.Id).ShouldBe([finished.Id, newer.Id, older.Id]);
-        (await _repository.GetUnfinishedAsync(CancellationToken.None)).Select(backtest => backtest.Id).ShouldBe([older.Id, newer.Id]);
+        (await _repository.GetUnfinishedAsync(EngineVersion.Current, CancellationToken.None)).Select(backtest => backtest.Id).ShouldBe([older.Id, newer.Id]);
     }
 
     // Scenario "Бот с бэктестами".
     [Test]
     public async Task Deleted_bot_takes_its_backtests_and_their_results_along()
     {
-        Backtest first = Backtest(Created) with { Status = BacktestStatus.Running };
+        Backtest first = await RunningAsync(Backtest(Created));
         Backtest second = Backtest(Created.AddHours(1));
-        await _repository.AddAsync(first, CancellationToken.None);
         await _repository.AddAsync(second, CancellationToken.None);
-        await _repository.SaveProgressAsync(first.Progress(1, null), [Result(first.Id, 0)], CancellationToken.None);
+        var owner = Guid.NewGuid();
+        await SaveAsync((await ClaimAsync(first, owner, Created))!, owner, Created, Result(first.Id, 0));
         StrategyLibrary library = await _library.LoadAsync(CancellationToken.None);
         library.RemoveBot(_bot.Id);
 
@@ -181,6 +186,216 @@ public class BacktestRepositoryTests
         (await _repository.GetAsync(first.Id, CancellationToken.None)).ShouldBeNull();
         (await _repository.GetAsync(second.Id, CancellationToken.None)).ShouldBeNull();
         (await _repository.GetResultAsync(first.Id, 0, CancellationToken.None)).ShouldBeNull();
+    }
+
+    // Scenario "Занятый кусок".
+    [Test]
+    public async Task Each_worker_claims_its_own_chunk_in_order_and_none_is_left_for_a_third()
+    {
+        Backtest backtest = await RunningAsync(Backtest(Created), chunkSize: 2);
+
+        BacktestChunk? first = await ClaimAsync(backtest, Guid.NewGuid(), Created);
+        BacktestChunk? second = await ClaimAsync(backtest, Guid.NewGuid(), Created);
+        BacktestChunk? third = await ClaimAsync(backtest, Guid.NewGuid(), Created);
+
+        (first, second, third).ShouldBe((new BacktestChunk(backtest.Id, 0, 0, 2), new BacktestChunk(backtest.Id, 1, 2, 1), null));
+    }
+
+    [Test]
+    public async Task Workers_claiming_at_once_never_take_the_same_chunk()
+    {
+        Backtest backtest = await RunningAsync(Backtest(Created), chunkSize: 1);
+
+        BacktestChunk?[] claimed = await Task.WhenAll(Enumerable.Range(0, 6).Select(_ => ClaimAsync(backtest, Guid.NewGuid(), Created)));
+
+        claimed.OfType<BacktestChunk>().Select(chunk => chunk.Number).Order().ShouldBe([0, 1, 2]);
+    }
+
+    // Scenario "Аренда перехвачена".
+    [Test]
+    public async Task Chunk_whose_lease_expired_is_taken_over_with_a_lost_lease_and_its_first_owner_saves_nothing()
+    {
+        Backtest backtest = await RunningAsync(Backtest(Created));
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+        await ClaimAsync(backtest, a, Created);
+
+        BacktestChunk taken = (await ClaimAsync(backtest, b, Created.AddSeconds(30)))!;
+
+        taken.ShouldBe(new BacktestChunk(backtest.Id, 0, 0, 3, LostLeases: 1));
+        (await SaveAsync(taken, a, Created.AddSeconds(31), Result(backtest.Id, 0))).ShouldBeFalse();
+        (await _repository.RenewChunkLeaseAsync(taken, a, Created.AddSeconds(90), CancellationToken.None)).ShouldBeFalse();
+        (await _repository.CompleteChunkAsync(taken, a, CancellationToken.None)).ShouldBeFalse();
+        (await _repository.GetCalculatedCombinationsAsync(backtest.Id, CancellationToken.None)).ShouldBeEmpty();
+        (await SaveAsync(taken, b, Created.AddSeconds(31), Result(backtest.Id, 0))).ShouldBeTrue();
+    }
+
+    [Test]
+    public async Task Renewed_lease_keeps_the_chunk_from_other_workers()
+    {
+        Backtest backtest = await RunningAsync(Backtest(Created));
+        var a = Guid.NewGuid();
+        BacktestChunk chunk = (await ClaimAsync(backtest, a, Created))!;
+
+        (await _repository.RenewChunkLeaseAsync(chunk, a, Created.AddSeconds(60), CancellationToken.None)).ShouldBeTrue();
+
+        (await ClaimAsync(backtest, Guid.NewGuid(), Created.AddSeconds(31))).ShouldBeNull();
+    }
+
+    // Scenarios "Кусок без продвижения" and "Worker упал во время прогона": a saved result starts the count over.
+    [Test]
+    public async Task Saved_results_end_the_lost_leases_of_a_chunk()
+    {
+        Backtest backtest = await RunningAsync(Backtest(Created));
+        await ClaimAsync(backtest, Guid.NewGuid(), Created);
+        var b = Guid.NewGuid();
+        BacktestChunk taken = (await ClaimAsync(backtest, b, Created.AddSeconds(30)))!;
+        var c = Guid.NewGuid();
+        BacktestChunk again = (await ClaimAsync(backtest, c, Created.AddSeconds(60)))!;
+        await SaveAsync(again, c, Created.AddSeconds(61), Result(backtest.Id, 0));
+
+        BacktestChunk afterSave = (await ClaimAsync(backtest, Guid.NewGuid(), Created.AddSeconds(91)))!;
+
+        (taken.LostLeases, again.LostLeases, afterSave.LostLeases).ShouldBe((1, 2, 1));
+    }
+
+    // A chunk reads only the results of its own combinations, not those of the whole grid.
+    [Test]
+    public async Task Calculated_combinations_of_a_chunk_are_those_inside_its_range()
+    {
+        Backtest backtest = await RunningAsync(Backtest(Created) with { TotalCombinations = 8 }, chunkSize: 8);
+        var owner = Guid.NewGuid();
+        BacktestChunk chunk = (await ClaimAsync(backtest, owner, Created))!;
+        await SaveAsync(chunk, owner, Created, Result(backtest.Id, 1), Result(backtest.Id, 2), Result(backtest.Id, 4), Result(backtest.Id, 5));
+
+        IReadOnlyList<long> inRange = await _repository.GetCalculatedCombinationsAsync(new BacktestChunk(backtest.Id, 0, 2, 3), CancellationToken.None);
+
+        inRange.ShouldBe([2L, 4L]);
+    }
+
+    // Scenario "Прогресс двух Worker'ов".
+    [Test]
+    public async Task Backtest_counts_the_results_of_every_chunk_and_sums_the_speed_of_chunks_with_a_live_lease()
+    {
+        Backtest backtest = await RunningAsync(Backtest(Created) with { TotalCombinations = 8 }, chunkSize: 4);
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+        BacktestChunk first = (await ClaimAsync(backtest, a, Created))!;
+        BacktestChunk second = (await ClaimAsync(backtest, b, Created))!;
+
+        await SaveAsync(first, a, Created.AddSeconds(1), 100m, Result(backtest.Id, 0), Result(backtest.Id, 1), Result(backtest.Id, 2));
+        await SaveAsync(second, b, Created.AddSeconds(2), 200m, Result(backtest.Id, 4), Result(backtest.Id, 5), Result(backtest.Id, 6), Result(backtest.Id, 7));
+
+        Backtest stored = (await _repository.GetAsync(backtest.Id, CancellationToken.None))!;
+        (stored.CalculatedCombinations, stored.Speed).ShouldBe((7L, 300m));
+    }
+
+    // Requirement "Куски бэктеста": the backtest succeeds when its last chunk is done, and only once.
+    [Test]
+    public async Task Backtest_succeeds_once_its_last_chunk_is_done()
+    {
+        Backtest backtest = await RunningAsync(Backtest(Created), chunkSize: 2);
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+        BacktestChunk first = (await ClaimAsync(backtest, a, Created))!;
+        BacktestChunk second = (await ClaimAsync(backtest, b, Created))!;
+        await _repository.CompleteChunkAsync(first, a, CancellationToken.None);
+
+        bool early = await _repository.SucceedIfCompleteAsync(backtest.Id, Created.AddMinutes(1), CancellationToken.None);
+        await _repository.CompleteChunkAsync(second, b, CancellationToken.None);
+        bool[] last = await Task.WhenAll(
+            _repository.SucceedIfCompleteAsync(backtest.Id, Created.AddMinutes(2), CancellationToken.None),
+            _repository.SucceedIfCompleteAsync(backtest.Id, Created.AddMinutes(2), CancellationToken.None));
+
+        early.ShouldBeFalse();
+        last.Count(succeeded => succeeded).ShouldBe(1);
+        Backtest stored = (await _repository.GetAsync(backtest.Id, CancellationToken.None))!;
+        (stored.Status, stored.FinishedAt).ShouldBe((BacktestStatus.Succeeded, Created.AddMinutes(2)));
+        (await ClaimAsync(backtest, Guid.NewGuid(), Created.AddHours(1))).ShouldBeNull();
+    }
+
+    // Requirement "Отмена бэктеста" with several Workers.
+    [Test]
+    public async Task Cancelled_backtest_takes_no_more_results_from_any_worker()
+    {
+        Backtest backtest = await RunningAsync(Backtest(Created), chunkSize: 2);
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+        BacktestChunk first = (await ClaimAsync(backtest, a, Created))!;
+        BacktestChunk second = (await ClaimAsync(backtest, b, Created))!;
+
+        await _repository.UpdateStatusAsync(backtest.Id, [BacktestStatus.Running], BacktestStatus.Cancelled, Created, CancellationToken.None);
+
+        (await SaveAsync(first, a, Created, Result(backtest.Id, 0))).ShouldBeFalse();
+        (await SaveAsync(second, b, Created, Result(backtest.Id, 2))).ShouldBeFalse();
+        (await _repository.GetCalculatedCombinationsAsync(backtest.Id, CancellationToken.None)).ShouldBeEmpty();
+    }
+
+    // Two Workers that take the same step of a loading backtest at once end the same way: one import job, one set of chunks.
+    [Test]
+    public async Task Import_and_chunks_of_a_loading_backtest_are_added_once()
+    {
+        Backtest loading = Backtest(Created).StartLoading(Created);
+        await _repository.AddAsync(loading, CancellationToken.None);
+        CandleImportJob job = CandleImportJobGenerator.Generate(CandleImportStatus.Pending);
+        CandleImportJob other = CandleImportJobGenerator.Generate(CandleImportStatus.Pending);
+        var jobs = new CandleImportJobRepository(_dataSource);
+
+        bool[] imports = await Task.WhenAll(
+            _repository.StartImportAsync(loading.WaitForImport(job.Id), job, CancellationToken.None),
+            _repository.StartImportAsync(loading.WaitForImport(other.Id), other, CancellationToken.None));
+        Backtest waiting = (await _repository.GetAsync(loading.Id, CancellationToken.None))!;
+        Backtest running = waiting.StartRunning(null, []);
+        bool[] runs = await Task.WhenAll(
+            _repository.StartRunningAsync(running, BacktestChunk.Split(running.Id, 3, 1), CancellationToken.None),
+            _repository.StartRunningAsync(running, BacktestChunk.Split(running.Id, 3, 1), CancellationToken.None));
+
+        imports.Count(added => added).ShouldBe(1);
+        (await jobs.GetAsync(waiting.ImportJobId!.Value, CancellationToken.None)).ShouldNotBeNull();
+        (await jobs.GetAsync(waiting.ImportJobId == job.Id ? other.Id : job.Id, CancellationToken.None)).ShouldBeNull();
+        runs.Count(started => started).ShouldBe(1);
+        (await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => ClaimAsync(running, Guid.NewGuid(), Created)))).Count(chunk => chunk is not null).ShouldBe(3);
+    }
+
+    [Test]
+    public async Task Fail_ends_the_backtest_with_a_reason_only_from_an_expected_status()
+    {
+        Backtest backtest = Backtest(Created);
+        await _repository.AddAsync(backtest, CancellationToken.None);
+
+        bool fromRunning = await _repository.FailAsync(backtest.Id, [BacktestStatus.Running], "no", Created, CancellationToken.None);
+        bool fromPending = await _repository.FailAsync(backtest.Id, [BacktestStatus.Pending], "Bybit is unavailable.", Created.AddMinutes(1), CancellationToken.None);
+
+        (fromRunning, fromPending).ShouldBe((false, true));
+        Backtest failed = (await _repository.GetAsync(backtest.Id, CancellationToken.None))!;
+        (failed.Status, failed.Error, failed.FinishedAt).ShouldBe((BacktestStatus.Failed, "Bybit is unavailable.", Created.AddMinutes(1)));
+    }
+
+    /// <summary>Adds the backtest loading and moves it to running with chunks of <paramref name="chunkSize" /> combinations.</summary>
+    private async Task<Backtest> RunningAsync(Backtest backtest, int chunkSize = 100)
+    {
+        Backtest loading = backtest.StartLoading(backtest.CreatedAt);
+        await _repository.AddAsync(loading, CancellationToken.None);
+        Backtest running = loading.StartRunning(null, []);
+        await _repository.StartRunningAsync(running, BacktestChunk.Split(running.Id, running.TotalCombinations, chunkSize), CancellationToken.None);
+
+        return running;
+    }
+
+    /// <summary>Claims a chunk under a lease of thirty seconds from <paramref name="now" />.</summary>
+    private Task<BacktestChunk?> ClaimAsync(Backtest backtest, Guid owner, DateTimeOffset now)
+    {
+        return _repository.ClaimChunkAsync(backtest.Id, owner, now, now.AddSeconds(30), CancellationToken.None);
+    }
+
+    private Task<bool> SaveAsync(BacktestChunk chunk, Guid owner, DateTimeOffset now, params BacktestResult[] results)
+    {
+        return SaveAsync(chunk, owner, now, null, results);
+    }
+
+    private Task<bool> SaveAsync(BacktestChunk chunk, Guid owner, DateTimeOffset now, decimal? speed, params BacktestResult[] results)
+    {
+        return _repository.SaveChunkProgressAsync(chunk, owner, results, speed, now, CancellationToken.None);
     }
 
     private Backtest Backtest(DateTimeOffset createdAt)
@@ -213,10 +428,10 @@ public class BacktestRepositoryTests
             0,
             3,
             null,
-            0,
             createdAt,
             null,
-            null);
+            null,
+            EngineVersion.Current);
     }
 
     private static BacktestResult Result(Guid backtestId, long combination)

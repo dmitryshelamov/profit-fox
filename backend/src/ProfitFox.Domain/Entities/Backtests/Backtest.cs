@@ -13,7 +13,8 @@ namespace ProfitFox.Domain.Entities.Backtests;
 /// <summary>
 ///     A run of a bot on stored candles of <c>[From, To)</c> at the strategy version it was created on, one result per combination of
 ///     parameter values. It goes <c>Pending</c> → <c>LoadingCandles</c> → <c>Running</c> and ends <c>Succeeded</c>, <c>Failed</c> or
-///     <c>Cancelled</c>. <see cref="StalledRestarts" /> counts restarts in a row that stopped it running before it saved a result.
+///     <c>Cancelled</c>. Running, it is computed in chunks (<see cref="BacktestChunk" />) by any number of Workers of its
+///     <see cref="EngineVersion" />.
 /// </summary>
 public sealed record Backtest(
     Guid Id,
@@ -38,22 +39,22 @@ public sealed record Backtest(
     long CalculatedCombinations,
     long TotalCombinations,
     decimal? Speed,
-    int StalledRestarts,
     DateTimeOffset CreatedAt,
     DateTimeOffset? StartedAt,
-    DateTimeOffset? FinishedAt)
+    DateTimeOffset? FinishedAt,
+    int EngineVersion)
 {
-    public const string InterruptedByRestart = "Interrupted by service restart.";
+    public const string InterruptedChunk = "A chunk was interrupted three times in a row without a result.";
+
+    public const string EngineVersionChanged = "The engine version changed; run the backtest again.";
 
     /// <summary>Statuses of a backtest that has not ended yet: it can still be cancelled.</summary>
     public static readonly IReadOnlyList<BacktestStatus> Unfinished = [BacktestStatus.Pending, BacktestStatus.LoadingCandles, BacktestStatus.Running];
 
-    // A backtest that keeps stopping the service before it saves anything would otherwise restart it forever.
-    private const int MaxStalledRestarts = 3;
-
     /// <summary>
-    ///     A pending backtest of <paramref name="bot" /> at <paramref name="latest" />, the latest version of its strategy. A parameter the
-    ///     backtest does not give takes the value of the bot, otherwise the default of that version.
+    ///     A pending backtest of <paramref name="bot" /> at <paramref name="latest" />, the latest version of its strategy, computed at
+    ///     <paramref name="engineVersion" />. A parameter the backtest does not give takes the value of the bot, otherwise the default of
+    ///     that version.
     /// </summary>
     /// <exception cref="BacktestValidationException">The period, a parameter, the size of the grid or a simulation setting is invalid.</exception>
     public static Backtest Create(
@@ -66,6 +67,7 @@ public sealed record Backtest(
         SimulationRequest simulation,
         BacktestPolicy policy,
         InstrumentRules rules,
+        int engineVersion,
         DateTimeOffset now)
     {
         var errors = new List<BacktestError>();
@@ -160,10 +162,10 @@ public sealed record Backtest(
             CalculatedCombinations: 0,
             combinations!.Value,
             Speed: null,
-            StalledRestarts: 0,
             now,
             StartedAt: null,
-            FinishedAt: null);
+            FinishedAt: null,
+            engineVersion);
     }
 
     /// <summary>Whether the bot no longer trades what the backtest ran: a newer strategy version, another instrument or interval.</summary>
@@ -213,23 +215,6 @@ public sealed record Backtest(
         return this with { Status = BacktestStatus.Running, ActualStart = actualStart, Gaps = gaps };
     }
 
-    /// <param name="calculated"></param>
-    /// <param name="speed">Candles a second; <c>null</c> before any time has passed.</param>
-    public Backtest Progress(long calculated, decimal? speed)
-    {
-        return this with { CalculatedCombinations = calculated, Speed = speed, StalledRestarts = 0 };
-    }
-
-    public Backtest Succeed(DateTimeOffset now)
-    {
-        return this with { Status = BacktestStatus.Succeeded, FinishedAt = now };
-    }
-
-    public Backtest Fail(string reason, DateTimeOffset now)
-    {
-        return this with { Status = BacktestStatus.Failed, Error = reason, FinishedAt = now };
-    }
-
     /// <summary>A value is checked as a value of a bot, a range by its own rules; every spec must name a parameter of the strategy.</summary>
     private static IEnumerable<BacktestError> ParameterErrors(IReadOnlyList<StrategyParameter> parameters, IReadOnlyDictionary<string, ParameterSpec> specs)
     {
@@ -249,13 +234,5 @@ public sealed record Backtest(
         {
             yield return new BacktestError(BacktestField.Parameter, unknown, "No such parameter.");
         }
-    }
-
-    /// <summary>A running backtest the previous process left counts one more stalled restart; the third one fails it.</summary>
-    public Backtest Restarted(DateTimeOffset now)
-    {
-        Backtest restarted = this with { StalledRestarts = StalledRestarts + 1 };
-
-        return restarted.StalledRestarts == MaxStalledRestarts ? restarted.Fail(InterruptedByRestart, now) : restarted;
     }
 }

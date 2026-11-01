@@ -2,7 +2,6 @@ using NSubstitute;
 
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.MarketData.Commands.RetryCandleImport;
-using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
@@ -17,20 +16,18 @@ public class RetryCandleImportTests
     private static readonly DateTimeOffset Started = DateTimeOffset.Parse("2024-03-10T12:00:00Z");
 
     private ICandleImportJobRepository _jobs = null!;
-    private ICandleImportQueue _queue = null!;
     private RetryCandleImportCommandHandler _handler = null!;
 
     [SetUp]
     public void SetUp()
     {
         _jobs = Substitute.For<ICandleImportJobRepository>();
-        _queue = Substitute.For<ICandleImportQueue>();
-        _handler = new RetryCandleImportCommandHandler(_jobs, _queue);
+        _handler = new RetryCandleImportCommandHandler(_jobs);
     }
 
     // Scenarios "Повтор упавшей задачи" and "Ручной повтор сбрасывает отсчёт прерываний".
     [Test]
-    public async Task Failed_job_is_pending_again_and_queued()
+    public async Task Failed_job_is_pending_again()
     {
         CandleImportJob failed = Stored(
             CandleImportJobGenerator.Generate(CandleImportStatus.Failed) with
@@ -39,16 +36,15 @@ public class RetryCandleImportTests
                 Error = "Bybit request failed after 5 retries: HTTP 503",
                 StartedAt = Started,
                 FinishedAt = Started.AddMinutes(5),
-                StalledRestarts = 2
+                LostLeases = 2
             });
 
         await RetryAsync(failed.Id);
 
         await _jobs.Received(1)
             .UpdateAsync(
-                failed with { Status = CandleImportStatus.Pending, Error = null, FinishedAt = null, StalledRestarts = 0 },
+                failed with { Status = CandleImportStatus.Pending, Error = null, FinishedAt = null, LostLeases = 0 },
                 Arg.Any<CancellationToken>());
-        await _queue.Received(1).EnqueueAsync(failed.Id, Arg.Any<CancellationToken>());
     }
 
     // Scenario "Повтор незавершённой или успешной задачи".
@@ -62,7 +58,6 @@ public class RetryCandleImportTests
         await Should.ThrowAsync<ConflictException>(() => RetryAsync(job.Id));
 
         await _jobs.DidNotReceive().UpdateAsync(Arg.Any<CandleImportJob>(), Arg.Any<CancellationToken>());
-        await _queue.DidNotReceive().EnqueueAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     // Scenario "Повтор неизвестной задачи".
@@ -70,8 +65,6 @@ public class RetryCandleImportTests
     public async Task Unknown_job_is_not_found()
     {
         await Should.ThrowAsync<NotFoundException>(() => RetryAsync(Guid.NewGuid()));
-
-        await _queue.DidNotReceive().EnqueueAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     private CandleImportJob Stored(CandleImportJob job)

@@ -24,6 +24,7 @@ public class BacktestCreationTests
     private static readonly DateTimeOffset To = DateTimeOffset.Parse("2024-02-01T00:00:00Z");
     private static readonly InstrumentRules Rules = new InstrumentRules(0.01m, 0.001m, 0.001m, 1m);
     private static readonly Guid Id = Guid.Parse("00000000-0000-0000-0000-0000000000ba");
+    private const int Engine = 7;
 
     private static readonly BacktestPolicy Policy = new BacktestPolicy(
         10000,
@@ -38,13 +39,14 @@ public class BacktestCreationTests
         (backtest.Id, backtest.BotId, backtest.StrategyId, backtest.StrategyVersion).ShouldBe((Id, BotId, StrategyId, 3));
         (backtest.Status, backtest.From, backtest.To, backtest.CreatedAt, backtest.TotalCombinations).ShouldBe((BacktestStatus.Pending, From, To, Now, 1L));
         (backtest.Instrument, backtest.Interval, backtest.Rules, backtest.SearchMode).ShouldBe((new Instrument(MarketCategory.Spot, "BTCUSDT"), Interval.OneHour, Rules, SearchMode.Grid));
+        backtest.EngineVersion.ShouldBe(Engine);
     }
 
     // Scenario "Период в будущем".
     [Test]
     public void Period_that_ends_in_the_future_is_rejected()
     {
-        Errors(() => Backtest.Create(Id, Ema(MarketCategory.Spot), Version(), From, Now.AddSeconds(1), NoSpecs, NoOverrides, Policy, Rules, Now))
+        Errors(() => Backtest.Create(Id, Ema(MarketCategory.Spot), Version(), From, Now.AddSeconds(1), NoSpecs, NoOverrides, Policy, Rules, Engine, Now))
             .ShouldBe([new BacktestError(BacktestField.To, null, "to must not be in the future.")]);
     }
 
@@ -52,9 +54,9 @@ public class BacktestCreationTests
     public void Period_that_ends_inside_a_candle_not_closed_yet_is_rejected()
     {
         // Now is 12:30: the hourly candle of 12:00 closes at 13:00.
-        Errors(() => Backtest.Create(Id, Ema(MarketCategory.Spot), Version(), Now.AddHours(-2.5), Now.AddMinutes(-15), NoSpecs, NoOverrides, Policy, Rules, Now))
+        Errors(() => Backtest.Create(Id, Ema(MarketCategory.Spot), Version(), Now.AddHours(-2.5), Now.AddMinutes(-15), NoSpecs, NoOverrides, Policy, Rules, Engine, Now))
             .ShouldBe([new BacktestError(BacktestField.To, null, "to must not be later than the end of the last closed candle.")]);
-        Backtest.Create(Id, Ema(MarketCategory.Spot), Version(), Now.AddHours(-2.5), Now.AddMinutes(-30), NoSpecs, NoOverrides, Policy, Rules, Now).To.ShouldBe(Now.AddMinutes(-30));
+        Backtest.Create(Id, Ema(MarketCategory.Spot), Version(), Now.AddHours(-2.5), Now.AddMinutes(-30), NoSpecs, NoOverrides, Policy, Rules, Engine, Now).To.ShouldBe(Now.AddMinutes(-30));
     }
 
     // Scenario "Некорректный период".
@@ -62,7 +64,7 @@ public class BacktestCreationTests
     [TestCase(1)]
     public void Period_that_does_not_start_before_it_ends_is_rejected(int days)
     {
-        Errors(() => Backtest.Create(Id, Ema(MarketCategory.Spot), Version(), To.AddDays(days), To, NoSpecs, NoOverrides, Policy, Rules, Now))
+        Errors(() => Backtest.Create(Id, Ema(MarketCategory.Spot), Version(), To.AddDays(days), To, NoSpecs, NoOverrides, Policy, Rules, Engine, Now))
             .ShouldBe([new BacktestError(BacktestField.Period, null, "from must be earlier than to.")]);
     }
 
@@ -145,7 +147,7 @@ public class BacktestCreationTests
     {
         Bot bot = Ema(MarketCategory.Spot);
 
-        var backtest = Backtest.Create(Id, bot, Version(), From, To, NoSpecs, new SimulationRequest(500m, 0m, 0.2m, 0.05m, LimitFillMode.Touch), Policy, Rules, Now);
+        var backtest = Backtest.Create(Id, bot, Version(), From, To, NoSpecs, new SimulationRequest(500m, 0m, 0.2m, 0.05m, LimitFillMode.Touch), Policy, Rules, Engine, Now);
 
         backtest.Simulation.ShouldBe(new SimulationSettings(500m, 0m, 0.2m, 0.05m, LimitFillMode.Touch));
         bot.Balance.ShouldBe(1000m);
@@ -154,7 +156,7 @@ public class BacktestCreationTests
     [Test]
     public void Negative_rates_and_a_balance_that_is_not_positive_are_rejected()
     {
-        Errors(() => Backtest.Create(Id, Ema(MarketCategory.Spot), Version(), From, To, NoSpecs, new SimulationRequest(0m, -0.1m, -0.1m, null, null), Policy, Rules, Now)).ShouldBe(
+        Errors(() => Backtest.Create(Id, Ema(MarketCategory.Spot), Version(), From, To, NoSpecs, new SimulationRequest(0m, -0.1m, -0.1m, null, null), Policy, Rules, Engine, Now)).ShouldBe(
         [
             new BacktestError(BacktestField.Balance, null, "Balance must be greater than zero."),
             new BacktestError(BacktestField.LimitFee, null, "Fee rate must not be negative."),
@@ -166,7 +168,7 @@ public class BacktestCreationTests
     [TestCase(100)]
     public void Slippage_below_zero_or_of_100_percent_and_more_is_rejected(decimal slippage)
     {
-        Errors(() => Backtest.Create(Id, Ema(MarketCategory.Spot), Version(), From, To, NoSpecs, new SimulationRequest(null, null, null, slippage, null), Policy, Rules, Now))
+        Errors(() => Backtest.Create(Id, Ema(MarketCategory.Spot), Version(), From, To, NoSpecs, new SimulationRequest(null, null, null, slippage, null), Policy, Rules, Engine, Now))
             .ShouldBe([new BacktestError(BacktestField.Slippage, null, "Slippage must be from 0 up to 100 percent.")]);
     }
 
@@ -177,7 +179,7 @@ public class BacktestCreationTests
 
     private static Backtest Create(Bot bot, IReadOnlyDictionary<string, ParameterSpec> specs, StrategyDefinition? definition = null)
     {
-        return Backtest.Create(Id, bot, Version(definition), From, To, specs, NoOverrides, Policy, Rules, Now);
+        return Backtest.Create(Id, bot, Version(definition), From, To, specs, NoOverrides, Policy, Rules, Engine, Now);
     }
 
     private static IReadOnlyList<BacktestError> Errors(Func<Backtest> create)

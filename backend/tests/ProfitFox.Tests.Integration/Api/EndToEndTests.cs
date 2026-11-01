@@ -41,7 +41,7 @@ public class EndToEndTests
                 interval = "60",
                 from = "2024-03-10T09:00:00Z"
             })).Content.ReadFromJsonAsync<JsonElement>();
-        JsonElement job = await WaitUntilFinishedAsync(client, created.GetProperty("id").GetGuid());
+        JsonElement job = await WaitUntilFinishedAsync(factory, client, created.GetProperty("id").GetGuid());
 
         job.GetProperty("status").GetString().ShouldBe("Succeeded");
         job.GetProperty("importedCandles").GetInt64().ShouldBe(3);
@@ -65,13 +65,13 @@ public class EndToEndTests
         factory.Bybit.Instruments.Add(("linear", "BTCUSDT"));
         factory.Bybit.Klines.AddRange(Hours("2024-03-10T09:00:00Z", "2024-03-10T10:00:00Z", "2024-03-10T11:00:00Z"));
         using HttpClient client = factory.CreateClient();
-        await ImportAsync(client, "2024-03-10T09:00:00Z", "2024-03-10T12:00:00Z");
+        await ImportAsync(factory, client, "2024-03-10T09:00:00Z", "2024-03-10T12:00:00Z");
         List<JsonElement>? loaded = await GetCandlesAsync(client);
         factory.Bybit.KlineRequests.Clear();
         factory.Bybit.Klines.Clear();
         factory.Bybit.Klines.AddRange(Hours("2024-03-10T09:00:00Z", "2024-03-10T10:00:00Z", "2024-03-10T11:00:00Z").Select(row => row.Select(value => value == "1" ? "9" : value).ToArray()));
 
-        JsonElement job = await ImportAsync(client, "2024-03-10T09:00:00Z", "2024-03-10T12:00:00Z");
+        JsonElement job = await ImportAsync(factory, client, "2024-03-10T09:00:00Z", "2024-03-10T12:00:00Z");
 
         job.GetProperty("status").GetString().ShouldBe("Succeeded");
         job.GetProperty("importedCandles").GetInt64().ShouldBe(0);
@@ -87,10 +87,10 @@ public class EndToEndTests
         factory.Bybit.Instruments.Add(("linear", "BTCUSDT"));
         factory.Bybit.Klines.AddRange(Hours("2024-03-10T09:00:00Z", "2024-03-10T10:00:00Z", "2024-03-10T11:00:00Z"));
         using HttpClient client = factory.CreateClient();
-        await ImportAsync(client, "2024-03-10T10:00:00Z", "2024-03-10T11:00:00Z");
+        await ImportAsync(factory, client, "2024-03-10T10:00:00Z", "2024-03-10T11:00:00Z");
         factory.Bybit.KlineRequests.Clear();
 
-        JsonElement job = await ImportAsync(client, "2024-03-10T09:00:00Z", "2024-03-10T12:00:00Z");
+        JsonElement job = await ImportAsync(factory, client, "2024-03-10T09:00:00Z", "2024-03-10T12:00:00Z");
 
         job.GetProperty("status").GetString().ShouldBe("Succeeded");
         job.GetProperty("importedCandles").GetInt64().ShouldBe(2);
@@ -128,20 +128,20 @@ public class EndToEndTests
         }
 
         (await client.PostAsync($"/api/market-data/candle-imports/{failed.Id}/retry", null)).EnsureSuccessStatusCode();
-        JsonElement job = await WaitUntilFinishedAsync(client, failed.Id);
+        JsonElement job = await WaitUntilFinishedAsync(factory, client, failed.Id);
 
         job.GetProperty("status").GetString().ShouldBe("Succeeded");
         job.GetProperty("importedCandles").GetInt64().ShouldBe(3);
         factory.Bybit.KlineRequests.ShouldBe([(At("2024-03-10T09:00:00Z"), At("2024-03-10T10:59:59.999Z"))]);
     }
 
-    private static async Task<JsonElement> ImportAsync(HttpClient client, string from, string to)
+    private static async Task<JsonElement> ImportAsync(ProfitFoxFactory factory, HttpClient client, string from, string to)
     {
         JsonElement created = await (await client.PostAsJsonAsync(
             "/api/market-data/candle-imports",
             new { category = "linear", symbol = "BTCUSDT", interval = "60", from, to })).Content.ReadFromJsonAsync<JsonElement>();
 
-        return await WaitUntilFinishedAsync(client, created.GetProperty("id").GetGuid());
+        return await WaitUntilFinishedAsync(factory, client, created.GetProperty("id").GetGuid());
     }
 
     private static Task<List<JsonElement>?> GetCandlesAsync(HttpClient client)
@@ -169,7 +169,8 @@ public class EndToEndTests
         ];
     }
 
-    private static async Task<JsonElement> WaitUntilFinishedAsync(HttpClient client, Guid id)
+    /// <summary>Waits for the job to finish, moving the app's clock a second at a time.</summary>
+    private static async Task<JsonElement> WaitUntilFinishedAsync(ProfitFoxFactory factory, HttpClient client, Guid id)
     {
         var waiting = Stopwatch.StartNew();
 
@@ -182,6 +183,8 @@ public class EndToEndTests
                 return job;
             }
 
+            // The Worker waits its poll interval on the app's clock.
+            factory.Time.Advance(TimeSpan.FromSeconds(1));
             await Task.Delay(50);
         }
     }

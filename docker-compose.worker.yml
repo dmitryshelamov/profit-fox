@@ -1,0 +1,19 @@
+# A Worker on any machine of the local network. It takes candle imports and backtest work from the database the API migrated.
+# Settings come from worker.env next to this file (never committed):
+#   ConnectionStrings__MarketData=Host=<database host>;Port=5432;Database=profitfox;Username=<user>;Password=<password>
+#   Backtests__MaxParallelism=<threads of this machine>   (optional; every core but one by default)
+# Start or update: docker compose -f docker-compose.worker.yml up -d --build
+# A project of its own, so it never touches the containers of docker-compose.yml on the same machine.
+name: profit-fox-worker
+
+services:
+  worker:
+    build:
+      context: backend
+      dockerfile: src/ProfitFox.Worker/Dockerfile
+    restart: unless-stopped
+    environment:
+      DOTNET_ENVIRONMENT: Production
+    env_file:
+      - path: worker.env
+        required: true

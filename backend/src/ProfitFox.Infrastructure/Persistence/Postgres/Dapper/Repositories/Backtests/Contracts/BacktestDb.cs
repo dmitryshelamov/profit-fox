@@ -64,11 +64,11 @@ internal sealed class BacktestDb
 
     public decimal? Speed { get; init; }
 
-    public int StalledRestarts { get; init; }
-
     public DateTimeOffset CreatedAt { get; init; }
 
     public DateTimeOffset? StartedAt { get; init; }
 
     public DateTimeOffset? FinishedAt { get; init; }
+
+    public int EngineVersion { get; init; }
 }
