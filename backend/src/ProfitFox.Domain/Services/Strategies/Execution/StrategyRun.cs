@@ -44,26 +44,11 @@ public sealed class StrategyRun
     /// <exception cref="GraphValidationException">A parameter value is unknown or breaks the parameter's limits.</exception>
     public static StrategyRun Start(StrategyDefinition definition, CompositeCatalog catalog, IReadOnlyDictionary<string, NodeValue> parameterValues)
     {
-        var errors = new List<GraphError>();
-
-        foreach (StrategyParameter parameter in definition.Parameters)
-        {
-            string? reason = parameterValues.TryGetValue(parameter.Name, out NodeValue? value) ? parameter.Reject(value) : null;
-
-            if (reason is not null)
-            {
-                errors.Add(new GraphError("", parameter.Name, $"Value {reason}"));
-            }
-        }
-
-        foreach (string unknown in parameterValues.Keys.Where(name => definition.Parameters.All(parameter => parameter.Name != name)))
-        {
-            errors.Add(new GraphError("", unknown, "No such parameter."));
-        }
+        IReadOnlyList<(string Parameter, string Reason)> errors = ParameterValues.Check(definition.Parameters, parameterValues);
 
         if (errors.Count > 0)
         {
-            throw new GraphValidationException(errors);
+            throw new GraphValidationException([.. errors.Select(error => new GraphError("", error.Parameter, error.Reason))]);
         }
 
         var parameters = definition.Parameters.ToDictionary(

@@ -1,8 +1,13 @@
 using ProfitFox.Domain.Entities.Base;
+using ProfitFox.Domain.Entities.Bots;
+using ProfitFox.Domain.Entities.Bots.Enums;
+using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Services.Strategies.BuiltIns;
 using ProfitFox.Domain.Services.Strategies.Validation;
+using ProfitFox.Domain.ValueObjects.Bots;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
 
 namespace ProfitFox.Domain.Entities.Strategies;
@@ -21,17 +26,21 @@ public sealed class StrategyLibrary : AggregateRoot
     private readonly List<Guid> _removedStrategies = [];
     private readonly Dictionary<Guid, CompositeNode> _savedComposites = [];
     private readonly List<Guid> _removedComposites = [];
+    private readonly List<Bot> _bots;
 
     /// <param name="revision"></param>
     /// <param name="strategies"></param>
     /// <param name="composites"></param>
     /// <param name="latestVersions">The latest version of each strategy.</param>
+    /// <param name="bots"></param>
     public StrategyLibrary(
         long revision,
         IEnumerable<Strategy> strategies,
         IEnumerable<CompositeNode> composites,
-        IEnumerable<StrategyVersion>? latestVersions = null)
+        IEnumerable<StrategyVersion>? latestVersions = null,
+        IEnumerable<Bot>? bots = null)
     {
+        _bots = [.. bots ?? []];
         Revision = revision;
         _strategies = [.. strategies];
         _composites = [.. composites];
@@ -44,6 +53,8 @@ public sealed class StrategyLibrary : AggregateRoot
     public IReadOnlyList<Strategy> Strategies => _strategies;
 
     public IReadOnlyList<CompositeNode> Composites => _composites;
+
+    public IReadOnlyList<Bot> Bots => _bots;
 
     /// <summary>Everything the operations on this instance changed; new versions come oldest first.</summary>
     public StrategyLibraryChange Change => new StrategyLibraryChange(
@@ -100,6 +111,63 @@ public sealed class StrategyLibrary : AggregateRoot
         _removedStrategies.Add(id);
 
         return true;
+    }
+
+    /// <exception cref="BotValidationException">The bot is invalid against its strategy.</exception>
+    public Bot AddBot(
+        Guid id,
+        string name,
+        Guid strategyId,
+        IReadOnlyDictionary<string, NodeValue> parameterValues,
+        Instrument instrument,
+        Interval interval,
+        decimal balance,
+        DateTimeOffset now)
+    {
+        var bot = new Bot(id, name, strategyId, parameterValues, instrument, interval, balance, now, now);
+        ValidateBot(bot);
+        _bots.Add(bot);
+
+        return bot;
+    }
+
+    /// <summary>The strategy of a bot never changes.</summary>
+    /// <returns>The changed bot, or <c>null</c> when there is no such bot.</returns>
+    /// <exception cref="BotValidationException">The change is invalid; the bot stays as it was.</exception>
+    public Bot? UpdateBot(
+        Guid id,
+        string name,
+        IReadOnlyDictionary<string, NodeValue> parameterValues,
+        Instrument instrument,
+        Interval interval,
+        decimal balance,
+        DateTimeOffset now)
+    {
+        int index = _bots.FindIndex(bot => bot.Id == id);
+
+        if (index < 0)
+        {
+            return null;
+        }
+
+        Bot changed = _bots[index] with
+        {
+            Name = name,
+            ParameterValues = parameterValues,
+            Instrument = instrument,
+            Interval = interval,
+            Balance = balance,
+            UpdatedAt = now
+        };
+        ValidateBot(changed);
+        _bots[index] = changed;
+
+        return changed;
+    }
+
+    public bool RemoveBot(Guid id)
+    {
+        return _bots.RemoveAll(bot => bot.Id == id) > 0;
     }
 
     /// <summary>Strategies saved before versions existed get version 1 of their current graph.</summary>
@@ -241,6 +309,43 @@ public sealed class StrategyLibrary : AggregateRoot
         }
 
         return found;
+    }
+
+    private void ValidateBot(Bot bot)
+    {
+        IReadOnlyList<BotError> errors = BotErrors(bot, _strategies.FirstOrDefault(strategy => strategy.Id == bot.StrategyId)?.Definition);
+
+        if (errors.Count > 0)
+        {
+            throw new BotValidationException(errors);
+        }
+    }
+
+    /// <summary>The same checks of parameter values as the start of a run, plus the market category against the direction.</summary>
+    private static IReadOnlyList<BotError> BotErrors(Bot bot, StrategyDefinition? definition)
+    {
+        var errors = new List<BotError>();
+
+        if (definition is null)
+        {
+            errors.Add(new BotError(BotField.Strategy, null, "No such strategy."));
+        }
+        else
+        {
+            errors.AddRange(ParameterValues.Check(definition.Parameters, bot.ParameterValues).Select(error => new BotError(BotField.Parameter, error.Parameter, error.Reason)));
+
+            if (!definition.Direction.SupportedCategories().Contains(bot.Instrument.Category))
+            {
+                errors.Add(new BotError(BotField.Category, null, "The strategy direction does not support this market category."));
+            }
+        }
+
+        if (bot.Balance <= 0m)
+        {
+            errors.Add(new BotError(BotField.Balance, null, "Balance must be greater than zero."));
+        }
+
+        return errors;
     }
 
     /// <summary>A snapshot that differs from the latest version becomes the next version.</summary>
