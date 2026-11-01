@@ -1,15 +1,17 @@
 import '@xyflow/react/dist/style.css';
 
 import {
+  applyEdgeChanges,
   applyNodeChanges,
   Background,
   BackgroundVariant,
   type Connection,
+  type EdgeChange,
   type NodeChange,
   ReactFlow,
   type ReactFlowInstance,
 } from '@xyflow/react';
-import { type DragEvent, useEffect, useMemo, useState } from 'react';
+import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import { type GraphFlowEdge, type GraphFlowNode, toFlow } from '../model/flow';
 import type { Issue } from '../model/issues';
@@ -67,7 +69,7 @@ export function GraphCanvas<T extends AnyDef>({
   // Positions while dragging live here; the definition changes once the drag ends.
   useEffect(() => setNodes(flow.nodes), [flow.nodes]);
 
-  const edges = useMemo(
+  const colored = useMemo(
     () =>
       flow.edges.map((edge): GraphFlowEdge => {
         const source = definition.nodes.find((node) => node.id === edge.source);
@@ -83,6 +85,11 @@ export function GraphCanvas<T extends AnyDef>({
       }),
     [flow.edges, definition.nodes, catalog, context],
   );
+  const reconnected = useRef(false);
+  // Selection of wires lives here, like positions of nodes: the definition has no notion of it.
+  const [edges, setEdges] = useState(colored);
+
+  useEffect(() => setEdges(colored), [colored]);
 
   const environment = useMemo(
     (): GraphEnvironment => ({
@@ -141,6 +148,9 @@ export function GraphCanvas<T extends AnyDef>({
           onNodesChange={(changes: NodeChange<GraphFlowNode>[]) =>
             setNodes((current) => applyNodeChanges(changes, current))
           }
+          onEdgesChange={(changes: EdgeChange<GraphFlowEdge>[]) =>
+            setEdges((current) => applyEdgeChanges(changes, current))
+          }
           onNodeDragStop={(_, node) => onChange(moveNode(definition, node.id, node.position))}
           onNodeClick={(_, node) => onSelect(node.id)}
           onPaneClick={() => onSelect(undefined)}
@@ -152,6 +162,36 @@ export function GraphCanvas<T extends AnyDef>({
           onConnect={(connection) => {
             const { from, to } = reference(connection);
             onChange(connect(definition, from, to));
+          }}
+          onConnectEnd={(_, state) => {
+            // A connected input pin dragged onto empty canvas lets its wire go, like the end of the wire itself.
+            if (state.isValid || state.toHandle || state.fromHandle?.type !== 'target') {
+              return;
+            }
+
+            const to = `${state.fromNode?.id}.${state.fromHandle.id}`;
+            const wire = definition.wires?.find((candidate) => candidate.to === to);
+
+            if (wire) {
+              onChange(disconnect(definition, wire.from, wire.to));
+            }
+          }}
+          edgesReconnectable={!readOnly}
+          onReconnectStart={() => {
+            reconnected.current = false;
+          }}
+          onReconnect={(old, connection) => {
+            reconnected.current = true;
+            const before = reference(old);
+            const after = reference(connection);
+            onChange(connect(disconnect(definition, before.from, before.to), after.from, after.to));
+          }}
+          onReconnectEnd={(_, old) => {
+            // A wire end let go over empty canvas takes the wire away, as in Unreal Blueprints.
+            if (!reconnected.current) {
+              const { from, to } = reference(old);
+              onChange(disconnect(definition, from, to));
+            }
           }}
           onNodesDelete={(deleted) =>
             onChange(deleted.reduce((current, node) => removeNode(current, node.id), definition))

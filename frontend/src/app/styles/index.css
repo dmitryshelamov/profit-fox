@@ -31,3 +31,9 @@ html {
 body {
   @apply bg-app text-text antialiased;
 }
+
+/* A selected wire stands out: it is what Delete removes. */
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke-width: 4 !important;
+  filter: drop-shadow(0 0 4px rgb(242 140 40 / 0.8));
+}
