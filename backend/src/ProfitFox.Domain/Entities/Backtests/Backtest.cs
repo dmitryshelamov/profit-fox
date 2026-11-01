@@ -1,8 +1,12 @@
 using ProfitFox.Domain.Entities.Backtests.Enums;
+using ProfitFox.Domain.Entities.Bots;
 using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Domain.Exceptions;
+using ProfitFox.Domain.Services.Backtests;
 using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Domain.ValueObjects.Strategies;
 
 namespace ProfitFox.Domain.Entities.Backtests;
 
@@ -43,6 +47,110 @@ public sealed record Backtest(
 
     // A backtest that keeps stopping the service before it saves anything would otherwise restart it forever.
     private const int MaxStalledRestarts = 3;
+
+    /// <summary>
+    ///     A pending backtest of <paramref name="bot" /> at <paramref name="latest" />, the latest version of its strategy. A parameter the
+    ///     backtest does not give takes the value of the bot, otherwise the default of that version.
+    /// </summary>
+    /// <exception cref="BacktestValidationException">The period, a parameter, the size of the grid or a simulation setting is invalid.</exception>
+    public static Backtest Create(
+        Guid id,
+        Bot bot,
+        StrategyVersion latest,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        IReadOnlyDictionary<string, ParameterSpec> specs,
+        SimulationRequest simulation,
+        BacktestPolicy policy,
+        InstrumentRules rules,
+        DateTimeOffset now)
+    {
+        var errors = new List<BacktestError>();
+        StrategyDefinition definition = latest.Snapshot.Definition;
+
+        if (from >= to)
+        {
+            errors.Add(new BacktestError(BacktestField.Period, null, "from must be earlier than to."));
+        }
+        else if (to > now)
+        {
+            errors.Add(new BacktestError(BacktestField.To, null, "to must not be in the future."));
+        }
+
+        int parameterErrors = errors.Count;
+        errors.AddRange(ParameterErrors(definition.Parameters, specs));
+        var parameters = definition.Parameters.ToDictionary(
+            parameter => parameter.Name,
+            parameter => specs.GetValueOrDefault(parameter.Name) ?? ParameterSpec.Of(bot.ParameterValues.GetValueOrDefault(parameter.Name, parameter.Default)));
+        // A grid of invalid parameters has no meaningful size.
+        long? combinations = errors.Count == parameterErrors ? new ParameterGrid(parameters).Count : 1;
+
+        if (combinations is null || combinations > policy.MaxCombinations)
+        {
+            errors.Add(new BacktestError(
+                BacktestField.Combinations,
+                null,
+                combinations is { } count
+                    ? $"The grid has {count} combinations, more than the limit of {policy.MaxCombinations}."
+                    : $"The grid has more combinations than the limit of {policy.MaxCombinations}."));
+        }
+
+        FeeRates fees = policy.DefaultFees[bot.Instrument.Category];
+        var settings = new SimulationSettings(
+            simulation.Balance ?? bot.Balance,
+            simulation.LimitFeePercent ?? fees.LimitPercent,
+            simulation.MarketFeePercent ?? fees.MarketPercent,
+            simulation.SlippagePercent ?? 0m,
+            simulation.LimitFillMode ?? LimitFillMode.Breakout);
+
+        if (settings.Balance <= 0m)
+        {
+            errors.Add(new BacktestError(BacktestField.Balance, null, "Balance must be greater than zero."));
+        }
+
+        if (settings.LimitFeePercent < 0m)
+        {
+            errors.Add(new BacktestError(BacktestField.LimitFee, null, "Fee rate must not be negative."));
+        }
+
+        if (settings.MarketFeePercent < 0m)
+        {
+            errors.Add(new BacktestError(BacktestField.MarketFee, null, "Fee rate must not be negative."));
+        }
+
+        if (errors.Count > 0)
+        {
+            throw new BacktestValidationException(errors);
+        }
+
+        return new Backtest(
+            id,
+            bot.Id,
+            bot.StrategyId,
+            latest.Number,
+            bot.Instrument,
+            bot.Interval,
+            from,
+            to,
+            parameters,
+            settings,
+            rules,
+            SearchMode.Grid,
+            BacktestStatus.Pending,
+            Error: null,
+            ImportJobId: null,
+            ActualStart: null,
+            Gaps: [],
+            LoadedCandles: 0,
+            ExpectedCandles: 0,
+            CalculatedCombinations: 0,
+            combinations!.Value,
+            Speed: null,
+            StalledRestarts: 0,
+            now,
+            StartedAt: null,
+            FinishedAt: null);
+    }
 
     public Backtest StartLoading(DateTimeOffset now)
     {
@@ -92,6 +200,27 @@ public sealed record Backtest(
         }
 
         return this with { Status = BacktestStatus.Cancelled, FinishedAt = now };
+    }
+
+    /// <summary>A value is checked as a value of a bot, a range by its own rules; every spec must name a parameter of the strategy.</summary>
+    private static IEnumerable<BacktestError> ParameterErrors(IReadOnlyList<StrategyParameter> parameters, IReadOnlyDictionary<string, ParameterSpec> specs)
+    {
+        foreach (StrategyParameter parameter in parameters)
+        {
+            string? reason = !specs.TryGetValue(parameter.Name, out ParameterSpec? spec) ? null
+                : spec.Range is { } range ? range.Reject(parameter)
+                : parameter.Reject(spec.Value!) is { } rejected ? $"Value {rejected}" : null;
+
+            if (reason is not null)
+            {
+                yield return new BacktestError(BacktestField.Parameter, parameter.Name, reason);
+            }
+        }
+
+        foreach (string unknown in specs.Keys.Where(name => parameters.All(parameter => parameter.Name != name)))
+        {
+            yield return new BacktestError(BacktestField.Parameter, unknown, "No such parameter.");
+        }
     }
 
     /// <summary>A running backtest the previous process left counts one more stalled restart; the third one fails it.</summary>
