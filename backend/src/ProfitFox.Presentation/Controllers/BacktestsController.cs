@@ -7,8 +7,10 @@ using ProfitFox.Application.Backtests.Commands.CreateBacktest;
 using ProfitFox.Application.Backtests.Queries.GetBacktest;
 using ProfitFox.Application.Backtests.Queries.GetBacktestResults;
 using ProfitFox.Application.Backtests.Queries.GetBotBacktests;
+using ProfitFox.Application.Backtests.Queries.GetResultDetails;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Domain.Entities.Backtests;
+using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Presentation.Contracts.Backtests;
 using ProfitFox.Presentation.Contracts.Strategies;
 
@@ -74,6 +76,14 @@ public sealed class BacktestsController(ISender sender) : ControllerBase
         {
             return problem;
         }
+    }
+
+    [HttpGet("{id:guid}/results/{combination:long}/details")]
+    public async Task<IActionResult> Details(Guid id, long combination, CancellationToken cancellationToken)
+    {
+        BacktestDetails? details = await sender.Send(new GetResultDetailsQuery(id, combination), cancellationToken);
+
+        return details is null ? NotFound() : Ok(BacktestDetailsResponse.Of(details));
     }
 
     [HttpPost("{id:guid}/cancel")]
