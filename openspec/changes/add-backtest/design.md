@@ -127,11 +127,15 @@ unit-тестами. Конкурирующие сохранения бота и
 
 - `OrderFilled` получает `Fee` и `FeeAsset` (`Quote`, `Base`). Комиссию считает источник событий (симулятор, потом
   биржа), а движок только учитывает.
-- Учёт (спек «Учёт позиции», «Свободные деньги»): вход лонга — `cash −= price × qty`, объём `+= qty − baseFee`,
-  вложено `+= price × qty + quoteFee`; выход лонга — `cash += price × qty − quoteFee`, вложено `−= avg × qty`. Вход шорта
-  — `cash −= price × qty + quoteFee` (обеспечение), вложено `+= price × qty − quoteFee`; выход шорта — обеспечение
-  закрытого объёма (`entryNotional × qty / quantity`) плюс `(avgEntry − price) × qty`, минус комиссия. Стоимость
+- Учёт (спек «Учёт позиции», «Свободные деньги»): вход лонга — `cash −= price × qty + quoteFee`, объём
+  `+= qty − baseFee`, вложено `+= price × qty + quoteFee`; выход лонга — `cash += price × qty − quoteFee`, вложено
+  `−= avg × qty`. Вход шорта — `cash −= price × qty + quoteFee`, обеспечение `collateral += price × qty`, вложено
+  `+= price × qty − quoteFee`; выход шорта — `returned = collateral × qty / quantity`,
+  `cash += returned + (returned − price × qty) − quoteFee`, `collateral −= returned`. Результат шорта считается от средней
+  цены входа без комиссии (`collateral / quantity`): от средней по вложенному комиссия входа учлась бы дважды. Стоимость
   входа шорта для проверки денег — `price × qty` плюс комиссия.
+- Рыночный вход объёмом до первой закрытой свечи не проверяется на деньги и минимальную сумму: оценить его не по чему.
+  Пропуски — один счётчик на прогон.
 - Проверка денег до `Place`: стоимость входа с комиссией в валюте котировки не больше свободных денег; рыночный вход
   объёмом оценивается по close последнего бара. Отказ увеличивает счётчик пропущенных ордеров узла.
 - Округление в одном месте перед `Place`, и `hold-limit` сравнивает округлённые цену и объём с ордером — иначе ордер
@@ -154,6 +158,8 @@ unit-тестами. Конкурирующие сохранения бота и
 - `IReplayObserver` — наблюдатель исполнений и закрытий свечей. `MetricsObserver` копит метрики спека
   `backtest-results`; `DetailsObserver` дополнительно собирает исполнения, сделки и корзины кривой капитала. Результат и
   детали считает один и тот же `BacktestReplay`, поэтому метрики деталей совпадают с сохранёнными, и тест это проверяет.
+- Капитал — все деньги бота, включая резерв стоящих лимитных входов, плюс позиция и пыль по close: иначе он падал бы
+  при каждой постановке лимитки. Просадка — по капиталу на закрытиях свечей, без начального баланса.
 - Всё в `decimal`, время — время свечей; `TimeProvider` используется только для скорости и времени расчёта.
 
 ### 6. Бэктест — отдельный агрегат
@@ -185,8 +191,11 @@ unit-тестами. Конкурирующие сохранения бота и
 2. `Running`: свечи периода читаются один раз; номера без результата делятся между потоками
    (`Parallel.ForEachAsync`, `Backtests:MaxParallelism`, по умолчанию `Environment.ProcessorCount − 1`, минимум 1).
    Результаты копятся в канале и пишутся пачками не реже раза в секунду вместе с прогрессом и скоростью.
-3. При каждой записи пачки обработчик перечитывает статус: `Cancelled` (отмена) или отсутствие бэктеста (удалён бот)
-   останавливает потоки. Один механизм для процесса API и будущего Worker, без реестра токенов в памяти.
+3. Каждая запись бэктеста ждёт статус, который оставил прогон: `UPDATE … WHERE id = @Id AND status = @Expected`.
+   Прогресс и пачка результатов пишутся одной транзакцией; ноль затронутых строк значит отмену (`Cancelled`) или
+   удаление бота, и прогон останавливает потоки. Так же останавливается ожидание загрузки свечей. Проверка и запись —
+   один оператор, поэтому одновременная отмена не перезаписывается. Один механизм для процесса API и будущего Worker,
+   без реестра токенов в памяти.
 4. Прерывания без продвижения — как у загрузки: счётчик растёт при постановке `Running` в очередь при старте и
    сбрасывается сохранённым результатом; третье — `Failed`.
 
@@ -199,6 +208,8 @@ unit-тестами. Конкурирующие сохранения бота и
   `priceFilter.tickSize`, `lotSizeFilter.basePrecision`, `minOrderQty`, `minOrderAmt`; `linear` — `tickSize`, `qtyStep`,
   `minOrderQty`, `minNotionalValue`. Через `ExchangeResilienceExecutor`; недоступность — `ExchangeUnavailableException`,
   ответ 503, как у создания загрузки.
+- Порядок создания бэктеста: разбор полей запроса, бот, последняя версия, правила с биржи, затем доменная проверка.
+  Правила нужны для создания агрегата, поэтому при недоступной бирже запрос с ошибками тоже получает 503.
 - `appsettings.json`, раздел `Backtests`: `MaxCombinations` (10000), `MaxParallelism`, `DefaultFees` — по категориям
   ставки лимитки и рынка (`spot` 0.1 % и 0.1 %, `linear` 0.02 % и 0.055 % — базовые ставки Bybit на 2026-11-01; Bybit
   предупреждает, что в отдельных регионах они другие, поэтому их можно переопределить в бэктесте).
@@ -220,13 +231,24 @@ unit-тестами. Конкурирующие сохранения бота и
 | `GET /api/backtests/{id}/results/{combination}/details` | 200 с исполнениями, сделками, кривой капитала; 404 |
 | `POST /api/backtests/{id}/cancel` | 204; 404; 409 для завершённого |
 
+Ключи ошибок создания бэктеста: `from`, `to`, `period` (`from` не раньше `to`), `parameters.<имя>`, `parameters` (тело не
+объект или размер сетки больше лимита), `searchMode`, `simulation.balance`, `simulation.limitFeePercent`,
+`simulation.marketFeePercent`, `simulation.limitFillMode`. Код режима поиска — `grid`, по умолчанию он же. Результаты:
+`sort` — код метрики (`combination`, `calculationTime`, `startEquity`, `endEquity`, `pnl`, `realizedPnl`, `unrealizedPnl`,
+`return`, `maxDrawdown`, `returnToDrawdown`, `closedTrades`, `winRate`, `fills`, `fees`, `maxPositionCost`,
+`maxPositionCostPercent`, `maxCapitalUsed`, `timeInPosition`, `timeUnderWater`, `longestUnderWater`, `skippedOrders`,
+`candles`), по умолчанию `combination`; `order` — `asc` (по умолчанию) или `desc`; `offset` от `0`, `limit` от `1` до
+`1000`, по умолчанию `100`; ответ — `{ total, items }`. `GET /api/bots/{id}/backtests` для неизвестного бота — 404.
+
 `GET /api/strategies/{id}` получает `version`; `PUT` и `DELETE /api/strategies/{id}` — 409 с расширением `bots`
 (список ботов и их ошибок). Числа — десятичные строки, как у свечей; время — с `Z`. Детали считаются синхронно в
 запросе: один прогон, секунды на длинном периоде.
 
 ### 10. Хранилище
 
-Миграция `202611020001`: `strategy_versions` (`strategy_id` → `strategies` `ON DELETE CASCADE`, `number`,
+Три миграции, по одной на группу задач, чтобы группы можно было выпускать отдельными PR без правки уже применённой
+миграции: `202611020001` — `strategy_versions`, `202611020002` — `bots`, `202611020003` — `backtests` и
+`backtest_results`. Таблицы: `strategy_versions` (`strategy_id` → `strategies` `ON DELETE CASCADE`, `number`,
 `snapshot jsonb`, `created_at`, ключ `(strategy_id, number)`); `bots` (`id`, `name`, `strategy_id` →
 `strategies` без каскада, `parameter_values jsonb`, `category`, `symbol`, `interval`, `balance numeric`, `created_at`,
 `updated_at`); `backtests`; `backtest_results`. Коды категорий, интервалов, статусов — строками через `MarketDataCodes` и
