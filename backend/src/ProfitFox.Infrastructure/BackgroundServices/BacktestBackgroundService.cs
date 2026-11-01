@@ -1,31 +1,38 @@
-using MediatR;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-using ProfitFox.Application.Backtests.Commands.RunBacktest;
-using ProfitFox.Infrastructure.Messaging;
+using ProfitFox.Application.Backtests.Commands.RunNextBacktestWork;
+using ProfitFox.Application.Exceptions;
+using ProfitFox.Application.Workers;
 
 namespace ProfitFox.Infrastructure.BackgroundServices;
 
-/// <summary>Runs queued backtests one at a time, in the order they were queued; one backtest uses several threads itself.</summary>
-internal sealed class BacktestBackgroundService(BacktestQueue queue, IServiceScopeFactory scopes, ILogger<BacktestBackgroundService> logger) : BackgroundService
+/// <summary>The backtest lane of a Worker: one chunk at a time, which itself uses several threads.</summary>
+internal sealed class BacktestBackgroundService(
+    IServiceScopeFactory scopes,
+    WorkerSettings settings,
+    TimeProvider time,
+    ILogger<BacktestBackgroundService> logger) : BackgroundService
 {
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (Guid backtestId in queue.ReadAllAsync(stoppingToken))
-        {
-            // An escaping exception would stop the whole host; the backtest stays as last saved and resumes on the next start.
-            try
+        return WorkerLoop.RunAsync(
+            new RunNextBacktestWorkCommand(),
+            exception =>
             {
-                await using AsyncServiceScope scope = scopes.CreateAsyncScope();
-                await scope.ServiceProvider.GetRequiredService<ISender>().Send(new RunBacktestCommand(backtestId), stoppingToken);
-            }
-            catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
-            {
-                logger.LogError(exception, "Backtest {BacktestId} failed outside its own error handling.", backtestId);
-            }
-        }
+                if (exception is BacktestWorkException work)
+                {
+                    logger.LogError(work.InnerException, "Backtest {BacktestId} failed outside its own error handling.", work.BacktestId);
+                }
+                else
+                {
+                    logger.LogError(exception, "Backtest work failed outside its own error handling.");
+                }
+            },
+            scopes,
+            settings.PollInterval,
+            time,
+            stoppingToken);
     }
 }

@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 
-using ProfitFox.Application.Backtests.Commands.RunBacktest;
+using ProfitFox.Application.Backtests.Commands.RunNextBacktestWork;
 using ProfitFox.Domain.Entities.Backtests;
 using ProfitFox.Domain.Entities.Backtests.Enums;
 using ProfitFox.Domain.Repositories;
@@ -23,7 +23,7 @@ public class BacktestParallelTests
     [Test]
     public async Task Running_backtest_saves_the_calculated_combinations_of_all_and_the_speed_in_candles_a_second()
     {
-        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync();
+        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync(workers: 0);
         using HttpClient client = factory.CreateClient();
         var scenario = new BacktestScenario(factory, client);
         await scenario.CreateBotAsync("ladder");
@@ -32,11 +32,11 @@ public class BacktestParallelTests
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         IBacktestRepository stored = scope.ServiceProvider.GetRequiredService<IBacktestRepository>();
         var progress = new List<Backtest>();
-        IBacktestRepository spy = BacktestScenario.Spy(stored, (saved, _) => progress.Add(saved));
+        IBacktestRepository spy = BacktestScenario.Spy(stored, (saved, _) => progress.Add(saved!));
         var time = new FakeTimeProvider(factory.Time.GetUtcNow()) { AutoAdvanceAmount = TimeSpan.FromSeconds(1) };
-        RunBacktestCommandHandler handler = BacktestScenario.Handler(scope, spy, time);
+        RunNextBacktestWorkCommandHandler handler = BacktestScenario.Handler(scope, spy, time);
 
-        await handler.Handle(new RunBacktestCommand(backtest.Id), CancellationToken.None);
+        await BacktestScenario.RunUntilIdleAsync(handler);
 
         progress.Select(saved => saved.CalculatedCombinations).ShouldBe([.. Enumerable.Range(1, 12).Select(count => (long)count)]);
         Backtest fifth = progress[4];
@@ -65,7 +65,7 @@ public class BacktestParallelTests
         await scenario.CreateBotAsync("ladder");
         await scenario.StoreCandlesAsync(From, Closes);
 
-        Backtest queued = await scenario.QueueAsync(From, From.AddHours(Closes.Length), Grid());
+        Backtest queued = await scenario.CreateAsync(From, From.AddHours(Closes.Length), Grid());
         Backtest backtest = await scenario.WaitUntilFinishedAsync(queued.Id);
 
         backtest.Status.ShouldBe(BacktestStatus.Succeeded);

@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
+using ProfitFox.Domain.Services.Backtests;
 using ProfitFox.Tests.Integration.Infrastructure;
 using ProfitFox.Tests.Shared.Fixtures.Strategies;
 
@@ -45,6 +46,7 @@ public class BacktestsApiTests
         JsonElement backtest = await _client.GetFromJsonAsync<JsonElement>($"/api/backtests/{id}");
         (backtest.GetProperty("botId").GetGuid(), backtest.GetProperty("strategyId").GetGuid()).ShouldBe((_scenario.BotId, _scenario.StrategyId));
         backtest.GetProperty("strategyVersion").GetInt32().ShouldBe(1);
+        backtest.GetProperty("engineVersion").GetInt32().ShouldBe(EngineVersion.Current);
         (backtest.GetProperty("category").GetString(), backtest.GetProperty("symbol").GetString(), backtest.GetProperty("interval").GetString()).ShouldBe(("linear", "BTCUSDT", "60"));
         (backtest.GetProperty("from").GetDateTimeOffset(), backtest.GetProperty("to").GetDateTimeOffset())
             .ShouldBe((DateTimeOffset.Parse("2024-01-01T00:00:00Z"), DateTimeOffset.Parse("2024-02-01T00:00:00Z")));

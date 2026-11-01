@@ -12,10 +12,9 @@ namespace ProfitFox.Application.MarketData.Commands.CreateCandleImport;
 public sealed class CreateCandleImportCommandHandler(
     IMarketHistoryClient marketHistory,
     ICandleImportJobRepository jobs,
-    ICandleImportQueue queue,
     TimeProvider time) : IRequestHandler<CreateCandleImportCommand, Guid>
 {
-    /// <summary>Validates the request, checks the symbol on the exchange and queues a pending job.</summary>
+    /// <summary>Validates the request, checks the symbol on the exchange and saves a pending job for a Worker.</summary>
     /// <exception cref="ValidationFailedException">A parameter is invalid or the exchange has no such symbol.</exception>
     /// <exception cref="ExchangeException">The exchange could not confirm the symbol.</exception>
     public async Task<Guid> Handle(CreateCandleImportCommand request, CancellationToken cancellationToken)
@@ -85,7 +84,6 @@ public sealed class CreateCandleImportCommandHandler(
             StartedAt: null,
             FinishedAt: null);
         await jobs.AddAsync(job, cancellationToken);
-        await queue.EnqueueAsync(job.Id, cancellationToken);
 
         return job.Id;
     }

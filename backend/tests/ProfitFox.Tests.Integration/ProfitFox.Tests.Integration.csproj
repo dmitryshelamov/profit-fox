@@ -24,6 +24,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\..\src\ProfitFox.Presentation\ProfitFox.Presentation.csproj"/>
+        <ProjectReference Include="..\..\src\ProfitFox.Worker\ProfitFox.Worker.csproj"/>
         <ProjectReference Include="..\ProfitFox.Tests.Shared\ProfitFox.Tests.Shared.csproj"/>
     </ItemGroup>
 

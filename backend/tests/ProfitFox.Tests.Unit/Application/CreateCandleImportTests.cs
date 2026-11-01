@@ -23,7 +23,6 @@ public class CreateCandleImportTests
 
     private IMarketHistoryClient _marketHistory = null!;
     private ICandleImportJobRepository _jobs = null!;
-    private ICandleImportQueue _queue = null!;
     private CreateCandleImportCommandHandler _handler = null!;
 
     [SetUp]
@@ -32,13 +31,12 @@ public class CreateCandleImportTests
         _marketHistory = Substitute.For<IMarketHistoryClient>();
         _marketHistory.InstrumentExistsAsync(new Instrument(MarketCategory.Linear, "BTCUSDT"), Arg.Any<CancellationToken>()).Returns(true);
         _jobs = Substitute.For<ICandleImportJobRepository>();
-        _queue = Substitute.For<ICandleImportQueue>();
-        _handler = new CreateCandleImportCommandHandler(_marketHistory, _jobs, _queue, new FakeTimeProvider(Now));
+        _handler = new CreateCandleImportCommandHandler(_marketHistory, _jobs, new FakeTimeProvider(Now));
     }
 
     // Scenario "Корректный запрос".
     [Test]
-    public async Task Valid_request_creates_a_pending_job_and_queues_it()
+    public async Task Valid_request_creates_a_pending_job()
     {
         Guid id = await _handler.Handle(new CreateCandleImportCommand("linear", "btcusdt", "60", "2024-01-01T00:00:00Z", "2024-02-01T00:00:00Z"), CancellationToken.None);
 
@@ -55,7 +53,6 @@ public class CreateCandleImportTests
             StartedAt: null,
             FinishedAt: null);
         await _jobs.Received(1).AddAsync(expected, Arg.Any<CancellationToken>());
-        await _queue.Received(1).EnqueueAsync(id, Arg.Any<CancellationToken>());
     }
 
     // Scenario "Конец периода не указан".
@@ -94,7 +91,6 @@ public class CreateCandleImportTests
 
         error.Errors.Keys.ShouldBe([invalidField]);
         await _jobs.DidNotReceiveWithAnyArgs().AddAsync(default!, cancellationToken: default);
-        await _queue.DidNotReceiveWithAnyArgs().EnqueueAsync(jobId: default, cancellationToken: default);
         await _marketHistory.DidNotReceiveWithAnyArgs().InstrumentExistsAsync(default!, cancellationToken: default);
     }
 
@@ -107,7 +103,6 @@ public class CreateCandleImportTests
 
         error.Errors.Keys.ShouldBe(["symbol"]);
         await _jobs.DidNotReceiveWithAnyArgs().AddAsync(default!, cancellationToken: default);
-        await _queue.DidNotReceiveWithAnyArgs().EnqueueAsync(jobId: default, cancellationToken: default);
     }
 
     // Scenario "Bybit недоступен при проверке".

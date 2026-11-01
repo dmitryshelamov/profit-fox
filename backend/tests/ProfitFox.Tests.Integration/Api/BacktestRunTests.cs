@@ -51,7 +51,7 @@ public class BacktestRunTests
         await _scenario.StoreCandlesAsync(From, closes[..5]);
         _factory.Bybit.Klines.AddRange(Rows(BacktestScenario.Candles(From, closes).Skip(5)));
 
-        Backtest queued = await _scenario.QueueAsync(From, From.AddHours(10));
+        Backtest queued = await _scenario.CreateAsync(From, From.AddHours(10));
         Backtest backtest = await _scenario.WaitUntilFinishedAsync(queued.Id);
 
         backtest.Status.ShouldBe(BacktestStatus.Succeeded);
@@ -68,7 +68,7 @@ public class BacktestRunTests
     {
         _factory.Bybit.RejectKlines = true;
 
-        Backtest queued = await _scenario.QueueAsync(From, From.AddHours(10));
+        Backtest queued = await _scenario.CreateAsync(From, From.AddHours(10));
         Backtest backtest = await _scenario.WaitUntilFinishedAsync(queued.Id);
 
         backtest.Status.ShouldBe(BacktestStatus.Failed);
@@ -84,7 +84,7 @@ public class BacktestRunTests
     {
         _factory.Bybit.Klines.AddRange(Rows(BacktestScenario.Candles(From.AddHours(4), 10m, 9m, 8m, 9m, 10m, 11m)));
 
-        Backtest queued = await _scenario.QueueAsync(From, From.AddHours(10));
+        Backtest queued = await _scenario.CreateAsync(From, From.AddHours(10));
         Backtest backtest = await _scenario.WaitUntilFinishedAsync(queued.Id);
 
         backtest.Status.ShouldBe(BacktestStatus.Succeeded);
@@ -97,7 +97,7 @@ public class BacktestRunTests
     [Test]
     public async Task Backtest_of_a_period_without_any_candle_keeps_the_balance()
     {
-        Backtest queued = await _scenario.QueueAsync(From, From.AddHours(10));
+        Backtest queued = await _scenario.CreateAsync(From, From.AddHours(10));
         Backtest backtest = await _scenario.WaitUntilFinishedAsync(queued.Id);
 
         backtest.Status.ShouldBe(BacktestStatus.Succeeded);
@@ -116,7 +116,7 @@ public class BacktestRunTests
             await scope.ServiceProvider.GetRequiredService<ICandleRepository>().UpsertAsync(BacktestScenario.BtcLinear, Interval.OneHour, candles, CancellationToken.None);
         }
 
-        Backtest queued = await _scenario.QueueAsync(From, From.AddHours(10));
+        Backtest queued = await _scenario.CreateAsync(From, From.AddHours(10));
         Backtest backtest = await _scenario.WaitUntilFinishedAsync(queued.Id);
 
         backtest.Status.ShouldBe(BacktestStatus.Failed);
@@ -148,7 +148,7 @@ public class BacktestRunTests
     {
         await _scenario.StoreCandlesAsync(From, 10m, 9m, 8m, 7m, 8m, 10m, 12m, 11m, 9m, 7m);
 
-        Backtest queued = await _scenario.QueueAsync(
+        Backtest queued = await _scenario.CreateAsync(
             From,
             From.AddHours(10),
             new Dictionary<string, ParameterSpec> { ["fast"] = ParameterSpec.Between(new NumberValue(2m), new NumberValue(3m), new NumberValue(1m)) });

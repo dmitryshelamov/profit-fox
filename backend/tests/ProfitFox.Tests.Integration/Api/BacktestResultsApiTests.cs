@@ -3,11 +3,8 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 
-using Microsoft.Extensions.DependencyInjection;
-
 using ProfitFox.Domain.Entities.Backtests;
 using ProfitFox.Domain.Entities.Backtests.Enums;
-using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Tests.Integration.Infrastructure;
@@ -35,7 +32,7 @@ public class BacktestResultsApiTests
         _scenario = new BacktestScenario(_factory, _client);
         await _scenario.CreateBotAsync("ladder");
         await _scenario.StoreCandlesAsync(From, Closes);
-        Backtest queued = await _scenario.QueueAsync(
+        Backtest queued = await _scenario.CreateAsync(
             From,
             From.AddHours(Closes.Length),
             new Dictionary<string, ParameterSpec>
@@ -91,20 +88,12 @@ public class BacktestResultsApiTests
     [TestCase("asc", new[] { 0L, 2L, 1L })]
     public async Task Missing_values_go_last(string order, long[] combinations)
     {
-        Backtest backtest = await _scenario.CreateAsync(From, From.AddHours(Closes.Length));
-        await using AsyncServiceScope scope = _factory.Services.CreateAsyncScope();
-        IBacktestRepository stored = scope.ServiceProvider.GetRequiredService<IBacktestRepository>();
-        Backtest running = backtest with { Status = BacktestStatus.Running };
-        await stored.UpdateAsync(running, BacktestStatus.Pending, CancellationToken.None);
+        Backtest backtest = await _scenario.CreateAsync(From, From.AddHours(Closes.Length), status: BacktestStatus.Succeeded);
         BacktestResult result = (await _scenario.ResultsAsync(_backtest))[0];
-        await stored.SaveProgressAsync(
-            running,
-            [
-                result with { BacktestId = backtest.Id, Combination = 0, Metrics = result.Metrics with { WinRatePercent = 50m } },
-                result with { BacktestId = backtest.Id, Combination = 1, Metrics = result.Metrics with { WinRatePercent = null } },
-                result with { BacktestId = backtest.Id, Combination = 2, Metrics = result.Metrics with { WinRatePercent = 80m } }
-            ],
-            CancellationToken.None);
+        await _scenario.StoreResultsAsync(
+            result with { BacktestId = backtest.Id, Combination = 0, Metrics = result.Metrics with { WinRatePercent = 50m } },
+            result with { BacktestId = backtest.Id, Combination = 1, Metrics = result.Metrics with { WinRatePercent = null } },
+            result with { BacktestId = backtest.Id, Combination = 2, Metrics = result.Metrics with { WinRatePercent = 80m } });
 
         JsonElement page = await _client.GetFromJsonAsync<JsonElement>($"/api/backtests/{backtest.Id}/results?sort=winRate&order={order}");
 

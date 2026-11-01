@@ -81,9 +81,16 @@ public sealed class BacktestsController(ISender sender) : ControllerBase
     [HttpGet("{id:guid}/results/{combination:long}/details")]
     public async Task<IActionResult> Details(Guid id, long combination, CancellationToken cancellationToken)
     {
-        BacktestDetails? details = await sender.Send(new GetResultDetailsQuery(id, combination), cancellationToken);
+        try
+        {
+            BacktestDetails? details = await sender.Send(new GetResultDetailsQuery(id, combination), cancellationToken);
 
-        return details is null ? NotFound() : Ok(BacktestDetailsResponse.Of(details));
+            return details is null ? NotFound() : Ok(BacktestDetailsResponse.Of(details));
+        }
+        catch (ConflictException exception)
+        {
+            return Problem(exception.Message, statusCode: StatusCodes.Status409Conflict);
+        }
     }
 
     [HttpPost("{id:guid}/cancel")]

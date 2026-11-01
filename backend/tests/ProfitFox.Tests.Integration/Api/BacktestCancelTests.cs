@@ -2,7 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 
 using ProfitFox.Application.Backtests.Commands.CancelBacktest;
-using ProfitFox.Application.Backtests.Commands.RunBacktest;
+using ProfitFox.Application.Backtests.Commands.RunNextBacktestWork;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Domain.Entities.Backtests;
 using ProfitFox.Domain.Entities.Backtests.Enums;
@@ -13,7 +13,6 @@ using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Tests.Integration.Infrastructure;
-using ProfitFox.Tests.Shared.Generators.Domain.Entity.MarketData;
 
 using Shouldly;
 
@@ -32,7 +31,8 @@ public class BacktestCancelTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = await ProfitFoxFactory.CreateAsync();
+        // The tests take the place of the Worker.
+        _factory = await ProfitFoxFactory.CreateAsync(workers: 0);
         _client = _factory.CreateClient();
         _scenario = new BacktestScenario(_factory, _client);
         await _scenario.CreateBotAsync("ladder");
@@ -54,15 +54,15 @@ public class BacktestCancelTests
         await using AsyncServiceScope scope = _factory.Services.CreateAsyncScope();
         IBacktestRepository stored = scope.ServiceProvider.GetRequiredService<IBacktestRepository>();
         var cancel = new CancelBacktestCommandHandler(stored, _factory.Time);
-        IBacktestRepository spy = BacktestScenario.Spy(stored, (saved, _) =>
+        IBacktestRepository spy = BacktestScenario.Spy(stored, (saved, written) =>
         {
-            if (saved.CalculatedCombinations == 5)
+            if (written && saved?.CalculatedCombinations == 5)
             {
                 cancel.Handle(new CancelBacktestCommand(backtest.Id), CancellationToken.None).GetAwaiter().GetResult();
             }
         });
 
-        await BacktestScenario.Handler(scope, spy, Ticking()).Handle(new RunBacktestCommand(backtest.Id), CancellationToken.None);
+        await BacktestScenario.RunUntilIdleAsync(BacktestScenario.Handler(scope, spy, Ticking()));
 
         Backtest cancelled = (await stored.GetAsync(backtest.Id, CancellationToken.None))!;
         (cancelled.Status, cancelled.CalculatedCombinations).ShouldBe((BacktestStatus.Cancelled, 5L));
@@ -79,7 +79,7 @@ public class BacktestCancelTests
         await stored.UpdateAsync(backtest with { Status = status }, BacktestStatus.Pending, CancellationToken.None);
 
         await new CancelBacktestCommandHandler(stored, _factory.Time).Handle(new CancelBacktestCommand(backtest.Id), CancellationToken.None);
-        await BacktestScenario.Handler(scope, stored, Ticking()).Handle(new RunBacktestCommand(backtest.Id), CancellationToken.None);
+        await BacktestScenario.RunUntilIdleAsync(BacktestScenario.Handler(scope, stored, Ticking()));
 
         Backtest cancelled = (await stored.GetAsync(backtest.Id, CancellationToken.None))!;
         (cancelled.Status, cancelled.FinishedAt).ShouldBe((BacktestStatus.Cancelled, _factory.Time.GetUtcNow()));
@@ -87,37 +87,35 @@ public class BacktestCancelTests
     }
 
     [Test]
-    public async Task Backtest_cancelled_while_it_waits_for_its_import_stops_waiting()
+    public async Task Backtest_cancelled_while_it_waits_for_its_import_does_not_run_after_the_import()
     {
         Backtest backtest = await _scenario.CreateAsync(From.AddHours(-5), From.AddHours(Closes.Length));
         await using AsyncServiceScope scope = _factory.Services.CreateAsyncScope();
         IBacktestRepository stored = scope.ServiceProvider.GetRequiredService<IBacktestRepository>();
-        CandleImportJob job = CandleImportJobGenerator.Generate(CandleImportStatus.Pending);
-        await scope.ServiceProvider.GetRequiredService<ICandleImportJobRepository>().AddAsync(job, CancellationToken.None);
-        await stored.UpdateAsync(backtest.StartLoading(_factory.Time.GetUtcNow()).WaitForImport(job.Id), BacktestStatus.Pending, CancellationToken.None);
-        var time = new FakeTimeProvider(_factory.Time.GetUtcNow());
-        Task running = BacktestScenario.Handler(scope, stored, time).Handle(new RunBacktestCommand(backtest.Id), CancellationToken.None);
+        RunNextBacktestWorkCommandHandler worker = BacktestScenario.Handler(scope, stored, Ticking());
+        await BacktestScenario.RunUntilIdleAsync(worker);
+        Backtest waiting = (await stored.GetAsync(backtest.Id, CancellationToken.None))!;
+        ICandleImportJobRepository jobs = scope.ServiceProvider.GetRequiredService<ICandleImportJobRepository>();
+        CandleImportJob job = (await jobs.GetAsync(waiting.ImportJobId!.Value, CancellationToken.None))!;
 
         await new CancelBacktestCommandHandler(stored, _factory.Time).Handle(new CancelBacktestCommand(backtest.Id), CancellationToken.None);
+        await jobs.UpdateAsync(job with { Status = CandleImportStatus.Succeeded }, CancellationToken.None);
+        await BacktestScenario.RunUntilIdleAsync(worker);
 
-        for (int second = 0; second < 100 && !running.IsCompleted; second++)
-        {
-            time.Advance(TimeSpan.FromSeconds(1));
-            await Task.Delay(20);
-        }
-
-        running.IsCompletedSuccessfully.ShouldBeTrue();
-        (await stored.GetAsync(backtest.Id, CancellationToken.None))!.Status.ShouldBe(BacktestStatus.Cancelled);
+        Backtest cancelled = (await stored.GetAsync(backtest.Id, CancellationToken.None))!;
+        (waiting.Status, cancelled.Status).ShouldBe((BacktestStatus.LoadingCandles, BacktestStatus.Cancelled));
+        (await stored.GetCalculatedCombinationsAsync(backtest.Id, CancellationToken.None)).ShouldBeEmpty();
     }
 
     // Scenario "Отмена завершённого".
     [Test]
     public async Task Finished_backtest_is_not_cancelled()
     {
-        Backtest queued = await _scenario.QueueAsync(From, From.AddHours(Closes.Length));
-        Backtest finished = await _scenario.WaitUntilFinishedAsync(queued.Id);
+        Backtest queued = await _scenario.CreateAsync(From, From.AddHours(Closes.Length));
         await using AsyncServiceScope scope = _factory.Services.CreateAsyncScope();
         IBacktestRepository stored = scope.ServiceProvider.GetRequiredService<IBacktestRepository>();
+        await BacktestScenario.RunUntilIdleAsync(BacktestScenario.Handler(scope, stored, Ticking()));
+        Backtest finished = (await stored.GetAsync(queued.Id, CancellationToken.None))!;
 
         await Should.ThrowAsync<ConflictException>(() => new CancelBacktestCommandHandler(stored, _factory.Time).Handle(new CancelBacktestCommand(queued.Id), CancellationToken.None));
 
@@ -146,7 +144,7 @@ public class BacktestCancelTests
         {
             writes.Add(written);
 
-            if (saved.CalculatedCombinations == 3)
+            if (saved?.CalculatedCombinations == 3)
             {
                 StrategyLibrary loaded = library.LoadAsync(CancellationToken.None).GetAwaiter().GetResult();
                 loaded.RemoveBot(_scenario.BotId);
@@ -154,7 +152,7 @@ public class BacktestCancelTests
             }
         });
 
-        await BacktestScenario.Handler(scope, spy, Ticking()).Handle(new RunBacktestCommand(backtest.Id), CancellationToken.None);
+        await BacktestScenario.RunUntilIdleAsync(BacktestScenario.Handler(scope, spy, Ticking()));
 
         writes.ShouldBe([true, true, true, false]);
         (await stored.GetAsync(backtest.Id, CancellationToken.None)).ShouldBeNull();
@@ -170,8 +168,10 @@ public class BacktestCancelTests
         loaded.RemoveBot(_scenario.BotId);
         await library.SaveAsync(loaded.Change, loaded.Revision, CancellationToken.None);
 
-        await BacktestScenario.Handler(scope, scope.ServiceProvider.GetRequiredService<IBacktestRepository>(), Ticking())
-            .Handle(new RunBacktestCommand(backtest.Id), CancellationToken.None);
+        bool found = await BacktestScenario.Handler(scope, scope.ServiceProvider.GetRequiredService<IBacktestRepository>(), Ticking())
+            .Handle(new RunNextBacktestWorkCommand(), CancellationToken.None);
+
+        found.ShouldBeFalse();
     }
 
     /// <summary>A clock that moves a second on every read, so that every result is saved on its own.</summary>

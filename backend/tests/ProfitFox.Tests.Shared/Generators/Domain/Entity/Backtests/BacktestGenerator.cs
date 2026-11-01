@@ -2,6 +2,7 @@ using AutoFixture;
 
 using ProfitFox.Domain.Entities.Backtests;
 using ProfitFox.Domain.Entities.Backtests.Enums;
+using ProfitFox.Domain.Services.Backtests;
 using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Tests.Shared.Generators.Base;
@@ -42,9 +43,9 @@ public static class BacktestGenerator
             CalculatedCombinations: 0,
             TotalCombinations: 12,
             Speed: null,
-            StalledRestarts: 0,
             DateTimeOffsetGenerator.Generate(),
             StartedAt: null,
-            FinishedAt: null);
+            FinishedAt: null,
+            EngineVersion.Current);
     }
 }

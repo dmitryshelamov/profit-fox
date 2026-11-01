@@ -2,14 +2,17 @@ using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text.Json;
 
+using Dapper;
+
 using Microsoft.Extensions.DependencyInjection;
+
+using Npgsql;
 
 using NSubstitute;
 
 using ProfitFox.Application.Backtests;
-using ProfitFox.Application.Backtests.Commands.RunBacktest;
-using ProfitFox.Application.Ports.Backtests;
-using ProfitFox.Application.Ports.MarketData;
+using ProfitFox.Application.Backtests.Commands.RunNextBacktestWork;
+using ProfitFox.Application.Workers;
 using ProfitFox.Domain.Entities.Backtests;
 using ProfitFox.Domain.Entities.Backtests.Enums;
 using ProfitFox.Domain.Entities.Bots;
@@ -17,8 +20,11 @@ using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.Services.Backtests;
 using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Backtests.Converters;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Backtests.Queries;
 using ProfitFox.Tests.Integration.Infrastructure;
 using ProfitFox.Tests.Shared.Fixtures.Strategies;
 
@@ -67,25 +73,23 @@ public sealed class BacktestScenario(ProfitFoxFactory factory, HttpClient client
         ];
     }
 
-    /// <summary>Saves a pending backtest of the bot and queues it, as creating it through the API does.</summary>
-    public async Task<Backtest> QueueAsync(DateTimeOffset from, DateTimeOffset to, IReadOnlyDictionary<string, ParameterSpec>? parameters = null)
-    {
-        Backtest backtest = await CreateAsync(from, to, parameters);
-        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
-        await scope.ServiceProvider.GetRequiredService<IBacktestQueue>().EnqueueAsync(backtest.Id, CancellationToken.None);
-
-        return backtest;
-    }
-
-    /// <summary>Saves a pending backtest of the bot without queueing it.</summary>
-    public async Task<Backtest> CreateAsync(DateTimeOffset from, DateTimeOffset to, IReadOnlyDictionary<string, ParameterSpec>? parameters = null)
+    /// <summary>
+    ///     Saves a pending backtest of the bot, as creating it through the API does, and a running Worker takes it; a backtest saved finished
+    ///     stays as it is.
+    /// </summary>
+    public async Task<Backtest> CreateAsync(
+        DateTimeOffset from,
+        DateTimeOffset to,
+        IReadOnlyDictionary<string, ParameterSpec>? parameters = null,
+        BacktestStatus status = BacktestStatus.Pending,
+        int engineVersion = EngineVersion.Current)
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         IStrategyLibraryRepository library = scope.ServiceProvider.GetRequiredService<IStrategyLibraryRepository>();
         Bot bot = (await library.GetBotAsync(BotId, CancellationToken.None))!;
         StrategyVersion version = (await library.GetVersionAsync(StrategyId, (await library.GetLatestVersionNumberAsync(StrategyId, CancellationToken.None))!.Value, CancellationToken.None))!;
         var policy = new BacktestPolicy(10000, new Dictionary<MarketCategory, FeeRates> { [MarketCategory.Linear] = new FeeRates(0.02m, 0.055m) });
-        var backtest = Backtest.Create(
+        Backtest backtest = Backtest.Create(
             Guid.NewGuid(),
             bot,
             version,
@@ -95,10 +99,27 @@ public sealed class BacktestScenario(ProfitFoxFactory factory, HttpClient client
             new SimulationRequest(null, null, null, null, null),
             policy,
             Rules,
-            factory.Time.GetUtcNow());
+            engineVersion,
+            factory.Time.GetUtcNow()) with
+        { Status = status };
         await scope.ServiceProvider.GetRequiredService<IBacktestRepository>().AddAsync(backtest, CancellationToken.None);
 
         return backtest;
+    }
+
+    /// <summary>Stores results of the backtest as a Worker would, outside any chunk.</summary>
+    public async Task StoreResultsAsync(params BacktestResult[] results)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        await using NpgsqlConnection connection = await scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>().OpenConnectionAsync();
+        await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync();
+
+        foreach (BacktestResult result in results)
+        {
+            await connection.ExecuteAsync(BacktestRepositoryQueries.InsertResult(BacktestResultDbConverter.FromDomain(result), transaction, CancellationToken.None));
+        }
+
+        await transaction.CommitAsync();
     }
 
     public async Task<Backtest> GetAsync(Guid id)
@@ -146,35 +167,85 @@ public sealed class BacktestScenario(ProfitFoxFactory factory, HttpClient client
         return WaitForAsync(id, BacktestStatus.Succeeded, BacktestStatus.Failed, BacktestStatus.Cancelled);
     }
 
-    /// <summary>A handler with one thread over the services of the scope and the given repository and clock.</summary>
-    public static RunBacktestCommandHandler Handler(AsyncServiceScope scope, IBacktestRepository backtests, TimeProvider time)
+    /// <summary>A Worker's handler with one thread over the services of the scope and the given repository and clock, a Worker of its own.</summary>
+    public static RunNextBacktestWorkCommandHandler Handler(
+        AsyncServiceScope scope,
+        IBacktestRepository backtests,
+        TimeProvider time,
+        WorkerSettings? settings = null,
+        EngineVersion? engine = null)
     {
-        return new RunBacktestCommandHandler(
+        return new RunNextBacktestWorkCommandHandler(
             backtests,
             scope.ServiceProvider.GetRequiredService<IStrategyLibraryRepository>(),
             scope.ServiceProvider.GetRequiredService<ICandleRepository>(),
             scope.ServiceProvider.GetRequiredService<ICandleImportJobRepository>(),
-            scope.ServiceProvider.GetRequiredService<ICandleImportQueue>(),
+            new BacktestInputCache(),
             new BacktestSettings { MaxParallelism = 1 },
+            settings ?? new WorkerSettings(),
+            new WorkerIdentity(Guid.NewGuid()),
+            engine ?? new EngineVersion(EngineVersion.Current),
             time);
     }
 
-    /// <summary>Passes every call to the stored repository and tells of each saved progress and whether it was written.</summary>
-    public static IBacktestRepository Spy(IBacktestRepository stored, Action<Backtest, bool> saved)
+    /// <summary>Lets the handler take work until it finds none, as a Worker that nobody stops.</summary>
+    public static async Task RunUntilIdleAsync(RunNextBacktestWorkCommandHandler handler)
+    {
+        while (await handler.Handle(new RunNextBacktestWorkCommand(), CancellationToken.None))
+        {
+        }
+    }
+
+    /// <summary>
+    ///     Passes every call to the stored repository and, after each save of chunk progress, tells the backtest as stored then (<c>null</c>
+    ///     once deleted) and whether the save was written.
+    /// </summary>
+    public static IBacktestRepository Spy(IBacktestRepository stored, Action<Backtest?, bool> saved)
     {
         IBacktestRepository spy = Substitute.For<IBacktestRepository>();
         spy.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(call => stored.GetAsync(call.Arg<Guid>(), call.Arg<CancellationToken>()));
+        spy.GetUnfinishedAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(call => stored.GetUnfinishedAsync(call.Arg<int>(), call.Arg<CancellationToken>()));
+        spy.FailOutdatedAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(call => stored.FailOutdatedAsync(call.Arg<int>(), call.Arg<string>()!, call.Arg<DateTimeOffset>(), call.Arg<CancellationToken>()));
         spy.UpdateAsync(Arg.Any<Backtest>(), Arg.Any<BacktestStatus>(), Arg.Any<CancellationToken>())
             .Returns(call => stored.UpdateAsync(call.Arg<Backtest>()!, call.Arg<BacktestStatus>(), call.Arg<CancellationToken>()));
+        spy.FailAsync(Arg.Any<Guid>(), Arg.Any<IReadOnlyCollection<BacktestStatus>>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(call => stored.FailAsync(call.ArgAt<Guid>(0), call.ArgAt<IReadOnlyCollection<BacktestStatus>>(1)!, call.ArgAt<string>(2)!, call.ArgAt<DateTimeOffset>(3), call.ArgAt<CancellationToken>(4)));
+        spy.StartImportAsync(Arg.Any<Backtest>(), Arg.Any<CandleImportJob>(), Arg.Any<CancellationToken>())
+            .Returns(call => stored.StartImportAsync(call.Arg<Backtest>()!, call.Arg<CandleImportJob>()!, call.Arg<CancellationToken>()));
+        spy.StartRunningAsync(Arg.Any<Backtest>(), Arg.Any<IReadOnlyList<BacktestChunk>>(), Arg.Any<CancellationToken>())
+            .Returns(call => stored.StartRunningAsync(call.Arg<Backtest>()!, call.Arg<IReadOnlyList<BacktestChunk>>()!, call.Arg<CancellationToken>()));
+        spy.ClaimChunkAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(call => stored.ClaimChunkAsync(call.ArgAt<Guid>(0), call.ArgAt<Guid>(1), call.ArgAt<DateTimeOffset>(2), call.ArgAt<DateTimeOffset>(3), call.ArgAt<CancellationToken>(4)));
+        spy.RenewChunkLeaseAsync(Arg.Any<BacktestChunk>(), Arg.Any<Guid>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(call => stored.RenewChunkLeaseAsync(call.Arg<BacktestChunk>()!, call.Arg<Guid>(), call.Arg<DateTimeOffset>(), call.Arg<CancellationToken>()));
         spy.GetCalculatedCombinationsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(call => stored.GetCalculatedCombinationsAsync(call.Arg<Guid>(), call.Arg<CancellationToken>()));
-        spy.SaveProgressAsync(Arg.Any<Backtest>(), Arg.Any<IReadOnlyList<BacktestResult>>(), Arg.Any<CancellationToken>()).Returns(async call =>
-        {
-            bool written = await stored.SaveProgressAsync(call.Arg<Backtest>()!, call.Arg<IReadOnlyList<BacktestResult>>()!, call.Arg<CancellationToken>());
-            saved(call.Arg<Backtest>()!, written);
+        spy.CompleteChunkAsync(Arg.Any<BacktestChunk>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(call => stored.CompleteChunkAsync(call.Arg<BacktestChunk>()!, call.Arg<Guid>(), call.Arg<CancellationToken>()));
+        spy.SucceedIfCompleteAsync(Arg.Any<Guid>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(call => stored.SucceedIfCompleteAsync(call.Arg<Guid>(), call.Arg<DateTimeOffset>(), call.Arg<CancellationToken>()));
+        spy.SaveChunkProgressAsync(
+                Arg.Any<BacktestChunk>(),
+                Arg.Any<Guid>(),
+                Arg.Any<IReadOnlyList<BacktestResult>>(),
+                Arg.Any<decimal?>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                BacktestChunk chunk = call.ArgAt<BacktestChunk>(0)!;
+                bool written = await stored.SaveChunkProgressAsync(
+                    chunk,
+                    call.ArgAt<Guid>(1),
+                    call.ArgAt<IReadOnlyList<BacktestResult>>(2)!,
+                    call.ArgAt<decimal?>(3),
+                    call.ArgAt<DateTimeOffset>(4),
+                    call.ArgAt<CancellationToken>(5));
+                saved(await stored.GetAsync(chunk.BacktestId, CancellationToken.None), written);
 
-            return written;
-        });
+                return written;
+            });
 
         return spy;
     }

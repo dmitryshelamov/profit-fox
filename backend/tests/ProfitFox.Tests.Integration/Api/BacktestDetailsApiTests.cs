@@ -5,6 +5,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 
 using ProfitFox.Domain.Entities.Backtests;
+using ProfitFox.Domain.Entities.Backtests.Enums;
+using ProfitFox.Domain.Services.Backtests;
 using ProfitFox.Tests.Integration.Infrastructure;
 using ProfitFox.Tests.Shared.Fixtures.Strategies;
 
@@ -42,7 +44,7 @@ public class BacktestDetailsApiTests
     [Test]
     public async Task Details_are_computed_at_the_version_of_the_backtest_and_match_its_result()
     {
-        Backtest queued = await _scenario.QueueAsync(From, From.AddHours(11));
+        Backtest queued = await _scenario.CreateAsync(From, From.AddHours(11));
         Backtest backtest = await _scenario.WaitUntilFinishedAsync(queued.Id);
         JsonNode changed = JsonNode.Parse(StrategyFixtures.Json("ema"))!;
         changed["parameters"]![2]!["default"] = 300;
@@ -69,7 +71,7 @@ public class BacktestDetailsApiTests
     [Test]
     public async Task Trade_open_at_the_end_has_no_close_exit_or_result()
     {
-        Backtest queued = await _scenario.QueueAsync(From, From.AddHours(8));
+        Backtest queued = await _scenario.CreateAsync(From, From.AddHours(8));
         await _scenario.WaitUntilFinishedAsync(queued.Id);
 
         JsonElement trade = (await _client.GetFromJsonAsync<JsonElement>($"/api/backtests/{queued.Id}/results/0/details")).GetProperty("trades").EnumerateArray().ShouldHaveSingleItem();
@@ -81,11 +83,30 @@ public class BacktestDetailsApiTests
     [Test]
     public async Task Details_of_an_unknown_backtest_or_combination_are_not_found()
     {
-        Backtest queued = await _scenario.QueueAsync(From, From.AddHours(11));
+        Backtest queued = await _scenario.CreateAsync(From, From.AddHours(11));
         await _scenario.WaitUntilFinishedAsync(queued.Id);
 
         (await _client.GetAsync($"/api/backtests/{queued.Id}/results/1/details")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await _client.GetAsync($"/api/backtests/{Guid.NewGuid()}/results/0/details")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    // Scenario "Детали бэктеста другой версии движка".
+    [Test]
+    public async Task Details_of_a_backtest_of_another_engine_version_are_a_conflict_and_its_results_still_read()
+    {
+        Backtest computed = await _scenario.CreateAsync(From, From.AddHours(11));
+        BacktestResult result = (await _scenario.ResultsAsync(await _scenario.WaitUntilFinishedAsync(computed.Id)))[0];
+        int other = EngineVersion.Current + 1;
+        Backtest backtest = await _scenario.CreateAsync(From, From.AddHours(11), status: BacktestStatus.Succeeded, engineVersion: other);
+        await _scenario.StoreResultsAsync(result with { BacktestId = backtest.Id });
+
+        HttpResponseMessage details = await _client.GetAsync($"/api/backtests/{backtest.Id}/results/0/details");
+
+        details.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        string problem = (await details.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("detail").GetString()!;
+        problem.ShouldContain($"engine version {other}");
+        problem.ShouldContain($"engine version {EngineVersion.Current}");
+        (await _client.GetAsync($"/api/backtests/{backtest.Id}/results")).StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
     private static decimal Number(JsonElement item, string name)

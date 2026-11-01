@@ -34,10 +34,14 @@
 
 ### 1. Отдельный проект `ProfitFox.Worker` на generic host
 
-`ProfitFox.Worker` — консольный хост (`Host.CreateApplicationBuilder`) с Serilog из конфигурации, как в API. Он
-вызывает `InfrastructureRegistrar.Configure` (общие сервисы) и новый `InfrastructureRegistrar.ConfigureWorker`
-(фоновые сервисы Worker'а и `WorkerSettings`). API вызывает только `Configure`, поэтому фоновые сервисы в нём не
-регистрируются. `StrategyVersionsInitializationService` и миграции остаются в API.
+`ProfitFox.Worker` — консольный хост (`Host.CreateApplicationBuilder`) с Serilog из конфигурации, как в API.
+`Program.Configure` вызывает `InfrastructureRegistrar.ConfigureWorker` (общие сервисы и фоновые сервисы Worker'а), API
+вызывает `InfrastructureRegistrar.Configure` (общие сервисы и `StrategyVersionsInitializationService`), поэтому фоновые
+сервисы в API не регистрируются, а шаг запуска версий стратегий и миграции остаются в API. MediatR регистрирует
+обработчики Worker'а и в API, поэтому то, что они принимают (`WorkerSettings`, `WorkerIdentity`, `BacktestInputCache`),
+регистрируется в обоих процессах; тестовые хосты проверяют, что каждый зарегистрированный сервис разрешается
+(`ValidateOnBuild`), как это делает Development. Worker сохраняет статический логгер Serilog (`preserveStaticLogger`):
+им `Main` пишет ошибку запуска, а Worker в процессе теста не перехватывает логгер API.
 
 Отклонены: роль `worker` внутри бинарника API (на машинах Worker'ов поднимается ASP.NET и HTTP-порт без нужды);
 роли по образцу ProfitGraph (`jobs`, `live`) — живого бота пока нет, а загрузки и бэктесты разводятся аренды, а не
@@ -85,7 +89,7 @@ Worker, потерявший аренду, ничего не сохраняет.
 Сохранение пачки (`SaveProgressAsync`) в одной транзакции: вставляет результаты с `ON CONFLICT DO NOTHING`, прибавляет
 к `backtests.calculated_combinations` число действительно вставленных строк, обновляет `speed` куска и
 `backtests.speed` как сумму скоростей кусков с действующей арендой, сбрасывает `lost_leases` куска. Пишет только при
-`Running` бэктеста и своей аренде куска. Последняя пачка ставит `done = true` и снимает аренду. Отдельным оператором
+`Running` бэктеста и своей аренде куска. После последней пачки Worker отдельным оператором ставит куску `done = true` и снимает аренду, если она ещё его. Отдельным оператором
 после фиксации Worker завершает бэктест: `UPDATE … SET status = 'Succeeded' WHERE status = 'Running' AND NOT EXISTS
 (несданный кусок)`. Из двух Worker'ов, сдавших последние куски одновременно, хотя бы второй видит оба куска сданными.
 
@@ -195,8 +199,9 @@ Worker'ов из переменной окружения `ConnectionStrings__Mar
 ### 12. Образ и compose
 
 `backend/src/ProfitFox.Worker/Dockerfile` — многоэтапная сборка: образ SDK .NET 10 собирает и публикует, образ
-runtime .NET 10 запускает. `docker-compose.worker.yml` в корне — один сервис `worker` с `restart: unless-stopped`,
-строкой подключения и `Backtests__MaxParallelism` из `.env` рядом с файлом (`.env` в `.gitignore`). На машине Worker'а:
+ASP.NET Core runtime .NET 10 запускает: Infrastructure использует общую платформу ASP.NET Core. `docker-compose.worker.yml` в корне — один сервис `worker` с `restart: unless-stopped`,
+строкой подключения и `Backtests__MaxParallelism` из `worker.env` рядом с файлом (`*.env` в `.gitignore`); отдельный
+файл, а не `.env`, чтобы Worker не получал чужих переменных. На машине Worker'а:
 клон репозитория и `docker compose -f docker-compose.worker.yml up -d --build`.
 
 ## Risks / Trade-offs

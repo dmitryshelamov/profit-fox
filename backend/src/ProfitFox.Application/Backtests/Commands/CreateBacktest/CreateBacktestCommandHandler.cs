@@ -1,12 +1,12 @@
 using MediatR;
 
 using ProfitFox.Application.Exceptions;
-using ProfitFox.Application.Ports.Backtests;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.Entities.Backtests;
 using ProfitFox.Domain.Entities.Bots;
 using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.Services.Backtests;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Application.Backtests.Commands.CreateBacktest;
@@ -15,8 +15,8 @@ public sealed class CreateBacktestCommandHandler(
     IStrategyLibraryRepository library,
     IBacktestRepository backtests,
     IInstrumentRulesProvider exchange,
-    IBacktestQueue queue,
     BacktestSettings settings,
+    EngineVersion engine,
     TimeProvider time) : IRequestHandler<CreateBacktestCommand, Guid>
 {
     /// <summary>The rules of the instrument are asked from the exchange and kept with the backtest, so a later recount uses the same.</summary>
@@ -40,9 +40,8 @@ public sealed class CreateBacktestCommandHandler(
         StrategyVersion latest = (await library.GetVersionAsync(bot.StrategyId, number, cancellationToken))!;
         InstrumentRules rules = await exchange.GetRulesAsync(bot.Instrument, cancellationToken);
         Backtest backtest = BacktestRequests.Check(() =>
-            Backtest.Create(Guid.NewGuid(), bot, latest, from, to, parameters, simulation, settings.Policy(), rules, time.GetUtcNow()));
+            Backtest.Create(Guid.NewGuid(), bot, latest, from, to, parameters, simulation, settings.Policy(), rules, engine.Number, time.GetUtcNow()));
         await backtests.AddAsync(backtest, cancellationToken);
-        await queue.EnqueueAsync(backtest.Id, cancellationToken);
 
         return backtest.Id;
     }
