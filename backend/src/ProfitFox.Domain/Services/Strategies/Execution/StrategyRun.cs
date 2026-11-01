@@ -1,6 +1,7 @@
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Services.Strategies.Validation;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
 
 namespace ProfitFox.Domain.Services.Strategies.Execution;
@@ -17,6 +18,7 @@ public sealed class StrategyRun
     private readonly Account _account;
     private readonly OrderSide _entrySide;
     private readonly FeeSchedule _fees;
+    private readonly InstrumentRules _rules;
     private readonly List<OrderCommand> _commands = [];
     private int _lastOrderNumber;
     private StrategyEvent _event = null!;
@@ -27,6 +29,7 @@ public sealed class StrategyRun
         _entrySide = direction == StrategyDirection.Long ? OrderSide.Buy : OrderSide.Sell;
         _account = new Account(direction, conditions.Balance);
         _fees = conditions.Fees;
+        _rules = conditions.Rules;
         _nodes = nodes;
         _parameters = parameters;
         _indexByPath = nodes.Select((node, index) => (node.Path, index)).ToDictionary(entry => entry.Path, entry => entry.index);
@@ -221,7 +224,7 @@ public sealed class StrategyRun
 
         if (side == _entrySide)
         {
-            Place(index, node, side, byAmount ? null : size, byAmount ? size : null);
+            Place(index, node, side, byAmount ? null : Down(size, _rules.QuantityStep), byAmount ? size : null);
 
             return;
         }
@@ -230,7 +233,7 @@ public sealed class StrategyRun
 
         if (_account.Quantity > 0m && quantity is { } wanted)
         {
-            Place(index, node, side, Math.Min(wanted, _account.Quantity), null);
+            Place(index, node, side, Math.Min(Down(wanted, _rules.QuantityStep), ExitableQuantity()), null);
         }
     }
 
@@ -238,7 +241,7 @@ public sealed class StrategyRun
     {
         if (!HasOrder(index) && IsTrue(node, "when") && _account.Quantity > 0m)
         {
-            Place(index, node, _entrySide == OrderSide.Buy ? OrderSide.Sell : OrderSide.Buy, _account.Quantity, null);
+            Place(index, node, _entrySide == OrderSide.Buy ? OrderSide.Sell : OrderSide.Buy, ExitableQuantity(), null);
         }
     }
 
@@ -275,21 +278,42 @@ public sealed class StrategyRun
         }
     }
 
+    /// <summary>The order on the steps of the instrument: a buy price rounds down, a sell price up, a quantity down.</summary>
     private (decimal Price, decimal Quantity)? WantedLimit(RunNode node, OrderSide side)
     {
-        if (!IsTrue(node, "when") || Positive(node, "price") is not { } price || Positive(node, "size") is not { } size)
+        if (!IsTrue(node, "when") || Positive(node, "price") is not { } wantedPrice || Positive(node, "size") is not { } size)
         {
             return null;
         }
 
-        decimal quantity = node.Settings.SizeMode == OrderSizeMode.Amount ? size / price : size;
+        decimal price = side == OrderSide.Buy ? Down(wantedPrice, _rules.TickSize) : Up(wantedPrice, _rules.TickSize);
+        decimal quantity = Down(node.Settings.SizeMode == OrderSizeMode.Amount ? size / price : size, _rules.QuantityStep);
 
         if (side == _entrySide)
         {
             return (price, quantity);
         }
 
-        return _account.Quantity > 0m ? (price, Math.Min(quantity, _account.Quantity)) : null;
+        return _account.Quantity > 0m ? (price, Math.Min(quantity, ExitableQuantity())) : null;
+    }
+
+    /// <summary>An exit sells at most the position rounded down to the quantity step.</summary>
+    private decimal ExitableQuantity()
+    {
+        return Down(_account.Quantity, _rules.QuantityStep);
+    }
+
+    // The remainder never overflows, unlike a division by a fine step.
+    private static decimal Down(decimal value, decimal step)
+    {
+        return value - value % step;
+    }
+
+    private static decimal Up(decimal value, decimal step)
+    {
+        decimal rest = value % step;
+
+        return rest == 0m ? value : value - rest + step;
     }
 
     /// <summary>
