@@ -77,6 +77,28 @@ internal sealed class BacktestRepository(NpgsqlDataSource dataSource) : IBacktes
         return [.. await connection.QueryAsync<long>(BacktestRepositoryQueries.CalculatedCombinations(backtestId, cancellationToken))];
     }
 
+    public async Task<IReadOnlyList<BacktestResult>> GetResultsAsync(
+        Guid backtestId,
+        ResultMetric sort,
+        bool descending,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        IEnumerable<BacktestResultDb> results =
+            await connection.QueryAsync<BacktestResultDb>(BacktestRepositoryQueries.Results(backtestId, sort, descending, offset, limit, cancellationToken));
+
+        return [.. results.Select(BacktestResultDbConverter.ToDomain)];
+    }
+
+    public async Task<long> CountResultsAsync(Guid backtestId, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        return await connection.ExecuteScalarAsync<long>(BacktestRepositoryQueries.CountResults(backtestId, cancellationToken));
+    }
+
     public async Task<BacktestResult?> GetResultAsync(Guid backtestId, long combination, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);

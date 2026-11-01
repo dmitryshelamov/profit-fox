@@ -111,7 +111,7 @@
 - [x] 8.1 `POST /api/bots/{id}/backtests`, `GET /api/bots/{id}/backtests`, `GET /api/backtests/{id}`,
   `POST /api/backtests/{id}/cancel` и контракты; integration-тесты: 201, 400 по полям, 404, 503 «Биржа недоступна»,
   «Список бэктестов бота»
-- [ ] 8.2 `GET /api/backtests/{id}/results` с сортировкой, порядком и страницами; integration-тесты «Сортировка по
+- [x] 8.2 `GET /api/backtests/{id}/results` с сортировкой, порядком и страницами; integration-тесты «Сортировка по
   доходности», отсутствующее значение последним, 400 для неизвестной метрики
 - [ ] 8.3 `GET /api/backtests/{id}/results/{combination}/details`; integration-тест «Детали после правки стратегии»
 - [ ] 8.4 «Бот изменился» в чтении бэктеста; integration-тесты «Правка стратегии» и «Бот не менялся»

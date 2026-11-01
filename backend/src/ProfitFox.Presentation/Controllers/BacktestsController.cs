@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using ProfitFox.Application.Backtests.Commands.CancelBacktest;
 using ProfitFox.Application.Backtests.Commands.CreateBacktest;
 using ProfitFox.Application.Backtests.Queries.GetBacktest;
+using ProfitFox.Application.Backtests.Queries.GetBacktestResults;
 using ProfitFox.Application.Backtests.Queries.GetBotBacktests;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Domain.Entities.Backtests;
@@ -58,6 +59,21 @@ public sealed class BacktestsController(ISender sender) : ControllerBase
         Backtest? backtest = await sender.Send(new GetBacktestQuery(id), cancellationToken);
 
         return backtest is null ? NotFound() : Ok(BacktestResponse.Of(backtest));
+    }
+
+    [HttpGet("{id:guid}/results")]
+    public async Task<IActionResult> Results(Guid id, [FromQuery] ResultsQueryParameters query, CancellationToken cancellationToken)
+    {
+        try
+        {
+            GetBacktestResultsResult? page = await sender.Send(new GetBacktestResultsQuery(id, query.Sort, query.Order, query.Offset, query.Limit), cancellationToken);
+
+            return page is null ? NotFound() : Ok(new BacktestResultsResponse(page.Total, [.. page.Items.Select(BacktestResultResponse.Of)]));
+        }
+        catch (Exception exception) when (StrategyProblems.Of(exception) is { } problem)
+        {
+            return problem;
+        }
     }
 
     [HttpPost("{id:guid}/cancel")]

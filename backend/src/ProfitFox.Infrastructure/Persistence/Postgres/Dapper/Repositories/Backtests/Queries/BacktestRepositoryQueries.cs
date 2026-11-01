@@ -82,6 +82,48 @@ internal static class BacktestRepositoryQueries
             cancellationToken: cancellationToken);
     }
 
+    // Columns by metric: only these names ever reach the SQL text.
+    private static readonly Dictionary<ResultMetric, string> Columns = new Dictionary<ResultMetric, string>
+    {
+        [ResultMetric.Combination] = "combination",
+        [ResultMetric.CalculationTime] = "calculation_time",
+        [ResultMetric.StartEquity] = "start_equity",
+        [ResultMetric.EndEquity] = "end_equity",
+        [ResultMetric.Pnl] = "pnl",
+        [ResultMetric.RealizedPnl] = "realized_pnl",
+        [ResultMetric.UnrealizedPnl] = "unrealized_pnl",
+        [ResultMetric.Return] = "return_percent",
+        [ResultMetric.MaxDrawdown] = "max_drawdown_percent",
+        [ResultMetric.ReturnToDrawdown] = "return_to_drawdown",
+        [ResultMetric.ClosedTrades] = "closed_trades",
+        [ResultMetric.WinRate] = "win_rate_percent",
+        [ResultMetric.Fills] = "fills",
+        [ResultMetric.Fees] = "fees",
+        [ResultMetric.MaxPositionCost] = "max_position_cost",
+        [ResultMetric.MaxPositionCostPercent] = "max_position_cost_percent",
+        [ResultMetric.MaxCapitalUsed] = "max_capital_used",
+        [ResultMetric.TimeInPosition] = "time_in_position_percent",
+        [ResultMetric.TimeUnderWater] = "time_under_water_percent",
+        [ResultMetric.LongestUnderWater] = "longest_under_water_candles",
+        [ResultMetric.SkippedOrders] = "skipped_orders",
+        [ResultMetric.Candles] = "candles"
+    };
+
+    internal static CommandDefinition Results(Guid backtestId, ResultMetric sort, bool descending, int offset, int limit, CancellationToken cancellationToken)
+    {
+        string order = descending ? "DESC" : "ASC";
+
+        return new CommandDefinition(
+            $"{SelectResultsSql} WHERE backtest_id = @BacktestId ORDER BY {Columns[sort]} {order} NULLS LAST, combination OFFSET @Offset LIMIT @Limit",
+            new { BacktestId = backtestId, Offset = offset, Limit = limit },
+            cancellationToken: cancellationToken);
+    }
+
+    internal static CommandDefinition CountResults(Guid backtestId, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition("SELECT count(*) FROM backtest_results WHERE backtest_id = @BacktestId", new { BacktestId = backtestId }, cancellationToken: cancellationToken);
+    }
+
     internal static CommandDefinition Result(Guid backtestId, long combination, CancellationToken cancellationToken)
     {
         return new CommandDefinition(

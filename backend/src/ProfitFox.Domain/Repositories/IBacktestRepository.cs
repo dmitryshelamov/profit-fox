@@ -31,5 +31,16 @@ public interface IBacktestRepository
     /// <summary>Numbers of the combinations that have a result, ascending.</summary>
     Task<IReadOnlyList<long>> GetCalculatedCombinationsAsync(Guid backtestId, CancellationToken cancellationToken);
 
+    /// <summary>A page of results sorted by <paramref name="sort" />, a missing value last, equal values by combination.</summary>
+    Task<IReadOnlyList<BacktestResult>> GetResultsAsync(
+        Guid backtestId,
+        ResultMetric sort,
+        bool descending,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken);
+
+    Task<long> CountResultsAsync(Guid backtestId, CancellationToken cancellationToken);
+
     Task<BacktestResult?> GetResultAsync(Guid backtestId, long combination, CancellationToken cancellationToken);
 }
