@@ -16,15 +16,17 @@ public sealed class StrategyRun
     private readonly Dictionary<string, ActiveOrder> _orders = [];
     private readonly Account _account;
     private readonly OrderSide _entrySide;
+    private readonly FeeSchedule _fees;
     private readonly List<OrderCommand> _commands = [];
     private int _lastOrderNumber;
     private StrategyEvent _event = null!;
     private Bar? _lastBar;
 
-    private StrategyRun(IReadOnlyList<RunNode> nodes, IReadOnlyDictionary<string, NodeValue> parameters, StrategyDirection direction)
+    private StrategyRun(IReadOnlyList<RunNode> nodes, IReadOnlyDictionary<string, NodeValue> parameters, StrategyDirection direction, TradingConditions conditions)
     {
         _entrySide = direction == StrategyDirection.Long ? OrderSide.Buy : OrderSide.Sell;
-        _account = new Account(direction);
+        _account = new Account(direction, conditions.Balance);
+        _fees = conditions.Fees;
         _nodes = nodes;
         _parameters = parameters;
         _indexByPath = nodes.Select((node, index) => (node.Path, index)).ToDictionary(entry => entry.Path, entry => entry.index);
@@ -60,7 +62,7 @@ public sealed class StrategyRun
             parameter => parameter.Name,
             parameter => parameterValues.GetValueOrDefault(parameter.Name, parameter.Default));
 
-        return new StrategyRun(GraphExpander.Expand(definition, catalog), parameters, definition.Direction);
+        return new StrategyRun(GraphExpander.Expand(definition, catalog), parameters, definition.Direction, conditions);
     }
 
     public IReadOnlyList<OrderCommand> Handle(StrategyEvent @event)
@@ -113,7 +115,7 @@ public sealed class StrategyRun
         }
         else
         {
-            _account.Exit(filled.Quantity);
+            _account.Exit(filled.Quantity, filled.Price, filled.Fee);
         }
 
         if (filled.IsComplete)
@@ -157,6 +159,7 @@ public sealed class StrategyRun
                 outputs["invested"] = new NumberValue(_account.Invested);
                 outputs["lastEntryPrice"] = Number(_account.LastEntryPrice);
                 outputs["sinceLastEntry"] = _account.LastEntryAt is { } at ? new DurationValue(_event.At - at) : null;
+                outputs["free"] = new NumberValue(Free());
 
                 break;
             case SimpleNodeKind.Ema:
@@ -284,6 +287,17 @@ public sealed class StrategyRun
         }
 
         return _account.Quantity > 0m ? (price, Math.Min(quantity, _account.Quantity)) : null;
+    }
+
+    /// <summary>The cash less what standing limit entries reserve: their value and the fee they pay in the quote asset.</summary>
+    private decimal Free()
+    {
+        decimal rate = _fees.AssetOf(_entrySide) == FeeAsset.Quote ? _fees.LimitRate : 0m;
+        decimal reserved = _orders.Values
+            .Where(order => order.Side == _entrySide && order.Price is not null)
+            .Sum(order => order.Price!.Value * order.Remaining!.Value * (1m + rate));
+
+        return _account.Cash - reserved;
     }
 
     private bool HasOrder(int index)

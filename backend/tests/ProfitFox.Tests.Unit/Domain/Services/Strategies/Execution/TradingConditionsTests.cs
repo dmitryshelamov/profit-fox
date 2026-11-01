@@ -29,6 +29,7 @@ public class TradingConditionsTests
 
         IReadOnlyList<OrderCommand> commands = [.. closes.SelectMany((close, bar) => run.Handle(new BarClosed(Start.AddHours(bar), new Bar(close, close, close, close, 1m))))];
         commands.ShouldBeEmpty();
+        run.ValueOf("position", "free").ShouldBe(new NumberValue(1000m));
         run.Handle(new BarClosed(Start.AddHours(6), new Bar(10m, 10m, 10m, 10m, 1m)))
             .ShouldBe([new PlaceOrder("o-1", "enter", OrderSide.Buy, OrderType.Market, null, null, 100m)]);
         run.Handle(new OrderFilled(Start.AddHours(7), "o-1", 10m, 10m, IsComplete: true, Fee: 0.01m, FeeAsset: FeeAsset.Base)).ShouldBeEmpty();
