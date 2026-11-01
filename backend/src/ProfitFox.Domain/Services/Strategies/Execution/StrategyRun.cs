@@ -27,7 +27,7 @@ public sealed class StrategyRun
     private StrategyRun(IReadOnlyList<RunNode> nodes, IReadOnlyDictionary<string, NodeValue> parameters, StrategyDirection direction, TradingConditions conditions)
     {
         _entrySide = direction == StrategyDirection.Long ? OrderSide.Buy : OrderSide.Sell;
-        _account = new Account(direction, conditions.Balance);
+        _account = new Account(direction, conditions.Balance, conditions.Rules.MinQuantity);
         _fees = conditions.Fees;
         _rules = conditions.Rules;
         _nodes = nodes;
@@ -316,14 +316,10 @@ public sealed class StrategyRun
         return rest == 0m ? value : value - rest + step;
     }
 
-    /// <summary>
-    ///     Value of an entry with its fee in the quote asset. A market entry by quantity is valued at the last close; before the first
-    ///     bar there is no price to value it at, so it costs nothing.
-    /// </summary>
-    private decimal EntryCost(OrderType type, decimal? price, decimal? quantity, decimal? amount)
+    /// <summary>Value of an entry with its fee in the quote asset.</summary>
+    private decimal? WithFee(OrderType type, decimal? value)
     {
         decimal rate = _fees.AssetOf(_entrySide) == FeeAsset.Base ? 0m : type == OrderType.Limit ? _fees.LimitRate : _fees.MarketRate;
-        decimal value = amount ?? quantity!.Value * (price ?? _lastBar?.Close ?? 0m);
 
         return value * (1m + rate);
     }
@@ -349,10 +345,15 @@ public sealed class StrategyRun
         Place(index, node, side, OrderType.Market, null, quantity, amount);
     }
 
-    /// <summary>An entry that free money does not pay for is skipped as if its condition were false, and counted.</summary>
+    /// <summary>
+    ///     An order below the exchange minimum, or an entry that free money does not pay for, is skipped as if its condition were false,
+    ///     and counted. A value that cannot be known yet, of a market order by quantity before the first bar, passes both checks.
+    /// </summary>
     private void Place(int index, RunNode node, OrderSide side, OrderType type, decimal? price, decimal? quantity, decimal? amount)
     {
-        if (side == _entrySide && EntryCost(type, price, quantity, amount) > Free())
+        decimal? value = amount ?? quantity * (price ?? _lastBar?.Close);
+
+        if (quantity < _rules.MinQuantity || value < _rules.MinAmount || (side == _entrySide && WithFee(type, value) > Free()))
         {
             SkippedOrders++;
 

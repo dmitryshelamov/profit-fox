@@ -8,7 +8,10 @@ namespace ProfitFox.Domain.Services.Strategies.Execution;
 ///     amount of a long and takes from it of a short, so the average price includes the entry fees. A short holds the value of its
 ///     entries as collateral, leverage 1.
 /// </summary>
-internal sealed class Account(StrategyDirection direction, decimal balance)
+/// <param name="direction"></param>
+/// <param name="balance"></param>
+/// <param name="minQuantity">A position left below it after an exit cannot be sold, so it is closed.</param>
+internal sealed class Account(StrategyDirection direction, decimal balance, decimal minQuantity)
 {
     private decimal _collateral;
 
@@ -54,8 +57,9 @@ internal sealed class Account(StrategyDirection direction, decimal balance)
         Invested -= AveragePrice!.Value * exited;
         Quantity -= exited;
 
-        if (Quantity == 0m)
+        if (Quantity < minQuantity || Quantity == 0m)
         {
+            Quantity = 0m;
             Invested = 0m;
             _collateral = 0m;
             LastEntryPrice = null;
