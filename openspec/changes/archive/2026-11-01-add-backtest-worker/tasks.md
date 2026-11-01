@@ -83,7 +83,7 @@
 
 ## 6. Образ, compose и документация
 
-- [ ] 6.1 `backend/src/ProfitFox.Worker/Dockerfile` (SDK .NET 10 → runtime .NET 10) и `docker-compose.worker.yml` с
+- [x] 6.1 `backend/src/ProfitFox.Worker/Dockerfile` (SDK .NET 10 → runtime .NET 10) и `docker-compose.worker.yml` с
   `.env` рядом; проверить `docker compose -f docker-compose.worker.yml build` и запуск Worker'а против локальной базы
   из `docker-compose.yml`
 - [x] 6.2 README: локальный запуск API и Worker'а, запуск Worker'а на другой машине, порядок деплоя (API первым) и
