@@ -17,6 +17,10 @@ public sealed class StrategyLibrary : AggregateRoot
     private readonly List<Strategy> _strategies;
     private readonly Dictionary<Guid, StrategyVersion> _latestVersions;
     private readonly List<StrategyVersion> _newVersions = [];
+    private readonly Dictionary<Guid, Strategy> _savedStrategies = [];
+    private readonly List<Guid> _removedStrategies = [];
+    private readonly Dictionary<Guid, CompositeNode> _savedComposites = [];
+    private readonly List<Guid> _removedComposites = [];
 
     /// <param name="revision"></param>
     /// <param name="strategies"></param>
@@ -41,8 +45,13 @@ public sealed class StrategyLibrary : AggregateRoot
 
     public IReadOnlyList<CompositeNode> Composites => _composites;
 
-    /// <summary>Versions the operations on this instance created, oldest first; they are saved with the change.</summary>
-    public IReadOnlyList<StrategyVersion> NewVersions => _newVersions;
+    /// <summary>Everything the operations on this instance changed; new versions come oldest first.</summary>
+    public StrategyLibraryChange Change => new StrategyLibraryChange(
+        [.. _savedStrategies.Values],
+        [.. _removedStrategies],
+        [.. _savedComposites.Values],
+        [.. _removedComposites],
+        [.. _newVersions]);
 
     public StrategyVersion? LatestVersion(Guid strategyId)
     {
@@ -55,6 +64,7 @@ public sealed class StrategyLibrary : AggregateRoot
         Validate(definition);
         var strategy = new Strategy(id, name, definition, now, now);
         _strategies.Add(strategy);
+        _savedStrategies[id] = strategy;
         Version(strategy, Catalog(), now);
 
         return strategy;
@@ -73,6 +83,7 @@ public sealed class StrategyLibrary : AggregateRoot
 
         Validate(definition);
         _strategies[index] = _strategies[index] with { Name = name, Definition = definition, UpdatedAt = now };
+        _savedStrategies[id] = _strategies[index];
         Version(_strategies[index], Catalog(), now);
 
         return _strategies[index];
@@ -80,7 +91,15 @@ public sealed class StrategyLibrary : AggregateRoot
 
     public bool RemoveStrategy(Guid id)
     {
-        return _strategies.RemoveAll(strategy => strategy.Id == id) > 0;
+        if (_strategies.RemoveAll(strategy => strategy.Id == id) == 0)
+        {
+            return false;
+        }
+
+        _savedStrategies.Remove(id);
+        _removedStrategies.Add(id);
+
+        return true;
     }
 
     /// <exception cref="GraphValidationException">The composite graph is invalid.</exception>
@@ -89,6 +108,7 @@ public sealed class StrategyLibrary : AggregateRoot
         ValidateComposite(id, definition, Catalog());
         var composite = new CompositeNode(id, name, definition, now, now);
         _composites.Add(composite);
+        _savedComposites[id] = composite;
 
         return composite;
     }
@@ -127,6 +147,7 @@ public sealed class StrategyLibrary : AggregateRoot
         }
 
         _composites[index] = _composites[index] with { Name = name, Definition = definition, UpdatedAt = now };
+        _savedComposites[id] = _composites[index];
 
         foreach (Strategy user in _strategies.Where(strategy => Uses(strategy.Definition.Graph, affected)))
         {
@@ -151,7 +172,15 @@ public sealed class StrategyLibrary : AggregateRoot
             throw new NodeInUseException(usages);
         }
 
-        return _composites.RemoveAll(composite => composite.Id == id) > 0;
+        if (_composites.RemoveAll(composite => composite.Id == id) == 0)
+        {
+            return false;
+        }
+
+        _savedComposites.Remove(id);
+        _removedComposites.Add(id);
+
+        return true;
     }
 
     /// <returns>The clone as a new custom node, or <c>null</c> when there is no such source node.</returns>
@@ -164,6 +193,7 @@ public sealed class StrategyLibrary : AggregateRoot
 
         var clone = new CompositeNode(id, name, definition, now, now);
         _composites.Add(clone);
+        _savedComposites[id] = clone;
 
         return clone;
     }

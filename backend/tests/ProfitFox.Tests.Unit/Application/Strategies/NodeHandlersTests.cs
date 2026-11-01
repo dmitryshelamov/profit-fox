@@ -40,8 +40,7 @@ public class NodeHandlersTests
         _library.AddStrategy(User, "EMA", UsesSignal(), Now.AddDays(-1));
         _repository = Substitute.For<IStrategyLibraryRepository>();
         _repository.LoadAsync(Arg.Any<CancellationToken>()).Returns(_ => _library);
-        _repository.SaveCompositeAsync(Arg.Any<CompositeNode>(), Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(true);
-        _repository.DeleteCompositeAsync(Arg.Any<Guid>(), Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(true);
+        _repository.SaveAsync(Arg.Any<StrategyLibraryChange>(), Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(true);
         _repository.GetCompositesAsync(Arg.Any<CancellationToken>()).Returns(_ => _library.Composites);
         _repository.GetCompositeAsync(Signal, Arg.Any<CancellationToken>()).Returns(_ => _library.Composites[0]);
     }
@@ -51,7 +50,7 @@ public class NodeHandlersTests
     {
         Guid id = await new CreateNodeCommandHandler(_repository, _time).Handle(new CreateNodeCommand("Новый", Json(SignalDefinition())), CancellationToken.None);
 
-        await _repository.Received(1).SaveCompositeAsync(Arg.Is<CompositeNode>(node => node!.Id == id && node.Name == "Новый"), 3, Arg.Any<CancellationToken>());
+        await _repository.Received(1).SaveAsync(Arg.Is<StrategyLibraryChange>(change => change!.SavedComposites.Any(node => node.Id == id && node.Name == "Новый")), 3, Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -78,7 +77,7 @@ public class NodeHandlersTests
     {
         await new UpdateNodeCommandHandler(_repository, _time).Handle(new UpdateNodeCommand(Signal.ToString(), "Сигнал 2", Json(SignalDefinition())), CancellationToken.None);
 
-        await _repository.Received(1).SaveCompositeAsync(Arg.Is<CompositeNode>(node => node!.Id == Signal && node.Name == "Сигнал 2" && node.UpdatedAt == Now), 3, Arg.Any<CancellationToken>());
+        await _repository.Received(1).SaveAsync(Arg.Is<StrategyLibraryChange>(change => change!.SavedComposites.Any(node => node.Id == Signal && node.Name == "Сигнал 2" && node.UpdatedAt == Now)), 3, Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -119,7 +118,7 @@ public class NodeHandlersTests
 
         await new DeleteNodeCommandHandler(_repository).Handle(new DeleteNodeCommand(Signal.ToString()), CancellationToken.None);
 
-        await _repository.Received(1).DeleteCompositeAsync(Signal, 3, Arg.Any<CancellationToken>());
+        await _repository.Received(1).SaveAsync(Arg.Is<StrategyLibraryChange>(change => change!.RemovedComposites.SequenceEqual(new[] { Signal })), 3, Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -131,9 +130,9 @@ public class NodeHandlersTests
         Guid named = await handler.Handle(new CloneNodeCommand(Signal.ToString(), "Свой"), CancellationToken.None);
         Guid custom = await handler.Handle(new CloneNodeCommand(Signal.ToString(), null), CancellationToken.None);
 
-        await _repository.Received(1).SaveCompositeAsync(Arg.Is<CompositeNode>(node => node!.Id == ladder && node.Name == "Ladder (копия)"), 3, Arg.Any<CancellationToken>());
-        await _repository.Received(1).SaveCompositeAsync(Arg.Is<CompositeNode>(node => node!.Id == named && node.Name == "Свой"), 3, Arg.Any<CancellationToken>());
-        await _repository.Received(1).SaveCompositeAsync(Arg.Is<CompositeNode>(node => node!.Id == custom && node.Name == "Мой сигнал (копия)"), 3, Arg.Any<CancellationToken>());
+        await _repository.Received(1).SaveAsync(Arg.Is<StrategyLibraryChange>(change => change!.SavedComposites.Last().Id == ladder && change.SavedComposites.Last().Name == "Ladder (копия)"), 3, Arg.Any<CancellationToken>());
+        await _repository.Received(1).SaveAsync(Arg.Is<StrategyLibraryChange>(change => change!.SavedComposites.Last().Id == named && change.SavedComposites.Last().Name == "Свой"), 3, Arg.Any<CancellationToken>());
+        await _repository.Received(1).SaveAsync(Arg.Is<StrategyLibraryChange>(change => change!.SavedComposites.Last().Id == custom && change.SavedComposites.Last().Name == "Мой сигнал (копия)"), 3, Arg.Any<CancellationToken>());
     }
 
     [TestCase("")]
@@ -147,7 +146,7 @@ public class NodeHandlersTests
     [Test]
     public void Save_on_a_changed_library_is_a_conflict()
     {
-        _repository.SaveCompositeAsync(Arg.Any<CompositeNode>(), Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(false);
+        _repository.SaveAsync(Arg.Any<StrategyLibraryChange>(), Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(false);
 
         Should.Throw<StateConflictException>(() => new CloneNodeCommandHandler(_repository, _time).Handle(new CloneNodeCommand("dca", null), CancellationToken.None));
     }

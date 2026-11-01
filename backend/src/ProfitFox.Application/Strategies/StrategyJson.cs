@@ -92,6 +92,35 @@ public static partial class StrategyJson
         return json;
     }
 
+    /// <summary>A strategy version: <c>{ "strategy": …, "composites": [ { "ref": …, "definition": … } ] }</c>.</summary>
+    public static JsonObject WriteSnapshot(StrategySnapshot snapshot)
+    {
+        return new JsonObject
+        {
+            ["strategy"] = WriteStrategy(snapshot.Definition),
+            ["composites"] = new JsonArray(
+            [
+                .. snapshot.Composites.Select(composite => new JsonObject { ["ref"] = ToCode(composite.Id), ["definition"] = WriteComposite(composite.Definition) })
+            ])
+        };
+    }
+
+    /// <summary>Reads a stored version; it was valid when written, so it is not checked again.</summary>
+    public static StrategySnapshot ParseSnapshot(JsonElement json)
+    {
+        IReadOnlyList<SnapshotComposite> composites =
+        [
+            .. json.GetProperty("composites").EnumerateArray().Select(composite =>
+            {
+                TryParseNodeId(composite.GetProperty("ref").GetString()!, out CompositeNodeId? id);
+
+                return new SnapshotComposite(id!, ParseComposite(composite.GetProperty("definition")));
+            })
+        ];
+
+        return StrategySnapshot.Restore(ParseStrategy(json.GetProperty("strategy")), composites);
+    }
+
     /// <summary>Code of a composite node id in a graph reference: the built-in code or the custom <see cref="Guid" />.</summary>
     public static string ToCode(CompositeNodeId id)
     {

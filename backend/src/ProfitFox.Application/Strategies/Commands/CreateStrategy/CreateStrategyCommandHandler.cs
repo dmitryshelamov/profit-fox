@@ -16,7 +16,7 @@ public sealed class CreateStrategyCommandHandler(IStrategyLibraryRepository repo
         StrategyDefinition definition = StrategyRequests.Read(request.Name, request.Definition, StrategyJson.ParseStrategy);
         StrategyLibrary library = await repository.LoadAsync(cancellationToken);
         Strategy strategy = StrategyRequests.Check(() => library.AddStrategy(Guid.NewGuid(), request.Name, definition, time.GetUtcNow()));
-        StrategyRequests.EnsureSaved(await repository.SaveStrategyAsync(strategy, library.Revision, cancellationToken));
+        StrategyRequests.EnsureSaved(await repository.SaveAsync(library.Change, library.Revision, cancellationToken));
 
         return strategy.Id;
     }

@@ -16,7 +16,7 @@ public sealed class CreateNodeCommandHandler(IStrategyLibraryRepository reposito
         CompositeDefinition definition = StrategyRequests.Read(request.Name, request.Definition, StrategyJson.ParseComposite);
         StrategyLibrary library = await repository.LoadAsync(cancellationToken);
         CompositeNode node = StrategyRequests.Check(() => library.AddComposite(Guid.NewGuid(), request.Name, definition, time.GetUtcNow()));
-        StrategyRequests.EnsureSaved(await repository.SaveCompositeAsync(node, library.Revision, cancellationToken));
+        StrategyRequests.EnsureSaved(await repository.SaveAsync(library.Change, library.Revision, cancellationToken));
 
         return node.Id;
     }

@@ -16,8 +16,8 @@ public sealed class UpdateStrategyCommandHandler(IStrategyLibraryRepository repo
     {
         StrategyDefinition definition = StrategyRequests.Read(request.Name, request.Definition, StrategyJson.ParseStrategy);
         StrategyLibrary library = await repository.LoadAsync(cancellationToken);
-        Strategy strategy = StrategyRequests.Check(() => library.UpdateStrategy(request.Id, request.Name, definition, time.GetUtcNow()))
+        _ = StrategyRequests.Check(() => library.UpdateStrategy(request.Id, request.Name, definition, time.GetUtcNow()))
             ?? throw new NotFoundException($"There is no strategy {request.Id}.");
-        StrategyRequests.EnsureSaved(await repository.SaveStrategyAsync(strategy, library.Revision, cancellationToken));
+        StrategyRequests.EnsureSaved(await repository.SaveAsync(library.Change, library.Revision, cancellationToken));
     }
 }

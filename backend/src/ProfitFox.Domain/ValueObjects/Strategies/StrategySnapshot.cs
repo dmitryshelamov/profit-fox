@@ -33,6 +33,12 @@ public sealed record StrategySnapshot
         return new StrategySnapshot(definition with { Graph = WithoutLayout(definition.Graph) }, composites);
     }
 
+    /// <summary>Restores a stored snapshot, which holds no layout and keeps its nodes in order already.</summary>
+    public static StrategySnapshot Restore(StrategyDefinition definition, IReadOnlyList<SnapshotComposite> composites)
+    {
+        return new StrategySnapshot(definition, composites);
+    }
+
     /// <summary>Only the nodes of the snapshot, so the version executes the same after any later edit of a node.</summary>
     public CompositeCatalog Catalog()
     {

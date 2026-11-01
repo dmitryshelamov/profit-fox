@@ -19,7 +19,8 @@ public class IntegrationEnvironment
     public async Task StartContainer()
     {
         OutboundHttpGuard.Install();
-        Container = new PostgreSqlBuilder(TimescaleImage).Build();
+        // Every test gets its own database, and idle pooled connections of finished tests stay open for a while.
+        Container = new PostgreSqlBuilder(TimescaleImage).WithCommand("-c", "max_connections=1000").Build();
         await Container.StartAsync();
     }
 

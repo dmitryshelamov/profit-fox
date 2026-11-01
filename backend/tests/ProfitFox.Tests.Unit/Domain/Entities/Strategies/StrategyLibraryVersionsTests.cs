@@ -27,7 +27,7 @@ public class StrategyLibraryVersionsTests
         StrategyVersion version = library.LatestVersion(Id)!;
         version.ShouldBe(new StrategyVersion(Id, 1, StrategySnapshot.Of(ladder, BuiltInComposites.Catalog), Now));
         version.Snapshot.Composites.ShouldHaveSingleItem().Id.ShouldBe(new BuiltInNodeId(BuiltInNode.Ladder));
-        library.NewVersions.ShouldBe([version]);
+        library.Change.NewVersions.ShouldBe([version]);
     }
 
     // Scenario "Изменён граф".
@@ -50,7 +50,7 @@ public class StrategyLibraryVersionsTests
 
         StrategyVersion version = library.LatestVersion(Id)!;
         version.ShouldBe(new StrategyVersion(Id, 2, StrategySnapshot.Of(changed, BuiltInComposites.Catalog), Now.AddHours(1)));
-        library.NewVersions.ShouldBe([version]);
+        library.Change.NewVersions.ShouldBe([version]);
         first.Number.ShouldBe(1);
     }
 
@@ -65,7 +65,7 @@ public class StrategyLibraryVersionsTests
         library.UpdateStrategy(Id, "EMA 2", moved, Now.AddHours(1));
 
         library.LatestVersion(Id).ShouldBe(first);
-        library.NewVersions.ShouldBeEmpty();
+        library.Change.NewVersions.ShouldBeEmpty();
     }
 
     // Scenario "Правка узла создаёт версию стратегии".
@@ -87,7 +87,7 @@ public class StrategyLibraryVersionsTests
         version.CreatedAt.ShouldBe(Now.AddHours(1));
         version.Snapshot.Catalog().Find(new CustomNodeId(crossId))!.Graph.Nodes.Single(node => node.Id == "mul").Inputs["b"].ShouldBe(Values.Number(3m));
         old.Snapshot.Catalog().Find(new CustomNodeId(crossId))!.Graph.Nodes.Single(node => node.Id == "mul").Inputs["b"].ShouldBe(Values.Number(2m));
-        library.NewVersions.ShouldBe([old, version]);
+        library.Change.NewVersions.ShouldBe([old, version]);
     }
 
     [Test]

@@ -19,6 +19,6 @@ public sealed class DeleteStrategyCommandHandler(IStrategyLibraryRepository repo
             throw new NotFoundException($"There is no strategy {request.Id}.");
         }
 
-        StrategyRequests.EnsureSaved(await repository.DeleteStrategyAsync(request.Id, library.Revision, cancellationToken));
+        StrategyRequests.EnsureSaved(await repository.SaveAsync(library.Change, library.Revision, cancellationToken));
     }
 }

@@ -29,7 +29,7 @@ public sealed class CloneNodeCommandHandler(IStrategyLibraryRepository repositor
 
         string name = request.Name ?? $"{NodeTitles.Of(source, library)} (копия)";
         CompositeNode clone = library.CloneComposite(source, Guid.NewGuid(), name, time.GetUtcNow())!;
-        StrategyRequests.EnsureSaved(await repository.SaveCompositeAsync(clone, library.Revision, cancellationToken));
+        StrategyRequests.EnsureSaved(await repository.SaveAsync(library.Change, library.Revision, cancellationToken));
 
         return clone.Id;
     }

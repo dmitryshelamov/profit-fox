@@ -17,8 +17,8 @@ public sealed class UpdateNodeCommandHandler(IStrategyLibraryRepository reposito
         Guid id = NodeIds.Custom(request.Id);
         CompositeDefinition definition = StrategyRequests.Read(request.Name, request.Definition, StrategyJson.ParseComposite);
         StrategyLibrary library = await repository.LoadAsync(cancellationToken);
-        CompositeNode node = NodeIds.InUse(() => StrategyRequests.Check(() => library.UpdateComposite(id, request.Name, definition, time.GetUtcNow())))
+        _ = NodeIds.InUse(() => StrategyRequests.Check(() => library.UpdateComposite(id, request.Name, definition, time.GetUtcNow())))
             ?? throw NodeIds.NotFound(request.Id);
-        StrategyRequests.EnsureSaved(await repository.SaveCompositeAsync(node, library.Revision, cancellationToken));
+        StrategyRequests.EnsureSaved(await repository.SaveAsync(library.Change, library.Revision, cancellationToken));
     }
 }
