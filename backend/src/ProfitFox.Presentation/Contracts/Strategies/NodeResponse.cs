@@ -11,8 +11,16 @@ namespace ProfitFox.Presentation.Contracts.Strategies;
 /// <param name="Title"></param>/// <param name="Group"><c>simple</c>, <c>builtIn</c> or <c>custom</c>.</param>
 /// <param name="Inputs"></param>
 /// <param name="Outputs"></param>
+/// <param name="Settings">The settings of a simple node; empty for a composite node.</param>
 /// <param name="Definition">The graph of a composite node; absent for a simple node.</param>
-public sealed record NodeResponse(string Id, string Title, string Group, IReadOnlyList<PinResponse> Inputs, IReadOnlyList<PinResponse> Outputs, JsonObject? Definition)
+public sealed record NodeResponse(
+    string Id,
+    string Title,
+    string Group,
+    IReadOnlyList<PinResponse> Inputs,
+    IReadOnlyList<PinResponse> Outputs,
+    IReadOnlyList<SettingResponse> Settings,
+    JsonObject? Definition)
 {
     public static NodeResponse Of(NodeCatalogEntry entry)
     {
@@ -27,6 +35,7 @@ public sealed record NodeResponse(string Id, string Title, string Group, IReadOn
             },
             [.. entry.Inputs.Select(PinResponse.Of)],
             [.. entry.Outputs.Select(PinResponse.Of)],
+            [.. entry.Settings.Select(SettingResponse.Of)],
             null);
     }
 

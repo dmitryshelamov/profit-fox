@@ -451,32 +451,51 @@ public static partial class StrategyJson
         private NodeSettings Settings(JsonElement json, NodeType type, string path)
         {
             JsonElement settings = json.TryGetProperty("settings", out JsonElement raw) ? raw : default;
-            SimpleNodeKind? kind = (type as SimpleNodeType)?.Kind;
+            var result = new NodeSettings();
 
-            if (kind == SimpleNodeKind.Compare)
+            if (type is not SimpleNodeType simple)
             {
-                CompareOperation operation = Code<CompareOperation>(settings, "operation", $"{path}.operation", required: true);
-                PinType? valueType = settings.ValueKind == JsonValueKind.Object && settings.TryGetProperty("type", out _)
-                    ? Code<PinType>(settings, "type", $"{path}.type", required: true)
-                    : null;
+                return result;
+            }
 
-                if (valueType == PinType.Boolean)
+            foreach (NodeSettingSpec spec in NodeSettingSpecs.Of(simple.Kind))
+            {
+                if (Setting(settings, spec, $"{path}.{spec.Name}") is { } value)
                 {
-                    Fail($"{path}.type", "Compared values must be numbers or durations.");
+                    result = spec.Apply(result, value);
+                }
+            }
+
+            return result;
+        }
+
+        private Enum? Setting(JsonElement settings, NodeSettingSpec spec, string path)
+        {
+            if (settings.ValueKind != JsonValueKind.Object || !settings.TryGetProperty(spec.Name, out JsonElement value))
+            {
+                if (spec.Required)
+                {
+                    Fail(path, "Value is required.");
                 }
 
-                return new NodeSettings(valueType, operation);
+                return null;
             }
 
-            if (kind is SimpleNodeKind.MarketOrder or SimpleNodeKind.HoldLimit)
+            if (value.ValueKind != JsonValueKind.String || !StrategyCodes.TryParse(spec.Default.GetType(), value.GetString()!, out Enum? parsed))
             {
-                OrderSide side = Code<OrderSide>(settings, "side", $"{path}.side", required: true);
-                OrderSizeMode size = Code<OrderSizeMode>(settings, "size", $"{path}.size", required: true);
+                Fail(path, $"Unknown code {value}.");
 
-                return new NodeSettings(Side: side, SizeMode: size);
+                return null;
             }
 
-            return new NodeSettings();
+            if (!spec.Values.Contains(parsed!))
+            {
+                Fail(path, $"Value must be one of {string.Join(", ", spec.Values.Select(StrategyCodes.ToCode))}.");
+
+                return null;
+            }
+
+            return parsed;
         }
 
         private PinRef Pin(JsonElement json, string property, string path)

@@ -1,8 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 
-using ProfitFox.Application.Bots;
 using ProfitFox.Application.Exceptions;
-using ProfitFox.Application.Strategies;
 
 namespace ProfitFox.Presentation.Contracts.Strategies;
 
@@ -21,17 +19,11 @@ public static class StrategyProblems
                 return new NotFoundObjectResult(new ProblemDetails { Status = StatusCodes.Status404NotFound, Detail = notFound.Message });
             case StateConflictException conflict:
                 var problem = new ProblemDetails { Status = StatusCodes.Status409Conflict, Detail = conflict.Message };
-                problem.Extensions["usages"] = conflict.Usages.Select(usage => new
-                {
-                    kind = StrategyCodes.ToCode(usage.Kind),
-                    id = usage.Id,
-                    name = usage.Name,
-                    errors = StrategyRequests.Errors(usage.Errors)
-                });
+                problem.Extensions["usages"] = conflict.Usages.Select(UsageResponse.Of);
 
                 if (conflict.Bots is { } bots)
                 {
-                    problem.Extensions["bots"] = bots.Select(bot => new { id = bot.Id, name = bot.Name, errors = BotRequests.Errors(bot.Errors) });
+                    problem.Extensions["bots"] = bots.Select(AffectedBotResponse.Of);
                 }
 
                 return new ConflictObjectResult(problem);

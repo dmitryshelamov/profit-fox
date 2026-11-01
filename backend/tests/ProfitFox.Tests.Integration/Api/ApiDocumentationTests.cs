@@ -48,6 +48,21 @@ public class ApiDocumentationTests
         expected.Except(documented).ShouldBeEmpty();
     }
 
+    // The editor takes its API types from this document, so the answers it reads must be described.
+    [Test]
+    public async Task OpenApi_document_describes_what_the_editor_reads()
+    {
+        using var document = JsonDocument.Parse(await _client.GetStringAsync("/openapi/v1.json"));
+        JsonElement paths = document.RootElement.GetProperty("paths");
+        JsonElement schemas = document.RootElement.GetProperty("components").GetProperty("schemas");
+
+        string[] expected = ["/api/strategies/validate", "/api/strategies/{id}/validate", "/api/strategy-nodes/validate", "/api/strategy-nodes/{id}/validate"];
+        expected.Except(paths.EnumerateObject().Select(path => path.Name)).ShouldBeEmpty();
+        schemas.GetProperty("NodeResponse").GetProperty("properties").TryGetProperty("settings", out _).ShouldBeTrue();
+        schemas.GetProperty("ValidationReportResponse").GetProperty("properties").TryGetProperty("bots", out _).ShouldBeTrue();
+        schemas.TryGetProperty("StrategyResponse", out _).ShouldBeTrue();
+    }
+
     // Scenario "Страница в Production".
     [Test]
     public async Task Swagger_ui_is_served_in_production()

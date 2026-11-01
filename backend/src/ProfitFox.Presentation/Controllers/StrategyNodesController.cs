@@ -3,12 +3,14 @@ using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 
+using ProfitFox.Application.Strategies;
 using ProfitFox.Application.Strategies.Commands.CloneNode;
 using ProfitFox.Application.Strategies.Commands.CreateNode;
 using ProfitFox.Application.Strategies.Commands.DeleteNode;
 using ProfitFox.Application.Strategies.Commands.UpdateNode;
 using ProfitFox.Application.Strategies.Queries.GetNode;
 using ProfitFox.Application.Strategies.Queries.GetNodeCatalog;
+using ProfitFox.Application.Strategies.Queries.ValidateNode;
 using ProfitFox.Presentation.Contracts.Strategies;
 
 namespace ProfitFox.Presentation.Controllers;
@@ -19,6 +21,7 @@ namespace ProfitFox.Presentation.Controllers;
 public sealed class StrategyNodesController(ISender sender) : ControllerBase
 {
     [HttpGet]
+    [ProducesResponseType<IReadOnlyList<NodeResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Catalog(CancellationToken cancellationToken)
     {
         IReadOnlyList<NodeCatalogEntry> catalog = await sender.Send(new GetNodeCatalogQuery(), cancellationToken);
@@ -27,6 +30,8 @@ public sealed class StrategyNodesController(ISender sender) : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [ProducesResponseType<NodeResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Get(string id, CancellationToken cancellationToken)
     {
         NodeResult? node = await sender.Send(new GetNodeQuery(id), cancellationToken);
@@ -35,6 +40,9 @@ public sealed class StrategyNodesController(ISender sender) : ControllerBase
     }
 
     [HttpPost]
+    [ProducesResponseType<CreatedResponse>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Create(DefinitionBody body, CancellationToken cancellationToken)
     {
         try
@@ -50,6 +58,10 @@ public sealed class StrategyNodesController(ISender sender) : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Update(string id, DefinitionBody body, CancellationToken cancellationToken)
     {
         try
@@ -65,6 +77,9 @@ public sealed class StrategyNodesController(ISender sender) : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Delete(string id, CancellationToken cancellationToken)
     {
         try
@@ -80,6 +95,8 @@ public sealed class StrategyNodesController(ISender sender) : ControllerBase
     }
 
     [HttpPost("{id}/clone")]
+    [ProducesResponseType<CreatedResponse>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Clone(string id, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] CloneNodeBody? body, CancellationToken cancellationToken)
     {
         try
@@ -87,6 +104,40 @@ public sealed class StrategyNodesController(ISender sender) : ControllerBase
             Guid clone = await sender.Send(new CloneNodeCommand(id, body?.Name), cancellationToken);
 
             return CreatedAtAction(nameof(Get), new { id = clone }, new CreatedResponse(clone));
+        }
+        catch (Exception exception) when (StrategyProblems.Of(exception) is { } problem)
+        {
+            return problem;
+        }
+    }
+
+    /// <summary>What creating this composite node would reject; nothing is saved.</summary>
+    [HttpPost("validate")]
+    [ProducesResponseType<ValidationReportResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    public Task<IActionResult> ValidateNew(DefinitionBody body, CancellationToken cancellationToken)
+    {
+        return Validate(null, body, cancellationToken);
+    }
+
+    /// <summary>What saving this change of the composite node would reject; nothing is saved.</summary>
+    [HttpPost("{id}/validate")]
+    [ProducesResponseType<ValidationReportResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public Task<IActionResult> ValidateChange(string id, DefinitionBody body, CancellationToken cancellationToken)
+    {
+        return Validate(id, body, cancellationToken);
+    }
+
+    private async Task<IActionResult> Validate(string? id, DefinitionBody body, CancellationToken cancellationToken)
+    {
+        try
+        {
+            ValidationReport report = await sender.Send(new ValidateNodeQuery(id, body.Name, body.Definition!.Value), cancellationToken);
+
+            return Ok(ValidationReportResponse.Of(report));
         }
         catch (Exception exception) when (StrategyProblems.Of(exception) is { } problem)
         {

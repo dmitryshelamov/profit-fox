@@ -1,0 +1,30 @@
+# PROFITFOX_API is the address of the API as this container reaches it, api:8080 in a compose network by default.
+# PROFITFOX_WEB_PORT is the port Caddy listens on, 80 by default; end-to-end tests run it in the host network.
+{
+	auto_https off
+	admin off
+}
+
+:{$PROFITFOX_WEB_PORT:80} {
+	encode zstd gzip
+
+	@api path /api /api/*
+	handle @api {
+		reverse_proxy {$PROFITFOX_API:api:8080}
+	}
+
+	handle {
+		root * /srv
+
+		# Built files carry a hash in their names, so they never change: the browser keeps them.
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+
+		# The page names the current build, so the browser asks for it every time.
+		@page not path /assets/*
+		header @page Cache-Control "no-cache"
+
+		try_files {path} /index.html
+		file_server
+	}
+}

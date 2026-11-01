@@ -1,0 +1,114 @@
+{
+  "id": "ema-cross",
+  "title": "Пересечение EMA",
+  "group": "builtIn",
+  "inputs": [
+    {
+      "name": "source",
+      "type": "number"
+    },
+    {
+      "name": "fast",
+      "type": "number"
+    },
+    {
+      "name": "slow",
+      "type": "number"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "up",
+      "type": "boolean"
+    },
+    {
+      "name": "down",
+      "type": "boolean"
+    }
+  ],
+  "settings": [],
+  "definition": {
+    "formatVersion": 1,
+    "inputs": [
+      {
+        "name": "source",
+        "type": "number"
+      },
+      {
+        "name": "fast",
+        "type": "number"
+      },
+      {
+        "name": "slow",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "up",
+        "type": "boolean"
+      },
+      {
+        "name": "down",
+        "type": "boolean"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "in",
+        "kind": "inputs"
+      },
+      {
+        "id": "fastEma",
+        "kind": "ema"
+      },
+      {
+        "id": "slowEma",
+        "kind": "ema"
+      },
+      {
+        "id": "cross",
+        "kind": "cross"
+      },
+      {
+        "id": "out",
+        "kind": "outputs"
+      }
+    ],
+    "wires": [
+      {
+        "from": "in.source",
+        "to": "fastEma.source"
+      },
+      {
+        "from": "in.fast",
+        "to": "fastEma.period"
+      },
+      {
+        "from": "in.source",
+        "to": "slowEma.source"
+      },
+      {
+        "from": "in.slow",
+        "to": "slowEma.period"
+      },
+      {
+        "from": "fastEma.value",
+        "to": "cross.a"
+      },
+      {
+        "from": "slowEma.value",
+        "to": "cross.b"
+      },
+      {
+        "from": "cross.up",
+        "to": "out.up"
+      },
+      {
+        "from": "cross.down",
+        "to": "out.down"
+      }
+    ],
+    "layout": {}
+  }
+}

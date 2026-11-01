@@ -51,7 +51,7 @@ public class StrategiesApiTests
     }
 
     [Test]
-    public async Task List_gives_id_name_and_direction()
+    public async Task List_gives_id_name_direction_and_categories()
     {
         await Create("EMA", StrategyFixtures.Element("ema"));
 
@@ -59,6 +59,7 @@ public class StrategiesApiTests
 
         JsonElement item = list.EnumerateArray().ShouldHaveSingleItem();
         (item.GetProperty("name").GetString(), item.GetProperty("direction").GetString()).ShouldBe(("EMA", "long"));
+        item.GetProperty("supportedCategories").EnumerateArray().Select(category => category.GetString()).ShouldBe(["spot", "linear"]);
     }
 
     [Test]

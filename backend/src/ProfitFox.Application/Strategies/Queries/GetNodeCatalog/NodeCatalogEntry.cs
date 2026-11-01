@@ -7,4 +7,11 @@ namespace ProfitFox.Application.Strategies.Queries.GetNodeCatalog;
 /// <param name="Group"></param>
 /// <param name="Inputs"></param>
 /// <param name="Outputs"></param>
-public sealed record NodeCatalogEntry(string Id, string Title, NodeGroup Group, IReadOnlyList<PinDeclaration> Inputs, IReadOnlyList<PinDeclaration> Outputs);
+/// <param name="Settings">The settings of a simple node; empty for a composite node.</param>
+public sealed record NodeCatalogEntry(
+    string Id,
+    string Title,
+    NodeGroup Group,
+    IReadOnlyList<PinDeclaration> Inputs,
+    IReadOnlyList<PinDeclaration> Outputs,
+    IReadOnlyList<NodeSettingSpec> Settings);

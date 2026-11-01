@@ -1,0 +1,499 @@
+[
+  {
+    "id": "parameters",
+    "title": "Параметры",
+    "group": "simple",
+    "inputs": [],
+    "outputs": [],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "inputs",
+    "title": "Входы узла",
+    "group": "simple",
+    "inputs": [],
+    "outputs": [],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "outputs",
+    "title": "Выходы узла",
+    "group": "simple",
+    "inputs": [],
+    "outputs": [],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "candle",
+    "title": "Свеча",
+    "group": "simple",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "open",
+        "type": "number"
+      },
+      {
+        "name": "high",
+        "type": "number"
+      },
+      {
+        "name": "low",
+        "type": "number"
+      },
+      {
+        "name": "close",
+        "type": "number"
+      },
+      {
+        "name": "volume",
+        "type": "number"
+      }
+    ],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "position",
+    "title": "Позиция",
+    "group": "simple",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "hasPosition",
+        "type": "boolean"
+      },
+      {
+        "name": "quantity",
+        "type": "number"
+      },
+      {
+        "name": "averagePrice",
+        "type": "number"
+      },
+      {
+        "name": "invested",
+        "type": "number"
+      },
+      {
+        "name": "lastEntryPrice",
+        "type": "number"
+      },
+      {
+        "name": "sinceLastEntry",
+        "type": "duration"
+      },
+      {
+        "name": "free",
+        "type": "number"
+      }
+    ],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "ema",
+    "title": "EMA",
+    "group": "simple",
+    "inputs": [
+      {
+        "name": "source",
+        "type": "number"
+      },
+      {
+        "name": "period",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "value",
+        "type": "number"
+      }
+    ],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "cross",
+    "title": "Пересечение",
+    "group": "simple",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "up",
+        "type": "boolean"
+      },
+      {
+        "name": "down",
+        "type": "boolean"
+      }
+    ],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "add",
+    "title": "Сложить",
+    "group": "simple",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "subtract",
+    "title": "Вычесть",
+    "group": "simple",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "multiply",
+    "title": "Умножить",
+    "group": "simple",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "divide",
+    "title": "Разделить",
+    "group": "simple",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "compare",
+    "title": "Сравнить",
+    "group": "simple",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "boolean"
+      }
+    ],
+    "settings": [
+      {
+        "name": "operation",
+        "values": ["gt", "ge", "lt", "le"],
+        "default": "gt",
+        "inputs": []
+      },
+      {
+        "name": "type",
+        "values": ["number", "duration"],
+        "default": "number",
+        "inputs": ["a", "b"]
+      }
+    ],
+    "definition": null
+  },
+  {
+    "id": "and",
+    "title": "И",
+    "group": "simple",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "boolean"
+      },
+      {
+        "name": "b",
+        "type": "boolean"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "boolean"
+      }
+    ],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "or",
+    "title": "ИЛИ",
+    "group": "simple",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "boolean"
+      },
+      {
+        "name": "b",
+        "type": "boolean"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "boolean"
+      }
+    ],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "not",
+    "title": "НЕ",
+    "group": "simple",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "boolean"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "boolean"
+      }
+    ],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "market-order",
+    "title": "Рыночный ордер",
+    "group": "simple",
+    "inputs": [
+      {
+        "name": "when",
+        "type": "boolean"
+      },
+      {
+        "name": "size",
+        "type": "number"
+      }
+    ],
+    "outputs": [],
+    "settings": [
+      {
+        "name": "side",
+        "values": ["buy", "sell"],
+        "default": "buy",
+        "inputs": []
+      },
+      {
+        "name": "size",
+        "values": ["quantity", "amount"],
+        "default": "quantity",
+        "inputs": []
+      }
+    ],
+    "definition": null
+  },
+  {
+    "id": "close-position",
+    "title": "Закрыть позицию",
+    "group": "simple",
+    "inputs": [
+      {
+        "name": "when",
+        "type": "boolean"
+      }
+    ],
+    "outputs": [],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "hold-limit",
+    "title": "Держать лимитку",
+    "group": "simple",
+    "inputs": [
+      {
+        "name": "when",
+        "type": "boolean"
+      },
+      {
+        "name": "price",
+        "type": "number"
+      },
+      {
+        "name": "size",
+        "type": "number"
+      }
+    ],
+    "outputs": [],
+    "settings": [
+      {
+        "name": "side",
+        "values": ["buy", "sell"],
+        "default": "buy",
+        "inputs": []
+      },
+      {
+        "name": "size",
+        "values": ["quantity", "amount"],
+        "default": "quantity",
+        "inputs": []
+      }
+    ],
+    "definition": null
+  },
+  {
+    "id": "ema-cross",
+    "title": "Пересечение EMA",
+    "group": "builtIn",
+    "inputs": [
+      {
+        "name": "source",
+        "type": "number"
+      },
+      {
+        "name": "fast",
+        "type": "number"
+      },
+      {
+        "name": "slow",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "up",
+        "type": "boolean"
+      },
+      {
+        "name": "down",
+        "type": "boolean"
+      }
+    ],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "ladder",
+    "title": "Ladder",
+    "group": "builtIn",
+    "inputs": [
+      {
+        "name": "limitPerOrder",
+        "type": "number"
+      },
+      {
+        "name": "limitDeposit",
+        "type": "number"
+      },
+      {
+        "name": "priceDropForBuy",
+        "type": "number"
+      },
+      {
+        "name": "priceRiseForSell",
+        "type": "number"
+      }
+    ],
+    "outputs": [],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "dca",
+    "title": "DCA",
+    "group": "builtIn",
+    "inputs": [
+      {
+        "name": "limitPerOrder",
+        "type": "number"
+      },
+      {
+        "name": "limitDeposit",
+        "type": "number"
+      },
+      {
+        "name": "purchaseInterval",
+        "type": "duration"
+      }
+    ],
+    "outputs": [],
+    "settings": [],
+    "definition": null
+  }
+]

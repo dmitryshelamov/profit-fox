@@ -31,7 +31,10 @@ enforces a rule, the check is the source of truth.
   `<Area>/Queries/<Name>/<Name>Query`, `<Name>QueryHandler` and `<Name>Result` (`Bots/Commands/CreateBot`,
   `Backtests/Commands/RunBacktest`, `Backtests/Queries/GetBacktestResults`).
 - A command returns nothing or an id. Invalid input raises `ValidationFailedException` with errors keyed by parameter
-  name. A query may return a result that carries errors.
+  name. A query may return a result that carries errors: `ValidateStrategyQuery` and `ValidateNodeQuery` run the
+  library operation of a save without saving and return a `ValidationReport`.
+- `Strategies/NodeSettingSpecs` is the one table of simple node settings (`side`, `size`, `operation`, `type`): reading a
+  definition in `StrategyJson` and the node catalog both use it. A new setting is added there and nowhere else.
 - `Ports/<Area>` holds ports to external systems and mechanisms (`IMarketHistoryClient`, `IInstrumentRulesProvider`). Port names say what the port does, never which vendor implements it.
 - `Exceptions` holds `BaseApplicationException` and its subclasses, also vendor-neutral (`ExchangeException`).
 - `Workers` holds what the Worker needs to share work with other Workers: `WorkerSettings`, `WorkerIdentity` (the
@@ -103,6 +106,8 @@ enforces a rule, the check is the source of truth.
   `Contracts/<Area>` (`Contracts/Bots`, `Contracts/Backtests`).
 - Mark required contract members with `[Required]`, not the C# `required` keyword: a missing JSON property is then
   reported under its own name, not under `$`.
+- An endpoint the frontend calls declares every answer with `[ProducesResponseType]`: the frontend takes its API types
+  from the OpenAPI document, and an undeclared answer has no type there.
 - Application services are registered only through `InfrastructureRegistrar.Configure`. `Program` calls it and
   `MigrateToLatestVersion` and configures the host itself: controllers, Serilog, the OpenAPI document and Swagger UI,
   and the middleware pipeline.
@@ -141,3 +146,21 @@ enforces a rule, the check is the source of truth.
   codes) stays explicit in the test.
 - A vendor SDK that builds its own `HttpClient` is replaced in tests as a whole client. `OutboundHttpGuard` sends any
   request a test failed to replace to a dead proxy, so it fails instead of reaching the exchange.
+
+## Frontend (`frontend/`)
+
+React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface text is in Russian.
+
+- `src/app` holds the router (TanStack Router) and the providers (TanStack Query). `src/pages/<screen>` holds one screen
+  each (`strategies`, `strategy-editor`, `nodes`, `node-editor`); a page never imports another page.
+- `src/modules/<area>` holds a feature: `model` for pure functions, `ui` for components, `api.ts` for queries. Other
+  code imports a module only through its `index.ts`. `modules/graph-editor/model` is the logic of the editor that can be
+  wrong (definition ↔ canvas, pins, wire types, error paths, draft comparison): plain TypeScript without React.
+- `src/shared/api` holds the only HTTP client (`openapi-fetch`) and the types generated from the API's OpenAPI document
+  in `generated/schema.d.ts`. That file is committed: after changing an API contract, run the API and
+  `npm run generate:api`, and commit the result with the change.
+- Colors are theme tokens in `src/app/styles/index.css`, taken from the mockups; components use the tokens, not raw
+  colors.
+- Tests: Vitest next to the code (`*.test.ts(x)`). Pure functions follow red → green → refactor like the backend.
+  Screens are tested through `renderApp` against `fakeApi`, which replaces `fetch` with a routing table; an unrouted
+  request answers 404. End-to-end tests in `e2e/` run Playwright against the real API through the `web` image.
