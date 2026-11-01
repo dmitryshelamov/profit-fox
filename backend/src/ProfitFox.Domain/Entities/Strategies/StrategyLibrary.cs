@@ -128,6 +128,11 @@ public sealed class StrategyLibrary : AggregateRoot
 
         _composites[index] = _composites[index] with { Name = name, Definition = definition, UpdatedAt = now };
 
+        foreach (Strategy user in _strategies.Where(strategy => Uses(strategy.Definition.Graph, affected)))
+        {
+            Version(user, changed, now);
+        }
+
         return _composites[index];
     }
 
