@@ -16,7 +16,7 @@ public class StrategyRunTests
     [Test]
     public void Event_without_order_conditions_gives_no_commands()
     {
-        var run = StrategyRun.Start(StrategyDefinitions.Long(new GraphBuilder().Build()), CompositeCatalog.Empty, new Dictionary<string, NodeValue>());
+        var run = StrategyRun.Start(StrategyDefinitions.Long(new GraphBuilder().Build()), CompositeCatalog.Empty, new Dictionary<string, NodeValue>(), Conditions.Neutral);
 
         run.Handle(new BarClosed(Start, new Bar(1m, 2m, 0.5m, 1.5m, 10m))).ShouldBeEmpty();
     }
@@ -31,7 +31,7 @@ public class StrategyRunTests
         GraphValidationException exception = Should.Throw<GraphValidationException>(() => StrategyRun.Start(
             definition,
             CompositeCatalog.Empty,
-            new Dictionary<string, NodeValue> { ["fast"] = Values.Number(1m), ["slow"] = Values.Number(20m) }));
+            new Dictionary<string, NodeValue> { ["fast"] = Values.Number(1m), ["slow"] = Values.Number(20m) }, Conditions.Neutral));
 
         exception.Errors.ShouldBe([new GraphError("", "fast", "Value must be at least 2."), new GraphError("", "slow", "No such parameter.")]);
     }
@@ -39,7 +39,7 @@ public class StrategyRunTests
     [Test]
     public void Candle_gives_the_last_closed_bar_and_nothing_before_it()
     {
-        var run = StrategyRun.Start(StrategyDefinitions.Long(new GraphBuilder().Node("candle", SimpleNodeKind.Candle).Build()), CompositeCatalog.Empty, NoValues);
+        var run = StrategyRun.Start(StrategyDefinitions.Long(new GraphBuilder().Node("candle", SimpleNodeKind.Candle).Build()), CompositeCatalog.Empty, NoValues, Conditions.Neutral);
 
         run.Handle(new RunStarted(Start));
         run.ValueOf("candle", "close").ShouldBeNull();
@@ -62,7 +62,7 @@ public class StrategyRunTests
             .Node("or1", SimpleNodeKind.Or, ("a", Values.Boolean(a)), ("b", Values.Boolean(b)))
             .Node("not1", SimpleNodeKind.Not, ("value", Values.Boolean(a)))
             .Build();
-        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, NoValues);
+        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, NoValues, Conditions.Neutral);
 
         run.Handle(new RunStarted(Start));
 
@@ -83,7 +83,7 @@ public class StrategyRunTests
             .Wire("a_add.result", "z_mul.a")
             .Wire("z_mul.result", "cmp.a")
             .Build();
-        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, NoValues);
+        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, NoValues, Conditions.Neutral);
 
         run.Handle(new BarClosed(Start, new Bar(1m, 1m, 1m, 100m, 1m)));
 
@@ -98,7 +98,7 @@ public class StrategyRunTests
             new GraphBuilder().Node("params", SimpleNodeKind.Parameters).Build(),
             new StrategyParameter("fast", PinType.Number, Values.Number(12m)),
             new StrategyParameter("slow", PinType.Number, Values.Number(26m)));
-        var run = StrategyRun.Start(definition, CompositeCatalog.Empty, new Dictionary<string, NodeValue> { ["fast"] = Values.Number(5m) });
+        var run = StrategyRun.Start(definition, CompositeCatalog.Empty, new Dictionary<string, NodeValue> { ["fast"] = Values.Number(5m) }, Conditions.Neutral);
 
         run.Handle(new RunStarted(Start));
 
@@ -129,7 +129,7 @@ public class StrategyRunTests
             .Wire("twice.y", "add.a")
             .Build();
         var catalog = new CompositeCatalog(new Dictionary<CompositeNodeId, CompositeDefinition> { [doubleId] = doubler });
-        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), catalog, NoValues);
+        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), catalog, NoValues, Conditions.Neutral);
 
         run.Handle(new BarClosed(Start, new Bar(1m, 1m, 1m, 10m, 1m)));
 
@@ -145,7 +145,7 @@ public class StrategyRunTests
             .Node("b_buy", SimpleNodeKind.MarketOrder, new NodeSettings(Side: OrderSide.Buy, SizeMode: OrderSizeMode.Amount), ("when", Values.Boolean(true)), ("size", Values.Number(2m)))
             .Node("a_buy", SimpleNodeKind.MarketOrder, new NodeSettings(Side: OrderSide.Buy, SizeMode: OrderSizeMode.Amount), ("when", Values.Boolean(true)), ("size", Values.Number(1m)))
             .Build();
-        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, NoValues);
+        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, NoValues, Conditions.Neutral);
 
         run.Handle(new RunStarted(Start)).Select(command => (command.OrderId, ((PlaceOrder)command).NodePath)).ShouldBe([("o-1", "a_buy"), ("o-2", "b_buy")]);
     }
@@ -188,7 +188,7 @@ public class StrategyRunTests
             .Node("hold", SimpleNodeKind.HoldLimit, new NodeSettings(Side: OrderSide.Buy, SizeMode: OrderSizeMode.Amount), ("when", Values.Boolean(true)), ("size", Values.Number(100m)))
             .Wire("candle.close", "hold.price")
             .Build();
-        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, NoValues);
+        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, NoValues, Conditions.Neutral);
 
         return [.. events.SelectMany(run.Handle)];
     }

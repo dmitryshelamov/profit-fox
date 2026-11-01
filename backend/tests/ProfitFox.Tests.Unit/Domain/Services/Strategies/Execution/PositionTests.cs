@@ -99,7 +99,7 @@ public class PositionTests
             .Wire("full.result", "exit.when")
             .Build();
 
-        return StrategyRun.Start(new StrategyDefinition(direction, [], graph), CompositeCatalog.Empty, new Dictionary<string, NodeValue>());
+        return StrategyRun.Start(new StrategyDefinition(direction, [], graph), CompositeCatalog.Empty, new Dictionary<string, NodeValue>(), Conditions.Neutral);
     }
 
     private static (bool Has, decimal Quantity, decimal? Average, decimal Invested, decimal? LastEntry) Position(StrategyRun run)

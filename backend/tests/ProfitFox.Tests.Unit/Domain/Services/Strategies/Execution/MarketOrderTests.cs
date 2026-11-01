@@ -115,6 +115,6 @@ public class MarketOrderTests
 
     private static StrategyRun Run(Graph graph)
     {
-        return StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, new Dictionary<string, NodeValue>());
+        return StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, new Dictionary<string, NodeValue>(), Conditions.Neutral);
     }
 }

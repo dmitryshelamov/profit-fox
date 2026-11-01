@@ -4,6 +4,7 @@ using ProfitFox.Domain.Services.Strategies.BuiltIns;
 using ProfitFox.Domain.Services.Strategies.Execution;
 using ProfitFox.Domain.Services.Strategies.Validation;
 using ProfitFox.Domain.ValueObjects.Strategies;
+using ProfitFox.Tests.Shared.Builders.Strategies;
 using ProfitFox.Tests.Shared.Fixtures.Strategies;
 
 using Shouldly;
@@ -145,7 +146,7 @@ public class ReferenceStrategiesTests
     {
         StrategyDefinition definition = StrategyJson.ParseStrategy(StrategyFixtures.Element(name));
 
-        return StrategyRun.Start(definition, BuiltInComposites.Catalog, values.ToDictionary(value => value.Name, value => (NodeValue)new NumberValue(value.Value)));
+        return StrategyRun.Start(definition, BuiltInComposites.Catalog, values.ToDictionary(value => value.Name, value => (NodeValue)new NumberValue(value.Value)), Conditions.Neutral);
     }
 
     private static IReadOnlyList<OrderCommand> Close(StrategyRun run, int bar, decimal close)

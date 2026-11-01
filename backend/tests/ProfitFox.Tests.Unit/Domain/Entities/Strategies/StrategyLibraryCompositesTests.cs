@@ -165,7 +165,7 @@ public class StrategyLibraryCompositesTests
 
     private static bool Buys(StrategyLibrary library, decimal close)
     {
-        var run = StrategyRun.Start(library.Strategies.Single().Definition, library.Catalog(), new Dictionary<string, NodeValue>());
+        var run = StrategyRun.Start(library.Strategies.Single().Definition, library.Catalog(), new Dictionary<string, NodeValue>(), Conditions.Neutral);
 
         return run.Handle(new BarClosed(Now, new Bar(close, close, close, close, 1m))).Count > 0;
     }

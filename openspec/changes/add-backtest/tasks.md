@@ -45,7 +45,7 @@
 
 ## 4. Условия торговли в движке
 
-- [ ] 4.1 `TradingConditions`, `InstrumentRules`, `FeeSchedule` на входе `StrategyRun.Start`; `OrderFilled` с `Fee` и
+- [x] 4.1 `TradingConditions`, `InstrumentRules`, `FeeSchedule` на входе `StrategyRun.Start`; `OrderFilled` с `Fee` и
   `FeeAsset`; существующие тесты исполнения переведены на условия без влияния на команды; unit-тест «Запуск с условиями»
 - [ ] 4.2 `Account` вместо `PositionBook`: учёт комиссии в монете и в валюте котировки для лонга и шорта; unit-тесты
   «Два входа и выход», «Комиссия в монете», «Комиссия в валюте котировки» и зеркальный для шорта

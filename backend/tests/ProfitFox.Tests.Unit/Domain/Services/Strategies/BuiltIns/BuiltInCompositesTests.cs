@@ -43,7 +43,7 @@ public class BuiltInCompositesTests
             .Composite("cross", new BuiltInNodeId(BuiltInNode.EmaCross), ("fast", Values.Number(2m)), ("slow", Values.Number(3m)))
             .Wire("candle.close", "cross.source")
             .Build();
-        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), BuiltInComposites.Catalog, new Dictionary<string, NodeValue>());
+        var run = StrategyRun.Start(StrategyDefinitions.Long(graph), BuiltInComposites.Catalog, new Dictionary<string, NodeValue>(), Conditions.Neutral);
         var signals = new List<string>();
 
         foreach (decimal close in new[] { 10m, 9m, 8m, 7m, 8m, 10m, 12m, 11m, 9m, 7m })
