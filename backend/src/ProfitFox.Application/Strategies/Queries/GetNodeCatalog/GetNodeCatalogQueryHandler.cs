@@ -23,16 +23,16 @@ public sealed class GetNodeCatalogQueryHandler(IStrategyLibraryRepository reposi
     {
         NodePins pins = SimpleNodeCatalog.Pins(kind, new NodeSettings(), new PinContext([], [], []));
 
-        return new NodeCatalogEntry(StrategyCodes.ToCode(kind), NodeTitles.Of(kind), NodeGroup.Simple, pins.Inputs, pins.Outputs);
+        return new NodeCatalogEntry(StrategyCodes.ToCode(kind), NodeTitles.Of(kind), NodeGroup.Simple, pins.Inputs, pins.Outputs, NodeSettingSpecs.Of(kind));
     }
 
     internal static NodeCatalogEntry BuiltIn(BuiltInComposite composite)
     {
-        return new NodeCatalogEntry(StrategyCodes.ToCode(composite.Node), composite.Title, NodeGroup.BuiltIn, composite.Definition.Inputs, composite.Definition.Outputs);
+        return new NodeCatalogEntry(StrategyCodes.ToCode(composite.Node), composite.Title, NodeGroup.BuiltIn, composite.Definition.Inputs, composite.Definition.Outputs, []);
     }
 
     internal static NodeCatalogEntry Custom(CompositeNode composite)
     {
-        return new NodeCatalogEntry(composite.Id.ToString(), composite.Name, NodeGroup.Custom, composite.Definition.Inputs, composite.Definition.Outputs);
+        return new NodeCatalogEntry(composite.Id.ToString(), composite.Name, NodeGroup.Custom, composite.Definition.Inputs, composite.Definition.Outputs, []);
     }
 }

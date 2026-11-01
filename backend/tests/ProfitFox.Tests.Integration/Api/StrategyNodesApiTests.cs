@@ -62,6 +62,30 @@ public class StrategyNodesApiTests
     }
 
     [Test]
+    public async Task Catalog_describes_the_settings_of_a_market_order()
+    {
+        JsonElement catalog = await _client.GetFromJsonAsync<JsonElement>(Nodes);
+
+        JsonElement settings = catalog.EnumerateArray().Single(node => node.GetProperty("id").GetString() == "market-order").GetProperty("settings");
+        settings.EnumerateArray().Select(setting => setting.GetProperty("name").GetString()).ShouldBe(["side", "size"]);
+        settings[0].GetProperty("values").EnumerateArray().Select(value => value.GetString()).ShouldBe(["buy", "sell"]);
+        settings[1].GetProperty("values").EnumerateArray().Select(value => value.GetString()).ShouldBe(["quantity", "amount"]);
+        settings[1].GetProperty("default").GetString().ShouldBe("quantity");
+    }
+
+    [Test]
+    public async Task Catalog_names_the_inputs_whose_type_a_setting_chooses()
+    {
+        JsonElement catalog = await _client.GetFromJsonAsync<JsonElement>(Nodes);
+
+        JsonElement type = catalog.EnumerateArray().Single(node => node.GetProperty("id").GetString() == "compare").GetProperty("settings")
+            .EnumerateArray().Single(setting => setting.GetProperty("name").GetString() == "type");
+        type.GetProperty("values").EnumerateArray().Select(value => value.GetString()).ShouldBe(["number", "duration"]);
+        type.GetProperty("default").GetString().ShouldBe("number");
+        type.GetProperty("inputs").EnumerateArray().Select(input => input.GetString()).ShouldBe(["a", "b"]);
+    }
+
+    [Test]
     public async Task Built_in_node_is_read_with_its_definition()
     {
         JsonElement ladder = await _client.GetFromJsonAsync<JsonElement>($"{Nodes}/ladder");
@@ -77,6 +101,52 @@ public class StrategyNodesApiTests
     {
         (await _client.PutAsJsonAsync($"{Nodes}/ladder", Body("x", Signal))).StatusCode.ShouldBe(HttpStatusCode.Conflict);
         (await _client.DeleteAsync($"{Nodes}/ladder")).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+    }
+
+    // Scenario "Ломающая правка" of the check without saving.
+    [Test]
+    public async Task Check_of_a_breaking_change_lists_the_usages_and_changes_nothing()
+    {
+        string id = await CreateSignal();
+        await CreateStrategyUsing(id);
+
+        HttpResponseMessage response = await _client.PostAsJsonAsync($"{Nodes}/{id}/validate", Body("Мой сигнал", WithoutOutput));
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        JsonElement usage = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("usages").EnumerateArray().ShouldHaveSingleItem();
+        (usage.GetProperty("kind").GetString(), usage.GetProperty("name").GetString()).ShouldBe(("strategy", "EMA"));
+        usage.GetProperty("errors").TryGetProperty("graph.signal.on", out _).ShouldBeTrue();
+        (await _client.GetFromJsonAsync<JsonElement>($"{Nodes}/{id}")).GetProperty("outputs").GetArrayLength().ShouldBe(1);
+    }
+
+    // Scenario "Валидный новый узел".
+    [Test]
+    public async Task Check_of_a_valid_new_node_has_no_errors_and_saves_nothing()
+    {
+        HttpResponseMessage response = await _client.PostAsJsonAsync($"{Nodes}/validate", Body("Мой сигнал", Signal));
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        JsonElement result = await response.Content.ReadFromJsonAsync<JsonElement>();
+        result.GetProperty("errors").EnumerateObject().ShouldBeEmpty();
+        result.GetProperty("usages").GetArrayLength().ShouldBe(0);
+        JsonElement catalog = await _client.GetFromJsonAsync<JsonElement>(Nodes);
+        catalog.EnumerateArray().ShouldNotContain(node => node.GetProperty("group").GetString() == "custom");
+    }
+
+    [Test]
+    public async Task Check_reports_graph_errors_of_a_node()
+    {
+        HttpResponseMessage response = await _client.PostAsJsonAsync($"{Nodes}/validate", Body("Мой сигнал", Signal.Replace("\"inputs\": { \"b\": 100 }", "\"inputs\": {}")));
+
+        JsonElement errors = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errors");
+        errors.TryGetProperty("graph.above.b", out _).ShouldBeTrue();
+    }
+
+    [Test]
+    public async Task Check_of_a_change_of_a_built_in_or_unknown_node_is_answered_like_the_change()
+    {
+        (await _client.PostAsJsonAsync($"{Nodes}/ladder/validate", Body("x", Signal))).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await _client.PostAsJsonAsync($"{Nodes}/{Guid.NewGuid()}/validate", Body("x", Signal))).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Test]

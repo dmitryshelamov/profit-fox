@@ -3,10 +3,16 @@
 # Enable once per clone: git config core.hooksPath .githooks
 set -e
 
-# Skip commits that touch nothing the .NET build reads.
-if ! git diff --cached --name-only | grep -qE '^(backend/|\.editorconfig$)'; then
-    exit 0
+staged=$(git diff --cached --name-only)
+
+# The .NET build reads backend/ and .editorconfig.
+if echo "$staged" | grep -qE '^(backend/|\.editorconfig$)'; then
+    dotnet build backend/ProfitFox.sln --nologo -v:q
+    dotnet format backend/ProfitFox.sln --verify-no-changes --no-restore
 fi
 
-dotnet build backend/ProfitFox.sln --nologo -v:q
-dotnet format backend/ProfitFox.sln --verify-no-changes --no-restore
+if echo "$staged" | grep -qE '^frontend/'; then
+    npm --prefix frontend run --silent lint
+    npm --prefix frontend run --silent format:check
+    npm --prefix frontend run --silent typecheck
+fi

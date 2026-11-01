@@ -1,0 +1,39 @@
+@import 'tailwindcss';
+
+/* Colors of the mockups agreed in Penpot ("Макеты редактора"). */
+@theme {
+  --color-app: #14161b;
+  --color-canvas: #101216;
+  --color-panel: #1b1e25;
+  --color-panel-2: #232731;
+  --color-line: #2c313b;
+  --color-text: #e7e9ee;
+  --color-muted: #8c94a3;
+  --color-faint: #5d6573;
+  --color-accent: #f28c28;
+  --color-on-accent: #1a1206;
+  --color-ok: #3fb37f;
+  --color-warn: #e0a43a;
+  --color-warn-bg: #3a2e16;
+  --color-err: #e5484d;
+  --color-err-bg: #3a1d20;
+  --color-node: #262a33;
+  --color-node-line: #3a404c;
+  --color-pin-number: #8bd450;
+  --color-pin-boolean: #e5534b;
+  --color-pin-duration: #a78bfa;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-app text-text antialiased;
+}
+
+/* A selected wire stands out: it is what Delete removes. */
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke-width: 4 !important;
+  filter: drop-shadow(0 0 4px rgb(242 140 40 / 0.8));
+}
