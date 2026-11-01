@@ -3,6 +3,7 @@ using ProfitFox.Domain.Entities.Bots;
 using ProfitFox.Domain.Entities.Bots.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies;
+using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.ValueObjects.Bots;
 using ProfitFox.Domain.ValueObjects.MarketData;
@@ -143,6 +144,78 @@ public class StrategyLibraryBotsTests
 
         exception.Errors.ShouldBe([new BotError(BotField.Parameter, "fast", "Value must be at least 2.")]);
         library.Bots.ShouldBe([bot]);
+    }
+
+    // Scenario "Удалён параметр со значением у бота".
+    [Test]
+    public void Removing_a_parameter_a_bot_sets_is_rejected_with_the_bot_and_the_strategy_stays()
+    {
+        StrategyLibrary library = Library();
+        library.AddBot(BotId, "EMA BTC", Ema, Fast(10m), BtcSpot, Interval.OneHour, 1000m, Now);
+        Strategy before = library.Strategies.Single(strategy => strategy.Id == Ema);
+        StrategyDefinition withoutFast = before.Definition with
+        {
+            Parameters = [.. before.Definition.Parameters.Where(parameter => parameter.Name != "fast")],
+            Graph = before.Definition.Graph with
+            {
+                Wires = [.. before.Definition.Graph.Wires.Where(wire => wire.From != new PinRef("params", "fast"))],
+                Nodes = [.. before.Definition.Graph.Nodes.Select(node => node.Id == "cross" ? node with { Inputs = Fast(5m) } : node)]
+            }
+        };
+
+        BotsAffectedException exception = Should.Throw<BotsAffectedException>(() => library.UpdateStrategy(Ema, "EMA", withoutFast, Now.AddHours(1)));
+
+        exception.Bots.ShouldBe([new AffectedBot(BotId, "EMA BTC", exception.Bots[0].Errors)]);
+        exception.Bots[0].Errors.ShouldBe([new BotError(BotField.Parameter, "fast", "No such parameter.")]);
+        library.Strategies.Single(strategy => strategy.Id == Ema).ShouldBe(before);
+        library.LatestVersion(Ema)!.Number.ShouldBe(1);
+    }
+
+    // Scenario "Смена направления".
+    [Test]
+    public void Changing_a_long_strategy_with_a_spot_bot_to_short_is_rejected()
+    {
+        StrategyLibrary library = Library();
+        library.AddBot(BotId, "EMA BTC", Ema, NoValues, BtcSpot, Interval.OneHour, 1000m, Now);
+        Strategy ema = library.Strategies.Single(strategy => strategy.Id == Ema);
+
+        BotsAffectedException exception = Should.Throw<BotsAffectedException>(() =>
+            library.UpdateStrategy(Ema, "EMA", ema.Definition with { Direction = StrategyDirection.Short }, Now.AddHours(1)));
+
+        exception.Bots.ShouldHaveSingleItem().Errors.ShouldBe([new BotError(BotField.Category, null, "The strategy direction does not support this market category.")]);
+    }
+
+    // Scenario "Совместимое изменение".
+    [Test]
+    public void Compatible_change_is_saved_and_the_bot_follows_the_new_version()
+    {
+        StrategyLibrary library = Library();
+        Bot bot = library.AddBot(BotId, "EMA BTC", Ema, Fast(10m), BtcSpot, Interval.OneHour, 1000m, Now);
+        Strategy ema = library.Strategies.Single(strategy => strategy.Id == Ema);
+        StrategyDefinition withNode = ema.Definition with
+        {
+            Graph = ema.Definition.Graph with { Nodes = [.. ema.Definition.Graph.Nodes, new GraphNode("extra", new SimpleNodeType(SimpleNodeKind.Candle), NoValues, new NodeSettings())] }
+        };
+
+        library.UpdateStrategy(Ema, "EMA", withNode, Now.AddHours(1));
+
+        library.LatestVersion(Ema)!.Number.ShouldBe(2);
+        library.Bots.ShouldBe([bot]);
+    }
+
+    // Scenario "Удаление стратегии с ботами".
+    [Test]
+    public void Strategy_with_bots_is_not_removed()
+    {
+        StrategyLibrary library = Library();
+        library.AddBot(BotId, "EMA BTC", Ema, NoValues, BtcSpot, Interval.OneHour, 1000m, Now);
+
+        BotsAffectedException exception = Should.Throw<BotsAffectedException>(() => library.RemoveStrategy(Ema));
+
+        AffectedBot affected = exception.Bots.ShouldHaveSingleItem();
+        (affected.Id, affected.Name, affected.Errors.Count).ShouldBe((BotId, "EMA BTC", 0));
+        library.Strategies.Select(strategy => strategy.Id).ShouldContain(Ema);
+        library.Change.RemovedStrategies.ShouldBeEmpty();
     }
 
     [Test]

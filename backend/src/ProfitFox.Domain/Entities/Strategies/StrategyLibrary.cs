@@ -83,6 +83,7 @@ public sealed class StrategyLibrary : AggregateRoot
 
     /// <returns>The changed strategy, or <c>null</c> when there is no such strategy.</returns>
     /// <exception cref="GraphValidationException">The new graph is invalid; the strategy stays as it was.</exception>
+    /// <exception cref="BotsAffectedException">A bot of the strategy would become invalid; the strategy stays as it was.</exception>
     public Strategy? UpdateStrategy(Guid id, string name, StrategyDefinition definition, DateTimeOffset now)
     {
         int index = _strategies.FindIndex(strategy => strategy.Id == id);
@@ -93,6 +94,16 @@ public sealed class StrategyLibrary : AggregateRoot
         }
 
         Validate(definition);
+        var affected = _bots.Where(bot => bot.StrategyId == id)
+            .Select(bot => new AffectedBot(bot.Id, bot.Name, BotErrors(bot, definition)))
+            .Where(bot => bot.Errors.Count > 0)
+            .ToList();
+
+        if (affected.Count > 0)
+        {
+            throw new BotsAffectedException(affected);
+        }
+
         _strategies[index] = _strategies[index] with { Name = name, Definition = definition, UpdatedAt = now };
         _savedStrategies[id] = _strategies[index];
         Version(_strategies[index], Catalog(), now);
@@ -100,8 +111,16 @@ public sealed class StrategyLibrary : AggregateRoot
         return _strategies[index];
     }
 
+    /// <exception cref="BotsAffectedException">The strategy has bots.</exception>
     public bool RemoveStrategy(Guid id)
     {
+        var bots = _bots.Where(bot => bot.StrategyId == id).Select(bot => new AffectedBot(bot.Id, bot.Name, [])).ToList();
+
+        if (bots.Count > 0)
+        {
+            throw new BotsAffectedException(bots);
+        }
+
         if (_strategies.RemoveAll(strategy => strategy.Id == id) == 0)
         {
             return false;
