@@ -39,7 +39,7 @@ public class ReplayOrdersTests
 
         IReadOnlyList<ReplayFill> fills = Fills(Replay(graph, 0m, LimitFillMode.Breakout, Candle(0, 60m, 60m, 60m, 60m), Candle(1, 50m, 55m, 45m, 52m)));
 
-        fills.ShouldHaveSingleItem().ShouldBe(new ReplayFill(Start.AddHours(1), "o-1", OrderSide.Buy, OrderType.Market, 50m, 2m, 0m, FeeAsset.Quote));
+        fills.ShouldHaveSingleItem().ShouldBe(new ReplayFill(Start.AddHours(1), "o-1", OrderSide.Buy, OrderType.Market, 50m, 2m, 0m, FeeAsset.Base));
     }
 
     // Scenario "Проскальзывание".

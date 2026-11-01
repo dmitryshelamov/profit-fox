@@ -99,10 +99,14 @@ public sealed class BacktestReplay(
             return mode == LimitFillMode.Touch ? higher >= lower : higher > lower;
         }
 
+        /// <summary>The fee is charged as on Bybit: in the coin of a spot buy, otherwise in the quote asset from the value of the fill.</summary>
         private void Fill(SimulatedOrder order, decimal price, DateTimeOffset at, int index)
         {
             decimal quantity = order.Quantity ?? Down(order.Amount!.Value / price, conditions.Rules.QuantityStep);
-            var fill = new ReplayFill(at, order.Id, order.Side, order.Type, price, quantity, 0m, FeeAsset.Quote);
+            decimal rate = order.Type == OrderType.Limit ? conditions.Fees.LimitRate : conditions.Fees.MarketRate;
+            FeeAsset asset = conditions.Fees.AssetOf(order.Side);
+            decimal fee = asset == FeeAsset.Base ? quantity * rate : price * quantity * rate;
+            var fill = new ReplayFill(at, order.Id, order.Side, order.Type, price, quantity, fee, asset);
             Handle(new OrderFilled(at, order.Id, quantity, price, IsComplete: true, fill.Fee, fill.FeeAsset), index + 1);
             observer.Filled(fill);
         }
