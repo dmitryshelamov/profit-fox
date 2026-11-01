@@ -12,7 +12,11 @@ describe('check after edits', () => {
   it('checks once a series of edits pauses, with the last edit', async () => {
     const run = vi.fn(async (edit: string) => `checked ${edit}`);
     const results: string[] = [];
-    const checker = createChecker(run, (result) => results.push(result));
+    const checker = createChecker(
+      run,
+      (result) => results.push(result),
+      () => undefined,
+    );
 
     checker.request('a');
     vi.advanceTimersByTime(399);
@@ -38,7 +42,11 @@ describe('check after edits', () => {
         : Promise.resolve('checked b');
     });
     const results: string[] = [];
-    const checker = createChecker(run, (result) => results.push(result));
+    const checker = createChecker(
+      run,
+      (result) => results.push(result),
+      () => undefined,
+    );
 
     checker.request('a');
     await vi.advanceTimersByTimeAsync(400);
@@ -50,16 +58,41 @@ describe('check after edits', () => {
     expect(results).toEqual(['checked b']);
   });
 
-  it('tells whether the last edit is still being checked', async () => {
+  it('reports a failed check of the last edit', async () => {
+    const failures: unknown[] = [];
     const checker = createChecker(
-      async () => 'ok',
+      async () => {
+        throw new Error('502');
+      },
       () => undefined,
+      (error) => failures.push(error),
     );
 
     checker.request('a');
-    expect(checker.pending()).toBe(true);
     await vi.advanceTimersByTimeAsync(400);
 
-    expect(checker.pending()).toBe(false);
+    expect(failures).toEqual([new Error('502')]);
+  });
+
+  it('does not report a check cancelled by a newer edit', async () => {
+    const failures: unknown[] = [];
+    const checker = createChecker(
+      (edit: string, signal: AbortSignal) =>
+        new Promise<string>((resolve, reject) => {
+          signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+          if (edit === 'b') {
+            resolve('checked b');
+          }
+        }),
+      () => undefined,
+      (error) => failures.push(error),
+    );
+
+    checker.request('a');
+    await vi.advanceTimersByTimeAsync(400);
+    checker.request('b');
+    await vi.advanceTimersByTimeAsync(400);
+
+    expect(failures).toEqual([]);
   });
 });

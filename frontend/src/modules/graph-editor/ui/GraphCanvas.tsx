@@ -20,7 +20,7 @@ import {
   connect,
   contextOf,
   disconnect,
-  moveNode,
+  moveNodes,
   removeNode,
   setInputValue,
 } from '../model/operations';
@@ -151,7 +151,11 @@ export function GraphCanvas<T extends AnyDef>({
           onEdgesChange={(changes: EdgeChange<GraphFlowEdge>[]) =>
             setEdges((current) => applyEdgeChanges(changes, current))
           }
-          onNodeDragStop={(_, node) => onChange(moveNode(definition, node.id, node.position))}
+          // Every dragged node keeps its place: a drag can carry a whole selection.
+          onNodeDragStop={(_, __, dragged) => onChange(moveNodes(definition, positionsOf(dragged)))}
+          onSelectionDragStop={(_, dragged) =>
+            onChange(moveNodes(definition, positionsOf(dragged)))
+          }
           onNodeClick={(_, node) => onSelect(node.id)}
           onPaneClick={() => onSelect(undefined)}
           isValidConnection={(connection) => {
@@ -193,18 +197,19 @@ export function GraphCanvas<T extends AnyDef>({
               onChange(disconnect(definition, from, to));
             }
           }}
-          onNodesDelete={(deleted) =>
-            onChange(deleted.reduce((current, node) => removeNode(current, node.id), definition))
-          }
-          onEdgesDelete={(deleted) =>
-            onChange(
-              deleted.reduce((current, edge) => {
-                const { from, to } = reference(edge);
+          // One change for everything Delete takes: separate node and wire handlers would each start from the same
+          // definition, and the later would undo the earlier.
+          onDelete={({ nodes: deletedNodes, edges: deletedEdges }) => {
+            const withoutWires = deletedEdges.reduce((current, edge) => {
+              const { from, to } = reference(edge);
 
-                return disconnect(current, from, to);
-              }, definition),
-            )
-          }
+              return disconnect(current, from, to);
+            }, definition);
+
+            onChange(
+              deletedNodes.reduce((current, node) => removeNode(current, node.id), withoutWires),
+            );
+          }}
         >
           <Background variant={BackgroundVariant.Dots} color="#2a2f3a" gap={24} size={1.6} />
           <CanvasChrome
@@ -241,4 +246,10 @@ function findNode(
 
     return node.id.toLowerCase().includes(needle) || title.toLowerCase().includes(needle);
   })?.id;
+}
+
+function positionsOf(nodes: readonly GraphFlowNode[]) {
+  return Object.fromEntries(
+    nodes.map((node) => [node.id, { x: node.position.x, y: node.position.y }]),
+  );
 }

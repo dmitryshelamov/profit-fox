@@ -51,7 +51,15 @@ export function addNode<T extends AnyDef>(
 }
 
 export function moveNode<T extends AnyDef>(definition: T, id: string, position: Position): T {
-  return { ...definition, layout: { ...definition.layout, [id]: position } };
+  return moveNodes(definition, { [id]: position });
+}
+
+/** Saves the positions of nodes moved together, such as a dragged selection. */
+export function moveNodes<T extends AnyDef>(
+  definition: T,
+  positions: Readonly<Record<string, Position>>,
+): T {
+  return { ...definition, layout: { ...definition.layout, ...positions } };
 }
 
 export function removeNode<T extends AnyDef>(definition: T, id: string): T {

@@ -5,6 +5,7 @@ import { useCallback, useState } from 'react';
 import {
   BarDivider,
   type CatalogNode,
+  CheckFailedNotice,
   type CompositeDef,
   DeclarationsCard,
   draftKey,
@@ -200,6 +201,7 @@ function NodeEditor({
           onDrop={editing.dropDraft}
         />
       )}
+      {editing.checkFailed && <CheckFailedNotice onRetry={editing.recheck} />}
       {editing.rejection && (
         <RejectionView rejection={editing.rejection} onClose={editing.dismissRejection} />
       )}

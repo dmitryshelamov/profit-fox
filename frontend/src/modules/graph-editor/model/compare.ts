@@ -31,7 +31,16 @@ export function compareDrafts(saved: Edited, draft: Edited): Difference {
 function withoutLayout({ definition }: Edited): string {
   const { layout: _, ...rest } = definition;
 
-  return JSON.stringify(rest);
+  return canonical(rest);
+}
+
+/** JSON with the keys of every object sorted: equal values give equal text whatever order their keys were set in. */
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_, item: unknown) =>
+    item !== null && typeof item === 'object' && !Array.isArray(item)
+      ? Object.fromEntries(Object.entries(item).sort(([one], [other]) => one.localeCompare(other)))
+      : item,
+  );
 }
 
 /** How many of `items` are not among `others`. */
@@ -41,7 +50,5 @@ function missing(items: readonly string[], others: readonly string[]): number {
 
 /** Whether two edits are the same, positions on the canvas included: moving a node is an edit to save. */
 export function sameEdit(one: Edited, other: Edited): boolean {
-  return (
-    one.name === other.name && JSON.stringify(one.definition) === JSON.stringify(other.definition)
-  );
+  return one.name === other.name && canonical(one.definition) === canonical(other.definition);
 }

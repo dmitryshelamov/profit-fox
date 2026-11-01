@@ -6,6 +6,7 @@ import {
   connect,
   disconnect,
   moveNode,
+  moveNodes,
   removeNode,
   renamePin,
   setDeclarations,
@@ -57,6 +58,16 @@ describe('graph operations', () => {
 
   it('moves a node by saving its position', () => {
     expect(moveNode(strategy, 'candle', { x: 1, y: 2 }).layout?.candle).toEqual({ x: 1, y: 2 });
+  });
+
+  it('moves several nodes in one edit', () => {
+    const moved = moveNodes(strategy, { candle: { x: 1, y: 2 }, flat: { x: 3, y: 4 } });
+
+    expect(moved.layout).toEqual({
+      ...strategy.layout,
+      candle: { x: 1, y: 2 },
+      flat: { x: 3, y: 4 },
+    });
   });
 
   it('removes a node with its wires and position', () => {

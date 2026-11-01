@@ -5,6 +5,7 @@ import { useCallback, useState } from 'react';
 import {
   BarDivider,
   type CatalogNode,
+  CheckFailedNotice,
   draftKey,
   DraftOfferDialog,
   drafts,
@@ -34,6 +35,17 @@ import { Button } from '@/shared/ui/Button';
 export function StrategyEditorPage({ id }: { id: string }) {
   const strategy = useQuery(strategyQuery(id));
   const catalog = useQuery(catalogQuery);
+
+  if (strategy.isError) {
+    return (
+      <div className="space-y-3 p-6">
+        <p className="text-muted">Стратегия не найдена.</p>
+        <Link to="/strategies" className="text-accent hover:underline">
+          К стратегиям
+        </Link>
+      </div>
+    );
+  }
 
   if (!strategy.data || !catalog.data) {
     return <p className="p-6 text-muted">Загрузка…</p>;
@@ -222,6 +234,7 @@ function StrategyEditor({
           onDrop={editing.dropDraft}
         />
       )}
+      {editing.checkFailed && <CheckFailedNotice onRetry={editing.recheck} />}
       {editing.rejection && (
         <RejectionView rejection={editing.rejection} onClose={editing.dismissRejection} />
       )}

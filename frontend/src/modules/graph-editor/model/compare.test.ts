@@ -1,6 +1,6 @@
 import ema from '../../../../../backend/tests/ProfitFox.Tests.Shared/Fixtures/Strategies/ema.json';
 import { compareDrafts, sameEdit } from './compare';
-import { addNode, connect, disconnect, moveNode } from './operations';
+import { addNode, connect, disconnect, moveNode, setInputValue } from './operations';
 import type { StrategyDef } from './types';
 
 const saved = { name: 'EMA', definition: ema as unknown as StrategyDef };
@@ -42,5 +42,22 @@ describe('draft against the saved definition', () => {
 
     expect(sameEdit(saved, moved)).toBe(false);
     expect(sameEdit(saved, { ...saved })).toBe(true);
+  });
+
+  it('sees no edit when a value is changed and changed back, whatever the order of keys', () => {
+    const withValues = {
+      ...saved,
+      definition: setInputValue(
+        setInputValue(saved.definition, 'entry', 'a', true),
+        'entry',
+        'b',
+        false,
+      ),
+    };
+    const changed = setInputValue(withValues.definition, 'entry', 'a', false);
+    const back = { ...withValues, definition: setInputValue(changed, 'entry', 'a', true) };
+
+    expect(sameEdit(withValues, back)).toBe(true);
+    expect(compareDrafts(withValues, back).same).toBe(true);
   });
 });

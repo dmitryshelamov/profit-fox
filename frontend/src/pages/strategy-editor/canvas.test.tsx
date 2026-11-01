@@ -1,7 +1,7 @@
 import { screen } from '@testing-library/react';
 
 import catalog from '@/test/catalog.fixture.json';
-import { fakeApi, json } from '@/test/fakeApi';
+import { fakeApi, json, problem } from '@/test/fakeApi';
 import { emaSummary, savedStrategy } from '@/test/fixtures';
 import { renderApp } from '@/test/renderApp';
 
@@ -37,5 +37,17 @@ describe('strategy canvas', () => {
     expect(
       container.querySelector<HTMLElement>('.react-flow__node[data-id="cross"]')!.style.transform,
     ).toBe('translate(240px,0px)');
+  });
+
+  it('says so when there is no such strategy', async () => {
+    fakeApi({
+      [`GET /api/strategies/${emaSummary.id}`]: () => problem(404, 'Not Found'),
+      'GET /api/strategy-nodes': () => json(catalog),
+    });
+
+    renderApp(`/strategies/${emaSummary.id}`);
+
+    expect(await screen.findByText('Стратегия не найдена.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'К стратегиям' })).toBeInTheDocument();
   });
 });

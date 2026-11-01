@@ -59,6 +59,7 @@ export function useGraphEditing<T extends AnyDef>({
   const [rejection, setRejection] = useState<Rejection>();
   const [report, setReport] = useState(clean);
   const [checking, setChecking] = useState(false);
+  const [checkFailed, setCheckFailed] = useState(false);
   const [offer, setOffer] = useState(() => (initial ? undefined : draftOffer(draftKey, saved)));
   const writer = useMemo(() => createDraftWriter(draftKey), [draftKey]);
 
@@ -80,6 +81,12 @@ export function useGraphEditing<T extends AnyDef>({
         (result: Report) => {
           setReport(result);
           setChecking(false);
+          setCheckFailed(false);
+        },
+        // No answer: stop waiting and let the save be checked by the server, which checks every save anyway.
+        () => {
+          setChecking(false);
+          setCheckFailed(true);
         },
       ),
     [validate],
@@ -96,18 +103,22 @@ export function useGraphEditing<T extends AnyDef>({
   // An edit the editor starts with needs a check like any other.
   useEffect(() => {
     if (initial && !sameEdit(initial, saved)) {
-      setChecking(true);
-      checker.request(initial);
+      check(initial);
     }
     // Only the start of editing: later edits are checked as they come.
   }, []);
 
   const dirty = !sameEdit(baseline, edited);
 
+  function check(next: Edited<T>) {
+    setChecking(true);
+    setCheckFailed(false);
+    checker.request(next);
+  }
+
   function change(next: Edited<T>) {
     setEdited(next);
-    setChecking(true);
-    checker.request(next);
+    check(next);
     writer.write(next);
   }
 
@@ -118,6 +129,7 @@ export function useGraphEditing<T extends AnyDef>({
     setEdited(to);
     setReport(clean);
     setChecking(false);
+    setCheckFailed(false);
   }
 
   const issues: Issue[] = issuesOf(report.errors, edited.definition);
@@ -127,6 +139,9 @@ export function useGraphEditing<T extends AnyDef>({
     ...edited,
     dirty,
     checking,
+    checkFailed,
+    /** Checks the current edit again, after a check that failed. */
+    recheck: () => check(edited),
     report,
     issues,
     errorCount,

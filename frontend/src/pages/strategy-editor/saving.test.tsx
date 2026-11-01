@@ -87,4 +87,22 @@ describe('saving', () => {
     );
     expect(save()).toBeDisabled();
   });
+
+  it('stops waiting for a check that failed, says so and lets the server check on save', async () => {
+    let attempts = 0;
+    openEma({
+      [`POST /api/strategies/${emaSummary.id}/validate`]: () =>
+        ++attempts === 1 ? problem(502, 'Bad Gateway') : json({ errors: {}, usages: [], bots: [] }),
+    });
+
+    const card = await selectNode('НЕ');
+    await userEvent.click(within(card).getByRole('button', { name: 'Удалить узел' }));
+
+    const notice = await screen.findByRole('status');
+    expect(notice).toHaveTextContent('Проверка не удалась');
+    expect(save()).toBeEnabled();
+    await userEvent.click(within(notice).getByRole('button', { name: 'Повторить проверку' }));
+    await waitFor(() => expect(attempts).toBe(2));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
 });

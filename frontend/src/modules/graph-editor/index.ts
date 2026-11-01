@@ -7,6 +7,7 @@ export {
 } from './editing/useGraphEditing';
 export type { Issue } from './model/issues';
 export type { AnyDef, CatalogNode, CompositeDef, StrategyDef } from './model/types';
+export { CheckFailedNotice } from './ui/CheckFailedNotice';
 export { DeclarationsCard } from './ui/DeclarationsCard';
 export { DraftOfferDialog, LeaveGuard } from './ui/EditorDialogs';
 export { BarDivider, FloatingBar } from './ui/FloatingBar';

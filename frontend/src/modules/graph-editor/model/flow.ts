@@ -34,31 +34,7 @@ export function toFlow(definition: GraphDef): { nodes: GraphFlowNode[]; edges: G
   return { nodes, edges: (definition.wires ?? []).map(toEdge) };
 }
 
-/** The definition with the wires and saved positions of the canvas; everything else stays as it was. */
-export function fromFlow<T extends GraphDef>(
-  definition: T,
-  nodes: readonly GraphFlowNode[],
-  edges: readonly GraphFlowEdge[],
-): T {
-  const placed = nodes.filter((node) => node.data.placed);
-  const result: T = { ...definition };
-
-  if (definition.wires !== undefined || edges.length > 0) {
-    Object.assign(result, { wires: edges.map(toWire) });
-  }
-
-  if (definition.layout !== undefined || placed.length > 0) {
-    Object.assign(result, {
-      layout: Object.fromEntries(
-        placed.map((node) => [node.id, { x: node.position.x, y: node.position.y }]),
-      ),
-    });
-  }
-
-  return result;
-}
-
-export function edgeId(wire: WireDef): string {
+function edgeId(wire: WireDef): string {
   return `${wire.from}->${wire.to}`;
 }
 
@@ -67,8 +43,4 @@ function toEdge(wire: WireDef): GraphFlowEdge {
   const [target = '', targetHandle = ''] = wire.to.split('.');
 
   return { id: edgeId(wire), source, sourceHandle, target, targetHandle };
-}
-
-function toWire(edge: GraphFlowEdge): WireDef {
-  return { from: `${edge.source}.${edge.sourceHandle}`, to: `${edge.target}.${edge.targetHandle}` };
 }
