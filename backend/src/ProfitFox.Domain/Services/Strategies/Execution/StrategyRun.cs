@@ -14,7 +14,7 @@ public sealed class StrategyRun
     private readonly Dictionary<string, NodeValue?>[] _outputs;
     private readonly object[] _states;
     private readonly Dictionary<string, ActiveOrder> _orders = [];
-    private readonly PositionBook _position = new PositionBook();
+    private readonly Account _account;
     private readonly OrderSide _entrySide;
     private readonly List<OrderCommand> _commands = [];
     private int _lastOrderNumber;
@@ -24,6 +24,7 @@ public sealed class StrategyRun
     private StrategyRun(IReadOnlyList<RunNode> nodes, IReadOnlyDictionary<string, NodeValue> parameters, StrategyDirection direction)
     {
         _entrySide = direction == StrategyDirection.Long ? OrderSide.Buy : OrderSide.Sell;
+        _account = new Account(direction);
         _nodes = nodes;
         _parameters = parameters;
         _indexByPath = nodes.Select((node, index) => (node.Path, index)).ToDictionary(entry => entry.Path, entry => entry.index);
@@ -108,11 +109,11 @@ public sealed class StrategyRun
 
         if (order.Side == _entrySide)
         {
-            _position.Enter(filled.Quantity, filled.Price, filled.At);
+            _account.Enter(filled.Quantity, filled.Price, filled.Fee, filled.FeeAsset, filled.At);
         }
         else
         {
-            _position.Exit(filled.Quantity);
+            _account.Exit(filled.Quantity);
         }
 
         if (filled.IsComplete)
@@ -150,12 +151,12 @@ public sealed class StrategyRun
 
                 break;
             case SimpleNodeKind.Position:
-                outputs["hasPosition"] = new BooleanValue(_position.Quantity > 0m);
-                outputs["quantity"] = new NumberValue(_position.Quantity);
-                outputs["averagePrice"] = Number(_position.AveragePrice);
-                outputs["invested"] = new NumberValue(_position.Invested);
-                outputs["lastEntryPrice"] = Number(_position.LastEntryPrice);
-                outputs["sinceLastEntry"] = _position.LastEntryAt is { } at ? new DurationValue(_event.At - at) : null;
+                outputs["hasPosition"] = new BooleanValue(_account.Quantity > 0m);
+                outputs["quantity"] = new NumberValue(_account.Quantity);
+                outputs["averagePrice"] = Number(_account.AveragePrice);
+                outputs["invested"] = new NumberValue(_account.Invested);
+                outputs["lastEntryPrice"] = Number(_account.LastEntryPrice);
+                outputs["sinceLastEntry"] = _account.LastEntryAt is { } at ? new DurationValue(_event.At - at) : null;
 
                 break;
             case SimpleNodeKind.Ema:
@@ -221,17 +222,17 @@ public sealed class StrategyRun
 
         decimal? quantity = !byAmount ? size : _lastBar is { Close: > 0m } bar ? size / bar.Close : null;
 
-        if (_position.Quantity > 0m && quantity is { } wanted)
+        if (_account.Quantity > 0m && quantity is { } wanted)
         {
-            Place(index, node, side, Math.Min(wanted, _position.Quantity), null);
+            Place(index, node, side, Math.Min(wanted, _account.Quantity), null);
         }
     }
 
     private void ClosePosition(int index, RunNode node)
     {
-        if (!HasOrder(index) && IsTrue(node, "when") && _position.Quantity > 0m)
+        if (!HasOrder(index) && IsTrue(node, "when") && _account.Quantity > 0m)
         {
-            Place(index, node, _entrySide == OrderSide.Buy ? OrderSide.Sell : OrderSide.Buy, _position.Quantity, null);
+            Place(index, node, _entrySide == OrderSide.Buy ? OrderSide.Sell : OrderSide.Buy, _account.Quantity, null);
         }
     }
 
@@ -282,7 +283,7 @@ public sealed class StrategyRun
             return (price, quantity);
         }
 
-        return _position.Quantity > 0m ? (price, Math.Min(quantity, _position.Quantity)) : null;
+        return _account.Quantity > 0m ? (price, Math.Min(quantity, _account.Quantity)) : null;
     }
 
     private bool HasOrder(int index)

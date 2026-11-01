@@ -46,6 +46,41 @@ public class PositionTests
         Position(run).ShouldBe((false, 0m, null, 0m, null));
     }
 
+    // Scenario "Комиссия в монете".
+    [Test]
+    public void Fee_in_the_coin_reduces_the_quantity_of_a_long()
+    {
+        StrategyRun run = EnterTwiceThenExit(StrategyDirection.Long);
+        run.Handle(new RunStarted(Start));
+
+        run.Handle(new OrderFilled(Start, "o-1", 1m, 99.9m, IsComplete: true, Fee: 0.001m, FeeAsset: FeeAsset.Base));
+
+        Position(run).ShouldBe((true, 0.999m, 100m, 99.9m, 99.9m));
+    }
+
+    // Scenario "Комиссия в валюте котировки".
+    [Test]
+    public void Fee_in_the_quote_asset_adds_to_the_invested_amount_of_a_long()
+    {
+        StrategyRun run = EnterTwiceThenExit(StrategyDirection.Long);
+        run.Handle(new RunStarted(Start));
+
+        run.Handle(new OrderFilled(Start, "o-1", 2m, 100m, IsComplete: true, Fee: 0.04m, FeeAsset: FeeAsset.Quote));
+
+        Position(run).ShouldBe((true, 2m, 100.02m, 200.04m, 100m));
+    }
+
+    [Test]
+    public void Fee_in_the_quote_asset_takes_from_the_invested_amount_of_a_short()
+    {
+        StrategyRun run = EnterTwiceThenExit(StrategyDirection.Short);
+        run.Handle(new RunStarted(Start));
+
+        run.Handle(new OrderFilled(Start, "o-1", 2m, 100m, IsComplete: true, Fee: 0.04m, FeeAsset: FeeAsset.Quote));
+
+        Position(run).ShouldBe((true, 2m, 99.98m, 199.96m, 100m));
+    }
+
     [Test]
     public void Partial_exit_keeps_the_average_entry_price()
     {

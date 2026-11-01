@@ -1,7 +1,13 @@
+using ProfitFox.Domain.Entities.Strategies.Enums;
+
 namespace ProfitFox.Domain.Services.Strategies.Execution;
 
-/// <summary>The position built from fills: an entry adds quantity and invested amount, an exit takes them away at the average price.</summary>
-internal sealed class PositionBook
+/// <summary>
+///     The position built from fills: an entry adds quantity and invested amount, an exit takes them away at the average price.
+///     A fee in the coin comes off the quantity; a fee in the quote asset adds to the invested amount of a long and takes from it of a
+///     short, so the average price includes the entry fees.
+/// </summary>
+internal sealed class Account(StrategyDirection direction)
 {
     public decimal Quantity { get; private set; }
 
@@ -13,10 +19,11 @@ internal sealed class PositionBook
 
     public decimal? AveragePrice => Quantity > 0m ? Invested / Quantity : null;
 
-    public void Enter(decimal quantity, decimal price, DateTimeOffset at)
+    public void Enter(decimal quantity, decimal price, decimal fee, FeeAsset asset, DateTimeOffset at)
     {
-        Quantity += quantity;
-        Invested += quantity * price;
+        decimal quoteFee = asset == FeeAsset.Quote ? fee : 0m;
+        Quantity += asset == FeeAsset.Base ? quantity - fee : quantity;
+        Invested += quantity * price + (direction == StrategyDirection.Long ? quoteFee : -quoteFee);
         LastEntryPrice = price;
         LastEntryAt = at;
     }
