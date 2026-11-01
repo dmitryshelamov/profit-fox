@@ -19,5 +19,7 @@ public interface IStrategyLibraryRepository
 
     Task<IReadOnlyList<CompositeNode>> GetCompositesAsync(CancellationToken cancellationToken);
 
+    Task<int?> GetLatestVersionNumberAsync(Guid strategyId, CancellationToken cancellationToken);
+
     Task<StrategyVersion?> GetVersionAsync(Guid strategyId, int number, CancellationToken cancellationToken);
 }

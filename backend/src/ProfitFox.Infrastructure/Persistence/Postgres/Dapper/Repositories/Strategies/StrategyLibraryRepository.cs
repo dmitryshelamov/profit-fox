@@ -104,6 +104,13 @@ internal sealed class StrategyLibraryRepository(NpgsqlDataSource dataSource) : I
         return [.. (await connection.QueryAsync<CompositeNodeDb>(StrategyLibraryRepositoryQueries.Composites(null, cancellationToken))).Select(CompositeNodeDbConverter.ToDomain)];
     }
 
+    public async Task<int?> GetLatestVersionNumberAsync(Guid strategyId, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        return await connection.ExecuteScalarAsync<int?>(StrategyLibraryRepositoryQueries.LatestVersionNumber(strategyId, cancellationToken));
+    }
+
     public async Task<StrategyVersion?> GetVersionAsync(Guid strategyId, int number, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);

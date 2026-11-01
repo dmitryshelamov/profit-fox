@@ -140,8 +140,10 @@ public class StrategyHandlersTests
         Strategy strategy = _library.Strategies.Single();
         _repository.GetStrategyAsync(Existing, Arg.Any<CancellationToken>()).Returns(strategy);
         _repository.GetStrategiesAsync(Arg.Any<CancellationToken>()).Returns([strategy]);
+        _repository.GetLatestVersionNumberAsync(Existing, Arg.Any<CancellationToken>()).Returns(3);
 
-        (await new GetStrategyQueryHandler(_repository).Handle(new GetStrategyQuery(Existing), CancellationToken.None)).ShouldBe(strategy);
+        (await new GetStrategyQueryHandler(_repository).Handle(new GetStrategyQuery(Existing), CancellationToken.None)).ShouldBe(new GetStrategyResult(strategy, 3));
+        (await new GetStrategyQueryHandler(_repository).Handle(new GetStrategyQuery(Guid.NewGuid()), CancellationToken.None)).ShouldBeNull();
         (await new GetStrategiesQueryHandler(_repository).Handle(new GetStrategiesQuery(), CancellationToken.None)).ShouldBe([strategy]);
     }
 }

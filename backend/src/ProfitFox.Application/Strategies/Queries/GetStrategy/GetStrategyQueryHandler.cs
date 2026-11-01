@@ -5,10 +5,13 @@ using ProfitFox.Domain.Repositories;
 
 namespace ProfitFox.Application.Strategies.Queries.GetStrategy;
 
-public sealed class GetStrategyQueryHandler(IStrategyLibraryRepository repository) : IRequestHandler<GetStrategyQuery, Strategy?>
+public sealed class GetStrategyQueryHandler(IStrategyLibraryRepository repository) : IRequestHandler<GetStrategyQuery, GetStrategyResult?>
 {
-    public Task<Strategy?> Handle(GetStrategyQuery request, CancellationToken cancellationToken)
+    /// <summary>Every saved strategy has a version: the startup step gives one to older strategies before requests are served.</summary>
+    public async Task<GetStrategyResult?> Handle(GetStrategyQuery request, CancellationToken cancellationToken)
     {
-        return repository.GetStrategyAsync(request.Id, cancellationToken);
+        Strategy? strategy = await repository.GetStrategyAsync(request.Id, cancellationToken);
+
+        return strategy is null ? null : new GetStrategyResult(strategy, (await repository.GetLatestVersionNumberAsync(request.Id, cancellationToken))!.Value);
     }
 }

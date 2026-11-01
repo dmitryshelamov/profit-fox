@@ -43,7 +43,7 @@ public class ApiDocumentationTests
         using var document = JsonDocument.Parse(await _client.GetStringAsync("/openapi/v1.json"));
         JsonElement paths = document.RootElement.GetProperty("paths");
 
-        string[] expected = ["/api/strategies", "/api/strategies/{id}", "/api/strategy-nodes", "/api/strategy-nodes/{id}", "/api/strategy-nodes/{id}/clone"];
+        string[] expected = ["/api/strategies", "/api/strategies/{id}", "/api/strategies/{id}/versions/{number}", "/api/strategy-nodes", "/api/strategy-nodes/{id}", "/api/strategy-nodes/{id}/clone"];
         string[] documented = [.. paths.EnumerateObject().Select(path => path.Name)];
         expected.Except(documented).ShouldBeEmpty();
     }

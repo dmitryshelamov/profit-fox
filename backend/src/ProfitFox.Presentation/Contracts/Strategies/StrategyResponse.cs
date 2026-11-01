@@ -13,10 +13,11 @@ public sealed record StrategyResponse(
     string Direction,
     IReadOnlyList<string> SupportedCategories,
     JsonObject Definition,
+    int Version,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt)
 {
-    public static StrategyResponse Of(Strategy strategy)
+    public static StrategyResponse Of(Strategy strategy, int version)
     {
         StrategyDirection direction = strategy.Definition.Direction;
 
@@ -26,6 +27,7 @@ public sealed record StrategyResponse(
             StrategyCodes.ToCode(direction),
             [.. direction.SupportedCategories().Select(category => category.ToCode())],
             StrategyJson.WriteStrategy(strategy.Definition),
+            version,
             strategy.CreatedAt,
             strategy.UpdatedAt);
     }

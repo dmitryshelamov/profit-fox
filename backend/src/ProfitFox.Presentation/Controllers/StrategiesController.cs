@@ -7,6 +7,7 @@ using ProfitFox.Application.Strategies.Commands.DeleteStrategy;
 using ProfitFox.Application.Strategies.Commands.UpdateStrategy;
 using ProfitFox.Application.Strategies.Queries.GetStrategies;
 using ProfitFox.Application.Strategies.Queries.GetStrategy;
+using ProfitFox.Application.Strategies.Queries.GetStrategyVersion;
 using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Presentation.Contracts.Strategies;
 
@@ -27,9 +28,17 @@ public sealed class StrategiesController(ISender sender) : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken)
     {
-        Strategy? strategy = await sender.Send(new GetStrategyQuery(id), cancellationToken);
+        GetStrategyResult? result = await sender.Send(new GetStrategyQuery(id), cancellationToken);
 
-        return strategy is null ? NotFound() : Ok(StrategyResponse.Of(strategy));
+        return result is null ? NotFound() : Ok(StrategyResponse.Of(result.Strategy, result.Version));
+    }
+
+    [HttpGet("{id:guid}/versions/{number:int}")]
+    public async Task<IActionResult> GetVersion(Guid id, int number, CancellationToken cancellationToken)
+    {
+        StrategyVersion? version = await sender.Send(new GetStrategyVersionQuery(id, number), cancellationToken);
+
+        return version is null ? NotFound() : Ok(StrategyVersionResponse.Of(version));
     }
 
     [HttpPost]

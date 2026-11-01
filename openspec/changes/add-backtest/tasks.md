@@ -24,7 +24,7 @@
   конфликт ревизии не пишет ни изменение, ни версию
 - [x] 2.5 Шаг запуска `CreateMissingStrategyVersionsCommand`: версия `1` для стратегий без версий, повторный запуск
   ничего не меняет; integration-тест на оба случая
-- [ ] 2.6 `GET /api/strategies/{id}` с `version` и `GET /api/strategies/{id}/versions/{number}`; integration-тесты
+- [x] 2.6 `GET /api/strategies/{id}` с `version` и `GET /api/strategies/{id}/versions/{number}`; integration-тесты
   «Номер версии», «Чтение старой версии» и 404 для неизвестного номера
 
 ## 3. Боты

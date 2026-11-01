@@ -89,6 +89,14 @@ internal static class StrategyLibraryRepositoryQueries
         return new CommandDefinition(LatestVersionsSql, transaction: transaction, cancellationToken: cancellationToken);
     }
 
+    internal static CommandDefinition LatestVersionNumber(Guid strategyId, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            "SELECT max(number) FROM strategy_versions WHERE strategy_id = @StrategyId",
+            new { StrategyId = strategyId },
+            cancellationToken: cancellationToken);
+    }
+
     internal static CommandDefinition Version(Guid strategyId, int number, CancellationToken cancellationToken)
     {
         return new CommandDefinition(
