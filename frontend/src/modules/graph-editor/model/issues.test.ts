@@ -6,7 +6,7 @@ const strategy: StrategyDef = {
   ...(ema as unknown as StrategyDef),
   nodes: [
     ...(ema as unknown as StrategyDef).nodes,
-    { id: 'ladder1', kind: 'composite', ref: 'ladder' },
+    { id: 'cross2', kind: 'composite', ref: 'ema-cross' },
   ],
 };
 
@@ -25,8 +25,8 @@ describe('error paths', () => {
   });
 
   it('puts an error inside a composite node on the node the graph uses', () => {
-    expect(issuesOf({ 'graph.ladder1/mul2.b': ['x'] }, strategy)).toEqual([
-      { key: 'graph.ladder1/mul2.b', message: 'x', nodeId: 'ladder1' },
+    expect(issuesOf({ 'graph.cross2/fastEma.period': ['x'] }, strategy)).toEqual([
+      { key: 'graph.cross2/fastEma.period', message: 'x', nodeId: 'cross2' },
     ]);
   });
 

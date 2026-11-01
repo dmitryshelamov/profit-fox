@@ -41,12 +41,16 @@ describe('graph operations', () => {
     const { definition, id } = addNode(
       strategy,
       catalog,
-      { kind: 'composite', ref: 'ladder' },
+      { kind: 'composite', ref: 'ema-cross' },
       { x: 0, y: 0 },
     );
 
-    expect(id).toBe('ladder1');
-    expect(definition.nodes.at(-1)).toEqual({ id: 'ladder1', kind: 'composite', ref: 'ladder' });
+    expect(id).toBe('ema-cross1');
+    expect(definition.nodes.at(-1)).toEqual({
+      id: 'ema-cross1',
+      kind: 'composite',
+      ref: 'ema-cross',
+    });
     const custom = addNode(
       strategy,
       catalog,

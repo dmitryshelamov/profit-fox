@@ -45,6 +45,7 @@ export function CanvasChrome({
   readOnly,
   onAdd,
   onFind,
+  onRelayout,
 }: {
   catalog: readonly CatalogNode[];
   composite: boolean;
@@ -52,6 +53,8 @@ export function CanvasChrome({
   onAdd: (item: PaletteItem, center: { x: number; y: number }) => void;
   /** Selects the node whose title or id contains the text and returns its id. */
   onFind: (text: string) => string | undefined;
+  /** Lays the graph out by stages again. */
+  onRelayout: () => void;
 }) {
   const flow = useReactFlow<GraphFlowNode, GraphFlowEdge>();
   const [open, setOpen] = useState<'palette' | 'find'>();
@@ -97,6 +100,9 @@ export function CanvasChrome({
             </Tool>
             <Tool label="Вписать в экран" onClick={() => void flow.fitView({ duration: 300 })}>
               ⤢
+            </Tool>
+            <Tool label="Выстроить" onClick={onRelayout}>
+              ⇉
             </Tool>
           </div>
         )}

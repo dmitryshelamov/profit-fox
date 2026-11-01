@@ -20,13 +20,13 @@ public class StrategyLibraryVersionsTests
     public void New_strategy_gets_version_one_with_its_graph_and_the_built_in_node()
     {
         var library = new StrategyLibrary(0, [], []);
-        StrategyDefinition ladder = Fixture("ladder");
+        StrategyDefinition ema = Fixture("ema");
 
-        library.AddStrategy(Id, "Ladder", ladder, Now);
+        library.AddStrategy(Id, "EMA", ema, Now);
 
         StrategyVersion version = library.LatestVersion(Id)!;
-        version.ShouldBe(new StrategyVersion(Id, 1, StrategySnapshot.Of(ladder, BuiltInComposites.Catalog), Now));
-        version.Snapshot.Composites.ShouldHaveSingleItem().Id.ShouldBe(new BuiltInNodeId(BuiltInNode.Ladder));
+        version.ShouldBe(new StrategyVersion(Id, 1, StrategySnapshot.Of(ema, BuiltInComposites.Catalog), Now));
+        version.Snapshot.Composites.ShouldHaveSingleItem().Id.ShouldBe(new BuiltInNodeId(BuiltInNode.EmaCross));
         library.Change.NewVersions.ShouldBe([version]);
     }
 
@@ -60,7 +60,7 @@ public class StrategyLibraryVersionsTests
     {
         StrategyLibrary library = Saved("ema", out StrategyVersion first);
         StrategyDefinition ema = Fixture("ema");
-        StrategyDefinition moved = ema with { Graph = ema.Graph with { Layout = new Dictionary<string, NodePosition>() } };
+        StrategyDefinition moved = ema with { Graph = ema.Graph with { Layout = new Dictionary<string, NodePosition> { ["cross"] = new NodePosition(240m, 0m) } } };
 
         library.UpdateStrategy(Id, "EMA 2", moved, Now.AddHours(1));
 

@@ -57,8 +57,8 @@ public class NodeHandlersTests
     public void Built_in_node_cannot_be_changed_or_deleted()
     {
         Should.Throw<StateConflictException>(() =>
-            new UpdateNodeCommandHandler(_repository, _time).Handle(new UpdateNodeCommand("ladder", "x", Json(SignalDefinition())), CancellationToken.None));
-        Should.Throw<StateConflictException>(() => new DeleteNodeCommandHandler(_repository).Handle(new DeleteNodeCommand("ladder"), CancellationToken.None));
+            new UpdateNodeCommandHandler(_repository, _time).Handle(new UpdateNodeCommand("ema-cross", "x", Json(SignalDefinition())), CancellationToken.None));
+        Should.Throw<StateConflictException>(() => new DeleteNodeCommandHandler(_repository).Handle(new DeleteNodeCommand("ema-cross"), CancellationToken.None));
         _repository.ReceivedCalls().ShouldBeEmpty();
     }
 
@@ -126,11 +126,11 @@ public class NodeHandlersTests
     {
         var handler = new CloneNodeCommandHandler(_repository, _time);
 
-        Guid ladder = await handler.Handle(new CloneNodeCommand("ladder", null), CancellationToken.None);
+        Guid emaCross = await handler.Handle(new CloneNodeCommand("ema-cross", null), CancellationToken.None);
         Guid named = await handler.Handle(new CloneNodeCommand(Signal.ToString(), "Свой"), CancellationToken.None);
         Guid custom = await handler.Handle(new CloneNodeCommand(Signal.ToString(), null), CancellationToken.None);
 
-        await _repository.Received(1).SaveAsync(Arg.Is<StrategyLibraryChange>(change => change!.SavedComposites.Last().Id == ladder && change.SavedComposites.Last().Name == "Ladder (копия)"), 3, Arg.Any<CancellationToken>());
+        await _repository.Received(1).SaveAsync(Arg.Is<StrategyLibraryChange>(change => change!.SavedComposites.Last().Id == emaCross && change.SavedComposites.Last().Name == "Пересечение EMA (копия)"), 3, Arg.Any<CancellationToken>());
         await _repository.Received(1).SaveAsync(Arg.Is<StrategyLibraryChange>(change => change!.SavedComposites.Last().Id == named && change.SavedComposites.Last().Name == "Свой"), 3, Arg.Any<CancellationToken>());
         await _repository.Received(1).SaveAsync(Arg.Is<StrategyLibraryChange>(change => change!.SavedComposites.Last().Id == custom && change.SavedComposites.Last().Name == "Мой сигнал (копия)"), 3, Arg.Any<CancellationToken>());
     }
@@ -139,7 +139,7 @@ public class NodeHandlersTests
     [TestCase("  ")]
     public void Clone_with_an_empty_name_is_rejected(string name)
     {
-        Should.Throw<ValidationFailedException>(() => new CloneNodeCommandHandler(_repository, _time).Handle(new CloneNodeCommand("ladder", name), CancellationToken.None))
+        Should.Throw<ValidationFailedException>(() => new CloneNodeCommandHandler(_repository, _time).Handle(new CloneNodeCommand("ema-cross", name), CancellationToken.None))
             .Errors.Keys.ShouldBe(["name"]);
     }
 
@@ -148,7 +148,7 @@ public class NodeHandlersTests
     {
         _repository.SaveAsync(Arg.Any<StrategyLibraryChange>(), Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(false);
 
-        Should.Throw<StateConflictException>(() => new CloneNodeCommandHandler(_repository, _time).Handle(new CloneNodeCommand("dca", null), CancellationToken.None));
+        Should.Throw<StateConflictException>(() => new CloneNodeCommandHandler(_repository, _time).Handle(new CloneNodeCommand("ema-cross", null), CancellationToken.None));
     }
 
     [Test]
@@ -158,8 +158,8 @@ public class NodeHandlersTests
 
         catalog.Count(entry => entry.Group == NodeGroup.Simple).ShouldBe(Enum.GetValues<SimpleNodeKind>().Length);
         catalog.Single(entry => entry.Id == "ema").Title.ShouldBe("EMA");
-        NodeCatalogEntry ladder = catalog.Single(entry => entry.Id == "ladder");
-        (ladder.Group, ladder.Title).ShouldBe((NodeGroup.BuiltIn, "Ladder"));
+        NodeCatalogEntry emaCross = catalog.Single(entry => entry.Id == "ema-cross");
+        (emaCross.Group, emaCross.Title).ShouldBe((NodeGroup.BuiltIn, "Пересечение EMA"));
         NodeCatalogEntry custom = catalog.Single(entry => entry.Id == Signal.ToString());
         (custom.Group, custom.Title).ShouldBe((NodeGroup.Custom, "Мой сигнал"));
         custom.Outputs.ShouldHaveSingleItem().Name.ShouldBe("on");
@@ -170,11 +170,11 @@ public class NodeHandlersTests
     {
         var handler = new GetNodeQueryHandler(_repository);
 
-        NodeResult ladder = (await handler.Handle(new GetNodeQuery("ladder"), CancellationToken.None))!;
+        NodeResult emaCross = (await handler.Handle(new GetNodeQuery("ema-cross"), CancellationToken.None))!;
         NodeResult ema = (await handler.Handle(new GetNodeQuery("ema"), CancellationToken.None))!;
         NodeResult custom = (await handler.Handle(new GetNodeQuery(Signal.ToString()), CancellationToken.None))!;
 
-        ladder.Definition.ShouldBe(BuiltInComposites.All.Single(composite => composite.Node == BuiltInNode.Ladder).Definition);
+        emaCross.Definition.ShouldBe(BuiltInComposites.All.Single(composite => composite.Node == BuiltInNode.EmaCross).Definition);
         (ema.Entry.Group, ema.Definition).ShouldBe((NodeGroup.Simple, null));
         custom.Definition.ShouldBe(_library.Composites[0].Definition);
         (await handler.Handle(new GetNodeQuery("nope"), CancellationToken.None)).ShouldBeNull();

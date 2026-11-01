@@ -35,7 +35,7 @@ public static class StrategyCodes
             ("ge", CompareOperation.GreaterOrEqual),
             ("lt", CompareOperation.Less),
             ("le", CompareOperation.LessOrEqual)),
-        [typeof(BuiltInNode)] = Map(("ema-cross", BuiltInNode.EmaCross), ("ladder", BuiltInNode.Ladder), ("dca", BuiltInNode.Dca)),
+        [typeof(BuiltInNode)] = Map(("ema-cross", BuiltInNode.EmaCross)),
         [typeof(UsageKind)] = Map(("strategy", UsageKind.Strategy), ("node", UsageKind.Composite)),
         [typeof(OrderType)] = Map(("market", OrderType.Market), ("limit", OrderType.Limit))
     };

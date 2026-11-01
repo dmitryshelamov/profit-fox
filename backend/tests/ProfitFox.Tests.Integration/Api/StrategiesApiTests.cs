@@ -50,6 +50,28 @@ public class StrategiesApiTests
         JsonNode.DeepEquals(JsonNode.Parse(strategy.GetProperty("definition").GetRawText()), JsonNode.Parse(StrategyFixtures.Json(fixture))).ShouldBeTrue();
     }
 
+    // Scenario "Стратегия без координат".
+    [Test]
+    public async Task Strategy_without_coordinates_is_read_back_with_an_empty_layout()
+    {
+        Guid id = await CreateIdAsync("EMA", StrategyFixtures.Element("ema"));
+
+        JsonElement layout = (await _client.GetFromJsonAsync<JsonElement>($"{Strategies}/{id}")).GetProperty("definition").GetProperty("layout");
+
+        layout.ValueKind.ShouldBe(JsonValueKind.Object);
+        layout.EnumerateObject().ShouldBeEmpty();
+    }
+
+    [Test]
+    public async Task Coordinates_of_a_strategy_are_read_back()
+    {
+        Guid id = await CreateIdAsync("EMA", WithCrossAt(240, 0));
+
+        JsonElement layout = (await _client.GetFromJsonAsync<JsonElement>($"{Strategies}/{id}")).GetProperty("definition").GetProperty("layout");
+
+        JsonNode.DeepEquals(JsonNode.Parse(layout.GetRawText()), JsonNode.Parse("""{ "cross": { "x": 240, "y": 0 } }""")).ShouldBeTrue();
+    }
+
     [Test]
     public async Task List_gives_id_name_direction_and_categories()
     {
@@ -141,16 +163,14 @@ public class StrategiesApiTests
     [Test]
     public async Task Old_version_gives_the_graph_as_it_was_and_the_nodes_it_used()
     {
-        Guid id = await CreateIdAsync("EMA", StrategyFixtures.Element("ema"));
+        Guid id = await CreateIdAsync("EMA", WithCrossAt(240, 0));
         await _client.PutAsJsonAsync($"{Strategies}/{id}", new { name = "EMA", definition = WithAmount(10) });
 
         JsonElement version = await _client.GetFromJsonAsync<JsonElement>($"{Strategies}/{id}/versions/1");
 
         version.GetProperty("number").GetInt32().ShouldBe(1);
         version.GetProperty("createdAt").GetString().ShouldBe("2024-03-10T12:30:00+00:00");
-        JsonNode expected = JsonNode.Parse(StrategyFixtures.Json("ema"))!;
-        expected["layout"] = new JsonObject();
-        JsonNode.DeepEquals(JsonNode.Parse(version.GetProperty("definition").GetRawText()), expected).ShouldBeTrue();
+        JsonNode.DeepEquals(JsonNode.Parse(version.GetProperty("definition").GetRawText()), JsonNode.Parse(StrategyFixtures.Json("ema"))).ShouldBeTrue();
         JsonElement node = version.GetProperty("composites").EnumerateArray().ShouldHaveSingleItem();
         node.GetProperty("ref").GetString().ShouldBe("ema-cross");
         node.GetProperty("definition").GetProperty("nodes").GetArrayLength().ShouldBe(5);
@@ -163,6 +183,14 @@ public class StrategiesApiTests
 
         (await _client.GetAsync($"{Strategies}/{id}/versions/2")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await _client.GetAsync($"{Strategies}/{Guid.NewGuid()}/versions/1")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    private static JsonElement WithCrossAt(decimal x, decimal y)
+    {
+        JsonNode definition = JsonNode.Parse(StrategyFixtures.Json("ema"))!;
+        definition["layout"] = new JsonObject { ["cross"] = new JsonObject { ["x"] = x, ["y"] = y } };
+
+        return JsonDocument.Parse(definition.ToJsonString()).RootElement;
     }
 
     private static JsonElement WithAmount(decimal amount)

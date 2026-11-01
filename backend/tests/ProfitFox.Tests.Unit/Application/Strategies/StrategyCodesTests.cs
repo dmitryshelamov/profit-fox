@@ -22,7 +22,7 @@ public class StrategyCodesTests
             ("buy", OrderSide.Buy), ("sell", OrderSide.Sell),
             ("quantity", OrderSizeMode.Quantity), ("amount", OrderSizeMode.Amount),
             ("gt", CompareOperation.Greater), ("ge", CompareOperation.GreaterOrEqual), ("lt", CompareOperation.Less), ("le", CompareOperation.LessOrEqual),
-            ("ema-cross", BuiltInNode.EmaCross), ("ladder", BuiltInNode.Ladder), ("dca", BuiltInNode.Dca),
+            ("ema-cross", BuiltInNode.EmaCross),
             ("strategy", UsageKind.Strategy), ("node", UsageKind.Composite),
             ("market", OrderType.Market), ("limit", OrderType.Limit)
         ];
@@ -44,6 +44,14 @@ public class StrategyCodesTests
         Type[] coded = [typeof(SimpleNodeKind), typeof(PinType), typeof(StrategyDirection), typeof(OrderSide), typeof(OrderSizeMode), typeof(CompareOperation), typeof(BuiltInNode), typeof(UsageKind), typeof(OrderType)];
 
         coded.SelectMany(type => Enum.GetValues(type).Cast<Enum>()).Count().ShouldBe(Codes().Count());
+    }
+
+    // Scenario "Ladder и DCA не встроены".
+    [TestCase("ladder")]
+    [TestCase("dca")]
+    public void Ladder_and_dca_are_not_built_in_node_codes(string code)
+    {
+        StrategyCodes.TryParse(typeof(BuiltInNode), code, out _).ShouldBeFalse();
     }
 
     [TestCase("rsi")]

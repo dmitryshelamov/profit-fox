@@ -26,23 +26,101 @@
       "kind": "parameters"
     },
     {
-      "id": "dca",
-      "kind": "composite",
-      "ref": "dca"
+      "id": "position",
+      "kind": "position"
+    },
+    {
+      "id": "flat",
+      "kind": "not"
+    },
+    {
+      "id": "due",
+      "kind": "compare",
+      "settings": {
+        "type": "duration",
+        "operation": "ge"
+      }
+    },
+    {
+      "id": "time",
+      "kind": "or"
+    },
+    {
+      "id": "nextInvested",
+      "kind": "add"
+    },
+    {
+      "id": "budget",
+      "kind": "compare",
+      "settings": {
+        "operation": "le"
+      }
+    },
+    {
+      "id": "go",
+      "kind": "and"
+    },
+    {
+      "id": "buy",
+      "kind": "market-order",
+      "settings": {
+        "side": "buy",
+        "size": "amount"
+      }
     }
   ],
   "wires": [
     {
-      "from": "params.limitPerOrder",
-      "to": "dca.limitPerOrder"
+      "from": "position.hasPosition",
+      "to": "flat.value"
     },
     {
-      "from": "params.limitDeposit",
-      "to": "dca.limitDeposit"
+      "from": "position.sinceLastEntry",
+      "to": "due.a"
     },
     {
       "from": "params.purchaseInterval",
-      "to": "dca.purchaseInterval"
+      "to": "due.b"
+    },
+    {
+      "from": "flat.result",
+      "to": "time.a"
+    },
+    {
+      "from": "due.result",
+      "to": "time.b"
+    },
+    {
+      "from": "position.invested",
+      "to": "nextInvested.a"
+    },
+    {
+      "from": "params.limitPerOrder",
+      "to": "nextInvested.b"
+    },
+    {
+      "from": "nextInvested.result",
+      "to": "budget.a"
+    },
+    {
+      "from": "params.limitDeposit",
+      "to": "budget.b"
+    },
+    {
+      "from": "time.result",
+      "to": "go.a"
+    },
+    {
+      "from": "budget.result",
+      "to": "go.b"
+    },
+    {
+      "from": "go.result",
+      "to": "buy.when"
+    },
+    {
+      "from": "params.limitPerOrder",
+      "to": "buy.size"
     }
   ],
   "layout": {}

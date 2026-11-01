@@ -102,18 +102,5 @@
       "to": "exit.when"
     }
   ],
-  "layout": {
-    "params": {
-      "x": 0,
-      "y": 0
-    },
-    "cross": {
-      "x": 240,
-      "y": 0
-    },
-    "enter": {
-      "x": 480,
-      "y": 0
-    }
-  }
+  "layout": {}
 }

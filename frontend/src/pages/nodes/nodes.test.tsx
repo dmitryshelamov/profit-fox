@@ -24,7 +24,7 @@ describe('composite node list', () => {
       within(builtIn)
         .getAllByRole('link')
         .map((link) => link.textContent),
-    ).toEqual(['Пересечение EMA', 'Ladder', 'DCA']);
+    ).toEqual(['Пересечение EMA']);
     expect(within(builtIn).queryByRole('button', { name: /Удалить/ })).not.toBeInTheDocument();
     expect(screen.queryByText('Свеча')).not.toBeInTheDocument();
   });
@@ -54,15 +54,15 @@ describe('composite node list', () => {
   // Scenario "Клон встроенного узла".
   it('clones a built-in node into the custom nodes, ready to edit', async () => {
     const clone = {
-      ...catalog.find((node) => node.id === 'ladder')!,
+      ...catalog.find((node) => node.id === 'ema-cross')!,
       id: '55555555-5555-4555-8555-555555555555',
-      title: 'Ladder (копия)',
+      title: 'Пересечение EMA (копия)',
       group: 'custom',
     };
     let nodes: unknown[] = catalog;
     fakeApi({
       'GET /api/strategy-nodes': () => json(nodes),
-      'POST /api/strategy-nodes/ladder/clone': () => {
+      'POST /api/strategy-nodes/ema-cross/clone': () => {
         nodes = [...catalog, clone];
 
         return json({ id: clone.id }, 201);
@@ -70,10 +70,12 @@ describe('composite node list', () => {
     });
     const { history } = renderApp('/nodes');
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Клонировать: Ladder' }));
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Клонировать: Пересечение EMA' }),
+    );
 
     const custom = screen.getByRole('region', { name: 'Мои' });
-    const link = await within(custom).findByRole('link', { name: 'Ladder (копия)' });
+    const link = await within(custom).findByRole('link', { name: 'Пересечение EMA (копия)' });
     await userEvent.click(link);
     await waitFor(() => expect(history.location.pathname).toBe(`/nodes/${clone.id}`));
   });

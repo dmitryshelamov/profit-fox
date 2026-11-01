@@ -65,7 +65,12 @@ function NodeEditor({
     (edited: Edited<CompositeDef>, signal: AbortSignal) => validateNode(id, edited, signal),
     [id],
   );
-  const editing = useGraphEditing({ saved, validate, draftKey: draftKey({ node: id }) });
+  const editing = useGraphEditing({
+    saved,
+    validate,
+    draftKey: draftKey({ node: id }),
+    catalog,
+  });
   const queryClient = useQueryClient();
   const { name, definition } = editing;
   const [selected, setSelected] = useState<string>();
@@ -91,6 +96,7 @@ function NodeEditor({
         issues={editing.issues}
         readOnly={builtIn}
         onChange={editing.setDefinition}
+        onRelayout={editing.relayout}
         onSelect={(nodeId) => {
           setSelected(nodeId);
           setPanel(undefined);

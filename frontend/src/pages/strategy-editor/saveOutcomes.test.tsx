@@ -32,7 +32,13 @@ describe('outcomes of a save', () => {
     };
     expect(body.name).toBe('EMA');
     expect(body.definition.nodes.map((node) => node.id)).not.toContain('flat');
-    expect(body.definition.layout).toEqual(emaDefinition.layout);
+    // The edit pinned every node that is left where it stood.
+    expect(Object.keys(body.definition.layout).sort()).toEqual(
+      emaDefinition.nodes
+        .map((node) => node.id)
+        .filter((id) => id !== 'flat')
+        .sort(),
+    );
   });
 
   it('saves the limits of a parameter as edited', async () => {

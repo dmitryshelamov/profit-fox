@@ -117,7 +117,7 @@ function StrategyEditor({
     (edited: Edited<StrategyDef>, signal: AbortSignal) => validateStrategy(id, edited, signal),
     [id],
   );
-  const editing = useGraphEditing({ saved, initial, validate, draftKey: draft });
+  const editing = useGraphEditing({ saved, initial, validate, draftKey: draft, catalog });
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -161,6 +161,7 @@ function StrategyEditor({
         issues={editing.issues}
         readOnly={false}
         onChange={editing.setDefinition}
+        onRelayout={editing.relayout}
         onSelect={(nodeId) => {
           setSelected(nodeId);
           setPanel(undefined);

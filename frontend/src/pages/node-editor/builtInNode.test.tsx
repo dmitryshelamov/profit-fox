@@ -38,6 +38,7 @@ describe('built-in composite node', () => {
       'Только чтение',
     );
     expect(screen.queryByRole('button', { name: 'Добавить узел' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Выстроить' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Сохранить' })).not.toBeInTheDocument();
     expect(within(card).queryByRole('button', { name: 'Удалить узел' })).not.toBeInTheDocument();
     expect(within(card).getByRole('combobox', { name: 'Источник source' })).toBeDisabled();
