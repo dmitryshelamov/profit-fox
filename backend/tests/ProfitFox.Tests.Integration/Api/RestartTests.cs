@@ -1,10 +1,19 @@
 using System.Diagnostics;
 
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
+
 using Npgsql;
 
+using ProfitFox.Application.Backtests.Commands.RunBacktest;
+using ProfitFox.Domain.Entities.Backtests;
+using ProfitFox.Domain.Entities.Backtests.Enums;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.MarketData;
 using ProfitFox.Tests.Integration.Infrastructure;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.MarketData;
@@ -41,6 +50,89 @@ public class RestartTests
         IReadOnlyList<DateTimeOffset> stored = await new CandleRepository(dataSource)
             .GetOpenTimesAsync(BtcLinear, Interval.OneHour, running.From, running.To, CancellationToken.None);
         stored.ShouldBe([At("2024-03-10T09:00:00Z"), At("2024-03-10T10:00:00Z"), At("2024-03-10T11:00:00Z")]);
+    }
+
+    // Scenario "Перезапуск во время прогона".
+    [Test]
+    public async Task Backtest_stopped_after_five_combinations_calculates_the_other_seven_after_start()
+    {
+        string connectionString = await IntegrationEnvironment.CreateDatabaseAsync();
+        DateTimeOffset from = At("2024-03-01T00:00:00Z");
+        decimal[] closes = [100m, 98m, 97m, 99m, 101m, 100m, 98m, 96m, 97m, 99m, 102m, 103m];
+        var grid = new Dictionary<string, ParameterSpec>
+        {
+            ["priceDropForBuy"] = ParameterSpec.Between(new NumberValue(0.01m), new NumberValue(0.03m), new NumberValue(0.01m)),
+            ["priceRiseForSell"] = ParameterSpec.Between(new NumberValue(0.005m), new NumberValue(0.02m), new NumberValue(0.005m))
+        };
+        Guid interrupted;
+        Guid whole;
+        IReadOnlyList<BacktestResult> expected;
+
+        await using (var first = new ProfitFoxFactory(connectionString))
+        {
+            using HttpClient client = first.CreateClient();
+            var scenario = new BacktestScenario(first, client);
+            await scenario.CreateBotAsync("ladder");
+            await scenario.StoreCandlesAsync(from, closes);
+            Backtest reference = await scenario.QueueAsync(from, from.AddHours(closes.Length), grid);
+            expected = await scenario.ResultsAsync(await scenario.WaitUntilFinishedAsync(reference.Id));
+            whole = reference.Id;
+            Backtest backtest = await scenario.CreateAsync(from, from.AddHours(closes.Length), grid);
+            interrupted = backtest.Id;
+            await using AsyncServiceScope scope = first.Services.CreateAsyncScope();
+            IBacktestRepository spy = BacktestScenario.Spy(
+                scope.ServiceProvider.GetRequiredService<IBacktestRepository>(),
+                (saved, _) =>
+                {
+                    if (saved.CalculatedCombinations == 5)
+                    {
+                        throw new OperationCanceledException("The service stops.");
+                    }
+                });
+            var ticking = new FakeTimeProvider(first.Time.GetUtcNow()) { AutoAdvanceAmount = TimeSpan.FromSeconds(1) };
+
+            await Should.ThrowAsync<OperationCanceledException>(() =>
+                BacktestScenario.Handler(scope, spy, ticking).Handle(new RunBacktestCommand(backtest.Id), CancellationToken.None));
+        }
+
+        await using var restarted = new ProfitFoxFactory(connectionString);
+        using HttpClient restartedClient = restarted.CreateClient();
+        var after = new BacktestScenario(restarted, restartedClient);
+
+        Backtest resumed = await after.WaitUntilFinishedAsync(interrupted);
+
+        resumed.Status.ShouldBe(BacktestStatus.Succeeded);
+        resumed.CalculatedCombinations.ShouldBe(12L);
+        IReadOnlyList<BacktestResult> results = await after.ResultsAsync(resumed);
+        results.Select(result => (result.Combination, result.Metrics)).ShouldBe(expected.Select(result => (result.Combination, result.Metrics)));
+        whole.ShouldNotBe(interrupted);
+    }
+
+    // Scenario "Бэктест без продвижения".
+    [Test]
+    public async Task Backtest_interrupted_for_the_third_time_without_a_new_result_fails_after_start()
+    {
+        string connectionString = await IntegrationEnvironment.CreateDatabaseAsync();
+        Guid stalled;
+
+        await using (var first = new ProfitFoxFactory(connectionString))
+        {
+            using HttpClient client = first.CreateClient();
+            var scenario = new BacktestScenario(first, client);
+            await scenario.CreateBotAsync("ladder");
+            Backtest backtest = await scenario.CreateAsync(At("2024-03-01T00:00:00Z"), At("2024-03-01T12:00:00Z"));
+            await using AsyncServiceScope scope = first.Services.CreateAsyncScope();
+            await scope.ServiceProvider.GetRequiredService<IBacktestRepository>()
+                .UpdateAsync(backtest with { Status = BacktestStatus.Running, StalledRestarts = 2 }, BacktestStatus.Pending, CancellationToken.None);
+            stalled = backtest.Id;
+        }
+
+        await using var restarted = new ProfitFoxFactory(connectionString);
+        using HttpClient restartedClient = restarted.CreateClient();
+
+        Backtest failed = await new BacktestScenario(restarted, restartedClient).GetAsync(stalled);
+
+        (failed.Status, failed.Error, failed.StalledRestarts).ShouldBe((BacktestStatus.Failed, Backtest.InterruptedByRestart, 3));
     }
 
     private static async Task<CandleImportJob> StartAndLeaveRunningJobAsync(string connectionString)

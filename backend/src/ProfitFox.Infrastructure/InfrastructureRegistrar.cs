@@ -36,6 +36,7 @@ public static class InfrastructureRegistrar
         services.AddSingleton(configuration.GetSection("Backtests").Get<BacktestSettings>() ?? new BacktestSettings());
         services.AddSingleton<BacktestQueue>();
         services.AddSingleton<IBacktestQueue>(provider => provider.GetRequiredService<BacktestQueue>());
+        services.AddHostedService<BacktestInitializationService>();
         services.AddHostedService<BacktestBackgroundService>();
     }
 }
