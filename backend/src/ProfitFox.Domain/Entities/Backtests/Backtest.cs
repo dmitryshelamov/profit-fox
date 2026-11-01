@@ -152,6 +152,12 @@ public sealed record Backtest(
             FinishedAt: null);
     }
 
+    /// <summary>Whether the bot no longer trades what the backtest ran: a newer strategy version, another instrument or interval.</summary>
+    public bool BotChanged(Bot bot, int latestVersion)
+    {
+        return latestVersion > StrategyVersion || bot.Instrument != Instrument || bot.Interval != Interval;
+    }
+
     public ParameterGrid Grid()
     {
         return new ParameterGrid(Parameters);

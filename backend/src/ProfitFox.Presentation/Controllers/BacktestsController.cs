@@ -58,9 +58,9 @@ public sealed class BacktestsController(ISender sender) : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken)
     {
-        Backtest? backtest = await sender.Send(new GetBacktestQuery(id), cancellationToken);
+        GetBacktestResult? result = await sender.Send(new GetBacktestQuery(id), cancellationToken);
 
-        return backtest is null ? NotFound() : Ok(BacktestResponse.Of(backtest));
+        return result is null ? NotFound() : Ok(BacktestResponse.Of(result.Backtest, result.BotChanged));
     }
 
     [HttpGet("{id:guid}/results")]

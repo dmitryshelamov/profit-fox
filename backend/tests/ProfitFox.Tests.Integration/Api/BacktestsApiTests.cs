@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 
 using ProfitFox.Tests.Integration.Infrastructure;
+using ProfitFox.Tests.Shared.Fixtures.Strategies;
 
 using Shouldly;
 
@@ -154,6 +155,34 @@ public class BacktestsApiTests
         HttpResponseMessage response = await _client.PostAsync($"/api/backtests/{id}/cancel", null);
 
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+    }
+
+    // Scenario "Правка стратегии".
+    [Test]
+    public async Task Backtest_shows_the_bot_changed_after_its_strategy_got_a_new_version()
+    {
+        Guid id = (await (await CreateAsync(Body())).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        (await _client.GetFromJsonAsync<JsonElement>($"/api/backtests/{id}")).GetProperty("botChanged").GetBoolean().ShouldBeFalse();
+        JsonNode changed = JsonNode.Parse(StrategyFixtures.Json("ema"))!;
+        changed["parameters"]![2]!["default"] = 300;
+
+        await _client.PutAsJsonAsync($"/api/strategies/{_scenario.StrategyId}", new { name = "ema", definition = changed });
+
+        (await _client.GetFromJsonAsync<JsonElement>($"/api/backtests/{id}")).GetProperty("botChanged").GetBoolean().ShouldBeTrue();
+    }
+
+    // Scenario "Бот не менялся".
+    [Test]
+    public async Task Backtest_does_not_show_the_bot_changed_after_a_new_name_of_the_bot()
+    {
+        Guid id = (await (await CreateAsync(Body())).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        HttpResponseMessage renamed = await _client.PutAsJsonAsync(
+            $"/api/bots/{_scenario.BotId}",
+            new { name = "Новое имя", parameterValues = new { fast = 10 }, category = "linear", symbol = "BTCUSDT", interval = "60", balance = 1000 });
+
+        renamed.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await _client.GetFromJsonAsync<JsonElement>($"/api/backtests/{id}")).GetProperty("botChanged").GetBoolean().ShouldBeFalse();
     }
 
     private Task<HttpResponseMessage> CreateAsync(JsonObject body)

@@ -30,9 +30,10 @@ public sealed record BacktestResponse(
     IReadOnlyList<GapResponse> Gaps,
     DateTimeOffset CreatedAt,
     DateTimeOffset? StartedAt,
-    DateTimeOffset? FinishedAt)
+    DateTimeOffset? FinishedAt,
+    bool BotChanged)
 {
-    public static BacktestResponse Of(Backtest backtest)
+    public static BacktestResponse Of(Backtest backtest, bool botChanged)
     {
         return new BacktestResponse(
             backtest.Id,
@@ -61,7 +62,8 @@ public sealed record BacktestResponse(
             [.. backtest.Gaps.Select(gap => new GapResponse(gap.From, gap.To))],
             backtest.CreatedAt,
             backtest.StartedAt,
-            backtest.FinishedAt);
+            backtest.FinishedAt,
+            botChanged);
     }
 
     internal static string Text(decimal value)
