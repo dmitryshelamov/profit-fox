@@ -15,12 +15,23 @@ public sealed class StrategyLibrary : AggregateRoot
 {
     private readonly List<CompositeNode> _composites;
     private readonly List<Strategy> _strategies;
+    private readonly Dictionary<Guid, StrategyVersion> _latestVersions;
+    private readonly List<StrategyVersion> _newVersions = [];
 
-    public StrategyLibrary(long revision, IEnumerable<Strategy> strategies, IEnumerable<CompositeNode> composites)
+    /// <param name="revision"></param>
+    /// <param name="strategies"></param>
+    /// <param name="composites"></param>
+    /// <param name="latestVersions">The latest version of each strategy.</param>
+    public StrategyLibrary(
+        long revision,
+        IEnumerable<Strategy> strategies,
+        IEnumerable<CompositeNode> composites,
+        IEnumerable<StrategyVersion>? latestVersions = null)
     {
         Revision = revision;
         _strategies = [.. strategies];
         _composites = [.. composites];
+        _latestVersions = (latestVersions ?? []).ToDictionary(version => version.StrategyId);
     }
 
     /// <summary>Grows with every saved change; a save based on an older revision is a conflict.</summary>
@@ -30,12 +41,21 @@ public sealed class StrategyLibrary : AggregateRoot
 
     public IReadOnlyList<CompositeNode> Composites => _composites;
 
+    /// <summary>Versions the operations on this instance created, oldest first; they are saved with the change.</summary>
+    public IReadOnlyList<StrategyVersion> NewVersions => _newVersions;
+
+    public StrategyVersion? LatestVersion(Guid strategyId)
+    {
+        return _latestVersions.GetValueOrDefault(strategyId);
+    }
+
     /// <exception cref="GraphValidationException">The strategy graph is invalid.</exception>
     public Strategy AddStrategy(Guid id, string name, StrategyDefinition definition, DateTimeOffset now)
     {
         Validate(definition);
         var strategy = new Strategy(id, name, definition, now, now);
         _strategies.Add(strategy);
+        Version(strategy, Catalog(), now);
 
         return strategy;
     }
@@ -53,6 +73,7 @@ public sealed class StrategyLibrary : AggregateRoot
 
         Validate(definition);
         _strategies[index] = _strategies[index] with { Name = name, Definition = definition, UpdatedAt = now };
+        Version(_strategies[index], Catalog(), now);
 
         return _strategies[index];
     }
@@ -174,6 +195,22 @@ public sealed class StrategyLibrary : AggregateRoot
         }
 
         return found;
+    }
+
+    /// <summary>A snapshot that differs from the latest version becomes the next version.</summary>
+    private void Version(Strategy strategy, CompositeCatalog catalog, DateTimeOffset now)
+    {
+        var snapshot = StrategySnapshot.Of(strategy.Definition, catalog);
+        StrategyVersion? latest = LatestVersion(strategy.Id);
+
+        if (snapshot.Equals(latest?.Snapshot))
+        {
+            return;
+        }
+
+        var version = new StrategyVersion(strategy.Id, (latest?.Number ?? 0) + 1, snapshot, now);
+        _latestVersions[strategy.Id] = version;
+        _newVersions.Add(version);
     }
 
     private static bool Uses(Graph graph, HashSet<Guid> ids)
