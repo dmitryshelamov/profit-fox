@@ -121,6 +121,31 @@ public static partial class StrategyJson
         return StrategySnapshot.Restore(ParseStrategy(json.GetProperty("strategy")), composites);
     }
 
+    /// <summary>Parameter values of a bot or a backtest: <c>{ "fast": 10, "every": "01:00:00" }</c>.</summary>
+    public static JsonObject WriteValues(IReadOnlyDictionary<string, NodeValue> values)
+    {
+        return new JsonObject(values.Select(value => KeyValuePair.Create(value.Key, WriteValue(value.Value))));
+    }
+
+    /// <summary>A number, <c>true</c>/<c>false</c> or a duration such as <c>01:00:00</c>; <c>null</c> for anything else.</summary>
+    public static NodeValue? ParseValue(JsonElement json)
+    {
+        return json.ValueKind switch
+        {
+            JsonValueKind.Number => new NumberValue(json.GetDecimal()),
+            JsonValueKind.True or JsonValueKind.False => new BooleanValue(json.GetBoolean()),
+            JsonValueKind.String when TimeSpan.TryParseExact(json.GetString(), DurationFormat, CultureInfo.InvariantCulture, out TimeSpan duration) =>
+                new DurationValue(duration),
+            _ => null
+        };
+    }
+
+    /// <summary>Reads stored values; they were valid when written.</summary>
+    public static IReadOnlyDictionary<string, NodeValue> ParseValues(JsonElement json)
+    {
+        return json.EnumerateObject().ToDictionary(value => value.Name, value => ParseValue(value.Value)!);
+    }
+
     /// <summary>Code of a composite node id in a graph reference: the built-in code or the custom <see cref="Guid" />.</summary>
     public static string ToCode(CompositeNodeId id)
     {
@@ -471,14 +496,7 @@ public static partial class StrategyJson
         /// <summary>A number, <c>true</c>/<c>false</c> or a duration such as <c>01:00:00</c>; <paramref name="expected" /> narrows it to one type.</summary>
         private NodeValue Value(JsonElement json, string path, PinType? expected)
         {
-            NodeValue? value = json.ValueKind switch
-            {
-                JsonValueKind.Number => new NumberValue(json.GetDecimal()),
-                JsonValueKind.True or JsonValueKind.False => new BooleanValue(json.GetBoolean()),
-                JsonValueKind.String when TimeSpan.TryParseExact(json.GetString(), DurationFormat, CultureInfo.InvariantCulture, out TimeSpan duration) =>
-                    new DurationValue(duration),
-                _ => null
-            };
+            NodeValue? value = ParseValue(json);
 
             if (value is null || (expected is { } type && value.Type != type))
             {

@@ -27,6 +27,8 @@ public sealed class StrategyLibrary : AggregateRoot
     private readonly Dictionary<Guid, CompositeNode> _savedComposites = [];
     private readonly List<Guid> _removedComposites = [];
     private readonly List<Bot> _bots;
+    private readonly Dictionary<Guid, Bot> _savedBots = [];
+    private readonly List<Guid> _removedBots = [];
 
     /// <param name="revision"></param>
     /// <param name="strategies"></param>
@@ -62,7 +64,9 @@ public sealed class StrategyLibrary : AggregateRoot
         [.. _removedStrategies],
         [.. _savedComposites.Values],
         [.. _removedComposites],
-        [.. _newVersions]);
+        [.. _newVersions],
+        [.. _savedBots.Values],
+        [.. _removedBots]);
 
     public StrategyVersion? LatestVersion(Guid strategyId)
     {
@@ -146,6 +150,7 @@ public sealed class StrategyLibrary : AggregateRoot
         var bot = new Bot(id, name, strategyId, parameterValues, instrument, interval, balance, now, now);
         ValidateBot(bot);
         _bots.Add(bot);
+        _savedBots[id] = bot;
 
         return bot;
     }
@@ -180,6 +185,7 @@ public sealed class StrategyLibrary : AggregateRoot
         };
         ValidateBot(changed);
         _bots[index] = changed;
+        _savedBots[id] = changed;
 
         return changed;
     }
@@ -194,7 +200,15 @@ public sealed class StrategyLibrary : AggregateRoot
 
     public bool RemoveBot(Guid id)
     {
-        return _bots.RemoveAll(bot => bot.Id == id) > 0;
+        if (_bots.RemoveAll(bot => bot.Id == id) == 0)
+        {
+            return false;
+        }
+
+        _savedBots.Remove(id);
+        _removedBots.Add(id);
+
+        return true;
     }
 
     /// <summary>Strategies saved before versions existed get version 1 of their current graph.</summary>

@@ -4,6 +4,7 @@ using Dapper;
 
 using Npgsql;
 
+using ProfitFox.Domain.Entities.Bots;
 using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Strategies.Contracts;
@@ -24,16 +25,21 @@ internal sealed class StrategyLibraryRepository(NpgsqlDataSource dataSource) : I
         IEnumerable<StrategyDb> strategies = await connection.QueryAsync<StrategyDb>(StrategyLibraryRepositoryQueries.Strategies(transaction, cancellationToken));
         IEnumerable<CompositeNodeDb> composites = await connection.QueryAsync<CompositeNodeDb>(StrategyLibraryRepositoryQueries.Composites(transaction, cancellationToken));
         IEnumerable<StrategyVersionDb> versions = await connection.QueryAsync<StrategyVersionDb>(StrategyLibraryRepositoryQueries.LatestVersions(transaction, cancellationToken));
+        IEnumerable<BotDb> bots = await connection.QueryAsync<BotDb>(StrategyLibraryRepositoryQueries.Bots(transaction, cancellationToken));
         await transaction.CommitAsync(cancellationToken);
 
         return new StrategyLibrary(
             revision,
             strategies.Select(StrategyDbConverter.ToDomain),
             composites.Select(CompositeNodeDbConverter.ToDomain),
-            versions.Select(StrategyVersionDbConverter.ToDomain));
+            versions.Select(StrategyVersionDbConverter.ToDomain),
+            bots.Select(BotDbConverter.ToDomain));
     }
 
-    /// <summary>Nodes and strategies go first, so the versions find their strategies; deletions cascade to versions.</summary>
+    /// <summary>
+    ///     Strategies go before the bots and versions that refer to them, removed bots before their strategies; a deleted strategy
+    ///     takes its versions along.
+    /// </summary>
     public async Task<bool> SaveAsync(StrategyLibraryChange change, long expectedRevision, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
@@ -52,6 +58,16 @@ internal sealed class StrategyLibraryRepository(NpgsqlDataSource dataSource) : I
         foreach (Strategy strategy in change.SavedStrategies)
         {
             await connection.ExecuteAsync(StrategyLibraryRepositoryQueries.UpsertStrategy(StrategyDbConverter.FromDomain(strategy), transaction, cancellationToken));
+        }
+
+        foreach (Bot bot in change.SavedBots)
+        {
+            await connection.ExecuteAsync(StrategyLibraryRepositoryQueries.UpsertBot(BotDbConverter.FromDomain(bot), transaction, cancellationToken));
+        }
+
+        foreach (Guid id in change.RemovedBots)
+        {
+            await connection.ExecuteAsync(StrategyLibraryRepositoryQueries.DeleteBot(id, transaction, cancellationToken));
         }
 
         foreach (Guid id in change.RemovedStrategies)
@@ -102,6 +118,21 @@ internal sealed class StrategyLibraryRepository(NpgsqlDataSource dataSource) : I
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
         return [.. (await connection.QueryAsync<CompositeNodeDb>(StrategyLibraryRepositoryQueries.Composites(null, cancellationToken))).Select(CompositeNodeDbConverter.ToDomain)];
+    }
+
+    public async Task<Bot?> GetBotAsync(Guid id, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        BotDb? bot = await connection.QuerySingleOrDefaultAsync<BotDb>(StrategyLibraryRepositoryQueries.Bot(id, cancellationToken));
+
+        return bot is null ? null : BotDbConverter.ToDomain(bot);
+    }
+
+    public async Task<IReadOnlyList<Bot>> GetBotsAsync(CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        return [.. (await connection.QueryAsync<BotDb>(StrategyLibraryRepositoryQueries.Bots(null, cancellationToken))).Select(BotDbConverter.ToDomain)];
     }
 
     public async Task<int?> GetLatestVersionNumberAsync(Guid strategyId, CancellationToken cancellationToken)

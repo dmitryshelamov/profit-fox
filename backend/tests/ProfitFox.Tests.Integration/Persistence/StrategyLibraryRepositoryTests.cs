@@ -3,9 +3,12 @@ using System.Text.Json.Nodes;
 using Npgsql;
 
 using ProfitFox.Application.Strategies;
+using ProfitFox.Domain.Entities.Bots;
+using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Services.Strategies.BuiltIns;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Strategies;
 using ProfitFox.Tests.Shared.Fixtures.Strategies;
@@ -183,6 +186,72 @@ public class StrategyLibraryRepositoryTests
         (await _repository.GetVersionAsync(strategy.Id, 1, CancellationToken.None)).ShouldBeNull();
     }
 
+    [Test]
+    public async Task Bot_is_saved_read_and_deleted_without_losing_decimal_precision()
+    {
+        Strategy strategy = Strategy("dca");
+        var bot = new Bot(
+            Guid.NewGuid(),
+            "DCA BTC",
+            strategy.Id,
+            new Dictionary<string, NodeValue> { ["limitPerOrder"] = new NumberValue(12.345678901234567890m), ["purchaseInterval"] = new DurationValue(TimeSpan.FromHours(4)) },
+            new Instrument(MarketCategory.Linear, "BTCUSDT"),
+            Interval.FourHours,
+            1000.000000000001m,
+            Created,
+            Created.AddMinutes(1));
+
+        (await _repository.SaveAsync(Change([strategy], bots: [bot]), 0, CancellationToken.None)).ShouldBeTrue();
+
+        Bot loaded = (await _repository.LoadAsync(CancellationToken.None)).Bots.ShouldHaveSingleItem();
+        loaded.ShouldBe(bot with { ParameterValues = loaded.ParameterValues });
+        loaded.ParameterValues.ShouldBe(bot.ParameterValues);
+        (await _repository.GetBotAsync(bot.Id, CancellationToken.None))!.Balance.ShouldBe(1000.000000000001m);
+        (await _repository.GetBotsAsync(CancellationToken.None)).Select(item => item.Id).ShouldBe([bot.Id]);
+
+        (await _repository.SaveAsync(Change(removedBots: [bot.Id]), 1, CancellationToken.None)).ShouldBeTrue();
+        (await _repository.GetBotAsync(bot.Id, CancellationToken.None)).ShouldBeNull();
+    }
+
+    // Scenario "Конкурирующие сохранения".
+    [Test]
+    public async Task Of_a_bot_change_and_a_strategy_change_read_at_one_revision_only_the_first_is_saved()
+    {
+        StrategyDefinition ema = StrategyJson.ParseStrategy(StrategyFixtures.Element("ema"));
+        var setup = new StrategyLibrary(0, [], []);
+        setup.AddStrategy(Guid.NewGuid(), "EMA", ema, Created);
+        Strategy strategy = setup.Strategies.Single();
+        Bot bot = setup.AddBot(Guid.NewGuid(), "EMA BTC", strategy.Id, new Dictionary<string, NodeValue>(), new Instrument(MarketCategory.Spot, "BTCUSDT"), Interval.OneHour, 1000m, Created);
+        await _repository.SaveAsync(setup.Change, 0, CancellationToken.None);
+        StrategyLibrary first = await _repository.LoadAsync(CancellationToken.None);
+        StrategyLibrary second = await _repository.LoadAsync(CancellationToken.None);
+        first.UpdateBot(bot.Id, bot.Name, new Dictionary<string, NodeValue> { ["fast"] = new NumberValue(10m) }, bot.Instrument, bot.Interval, bot.Balance, Created);
+        second.UpdateStrategy(strategy.Id, "EMA", WithoutFast(ema), Created);
+
+        (await _repository.SaveAsync(first.Change, first.Revision, CancellationToken.None)).ShouldBeTrue();
+        (await _repository.SaveAsync(second.Change, second.Revision, CancellationToken.None)).ShouldBeFalse();
+
+        StrategyLibrary saved = await _repository.LoadAsync(CancellationToken.None);
+        saved.Strategies.Single().Definition.Parameters.Select(parameter => parameter.Name).ShouldContain("fast");
+        saved.Bots.Single().ParameterValues["fast"].ShouldBe(new NumberValue(10m));
+    }
+
+    private static StrategyDefinition WithoutFast(StrategyDefinition ema)
+    {
+        return ema with
+        {
+            Parameters = [.. ema.Parameters.Where(parameter => parameter.Name != "fast")],
+            Graph = ema.Graph with
+            {
+                Wires = [.. ema.Graph.Wires.Where(wire => wire.From != new PinRef("params", "fast"))],
+                Nodes =
+                [
+                    .. ema.Graph.Nodes.Select(node => node.Id == "cross" ? node with { Inputs = new Dictionary<string, NodeValue> { ["fast"] = new NumberValue(5m) } } : node)
+                ]
+            }
+        };
+    }
+
     private static StrategyLibraryChange Saving(Strategy strategy)
     {
         return Change([strategy]);
@@ -198,9 +267,11 @@ public class StrategyLibraryRepositoryTests
         IReadOnlyList<Guid>? removedStrategies = null,
         IReadOnlyList<CompositeNode>? composites = null,
         IReadOnlyList<Guid>? removedComposites = null,
-        IReadOnlyList<StrategyVersion>? versions = null)
+        IReadOnlyList<StrategyVersion>? versions = null,
+        IReadOnlyList<Bot>? bots = null,
+        IReadOnlyList<Guid>? removedBots = null)
     {
-        return new StrategyLibraryChange(strategies ?? [], removedStrategies ?? [], composites ?? [], removedComposites ?? [], versions ?? []);
+        return new StrategyLibraryChange(strategies ?? [], removedStrategies ?? [], composites ?? [], removedComposites ?? [], versions ?? [], bots ?? [], removedBots ?? []);
     }
 
     private static Strategy Strategy(string fixture)

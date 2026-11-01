@@ -1,5 +1,8 @@
+using ProfitFox.Domain.Entities.Bots;
+using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Domain.Entities.Strategies.Enums;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Tests.Shared.Builders.Strategies;
 
@@ -12,6 +15,8 @@ public class StrategyLibraryChangeTests
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2024-01-01T00:00:00Z");
     private static readonly Guid Id = Guid.Parse("00000000-0000-0000-0000-000000000001");
+    private static readonly Guid BotId = Guid.Parse("00000000-0000-0000-0000-0000000000b1");
+    private static readonly Guid OtherBotId = Guid.Parse("00000000-0000-0000-0000-0000000000b2");
     private static readonly Guid NodeId = Guid.Parse("00000000-0000-0000-0000-000000000002");
 
     [Test]
@@ -24,6 +29,25 @@ public class StrategyLibraryChangeTests
         change.SavedComposites.ShouldBeEmpty();
         change.RemovedComposites.ShouldBeEmpty();
         change.NewVersions.ShouldBeEmpty();
+        change.SavedBots.ShouldBeEmpty();
+        change.RemovedBots.ShouldBeEmpty();
+    }
+
+    [Test]
+    public void Added_and_changed_bot_is_saved_in_its_last_state_and_a_removed_one_is_removed()
+    {
+        var library = new StrategyLibrary(0, [], []);
+        library.AddStrategy(Id, "A", Definition(1m), Now);
+        var instrument = new Instrument(MarketCategory.Spot, "BTCUSDT");
+        var values = new Dictionary<string, NodeValue>();
+        library.AddBot(BotId, "A", Id, values, instrument, Interval.OneHour, 100m, Now);
+        Bot changed = library.UpdateBot(BotId, "B", values, instrument, Interval.OneHour, 100m, Now)!;
+        library.AddBot(OtherBotId, "C", Id, values, instrument, Interval.OneHour, 100m, Now);
+
+        library.RemoveBot(OtherBotId);
+
+        library.Change.SavedBots.ShouldBe([changed]);
+        library.Change.RemovedBots.ShouldBe([OtherBotId]);
     }
 
     [Test]

@@ -42,6 +42,20 @@ internal static class StrategyLibraryRepositoryQueries
                                             VALUES (@StrategyId, @Number, @Snapshot::jsonb, @CreatedAt)
                                             """;
 
+    private const string SelectBotsSql = """
+                                         SELECT id, name, strategy_id AS "StrategyId", parameter_values::text AS "ParameterValues", category, symbol, "interval",
+                                             balance, created_at AS "CreatedAt", updated_at AS "UpdatedAt"
+                                         FROM bots
+                                         """;
+
+    private const string UpsertBotSql = """
+                                        INSERT INTO bots (id, name, strategy_id, parameter_values, category, symbol, "interval", balance, created_at, updated_at)
+                                        VALUES (@Id, @Name, @StrategyId, @ParameterValues::jsonb, @Category, @Symbol, @Interval, @Balance, @CreatedAt, @UpdatedAt)
+                                        ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, parameter_values = EXCLUDED.parameter_values,
+                                            category = EXCLUDED.category, symbol = EXCLUDED.symbol, "interval" = EXCLUDED."interval",
+                                            balance = EXCLUDED.balance, updated_at = EXCLUDED.updated_at
+                                        """;
+
     private const string UpsertStrategySql = """
                                              INSERT INTO strategies (id, name, definition, created_at, updated_at)
                                              VALUES (@Id, @Name, @Definition::jsonb, @CreatedAt, @UpdatedAt)
@@ -82,6 +96,26 @@ internal static class StrategyLibraryRepositoryQueries
     internal static CommandDefinition Composite(Guid id, CancellationToken cancellationToken)
     {
         return new CommandDefinition($"{SelectCompositesSql} WHERE id = @Id", new { Id = id }, cancellationToken: cancellationToken);
+    }
+
+    internal static CommandDefinition Bots(IDbTransaction? transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition($"{SelectBotsSql} {OrderSql}", transaction: transaction, cancellationToken: cancellationToken);
+    }
+
+    internal static CommandDefinition Bot(Guid id, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition($"{SelectBotsSql} WHERE id = @Id", new { Id = id }, cancellationToken: cancellationToken);
+    }
+
+    internal static CommandDefinition UpsertBot(BotDb bot, IDbTransaction transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(UpsertBotSql, bot, transaction, cancellationToken: cancellationToken);
+    }
+
+    internal static CommandDefinition DeleteBot(Guid id, IDbTransaction transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition("DELETE FROM bots WHERE id = @Id", new { Id = id }, transaction, cancellationToken: cancellationToken);
     }
 
     internal static CommandDefinition LatestVersions(IDbTransaction transaction, CancellationToken cancellationToken)

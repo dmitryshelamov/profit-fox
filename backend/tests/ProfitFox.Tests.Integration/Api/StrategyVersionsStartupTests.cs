@@ -27,7 +27,7 @@ public class StrategyVersionsStartupTests
         await using var dataSource = NpgsqlDataSource.Create(connectionString);
         var repository = new StrategyLibraryRepository(dataSource);
         var strategy = new Strategy(Guid.NewGuid(), "EMA", StrategyJson.ParseStrategy(StrategyFixtures.Element("ema")), Created, Created);
-        (await repository.SaveAsync(new StrategyLibraryChange([strategy], [], [], [], []), 0, CancellationToken.None)).ShouldBeTrue();
+        (await repository.SaveAsync(new StrategyLibraryChange([strategy], [], [], [], [], [], []), 0, CancellationToken.None)).ShouldBeTrue();
 
         await StartAsync(connectionString);
 
