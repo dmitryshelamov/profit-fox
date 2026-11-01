@@ -94,6 +94,7 @@ public sealed class StrategyRun
         _account.Invested,
         _account.Collateral,
         _account.Dust,
+        _account.DustCollateral,
         _account.Cash - Free(),
         SkippedOrders);
 
@@ -290,7 +291,10 @@ public sealed class StrategyRun
         }
     }
 
-    /// <summary>The order on the steps of the instrument: a buy price rounds down, a sell price up, a quantity down.</summary>
+    /// <summary>
+    ///     The order on the steps of the instrument: a buy price rounds down, a sell price up, a quantity down. A price that rounds
+    ///     to zero counts as a missing value.
+    /// </summary>
     private (decimal Price, decimal Quantity)? WantedLimit(RunNode node, OrderSide side)
     {
         if (!IsTrue(node, "when") || Positive(node, "price") is not { } wantedPrice || Positive(node, "size") is not { } size)
@@ -299,6 +303,12 @@ public sealed class StrategyRun
         }
 
         decimal price = side == OrderSide.Buy ? Down(wantedPrice, _rules.TickSize) : Up(wantedPrice, _rules.TickSize);
+
+        // A buy below one tick rounds down to no price at all.
+        if (price == 0m)
+        {
+            return null;
+        }
         decimal quantity = Down(node.Settings.SizeMode == OrderSizeMode.Amount ? size / price : size, _rules.QuantityStep);
 
         if (side == _entrySide)
@@ -336,7 +346,10 @@ public sealed class StrategyRun
         return value * (1m + rate);
     }
 
-    /// <summary>The cash less what standing limit entries reserve: their value and the fee they pay in the quote asset.</summary>
+    /// <summary>
+    ///     The cash less what unfinished entries hold back: a standing limit entry its value and the fee in the quote asset, an
+    ///     unfilled market entry its value when it was placed with that fee, so several entries of one event never spend more.
+    /// </summary>
     private decimal Free()
     {
         decimal rate = _fees.AssetOf(_entrySide) == FeeAsset.Quote ? _fees.LimitRate : 0m;
@@ -344,7 +357,7 @@ public sealed class StrategyRun
             .Where(order => order.Side == _entrySide && order.Price is not null)
             .Sum(order => order.Price!.Value * order.Remaining!.Value * (1m + rate));
 
-        return _account.Cash - reserved;
+        return _account.Cash - reserved - _orders.Values.Sum(order => order.Reserve);
     }
 
     private bool HasOrder(int index)
@@ -373,7 +386,8 @@ public sealed class StrategyRun
         }
 
         string id = $"o-{++_lastOrderNumber}";
-        _orders[id] = new ActiveOrder(index, side, price, type == OrderType.Limit ? quantity : null);
+        decimal reserve = type == OrderType.Market && side == _entrySide ? WithFee(type, value) ?? 0m : 0m;
+        _orders[id] = new ActiveOrder(index, side, price, type == OrderType.Limit ? quantity : null, Reserve: reserve);
         _commands.Add(new PlaceOrder(id, node.Path, side, type, price, quantity, amount));
     }
 

@@ -46,6 +46,15 @@ public class RoundingTests
     }
 
     [Test]
+    public void Limit_buy_whose_price_rounds_down_to_zero_holds_no_order()
+    {
+        StrategyRun run = HoldAtClose(OrderSide.Buy, OrderSizeMode.Amount, 100m);
+
+        Close(run, 0.009m).ShouldBeEmpty();
+        run.SkippedOrders.ShouldBe(0);
+    }
+
+    [Test]
     public void Exit_takes_at_most_the_position_rounded_down()
     {
         StrategyRun run = HoldAtClose(OrderSide.Sell, OrderSizeMode.Quantity, 5m);

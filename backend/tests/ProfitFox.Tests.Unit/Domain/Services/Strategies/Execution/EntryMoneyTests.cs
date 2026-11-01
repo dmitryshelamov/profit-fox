@@ -60,6 +60,29 @@ public class EntryMoneyTests
     }
 
     [Test]
+    public void Unfilled_market_entry_keeps_its_money_from_the_next_entry()
+    {
+        Graph graph = new GraphBuilder()
+            .Node("position", SimpleNodeKind.Position)
+            .Node("flat", SimpleNodeKind.Not)
+            .Node("first", SimpleNodeKind.MarketOrder, Settings(OrderSide.Buy, OrderSizeMode.Amount), ("size", Values.Number(800m)))
+            .Node("second", SimpleNodeKind.MarketOrder, Settings(OrderSide.Buy, OrderSizeMode.Quantity), ("size", Values.Number(3m)))
+            .Wire("position.hasPosition", "flat.value")
+            .Wire("flat.result", "first.when")
+            .Wire("flat.result", "second.when")
+            .Build();
+        StrategyRun run = Run(graph, 1000m);
+        run.Handle(new BarClosed(Start, new Bar(100m, 100m, 100m, 100m, 1m))).ShouldBe([new PlaceOrder("o-1", "first", OrderSide.Buy, OrderType.Market, null, null, 800m)]);
+        run.SkippedOrders.ShouldBe(1);
+
+        run.Handle(new BarClosed(Start.AddHours(1), new Bar(100m, 100m, 100m, 100m, 1m)));
+
+        run.State.Reserved.ShouldBe(800m);
+        run.Handle(new OrderFilled(Start.AddHours(1), "o-1", 8m, 100m, IsComplete: true));
+        run.State.Reserved.ShouldBe(0m);
+    }
+
+    [Test]
     public void Market_entry_by_quantity_is_valued_at_the_last_close()
     {
         Graph graph = new GraphBuilder()

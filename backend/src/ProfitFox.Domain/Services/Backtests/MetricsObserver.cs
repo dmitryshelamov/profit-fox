@@ -25,24 +25,22 @@ public sealed class MetricsObserver(decimal balance) : IReplayObserver
     private int _longestUnderWater;
     private int _closedTrades;
     private int _winningTrades;
-    private decimal _tradeStartCash;
-    private decimal _tradeStartDust;
+    private RunState? _tradeStart;
 
     public void Filled(ReplayFill fill, RunState state)
     {
-        RunState before = _last ?? state with { Cash = _balance, Quantity = 0m, Dust = 0m };
+        RunState before = _last ?? state with { Cash = _balance, Quantity = 0m, Dust = 0m, DustCollateral = 0m };
         _fills++;
         _fees += fill.FeeAsset == FeeAsset.Quote ? fill.Fee : fill.Fee * fill.Price;
 
         if (before.Quantity == 0m && state.Quantity > 0m)
         {
-            _tradeStartCash = before.Cash;
-            _tradeStartDust = before.Dust;
+            _tradeStart = before;
         }
         else if (before.Quantity > 0m && state.Quantity == 0m)
         {
             _closedTrades++;
-            _winningTrades += state.Cash - _tradeStartCash + (state.Dust - _tradeStartDust) * fill.Price > 0m ? 1 : 0;
+            _winningTrades += state.Cash - _tradeStart!.Cash + state.DustValue(fill.Price) - _tradeStart.DustValue(fill.Price) > 0m ? 1 : 0;
         }
 
         Observe(state);

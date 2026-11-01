@@ -21,8 +21,8 @@ public sealed class DetailsObserver(decimal balance) : IReplayObserver
     {
         _metrics.Filled(fill, state);
         _fills.Add(fill);
-        RunState before = _last ?? state with { Cash = balance, Quantity = 0m, Dust = 0m };
-        _cycle ??= new Cycle(fill.At, before.Cash, before.Dust);
+        RunState before = _last ?? state with { Cash = balance, Quantity = 0m, Dust = 0m, DustCollateral = 0m };
+        _cycle ??= new Cycle(fill.At, before);
         _cycle.Add(fill, state.Direction);
 
         if (state.Quantity == 0m)
@@ -60,7 +60,7 @@ public sealed class DetailsObserver(decimal balance) : IReplayObserver
     }
 
     /// <summary>A position cycle being collected: entries and exits by quantity, fees in the quote asset.</summary>
-    private sealed class Cycle(DateTimeOffset openedAt, decimal startCash, decimal startDust)
+    private sealed class Cycle(DateTimeOffset openedAt, RunState start)
     {
         private decimal _entryValue;
         private decimal _entryQuantity;
@@ -88,7 +88,7 @@ public sealed class DetailsObserver(decimal balance) : IReplayObserver
         /// <summary>The result is the cash the cycle returned over the cash it started with, with the dust it left at the last price.</summary>
         public BacktestTrade Close(ReplayFill fill, RunState state)
         {
-            decimal pnl = state.Cash - startCash + (state.Dust - startDust) * fill.Price;
+            decimal pnl = state.Cash - start.Cash + state.DustValue(fill.Price) - start.DustValue(fill.Price);
 
             return new BacktestTrade(openedAt, fill.At, _entryValue / _entryQuantity, _exitValue / _exitQuantity, pnl, _fees);
         }

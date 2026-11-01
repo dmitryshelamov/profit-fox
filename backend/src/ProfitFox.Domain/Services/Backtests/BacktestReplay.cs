@@ -99,10 +99,30 @@ public sealed class BacktestReplay(
             return mode == LimitFillMode.Touch ? higher >= lower : higher > lower;
         }
 
-        /// <summary>The fee is charged as on Bybit: in the coin of a spot buy, otherwise in the quote asset from the value of the fill.</summary>
+        /// <summary>
+        ///     An exit fills at most the position, as a reduce-only order on the exchange. The fee is charged as on Bybit: in the coin of
+        ///     a spot buy, otherwise in the quote asset from the value of the fill.
+        /// </summary>
         private void Fill(SimulatedOrder order, decimal price, DateTimeOffset at, int index)
         {
             decimal quantity = order.Quantity ?? Down(order.Amount!.Value / price, conditions.Rules.QuantityStep);
+            RunState state = run.State;
+            bool exit = (order.Side == OrderSide.Buy) != (state.Direction == StrategyDirection.Long);
+
+            if (exit)
+            {
+                quantity = Math.Min(quantity, Down(state.Quantity, conditions.Rules.QuantityStep));
+            }
+
+            // Like the exchange, an exit only reduces the position, and no fill goes below the minimum quantity: such an order is
+            // cancelled, such as an exit with nothing left to sell or a buy by amount too small at the price of the fill.
+            if (quantity == 0m || quantity < conditions.Rules.MinQuantity)
+            {
+                Handle(new OrderCancelled(at, order.Id), index + 1);
+
+                return;
+            }
+
             decimal rate = order.Type == OrderType.Limit ? conditions.Fees.LimitRate : conditions.Fees.MarketRate;
             FeeAsset asset = conditions.Fees.AssetOf(order.Side);
             decimal fee = asset == FeeAsset.Base ? quantity * rate : price * quantity * rate;

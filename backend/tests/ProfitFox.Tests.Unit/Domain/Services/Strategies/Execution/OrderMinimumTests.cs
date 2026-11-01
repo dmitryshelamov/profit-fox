@@ -79,6 +79,33 @@ public class OrderMinimumTests
         run.ValueOf("position", "averagePrice").ShouldBe(Values.Number(120m));
     }
 
+    [Test]
+    public void Remainder_of_a_short_below_the_minimum_stays_a_liability_in_the_equity()
+    {
+        Graph graph = new GraphBuilder()
+            .Node("position", SimpleNodeKind.Position)
+            .Node("flat", SimpleNodeKind.Not)
+            .Node("enter", SimpleNodeKind.MarketOrder, Settings(OrderSide.Sell, OrderSizeMode.Quantity), ("size", Values.Number(1.005m)))
+            .Node("exit", SimpleNodeKind.MarketOrder, Settings(OrderSide.Buy, OrderSizeMode.Quantity), ("size", Values.Number(1m)))
+            .Wire("position.hasPosition", "flat.value")
+            .Wire("flat.result", "enter.when")
+            .Wire("position.hasPosition", "exit.when")
+            .Build();
+        var run = StrategyRun.Start(
+            StrategyDefinitions.Short(graph),
+            CompositeCatalog.Empty,
+            new Dictionary<string, NodeValue>(),
+            Conditions.Neutral with { Balance = 1000m, Rules = new InstrumentRules(0.01m, 0.001m, 0.01m, 0m) });
+        run.Handle(new RunStarted(Start));
+        run.Handle(new OrderFilled(Start, "o-1", 1.005m, 100m, IsComplete: true));
+
+        run.Handle(new OrderFilled(Start, "o-2", 1m, 100m, IsComplete: true));
+
+        run.ValueOf("position", "hasPosition").ShouldBe(Values.Boolean(false));
+        run.State.Equity(200m).ShouldBe(999.5m);
+        run.State.Equity(100m).ShouldBe(1000m);
+    }
+
     private static StrategyRun Run(Graph graph)
     {
         return StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, new Dictionary<string, NodeValue>(), Conditions.Neutral with { Rules = Rules });

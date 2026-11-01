@@ -18,8 +18,14 @@ internal sealed class Account(StrategyDirection direction, decimal balance, deci
     /// <summary>What a short holds in the cash it paid for its entries.</summary>
     public decimal Collateral { get; private set; }
 
-    /// <summary>Coins left over by positions closed below the minimum quantity; they stay on the account.</summary>
+    /// <summary>
+    ///     What positions closed below the minimum quantity left over: coins of a long, which stay on the account, or contracts of
+    ///     a short, which stay sold.
+    /// </summary>
     public decimal Dust { get; private set; }
+
+    /// <summary>The collateral of the contracts a short left over in <see cref="Dust" />.</summary>
+    public decimal DustCollateral { get; private set; }
 
     public decimal Quantity { get; private set; }
 
@@ -64,6 +70,7 @@ internal sealed class Account(StrategyDirection direction, decimal balance, deci
         if (Quantity < minQuantity || Quantity == 0m)
         {
             Dust += Quantity;
+            DustCollateral += Collateral;
             Quantity = 0m;
             Invested = 0m;
             Collateral = 0m;

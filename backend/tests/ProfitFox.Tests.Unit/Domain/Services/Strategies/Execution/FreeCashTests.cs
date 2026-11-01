@@ -58,7 +58,7 @@ public class FreeCashTests
     }
 
     [Test]
-    public void Market_entries_and_limit_exits_reserve_nothing()
+    public void Unfilled_market_entry_reserves_its_amount_and_limit_exits_reserve_nothing()
     {
         Graph graph = new GraphBuilder()
             .Node("position", SimpleNodeKind.Position)
@@ -74,7 +74,7 @@ public class FreeCashTests
         run.Handle(new RunStarted(Start)).ShouldHaveSingleItem();
 
         Close(run, 100m);
-        Free(run).ShouldBe(1000m);
+        Free(run).ShouldBe(900m);
 
         run.Handle(new OrderFilled(Start, "o-1", 1m, 100m, IsComplete: true)).ShouldHaveSingleItem();
         Close(run, 100m);
@@ -102,7 +102,7 @@ public class FreeCashTests
 
         run.Handle(new OrderFilled(Start, "o-1", 1m, 100m, IsComplete: true, Fee: 0.055m, FeeAsset: FeeAsset.Quote));
         Free(run).ShouldBe(899.945m);
-        run.State.ShouldBe(new RunState(StrategyDirection.Short, 899.945m, 1m, 99.945m, 100m, 0m, 0m, 0));
+        run.State.ShouldBe(new RunState(StrategyDirection.Short, 899.945m, 1m, 99.945m, 100m, 0m, 0m, 0m, 0));
 
         run.Handle(new OrderFilled(Start, "o-2", 0.5m, 90m, IsComplete: false, Fee: 0.02475m, FeeAsset: FeeAsset.Quote));
         Free(run).ShouldBe(899.945m + 50m + 5m - 0.02475m);

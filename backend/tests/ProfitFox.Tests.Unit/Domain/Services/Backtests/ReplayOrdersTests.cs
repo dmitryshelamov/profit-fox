@@ -6,6 +6,7 @@ using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Services.Backtests;
 using ProfitFox.Domain.Services.Strategies.Validation;
+using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Tests.Shared.Builders.Strategies;
@@ -74,6 +75,47 @@ public class ReplayOrdersTests
             .Build();
 
         Fills(Replay(graph, 0m, LimitFillMode.Breakout, Candle(0, 60m, 60m, 60m, 60m))).ShouldBeEmpty();
+    }
+
+    [Test]
+    public void Exit_beyond_the_position_fills_only_what_is_left_and_one_with_nothing_left_is_cancelled()
+    {
+        Graph graph = new GraphBuilder()
+            .Node("position", SimpleNodeKind.Position)
+            .Node("flat", SimpleNodeKind.Not)
+            .Node("buy", SimpleNodeKind.MarketOrder, Settings(OrderSide.Buy, OrderSizeMode.Quantity), ("size", Values.Number(1m)))
+            .Node("first", SimpleNodeKind.ClosePosition)
+            .Node("second", SimpleNodeKind.ClosePosition)
+            .Wire("position.hasPosition", "flat.value")
+            .Wire("flat.result", "buy.when")
+            .Wire("position.hasPosition", "first.when")
+            .Wire("position.hasPosition", "second.when")
+            .Build();
+        TradingConditions conditions = Conditions.Reference with { Fees = new FeeSchedule(0.001m, 0.001m, MarketCategory.Linear) };
+        var details = new DetailsObserver(conditions.Balance);
+
+        new BacktestReplay(StrategySnapshot.Of(StrategyDefinitions.Long(graph), CompositeCatalog.Empty), new Dictionary<string, NodeValue>(), conditions, 0m, LimitFillMode.Breakout, Interval.OneHour)
+            .Run(Start, [Candle(0, 100m, 100m, 100m, 100m), Candle(1, 100m, 100m, 100m, 100m), Candle(2, 100m, 100m, 100m, 100m)], details);
+
+        BacktestDetails result = details.Details();
+        result.Fills.Select(fill => (fill.Side, fill.Quantity)).ShouldBe([(OrderSide.Buy, 1m), (OrderSide.Sell, 1m), (OrderSide.Buy, 1m)]);
+        (result.Metrics.Fees, result.Metrics.EndEquity).ShouldBe((0.3m, 999.7m));
+    }
+
+    [TestCase(100000, 0.001)]
+    [TestCase(10000, 0.01)]
+    public void Market_buy_by_amount_below_the_minimum_quantity_at_the_fill_price_is_cancelled(decimal price, decimal minQuantity)
+    {
+        StrategyDefinition buy = StrategyDefinitions.Long(new GraphBuilder()
+            .Node("buy", SimpleNodeKind.MarketOrder, Settings(OrderSide.Buy, OrderSizeMode.Amount), ("when", Values.Boolean(true)), ("size", Values.Number(50m)))
+            .Build());
+        IReplayObserver observer = Substitute.For<IReplayObserver>();
+        TradingConditions conditions = Conditions.Reference with { Rules = new InstrumentRules(0.01m, 0.001m, minQuantity, 5m) };
+
+        new BacktestReplay(StrategySnapshot.Of(buy, CompositeCatalog.Empty), new Dictionary<string, NodeValue>(), conditions, 0m, LimitFillMode.Breakout, Interval.OneHour)
+            .Run(Start, [Candle(0, price, price, price, price), Candle(1, price, price, price, price)], observer);
+
+        Fills(observer).ShouldBeEmpty();
     }
 
     // Scenarios "Касание" and "Пробой".
