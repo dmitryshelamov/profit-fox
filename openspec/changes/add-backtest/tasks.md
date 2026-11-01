@@ -108,7 +108,7 @@
 
 ## 8. API бэктестов и результатов
 
-- [ ] 8.1 `POST /api/bots/{id}/backtests`, `GET /api/bots/{id}/backtests`, `GET /api/backtests/{id}`,
+- [x] 8.1 `POST /api/bots/{id}/backtests`, `GET /api/bots/{id}/backtests`, `GET /api/backtests/{id}`,
   `POST /api/backtests/{id}/cancel` и контракты; integration-тесты: 201, 400 по полям, 404, 503 «Биржа недоступна»,
   «Список бэктестов бота»
 - [ ] 8.2 `GET /api/backtests/{id}/results` с сортировкой, порядком и страницами; integration-тесты «Сортировка по
