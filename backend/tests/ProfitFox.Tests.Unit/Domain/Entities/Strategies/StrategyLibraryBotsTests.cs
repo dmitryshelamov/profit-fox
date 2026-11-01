@@ -113,6 +113,38 @@ public class StrategyLibraryBotsTests
         library.Bots.ShouldBeEmpty();
     }
 
+    // Scenario "Значение по умолчанию".
+    [Test]
+    public void Parameter_without_a_bot_value_takes_the_default_of_the_latest_version()
+    {
+        StrategyLibrary library = Library();
+        Bot bot = library.AddBot(BotId, "EMA BTC", Ema, Fast(10m), BtcSpot, Interval.OneHour, 1000m, Now);
+        StrategyDefinition ema = StrategyJson.ParseStrategy(StrategyFixtures.Element("ema"));
+        StrategyDefinition slower = ema with
+        {
+            Parameters = [.. ema.Parameters.Select(parameter => parameter.Name == "slow" ? parameter with { Default = Values.Number(30m) } : parameter)]
+        };
+
+        library.UpdateStrategy(Ema, "EMA", slower, Now.AddHours(1));
+
+        library.ParameterValues(bot).ShouldBe(
+            new Dictionary<string, NodeValue> { ["fast"] = Values.Number(10m), ["slow"] = Values.Number(30m), ["amount"] = Values.Number(100m) });
+    }
+
+    // Scenario "Изменение с ошибкой".
+    [Test]
+    public void Invalid_change_keeps_the_bot()
+    {
+        StrategyLibrary library = Library();
+        Bot bot = library.AddBot(BotId, "EMA BTC", Ema, Fast(10m), BtcSpot, Interval.OneHour, 1000m, Now);
+
+        BotValidationException exception = Should.Throw<BotValidationException>(() =>
+            library.UpdateBot(BotId, "EMA BTC", Fast(1m), BtcSpot, Interval.OneHour, 1000m, Now.AddHours(1)));
+
+        exception.Errors.ShouldBe([new BotError(BotField.Parameter, "fast", "Value must be at least 2.")]);
+        library.Bots.ShouldBe([bot]);
+    }
+
     [Test]
     public void Missing_bot_is_not_changed_or_removed()
     {

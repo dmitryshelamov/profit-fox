@@ -165,6 +165,14 @@ public sealed class StrategyLibrary : AggregateRoot
         return changed;
     }
 
+    /// <summary>Every parameter of the latest strategy version: the bot's value, otherwise the default of that version.</summary>
+    public IReadOnlyDictionary<string, NodeValue> ParameterValues(Bot bot)
+    {
+        return LatestVersion(bot.StrategyId)!.Snapshot.Definition.Parameters.ToDictionary(
+            parameter => parameter.Name,
+            parameter => bot.ParameterValues.GetValueOrDefault(parameter.Name, parameter.Default));
+    }
+
     public bool RemoveBot(Guid id)
     {
         return _bots.RemoveAll(bot => bot.Id == id) > 0;
@@ -332,7 +340,7 @@ public sealed class StrategyLibrary : AggregateRoot
         }
         else
         {
-            errors.AddRange(ParameterValues.Check(definition.Parameters, bot.ParameterValues).Select(error => new BotError(BotField.Parameter, error.Parameter, error.Reason)));
+            errors.AddRange(ParameterValueRules.Check(definition.Parameters, bot.ParameterValues).Select(error => new BotError(BotField.Parameter, error.Parameter, error.Reason)));
 
             if (!definition.Direction.SupportedCategories().Contains(bot.Instrument.Category))
             {

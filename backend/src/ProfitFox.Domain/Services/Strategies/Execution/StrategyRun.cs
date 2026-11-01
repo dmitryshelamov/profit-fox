@@ -44,7 +44,7 @@ public sealed class StrategyRun
     /// <exception cref="GraphValidationException">A parameter value is unknown or breaks the parameter's limits.</exception>
     public static StrategyRun Start(StrategyDefinition definition, CompositeCatalog catalog, IReadOnlyDictionary<string, NodeValue> parameterValues)
     {
-        IReadOnlyList<(string Parameter, string Reason)> errors = ParameterValues.Check(definition.Parameters, parameterValues);
+        IReadOnlyList<(string Parameter, string Reason)> errors = ParameterValueRules.Check(definition.Parameters, parameterValues);
 
         if (errors.Count > 0)
         {

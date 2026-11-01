@@ -3,7 +3,7 @@ using ProfitFox.Domain.ValueObjects.Strategies;
 namespace ProfitFox.Domain.Services.Strategies.Validation;
 
 /// <summary>Values a bot or a backtest gives to strategy parameters.</summary>
-public static class ParameterValues
+public static class ParameterValueRules
 {
     /// <summary>Every value that breaks its parameter's limits, in the order of the parameters, then every value of an unknown parameter.</summary>
     public static IReadOnlyList<(string Parameter, string Reason)> Check(IReadOnlyList<StrategyParameter> parameters, IReadOnlyDictionary<string, NodeValue> values)
