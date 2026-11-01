@@ -22,6 +22,7 @@ public static class InfrastructureRegistrar
         services.AddBybit();
         services.AddSingleton<ExchangeResilienceExecutor>();
         services.AddTransient<IMarketHistoryClient, BybitMarketDataClient>();
+        services.AddTransient<IInstrumentRulesProvider, BybitMarketDataClient>();
 
         services.AddHostedService<StrategyVersionsInitializationService>();
 

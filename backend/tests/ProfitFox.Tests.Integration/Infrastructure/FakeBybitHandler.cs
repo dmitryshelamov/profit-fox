@@ -10,6 +10,9 @@ public class FakeBybitHandler : HttpMessageHandler
     /// <summary>Instruments Bybit lists, as (category, symbol).</summary>
     public HashSet<(string Category, string Symbol)> Instruments { get; } = [];
 
+    /// <summary>Price and lot filters of listed instruments, as Bybit writes them; an instrument without them is listed bare.</summary>
+    public Dictionary<(string Category, string Symbol), (string TickSize, string QuantityStep, string MinQuantity, string MinAmount)> Rules { get; } = [];
+
     /// <summary>
     ///     The candle history Bybit knows, rows <c>[openTime ISO, open, high, low, close, volume, turnover]</c> in any order. A kline
     ///     request gets the rows with open time in its inclusive <c>[start, end]</c>, newest first, at most <c>limit</c> of them.
@@ -42,9 +45,17 @@ public class FakeBybitHandler : HttpMessageHandler
 
     private string InstrumentsInfo(string category, string symbol)
     {
-        return Instruments.Contains((category, symbol))
-            ? $$"""{"category":"{{category}}","list":[{"symbol":"{{symbol}}","status":"Trading"}]}"""
-            : $$"""{"category":"{{category}}","list":[]}""";
+        if (!Instruments.Contains((category, symbol)))
+        {
+            return $$"""{"category":"{{category}}","list":[]}""";
+        }
+
+        string filters = !Rules.TryGetValue((category, symbol), out (string TickSize, string QuantityStep, string MinQuantity, string MinAmount) rules) ? ""
+            : category == "spot"
+                ? $$""","priceFilter":{"tickSize":"{{rules.TickSize}}"},"lotSizeFilter":{"basePrecision":"{{rules.QuantityStep}}","quotePrecision":"0.00000001","minOrderQty":"{{rules.MinQuantity}}","maxOrderQty":"1000","minOrderAmt":"{{rules.MinAmount}}","maxOrderAmt":"2000000"}"""
+                : $$""","priceFilter":{"minPrice":"0.1","maxPrice":"1999999","tickSize":"{{rules.TickSize}}"},"lotSizeFilter":{"maxOrderQty":"100","minOrderQty":"{{rules.MinQuantity}}","qtyStep":"{{rules.QuantityStep}}","minNotionalValue":"{{rules.MinAmount}}"}""";
+
+        return $$"""{"category":"{{category}}","list":[{"symbol":"{{symbol}}","status":"Trading"{{filters}}}]}""";
     }
 
     private string Kline(NameValueCollection query)

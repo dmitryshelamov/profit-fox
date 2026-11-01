@@ -87,7 +87,7 @@
   симуляции по умолчанию; unit-тесты «Бэктест создан», «Период в будущем», «Некорректный период», «Диапазон
   параметра», «Шаг не делит диапазон», «Диапазон вне ограничений», «Сетка больше лимита», «Значения по умолчанию»,
   «Переопределённый баланс»
-- [ ] 6.3 `IInstrumentRulesProvider` в `BybitMarketDataClient` для `spot` и `linear`; integration-тест с
+- [x] 6.3 `IInstrumentRulesProvider` в `BybitMarketDataClient` для `spot` и `linear`; integration-тест с
   `FakeBybitHandler`: правила разобраны, недоступность — `ExchangeUnavailableException`
 - [ ] 6.4 Миграция `backtests` и `backtest_results`, `IBacktestRepository`, `BacktestCodes`, каскад от бота;
   integration-тесты: бэктест и результаты читаются без потери точности, повторная вставка результата ничего не

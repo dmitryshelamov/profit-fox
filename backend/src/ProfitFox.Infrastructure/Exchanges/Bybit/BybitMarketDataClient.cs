@@ -19,7 +19,7 @@ using MarketCategory = ProfitFox.Domain.Entities.MarketData.Enums.MarketCategory
 namespace ProfitFox.Infrastructure.Exchanges.Bybit;
 
 /// <summary>Public Bybit v5 market data through Bybit.Net; no API key, never sends orders.</summary>
-internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResilienceExecutor resilience) : IMarketHistoryClient
+internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResilienceExecutor resilience) : IMarketHistoryClient, IInstrumentRulesProvider
 {
     private const int PageSize = 1000;
 
@@ -70,6 +70,51 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
         {
             throw new ExchangeException($"Bybit is unavailable: {exception.Message}");
         }
+    }
+
+    /// <summary>
+    ///     A single attempt, like the instrument check: spot gives the base precision and the minimum order value, linear the quantity
+    ///     step and the minimum notional value.
+    /// </summary>
+    public async Task<InstrumentRules> GetRulesAsync(Instrument instrument, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await resilience.ExecuteOnceAsync(
+                async token =>
+                {
+                    if (instrument.Category == MarketCategory.Spot)
+                    {
+                        BybitSpotSymbol spot = Listed(Unwrap(await bybit.V5Api.ExchangeData.GetSpotSymbolsAsync(instrument.Symbol, token)).List, instrument);
+
+                        return new InstrumentRules(
+                            spot.PriceFilter!.TickSize,
+                            spot.LotSizeFilter!.BasePrecision,
+                            spot.LotSizeFilter.MinOrderQuantity,
+                            spot.LotSizeFilter.MinOrderValue);
+                    }
+
+                    BybitLinearInverseSymbol linear = Listed(
+                        Unwrap(await bybit.V5Api.ExchangeData.GetLinearInverseSymbolsAsync(instrument.Category.ToBybit(), instrument.Symbol, ct: token)).List,
+                        instrument);
+
+                    return new InstrumentRules(
+                        linear.PriceFilter!.TickSize,
+                        linear.LotSizeFilter!.QuantityStep,
+                        linear.LotSizeFilter.MinOrderQuantity,
+                        linear.LotSizeFilter.MinNotionalValue ?? 0m);
+                },
+                cancellationToken);
+        }
+        catch (TransientExchangeException exception)
+        {
+            throw new ExchangeUnavailableException($"Bybit is unavailable: {exception.Message}");
+        }
+    }
+
+    private static T Listed<T>(T[] symbols, Instrument instrument)
+    {
+        return symbols.Length > 0 ? symbols[0] : throw new ExchangeException($"Bybit does not list {instrument.Symbol} in {instrument.Category}.");
     }
 
     private async Task<IReadOnlyList<Candle>> GetPageAsync(
