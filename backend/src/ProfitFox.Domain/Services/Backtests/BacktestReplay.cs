@@ -10,6 +10,7 @@ namespace ProfitFox.Domain.Services.Backtests;
 /// <summary>
 ///     Runs one combination of parameter values on stored candles, simulating the exchange. Inside a candle the price goes
 ///     Open → Low → High → Close. An order works from the candle after the event it was placed on; a cancel is confirmed at once.
+///     A market order fills whole at the open, worse by <c>slippage</c> (a fraction); a limit order fills whole at its own price.
 /// </summary>
 public sealed class BacktestReplay(
     StrategySnapshot snapshot,
@@ -23,10 +24,10 @@ public sealed class BacktestReplay(
     public void Run(DateTimeOffset start, IReadOnlyList<Candle> candles, IReplayObserver observer)
     {
         var run = StrategyRun.Start(snapshot.Definition, snapshot.Catalog(), parameterValues, conditions);
-        new Pass(run, conditions, mode, interval, observer).Run(start, candles);
+        new Pass(run, conditions, slippage, mode, interval, observer).Run(start, candles);
     }
 
-    private sealed class Pass(StrategyRun run, TradingConditions conditions, LimitFillMode mode, Interval interval, IReplayObserver observer)
+    private sealed class Pass(StrategyRun run, TradingConditions conditions, decimal slippage, LimitFillMode mode, Interval interval, IReplayObserver observer)
     {
         private readonly List<SimulatedOrder> _orders = [];
         private readonly Queue<OrderCancelled> _cancels = new Queue<OrderCancelled>();
@@ -69,7 +70,7 @@ public sealed class BacktestReplay(
 
                 if (order.Type == OrderType.Market)
                 {
-                    reached.Add((0, 0m, order.Sequence, order, open));
+                    reached.Add((0, 0m, order.Sequence, order, order.Side == OrderSide.Buy ? open * (1m + slippage) : open * (1m - slippage)));
                 }
                 else if (order.Side == OrderSide.Buy && Beyond(limit, open))
                 {
