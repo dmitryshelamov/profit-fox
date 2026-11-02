@@ -2,6 +2,7 @@ using Bybit.Net;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 using ProfitFox.Application.Backtests;
 using ProfitFox.Application.ExchangeAccounts;
@@ -33,8 +34,10 @@ public static class InfrastructureRegistrar
     }
 
     /// <summary>The services of a Worker: the lanes that take candle imports and backtest work from the database.</summary>
-    /// <exception cref="InvalidOperationException">The lease would expire before the Worker renews it.</exception>
-    public static void ConfigureWorker(IConfiguration configuration, IServiceCollection services)
+    /// <exception cref="InvalidOperationException">
+    ///     The lease would expire before the Worker renews it, or a Worker in Development would trade on the live Bybit.
+    /// </exception>
+    public static void ConfigureWorker(IConfiguration configuration, IServiceCollection services, IHostEnvironment environment)
     {
         WorkerSettings settings = Settings(configuration);
 
@@ -46,6 +49,15 @@ public static class InfrastructureRegistrar
         ConfigureCommon(configuration, services);
         TradingSettings trading = configuration.GetSection("Trading").Get<TradingSettings>() ?? new TradingSettings();
         services.AddSingleton(trading);
+
+        // A local run never sends real orders.
+        BybitSettings stub = configuration.GetSection("Bybit").Get<BybitSettings>() ?? new BybitSettings();
+
+        if (trading.Enabled && environment.IsDevelopment() && (string.IsNullOrEmpty(stub.RestAddress) || string.IsNullOrEmpty(stub.SocketAddress)))
+        {
+            throw new InvalidOperationException(
+                "A Worker in Development trades only against a stub of Bybit: set Bybit__RestAddress and Bybit__SocketAddress, or Trading__Enabled=false.");
+        }
 
         // The API and a trading Worker decrypt secrets; a Worker that only runs backtests never needs the key (decision 12).
         if (trading.Enabled)

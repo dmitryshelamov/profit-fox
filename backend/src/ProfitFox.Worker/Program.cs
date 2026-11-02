@@ -36,6 +36,6 @@ public static class Program
                 .ReadFrom.Configuration(builder.Configuration)
                 .ReadFrom.Services(services),
             preserveStaticLogger: true);
-        InfrastructureRegistrar.ConfigureWorker(builder.Configuration, builder.Services);
+        InfrastructureRegistrar.ConfigureWorker(builder.Configuration, builder.Services, builder.Environment);
     }
 }
