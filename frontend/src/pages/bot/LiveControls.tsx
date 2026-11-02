@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { actOnBot, type BotAction, LiveStatusBadge } from '@/modules/bots';
+import { ApiError } from '@/shared/api/client';
 import { Button } from '@/shared/ui/Button';
 import { Dialog } from '@/shared/ui/Dialog';
 
@@ -23,16 +24,19 @@ export function LiveControls({
   closing,
   start,
   close,
+  ready,
 }: {
   botId: string;
   status: string;
   reason: string | null | undefined;
   /** A Worker closes the position: nothing is offered until it is closed. */
   closing: boolean;
-  /** What the bot will trade: its account, instrument and balance. */
-  start: string;
+  /** What the bot will trade: its account, instrument and balance; none without an account. */
+  start: string | undefined;
   /** The market order that closes the open position; none without one. */
   close: string | undefined;
+  /** The coins of the instrument are known, so the confirmations can name them. */
+  ready: boolean;
 }) {
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState<Confirmation>();
@@ -47,10 +51,15 @@ export function LiveControls({
 
     try {
       await actOnBot(botId, action);
-      await queryClient.invalidateQueries({ queryKey: ['bots'] });
     } catch (error) {
-      setFailure((error as Error).message);
+      setFailure(
+        error instanceof ApiError
+          ? error.message
+          : 'Сервер не ответил. Статус бота обновится сам — проверьте его.',
+      );
     } finally {
+      // A refusal may mean a Worker moved the bot on meanwhile: the status is read again either way.
+      await queryClient.invalidateQueries({ queryKey: ['bots'] });
       setBusy(false);
     }
   }
@@ -63,14 +72,21 @@ export function LiveControls({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <LiveStatusBadge status={status} />
-          {status === 'failed' && reason && <span className="text-sm text-err">{reason}</span>}
+          {(status === 'failed' || status === 'stopping') && reason && (
+            <span className="text-sm text-err">{reason}</span>
+          )}
           {closing && <span className="text-sm text-muted">Позиция закрывается по рынку…</span>}
         </div>
         <div className="flex gap-2">
-          {stopped && (
+          {stopped && !start && (
+            <span className="text-sm text-muted">
+              Привяжите к боту аккаунт биржи, чтобы запустить его.
+            </span>
+          )}
+          {stopped && start && (
             <Button
               look="primary"
-              disabled={busy}
+              disabled={busy || !ready}
               onClick={() =>
                 setConfirming({ action: 'start', title: 'Запустить бота?', text: start })
               }
@@ -80,7 +96,7 @@ export function LiveControls({
           )}
           {stopped && close && (
             <Button
-              disabled={busy}
+              disabled={busy || !ready}
               onClick={() =>
                 setConfirming({ action: 'close-position', title: 'Закрыть позицию?', text: close })
               }

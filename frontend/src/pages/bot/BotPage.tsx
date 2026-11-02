@@ -11,7 +11,7 @@ import {
   StatusBadge,
   useInvalidateOnFinish,
 } from '@/modules/backtests';
-import { botPositionsQuery, botQuery, isFollowed, isWorking } from '@/modules/bots';
+import { botPositionsQuery, botQuery, isFollowed } from '@/modules/bots';
 import { instrumentsQuery, intervalLabel } from '@/modules/market-data';
 import { strategiesQuery, strategyQuery } from '@/modules/strategies';
 import { formatDay, formatMoment, groupDigits } from '@/shared/format/format';
@@ -78,13 +78,15 @@ export function BotPage({ botId }: { botId: string }) {
   const strategyName = strategies.data?.find((item) => item.id === data.strategyId)?.name ?? '';
   const listed = instruments.data?.find((item) => item.symbol === data.symbol);
   const quoteCoin = listed?.quoteCoin;
-  const working = isWorking(data.status);
+  const followed = isFollowed(data);
   const current = positions.data?.find((position) => position.status === 'open');
   // The side of the exit comes with the position: the bot trades the version fixed at its start, not the current one.
   const close = current
     ? `${current.exitSide === 'buy' ? 'Покупка' : 'Продажа'} по рынку ${current.quantity}${listed?.baseCoin ? ` ${listed.baseCoin}` : ''}.`
     : undefined;
-  const start = `Бот начнёт торговать на аккаунте «${data.exchangeAccount?.name ?? 'без аккаунта'}»: ${data.category} · ${data.symbol}, баланс ${groupDigits(data.balance)}${quoteCoin ? ` ${quoteCoin}` : ''}. Ордера уходят на биржу с реальными деньгами.`;
+  const start =
+    data.exchangeAccount &&
+    `Бот начнёт торговать на аккаунте «${data.exchangeAccount.name}»: ${data.category} · ${data.symbol}, баланс ${groupDigits(data.balance)}${quoteCoin ? ` ${quoteCoin}` : ''}. Ордера уходят на биржу с реальными деньгами.`;
   const declared = ((strategy.data?.definition as { parameters?: Declared[] } | undefined)
     ?.parameters ?? []) as Declared[];
   const values = data.parameterValues as Record<string, unknown>;
@@ -120,9 +122,11 @@ export function BotPage({ botId }: { botId: string }) {
             )}
           </p>
         </div>
-        {working ? (
+        {followed ? (
           <p className="max-w-56 text-right text-xs text-faint">
-            Остановите бота, чтобы изменить или удалить его.
+            {data.closeRequested
+              ? 'Изменить или удалить бота можно, когда позиция закроется.'
+              : 'Остановите бота, чтобы изменить или удалить его.'}
           </p>
         ) : (
           <div className="flex gap-2">
@@ -142,9 +146,11 @@ export function BotPage({ botId }: { botId: string }) {
         status={data.status}
         reason={data.statusReason}
         closing={data.closeRequested}
-        start={start}
+        start={start ?? undefined}
         close={close}
+        ready={!instruments.isPending}
       />
+      {positions.isError && <p role="alert">Не удалось загрузить позиции.</p>}
       {positions.data && positions.data.length > 0 && <LivePositions positions={positions.data} />}
       <section
         aria-label="Параметры"

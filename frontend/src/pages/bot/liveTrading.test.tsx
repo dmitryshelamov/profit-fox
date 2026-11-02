@@ -1,7 +1,7 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { fakeApi, json, problem } from '@/test/fakeApi';
+import { fakeApi, type FakeRoute, json, problem } from '@/test/fakeApi';
 import {
   botDetails,
   botId,
@@ -65,7 +65,7 @@ function position(overrides: object = {}) {
   };
 }
 
-function open(bot: object, positions: unknown[] = [], extra: Record<string, () => Response> = {}) {
+function open(bot: object, positions: unknown[] = [], extra: Record<string, FakeRoute> = {}) {
   const requests = fakeApi({
     [`GET /api/bots/${botId}`]: () => json({ ...botDetails, exchangeAccount: account, ...bot }),
     [`GET /api/bots/${botId}/backtests`]: () => json([]),
@@ -226,6 +226,90 @@ describe('live trading on the bot page', () => {
     await act(() => vi.advanceTimersByTimeAsync(5000));
 
     expect(await screen.findByRole('region', { name: 'Закрытые позиции' })).toBeInTheDocument();
+  });
+
+  it('tells that the positions did not load', async () => {
+    open({ status: 'running' }, [], {
+      [`GET /api/bots/${botId}/positions`]: () => problem(503, 'Boom.'),
+    });
+
+    expect(
+      await screen.findByText('Не удалось загрузить позиции.', {}, { timeout: 3000 }),
+    ).toHaveAttribute('role', 'alert');
+  });
+
+  // A refused action may mean a Worker moved the bot on meanwhile: the status is read again.
+  it('reads the status again after a refused action', async () => {
+    const requests = open({ status: 'running' }, [], {
+      [`POST /api/bots/${botId}/pause`]: () => problem(409, 'Only a running bot pauses.'),
+    });
+    const reads = () =>
+      requests.filter(
+        (request) => request.method === 'GET' && request.url.endsWith(`/api/bots/${botId}`),
+      ).length;
+    const pause = await screen.findByRole('button', { name: 'Пауза' });
+    const before = reads();
+
+    await userEvent.click(pause);
+
+    expect(await screen.findByText('Only a running bot pauses.')).toBeInTheDocument();
+    await waitFor(() => expect(reads()).toBeGreaterThan(before));
+  });
+
+  // Without an answer the result of the action is unknown: the owner is told so, in Russian.
+  it('tells that the server did not answer an action', async () => {
+    open({ status: 'running' }, [], {
+      [`POST /api/bots/${botId}/stop`]: () => {
+        throw new TypeError('Failed to fetch');
+      },
+    });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Остановить' }));
+
+    expect(
+      await screen.findByText('Сервер не ответил. Статус бота обновится сам — проверьте его.'),
+    ).toBeInTheDocument();
+  });
+
+  it('offers no changes while the position closes', async () => {
+    open({ status: 'stopped', closeRequested: true }, [position({ orders: [] })]);
+
+    expect(await screen.findByText('Позиция закрывается по рынку…')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Изменить' })).not.toBeInTheDocument();
+  });
+
+  it('offers no start to a bot without an account', async () => {
+    open({ status: 'stopped', exchangeAccount: null });
+
+    expect(
+      await screen.findByText('Привяжите к боту аккаунт биржи, чтобы запустить его.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Запустить' })).not.toBeInTheDocument();
+  });
+
+  // The confirmation names the coins: until the instrument is known, nothing with money is offered.
+  it('offers the start once the coins of the instrument are known', async () => {
+    let answer = () => {};
+    open({ status: 'stopped' }, [], {
+      'GET /api/market-data/instruments': () =>
+        new Promise<Response>((resolve) => {
+          answer = () =>
+            resolve(
+              json([{ category: 'linear', symbol: 'BTCUSDT', baseCoin: 'BTC', quoteCoin: 'USDT' }]),
+            );
+        }),
+    });
+
+    expect(await screen.findByRole('button', { name: 'Запустить' })).toBeDisabled();
+    answer();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Запустить' })).toBeEnabled());
+  });
+
+  // A bot stops for a reason while it still cancels its orders: the reason shows at once.
+  it('shows the reason of a bot that stops for it', async () => {
+    open({ status: 'stopping', statusReason: 'API key is invalid.' });
+
+    expect(await screen.findByText('API key is invalid.')).toBeInTheDocument();
   });
 
   // Scenario "Текущая позиция".

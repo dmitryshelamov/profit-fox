@@ -19,6 +19,7 @@ function routes(backtests: () => unknown[]) {
   return {
     [`GET /api/bots/${botId}`]: () => json(botDetails),
     [`GET /api/bots/${botId}/backtests`]: () => json(backtests()),
+    [`GET /api/bots/${botId}/positions`]: () => json([]),
     'GET /api/strategies': () => json([emaSummary]),
     [`GET /api/strategies/${emaSummary.id}`]: () => json(savedStrategy(emaSummary, emaDefinition)),
     'GET /api/market-data/instruments': () =>
