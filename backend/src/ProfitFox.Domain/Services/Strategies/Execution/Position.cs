@@ -79,7 +79,8 @@ internal sealed class Position(int number, StrategyDirection direction, decimal 
 
         decimal returned = Collateral * exited / Quantity;
         decimal cash = direction == StrategyDirection.Long ? exited * price - fee : returned + (returned - exited * price) - fee;
-        decimal cost = AveragePrice!.Value * exited;
+        // An exit of the whole position takes all it invested: the average price may not divide exactly.
+        decimal cost = exited == Quantity ? Invested : AveragePrice!.Value * exited;
         RealizedPnl += (direction == StrategyDirection.Long ? exited * price - cost : cost - exited * price) - fee;
         Fees += fee;
         Collateral -= returned;

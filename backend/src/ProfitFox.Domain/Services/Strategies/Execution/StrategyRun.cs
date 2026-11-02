@@ -92,6 +92,9 @@ public sealed class StrategyRun
     /// <summary>How many times an order node did not place an entry because free money or the exchange minimum did not allow it.</summary>
     public long SkippedOrders { get; private set; }
 
+    /// <summary>The number of the current position, without building <see cref="State" />.</summary>
+    public int Position => _position.Number;
+
     public RunState State => new RunState(
         _direction,
         _cash,
@@ -239,8 +242,8 @@ public sealed class StrategyRun
                 outputs["quantity"] = new NumberValue(open ? _position.Quantity : 0m);
                 outputs["averagePrice"] = Number(open ? _position.AveragePrice : null);
                 outputs["invested"] = new NumberValue(open ? _position.Invested : 0m);
-                outputs["lastEntryPrice"] = Number(_position.LastEntryPrice);
-                outputs["sinceLastEntry"] = _position.LastEntryAt is { } at ? new DurationValue(_event.At - at) : null;
+                outputs["lastEntryPrice"] = Number(open ? _position.LastEntryPrice : null);
+                outputs["sinceLastEntry"] = open && _position.LastEntryAt is { } at ? new DurationValue(_event.At - at) : null;
                 outputs["free"] = new NumberValue(Free());
 
                 break;

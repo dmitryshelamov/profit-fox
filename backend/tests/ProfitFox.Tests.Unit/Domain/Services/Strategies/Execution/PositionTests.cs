@@ -145,6 +145,23 @@ public class PositionTests
         run.State.Closed!.RealizedPnl.ShouldBe(20m);
     }
 
+    [TestCase(StrategyDirection.Long, -0.02)]
+    [TestCase(StrategyDirection.Short, 0.02)]
+    public void Exit_of_the_whole_position_takes_all_its_invested_amount_and_collateral(StrategyDirection direction, decimal pnl)
+    {
+        // The average price of 300.02 invested in 3 does not divide exactly, so its product with 3 is not 300.02.
+        StrategyRun run = EnterTwiceThenExit(direction);
+        run.Handle(new RunStarted(Start));
+        run.Handle(new OrderFilled(Start, "o-1", 1m, 100m, IsComplete: true));
+        run.Handle(new OrderFilled(Start, "o-2", 2m, 100.01m, IsComplete: true));
+
+        run.Handle(new OrderFilled(Start, "o-3", 3m, 100m, IsComplete: true));
+
+        run.State.Closed!.RealizedPnl.ShouldBe(pnl);
+        (run.State.Quantity, run.State.Invested, run.State.Collateral).ShouldBe((0m, 0m, 0m));
+        run.State.Cash.ShouldBe(Conditions.Neutral.Balance + pnl);
+    }
+
     // Scenario "Комиссии на споте".
     [Test]
     public void Fees_of_the_position_are_in_the_quote_asset_with_a_coin_fee_at_the_price_of_its_fill()

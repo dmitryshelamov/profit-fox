@@ -91,7 +91,7 @@ export function PositionsTable({
                   <td className={cell}>{position.number}</td>
                   <td className={cell}>
                     <span className={closed ? '' : 'text-warn'}>{STATUS[position.status]}</span>
-                    {position.carriedQuantity !== '0' && (
+                    {Number(position.carriedQuantity) !== 0 && (
                       <span className="ml-2 text-xs text-faint">{`перенесено ${position.carriedQuantity}`}</span>
                     )}
                   </td>

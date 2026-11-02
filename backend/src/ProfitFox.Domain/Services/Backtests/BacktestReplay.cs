@@ -155,7 +155,7 @@ public sealed class BacktestReplay(
             {
                 if (command is PlaceOrder place)
                 {
-                    observer.Placed(place, at, run.State.Position);
+                    observer.Placed(place, at, run.Position);
                     _orders.Add(new SimulatedOrder(place.OrderId, place.Side, place.Type, place.Price, place.Quantity, place.Amount, activeFrom, _sequence++));
                 }
                 else

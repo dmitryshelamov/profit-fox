@@ -267,6 +267,7 @@ describe('result details page', () => {
         json(
           detailsOf({
             positions: [
+              position({ number: 2, openedAt: '2024-02-01T00:00:00Z', carriedQuantity: '0.000' }),
               position({
                 carriedQuantity: '0.000044',
                 orders: [
@@ -297,6 +298,7 @@ describe('result details page', () => {
     const toggle = await screen.findByRole('button', { name: 'Ордера позиции 1' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByText('перенесено 0.000044')).toBeInTheDocument();
+    expect(screen.getAllByText(/перенесено/)).toHaveLength(1);
     expect(screen.queryByText('average')).not.toBeInTheDocument();
 
     await userEvent.click(toggle);

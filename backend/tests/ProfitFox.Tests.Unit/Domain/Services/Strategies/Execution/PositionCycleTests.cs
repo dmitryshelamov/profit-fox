@@ -174,6 +174,19 @@ public class PositionCycleTests
     }
 
     [Test]
+    public void Fill_that_leaves_less_than_the_minimum_gives_the_node_no_last_entry()
+    {
+        StrategyRun run = Run(BuyThenClose());
+        run.Handle(new RunStarted(Start));
+
+        run.Handle(new OrderFilled(Start, "o-1", 0.001m, 100m, IsComplete: true, Fee: 0.0005m, FeeAsset: FeeAsset.Base));
+
+        run.State.Status.ShouldBe(PositionStatus.Waiting);
+        run.ValueOf("position", "lastEntryPrice").ShouldBeNull();
+        run.ValueOf("position", "sinceLastEntry").ShouldBeNull();
+    }
+
+    [Test]
     public void Remainder_of_a_short_moves_with_its_collateral()
     {
         Graph graph = new GraphBuilder()
