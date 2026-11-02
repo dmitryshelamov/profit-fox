@@ -51,7 +51,7 @@ public sealed class ExchangeAccountsController(ISender sender) : ControllerBase
     {
         try
         {
-            Guid id = await sender.Send(new CreateExchangeAccountCommand(body.Name, body.Environment, body.ApiKey, body.ApiSecret), cancellationToken);
+            Guid id = await sender.Send(new CreateExchangeAccountCommand(body.Name, body.ApiKey, body.ApiSecret), cancellationToken);
 
             return CreatedAtAction(nameof(Get), new { id }, new CreatedResponse(id));
         }

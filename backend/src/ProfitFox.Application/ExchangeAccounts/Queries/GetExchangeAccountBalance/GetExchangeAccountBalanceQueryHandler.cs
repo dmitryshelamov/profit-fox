@@ -39,7 +39,7 @@ public sealed class GetExchangeAccountBalanceQueryHandler(IExchangeAccountReposi
 
         try
         {
-            return await inspector.GetBalanceAsync(account.Environment, account.ApiKey, plaintext, cancellationToken);
+            return await inspector.GetBalanceAsync(account.ApiKey, plaintext, cancellationToken);
         }
         catch (ExchangeKeyRejectedException exception)
         {

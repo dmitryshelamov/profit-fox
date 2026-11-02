@@ -2,12 +2,13 @@ using System.Globalization;
 
 using ProfitFox.Application.Backtests;
 using ProfitFox.Application.Bots.Queries.GetBots;
+using ProfitFox.Application.LiveTrading;
 using ProfitFox.Application.MarketData;
 using ProfitFox.Presentation.Contracts.Backtests;
 
 namespace ProfitFox.Presentation.Contracts.Bots;
 
-public sealed record BotSummaryResponse(Guid Id, string Name, Guid StrategyId, string Category, string Symbol, string Interval, string Balance, LastBacktestResponse? LastBacktest, BotAccountResponse? ExchangeAccount)
+public sealed record BotSummaryResponse(Guid Id, string Name, Guid StrategyId, string Category, string Symbol, string Interval, string Balance, LastBacktestResponse? LastBacktest, BotAccountResponse? ExchangeAccount, string Status, string? StatusReason, bool CloseRequested)
 {
     public static BotSummaryResponse Of(BotListItem item)
     {
@@ -20,7 +21,10 @@ public sealed record BotSummaryResponse(Guid Id, string Name, Guid StrategyId, s
             item.Bot.Interval.ToCode(),
             item.Bot.Balance.ToString(CultureInfo.InvariantCulture),
             item.LastBacktest is { } backtest ? new LastBacktestResponse(backtest.Id, backtest.Status.ToCode(), ProgressResponse.Of(backtest)) : null,
-            BotAccountResponse.Of(item.Account));
+            BotAccountResponse.Of(item.Account),
+            item.Live.Status.ToCode(),
+            item.Live.StopReason,
+            item.Live.CloseRequested);
     }
 }
 

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 
 using ProfitFox.Application.Bots.Queries.GetBot;
+using ProfitFox.Application.LiveTrading;
 using ProfitFox.Application.MarketData;
 using ProfitFox.Application.Strategies;
 using ProfitFox.Domain.Entities.Bots;
@@ -20,7 +21,10 @@ public sealed record BotResponse(
     string Balance,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    BotAccountResponse? ExchangeAccount)
+    BotAccountResponse? ExchangeAccount,
+    string Status,
+    string? StatusReason,
+    bool CloseRequested)
 {
     public static BotResponse Of(GetBotResult result)
     {
@@ -37,6 +41,9 @@ public sealed record BotResponse(
             bot.Balance.ToString(CultureInfo.InvariantCulture),
             bot.CreatedAt,
             bot.UpdatedAt,
-            BotAccountResponse.Of(result.Account));
+            BotAccountResponse.Of(result.Account),
+            result.Live.Status.ToCode(),
+            result.Live.StopReason,
+            result.Live.CloseRequested);
     }
 }

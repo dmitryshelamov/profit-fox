@@ -27,6 +27,8 @@ public static class StrategyProblems
                 }
 
                 return new ConflictObjectResult(problem);
+            case ConflictException conflict:
+                return new ConflictObjectResult(new ProblemDetails { Status = StatusCodes.Status409Conflict, Detail = conflict.Message });
             case ExchangeException unavailable:
                 return new ObjectResult(new ProblemDetails { Status = StatusCodes.Status503ServiceUnavailable, Detail = unavailable.Message })
                 {

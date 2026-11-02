@@ -11,6 +11,9 @@ public class StubHttpHandler(TimeProvider? clock = null) : HttpMessageHandler
 
     public List<DateTimeOffset> RequestTimes { get; } = [];
 
+    /// <summary>The body of each request that has one, in order.</summary>
+    public List<string> Bodies { get; } = [];
+
     public StubHttpHandler RespondJson(string json)
     {
         return Respond(() => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json) });
@@ -33,11 +36,16 @@ public class StubHttpHandler(TimeProvider? clock = null) : HttpMessageHandler
         return new HttpClient(this) { BaseAddress = new Uri("https://bybit.test") };
     }
 
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         Requests.Add(request.RequestUri!);
         RequestTimes.Add((clock ?? TimeProvider.System).GetUtcNow());
 
-        return Task.FromResult(_responses.Dequeue()());
+        if (request.Content is not null)
+        {
+            Bodies.Add(await request.Content.ReadAsStringAsync(cancellationToken));
+        }
+
+        return _responses.Dequeue()();
     }
 }

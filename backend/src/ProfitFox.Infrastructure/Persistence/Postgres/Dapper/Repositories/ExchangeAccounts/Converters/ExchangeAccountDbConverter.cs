@@ -1,7 +1,5 @@
-using ProfitFox.Application.ExchangeAccounts;
 using ProfitFox.Application.MarketData;
 using ProfitFox.Domain.Entities.ExchangeAccounts;
-using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.ExchangeAccounts.Contracts;
 
@@ -15,7 +13,6 @@ internal static class ExchangeAccountDbConverter
         {
             Id = account.Id,
             Name = account.Name,
-            Environment = account.Environment.ToCode(),
             ApiKey = account.ApiKey,
             Uid = account.Uid,
             Categories = [.. account.Categories.Order().Select(category => category.ToCode())],
@@ -25,15 +22,9 @@ internal static class ExchangeAccountDbConverter
 
     internal static ExchangeAccount ToDomain(ExchangeAccountDb account)
     {
-        if (!ExchangeAccountCodes.TryParseEnvironment(account.Environment, out ExchangeEnvironment environment))
-        {
-            throw new InvalidOperationException($"Exchange account {account.Id} has an unknown environment '{account.Environment}'.");
-        }
-
         return new ExchangeAccount(
             account.Id,
             account.Name,
-            environment,
             account.ApiKey,
             account.Uid,
             account.Categories.Select(code => Category(account.Id, code)).ToHashSet(),

@@ -5,11 +5,14 @@ using Microsoft.Extensions.DependencyInjection;
 
 using Npgsql;
 
+using ProfitFox.Application.Transactions;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Backtests;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.ExchangeAccounts;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.LiveTrading;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Strategies;
+using ProfitFox.Infrastructure.Persistence.Postgres.Transactions;
 
 namespace ProfitFox.Infrastructure.Persistence.Postgres;
 
@@ -24,6 +27,9 @@ internal static class PostgresRegistrar
         services.AddScoped<IStrategyLibraryRepository, StrategyLibraryRepository>();
         services.AddScoped<IBacktestRepository, BacktestRepository>();
         services.AddScoped<IExchangeAccountRepository, ExchangeAccountRepository>();
+        services.AddScoped<PostgresTransactionAccessor>();
+        services.AddScoped<ITransactionExecutor, PostgresTransactionExecutor>();
+        services.AddScoped<ILiveBotRepository, LiveBotRepository>();
         services
             .AddFluentMigratorCore()
             .ConfigureRunner(runner => runner

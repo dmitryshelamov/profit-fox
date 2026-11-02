@@ -10,4 +10,3 @@ export {
 export { accountFieldErrors, accountProblem } from './model/accountProblems';
 export { AccountForm } from './ui/AccountForm';
 export { BalanceTable } from './ui/BalanceTable';
-export { EnvironmentBadge } from './ui/EnvironmentBadge';

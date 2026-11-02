@@ -6,8 +6,6 @@ internal sealed class ExchangeAccountDb
 
     public required string Name { get; init; }
 
-    public required string Environment { get; init; }
-
     public required string ApiKey { get; init; }
 
     public long Uid { get; init; }

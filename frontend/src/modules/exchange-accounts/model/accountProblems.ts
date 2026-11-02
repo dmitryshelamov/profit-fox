@@ -1,7 +1,7 @@
 import { ApiError } from '@/shared/api/client';
 import { type FieldErrors, layOutProblems, type ProblemErrors } from '@/shared/api/problems';
 
-const fields = new Set(['name', 'environment', 'apiKey', 'apiSecret']);
+const fields = new Set(['name', 'apiKey', 'apiSecret']);
 
 /** The errors of an account request by form field. */
 export function accountFieldErrors(errors: ProblemErrors): FieldErrors {

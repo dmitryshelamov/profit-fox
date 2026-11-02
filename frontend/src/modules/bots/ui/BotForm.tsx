@@ -266,7 +266,7 @@ export function BotForm({
               <option value="">Без аккаунта</option>
               {accounts.data?.map((account) => (
                 <option key={account.id} value={account.id}>
-                  {account.environment === 'testnet' ? `${account.name} · Testnet` : account.name}
+                  {account.name}
                 </option>
               ))}
             </select>

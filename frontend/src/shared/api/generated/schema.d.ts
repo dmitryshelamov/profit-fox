@@ -651,6 +651,357 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/bots/{id}/positions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The positions of the bot in live trading, the newest first, with their orders and fills. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["LivePositionResponse"][];
+                        "application/json": components["schemas"]["LivePositionResponse"][];
+                        "text/json": components["schemas"]["LivePositionResponse"][];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bots/{id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Starts a stopped bot on the latest version of its strategy; a conflict says why the account cannot trade it. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bots/{id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pauses a running bot: its strategy stops reacting, its orders and position stay. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bots/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bots/{id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stops a running or paused bot: its active orders are cancelled, its position stays. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bots/{id}/close-position": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Closes the open position of a stopped bot at the market. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/market-data/candle-imports": {
         parameters: {
             query?: never;
@@ -2131,7 +2482,6 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
-            environment: string;
         };
         /** @description Settings of a bot; a change ignores Guid? BotBody.StrategyId, because the strategy of a bot never changes. */
         BotBody: {
@@ -2170,6 +2520,9 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
             exchangeAccount: null | components["schemas"]["BotAccountResponse"];
+            status: string;
+            statusReason: null | string;
+            closeRequested: boolean;
         };
         BotSummaryResponse: {
             /** Format: uuid */
@@ -2183,6 +2536,9 @@ export interface components {
             balance: string;
             lastBacktest: null | components["schemas"]["LastBacktestResponse"];
             exchangeAccount: null | components["schemas"]["BotAccountResponse"];
+            status: string;
+            statusReason: null | string;
+            closeRequested: boolean;
         };
         CloneNodeBody: {
             /** @description Name of the copy; defaults to the source name with a mark. */
@@ -2240,8 +2596,6 @@ export interface components {
         /** @description A new exchange account; the secret is stored encrypted and never returned. */
         ExchangeAccountBody: {
             name: string;
-            /** @description `mainnet` or `testnet`. */
-            environment: string;
             apiKey: string;
             apiSecret: string;
         };
@@ -2250,7 +2604,6 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
-            environment: string;
             apiKey: string;
             /** Format: int64 */
             uid: number | string;
@@ -2264,7 +2617,6 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
-            environment: string;
             apiKey: string;
             /** Format: int64 */
             uid: number | string;
@@ -2301,6 +2653,50 @@ export interface components {
             id: string;
             status: string;
             progress: components["schemas"]["ProgressResponse"];
+        };
+        /** @description An order of a live position with its fills. */
+        LiveOrderResponse: {
+            /**
+             * Format: int32
+             * @description The number of the order in the bot.
+             */
+            number: number | string;
+            /** @description The path of the node that placed it; `null` when the closing position placed it. */
+            node: null | string;
+            side: string;
+            type: string;
+            /** @description The limit price; `null` for a market order. */
+            price: null | string;
+            quantity: null | string;
+            /** @description The amount of a market order sized by amount. */
+            amount: null | string;
+            /** @description `pending_submit`, `active`, `pending_cancel`, `cancel_sent`, `filled`, `cancelled` or `rejected`. */
+            status: string;
+            /** @description Why the exchange refused it. */
+            rejectReason: null | string;
+            fills: components["schemas"]["FillResponse"][];
+        };
+        /** @description A position of a live bot with its orders; prices are averages of its own fills, fees are in the quote asset. */
+        LivePositionResponse: {
+            /** Format: int32 */
+            number: number | string;
+            /** @description `waiting`, `open`, `closing` or `closed`. */
+            status: string;
+            /**
+             * Format: date-time
+             * @description The time of its first fill.
+             */
+            openedAt: null | string;
+            /** Format: date-time */
+            closedAt: null | string;
+            quantity: string;
+            invested: string;
+            entryPrice: null | string;
+            exitPrice: null | string;
+            /** @description The realized PnL. */
+            pnl: string;
+            fees: string;
+            orders: components["schemas"]["LiveOrderResponse"][];
         };
         /** @description Money and percentages are decimal strings, counts are numbers; names match the codes results sort by. */
         MetricsResponse: {

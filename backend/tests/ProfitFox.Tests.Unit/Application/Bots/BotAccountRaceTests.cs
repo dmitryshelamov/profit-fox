@@ -9,7 +9,6 @@ using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.Strategies;
 using ProfitFox.Domain.Entities.Bots.Enums;
 using ProfitFox.Domain.Entities.ExchangeAccounts;
-using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Domain.Exceptions;
@@ -36,7 +35,7 @@ public class BotAccountRaceTests
         repository.LoadAsync(Arg.Any<CancellationToken>()).Returns(library);
         repository.SaveAsync(Arg.Any<StrategyLibraryChange>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new BotValidationException([new BotError(BotField.Account, null, "No such exchange account.")]));
-        var account = new ExchangeAccount(Guid.NewGuid(), "Main", ExchangeEnvironment.Testnet, "key", 100, new HashSet<MarketCategory> { MarketCategory.Spot }, Now);
+        var account = new ExchangeAccount(Guid.NewGuid(), "Main", "key", 100, new HashSet<MarketCategory> { MarketCategory.Spot }, Now);
         IExchangeAccountRepository accounts = Substitute.For<IExchangeAccountRepository>();
         accounts.GetAsync(account.Id, Arg.Any<CancellationToken>()).Returns(account);
         IMarketHistoryClient marketHistory = Substitute.For<IMarketHistoryClient>();

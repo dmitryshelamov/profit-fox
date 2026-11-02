@@ -8,8 +8,8 @@ import {
   emaDefinition,
   emaShortSummary,
   emaSummary,
+  exchangeAccount,
   savedStrategy,
-  testnetAccount,
 } from '@/test/fixtures';
 import { renderApp } from '@/test/renderApp';
 
@@ -82,12 +82,12 @@ describe('bot form', () => {
   it('sends the chosen account', async () => {
     const requests = fakeApi(
       routes({
-        'GET /api/exchange-accounts': () => json([testnetAccount]),
+        'GET /api/exchange-accounts': () => json([exchangeAccount]),
         'POST /api/bots': () => json({ id: botId }, 201),
         [`GET /api/bots/${botId}`]: () =>
           json({
             ...botDetails,
-            exchangeAccount: { id: testnetAccount.id, name: 'Проверка', environment: 'testnet' },
+            exchangeAccount: { id: exchangeAccount.id, name: 'Проверка' },
           }),
         [`GET /api/bots/${botId}/backtests`]: () => json([]),
         'GET /api/bots': () => json([]),
@@ -100,13 +100,13 @@ describe('bot form', () => {
     await userEvent.type(screen.getByLabelText('Баланс бота'), '1000');
     await userEvent.selectOptions(
       await screen.findByLabelText('Аккаунт'),
-      await screen.findByRole('option', { name: 'Проверка · Testnet' }),
+      await screen.findByRole('option', { name: 'Проверка' }),
     );
     await userEvent.click(screen.getByRole('button', { name: 'Создать бота' }));
 
     await waitFor(() => expect(history.location.pathname).toBe(`/bots/${botId}`));
     const post = requests.find((request) => request.method === 'POST')!;
-    expect((await post.json()).exchangeAccountId).toBe(testnetAccount.id);
+    expect((await post.json()).exchangeAccountId).toBe(exchangeAccount.id);
     expect(await screen.findByRole('link', { name: 'Проверка' })).toBeInTheDocument();
   });
 
@@ -114,7 +114,7 @@ describe('bot form', () => {
   it('shows the server error of the account at its field and keeps the values', async () => {
     fakeApi(
       routes({
-        'GET /api/exchange-accounts': () => json([testnetAccount]),
+        'GET /api/exchange-accounts': () => json([exchangeAccount]),
         'POST /api/bots': () =>
           problem(400, 'x', {
             errors: { exchangeAccountId: ['The key of the account does not trade linear.'] },
@@ -127,7 +127,7 @@ describe('bot form', () => {
     await userEvent.type(screen.getByLabelText('Баланс бота'), '1000');
     await userEvent.selectOptions(
       await screen.findByLabelText('Аккаунт'),
-      await screen.findByRole('option', { name: 'Проверка · Testnet' }),
+      await screen.findByRole('option', { name: 'Проверка' }),
     );
     await userEvent.click(screen.getByRole('button', { name: 'Создать бота' }));
 
@@ -135,7 +135,7 @@ describe('bot form', () => {
       await screen.findByText('The key of the account does not trade linear.'),
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Название')).toHaveValue('BTC EMA час');
-    expect(screen.getByLabelText('Аккаунт')).toHaveValue(testnetAccount.id);
+    expect(screen.getByLabelText('Аккаунт')).toHaveValue(exchangeAccount.id);
   });
 
   it('offers to add an account when there is none', async () => {

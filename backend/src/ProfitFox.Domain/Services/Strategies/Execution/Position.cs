@@ -1,4 +1,5 @@
 using ProfitFox.Domain.Entities.Strategies.Enums;
+using ProfitFox.Domain.ValueObjects.Strategies;
 
 namespace ProfitFox.Domain.Services.Strategies.Execution;
 
@@ -42,10 +43,32 @@ internal sealed class Position(int number, StrategyDirection direction, decimal 
     public PositionStatus Status =>
         _closing ? PositionStatus.Closing : Quantity > 0m && Quantity >= minQuantity ? PositionStatus.Open : PositionStatus.Waiting;
 
+    /// <summary>The position a run snapshot holds.</summary>
+    public static Position Restore(RunSnapshot snapshot, StrategyDirection direction, decimal minQuantity)
+    {
+        return new Position(snapshot.Position, direction, minQuantity)
+        {
+            Quantity = snapshot.Quantity,
+            Invested = snapshot.Invested,
+            Collateral = snapshot.Collateral,
+            RealizedPnl = snapshot.RealizedPnl,
+            Fees = snapshot.Fees,
+            LastEntryPrice = snapshot.LastEntryPrice,
+            LastEntryAt = snapshot.LastEntryAt,
+            _closing = snapshot.Closing
+        };
+    }
+
     /// <summary>The position that follows this closed one, with the remainder it left, its invested amount and collateral.</summary>
     public Position Next()
     {
         return new Position(Number + 1, direction, minQuantity) { Quantity = Quantity, Invested = Invested, Collateral = Collateral };
+    }
+
+    /// <summary>Closes the position on request, whatever it holds: it waits for its orders and sells what it holds.</summary>
+    public void BeginClosing()
+    {
+        _closing = true;
     }
 
     /// <returns>The change of the cash.</returns>

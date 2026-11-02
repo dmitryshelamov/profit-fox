@@ -7,7 +7,6 @@ using Npgsql;
 using ProfitFox.Application.Strategies;
 using ProfitFox.Domain.Entities.Bots;
 using ProfitFox.Domain.Entities.ExchangeAccounts;
-using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Domain.Exceptions;
@@ -46,7 +45,7 @@ public class ExchangeAccountRepositoryTests
     [Test]
     public async Task Account_is_read_back_with_its_secret_apart()
     {
-        ExchangeAccount account = Account(uid: 100, ExchangeEnvironment.Testnet);
+        ExchangeAccount account = Account(uid: 100);
 
         (await _repository.AddAsync(account, Secret, CancellationToken.None)).ShouldBeTrue();
 
@@ -70,22 +69,21 @@ public class ExchangeAccountRepositoryTests
         (await _repository.DeleteAsync(Guid.NewGuid(), CancellationToken.None)).ShouldBeFalse();
     }
 
-    // Scenarios "Повторный ключ того же аккаунта" and "Тот же UID в testnet".
+    // Scenario "Повторный ключ того же аккаунта".
     [Test]
-    public async Task One_uid_is_stored_once_per_environment()
+    public async Task One_uid_is_stored_once()
     {
-        await _repository.AddAsync(Account(uid: 100, ExchangeEnvironment.Mainnet), Secret, CancellationToken.None);
+        await _repository.AddAsync(Account(uid: 100), Secret, CancellationToken.None);
 
-        (await _repository.AddAsync(Account(uid: 100, ExchangeEnvironment.Mainnet), Secret, CancellationToken.None)).ShouldBeFalse();
-        (await _repository.AddAsync(Account(uid: 100, ExchangeEnvironment.Testnet), Secret, CancellationToken.None)).ShouldBeTrue();
-        (await _repository.GetAllAsync(CancellationToken.None)).Count.ShouldBe(2);
+        (await _repository.AddAsync(Account(uid: 100), Secret, CancellationToken.None)).ShouldBeFalse();
+        (await _repository.GetAllAsync(CancellationToken.None)).Count.ShouldBe(1);
     }
 
     // Scenario "Secret в базе зашифрован".
     [Test]
     public async Task The_row_holds_only_the_encrypted_secret()
     {
-        ExchangeAccount account = Account(uid: 100, ExchangeEnvironment.Testnet);
+        ExchangeAccount account = Account(uid: 100);
         await _repository.AddAsync(account, Secret, CancellationToken.None);
 
         await using NpgsqlConnection connection = await _dataSource.OpenConnectionAsync();
@@ -95,13 +93,12 @@ public class ExchangeAccountRepositoryTests
         row.ShouldContain(account.ApiKey);
     }
 
-    // An unknown environment must never be read as one: the wrong guess would be the main network with real money.
-    [TestCase("environment", "'demo'")]
+    // An unknown category must never be read as one.
     [TestCase("categories", "ARRAY['spot', 'inverse']")]
     [TestCase("categories", "ARRAY[]::text[]")]
     public async Task The_table_takes_only_known_codes(string column, string value)
     {
-        await _repository.AddAsync(Account(uid: 100, ExchangeEnvironment.Testnet), Secret, CancellationToken.None);
+        await _repository.AddAsync(Account(uid: 100), Secret, CancellationToken.None);
 
         await using NpgsqlConnection connection = await _dataSource.OpenConnectionAsync();
 
@@ -112,7 +109,7 @@ public class ExchangeAccountRepositoryTests
     [Test]
     public async Task Rename_changes_only_the_name()
     {
-        ExchangeAccount account = Account(uid: 100, ExchangeEnvironment.Testnet);
+        ExchangeAccount account = Account(uid: 100);
         await _repository.AddAsync(account, Secret, CancellationToken.None);
 
         (await _repository.RenameAsync(account.Id, "Testnet", CancellationToken.None)).ShouldBeTrue();
@@ -123,7 +120,7 @@ public class ExchangeAccountRepositoryTests
     [Test]
     public async Task Deleted_account_is_gone()
     {
-        ExchangeAccount account = Account(uid: 100, ExchangeEnvironment.Testnet);
+        ExchangeAccount account = Account(uid: 100);
         await _repository.AddAsync(account, Secret, CancellationToken.None);
 
         (await _repository.DeleteAsync(account.Id, CancellationToken.None)).ShouldBeTrue();
@@ -135,7 +132,7 @@ public class ExchangeAccountRepositoryTests
     [Test]
     public async Task Account_a_bot_refers_to_is_not_deleted()
     {
-        ExchangeAccount account = Account(uid: 100, ExchangeEnvironment.Testnet);
+        ExchangeAccount account = Account(uid: 100);
         await _repository.AddAsync(account, Secret, CancellationToken.None);
         Guid botId = await AddBotAsync();
         await using (NpgsqlConnection connection = await _dataSource.OpenConnectionAsync())
@@ -158,12 +155,11 @@ public class ExchangeAccountRepositoryTests
         return bot.Id;
     }
 
-    private static ExchangeAccount Account(long uid, ExchangeEnvironment environment)
+    private static ExchangeAccount Account(long uid)
     {
         return new ExchangeAccount(
             Guid.NewGuid(),
             "Main",
-            environment,
             $"key-{Guid.NewGuid():N}",
             uid,
             new HashSet<MarketCategory> { MarketCategory.Spot, MarketCategory.Linear },

@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.ExchangeAccounts;
-using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
 
@@ -24,32 +23,20 @@ public class BybitAccountClientTests
     {
         using StubHttpHandler handler = new StubHttpHandler().RespondJson(KeyInfo(FullPermissions));
 
-        ExchangeKeyInfo key = await InspectAsync(handler, ExchangeEnvironment.Mainnet);
+        ExchangeKeyInfo key = await InspectAsync(handler);
 
         key.ShouldBeEquivalentTo(new ExchangeKeyInfo(24617703, false, true, false, new HashSet<MarketCategory> { MarketCategory.Spot, MarketCategory.Linear }));
         handler.Requests.Single().Host.ShouldBe("api.bybit.com");
         handler.Requests.Single().AbsolutePath.ShouldBe("/v5/user/query-api");
     }
 
-    // Scenario "Ключ проверяется в выбранном окружении".
+    // The end-to-end stub: a configured address takes the calls instead of the main network.
     [Test]
-    public async Task Testnet_key_is_inspected_on_the_testnet()
+    public async Task Configured_address_takes_the_calls()
     {
         using StubHttpHandler handler = new StubHttpHandler().RespondJson(KeyInfo(FullPermissions));
 
-        await InspectAsync(handler, ExchangeEnvironment.Testnet);
-
-        handler.Requests.Single().Host.ShouldBe("api-testnet.bybit.com");
-    }
-
-    // Decision 5 and the end-to-end stub: a configured address takes the calls of both environments.
-    [TestCase(ExchangeEnvironment.Mainnet)]
-    [TestCase(ExchangeEnvironment.Testnet)]
-    public async Task Configured_address_takes_every_environment(ExchangeEnvironment environment)
-    {
-        using StubHttpHandler handler = new StubHttpHandler().RespondJson(KeyInfo(FullPermissions));
-
-        await Client(handler, new BybitSettings("http://127.0.0.1:5296")).InspectAsync(environment, "key", Secret, CancellationToken.None);
+        await Client(handler, new BybitSettings("http://127.0.0.1:5296")).InspectAsync("key", Secret, CancellationToken.None);
 
         handler.Requests.Single().Authority.ShouldBe("127.0.0.1:5296");
     }
@@ -59,7 +46,7 @@ public class BybitAccountClientTests
     {
         using StubHttpHandler handler = new StubHttpHandler().RespondJson(KeyInfo("""{"ContractTrade":[],"Spot":["SpotTrade"],"Wallet":[]}"""));
 
-        ExchangeKeyInfo key = await InspectAsync(handler, ExchangeEnvironment.Mainnet);
+        ExchangeKeyInfo key = await InspectAsync(handler);
 
         key.TradableCategories.ShouldBe([MarketCategory.Spot]);
     }
@@ -70,7 +57,7 @@ public class BybitAccountClientTests
     {
         using StubHttpHandler handler = new StubHttpHandler().RespondJson(KeyInfo("""{"ContractTrade":["Order"],"Spot":[],"Wallet":[]}"""));
 
-        ExchangeKeyInfo key = await InspectAsync(handler, ExchangeEnvironment.Mainnet);
+        ExchangeKeyInfo key = await InspectAsync(handler);
 
         key.TradableCategories.ShouldBeEmpty();
     }
@@ -80,7 +67,7 @@ public class BybitAccountClientTests
     {
         using StubHttpHandler handler = new StubHttpHandler().RespondJson(KeyInfo("""{"ContractTrade":[],"Spot":["SpotTrade"],"Wallet":["AccountTransfer","Withdraw"]}"""));
 
-        ExchangeKeyInfo key = await InspectAsync(handler, ExchangeEnvironment.Mainnet);
+        ExchangeKeyInfo key = await InspectAsync(handler);
 
         key.CanWithdraw.ShouldBeTrue();
     }
@@ -90,7 +77,7 @@ public class BybitAccountClientTests
     {
         using StubHttpHandler handler = new StubHttpHandler().RespondJson(KeyInfo(FullPermissions, readOnly: 1, uta: 0));
 
-        ExchangeKeyInfo key = await InspectAsync(handler, ExchangeEnvironment.Mainnet);
+        ExchangeKeyInfo key = await InspectAsync(handler);
 
         key.IsReadOnly.ShouldBeTrue();
         key.IsUnifiedAccount.ShouldBeFalse();
@@ -106,7 +93,7 @@ public class BybitAccountClientTests
     {
         using StubHttpHandler handler = new StubHttpHandler().RespondJson(BybitJson.Error(retCode, "API key is invalid."));
 
-        ExchangeKeyRejectedException exception = await Should.ThrowAsync<ExchangeKeyRejectedException>(() => InspectAsync(handler, ExchangeEnvironment.Mainnet));
+        ExchangeKeyRejectedException exception = await Should.ThrowAsync<ExchangeKeyRejectedException>(() => InspectAsync(handler));
 
         exception.Message.ShouldNotContain(Secret);
     }
@@ -117,7 +104,7 @@ public class BybitAccountClientTests
     {
         using StubHttpHandler handler = new StubHttpHandler().Respond(HttpStatusCode.ServiceUnavailable);
 
-        await Should.ThrowAsync<ExchangeUnavailableException>(() => InspectAsync(handler, ExchangeEnvironment.Mainnet));
+        await Should.ThrowAsync<ExchangeUnavailableException>(() => InspectAsync(handler));
         handler.Requests.Count.ShouldBe(1);
     }
 
@@ -126,7 +113,7 @@ public class BybitAccountClientTests
     {
         using StubHttpHandler handler = new StubHttpHandler().Respond(() => throw new HttpRequestException("connection refused"));
 
-        await Should.ThrowAsync<ExchangeUnavailableException>(() => InspectAsync(handler, ExchangeEnvironment.Mainnet));
+        await Should.ThrowAsync<ExchangeUnavailableException>(() => InspectAsync(handler));
     }
 
     [Test]
@@ -134,7 +121,7 @@ public class BybitAccountClientTests
     {
         using StubHttpHandler handler = new StubHttpHandler().RespondJson(BybitJson.Error(10006, "Too many visits!"));
 
-        await Should.ThrowAsync<ExchangeUnavailableException>(() => InspectAsync(handler, ExchangeEnvironment.Mainnet));
+        await Should.ThrowAsync<ExchangeUnavailableException>(() => InspectAsync(handler));
     }
 
     [Test]
@@ -142,7 +129,7 @@ public class BybitAccountClientTests
     {
         using StubHttpHandler handler = new StubHttpHandler().RespondJson(BybitJson.Error(10001, "Params error."));
 
-        ExchangeException exception = await Should.ThrowAsync<ExchangeException>(() => InspectAsync(handler, ExchangeEnvironment.Mainnet));
+        ExchangeException exception = await Should.ThrowAsync<ExchangeException>(() => InspectAsync(handler));
 
         exception.ShouldNotBeOfType<ExchangeKeyRejectedException>();
         exception.ShouldNotBeOfType<ExchangeUnavailableException>();
@@ -159,12 +146,12 @@ public class BybitAccountClientTests
                 Coin("ETH", "0", "0"),
                 Coin("BTC", "0.01", "675.06")));
 
-        AccountBalance balance = await Client(handler).GetBalanceAsync(ExchangeEnvironment.Testnet, "key", Secret, CancellationToken.None);
+        AccountBalance balance = await Client(handler).GetBalanceAsync("key", Secret, CancellationToken.None);
 
         balance.TotalEquityUsd.ShouldBe(1675.31m);
         balance.Coins.ShouldBe([new CoinBalance("USDT", 1000.123456m, 1000.25m), new CoinBalance("BTC", 0.01m, 675.06m)]);
         BybitRequests.Describe(handler.Requests.Single()).ShouldBe(BybitRequests.Describe("/v5/account/wallet-balance?accountType=UNIFIED"));
-        handler.Requests.Single().Host.ShouldBe("api-testnet.bybit.com");
+        handler.Requests.Single().Host.ShouldBe("api.bybit.com");
     }
 
     // Bybit writes an empty string for a value it has not computed: a coin without a balance is left out, an unknown value is 0.
@@ -173,7 +160,7 @@ public class BybitAccountClientTests
     {
         using StubHttpHandler handler = new StubHttpHandler().RespondJson(Balance("", Coin("USDT", "1000", ""), Coin("ETH", "", "")));
 
-        AccountBalance balance = await Client(handler).GetBalanceAsync(ExchangeEnvironment.Testnet, "key", Secret, CancellationToken.None);
+        AccountBalance balance = await Client(handler).GetBalanceAsync("key", Secret, CancellationToken.None);
 
         balance.TotalEquityUsd.ShouldBe(0m);
         balance.Coins.ShouldBe([new CoinBalance("USDT", 1000m, 0m)]);
@@ -184,7 +171,7 @@ public class BybitAccountClientTests
     {
         using StubHttpHandler handler = new StubHttpHandler().RespondJson("""{"retCode":0,"retMsg":"OK","result":{"list":[]},"retExtInfo":{},"time":0}""");
 
-        AccountBalance balance = await Client(handler).GetBalanceAsync(ExchangeEnvironment.Testnet, "key", Secret, CancellationToken.None);
+        AccountBalance balance = await Client(handler).GetBalanceAsync("key", Secret, CancellationToken.None);
 
         balance.TotalEquityUsd.ShouldBe(0m);
         balance.Coins.ShouldBeEmpty();
@@ -196,7 +183,7 @@ public class BybitAccountClientTests
     {
         using StubHttpHandler handler = new StubHttpHandler().RespondJson(BybitJson.Error(10003, "API key is invalid."));
 
-        await Should.ThrowAsync<ExchangeKeyRejectedException>(() => Client(handler).GetBalanceAsync(ExchangeEnvironment.Mainnet, "key", Secret, CancellationToken.None));
+        await Should.ThrowAsync<ExchangeKeyRejectedException>(() => Client(handler).GetBalanceAsync("key", Secret, CancellationToken.None));
     }
 
     [Test]
@@ -204,12 +191,12 @@ public class BybitAccountClientTests
     {
         using StubHttpHandler handler = new StubHttpHandler().Respond(HttpStatusCode.BadGateway);
 
-        await Should.ThrowAsync<ExchangeUnavailableException>(() => Client(handler).GetBalanceAsync(ExchangeEnvironment.Mainnet, "key", Secret, CancellationToken.None));
+        await Should.ThrowAsync<ExchangeUnavailableException>(() => Client(handler).GetBalanceAsync("key", Secret, CancellationToken.None));
     }
 
-    private static Task<ExchangeKeyInfo> InspectAsync(StubHttpHandler handler, ExchangeEnvironment environment)
+    private static Task<ExchangeKeyInfo> InspectAsync(StubHttpHandler handler)
     {
-        return Client(handler).InspectAsync(environment, "key", Secret, CancellationToken.None);
+        return Client(handler).InspectAsync("key", Secret, CancellationToken.None);
     }
 
     private static BybitAccountClient Client(StubHttpHandler handler, BybitSettings? settings = null)

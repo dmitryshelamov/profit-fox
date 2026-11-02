@@ -8,6 +8,16 @@ export const botsQuery = queryOptions({
   queryFn: async () => unwrap(await api.GET('/api/bots')),
 });
 
+/** Whether a bot trades or waits for its cancels: it cannot be changed then. */
+export function isWorking(status: string | undefined): boolean {
+  return status === 'running' || status === 'paused' || status === 'stopping';
+}
+
+/** Whether a Worker keeps the bot, also to close its position: its page and the list then follow it every 5 seconds. */
+export function isFollowed(bot: { status: string; closeRequested: boolean } | undefined): boolean {
+  return bot !== undefined && (isWorking(bot.status) || bot.closeRequested);
+}
+
 export function botQuery(id: string) {
   return queryOptions({
     queryKey: ['bots', id],
@@ -46,4 +56,37 @@ export async function updateBot(id: string, input: BotInput): Promise<void> {
 
 export async function deleteBot(id: string): Promise<void> {
   unwrap(await api.DELETE('/api/bots/{id}', { params: { path: { id } } }));
+}
+
+export function botPositionsQuery(id: string) {
+  return queryOptions({
+    queryKey: ['bots', id, 'positions'],
+    queryFn: async () =>
+      unwrap(await api.GET('/api/bots/{id}/positions', { params: { path: { id } } })),
+  });
+}
+
+export type BotAction = 'start' | 'pause' | 'resume' | 'stop' | 'close-position';
+
+/** An action of live trading; a refusal comes as an `ApiError` with the reason of the server. */
+export async function actOnBot(id: string, action: BotAction): Promise<void> {
+  const options = { params: { path: { id } } };
+
+  switch (action) {
+    case 'start':
+      unwrap(await api.POST('/api/bots/{id}/start', options));
+      break;
+    case 'pause':
+      unwrap(await api.POST('/api/bots/{id}/pause', options));
+      break;
+    case 'resume':
+      unwrap(await api.POST('/api/bots/{id}/resume', options));
+      break;
+    case 'stop':
+      unwrap(await api.POST('/api/bots/{id}/stop', options));
+      break;
+    case 'close-position':
+      unwrap(await api.POST('/api/bots/{id}/close-position', options));
+      break;
+  }
 }

@@ -93,6 +93,10 @@ public static class BotRequests
         {
             throw new ValidationFailedException(Errors(exception.Errors));
         }
+        catch (LiveBotConflictException exception)
+        {
+            throw new ConflictException(exception.Message);
+        }
     }
 
     /// <exception cref="ValidationFailedException">The exchange has no such symbol in the category.</exception>
@@ -122,7 +126,8 @@ public static class BotRequests
     }
 
     /// <summary>Saves the library; a bot whose account was deleted meanwhile is an error of the account.</summary>
-    /// <exception cref="ValidationFailedException">The account of a saved bot is gone.</exception>
+    /// <exception cref="ValidationFailedException">The account of a saved bot is gone, or a bot with an open position changes what it trades.</exception>
+    /// <exception cref="ConflictException">A saved or removed bot trades, or a removed bot holds an open position.</exception>
     /// <exception cref="StateConflictException">The library changed while the bot was being saved.</exception>
     public static async Task SaveAsync(IStrategyLibraryRepository repository, StrategyLibrary library, CancellationToken cancellationToken)
     {
@@ -141,6 +146,8 @@ public static class BotRequests
             BotField.Strategy => "strategyId",
             BotField.Parameter => $"parameterValues.{error.Parameter}",
             BotField.Category => "category",
+            BotField.Symbol => "symbol",
+            BotField.Interval => "interval",
             BotField.Account => "exchangeAccountId",
             _ => "balance"
         };

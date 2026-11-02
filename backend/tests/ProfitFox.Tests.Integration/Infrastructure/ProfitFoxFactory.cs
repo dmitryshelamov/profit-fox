@@ -16,6 +16,7 @@ using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 
 using ProfitFox.Application.Ports.ExchangeAccounts;
+using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
 using ProfitFox.Presentation;
 
@@ -31,6 +32,9 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
 
     /// <summary>Answers the app's calls to Bybit with the key of an account; no test reaches the private Bybit API.</summary>
     public IExchangeKeyInspector KeyInspector { get; } = Substitute.For<IExchangeKeyInspector>();
+
+    /// <summary>Answers the app's reads of what an account holds on the exchange.</summary>
+    public IExchangeLedger Ledger { get; } = Substitute.For<IExchangeLedger>();
 
     /// <summary>
     ///     Whether <see cref="KeyInspector" /> answers the calls with an account key. Without it the app's own Bybit client sends them
@@ -118,6 +122,7 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
         builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<TimeProvider>(Time);
+            services.AddSingleton(Ledger);
             if (FakeKeyInspector)
             {
                 services.AddSingleton(KeyInspector);

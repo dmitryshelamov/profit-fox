@@ -8,7 +8,6 @@ using ProfitFox.Application.ExchangeAccounts.Commands.CreateExchangeAccount;
 using ProfitFox.Application.Ports.ExchangeAccounts;
 using ProfitFox.Application.Ports.Security;
 using ProfitFox.Domain.Entities.ExchangeAccounts;
-using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.ExchangeAccounts;
@@ -40,7 +39,7 @@ public class CreateExchangeAccountTests
         _repository = Substitute.For<IExchangeAccountRepository>();
         _repository.AddAsync(Arg.Any<ExchangeAccount>(), Arg.Any<EncryptedSecret>(), Arg.Any<CancellationToken>()).Returns(true);
         _inspector = Substitute.For<IExchangeKeyInspector>();
-        _inspector.InspectAsync(Arg.Any<ExchangeEnvironment>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(TradingKey);
+        _inspector.InspectAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(TradingKey);
         _protector = Substitute.For<ISecretProtector>();
         _protector.Encrypt(Arg.Any<Guid>(), Arg.Any<string>()).Returns(Encrypted);
         _handler = new CreateExchangeAccountCommandHandler(_repository, _inspector, _protector, new FakeTimeProvider(Now));
@@ -52,12 +51,11 @@ public class CreateExchangeAccountTests
     {
         Guid id = await _handler.Handle(Command(), CancellationToken.None);
 
-        await _inspector.Received(1).InspectAsync(ExchangeEnvironment.Testnet, "api-key", "api-secret", Arg.Any<CancellationToken>());
+        await _inspector.Received(1).InspectAsync("api-key", "api-secret", Arg.Any<CancellationToken>());
         _protector.Received(1).Encrypt(id, "api-secret");
         await _repository.Received(1).AddAsync(
             Arg.Is<ExchangeAccount>(account => account!.Id == id
                                                && account.Name == "Основной"
-                                               && account.Environment == ExchangeEnvironment.Testnet
                                                && account.ApiKey == "api-key"
                                                && account.Uid == 100
                                                && account.Categories.SetEquals(new[] { MarketCategory.Spot, MarketCategory.Linear })
@@ -70,7 +68,7 @@ public class CreateExchangeAccountTests
     [Test]
     public async Task Categories_the_key_trades_in_are_kept()
     {
-        _inspector.InspectAsync(Arg.Any<ExchangeEnvironment>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _inspector.InspectAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(TradingKey with { TradableCategories = new HashSet<MarketCategory> { MarketCategory.Spot } });
 
         await _handler.Handle(Command(), CancellationToken.None);
@@ -81,15 +79,15 @@ public class CreateExchangeAccountTests
             Arg.Any<CancellationToken>());
     }
 
-    // Scenarios "Пустое имя" and "Неизвестное окружение": every field is checked before Bybit is asked.
+    // Scenario "Пустое имя": every field is checked before Bybit is asked.
     [Test]
     public async Task Malformed_fields_are_rejected_without_asking_bybit()
     {
         ValidationFailedException exception = await Should.ThrowAsync<ValidationFailedException>(() =>
-            _handler.Handle(new CreateExchangeAccountCommand(" ", "demo", "", ""), CancellationToken.None));
+            _handler.Handle(new CreateExchangeAccountCommand(" ", "", ""), CancellationToken.None));
 
-        exception.Errors.Keys.Order().ShouldBe(["apiKey", "apiSecret", "environment", "name"]);
-        await _inspector.DidNotReceiveWithAnyArgs().InspectAsync(default, default!, default!, default);
+        exception.Errors.Keys.Order().ShouldBe(["apiKey", "apiSecret", "name"]);
+        await _inspector.DidNotReceiveWithAnyArgs().InspectAsync(default!, default!, default);
         await _repository.DidNotReceiveWithAnyArgs().AddAsync(default!, default!, default);
     }
 
@@ -97,7 +95,7 @@ public class CreateExchangeAccountTests
     [Test]
     public async Task Key_bybit_does_not_accept_is_an_error_of_the_key()
     {
-        _inspector.InspectAsync(Arg.Any<ExchangeEnvironment>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _inspector.InspectAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new ExchangeKeyRejectedException("Bybit does not accept the key: API key is invalid."));
 
         ValidationFailedException exception = await Should.ThrowAsync<ValidationFailedException>(() => _handler.Handle(Command(), CancellationToken.None));
@@ -110,7 +108,7 @@ public class CreateExchangeAccountTests
     [Test]
     public async Task Key_the_rules_reject_is_an_error_of_the_key()
     {
-        _inspector.InspectAsync(Arg.Any<ExchangeEnvironment>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _inspector.InspectAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(TradingKey with { IsReadOnly = true, CanWithdraw = true });
 
         ValidationFailedException exception = await Should.ThrowAsync<ValidationFailedException>(() => _handler.Handle(Command(), CancellationToken.None));
@@ -128,14 +126,14 @@ public class CreateExchangeAccountTests
 
         ValidationFailedException exception = await Should.ThrowAsync<ValidationFailedException>(() => _handler.Handle(Command(), CancellationToken.None));
 
-        exception.Errors.ShouldBe(new Dictionary<string, string> { ["apiKey"] = "Bybit account 100 is already added in testnet." });
+        exception.Errors.ShouldBe(new Dictionary<string, string> { ["apiKey"] = "Bybit account 100 is already added." });
     }
 
     // Scenario "Bybit не отвечает при создании".
     [Test]
     public async Task Bybit_unavailable_saves_nothing()
     {
-        _inspector.InspectAsync(Arg.Any<ExchangeEnvironment>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _inspector.InspectAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new ExchangeUnavailableException("Bybit is unavailable."));
 
         await Should.ThrowAsync<ExchangeUnavailableException>(() => _handler.Handle(Command(), CancellationToken.None));
@@ -144,6 +142,6 @@ public class CreateExchangeAccountTests
 
     private static CreateExchangeAccountCommand Command()
     {
-        return new CreateExchangeAccountCommand("Основной", "testnet", "api-key", "api-secret");
+        return new CreateExchangeAccountCommand("Основной", "api-key", "api-secret");
     }
 }

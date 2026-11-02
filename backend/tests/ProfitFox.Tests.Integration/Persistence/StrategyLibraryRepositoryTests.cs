@@ -6,7 +6,6 @@ using ProfitFox.Application.Strategies;
 using ProfitFox.Domain.Entities.Bots;
 using ProfitFox.Domain.Entities.Bots.Enums;
 using ProfitFox.Domain.Entities.ExchangeAccounts;
-using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Domain.Entities.Strategies.Enums;
@@ -196,7 +195,7 @@ public class StrategyLibraryRepositoryTests
     public async Task Bot_keeps_its_exchange_account()
     {
         Strategy strategy = Strategy("ema");
-        var account = new ExchangeAccount(Guid.NewGuid(), "Main", ExchangeEnvironment.Testnet, "key", 100, new HashSet<MarketCategory> { MarketCategory.Spot }, Created);
+        var account = new ExchangeAccount(Guid.NewGuid(), "Main", "key", 100, new HashSet<MarketCategory> { MarketCategory.Spot }, Created);
         await new ExchangeAccountRepository(_dataSource).AddAsync(account, new EncryptedSecret([1], [2], [3]), CancellationToken.None);
         Bot bot = Bot(strategy) with { ExchangeAccountId = account.Id };
 

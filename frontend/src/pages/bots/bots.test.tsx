@@ -72,12 +72,12 @@ describe('bot list', () => {
     ).toHaveLength(3);
   });
 
-  // Scenario "Бот на testnet".
-  it('shows the account of each bot with a testnet mark', async () => {
+  // Scenario "Бот с аккаунтом".
+  it('shows the account of each bot with a link to it', async () => {
     open([
       {
         ...botSummary,
-        exchangeAccount: { id: 'a', name: 'Проверка', environment: 'testnet' },
+        exchangeAccount: { id: 'a', name: 'Проверка' },
       },
       { ...botSummary, id: 'b', name: 'Без счёта' },
     ]);
@@ -87,7 +87,7 @@ describe('bot list', () => {
       'href',
       '/accounts/a',
     );
-    expect(within(row).getByText('Testnet')).toBeInTheDocument();
+    expect(within(row).queryByText('Testnet')).not.toBeInTheDocument();
     expect(
       within(screen.getByText('Без счёта').closest('tr')!).getByText('Без аккаунта'),
     ).toBeInTheDocument();
@@ -144,5 +144,19 @@ describe('bot list', () => {
     renderApp('/bots');
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Не удалось загрузить ботов.');
+  });
+
+  // Scenario "Бот с ошибкой в списке".
+  it('shows the status of each bot', async () => {
+    open([
+      { ...botSummary, status: 'failed', statusReason: 'Insufficient balance.' },
+      { ...botSummary, id: 'b', name: 'Второй', status: 'running' },
+    ]);
+
+    const failed = (await screen.findByText('BTC EMA час')).closest('tr')!;
+    expect(within(failed).getByText('Ошибка')).toBeInTheDocument();
+    expect(
+      within(screen.getByText('Второй').closest('tr')!).getByText('Запущен'),
+    ).toBeInTheDocument();
   });
 });

@@ -1,11 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 
-import { accountsQuery, EnvironmentBadge } from '@/modules/exchange-accounts';
+import { accountsQuery } from '@/modules/exchange-accounts';
 
 const cell = 'px-5 py-4';
-const environmentLabel = (environment: string) =>
-  environment === 'testnet' ? 'Testnet' : 'Основная сеть';
 
 export function AccountsPage() {
   const accounts = useQuery(accountsQuery);
@@ -41,7 +39,6 @@ export function AccountsPage() {
           <thead className="text-left text-[11px] tracking-wide text-faint uppercase">
             <tr>
               <th className={cell}>Название</th>
-              <th className={cell}>Окружение</th>
               <th className={cell}>API key</th>
               <th className={cell}>UID</th>
               <th className={cell}>Торгует</th>
@@ -51,13 +48,7 @@ export function AccountsPage() {
           <tbody>
             {accounts.data.map((account) => (
               <tr key={account.id} className="bg-panel">
-                <td className={`${cell} font-semibold`}>
-                  <span className="flex items-center gap-2">
-                    {account.name}
-                    <EnvironmentBadge environment={account.environment} />
-                  </span>
-                </td>
-                <td className={cell}>{environmentLabel(account.environment)}</td>
+                <td className={`${cell} font-semibold`}>{account.name}</td>
                 <td className={`${cell} font-mono text-muted`}>{account.apiKey}</td>
                 <td className={`${cell} font-mono`}>{account.uid}</td>
                 <td className={`${cell} font-mono`}>{account.categories.join(', ')}</td>

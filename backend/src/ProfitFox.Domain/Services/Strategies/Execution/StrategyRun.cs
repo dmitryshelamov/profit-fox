@@ -23,6 +23,7 @@ public sealed class StrategyRun
     private readonly InstrumentRules _rules;
     private readonly List<OrderCommand> _commands = [];
     private decimal _cash;
+    private decimal _pastPnl;
     private int _lastOrderNumber;
     private StrategyEvent _event = null!;
     private Bar? _lastBar;
@@ -59,6 +60,73 @@ public sealed class StrategyRun
         IReadOnlyDictionary<string, NodeValue> parameterValues,
         TradingConditions conditions)
     {
+        return Create(definition, catalog, parameterValues, conditions);
+    }
+
+    /// <summary>
+    ///     A run that goes on from <paramref name="snapshot" />: its position, its active orders, each owned by the node of its path,
+    ///     and its order numbers. The cash is the balance with what the positions made and less what the current one holds.
+    /// </summary>
+    /// <exception cref="GraphValidationException">A parameter value is unknown or breaks the parameter's limits.</exception>
+    public static StrategyRun Restore(
+        StrategyDefinition definition,
+        CompositeCatalog catalog,
+        IReadOnlyDictionary<string, NodeValue> parameterValues,
+        TradingConditions conditions,
+        RunSnapshot snapshot)
+    {
+        StrategyRun run = Create(definition, catalog, parameterValues, conditions);
+        run._position = Execution.Position.Restore(snapshot, definition.Direction, conditions.Rules.MinQuantity);
+        run._pastPnl = snapshot.PastPnl;
+        run._lastOrderNumber = snapshot.LastOrderNumber;
+        run.SkippedOrders = snapshot.SkippedOrders;
+        decimal held = definition.Direction == StrategyDirection.Long ? snapshot.Invested : 2m * snapshot.Collateral - snapshot.Invested;
+        run._cash = conditions.Balance + snapshot.PastPnl + snapshot.RealizedPnl - held;
+
+        foreach (RunOrder order in snapshot.Orders)
+        {
+            int? node = order.NodePath is null ? null : run._indexByPath[order.NodePath];
+            run._orders[order.Id] = new ActiveOrder(node, order.Side, order.Price, order.Remaining, order.Cancelling, order.Reserve, order.Filled);
+        }
+
+        return run;
+    }
+
+    /// <summary>What <see cref="Restore" /> needs to go on from here.</summary>
+    public RunSnapshot Snapshot()
+    {
+        return new RunSnapshot(
+            _position.Number,
+            _position.Quantity,
+            _position.Invested,
+            _position.Collateral,
+            _pastPnl,
+            _position.RealizedPnl,
+            _position.Fees,
+            _position.LastEntryPrice,
+            _position.LastEntryAt,
+            _position.Status == PositionStatus.Closing,
+            SkippedOrders,
+            [
+                .. _orders.Select(order => new RunOrder(
+                    order.Key,
+                    order.Value.Node is { } node ? _nodes[node].Path : null,
+                    order.Value.Side,
+                    order.Value.Price,
+                    order.Value.Remaining,
+                    order.Value.Cancelling,
+                    order.Value.Reserve,
+                    order.Value.Filled))
+            ],
+            _lastOrderNumber);
+    }
+
+    private static StrategyRun Create(
+        StrategyDefinition definition,
+        CompositeCatalog catalog,
+        IReadOnlyDictionary<string, NodeValue> parameterValues,
+        TradingConditions conditions)
+    {
         IReadOnlyList<(string Parameter, string Reason)> errors = ParameterValueRules.Check(definition.Parameters, parameterValues);
 
         if (errors.Count > 0)
@@ -85,6 +153,56 @@ public sealed class StrategyRun
         {
             Evaluate(index, _outputs[index], _states[index]);
         }
+
+        return [.. _commands];
+    }
+
+    /// <summary>
+    ///     Gives the indicators a closed bar of the history before the run goes live: the graph is evaluated without its order
+    ///     nodes, so nothing is ordered and the position stays as it is.
+    /// </summary>
+    public void WarmUp(BarClosed bar)
+    {
+        _event = bar;
+        _lastBar = bar.Bar;
+
+        for (int index = 0; index < _nodes.Count; index++)
+        {
+            if (_nodes[index].Kind is not (SimpleNodeKind.MarketOrder or SimpleNodeKind.ClosePosition or SimpleNodeKind.HoldLimit))
+            {
+                Evaluate(index, _outputs[index], _states[index]);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Closes the current position on the owner's request, as a full exit does: its orders are cancelled and what it holds is
+    ///     sold at the market by the position itself.
+    /// </summary>
+    public IReadOnlyList<OrderCommand> Close(DateTimeOffset at)
+    {
+        _event = new RunStarted(at);
+        _commands.Clear();
+        _closed = null;
+        _position.BeginClosing();
+        CancelAll();
+        SellWhatCameWhileClosing();
+        CloseWhenDone();
+
+        return [.. _commands];
+    }
+
+    /// <summary>
+    ///     Keeps the books of a paused strategy: a fill or a cancel changes the position and its own rules work (a closing position
+    ///     cancels what is left and sells what came meanwhile), but no node is evaluated.
+    /// </summary>
+    public IReadOnlyList<OrderCommand> Record(StrategyEvent @event)
+    {
+        _event = @event;
+        _commands.Clear();
+        _closed = null;
+        Apply(@event);
+        CloseWhenDone();
 
         return [.. _commands];
     }
@@ -137,7 +255,7 @@ public sealed class StrategyRun
     private void Fill(OrderFilled filled)
     {
         ActiveOrder order = _orders[filled.OrderId];
-        _orders[filled.OrderId] = order with { Remaining = order.Remaining - filled.Quantity };
+        _orders[filled.OrderId] = order with { Remaining = order.Remaining - filled.Quantity, Filled = true };
 
         if (order.Side == _entrySide)
         {
@@ -194,6 +312,7 @@ public sealed class StrategyRun
         if (_position.Status == PositionStatus.Closing && _orders.Count == 0)
         {
             _closed = new ClosedPosition(_position.Number, _event.At, _position.RealizedPnl, _position.Fees);
+            _pastPnl += _position.RealizedPnl;
             _position = _position.Next();
         }
     }
@@ -326,7 +445,8 @@ public sealed class StrategyRun
 
     /// <summary>
     ///     Keeps one limit order with the wanted price and unfilled quantity; a different one is cancelled first and replaced
-    ///     only once the cancel is confirmed, so the old order never holds the balance the new one needs.
+    ///     only once the cancel is confirmed, so the old order never holds the balance the new one needs. An order with a fill is
+    ///     not replaced for its size: its remainder waits for the rest of the fill rather than a new order of the whole size.
     /// </summary>
     private void HoldLimit(int index, RunNode node)
     {
@@ -350,7 +470,7 @@ public sealed class StrategyRun
             return;
         }
 
-        if (wanted is not { } same || same.Price != existing.Value.Price || same.Quantity != existing.Value.Remaining)
+        if (wanted is not { } same || same.Price != existing.Value.Price || (!existing.Value.Filled && same.Quantity != existing.Value.Remaining))
         {
             _orders[existing.Key] = existing.Value with { Cancelling = true };
             _commands.Add(new CancelOrder(existing.Key));

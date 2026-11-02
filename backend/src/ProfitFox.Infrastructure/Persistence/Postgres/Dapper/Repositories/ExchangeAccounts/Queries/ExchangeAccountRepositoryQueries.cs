@@ -9,14 +9,14 @@ internal static class ExchangeAccountRepositoryQueries
 {
     // The secret columns are left out: only GetSecret reads them.
     private const string SelectSql = """
-                                     SELECT id, name, environment, api_key AS "ApiKey", uid, categories, created_at AS "CreatedAt"
+                                     SELECT id, name, api_key AS "ApiKey", uid, categories, created_at AS "CreatedAt"
                                      FROM exchange_accounts
                                      """;
 
     private const string InsertSql = """
-                                     INSERT INTO exchange_accounts (id, name, environment, api_key, secret_nonce, secret_ciphertext, secret_tag, uid, categories, created_at)
-                                     VALUES (@Id, @Name, @Environment, @ApiKey, @Nonce, @Ciphertext, @Tag, @Uid, @Categories, @CreatedAt)
-                                     ON CONFLICT (uid, environment) DO NOTHING
+                                     INSERT INTO exchange_accounts (id, name, api_key, secret_nonce, secret_ciphertext, secret_tag, uid, categories, created_at)
+                                     VALUES (@Id, @Name, @ApiKey, @Nonce, @Ciphertext, @Tag, @Uid, @Categories, @CreatedAt)
+                                     ON CONFLICT (uid) DO NOTHING
                                      """;
 
     public static CommandDefinition Insert(ExchangeAccountDb account, EncryptedSecret secret, CancellationToken cancellationToken)
@@ -27,7 +27,6 @@ internal static class ExchangeAccountRepositoryQueries
             {
                 account.Id,
                 account.Name,
-                account.Environment,
                 account.ApiKey,
                 secret.Nonce,
                 secret.Ciphertext,

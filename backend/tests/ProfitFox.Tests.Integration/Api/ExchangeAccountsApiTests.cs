@@ -12,7 +12,6 @@ using NSubstitute.ExceptionExtensions;
 
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.ExchangeAccounts;
-using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Tests.Integration.Infrastructure;
 using ProfitFox.Tests.Shared.Fixtures.Strategies;
@@ -43,7 +42,7 @@ public class ExchangeAccountsApiTests
     public async Task SetUp()
     {
         _factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { Workers = 0 };
-        _factory.KeyInspector.InspectAsync(Arg.Any<ExchangeEnvironment>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(TradingKey);
+        _factory.KeyInspector.InspectAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(TradingKey);
         _client = _factory.CreateClient();
     }
 
@@ -66,15 +65,14 @@ public class ExchangeAccountsApiTests
         string read = await _client.GetStringAsync($"{Accounts}/{id}");
         string list = await _client.GetStringAsync(Accounts);
         JsonElement account = JsonDocument.Parse(read).RootElement;
-        (account.GetProperty("name").GetString(), account.GetProperty("environment").GetString(), account.GetProperty("apiKey").GetString())
-            .ShouldBe(("Основной", "testnet", "api-key"));
+        (account.GetProperty("name").GetString(), account.GetProperty("apiKey").GetString()).ShouldBe(("Основной", "api-key"));
         account.GetProperty("uid").GetInt64().ShouldBe(100);
         account.GetProperty("categories").EnumerateArray().Select(category => category.GetString()).ShouldBe(["spot", "linear"]);
         account.GetProperty("bots").GetArrayLength().ShouldBe(0);
         JsonDocument.Parse(list).RootElement.EnumerateArray().ShouldHaveSingleItem().GetProperty("id").GetGuid().ShouldBe(id);
         read.ShouldNotContain(Secret);
         list.ShouldNotContain(Secret);
-        await _factory.KeyInspector.Received(1).InspectAsync(ExchangeEnvironment.Testnet, "api-key", Secret, Arg.Any<CancellationToken>());
+        await _factory.KeyInspector.Received(1).InspectAsync("api-key", Secret, Arg.Any<CancellationToken>());
     }
 
     // Scenario "Secret в базе зашифрован".
@@ -104,7 +102,7 @@ public class ExchangeAccountsApiTests
     [Test]
     public async Task Key_bybit_rejects_is_a_bad_request_on_the_key()
     {
-        _factory.KeyInspector.InspectAsync(Arg.Any<ExchangeEnvironment>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _factory.KeyInspector.InspectAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new ExchangeKeyRejectedException("Bybit does not accept the key: API key is invalid."));
 
         HttpResponseMessage response = await _client.PostAsJsonAsync(Accounts, Body());
@@ -120,7 +118,7 @@ public class ExchangeAccountsApiTests
     [Test]
     public async Task Bybit_unavailable_is_service_unavailable()
     {
-        _factory.KeyInspector.InspectAsync(Arg.Any<ExchangeEnvironment>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _factory.KeyInspector.InspectAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new ExchangeUnavailableException("Bybit is unavailable."));
 
         HttpResponseMessage response = await _client.PostAsJsonAsync(Accounts, Body());
@@ -132,7 +130,7 @@ public class ExchangeAccountsApiTests
     [Test]
     public async Task Other_bybit_refusal_is_a_bad_gateway_with_its_reason()
     {
-        _factory.KeyInspector.InspectAsync(Arg.Any<ExchangeEnvironment>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _factory.KeyInspector.InspectAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new ExchangeException("10002: invalid request, please check your server timestamp or recv_window param"));
 
         HttpResponseMessage response = await _client.PostAsJsonAsync(Accounts, Body());
@@ -145,7 +143,7 @@ public class ExchangeAccountsApiTests
     public async Task Other_bybit_refusal_of_the_balance_is_a_bad_gateway()
     {
         Guid id = await CreateAsync();
-        _factory.KeyInspector.GetBalanceAsync(Arg.Any<ExchangeEnvironment>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _factory.KeyInspector.GetBalanceAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new ExchangeException("10002: invalid request, please check your server timestamp or recv_window param"));
 
         (await _client.GetAsync($"{Accounts}/{id}/balance")).StatusCode.ShouldBe(HttpStatusCode.BadGateway);
@@ -167,9 +165,9 @@ public class ExchangeAccountsApiTests
     {
         Guid id = await CreateAsync();
 
-        (await _client.PutAsJsonAsync($"{Accounts}/{id}", new { name = "Testnet" })).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await _client.PutAsJsonAsync($"{Accounts}/{id}", new { name = "Торговый" })).StatusCode.ShouldBe(HttpStatusCode.NoContent);
 
-        (await _client.GetFromJsonAsync<JsonElement>($"{Accounts}/{id}")).GetProperty("name").GetString().ShouldBe("Testnet");
+        (await _client.GetFromJsonAsync<JsonElement>($"{Accounts}/{id}")).GetProperty("name").GetString().ShouldBe("Торговый");
     }
 
     // Scenarios "Аккаунт без ботов" and "Аккаунт с ботом".
@@ -195,7 +193,7 @@ public class ExchangeAccountsApiTests
     public async Task Balance_is_read_from_bybit_with_the_stored_key()
     {
         Guid id = await CreateAsync();
-        _factory.KeyInspector.GetBalanceAsync(ExchangeEnvironment.Testnet, "api-key", Secret, Arg.Any<CancellationToken>())
+        _factory.KeyInspector.GetBalanceAsync("api-key", Secret, Arg.Any<CancellationToken>())
             .Returns(new AccountBalance(1675.31m, [new CoinBalance("USDT", 1000.123456m, 1000.25m), new CoinBalance("BTC", 0.01m, 675.06m)]));
 
         JsonElement balance = await _client.GetFromJsonAsync<JsonElement>($"{Accounts}/{id}/balance");
@@ -214,7 +212,7 @@ public class ExchangeAccountsApiTests
     public async Task Balance_of_a_key_bybit_no_longer_accepts_is_a_conflict()
     {
         Guid id = await CreateAsync();
-        _factory.KeyInspector.GetBalanceAsync(Arg.Any<ExchangeEnvironment>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _factory.KeyInspector.GetBalanceAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new ExchangeKeyRejectedException("Bybit does not accept the key: API key is invalid."));
 
         (await _client.GetAsync($"{Accounts}/{id}/balance")).StatusCode.ShouldBe(HttpStatusCode.Conflict);
@@ -224,7 +222,7 @@ public class ExchangeAccountsApiTests
     public async Task Balance_while_bybit_is_unavailable_is_service_unavailable()
     {
         Guid id = await CreateAsync();
-        _factory.KeyInspector.GetBalanceAsync(Arg.Any<ExchangeEnvironment>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _factory.KeyInspector.GetBalanceAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new ExchangeUnavailableException("Bybit is unavailable."));
 
         (await _client.GetAsync($"{Accounts}/{id}/balance")).StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable);
@@ -303,6 +301,6 @@ public class ExchangeAccountsApiTests
 
     private static JsonObject Body(string name = "Основной")
     {
-        return new JsonObject { ["name"] = name, ["environment"] = "testnet", ["apiKey"] = "api-key", ["apiSecret"] = Secret };
+        return new JsonObject { ["name"] = name, ["apiKey"] = "api-key", ["apiSecret"] = Secret };
     }
 }

@@ -2,14 +2,14 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { fakeApi, json, problem } from '@/test/fakeApi';
-import { testnetAccount } from '@/test/fixtures';
+import { exchangeAccount } from '@/test/fixtures';
 import { renderApp } from '@/test/renderApp';
 
-const details = { ...testnetAccount, bots: [] };
+const details = { ...exchangeAccount, bots: [] };
 
 async function fill() {
   await userEvent.type(await screen.findByLabelText('Название'), 'Проверка');
-  await userEvent.type(screen.getByLabelText('API key'), 'XKz8apikeyTESTNET');
+  await userEvent.type(screen.getByLabelText('API key'), 'XKz8apikeyMAIN');
   await userEvent.type(screen.getByLabelText('API secret'), 'secret-value');
   await userEvent.click(screen.getByRole('button', { name: 'Добавить аккаунт' }));
 }
@@ -20,27 +20,22 @@ describe('new account', () => {
   });
 
   // Scenario "Аккаунт добавлен".
-  it('adds a testnet account by default and opens its page', async () => {
+  it('adds an account and opens its page', async () => {
     const requests = fakeApi({
-      'POST /api/exchange-accounts': () => json({ id: testnetAccount.id }, 201),
-      [`GET /api/exchange-accounts/${testnetAccount.id}`]: () => json(details),
-      'GET /api/exchange-accounts': () => json([testnetAccount]),
+      'POST /api/exchange-accounts': () => json({ id: exchangeAccount.id }, 201),
+      [`GET /api/exchange-accounts/${exchangeAccount.id}`]: () => json(details),
+      'GET /api/exchange-accounts': () => json([exchangeAccount]),
     });
     const { history } = renderApp('/accounts/new');
 
-    expect(await screen.findByRole('button', { name: 'Testnet' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    expect(screen.getByLabelText('API secret')).toHaveAttribute('type', 'password');
+    expect(await screen.findByLabelText('API secret')).toHaveAttribute('type', 'password');
     await fill();
 
-    await waitFor(() => expect(history.location.pathname).toBe(`/accounts/${testnetAccount.id}`));
+    await waitFor(() => expect(history.location.pathname).toBe(`/accounts/${exchangeAccount.id}`));
     const post = requests.find((request) => request.method === 'POST')!;
     expect(await post.json()).toEqual({
       name: 'Проверка',
-      environment: 'testnet',
-      apiKey: 'XKz8apikeyTESTNET',
+      apiKey: 'XKz8apikeyMAIN',
       apiSecret: 'secret-value',
     });
   });
@@ -61,7 +56,7 @@ describe('new account', () => {
       await screen.findByText('Bybit does not accept the key: API key is invalid.'),
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Название')).toHaveValue('Проверка');
-    expect(screen.getByLabelText('API key')).toHaveValue('XKz8apikeyTESTNET');
+    expect(screen.getByLabelText('API key')).toHaveValue('XKz8apikeyMAIN');
     expect(screen.getByLabelText('API secret')).toHaveValue('');
   });
 

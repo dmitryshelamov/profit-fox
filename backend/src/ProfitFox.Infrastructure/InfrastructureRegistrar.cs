@@ -5,7 +5,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 using ProfitFox.Application.Backtests;
 using ProfitFox.Application.ExchangeAccounts;
+using ProfitFox.Application.LiveTrading;
 using ProfitFox.Application.Ports.ExchangeAccounts;
+using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.Ports.Security;
 using ProfitFox.Application.Workers;
@@ -26,14 +28,7 @@ public static class InfrastructureRegistrar
     public static void Configure(IConfiguration configuration, IServiceCollection services)
     {
         ConfigureCommon(configuration, services);
-
-        // Only the API decrypts secrets for now, so only the API refuses to start without the key (design, decision 4).
-        services.AddOptions<ExchangeAccountSettings>()
-            .Bind(configuration.GetSection("ExchangeAccounts"))
-            .Validate(
-                settings => IsMasterKey(settings.MasterKey),
-                "ExchangeAccounts__MasterKey must be set to 32 random bytes in base64, such as the output of `openssl rand -base64 32`.")
-            .ValidateOnStart();
+        RequireMasterKey(configuration, services);
         services.AddHostedService<StrategyVersionsInitializationService>();
     }
 
@@ -49,9 +44,29 @@ public static class InfrastructureRegistrar
         }
 
         ConfigureCommon(configuration, services);
+        TradingSettings trading = configuration.GetSection("Trading").Get<TradingSettings>() ?? new TradingSettings();
+        services.AddSingleton(trading);
+
+        // The API and a trading Worker decrypt secrets; a Worker that only runs backtests never needs the key (decision 12).
+        if (trading.Enabled)
+        {
+            RequireMasterKey(configuration, services);
+            services.AddHostedService<LiveTradingBackgroundService>();
+        }
+
         services.AddHostedService<WorkerStartLogService>();
         services.AddHostedService<CandleImportBackgroundService>();
         services.AddHostedService<BacktestBackgroundService>();
+    }
+
+    private static void RequireMasterKey(IConfiguration configuration, IServiceCollection services)
+    {
+        services.AddOptions<ExchangeAccountSettings>()
+            .Bind(configuration.GetSection("ExchangeAccounts"))
+            .Validate(
+                settings => IsMasterKey(settings.MasterKey),
+                "ExchangeAccounts__MasterKey must be set to 32 random bytes in base64, such as the output of `openssl rand -base64 32`.")
+            .ValidateOnStart();
     }
 
     private static void ConfigureCommon(IConfiguration configuration, IServiceCollection services)
@@ -70,6 +85,10 @@ public static class InfrastructureRegistrar
         });
         services.AddSingleton(bybit);
         services.AddHttpClient<IExchangeKeyInspector, BybitAccountClient>();
+        services.AddHttpClient<IExchangeLedger, BybitLedger>();
+        services.AddHttpClient<IOrderGateway, BybitOrderGateway>();
+        services.AddSingleton<IExchangeStreams, BybitStreams>();
+        services.AddSingleton<ILiveTradingJournal, LoggingLiveTradingJournal>();
         services.AddSingleton<ExchangeResilienceExecutor>();
         services.AddTransient<IMarketHistoryClient, BybitMarketDataClient>();
         services.AddTransient<IInstrumentRulesProvider, BybitMarketDataClient>();
