@@ -51,6 +51,9 @@ internal sealed class LiveBotSession(
 
     private readonly Channel<LiveInput> _inputs = Channel.CreateUnbounded<LiveInput>(new UnboundedChannelOptions { SingleReader = true });
     private readonly Dictionary<int, LiveOrder> _orders = [];
+
+    // The ends the exchange told of orders whose fills have not all come yet.
+    private readonly Dictionary<int, ExchangeOrder> _ends = [];
     private readonly Guid _id = leased.Bot.BotId;
     private LiveBot _bot = leased.Bot;
     private LiveBotContext _context = null!;
@@ -489,6 +492,10 @@ internal sealed class LiveBotSession(
                 await RebuildAsync(fresh: false, cancellationToken);
 
                 break;
+            case RefreshInput { Number: var number }:
+                await RefreshAsync(number, cancellationToken);
+
+                break;
             case StatusInput { Bot: var bot }:
                 bool resumed = _bot.Status == LiveBotStatus.Paused && bot.Status == LiveBotStatus.Running;
 
@@ -545,6 +552,11 @@ internal sealed class LiveBotSession(
             },
             bot => bot,
             cancellationToken);
+
+        if (_ends.TryGetValue(id.Number, out ExchangeOrder? end))
+        {
+            await StateAsync(end, cancellationToken);
+        }
     }
 
     private FeeAsset Asset(string coin)
@@ -576,8 +588,17 @@ internal sealed class LiveBotSession(
                 break;
             case ExchangeOrderState.Cancelled:
             case ExchangeOrderState.Filled when live.Status != LiveOrderStatus.Filled:
-                // A filled order whose fills fall short of it ends as a cancel: the run keeps only what it got.
-                await EndAsync(live.Number, LiveOrderStatus.Cancelled, null, cancellationToken);
+                if (live.FilledQuantity < order.FilledQuantity)
+                {
+                    // Bybit tells the end on its own topic, often before the last fills: the order waits for what the exchange counted.
+                    _ends[live.Number] = order;
+                    _ = LaterAsync(new RefreshInput(live.Number), settings.PollInterval, cancellationToken);
+
+                    break;
+                }
+
+                // The run keeps only what the order got; an order by amount is done once the exchange says it filled.
+                await EndAsync(live.Number, order.State == ExchangeOrderState.Filled ? LiveOrderStatus.Filled : LiveOrderStatus.Cancelled, null, cancellationToken);
 
                 break;
             case ExchangeOrderState.Rejected:
@@ -737,6 +758,7 @@ internal sealed class LiveBotSession(
         else
         {
             _orders.Remove(order.Number);
+            _ends.Remove(order.Number);
         }
     }
 
@@ -783,7 +805,7 @@ internal sealed class LiveBotSession(
                 case OrderOutcomeKind.Transient:
                     var delay = TimeSpan.FromSeconds(Math.Min(Math.Pow(2, order.Attempts), 60));
                     await WriteOrderAsync(order with { Attempts = order.Attempts + 1, NextAttemptAt = now + delay }, cancellationToken);
-                    _ = WakeAsync(delay, cancellationToken);
+                    _ = LaterAsync(new WakeInput(), delay, cancellationToken);
 
                     break;
                 case OrderOutcomeKind.Permanent:
@@ -816,12 +838,12 @@ internal sealed class LiveBotSession(
             cancellationToken);
     }
 
-    private async Task WakeAsync(TimeSpan delay, CancellationToken cancellationToken)
+    private async Task LaterAsync(LiveInput input, TimeSpan delay, CancellationToken cancellationToken)
     {
         try
         {
             await Task.Delay(delay, time, cancellationToken);
-            _inputs.Writer.TryWrite(new WakeInput());
+            _inputs.Writer.TryWrite(input);
         }
         catch (OperationCanceledException)
         {

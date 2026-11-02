@@ -17,6 +17,7 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
     private readonly Dictionary<string, ExchangeOrder> _orders = [];
     private readonly Dictionary<string, OrderRequest> _requests = [];
     private readonly Dictionary<string, List<ExchangeFill>> _fills = [];
+    private readonly Dictionary<string, List<ExchangeFill>> _late = [];
     private readonly List<Action<Candle>> _candles = [];
     private readonly List<Action<ExchangeOrder>> _orderUpdates = [];
     private readonly List<Action<ExchangeFill>> _fillUpdates = [];
@@ -117,6 +118,58 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
         foreach (Action<ExchangeOrder> handler in orders)
         {
             handler(order);
+        }
+    }
+
+    /// <summary>
+    ///     Fills an order as Bybit often reports it: the order update with its filled quantity comes first, while the fill is
+    ///     neither on the stream nor in the trade history yet. <see cref="Deliver" /> lets it out.
+    /// </summary>
+    public void FillLate(string clientId, decimal quantity, decimal price)
+    {
+        ExchangeOrder order;
+        Action<ExchangeOrder>[] orders;
+
+        lock (_lock)
+        {
+            OrderRequest request = _requests[clientId];
+            ExchangeOrder before = _orders[clientId];
+            decimal filled = before.FilledQuantity + quantity;
+            order = before with { FilledQuantity = filled, State = filled >= (request.Quantity ?? filled) ? ExchangeOrderState.Filled : ExchangeOrderState.Open };
+            _orders[clientId] = order;
+            _late.TryAdd(clientId, []);
+            _late[clientId].Add(new ExchangeFill($"e-{++_execs}", clientId, quantity, price, 0m, "USDT", DateTimeOffset.Parse("2024-03-10T12:30:00Z")));
+            Holding += request.Side == OrderSide.Buy ? quantity : -quantity;
+            orders = [.. _orderUpdates];
+        }
+
+        foreach (Action<ExchangeOrder> handler in orders)
+        {
+            handler(order);
+        }
+    }
+
+    /// <summary>The late fills of an order reach the trade history and, unless <paramref name="silently" />, the stream.</summary>
+    public void Deliver(string clientId, bool silently = false)
+    {
+        ExchangeFill[] late;
+        Action<ExchangeFill>[] handlers;
+
+        lock (_lock)
+        {
+            late = [.. _late.GetValueOrDefault(clientId) ?? []];
+            _late.Remove(clientId);
+            _fills.TryAdd(clientId, []);
+            _fills[clientId].AddRange(late);
+            handlers = silently ? [] : [.. _fillUpdates];
+        }
+
+        foreach (ExchangeFill fill in late)
+        {
+            foreach (Action<ExchangeFill> handler in handlers)
+            {
+                handler(fill);
+            }
         }
     }
 

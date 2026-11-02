@@ -105,6 +105,37 @@ public class LiveTradingTests
         await _scenario.WaitAsync(async () => (await _scenario.PositionsAsync(bot)).FirstOrDefault()?.Quantity == 1m, "the missed fill");
     }
 
+    // Bybit tells the end of an order on its own topic, often before the fill, and its trade history lags behind: the order
+    // waits for the fills the exchange counted.
+    [Test]
+    public async Task Fill_that_comes_after_the_end_of_its_order_counts()
+    {
+        Guid bot = await StartedAsync();
+        string start = LiveTradingScenario.ClientId(bot, 1);
+
+        _scenario.Exchange.FillLate(start, 1m, 100m);
+        await SettleAsync();
+        _scenario.Exchange.Deliver(start);
+
+        await _scenario.WaitAsync(async () => (await _scenario.PositionsAsync(bot)).FirstOrDefault()?.Quantity == 1m, "the late fill");
+        (await _scenario.OrdersAsync(bot)).Single().Status.ShouldBe(LiveOrderStatus.Filled);
+    }
+
+    // The late fill never comes on the stream: the trade history is read again until it has it.
+    [Test]
+    public async Task Fill_missing_from_the_trade_history_is_read_again_later()
+    {
+        Guid bot = await StartedAsync();
+        string start = LiveTradingScenario.ClientId(bot, 1);
+
+        _scenario.Exchange.FillLate(start, 1m, 100m);
+        await SettleAsync();
+        _scenario.Exchange.Deliver(start, silently: true);
+
+        await _scenario.WaitAsync(async () => (await _scenario.PositionsAsync(bot)).FirstOrDefault()?.Quantity == 1m, "the fill read again");
+        (await _scenario.OrdersAsync(bot)).Single().Status.ShouldBe(LiveOrderStatus.Filled);
+    }
+
     // Scenarios "Worker остановлен до отправки" and "Ответ на отправку потерян": the saved order goes out after the restart, once.
     [Test]
     public async Task Order_saved_before_the_worker_stopped_goes_out_once_after_it()
@@ -344,7 +375,8 @@ public class LiveTradingTests
         _scenario.Exchange.Fill(start.ClientId, 0.5m, 100m, silently: true);
         _scenario.Exchange.Finish(start.ClientId);
 
-        await _scenario.WaitAsync(async () => (await _scenario.OrdersAsync(bot)).Single().Status == LiveOrderStatus.Cancelled, "the ended order");
+        // The exchange says the order filled: it is filled in the books too, though only its status told the end.
+        await _scenario.WaitAsync(async () => (await _scenario.OrdersAsync(bot)).Single().Status == LiveOrderStatus.Filled, "the filled order");
         (await _scenario.PositionsAsync(bot))[0].Quantity.ShouldBe(0.5m);
     }
 

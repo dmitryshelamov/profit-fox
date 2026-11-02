@@ -19,6 +19,9 @@ internal sealed record FillInput(ExchangeFill Fill) : LiveInput;
 /// <summary>A stream is back after a gap: what came meanwhile is read again.</summary>
 internal sealed record RestoreInput : LiveInput;
 
+/// <summary>An order waits for fills the exchange counted: what the exchange knows of it is read again.</summary>
+internal sealed record RefreshInput(int Number) : LiveInput;
+
 /// <summary>The bot as the database holds it, read with each renewal of the lease.</summary>
 internal sealed record StatusInput(LiveBot Bot) : LiveInput;
 
