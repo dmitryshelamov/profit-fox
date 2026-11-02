@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 
 import { deleteStrategy, renameStrategy, strategiesQuery } from '@/modules/strategies';
@@ -10,6 +11,7 @@ type Open = 'menu' | 'rename' | 'delete' | undefined;
 
 export function StrategyActions({ id, name }: { id: string; name: string }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [open, setOpen] = useState<Open>();
   const [newName, setNewName] = useState(name);
   const [failure, setFailure] = useState<string>();
@@ -42,6 +44,13 @@ export function StrategyActions({ id, name }: { id: string; name: string }) {
           role="menu"
           className="absolute top-9 right-0 z-10 w-48 rounded-lg border border-line bg-panel p-1 shadow-xl"
         >
+          <button
+            role="menuitem"
+            className="w-full rounded-md px-3 py-2 text-left hover:bg-panel-2"
+            onClick={() => void navigate({ to: '/bots/new', search: { strategyId: id } })}
+          >
+            Создать бота
+          </button>
           <button
             role="menuitem"
             className="w-full rounded-md px-3 py-2 text-left hover:bg-panel-2"

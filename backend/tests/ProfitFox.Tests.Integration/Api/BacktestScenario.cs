@@ -82,7 +82,10 @@ public sealed class BacktestScenario(ProfitFoxFactory factory, HttpClient client
         DateTimeOffset to,
         IReadOnlyDictionary<string, ParameterSpec>? parameters = null,
         BacktestStatus status = BacktestStatus.Pending,
-        int engineVersion = EngineVersion.Current)
+        int engineVersion = EngineVersion.Current,
+        string? error = null,
+        long calculatedCombinations = 0,
+        Guid? id = null)
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         IStrategyLibraryRepository library = scope.ServiceProvider.GetRequiredService<IStrategyLibraryRepository>();
@@ -90,7 +93,7 @@ public sealed class BacktestScenario(ProfitFoxFactory factory, HttpClient client
         StrategyVersion version = (await library.GetVersionAsync(StrategyId, (await library.GetLatestVersionNumberAsync(StrategyId, CancellationToken.None))!.Value, CancellationToken.None))!;
         var policy = new BacktestPolicy(10000, new Dictionary<MarketCategory, FeeRates> { [MarketCategory.Linear] = new FeeRates(0.02m, 0.055m) });
         Backtest backtest = Backtest.Create(
-            Guid.NewGuid(),
+            id ?? Guid.NewGuid(),
             bot,
             version,
             from,
@@ -101,7 +104,7 @@ public sealed class BacktestScenario(ProfitFoxFactory factory, HttpClient client
             Rules,
             engineVersion,
             factory.Time.GetUtcNow()) with
-        { Status = status };
+        { Status = status, Error = error, CalculatedCombinations = calculatedCombinations };
         await scope.ServiceProvider.GetRequiredService<IBacktestRepository>().AddAsync(backtest, CancellationToken.None);
 
         return backtest;

@@ -1,9 +1,13 @@
 import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 
+import { ComparisonBar, useComparison } from '@/modules/comparison';
+
 const navLink = 'border-b-2 border-transparent py-3 text-muted hover:text-text';
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const barShown = useComparison().length > 0;
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center gap-8 border-b border-line bg-panel px-4">
@@ -28,9 +32,21 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             Составные узлы
           </Link>
+          <Link
+            to="/bots"
+            className={navLink}
+            activeProps={{ className: 'border-accent! text-text!', 'aria-current': 'page' }}
+          >
+            Боты
+          </Link>
         </nav>
       </header>
-      <main className="mx-auto w-full max-w-[1100px] flex-1 px-4 py-9">{children}</main>
+      <main
+        className={`mx-auto w-full max-w-[1100px] flex-1 px-4 pt-9 ${barShown ? 'pb-28' : 'pb-9'}`}
+      >
+        {children}
+      </main>
+      <ComparisonBar />
     </div>
   );
 }

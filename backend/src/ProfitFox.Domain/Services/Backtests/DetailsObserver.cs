@@ -13,7 +13,7 @@ public sealed class DetailsObserver(decimal balance) : IReplayObserver
     private readonly MetricsObserver _metrics = new MetricsObserver(balance);
     private readonly List<ReplayFill> _fills = [];
     private readonly List<BacktestTrade> _trades = [];
-    private readonly List<(DateTimeOffset At, decimal Equity)> _closes = [];
+    private readonly List<(DateTimeOffset At, Candle Candle, decimal Equity)> _closes = [];
     private RunState? _last;
     private Cycle? _cycle;
 
@@ -37,7 +37,7 @@ public sealed class DetailsObserver(decimal balance) : IReplayObserver
     public void BarClosed(DateTimeOffset at, Candle candle, RunState state)
     {
         _metrics.BarClosed(at, candle, state);
-        _closes.Add((at, state.Equity(candle.Close.Value)));
+        _closes.Add((at, candle, state.Equity(candle.Close.Value)));
         _last = state;
     }
 
@@ -55,7 +55,15 @@ public sealed class DetailsObserver(decimal balance) : IReplayObserver
 
         return
         [
-            .. _closes.Chunk(Math.Max(size, 1)).Select(group => new EquityPoint(group[^1].At, group[^1].Equity, group.Min(close => close.Equity)))
+            .. _closes.Chunk(Math.Max(size, 1)).Select(group => new EquityPoint(
+                group[^1].At,
+                group[^1].Equity,
+                group.Min(close => close.Equity),
+                group[0].Candle.OpenTime,
+                group[0].Candle.Open.Value,
+                group.Max(close => close.Candle.High.Value),
+                group.Min(close => close.Candle.Low.Value),
+                group[^1].Candle.Close.Value))
         ];
     }
 

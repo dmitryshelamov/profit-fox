@@ -42,6 +42,15 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
     /// <summary>Threads of a backtest in each Worker; without it the Worker takes its default.</summary>
     public int? BacktestThreads { get; init; }
 
+    /// <summary>
+    ///     Whether the fake Bybit answers the app's Bybit calls. Without it the app builds its own Bybit client, for a test of the
+    ///     configured address; the test must point <see cref="BybitRestAddress" /> at a listener of its own.
+    /// </summary>
+    public bool FakeBybit { get; init; } = true;
+
+    /// <summary>The value of <c>Bybit:RestAddress</c>; without it the app uses the live Bybit.</summary>
+    public string? BybitRestAddress { get; init; }
+
     /// <summary>Receives every event the app's logger writes.</summary>
     public ILogEventSink? LogSink { get; init; }
 
@@ -62,15 +71,23 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
         });
         builder.UseSetting("ConnectionStrings:MarketData", connectionString);
 
+        if (BybitRestAddress is not null)
+        {
+            builder.UseSetting("Bybit:RestAddress", BybitRestAddress);
+        }
+
         builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<TimeProvider>(Time);
 
             // Bybit.Net configures its own primary handler, so replace the whole client: no test may reach the real Bybit.
-            services.AddSingleton<IBybitRestClient>(_ => new BybitRestClient(
-                new HttpClient(Bybit, disposeHandler: false),
-                NullLoggerFactory.Instance,
-                Options.Create(new BybitRestOptions { RateLimiterEnabled = false })));
+            if (FakeBybit)
+            {
+                services.AddSingleton<IBybitRestClient>(_ => new BybitRestClient(
+                    new HttpClient(Bybit, disposeHandler: false),
+                    NullLoggerFactory.Instance,
+                    Options.Create(new BybitRestOptions { RateLimiterEnabled = false })));
+            }
 
             if (LogSink is not null)
             {

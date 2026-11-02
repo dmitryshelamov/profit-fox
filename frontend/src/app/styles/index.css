@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 
 /* Colors of the mockups agreed in Penpot ("Макеты редактора"). */
-@theme {
+@theme static {
   --color-app: #14161b;
   --color-canvas: #101216;
   --color-panel: #1b1e25;
@@ -12,6 +12,7 @@
   --color-faint: #5d6573;
   --color-accent: #f28c28;
   --color-on-accent: #1a1206;
+  --color-run: #7aa7ff;
   --color-ok: #3fb37f;
   --color-warn: #e0a43a;
   --color-warn-bg: #3a2e16;
@@ -19,6 +20,12 @@
   --color-err-bg: #3a1d20;
   --color-node: #262a33;
   --color-node-line: #3a404c;
+  --color-series-1: #7aa7ff;
+  --color-series-2: #f5b84a;
+  --color-series-3: #c58bff;
+  --color-series-4: #4dd0e1;
+  --color-series-5: #3fb37f;
+  --color-series-6: #ff8a9a;
   --color-pin-number: #8bd450;
   --color-pin-boolean: #e5534b;
   --color-pin-duration: #a78bfa;

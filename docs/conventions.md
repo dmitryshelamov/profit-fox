@@ -35,7 +35,12 @@ enforces a rule, the check is the source of truth.
   library operation of a save without saving and return a `ValidationReport`.
 - `Strategies/NodeSettingSpecs` is the one table of simple node settings (`side`, `size`, `operation`, `type`): reading a
   definition in `StrategyJson` and the node catalog both use it. A new setting is added there and nowhere else.
-- `Ports/<Area>` holds ports to external systems and mechanisms (`IMarketHistoryClient`, `IInstrumentRulesProvider`). Port names say what the port does, never which vendor implements it.
+- `Ports/<Area>` holds ports to external systems and mechanisms (`IMarketHistoryClient`, `IInstrumentRulesProvider`, `IInstrumentCatalog`). Port names say what the port does, never which
+  vendor implements it. `IInstrumentCatalog.ListAsync(category)` returns every instrument the exchange lists in a market
+  category (`ListedInstrument`: symbol, base coin, quote coin). `SearchInstrumentsQuery(category, query, limit)` filters that
+  list with the pure function `InstrumentSearch.Find`: a case-insensitive substring (spaces around the query are ignored) of the symbol or a coin, symbols that start
+  with the query first, then by symbol ordinally, cut to `limit` (1 to 100, 20 by default). Its result carries field errors
+  like `GetCandlesQuery`.
 - `Exceptions` holds `BaseApplicationException` and its subclasses, also vendor-neutral (`ExchangeException`).
 - `Workers` holds what the Worker needs to share work with other Workers: `WorkerSettings`, `WorkerIdentity` (the
   lease owner of this process) and `LeaseKeeper`, which renews a lease while the work runs. Work the Worker takes is a
@@ -51,7 +56,9 @@ enforces a rule, the check is the source of truth.
   Both call internal registrars such as `Mediatr/MediatrRegistrar` and `Persistence/Postgres/PostgresRegistrar`; only
   `ConfigureWorker` registers the background services that run work.
 - `Exchanges/<Vendor>` holds adapters over vendor SDKs, including the mapping of domain values to SDK types
-  (`BybitCodes`). `Exchanges/Retry` holds Polly pipelines.
+  (`BybitCodes`). `Exchanges/Retry` holds Polly pipelines. `BybitMarketDataClient` implements `IInstrumentCatalog` (spot in one
+  answer, linear by following the cursor; one attempt per request). The registered `IInstrumentCatalog` is
+  `Exchanges/CachedInstrumentCatalog` over it: a list per category is kept for 5 minutes on `TimeProvider`, a failure is not kept.
 - `Persistence/Postgres/Dapper/Repositories/<Area>` holds repositories, with `Contracts` (`*Db` rows), `Converters`
   (`*DbConverter`) and `Queries` (`*RepositoryQueries`, the SQL). `Persistence/Postgres/FluentMigrator/Migrations` holds
   raw-SQL migrations, `FluentMigrator/Extensions` holds `MigrateToLatestVersion`.
@@ -100,9 +107,18 @@ enforces a rule, the check is the source of truth.
   }
   ```
 
+- The `Bybit` section (`BybitSettings`, bound in `InfrastructureRegistrar`): `RestAddress` sends REST calls to another
+  address instead of the live Bybit, for end-to-end runs against a stub; plain `http://127.0.0.1:port` works. Unset, the
+  client uses the live Bybit.
+
+  ```json
+  "Bybit": { "RestAddress": "http://127.0.0.1:5296" }
+  ```
+
 ## Presentation (`ProfitFox.Presentation`)
 
-- `Controllers` holds controllers only (`BotsController`, `BacktestsController`); request and response types go to
+- `Controllers` holds controllers only (`BotsController`, `BacktestsController`, `InstrumentsController`: `GET /api/market-data/instruments?category&query&limit`
+  → `[{ category, symbol, baseCoin, quoteCoin }]`; field errors 400, exchange unavailable 503); request and response types go to
   `Contracts/<Area>` (`Contracts/Bots`, `Contracts/Backtests`).
 - Mark required contract members with `[Required]`, not the C# `required` keyword: a missing JSON property is then
   reported under its own name, not under `$`.
@@ -152,10 +168,18 @@ enforces a rule, the check is the source of truth.
 React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface text is in Russian.
 
 - `src/app` holds the router (TanStack Router) and the providers (TanStack Query). `src/pages/<screen>` holds one screen
-  each (`strategies`, `strategy-editor`, `nodes`, `node-editor`); a page never imports another page.
+  each (`strategies`, `strategy-editor`, `nodes`, `node-editor`, `bots`, `bot-editor`, `bot`, `backtest-setup`, `backtest`,
+  `backtest-result`, `compare`); a page never imports another page.
 - `src/modules/<area>` holds a feature: `model` for pure functions, `ui` for components, `api.ts` for queries. Other
   code imports a module only through its `index.ts`. `modules/graph-editor/model` is the logic of the editor that can be
   wrong (definition ↔ canvas, pins, wire types, error paths, draft comparison): plain TypeScript without React.
+- Modules of the bot section: `bots` (queries, `BotForm`, server errors by field, `parameterValues` from form text),
+  `backtests` (queries with polling every 2 s while a backtest is unfinished, `BacktestForm`, status, ranges, grid,
+  period, result columns, engine conflicts), `market-data` (instrument search for symbol suggestions, Bybit
+  intervals), `comparison` (the set of results on `useSyncExternalStore` over `sessionStorage`, the bar in
+  `AppShell`, the mark checkbox), `market-chart` (`PriceEquityChart` and `EquityComparisonChart` on
+  `lightweight-charts`, fill markers, candles per point). `shared/format` shows decimal strings with thousands
+  spacing without float math, and UTC dates. Decimal strings become numbers only in `market-chart/model`, for drawing.
 - `src/shared/api` holds the only HTTP client (`openapi-fetch`) and the types generated from the API's OpenAPI document
   in `generated/schema.d.ts`. That file is committed: after changing an API contract, run the API and
   `npm run generate:api`, and commit the result with the change.

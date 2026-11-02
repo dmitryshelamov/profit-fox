@@ -27,7 +27,22 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["BacktestSummaryResponse"][];
+                        "application/json": components["schemas"]["BacktestSummaryResponse"][];
+                        "text/json": components["schemas"]["BacktestSummaryResponse"][];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -49,12 +64,49 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Created */
+                201: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["CreatedResponse"];
+                        "application/json": components["schemas"]["CreatedResponse"];
+                        "text/json": components["schemas"]["CreatedResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -87,7 +139,22 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["BacktestResponse"];
+                        "application/json": components["schemas"]["BacktestResponse"];
+                        "text/json": components["schemas"]["BacktestResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -130,7 +197,84 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["BacktestResultsResponse"];
+                        "application/json": components["schemas"]["BacktestResultsResponse"];
+                        "text/json": components["schemas"]["BacktestResultsResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/backtests/{id}/results/{combination}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    combination: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["BacktestResultResponse"];
+                        "application/json": components["schemas"]["BacktestResultResponse"];
+                        "text/json": components["schemas"]["BacktestResultResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -166,7 +310,33 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["BacktestDetailsResponse"];
+                        "application/json": components["schemas"]["BacktestDetailsResponse"];
+                        "text/json": components["schemas"]["BacktestDetailsResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -198,12 +368,34 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -234,7 +426,11 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["BotSummaryResponse"][];
+                        "application/json": components["schemas"]["BotSummaryResponse"][];
+                        "text/json": components["schemas"]["BotSummaryResponse"][];
+                    };
                 };
             };
         };
@@ -254,12 +450,38 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Created */
+                201: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["CreatedResponse"];
+                        "application/json": components["schemas"]["CreatedResponse"];
+                        "text/json": components["schemas"]["CreatedResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -292,7 +514,22 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["BotResponse"];
+                        "application/json": components["schemas"]["BotResponse"];
+                        "text/json": components["schemas"]["BotResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -313,12 +550,56 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -334,12 +615,34 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -488,6 +791,70 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market-data/instruments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    Category?: string;
+                    query?: string;
+                    /** @description From 1 to 100; 20 when omitted. */
+                    Limit?: number | string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InstrumentResponse"][];
+                        "application/json": components["schemas"]["InstrumentResponse"][];
+                        "text/json": components["schemas"]["InstrumentResponse"][];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -1346,6 +1713,85 @@ export interface components {
                 [key: string]: string;
             };
         };
+        /** @description Fills, trades and the equity curve of a result, at most 5000 points, with the metrics they give. */
+        BacktestDetailsResponse: {
+            metrics: components["schemas"]["MetricsResponse"];
+            fills: components["schemas"]["FillResponse"][];
+            trades: components["schemas"]["TradeResponse"][];
+            equity: components["schemas"]["EquityPointResponse"][];
+        };
+        /** @description Money, rates and the speed are decimal strings: JSON numbers lose precision in JavaScript clients. */
+        BacktestResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            botId: string;
+            /** Format: uuid */
+            strategyId: string;
+            /** Format: int32 */
+            strategyVersion: number | string;
+            /** Format: int32 */
+            engineVersion: number | string;
+            category: string;
+            symbol: string;
+            interval: string;
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            parameters: components["schemas"]["JsonObject"];
+            searchMode: string;
+            simulation: components["schemas"]["SimulationResponse"];
+            rules: components["schemas"]["RulesResponse"];
+            status: string;
+            error: null | string;
+            progress: components["schemas"]["ProgressResponse"];
+            speed: null | string;
+            /** Format: date-time */
+            actualStart: null | string;
+            gaps: components["schemas"]["GapResponse"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            startedAt: null | string;
+            /** Format: date-time */
+            finishedAt: null | string;
+            botChanged: boolean;
+        };
+        BacktestResultResponse: {
+            /** Format: int64 */
+            combination: number | string;
+            /** @description Every parameter of the strategy with the value of the combination. */
+            parameterValues: components["schemas"]["JsonObject"];
+            metrics: components["schemas"]["MetricsResponse"];
+            /** @description As `hh:mm:ss.fffffff`. */
+            calculationTime: string;
+        };
+        BacktestResultsResponse: {
+            /**
+             * Format: int64
+             * @description Results the backtest has so far.
+             */
+            total: number | string;
+            items: components["schemas"]["BacktestResultResponse"][];
+        };
+        BacktestSummaryResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            strategyVersion: number | string;
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            parameters: components["schemas"]["JsonObject"];
+            status: string;
+            error: null | string;
+            progress: components["schemas"]["ProgressResponse"];
+            /** Format: date-time */
+            createdAt: string;
+            botChanged: boolean;
+        };
         /** @description Settings of a bot; a change ignores Guid? BotBody.StrategyId, because the strategy of a bot never changes. */
         BotBody: {
             name: string;
@@ -1360,6 +1806,35 @@ export interface components {
              * @description In the quote asset.
              */
             balance: null | number | string;
+        };
+        /** @description The balance is a decimal string: JSON numbers lose precision in JavaScript clients. */
+        BotResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: uuid */
+            strategyId: string;
+            parameterValues: components["schemas"]["JsonObject"];
+            category: string;
+            symbol: string;
+            interval: string;
+            balance: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        BotSummaryResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: uuid */
+            strategyId: string;
+            category: string;
+            symbol: string;
+            interval: string;
+            balance: string;
+            lastBacktest: null | components["schemas"]["LastBacktestResponse"];
         };
         CloneNodeBody: {
             /** @description Name of the copy; defaults to the source name with a mark. */
@@ -1393,8 +1868,82 @@ export interface components {
             name: string;
             definition: null | components["schemas"]["JsonElement"];
         };
+        /**
+         * @description The end of a group of closes, the equity at it and the lowest equity in the group, with the open time and open of the first
+         *     candle of the group, its highest high, its lowest low and the close of the last candle.
+         */
+        EquityPointResponse: {
+            /** Format: date-time */
+            at: string;
+            equity: string;
+            minEquity: string;
+            /** Format: date-time */
+            openTime: string;
+            open: string;
+            high: string;
+            low: string;
+            close: string;
+        };
+        FillResponse: {
+            /** Format: date-time */
+            at: string;
+            side: string;
+            type: string;
+            price: string;
+            quantity: string;
+            fee: string;
+            /** @description `quote` or `base`. */
+            feeAsset: string;
+        };
+        GapResponse: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+        };
+        InstrumentResponse: {
+            category: string;
+            symbol: string;
+            baseCoin: string;
+            quoteCoin: string;
+        };
         JsonElement: unknown;
         JsonObject: Record<string, never>;
+        /** @description The newest backtest of a bot in the list of bots. */
+        LastBacktestResponse: {
+            /** Format: uuid */
+            id: string;
+            status: string;
+            progress: components["schemas"]["ProgressResponse"];
+        };
+        /** @description Money and percentages are decimal strings, counts are numbers; names match the codes results sort by. */
+        MetricsResponse: {
+            startEquity: string;
+            endEquity: string;
+            pnl: string;
+            realizedPnl: string;
+            unrealizedPnl: string;
+            return: string;
+            maxDrawdown: string;
+            returnToDrawdown: null | string;
+            /** Format: int32 */
+            closedTrades: number | string;
+            winRate: null | string;
+            /** Format: int32 */
+            fills: number | string;
+            fees: string;
+            maxPositionCost: string;
+            maxPositionCostPercent: string;
+            maxCapitalUsed: string;
+            timeInPosition: string;
+            timeUnderWater: string;
+            /** Format: int32 */
+            longestUnderWater: number | string;
+            /** Format: int64 */
+            skippedOrders: number | string;
+            /** Format: int32 */
+            candles: number | string;
+        };
         NodeResponse: {
             id: string;
             title: string;
@@ -1418,6 +1967,23 @@ export interface components {
             detail?: null | string;
             instance?: null | string;
         };
+        /** @description Candles loaded of those expected while loading, combinations calculated of all while running. */
+        ProgressResponse: {
+            /** Format: int64 */
+            loadedCandles: number | string;
+            /** Format: int64 */
+            expectedCandles: number | string;
+            /** Format: int64 */
+            calculatedCombinations: number | string;
+            /** Format: int64 */
+            totalCombinations: number | string;
+        };
+        RulesResponse: {
+            tickSize: string;
+            quantityStep: string;
+            minQuantity: string;
+            minAmount: string;
+        };
         SettingResponse: {
             /** @description The property under `settings` of a node, such as `side`. */
             name: string;
@@ -1440,6 +2006,13 @@ export interface components {
             slippagePercent?: null | number | string;
             /** @description `touch` or `breakout`. */
             limitFillMode?: null | string;
+        };
+        SimulationResponse: {
+            balance: string;
+            limitFeePercent: string;
+            marketFeePercent: string;
+            slippagePercent: string;
+            limitFillMode: string;
         };
         StrategyResponse: {
             /** Format: uuid */
@@ -1471,6 +2044,17 @@ export interface components {
             definition: components["schemas"]["JsonObject"];
             /** @description Every composite node the version uses, built-in ones included. */
             composites: components["schemas"]["VersionNodeResponse"][];
+        };
+        /** @description A position cycle; one open at the end has no close, exit price or result. Fees are in the quote asset. */
+        TradeResponse: {
+            /** Format: date-time */
+            openedAt: string;
+            /** Format: date-time */
+            closedAt: null | string;
+            entryPrice: string;
+            exitPrice: null | string;
+            pnl: null | string;
+            fees: string;
         };
         UsageResponse: {
             /** @description `strategy` or `node`. */

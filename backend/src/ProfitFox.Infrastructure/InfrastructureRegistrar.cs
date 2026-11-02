@@ -1,3 +1,5 @@
+using Bybit.Net;
+
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -6,6 +8,7 @@ using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.Workers;
 using ProfitFox.Domain.Services.Backtests;
 using ProfitFox.Infrastructure.BackgroundServices;
+using ProfitFox.Infrastructure.Exchanges;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
 using ProfitFox.Infrastructure.Exchanges.Retry;
 using ProfitFox.Infrastructure.Mediatr;
@@ -45,10 +48,21 @@ public static class InfrastructureRegistrar
         PostgresRegistrar.Configure(configuration, services);
 
         services.AddSingleton(TimeProvider.System);
-        services.AddBybit();
+        BybitSettings bybit = configuration.GetSection("Bybit").Get<BybitSettings>() ?? new BybitSettings();
+        services.AddBybit(options =>
+        {
+            if (!string.IsNullOrEmpty(bybit.RestAddress))
+            {
+                options.Rest.Environment = BybitEnvironment.CreateCustom("profit-fox", bybit.RestAddress, BybitEnvironment.Live.SocketBaseAddress);
+            }
+        });
         services.AddSingleton<ExchangeResilienceExecutor>();
         services.AddTransient<IMarketHistoryClient, BybitMarketDataClient>();
         services.AddTransient<IInstrumentRulesProvider, BybitMarketDataClient>();
+        services.AddTransient<BybitMarketDataClient>();
+        services.AddSingleton<IInstrumentCatalog>(provider => new CachedInstrumentCatalog(
+            provider.GetRequiredService<BybitMarketDataClient>(),
+            provider.GetRequiredService<TimeProvider>()));
         services.AddSingleton(configuration.GetSection("Backtests").Get<BacktestSettings>() ?? new BacktestSettings());
         services.AddSingleton(new EngineVersion(EngineVersion.Current));
 

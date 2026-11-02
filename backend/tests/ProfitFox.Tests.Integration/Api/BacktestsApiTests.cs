@@ -3,8 +3,12 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
+using ProfitFox.Domain.Entities.Backtests;
+using ProfitFox.Domain.Entities.Backtests.Enums;
 using ProfitFox.Domain.Services.Backtests;
+using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Tests.Integration.Infrastructure;
+using ProfitFox.Tests.Shared.Builders.Strategies;
 using ProfitFox.Tests.Shared.Fixtures.Strategies;
 
 using Shouldly;
@@ -146,6 +150,52 @@ public class BacktestsApiTests
 
         list.EnumerateArray().Select(item => item.GetProperty("id").GetGuid()).ShouldBe([second, first]);
         list[0].GetProperty("progress").GetProperty("totalCombinations").GetInt64().ShouldBe(3);
+    }
+
+    [Test]
+    public async Task Backtests_created_at_the_same_moment_are_listed_with_the_greater_id_first()
+    {
+        var from = DateTimeOffset.Parse("2024-01-01T00:00:00Z");
+        var greater = Guid.Parse("ffffffff-0000-0000-0000-000000000000");
+        var lesser = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        await _scenario.CreateAsync(from, from.AddDays(1), status: BacktestStatus.Succeeded, id: lesser);
+        await _scenario.CreateAsync(from, from.AddDays(1), status: BacktestStatus.Succeeded, id: greater);
+
+        JsonElement list = await _client.GetFromJsonAsync<JsonElement>($"/api/bots/{_scenario.BotId}/backtests");
+
+        list.EnumerateArray().Select(item => item.GetProperty("id").GetGuid()).ShouldBe([greater, lesser]);
+    }
+
+    // Scenario "Диапазоны и ошибка в списке".
+    [Test]
+    public async Task Listed_backtest_gives_its_parameter_ranges_status_and_error()
+    {
+        var parameters = new Dictionary<string, ParameterSpec> { ["fast"] = ParameterSpec.Between(Values.Number(5m), Values.Number(15m), Values.Number(5m)) };
+        await _scenario.CreateAsync(DateTimeOffset.Parse("2024-01-01T00:00:00Z"), DateTimeOffset.Parse("2024-01-02T00:00:00Z"), parameters, BacktestStatus.Failed, error: "Candles could not be loaded.");
+
+        JsonElement item = (await _client.GetFromJsonAsync<JsonElement>($"/api/bots/{_scenario.BotId}/backtests")).EnumerateArray().ShouldHaveSingleItem();
+
+        JsonElement fast = item.GetProperty("parameters").GetProperty("fast");
+        (fast.GetProperty("min").GetDecimal(), fast.GetProperty("max").GetDecimal(), fast.GetProperty("step").GetDecimal()).ShouldBe((5m, 15m, 5m));
+        (item.GetProperty("status").GetString(), item.GetProperty("error").GetString()).ShouldBe(("Failed", "Candles could not be loaded."));
+    }
+
+    // Scenario "Бот изменился в списке".
+    [Test]
+    public async Task Listed_backtest_shows_the_bot_changed_only_for_backtests_before_the_strategy_edit()
+    {
+        var from = DateTimeOffset.Parse("2024-01-01T00:00:00Z");
+        Backtest before = await _scenario.CreateAsync(from, from.AddDays(1), status: BacktestStatus.Succeeded);
+        _factory.Time.Advance(TimeSpan.FromMinutes(1));
+        JsonNode changed = JsonNode.Parse(StrategyFixtures.Json("ema"))!;
+        changed["parameters"]![2]!["default"] = 300;
+        await _client.PutAsJsonAsync($"/api/strategies/{_scenario.StrategyId}", new { name = "ema", definition = changed });
+        _factory.Time.Advance(TimeSpan.FromMinutes(1));
+        Backtest after = await _scenario.CreateAsync(from, from.AddDays(1), status: BacktestStatus.Succeeded);
+
+        JsonElement list = await _client.GetFromJsonAsync<JsonElement>($"/api/bots/{_scenario.BotId}/backtests");
+
+        list.EnumerateArray().Select(item => (item.GetProperty("id").GetGuid(), item.GetProperty("botChanged").GetBoolean())).ShouldBe([(after.Id, false), (before.Id, true)]);
     }
 
     // Scenarios "Отмена завершённого" and the cancel of a pending backtest.

@@ -19,7 +19,7 @@ using MarketCategory = ProfitFox.Domain.Entities.MarketData.Enums.MarketCategory
 namespace ProfitFox.Infrastructure.Exchanges.Bybit;
 
 /// <summary>Public Bybit v5 market data through Bybit.Net; no API key, never sends orders.</summary>
-internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResilienceExecutor resilience) : IMarketHistoryClient, IInstrumentRulesProvider
+internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResilienceExecutor resilience) : IMarketHistoryClient, IInstrumentRulesProvider, IInstrumentCatalog
 {
     private const int PageSize = 1000;
 
@@ -103,6 +103,44 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
                         linear.LotSizeFilter!.QuantityStep,
                         linear.LotSizeFilter.MinOrderQuantity,
                         linear.LotSizeFilter.MinNotionalValue ?? 0m);
+                },
+                cancellationToken);
+        }
+        catch (TransientExchangeException exception)
+        {
+            throw new ExchangeUnavailableException($"Bybit is unavailable: {exception.Message}");
+        }
+    }
+
+    /// <summary>Every instrument of the category, one attempt per request: a person waits for the answer of a search.</summary>
+    public async Task<IReadOnlyList<ListedInstrument>> ListAsync(MarketCategory category, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await resilience.ExecuteOnceAsync(
+                async token =>
+                {
+                    if (category == MarketCategory.Spot)
+                    {
+                        // Bybit lists all spot instruments in one answer.
+                        return Unwrap(await bybit.V5Api.ExchangeData.GetSpotSymbolsAsync(ct: token)).List
+                            .Select(spot => new ListedInstrument(category, spot.Name, spot.BaseAsset, spot.QuoteAsset))
+                            .ToList();
+                    }
+
+                    var listed = new List<ListedInstrument>();
+                    string? cursor = null;
+
+                    do
+                    {
+                        BybitResponse<BybitLinearInverseSymbol> page = Unwrap(
+                            await bybit.V5Api.ExchangeData.GetLinearInverseSymbolsAsync(category.ToBybit(), limit: PageSize, cursor: cursor, ct: token));
+                        listed.AddRange(page.List.Select(linear => new ListedInstrument(category, linear.Name, linear.BaseAsset, linear.QuoteAsset)));
+                        cursor = page.NextPageCursor;
+                    }
+                    while (!string.IsNullOrEmpty(cursor));
+
+                    return listed;
                 },
                 cancellationToken);
         }

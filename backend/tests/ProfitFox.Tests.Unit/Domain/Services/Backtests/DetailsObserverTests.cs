@@ -88,6 +88,33 @@ public class DetailsObserverTests
         curve[^1].Equity.ShouldBe(details.Details().Metrics.EndEquity);
     }
 
+    // Scenario "Цены группы".
+    [Test]
+    public void Equity_point_of_a_group_carries_the_open_time_open_highest_high_lowest_low_and_last_close()
+    {
+        var candles = new List<Candle> { Candle(0, 100m, 104m, 99m, 103m), Candle(1, 103m, 106m, 101m, 102m) };
+        candles.AddRange(Enumerable.Range(2, 8000).Select(hour => Flat(hour, 102m)));
+        var details = new DetailsObserver(1000m);
+
+        Replay(StrategyJson.ParseStrategy(StrategyFixtures.Element("ladder")), Conditions.Reference).Run(Start, candles, details);
+
+        EquityPoint first = details.Details().Equity[0];
+        (first.OpenTime, first.Open, first.High, first.Low, first.Close).ShouldBe((Start, 100m, 106m, 99m, 102m));
+    }
+
+    // Scenario "Одна свеча в точке".
+    [Test]
+    public void Equity_point_of_a_single_candle_carries_the_prices_of_that_candle()
+    {
+        Candle[] candles = [Candle(0, 100m, 104m, 99m, 103m), Candle(1, 103m, 106m, 101m, 102m), Candle(2, 102m, 102m, 97m, 98m)];
+        var details = new DetailsObserver(1000m);
+
+        Replay(StrategyJson.ParseStrategy(StrategyFixtures.Element("ladder")), Conditions.Reference).Run(Start, candles, details);
+
+        details.Details().Equity.Select(point => (point.OpenTime, point.Open, point.High, point.Low, point.Close)).ShouldBe(
+            [.. candles.Select(candle => (candle.OpenTime, candle.Open.Value, candle.High.Value, candle.Low.Value, candle.Close.Value))]);
+    }
+
     [Test]
     public void Details_without_candles_have_no_fills_trades_or_curve()
     {

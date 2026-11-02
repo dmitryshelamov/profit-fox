@@ -115,6 +115,13 @@ internal static class BacktestRepositoryQueries
         return new CommandDefinition($"{SelectSql} WHERE bot_id = @BotId ORDER BY created_at DESC, id DESC", new { BotId = botId }, cancellationToken: cancellationToken);
     }
 
+    internal static CommandDefinition GetLastOfBots(CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            $"""SELECT DISTINCT ON ("BotId") * FROM ({SelectSql}) AS backtest ORDER BY "BotId", "CreatedAt" DESC, "Id" DESC""",
+            cancellationToken: cancellationToken);
+    }
+
     internal static CommandDefinition GetUnfinished(int engineVersion, CancellationToken cancellationToken)
     {
         return new CommandDefinition(

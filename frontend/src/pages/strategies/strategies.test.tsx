@@ -147,3 +147,26 @@ describe('strategy list actions', () => {
     expect(await put.json()).toEqual({ name: 'EMA 2', definition });
   });
 });
+
+describe('strategy list: bot creation', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // Scenario "Создание из списка стратегий".
+  it('opens the new bot form with the strategy', async () => {
+    fakeApi({
+      'GET /api/strategies': () => json([emaSummary, emaShortSummary]),
+      [`GET /api/strategies/${emaShortSummary.id}`]: () =>
+        json({ ...emaShortSummary, definition: { formatVersion: 1, nodes: [] } }),
+    });
+    const { history } = renderApp('/strategies');
+
+    const row = (await screen.findByRole('link', { name: 'EMA Short' })).closest('tr')!;
+    await userEvent.click(within(row).getByRole('button', { name: 'Действия: EMA Short' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Создать бота' }));
+
+    await waitFor(() => expect(history.location.pathname).toBe('/bots/new'));
+    expect(await screen.findByLabelText('Стратегия')).toHaveValue(emaShortSummary.id);
+  });
+});

@@ -5,6 +5,7 @@ export {
   saveStrategy,
   strategiesQuery,
   strategyQuery,
+  strategyVersionQuery,
   validateStrategy,
 } from './api';
 export { directionTitles } from './directions';

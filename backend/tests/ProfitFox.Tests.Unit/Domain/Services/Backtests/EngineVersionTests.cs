@@ -114,7 +114,11 @@ public class EngineVersionTests
             var details = new DetailsObserver(simulation.Balance);
             backtest.Replay(snapshot, values).Run(Start, candles, details);
 
-            yield return $"{strategy} {combination} {JsonSerializer.Serialize(details.Details())}";
+            // The curve is hashed without the candle prices of its points: they do not come from the calculation.
+            BacktestDetails result = details.Details();
+            var hashed = new { result.Metrics, result.Fills, result.Trades, Equity = result.Equity.Select(point => new { point.At, point.Equity, point.MinEquity }) };
+
+            yield return $"{strategy} {combination} {JsonSerializer.Serialize(hashed)}";
         }
     }
 

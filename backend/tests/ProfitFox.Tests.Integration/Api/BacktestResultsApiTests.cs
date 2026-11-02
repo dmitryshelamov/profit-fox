@@ -117,6 +117,32 @@ public class BacktestResultsApiTests
         (await _client.GetAsync($"/api/backtests/{Guid.NewGuid()}/results")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
+    // Scenarios "Результат после пропуска" and "Комбинация без результата" of the requirement "Чтение одного результата".
+    [Test]
+    public async Task One_result_is_read_by_its_combination_after_a_gap_and_a_missing_one_is_not_found()
+    {
+        Backtest cancelled = await _scenario.CreateAsync(From, From.AddHours(Closes.Length), status: BacktestStatus.Cancelled);
+        BacktestResult template = (await _scenario.ResultsAsync(_backtest))[0];
+        await _scenario.StoreResultsAsync(
+            [.. Enumerable.Range(0, 100).Concat(Enumerable.Range(200, 100)).Select(number => template with { BacktestId = cancelled.Id, Combination = number })]);
+
+        HttpResponseMessage found = await _client.GetAsync($"/api/backtests/{cancelled.Id}/results/250");
+        HttpResponseMessage missing = await _client.GetAsync($"/api/backtests/{cancelled.Id}/results/150");
+
+        found.StatusCode.ShouldBe(HttpStatusCode.OK);
+        JsonElement item = await found.Content.ReadFromJsonAsync<JsonElement>();
+        item.GetProperty("combination").GetInt64().ShouldBe(250);
+        item.GetProperty("parameterValues").GetProperty("priceDropForBuy").GetDecimal().ShouldBe(0.01m);
+        Metric(item, "startEquity").ShouldBe(1000m);
+        missing.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Test]
+    public async Task A_result_of_an_unknown_backtest_is_not_found()
+    {
+        (await _client.GetAsync($"/api/backtests/{Guid.NewGuid()}/results/0")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
     private async Task<JsonElement> ResultsAsync(string query)
     {
         return await _client.GetFromJsonAsync<JsonElement>($"/api/backtests/{_backtest.Id}/results{query}");

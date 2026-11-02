@@ -10,6 +10,15 @@ public class FakeBybitHandler : HttpMessageHandler
     /// <summary>Instruments Bybit lists, as (category, symbol).</summary>
     public HashSet<(string Category, string Symbol)> Instruments { get; } = [];
 
+    /// <summary>Base and quote coins of listed instruments; an instrument without them is listed with empty coins.</summary>
+    public Dictionary<(string Category, string Symbol), (string BaseCoin, string QuoteCoin)> Coins { get; } = [];
+
+    /// <summary>Instruments per page of a linear list without a symbol; without it Bybit's own <c>limit</c> decides. Spot is never paged.</summary>
+    public int? LinearPageSize { get; set; }
+
+    /// <summary>The <c>category</c> of every instruments-info request without a symbol, in order.</summary>
+    public List<string> ListRequests { get; } = [];
+
     /// <summary>Price and lot filters of listed instruments, as Bybit writes them; an instrument without them is listed bare.</summary>
     public Dictionary<(string Category, string Symbol), (string TickSize, string QuantityStep, string MinQuantity, string MinAmount)> Rules { get; } = [];
 
@@ -45,7 +54,7 @@ public class FakeBybitHandler : HttpMessageHandler
         NameValueCollection query = HttpUtility.ParseQueryString(request.RequestUri!.Query);
         string result = request.RequestUri.AbsolutePath switch
         {
-            "/v5/market/instruments-info" => InstrumentsInfo(query["category"]!, query["symbol"]!),
+            "/v5/market/instruments-info" => query["symbol"] is { } symbol ? InstrumentsInfo(query["category"]!, symbol) : InstrumentsList(query),
             "/v5/market/kline" => Kline(query),
             _ => throw new InvalidOperationException($"Unexpected Bybit request {request.RequestUri}")
         };
@@ -67,6 +76,24 @@ public class FakeBybitHandler : HttpMessageHandler
                 : $$""","priceFilter":{"minPrice":"0.1","maxPrice":"1999999","tickSize":"{{rules.TickSize}}"},"lotSizeFilter":{"maxOrderQty":"100","minOrderQty":"{{rules.MinQuantity}}","qtyStep":"{{rules.QuantityStep}}","minNotionalValue":"{{rules.MinAmount}}"}""";
 
         return $$"""{"category":"{{category}}","list":[{"symbol":"{{symbol}}","status":"Trading"{{filters}}}]}""";
+    }
+
+    private string InstrumentsList(NameValueCollection query)
+    {
+        string category = query["category"]!;
+        ListRequests.Add(category);
+        var all = Instruments.Where(instrument => instrument.Category == category).OrderBy(instrument => instrument.Symbol, StringComparer.Ordinal).ToList();
+        var pageSize = category == "linear" ? LinearPageSize ?? int.Parse(query["limit"] ?? "500") : all.Count;
+        var offset = int.Parse(query["cursor"] ?? "0");
+        IEnumerable<string> items = all.Skip(offset).Take(pageSize).Select(instrument =>
+        {
+            (string baseCoin, string quoteCoin) = Coins.GetValueOrDefault(instrument, ("", ""));
+
+            return $$"""{"symbol":"{{instrument.Symbol}}","baseCoin":"{{baseCoin}}","quoteCoin":"{{quoteCoin}}","status":"Trading"}""";
+        });
+        var cursor = category == "linear" && offset + pageSize < all.Count ? (offset + pageSize).ToString() : "";
+
+        return $$"""{"category":"{{category}}","list":[{{string.Join(",", items)}}],"nextPageCursor":"{{cursor}}"}""";
     }
 
     private string Kline(NameValueCollection query)

@@ -1,5 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 
+import { vi } from 'vitest';
+
 // jsdom does not implement scrolling; the router restores scroll position on navigation.
 window.scrollTo = () => undefined;
 
@@ -45,4 +47,33 @@ Object.defineProperties(HTMLElement.prototype, {
       return parseFloat(this.style.width) || 160;
     },
   },
+});
+
+// jsdom has no canvas, so the chart library is replaced by series that keep the data they were given.
+vi.mock('lightweight-charts', () => {
+  const series = () => ({
+    setData: vi.fn(),
+    applyOptions: vi.fn(),
+    priceScale: () => ({ applyOptions: vi.fn() }),
+  });
+  const timeScale = {
+    fitContent: vi.fn(),
+    getVisibleLogicalRange: vi.fn(() => null),
+    setVisibleLogicalRange: vi.fn(),
+    subscribeVisibleLogicalRangeChange: vi.fn(),
+    unsubscribeVisibleLogicalRangeChange: vi.fn(),
+  };
+
+  return {
+    CandlestickSeries: 'Candlestick',
+    LineSeries: 'Line',
+    ColorType: { Solid: 'solid' },
+    createChart: vi.fn(() => ({
+      addSeries: vi.fn(series),
+      removeSeries: vi.fn(),
+      remove: vi.fn(),
+      timeScale: () => timeScale,
+    })),
+    createSeriesMarkers: vi.fn(() => ({ setMarkers: vi.fn() })),
+  };
 });
