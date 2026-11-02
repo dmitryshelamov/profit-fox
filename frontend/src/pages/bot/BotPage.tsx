@@ -12,6 +12,7 @@ import {
   useInvalidateOnFinish,
 } from '@/modules/backtests';
 import { botQuery } from '@/modules/bots';
+import { EnvironmentBadge } from '@/modules/exchange-accounts';
 import { instrumentsQuery, intervalLabel } from '@/modules/market-data';
 import { strategiesQuery, strategyQuery } from '@/modules/strategies';
 import { formatDay, formatMoment, groupDigits } from '@/shared/format/format';
@@ -79,6 +80,23 @@ export function BotPage({ botId }: { botId: string }) {
             {strategyName} · {data.category} · {data.symbol} · {intervalLabel(data.interval)} ·
             баланс {groupDigits(data.balance)}
             {quoteCoin ? ` ${quoteCoin}` : ''}
+          </p>
+          <p className="flex items-center gap-2 text-sm text-muted">
+            Аккаунт:{' '}
+            {data.exchangeAccount ? (
+              <>
+                <Link
+                  to="/accounts/$accountId"
+                  params={{ accountId: data.exchangeAccount.id }}
+                  className="font-semibold text-accent hover:underline"
+                >
+                  {data.exchangeAccount.name}
+                </Link>
+                <EnvironmentBadge environment={data.exchangeAccount.environment} />
+              </>
+            ) : (
+              'Без аккаунта'
+            )}
           </p>
         </div>
         <div className="flex gap-2">

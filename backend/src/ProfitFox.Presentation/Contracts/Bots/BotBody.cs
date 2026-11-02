@@ -26,4 +26,7 @@ public sealed class BotBody
     /// <summary>In the quote asset.</summary>
     [Required]
     public decimal? Balance { get; init; }
+
+    /// <summary>The exchange account the bot will trade with; without it, the bot has none.</summary>
+    public Guid? ExchangeAccountId { get; init; }
 }

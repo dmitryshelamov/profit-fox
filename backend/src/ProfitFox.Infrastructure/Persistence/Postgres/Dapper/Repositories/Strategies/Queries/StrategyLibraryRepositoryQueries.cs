@@ -44,16 +44,18 @@ internal static class StrategyLibraryRepositoryQueries
 
     private const string SelectBotsSql = """
                                          SELECT id, name, strategy_id AS "StrategyId", parameter_values::text AS "ParameterValues", category, symbol, "interval",
-                                             balance, created_at AS "CreatedAt", updated_at AS "UpdatedAt"
+                                             balance, created_at AS "CreatedAt", updated_at AS "UpdatedAt", exchange_account_id AS "ExchangeAccountId"
                                          FROM bots
                                          """;
 
     private const string UpsertBotSql = """
-                                        INSERT INTO bots (id, name, strategy_id, parameter_values, category, symbol, "interval", balance, created_at, updated_at)
-                                        VALUES (@Id, @Name, @StrategyId, @ParameterValues::jsonb, @Category, @Symbol, @Interval, @Balance, @CreatedAt, @UpdatedAt)
+                                        INSERT INTO bots (id, name, strategy_id, parameter_values, category, symbol, "interval", balance, created_at, updated_at,
+                                            exchange_account_id)
+                                        VALUES (@Id, @Name, @StrategyId, @ParameterValues::jsonb, @Category, @Symbol, @Interval, @Balance, @CreatedAt, @UpdatedAt,
+                                            @ExchangeAccountId)
                                         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, parameter_values = EXCLUDED.parameter_values,
                                             category = EXCLUDED.category, symbol = EXCLUDED.symbol, "interval" = EXCLUDED."interval",
-                                            balance = EXCLUDED.balance, updated_at = EXCLUDED.updated_at
+                                            balance = EXCLUDED.balance, updated_at = EXCLUDED.updated_at, exchange_account_id = EXCLUDED.exchange_account_id
                                         """;
 
     private const string UpsertStrategySql = """

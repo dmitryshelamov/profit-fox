@@ -1,5 +1,6 @@
-// A local stand-in for Bybit in end-to-end tests: deterministic instruments and candles over REST, so no test ever
-// reaches the exchange. Response shapes follow the integration tests' FakeBybitHandler.
+// A local stand-in for Bybit in end-to-end tests: deterministic instruments and candles over REST, and the private
+// calls about an account key, so no test ever reaches the exchange. Signatures are not checked: the key alone picks the
+// answer (`e2e-valid-<uid>`, `e2e-withdraw`, anything else is rejected). Response shapes follow the integration tests' FakeBybitHandler.
 // Usage: node e2e/bybit-stub.ts <port>
 import { createServer, type ServerResponse } from 'node:http';
 
@@ -158,6 +159,66 @@ function instrumentsInfo(url: URL) {
   });
 }
 
+/** What Bybit tells about a key: a unified account that trades spot and linear, without withdrawals unless asked. */
+function apiKeyInfo(key: string) {
+  const valid = /^e2e-valid-(\d+)$/.exec(key);
+
+  if (!valid && key !== 'e2e-withdraw') {
+    return {
+      retCode: 10003,
+      retMsg: 'API key is invalid.',
+      result: {},
+      retExtInfo: {},
+      time: Date.now(),
+    };
+  }
+
+  return ok({
+    id: '1',
+    note: 'e2e',
+    apiKey: key,
+    readOnly: 0,
+    secret: '',
+    permissions: {
+      ContractTrade: ['Order', 'Position'],
+      Spot: ['SpotTrade'],
+      Wallet: valid ? ['AccountTransfer'] : ['AccountTransfer', 'Withdraw'],
+    },
+    ips: ['*'],
+    type: 1,
+    unified: 0,
+    uta: 1,
+    userID: valid ? Number(valid[1]) : 1,
+    isMaster: true,
+  });
+}
+
+/** The same balance for every account: 1000 USDT and 0.01 BTC. */
+function walletBalance(key: string) {
+  if (!key.startsWith('e2e-valid-')) {
+    return {
+      retCode: 10003,
+      retMsg: 'API key is invalid.',
+      result: {},
+      retExtInfo: {},
+      time: Date.now(),
+    };
+  }
+
+  return ok({
+    list: [
+      {
+        accountType: 'UNIFIED',
+        totalEquity: '1675.31',
+        coin: [
+          { coin: 'USDT', walletBalance: '1000', usdValue: '1000.25' },
+          { coin: 'BTC', walletBalance: '0.01', usdValue: '675.06' },
+        ],
+      },
+    ],
+  });
+}
+
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? '/', `http://127.0.0.1:${port}`);
 
@@ -167,6 +228,10 @@ const server = createServer((request, response) => {
     send(response, klines(url));
   } else if (url.pathname === '/v5/market/instruments-info') {
     send(response, instrumentsInfo(url));
+  } else if (url.pathname === '/v5/user/query-api') {
+    send(response, apiKeyInfo(String(request.headers['x-bapi-api-key'] ?? '')));
+  } else if (url.pathname === '/v5/account/wallet-balance') {
+    send(response, walletBalance(String(request.headers['x-bapi-api-key'] ?? '')));
   } else if (url.pathname === '/v5/market/time') {
     const now = Date.now();
     send(response, {

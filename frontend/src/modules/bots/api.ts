@@ -24,6 +24,8 @@ export interface BotInput {
   readonly symbol: string;
   readonly interval: string;
   readonly balance: string;
+  /** The exchange account the bot will trade with; `null` for none. */
+  readonly exchangeAccountId: string | null;
 }
 
 function bodyOf(input: BotInput): Schemas['BotBody'] {

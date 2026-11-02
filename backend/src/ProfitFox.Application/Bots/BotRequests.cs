@@ -5,8 +5,11 @@ using ProfitFox.Application.MarketData;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.Strategies;
 using ProfitFox.Domain.Entities.Bots.Enums;
+using ProfitFox.Domain.Entities.ExchangeAccounts;
 using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Domain.Exceptions;
+using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.Bots;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
@@ -80,6 +83,18 @@ public static class BotRequests
         }
     }
 
+    private static async Task<T> Check<T>(Func<Task<T>> operation)
+    {
+        try
+        {
+            return await operation();
+        }
+        catch (BotValidationException exception)
+        {
+            throw new ValidationFailedException(Errors(exception.Errors));
+        }
+    }
+
     /// <exception cref="ValidationFailedException">The exchange has no such symbol in the category.</exception>
     /// <exception cref="ExchangeException">The exchange could not confirm the symbol.</exception>
     public static async Task EnsureListedAsync(IMarketHistoryClient marketHistory, Instrument instrument, CancellationToken cancellationToken)
@@ -89,6 +104,29 @@ public static class BotRequests
             throw new ValidationFailedException(
                 new Dictionary<string, string> { ["symbol"] = $"Bybit has no {instrument.Symbol} in {instrument.Category.ToCode()}." });
         }
+    }
+
+    /// <summary>The account a bot is to trade with, <c>null</c> for none.</summary>
+    /// <exception cref="ValidationFailedException">There is no such account.</exception>
+    public static async Task<BotAccount?> AccountAsync(IExchangeAccountRepository accounts, Guid? id, CancellationToken cancellationToken)
+    {
+        if (id is not { } accountId)
+        {
+            return null;
+        }
+
+        ExchangeAccount account = await accounts.GetAsync(accountId, cancellationToken)
+                                  ?? throw new ValidationFailedException(new Dictionary<string, string> { ["exchangeAccountId"] = "No such exchange account." });
+
+        return new BotAccount(account.Id, account.Categories);
+    }
+
+    /// <summary>Saves the library; a bot whose account was deleted meanwhile is an error of the account.</summary>
+    /// <exception cref="ValidationFailedException">The account of a saved bot is gone.</exception>
+    /// <exception cref="StateConflictException">The library changed while the bot was being saved.</exception>
+    public static async Task SaveAsync(IStrategyLibraryRepository repository, StrategyLibrary library, CancellationToken cancellationToken)
+    {
+        StrategyRequests.EnsureSaved(await Check(() => repository.SaveAsync(library.Change, library.Revision, cancellationToken)));
     }
 
     public static Dictionary<string, string> Errors(IReadOnlyList<BotError> errors)
@@ -103,6 +141,7 @@ public static class BotRequests
             BotField.Strategy => "strategyId",
             BotField.Parameter => $"parameterValues.{error.Parameter}",
             BotField.Category => "category",
+            BotField.Account => "exchangeAccountId",
             _ => "balance"
         };
     }

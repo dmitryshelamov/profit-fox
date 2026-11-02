@@ -6,7 +6,8 @@ namespace ProfitFox.Domain.Entities.Bots;
 
 /// <summary>
 ///     A strategy set up to trade. <see cref="ParameterValues" /> holds only the values the owner gave; the other parameters take
-///     the default of the latest strategy version. <see cref="Balance" /> is in the quote asset.
+///     the default of the latest strategy version. <see cref="Balance" /> is in the quote asset. <see cref="ExchangeAccountId" /> is the
+///     account the bot will trade with, <c>null</c> for a bot that only runs backtests.
 /// </summary>
 public sealed record Bot(
     Guid Id,
@@ -17,4 +18,5 @@ public sealed record Bot(
     Interval Interval,
     decimal Balance,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    Guid? ExchangeAccountId = null);

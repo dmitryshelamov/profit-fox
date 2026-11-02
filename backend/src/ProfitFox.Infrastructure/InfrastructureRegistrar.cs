@@ -4,7 +4,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 using ProfitFox.Application.Backtests;
+using ProfitFox.Application.ExchangeAccounts;
+using ProfitFox.Application.Ports.ExchangeAccounts;
 using ProfitFox.Application.Ports.MarketData;
+using ProfitFox.Application.Ports.Security;
 using ProfitFox.Application.Workers;
 using ProfitFox.Domain.Services.Backtests;
 using ProfitFox.Infrastructure.BackgroundServices;
@@ -13,6 +16,7 @@ using ProfitFox.Infrastructure.Exchanges.Bybit;
 using ProfitFox.Infrastructure.Exchanges.Retry;
 using ProfitFox.Infrastructure.Mediatr;
 using ProfitFox.Infrastructure.Persistence.Postgres;
+using ProfitFox.Infrastructure.Security;
 
 namespace ProfitFox.Infrastructure;
 
@@ -22,6 +26,14 @@ public static class InfrastructureRegistrar
     public static void Configure(IConfiguration configuration, IServiceCollection services)
     {
         ConfigureCommon(configuration, services);
+
+        // Only the API decrypts secrets for now, so only the API refuses to start without the key (design, decision 4).
+        services.AddOptions<ExchangeAccountSettings>()
+            .Bind(configuration.GetSection("ExchangeAccounts"))
+            .Validate(
+                settings => IsMasterKey(settings.MasterKey),
+                "ExchangeAccounts__MasterKey must be set to 32 random bytes in base64, such as the output of `openssl rand -base64 32`.")
+            .ValidateOnStart();
         services.AddHostedService<StrategyVersionsInitializationService>();
     }
 
@@ -56,6 +68,8 @@ public static class InfrastructureRegistrar
                 options.Rest.Environment = BybitEnvironment.CreateCustom("profit-fox", bybit.RestAddress, BybitEnvironment.Live.SocketBaseAddress);
             }
         });
+        services.AddSingleton(bybit);
+        services.AddHttpClient<IExchangeKeyInspector, BybitAccountClient>();
         services.AddSingleton<ExchangeResilienceExecutor>();
         services.AddTransient<IMarketHistoryClient, BybitMarketDataClient>();
         services.AddTransient<IInstrumentRulesProvider, BybitMarketDataClient>();
@@ -65,11 +79,20 @@ public static class InfrastructureRegistrar
             provider.GetRequiredService<TimeProvider>()));
         services.AddSingleton(configuration.GetSection("Backtests").Get<BacktestSettings>() ?? new BacktestSettings());
         services.AddSingleton(new EngineVersion(EngineVersion.Current));
+        services.AddSingleton(configuration.GetSection("ExchangeAccounts").Get<ExchangeAccountSettings>() ?? new ExchangeAccountSettings());
+        services.AddSingleton<ISecretProtector, AesGcmSecretProtector>();
 
         // MediatR registers the Worker's handlers in the API too, so what they take must resolve there as well.
         services.AddSingleton(Settings(configuration));
         services.AddSingleton(new WorkerIdentity(Guid.NewGuid()));
         services.AddSingleton<BacktestInputCache>();
+    }
+
+    private static bool IsMasterKey(string? value)
+    {
+        var key = new byte[32];
+
+        return Convert.TryFromBase64String(value ?? string.Empty, key, out int length) && length == key.Length;
     }
 
     private static WorkerSettings Settings(IConfiguration configuration)

@@ -39,6 +39,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             Боты
           </Link>
+          <Link
+            to="/accounts"
+            className={navLink}
+            activeProps={{ className: 'border-accent! text-text!', 'aria-current': 'page' }}
+          >
+            Аккаунты
+          </Link>
         </nav>
       </header>
       <main

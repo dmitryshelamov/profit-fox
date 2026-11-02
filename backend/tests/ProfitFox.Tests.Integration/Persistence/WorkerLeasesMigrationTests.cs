@@ -143,7 +143,16 @@ public class WorkerLeasesMigrationTests
         var library = new StrategyLibrary(0, [], []);
         Strategy ema = library.AddStrategy(Guid.NewGuid(), "EMA", StrategyJson.ParseStrategy(StrategyFixtures.Element("ema")), Created);
         Bot bot = library.AddBot(Guid.NewGuid(), "EMA BTC", ema.Id, new Dictionary<string, NodeValue>(), new Instrument(MarketCategory.Linear, "BTCUSDT"), Interval.OneHour, 1000m, Created);
-        await new StrategyLibraryRepository(_dataSource).SaveAsync(library.Change, 0, CancellationToken.None);
+        await new StrategyLibraryRepository(_dataSource).SaveAsync(library.Change with { SavedBots = [] }, 0, CancellationToken.None);
+
+        // The bots table as it was before leases: the repository writes columns of later migrations.
+        await using NpgsqlConnection connection = await _dataSource.OpenConnectionAsync();
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO bots (id, name, strategy_id, parameter_values, category, symbol, "interval", balance, created_at, updated_at)
+            VALUES (@Id, @Name, @StrategyId, '{}'::jsonb, 'linear', 'BTCUSDT', '60', @Balance, @CreatedAt, @UpdatedAt)
+            """,
+            new { bot.Id, bot.Name, bot.StrategyId, bot.Balance, bot.CreatedAt, bot.UpdatedAt });
 
         return bot;
     }

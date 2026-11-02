@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 
+import { accountsQuery } from '@/modules/exchange-accounts';
 import { instrumentsQuery, intervals } from '@/modules/market-data';
 import { strategiesQuery, strategyQuery } from '@/modules/strategies';
 import { ApiError, type Schemas } from '@/shared/api/client';
@@ -58,6 +59,8 @@ export function BotForm({
   const [interval, setInterval] = useState(bot?.interval ?? '60');
   const [balance, setBalance] = useState(bot?.balance ?? '');
   const [texts, setTexts] = useState(() => textsOf(bot?.parameterValues));
+  const [accountId, setAccountId] = useState(bot?.exchangeAccount?.id ?? '');
+  const accounts = useQuery(accountsQuery);
   const [errors, setErrors] = useState<FieldErrors>({ fields: {}, form: [] });
 
   const strategy = useQuery({ ...strategyQuery(strategyId), enabled: strategyId !== '' });
@@ -93,6 +96,7 @@ export function BotForm({
       symbol,
       interval,
       balance,
+      exchangeAccountId: accountId === '' ? null : accountId,
     };
 
     try {
@@ -248,6 +252,33 @@ export function BotForm({
               </div>
               {problem('balance')}
             </div>
+          </div>
+          <div>
+            <label htmlFor="bot-account" className={labelText}>
+              Аккаунт
+            </label>
+            <select
+              id="bot-account"
+              className={`${input} ${border('exchangeAccountId')}`}
+              value={accountId}
+              onChange={(event) => setAccountId(event.target.value)}
+            >
+              <option value="">Без аккаунта</option>
+              {accounts.data?.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.environment === 'testnet' ? `${account.name} · Testnet` : account.name}
+                </option>
+              ))}
+            </select>
+            {accounts.data?.length === 0 && (
+              <p className="mt-1 text-xs text-faint">
+                Аккаунтов пока нет.{' '}
+                <Link to="/accounts/new" className="text-accent hover:underline">
+                  Добавить аккаунт
+                </Link>
+              </p>
+            )}
+            {problem('exchangeAccountId')}
           </div>
         </section>
         <section className="space-y-4 rounded-xl border border-line bg-panel p-5">

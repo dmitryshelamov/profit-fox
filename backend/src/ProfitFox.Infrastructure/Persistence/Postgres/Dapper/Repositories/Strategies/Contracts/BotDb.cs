@@ -22,4 +22,6 @@ internal sealed class BotDb
     public DateTimeOffset CreatedAt { get; init; }
 
     public DateTimeOffset UpdatedAt { get; init; }
+
+    public Guid? ExchangeAccountId { get; init; }
 }

@@ -13,6 +13,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 
+using NSubstitute;
+
+using ProfitFox.Application.Ports.ExchangeAccounts;
+using ProfitFox.Infrastructure.Exchanges.Bybit;
 using ProfitFox.Presentation;
 
 using Serilog.Core;
@@ -24,6 +28,18 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
     public string ConnectionString => connectionString;
 
     public FakeBybitHandler Bybit { get; } = new FakeBybitHandler();
+
+    /// <summary>Answers the app's calls to Bybit with the key of an account; no test reaches the private Bybit API.</summary>
+    public IExchangeKeyInspector KeyInspector { get; } = Substitute.For<IExchangeKeyInspector>();
+
+    /// <summary>
+    ///     Whether <see cref="KeyInspector" /> answers the calls with an account key. Without it the app's own Bybit client sends them
+    ///     through its HTTP pipeline to <see cref="Bybit" />.
+    /// </summary>
+    public bool FakeKeyInspector { get; init; } = true;
+
+    /// <summary>Every logger of the app writes from Verbose, for a test that must see everything the app could log.</summary>
+    public bool VerboseLogs { get; init; }
 
     /// <summary>The app's clock; it moves only when a test advances it.</summary>
     public FakeTimeProvider Time { get; } = new FakeTimeProvider(DateTimeOffset.Parse("2024-03-10T12:30:00Z"));
@@ -51,6 +67,14 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
     /// <summary>The value of <c>Bybit:RestAddress</c>; without it the app uses the live Bybit.</summary>
     public string? BybitRestAddress { get; init; }
 
+    /// <summary>
+    ///     The value of <c>ExchangeAccounts:MasterKey</c> over the environment's own; null keeps the one of the settings files, which
+    ///     only Development and Testing have.
+    /// </summary>
+    public string? MasterKey { get; init; } = TestMasterKey;
+
+    public static readonly string TestMasterKey = Convert.ToBase64String(Enumerable.Range(0, 32).Select(value => (byte)value).ToArray());
+
     /// <summary>Receives every event the app's logger writes.</summary>
     public ILogEventSink? LogSink { get; init; }
 
@@ -71,6 +95,21 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
         });
         builder.UseSetting("ConnectionStrings:MarketData", connectionString);
 
+        if (MasterKey is not null)
+        {
+            builder.UseSetting("ExchangeAccounts:MasterKey", MasterKey);
+        }
+
+        if (VerboseLogs)
+        {
+            foreach (string logger in new[] { "Microsoft.AspNetCore", "Microsoft.Hosting.Lifetime", "FluentMigrator", "ProfitFox", "Serilog.AspNetCore.RequestLoggingMiddleware" })
+            {
+                builder.UseSetting($"Serilog:MinimumLevel:Override:{logger}", "Verbose");
+            }
+
+            builder.UseSetting("Serilog:MinimumLevel:Default", "Verbose");
+        }
+
         if (BybitRestAddress is not null)
         {
             builder.UseSetting("Bybit:RestAddress", BybitRestAddress);
@@ -79,6 +118,14 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
         builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<TimeProvider>(Time);
+            if (FakeKeyInspector)
+            {
+                services.AddSingleton(KeyInspector);
+            }
+            else
+            {
+                services.AddHttpClient<IExchangeKeyInspector, BybitAccountClient>().ConfigurePrimaryHttpMessageHandler(() => new SharedHandler(Bybit));
+            }
 
             // Bybit.Net configures its own primary handler, so replace the whole client: no test may reach the real Bybit.
             if (FakeBybit)
@@ -141,5 +188,22 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
 
         await base.DisposeAsync();
         GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Lets the HTTP client factory rotate and dispose its handler without disposing the shared fake.</summary>
+    private sealed class SharedHandler(HttpMessageHandler inner) : HttpMessageHandler
+    {
+        private readonly HttpMessageInvoker _invoker = new HttpMessageInvoker(inner, disposeHandler: false);
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            return _invoker.SendAsync(request, cancellationToken);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            _invoker.Dispose();
+            base.Dispose(disposing);
+        }
     }
 }

@@ -91,6 +91,7 @@ export const botSummary = {
   interval: '60',
   balance: '1000',
   lastBacktest: null,
+  exchangeAccount: null,
 };
 
 export const botDetails = {
@@ -199,3 +200,13 @@ export function resultOf(combination: number, metrics: object = {}) {
     calculationTime: '00:00:00.1200000',
   };
 }
+
+export const testnetAccount = {
+  id: '99999999-9999-4999-8999-999999999999',
+  name: 'Проверка',
+  environment: 'testnet',
+  apiKey: 'XKz8apikeyTESTNET',
+  uid: 24617703,
+  categories: ['spot', 'linear'],
+  createdAt: '2026-11-02T10:00:00Z',
+};

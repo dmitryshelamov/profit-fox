@@ -7,7 +7,6 @@ using ProfitFox.Application.Bots.Commands.DeleteBot;
 using ProfitFox.Application.Bots.Commands.UpdateBot;
 using ProfitFox.Application.Bots.Queries.GetBot;
 using ProfitFox.Application.Bots.Queries.GetBots;
-using ProfitFox.Domain.Entities.Bots;
 using ProfitFox.Presentation.Contracts.Bots;
 using ProfitFox.Presentation.Contracts.Strategies;
 
@@ -31,7 +30,7 @@ public sealed class BotsController(ISender sender) : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken)
     {
-        Bot? bot = await sender.Send(new GetBotQuery(id), cancellationToken);
+        GetBotResult? bot = await sender.Send(new GetBotQuery(id), cancellationToken);
 
         return bot is null ? NotFound() : Ok(BotResponse.Of(bot));
     }
@@ -45,7 +44,7 @@ public sealed class BotsController(ISender sender) : ControllerBase
         try
         {
             Guid id = await sender.Send(
-                new CreateBotCommand(body.Name, body.StrategyId ?? Guid.Empty, body.ParameterValues, body.Category, body.Symbol, body.Interval, body.Balance!.Value),
+                new CreateBotCommand(body.Name, body.StrategyId ?? Guid.Empty, body.ParameterValues, body.Category, body.Symbol, body.Interval, body.Balance!.Value, body.ExchangeAccountId),
                 cancellationToken);
 
             return CreatedAtAction(nameof(Get), new { id }, new CreatedResponse(id));
@@ -66,7 +65,7 @@ public sealed class BotsController(ISender sender) : ControllerBase
     {
         try
         {
-            await sender.Send(new UpdateBotCommand(id, body.Name, body.ParameterValues, body.Category, body.Symbol, body.Interval, body.Balance!.Value), cancellationToken);
+            await sender.Send(new UpdateBotCommand(id, body.Name, body.ParameterValues, body.Category, body.Symbol, body.Interval, body.Balance!.Value, body.ExchangeAccountId), cancellationToken);
 
             return NoContent();
         }

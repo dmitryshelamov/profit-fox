@@ -8,6 +8,9 @@ import {
   type RouterHistory,
 } from '@tanstack/react-router';
 
+import { AccountPage } from '@/pages/account/AccountPage';
+import { NewAccountPage } from '@/pages/account-new/NewAccountPage';
+import { AccountsPage } from '@/pages/accounts/AccountsPage';
 import { BacktestPage } from '@/pages/backtest/BacktestPage';
 import { BacktestResultPage } from '@/pages/backtest-result/BacktestResultPage';
 import { BacktestSetupPage } from '@/pages/backtest-setup/BacktestSetupPage';
@@ -139,6 +142,28 @@ const resultRoute = createRoute({
   },
 });
 
+const accountsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/accounts',
+  component: AccountsPage,
+});
+
+const newAccountRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/accounts/new',
+  component: NewAccountPage,
+});
+
+const accountRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/accounts/$accountId',
+  component: function AccountRoute() {
+    const { accountId } = accountRoute.useParams();
+
+    return <AccountPage accountId={accountId} />;
+  },
+});
+
 const compareRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/compare',
@@ -195,6 +220,9 @@ const routeTree = rootRoute.addChildren([
     backtestRoute,
     resultRoute,
     compareRoute,
+    accountsRoute,
+    newAccountRoute,
+    accountRoute,
   ]),
   newStrategyRoute,
   strategyRoute,

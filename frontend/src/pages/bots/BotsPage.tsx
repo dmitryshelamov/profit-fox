@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 
 import { StatusBadge } from '@/modules/backtests';
 import { botsQuery } from '@/modules/bots';
+import { EnvironmentBadge } from '@/modules/exchange-accounts';
 import { instrumentsQuery, intervalLabel } from '@/modules/market-data';
 import { strategiesQuery } from '@/modules/strategies';
 import { combinationsWord, groupDigits } from '@/shared/format/format';
@@ -70,6 +71,7 @@ export function BotsPage() {
             <th className={cell}>Инструмент</th>
             <th className={cell}>Интервал</th>
             <th className={cell}>Баланс</th>
+            <th className={cell}>Аккаунт</th>
             <th className={cell}>Последний бэктест</th>
             <th className={cell} />
           </tr>
@@ -84,6 +86,22 @@ export function BotsPage() {
               </td>
               <td className={cell}>{intervalLabel(bot.interval)}</td>
               <td className={`${cell} font-mono whitespace-nowrap`}>{balanceOf(bot)}</td>
+              <td className={`${cell} whitespace-nowrap`}>
+                {bot.exchangeAccount ? (
+                  <span className="flex items-center gap-2">
+                    <Link
+                      to="/accounts/$accountId"
+                      params={{ accountId: bot.exchangeAccount.id }}
+                      className="text-accent hover:underline"
+                    >
+                      {bot.exchangeAccount.name}
+                    </Link>
+                    <EnvironmentBadge environment={bot.exchangeAccount.environment} />
+                  </span>
+                ) : (
+                  <span className="text-faint">Без аккаунта</span>
+                )}
+              </td>
               <td className={`${cell} whitespace-nowrap`}>
                 {bot.lastBacktest ? (
                   <span className="flex items-center gap-2">
