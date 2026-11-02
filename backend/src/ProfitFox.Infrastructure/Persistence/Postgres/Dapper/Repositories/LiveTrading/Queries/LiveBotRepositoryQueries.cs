@@ -101,6 +101,16 @@ internal static class LiveBotRepositoryQueries
         return new CommandDefinition($"SELECT {BotColumns} FROM live_bots WHERE bot_id = @BotId FOR UPDATE", new { BotId = botId }, transaction, cancellationToken: cancellationToken);
     }
 
+    // An advisory lock of the transaction, keyed by the account: it touches no row, so it waits for nothing but other starts.
+    public static CommandDefinition LockAccount(Guid accountId, NpgsqlTransaction transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            "SELECT pg_advisory_xact_lock(hashtextextended('live-account:' || @AccountId::text, 0))",
+            new { AccountId = accountId },
+            transaction,
+            cancellationToken: cancellationToken);
+    }
+
     public static CommandDefinition LockLeased(Guid botId, Guid owner, long epoch, NpgsqlTransaction transaction, CancellationToken cancellationToken)
     {
         return new CommandDefinition(

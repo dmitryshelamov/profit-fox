@@ -34,8 +34,8 @@ public sealed class StartBotCommandHandler(
     TimeProvider time) : IRequestHandler<StartBotCommand>
 {
     /// <summary>
-    ///     Checks the account on the exchange first, then starts the bot under its lock on the latest version of its strategy;
-    ///     a Worker does the trading.
+    ///     Checks the key on the exchange first, then, under the lock of the bot and of its account, the money and starts the bot
+    ///     on the latest version of its strategy; a Worker does the trading.
     /// </summary>
     /// <exception cref="NotFoundException">There is no such bot.</exception>
     /// <exception cref="ConflictException">The bot works, or the account cannot trade it: the reason says why.</exception>
@@ -49,7 +49,6 @@ public sealed class StartBotCommandHandler(
         ExchangeKey key = await LiveRequests.KeyAsync(accounts, protector, account, cancellationToken);
         await CheckKeyAsync(bot, key, cancellationToken);
         string quote = await QuoteCoinAsync(bot.Instrument, cancellationToken);
-        await CheckFundsAsync(bot, key, quote, cancellationToken);
 
         await LiveRequests.ChangeAsync(
             executor,
@@ -63,6 +62,10 @@ public sealed class StartBotCommandHandler(
                 {
                     throw new ConflictException("The bot changed while it was starting; start it again.");
                 }
+
+                // Under the lock of the account another start waits, so it sees this one among the working bots.
+                await live.LockAccountAsync(account.Id, token);
+                await CheckFundsAsync(bot, key, quote, token);
 
                 return locked.Start(loaded.LatestVersion(bot.StrategyId)!.Number, loaded.ParameterValues(bot));
             },

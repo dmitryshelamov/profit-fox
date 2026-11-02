@@ -152,6 +152,36 @@ public class LiveBotCommandsApiTests
         (await StatusAsync(second)).ShouldBe("stopped");
     }
 
+    // Two starts on one account at once: the money is checked one start at a time, so only one of them takes it.
+    [Test]
+    public async Task Two_starts_at_once_do_not_spend_the_money_twice()
+    {
+        Guid account = await CreateAccountAsync(MarketCategory.Spot);
+        Guid first = await CreateBotAsync(account);
+        Guid second = await CreateBotAsync(account);
+        var gate = new TaskCompletionSource();
+        int calls = 0;
+        _factory.Ledger.GetFreeAsync(Arg.Any<ExchangeKey>(), "USDT", Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                if (Interlocked.Increment(ref calls) == 1)
+                {
+                    await gate.Task;
+                }
+
+                return 1500m;
+            });
+
+        Task<HttpResponseMessage> one = StartAsync(first);
+        await WaitForAsync(() => Volatile.Read(ref calls) >= 1);
+        Task<HttpResponseMessage> other = StartAsync(second);
+        await Task.Delay(500);
+        gate.SetResult();
+
+        HttpStatusCode[] answers = [(await one).StatusCode, (await other).StatusCode];
+        answers.ShouldBe([HttpStatusCode.NoContent, HttpStatusCode.Conflict], ignoreOrder: true);
+    }
+
     [Test]
     public async Task Pause_resume_and_stop_change_the_status()
     {
@@ -197,6 +227,16 @@ public class LiveBotCommandsApiTests
     public async Task Action_with_an_unknown_bot_is_not_found(string action)
     {
         (await PostAsync(Guid.NewGuid(), action)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    private static async Task WaitForAsync(Func<bool> condition)
+    {
+        for (var attempt = 0; attempt < 200 && !condition(); attempt++)
+        {
+            await Task.Delay(25);
+        }
+
+        condition().ShouldBeTrue();
     }
 
     private static async Task ShouldBeRefusedAsync(HttpResponseMessage response, string reason)

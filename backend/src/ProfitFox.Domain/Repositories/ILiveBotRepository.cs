@@ -28,6 +28,12 @@ public interface ILiveBotRepository
     /// <returns><c>null</c> when there is no such bot.</returns>
     Task<LiveBot?> LockAsync(Guid botId, DateTimeOffset now, CancellationToken cancellationToken);
 
+    /// <summary>
+    ///     In a unit of work: takes the lock of starts on an exchange account until the unit ends, so the money of the account is
+    ///     checked for one start at a time.
+    /// </summary>
+    Task LockAccountAsync(Guid accountId, CancellationToken cancellationToken);
+
     /// <summary>In a unit of work: locks the live row while this take holds it, or returns <c>null</c>.</summary>
     Task<LiveBot?> LockLeasedAsync(Guid botId, Guid owner, long epoch, CancellationToken cancellationToken);
 

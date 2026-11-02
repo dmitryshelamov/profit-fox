@@ -65,6 +65,12 @@ internal sealed class LiveBotRepository(NpgsqlDataSource dataSource, PostgresTra
         return LiveTradingDbConverter.ToDomain(bot);
     }
 
+    public async Task LockAccountAsync(Guid accountId, CancellationToken cancellationToken)
+    {
+        PostgresTransaction current = accessor.Current;
+        await current.Connection.ExecuteAsync(LiveBotRepositoryQueries.LockAccount(accountId, current.Transaction, cancellationToken));
+    }
+
     public async Task<LiveBot?> LockLeasedAsync(Guid botId, Guid owner, long epoch, CancellationToken cancellationToken)
     {
         PostgresTransaction current = accessor.Current;
