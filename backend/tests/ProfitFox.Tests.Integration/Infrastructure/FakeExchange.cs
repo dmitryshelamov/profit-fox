@@ -23,6 +23,7 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
     private readonly List<Action<ExchangeFill>> _fillUpdates = [];
     private readonly List<Action> _restored = [];
     private int _execs;
+    private Action? _onHoldingRead;
 
     public decimal Free { get; set; } = 10_000m;
 
@@ -250,7 +251,15 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
 
     public Task<decimal> GetHoldingAsync(ExchangeKey key, Instrument instrument, string baseCoin, CancellationToken cancellationToken)
     {
+        Interlocked.Exchange(ref _onHoldingRead, null)?.Invoke();
+
         return Task.FromResult(Holding);
+    }
+
+    /// <summary>Runs once, the next time the holding is read: something happens on the exchange right then.</summary>
+    public void OnHoldingRead(Action action)
+    {
+        _onHoldingRead = action;
     }
 
     public Task<IReadOnlyList<ExchangeOrder>> GetOpenOrdersAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)

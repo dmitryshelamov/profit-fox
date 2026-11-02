@@ -311,6 +311,24 @@ internal sealed class LiveBotSession(
 
     private async Task ReconcileAsync(CancellationToken cancellationToken)
     {
+        (IReadOnlyList<Guid> bots, IReadOnlyList<string> differences) = await CompareAsync(cancellationToken);
+
+        if (differences.Count > 0)
+        {
+            // A fill may land between the catch-up and the read of the exchange: the books are read again before any bot stops.
+            await CatchUpAsync(cancellationToken);
+            (bots, differences) = await CompareAsync(cancellationToken);
+        }
+
+        if (differences.Count > 0)
+        {
+            await FailAllAsync(bots, string.Join(" ", differences), cancellationToken);
+        }
+    }
+
+    /// <summary>The bots the books of this bot are compared with, and what differs.</summary>
+    private async Task<(IReadOnlyList<Guid> Bots, IReadOnlyList<string> Differences)> CompareAsync(CancellationToken cancellationToken)
+    {
         Bot bot = _context.Bot;
         IReadOnlyList<Bot> neighbours = await NeighboursAsync(cancellationToken);
         var holdings = new List<BotHolding>();
@@ -362,10 +380,7 @@ internal sealed class LiveBotSession(
         decimal held = await ledger.GetHoldingAsync(_context.Key, bot.Instrument, _context.BaseCoin, cancellationToken);
         IReadOnlyList<string> differences = Reconciliation.Check(bot.Instrument.Category, _context.Conditions.Rules.QuantityStep, holdings, new ExchangeHoldings(held, open, finished));
 
-        if (differences.Count > 0)
-        {
-            await FailAllAsync(holdings.Select(holding => holding.BotId), string.Join(" ", differences), cancellationToken);
-        }
+        return ([.. holdings.Select(holding => holding.BotId)], differences);
     }
 
     /// <summary>The bots of the account on the instrument of this bot, on the spot on any instrument of its coin.</summary>

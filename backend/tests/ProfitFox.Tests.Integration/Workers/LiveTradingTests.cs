@@ -452,6 +452,24 @@ public class LiveTradingTests
         await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(first)).Status == LiveBotStatus.Failed && (await _scenario.LiveAsync(second)).Status == LiveBotStatus.Failed, "both bots failed");
     }
 
+    // A fill that lands while the books are compared is no difference: the books are read again before any bot stops.
+    [Test]
+    public async Task Fill_during_the_comparison_does_not_stop_the_bot()
+    {
+        Guid bot = await _scenario.CreateBotAsync(category: "linear");
+        WorkerHost first = _scenario.StartWorker();
+        await _scenario.ActAsync(bot, "start");
+        await _scenario.WaitAsync(async () => (await _scenario.OrdersAsync(bot)).SingleOrDefault()?.Status == LiveOrderStatus.Active, "the start order on the exchange");
+        await _scenario.StopWorkerAsync(first);
+        _scenario.Exchange.OnHoldingRead(() => _scenario.Exchange.Fill(LiveTradingScenario.ClientId(bot, 1), 1m, 100m));
+
+        _scenario.StartWorker();
+
+        await _scenario.WaitAsync(async () => (await _scenario.PositionsAsync(bot)).FirstOrDefault()?.Quantity == 1m, "the fill");
+        await SettleAsync();
+        (await _scenario.LiveAsync(bot)).Status.ShouldBe(LiveBotStatus.Running);
+    }
+
     [Test]
     public async Task Linear_bot_trades_against_the_position_of_its_symbol()
     {
