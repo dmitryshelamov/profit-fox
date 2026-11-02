@@ -200,8 +200,8 @@ internal sealed class LiveBotSession(
     }
 
     /// <summary>
-    ///     Builds the run again from the database, reads what the exchange did meanwhile, compares the books with the exchange and
-    ///     warms the indicators up. A fresh run (a start, a resume) takes the candles before it only as history; a restored one gives
+    ///     Builds the run again from the database, warms the indicators up, reads what the exchange did meanwhile and compares the
+    ///     books with the exchange. A fresh run (a start, a resume) takes the candles before it only as history; a restored one gives
     ///     the strategy the last closed candle it has not seen.
     /// </summary>
     private async Task RebuildAsync(bool fresh, CancellationToken cancellationToken)
@@ -226,9 +226,15 @@ internal sealed class LiveBotSession(
             },
             cancellationToken);
 
+        // The indicators are warm before the strategy meets the fills it missed; the last candle comes after them.
+        Candle? last = await WarmUpAsync(cancellationToken);
         await CatchUpAsync(cancellationToken);
         await ReconcileAsync(cancellationToken);
-        await WarmUpAsync(fresh, cancellationToken);
+
+        if (last is not null)
+        {
+            await LastCandleAsync(last, fresh, cancellationToken);
+        }
 
         if (_bot is { StartPending: true, Status: LiveBotStatus.Running })
         {
@@ -408,7 +414,8 @@ internal sealed class LiveBotSession(
             cancellationToken);
     }
 
-    private async Task WarmUpAsync(bool fresh, CancellationToken cancellationToken)
+    /// <summary>Gives the run the closed candles of the history but the last one, which is returned.</summary>
+    private async Task<Candle?> WarmUpAsync(CancellationToken cancellationToken)
     {
         Bot bot = _context.Bot;
         DateTimeOffset now = time.GetUtcNow();
@@ -426,7 +433,7 @@ internal sealed class LiveBotSession(
 
         if (closed.Length == 0)
         {
-            return;
+            return null;
         }
 
         foreach (Candle candle in closed[..^1])
@@ -434,9 +441,14 @@ internal sealed class LiveBotSession(
             _run.WarmUp(Bar(candle));
         }
 
-        Candle last = closed[^1];
-        _lastClose = last.Close.Value;
+        _lastClose = closed[^1].Close.Value;
 
+        return closed[^1];
+    }
+
+    /// <summary>The last closed candle reaches a restored running strategy if it has not seen it; otherwise it is history.</summary>
+    private async Task LastCandleAsync(Candle last, bool fresh, CancellationToken cancellationToken)
+    {
         if (!fresh && _bot.Status == LiveBotStatus.Running && last.OpenTime > (_bot.LastBarAt ?? DateTimeOffset.MinValue))
         {
             await CandleAsync(last, cancellationToken);

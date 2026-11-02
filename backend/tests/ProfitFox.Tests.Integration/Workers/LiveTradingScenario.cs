@@ -105,9 +105,15 @@ public sealed class LiveTradingScenario : IAsyncDisposable
     }
 
     /// <summary>A bot on a reference strategy on BTCUSDT on the spot, hourly, with the account of the scenario.</summary>
-    public async Task<Guid> CreateBotAsync(string strategy = "dca", decimal balance = 1000m, string category = "spot", string symbol = "BTCUSDT")
+    public Task<Guid> CreateBotAsync(string strategy = "dca", decimal balance = 1000m, string category = "spot", string symbol = "BTCUSDT")
     {
-        HttpResponseMessage created = await Client.PostAsJsonAsync("/api/strategies", new { name = $"{strategy} {Guid.NewGuid():N}", definition = StrategyFixtures.Element(strategy) });
+        return CreateBotAsync(strategy, StrategyFixtures.Element(strategy), balance, category, symbol);
+    }
+
+    /// <summary>A bot on the strategy of <paramref name="definition" />, otherwise as <see cref="CreateBotAsync(string, decimal, string, string)" />.</summary>
+    public async Task<Guid> CreateBotAsync(string strategy, JsonElement definition, decimal balance = 1000m, string category = "spot", string symbol = "BTCUSDT")
+    {
+        HttpResponseMessage created = await Client.PostAsJsonAsync("/api/strategies", new { name = $"{strategy} {Guid.NewGuid():N}", definition });
         Guid strategyId = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         var body = new JsonObject
         {

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 
 using NSubstitute;
 
@@ -134,6 +135,25 @@ public class LiveTradingTests
 
         await _scenario.WaitAsync(async () => (await _scenario.PositionsAsync(bot)).FirstOrDefault()?.Quantity == 1m, "the fill read again");
         (await _scenario.OrdersAsync(bot)).Single().Status.ShouldBe(LiveOrderStatus.Filled);
+    }
+
+    // A fill read after a restart reaches the strategy once its indicators are warm: the sell limit goes at the average of
+    // the history, not at an average of nothing.
+    [Test]
+    public async Task Fill_read_after_a_restart_meets_warm_indicators()
+    {
+        Guid bot = await _scenario.CreateBotAsync("ema-limit", JsonDocument.Parse(EmaLimit).RootElement);
+        WorkerHost first = _scenario.StartWorker();
+        await _scenario.ActAsync(bot, "start");
+        await _scenario.WaitAsync(async () => (await _scenario.OrdersAsync(bot)).SingleOrDefault()?.Status == LiveOrderStatus.Active, "the start order on the exchange");
+        await _scenario.StopWorkerAsync(first);
+        _scenario.Exchange.Fill(LiveTradingScenario.ClientId(bot, 1), 1m, 100m, silently: true);
+
+        _scenario.StartWorker();
+
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 2, "the sell limit");
+        OrderRequest sell = _scenario.Exchange.Orders.Single(order => order.ClientId == LiveTradingScenario.ClientId(bot, 2));
+        (sell.Side, sell.Type, sell.Price, sell.Quantity).ShouldBe((OrderSide.Sell, OrderType.Limit, 110m, 1m));
     }
 
     // Scenarios "Worker остановлен до отправки" and "Ответ на отправку потерян": the saved order goes out after the restart, once.
@@ -463,6 +483,32 @@ public class LiveTradingTests
         await _scenario.WaitAsync(async () => (await _scenario.OrdersAsync(bot)).Single().Status == LiveOrderStatus.Active, "the order known as taken");
         _scenario.Exchange.Sent.Count.ShouldBe(1);
     }
+
+    // Buys 100 when flat, then holds a sell limit at the 3-bar EMA of the close plus 10%.
+    private const string EmaLimit = """
+        {
+          "formatVersion": 1, "direction": "long", "parameters": [],
+          "nodes": [
+            { "id": "candle", "kind": "candle" },
+            { "id": "position", "kind": "position" },
+            { "id": "flat", "kind": "not" },
+            { "id": "ema", "kind": "ema", "inputs": { "period": 3 } },
+            { "id": "target", "kind": "multiply", "inputs": { "b": 1.1 } },
+            { "id": "entry", "kind": "market-order", "settings": { "side": "buy", "size": "amount" }, "inputs": { "size": 100 } },
+            { "id": "sell", "kind": "hold-limit", "settings": { "side": "sell", "size": "quantity" } }
+          ],
+          "wires": [
+            { "from": "position.hasPosition", "to": "flat.value" },
+            { "from": "flat.result", "to": "entry.when" },
+            { "from": "candle.close", "to": "ema.source" },
+            { "from": "ema.value", "to": "target.a" },
+            { "from": "position.hasPosition", "to": "sell.when" },
+            { "from": "target.result", "to": "sell.price" },
+            { "from": "position.quantity", "to": "sell.size" }
+          ],
+          "layout": {}
+        }
+        """;
 
     private async Task<Guid> StartedAsync(string strategy = "dca")
     {
