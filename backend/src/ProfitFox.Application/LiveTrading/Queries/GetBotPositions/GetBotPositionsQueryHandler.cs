@@ -39,6 +39,7 @@ public sealed class GetBotPositionsQueryHandler(IStrategyLibraryRepository libra
                 return new LivePositionDetails(
                     position,
                     Status(position),
+                    entry == OrderSide.Buy ? OrderSide.Sell : OrderSide.Buy,
                     filled.Length > 0 ? filled.Min(fill => fill.ExecutedAt) : null,
                     Average(own.Where(order => order.Order.Side == entry)),
                     Average(own.Where(order => order.Order.Side != entry)),

@@ -92,6 +92,21 @@ public class LiveBotPositionsApiTests
         (await _client.GetFromJsonAsync<JsonElement>($"/api/bots/{bot}/positions"))[0].GetProperty("status").GetString().ShouldBe("waiting");
     }
 
+    // Scenario "Закрытие позиции": the page names the side of the market exit, taken from the version the bot trades.
+    [Test]
+    public async Task Position_tells_the_side_of_its_market_exit()
+    {
+        Guid bot = await CreateBotAsync();
+        await InUnitAsync(async (repository, cancellationToken) =>
+        {
+            LiveBot live = (await repository.LockAsync(bot, Now, cancellationToken))!;
+            await repository.SaveAsync(live.Start(1, new Dictionary<string, NodeValue>()), Now, cancellationToken);
+            await repository.SavePositionAsync(new LivePosition(bot, 1, true, false, 0.5m, 50m, 50m, 0m, 0m, 100m, Now, 0, null), cancellationToken);
+        });
+
+        (await _client.GetFromJsonAsync<JsonElement>($"/api/bots/{bot}/positions"))[0].GetProperty("exitSide").GetString().ShouldBe("sell");
+    }
+
     [Test]
     public async Task Bot_that_never_traded_has_no_positions()
     {

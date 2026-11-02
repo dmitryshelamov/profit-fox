@@ -80,10 +80,9 @@ export function BotPage({ botId }: { botId: string }) {
   const quoteCoin = listed?.quoteCoin;
   const working = isWorking(data.status);
   const current = positions.data?.find((position) => position.status === 'open');
-  const definition = strategy.data?.definition as { direction?: string } | undefined;
-  const exit = definition?.direction === 'short' ? 'Покупка' : 'Продажа';
+  // The side of the exit comes with the position: the bot trades the version fixed at its start, not the current one.
   const close = current
-    ? `${exit} по рынку ${current.quantity}${listed?.baseCoin ? ` ${listed.baseCoin}` : ''}.`
+    ? `${current.exitSide === 'buy' ? 'Покупка' : 'Продажа'} по рынку ${current.quantity}${listed?.baseCoin ? ` ${listed.baseCoin}` : ''}.`
     : undefined;
   const start = `Бот начнёт торговать на аккаунте «${data.exchangeAccount?.name ?? 'без аккаунта'}»: ${data.category} · ${data.symbol}, баланс ${groupDigits(data.balance)}${quoteCoin ? ` ${quoteCoin}` : ''}. Ордера уходят на биржу с реальными деньгами.`;
   const declared = ((strategy.data?.definition as { parameters?: Declared[] } | undefined)

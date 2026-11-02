@@ -18,6 +18,7 @@ function position(overrides: object = {}) {
   return {
     number: 1,
     status: 'open',
+    exitSide: 'sell',
     openedAt: '2026-11-03T10:00:00Z',
     closedAt: null,
     quantity: '0.5',
@@ -176,6 +177,17 @@ describe('live trading on the bot page', () => {
         requests.some((request) => request.url.endsWith(`/api/bots/${botId}/close-position`)),
       ).toBe(true),
     );
+  });
+
+  // The side comes with the position from the version the bot trades, though the strategy is edited since.
+  it('names the exit side of the version the bot trades', async () => {
+    open({ status: 'stopped' }, [position({ exitSide: 'buy', orders: [] })]);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Закрыть позицию' }));
+
+    expect(
+      within(screen.getByRole('dialog')).getByText('Покупка по рынку 0.5 BTC.'),
+    ).toBeInTheDocument();
   });
 
   it('tells that the position closes and offers nothing meanwhile', async () => {

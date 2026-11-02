@@ -2682,6 +2682,8 @@ export interface components {
             number: number | string;
             /** @description `waiting`, `open`, `closing` or `closed`. */
             status: string;
+            /** @description The side of its market exit: `buy` or `sell`. */
+            exitSide: string;
             /**
              * Format: date-time
              * @description The time of its first fill.

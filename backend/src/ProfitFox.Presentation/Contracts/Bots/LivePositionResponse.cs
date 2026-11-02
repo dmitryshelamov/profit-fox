@@ -10,6 +10,7 @@ namespace ProfitFox.Presentation.Contracts.Bots;
 /// <summary>A position of a live bot with its orders; prices are averages of its own fills, fees are in the quote asset.</summary>
 /// <param name="Number"></param>
 /// <param name="Status"><c>waiting</c>, <c>open</c>, <c>closing</c> or <c>closed</c>.</param>
+/// <param name="ExitSide">The side of its market exit: <c>buy</c> or <c>sell</c>.</param>
 /// <param name="OpenedAt">The time of its first fill.</param>
 /// <param name="ClosedAt"></param>
 /// <param name="Quantity"></param>
@@ -22,6 +23,7 @@ namespace ProfitFox.Presentation.Contracts.Bots;
 public sealed record LivePositionResponse(
     int Number,
     string Status,
+    string ExitSide,
     DateTimeOffset? OpenedAt,
     DateTimeOffset? ClosedAt,
     string Quantity,
@@ -37,6 +39,7 @@ public sealed record LivePositionResponse(
         return new LivePositionResponse(
             details.Position.Number,
             details.Status.ToCode(),
+            StrategyCodes.ToCode(details.ExitSide),
             details.OpenedAt,
             details.Position.ClosedAt,
             BacktestResponse.Text(details.Position.Quantity),
