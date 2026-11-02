@@ -346,6 +346,38 @@ public class LiveTradingTests
         await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 2, "the next purchase of DCA");
     }
 
+    // A bot no Worker can take up fails after the third try with the reason, and nobody tries it again.
+    [Test]
+    public async Task Bot_no_worker_can_take_up_fails_after_three_tries()
+    {
+        Guid bot = await _scenario.CreateBotAsync();
+        _scenario.Exchange.FeesUnavailable = true;
+        _scenario.StartWorker();
+
+        await _scenario.ActAsync(bot, "start");
+
+        await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).Status == LiveBotStatus.Failed, "the failed bot");
+        (await _scenario.LiveAsync(bot)).StopReason.ShouldBe("The Worker failed to take the bot 3 times in a row: Bybit is unavailable: fee rates did not come.");
+        _scenario.Exchange.Orders.ShouldBeEmpty();
+    }
+
+    // The failures count in a row: a Worker that takes the bot up forgets them.
+    [Test]
+    public async Task Bot_taken_up_at_last_forgets_the_failures_before()
+    {
+        Guid bot = await _scenario.CreateBotAsync();
+        _scenario.Exchange.FeesUnavailable = true;
+        _scenario.StartWorker();
+        await _scenario.ActAsync(bot, "start");
+        await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).SessionFailures == 2, "two failures");
+
+        _scenario.Exchange.FeesUnavailable = false;
+
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the start order");
+        await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).SessionFailures == 0, "the failures forgotten");
+        (await _scenario.LiveAsync(bot)).Status.ShouldBe(LiveBotStatus.Running);
+    }
+
     // Scenario "Аренда перехвачена": the take that lost the bot writes nothing more of it.
     [Test]
     public async Task Worker_whose_lease_was_taken_over_writes_nothing_more()

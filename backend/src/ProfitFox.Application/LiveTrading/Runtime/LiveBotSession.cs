@@ -66,6 +66,7 @@ internal sealed class LiveBotSession(
         Task keeper = KeepAsync(lease);
         var subscriptions = new List<IAsyncDisposable>();
         journal.Took(_id, leased.Epoch);
+        var up = false;
 
         try
         {
@@ -95,6 +96,12 @@ internal sealed class LiveBotSession(
                 () => _inputs.Writer.TryWrite(new RestoreInput()),
                 lease.Token));
             await RebuildAsync(fresh: _bot.StartPending, lease.Token);
+            up = true;
+
+            if (_bot.SessionFailures > 0)
+            {
+                await WriteAsync(_ => Task.FromResult<IReadOnlyList<OrderCommand>>([]), bot => bot.SessionUp(), lease.Token);
+            }
 
             while (!await AdvanceAsync(lease.Token))
             {
@@ -117,6 +124,13 @@ internal sealed class LiveBotSession(
         {
             journal.Lost(_id);
         }
+        catch (Exception exception) when (!up && exception is not OperationCanceledException)
+        {
+            // The bot is counted as failed to take up; the third failure in a row fails it, so no Worker keeps trying.
+            await SessionFailedAsync(exception.Message);
+
+            throw;
+        }
         catch (OperationCanceledException) when (lease.IsCancellationRequested)
         {
             // The Worker stops or the lease is lost; the lease expires for any Worker.
@@ -132,6 +146,19 @@ internal sealed class LiveBotSession(
 
             await keeper;
         }
+    }
+
+    private Task SessionFailedAsync(string reason)
+    {
+        return executor.ExecuteAsync(
+            async token =>
+            {
+                LiveBot bot = await repository.LockLeasedAsync(_id, worker.Id, leased.Epoch, token) ?? throw new LeaseLostException();
+                await repository.SaveAsync(bot.SessionFailed(reason), time.GetUtcNow(), token);
+
+                return 0;
+            },
+            CancellationToken.None);
     }
 
     /// <summary>Renews the lease on every poll and hands the bot as the database holds it to the session; a lost lease ends it.</summary>

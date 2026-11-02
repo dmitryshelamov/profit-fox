@@ -20,5 +20,7 @@ internal sealed class LiveBotDb
 
     public DateTimeOffset? LastBarAt { get; init; }
 
+    public int SessionFailures { get; init; }
+
     public long LeaseEpoch { get; init; }
 }

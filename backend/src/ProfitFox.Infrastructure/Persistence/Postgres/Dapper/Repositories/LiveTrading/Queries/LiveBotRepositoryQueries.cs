@@ -11,7 +11,8 @@ internal static class LiveBotRepositoryQueries
     private const string BotColumns = """
                                       bot_id AS "BotId", status, stop_reason AS "StopReason", strategy_version AS "StrategyVersion",
                                       parameter_values::text AS "ParameterValues", start_pending AS "StartPending", close_requested AS "CloseRequested",
-                                      last_order_number AS "LastOrderNumber", last_bar_at AS "LastBarAt", lease_epoch AS "LeaseEpoch"
+                                      last_order_number AS "LastOrderNumber", last_bar_at AS "LastBarAt", session_failures AS "SessionFailures",
+                                      lease_epoch AS "LeaseEpoch"
                                       """;
 
     private const string PositionColumns = """
@@ -126,7 +127,7 @@ internal static class LiveBotRepositoryQueries
             """
             UPDATE live_bots SET status = @Status, stop_reason = @StopReason, strategy_version = @StrategyVersion,
                 parameter_values = @ParameterValues::jsonb, start_pending = @StartPending, close_requested = @CloseRequested,
-                last_order_number = @LastOrderNumber, last_bar_at = @LastBarAt, updated_at = @Now
+                last_order_number = @LastOrderNumber, last_bar_at = @LastBarAt, session_failures = @SessionFailures, updated_at = @Now
             WHERE bot_id = @BotId
             """,
             new
@@ -140,6 +141,7 @@ internal static class LiveBotRepositoryQueries
                 bot.CloseRequested,
                 bot.LastOrderNumber,
                 bot.LastBarAt,
+                bot.SessionFailures,
                 Now = now
             },
             transaction,

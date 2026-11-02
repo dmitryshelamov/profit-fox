@@ -36,6 +36,9 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
     /// <summary>Every client id a cancel was sent for.</summary>
     public List<string> Cancels { get; } = [];
 
+    /// <summary>The fee rates of the account do not come, so no session of a bot gets up.</summary>
+    public bool FeesUnavailable { get; set; }
+
     /// <summary>When each cancel came, by the clock of the app.</summary>
     public List<(string ClientId, DateTimeOffset At)> CancelTimes { get; } = [];
 
@@ -291,6 +294,11 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
 
     public Task<FeeSchedule> GetFeesAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
     {
+        if (FeesUnavailable)
+        {
+            throw new ProfitFox.Application.Exceptions.ExchangeUnavailableException("Bybit is unavailable: fee rates did not come.");
+        }
+
         return Task.FromResult(new FeeSchedule(0m, 0m, instrument.Category));
     }
 

@@ -12,6 +12,46 @@ public class LiveBotTests
     private static readonly Guid Bot = Guid.Parse("11111111-1111-4111-8111-111111111111");
     private static readonly IReadOnlyDictionary<string, NodeValue> Values = new Dictionary<string, NodeValue> { ["fast"] = new NumberValue(10m) };
 
+    // A session that fails before it is up is counted; the bot goes on, another take tries again.
+    [Test]
+    public void Session_that_fails_to_start_is_counted()
+    {
+        LiveBot bot = LiveBot.New(Bot).Start(1, Values);
+
+        LiveBot failed = bot.SessionFailed("Bybit is unavailable.");
+
+        (failed.Status, failed.SessionFailures, failed.StopReason).ShouldBe((LiveBotStatus.Running, 1, null));
+    }
+
+    // The third failure in a row stops trying: the bot fails with the reason, and a close of its position is given up too.
+    [Test]
+    public void Third_session_failure_in_a_row_fails_the_bot()
+    {
+        LiveBot bot = LiveBot.New(Bot) with { Status = LiveBotStatus.Stopping, CloseRequested = true, SessionFailures = 2 };
+
+        LiveBot failed = bot.SessionFailed("Bybit is unavailable.");
+
+        (failed.Status, failed.CloseRequested, failed.Kept).ShouldBe((LiveBotStatus.Failed, false, false));
+        failed.StopReason.ShouldBe("The Worker failed to take the bot 3 times in a row: Bybit is unavailable.");
+    }
+
+    // As with any failure, the first reason stays: the bot was stopping for it before its Worker failed.
+    [Test]
+    public void Third_session_failure_keeps_the_first_reason()
+    {
+        LiveBot bot = LiveBot.New(Bot) with { Status = LiveBotStatus.Stopping, StopReason = "Order c-7 of the bot is unknown.", SessionFailures = 2 };
+
+        bot.SessionFailed("Bybit is unavailable.").StopReason.ShouldBe("Order c-7 of the bot is unknown.");
+    }
+
+    [Test]
+    public void Session_that_is_up_forgets_the_failures()
+    {
+        LiveBot bot = LiveBot.New(Bot).Start(1, Values) with { SessionFailures = 2 };
+
+        bot.SessionUp().SessionFailures.ShouldBe(0);
+    }
+
     // Scenario "Новый бот".
     [Test]
     public void New_bot_is_stopped_without_a_reason()

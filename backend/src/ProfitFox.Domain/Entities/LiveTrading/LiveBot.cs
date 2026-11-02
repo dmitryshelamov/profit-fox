@@ -7,7 +7,7 @@ namespace ProfitFox.Domain.Entities.LiveTrading;
 /// <summary>
 ///     A bot in live trading: its status, the strategy version and parameter values fixed when it started, and what the Worker
 ///     that keeps it needs to go on. <see cref="StartPending" /> gives the strategy its start event once; <see cref="CloseRequested" />
-///     asks a Worker to close the position of a stopped bot.
+///     asks a Worker to close the position of a stopped bot; <see cref="SessionFailures" /> counts the failures in a row to take it up.
 /// </summary>
 public sealed record LiveBot(
     Guid BotId,
@@ -18,8 +18,12 @@ public sealed record LiveBot(
     bool StartPending,
     bool CloseRequested,
     int LastOrderNumber,
-    DateTimeOffset? LastBarAt)
+    DateTimeOffset? LastBarAt,
+    int SessionFailures = 0)
 {
+    // How many failures in a row to take the bot up a Worker makes before the bot fails.
+    private const int MaxSessionFailures = 3;
+
     public static LiveBot New(Guid botId)
     {
         return new LiveBot(botId, LiveBotStatus.Stopped, null, null, new Dictionary<string, NodeValue>(), false, false, 0, null);
@@ -99,6 +103,31 @@ public sealed record LiveBot(
     public LiveBot Closed()
     {
         return this with { CloseRequested = false };
+    }
+
+    /// <summary>
+    ///     A Worker failed to take the bot up. The third failure in a row stops trying: the bot fails with the reason and gives up a
+    ///     close of its position, so no Worker takes it again until the owner starts it.
+    /// </summary>
+    public LiveBot SessionFailed(string reason)
+    {
+        int failures = SessionFailures + 1;
+
+        return failures < MaxSessionFailures
+            ? this with { SessionFailures = failures }
+            : this with
+            {
+                Status = LiveBotStatus.Failed,
+                StopReason = StopReason ?? $"The Worker failed to take the bot {failures} times in a row: {reason}",
+                CloseRequested = false,
+                SessionFailures = failures
+            };
+    }
+
+    /// <summary>A Worker took the bot up: the failures before are forgotten.</summary>
+    public LiveBot SessionUp()
+    {
+        return this with { SessionFailures = 0 };
     }
 
     public LiveBot Started()
