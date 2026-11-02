@@ -1,8 +1,10 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 
 import { type ParameterDef, parameterMeta } from '@/modules/bots';
 import { ApiError, type Schemas } from '@/shared/api/client';
+import { isDecimalText } from '@/shared/api/jsonNumber';
 import type { FieldErrors } from '@/shared/api/problems';
 import { groupDigits } from '@/shared/format/format';
 import { Button } from '@/shared/ui/Button';
@@ -62,6 +64,7 @@ export function BacktestForm({
   now: number;
 }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const initial = periodEndingAt(new Date(now), bot.interval, 'month');
   const [from, setFrom] = useState(momentText(initial.from));
   const [to, setTo] = useState(momentText(initial.to));
@@ -91,7 +94,7 @@ export function BacktestForm({
   async function start() {
     setErrors({ fields: {}, form: [] });
     const filled = simulationFields.filter(({ key }) => (simulation[key] ?? '').trim() !== '');
-    const notNumbers = filled.filter(({ key }) => !Number.isFinite(Number(simulation[key])));
+    const notNumbers = filled.filter(({ key }) => !isDecimalText(simulation[key]!.trim()));
 
     if (notNumbers.length > 0) {
       setErrors({
@@ -115,7 +118,7 @@ export function BacktestForm({
 
     if (filled.length > 0 || mode !== '') {
       body.simulation = {
-        ...Object.fromEntries(filled.map(({ key }) => [key, Number(simulation[key])])),
+        ...Object.fromEntries(filled.map(({ key }) => [key, simulation[key]!.trim()])),
         ...(mode === '' ? {} : { limitFillMode: mode }),
       };
     }
@@ -123,6 +126,11 @@ export function BacktestForm({
     try {
       const id = await createBacktest(botId, body);
 
+      // The bot page and the list of bots show cached lists for 30 seconds; the new backtest has to be in both.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['bots'], exact: true }),
+        queryClient.invalidateQueries({ queryKey: ['bots', botId, 'backtests'] }),
+      ]);
       await navigate({ to: '/backtests/$backtestId', params: { backtestId: id } });
     } catch (error) {
       if (!(error instanceof ApiError)) {
@@ -221,63 +229,70 @@ export function BacktestForm({
               const key = `parameters.${name}`;
 
               return (
-                <tr key={name} className="align-top">
-                  <th scope="row" className="py-2 pr-4 text-left font-normal">
-                    <span className="block font-mono font-semibold">{name}</span>
-                    <span className="text-xs text-faint">{parameterMeta(parameter)}</span>
-                  </th>
-                  <td className="py-2 pr-4">
-                    <div className="inline-grid grid-cols-2 gap-1 rounded-md border border-line bg-app p-1">
-                      {(['value', 'range'] as const).map((mode) => (
-                        <button
-                          key={mode}
-                          type="button"
-                          aria-pressed={current.mode === mode}
-                          className={`h-7 rounded px-2 text-sm ${current.mode === mode ? 'bg-panel-2 font-bold' : 'text-muted'}`}
-                          onClick={() => change(name, { mode })}
-                        >
-                          {mode === 'value' ? 'Значение' : 'Диапазон'}
-                        </button>
-                      ))}
-                    </div>
-                  </td>
-                  {current.mode === 'value' ? (
-                    <td colSpan={3} className="py-2 pr-4">
-                      <input
-                        aria-label={`${name} значение`}
-                        className={`${input} ${border(key)}`}
-                        placeholder={hint}
-                        value={current.value}
-                        onChange={(event) => change(name, { value: event.target.value })}
-                      />
-                      {problem(key)}
+                <Fragment key={name}>
+                  <tr className="align-top">
+                    <th scope="row" className="py-2 pr-4 text-left font-normal">
+                      <span className="block font-mono font-semibold">{name}</span>
+                      <span className="text-xs text-faint">{parameterMeta(parameter)}</span>
+                    </th>
+                    <td className="py-2 pr-4">
+                      <div className="inline-grid grid-cols-2 gap-1 rounded-md border border-line bg-app p-1">
+                        {(['value', 'range'] as const).map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            aria-pressed={current.mode === mode}
+                            className={`h-7 rounded px-2 text-sm ${current.mode === mode ? 'bg-panel-2 font-bold' : 'text-muted'}`}
+                            onClick={() => change(name, { mode })}
+                          >
+                            {mode === 'value' ? 'Значение' : 'Диапазон'}
+                          </button>
+                        ))}
+                      </div>
                     </td>
-                  ) : (
-                    <>
-                      {(
-                        [
-                          ['min', 'min'],
-                          ['max', 'max'],
-                          ['step', 'шаг'],
-                        ] as const
-                      ).map(([field, title]) => (
-                        <td key={field} className="py-2 pr-4">
-                          <input
-                            aria-label={`${name} ${title}`}
-                            className={`${input} ${'problem' in count && count.problem ? 'border-err' : border(key)}`}
-                            value={current[field]}
-                            onChange={(event) => change(name, { [field]: event.target.value })}
-                          />
-                        </td>
-                      ))}
-                    </>
+                    {current.mode === 'value' ? (
+                      <td colSpan={3} className="py-2 pr-4">
+                        <input
+                          aria-label={`${name} значение`}
+                          className={`${input} ${border(key)}`}
+                          placeholder={hint}
+                          value={current.value}
+                          onChange={(event) => change(name, { value: event.target.value })}
+                        />
+                        {problem(key)}
+                      </td>
+                    ) : (
+                      <>
+                        {(
+                          [
+                            ['min', 'min'],
+                            ['max', 'max'],
+                            ['step', 'шаг'],
+                          ] as const
+                        ).map(([field, title]) => (
+                          <td key={field} className="py-2 pr-4">
+                            <input
+                              aria-label={`${name} ${title}`}
+                              className={`${input} ${'problem' in count && count.problem ? 'border-err' : border(key)}`}
+                              value={current[field]}
+                              onChange={(event) => change(name, { [field]: event.target.value })}
+                            />
+                          </td>
+                        ))}
+                      </>
+                    )}
+                    <td className="py-4 font-mono">
+                      <span aria-label={`${name} значений`}>
+                        {'count' in count ? String(count.count) : '—'}
+                      </span>
+                    </td>
+                  </tr>
+                  {current.mode === 'range' && fieldError(key) && (
+                    <tr>
+                      <td colSpan={6}>{problem(key)}</td>
+                    </tr>
                   )}
-                  <td className="py-4 font-mono">
-                    <span aria-label={`${name} значений`}>
-                      {'count' in count ? String(count.count) : '—'}
-                    </span>
-                  </td>
-                </tr>
+                </Fragment>
               );
             })}
           </tbody>

@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { instrumentsQuery, intervals } from '@/modules/market-data';
 import { strategiesQuery, strategyQuery } from '@/modules/strategies';
 import { ApiError, type Schemas } from '@/shared/api/client';
+import { isDecimalText } from '@/shared/api/jsonNumber';
 import type { FieldErrors } from '@/shared/api/problems';
 import { Button } from '@/shared/ui/Button';
 
@@ -78,6 +79,12 @@ export function BotForm({
   }
 
   async function save() {
+    if (!isDecimalText(balance.trim())) {
+      setErrors({ fields: { balance: ['Введите число.'] }, form: [] });
+
+      return;
+    }
+
     setErrors({ fields: {}, form: [] });
     const values = {
       name,

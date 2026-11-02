@@ -1,9 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 
 import { StatusBadge } from '@/modules/backtests';
 import { botsQuery } from '@/modules/bots';
-import { intervalLabel } from '@/modules/market-data';
+import { instrumentsQuery, intervalLabel } from '@/modules/market-data';
 import { strategiesQuery } from '@/modules/strategies';
 import { combinationsWord, groupDigits } from '@/shared/format/format';
 import { Badge } from '@/shared/ui/Badge';
@@ -13,6 +13,34 @@ const cell = 'px-5 py-4';
 export function BotsPage() {
   const bots = useQuery(botsQuery);
   const strategies = useQuery(strategiesQuery);
+  const pairs = [
+    ...new Map(
+      (bots.data ?? []).map(({ category, symbol }) => [
+        `${category} ${symbol}`,
+        { category, symbol },
+      ]),
+    ).values(),
+  ];
+  const instruments = useQueries({
+    queries: pairs.map(({ category, symbol }) => instrumentsQuery(category, symbol)),
+  });
+  const quoteCoinOf = (category: string, symbol: string) =>
+    instruments[
+      pairs.findIndex((pair) => pair.category === category && pair.symbol === symbol)
+    ]?.data?.find((item) => item.symbol === symbol)?.quoteCoin;
+  const balanceOf = ({
+    balance,
+    category,
+    symbol,
+  }: {
+    balance: string;
+    category: string;
+    symbol: string;
+  }) => {
+    const quoteCoin = quoteCoinOf(category, symbol);
+
+    return quoteCoin ? `${groupDigits(balance)} ${quoteCoin}` : groupDigits(balance);
+  };
   const strategyName = (id: string) => strategies.data?.find((item) => item.id === id)?.name ?? '';
 
   return (
@@ -55,7 +83,7 @@ export function BotsPage() {
                 {bot.category} · {bot.symbol}
               </td>
               <td className={cell}>{intervalLabel(bot.interval)}</td>
-              <td className={`${cell} font-mono whitespace-nowrap`}>{groupDigits(bot.balance)}</td>
+              <td className={`${cell} font-mono whitespace-nowrap`}>{balanceOf(bot)}</td>
               <td className={`${cell} whitespace-nowrap`}>
                 {bot.lastBacktest ? (
                   <span className="flex items-center gap-2">

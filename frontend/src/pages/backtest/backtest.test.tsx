@@ -168,6 +168,34 @@ describe('backtest page', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Не удалось загрузить бэктест.');
   });
 
+  it('stops asking for a backtest that is gone', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const requests = fakeApi({ [`GET /api/backtests/${backtestId}`]: () => problem(404, 'нет') });
+    renderApp(`/backtests/${backtestId}`);
+    await screen.findByRole('alert');
+    const asked = () =>
+      requests.filter((request) => request.url.includes('/api/backtests/')).length;
+    const before = asked();
+
+    await act(() => vi.advanceTimersByTimeAsync(10_000));
+
+    expect(asked()).toBe(before);
+  });
+
+  it('keeps asking for a backtest while the server fails', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const requests = fakeApi({ [`GET /api/backtests/${backtestId}`]: () => problem(500, 'сбой') });
+    renderApp(`/backtests/${backtestId}`);
+    await screen.findByRole('alert', {}, { timeout: 5000 });
+    const asked = () =>
+      requests.filter((request) => request.url.includes('/api/backtests/')).length;
+    const before = asked();
+
+    await act(() => vi.advanceTimersByTimeAsync(4100));
+
+    expect(asked()).toBeGreaterThan(before);
+  });
+
   it('shows the reason a backtest failed', async () => {
     fakeApi(routes(() => backtestFull({ status: 'Failed', error: 'Bybit: биржа недоступна' })));
     renderApp(`/backtests/${backtestId}`);

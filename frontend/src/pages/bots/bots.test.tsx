@@ -28,6 +28,50 @@ describe('bot list', () => {
     expect(within(row).getByText('1 000')).toBeInTheDocument();
   });
 
+  // Scenario "Список ботов": the balance is in the quote coin of the instrument.
+  it('labels the balance with the quote coin of the instrument', async () => {
+    const requests = fakeApi({
+      'GET /api/bots': () =>
+        json([
+          { ...botSummary, id: 'a', name: 'Первый', category: 'spot', symbol: 'ETHBTC' },
+          { ...botSummary, id: 'b', name: 'Второй', category: 'spot', symbol: 'ETHBTC' },
+          { ...botSummary, id: 'c', name: 'Третий', category: 'linear', symbol: 'BTCUSDT' },
+          { ...botSummary, id: 'd', name: 'Четвёртый', category: 'spot', symbol: 'ETH' },
+        ]),
+      'GET /api/strategies': () => json([emaSummary]),
+      'GET /api/market-data/instruments': (request) => {
+        const url = new URL(request.url);
+
+        return json(
+          url.searchParams.get('Category') === 'spot'
+            ? [
+                { category: 'spot', symbol: 'ETHBTC', baseCoin: 'ETH', quoteCoin: 'BTC' },
+                { category: 'spot', symbol: 'ETHUSDT', baseCoin: 'ETH', quoteCoin: 'USDT' },
+              ]
+            : [{ category: 'linear', symbol: 'BTCUSDT', baseCoin: 'BTC', quoteCoin: 'USDT' }],
+        );
+      },
+    });
+    renderApp('/bots');
+
+    const first = (await screen.findByText('Первый')).closest('tr')!;
+    expect(await within(first).findByText('1 000 BTC')).toBeInTheDocument();
+    expect(
+      await within((await screen.findByText('Второй')).closest('tr')!).findByText('1 000 BTC'),
+    ).toBeInTheDocument();
+    expect(
+      await within((await screen.findByText('Третий')).closest('tr')!).findByText('1 000 USDT'),
+    ).toBeInTheDocument();
+    // No exact match of the symbol: the number only.
+    expect(
+      within((await screen.findByText('Четвёртый')).closest('tr')!).getByText('1 000'),
+    ).toBeInTheDocument();
+    // One request for a pair of category and symbol, not one for a bot.
+    expect(
+      requests.filter((request) => request.url.includes('/api/market-data/instruments')),
+    ).toHaveLength(3);
+  });
+
   // Scenario "Последний бэктест считается".
   it('shows the status and progress of the last backtest that is running', async () => {
     open([

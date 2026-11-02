@@ -1,6 +1,6 @@
 import { queryOptions } from '@tanstack/react-query';
 
-import { api, type Schemas, unwrap } from '@/shared/api/client';
+import { api, ApiError, type Schemas, unwrap } from '@/shared/api/client';
 
 import { isFinished } from './model/status';
 
@@ -16,13 +16,16 @@ export function botBacktestsQuery(botId: string) {
   });
 }
 
-/** One backtest; polled every 2 seconds until it is finished. */
+/** One backtest; polled every 2 seconds until it is finished, or until the server says there is none. */
 export function backtestQuery(id: string) {
   return queryOptions({
     queryKey: ['backtests', id],
     queryFn: async () => unwrap(await api.GET('/api/backtests/{id}', { params: { path: { id } } })),
     refetchInterval: (query) =>
-      query.state.data && isFinished(query.state.data.status) ? false : 2000,
+      (query.state.data && isFinished(query.state.data.status)) ||
+      (query.state.error instanceof ApiError && query.state.error.status < 500)
+        ? false
+        : 2000,
     refetchIntervalInBackground: false,
   });
 }

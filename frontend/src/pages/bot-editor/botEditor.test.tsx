@@ -72,8 +72,39 @@ describe('bot form', () => {
       category: 'linear',
       symbol: 'BTCUSDT',
       interval: '60',
-      balance: 1000,
+      balance: '1000',
     });
+  });
+
+  // Money goes as text: a JavaScript number would round the digits.
+  it('sends the balance and a parameter with every digit typed', async () => {
+    const requests = fakeApi(routes({ 'POST /api/bots': () => problem(400, 'x') }));
+    renderApp(`/bots/new?strategyId=${emaSummary.id}`);
+
+    await userEvent.type(await screen.findByLabelText('Название'), 'Бот');
+    await userEvent.type(screen.getByLabelText('fast'), '10.123456789012345678');
+    await userEvent.type(screen.getByLabelText('Баланс бота'), ' 1000.12345678901234567');
+    await userEvent.click(screen.getByRole('button', { name: 'Создать бота' }));
+
+    await waitFor(() => expect(requests.some((request) => request.method === 'POST')).toBe(true));
+    const text = await requests.find((request) => request.method === 'POST')!.text();
+    expect(text).toContain('"balance":"1000.12345678901234567"');
+    expect(text).toContain('"parameterValues":{"fast":10.123456789012345678}');
+  });
+
+  it.each(['', '0x10', '1e5', '1,5'])('rejects "%s" as a balance at the field', async (text) => {
+    const requests = fakeApi(routes({ 'POST /api/bots': () => json({ id: botId }, 201) }));
+    renderApp('/bots/new');
+
+    await userEvent.type(await screen.findByLabelText('Название'), 'Бот');
+    if (text !== '') {
+      await userEvent.type(screen.getByLabelText('Баланс бота'), text);
+    }
+    await userEvent.click(screen.getByRole('button', { name: 'Создать бота' }));
+
+    expect(await screen.findByText('Введите число.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Баланс бота')).toHaveClass('border-err');
+    expect(requests.some((request) => request.method === 'POST')).toBe(false);
   });
 
   // Scenario "Значение по умолчанию".
@@ -85,6 +116,7 @@ describe('bot form', () => {
 
     expect(await screen.findByLabelText('slow')).toHaveAttribute('placeholder', '26');
     await userEvent.type(screen.getByLabelText('fast'), '10');
+    await userEvent.type(screen.getByLabelText('Баланс бота'), '5');
     await userEvent.click(screen.getByRole('button', { name: 'Создать бота' }));
 
     await screen.findByText('Нет');
@@ -236,6 +268,7 @@ describe('bot form', () => {
     await userEvent.type(await screen.findByLabelText('Название'), 'Бот');
     await userEvent.type(screen.getByLabelText('fast'), '1');
     await userEvent.type(screen.getByLabelText('slow'), '30');
+    await userEvent.type(screen.getByLabelText('Баланс бота'), '5');
     await userEvent.click(screen.getByRole('button', { name: 'Создать бота' }));
 
     expect(await screen.findByText('Не меньше 2')).toBeInTheDocument();
@@ -254,6 +287,7 @@ describe('bot form', () => {
     );
     renderApp('/bots/new');
 
+    await userEvent.type(await screen.findByLabelText('Баланс бота'), '5');
     await userEvent.click(await screen.findByRole('button', { name: 'Создать бота' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Не удалось связаться с сервером.');
@@ -272,6 +306,7 @@ describe('bot form', () => {
     fakeApi(routes({ 'POST /api/bots': () => problem(503, 'Биржа недоступна.') }));
     renderApp('/bots/new');
 
+    await userEvent.type(await screen.findByLabelText('Баланс бота'), '5');
     await userEvent.click(await screen.findByRole('button', { name: 'Создать бота' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Биржа недоступна.');

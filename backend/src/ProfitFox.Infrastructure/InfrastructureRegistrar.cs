@@ -59,9 +59,9 @@ public static class InfrastructureRegistrar
         services.AddSingleton<ExchangeResilienceExecutor>();
         services.AddTransient<IMarketHistoryClient, BybitMarketDataClient>();
         services.AddTransient<IInstrumentRulesProvider, BybitMarketDataClient>();
-        services.AddTransient<BybitMarketDataClient>();
+        services.AddKeyedTransient<IInstrumentCatalog, BybitMarketDataClient>(CachedInstrumentCatalog.InnerKey);
         services.AddSingleton<IInstrumentCatalog>(provider => new CachedInstrumentCatalog(
-            provider.GetRequiredService<BybitMarketDataClient>(),
+            provider.GetRequiredService<IServiceScopeFactory>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddSingleton(configuration.GetSection("Backtests").Get<BacktestSettings>() ?? new BacktestSettings());
         services.AddSingleton(new EngineVersion(EngineVersion.Current));

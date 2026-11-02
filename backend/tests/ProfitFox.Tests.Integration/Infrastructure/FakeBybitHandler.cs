@@ -36,6 +36,9 @@ public class FakeBybitHandler : HttpMessageHandler
     /// <summary>Kline requests get an error Bybit does not ask to retry.</summary>
     public bool RejectKlines { get; set; }
 
+    /// <summary>Instrument list requests get an error Bybit does not ask to retry.</summary>
+    public bool RejectLists { get; set; }
+
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         if (Unavailable)
@@ -48,6 +51,14 @@ public class FakeBybitHandler : HttpMessageHandler
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("""{"retCode":10001,"retMsg":"params error: symbol invalid","result":{},"retExtInfo":{},"time":0}""")
+            });
+        }
+
+        if (RejectLists && request.RequestUri!.AbsolutePath == "/v5/market/instruments-info")
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"retCode":10001,"retMsg":"params error","result":{},"retExtInfo":{},"time":0}""")
             });
         }
 

@@ -1,6 +1,7 @@
 import createClient from 'openapi-fetch';
 
 import type { components, paths } from './generated/schema';
+import { serializeJson } from './jsonNumber';
 
 export type Schemas = components['schemas'];
 export type Usage = Schemas['UsageResponse'];
@@ -8,11 +9,13 @@ export type AffectedBot = Schemas['AffectedBotResponse'];
 
 /**
  * The only HTTP client. Requests go to the page's own origin: Vite in development and Caddy in production forward
- * `/api` to the API. `fetch` is resolved on every call, so a test can replace the global.
+ * `/api` to the API. `fetch` is resolved on every call, so a test can replace the global. A body is written by
+ * {@link serializeJson}, so a number that must keep its digits goes out as typed.
  */
 export const api = createClient<paths>({
   baseUrl: globalThis.location?.origin ?? '',
   fetch: (request) => globalThis.fetch(request),
+  bodySerializer: serializeJson,
 });
 
 /** A failed answer of the API: the Problem Details the backend sends, with its validation errors and conflicts. */

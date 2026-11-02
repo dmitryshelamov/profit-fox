@@ -24,7 +24,7 @@ public sealed class InstrumentsController(ISender sender) : ControllerBase
         {
             result = await sender.Send(new SearchInstrumentsQuery(parameters.Category, parameters.Query, parameters.Limit), cancellationToken);
         }
-        catch (ExchangeUnavailableException exception)
+        catch (ExchangeException exception)
         {
             return Problem(exception.Message, statusCode: StatusCodes.Status503ServiceUnavailable);
         }

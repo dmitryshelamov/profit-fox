@@ -91,6 +91,18 @@ public class BacktestsApiTests
         (simulation.GetProperty("balance").GetString(), simulation.GetProperty("limitFillMode").GetString()).ShouldBe(("500", "touch"));
     }
 
+    [Test]
+    public async Task Simulation_settings_as_decimal_strings_are_kept_exactly()
+    {
+        JsonObject body = Body();
+        body["simulation"] = new JsonObject { ["balance"] = "500.12345678901234567", ["marketFeePercent"] = "0.055" };
+
+        Guid id = (await (await CreateAsync(body)).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        JsonElement simulation = (await _client.GetFromJsonAsync<JsonElement>($"/api/backtests/{id}")).GetProperty("simulation");
+        (simulation.GetProperty("balance").GetString(), simulation.GetProperty("marketFeePercent").GetString()).ShouldBe(("500.12345678901234567", "0.055"));
+    }
+
     [TestCase("from", "2024-01-01", "from")]
     [TestCase("to", "2030-01-01T00:00:00Z", "to")]
     [TestCase("from", "2024-03-01T00:00:00Z", "period")]

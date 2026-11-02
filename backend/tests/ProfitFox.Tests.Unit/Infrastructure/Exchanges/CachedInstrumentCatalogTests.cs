@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 
 using NSubstitute;
@@ -20,6 +21,7 @@ public class CachedInstrumentCatalogTests
     private IInstrumentCatalog _inner = null!;
     private FakeTimeProvider _time = null!;
     private CachedInstrumentCatalog _catalog = null!;
+    private int _resolved;
 
     [SetUp]
     public void SetUp()
@@ -28,7 +30,16 @@ public class CachedInstrumentCatalogTests
         _inner.ListAsync(MarketCategory.Spot, Arg.Any<CancellationToken>()).Returns(Spot);
         _inner.ListAsync(MarketCategory.Linear, Arg.Any<CancellationToken>()).Returns(Linear);
         _time = new FakeTimeProvider(DateTimeOffset.Parse("2024-03-10T12:30:00Z"));
-        _catalog = new CachedInstrumentCatalog(_inner, _time);
+        _resolved = 0;
+        ServiceProvider provider = new ServiceCollection()
+            .AddKeyedTransient<IInstrumentCatalog>(CachedInstrumentCatalog.InnerKey, (_, _) =>
+            {
+                _resolved++;
+
+                return _inner;
+            })
+            .BuildServiceProvider();
+        _catalog = new CachedInstrumentCatalog(provider.GetRequiredService<IServiceScopeFactory>(), _time);
     }
 
     [Test]
@@ -75,5 +86,63 @@ public class CachedInstrumentCatalogTests
         IReadOnlyList<ListedInstrument> second = await _catalog.ListAsync(MarketCategory.Spot, CancellationToken.None);
 
         second.ShouldBe(Spot);
+    }
+
+    [Test]
+    public async Task Concurrent_lists_on_a_cold_cache_share_one_fetch()
+    {
+        var fetch = new TaskCompletionSource<IReadOnlyList<ListedInstrument>>();
+        _inner.ListAsync(MarketCategory.Spot, Arg.Any<CancellationToken>()).Returns(fetch.Task);
+
+        Task<IReadOnlyList<ListedInstrument>> first = _catalog.ListAsync(MarketCategory.Spot, CancellationToken.None);
+        Task<IReadOnlyList<ListedInstrument>> second = _catalog.ListAsync(MarketCategory.Spot, CancellationToken.None);
+        fetch.SetResult(Spot);
+
+        (await first).ShouldBe(Spot);
+        (await second).ShouldBe(Spot);
+        await _inner.Received(1).ListAsync(MarketCategory.Spot, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Failure_of_a_shared_fetch_reaches_every_caller_and_is_not_cached()
+    {
+        var fetch = new TaskCompletionSource<IReadOnlyList<ListedInstrument>>();
+        _inner.ListAsync(MarketCategory.Spot, Arg.Any<CancellationToken>()).Returns(fetch.Task, Task.FromResult<IReadOnlyList<ListedInstrument>>(Spot));
+
+        Task<IReadOnlyList<ListedInstrument>> first = _catalog.ListAsync(MarketCategory.Spot, CancellationToken.None);
+        Task<IReadOnlyList<ListedInstrument>> second = _catalog.ListAsync(MarketCategory.Spot, CancellationToken.None);
+        fetch.SetException(new ExchangeUnavailableException("down"));
+
+        await Should.ThrowAsync<ExchangeUnavailableException>(() => first);
+        await Should.ThrowAsync<ExchangeUnavailableException>(() => second);
+        (await _catalog.ListAsync(MarketCategory.Spot, CancellationToken.None)).ShouldBe(Spot);
+    }
+
+    [Test]
+    public async Task Caller_that_stops_waiting_does_not_cancel_the_fetch_of_the_others()
+    {
+        var fetch = new TaskCompletionSource<IReadOnlyList<ListedInstrument>>();
+        _inner.ListAsync(MarketCategory.Spot, Arg.Any<CancellationToken>()).Returns(fetch.Task);
+        using var cancel = new CancellationTokenSource();
+
+        Task<IReadOnlyList<ListedInstrument>> leaving = _catalog.ListAsync(MarketCategory.Spot, cancel.Token);
+        Task<IReadOnlyList<ListedInstrument>> staying = _catalog.ListAsync(MarketCategory.Spot, CancellationToken.None);
+        await cancel.CancelAsync();
+        fetch.SetResult(Spot);
+
+        await Should.ThrowAsync<OperationCanceledException>(() => leaving);
+        (await staying).ShouldBe(Spot);
+    }
+
+    // The inner catalog holds an HTTP client; kept for the life of the app it would never see a changed address of Bybit.
+    [Test]
+    public async Task Each_fetch_resolves_the_inner_catalog_anew()
+    {
+        await _catalog.ListAsync(MarketCategory.Spot, CancellationToken.None);
+        await _catalog.ListAsync(MarketCategory.Spot, CancellationToken.None);
+        _time.Advance(TimeSpan.FromMinutes(5));
+        await _catalog.ListAsync(MarketCategory.Spot, CancellationToken.None);
+
+        _resolved.ShouldBe(2);
     }
 }

@@ -1,3 +1,5 @@
+import { isDecimalText, jsonNumberOf } from '@/shared/api/jsonNumber';
+
 import { rangeCount } from './grid';
 
 /** What the form holds for one parameter: a single value, or a range with its step. All of it is text. */
@@ -56,7 +58,7 @@ export function combinationTotal(
 type Declared = { readonly name: string; readonly type: 'number' | 'boolean' | 'duration' };
 
 const typed = (type: Declared['type'], text: string) =>
-  type === 'number' && Number.isFinite(Number(text)) ? Number(text) : text;
+  type === 'number' && isDecimalText(text) ? jsonNumberOf(text) : text;
 
 /** The `parameters` of the request: filled values and ranges; an empty value is left out, so the bot's value applies. */
 export function parametersBody(

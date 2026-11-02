@@ -1,8 +1,16 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { fakeApi, json, problem } from '@/test/fakeApi';
-import { botDetails, botId, emaDefinition, emaSummary, savedStrategy } from '@/test/fixtures';
+import {
+  backtestSummary,
+  botDetails,
+  botId,
+  emaDefinition,
+  emaSummary,
+  progressOf,
+  savedStrategy,
+} from '@/test/fixtures';
 import { renderApp } from '@/test/renderApp';
 
 const createdId = '99999999-9999-4999-8999-999999999999';
@@ -162,12 +170,52 @@ describe('new backtest form', () => {
 
     await waitFor(() => expect(requests.some((request) => request.method === 'POST')).toBe(true));
     expect((await submitted(requests)).simulation).toEqual({
-      balance: 2000,
-      limitFeePercent: 0.02,
-      marketFeePercent: 0.055,
-      slippagePercent: 0.1,
+      balance: '2000',
+      limitFeePercent: '0.02',
+      marketFeePercent: '0.055',
+      slippagePercent: '0.1',
       limitFillMode: 'touch',
     });
+  });
+
+  // Money goes as text: a JavaScript number would round the digits.
+  it('sends the simulation balance with every digit typed', async () => {
+    const requests = fakeApi(
+      routes({
+        [`POST /api/bots/${botId}/backtests`]: created,
+        [`GET /api/backtests/${createdId}`]: () => problem(404, 'later'),
+      }),
+    );
+    renderApp(`/bots/${botId}/backtests/new`);
+
+    await userEvent.click(await screen.findByText('Настройки симуляции'));
+    await setField('Баланс', ' 1000.12345678901234567 ');
+    await userEvent.click(screen.getByRole('button', { name: 'Запустить' }));
+
+    await waitFor(() => expect(requests.some((request) => request.method === 'POST')).toBe(true));
+    const post = requests.find((request) => request.method === 'POST')!;
+    expect(await post.text()).toContain('"balance":"1000.12345678901234567"');
+  });
+
+  it('sends a number of a parameter with every digit typed', async () => {
+    const requests = fakeApi(
+      routes({
+        [`POST /api/bots/${botId}/backtests`]: created,
+        [`GET /api/backtests/${createdId}`]: () => problem(404, 'later'),
+      }),
+    );
+    renderApp(`/bots/${botId}/backtests/new`);
+
+    await setField('fast значение', '12.123456789012345678');
+    await setRange('slow', '20.000000000000000001', '30.000000000000000001', '5');
+    await userEvent.click(screen.getByRole('button', { name: 'Запустить' }));
+
+    await waitFor(() => expect(requests.some((request) => request.method === 'POST')).toBe(true));
+    const text = await requests.find((request) => request.method === 'POST')!.text();
+    expect(text).toContain('"fast":12.123456789012345678');
+    expect(text).toContain(
+      '"slow":{"min":20.000000000000000001,"max":30.000000000000000001,"step":5}',
+    );
   });
 
   it('sends only the fill mode when that is the only simulation setting chosen', async () => {
@@ -201,7 +249,7 @@ describe('new backtest form', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Запустить' }));
 
     await waitFor(() => expect(requests.some((request) => request.method === 'POST')).toBe(true));
-    expect((await submitted(requests)).simulation).toEqual({ balance: 2000 });
+    expect((await submitted(requests)).simulation).toEqual({ balance: '2000' });
   });
 
   it('marks a simulation field that is no number and sends nothing', async () => {
@@ -219,6 +267,18 @@ describe('new backtest form', () => {
     expect(screen.getByLabelText('Комиссия рынка, %')).not.toHaveClass('border-err');
     expect(requests.some((request) => request.method === 'POST')).toBe(false);
     expect(history.location.pathname).toBe(`/bots/${botId}/backtests/new`);
+  });
+
+  it.each(['0x10', '1e5', '.5', '5.', '1 000'])('rejects "%s" as a balance', async (text) => {
+    const requests = fakeApi(routes({ [`POST /api/bots/${botId}/backtests`]: created }));
+    renderApp(`/bots/${botId}/backtests/new`);
+
+    await userEvent.click(await screen.findByText('Настройки симуляции'));
+    await setField('Баланс', text);
+    await userEvent.click(screen.getByRole('button', { name: 'Запустить' }));
+
+    expect(await screen.findByText('Введите число.')).toBeInTheDocument();
+    expect(requests.some((request) => request.method === 'POST')).toBe(false);
   });
 
   it('opens the simulation settings where a field is no number', async () => {
@@ -279,6 +339,22 @@ describe('new backtest form', () => {
 
     expect(await screen.findByText('Не меньше 2')).toBeInTheDocument();
     expect(screen.getByLabelText('fast значение')).toHaveClass('border-err');
+  });
+
+  it('shows the error of a parameter under the row while it is a range', async () => {
+    fakeApi(
+      routes({
+        [`POST /api/bots/${botId}/backtests`]: () =>
+          problem(400, 'x', { errors: { 'parameters.fast': ['Не меньше 2'] } }),
+      }),
+    );
+    renderApp(`/bots/${botId}/backtests/new`);
+
+    await setRange('fast', '5', '15', '5');
+    await userEvent.click(screen.getByRole('button', { name: 'Запустить' }));
+
+    expect(await screen.findByText('Не меньше 2')).toBeInTheDocument();
+    expect(screen.getByLabelText('fast min')).toHaveClass('border-err');
   });
 
   it('shows the error of the period at the period', async () => {
@@ -352,5 +428,71 @@ describe('new backtest form', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Биржа недоступна');
     expect(history.location.pathname).toBe(`/bots/${botId}/backtests/new`);
+  });
+
+  // The lists are cached for 30 seconds and polled only while one of them is unfinished.
+  it('shows the created backtest at once on the bot page and polls it', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: new Date('2026-11-02T12:30:00Z') });
+    let created = false;
+    const running = backtestSummary({
+      id: createdId,
+      status: 'Running',
+      progress: progressOf(1, 3),
+    });
+    const requests = fakeApi(
+      routes({
+        [`GET /api/bots/${botId}/backtests`]: () => json(created ? [running] : []),
+        'GET /api/bots': () => json([{ ...botDetails, lastBacktest: created ? running : null }]),
+        [`POST /api/bots/${botId}/backtests`]: () => {
+          created = true;
+
+          return json({ id: createdId }, 201);
+        },
+        [`GET /api/backtests/${createdId}`]: () => problem(404, 'later'),
+      }),
+    );
+    const { history } = renderApp(`/bots/${botId}`);
+
+    await userEvent.click(await screen.findByRole('link', { name: '+ Новый бэктест' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Запустить' }));
+    await waitFor(() => expect(history.location.pathname).toBe(`/backtests/${createdId}`));
+    history.push(`/bots/${botId}`);
+
+    expect(await screen.findByText('Считается', { exact: false })).toBeInTheDocument();
+    const listed = () =>
+      requests.filter((request) => request.url.endsWith(`/api/bots/${botId}/backtests`)).length;
+    const before = listed();
+    await act(() => vi.advanceTimersByTimeAsync(2100));
+    expect(listed()).toBeGreaterThan(before);
+  });
+
+  it('shows the created backtest as the last one in the list of bots', async () => {
+    let created = false;
+    const running = backtestSummary({
+      id: createdId,
+      status: 'Running',
+      progress: progressOf(1, 3),
+    });
+    fakeApi(
+      routes({
+        'GET /api/bots': () => json([{ ...botDetails, lastBacktest: created ? running : null }]),
+        [`POST /api/bots/${botId}/backtests`]: () => {
+          created = true;
+
+          return json({ id: createdId }, 201);
+        },
+        [`GET /api/bots/${botId}/backtests`]: () => json([]),
+        [`GET /api/backtests/${createdId}`]: () => problem(404, 'later'),
+      }),
+    );
+    const { history } = renderApp('/bots');
+
+    expect(await screen.findByText('Нет бэктестов')).toBeInTheDocument();
+    history.push(`/bots/${botId}/backtests/new`);
+    await userEvent.click(await screen.findByRole('button', { name: 'Запустить' }));
+    await waitFor(() => expect(history.location.pathname).toBe(`/backtests/${createdId}`));
+    history.push('/bots');
+
+    expect(await screen.findByText('Считается', { exact: false })).toBeInTheDocument();
   });
 });

@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 
 import { api, type Schemas, unwrap } from '@/shared/api/client';
+import type { JsonNumber } from '@/shared/api/jsonNumber';
 
 export const botsQuery = queryOptions({
   queryKey: ['bots'],
@@ -14,11 +15,11 @@ export function botQuery(id: string) {
   });
 }
 
-/** What the form sends: parameter values by name, the balance as a number the API reads as a decimal. */
+/** What the form sends: parameter values by name, the balance as the text typed, which the API reads as a decimal. */
 export interface BotInput {
   readonly name: string;
   readonly strategyId?: string;
-  readonly parameterValues: Readonly<Record<string, number | string>>;
+  readonly parameterValues: Readonly<Record<string, JsonNumber | string>>;
   readonly category: string;
   readonly symbol: string;
   readonly interval: string;
@@ -29,7 +30,7 @@ function bodyOf(input: BotInput): Schemas['BotBody'] {
   return {
     ...input,
     parameterValues: input.parameterValues as unknown as Schemas['JsonElement'],
-    balance: Number(input.balance),
+    balance: input.balance.trim(),
   };
 }
 

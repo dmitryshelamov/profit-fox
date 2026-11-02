@@ -1,3 +1,5 @@
+import { jsonNumberOf } from '@/shared/api/jsonNumber';
+
 import {
   combinationTotal,
   type ParameterInput,
@@ -75,7 +77,7 @@ describe('parameters of the request', () => {
         slow: valueInput,
         cooldown: { ...valueInput, value: '02:00:00' },
       }),
-    ).toEqual({ fast: 10, cooldown: '02:00:00' });
+    ).toEqual({ fast: jsonNumberOf('10'), cooldown: '02:00:00' });
   });
 
   it('sends a range as min, max and step', () => {
@@ -85,7 +87,7 @@ describe('parameters of the request', () => {
         cooldown: range('01:00:00', '03:00:00', '01:00:00'),
       }),
     ).toEqual({
-      fast: { min: 5, max: 15, step: 5 },
+      fast: { min: jsonNumberOf('5'), max: jsonNumberOf('15'), step: jsonNumberOf('5') },
       cooldown: { min: '01:00:00', max: '03:00:00', step: '01:00:00' },
     });
   });
@@ -96,6 +98,9 @@ describe('parameters of the request', () => {
         fast: { ...valueInput, value: 'abc' },
         slow: range('5', 'x', '5'),
       }),
-    ).toEqual({ fast: 'abc', slow: { min: 5, max: 'x', step: 5 } });
+    ).toEqual({
+      fast: 'abc',
+      slow: { min: jsonNumberOf('5'), max: 'x', step: jsonNumberOf('5') },
+    });
   });
 });

@@ -102,6 +102,16 @@ public class InstrumentsApiTests
     }
 
     [Test]
+    public async Task Rejected_list_request_means_503()
+    {
+        _factory.Bybit.RejectLists = true;
+
+        HttpResponseMessage response = await _client.GetAsync("/api/market-data/instruments?category=spot&query=btc");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable);
+    }
+
+    [Test]
     public async Task Second_search_within_five_minutes_does_not_ask_bybit_and_one_after_five_minutes_does()
     {
         await _client.GetAsync("/api/market-data/instruments?category=spot&query=btc");
