@@ -140,6 +140,21 @@ describe('live trading on the bot page', () => {
     );
   });
 
+  // The confirmation is modal: the focus moves into it, and Escape steps back without the action.
+  it('asks in a modal dialog that Escape closes without acting', async () => {
+    const requests = open({ status: 'stopped' });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Запустить' }));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+
+    await userEvent.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(requests.some((request) => request.method === 'POST')).toBe(false);
+  });
+
   // Scenario "Запуск без денег".
   it('shows why the server refused the start', async () => {
     open({ status: 'stopped' }, [], {

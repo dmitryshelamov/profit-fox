@@ -132,6 +132,7 @@ export function LiveControls({
       {confirming && (
         <Dialog
           title={confirming.title}
+          onClose={() => setConfirming(undefined)}
           actions={
             <>
               <Button onClick={() => setConfirming(undefined)}>Отмена</Button>
