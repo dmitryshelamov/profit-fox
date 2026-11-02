@@ -238,6 +238,9 @@ interface StubOrder {
   qty: string;
   orderStatus: string;
   cumExecQty: string;
+  cumExecValue: string;
+  /** The unit of `qty` of a spot market order, as Bybit reads it: a buy without one is sized in the quote coin. */
+  marketUnit: string;
 }
 
 const orders = new Map<string, StubOrder>();
@@ -262,12 +265,23 @@ function push(topic: string, data: object[]) {
   }
 }
 
+/** The unfilled quantity of an order in its own unit; nothing for a finished one. */
+function leaves(order: StubOrder): string {
+  if (order.orderStatus !== 'New' && order.orderStatus !== 'PartiallyFilled') {
+    return '0';
+  }
+
+  return String(
+    Number(order.qty) -
+      Number(order.marketUnit === 'quoteCoin' ? order.cumExecValue : order.cumExecQty),
+  );
+}
+
 function orderView(order: StubOrder) {
   return {
     ...order,
     timeInForce: 'GTC',
-    leavesQty: '0',
-    cumExecValue: '0',
+    leavesQty: leaves(order),
     cumExecFee: '0',
     rejectReason: 'EC_NoError',
     createdTime: String(Date.now()),
@@ -310,6 +324,11 @@ function createOrder(request: Record<string, unknown>) {
     qty: String(request.qty),
     orderStatus: 'New',
     cumExecQty: '0',
+    cumExecValue: '0',
+    marketUnit:
+      request.category === 'spot' && request.orderType === 'Market'
+        ? String(request.marketUnit ?? (request.side === 'Buy' ? 'quoteCoin' : 'baseCoin'))
+        : '',
   };
   orders.set(orderLinkId, order);
   push('order', [orderView(order)]);
@@ -351,19 +370,31 @@ function listOrders(url: URL, history: boolean) {
   });
 }
 
-/** Fills an order as the exchange would and tells the private streams. */
+/**
+ * Fills an order as the exchange would and tells the private streams. A spot market order sized in the quote coin buys
+ * what its amount pays for at the price; a finished order or one filled in full takes no more fills.
+ */
 function fill(url: URL) {
   const order = orders.get(url.searchParams.get('orderLinkId') ?? '');
 
-  if (!order) {
-    return { retCode: 10001, retMsg: 'No such order', result: {} };
+  if (!order || (order.orderStatus !== 'New' && order.orderStatus !== 'PartiallyFilled')) {
+    return { retCode: 10001, retMsg: 'No such open order', result: {} };
   }
 
-  const qty = Number(url.searchParams.get('qty') ?? order.qty);
   const price = Number(url.searchParams.get('price') ?? '100000');
-  const filled = Number(order.cumExecQty) + qty;
-  order.cumExecQty = String(filled);
-  order.orderStatus = filled >= Number(order.qty) ? 'Filled' : 'PartiallyFilled';
+  const byValue = order.marketUnit === 'quoteCoin';
+  const left = byValue
+    ? (Number(order.qty) - Number(order.cumExecValue)) / price
+    : Number(order.qty) - Number(order.cumExecQty);
+  const qty = Number(url.searchParams.get('qty') ?? left);
+
+  if (qty > left + 1e-12) {
+    return { retCode: 10001, retMsg: 'Fill exceeds the order', result: {} };
+  }
+
+  order.cumExecQty = String(Number(order.cumExecQty) + qty);
+  order.cumExecValue = String(Number(order.cumExecValue) + qty * price);
+  order.orderStatus = qty >= left - 1e-12 ? 'Filled' : 'PartiallyFilled';
   const base = order.symbol.replace(/USDT$/, '');
   coins[base] = (coins[base] ?? 0) + (order.side === 'Buy' ? qty : -qty);
   coins.USDT = (coins.USDT ?? 0) + (order.side === 'Buy' ? -qty * price : qty * price);
@@ -376,7 +407,7 @@ function fill(url: URL) {
     orderType: order.orderType,
     orderPrice: order.price,
     orderQty: order.qty,
-    leavesQty: '0',
+    leavesQty: leaves(order),
     execId: `e-${++execs}`,
     execQty: String(qty),
     execPrice: String(price),

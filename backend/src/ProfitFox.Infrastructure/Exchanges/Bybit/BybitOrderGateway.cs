@@ -34,6 +34,10 @@ internal sealed class BybitOrderGateway(HttpClient http, ILoggerFactory loggers,
     {
         using BybitRestClient client = BybitKeyClients.Create(http, loggers, settings, key.ApiKey, key.Secret);
         bool byAmount = order.QuoteAmount is not null && instrument.Category == MarketCategory.Spot;
+        // Bybit sizes a spot market buy in the quote coin by default: the unit is always said.
+        MarketUnit? unit = instrument.Category == MarketCategory.Spot && order.Type == OrderType.Market
+            ? byAmount ? MarketUnit.QuoteAsset : MarketUnit.BaseAsset
+            : null;
         HttpResult<BybitOrderId> result = await client.V5Api.Trading.PlaceOrderAsync(
             instrument.Category.ToBybit(),
             instrument.Symbol,
@@ -43,7 +47,7 @@ internal sealed class BybitOrderGateway(HttpClient http, ILoggerFactory loggers,
             order.Price,
             timeInForce: order.Type == OrderType.Limit ? TimeInForce.GoodTillCanceled : null,
             clientOrderId: order.ClientId,
-            marketUnit: byAmount ? MarketUnit.QuoteAsset : null,
+            marketUnit: unit,
             ct: cancellationToken);
 
         return result.Success ? new OrderOutcome(OrderOutcomeKind.Accepted, result.Data.OrderId) : Refusal(result, RepeatedClientIdCodes, OrderOutcomeKind.Accepted);

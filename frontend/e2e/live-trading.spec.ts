@@ -9,10 +9,12 @@ const stub = 'http://127.0.0.1:5296';
 
 async function stubOrders(
   request: APIRequestContext,
-): Promise<{ orderLinkId: string; side: string }[]> {
+): Promise<{ orderLinkId: string; side: string; qty: string; marketUnit: string }[]> {
   return (await (await request.get(`${stub}/control/orders`)).json()) as {
     orderLinkId: string;
     side: string;
+    qty: string;
+    marketUnit: string;
   }[];
 }
 
@@ -53,6 +55,8 @@ test('a bot starts, its fill opens the position, it survives a drop, stops and c
     .toBe(before + 1);
   const entry = (await stubOrders(request)).at(-1)!;
   expect(entry.side).toBe('Buy');
+  // The entry goes by the quantity of the coin: Bybit would read a bare qty of a market buy as USDT.
+  expect(entry.marketUnit).toBe('baseCoin');
   await request.post(`${stub}/control/fill?orderLinkId=${entry.orderLinkId}&price=100000`);
   const current = page.getByRole('region', { name: 'Текущая позиция' });
   await expect(current).toBeVisible({ timeout: 15_000 });

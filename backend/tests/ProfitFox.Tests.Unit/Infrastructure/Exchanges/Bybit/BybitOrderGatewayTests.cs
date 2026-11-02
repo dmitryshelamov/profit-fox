@@ -81,6 +81,36 @@ public class BybitOrderGatewayTests
         handler.Bodies.Single().ShouldContain("\"qty\":\"100\"");
     }
 
+    // Bybit reads the qty of a spot market buy in the quote coin unless told otherwise: 0.5 BTC would be 0.5 USDT.
+    [TestCase(OrderSide.Buy)]
+    [TestCase(OrderSide.Sell)]
+    public async Task Spot_market_order_by_quantity_is_sized_in_the_base_coin(OrderSide side)
+    {
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(Answer(0, "OK", """{"orderId":"x-1","orderLinkId":"c-1"}"""));
+
+        await Gateway(handler).PlaceAsync(Key, Spot, new OrderRequest("c-1", side, OrderType.Market, null, 0.5m, null), CancellationToken.None);
+
+        handler.Bodies.Single().ShouldContain("\"marketUnit\":\"baseCoin\"");
+        handler.Bodies.Single().ShouldContain("\"qty\":\"0.5\"");
+    }
+
+    // The unit is a field of spot market orders only; a limit order and linear always go by quantity.
+    [TestCase(MarketCategory.Spot, OrderType.Limit)]
+    [TestCase(MarketCategory.Linear, OrderType.Market)]
+    [TestCase(MarketCategory.Linear, OrderType.Limit)]
+    public async Task Order_other_than_spot_market_carries_no_unit(MarketCategory category, OrderType type)
+    {
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(Answer(0, "OK", """{"orderId":"x-1","orderLinkId":"c-1"}"""));
+
+        await Gateway(handler).PlaceAsync(
+            Key,
+            new Instrument(category, "BTCUSDT"),
+            new OrderRequest("c-1", OrderSide.Buy, type, type == OrderType.Limit ? 99m : null, 0.5m, null),
+            CancellationToken.None);
+
+        handler.Bodies.Single().ShouldNotContain("marketUnit");
+    }
+
     [Test]
     public async Task Cancel_is_sent_by_the_client_id()
     {
