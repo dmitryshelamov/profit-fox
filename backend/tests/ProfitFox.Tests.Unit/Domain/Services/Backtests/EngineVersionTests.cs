@@ -116,7 +116,7 @@ public class EngineVersionTests
 
             // The curve is hashed without the candle prices of its points: they do not come from the calculation.
             BacktestDetails result = details.Details();
-            var hashed = new { result.Metrics, result.Fills, result.Trades, Equity = result.Equity.Select(point => new { point.At, point.Equity, point.MinEquity }) };
+            var hashed = new { result.Metrics, result.Positions, Equity = result.Equity.Select(point => new { point.At, point.Equity, point.MinEquity }) };
 
             yield return $"{strategy} {combination} {JsonSerializer.Serialize(hashed)}";
         }

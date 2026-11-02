@@ -1,39 +1,21 @@
+using ProfitFox.Application.Backtests;
 using ProfitFox.Application.Strategies;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.ValueObjects.Backtests;
 
 namespace ProfitFox.Presentation.Contracts.Backtests;
 
-/// <summary>Fills, trades and the equity curve of a result, at most 5000 points, with the metrics they give.</summary>
+/// <summary>The positions with their orders and fills and the equity curve of a result, at most 5000 points, with the metrics they give.</summary>
 public sealed record BacktestDetailsResponse(
     MetricsResponse Metrics,
-    IReadOnlyList<FillResponse> Fills,
-    IReadOnlyList<TradeResponse> Trades,
+    IReadOnlyList<PositionResponse> Positions,
     IReadOnlyList<EquityPointResponse> Equity)
 {
     public static BacktestDetailsResponse Of(BacktestDetails details)
     {
         return new BacktestDetailsResponse(
             MetricsResponse.Of(details.Metrics),
-            [
-                .. details.Fills.Select(fill => new FillResponse(
-                    fill.At,
-                    StrategyCodes.ToCode(fill.Side),
-                    StrategyCodes.ToCode(fill.Type),
-                    BacktestResponse.Text(fill.Price),
-                    BacktestResponse.Text(fill.Quantity),
-                    BacktestResponse.Text(fill.Fee),
-                    fill.FeeAsset == FeeAsset.Quote ? "quote" : "base"))
-            ],
-            [
-                .. details.Trades.Select(trade => new TradeResponse(
-                    trade.OpenedAt,
-                    trade.ClosedAt,
-                    BacktestResponse.Text(trade.EntryPrice),
-                    trade.ExitPrice is { } exit ? BacktestResponse.Text(exit) : null,
-                    trade.Pnl is { } pnl ? BacktestResponse.Text(pnl) : null,
-                    BacktestResponse.Text(trade.Fees)))
-            ],
+            [.. details.Positions.Select(Position)],
             [
                 .. details.Equity.Select(point => new EquityPointResponse(
                     point.At,
@@ -45,5 +27,46 @@ public sealed record BacktestDetailsResponse(
                     BacktestResponse.Text(point.Low),
                     BacktestResponse.Text(point.Close)))
             ]);
+    }
+
+    private static PositionResponse Position(BacktestPosition position)
+    {
+        return new PositionResponse(
+            position.Number,
+            position.Status.ToCode(),
+            position.OpenedAt,
+            position.ClosedAt,
+            BacktestResponse.Text(position.CarriedQuantity),
+            Text(position.EntryPrice),
+            Text(position.ExitPrice),
+            BacktestResponse.Text(position.RealizedPnl),
+            BacktestResponse.Text(position.Fees),
+            [.. position.Orders.Select(Order)]);
+    }
+
+    private static OrderResponse Order(BacktestOrder order)
+    {
+        return new OrderResponse(
+            order.Id,
+            order.Node,
+            StrategyCodes.ToCode(order.Side),
+            StrategyCodes.ToCode(order.Type),
+            Text(order.Price),
+            Text(order.Quantity),
+            Text(order.Amount),
+            order.Status.ToCode(),
+            [
+                .. order.Fills.Select(fill => new FillResponse(
+                    fill.At,
+                    BacktestResponse.Text(fill.Price),
+                    BacktestResponse.Text(fill.Quantity),
+                    BacktestResponse.Text(fill.Fee),
+                    fill.FeeAsset == FeeAsset.Quote ? "quote" : "base"))
+            ]);
+    }
+
+    private static string? Text(decimal? value)
+    {
+        return value is { } number ? BacktestResponse.Text(number) : null;
     }
 }

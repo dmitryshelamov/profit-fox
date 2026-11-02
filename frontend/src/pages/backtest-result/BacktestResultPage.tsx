@@ -5,6 +5,7 @@ import { useMemo } from 'react';
 import {
   backtestQuery,
   backtestResultQuery,
+  positionFills,
   resultDetailsQuery,
   whyDetailsUnavailable,
 } from '@/modules/backtests';
@@ -23,7 +24,7 @@ import { ApiError } from '@/shared/api/client';
 import { formatMoment, showDecimal, signed } from '@/shared/format/format';
 import { Button } from '@/shared/ui/Button';
 
-import { TradeTables } from './TradeTables';
+import { PositionsTable } from './PositionsTable';
 
 const card = 'space-y-1 rounded-xl border border-line bg-panel px-4 py-3';
 const tones = { ok: 'text-ok', err: 'text-err' };
@@ -105,14 +106,7 @@ export function BacktestResultPage({
   const markers = useMemo(
     () =>
       details.data && (direction === 'long' || direction === 'short')
-        ? markersOf(
-            details.data.equity,
-            details.data.fills.map((fill) => ({
-              at: fill.at,
-              side: fill.side === 'buy' ? ('buy' as const) : ('sell' as const),
-            })),
-            direction,
-          )
+        ? markersOf(details.data.equity, positionFills(details.data.positions), direction)
         : [],
     [details.data, direction],
   );
@@ -265,12 +259,12 @@ export function BacktestResultPage({
             <Fact title="Пропущено ордеров">{String(metrics.skippedOrders)}</Fact>
             <Fact title="Исполнений">{String(metrics.fills)}</Fact>
           </section>
-          {details.data && <TradeTables trades={details.data.trades} fills={details.data.fills} />}
+          {details.data && <PositionsTable positions={details.data.positions} />}
         </>
       )}
       <p className="text-xs text-faint">
         Детали пересчитываются по версии стратегии и правилам бэктеста. Метка стоит на точке, в
-        которую попало время исполнения; точные значения — в таблицах.
+        которую попало время исполнения; точные значения — в таблице позиций.
       </p>
     </section>
   );

@@ -15,12 +15,14 @@ public sealed class StrategyRun
     private readonly Dictionary<string, NodeValue?>[] _outputs;
     private readonly object[] _states;
     private readonly Dictionary<string, ActiveOrder> _orders = [];
-    private readonly Account _account;
+    private Position _position;
+    private ClosedPosition? _closed;
     private readonly OrderSide _entrySide;
     private readonly StrategyDirection _direction;
     private readonly FeeSchedule _fees;
     private readonly InstrumentRules _rules;
     private readonly List<OrderCommand> _commands = [];
+    private decimal _cash;
     private int _lastOrderNumber;
     private StrategyEvent _event = null!;
     private Bar? _lastBar;
@@ -28,7 +30,8 @@ public sealed class StrategyRun
     private StrategyRun(IReadOnlyList<RunNode> nodes, IReadOnlyDictionary<string, NodeValue> parameters, StrategyDirection direction, TradingConditions conditions)
     {
         _entrySide = direction == StrategyDirection.Long ? OrderSide.Buy : OrderSide.Sell;
-        _account = new Account(direction, conditions.Balance, conditions.Rules.MinQuantity);
+        _cash = conditions.Balance;
+        _position = new Position(1, direction, conditions.Rules.MinQuantity);
         _direction = direction;
         _fees = conditions.Fees;
         _rules = conditions.Rules;
@@ -74,7 +77,9 @@ public sealed class StrategyRun
     {
         _event = @event;
         _commands.Clear();
+        _closed = null;
         Apply(@event);
+        CloseWhenDone();
 
         for (int index = 0; index < _nodes.Count; index++)
         {
@@ -87,16 +92,22 @@ public sealed class StrategyRun
     /// <summary>How many times an order node did not place an entry because free money or the exchange minimum did not allow it.</summary>
     public long SkippedOrders { get; private set; }
 
+    /// <summary>The number of the current position, without building <see cref="State" />.</summary>
+    public int Position => _position.Number;
+
     public RunState State => new RunState(
         _direction,
-        _account.Cash,
-        _account.Quantity,
-        _account.Invested,
-        _account.Collateral,
-        _account.Dust,
-        _account.DustCollateral,
-        _account.Cash - Free(),
-        SkippedOrders);
+        _cash,
+        _position.Quantity,
+        _position.Invested,
+        _position.Collateral,
+        _cash - Free(),
+        SkippedOrders,
+        _position.Number,
+        _position.Status,
+        _position.RealizedPnl,
+        _position.Fees,
+        _closed);
 
     /// <summary>Value of an output after the last event; <c>null</c> when it has no value.</summary>
     public NodeValue? ValueOf(string path, string pin)
@@ -130,16 +141,70 @@ public sealed class StrategyRun
 
         if (order.Side == _entrySide)
         {
-            _account.Enter(filled.Quantity, filled.Price, filled.Fee, filled.FeeAsset, filled.At);
+            _cash += _position.Enter(filled.Quantity, filled.Price, filled.Fee, filled.FeeAsset, filled.At);
         }
         else
         {
-            _account.Exit(filled.Quantity, filled.Price, filled.Fee);
+            _cash += _position.Exit(filled.Quantity, filled.Price, filled.Fee);
         }
 
         if (filled.IsComplete)
         {
             _orders.Remove(filled.OrderId);
+        }
+
+        if (_position.Status == PositionStatus.Closing)
+        {
+            CancelAll();
+            SellWhatCameWhileClosing();
+        }
+    }
+
+    /// <summary>
+    ///     A fill that came while the position was closing is sold at the market by the position itself: what its own sells placed so far
+    ///     do not cover, when the exchange lets it be sold.
+    /// </summary>
+    private void SellWhatCameWhileClosing()
+    {
+        decimal selling = _orders.Values.Where(order => order.Node is null).Sum(order => order.Remaining!.Value);
+        decimal quantity = Down(_position.Quantity - selling, _rules.QuantityStep);
+
+        if (!Sellable(quantity))
+        {
+            return;
+        }
+
+        string id = $"o-{++_lastOrderNumber}";
+        OrderSide side = _entrySide == OrderSide.Buy ? OrderSide.Sell : OrderSide.Buy;
+        _orders[id] = new ActiveOrder(null, side, Remaining: quantity);
+        _commands.Add(new PlaceOrder(id, null, side, OrderType.Market, null, quantity, null));
+    }
+
+    private bool Sellable(decimal quantity)
+    {
+        return quantity > 0m && quantity >= _rules.MinQuantity;
+    }
+
+    /// <summary>
+    ///     A closing position with no order left is closed, and the next position becomes the current one; what it could still sell has
+    ///     a sell of its own among the orders.
+    /// </summary>
+    private void CloseWhenDone()
+    {
+        if (_position.Status == PositionStatus.Closing && _orders.Count == 0)
+        {
+            _closed = new ClosedPosition(_position.Number, _event.At, _position.RealizedPnl, _position.Fees);
+            _position = _position.Next();
+        }
+    }
+
+    /// <summary>A closing position cancels every order of its nodes that is not being cancelled yet; its own sells stay.</summary>
+    private void CancelAll()
+    {
+        foreach ((string id, ActiveOrder order) in _orders.Where(order => order.Value.Node is not null && !order.Value.Cancelling).ToArray())
+        {
+            _orders[id] = order with { Cancelling = true };
+            _commands.Add(new CancelOrder(id));
         }
     }
 
@@ -172,12 +237,13 @@ public sealed class StrategyRun
 
                 break;
             case SimpleNodeKind.Position:
-                outputs["hasPosition"] = new BooleanValue(_account.Quantity > 0m);
-                outputs["quantity"] = new NumberValue(_account.Quantity);
-                outputs["averagePrice"] = Number(_account.AveragePrice);
-                outputs["invested"] = new NumberValue(_account.Invested);
-                outputs["lastEntryPrice"] = Number(_account.LastEntryPrice);
-                outputs["sinceLastEntry"] = _account.LastEntryAt is { } at ? new DurationValue(_event.At - at) : null;
+                bool open = IsOpen();
+                outputs["hasPosition"] = new BooleanValue(open);
+                outputs["quantity"] = new NumberValue(open ? _position.Quantity : 0m);
+                outputs["averagePrice"] = Number(open ? _position.AveragePrice : null);
+                outputs["invested"] = new NumberValue(open ? _position.Invested : 0m);
+                outputs["lastEntryPrice"] = Number(open ? _position.LastEntryPrice : null);
+                outputs["sinceLastEntry"] = open && _position.LastEntryAt is { } at ? new DurationValue(_event.At - at) : null;
                 outputs["free"] = new NumberValue(Free());
 
                 break;
@@ -244,7 +310,7 @@ public sealed class StrategyRun
 
         decimal? quantity = !byAmount ? size : _lastBar is { Close: > 0m } bar ? size / bar.Close : null;
 
-        if (_account.Quantity > 0m && quantity is { } wanted)
+        if (IsOpen() && quantity is { } wanted)
         {
             Place(index, node, side, Math.Min(Down(wanted, _rules.QuantityStep), ExitableQuantity()), null);
         }
@@ -252,7 +318,7 @@ public sealed class StrategyRun
 
     private void ClosePosition(int index, RunNode node)
     {
-        if (!HasOrder(index) && IsTrue(node, "when") && _account.Quantity > 0m)
+        if (!HasOrder(index) && IsTrue(node, "when") && IsOpen())
         {
             Place(index, node, _entrySide == OrderSide.Buy ? OrderSide.Sell : OrderSide.Buy, ExitableQuantity(), null);
         }
@@ -316,13 +382,18 @@ public sealed class StrategyRun
             return (price, quantity);
         }
 
-        return _account.Quantity > 0m ? (price, Math.Min(quantity, ExitableQuantity())) : null;
+        return IsOpen() ? (price, Math.Min(quantity, ExitableQuantity())) : null;
+    }
+
+    private bool IsOpen()
+    {
+        return _position.Status == PositionStatus.Open;
     }
 
     /// <summary>An exit sells at most the position rounded down to the quantity step.</summary>
     private decimal ExitableQuantity()
     {
-        return Down(_account.Quantity, _rules.QuantityStep);
+        return Down(_position.Quantity, _rules.QuantityStep);
     }
 
     // The remainder never overflows, unlike a division by a fine step.
@@ -357,7 +428,7 @@ public sealed class StrategyRun
             .Where(order => order.Side == _entrySide && order.Price is not null)
             .Sum(order => order.Price!.Value * order.Remaining!.Value * (1m + rate));
 
-        return _account.Cash - reserved - _orders.Values.Sum(order => order.Reserve);
+        return _cash - reserved - _orders.Values.Sum(order => order.Reserve);
     }
 
     private bool HasOrder(int index)
@@ -376,6 +447,12 @@ public sealed class StrategyRun
     /// </summary>
     private void Place(int index, RunNode node, OrderSide side, OrderType type, decimal? price, decimal? quantity, decimal? amount)
     {
+        // Nodes wait until the closing position is closed; what they place then belongs to the next one.
+        if (_position.Status == PositionStatus.Closing)
+        {
+            return;
+        }
+
         decimal? value = amount ?? quantity * (price ?? _lastBar?.Close);
 
         if (quantity < _rules.MinQuantity || value < _rules.MinAmount || (side == _entrySide && WithFee(type, value) > Free()))

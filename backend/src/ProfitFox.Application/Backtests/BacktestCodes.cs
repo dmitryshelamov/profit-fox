@@ -1,10 +1,12 @@
 using ProfitFox.Domain.Entities.Backtests.Enums;
+using ProfitFox.Domain.Services.Strategies.Execution;
 
 namespace ProfitFox.Application.Backtests;
 
 /// <summary>
 ///     Codes of the backtest enums in the API and in stored rows: statuses by name (<c>Pending</c>, <c>LoadingCandles</c>…), limit fill
-///     modes <c>touch</c> and <c>breakout</c>, the search mode <c>grid</c>, metrics to sort results by (<c>return</c>, <c>winRate</c>…).
+///     modes <c>touch</c> and <c>breakout</c>, the search mode <c>grid</c>, metrics to sort results by (<c>return</c>, <c>winRate</c>…),
+///     position states <c>waiting</c>, <c>open</c>, <c>closing</c>, <c>closed</c> and order states <c>filled</c>, <c>active</c> of details.
 /// </summary>
 public static class BacktestCodes
 {
@@ -77,5 +79,15 @@ public static class BacktestCodes
     public static string ToCode(this BacktestStatus status)
     {
         return status.ToString();
+    }
+
+    public static string ToCode(this PositionStatus status)
+    {
+        return status.ToString().ToLowerInvariant();
+    }
+
+    public static string ToCode(this BacktestOrderStatus status)
+    {
+        return status.ToString().ToLowerInvariant();
     }
 }

@@ -2,6 +2,7 @@ using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Services.Strategies.Execution;
 using ProfitFox.Domain.ValueObjects.Backtests;
+using ProfitFox.Domain.ValueObjects.Strategies;
 
 namespace ProfitFox.Domain.Services.Backtests;
 
@@ -25,22 +26,25 @@ public sealed class MetricsObserver(decimal balance) : IReplayObserver
     private int _longestUnderWater;
     private int _closedTrades;
     private int _winningTrades;
-    private RunState? _tradeStart;
 
+    public void Placed(PlaceOrder order, DateTimeOffset at, int position)
+    {
+    }
+
+    public void Cancelled(string orderId, DateTimeOffset at)
+    {
+    }
+
+    /// <summary>A closed trade is a closed position: a position closes only after its fills, and wins by what it realized.</summary>
     public void Filled(ReplayFill fill, RunState state)
     {
-        RunState before = _last ?? state with { Cash = _balance, Quantity = 0m, Dust = 0m, DustCollateral = 0m };
         _fills++;
         _fees += fill.FeeAsset == FeeAsset.Quote ? fill.Fee : fill.Fee * fill.Price;
 
-        if (before.Quantity == 0m && state.Quantity > 0m)
-        {
-            _tradeStart = before;
-        }
-        else if (before.Quantity > 0m && state.Quantity == 0m)
+        if (state.Closed is { } closed)
         {
             _closedTrades++;
-            _winningTrades += state.Cash - _tradeStart!.Cash + state.DustValue(fill.Price) - _tradeStart.DustValue(fill.Price) > 0m ? 1 : 0;
+            _winningTrades += closed.RealizedPnl > 0m ? 1 : 0;
         }
 
         Observe(state);
@@ -55,7 +59,8 @@ public sealed class MetricsObserver(decimal balance) : IReplayObserver
         _endEquity = equity;
         _peak = Math.Max(_peak, equity);
         _maxDrawdown = Math.Max(_maxDrawdown, (_peak - equity) / _peak * 100m);
-        bool inPosition = state.Quantity > 0m;
+        // A remainder alone is no position.
+        bool inPosition = state.Status != PositionStatus.Waiting;
         bool underWater = inPosition && state.Unrealized(close) < 0m;
         _inPosition += inPosition ? 1 : 0;
         _underWater += underWater ? 1 : 0;

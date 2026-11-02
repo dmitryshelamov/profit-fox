@@ -32,7 +32,7 @@ const curve = (count = 3) =>
     close: '105',
   }));
 
-const detailsOf = () => json({ metrics: metricsOf(), fills: [], trades: [], equity: curve() });
+const detailsOf = () => json({ metrics: metricsOf(), positions: [], equity: curve() });
 
 const engineConflict = () =>
   problem(

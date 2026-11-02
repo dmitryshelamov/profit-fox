@@ -1713,11 +1713,10 @@ export interface components {
                 [key: string]: string;
             };
         };
-        /** @description Fills, trades and the equity curve of a result, at most 5000 points, with the metrics they give. */
+        /** @description The positions with their orders and fills and the equity curve of a result, at most 5000 points, with the metrics they give. */
         BacktestDetailsResponse: {
             metrics: components["schemas"]["MetricsResponse"];
-            fills: components["schemas"]["FillResponse"][];
-            trades: components["schemas"]["TradeResponse"][];
+            positions: components["schemas"]["PositionResponse"][];
             equity: components["schemas"]["EquityPointResponse"][];
         };
         /** @description Money, rates and the speed are decimal strings: JSON numbers lose precision in JavaScript clients. */
@@ -1887,8 +1886,6 @@ export interface components {
         FillResponse: {
             /** Format: date-time */
             at: string;
-            side: string;
-            type: string;
             price: string;
             quantity: string;
             fee: string;
@@ -1955,9 +1952,50 @@ export interface components {
             settings: components["schemas"]["SettingResponse"][];
             definition: null | components["schemas"]["JsonObject"];
         };
+        /** @description An order of a position with its fills. */
+        OrderResponse: {
+            id: string;
+            /** @description The path of the node that placed it; `null` when the closing position placed it. */
+            node: null | string;
+            side: string;
+            type: string;
+            /** @description The limit price; `null` for a market order. */
+            price: null | string;
+            quantity: null | string;
+            /** @description The amount of a market order sized by amount. */
+            amount: null | string;
+            /** @description `filled` or `active` at the end of the period. */
+            status: string;
+            fills: components["schemas"]["FillResponse"][];
+        };
         PinResponse: {
             name: string;
             type: string;
+        };
+        /**
+         * @description A position of a result with its orders; prices are averages of its own fills, without the remainder it carried in, fees are in the
+         *     quote asset.
+         */
+        PositionResponse: {
+            /** Format: int32 */
+            number: number | string;
+            /** @description `waiting`, `open`, `closing` or `closed` at the end of the period. */
+            status: string;
+            /**
+             * Format: date-time
+             * @description The time of its first fill.
+             */
+            openedAt: null | string;
+            /** Format: date-time */
+            closedAt: null | string;
+            /** @description The remainder the previous position left below the minimum quantity. */
+            carriedQuantity: string;
+            entryPrice: null | string;
+            exitPrice: null | string;
+            /** @description The realized PnL. */
+            pnl: string;
+            fees: string;
+            orders: components["schemas"]["OrderResponse"][];
         };
         ProblemDetails: {
             type?: null | string;
@@ -2044,17 +2082,6 @@ export interface components {
             definition: components["schemas"]["JsonObject"];
             /** @description Every composite node the version uses, built-in ones included. */
             composites: components["schemas"]["VersionNodeResponse"][];
-        };
-        /** @description A position cycle; one open at the end has no close, exit price or result. Fees are in the quote asset. */
-        TradeResponse: {
-            /** Format: date-time */
-            openedAt: string;
-            /** Format: date-time */
-            closedAt: null | string;
-            entryPrice: string;
-            exitPrice: null | string;
-            pnl: null | string;
-            fees: string;
         };
         UsageResponse: {
             /** @description `strategy` or `node`. */

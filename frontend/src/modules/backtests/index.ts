@@ -11,6 +11,7 @@ export { backtestFieldErrors } from './model/backtestProblems';
 export { engineConflict, whyDetailsUnavailable } from './model/engineConflict';
 export { combinationsOf, type Range, type RangeCount, rangeCount } from './model/grid';
 export { lastClosedBoundary, periodEndingAt, type PeriodLength } from './model/period';
+export { positionFills } from './model/positionFills';
 export { rangedNames, rangeSummary } from './model/rangeSummary';
 export { type ResultColumn, resultColumns } from './model/resultColumns';
 export {
