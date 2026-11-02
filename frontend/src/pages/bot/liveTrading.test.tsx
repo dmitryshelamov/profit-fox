@@ -323,6 +323,61 @@ describe('live trading on the bot page', () => {
     expect(within(current).getByText('активен')).toBeInTheDocument();
   });
 
+  // The orders read as a table: named columns, words for the type, coins for the amounts and fees, and the reason of a
+  // refusal as text.
+  it('shows the orders of the position with their columns, coins and reasons', async () => {
+    open({ status: 'running' }, [
+      position({
+        orders: [
+          {
+            number: 1,
+            node: 'entry',
+            side: 'buy',
+            type: 'market',
+            price: null,
+            quantity: null,
+            amount: '100',
+            status: 'filled',
+            rejectReason: null,
+            fills: [
+              {
+                at: '2026-11-03T10:00:00Z',
+                price: '100',
+                quantity: '0.5',
+                fee: '0.05',
+                feeAsset: 'quote',
+              },
+            ],
+          },
+          {
+            number: 2,
+            node: 'exit',
+            side: 'sell',
+            type: 'limit',
+            price: '101',
+            quantity: '0.5',
+            amount: null,
+            status: 'rejected',
+            rejectReason: 'Insufficient balance.',
+            fills: [],
+          },
+        ],
+      }),
+    ]);
+
+    const current = await screen.findByRole('region', { name: 'Текущая позиция' });
+    expect(
+      within(current)
+        .getAllByRole('columnheader')
+        .map((header) => header.textContent),
+    ).toEqual(['Узел', 'Сторона', 'Тип', 'Цена', 'Объём', 'Статус']);
+    expect(within(current).getByText('рыночный')).toBeInTheDocument();
+    expect(within(current).getByText('лимитный')).toBeInTheDocument();
+    expect(within(current).getByText('100 USDT')).toBeInTheDocument();
+    expect(within(current).getByText('0.05 USDT')).toBeInTheDocument();
+    expect(within(current).getByText(/Insufficient balance\./)).toBeInTheDocument();
+  });
+
   it('lists the closed positions the newest first', async () => {
     open({ status: 'stopped' }, [
       position({ number: 3, status: 'waiting', quantity: '0', orders: [] }),

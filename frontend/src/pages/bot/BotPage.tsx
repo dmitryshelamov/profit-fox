@@ -151,7 +151,12 @@ export function BotPage({ botId }: { botId: string }) {
         ready={!instruments.isPending}
       />
       {positions.isError && <p role="alert">Не удалось загрузить позиции.</p>}
-      {positions.data && positions.data.length > 0 && <LivePositions positions={positions.data} />}
+      {positions.data && positions.data.length > 0 && (
+        <LivePositions
+          positions={positions.data}
+          coins={{ base: listed?.baseCoin ?? '', quote: quoteCoin ?? '' }}
+        />
+      )}
       <section
         aria-label="Параметры"
         className="space-y-2 rounded-xl border border-line bg-panel px-5 py-4"

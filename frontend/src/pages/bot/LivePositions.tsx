@@ -29,26 +29,61 @@ const ORDER_STATUS: Record<string, string> = {
   rejected: 'отклонён',
 };
 
-function OrderRows({ orders }: { orders: readonly Order[] }) {
+const ORDER_TYPE: Record<string, string> = { market: 'рыночный', limit: 'лимитный' };
+
+const ORDER_COLUMNS = ['Узел', 'Сторона', 'Тип', 'Цена', 'Объём', 'Статус'];
+
+/** The coins of the instrument: quantities are in the base coin, amounts and quote fees in the quote coin. */
+interface Coins {
+  readonly base: string;
+  readonly quote: string;
+}
+
+/** A value with its coin; before the coins of the instrument are known, the value alone. */
+function withCoin(value: string, coin: string): string {
+  return `${value} ${coin}`.trimEnd();
+}
+
+function OrderHead() {
+  return (
+    <thead>
+      <tr>
+        {ORDER_COLUMNS.map((title) => (
+          <th key={title} scope="col" className={head}>
+            {title}
+          </th>
+        ))}
+      </tr>
+    </thead>
+  );
+}
+
+/** The orders with their fills under them, each fill in the columns of its order: time, price, quantity and fee. */
+function OrderRows({ orders, coins }: { orders: readonly Order[]; coins: Coins }) {
   return orders.map((order) => (
     <Fragment key={order.number}>
       <tr className="bg-panel-2 text-muted">
         <td className={inner}>{order.node ?? 'позиция'}</td>
         <td className={inner}>{order.side === 'buy' ? 'Покупка' : 'Продажа'}</td>
-        <td className={inner}>{order.type}</td>
+        <td className={inner}>{ORDER_TYPE[order.type] ?? order.type}</td>
         <td className={inner}>{order.price === null ? MISSING : groupDigits(order.price)}</td>
-        <td className={inner}>{order.quantity ?? order.amount}</td>
-        <td className={inner} title={order.rejectReason ?? undefined}>
+        <td className={inner}>
+          {order.quantity ?? withCoin(groupDigits(order.amount ?? '0'), coins.quote)}
+        </td>
+        <td className={inner}>
           {ORDER_STATUS[order.status] ?? order.status}
+          {order.rejectReason && <span className="text-err">{` · ${order.rejectReason}`}</span>}
         </td>
       </tr>
       {order.fills.map((fill, index) => (
         <tr key={index} className="bg-panel-2 text-faint">
           <td className={`${inner} pl-8`}>{formatUtc(fill.at)}</td>
+          <td className={inner} />
+          <td className={inner}>исполнение</td>
           <td className={inner}>{groupDigits(fill.price)}</td>
           <td className={inner}>{fill.quantity}</td>
           <td className={inner}>
-            {fill.fee} {fill.feeAsset}
+            {withCoin(fill.fee, fill.feeAsset === 'base' ? coins.base : coins.quote)}
           </td>
         </tr>
       ))}
@@ -57,7 +92,13 @@ function OrderRows({ orders }: { orders: readonly Order[] }) {
 }
 
 /** The current position of a live bot with its orders, then its closed positions; a closed one opens to its orders. */
-export function LivePositions({ positions }: { positions: readonly Position[] }) {
+export function LivePositions({
+  positions,
+  coins,
+}: {
+  positions: readonly Position[];
+  coins: Coins;
+}) {
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   const current = positions.find((position) => position.status !== 'closed');
   const closed = positions.filter((position) => position.status === 'closed');
@@ -110,8 +151,9 @@ export function LivePositions({ positions }: { positions: readonly Position[] })
           </dl>
           {current.orders.length > 0 && (
             <table className="w-full border-separate border-spacing-y-1 text-sm">
+              <OrderHead />
               <tbody>
-                <OrderRows orders={current.orders} />
+                <OrderRows orders={current.orders} coins={coins} />
               </tbody>
             </table>
           )}
@@ -163,7 +205,9 @@ export function LivePositions({ positions }: { positions: readonly Position[] })
                       </button>
                     </td>
                   </tr>
-                  {opened.has(String(position.number)) && <OrderRows orders={position.orders} />}
+                  {opened.has(String(position.number)) && (
+                    <OrderRows orders={position.orders} coins={coins} />
+                  )}
                 </Fragment>
               ))}
             </tbody>
