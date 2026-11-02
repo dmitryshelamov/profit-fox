@@ -36,6 +36,12 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
     /// <summary>Every client id a cancel was sent for.</summary>
     public List<string> Cancels { get; } = [];
 
+    /// <summary>When each cancel came, by the clock of the app.</summary>
+    public List<(string ClientId, DateTimeOffset At)> CancelTimes { get; } = [];
+
+    /// <summary>The clock of the app, which <see cref="CancelTimes" /> are read on.</summary>
+    public TimeProvider Clock { get; set; } = TimeProvider.System;
+
     /// <summary>The answers to the next orders sent, before the exchange takes any.</summary>
     public Queue<OrderOutcome> Refusals { get; } = new Queue<OrderOutcome>();
 
@@ -368,6 +374,7 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
         lock (_lock)
         {
             Cancels.Add(clientId);
+            CancelTimes.Add((clientId, Clock.GetUtcNow()));
 
             if (CancelRefusals.TryDequeue(out OrderOutcome? refusal))
             {

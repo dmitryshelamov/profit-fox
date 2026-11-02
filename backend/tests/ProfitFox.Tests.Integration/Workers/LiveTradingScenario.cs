@@ -65,6 +65,7 @@ public sealed class LiveTradingScenario : IAsyncDisposable
 
         factory.Ledger.GetFreeAsync(Arg.Any<ExchangeKey>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(10_000m);
         var scenario = new LiveTradingScenario(factory, factory.CreateClient());
+        scenario.Exchange.Clock = factory.Time;
         factory.KeyInspector.InspectAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new ExchangeKeyInfo(100, false, true, false, new HashSet<MarketCategory> { MarketCategory.Spot, MarketCategory.Linear }));
         HttpResponseMessage account = await scenario.Client.PostAsJsonAsync("/api/exchange-accounts", new { name = "Основной", apiKey = "api-key", apiSecret = "api-secret" });

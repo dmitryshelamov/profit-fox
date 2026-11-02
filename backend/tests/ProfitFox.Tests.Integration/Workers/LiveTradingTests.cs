@@ -432,17 +432,27 @@ public class LiveTradingTests
         (await _scenario.PositionsAsync(bot))[0].Quantity.ShouldBe(1m + buy.Quantity.Value);
     }
 
+    // The order the exchange refuses to cancel stays on it, so the bot stays stopping with the reason and asks again ever
+    // more slowly, not on every event; once the exchange takes the cancel the bot stops as failed.
     [Test]
-    public async Task Cancel_the_exchange_refuses_for_good_fails_the_bot()
+    public async Task Cancel_the_exchange_refuses_for_good_is_asked_again_ever_more_slowly()
     {
         Guid bot = await StartedAsync("ladder");
         _scenario.Exchange.Fill(LiveTradingScenario.ClientId(bot, 1), 1m, 100m);
         await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 3, "the limit orders of the ladder");
-        _scenario.Exchange.CancelRefusals.Enqueue(new OrderOutcome(OrderOutcomeKind.Permanent, Reason: "API key is invalid."));
+        await _scenario.WaitAsync(async () => (await _scenario.OrdersAsync(bot)).Count(order => order.Status == LiveOrderStatus.Active) == 2, "the limits on the exchange");
+        for (var i = 0; i < 6; i++)
+        {
+            _scenario.Exchange.CancelRefusals.Enqueue(new OrderOutcome(OrderOutcomeKind.Permanent, Reason: "API key is invalid."));
+        }
 
         await _scenario.ActAsync(bot, "stop");
 
-        await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).StopReason == "API key is invalid.", "the reason of the failure");
+        await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).Status == LiveBotStatus.Failed, "the failed bot");
+        (await _scenario.LiveAsync(bot)).StopReason.ShouldBe("API key is invalid.");
+        DateTimeOffset[] times = [.. _scenario.Exchange.CancelTimes.Where(cancel => cancel.ClientId == _scenario.Exchange.CancelTimes[0].ClientId).Select(cancel => cancel.At)];
+        TimeSpan[] gaps = [.. times.Zip(times.Skip(1), (before, after) => after - before)];
+        gaps.Skip(1).First().ShouldBeGreaterThanOrEqualTo(TimeSpan.FromSeconds(2));
     }
 
     // Scenario "Расхождение при сверке": every working bot of the account and the instrument stops.

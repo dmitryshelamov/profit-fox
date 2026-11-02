@@ -852,7 +852,18 @@ internal sealed class LiveBotSession(
                     }
                     else
                     {
-                        await WriteAsync(_ => Task.FromResult<IReadOnlyList<OrderCommand>>([]), bot => bot.Fail(outcome.Reason ?? "Bybit refused the cancel."), cancellationToken);
+                        // The order stays on the exchange: the bot stops with the reason and asks again ever more slowly.
+                        var pause = TimeSpan.FromSeconds(Math.Min(Math.Pow(2, order.Attempts), 60));
+                        await WriteAsync(
+                            async token =>
+                            {
+                                await SaveOrderAsync(order with { Attempts = order.Attempts + 1, NextAttemptAt = now + pause, UpdatedAt = time.GetUtcNow() }, token);
+
+                                return [];
+                            },
+                            bot => bot.Fail(outcome.Reason ?? "Bybit refused the cancel."),
+                            cancellationToken);
+                        _ = LaterAsync(new WakeInput(), pause, cancellationToken);
                     }
 
                     break;
