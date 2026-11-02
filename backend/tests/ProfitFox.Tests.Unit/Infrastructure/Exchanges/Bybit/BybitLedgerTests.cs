@@ -117,6 +117,20 @@ public class BybitLedgerTests
         BybitRequests.Describe(handler.Requests.Single()).ShouldBe(BybitRequests.Describe("/v5/execution/list?category=spot&symbol=BTCUSDT&orderLinkId=c-1"));
     }
 
+    // An order filled in many parts lists its fills on more than one page: every page is read.
+    [Test]
+    public async Task Fills_of_an_order_are_read_from_every_page()
+    {
+        using StubHttpHandler handler = new StubHttpHandler()
+            .RespondJson(ExecutionPage("page-2", Execution("e-1", "0.4", "100", "0", "USDT", 1_700_000_000_000)))
+            .RespondJson(ExecutionPage("", Execution("e-2", "0.6", "101", "0", "USDT", 1_700_000_060_000)));
+
+        IReadOnlyList<ExchangeFill> fills = await Ledger(handler).GetFillsAsync(Key, Spot, "c-1", CancellationToken.None);
+
+        fills.Select(fill => fill.ExecId).ShouldBe(["e-1", "e-2"]);
+        BybitRequests.Describe(handler.Requests[1]).ShouldBe(BybitRequests.Describe("/v5/execution/list?category=spot&symbol=BTCUSDT&orderLinkId=c-1&cursor=page-2"));
+    }
+
     [Test]
     public async Task Fees_are_the_maker_and_taker_rates_of_the_account()
     {
@@ -195,7 +209,12 @@ public class BybitLedgerTests
 
     private static string Executions(params string[] executions)
     {
-        return $$"""{"retCode":0,"retMsg":"OK","result":{"list":[{{string.Join(",", executions)}}],"nextPageCursor":"","category":"spot"},"retExtInfo":{},"time":1}""";
+        return ExecutionPage("", executions);
+    }
+
+    private static string ExecutionPage(string cursor, params string[] executions)
+    {
+        return $$"""{"retCode":0,"retMsg":"OK","result":{"list":[{{string.Join(",", executions)}}],"nextPageCursor":"{{cursor}}","category":"spot"},"retExtInfo":{},"time":1}""";
     }
 
     private static string Execution(string id, string quantity, string price, string fee, string feeCoin, long at)

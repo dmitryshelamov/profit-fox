@@ -76,12 +76,22 @@ internal sealed class BybitLedger(HttpClient http, ILoggerFactory loggers, Bybit
     public async Task<IReadOnlyList<ExchangeFill>> GetFillsAsync(ExchangeKey key, Instrument instrument, string clientId, CancellationToken cancellationToken)
     {
         using BybitRestClient client = Client(key);
-        BybitResponse<BybitUserTrade> trades = BybitKeyClients.Unwrap(await client.V5Api.Trading.GetUserTradesAsync(
-            instrument.Category.ToBybit(), instrument.Symbol, clientOrderId: clientId, ct: cancellationToken));
+        var trades = new List<BybitUserTrade>();
+        string? cursor = null;
+
+        // An order filled in many parts lists its fills on more than one page.
+        do
+        {
+            BybitResponse<BybitUserTrade> page = BybitKeyClients.Unwrap(await client.V5Api.Trading.GetUserTradesAsync(
+                instrument.Category.ToBybit(), instrument.Symbol, clientOrderId: clientId, cursor: cursor, ct: cancellationToken));
+            trades.AddRange(page.List);
+            cursor = string.IsNullOrEmpty(page.NextPageCursor) ? null : page.NextPageCursor;
+        }
+        while (cursor is not null);
 
         return
         [
-            .. trades.List
+            .. trades
                 .OrderBy(trade => trade.Timestamp)
                 .Select(trade => new ExchangeFill(trade.TradeId, trade.ClientOrderId, trade.Quantity, trade.Price, trade.Fee ?? 0m, trade.FeeAsset, Utc(trade.Timestamp)))
         ];
