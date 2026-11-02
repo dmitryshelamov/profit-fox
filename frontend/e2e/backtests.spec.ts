@@ -184,24 +184,38 @@ test('sorts the table by a metric column', async ({ page, request }) => {
 });
 
 // Scenario "Детали результата".
-test('shows the chart and the trades of a result', async ({ page, request }) => {
+test('shows the chart and the positions of a result and opens one to its orders', async ({
+  page,
+  request,
+}) => {
   const details = await request.get(
     `/api/backtests/${backtestId}/results/${best.combination}/details`,
   );
   expect(details.status()).toBe(200);
-  const trades = ((await details.json()) as { trades: unknown[] }).trades.length;
+  const { positions } = (await details.json()) as {
+    positions: { orders: { fills: unknown[] }[] }[];
+  };
+  expect(positions.length).toBeGreaterThan(0);
+  const first = positions[0]!;
+  expect(first.orders.length).toBeGreaterThan(0);
 
   await page.goto(`/backtests/${backtestId}/results/${best.combination}`);
 
   await expect(
     page.getByRole('figure', { name: 'Цена и капитал' }).locator('canvas').first(),
   ).toBeVisible();
-  await expect(page.getByRole('tab', { name: `Сделки · ${trades}` })).toBeVisible();
-  expect(trades).toBeGreaterThan(0);
+  await expect(page.getByText(`Позиции · ${positions.length}`)).toBeVisible();
   const table = page
     .getByRole('table')
     .filter({ has: page.getByRole('columnheader', { name: 'Открытие' }) });
-  await expect(table.getByRole('row')).toHaveCount(trades + 1);
+  await expect(table.getByRole('row')).toHaveCount(positions.length + 1);
+
+  await page.getByRole('button', { name: 'Ордера позиции 1', exact: true }).click();
+
+  const fills = first.orders.reduce((count, order) => count + order.fills.length, 0);
+  await expect(table.getByRole('row')).toHaveCount(
+    positions.length + 1 + first.orders.length + fills,
+  );
 });
 
 // Scenario "Сравнение по ссылке".

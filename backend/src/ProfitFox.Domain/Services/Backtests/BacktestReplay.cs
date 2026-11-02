@@ -118,6 +118,7 @@ public sealed class BacktestReplay(
             // cancelled, such as an exit with nothing left to sell or a buy by amount too small at the price of the fill.
             if (quantity == 0m || quantity < conditions.Rules.MinQuantity)
             {
+                observer.Cancelled(order.Id, at);
                 Handle(new OrderCancelled(at, order.Id), index + 1);
 
                 return;
@@ -143,6 +144,7 @@ public sealed class BacktestReplay(
 
             while (_cancels.TryDequeue(out OrderCancelled? cancelled))
             {
+                observer.Cancelled(cancelled.OrderId, cancelled.At);
                 Answer(run.Handle(cancelled), cancelled.At, activeFrom);
             }
         }
@@ -153,6 +155,7 @@ public sealed class BacktestReplay(
             {
                 if (command is PlaceOrder place)
                 {
+                    observer.Placed(place, at, run.State.Position);
                     _orders.Add(new SimulatedOrder(place.OrderId, place.Side, place.Type, place.Price, place.Quantity, place.Amount, activeFrom, _sequence++));
                 }
                 else

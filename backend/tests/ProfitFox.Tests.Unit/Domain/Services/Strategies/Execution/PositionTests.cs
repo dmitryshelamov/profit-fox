@@ -117,6 +117,48 @@ public class PositionTests
         Position(run).ShouldBe((false, 0m, null, 0m, null));
     }
 
+    // Scenario "Два входа и выход" of "Реализованный PnL позиции".
+    [Test]
+    public void Exit_of_a_long_realizes_its_value_over_the_average_price_less_the_fee()
+    {
+        StrategyRun run = EnterTwiceThenExit(StrategyDirection.Long);
+        run.Handle(new RunStarted(Start));
+        run.Handle(new OrderFilled(Start, "o-1", 1m, 100m, IsComplete: true));
+        run.Handle(new OrderFilled(Start, "o-2", 1m, 80m, IsComplete: true));
+
+        run.Handle(new OrderFilled(Start, "o-3", 2m, 100m, IsComplete: true, Fee: 0.2m, FeeAsset: FeeAsset.Quote));
+
+        run.State.Closed!.RealizedPnl.ShouldBe(19.8m);
+    }
+
+    // Scenario "Шорт".
+    [Test]
+    public void Exit_of_a_short_realizes_the_average_price_over_its_value()
+    {
+        StrategyRun run = EnterTwiceThenExit(StrategyDirection.Short);
+        run.Handle(new RunStarted(Start));
+        run.Handle(new OrderFilled(Start, "o-1", 1m, 100m, IsComplete: true));
+        run.Handle(new OrderFilled(Start, "o-2", 1m, 100m, IsComplete: true));
+
+        run.Handle(new OrderFilled(Start, "o-3", 2m, 90m, IsComplete: true));
+
+        run.State.Closed!.RealizedPnl.ShouldBe(20m);
+    }
+
+    // Scenario "Комиссии на споте".
+    [Test]
+    public void Fees_of_the_position_are_in_the_quote_asset_with_a_coin_fee_at_the_price_of_its_fill()
+    {
+        StrategyRun run = EnterTwiceThenExit(StrategyDirection.Long);
+        run.Handle(new RunStarted(Start));
+        run.Handle(new OrderFilled(Start, "o-1", 1m, 100m, IsComplete: true, Fee: 0.001m, FeeAsset: FeeAsset.Base));
+        run.Handle(new OrderFilled(Start, "o-2", 1.001m, 100m, IsComplete: true));
+
+        run.Handle(new OrderFilled(Start, "o-3", 2m, 110m, IsComplete: true, Fee: 0.11m, FeeAsset: FeeAsset.Quote));
+
+        run.State.Closed!.Fees.ShouldBe(0.21m);
+    }
+
     /// <summary>Enters one unit at a time until the position holds two units, then exits both.</summary>
     private static StrategyRun EnterTwiceThenExit(StrategyDirection direction)
     {

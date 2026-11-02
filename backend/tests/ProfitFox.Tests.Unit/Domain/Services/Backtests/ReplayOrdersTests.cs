@@ -9,6 +9,7 @@ using ProfitFox.Domain.Services.Strategies.Validation;
 using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
+using ProfitFox.Tests.Shared.Builders.Backtests;
 using ProfitFox.Tests.Shared.Builders.Strategies;
 
 using Shouldly;
@@ -98,7 +99,7 @@ public class ReplayOrdersTests
             .Run(Start, [Candle(0, 100m, 100m, 100m, 100m), Candle(1, 100m, 100m, 100m, 100m), Candle(2, 100m, 100m, 100m, 100m)], details);
 
         BacktestDetails result = details.Details();
-        result.Fills.Select(fill => (fill.Side, fill.Quantity)).ShouldBe([(OrderSide.Buy, 1m), (OrderSide.Sell, 1m), (OrderSide.Buy, 1m)]);
+        result.AllFills().Select(entry => (entry.Order.Side, entry.Fill.Quantity)).ShouldBe([(OrderSide.Buy, 1m), (OrderSide.Sell, 1m), (OrderSide.Buy, 1m)]);
         (result.Metrics.Fees, result.Metrics.EndEquity).ShouldBe((0.3m, 999.7m));
     }
 
@@ -116,6 +117,7 @@ public class ReplayOrdersTests
             .Run(Start, [Candle(0, price, price, price, price), Candle(1, price, price, price, price)], observer);
 
         Fills(observer).ShouldBeEmpty();
+        observer.Received(1).Cancelled("o-1", Start);
     }
 
     // Scenarios "Касание" and "Пробой".

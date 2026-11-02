@@ -19,7 +19,11 @@ enforces a rule, the check is the source of truth.
 - `Services/<Area>` holds domain logic that has no state of its own in the database, split into folders by purpose
   (`Services/Strategies/Nodes`, `BuiltIns`, `Validation`, `Execution`). Logic that belongs to an entity or a value object
   stays on it. `Services/Backtests` holds the exchange simulator and the metrics of a backtest (`ParameterGrid`,
-  `BacktestReplay`, its observers, `EngineVersion`); the strategy engine itself stays in `Services/Strategies/Execution`.
+  `BacktestReplay`, its observers, `EngineVersion`); the strategy engine itself stays in `Services/Strategies/Execution`,
+  with the position of a run (`Position`, `PositionStatus`, `ClosedPosition`) until positions get storage of their own.
+  Replay observers see each placed order with the number of its position, each confirmed cancel and each fill; the
+  details they collect are value objects in `ValueObjects/Backtests` (`BacktestPosition`, `BacktestOrder`,
+  `BacktestFill`).
 - `Exceptions` holds domain exceptions: a broken domain rule that the caller reports to the user
   (`GraphValidationException`, `NodeInUseException`, `BotsAffectedException`).
 - The domain knows no wire codes and no vendor names: enums, not strings. Codes are mapped at the boundaries:

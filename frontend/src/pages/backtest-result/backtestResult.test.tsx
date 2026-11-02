@@ -31,31 +31,50 @@ function equityPoints(count: number, step = 1) {
   }));
 }
 
-const fill = (at: string, side: 'buy' | 'sell') => ({
+const fillAt = (at: string) => ({
   at,
-  side,
-  type: 'market',
   price: '43120.5',
   quantity: '0.022',
   fee: '0.5',
   feeAsset: 'quote',
 });
 
-const trade = (overrides: object = {}) => ({
+const order = (side: 'buy' | 'sell', fills: string[] = [], overrides: object = {}) => ({
+  id: `o-${side}`,
+  node: 'entry',
+  side,
+  type: 'market',
+  price: null,
+  quantity: '0.022',
+  amount: null,
+  status: 'filled',
+  fills: fills.map(fillAt),
+  ...overrides,
+});
+
+const position = (overrides: object = {}) => ({
+  number: 1,
+  status: 'closed',
   openedAt: '2024-01-05T14:00:00Z',
   closedAt: '2024-01-11T09:00:00Z',
+  carriedQuantity: '0',
   entryPrice: '43120.5',
   exitPrice: '44870',
   pnl: '38.49',
   fees: '1.02',
+  orders: [],
   ...overrides,
 });
+
+/** One position with an order for each fill. */
+const filled = (...fills: [string, 'buy' | 'sell'][]) => [
+  position({ orders: fills.map(([at, side], index) => order(side, [at], { id: `o-${index}` })) }),
+];
 
 function detailsOf(overrides: object = {}) {
   return {
     metrics: metricsOf(),
-    fills: [],
-    trades: [],
+    positions: [],
     equity: equityPoints(3),
     ...overrides,
   };
@@ -140,7 +159,7 @@ describe('result details page', () => {
       routes(() =>
         json(
           detailsOf({
-            fills: [fill('2024-01-05T14:00:00Z', 'buy'), fill('2024-01-11T09:00:00Z', 'sell')],
+            positions: filled(['2024-01-05T14:00:00Z', 'buy'], ['2024-01-11T09:00:00Z', 'sell']),
             equity: equityPoints(24 * 12),
           }),
         ),
@@ -156,7 +175,10 @@ describe('result details page', () => {
 
   it('marks a sell as the entry of a short strategy', async () => {
     fakeApi(
-      routes(() => json(detailsOf({ fills: [fill('2024-01-01T01:00:00Z', 'sell')] })), 'short'),
+      routes(
+        () => json(detailsOf({ positions: filled(['2024-01-01T01:00:00Z', 'sell']) })),
+        'short',
+      ),
     );
     open();
 
@@ -167,7 +189,7 @@ describe('result details page', () => {
 
   it('shows the chart without marks when the version of the strategy is not available', async () => {
     fakeApi({
-      ...routes(() => json(detailsOf({ fills: [fill('2024-01-01T01:00:00Z', 'buy')] }))),
+      ...routes(() => json(detailsOf({ positions: filled(['2024-01-01T01:00:00Z', 'buy']) }))),
       [`GET /api/strategies/${emaSummary.id}/versions/7`]: () => problem(404, 'нет'),
     });
     open();
@@ -197,18 +219,20 @@ describe('result details page', () => {
   });
 
   // Scenario "Открытая сделка".
-  it('marks the trade that is open at the end and leaves its exit and pnl empty', async () => {
+  it('marks the position that is open at the end and leaves its exit and pnl empty', async () => {
     fakeApi(
       routes(() =>
         json(
           detailsOf({
-            trades: [
-              trade(),
-              trade({
+            positions: [
+              position(),
+              position({
+                number: 2,
+                status: 'open',
                 openedAt: '2024-06-21T16:00:00Z',
                 closedAt: null,
                 exitPrice: null,
-                pnl: null,
+                pnl: '0',
                 entryPrice: '47010',
               }),
             ],
@@ -225,33 +249,96 @@ describe('result details page', () => {
     const cells = within(opened)
       .getAllByRole('cell')
       .map((cell) => cell.textContent);
-    expect(cells.slice(0, 5)).toEqual(['2024-06-21 16:00', 'открыта', '47\u00a0010', '—', '—']);
+    expect(cells.slice(0, 7)).toEqual([
+      '2',
+      'открыта',
+      '2024-06-21 16:00',
+      '—',
+      '47\u00a0010',
+      '—',
+      '—',
+    ]);
   });
 
-  it('switches between the trades and the fills', async () => {
+  // Scenario "Ордера позиции".
+  it('opens a position to its orders and their fills', async () => {
     fakeApi(
       routes(() =>
         json(
           detailsOf({
-            trades: [trade()],
-            fills: [fill('2024-01-05T14:00:00Z', 'buy'), fill('2024-01-11T09:00:00Z', 'sell')],
+            positions: [
+              position({
+                carriedQuantity: '0.000044',
+                orders: [
+                  order('buy', ['2024-01-05T14:00:00Z']),
+                  order('buy', ['2024-01-07T10:00:00Z'], {
+                    id: 'o-2',
+                    node: 'average',
+                    type: 'limit',
+                    price: '42000',
+                  }),
+                  order('sell', ['2024-01-11T09:00:00Z'], { id: 'o-3', node: 'take' }),
+                  order('buy', [], {
+                    id: 'o-4',
+                    node: 'dca',
+                    quantity: null,
+                    amount: '100',
+                    status: 'active',
+                  }),
+                ],
+              }),
+            ],
           }),
         ),
       ),
     );
     open();
 
-    expect(await screen.findByRole('tab', { name: 'Сделки · 1' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
-    await userEvent.click(screen.getByRole('tab', { name: 'Исполнения · 2' }));
+    const toggle = await screen.findByRole('button', { name: 'Ордера позиции 1' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('перенесено 0.000044')).toBeInTheDocument();
+    expect(screen.queryByText('average')).not.toBeInTheDocument();
 
+    await userEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
     const table = screen.getByRole('table');
-    expect(within(table).getByText('Покупка')).toBeInTheDocument();
-    expect(within(table).getByText('Продажа')).toBeInTheDocument();
-    expect(within(table).getAllByText('43 120.5')).toHaveLength(2);
-    expect(screen.queryByText('открыта')).not.toBeInTheDocument();
+    const average = within(table).getByText('average').closest('tr')!;
+    expect(
+      within(average)
+        .getAllByRole('cell')
+        .map((cell) => cell.textContent),
+    ).toEqual(['average', 'Покупка', 'limit', '42\u00a0000', '0.022', 'исполнен']);
+    expect(within(table).getByText('entry')).toBeInTheDocument();
+    expect(within(table).getByText('take')).toBeInTheDocument();
+    expect(within(table).getByText('2024-01-07 10:00')).toBeInTheDocument();
+    expect(within(table).getAllByText('0.5 quote')).toHaveLength(3);
+    const byAmount = within(table).getByText('dca').closest('tr')!;
+    expect(within(byAmount).getAllByRole('cell').slice(4)).toEqual([
+      expect.objectContaining({ textContent: '100' }),
+      expect.objectContaining({ textContent: 'активен' }),
+    ]);
+  });
+
+  // Scenario "Продажа позднего исполнения".
+  it('names the position as the one that placed its own sell', async () => {
+    fakeApi(
+      routes(() =>
+        json(
+          detailsOf({
+            positions: [
+              position({ orders: [order('sell', ['2024-01-11T09:00:00Z'], { node: null })] }),
+            ],
+          }),
+        ),
+      ),
+    );
+    open();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Ордера позиции 1' }));
+
+    const sell = screen.getByText('Продажа').closest('tr')!;
+    expect(within(sell).getAllByRole('cell')[0]).toHaveTextContent('позиция');
   });
 
   // Scenario "Движок обновился".
@@ -331,16 +418,22 @@ describe('result details page', () => {
     }
   });
 
-  it('colors the pnl of a trade by its sign', async () => {
+  it('colors the pnl of a position by its sign', async () => {
     fakeApi(
       routes(() =>
         json(
           detailsOf({
-            trades: [
-              trade({ openedAt: '2024-01-01T00:00:00Z', pnl: '38.49' }),
-              trade({ openedAt: '2024-01-02T00:00:00Z', pnl: '-12.00' }),
-              trade({ openedAt: '2024-01-03T00:00:00Z', pnl: '0' }),
-              trade({ openedAt: '2024-01-04T00:00:00Z', closedAt: null, pnl: null }),
+            positions: [
+              position({ number: 1, openedAt: '2024-01-01T00:00:00Z', pnl: '38.49' }),
+              position({ number: 2, openedAt: '2024-01-02T00:00:00Z', pnl: '-12.00' }),
+              position({ number: 3, openedAt: '2024-01-03T00:00:00Z', pnl: '0' }),
+              position({
+                number: 4,
+                status: 'open',
+                openedAt: '2024-01-04T00:00:00Z',
+                closedAt: null,
+                pnl: '-3',
+              }),
             ],
           }),
         ),
@@ -349,7 +442,7 @@ describe('result details page', () => {
     open();
 
     const pnl = async (opened: string) =>
-      within((await screen.findByText(opened)).closest('tr')!).getAllByRole('cell')[4]!;
+      within((await screen.findByText(opened)).closest('tr')!).getAllByRole('cell')[6]!;
     expect(await pnl('2024-01-01 00:00')).toHaveClass('text-ok');
     expect(await pnl('2024-01-02 00:00')).toHaveClass('text-err');
     expect(await pnl('2024-01-03 00:00')).not.toHaveClass('text-ok', 'text-err');
@@ -357,7 +450,7 @@ describe('result details page', () => {
   });
 
   it('keeps the marks on the chart when the page is drawn again without new fills', async () => {
-    fakeApi(routes(() => json(detailsOf({ fills: [fill('2024-01-01T01:00:00Z', 'buy')] }))));
+    fakeApi(routes(() => json(detailsOf({ positions: filled(['2024-01-01T01:00:00Z', 'buy']) }))));
     open();
     await screen.findByRole('figure', { name: 'Цена и капитал' });
     const plugin = vi.mocked(createSeriesMarkers).mock.results.at(-1)!.value as {

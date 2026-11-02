@@ -153,6 +153,24 @@ public class MetricsObserverTests
         (metrics.ClosedTrades, metrics.WinRatePercent, metrics.RealizedPnl).ShouldBe((1, 0m, -10m));
     }
 
+    // Scenario "Остаток не создаёт сделку".
+    [Test]
+    public void Remainder_moved_to_the_next_position_is_no_trade()
+    {
+        BacktestMetrics metrics = Run(BuyThenSell(), SpotWithCoinFee, new Dictionary<string, NodeValue>(), Flat(0, 100m), Flat(1, 110m));
+
+        (metrics.ClosedTrades, metrics.WinRatePercent, metrics.Fills).ShouldBe((1, 100m, 2));
+    }
+
+    [Test]
+    public void Remainder_alone_is_no_time_in_position_or_under_water()
+    {
+        // The coin fee keeps the first close under water; after the sell at the open of 110 the remainder falls to 90.
+        BacktestMetrics metrics = Run(BuyThenSell(), SpotWithCoinFee, new Dictionary<string, NodeValue>(), Flat(0, 100m), Candle(1, 110m, 110m, 90m, 90m));
+
+        (metrics.TimeInPositionPercent, metrics.TimeUnderWaterPercent).ShouldBe((50m, 50m));
+    }
+
     [Test]
     public void Run_without_candles_keeps_the_balance()
     {
@@ -160,6 +178,9 @@ public class MetricsObserverTests
 
         (metrics.EndEquity, metrics.Candles, metrics.TimeInPositionPercent, metrics.TimeUnderWaterPercent).ShouldBe((1000m, 0, 0m, 0m));
     }
+
+    /// <summary>A market fee of 0.04 % in the coin of a spot buy: a buy of 1 holds 0.9996, its sell of 0.999 leaves 0.0006.</summary>
+    private static TradingConditions SpotWithCoinFee => Conditions.Reference with { Fees = new FeeSchedule(0.0004m, 0.0004m, MarketCategory.Spot) };
 
     /// <summary>Buys once: the position is never sold.</summary>
     private static StrategyDefinition BuyOnStart(decimal quantity)

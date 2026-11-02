@@ -54,15 +54,19 @@ public class BacktestDetailsApiTests
         JsonElement details = await _client.GetFromJsonAsync<JsonElement>($"/api/backtests/{backtest.Id}/results/0/details");
 
         JsonNode.DeepEquals(JsonNode.Parse(details.GetProperty("metrics").GetRawText()), JsonNode.Parse(result.GetProperty("metrics").GetRawText())).ShouldBeTrue();
-        JsonElement[] fills = [.. details.GetProperty("fills").EnumerateArray()];
-        fills.Select(fill => (fill.GetProperty("side").GetString(), fill.GetProperty("type").GetString())).ShouldBe([("buy", "market"), ("sell", "market")]);
-        fills[0].GetProperty("at").GetDateTimeOffset().ShouldBe(From.AddHours(6));
-        Number(fills[0], "price").ShouldBe(10m);
-        Number(fills[0], "quantity").ShouldBe(10m);
-        fills[0].GetProperty("feeAsset").GetString().ShouldBe("quote");
-        JsonElement trade = details.GetProperty("trades").EnumerateArray().ShouldHaveSingleItem();
-        Number(trade, "pnl").ShouldBe(Number(result.GetProperty("metrics"), "pnl"));
-        (Number(trade, "entryPrice"), Number(trade, "exitPrice")).ShouldBe((10m, 9m));
+        JsonElement position = details.GetProperty("positions").EnumerateArray().ShouldHaveSingleItem();
+        (position.GetProperty("number").GetInt32(), position.GetProperty("status").GetString()).ShouldBe((1, "closed"));
+        Number(position, "pnl").ShouldBe(Number(result.GetProperty("metrics"), "pnl"));
+        (Number(position, "entryPrice"), Number(position, "exitPrice"), Number(position, "carriedQuantity")).ShouldBe((10m, 9m, 0m));
+        JsonElement[] orders = [.. position.GetProperty("orders").EnumerateArray()];
+        orders.Select(order => (order.GetProperty("side").GetString(), order.GetProperty("type").GetString(), order.GetProperty("status").GetString()))
+            .ShouldBe([("buy", "market", "filled"), ("sell", "market", "filled")]);
+        orders.ShouldAllBe(order => order.GetProperty("node").ValueKind == JsonValueKind.String);
+        JsonElement fill = orders[0].GetProperty("fills").EnumerateArray().ShouldHaveSingleItem();
+        fill.GetProperty("at").GetDateTimeOffset().ShouldBe(From.AddHours(6));
+        Number(fill, "price").ShouldBe(10m);
+        Number(fill, "quantity").ShouldBe(10m);
+        fill.GetProperty("feeAsset").GetString().ShouldBe("quote");
         JsonElement[] equity = [.. details.GetProperty("equity").EnumerateArray()];
         equity.Length.ShouldBe(11);
         Number(equity[^1], "equity").ShouldBe(Number(result.GetProperty("metrics"), "endEquity"));
@@ -91,15 +95,15 @@ public class BacktestDetailsApiTests
     }
 
     [Test]
-    public async Task Trade_open_at_the_end_has_no_close_exit_or_result()
+    public async Task Position_open_at_the_end_has_no_close_or_exit()
     {
         Backtest queued = await _scenario.CreateAsync(From, From.AddHours(8));
         await _scenario.WaitUntilFinishedAsync(queued.Id);
 
-        JsonElement trade = (await _client.GetFromJsonAsync<JsonElement>($"/api/backtests/{queued.Id}/results/0/details")).GetProperty("trades").EnumerateArray().ShouldHaveSingleItem();
+        JsonElement position = (await _client.GetFromJsonAsync<JsonElement>($"/api/backtests/{queued.Id}/results/0/details")).GetProperty("positions").EnumerateArray().ShouldHaveSingleItem();
 
-        (trade.GetProperty("closedAt").ValueKind, trade.GetProperty("exitPrice").ValueKind, trade.GetProperty("pnl").ValueKind)
-            .ShouldBe((JsonValueKind.Null, JsonValueKind.Null, JsonValueKind.Null));
+        (position.GetProperty("status").GetString(), position.GetProperty("closedAt").ValueKind, position.GetProperty("exitPrice").ValueKind)
+            .ShouldBe(("open", JsonValueKind.Null, JsonValueKind.Null));
     }
 
     [Test]

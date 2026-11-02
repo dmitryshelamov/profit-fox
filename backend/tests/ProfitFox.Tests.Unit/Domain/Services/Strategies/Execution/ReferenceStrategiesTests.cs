@@ -138,9 +138,10 @@ public class ReferenceStrategiesTests
         run.Handle(new RunStarted(Start));
         run.Handle(new OrderFilled(Start, "o-1", 1m, 100m, IsComplete: true));
 
-        IReadOnlyList<OrderCommand> commands = run.Handle(new OrderFilled(Start, "o-3", 1m, 101m, IsComplete: true));
+        run.Handle(new OrderFilled(Start, "o-3", 1m, 101m, IsComplete: true)).ShouldBe([new CancelOrder("o-2")]);
 
-        commands.ShouldBe([new CancelOrder("o-2"), Market("o-4", "entry", 100m)], ignoreOrder: true);
+        // The entry of the next cycle waits until the closing position is closed, as requirement "Узлы ждут закрытия" says.
+        run.Handle(new OrderCancelled(Start, "o-2")).ShouldBe([Market("o-4", "entry", 100m)]);
     }
 
     private static StrategyRun Run(string name, params (string Name, decimal Value)[] values)

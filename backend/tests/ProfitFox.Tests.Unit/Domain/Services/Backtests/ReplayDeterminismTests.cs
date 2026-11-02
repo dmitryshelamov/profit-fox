@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using ProfitFox.Application.Strategies;
 using ProfitFox.Domain.Entities.Backtests.Enums;
 using ProfitFox.Domain.Entities.MarketData;
@@ -7,6 +9,7 @@ using ProfitFox.Domain.Services.Strategies.BuiltIns;
 using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
+using ProfitFox.Tests.Shared.Builders.Backtests;
 using ProfitFox.Tests.Shared.Builders.Strategies;
 using ProfitFox.Tests.Shared.Fixtures.Strategies;
 
@@ -27,12 +30,13 @@ public class ReplayDeterminismTests
         Candle[] up = [.. common, .. Prices(12, 120m, 125m, 130m)];
         Candle[] down = [.. common, .. Prices(12, 80m, 70m, 60m)];
 
-        IReadOnlyList<ReplayFill> first = Details(up).Fills;
-        IReadOnlyList<ReplayFill> second = Details(down).Fills;
+        IReadOnlyList<(BacktestOrder Order, BacktestFill Fill)> first = Details(up).AllFills();
+        IReadOnlyList<(BacktestOrder Order, BacktestFill Fill)> second = Details(down).AllFills();
 
         DateTimeOffset last = common[^1].OpenTime;
-        first.Where(fill => fill.At <= last).ShouldBe(second.Where(fill => fill.At <= last));
-        first.Count(fill => fill.At <= last).ShouldBeGreaterThan(2);
+        first.Where(entry => entry.Fill.At <= last).Select(entry => (entry.Order.Id, entry.Fill))
+            .ShouldBe(second.Where(entry => entry.Fill.At <= last).Select(entry => (entry.Order.Id, entry.Fill)));
+        first.Count(entry => entry.Fill.At <= last).ShouldBeGreaterThan(2);
     }
 
     [Test]
@@ -43,9 +47,9 @@ public class ReplayDeterminismTests
         BacktestDetails first = Details(candles);
         BacktestDetails second = Details(candles);
 
-        second.Fills.ShouldBe(first.Fills);
+        JsonSerializer.Serialize(second.Positions).ShouldBe(JsonSerializer.Serialize(first.Positions));
         second.Metrics.ShouldBe(first.Metrics);
-        first.Fills.Count.ShouldBeGreaterThan(4);
+        first.AllFills().Count.ShouldBeGreaterThan(4);
     }
 
     private static BacktestDetails Details(Candle[] candles)

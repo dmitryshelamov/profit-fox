@@ -1,34 +1,55 @@
+using ProfitFox.Domain.Entities.Backtests.Enums;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Services.Strategies.Execution;
 using ProfitFox.Domain.ValueObjects.Backtests;
+using ProfitFox.Domain.ValueObjects.Strategies;
 
 namespace ProfitFox.Domain.Services.Backtests;
 
-/// <summary>The metrics of a combination, as <see cref="MetricsObserver" /> collects them, with its fills, trades and equity curve.</summary>
+/// <summary>
+///     The metrics of a combination, as <see cref="MetricsObserver" /> collects them, with its positions and equity curve. An order cancelled
+///     without a fill is dropped at once, so the replay keeps only the active orders and those with fills.
+/// </summary>
 public sealed class DetailsObserver(decimal balance) : IReplayObserver
 {
     public const int MaxEquityPoints = 5000;
 
     private readonly MetricsObserver _metrics = new MetricsObserver(balance);
-    private readonly List<ReplayFill> _fills = [];
-    private readonly List<BacktestTrade> _trades = [];
+    private readonly SortedDictionary<int, CollectedPosition> _positions = [];
+    private readonly Dictionary<string, (CollectedPosition Position, CollectedOrder Order)> _active = [];
     private readonly List<(DateTimeOffset At, Candle Candle, decimal Equity)> _closes = [];
     private RunState? _last;
-    private Cycle? _cycle;
 
+    public void Placed(PlaceOrder order, DateTimeOffset at, int position)
+    {
+        CollectedPosition collected = PositionOf(position);
+        var placed = new CollectedOrder(order);
+        collected.Orders.Add(placed);
+        _active[order.OrderId] = (collected, placed);
+    }
+
+    public void Cancelled(string orderId, DateTimeOffset at)
+    {
+        (CollectedPosition position, CollectedOrder order) = _active[orderId];
+        _active.Remove(orderId);
+        position.Orders.Remove(order);
+    }
+
+    /// <summary>A fill of the replay fills its order whole.</summary>
     public void Filled(ReplayFill fill, RunState state)
     {
         _metrics.Filled(fill, state);
-        _fills.Add(fill);
-        RunState before = _last ?? state with { Cash = balance, Quantity = 0m, Dust = 0m, DustCollateral = 0m };
-        _cycle ??= new Cycle(fill.At, before);
-        _cycle.Add(fill, state.Direction);
+        (CollectedPosition position, CollectedOrder order) = _active[fill.OrderId];
+        _active.Remove(fill.OrderId);
+        order.Status = BacktestOrderStatus.Filled;
+        order.Fills.Add(new BacktestFill(fill.At, fill.Price, fill.Quantity, fill.Fee, fill.FeeAsset));
+        position.Add(fill, state.Direction);
 
-        if (state.Quantity == 0m)
+        if (state.Closed is { } closed)
         {
-            _trades.Add(_cycle.Close(fill, state));
-            _cycle = null;
+            PositionOf(closed.Number).Closed = closed;
+            PositionOf(state.Position).CarriedQuantity = state.Quantity;
         }
 
         _last = state;
@@ -41,11 +62,24 @@ public sealed class DetailsObserver(decimal balance) : IReplayObserver
         _last = state;
     }
 
+    /// <summary>The positions with a fill or an active order, oldest first.</summary>
     public BacktestDetails Details()
     {
-        IReadOnlyList<BacktestTrade> trades = _cycle is null ? _trades : [.. _trades, _cycle.Open()];
+        return new BacktestDetails(
+            _metrics.Metrics(),
+            [.. _positions.Values.Where(position => position.HasFills || position.Orders.Count > 0).Select(position => position.Value(_last))],
+            Curve());
+    }
 
-        return new BacktestDetails(_metrics.Metrics(), _fills, trades, Curve());
+    private CollectedPosition PositionOf(int number)
+    {
+        if (!_positions.TryGetValue(number, out CollectedPosition? position))
+        {
+            position = new CollectedPosition(number);
+            _positions[number] = position;
+        }
+
+        return position;
     }
 
     /// <summary>Closes in equal groups, so that there are no more than <see cref="MaxEquityPoints" /> of them.</summary>
@@ -67,21 +101,40 @@ public sealed class DetailsObserver(decimal balance) : IReplayObserver
         ];
     }
 
-    /// <summary>A position cycle being collected: entries and exits by quantity, fees in the quote asset.</summary>
-    private sealed class Cycle(DateTimeOffset openedAt, RunState start)
+    private sealed class CollectedOrder(PlaceOrder order)
+    {
+        public List<BacktestFill> Fills { get; } = [];
+
+        public BacktestOrderStatus Status { get; set; } = BacktestOrderStatus.Active;
+
+        public BacktestOrder Value()
+        {
+            return new BacktestOrder(order.OrderId, order.NodePath, order.Side, order.Type, order.Price, order.Quantity, order.Amount, Status, Fills);
+        }
+    }
+
+    /// <summary>A position being collected: its orders, its entries and exits by quantity.</summary>
+    private sealed class CollectedPosition(int number)
     {
         private decimal _entryValue;
         private decimal _entryQuantity;
         private decimal _exitValue;
         private decimal _exitQuantity;
-        private decimal _fees;
+        private DateTimeOffset? _openedAt;
+
+        public List<CollectedOrder> Orders { get; } = [];
+
+        public ClosedPosition? Closed { get; set; }
+
+        public decimal CarriedQuantity { get; set; }
+
+        public bool HasFills => _openedAt is not null;
 
         public void Add(ReplayFill fill, StrategyDirection direction)
         {
-            bool entry = (fill.Side == OrderSide.Buy) == (direction == StrategyDirection.Long);
-            _fees += fill.FeeAsset == FeeAsset.Quote ? fill.Fee : fill.Fee * fill.Price;
+            _openedAt ??= fill.At;
 
-            if (entry)
+            if ((fill.Side == OrderSide.Buy) == (direction == StrategyDirection.Long))
             {
                 _entryValue += fill.Price * fill.Quantity;
                 _entryQuantity += fill.Quantity;
@@ -93,17 +146,22 @@ public sealed class DetailsObserver(decimal balance) : IReplayObserver
             }
         }
 
-        /// <summary>The result is the cash the cycle returned over the cash it started with, with the dust it left at the last price.</summary>
-        public BacktestTrade Close(ReplayFill fill, RunState state)
+        /// <summary>The current position takes its state, PnL and fees from the last state of the run.</summary>
+        public BacktestPosition Value(RunState? last)
         {
-            decimal pnl = state.Cash - start.Cash + state.DustValue(fill.Price) - start.DustValue(fill.Price);
+            RunState? current = last?.Position == number ? last : null;
 
-            return new BacktestTrade(openedAt, fill.At, _entryValue / _entryQuantity, _exitValue / _exitQuantity, pnl, _fees);
-        }
-
-        public BacktestTrade Open()
-        {
-            return new BacktestTrade(openedAt, null, _entryValue / _entryQuantity, null, null, _fees);
+            return new BacktestPosition(
+                number,
+                Closed is null ? current?.Status ?? PositionStatus.Waiting : PositionStatus.Closed,
+                _openedAt,
+                Closed?.At,
+                CarriedQuantity,
+                _entryQuantity == 0m ? null : _entryValue / _entryQuantity,
+                _exitQuantity == 0m ? null : _exitValue / _exitQuantity,
+                Closed?.RealizedPnl ?? current?.RealizedPnl ?? 0m,
+                Closed?.Fees ?? current?.Fees ?? 0m,
+                [.. Orders.Select(order => order.Value())]);
         }
     }
 }

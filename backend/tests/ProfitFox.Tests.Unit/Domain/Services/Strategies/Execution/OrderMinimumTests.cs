@@ -9,7 +9,7 @@ using Shouldly;
 
 namespace ProfitFox.Tests.Unit.Domain.Services.Strategies.Execution;
 
-/// <summary>No order below the exchange minimum, and a remainder of a position below the minimum quantity closes it.</summary>
+/// <summary>No order below the exchange minimum, and a remainder of a position below the minimum quantity closes it and moves on.</summary>
 public class OrderMinimumTests
 {
     private static readonly DateTimeOffset Start = DateTimeOffset.Parse("2024-01-01T00:00:00Z");
@@ -72,11 +72,11 @@ public class OrderMinimumTests
         run.ValueOf("position", "hasPosition").ShouldBe(Values.Boolean(false));
         run.ValueOf("position", "quantity").ShouldBe(Values.Number(0m));
         run.ValueOf("position", "invested").ShouldBe(Values.Number(0m));
-        run.State.Dust.ShouldBe(0.0005m);
+        (run.State.Position, run.State.Status, run.State.Quantity).ShouldBe((2, PositionStatus.Waiting, 0.0005m));
 
         run.Handle(new OrderFilled(Start, "o-3", 1m, 120m, IsComplete: true));
-        run.ValueOf("position", "quantity").ShouldBe(Values.Number(1m));
-        run.ValueOf("position", "averagePrice").ShouldBe(Values.Number(120m));
+        run.ValueOf("position", "quantity").ShouldBe(Values.Number(1.0005m));
+        run.ValueOf("position", "invested").ShouldBe(Values.Number(100m - 100m / 0.9995m * 0.999m + 120m));
     }
 
     [Test]

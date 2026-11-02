@@ -90,6 +90,35 @@ public class ReplaySequenceTests
         Fills(observer).Select(fill => (fill.Side, fill.Price, fill.At)).ShouldBe([(OrderSide.Buy, 100m, Start), (OrderSide.Buy, 99m, Start.AddHours(1))]);
     }
 
+    [Test]
+    public void Observer_sees_each_placed_order_with_its_position_and_each_confirmed_cancel()
+    {
+        Graph graph = new GraphBuilder()
+            .Node("position", SimpleNodeKind.Position)
+            .Node("flat", SimpleNodeKind.Not)
+            .Node("enter", SimpleNodeKind.MarketOrder, Settings(OrderSide.Buy, OrderSizeMode.Quantity), ("size", Values.Number(1m)))
+            .Node("average", SimpleNodeKind.HoldLimit, Settings(OrderSide.Buy, OrderSizeMode.Quantity), ("when", Values.Boolean(true)), ("price", Values.Number(90m)), ("size", Values.Number(1m)))
+            .Node("exit", SimpleNodeKind.ClosePosition)
+            .Wire("position.hasPosition", "flat.value")
+            .Wire("flat.result", "enter.when")
+            .Wire("position.hasPosition", "exit.when")
+            .Build();
+
+        IReplayObserver observer = Replay(StrategyDefinitions.Long(graph), Candle(0, 100m, 100m, 100m, 100m), Candle(1, 100m, 100m, 100m, 100m));
+
+        observer.ReceivedCalls().Where(call => call.GetMethodInfo().Name == nameof(IReplayObserver.Placed))
+            .Select(call => (((PlaceOrder)call.GetArguments()[0]!).NodePath, (DateTimeOffset)call.GetArguments()[1]!, (int)call.GetArguments()[2]!))
+            .ShouldBe(
+            [
+                ("enter", Start, 1),
+                ("average", Start, 1),
+                ("exit", Start, 1),
+                ("enter", Start.AddHours(1), 2),
+                ("average", Start.AddHours(1), 2)
+            ], ignoreOrder: true);
+        observer.Received(1).Cancelled("o-1", Start.AddHours(1));
+    }
+
     private static StrategyDefinition HoldBuyAt(decimal price)
     {
         return StrategyDefinitions.Long(new GraphBuilder()
