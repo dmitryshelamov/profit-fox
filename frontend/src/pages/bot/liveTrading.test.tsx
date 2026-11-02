@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { fakeApi, json, problem } from '@/test/fakeApi';
@@ -82,6 +82,7 @@ function open(bot: object, positions: unknown[] = [], extra: Record<string, () =
 
 describe('live trading on the bot page', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -183,6 +184,36 @@ describe('live trading on the bot page', () => {
     expect(await screen.findByText('Позиция закрывается по рынку…')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Запустить' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Закрыть позицию' })).not.toBeInTheDocument();
+  });
+
+  // A Worker may close the position between two polls: the positions are read again once the bot is no longer followed.
+  it('reads the positions again when the bot is done closing', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let closing = true;
+    open({ status: 'stopped', closeRequested: true }, [], {
+      [`GET /api/bots/${botId}`]: () =>
+        json({
+          ...botDetails,
+          exchangeAccount: account,
+          status: 'stopped',
+          closeRequested: closing,
+        }),
+      [`GET /api/bots/${botId}/positions`]: () =>
+        json(
+          closing
+            ? [position({ orders: [] })]
+            : [
+                position({ number: 2, status: 'waiting', quantity: '0', orders: [] }),
+                position({ status: 'closed', closedAt: '2026-11-03T12:00:00Z', orders: [] }),
+              ],
+        ),
+    });
+    expect(await screen.findByText('Позиция закрывается по рынку…')).toBeInTheDocument();
+
+    closing = false;
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+
+    expect(await screen.findByRole('region', { name: 'Закрытые позиции' })).toBeInTheDocument();
   });
 
   // Scenario "Текущая позиция".

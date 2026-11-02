@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 
 import {
   botBacktestsQuery,
@@ -43,6 +43,14 @@ export function BotPage({ botId }: { botId: string }) {
     ...botPositionsQuery(botId),
     refetchInterval: isFollowed(bot.data) ? 5000 : false,
   });
+  const queryClient = useQueryClient();
+  const status = bot.data?.status;
+  const closing = bot.data?.closeRequested;
+
+  // A Worker may finish between two polls: the positions are read again whenever the bot moves on, its last state too.
+  useEffect(() => {
+    void queryClient.invalidateQueries({ queryKey: botPositionsQuery(botId).queryKey });
+  }, [queryClient, botId, status, closing]);
   const backtests = useQuery(botBacktestsQuery(botId));
   const statuses = useMemo(
     () =>
