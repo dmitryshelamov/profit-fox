@@ -18,14 +18,17 @@ namespace ProfitFox.Presentation.Controllers;
 public sealed class BotsController(ISender sender) : ControllerBase
 {
     [HttpGet]
+    [ProducesResponseType<IReadOnlyList<BotSummaryResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> List(CancellationToken cancellationToken)
     {
-        IReadOnlyList<Bot> bots = await sender.Send(new GetBotsQuery(), cancellationToken);
+        IReadOnlyList<BotListItem> bots = await sender.Send(new GetBotsQuery(), cancellationToken);
 
         return Ok(bots.Select(BotSummaryResponse.Of));
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesResponseType<BotResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken)
     {
         Bot? bot = await sender.Send(new GetBotQuery(id), cancellationToken);
@@ -34,6 +37,9 @@ public sealed class BotsController(ISender sender) : ControllerBase
     }
 
     [HttpPost]
+    [ProducesResponseType<CreatedResponse>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> Create(BotBody body, CancellationToken cancellationToken)
     {
         try
@@ -51,6 +57,11 @@ public sealed class BotsController(ISender sender) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> Update(Guid id, BotBody body, CancellationToken cancellationToken)
     {
         try
@@ -66,6 +77,9 @@ public sealed class BotsController(ISender sender) : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         try

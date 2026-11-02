@@ -53,6 +53,19 @@ public class BotsApiTests
         bot.GetProperty("balance").GetString().ShouldBe("1000.5");
     }
 
+    // The web form sends money as decimal strings: a JSON number would lose digits in JavaScript.
+    [Test]
+    public async Task Balance_as_a_decimal_string_is_kept_exactly()
+    {
+        JsonObject body = Body();
+        body["balance"] = "1000.12345678901234567";
+
+        Guid id = await CreateBotAsync(body);
+
+        JsonElement bot = await _client.GetFromJsonAsync<JsonElement>($"{Bots}/{id}");
+        bot.GetProperty("balance").GetString().ShouldBe("1000.12345678901234567");
+    }
+
     [Test]
     public async Task List_gives_id_name_strategy_instrument_and_interval()
     {

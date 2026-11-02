@@ -17,6 +17,9 @@ public interface IBacktestRepository
     /// <summary>Backtests of the bot, newest first.</summary>
     Task<IReadOnlyList<Backtest>> GetByBotAsync(Guid botId, CancellationToken cancellationToken);
 
+    /// <summary>The newest backtest of every bot that has one, by the id of the bot; one query for all the bots.</summary>
+    Task<IReadOnlyDictionary<Guid, Backtest>> GetLastOfBotsAsync(CancellationToken cancellationToken);
+
     /// <summary>Every <c>Pending</c>, <c>LoadingCandles</c> and <c>Running</c> backtest of <paramref name="engineVersion" />, oldest first.</summary>
     Task<IReadOnlyList<Backtest>> GetUnfinishedAsync(int engineVersion, CancellationToken cancellationToken);
 

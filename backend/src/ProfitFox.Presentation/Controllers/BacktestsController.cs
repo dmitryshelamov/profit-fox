@@ -7,6 +7,7 @@ using ProfitFox.Application.Backtests.Commands.CreateBacktest;
 using ProfitFox.Application.Backtests.Queries.GetBacktest;
 using ProfitFox.Application.Backtests.Queries.GetBacktestResults;
 using ProfitFox.Application.Backtests.Queries.GetBotBacktests;
+using ProfitFox.Application.Backtests.Queries.GetResult;
 using ProfitFox.Application.Backtests.Queries.GetResultDetails;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Domain.Entities.Backtests;
@@ -21,6 +22,10 @@ namespace ProfitFox.Presentation.Controllers;
 public sealed class BacktestsController(ISender sender) : ControllerBase
 {
     [HttpPost("/api/bots/{botId:guid}/backtests")]
+    [ProducesResponseType<CreatedResponse>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> Create(Guid botId, CreateBacktestBody body, CancellationToken cancellationToken)
     {
         try
@@ -48,14 +53,18 @@ public sealed class BacktestsController(ISender sender) : ControllerBase
     }
 
     [HttpGet("/api/bots/{botId:guid}/backtests")]
+    [ProducesResponseType<IReadOnlyList<BacktestSummaryResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ListOfBot(Guid botId, CancellationToken cancellationToken)
     {
-        IReadOnlyList<Backtest>? backtests = await sender.Send(new GetBotBacktestsQuery(botId), cancellationToken);
+        IReadOnlyList<GetBacktestResult>? backtests = await sender.Send(new GetBotBacktestsQuery(botId), cancellationToken);
 
-        return backtests is null ? NotFound() : Ok(backtests.Select(BacktestSummaryResponse.Of));
+        return backtests is null ? NotFound() : Ok(backtests.Select(item => BacktestSummaryResponse.Of(item.Backtest, item.BotChanged)));
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesResponseType<BacktestResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken)
     {
         GetBacktestResult? result = await sender.Send(new GetBacktestQuery(id), cancellationToken);
@@ -64,6 +73,9 @@ public sealed class BacktestsController(ISender sender) : ControllerBase
     }
 
     [HttpGet("{id:guid}/results")]
+    [ProducesResponseType<BacktestResultsResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Results(Guid id, [FromQuery] ResultsQueryParameters query, CancellationToken cancellationToken)
     {
         try
@@ -78,7 +90,20 @@ public sealed class BacktestsController(ISender sender) : ControllerBase
         }
     }
 
+    [HttpGet("{id:guid}/results/{combination:long}")]
+    [ProducesResponseType<BacktestResultResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Result(Guid id, long combination, CancellationToken cancellationToken)
+    {
+        BacktestResult? result = await sender.Send(new GetResultQuery(id, combination), cancellationToken);
+
+        return result is null ? NotFound() : Ok(BacktestResultResponse.Of(result));
+    }
+
     [HttpGet("{id:guid}/results/{combination:long}/details")]
+    [ProducesResponseType<BacktestDetailsResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Details(Guid id, long combination, CancellationToken cancellationToken)
     {
         try
@@ -94,6 +119,9 @@ public sealed class BacktestsController(ISender sender) : ControllerBase
     }
 
     [HttpPost("{id:guid}/cancel")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Cancel(Guid id, CancellationToken cancellationToken)
     {
         try

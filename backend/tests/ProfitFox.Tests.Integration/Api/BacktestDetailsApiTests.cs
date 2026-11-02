@@ -68,6 +68,28 @@ public class BacktestDetailsApiTests
         Number(equity[^1], "equity").ShouldBe(Number(result.GetProperty("metrics"), "endEquity"));
     }
 
+    // Scenario "Одна свеча в точке" in the details of a result.
+    [Test]
+    public async Task Equity_points_carry_the_prices_of_the_candles_of_the_fixture()
+    {
+        Backtest queued = await _scenario.CreateAsync(From, From.AddHours(11));
+        await _scenario.WaitUntilFinishedAsync(queued.Id);
+        decimal[] closes = [10m, 9m, 8m, 7m, 8m, 10m, 12m, 11m, 9m, 7m, 8m];
+
+        JsonElement[] equity = [.. (await _client.GetFromJsonAsync<JsonElement>($"/api/backtests/{queued.Id}/results/0/details")).GetProperty("equity").EnumerateArray()];
+
+        equity.Length.ShouldBe(closes.Length);
+
+        for (int hour = 0; hour < closes.Length; hour++)
+        {
+            equity[hour].GetProperty("openTime").GetDateTimeOffset().ShouldBe(From.AddHours(hour));
+            Number(equity[hour], "open").ShouldBe(hour == 0 ? closes[0] : closes[hour - 1]);
+            Number(equity[hour], "high").ShouldBe(closes[hour] * 1.01m);
+            Number(equity[hour], "low").ShouldBe(closes[hour] * 0.99m);
+            Number(equity[hour], "close").ShouldBe(closes[hour]);
+        }
+    }
+
     [Test]
     public async Task Trade_open_at_the_end_has_no_close_exit_or_result()
     {

@@ -10,6 +10,7 @@ const database = process.env.PROFITFOX_E2E_DATABASE;
 const container = process.env.PROFITFOX_E2E_WEB_CONTAINER;
 const apiPort = 5293;
 const webPort = 5275;
+const bybitPort = 5296;
 const postgres = process.env.PROFITFOX_E2E_POSTGRES_HOST ?? '127.0.0.1:5432';
 const [host, port] = postgres.split(':');
 
@@ -19,16 +20,29 @@ const network = linux
   ? `--network host -e PROFITFOX_WEB_PORT=${webPort} -e PROFITFOX_API=127.0.0.1:${apiPort}`
   : `-p 127.0.0.1:${webPort}:80 -e PROFITFOX_API=host.docker.internal:${apiPort}`;
 
+// Tests never reach Bybit: its REST API is served by e2e/bybit-stub.ts.
+const shared = [
+  `ConnectionStrings__MarketData="Host=${host};Port=${port};Database=${database};Username=profitfox;Password=profitfox"`,
+  `Bybit__RestAddress=http://127.0.0.1:${bybitPort}`,
+];
 const api = [
   `node e2e/database.ts create ${database} &&`,
   'ASPNETCORE_ENVIRONMENT=Testing',
-  `ConnectionStrings__MarketData="Host=${host};Port=${port};Database=${database};Username=profitfox;Password=profitfox"`,
+  ...shared,
   `dotnet run --no-launch-profile --project ../backend/src/ProfitFox.Presentation --urls http://127.0.0.1:${apiPort}`,
 ].join(' ');
 
+// The Worker starts once the API has applied the migrations; its appsettings.Testing.json polls quickly.
+const worker = [
+  `until curl -sf http://127.0.0.1:${apiPort}/openapi/v1.json > /dev/null; do sleep 1; done;`,
+  'DOTNET_ENVIRONMENT=Testing',
+  ...shared,
+  'dotnet run --no-launch-profile --project ../backend/src/ProfitFox.Worker',
+].join(' ');
+
 /**
- * End-to-end tests drive the interface through the web image (Caddy) against the real API on a disposable database,
- * dropped afterwards. No Worker runs: the editor does not need one, and nothing reaches the exchange.
+ * End-to-end tests drive the interface through the web image (Caddy) against the real API and Worker on a disposable
+ * database, dropped afterwards. Bybit is a local stub, so nothing reaches the exchange.
  */
 export default defineConfig({
   testDir: './e2e',
@@ -47,8 +61,20 @@ export default defineConfig({
   },
   webServer: [
     {
+      command: `node e2e/bybit-stub.ts ${bybitPort}`,
+      url: `http://127.0.0.1:${bybitPort}/health`,
+      reuseExistingServer: false,
+    },
+    {
       command: api,
       url: `http://127.0.0.1:${apiPort}/openapi/v1.json`,
+      reuseExistingServer: false,
+      timeout: 180_000,
+    },
+    {
+      command: worker,
+      // Testing logs the host lifetime only from Warning, so the Worker is ready at its own start-up line.
+      wait: { stdout: /Worker .* runs on/ },
       reuseExistingServer: false,
       timeout: 180_000,
     },

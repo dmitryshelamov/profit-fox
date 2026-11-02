@@ -34,6 +34,16 @@ public sealed record BacktestDetailsResponse(
                     trade.Pnl is { } pnl ? BacktestResponse.Text(pnl) : null,
                     BacktestResponse.Text(trade.Fees)))
             ],
-            [.. details.Equity.Select(point => new EquityPointResponse(point.At, BacktestResponse.Text(point.Equity), BacktestResponse.Text(point.MinEquity)))]);
+            [
+                .. details.Equity.Select(point => new EquityPointResponse(
+                    point.At,
+                    BacktestResponse.Text(point.Equity),
+                    BacktestResponse.Text(point.MinEquity),
+                    point.OpenTime,
+                    BacktestResponse.Text(point.Open),
+                    BacktestResponse.Text(point.High),
+                    BacktestResponse.Text(point.Low),
+                    BacktestResponse.Text(point.Close)))
+            ]);
     }
 }

@@ -8,6 +8,13 @@ import {
   type RouterHistory,
 } from '@tanstack/react-router';
 
+import { BacktestPage } from '@/pages/backtest/BacktestPage';
+import { BacktestResultPage } from '@/pages/backtest-result/BacktestResultPage';
+import { BacktestSetupPage } from '@/pages/backtest-setup/BacktestSetupPage';
+import { BotPage } from '@/pages/bot/BotPage';
+import { BotEditorPage } from '@/pages/bot-editor/BotEditorPage';
+import { BotsPage } from '@/pages/bots/BotsPage';
+import { ComparePage } from '@/pages/compare/ComparePage';
 import { NodeEditorPage } from '@/pages/node-editor/NodeEditorPage';
 import { NodesPage } from '@/pages/nodes/NodesPage';
 import { StrategiesPage } from '@/pages/strategies/StrategiesPage';
@@ -63,6 +70,88 @@ const nodesRoute = createRoute({
   component: NodesPage,
 });
 
+const botsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/bots',
+  component: BotsPage,
+});
+
+const newBotRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/bots/new',
+  validateSearch: (search: Record<string, unknown>) => ({
+    strategyId: typeof search.strategyId === 'string' ? search.strategyId : undefined,
+  }),
+  component: function NewBotRoute() {
+    const { strategyId } = newBotRoute.useSearch();
+
+    return <BotEditorPage strategyId={strategyId} />;
+  },
+});
+
+const editBotRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/bots/$botId/edit',
+  component: function EditBotRoute() {
+    const { botId } = editBotRoute.useParams();
+
+    return <BotEditorPage botId={botId} />;
+  },
+});
+
+const botRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/bots/$botId',
+  component: function BotRoute() {
+    const { botId } = botRoute.useParams();
+
+    return <BotPage botId={botId} />;
+  },
+});
+
+const newBacktestRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/bots/$botId/backtests/new',
+  component: function NewBacktestRoute() {
+    const { botId } = newBacktestRoute.useParams();
+
+    return <BacktestSetupPage botId={botId} />;
+  },
+});
+
+const backtestRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/backtests/$backtestId',
+  component: function BacktestRoute() {
+    const { backtestId } = backtestRoute.useParams();
+
+    return <BacktestPage backtestId={backtestId} />;
+  },
+});
+
+const resultRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/backtests/$backtestId/results/$combination',
+  component: function ResultRoute() {
+    const { backtestId, combination } = resultRoute.useParams();
+
+    return <BacktestResultPage backtestId={backtestId} combination={combination} />;
+  },
+});
+
+const compareRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/compare',
+  validateSearch: (search: Record<string, unknown>) => ({
+    items: typeof search.items === 'string' ? search.items : undefined,
+  }),
+  component: function CompareRoute() {
+    const { items } = compareRoute.useSearch();
+
+    return <ComparePage items={items} />;
+  },
+});
+
 const newStrategyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/strategies/new/$draftId',
@@ -95,7 +184,18 @@ const nodeRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
-  shellRoute.addChildren([strategiesRoute, nodesRoute]),
+  shellRoute.addChildren([
+    strategiesRoute,
+    nodesRoute,
+    botsRoute,
+    newBotRoute,
+    editBotRoute,
+    botRoute,
+    newBacktestRoute,
+    backtestRoute,
+    resultRoute,
+    compareRoute,
+  ]),
   newStrategyRoute,
   strategyRoute,
   nodeRoute,

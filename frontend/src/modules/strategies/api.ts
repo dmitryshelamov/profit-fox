@@ -54,3 +54,16 @@ export async function saveStrategy(
 export async function createStrategy(body: { name: string; definition: unknown }): Promise<string> {
   return unwrap(await api.POST('/api/strategies', { body })).id;
 }
+
+/** One saved version of a strategy, as it was executed. */
+export function strategyVersionQuery(id: string, number: number | string) {
+  return queryOptions({
+    queryKey: ['strategies', id, 'versions', String(number)],
+    queryFn: async () =>
+      unwrap(
+        await api.GET('/api/strategies/{id}/versions/{number}', {
+          params: { path: { id, number: Number(number) } },
+        }),
+      ),
+  });
+}

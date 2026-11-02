@@ -38,6 +38,13 @@ internal sealed class BacktestRepository(NpgsqlDataSource dataSource) : IBacktes
         return [.. (await connection.QueryAsync<BacktestDb>(BacktestRepositoryQueries.GetByBot(botId, cancellationToken))).Select(BacktestDbConverter.ToDomain)];
     }
 
+    public async Task<IReadOnlyDictionary<Guid, Backtest>> GetLastOfBotsAsync(CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        return (await connection.QueryAsync<BacktestDb>(BacktestRepositoryQueries.GetLastOfBots(cancellationToken))).Select(BacktestDbConverter.ToDomain).ToDictionary(backtest => backtest.BotId);
+    }
+
     public async Task<IReadOnlyList<Backtest>> GetUnfinishedAsync(int engineVersion, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
