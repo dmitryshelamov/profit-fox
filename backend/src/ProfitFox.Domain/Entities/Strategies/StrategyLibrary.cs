@@ -136,7 +136,7 @@ public sealed class StrategyLibrary : AggregateRoot
         return true;
     }
 
-    /// <exception cref="BotValidationException">The bot is invalid against its strategy.</exception>
+    /// <exception cref="BotValidationException">The bot is invalid against its strategy or its account.</exception>
     public Bot AddBot(
         Guid id,
         string name,
@@ -145,10 +145,11 @@ public sealed class StrategyLibrary : AggregateRoot
         Instrument instrument,
         Interval interval,
         decimal balance,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        BotAccount? account = null)
     {
-        var bot = new Bot(id, name, strategyId, parameterValues, instrument, interval, balance, now, now);
-        ValidateBot(bot);
+        var bot = new Bot(id, name, strategyId, parameterValues, instrument, interval, balance, now, now, account?.Id);
+        ValidateBot(bot, account);
         _bots.Add(bot);
         _savedBots[id] = bot;
 
@@ -165,7 +166,8 @@ public sealed class StrategyLibrary : AggregateRoot
         Instrument instrument,
         Interval interval,
         decimal balance,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        BotAccount? account = null)
     {
         int index = _bots.FindIndex(bot => bot.Id == id);
 
@@ -181,9 +183,10 @@ public sealed class StrategyLibrary : AggregateRoot
             Instrument = instrument,
             Interval = interval,
             Balance = balance,
-            UpdatedAt = now
+            UpdatedAt = now,
+            ExchangeAccountId = account?.Id
         };
-        ValidateBot(changed);
+        ValidateBot(changed, account);
         _bots[index] = changed;
         _savedBots[id] = changed;
 
@@ -352,9 +355,14 @@ public sealed class StrategyLibrary : AggregateRoot
         return found;
     }
 
-    private void ValidateBot(Bot bot)
+    private void ValidateBot(Bot bot, BotAccount? account)
     {
-        IReadOnlyList<BotError> errors = BotErrors(bot, _strategies.FirstOrDefault(strategy => strategy.Id == bot.StrategyId)?.Definition);
+        var errors = BotErrors(bot, _strategies.FirstOrDefault(strategy => strategy.Id == bot.StrategyId)?.Definition).ToList();
+
+        if (account is not null && !account.Categories.Contains(bot.Instrument.Category))
+        {
+            errors.Add(new BotError(BotField.Account, null, $"The key of the account does not trade {bot.Instrument.Category.ToString().ToLowerInvariant()}."));
+        }
 
         if (errors.Count > 0)
         {

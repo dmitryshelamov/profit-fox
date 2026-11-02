@@ -12,4 +12,5 @@ public sealed record CreateBotCommand(
     string Category,
     string Symbol,
     string Interval,
-    decimal Balance) : IRequest<Guid>;
+    decimal Balance,
+    Guid? ExchangeAccountId = null) : IRequest<Guid>;

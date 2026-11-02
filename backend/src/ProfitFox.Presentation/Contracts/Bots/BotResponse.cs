@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 
+using ProfitFox.Application.Bots.Queries.GetBot;
 using ProfitFox.Application.MarketData;
 using ProfitFox.Application.Strategies;
 using ProfitFox.Domain.Entities.Bots;
@@ -18,10 +19,13 @@ public sealed record BotResponse(
     string Interval,
     string Balance,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt)
+    DateTimeOffset UpdatedAt,
+    BotAccountResponse? ExchangeAccount)
 {
-    public static BotResponse Of(Bot bot)
+    public static BotResponse Of(GetBotResult result)
     {
+        Bot bot = result.Bot;
+
         return new BotResponse(
             bot.Id,
             bot.Name,
@@ -32,6 +36,7 @@ public sealed record BotResponse(
             bot.Interval.ToCode(),
             bot.Balance.ToString(CultureInfo.InvariantCulture),
             bot.CreatedAt,
-            bot.UpdatedAt);
+            bot.UpdatedAt,
+            BotAccountResponse.Of(result.Account));
     }
 }

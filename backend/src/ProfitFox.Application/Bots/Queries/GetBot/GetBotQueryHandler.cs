@@ -5,10 +5,17 @@ using ProfitFox.Domain.Repositories;
 
 namespace ProfitFox.Application.Bots.Queries.GetBot;
 
-public sealed class GetBotQueryHandler(IStrategyLibraryRepository repository) : IRequestHandler<GetBotQuery, Bot?>
+public sealed class GetBotQueryHandler(IStrategyLibraryRepository repository, IExchangeAccountRepository accounts) : IRequestHandler<GetBotQuery, GetBotResult?>
 {
-    public Task<Bot?> Handle(GetBotQuery request, CancellationToken cancellationToken)
+    public async Task<GetBotResult?> Handle(GetBotQuery request, CancellationToken cancellationToken)
     {
-        return repository.GetBotAsync(request.Id, cancellationToken);
+        Bot? bot = await repository.GetBotAsync(request.Id, cancellationToken);
+
+        if (bot is null)
+        {
+            return null;
+        }
+
+        return new GetBotResult(bot, bot.ExchangeAccountId is { } account ? await accounts.GetAsync(account, cancellationToken) : null);
     }
 }

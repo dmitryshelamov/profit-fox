@@ -4,12 +4,18 @@ using Npgsql;
 
 using ProfitFox.Application.Strategies;
 using ProfitFox.Domain.Entities.Bots;
+using ProfitFox.Domain.Entities.Bots.Enums;
+using ProfitFox.Domain.Entities.ExchangeAccounts;
+using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Domain.Entities.Strategies.Enums;
+using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Services.Strategies.BuiltIns;
+using ProfitFox.Domain.ValueObjects.ExchangeAccounts;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.ExchangeAccounts;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Strategies;
 using ProfitFox.Tests.Shared.Fixtures.Strategies;
 
@@ -184,6 +190,39 @@ public class StrategyLibraryRepositoryTests
         await _repository.SaveAsync(Removing(strategy.Id), 1, CancellationToken.None);
 
         (await _repository.GetVersionAsync(strategy.Id, 1, CancellationToken.None)).ShouldBeNull();
+    }
+
+    [Test]
+    public async Task Bot_keeps_its_exchange_account()
+    {
+        Strategy strategy = Strategy("ema");
+        var account = new ExchangeAccount(Guid.NewGuid(), "Main", ExchangeEnvironment.Testnet, "key", 100, new HashSet<MarketCategory> { MarketCategory.Spot }, Created);
+        await new ExchangeAccountRepository(_dataSource).AddAsync(account, new EncryptedSecret([1], [2], [3]), CancellationToken.None);
+        Bot bot = Bot(strategy) with { ExchangeAccountId = account.Id };
+
+        await _repository.SaveAsync(Change([strategy], bots: [bot]), 0, CancellationToken.None);
+
+        (await _repository.GetBotAsync(bot.Id, CancellationToken.None))!.ExchangeAccountId.ShouldBe(account.Id);
+        (await _repository.LoadAsync(CancellationToken.None)).Bots.Single().ExchangeAccountId.ShouldBe(account.Id);
+    }
+
+    // Requirement "Проверка аккаунта бота": an account deleted after the check of the bot fails the save, never the foreign key alone.
+    [Test]
+    public async Task Bot_of_an_account_that_is_gone_is_not_saved()
+    {
+        Strategy strategy = Strategy("ema");
+        Bot bot = Bot(strategy) with { ExchangeAccountId = Guid.NewGuid() };
+
+        BotValidationException exception = await Should.ThrowAsync<BotValidationException>(() =>
+            _repository.SaveAsync(Change([strategy], bots: [bot]), 0, CancellationToken.None));
+
+        exception.Errors.Single().Field.ShouldBe(BotField.Account);
+        (await _repository.LoadAsync(CancellationToken.None)).Revision.ShouldBe(0);
+    }
+
+    private static Bot Bot(Strategy strategy)
+    {
+        return new Bot(Guid.NewGuid(), "EMA BTC", strategy.Id, new Dictionary<string, NodeValue>(), new Instrument(MarketCategory.Spot, "BTCUSDT"), Interval.OneHour, 1000m, Created, Created);
     }
 
     [Test]

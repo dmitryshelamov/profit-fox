@@ -6,8 +6,8 @@ enforces a rule, the check is the source of truth.
 ## Domain (`ProfitFox.Domain`)
 
 - Areas: `MarketData` (candles and their import), `Strategies` (strategies, composite nodes and their versions),
-  `Bots` (a strategy set up to trade: parameter values, instrument, interval, balance) and `Backtests` (a run of a bot on
-  stored candles and its results).
+  `Bots` (a strategy set up to trade: parameter values, instrument, interval, balance), `Backtests` (a run of a bot on
+  stored candles and its results) and `ExchangeAccounts` (keys of an exchange account a bot trades with).
 - `Entities/<Area>` holds entities (`Candle`, `CandleImportJob`, `Bot`, `Backtest`, `BacktestChunk`); `Entities/<Area>/Enums` holds enums
   and their pure domain extensions (`Interval`, `IntervalExtensions.CandleEnd`, `BacktestStatus`); `Entities/Base` holds
   `AggregateRoot`. A bot is part of the `StrategyLibrary` aggregate: it must stay valid against the latest version of its
@@ -39,13 +39,19 @@ enforces a rule, the check is the source of truth.
   library operation of a save without saving and return a `ValidationReport`.
 - `Strategies/NodeSettingSpecs` is the one table of simple node settings (`side`, `size`, `operation`, `type`): reading a
   definition in `StrategyJson` and the node catalog both use it. A new setting is added there and nowhere else.
-- `Ports/<Area>` holds ports to external systems and mechanisms (`IMarketHistoryClient`, `IInstrumentRulesProvider`, `IInstrumentCatalog`). Port names say what the port does, never which
+- `Ports/<Area>` holds ports to external systems and mechanisms (`IMarketHistoryClient`, `IInstrumentRulesProvider`, `IInstrumentCatalog`,
+  `IExchangeKeyInspector`, `Security/ISecretProtector`). Port names say what the port does, never which
   vendor implements it. `IInstrumentCatalog.ListAsync(category)` returns every instrument the exchange lists in a market
   category (`ListedInstrument`: symbol, base coin, quote coin). `SearchInstrumentsQuery(category, query, limit)` filters that
   list with the pure function `InstrumentSearch.Find`: a case-insensitive substring (spaces around the query are ignored) of the symbol or a coin, symbols that start
   with the query first, then by symbol ordinally, cut to `limit` (1 to 100, 20 by default). Its result carries field errors
   like `GetCandlesQuery`.
-- `Exceptions` holds `BaseApplicationException` and its subclasses, also vendor-neutral (`ExchangeException`).
+- `Exceptions` holds `BaseApplicationException` and its subclasses, also vendor-neutral (`ExchangeException`,
+  `ExchangeKeyRejectedException`).
+- `ExchangeAccounts` holds the commands and queries of exchange accounts, `ExchangeAccountCodes` (`mainnet`, `testnet`)
+  and `ExchangeKeyRules`, the pure check of what a key may do. The secret of an account is decrypted only in the query
+  that calls the exchange with it, and a bot refers to its account by id (`BotAccount` carries the categories the key
+  trades in into the checks of the bot).
 - `Workers` holds what the Worker needs to share work with other Workers: `WorkerSettings`, `WorkerIdentity` (the
   lease owner of this process) and `LeaseKeeper`, which renews a lease while the work runs. Work the Worker takes is a
   command that returns whether it found any (`RunNextCandleImportCommand`, `RunNextBacktestWorkCommand`).
@@ -63,6 +69,9 @@ enforces a rule, the check is the source of truth.
   (`BybitCodes`). `Exchanges/Retry` holds Polly pipelines. `BybitMarketDataClient` implements `IInstrumentCatalog` (spot in one
   answer, linear by following the cursor; one attempt per request). The registered `IInstrumentCatalog` is
   `Exchanges/CachedInstrumentCatalog` over it: a list per category is kept for 5 minutes on `TimeProvider`, a failure is not kept.
+- `Exchanges/Bybit/BybitAccountClient` implements `IExchangeKeyInspector`: a typed `HttpClient` that builds a Bybit client
+  with the key for one call and drops it, one attempt per call. `Security/AesGcmSecretProtector` encrypts secrets with the
+  master key (AES-256-GCM, the account id as associated data).
 - `Persistence/Postgres/Dapper/Repositories/<Area>` holds repositories, with `Contracts` (`*Db` rows), `Converters`
   (`*DbConverter`) and `Queries` (`*RepositoryQueries`, the SQL). `Persistence/Postgres/FluentMigrator/Migrations` holds
   raw-SQL migrations, `FluentMigrator/Extensions` holds `MigrateToLatestVersion`.
@@ -119,6 +128,15 @@ enforces a rule, the check is the source of truth.
   "Bybit": { "RestAddress": "http://127.0.0.1:5296" }
   ```
 
+- The `ExchangeAccounts` section (`ExchangeAccountSettings`): `MasterKey`, 32 bytes in base64, encrypts the secrets of
+  exchange accounts. Only `appsettings.Development.json` and `appsettings.Testing.json` of the API carry a key; any other
+  environment sets `ExchangeAccounts__MasterKey`, or the API does not start. The Worker does not require it yet: it never
+  decrypts a secret.
+
+  ```json
+  "ExchangeAccounts": { "MasterKey": "<openssl rand -base64 32>" }
+  ```
+
 ## Presentation (`ProfitFox.Presentation`)
 
 - `Controllers` holds controllers only (`BotsController`, `BacktestsController`, `InstrumentsController`: `GET /api/market-data/instruments?category&query&limit`
@@ -173,14 +191,15 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
 
 - `src/app` holds the router (TanStack Router) and the providers (TanStack Query). `src/pages/<screen>` holds one screen
   each (`strategies`, `strategy-editor`, `nodes`, `node-editor`, `bots`, `bot-editor`, `bot`, `backtest-setup`, `backtest`,
-  `backtest-result`, `compare`); a page never imports another page.
+  `backtest-result`, `compare`, `accounts`, `account-new`, `account`); a page never imports another page.
 - `src/modules/<area>` holds a feature: `model` for pure functions, `ui` for components, `api.ts` for queries. Other
   code imports a module only through its `index.ts`. `modules/graph-editor/model` is the logic of the editor that can be
   wrong (definition ↔ canvas, pins, wire types, error paths, draft comparison): plain TypeScript without React.
 - Modules of the bot section: `bots` (queries, `BotForm`, server errors by field, `parameterValues` from form text),
   `backtests` (queries with polling every 2 s while a backtest is unfinished, `BacktestForm`, status, ranges, grid,
   period, result columns, engine conflicts), `market-data` (instrument search for symbol suggestions, Bybit
-  intervals), `comparison` (the set of results on `useSyncExternalStore` over `sessionStorage`, the bar in
+  intervals), `exchange-accounts` (queries, `AccountForm`, `EnvironmentBadge`, `BalanceTable`, server problems of an
+  account; the balance query is disabled and runs only on the page's action), `comparison` (the set of results on `useSyncExternalStore` over `sessionStorage`, the bar in
   `AppShell`, the mark checkbox), `market-chart` (`PriceEquityChart` and `EquityComparisonChart` on
   `lightweight-charts`, fill markers, candles per point). `shared/format` shows decimal strings with thousands
   spacing without float math, and UTC dates. Decimal strings become numbers only in `market-chart/model`, for drawing.

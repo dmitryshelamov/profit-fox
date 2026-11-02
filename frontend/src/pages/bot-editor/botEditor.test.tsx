@@ -9,6 +9,7 @@ import {
   emaShortSummary,
   emaSummary,
   savedStrategy,
+  testnetAccount,
 } from '@/test/fixtures';
 import { renderApp } from '@/test/renderApp';
 
@@ -73,7 +74,78 @@ describe('bot form', () => {
       symbol: 'BTCUSDT',
       interval: '60',
       balance: '1000',
+      exchangeAccountId: null,
     });
+  });
+
+  // Scenario "Выбор аккаунта".
+  it('sends the chosen account', async () => {
+    const requests = fakeApi(
+      routes({
+        'GET /api/exchange-accounts': () => json([testnetAccount]),
+        'POST /api/bots': () => json({ id: botId }, 201),
+        [`GET /api/bots/${botId}`]: () =>
+          json({
+            ...botDetails,
+            exchangeAccount: { id: testnetAccount.id, name: 'Проверка', environment: 'testnet' },
+          }),
+        [`GET /api/bots/${botId}/backtests`]: () => json([]),
+        'GET /api/bots': () => json([]),
+      }),
+    );
+    const { history } = renderApp(`/bots/new?strategyId=${emaSummary.id}`);
+
+    await userEvent.type(await screen.findByLabelText('Название'), 'BTC EMA час');
+    await userEvent.type(screen.getByLabelText('Символ'), 'BTCUSDT');
+    await userEvent.type(screen.getByLabelText('Баланс бота'), '1000');
+    await userEvent.selectOptions(
+      await screen.findByLabelText('Аккаунт'),
+      await screen.findByRole('option', { name: 'Проверка · Testnet' }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Создать бота' }));
+
+    await waitFor(() => expect(history.location.pathname).toBe(`/bots/${botId}`));
+    const post = requests.find((request) => request.method === 'POST')!;
+    expect((await post.json()).exchangeAccountId).toBe(testnetAccount.id);
+    expect(await screen.findByRole('link', { name: 'Проверка' })).toBeInTheDocument();
+  });
+
+  // Scenario "Ключ не торгует в категории".
+  it('shows the server error of the account at its field and keeps the values', async () => {
+    fakeApi(
+      routes({
+        'GET /api/exchange-accounts': () => json([testnetAccount]),
+        'POST /api/bots': () =>
+          problem(400, 'x', {
+            errors: { exchangeAccountId: ['The key of the account does not trade linear.'] },
+          }),
+      }),
+    );
+    renderApp(`/bots/new?strategyId=${emaSummary.id}`);
+
+    await userEvent.type(await screen.findByLabelText('Название'), 'BTC EMA час');
+    await userEvent.type(screen.getByLabelText('Баланс бота'), '1000');
+    await userEvent.selectOptions(
+      await screen.findByLabelText('Аккаунт'),
+      await screen.findByRole('option', { name: 'Проверка · Testnet' }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Создать бота' }));
+
+    expect(
+      await screen.findByText('The key of the account does not trade linear.'),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Название')).toHaveValue('BTC EMA час');
+    expect(screen.getByLabelText('Аккаунт')).toHaveValue(testnetAccount.id);
+  });
+
+  it('offers to add an account when there is none', async () => {
+    fakeApi(routes({ 'GET /api/exchange-accounts': () => json([]) }));
+    renderApp('/bots/new');
+
+    expect(await screen.findByRole('link', { name: 'Добавить аккаунт' })).toHaveAttribute(
+      'href',
+      '/accounts/new',
+    );
   });
 
   // Money goes as text: a JavaScript number would round the digits.

@@ -12,4 +12,5 @@ public sealed record UpdateBotCommand(
     string Category,
     string Symbol,
     string Interval,
-    decimal Balance) : IRequest;
+    decimal Balance,
+    Guid? ExchangeAccountId = null) : IRequest;

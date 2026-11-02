@@ -11,6 +11,7 @@ import {
   emaSummary,
   progressOf,
   savedStrategy,
+  testnetAccount,
 } from '@/test/fixtures';
 import { renderApp } from '@/test/renderApp';
 
@@ -39,6 +40,33 @@ describe('bot page', () => {
     expect(
       await screen.findByText('EMA · linear · BTCUSDT · 1 ч · баланс 1 000 USDT'),
     ).toBeInTheDocument();
+  });
+
+  // Scenario "Бот на testnet".
+  it('shows the account of the bot with a testnet mark and a link to it', async () => {
+    fakeApi({
+      ...routes(() => []),
+      [`GET /api/bots/${botId}`]: () =>
+        json({
+          ...botDetails,
+          exchangeAccount: { id: testnetAccount.id, name: 'Проверка', environment: 'testnet' },
+        }),
+    });
+    renderApp(`/bots/${botId}`);
+
+    expect(await screen.findByRole('link', { name: 'Проверка' })).toHaveAttribute(
+      'href',
+      `/accounts/${testnetAccount.id}`,
+    );
+    expect(screen.getByText('Testnet')).toBeInTheDocument();
+  });
+
+  // Scenario "Бот без аккаунта".
+  it('says that the bot has no account', async () => {
+    fakeApi(routes(() => []));
+    renderApp(`/bots/${botId}`);
+
+    expect(await screen.findByText(/Без аккаунта/)).toBeInTheDocument();
   });
 
   // Scenario "Значения параметров".

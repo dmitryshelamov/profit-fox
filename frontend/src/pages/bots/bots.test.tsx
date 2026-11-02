@@ -72,6 +72,27 @@ describe('bot list', () => {
     ).toHaveLength(3);
   });
 
+  // Scenario "Бот на testnet".
+  it('shows the account of each bot with a testnet mark', async () => {
+    open([
+      {
+        ...botSummary,
+        exchangeAccount: { id: 'a', name: 'Проверка', environment: 'testnet' },
+      },
+      { ...botSummary, id: 'b', name: 'Без счёта' },
+    ]);
+
+    const row = (await screen.findByText('BTC EMA час')).closest('tr')!;
+    expect(within(row).getByRole('link', { name: 'Проверка' })).toHaveAttribute(
+      'href',
+      '/accounts/a',
+    );
+    expect(within(row).getByText('Testnet')).toBeInTheDocument();
+    expect(
+      within(screen.getByText('Без счёта').closest('tr')!).getByText('Без аккаунта'),
+    ).toBeInTheDocument();
+  });
+
   // Scenario "Последний бэктест считается".
   it('shows the status and progress of the last backtest that is running', async () => {
     open([

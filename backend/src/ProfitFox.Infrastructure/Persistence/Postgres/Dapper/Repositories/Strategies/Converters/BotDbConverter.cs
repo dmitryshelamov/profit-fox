@@ -24,7 +24,8 @@ internal static class BotDbConverter
             Interval = bot.Interval.ToCode(),
             Balance = bot.Balance,
             CreatedAt = bot.CreatedAt,
-            UpdatedAt = bot.UpdatedAt
+            UpdatedAt = bot.UpdatedAt,
+            ExchangeAccountId = bot.ExchangeAccountId
         };
     }
 
@@ -43,6 +44,7 @@ internal static class BotDbConverter
             interval,
             bot.Balance,
             bot.CreatedAt,
-            bot.UpdatedAt);
+            bot.UpdatedAt,
+            bot.ExchangeAccountId);
     }
 }

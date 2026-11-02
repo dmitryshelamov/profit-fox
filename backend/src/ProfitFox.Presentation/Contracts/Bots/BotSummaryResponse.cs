@@ -7,7 +7,7 @@ using ProfitFox.Presentation.Contracts.Backtests;
 
 namespace ProfitFox.Presentation.Contracts.Bots;
 
-public sealed record BotSummaryResponse(Guid Id, string Name, Guid StrategyId, string Category, string Symbol, string Interval, string Balance, LastBacktestResponse? LastBacktest)
+public sealed record BotSummaryResponse(Guid Id, string Name, Guid StrategyId, string Category, string Symbol, string Interval, string Balance, LastBacktestResponse? LastBacktest, BotAccountResponse? ExchangeAccount)
 {
     public static BotSummaryResponse Of(BotListItem item)
     {
@@ -19,7 +19,8 @@ public sealed record BotSummaryResponse(Guid Id, string Name, Guid StrategyId, s
             item.Bot.Instrument.Symbol,
             item.Bot.Interval.ToCode(),
             item.Bot.Balance.ToString(CultureInfo.InvariantCulture),
-            item.LastBacktest is { } backtest ? new LastBacktestResponse(backtest.Id, backtest.Status.ToCode(), ProgressResponse.Of(backtest)) : null);
+            item.LastBacktest is { } backtest ? new LastBacktestResponse(backtest.Id, backtest.Status.ToCode(), ProgressResponse.Of(backtest)) : null,
+            BotAccountResponse.Of(item.Account));
     }
 }
 

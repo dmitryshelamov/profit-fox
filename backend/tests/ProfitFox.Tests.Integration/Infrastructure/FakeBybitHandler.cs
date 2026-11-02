@@ -39,6 +39,9 @@ public class FakeBybitHandler : HttpMessageHandler
     /// <summary>Instrument list requests get an error Bybit does not ask to retry.</summary>
     public bool RejectLists { get; set; }
 
+    /// <summary>Calls with an account key get "API key is invalid"; otherwise the key opens a unified account that trades spot and linear.</summary>
+    public bool RejectKeys { get; set; }
+
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         if (Unavailable)
@@ -62,11 +65,23 @@ public class FakeBybitHandler : HttpMessageHandler
             });
         }
 
+        if (RejectKeys && request.RequestUri!.AbsolutePath is "/v5/user/query-api" or "/v5/account/wallet-balance")
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"retCode":10003,"retMsg":"API key is invalid.","result":{},"retExtInfo":{},"time":0}""")
+            });
+        }
+
         NameValueCollection query = HttpUtility.ParseQueryString(request.RequestUri!.Query);
         string result = request.RequestUri.AbsolutePath switch
         {
             "/v5/market/instruments-info" => query["symbol"] is { } symbol ? InstrumentsInfo(query["category"]!, symbol) : InstrumentsList(query),
             "/v5/market/kline" => Kline(query),
+            "/v5/user/query-api" =>
+                """{"id":"1","apiKey":"key","readOnly":0,"secret":"","permissions":{"ContractTrade":["Order","Position"],"Spot":["SpotTrade"],"Wallet":[]},"uta":1,"userID":100}""",
+            "/v5/account/wallet-balance" =>
+                """{"list":[{"accountType":"UNIFIED","totalEquity":"1000","coin":[{"coin":"USDT","walletBalance":"1000","usdValue":"1000"}]}]}""",
             _ => throw new InvalidOperationException($"Unexpected Bybit request {request.RequestUri}")
         };
         var json = $$"""{"retCode":0,"retMsg":"OK","result":{{result}},"retExtInfo":{},"time":0}""";

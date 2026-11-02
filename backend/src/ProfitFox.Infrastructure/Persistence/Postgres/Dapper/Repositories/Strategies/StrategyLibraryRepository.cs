@@ -5,8 +5,11 @@ using Dapper;
 using Npgsql;
 
 using ProfitFox.Domain.Entities.Bots;
+using ProfitFox.Domain.Entities.Bots.Enums;
 using ProfitFox.Domain.Entities.Strategies;
+using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.ValueObjects.Bots;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Strategies.Contracts;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Strategies.Converters;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Strategies.Queries;
@@ -40,6 +43,7 @@ internal sealed class StrategyLibraryRepository(NpgsqlDataSource dataSource) : I
     ///     Strategies go before the bots and versions that refer to them, removed bots before their strategies; a deleted strategy
     ///     takes its versions along.
     /// </summary>
+    /// <exception cref="BotValidationException">A saved bot refers to an exchange account that is gone; nothing is written.</exception>
     public async Task<bool> SaveAsync(StrategyLibraryChange change, long expectedRevision, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
@@ -62,7 +66,15 @@ internal sealed class StrategyLibraryRepository(NpgsqlDataSource dataSource) : I
 
         foreach (Bot bot in change.SavedBots)
         {
-            await connection.ExecuteAsync(StrategyLibraryRepositoryQueries.UpsertBot(BotDbConverter.FromDomain(bot), transaction, cancellationToken));
+            try
+            {
+                await connection.ExecuteAsync(StrategyLibraryRepositoryQueries.UpsertBot(BotDbConverter.FromDomain(bot), transaction, cancellationToken));
+            }
+            catch (PostgresException exception) when (exception.SqlState == PostgresErrorCodes.ForeignKeyViolation && exception.ConstraintName == "FK_bots_exchange_accounts")
+            {
+                // The account was deleted after the bot was checked against it.
+                throw new BotValidationException([new BotError(BotField.Account, null, "No such exchange account.")]);
+            }
         }
 
         foreach (Guid id in change.RemovedBots)

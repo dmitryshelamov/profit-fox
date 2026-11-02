@@ -22,6 +22,7 @@ public class StrategyLibraryBotsTests
     private static readonly Guid EmaShort = Guid.Parse("00000000-0000-0000-0000-000000000002");
     private static readonly Guid BotId = Guid.Parse("00000000-0000-0000-0000-0000000000b1");
     private static readonly Instrument BtcSpot = new Instrument(MarketCategory.Spot, "BTCUSDT");
+    private static readonly BotAccount SpotAccount = new BotAccount(Guid.Parse("00000000-0000-0000-0000-0000000000a1"), new HashSet<MarketCategory> { MarketCategory.Spot });
 
     // Scenario "Валидный бот".
     [Test]
@@ -34,6 +35,49 @@ public class StrategyLibraryBotsTests
         bot.ShouldBe(new Bot(BotId, "EMA BTC", Ema, bot.ParameterValues, BtcSpot, Interval.OneHour, 1000m, Now, Now));
         bot.ParameterValues.ShouldBe(Fast(10m));
         library.Bots.ShouldBe([bot]);
+    }
+
+    // Scenario "Бот с аккаунтом".
+    [Test]
+    public void Bot_keeps_its_account()
+    {
+        Bot bot = Library().AddBot(BotId, "EMA BTC", Ema, Fast(10m), BtcSpot, Interval.OneHour, 1000m, Now, SpotAccount);
+
+        bot.ExchangeAccountId.ShouldBe(SpotAccount.Id);
+    }
+
+    // Scenario "Бот без аккаунта".
+    [Test]
+    public void Bot_without_an_account_has_none()
+    {
+        Library().AddBot(BotId, "EMA BTC", Ema, Fast(10m), BtcSpot, Interval.OneHour, 1000m, Now).ExchangeAccountId.ShouldBeNull();
+    }
+
+    // Scenario "Ключ не торгует в категории бота".
+    [Test]
+    public void Account_that_does_not_trade_the_category_is_rejected()
+    {
+        StrategyLibrary library = Library();
+
+        BotValidationException exception = Should.Throw<BotValidationException>(() =>
+            library.AddBot(BotId, "EMA BTC", Ema, Fast(10m), new Instrument(MarketCategory.Linear, "BTCUSDT"), Interval.OneHour, 1000m, Now, SpotAccount));
+
+        exception.Errors.ShouldBe([new BotError(BotField.Account, null, "The key of the account does not trade linear.")]);
+        library.Bots.ShouldBeEmpty();
+    }
+
+    // Scenarios "Смена категории при аккаунте только для спота" and "Снять аккаунт".
+    [Test]
+    public void Account_is_checked_and_removed_on_change()
+    {
+        StrategyLibrary library = Library();
+        library.AddBot(BotId, "EMA BTC", Ema, Fast(10m), BtcSpot, Interval.OneHour, 1000m, Now, SpotAccount);
+        var btcLinear = new Instrument(MarketCategory.Linear, "BTCUSDT");
+
+        Should.Throw<BotValidationException>(() => library.UpdateBot(BotId, "EMA BTC", Fast(10m), btcLinear, Interval.OneHour, 1000m, Now, SpotAccount));
+        library.Bots.Single().Instrument.ShouldBe(BtcSpot);
+
+        library.UpdateBot(BotId, "EMA BTC", Fast(10m), btcLinear, Interval.OneHour, 1000m, Now, account: null)!.ExchangeAccountId.ShouldBeNull();
     }
 
     // Scenario "Значение вне ограничений".
