@@ -70,6 +70,17 @@ public class BybitStreamsTests
         _server.Authentications.ShouldBe(1);
     }
 
+    // A refused subscription is the exchange being unavailable to the session, whichever of the two topics it is.
+    [TestCase("order")]
+    [TestCase("execution")]
+    public async Task Refused_account_topic_is_unavailable(string topic)
+    {
+        _server.RefusedTopics[topic] = true;
+
+        await Should.ThrowAsync<ProfitFox.Application.Exceptions.ExchangeUnavailableException>(() =>
+            _streams.SubscribeAccountAsync(new ExchangeKey("key", "secret"), _ => { }, _ => { }, () => { }, CancellationToken.None));
+    }
+
     // Requirement "Догрузка пропущенного": a stream that is back tells it, so the missed events are read again.
     [Test]
     public async Task Restored_connection_is_told()

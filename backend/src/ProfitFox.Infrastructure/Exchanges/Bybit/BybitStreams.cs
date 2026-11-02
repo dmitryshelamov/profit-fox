@@ -70,9 +70,11 @@ internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings setting
         if (!trades.Success)
         {
             await orderStream.DisposeAsync();
+
+            throw new ExchangeUnavailableException($"Bybit refused the stream: {trades.Error!.Message}");
         }
 
-        trades.Data!.ConnectionRestored += _ => restored();
+        trades.Data.ConnectionRestored += _ => restored();
 
         return orderStream;
     }

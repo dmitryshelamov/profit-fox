@@ -30,6 +30,9 @@ public sealed class FakeBybitSocketServer : IAsyncDisposable
     /// <summary>Like <c>ws://127.0.0.1:5297</c>.</summary>
     public string Address { get; private set; } = "";
 
+    /// <summary>Topics a subscription to is refused, as Bybit refuses one it does not serve.</summary>
+    public ConcurrentDictionary<string, bool> RefusedTopics { get; } = new ConcurrentDictionary<string, bool>();
+
     /// <summary>How many times a client authenticated on the private stream.</summary>
     public int Authentications => _authentications;
 
@@ -229,9 +232,20 @@ public sealed class FakeBybitSocketServer : IAsyncDisposable
 
                 break;
             case "subscribe":
-                foreach (JsonNode? topic in request["args"]!.AsArray())
+                string[] topics = [.. request["args"]!.AsArray().Select(topic => topic!.GetValue<string>())];
+
+                if (topics.FirstOrDefault(RefusedTopics.ContainsKey) is { } refused)
                 {
-                    connection.Topics[topic!.GetValue<string>()] = true;
+                    await connection.SendAsync(
+                        new JsonObject { ["success"] = false, ["ret_msg"] = $"error:handler not found,topic:{refused}", ["op"] = "subscribe", ["conn_id"] = "fake", ["req_id"] = requestId }
+                            .ToJsonString());
+
+                    break;
+                }
+
+                foreach (string topic in topics)
+                {
+                    connection.Topics[topic] = true;
                 }
 
                 await connection.SendAsync(
