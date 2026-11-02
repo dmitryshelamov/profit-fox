@@ -312,6 +312,20 @@ public class LiveTradingTests
         (await _scenario.LiveAsync(bot)).LastBarAt.ShouldBe(LiveTradingScenario.LastOpen.AddHours(5));
     }
 
+    // The session learns of a pause with its next renewal; a candle before it meets the bot as written and is not traded.
+    [Test]
+    public async Task Candle_right_after_a_pause_places_nothing()
+    {
+        Guid bot = await StartedAndFilledAsync();
+        await SettleAsync();
+
+        await _scenario.ActAsync(bot, "pause");
+        _scenario.Exchange.CloseCandle(DateTimeOffset.Parse("2024-03-10T13:00:00Z"), 100m);
+
+        await SettleAsync();
+        _scenario.Exchange.Orders.Count.ShouldBe(1);
+    }
+
     // Scenario "Снятие с паузы": candles of the pause are only history, the strategy goes on with the next one.
     [Test]
     public async Task Resumed_bot_goes_on_with_the_next_candle()

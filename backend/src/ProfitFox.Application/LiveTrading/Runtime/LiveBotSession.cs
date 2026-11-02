@@ -544,11 +544,19 @@ internal sealed class LiveBotSession(
         await SendAsync(cancellationToken);
     }
 
-    /// <summary>A closed candle reaches the strategy once: one it has seen, by the bot as written, is passed over.</summary>
+    /// <summary>
+    ///     A closed candle reaches the strategy once and only while the bot runs, both by the bot as written: one it has seen is
+    ///     passed over, and one that meets a pause or a stop the session has not heard of yet is not traded.
+    /// </summary>
     private Task CandleAsync(Candle candle, CancellationToken cancellationToken)
     {
         return WriteAsync(
-            _ => Task.FromResult(_bot.LastBarAt >= candle.OpenTime ? [] : _run.Handle(Bar(candle))),
+            _ =>
+            {
+                bool seen = _bot.LastBarAt >= candle.OpenTime;
+
+                return Task.FromResult(!seen && _bot.Status == LiveBotStatus.Running ? _run.Handle(Bar(candle)) : []);
+            },
             bot => bot.LastBarAt >= candle.OpenTime ? bot : bot with { LastBarAt = candle.OpenTime },
             cancellationToken);
     }
