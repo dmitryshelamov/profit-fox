@@ -89,8 +89,24 @@ public class BybitStreamsTests
         orders.TryTake(out ExchangeOrder? order, TimeSpan.FromSeconds(10)).ShouldBeTrue();
         order.ShouldBe(new ExchangeOrder("c-1", "x-c-1", ExchangeOrderState.Open, 0.4m, null, 40m, 0.02m, "USDT"));
         fills.TryTake(out ExchangeFill? fill, TimeSpan.FromSeconds(10)).ShouldBeTrue();
-        fill.ShouldBe(new ExchangeFill("e-1", "c-1", 0.4m, 100m, 0.02m, "USDT", Open));
+        fill.ShouldBe(new ExchangeFill("e-1", "c-1", 0.4m, 100m, 0.02m, "USDT", Open, Linear));
         _server.Authentications.ShouldBe(1);
+    }
+
+    // Scenario "Сверка после чужого исполнения": a fill carries the instrument it was made on; a market the system does not trade has none.
+    [TestCase("linear", true)]
+    [TestCase("inverse", false)]
+    public async Task Fill_carries_its_instrument_when_the_system_trades_that_market(string category, bool traded)
+    {
+        var fills = new BlockingCollection<ExchangeFill>();
+        await using IAsyncDisposable subscription = await _streams.SubscribeAccountAsync(
+            new ExchangeKey("key", "secret"), _ => { }, fills.Add, () => { }, CancellationToken.None);
+        await _server.WaitForTopicAsync("execution");
+
+        await _server.PushAsync("execution", [FakeBybitSocketServer.Execution(category, "c-1", "e-1", 0.4m, 100m, 0.02m, "USDT", Open)]);
+
+        fills.TryTake(out ExchangeFill? fill, TimeSpan.FromSeconds(10)).ShouldBeTrue();
+        fill!.Instrument.ShouldBe(traded ? Linear : null);
     }
 
     // Requirement "Соединения с биржей": the bots of an account share its private connection and pick their own events.

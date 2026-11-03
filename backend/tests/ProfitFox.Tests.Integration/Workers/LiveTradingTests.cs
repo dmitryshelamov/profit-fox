@@ -104,7 +104,7 @@ public class LiveTradingTests
     {
         Guid bot = await StartedAndFilledAsync();
 
-        _scenario.Exchange.ForeignFill("manual-1", 5m, 100m);
+        _scenario.Exchange.ForeignFill("manual-1", 5m, 100m, LiveTradingScenario.Spot);
         await SettleAsync();
 
         (await _scenario.PositionsAsync(bot))[0].Quantity.ShouldBe(1m);

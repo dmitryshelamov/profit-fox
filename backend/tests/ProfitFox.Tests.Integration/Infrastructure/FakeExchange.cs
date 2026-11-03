@@ -256,8 +256,8 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
         }
     }
 
-    /// <summary>A fill of an order nobody of the system placed, such as the owner by hand.</summary>
-    public void ForeignFill(string clientId, decimal quantity, decimal price)
+    /// <summary>A fill of an order nobody of the system placed, such as the owner by hand, made on <paramref name="instrument" />.</summary>
+    public void ForeignFill(string clientId, decimal quantity, decimal price, Instrument instrument)
     {
         Action<ExchangeFill>[] handlers;
 
@@ -268,7 +268,7 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
 
         foreach (Action<ExchangeFill> handler in handlers)
         {
-            handler(new ExchangeFill($"e-{Interlocked.Increment(ref _execs)}", clientId, quantity, price, 0m, "USDT", DateTimeOffset.Parse("2024-03-10T12:30:00Z")));
+            handler(new ExchangeFill($"e-{Interlocked.Increment(ref _execs)}", clientId, quantity, price, 0m, "USDT", DateTimeOffset.Parse("2024-03-10T12:30:00Z"), instrument));
         }
     }
 
