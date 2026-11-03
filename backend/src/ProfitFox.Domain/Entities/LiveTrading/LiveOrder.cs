@@ -34,6 +34,18 @@ public sealed record LiveOrder(
 {
     public ClientOrderId ClientId => new ClientOrderId(BotId, Number);
 
+    /// <summary>The order may still be on the exchange or go there: it is not filled, cancelled or rejected.</summary>
+    public bool Unfinished => Status is LiveOrderStatus.PendingSubmit or LiveOrderStatus.Active or LiveOrderStatus.PendingCancel or LiveOrderStatus.CancelSent;
+
+    /// <summary>A cancel of the order is saved or sent.</summary>
+    public bool Cancelling => Status is LiveOrderStatus.PendingCancel or LiveOrderStatus.CancelSent;
+
+    /// <summary>A send or a cancel of the order is saved and its pause after a transient refusal, if any, is over.</summary>
+    public bool DueAt(DateTimeOffset now)
+    {
+        return Status is LiveOrderStatus.PendingSubmit or LiveOrderStatus.PendingCancel && (NextAttemptAt is null || NextAttemptAt <= now);
+    }
+
     /// <summary>An order saved before it goes to the exchange.</summary>
     public static LiveOrder New(
         Guid botId,

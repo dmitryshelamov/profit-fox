@@ -59,7 +59,10 @@ enforces a rule, the check is the source of truth.
 - `LiveTrading` holds the commands of live trading (start, pause, resume, stop, close the position, claim and run a bot),
   `LiveTradingCodes`, and `Runtime/LiveBotSession`: one session keeps one bot for the take of its lease, takes its inputs
   one at a time from a queue, writes every change in one unit of work after checking the lease, and sends orders only
-  once they are written. `Ports/LiveTrading` holds `IExchangeLedger` (REST reads of an account), `IOrderGateway` (orders
+  once they are written; `Runtime/LiveBotReconciler` compares the books of a bot and of the bots that share its
+  holding with the exchange and stops them all on a difference; `Runtime/LiveRunMapping` maps the stored position and
+  orders of a bot to the snapshot of its run and back; `Runtime/LiveWarmUpHistory` reads the last closed candles a bot
+  warms up its indicators with. `Ports/LiveTrading` holds `IExchangeLedger` (REST reads of an account), `IOrderGateway` (orders
   and cancels, a refusal is an outcome) and `IExchangeStreams` (closed candles, order updates and fills, and a signal
   when a stream is back after a gap).
 - `Workers` holds what the Worker needs to share work with other Workers: `WorkerSettings`, `WorkerIdentity` (the
@@ -82,6 +85,11 @@ enforces a rule, the check is the source of truth.
 - `Exchanges/Bybit/BybitAccountClient` implements `IExchangeKeyInspector`: a typed `HttpClient` that builds a Bybit client
   with the key for one call and drops it, one attempt per call. `Security/AesGcmSecretProtector` encrypts secrets with the
   master key (AES-256-GCM, the account id as associated data).
+- `Exchanges/Bybit/BybitStreams` implements `IExchangeStreams` as one singleton for the process, so the connections to
+  Bybit follow the pairs and accounts, not the bots: one public socket client whose connections carry one kline topic
+  per category, symbol and interval, and one private client per account key with the `order` and `execution` topics.
+  The first subscriber of a topic subscribes it at Bybit, the others join; the last to leave takes it off. Every
+  subscriber of a topic gets all its events and a restored connection; a session picks its own orders by `orderLinkId`.
 - `Persistence/Postgres/Dapper/Repositories/<Area>` holds repositories, with `Contracts` (`*Db` rows), `Converters`
   (`*DbConverter`) and `Queries` (`*RepositoryQueries`, the SQL). `Persistence/Postgres/FluentMigrator/Migrations` holds
   raw-SQL migrations, `FluentMigrator/Extensions` holds `MigrateToLatestVersion`.
@@ -92,6 +100,11 @@ enforces a rule, the check is the source of truth.
 - A lease of a live bot also has an epoch, `lease_epoch`, grown by every claim: every write of a session locks the row of
   its bot with the owner and the epoch it took, so a Worker that lost the bot and took it again is told from its
   stalled self.
+- A transaction that locks both rows of a bot takes `bots` first, then `live_bots`, each in its own statement, never
+  relying on the order inside one statement or CTE. A change of the owner (`LockAsync`) and a save of the library lock
+  the `bots` row `FOR UPDATE`; a write of a session (`LockLeasedAsync`) takes it `FOR KEY SHARE` before the `live_bots`
+  row, since the foreign key of a new `live_positions` row takes that share later anyway. A session that fails several
+  bots after a reconciliation locks them one bot after another in the order of the library, `created_at, id`.
 - `Persistence/Postgres/Transactions` implements the unit of work: `PostgresTransactionExecutor` opens the connection
   and the transaction, the scoped `PostgresTransactionAccessor.Current` hands them to repositories that write inside a
   unit. Only repositories of live trading use it; the older repositories open a connection per call and keep their
@@ -153,7 +166,14 @@ enforces a rule, the check is the source of truth.
 - The `Trading` section of the Worker (`TradingSettings`): `Enabled`, `false` by default. Only a trading Worker takes live
   bots (`LiveTradingBackgroundService`); a Worker on another machine that only runs backtests leaves it off. A local run
   never sends real orders: in Development a trading Worker does not start unless both `Bybit:RestAddress` and
-  `Bybit:SocketAddress` point at a stub.
+  `Bybit:SocketAddress` point at a stub. `LeaseDuration` and `LeaseRenewal` are the lease of a live bot, apart from the
+  `Worker` lease of chunks and imports: 5 minutes renewed each minute by default, the renewal shorter than the lease or
+  a trading Worker does not start. `appsettings.Testing.json` keeps 30 and 10 seconds, so tests that wait for a lease
+  to expire move the clock less.
+
+  ```json
+  "Trading": { "Enabled": false, "LeaseDuration": "00:05:00", "LeaseRenewal": "00:01:00" }
+  ```
 
   ```json
   "ExchangeAccounts": { "MasterKey": "<openssl rand -base64 32>" }

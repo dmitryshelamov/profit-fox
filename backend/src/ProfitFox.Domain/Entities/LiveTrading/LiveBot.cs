@@ -37,6 +37,12 @@ public sealed record LiveBot(
     /// <summary>The settings of a bot change only while nothing trades with them.</summary>
     public bool Editable => Status is LiveBotStatus.Stopped or LiveBotStatus.Failed;
 
+    /// <summary>The bot runs and has not yet traded the candle that opened at <paramref name="openTime" />.</summary>
+    public bool Awaits(DateTimeOffset openTime)
+    {
+        return Status == LiveBotStatus.Running && openTime > (LastBarAt ?? DateTimeOffset.MinValue);
+    }
+
     /// <exception cref="LiveBotConflictException">The bot works or closes its position.</exception>
     public LiveBot Start(int strategyVersion, IReadOnlyDictionary<string, NodeValue> parameterValues)
     {

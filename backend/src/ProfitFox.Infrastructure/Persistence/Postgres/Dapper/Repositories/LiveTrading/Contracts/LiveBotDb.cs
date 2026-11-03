@@ -25,4 +25,7 @@ internal sealed class LiveBotDb
     public string? SessionError { get; init; }
 
     public long LeaseEpoch { get; init; }
+
+    /// <summary>Read only by the queries that ask for it.</summary>
+    public DateTimeOffset UpdatedAt { get; init; }
 }

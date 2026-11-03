@@ -37,18 +37,37 @@ internal sealed class LiveBotRepository(NpgsqlDataSource dataSource, PostgresTra
         return bot is null ? null : new LeasedBot(LiveTradingDbConverter.ToDomain(bot), bot.LeaseEpoch);
     }
 
-    public async Task<LiveBot?> RenewAsync(Guid botId, Guid owner, long epoch, DateTimeOffset leasedUntil, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<LeasedBot>> RenewAllAsync(
+        Guid owner,
+        IReadOnlyCollection<(Guid BotId, long Epoch)> bots,
+        DateTimeOffset leasedUntil,
+        CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        LiveBotDb? bot = await connection.QuerySingleOrDefaultAsync<LiveBotDb>(LiveBotRepositoryQueries.Renew(botId, owner, epoch, leasedUntil, cancellationToken));
+        IEnumerable<LiveBotDb> renewed = await connection.QueryAsync<LiveBotDb>(
+            LiveBotRepositoryQueries.RenewAll(owner, [.. bots.Select(bot => bot.BotId)], [.. bots.Select(bot => bot.Epoch)], leasedUntil, cancellationToken));
 
-        return bot is null ? null : LiveTradingDbConverter.ToDomain(bot);
+        return [.. renewed.Select(bot => new LeasedBot(LiveTradingDbConverter.ToDomain(bot), bot.LeaseEpoch))];
+    }
+
+    public async Task<IReadOnlyList<ChangedLiveBot>> GetChangedAsync(Guid owner, DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        IEnumerable<LiveBotDb> changed = await connection.QueryAsync<LiveBotDb>(LiveBotRepositoryQueries.GetChanged(owner, since, cancellationToken));
+
+        return [.. changed.Select(bot => new ChangedLiveBot(LiveTradingDbConverter.ToDomain(bot), bot.LeaseEpoch, bot.UpdatedAt))];
     }
 
     public async Task ReleaseAsync(Guid botId, Guid owner, long epoch, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await connection.ExecuteAsync(LiveBotRepositoryQueries.Release(botId, owner, epoch, cancellationToken));
+    }
+
+    public async Task ReleaseAllAsync(Guid owner, IReadOnlyCollection<(Guid BotId, long Epoch)> bots, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await connection.ExecuteAsync(LiveBotRepositoryQueries.ReleaseAll(owner, [.. bots.Select(bot => bot.BotId)], [.. bots.Select(bot => bot.Epoch)], cancellationToken));
     }
 
     public async Task<LiveBot?> LockAsync(Guid botId, DateTimeOffset now, CancellationToken cancellationToken)
@@ -74,6 +93,7 @@ internal sealed class LiveBotRepository(NpgsqlDataSource dataSource, PostgresTra
     public async Task<LiveBot?> LockLeasedAsync(Guid botId, Guid owner, long epoch, CancellationToken cancellationToken)
     {
         PostgresTransaction current = accessor.Current;
+        await current.Connection.ExecuteAsync(LiveBotRepositoryQueries.ShareBot(botId, current.Transaction, cancellationToken));
         LiveBotDb? bot = await current.Connection.QuerySingleOrDefaultAsync<LiveBotDb>(
             LiveBotRepositoryQueries.LockLeased(botId, owner, epoch, current.Transaction, cancellationToken));
 

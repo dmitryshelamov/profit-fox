@@ -4,9 +4,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
+using Npgsql;
+
 using ProfitFox.Application.Backtests;
 using ProfitFox.Application.ExchangeAccounts;
 using ProfitFox.Application.LiveTrading;
+using ProfitFox.Application.LiveTrading.Runtime;
 using ProfitFox.Application.Ports.ExchangeAccounts;
 using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Application.Ports.MarketData;
@@ -19,6 +22,8 @@ using ProfitFox.Infrastructure.Exchanges.Bybit;
 using ProfitFox.Infrastructure.Exchanges.Retry;
 using ProfitFox.Infrastructure.Mediatr;
 using ProfitFox.Infrastructure.Persistence.Postgres;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.LiveTrading;
+using ProfitFox.Infrastructure.Persistence.Postgres.Transactions;
 using ProfitFox.Infrastructure.Security;
 
 namespace ProfitFox.Infrastructure;
@@ -35,7 +40,8 @@ public static class InfrastructureRegistrar
 
     /// <summary>The services of a Worker: the lanes that take candle imports and backtest work from the database.</summary>
     /// <exception cref="InvalidOperationException">
-    ///     The lease would expire before the Worker renews it, or a Worker in Development would trade on the live Bybit.
+    ///     A lease of work or of a bot would expire before the Worker renews it, or a Worker in Development would trade on the
+    ///     live Bybit.
     /// </exception>
     public static void ConfigureWorker(IConfiguration configuration, IServiceCollection services, IHostEnvironment environment)
     {
@@ -47,8 +53,12 @@ public static class InfrastructureRegistrar
         }
 
         ConfigureCommon(configuration, services);
-        TradingSettings trading = configuration.GetSection("Trading").Get<TradingSettings>() ?? new TradingSettings();
-        services.AddSingleton(trading);
+        TradingSettings trading = Trading(configuration);
+
+        if (trading.Enabled && trading.LeaseRenewal >= trading.LeaseDuration)
+        {
+            throw new InvalidOperationException("Trading:LeaseRenewal must be shorter than Trading:LeaseDuration.");
+        }
 
         // A local run never sends real orders.
         BybitSettings stub = configuration.GetSection("Bybit").Get<BybitSettings>() ?? new BybitSettings();
@@ -115,7 +125,16 @@ public static class InfrastructureRegistrar
 
         // MediatR registers the Worker's handlers in the API too, so what they take must resolve there as well.
         services.AddSingleton(Settings(configuration));
+        services.AddSingleton(Trading(configuration));
         services.AddSingleton(new WorkerIdentity(Guid.NewGuid()));
+
+        // One loop for all bots of the Worker; it reads and renews with a connection per call, outside any unit of work.
+        services.AddSingleton(provider => new LiveBotLeases(
+            new LiveBotRepository(provider.GetRequiredService<NpgsqlDataSource>(), new PostgresTransactionAccessor()),
+            provider.GetRequiredService<TradingSettings>(),
+            provider.GetRequiredService<WorkerSettings>(),
+            provider.GetRequiredService<WorkerIdentity>(),
+            provider.GetRequiredService<TimeProvider>()));
         services.AddSingleton<BacktestInputCache>();
     }
 
@@ -129,5 +148,10 @@ public static class InfrastructureRegistrar
     private static WorkerSettings Settings(IConfiguration configuration)
     {
         return configuration.GetSection("Worker").Get<WorkerSettings>() ?? new WorkerSettings();
+    }
+
+    private static TradingSettings Trading(IConfiguration configuration)
+    {
+        return configuration.GetSection("Trading").Get<TradingSettings>() ?? new TradingSettings();
     }
 }
