@@ -55,6 +55,26 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
         }
     }
 
+    // A single attempt, like the instrument check: a person waits for the page of a chart.
+    public async Task<IReadOnlyList<Candle>> GetCandlesOnceAsync(
+        Instrument instrument,
+        Interval interval,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await resilience.ExecuteOnceAsync(
+                async token => await RequestPageAsync(instrument, interval, from, to.AddMilliseconds(-1), token),
+                cancellationToken);
+        }
+        catch (TransientExchangeException exception)
+        {
+            throw new ExchangeUnavailableException($"Bybit is unavailable: {exception.Message}");
+        }
+    }
+
     // A single attempt: the caller waits for this answer synchronously.
     public async Task<bool> InstrumentExistsAsync(Instrument instrument, CancellationToken cancellationToken)
     {
@@ -164,24 +184,34 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
     {
         try
         {
-            BybitResponse<BybitKline> klines = await resilience.ExecuteWithRetriesAsync(
-                async token => Unwrap(
-                    await bybit.V5Api.ExchangeData.GetKlinesAsync(
-                        instrument.Category.ToBybit(),
-                        instrument.Symbol,
-                        interval.ToBybit(),
-                        from.UtcDateTime,
-                        end.UtcDateTime,
-                        PageSize,
-                        token)),
+            return await resilience.ExecuteWithRetriesAsync(
+                async token => await RequestPageAsync(instrument, interval, from, end, token),
                 cancellationToken);
-
-            return klines.List.Select(ToCandle).ToList();
         }
         catch (TransientExchangeException exception)
         {
             throw new ExchangeUnavailableException($"Bybit request failed after {resilience.RetryCount} retries: {exception.Message}");
         }
+    }
+
+    private async ValueTask<IReadOnlyList<Candle>> RequestPageAsync(
+        Instrument instrument,
+        Interval interval,
+        DateTimeOffset from,
+        DateTimeOffset end,
+        CancellationToken cancellationToken)
+    {
+        BybitResponse<BybitKline> klines = Unwrap(
+            await bybit.V5Api.ExchangeData.GetKlinesAsync(
+                instrument.Category.ToBybit(),
+                instrument.Symbol,
+                interval.ToBybit(),
+                from.UtcDateTime,
+                end.UtcDateTime,
+                PageSize,
+                cancellationToken));
+
+        return klines.List.Select(ToCandle).ToList();
     }
 
     /// <summary>The data of a successful call; a failure worth retrying is a <see cref="TransientExchangeException" />, any other an <see cref="ExchangeException" />.</summary>

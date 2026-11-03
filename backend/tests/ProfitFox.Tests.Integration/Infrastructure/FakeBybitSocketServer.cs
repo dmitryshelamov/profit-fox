@@ -128,7 +128,7 @@ public sealed class FakeBybitSocketServer : IAsyncDisposable
         await _app.DisposeAsync();
     }
 
-    public static JsonObject Kline(DateTimeOffset openTime, TimeSpan interval, decimal close, bool confirm)
+    public static JsonObject Kline(DateTimeOffset openTime, TimeSpan interval, decimal close, bool confirm, decimal volume = 1m, DateTimeOffset? at = null)
     {
         return new JsonObject
         {
@@ -139,10 +139,10 @@ public sealed class FakeBybitSocketServer : IAsyncDisposable
             ["close"] = Text(close),
             ["high"] = Text(close),
             ["low"] = Text(close),
-            ["volume"] = "1",
+            ["volume"] = Text(volume),
             ["turnover"] = Text(close),
             ["confirm"] = confirm,
-            ["timestamp"] = (openTime + interval).ToUnixTimeMilliseconds()
+            ["timestamp"] = (at ?? openTime + interval).ToUnixTimeMilliseconds()
         };
     }
 

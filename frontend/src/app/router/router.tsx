@@ -6,6 +6,7 @@ import {
   Outlet,
   redirect,
   type RouterHistory,
+  stringifySearchWith,
 } from '@tanstack/react-router';
 
 import { AccountPage } from '@/pages/account/AccountPage';
@@ -105,10 +106,16 @@ const editBotRoute = createRoute({
 const botRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/bots/$botId',
+  // The router reads `?interval=5` as the number 5, so a number is taken as its text.
+  validateSearch: (search: Record<string, unknown>): { interval?: string } =>
+    typeof search.interval === 'string' || typeof search.interval === 'number'
+      ? { interval: String(search.interval) }
+      : {},
   component: function BotRoute() {
     const { botId } = botRoute.useParams();
+    const { interval } = botRoute.useSearch();
 
-    return <BotPage botId={botId} />;
+    return <BotPage botId={botId} interval={interval} />;
   },
 });
 
@@ -230,7 +237,13 @@ const routeTree = rootRoute.addChildren([
 ]);
 
 export function createAppRouter(queryClient: QueryClient, history?: RouterHistory) {
-  return createRouter({ routeTree, context: { queryClient }, history });
+  // Without a parser the stringifier writes a text value as it is: `?interval=5`, not the quoted `?interval=%225%22`.
+  return createRouter({
+    routeTree,
+    context: { queryClient },
+    history,
+    stringifySearch: stringifySearchWith(JSON.stringify),
+  });
 }
 
 declare module '@tanstack/react-router' {

@@ -6,6 +6,7 @@ using ProfitFox.Application.Bots.Commands.CreateBot;
 using ProfitFox.Application.Bots.Commands.DeleteBot;
 using ProfitFox.Application.Bots.Commands.UpdateBot;
 using ProfitFox.Application.Bots.Queries.GetBot;
+using ProfitFox.Application.Bots.Queries.GetBotCandles;
 using ProfitFox.Application.Bots.Queries.GetBots;
 using ProfitFox.Application.LiveTrading.Commands.ClosePosition;
 using ProfitFox.Application.LiveTrading.Commands.PauseBot;
@@ -97,6 +98,31 @@ public sealed class BotsController(ISender sender) : ControllerBase
         {
             return problem;
         }
+    }
+
+    /// <summary>
+    ///     The closed candles of the bot's instrument in <c>[from, to)</c>, on the interval of the bot unless <c>interval</c> says another;
+    ///     what storage lacks is first read from Bybit. <c>to</c> is cut to the last closed candle.
+    /// </summary>
+    [HttpGet("{id:guid}/candles")]
+    [ProducesResponseType<BotCandlesResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Candles(Guid id, [FromQuery] BotCandlesQueryParameters parameters, CancellationToken cancellationToken)
+    {
+        GetBotCandlesResult? result = await sender.Send(new GetBotCandlesQuery(id, parameters.Interval, parameters.From, parameters.To), cancellationToken);
+
+        if (result is null)
+        {
+            return NotFound();
+        }
+
+        if (result.Candles is null)
+        {
+            return ValidationProblem(new ValidationProblemDetails(result.Errors.ToDictionary(error => error.Key, error => new[] { error.Value })));
+        }
+
+        return Ok(BotCandlesResponse.Of(result));
     }
 
     /// <summary>The positions of the bot in live trading, the newest first, with their orders and fills.</summary>

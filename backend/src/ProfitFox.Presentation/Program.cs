@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
 
+using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Infrastructure;
 using ProfitFox.Infrastructure.Persistence.Postgres.FluentMigrator.Extensions;
+using ProfitFox.Presentation.Hubs;
 
 using Serilog;
 
@@ -34,6 +36,10 @@ public class Program
 
             InfrastructureRegistrar.Configure(builder.Configuration, builder.Services);
 
+            // The current candle of a bot's chart is the API's own work: its feeds and the hub that shows them live only here.
+            builder.Services.AddSignalR();
+            builder.Services.AddSingleton<IFormingCandleBroadcast, BotChartBroadcast>();
+
             WebApplication app = builder.Build();
 
             app.Services.MigrateToLatestVersion();
@@ -49,6 +55,7 @@ public class Program
             app.UseAuthorization();
 
             app.MapControllers();
+            app.MapHub<BotChartHub>(BotChartHub.Path);
 
             await app.RunAsync();
         }

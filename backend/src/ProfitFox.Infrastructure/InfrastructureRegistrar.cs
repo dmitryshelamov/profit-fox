@@ -10,6 +10,8 @@ using ProfitFox.Application.Backtests;
 using ProfitFox.Application.ExchangeAccounts;
 using ProfitFox.Application.LiveTrading;
 using ProfitFox.Application.LiveTrading.Runtime;
+using ProfitFox.Application.MarketData;
+using ProfitFox.Application.MarketData.FormingCandles;
 using ProfitFox.Application.Ports.ExchangeAccounts;
 using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Application.Ports.MarketData;
@@ -36,6 +38,9 @@ public static class InfrastructureRegistrar
         ConfigureCommon(configuration, services);
         RequireMasterKey(configuration, services);
         services.AddHostedService<StrategyVersionsInitializationService>();
+
+        // The feeds of the current candle are the API's alone (the broadcast they need is the hub's, registered by the API host).
+        services.AddSingleton<FormingCandleFeeds>();
     }
 
     /// <summary>The services of a Worker: the lanes that take candle imports and backtest work from the database.</summary>
@@ -109,10 +114,13 @@ public static class InfrastructureRegistrar
         services.AddHttpClient<IExchangeKeyInspector, BybitAccountClient>();
         services.AddHttpClient<IExchangeLedger, BybitLedger>();
         services.AddHttpClient<IOrderGateway, BybitOrderGateway>();
-        services.AddSingleton<IExchangeStreams, BybitStreams>();
+        services.AddSingleton<BybitStreams>();
+        services.AddSingleton<IExchangeStreams>(provider => provider.GetRequiredService<BybitStreams>());
+        services.AddSingleton<IFormingCandleStreams>(provider => provider.GetRequiredService<BybitStreams>());
         services.AddSingleton<ILiveTradingJournal, LoggingLiveTradingJournal>();
         services.AddSingleton<ExchangeResilienceExecutor>();
         services.AddTransient<IMarketHistoryClient, BybitMarketDataClient>();
+        services.AddTransient<CandleReadThrough>();
         services.AddTransient<IInstrumentRulesProvider, BybitMarketDataClient>();
         services.AddKeyedTransient<IInstrumentCatalog, BybitMarketDataClient>(CachedInstrumentCatalog.InnerKey);
         services.AddSingleton<IInstrumentCatalog>(provider => new CachedInstrumentCatalog(

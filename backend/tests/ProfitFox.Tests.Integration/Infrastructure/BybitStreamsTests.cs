@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging.Abstractions;
 
 using ProfitFox.Application.Ports.LiveTrading;
+using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.ValueObjects.MarketData;
@@ -339,5 +340,114 @@ public class BybitStreamsTests
         await _server.DropAsync();
 
         (await restored.WaitAsync(TimeSpan.FromSeconds(30))).ShouldBeTrue();
+    }
+
+    // Requirement "Текущая свеча": the listeners of updates see every update of the topic, the closed ones only the confirmed.
+    [Test]
+    public async Task Update_listener_gets_the_forming_candle_and_its_closing_while_a_closed_listener_gets_only_the_closing()
+    {
+        var updates = new BlockingCollection<FormingCandle>();
+        var closed = new BlockingCollection<Candle>();
+        await using IAsyncDisposable forming = await Forming().SubscribeAsync(Linear, Interval.OneHour, updates.Add, () => { }, () => { }, () => { }, CancellationToken.None);
+        await using IAsyncDisposable candles = await _streams.SubscribeCandlesAsync(Linear, Interval.OneHour, closed.Add, () => { }, CancellationToken.None);
+        await _server.WaitForTopicAsync("kline.60.BTCUSDT");
+        DateTimeOffset at = Open.AddMinutes(10);
+
+        await _server.PushAsync("kline.60.BTCUSDT", [FakeBybitSocketServer.Kline(Open, TimeSpan.FromHours(1), 101m, confirm: false, volume: 2.5m, at: at)]);
+        await _server.PushAsync("kline.60.BTCUSDT", [FakeBybitSocketServer.Kline(Open, TimeSpan.FromHours(1), 102m, confirm: true, volume: 3m, at: at.AddMinutes(50))]);
+
+        updates.TryTake(out FormingCandle? first, TimeSpan.FromSeconds(10)).ShouldBeTrue();
+        updates.TryTake(out FormingCandle? second, TimeSpan.FromSeconds(10)).ShouldBeTrue();
+        (first!.OpenTime, first.Close.Value, first.Volume.Value, first.IsClosed, first.ObservedAt).ShouldBe((Open, 101m, 2.5m, false, at));
+        (second!.Close.Value, second.Volume.Value, second.IsClosed, second.ObservedAt).ShouldBe((102m, 3m, true, at.AddMinutes(50)));
+        closed.TryTake(out Candle? candle, TimeSpan.FromSeconds(10)).ShouldBeTrue();
+        candle!.Close.Value.ShouldBe(102m);
+        closed.TryTake(out _, TimeSpan.FromMilliseconds(200)).ShouldBeFalse();
+    }
+
+    // Requirement "Одна подписка на серию": a listener of either kind joins the one subscription of the topic.
+    [Test]
+    public async Task Listeners_of_both_kinds_share_one_subscription_and_the_last_to_leave_takes_it_off()
+    {
+        IAsyncDisposable forming = await Forming().SubscribeAsync(Linear, Interval.OneHour, _ => { }, () => { }, () => { }, () => { }, CancellationToken.None);
+        IAsyncDisposable candles = await _streams.SubscribeCandlesAsync(Linear, Interval.OneHour, _ => { }, () => { }, CancellationToken.None);
+        await _server.WaitForTopicAsync("kline.60.BTCUSDT");
+
+        _server.Subscribes("kline.60.BTCUSDT").ShouldBe(1);
+        await forming.DisposeAsync();
+        await Task.Delay(200);
+        _server.Subscribed("kline.60.BTCUSDT").ShouldBeTrue();
+        await candles.DisposeAsync();
+        await WaitAsync(() => !_server.Subscribed("kline.60.BTCUSDT"));
+    }
+
+    [Test]
+    public async Task Update_listener_is_the_last_to_leave_and_takes_the_topic_off()
+    {
+        IAsyncDisposable candles = await _streams.SubscribeCandlesAsync(Linear, Interval.OneHour, _ => { }, () => { }, CancellationToken.None);
+        IAsyncDisposable forming = await Forming().SubscribeAsync(Linear, Interval.OneHour, _ => { }, () => { }, () => { }, () => { }, CancellationToken.None);
+        await _server.WaitForTopicAsync("kline.60.BTCUSDT");
+
+        await candles.DisposeAsync();
+        await Task.Delay(200);
+        _server.Subscribed("kline.60.BTCUSDT").ShouldBeTrue();
+        await forming.DisposeAsync();
+        await WaitAsync(() => !_server.Subscribed("kline.60.BTCUSDT"));
+    }
+
+    // Requirement "Состояние канала текущей свечи": a broken connection is told as lost, then as restored.
+    [Test]
+    public async Task Drop_is_told_as_lost_and_then_restored()
+    {
+        var events = new BlockingCollection<string>();
+        await using IAsyncDisposable subscription = await Forming().SubscribeAsync(
+            Linear,
+            Interval.OneHour,
+            _ => { },
+            () => events.Add("lost"),
+            () => events.Add("restored"),
+            () => { },
+            CancellationToken.None);
+        await _server.WaitForTopicAsync("kline.60.BTCUSDT");
+
+        await _server.DropAsync();
+
+        events.TryTake(out string? first, TimeSpan.FromSeconds(30)).ShouldBeTrue();
+        events.TryTake(out string? second, TimeSpan.FromSeconds(30)).ShouldBeTrue();
+        (first, second).ShouldBe(("lost", "restored"));
+    }
+
+    // An unsubscribed subscription must not speak for the topic's next one on the same connection.
+    [Test]
+    public async Task A_subscription_that_was_taken_off_does_not_report_a_drop_to_the_next_one()
+    {
+        IAsyncDisposable first = await Forming().SubscribeAsync(Linear, Interval.OneHour, _ => { }, () => { }, () => { }, () => { }, CancellationToken.None);
+        await _server.WaitForTopicAsync("kline.60.BTCUSDT");
+        // Another topic keeps the connection open while the first one is taken off and made again.
+        await using IAsyncDisposable other = await Forming().SubscribeAsync(Linear, Interval.FifteenMinutes, _ => { }, () => { }, () => { }, () => { }, CancellationToken.None);
+        await first.DisposeAsync();
+        await WaitAsync(() => !_server.Subscribed("kline.60.BTCUSDT"));
+        var lost = 0;
+        var restored = new SemaphoreSlim(0);
+        await using IAsyncDisposable second = await Forming().SubscribeAsync(
+            Linear,
+            Interval.OneHour,
+            _ => { },
+            () => Interlocked.Increment(ref lost),
+            () => restored.Release(),
+            () => { },
+            CancellationToken.None);
+        await _server.WaitForTopicAsync("kline.60.BTCUSDT");
+
+        await _server.DropAsync();
+
+        (await restored.WaitAsync(TimeSpan.FromSeconds(30))).ShouldBeTrue();
+        await Task.Delay(200);
+        lost.ShouldBe(1);
+    }
+
+    private IFormingCandleStreams Forming()
+    {
+        return _streams;
     }
 }

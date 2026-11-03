@@ -71,6 +71,9 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
     /// <summary>The value of <c>Bybit:RestAddress</c>; without it the app uses the live Bybit.</summary>
     public string? BybitRestAddress { get; init; }
 
+    /// <summary>The value of <c>Bybit:SocketAddress</c>, like <c>ws://127.0.0.1:5297</c>; without it the API's streams use the live Bybit.</summary>
+    public string? BybitSocketAddress { get; init; }
+
     /// <summary>
     ///     The value of <c>ExchangeAccounts:MasterKey</c> over the environment's own; null keeps the one of the settings files, which
     ///     only Development and Testing have.
@@ -117,6 +120,11 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
         if (BybitRestAddress is not null)
         {
             builder.UseSetting("Bybit:RestAddress", BybitRestAddress);
+        }
+
+        if (BybitSocketAddress is not null)
+        {
+            builder.UseSetting("Bybit:SocketAddress", BybitSocketAddress);
         }
 
         builder.ConfigureTestServices(services =>

@@ -1,6 +1,6 @@
 // A local stand-in for Bybit in end-to-end tests: deterministic instruments and candles over REST, the private
 // calls about an account key, orders and their fills, and the v5 streams over WebSocket, so no test ever reaches the
-// exchange. A test closes candles, fills orders and drops the streams through the `/control/*` routes. Signatures are not checked: the key alone picks the
+// exchange. A test closes candles (`/control/candle`), sends a forming one (`/control/forming`), fills orders and drops the streams through the `/control/*` routes. Signatures are not checked: the key alone picks the
 // answer (`e2e-valid-<uid>`, `e2e-withdraw`, anything else is rejected). Response shapes follow the integration tests' FakeBybitHandler.
 // Usage: node e2e/bybit-stub.ts <port>
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -432,10 +432,12 @@ function fill(url: URL) {
   return ok(execution);
 }
 
-function candle(url: URL) {
+/** Sends a kline update of one candle to the subscribed sockets: the closing when `confirm` is set, otherwise a forming one. */
+function candle(url: URL, confirm = true) {
   const interval = url.searchParams.get('interval') ?? '60';
   const start = Number(url.searchParams.get('start'));
   const close = url.searchParams.get('close') ?? '100000';
+  const volume = url.searchParams.get('volume') ?? '1';
   push(`kline.${interval}.${url.searchParams.get('symbol') ?? 'BTCUSDT'}`, [
     {
       start,
@@ -445,9 +447,9 @@ function candle(url: URL) {
       close,
       high: close,
       low: close,
-      volume: '1',
+      volume,
       turnover: close,
-      confirm: true,
+      confirm,
       timestamp: Date.now(),
     },
   ]);
@@ -534,6 +536,8 @@ const server = createServer((request, response) => {
     send(response, fill(url));
   } else if (url.pathname === '/control/candle') {
     send(response, candle(url));
+  } else if (url.pathname === '/control/forming') {
+    send(response, candle(url, false));
   } else if (url.pathname === '/control/drop') {
     for (const socket of sockets.keys()) {
       socket.terminate();

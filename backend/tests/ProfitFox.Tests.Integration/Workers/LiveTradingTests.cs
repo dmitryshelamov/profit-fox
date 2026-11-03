@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 
+using Microsoft.AspNetCore.Http.Connections;
+using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 
 using NSubstitute;
@@ -1238,6 +1240,63 @@ public class LiveTradingTests
     }
 
     /// <summary>Lets the Workers take what is queued: a few polls of the clock.</summary>
+    // Requirement "Текущая свеча только для показа": a candle that is still forming reaches neither the strategy nor storage, though
+    // the chart of the bot is open; the same candle closed does.
+    [Test]
+    public async Task Forming_candle_of_a_running_bot_with_an_open_chart_reaches_neither_the_strategy_nor_storage()
+    {
+        await _scenario.DisposeAsync();
+        await using FakeBybitSocketServer server = await FakeBybitSocketServer.StartAsync();
+        _scenario = await LiveTradingScenario.CreateAsync(server.Address);
+        Guid bot = await _scenario.CreateBotAsync();
+        _scenario.StartWorker(bybitSocketAddress: server.Address);
+        await _scenario.ActAsync(bot, "start");
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the start order");
+        await using HubConnection chart = new HubConnectionBuilder()
+            .WithUrl(
+                new Uri(_scenario.Factory.Server.BaseAddress, "api/hubs/bot-chart"),
+                options =>
+                {
+                    options.Transports = HttpTransportType.WebSockets;
+                    options.HttpMessageHandlerFactory = _ => _scenario.Factory.Server.CreateHandler();
+                    options.WebSocketFactory = (context, cancellationToken) => new ValueTask<System.Net.WebSockets.WebSocket>(
+                        _scenario.Factory.Server.CreateWebSocketClient().ConnectAsync(context.Uri, cancellationToken));
+                })
+            .Build();
+        var forming = new BlockingCollection<JsonElement>();
+        chart.On<JsonElement>("FormingCandle", candle => forming.Add(candle.Clone()));
+        await chart.StartAsync();
+        await chart.InvokeAsync<JsonElement>("Subscribe", bot);
+        // The Worker's connection and the API's are two clients of the topic.
+        await _scenario.WaitAsync(() => server.Subscribes("kline.60.BTCUSDT") == 2, "both subscriptions of the kline topic");
+        var open = DateTimeOffset.Parse("2024-03-10T13:00:00Z");
+
+        await server.PushAsync("kline.60.BTCUSDT", [FakeBybitSocketServer.Kline(open, TimeSpan.FromHours(1), 105m, confirm: false, volume: 3m, at: open.AddMinutes(5))]);
+
+        forming.TryTake(out JsonElement shown, TimeSpan.FromSeconds(10)).ShouldBeTrue();
+        shown.GetProperty("isClosed").GetBoolean().ShouldBeFalse();
+        await SettleAsync();
+        _scenario.Exchange.Orders.Count.ShouldBe(1);
+        (await _scenario.LiveAsync(bot)).LastBarAt.ShouldNotBe(open);
+        (await StoredOpenTimesAsync()).ShouldBeEmpty();
+
+        await server.PushAsync("kline.60.BTCUSDT", [FakeBybitSocketServer.Kline(open, TimeSpan.FromHours(1), 106m, confirm: true, volume: 4m, at: open.AddHours(1))]);
+
+        await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).LastBarAt == open, "the closed candle taken by the strategy");
+    }
+
+    private async Task<IReadOnlyList<DateTimeOffset>> StoredOpenTimesAsync()
+    {
+        using IServiceScope scope = _scenario.Factory.Services.CreateScope();
+
+        return await scope.ServiceProvider.GetRequiredService<ICandleRepository>().GetOpenTimesAsync(
+            new Instrument(MarketCategory.Spot, "BTCUSDT"),
+            Interval.OneHour,
+            DateTimeOffset.Parse("2024-03-10T12:00:00Z"),
+            DateTimeOffset.Parse("2024-03-12T00:00:00Z"),
+            CancellationToken.None);
+    }
+
     private async Task SettleAsync()
     {
         for (var i = 0; i < 10; i++)
