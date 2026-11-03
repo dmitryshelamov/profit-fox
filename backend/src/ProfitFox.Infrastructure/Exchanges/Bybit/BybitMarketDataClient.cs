@@ -192,8 +192,9 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
             return result.Data!;
         }
 
-        // Rate limit (HTTP 429 or retCode 10006), timeout and no connection come as error types; a 5xx only by its status.
-        if (result.ResponseStatusCode >= HttpStatusCode.InternalServerError
+        // Rate limit (HTTP 429 or retCode 10006), timeout and no connection come as error types; a 5xx and a ban of the IP
+        // for the rate limit (HTTP 403) only by their status.
+        if (result.ResponseStatusCode is HttpStatusCode.Forbidden or >= HttpStatusCode.InternalServerError
             || result.Error!.ErrorType is ErrorType.RateLimitRequest or ErrorType.Timeout or ErrorType.NetworkError)
         {
             throw new TransientExchangeException(Describe(result));

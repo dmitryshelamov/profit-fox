@@ -50,6 +50,15 @@ public class BybitOrderGatewayTests
         (await Gateway(handler).PlaceAsync(Key, Spot, Limit, CancellationToken.None)).Kind.ShouldBe(OrderOutcomeKind.Transient);
     }
 
+    // Bybit answers HTTP 403 when the IP of the requests went over its limit, and lets the IP in again after a while.
+    [Test]
+    public async Task Ip_ban_is_transient()
+    {
+        using StubHttpHandler handler = new StubHttpHandler().Respond(HttpStatusCode.Forbidden);
+
+        (await Gateway(handler).PlaceAsync(Key, Spot, Limit, CancellationToken.None)).Kind.ShouldBe(OrderOutcomeKind.Transient);
+    }
+
     [Test]
     public async Task No_answer_is_transient()
     {

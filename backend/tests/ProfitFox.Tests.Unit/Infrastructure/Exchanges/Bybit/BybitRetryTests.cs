@@ -56,6 +56,18 @@ public class BybitRetryTests
         pages.Count.ShouldBe(1);
     }
 
+    // Bybit answers HTTP 403 when the IP of the requests went over its limit, and lets the IP in again after a while.
+    [Test]
+    public async Task Retries_after_ip_ban()
+    {
+        _handler.Respond(HttpStatusCode.Forbidden).RespondJson(OnePage);
+
+        List<IReadOnlyList<Candle>> pages = await LoadAsync();
+
+        pages.Count.ShouldBe(1);
+        _handler.Requests.Count.ShouldBe(2);
+    }
+
     [Test]
     public async Task Retries_after_timeout()
     {
@@ -136,7 +148,7 @@ public class BybitRetryTests
     [Test]
     public async Task Fails_immediately_on_other_http_error()
     {
-        _handler.Respond(HttpStatusCode.Forbidden);
+        _handler.Respond(HttpStatusCode.NotFound);
 
         await Should.ThrowAsync<ExchangeException>(LoadAsync);
         _handler.Requests.Count.ShouldBe(1);

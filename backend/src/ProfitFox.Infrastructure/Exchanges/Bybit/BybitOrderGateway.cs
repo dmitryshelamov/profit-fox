@@ -73,8 +73,8 @@ internal sealed class BybitOrderGateway(HttpClient http, ILoggerFactory loggers,
             return new OrderOutcome(knownKind);
         }
 
-        // No answer at all (connection, timeout), a 5xx or the rate limit (HTTP 429 or retCode 10006).
-        if (result.ResponseStatusCode is null or >= HttpStatusCode.InternalServerError
+        // No answer at all (connection, timeout), a 5xx, the rate limit (HTTP 429 or retCode 10006) or a ban of the IP for it (HTTP 403).
+        if (result.ResponseStatusCode is null or HttpStatusCode.Forbidden or >= HttpStatusCode.InternalServerError
             || result.Error.ErrorType is ErrorType.RateLimitRequest
             || (code is not null && TransientCodes.Contains(code)))
         {
