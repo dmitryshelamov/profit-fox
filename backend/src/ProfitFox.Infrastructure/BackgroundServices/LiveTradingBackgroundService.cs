@@ -74,9 +74,14 @@ internal sealed class LiveTradingBackgroundService(
             await using AsyncServiceScope scope = scopes.CreateAsyncScope();
             await scope.ServiceProvider.GetRequiredService<ISender>().Send(new RunLiveBotCommand(leased), stoppingToken);
         }
-        catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            logger.LogError(exception, "Live bot {BotId} failed; its lease expires for any Worker.", leased.Bot.BotId);
+            // The Worker stops.
+        }
+        catch (Exception exception)
+        {
+            // Also while the Worker stops: the SDK answers a call cut by the stop with a failure, and the leases are given up after.
+            logger.LogError(exception, "Live bot {BotId} failed.", leased.Bot.BotId);
         }
     }
 }

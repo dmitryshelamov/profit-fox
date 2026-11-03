@@ -453,6 +453,35 @@ public class LiveTradingTests
         _scenario.Exchange.Orders.ShouldBeEmpty();
     }
 
+    // A session that ends on an unavailable exchange hands the bot back after a short pause, not after a lease of five minutes.
+    [Test]
+    public async Task Session_ended_by_an_unavailable_exchange_takes_the_bot_again_soon()
+    {
+        Guid bot = await _scenario.CreateBotAsync();
+        _scenario.Exchange.FeesUnavailable = true;
+        _scenario.StartWorker(settings: MinuteLeases);
+        await _scenario.ActAsync(bot, "start");
+        await _scenario.WaitAsync(() => _scenario.Exchange.FeeRequests >= 1, "the first take");
+
+        await AdvanceAtMostAsync(TimeSpan.FromSeconds(45), () => Task.FromResult(_scenario.Exchange.FeeRequests >= 2));
+
+        _scenario.Exchange.FeeRequests.ShouldBeGreaterThanOrEqualTo(2);
+    }
+
+    // The same for a failure that counts against the bot: three of them in a row fail it in minutes, not a quarter of an hour.
+    [Test]
+    public async Task Failed_takes_follow_each_other_after_a_short_pause()
+    {
+        Guid bot = await _scenario.CreateBotAsync();
+        _scenario.Exchange.FeesRefused = true;
+        _scenario.StartWorker(settings: MinuteLeases);
+        await _scenario.ActAsync(bot, "start");
+
+        await AdvanceAtMostAsync(TimeSpan.FromSeconds(100), async () => (await _scenario.LiveAsync(bot)).Status == LiveBotStatus.Failed);
+
+        (await _scenario.LiveAsync(bot)).Status.ShouldBe(LiveBotStatus.Failed);
+    }
+
     // An exchange that does not answer for a while is no failure of the bot: the Worker keeps trying until it answers.
     [Test]
     public async Task Unavailable_exchange_is_not_counted_against_the_bot()
@@ -811,6 +840,23 @@ public class LiveTradingTests
         await _scenario.WaitAsync(async () => (await _scenario.PositionsAsync(bot)).FirstOrDefault()?.Quantity == 1m, "the filled start order");
 
         return bot;
+    }
+
+    // The leases of production: five minutes, renewed each minute.
+    private static readonly Dictionary<string, string?> MinuteLeases = new Dictionary<string, string?>
+    {
+        ["Trading:LeaseDuration"] = "00:05:00",
+        ["Trading:LeaseRenewal"] = "00:01:00"
+    };
+
+    /// <summary>Moves the clock a second at a time until the condition holds, but not further than <paramref name="limit" />.</summary>
+    private async Task AdvanceAtMostAsync(TimeSpan limit, Func<Task<bool>> condition)
+    {
+        for (TimeSpan moved = TimeSpan.Zero; moved < limit && !await condition(); moved += TimeSpan.FromSeconds(1))
+        {
+            _scenario.Factory.Time.Advance(TimeSpan.FromSeconds(1));
+            await Task.Delay(25);
+        }
     }
 
     private WorkerHost WorkerOf()

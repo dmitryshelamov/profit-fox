@@ -228,6 +228,89 @@ public class LiveBotLeasesTests
         changes.Count.ShouldBe(1);
     }
 
+    // A session that fails while it is told it lost its bot must not stop the leases of the other bots of the Worker.
+    [Test]
+    public async Task Failing_lost_callback_keeps_the_loop_renewing_the_others()
+    {
+        var taken = Guid.NewGuid();
+        _repository.RenewAllAsync(default, default!, default, default)
+            .ReturnsForAnyArgs(call => Held(call).Where(bot => bot.BotId != taken).Select(bot => new LeasedBot(Bot(bot.BotId), bot.Epoch)).ToList());
+        var renewals = 0;
+        _leases.Hold(new LeasedBot(Bot(taken), 1), _ => { }, () => throw new ObjectDisposedException("lease"));
+        _leases.Hold(new LeasedBot(Bot(Guid.NewGuid()), 1), _ => renewals++, () => { });
+
+        await AdvanceAsync(TimeSpan.FromMinutes(2));
+
+        renewals.ShouldBe(2);
+    }
+
+    [Test]
+    public async Task Failing_changed_callback_keeps_the_loop_polling()
+    {
+        var failing = Guid.NewGuid();
+        var other = Guid.NewGuid();
+        var changes = new List<DateTimeOffset>();
+        _leases.Hold(new LeasedBot(Bot(failing), 1), _ => throw new InvalidOperationException("The session broke."), () => { });
+        _leases.Hold(new LeasedBot(Bot(other), 1), _ => changes.Add(_time.GetUtcNow()), () => { });
+        _repository.GetChangedAsync(_worker.Id, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(_ => [new ChangedLiveBot(Bot(failing), 1, _time.GetUtcNow()), new ChangedLiveBot(Bot(other), 1, _time.GetUtcNow())]);
+
+        await AdvanceAsync(TimeSpan.FromSeconds(2));
+
+        changes.Count.ShouldBe(2);
+    }
+
+    // The Worker took the bot again before it noticed the lease of the old take expired: the old session is told at once.
+    [Test]
+    public async Task New_take_of_a_bot_tells_the_old_take_it_lost()
+    {
+        var bot = Guid.NewGuid();
+        var lost = 0;
+        _leases.Hold(new LeasedBot(Bot(bot), 1), _ => { }, () => lost++);
+
+        _leases.Hold(new LeasedBot(Bot(bot), 2), _ => { }, () => { });
+
+        lost.ShouldBe(1);
+    }
+
+    // The look back returns a row again and again: its session gets it once, and again only when it was written anew.
+    [Test]
+    public async Task Row_read_again_reaches_the_session_only_when_it_was_written_anew()
+    {
+        var bot = Guid.NewGuid();
+        var changes = new List<LiveBot>();
+        _leases.Hold(new LeasedBot(Bot(bot), 1), changes.Add, () => { });
+        _repository.GetChangedAsync(_worker.Id, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(
+            [new ChangedLiveBot(Bot(bot), 1, Start.AddSeconds(5))],
+            [new ChangedLiveBot(Bot(bot), 1, Start.AddSeconds(5))],
+            [new ChangedLiveBot(Bot(bot).Stop(), 1, Start.AddSeconds(3))]);
+
+        await AdvanceAsync(TimeSpan.FromSeconds(3));
+
+        changes.Select(change => change.Status).ShouldBe([LiveBotStatus.Running, LiveBotStatus.Stopping]);
+    }
+
+    // A renewal that fails slowly, as on a database that does not answer, still gives the bot up before its lease expires.
+    [Test]
+    public async Task Slow_failing_renewals_lose_the_bot_before_its_lease_expires()
+    {
+        _repository.RenewAllAsync(default, default!, default, default).ReturnsForAnyArgs(_ => SlowFailureAsync());
+        DateTimeOffset? lostAt = null;
+        _leases.Hold(new LeasedBot(Bot(Guid.NewGuid()), 1), _ => { }, () => lostAt = _time.GetUtcNow());
+
+        await AdvanceAsync(TimeSpan.FromMinutes(4));
+
+        lostAt.ShouldNotBeNull();
+        lostAt.Value.ShouldBeLessThanOrEqualTo(Start + TimeSpan.FromMinutes(5));
+    }
+
+    private Task<IReadOnlyList<LeasedBot>> SlowFailureAsync()
+    {
+        _time.Advance(TimeSpan.FromSeconds(70));
+
+        return Task.FromException<IReadOnlyList<LeasedBot>>(new InvalidOperationException("The database does not answer."));
+    }
+
     // A call that only configures the substitute comes without bots.
     private static IReadOnlyCollection<(Guid BotId, long Epoch)> Held(NSubstitute.Core.CallInfo call)
     {

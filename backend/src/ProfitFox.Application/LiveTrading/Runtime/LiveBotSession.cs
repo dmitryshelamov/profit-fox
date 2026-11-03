@@ -48,6 +48,10 @@ internal sealed class LiveBotSession(
     WorkerIdentity worker,
     TimeProvider time)
 {
+    // A session that failed hands its bot back to any Worker after this pause rather than at the end of its lease: soon enough
+    // to watch the bot again, late enough not to ask a failing exchange every second.
+    private static readonly TimeSpan FailedTakePause = TimeSpan.FromSeconds(30);
+
     // The most closed candles one request of the exchange gives, which the indicators are warmed up with.
     private const int WarmUpCandles = 1000;
 
@@ -75,7 +79,9 @@ internal sealed class LiveBotSession(
             () =>
             {
                 journal.Lost(_id);
-                lease.Cancel();
+
+                // Not in the loop of the Worker: what the token ends runs on its own.
+                _ = lease.CancelAsync();
             });
         var subscriptions = new List<IAsyncDisposable>();
         journal.Took(_id, leased.Epoch);
@@ -140,6 +146,13 @@ internal sealed class LiveBotSession(
             // An exchange that does not answer for a while is no failure of the bot; anything else is counted, after the bot
             // was up too, and the third failure in a row fails a bot with nothing on the exchange.
             await SessionFailedAsync(exception.Message);
+            await HandBackAsync(held);
+
+            throw;
+        }
+        catch (ExchangeUnavailableException)
+        {
+            await HandBackAsync(held);
 
             throw;
         }
@@ -156,6 +169,13 @@ internal sealed class LiveBotSession(
                 await subscription.DisposeAsync();
             }
         }
+    }
+
+    /// <summary>Stops holding the bot and shortens the lease of this take to <see cref="FailedTakePause" />.</summary>
+    private async Task HandBackAsync(IDisposable held)
+    {
+        held.Dispose();
+        await repository.RenewAllAsync(worker.Id, [(_id, leased.Epoch)], time.GetUtcNow() + FailedTakePause, CancellationToken.None);
     }
 
     private Task SessionFailedAsync(string reason)

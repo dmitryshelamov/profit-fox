@@ -45,7 +45,7 @@ internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings setting
             topic = _candles.TryGetValue(key, out Topic<CandleListener>? known) ? known : _candles[key] = new Topic<CandleListener>();
         }
 
-        return JoinAsync(topic, new CandleListener(closed, restored), token => OpenCandlesAsync(instrument, interval, topic, token), cancellationToken);
+        return JoinAsync(topic, new CandleListener(closed, restored), () => OpenCandlesAsync(instrument, interval, topic), cancellationToken);
     }
 
     public Task<IAsyncDisposable> SubscribeAccountAsync(
@@ -62,18 +62,22 @@ internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings setting
             topic = _accounts.TryGetValue(key.ApiKey, out Topic<AccountListener>? known) ? known : _accounts[key.ApiKey] = new Topic<AccountListener>();
         }
 
-        return JoinAsync(topic, new AccountListener(order, fill, restored), token => OpenAccountAsync(key, topic, token), cancellationToken);
+        return JoinAsync(topic, new AccountListener(order, fill, restored), () => OpenAccountAsync(key, topic), cancellationToken);
     }
 
-    /// <summary>The first subscriber opens the subscription of the topic; the others only join it.</summary>
-    private static async Task<IAsyncDisposable> JoinAsync<T>(Topic<T> topic, T listener, Func<CancellationToken, Task<IAsyncDisposable>> open, CancellationToken cancellationToken)
+    /// <summary>
+    ///     The first subscriber opens the subscription of the topic; the others only join it. The subscription belongs to the topic,
+    ///     not to the subscriber: CryptoExchange.Net closes a subscription when the token it was made with is cancelled, so it is
+    ///     made with none, and the token of the subscriber only bounds its wait.
+    /// </summary>
+    private static async Task<IAsyncDisposable> JoinAsync<T>(Topic<T> topic, T listener, Func<Task<IAsyncDisposable>> open, CancellationToken cancellationToken)
         where T : class, IListener
     {
         await topic.Gate.WaitAsync(cancellationToken);
 
         try
         {
-            topic.Subscription ??= await open(cancellationToken);
+            topic.Subscription ??= await open();
             topic.Add(listener);
         }
         finally
@@ -107,18 +111,18 @@ internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings setting
     }
 
     /// <summary>A kline topic on the shared public client; a connection with no topic left is closed by the client.</summary>
-    private async Task<IAsyncDisposable> OpenCandlesAsync(Instrument instrument, Interval interval, Topic<CandleListener> topic, CancellationToken cancellationToken)
+    private async Task<IAsyncDisposable> OpenCandlesAsync(Instrument instrument, Interval interval, Topic<CandleListener> topic)
     {
         WebSocketResult<UpdateSubscription> result = instrument.Category == MarketCategory.Spot
-            ? await _public.V5SpotApi.SubscribeToKlineUpdatesAsync(instrument.Symbol, interval.ToBybit(), update => Closed(update.Data, topic), cancellationToken)
-            : await _public.V5LinearApi.SubscribeToKlineUpdatesAsync(instrument.Symbol, interval.ToBybit(), update => Closed(update.Data, topic), cancellationToken);
+            ? await _public.V5SpotApi.SubscribeToKlineUpdatesAsync(instrument.Symbol, interval.ToBybit(), update => Closed(update.Data, topic), CancellationToken.None)
+            : await _public.V5LinearApi.SubscribeToKlineUpdatesAsync(instrument.Symbol, interval.ToBybit(), update => Closed(update.Data, topic), CancellationToken.None);
         UpdateSubscription subscription = Watch(result, topic);
 
         return new Leave(() => new ValueTask(_public.UnsubscribeAsync(subscription)));
     }
 
     /// <summary>The order and execution topics of an account on a client of its own key; leaving closes the client.</summary>
-    private async Task<IAsyncDisposable> OpenAccountAsync(ExchangeKey key, Topic<AccountListener> topic, CancellationToken cancellationToken)
+    private async Task<IAsyncDisposable> OpenAccountAsync(ExchangeKey key, Topic<AccountListener> topic)
     {
         var client = new BybitSocketClient(
             Options.Create(new BybitSocketOptions { Environment = settings.Environment(), ApiCredentials = new BybitCredentials(key.ApiKey, key.Secret) }),
@@ -141,7 +145,7 @@ internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings setting
                             }
                         }
                     },
-                    cancellationToken),
+                    CancellationToken.None),
                 topic);
             Watch(
                 await client.V5PrivateApi.SubscribeToUserTradeUpdatesAsync(
@@ -157,7 +161,7 @@ internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings setting
                             }
                         }
                     },
-                    cancellationToken),
+                    CancellationToken.None),
                 topic);
         }
         catch

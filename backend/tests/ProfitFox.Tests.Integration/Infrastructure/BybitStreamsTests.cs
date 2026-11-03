@@ -149,6 +149,43 @@ public class BybitStreamsTests
         candles.TryTake(out _, TimeSpan.FromSeconds(10)).ShouldBeTrue();
     }
 
+    // A bot that leaves cancels the token it subscribed with: the subscription it opened stays for the others of the pair.
+    [Test]
+    public async Task Cancelled_token_of_the_first_subscriber_keeps_the_candles_of_the_others()
+    {
+        var candles = new BlockingCollection<Candle>();
+        using var first = new CancellationTokenSource();
+        IAsyncDisposable opened = await _streams.SubscribeCandlesAsync(Linear, Interval.OneHour, _ => { }, () => { }, first.Token);
+        await using IAsyncDisposable second = await _streams.SubscribeCandlesAsync(Linear, Interval.OneHour, candles.Add, () => { }, CancellationToken.None);
+
+        await first.CancelAsync();
+        await opened.DisposeAsync();
+        await Task.Delay(200);
+
+        _server.Subscribed("kline.60.BTCUSDT").ShouldBeTrue();
+        await _server.PushAsync("kline.60.BTCUSDT", [FakeBybitSocketServer.Kline(Open, TimeSpan.FromHours(1), 102m, confirm: true)]);
+        candles.TryTake(out _, TimeSpan.FromSeconds(10)).ShouldBeTrue();
+    }
+
+    [Test]
+    public async Task Cancelled_token_of_the_first_subscriber_keeps_the_account_stream_of_the_others()
+    {
+        var orders = new BlockingCollection<ExchangeOrder>();
+        var fills = new BlockingCollection<ExchangeFill>();
+        using var first = new CancellationTokenSource();
+        IAsyncDisposable opened = await _streams.SubscribeAccountAsync(new ExchangeKey("key", "secret"), _ => { }, _ => { }, () => { }, first.Token);
+        await using IAsyncDisposable second = await _streams.SubscribeAccountAsync(new ExchangeKey("key", "secret"), orders.Add, fills.Add, () => { }, CancellationToken.None);
+
+        await first.CancelAsync();
+        await opened.DisposeAsync();
+        await Task.Delay(200);
+
+        await _server.PushAsync("order", [FakeBybitSocketServer.Order("linear", "c-1", "PartiallyFilled", 0.4m)]);
+        await _server.PushAsync("execution", [FakeBybitSocketServer.Execution("linear", "c-1", "e-1", 0.4m, 100m, 0.02m, "USDT", Open)]);
+        orders.TryTake(out _, TimeSpan.FromSeconds(10)).ShouldBeTrue();
+        fills.TryTake(out _, TimeSpan.FromSeconds(10)).ShouldBeTrue();
+    }
+
     // Scenario "Обрыв публичного соединения".
     [Test]
     public async Task Drop_tells_every_subscriber_of_the_connection()
