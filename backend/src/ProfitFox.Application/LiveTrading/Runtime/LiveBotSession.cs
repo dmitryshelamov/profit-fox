@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Threading.Channels;
 
 using ProfitFox.Application.Exceptions;
@@ -244,7 +243,7 @@ internal sealed class LiveBotSession(
                     _orders[order.Number] = order;
                 }
 
-                _run = StrategyRun.Restore(_context.Strategy.Definition, _context.Strategy.Catalog(), _bot.ParameterValues, _context.Conditions, Snapshot(position, pastPnl));
+                _run = StrategyRun.Restore(_context.Strategy.Definition, _context.Strategy.Catalog(), _bot.ParameterValues, _context.Conditions, LiveRunMapping.Snapshot(position, pastPnl, _orders.Values, _bot.LastOrderNumber));
 
                 return 0;
             },
@@ -265,34 +264,6 @@ internal sealed class LiveBotSession(
         {
             await WriteAsync(token => Task.FromResult(_run.Handle(new RunStarted(time.GetUtcNow()))), bot => bot.Started(), cancellationToken);
         }
-    }
-
-    private RunSnapshot Snapshot(LivePosition? position, decimal pastPnl)
-    {
-        return new RunSnapshot(
-            position?.Number ?? 1,
-            position?.Quantity ?? 0m,
-            position?.Invested ?? 0m,
-            position?.Collateral ?? 0m,
-            pastPnl,
-            position?.RealizedPnl ?? 0m,
-            position?.Fees ?? 0m,
-            position?.LastEntryPrice,
-            position?.LastEntryAt,
-            position?.Closing ?? false,
-            position?.SkippedOrders ?? 0,
-            [
-                .. _orders.Values.Select(order => new RunOrder(
-                    RunId(order.Number),
-                    order.NodePath,
-                    order.Side,
-                    order.Price,
-                    order.Type == OrderType.Limit ? order.Quantity - order.FilledQuantity : null,
-                    order.Cancelling,
-                    order.Reserve,
-                    order.FilledQuantity > 0m))
-            ],
-            _bot.LastOrderNumber);
     }
 
     /// <summary>The fills and the ends of the orders of the bot that the exchange reported while nobody listened.</summary>
@@ -537,7 +508,7 @@ internal sealed class LiveBotSession(
                     next = next.Grown(order.FilledQuantity, order.FilledValue, order.Fee, filled);
                     await SaveOrderAsync(next, token);
                     decimal price = value > 0m ? value / grown : live.Price ?? _lastClose ?? 0m;
-                    commands.AddRange(Apply(new OrderFilled(time.GetUtcNow(), RunId(live.Number), grown, price, filled, fee, Asset(order.FeeCoin))));
+                    commands.AddRange(Apply(new OrderFilled(time.GetUtcNow(), LiveRunMapping.RunId(live.Number), grown, price, filled, fee, Asset(order.FeeCoin))));
 
                     if (filled)
                     {
@@ -551,14 +522,14 @@ internal sealed class LiveBotSession(
                     case ExchangeOrderState.Cancelled:
                         // An order done with no growth left: the run keeps what it got, the order keeps how it ended.
                         await SaveOrderAsync(order.State == ExchangeOrderState.Filled ? next.Completed() : next.Cancelled(), token);
-                        commands.AddRange(Apply(new OrderCancelled(time.GetUtcNow(), RunId(live.Number))));
+                        commands.AddRange(Apply(new OrderCancelled(time.GetUtcNow(), LiveRunMapping.RunId(live.Number))));
 
                         break;
                     case ExchangeOrderState.Rejected:
                         LiveOrder rejected = next.Rejected(order.RejectReason ?? "Bybit rejected the order.");
                         await SaveOrderAsync(rejected, token);
                         _bot = _bot.Fail(rejected.RejectReason!);
-                        commands.AddRange(Apply(new OrderCancelled(time.GetUtcNow(), RunId(live.Number))));
+                        commands.AddRange(Apply(new OrderCancelled(time.GetUtcNow(), LiveRunMapping.RunId(live.Number))));
 
                         break;
                     default:
@@ -589,7 +560,7 @@ internal sealed class LiveBotSession(
                     _bot = _bot.Fail(reason);
                 }
 
-                return Apply(new OrderCancelled(time.GetUtcNow(), RunId(number)));
+                return Apply(new OrderCancelled(time.GetUtcNow(), LiveRunMapping.RunId(number)));
             },
             cancellationToken);
     }
@@ -638,32 +609,14 @@ internal sealed class LiveBotSession(
     /// <summary>The current position of the run, and the one it closed with this change.</summary>
     private async Task SavePositionsAsync(LivePosition? before, CancellationToken cancellationToken)
     {
-        RunSnapshot snapshot = _run.Snapshot();
         RunState state = _run.State;
 
-        if (state.Closed is { } closed && before is { ClosedAt: null } && before.Number == closed.Number)
+        if (LiveRunMapping.Closed(before, state) is { } closed)
         {
-            await repository.SavePositionAsync(
-                before with { Open = false, Closing = false, Quantity = 0m, Invested = 0m, Collateral = 0m, RealizedPnl = closed.RealizedPnl, Fees = closed.Fees, ClosedAt = closed.At },
-                cancellationToken);
+            await repository.SavePositionAsync(closed, cancellationToken);
         }
 
-        await repository.SavePositionAsync(
-            new LivePosition(
-                _id,
-                snapshot.Position,
-                state.Status == PositionStatus.Open,
-                snapshot.Closing,
-                snapshot.Quantity,
-                snapshot.Invested,
-                snapshot.Collateral,
-                snapshot.RealizedPnl,
-                snapshot.Fees,
-                snapshot.LastEntryPrice,
-                snapshot.LastEntryAt,
-                snapshot.SkippedOrders,
-                null),
-            cancellationToken);
+        await repository.SavePositionAsync(LiveRunMapping.Current(_id, _run.Snapshot(), state), cancellationToken);
     }
 
     private async Task CommandsAsync(IReadOnlyList<OrderCommand> commands, CancellationToken cancellationToken)
@@ -679,7 +632,7 @@ internal sealed class LiveBotSession(
                     RunOrder? active = snapshot.Orders.SingleOrDefault(order => order.Id == place.OrderId);
                     var order = LiveOrder.New(
                         _id,
-                        Number(place.OrderId),
+                        LiveRunMapping.Number(place.OrderId),
                         snapshot.Position,
                         place.NodePath,
                         place.Side,
@@ -692,7 +645,7 @@ internal sealed class LiveBotSession(
                     await SaveOrderAsync(order, cancellationToken);
 
                     break;
-                case CancelOrder cancel when _orders.TryGetValue(Number(cancel.OrderId), out LiveOrder? target):
+                case CancelOrder cancel when _orders.TryGetValue(LiveRunMapping.Number(cancel.OrderId), out LiveOrder? target):
                     await SaveOrderAsync(target.RequestCancel(now), cancellationToken);
 
                     break;
@@ -881,15 +834,5 @@ internal sealed class LiveBotSession(
             default:
                 return false;
         }
-    }
-
-    private static string RunId(int number)
-    {
-        return string.Create(CultureInfo.InvariantCulture, $"o-{number}");
-    }
-
-    private static int Number(string runId)
-    {
-        return int.Parse(runId.AsSpan(2), CultureInfo.InvariantCulture);
     }
 }
