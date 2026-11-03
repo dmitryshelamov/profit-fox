@@ -16,7 +16,6 @@ using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Repositories;
-using ProfitFox.Domain.Services.LiveTrading;
 using ProfitFox.Domain.Services.Strategies.Execution;
 using ProfitFox.Domain.ValueObjects.LiveTrading;
 using ProfitFox.Domain.ValueObjects.MarketData;
@@ -74,6 +73,7 @@ internal sealed class LiveBotSession(
     private readonly Dictionary<int, LiveOrder> _orders = [];
 
     private readonly Guid _id = leased.Bot.BotId;
+    private readonly LiveBotReconciler _reconciler = new LiveBotReconciler(repository, library, ledger, catalog, executor, journal, worker, time);
     private LiveBot _bot = leased.Bot;
     private LiveBotContext _context = null!;
     private StrategyRun _run = null!;
@@ -337,9 +337,10 @@ internal sealed class LiveBotSession(
         }
     }
 
+    /// <summary>Compares the books with the exchange and stops the bots of a difference that stays after the exchange is read again.</summary>
     private async Task ReconcileAsync(CancellationToken cancellationToken)
     {
-        (IReadOnlyList<Guid> bots, IReadOnlyList<string> differences) = await CompareAsync(cancellationToken);
+        (IReadOnlyList<Guid> bots, IReadOnlyList<string> differences) = await _reconciler.CompareAsync(_context, cancellationToken);
 
         // A fill may land between the catch-up and the read of the exchange, and a neighbour bot may write its fill a moment after
         // the exchange shows it: the books are read again right away and once more after a pause before any bot stops.
@@ -351,116 +352,13 @@ internal sealed class LiveBotSession(
             }
 
             await CatchUpAsync(cancellationToken);
-            (bots, differences) = await CompareAsync(cancellationToken);
+            (bots, differences) = await _reconciler.CompareAsync(_context, cancellationToken);
         }
 
         if (differences.Count > 0)
         {
-            await FailAllAsync(bots, string.Join(" ", differences), cancellationToken);
+            _bot = await _reconciler.FailAllAsync(leased, bots, string.Join(" ", differences), cancellationToken) ?? _bot;
         }
-    }
-
-    /// <summary>The bots the books of this bot are compared with, and what differs.</summary>
-    private async Task<(IReadOnlyList<Guid> Bots, IReadOnlyList<string> Differences)> CompareAsync(CancellationToken cancellationToken)
-    {
-        Bot bot = _context.Bot;
-        IReadOnlyList<Bot> neighbours = await NeighboursAsync(cancellationToken);
-        var holdings = new List<BotHolding>();
-        var pending = new HashSet<ClientOrderId>();
-
-        foreach (Bot neighbour in neighbours)
-        {
-            LiveBot live = await repository.GetAsync(neighbour.Id, cancellationToken);
-
-            if (live.StrategyVersion is not { } number)
-            {
-                continue;
-            }
-
-            StrategyDirection direction = neighbour.Id == _id
-                ? _context.Direction
-                : (await library.GetVersionAsync(neighbour.StrategyId, number, cancellationToken))!.Snapshot.Definition.Direction;
-            LivePosition? position = (await repository.GetPositionsAsync(neighbour.Id, cancellationToken)).FirstOrDefault();
-            LiveOrder[] unfinished = [.. (await repository.GetOrdersAsync(neighbour.Id, cancellationToken)).Where(order => order.Unfinished)];
-            pending.UnionWith(unfinished.Where(order => order.Status == LiveOrderStatus.PendingSubmit).Select(order => order.ClientId));
-            holdings.Add(new BotHolding(
-                neighbour.Id,
-                direction,
-                position?.ClosedAt is null ? position?.Quantity ?? 0m : 0m,
-                [.. unfinished.Where(order => order.Status != LiveOrderStatus.PendingSubmit).Select(order => order.Number)]));
-        }
-
-        var ids = holdings.Select(holding => holding.BotId).ToHashSet();
-        ClientOrderId[] open =
-        [
-            .. (await ledger.GetOpenOrdersAsync(_context.Key, bot.Instrument, cancellationToken))
-                .Select(order => ClientOrderId.TryParse(order.ClientId, out ClientOrderId? id) ? id : null)
-                .OfType<ClientOrderId>()
-                .Where(id => ids.Contains(id.BotId) && !pending.Contains(id))
-        ];
-        var finished = new List<ClientOrderId>();
-
-        foreach (BotHolding holding in holdings)
-        {
-            foreach (ClientOrderId id in holding.ActiveOrders.Select(number => new ClientOrderId(holding.BotId, number)).Where(id => !open.Contains(id)))
-            {
-                if (await ledger.FindOrderAsync(_context.Key, bot.Instrument, id.Code, cancellationToken) is { State: not ExchangeOrderState.Open })
-                {
-                    finished.Add(id);
-                }
-            }
-        }
-
-        decimal held = await ledger.GetHoldingAsync(_context.Key, bot.Instrument, _context.BaseCoin, cancellationToken);
-        IReadOnlyList<string> differences = Reconciliation.Check(bot.Instrument.Category, _context.Conditions.Rules.QuantityStep, holdings, new ExchangeHoldings(held, open, finished));
-
-        return ([.. holdings.Select(holding => holding.BotId)], differences);
-    }
-
-    /// <summary>The bots of the account on the instrument of this bot, on the spot on any instrument of its coin.</summary>
-    private async Task<IReadOnlyList<Bot>> NeighboursAsync(CancellationToken cancellationToken)
-    {
-        Bot bot = _context.Bot;
-        IReadOnlyList<Bot> bots = [.. (await library.GetBotsAsync(cancellationToken)).Where(other => other.ExchangeAccountId == bot.ExchangeAccountId)];
-
-        if (bot.Instrument.Category == MarketCategory.Linear)
-        {
-            return [.. bots.Where(other => other.Instrument == bot.Instrument)];
-        }
-
-        var coins = (await catalog.ListAsync(MarketCategory.Spot, cancellationToken)).ToDictionary(item => item.Symbol, item => item.BaseCoin);
-
-        return [.. bots.Where(other => other.Instrument.Category == MarketCategory.Spot && coins.GetValueOrDefault(other.Instrument.Symbol) == _context.BaseCoin)];
-    }
-
-    /// <summary>Stops every working bot of the difference with its reason; a fix is never guessed.</summary>
-    private async Task FailAllAsync(IEnumerable<Guid> bots, string reason, CancellationToken cancellationToken)
-    {
-        journal.Failed(_id, reason);
-        await executor.ExecuteAsync(
-            async token =>
-            {
-                foreach (Guid id in bots)
-                {
-                    LiveBot bot = id == _id
-                        ? await repository.LockLeasedAsync(_id, worker.Id, leased.Epoch, token) ?? throw new LeaseLostException()
-                        : (await repository.LockAsync(id, time.GetUtcNow(), token))!;
-
-                    if (bot.Status is LiveBotStatus.Running or LiveBotStatus.Paused)
-                    {
-                        bot = bot.Fail(reason);
-                        await repository.SaveAsync(bot, time.GetUtcNow(), token);
-                    }
-
-                    if (id == _id)
-                    {
-                        _bot = bot;
-                    }
-                }
-
-                return 0;
-            },
-            cancellationToken);
     }
 
     /// <summary>

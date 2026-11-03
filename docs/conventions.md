@@ -59,7 +59,8 @@ enforces a rule, the check is the source of truth.
 - `LiveTrading` holds the commands of live trading (start, pause, resume, stop, close the position, claim and run a bot),
   `LiveTradingCodes`, and `Runtime/LiveBotSession`: one session keeps one bot for the take of its lease, takes its inputs
   one at a time from a queue, writes every change in one unit of work after checking the lease, and sends orders only
-  once they are written. `Ports/LiveTrading` holds `IExchangeLedger` (REST reads of an account), `IOrderGateway` (orders
+  once they are written; `Runtime/LiveBotReconciler` compares the books of a bot and of the bots that share its
+  holding with the exchange and stops them all on a difference. `Ports/LiveTrading` holds `IExchangeLedger` (REST reads of an account), `IOrderGateway` (orders
   and cancels, a refusal is an outcome) and `IExchangeStreams` (closed candles, order updates and fills, and a signal
   when a stream is back after a gap).
 - `Workers` holds what the Worker needs to share work with other Workers: `WorkerSettings`, `WorkerIdentity` (the
