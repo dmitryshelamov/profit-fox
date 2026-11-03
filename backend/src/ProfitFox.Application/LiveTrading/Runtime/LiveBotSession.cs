@@ -48,10 +48,6 @@ internal sealed class LiveBotSession(
     WorkerIdentity worker,
     TimeProvider time)
 {
-    // A session that failed hands its bot back to any Worker after this pause rather than at the end of its lease: soon enough
-    // to watch the bot again, late enough not to ask a failing exchange every second.
-    private static readonly TimeSpan FailedTakePause = TimeSpan.FromSeconds(30);
-
     // The most closed candles one request of the exchange gives, which the indicators are warmed up with.
     private const int WarmUpCandles = 1000;
 
@@ -78,10 +74,10 @@ internal sealed class LiveBotSession(
             bot => _inputs.Writer.TryWrite(new StatusInput(bot)),
             () =>
             {
-                journal.Lost(_id);
-
-                // Not in the loop of the Worker: what the token ends runs on its own.
+                // First, so the session ends whatever the journal does; not in the loop of the Worker, what the token ends runs
+                // on its own.
                 _ = lease.CancelAsync();
+                journal.Lost(_id);
             });
         var subscriptions = new List<IAsyncDisposable>();
         journal.Took(_id, leased.Epoch);
@@ -146,13 +142,14 @@ internal sealed class LiveBotSession(
             // An exchange that does not answer for a while is no failure of the bot; anything else is counted, after the bot
             // was up too, and the third failure in a row fails a bot with nothing on the exchange.
             await SessionFailedAsync(exception.Message);
-            await HandBackAsync(held);
+            await leases.HandBackAsync(_id, leased.Epoch);
 
             throw;
         }
-        catch (ExchangeUnavailableException)
+        catch (Exception exception) when (exception is ExchangeUnavailableException || (exception is OperationCanceledException && !lease.IsCancellationRequested))
         {
-            await HandBackAsync(held);
+            // An exchange that does not answer, or a cancellation that is not the session's own, such as a timeout of a client.
+            await leases.HandBackAsync(_id, leased.Epoch);
 
             throw;
         }
@@ -169,13 +166,6 @@ internal sealed class LiveBotSession(
                 await subscription.DisposeAsync();
             }
         }
-    }
-
-    /// <summary>Stops holding the bot and shortens the lease of this take to <see cref="FailedTakePause" />.</summary>
-    private async Task HandBackAsync(IDisposable held)
-    {
-        held.Dispose();
-        await repository.RenewAllAsync(worker.Id, [(_id, leased.Epoch)], time.GetUtcNow() + FailedTakePause, CancellationToken.None);
     }
 
     private Task SessionFailedAsync(string reason)

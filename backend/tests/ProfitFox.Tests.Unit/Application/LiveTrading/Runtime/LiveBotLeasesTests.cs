@@ -304,6 +304,102 @@ public class LiveBotLeasesTests
         lostAt.Value.ShouldBeLessThanOrEqualTo(Start + TimeSpan.FromMinutes(5));
     }
 
+    // A failed session shortens its lease after the renewal on the way, so the renewal cannot lengthen it back to five minutes.
+    [Test]
+    public async Task Hand_back_comes_after_a_renewal_on_the_way()
+    {
+        var bot = Guid.NewGuid();
+        var renewal = new TaskCompletionSource<IReadOnlyList<LeasedBot>>();
+        var untils = new List<(DateTimeOffset Until, bool RenewalDone)>();
+        _repository.RenewAllAsync(default, default!, default, default).ReturnsForAnyArgs(call =>
+        {
+            untils.Add((call.ArgAt<DateTimeOffset>(2), renewal.Task.IsCompleted));
+
+            return untils.Count == 1 ? renewal.Task : Task.FromResult<IReadOnlyList<LeasedBot>>([]);
+        });
+        _leases.Hold(new LeasedBot(Bot(bot), 1), _ => { }, () => { });
+        await AdvanceAsync(TimeSpan.FromMinutes(1));
+
+        Task handing = _leases.HandBackAsync(bot, 1);
+        await Task.Delay(50);
+        renewal.SetResult([new LeasedBot(Bot(bot), 1)]);
+        await handing;
+
+        untils.ShouldBe([(Start + TimeSpan.FromMinutes(6), false), (Start + TimeSpan.FromMinutes(1) + TimeSpan.FromSeconds(30), true)]);
+    }
+
+    [Test]
+    public async Task Hand_back_of_an_old_take_keeps_the_new_take_held()
+    {
+        var bot = Guid.NewGuid();
+        var changes = 0;
+        _leases.Hold(new LeasedBot(Bot(bot), 2), _ => changes++, () => { });
+
+        await _leases.HandBackAsync(bot, 1);
+        await AdvanceAsync(TimeSpan.FromMinutes(1));
+
+        changes.ShouldBe(1);
+    }
+
+    [Test]
+    public async Task Handed_back_bot_is_held_no_more()
+    {
+        var bot = Guid.NewGuid();
+        var changes = 0;
+        _leases.Hold(new LeasedBot(Bot(bot), 1), _ => changes++, () => { });
+
+        await _leases.HandBackAsync(bot, 1);
+        await AdvanceAsync(TimeSpan.FromMinutes(1));
+
+        changes.ShouldBe(0);
+    }
+
+    // The pause never outlasts a lease shorter than it.
+    [Test]
+    public async Task Hand_back_never_lengthens_a_shorter_lease()
+    {
+        var leases = new LiveBotLeases(
+            _repository, new TradingSettings { LeaseDuration = TimeSpan.FromSeconds(10), LeaseRenewal = TimeSpan.FromSeconds(5) }, new WorkerSettings(), _worker, _time);
+        var bot = Guid.NewGuid();
+
+        await leases.HandBackAsync(bot, 1);
+
+        await _repository.Received(1).RenewAllAsync(
+            _worker.Id, Arg.Is<IReadOnlyCollection<(Guid BotId, long Epoch)>>(held => held.Single().BotId == bot), Start.AddSeconds(10), Arg.Any<CancellationToken>());
+    }
+
+    // The session ends on the failure it had; a database that does not answer only leaves the lease to run out.
+    [Test]
+    public async Task Failed_hand_back_does_not_throw()
+    {
+        _repository.RenewAllAsync(default, default!, default, default).ThrowsAsyncForAnyArgs(new InvalidOperationException("The database is down."));
+
+        await Should.NotThrowAsync(() => _leases.HandBackAsync(Guid.NewGuid(), 1));
+    }
+
+    // Polls that fail slowly push the next renewal back: the bot is still given up before its lease expires.
+    [Test]
+    public async Task Slow_failing_polls_do_not_keep_the_bot_past_its_lease()
+    {
+        _repository.RenewAllAsync(default, default!, default, default).ThrowsAsyncForAnyArgs(new InvalidOperationException("The database is down."));
+        _repository.GetChangedAsync(default, default, default).ReturnsForAnyArgs(_ => SlowPollFailureAsync());
+        DateTimeOffset? lostAt = null;
+        _leases.Hold(new LeasedBot(Bot(Guid.NewGuid()), 1), _ => { }, () => lostAt = _time.GetUtcNow());
+
+        await AdvanceAsync(TimeSpan.FromMinutes(5));
+
+        lostAt.ShouldNotBeNull();
+        lostAt.Value.ShouldBeLessThanOrEqualTo(Start + TimeSpan.FromMinutes(5));
+    }
+
+    // As a read from a database that does not answer times out.
+    private Task<IReadOnlyList<ChangedLiveBot>> SlowPollFailureAsync()
+    {
+        _time.Advance(TimeSpan.FromSeconds(25));
+
+        return Task.FromException<IReadOnlyList<ChangedLiveBot>>(new InvalidOperationException("The database does not answer."));
+    }
+
     private Task<IReadOnlyList<LeasedBot>> SlowFailureAsync()
     {
         _time.Advance(TimeSpan.FromSeconds(70));

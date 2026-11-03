@@ -42,6 +42,9 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
     /// <summary>The exchange refuses the fee rates, a failure another attempt meets again.</summary>
     public bool FeesRefused { get; set; }
 
+    /// <summary>The read of the fee rates is cancelled by the client's own timeout, not by the session.</summary>
+    public bool FeesTimedOut { get; set; }
+
     /// <summary>How many times the fee rates were asked for: once per take of a bot.</summary>
     public int FeeRequests => _feeRequests;
 
@@ -358,6 +361,11 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
         if (FeesRefused)
         {
             throw new ProfitFox.Application.Exceptions.ExchangeException("Bybit refused the fee rates.");
+        }
+
+        if (FeesTimedOut)
+        {
+            throw new OperationCanceledException("The request timed out.");
         }
 
         if (FeesUnavailable)
