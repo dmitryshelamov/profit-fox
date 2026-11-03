@@ -5,7 +5,7 @@ import { createStrategy, reference } from './api';
 // Acceptance criteria of exchange accounts against the real API and the Bybit stub, whose key `e2e-valid-<uid>` opens a
 // unified account that trades spot and linear and holds 1000 USDT and 0.01 BTC.
 
-test('a testnet account is added, shows its balance, takes a bot and cannot be deleted then', async ({
+test('an account is added, shows its balance, takes a bot and cannot be deleted then', async ({
   page,
   request,
 }) => {
@@ -19,7 +19,6 @@ test('a testnet account is added, shows its balance, takes a bot and cannot be d
   await page.getByRole('button', { name: 'Добавить аккаунт' }).click();
 
   await expect(page.getByRole('heading', { name: /Проверка e2e/ })).toBeVisible();
-  await expect(page.getByText('Testnet').first()).toBeVisible();
   await expect(page.getByText(uid, { exact: true })).toBeVisible();
   await expect(page.getByLabel('Secret скрыт')).toHaveText('••••••••');
   await expect(page.getByText('e2e-secret')).toHaveCount(0);
@@ -47,7 +46,6 @@ test('a testnet account is added, shows its balance, takes a bot and cannot be d
   await page.goto('/bots');
   const row = page.getByRole('row', { name: new RegExp(`BTC e2e ${uid}`) });
   await expect(row.getByText('Проверка e2e')).toBeVisible();
-  await expect(row.getByText('Testnet')).toBeVisible();
 
   await page.goto(`/accounts/${accountId}`);
   await page.getByRole('button', { name: 'Удалить' }).click();

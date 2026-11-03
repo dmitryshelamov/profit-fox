@@ -6,6 +6,8 @@ public enum BotField
     Strategy,
     Parameter,
     Category,
+    Symbol,
+    Interval,
     Balance,
     Account
 }

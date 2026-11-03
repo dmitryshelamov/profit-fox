@@ -6,7 +6,6 @@ using System.Text.Json.Nodes;
 using NSubstitute;
 
 using ProfitFox.Application.Ports.ExchangeAccounts;
-using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Tests.Integration.Infrastructure;
 using ProfitFox.Tests.Shared.Fixtures.Strategies;
@@ -53,7 +52,7 @@ public class BotAccountApiTests
         foreach (JsonElement shown in new[] { read, listed })
         {
             shown.GetProperty("id").GetGuid().ShouldBe(account);
-            (shown.GetProperty("name").GetString(), shown.GetProperty("environment").GetString()).ShouldBe(("Проверка", "testnet"));
+            shown.GetProperty("name").GetString().ShouldBe("Проверка");
         }
     }
 
@@ -103,11 +102,11 @@ public class BotAccountApiTests
 
     private async Task<Guid> CreateAccountAsync(string name, params MarketCategory[] categories)
     {
-        _factory.KeyInspector.InspectAsync(Arg.Any<ExchangeEnvironment>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _factory.KeyInspector.InspectAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new ExchangeKeyInfo(Random.Shared.NextInt64(1, long.MaxValue), false, true, false, categories.ToHashSet()));
         HttpResponseMessage created = await _client.PostAsJsonAsync(
             "/api/exchange-accounts",
-            new { name, environment = "testnet", apiKey = "api-key", apiSecret = "api-secret" });
+            new { name, apiKey = "api-key", apiSecret = "api-secret" });
         created.StatusCode.ShouldBe(HttpStatusCode.Created);
 
         return (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();

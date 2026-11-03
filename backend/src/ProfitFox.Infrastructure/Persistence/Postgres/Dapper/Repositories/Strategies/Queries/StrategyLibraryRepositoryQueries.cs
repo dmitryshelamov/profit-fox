@@ -115,6 +115,27 @@ internal static class StrategyLibraryRepositoryQueries
         return new CommandDefinition(UpsertBotSql, bot, transaction, cancellationToken: cancellationToken);
     }
 
+    // Locks the bot row, as starting the bot does, so a change and a start are never both let through.
+    internal static CommandDefinition GuardBot(BotDb bot, IDbTransaction transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            """
+            SELECT coalesce(l.status, 'stopped') AS "Status", coalesce(p.open, false) AS "Open",
+                (b.name, b.parameter_values, b.category, b.symbol, b."interval", b.balance, b.exchange_account_id)
+                    IS DISTINCT FROM (@Name, @ParameterValues::jsonb, @Category, @Symbol, @Interval, @Balance, @ExchangeAccountId) AS "Changed",
+                b.exchange_account_id IS DISTINCT FROM @ExchangeAccountId AS "AccountChanged",
+                b.category <> @Category AS "CategoryChanged", b.symbol <> @Symbol AS "SymbolChanged", b."interval" <> @Interval AS "IntervalChanged"
+            FROM bots b
+            LEFT JOIN live_bots l ON l.bot_id = b.id
+            LEFT JOIN LATERAL (SELECT open FROM live_positions WHERE bot_id = b.id ORDER BY number DESC LIMIT 1) p ON true
+            WHERE b.id = @Id
+            FOR UPDATE OF b
+            """,
+            bot,
+            transaction,
+            cancellationToken: cancellationToken);
+    }
+
     internal static CommandDefinition DeleteBot(Guid id, IDbTransaction transaction, CancellationToken cancellationToken)
     {
         return new CommandDefinition("DELETE FROM bots WHERE id = @Id", new { Id = id }, transaction, cancellationToken: cancellationToken);

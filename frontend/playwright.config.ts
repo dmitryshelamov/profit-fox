@@ -20,10 +20,11 @@ const network = linux
   ? `--network host -e PROFITFOX_WEB_PORT=${webPort} -e PROFITFOX_API=127.0.0.1:${apiPort}`
   : `-p 127.0.0.1:${webPort}:80 -e PROFITFOX_API=host.docker.internal:${apiPort}`;
 
-// Tests never reach Bybit: its REST API is served by e2e/bybit-stub.ts.
+// Tests never reach Bybit: its REST API and its streams are served by e2e/bybit-stub.ts.
 const shared = [
   `ConnectionStrings__MarketData="Host=${host};Port=${port};Database=${database};Username=profitfox;Password=profitfox"`,
   `Bybit__RestAddress=http://127.0.0.1:${bybitPort}`,
+  `Bybit__SocketAddress=ws://127.0.0.1:${bybitPort}`,
 ];
 const api = [
   `node e2e/database.ts create ${database} &&`,
@@ -32,10 +33,11 @@ const api = [
   `dotnet run --no-launch-profile --project ../backend/src/ProfitFox.Presentation --urls http://127.0.0.1:${apiPort}`,
 ].join(' ');
 
-// The Worker starts once the API has applied the migrations; its appsettings.Testing.json polls quickly.
+// The Worker starts once the API has applied the migrations; it trades, with the master key of the Testing settings.
 const worker = [
   `until curl -sf http://127.0.0.1:${apiPort}/openapi/v1.json > /dev/null; do sleep 1; done;`,
   'DOTNET_ENVIRONMENT=Testing',
+  'Trading__Enabled=true',
   ...shared,
   'dotnet run --no-launch-profile --project ../backend/src/ProfitFox.Worker',
 ].join(' ');

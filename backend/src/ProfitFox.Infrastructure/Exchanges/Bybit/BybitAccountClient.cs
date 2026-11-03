@@ -1,20 +1,12 @@
-using System.Net;
-
-using Bybit.Net;
 using Bybit.Net.Clients;
 using Bybit.Net.Enums;
 using Bybit.Net.Objects.Models.V5;
-using Bybit.Net.Objects.Options;
 
 using CryptoExchange.Net.Objects;
-using CryptoExchange.Net.Objects.Errors;
 
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
-using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.ExchangeAccounts;
-using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 
 namespace ProfitFox.Infrastructure.Exchanges.Bybit;
@@ -25,12 +17,9 @@ namespace ProfitFox.Infrastructure.Exchanges.Bybit;
 /// </summary>
 internal sealed class BybitAccountClient(HttpClient http, ILoggerFactory loggers, BybitSettings settings) : IExchangeKeyInspector
 {
-    // Codes of a key Bybit does not accept: invalid, bad signature, no permission, IP not allowed, expired.
-    private static readonly HashSet<string> RejectedKeyCodes = ["10003", "10004", "10005", "10010", "33004"];
-
-    public async Task<ExchangeKeyInfo> InspectAsync(ExchangeEnvironment environment, string apiKey, string secret, CancellationToken cancellationToken)
+    public async Task<ExchangeKeyInfo> InspectAsync(string apiKey, string secret, CancellationToken cancellationToken)
     {
-        using BybitRestClient client = Client(environment, apiKey, secret);
+        using BybitRestClient client = Client(apiKey, secret);
         BybitApiKeyInfo key = Unwrap(await client.V5Api.Account.GetApiKeyInfoAsync(cancellationToken));
         var categories = new HashSet<MarketCategory>();
 
@@ -47,9 +36,9 @@ internal sealed class BybitAccountClient(HttpClient http, ILoggerFactory loggers
         return new ExchangeKeyInfo(key.UserId, key.Readonly, key.Uta, Has(key.Permissions.Wallet, "Withdraw"), categories);
     }
 
-    public async Task<AccountBalance> GetBalanceAsync(ExchangeEnvironment environment, string apiKey, string secret, CancellationToken cancellationToken)
+    public async Task<AccountBalance> GetBalanceAsync(string apiKey, string secret, CancellationToken cancellationToken)
     {
-        using BybitRestClient client = Client(environment, apiKey, secret);
+        using BybitRestClient client = Client(apiKey, secret);
         BybitBalance? balance = Unwrap(await client.V5Api.Account.GetBalancesAsync(AccountType.Unified, ct: cancellationToken)).List.SingleOrDefault();
 
         // An account Bybit lists no unified wallet for holds nothing.
@@ -68,22 +57,9 @@ internal sealed class BybitAccountClient(HttpClient http, ILoggerFactory loggers
             ]);
     }
 
-    private BybitRestClient Client(ExchangeEnvironment environment, string apiKey, string secret)
+    private BybitRestClient Client(string apiKey, string secret)
     {
-        return new BybitRestClient(
-            http,
-            loggers,
-            Options.Create(new BybitRestOptions { ApiCredentials = new BybitCredentials(apiKey, secret), Environment = Environment(environment) }));
-    }
-
-    private BybitEnvironment Environment(ExchangeEnvironment environment)
-    {
-        if (!string.IsNullOrEmpty(settings.RestAddress))
-        {
-            return BybitEnvironment.CreateCustom("profit-fox", settings.RestAddress, BybitEnvironment.Live.SocketBaseAddress);
-        }
-
-        return environment == ExchangeEnvironment.Mainnet ? BybitEnvironment.Live : BybitEnvironment.Testnet;
+        return BybitKeyClients.Create(http, loggers, settings, apiKey, secret);
     }
 
     private static bool Has(IEnumerable<string>? permissions, string permission)
@@ -91,26 +67,8 @@ internal sealed class BybitAccountClient(HttpClient http, ILoggerFactory loggers
         return permissions?.Contains(permission, StringComparer.Ordinal) == true;
     }
 
-    /// <summary>A failure of the key is <see cref="ExchangeKeyRejectedException" />, no answer <see cref="ExchangeUnavailableException" />.</summary>
     private static T Unwrap<T>(HttpResult<T> result)
     {
-        if (result.Success)
-        {
-            return result.Data!;
-        }
-
-        // Only the code and the message of Bybit: the request carries the key, so it never goes into a message.
-        if (result.Error!.ErrorCode is { } code && RejectedKeyCodes.Contains(code))
-        {
-            throw new ExchangeKeyRejectedException($"Bybit does not accept the key: {result.Error.Message}");
-        }
-
-        // No answer at all (connection, timeout), a 5xx or the rate limit (HTTP 429 or retCode 10006).
-        if (result.ResponseStatusCode is null or >= HttpStatusCode.InternalServerError || result.Error.ErrorType is ErrorType.RateLimitRequest)
-        {
-            throw new ExchangeUnavailableException($"Bybit is unavailable: {result.Error.Message}");
-        }
-
-        throw new ExchangeException(result.Error.Message!);
+        return BybitKeyClients.Unwrap(result);
     }
 }

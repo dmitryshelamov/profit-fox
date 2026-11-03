@@ -9,9 +9,9 @@ import {
   botSummary,
   emaDefinition,
   emaSummary,
+  exchangeAccount,
   progressOf,
   savedStrategy,
-  testnetAccount,
 } from '@/test/fixtures';
 import { renderApp } from '@/test/renderApp';
 
@@ -19,6 +19,7 @@ function routes(backtests: () => unknown[]) {
   return {
     [`GET /api/bots/${botId}`]: () => json(botDetails),
     [`GET /api/bots/${botId}/backtests`]: () => json(backtests()),
+    [`GET /api/bots/${botId}/positions`]: () => json([]),
     'GET /api/strategies': () => json([emaSummary]),
     [`GET /api/strategies/${emaSummary.id}`]: () => json(savedStrategy(emaSummary, emaDefinition)),
     'GET /api/market-data/instruments': () =>
@@ -42,23 +43,23 @@ describe('bot page', () => {
     ).toBeInTheDocument();
   });
 
-  // Scenario "Бот на testnet".
-  it('shows the account of the bot with a testnet mark and a link to it', async () => {
+  // Scenario "Бот с аккаунтом".
+  it('shows the account of the bot with a link to it', async () => {
     fakeApi({
       ...routes(() => []),
       [`GET /api/bots/${botId}`]: () =>
         json({
           ...botDetails,
-          exchangeAccount: { id: testnetAccount.id, name: 'Проверка', environment: 'testnet' },
+          exchangeAccount: { id: exchangeAccount.id, name: 'Проверка' },
         }),
     });
     renderApp(`/bots/${botId}`);
 
     expect(await screen.findByRole('link', { name: 'Проверка' })).toHaveAttribute(
       'href',
-      `/accounts/${testnetAccount.id}`,
+      `/accounts/${exchangeAccount.id}`,
     );
-    expect(screen.getByText('Testnet')).toBeInTheDocument();
+    expect(screen.queryByText('Testnet')).not.toBeInTheDocument();
   });
 
   // Scenario "Бот без аккаунта".

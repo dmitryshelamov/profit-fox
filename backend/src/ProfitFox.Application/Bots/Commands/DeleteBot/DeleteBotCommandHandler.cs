@@ -3,6 +3,7 @@ using MediatR;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Strategies;
 using ProfitFox.Domain.Entities.Strategies;
+using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Repositories;
 
 namespace ProfitFox.Application.Bots.Commands.DeleteBot;
@@ -10,6 +11,7 @@ namespace ProfitFox.Application.Bots.Commands.DeleteBot;
 public sealed class DeleteBotCommandHandler(IStrategyLibraryRepository repository) : IRequestHandler<DeleteBotCommand>
 {
     /// <exception cref="NotFoundException">There is no such bot.</exception>
+    /// <exception cref="ConflictException">The bot trades or holds an open position.</exception>
     /// <exception cref="StateConflictException">The library changed while the bot was being deleted.</exception>
     public async Task Handle(DeleteBotCommand request, CancellationToken cancellationToken)
     {
@@ -20,6 +22,13 @@ public sealed class DeleteBotCommandHandler(IStrategyLibraryRepository repositor
             throw new NotFoundException($"There is no bot {request.Id}.");
         }
 
-        StrategyRequests.EnsureSaved(await repository.SaveAsync(library.Change, library.Revision, cancellationToken));
+        try
+        {
+            StrategyRequests.EnsureSaved(await repository.SaveAsync(library.Change, library.Revision, cancellationToken));
+        }
+        catch (LiveBotConflictException exception)
+        {
+            throw new ConflictException(exception.Message);
+        }
     }
 }

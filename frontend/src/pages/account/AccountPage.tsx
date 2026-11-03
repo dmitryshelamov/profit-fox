@@ -9,7 +9,6 @@ import {
   accountQuery,
   BalanceTable,
   deleteAccount,
-  EnvironmentBadge,
   renameAccount,
 } from '@/modules/exchange-accounts';
 import { ApiError } from '@/shared/api/client';
@@ -90,10 +89,7 @@ export function AccountPage({ accountId }: { accountId: string }) {
             / {data.name}
           </p>
           {name === undefined ? (
-            <h1 className="flex items-center gap-3 text-2xl font-bold">
-              {data.name}
-              <EnvironmentBadge environment={data.environment} />
-            </h1>
+            <h1 className="text-2xl font-bold">{data.name}</h1>
           ) : (
             <form
               className="flex items-start gap-2"
@@ -134,10 +130,6 @@ export function AccountPage({ accountId }: { accountId: string }) {
         </p>
       )}
       <dl className="grid grid-cols-3 gap-x-8 gap-y-4 rounded-xl border border-line bg-panel px-5 py-4 text-sm">
-        <div>
-          <dt className={term}>Окружение</dt>
-          <dd>{data.environment === 'testnet' ? 'Testnet' : 'Основная сеть'}</dd>
-        </div>
         <div>
           <dt className={term}>API key</dt>
           <dd className="font-mono break-all">{data.apiKey}</dd>

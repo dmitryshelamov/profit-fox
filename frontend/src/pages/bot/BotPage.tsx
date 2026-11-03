@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 
 import {
   botBacktestsQuery,
@@ -11,14 +11,15 @@ import {
   StatusBadge,
   useInvalidateOnFinish,
 } from '@/modules/backtests';
-import { botQuery } from '@/modules/bots';
-import { EnvironmentBadge } from '@/modules/exchange-accounts';
+import { botPositionsQuery, botQuery, isFollowed } from '@/modules/bots';
 import { instrumentsQuery, intervalLabel } from '@/modules/market-data';
 import { strategiesQuery, strategyQuery } from '@/modules/strategies';
 import { formatDay, formatMoment, groupDigits } from '@/shared/format/format';
 import { Badge } from '@/shared/ui/Badge';
 
 import { BotActions } from './BotActions';
+import { LiveControls } from './LiveControls';
+import { LivePositions } from './LivePositions';
 
 interface Declared {
   readonly name: string;
@@ -34,7 +35,22 @@ function Bar({ status, progress }: { status: string; progress: Progress }) {
 }
 
 export function BotPage({ botId }: { botId: string }) {
-  const bot = useQuery(botQuery(botId));
+  const bot = useQuery({
+    ...botQuery(botId),
+    refetchInterval: (query) => (isFollowed(query.state.data) ? 5000 : false),
+  });
+  const positions = useQuery({
+    ...botPositionsQuery(botId),
+    refetchInterval: isFollowed(bot.data) ? 5000 : false,
+  });
+  const queryClient = useQueryClient();
+  const status = bot.data?.status;
+  const closing = bot.data?.closeRequested;
+
+  // A Worker may finish between two polls: the positions are read again whenever the bot moves on, its last state too.
+  useEffect(() => {
+    void queryClient.invalidateQueries({ queryKey: botPositionsQuery(botId).queryKey });
+  }, [queryClient, botId, status, closing]);
   const backtests = useQuery(botBacktestsQuery(botId));
   const statuses = useMemo(
     () =>
@@ -60,7 +76,17 @@ export function BotPage({ botId }: { botId: string }) {
 
   const data = bot.data;
   const strategyName = strategies.data?.find((item) => item.id === data.strategyId)?.name ?? '';
-  const quoteCoin = instruments.data?.find((item) => item.symbol === data.symbol)?.quoteCoin;
+  const listed = instruments.data?.find((item) => item.symbol === data.symbol);
+  const quoteCoin = listed?.quoteCoin;
+  const followed = isFollowed(data);
+  const current = positions.data?.find((position) => position.status === 'open');
+  // The side of the exit comes with the position: the bot trades the version fixed at its start, not the current one.
+  const close = current
+    ? `${current.exitSide === 'buy' ? 'Покупка' : 'Продажа'} по рынку ${current.quantity}${listed?.baseCoin ? ` ${listed.baseCoin}` : ''}.`
+    : undefined;
+  const start =
+    data.exchangeAccount &&
+    `Бот начнёт торговать на аккаунте «${data.exchangeAccount.name}»: ${data.category} · ${data.symbol}, баланс ${groupDigits(data.balance)}${quoteCoin ? ` ${quoteCoin}` : ''}. Ордера уходят на биржу с реальными деньгами.`;
   const declared = ((strategy.data?.definition as { parameters?: Declared[] } | undefined)
     ?.parameters ?? []) as Declared[];
   const values = data.parameterValues as Record<string, unknown>;
@@ -84,32 +110,53 @@ export function BotPage({ botId }: { botId: string }) {
           <p className="flex items-center gap-2 text-sm text-muted">
             Аккаунт:{' '}
             {data.exchangeAccount ? (
-              <>
-                <Link
-                  to="/accounts/$accountId"
-                  params={{ accountId: data.exchangeAccount.id }}
-                  className="font-semibold text-accent hover:underline"
-                >
-                  {data.exchangeAccount.name}
-                </Link>
-                <EnvironmentBadge environment={data.exchangeAccount.environment} />
-              </>
+              <Link
+                to="/accounts/$accountId"
+                params={{ accountId: data.exchangeAccount.id }}
+                className="font-semibold text-accent hover:underline"
+              >
+                {data.exchangeAccount.name}
+              </Link>
             ) : (
               'Без аккаунта'
             )}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Link
-            to="/bots/$botId/edit"
-            params={{ botId }}
-            className="inline-flex h-8 items-center rounded-md border border-line px-3 text-sm font-semibold hover:bg-panel-2"
-          >
-            Изменить
-          </Link>
-          <BotActions botId={botId} name={data.name} />
-        </div>
+        {followed ? (
+          <p className="max-w-56 text-right text-xs text-faint">
+            {data.closeRequested
+              ? 'Изменить или удалить бота можно, когда позиция закроется.'
+              : 'Остановите бота, чтобы изменить или удалить его.'}
+          </p>
+        ) : (
+          <div className="flex gap-2">
+            <Link
+              to="/bots/$botId/edit"
+              params={{ botId }}
+              className="inline-flex h-8 items-center rounded-md border border-line px-3 text-sm font-semibold hover:bg-panel-2"
+            >
+              Изменить
+            </Link>
+            <BotActions botId={botId} name={data.name} />
+          </div>
+        )}
       </header>
+      <LiveControls
+        botId={botId}
+        status={data.status}
+        reason={data.statusReason}
+        closing={data.closeRequested}
+        start={start ?? undefined}
+        close={close}
+        ready={!instruments.isPending}
+      />
+      {positions.isError && <p role="alert">Не удалось загрузить позиции.</p>}
+      {positions.data && positions.data.length > 0 && (
+        <LivePositions
+          positions={positions.data}
+          coins={{ base: listed?.baseCoin ?? '', quote: quoteCoin ?? '' }}
+        />
+      )}
       <section
         aria-label="Параметры"
         className="space-y-2 rounded-xl border border-line bg-panel px-5 py-4"

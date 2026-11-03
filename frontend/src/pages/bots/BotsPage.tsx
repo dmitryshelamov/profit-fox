@@ -2,8 +2,7 @@ import { useQueries, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 
 import { StatusBadge } from '@/modules/backtests';
-import { botsQuery } from '@/modules/bots';
-import { EnvironmentBadge } from '@/modules/exchange-accounts';
+import { botsQuery, isFollowed, LiveStatusBadge } from '@/modules/bots';
 import { instrumentsQuery, intervalLabel } from '@/modules/market-data';
 import { strategiesQuery } from '@/modules/strategies';
 import { combinationsWord, groupDigits } from '@/shared/format/format';
@@ -12,7 +11,10 @@ import { Badge } from '@/shared/ui/Badge';
 const cell = 'px-5 py-4';
 
 export function BotsPage() {
-  const bots = useQuery(botsQuery);
+  const bots = useQuery({
+    ...botsQuery,
+    refetchInterval: (query) => (query.state.data?.some(isFollowed) ? 5000 : false),
+  });
   const strategies = useQuery(strategiesQuery);
   const pairs = [
     ...new Map(
@@ -67,6 +69,7 @@ export function BotsPage() {
         <thead className="text-left text-[11px] tracking-wide text-faint uppercase">
           <tr>
             <th className={cell}>Название</th>
+            <th className={cell}>Статус</th>
             <th className={cell}>Стратегия</th>
             <th className={cell}>Инструмент</th>
             <th className={cell}>Интервал</th>
@@ -80,6 +83,9 @@ export function BotsPage() {
           {bots.data?.map((bot) => (
             <tr key={bot.id} className="bg-panel">
               <td className={`${cell} font-semibold`}>{bot.name}</td>
+              <td className={cell}>
+                <LiveStatusBadge status={bot.status} />
+              </td>
               <td className={cell}>{strategyName(bot.strategyId)}</td>
               <td className={`${cell} font-mono whitespace-nowrap text-muted`}>
                 {bot.category} · {bot.symbol}
@@ -88,16 +94,13 @@ export function BotsPage() {
               <td className={`${cell} font-mono whitespace-nowrap`}>{balanceOf(bot)}</td>
               <td className={`${cell} whitespace-nowrap`}>
                 {bot.exchangeAccount ? (
-                  <span className="flex items-center gap-2">
-                    <Link
-                      to="/accounts/$accountId"
-                      params={{ accountId: bot.exchangeAccount.id }}
-                      className="text-accent hover:underline"
-                    >
-                      {bot.exchangeAccount.name}
-                    </Link>
-                    <EnvironmentBadge environment={bot.exchangeAccount.environment} />
-                  </span>
+                  <Link
+                    to="/accounts/$accountId"
+                    params={{ accountId: bot.exchangeAccount.id }}
+                    className="text-accent hover:underline"
+                  >
+                    {bot.exchangeAccount.name}
+                  </Link>
                 ) : (
                   <span className="text-faint">Без аккаунта</span>
                 )}

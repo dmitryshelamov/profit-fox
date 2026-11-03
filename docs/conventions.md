@@ -7,7 +7,9 @@ enforces a rule, the check is the source of truth.
 
 - Areas: `MarketData` (candles and their import), `Strategies` (strategies, composite nodes and their versions),
   `Bots` (a strategy set up to trade: parameter values, instrument, interval, balance), `Backtests` (a run of a bot on
-  stored candles and its results) and `ExchangeAccounts` (keys of an exchange account a bot trades with).
+  stored candles and its results), `ExchangeAccounts` (keys of an exchange account a bot trades with) and `LiveTrading`
+  (a bot on the exchange: `LiveBot` with its status and lease, its positions, orders and fills; `ClientOrderId`, the id an
+  order carries to the exchange; `Reconciliation` and `StartFunds`, the pure checks against the exchange).
 - `Entities/<Area>` holds entities (`Candle`, `CandleImportJob`, `Bot`, `Backtest`, `BacktestChunk`); `Entities/<Area>/Enums` holds enums
   and their pure domain extensions (`Interval`, `IntervalExtensions.CandleEnd`, `BacktestStatus`); `Entities/Base` holds
   `AggregateRoot`. A bot is part of the `StrategyLibrary` aggregate: it must stay valid against the latest version of its
@@ -48,10 +50,18 @@ enforces a rule, the check is the source of truth.
   like `GetCandlesQuery`.
 - `Exceptions` holds `BaseApplicationException` and its subclasses, also vendor-neutral (`ExchangeException`,
   `ExchangeKeyRejectedException`).
-- `ExchangeAccounts` holds the commands and queries of exchange accounts, `ExchangeAccountCodes` (`mainnet`, `testnet`)
-  and `ExchangeKeyRules`, the pure check of what a key may do. The secret of an account is decrypted only in the query
+- `ExchangeAccounts` holds the commands and queries of exchange accounts and `ExchangeKeyRules`, the pure check of what a key may do. The secret of an account is decrypted only in the query
   that calls the exchange with it, and a bot refers to its account by id (`BotAccount` carries the categories the key
   trades in into the checks of the bot).
+- `Transactions/ITransactionExecutor` runs a unit of work in one transaction: its writes commit together or not at all,
+  a unit inside a unit is refused, and `EnsureNoTransaction` guards a call that must not hold a transaction open (the
+  exchange).
+- `LiveTrading` holds the commands of live trading (start, pause, resume, stop, close the position, claim and run a bot),
+  `LiveTradingCodes`, and `Runtime/LiveBotSession`: one session keeps one bot for the take of its lease, takes its inputs
+  one at a time from a queue, writes every change in one unit of work after checking the lease, and sends orders only
+  once they are written. `Ports/LiveTrading` holds `IExchangeLedger` (REST reads of an account), `IOrderGateway` (orders
+  and cancels, a refusal is an outcome) and `IExchangeStreams` (closed candles, order updates and fills, and a signal
+  when a stream is back after a gap).
 - `Workers` holds what the Worker needs to share work with other Workers: `WorkerSettings`, `WorkerIdentity` (the
   lease owner of this process) and `LeaseKeeper`, which renews a lease while the work runs. Work the Worker takes is a
   command that returns whether it found any (`RunNextCandleImportCommand`, `RunNextBacktestWorkCommand`).
@@ -79,6 +89,13 @@ enforces a rule, the check is the source of truth.
   library in one transaction. `Repositories/Backtests` holds backtests, their chunks (`backtest_chunks`) and results.
   A lease is a column pair `lease_owner`, `leased_until` on the row of the work; a write of leased work is conditional
   on `lease_owner`.
+- A lease of a live bot also has an epoch, `lease_epoch`, grown by every claim: every write of a session locks the row of
+  its bot with the owner and the epoch it took, so a Worker that lost the bot and took it again is told from its
+  stalled self.
+- `Persistence/Postgres/Transactions` implements the unit of work: `PostgresTransactionExecutor` opens the connection
+  and the transaction, the scoped `PostgresTransactionAccessor.Current` hands them to repositories that write inside a
+  unit. Only repositories of live trading use it; the older repositories open a connection per call and keep their
+  transactions inside one method.
 - `BackgroundServices` holds hosted services; a loop over items catches each item's failure, otherwise one exception
   stops the host. A startup step that must finish before requests are served is an `IHostedService` with the work in
   `StartAsync`, not a `BackgroundService` (`StrategyVersionsInitializationService`, `BacktestInitializationService`).
@@ -130,8 +147,13 @@ enforces a rule, the check is the source of truth.
 
 - The `ExchangeAccounts` section (`ExchangeAccountSettings`): `MasterKey`, 32 bytes in base64, encrypts the secrets of
   exchange accounts. Only `appsettings.Development.json` and `appsettings.Testing.json` of the API carry a key; any other
-  environment sets `ExchangeAccounts__MasterKey`, or the API does not start. The Worker does not require it yet: it never
-  decrypts a secret.
+  environment sets `ExchangeAccounts__MasterKey`, or the API does not start. A Worker requires it only with
+  `Trading:Enabled`, as it decrypts keys only to trade; its `appsettings.Development.json` and `appsettings.Testing.json`
+  carry the same keys as the API's.
+- The `Trading` section of the Worker (`TradingSettings`): `Enabled`, `false` by default. Only a trading Worker takes live
+  bots (`LiveTradingBackgroundService`); a Worker on another machine that only runs backtests leaves it off. A local run
+  never sends real orders: in Development a trading Worker does not start unless both `Bybit:RestAddress` and
+  `Bybit:SocketAddress` point at a stub.
 
   ```json
   "ExchangeAccounts": { "MasterKey": "<openssl rand -base64 32>" }
@@ -177,8 +199,11 @@ enforces a rule, the check is the source of truth.
   fluent builders for structures a generator cannot randomize meaningfully (`GraphBuilder` for strategy graphs), and
   `Fixtures/<Area>` holds reference documents as embedded resources (the reference strategies EMA, EMA Short, DCA, Ladder;
   reference candle sets for backtests in `Fixtures/Backtests`).
-- Ports are replaced with NSubstitute mocks; there are no hand-written fakes. Hand-written stubs exist only for HTTP
-  transport (`StubHttpHandler`, `FakeBybitHandler`), because NSubstitute cannot replace the protected `SendAsync`.
+- Ports are replaced with NSubstitute mocks. Hand-written stubs exist only for transport and the exchange: HTTP
+  (`StubHttpHandler`, `FakeBybitHandler`), because NSubstitute cannot replace the protected `SendAsync`; the Bybit v5
+  streams on a local port (`FakeBybitSocketServer`); and `FakeExchange`, one exchange account in memory behind
+  `IExchangeLedger`, `IOrderGateway` and `IExchangeStreams` for the live trading runtime, whose orders, fills and streams
+  depend on each other as a mock cannot keep.
 - Assertions use Shouldly.
 - Generators randomize only values the test does not check. Reference data (decimal precision, period bounds, interval
   codes) stays explicit in the test.

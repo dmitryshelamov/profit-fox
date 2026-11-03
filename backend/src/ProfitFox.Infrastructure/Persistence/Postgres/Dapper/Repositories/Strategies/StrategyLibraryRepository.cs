@@ -66,9 +66,12 @@ internal sealed class StrategyLibraryRepository(NpgsqlDataSource dataSource) : I
 
         foreach (Bot bot in change.SavedBots)
         {
+            BotDb row = BotDbConverter.FromDomain(bot);
+            Guard(await connection.QuerySingleOrDefaultAsync<BotGuardDb>(StrategyLibraryRepositoryQueries.GuardBot(row, transaction, cancellationToken)));
+
             try
             {
-                await connection.ExecuteAsync(StrategyLibraryRepositoryQueries.UpsertBot(BotDbConverter.FromDomain(bot), transaction, cancellationToken));
+                await connection.ExecuteAsync(StrategyLibraryRepositoryQueries.UpsertBot(row, transaction, cancellationToken));
             }
             catch (PostgresException exception) when (exception.SqlState == PostgresErrorCodes.ForeignKeyViolation && exception.ConstraintName == "FK_bots_exchange_accounts")
             {
@@ -79,6 +82,18 @@ internal sealed class StrategyLibraryRepository(NpgsqlDataSource dataSource) : I
 
         foreach (Guid id in change.RemovedBots)
         {
+            BotGuardDb? guard = await connection.QuerySingleOrDefaultAsync<BotGuardDb>(StrategyLibraryRepositoryQueries.GuardBot(Removed(id), transaction, cancellationToken));
+
+            if (guard is { Status: not ("stopped" or "failed") })
+            {
+                throw new LiveBotConflictException("Stop the bot before deleting it.");
+            }
+
+            if (guard is { Open: true })
+            {
+                throw new LiveBotConflictException("The bot has an open position.");
+            }
+
             await connection.ExecuteAsync(StrategyLibraryRepositoryQueries.DeleteBot(id, transaction, cancellationToken));
         }
 
@@ -100,6 +115,53 @@ internal sealed class StrategyLibraryRepository(NpgsqlDataSource dataSource) : I
         await transaction.CommitAsync(cancellationToken);
 
         return true;
+    }
+
+    /// <summary>
+    ///     A bot that trades keeps every setting; one with an open position keeps the account, the instrument and the interval it
+    ///     holds the position with. A new bot has nothing to keep.
+    /// </summary>
+    private static void Guard(BotGuardDb? guard)
+    {
+        if (guard is null || !guard.Changed)
+        {
+            return;
+        }
+
+        if (guard.Status is not ("stopped" or "failed"))
+        {
+            throw new LiveBotConflictException("Stop the bot before changing it.");
+        }
+
+        if (!guard.Open)
+        {
+            return;
+        }
+
+        var errors = new List<BotError>();
+        AddKept(errors, guard.AccountChanged, BotField.Account, "account");
+        AddKept(errors, guard.CategoryChanged, BotField.Category, "category");
+        AddKept(errors, guard.SymbolChanged, BotField.Symbol, "instrument");
+        AddKept(errors, guard.IntervalChanged, BotField.Interval, "interval");
+
+        if (errors.Count > 0)
+        {
+            throw new BotValidationException(errors);
+        }
+    }
+
+    private static void AddKept(List<BotError> errors, bool changed, BotField field, string what)
+    {
+        if (changed)
+        {
+            errors.Add(new BotError(field, null, $"The bot has an open position: close it before changing the {what}."));
+        }
+    }
+
+    /// <summary>A row to guard the deletion of a bot with: only its id counts.</summary>
+    private static BotDb Removed(Guid id)
+    {
+        return new BotDb { Id = id, Name = "", ParameterValues = "{}", Category = "", Symbol = "", Interval = "" };
     }
 
     public async Task<Strategy?> GetStrategyAsync(Guid id, CancellationToken cancellationToken)

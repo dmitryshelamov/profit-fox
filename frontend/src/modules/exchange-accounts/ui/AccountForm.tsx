@@ -9,10 +9,6 @@ import { Button } from '@/shared/ui/Button';
 import { createAccount } from '../api';
 import { accountFieldErrors, accountProblem } from '../model/accountProblems';
 
-const environments = [
-  { value: 'testnet', label: 'Testnet' },
-  { value: 'mainnet', label: 'Основная сеть' },
-] as const;
 const input =
   'block h-9 w-full rounded-md border bg-app px-3 text-sm text-text placeholder:text-faint';
 const labelText = 'text-[13px] text-muted';
@@ -22,7 +18,6 @@ export function AccountForm() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
-  const [environment, setEnvironment] = useState('testnet');
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
   const [errors, setErrors] = useState<FieldErrors>({ fields: {}, form: [] });
@@ -34,7 +29,7 @@ export function AccountForm() {
     setSaving(true);
 
     try {
-      const id = await createAccount({ name, environment, apiKey, apiSecret });
+      const id = await createAccount({ name, apiKey, apiSecret });
 
       await queryClient.invalidateQueries({ queryKey: ['exchange-accounts'] });
       await navigate({ to: '/accounts/$accountId', params: { accountId: id } });
@@ -75,23 +70,6 @@ export function AccountForm() {
           onChange={(event) => setName(event.target.value)}
         />
         {problem('name')}
-      </div>
-      <div>
-        <span className={labelText}>Окружение Bybit</span>
-        <div className="mt-1 grid grid-cols-2 gap-1 rounded-md border border-line bg-app p-1">
-          {environments.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              aria-pressed={environment === item.value}
-              className={`h-7 rounded text-sm ${environment === item.value ? 'bg-panel-2 font-bold' : 'text-muted'}`}
-              onClick={() => setEnvironment(item.value)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-        {problem('environment')}
       </div>
       <div>
         <label htmlFor="account-api-key" className={labelText}>

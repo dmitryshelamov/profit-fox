@@ -8,10 +8,6 @@ public sealed class ExchangeAccountBody
     [Required]
     public string Name { get; init; } = string.Empty;
 
-    /// <summary><c>mainnet</c> or <c>testnet</c>.</summary>
-    [Required]
-    public string Environment { get; init; } = string.Empty;
-
     [Required]
     public string ApiKey { get; init; } = string.Empty;
 

@@ -12,7 +12,6 @@ using ProfitFox.Application.Ports.ExchangeAccounts;
 using ProfitFox.Application.Ports.Security;
 using ProfitFox.Domain.Entities.Bots;
 using ProfitFox.Domain.Entities.ExchangeAccounts;
-using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Repositories;
@@ -32,7 +31,6 @@ public class ExchangeAccountHandlersTests
     private static readonly ExchangeAccount Account = new ExchangeAccount(
         Guid.Parse("00000000-0000-0000-0000-0000000000a1"),
         "Основной",
-        ExchangeEnvironment.Testnet,
         "api-key",
         100,
         new HashSet<MarketCategory> { MarketCategory.Spot },
@@ -143,7 +141,7 @@ public class ExchangeAccountHandlersTests
     {
         var balance = new AccountBalance(1675.31m, [new CoinBalance("USDT", 1000m, 1000m)]);
         (ISecretProtector protector, IExchangeKeyInspector inspector) = Exchange();
-        inspector.GetBalanceAsync(ExchangeEnvironment.Testnet, "api-key", "api-secret", Arg.Any<CancellationToken>()).Returns(balance);
+        inspector.GetBalanceAsync("api-key", "api-secret", Arg.Any<CancellationToken>()).Returns(balance);
 
         AccountBalance? read = await new GetExchangeAccountBalanceQueryHandler(_accounts, inspector, protector)
             .Handle(new GetExchangeAccountBalanceQuery(Account.Id), CancellationToken.None);
@@ -156,7 +154,7 @@ public class ExchangeAccountHandlersTests
     public async Task Balance_of_a_key_bybit_no_longer_accepts_is_a_conflict()
     {
         (ISecretProtector protector, IExchangeKeyInspector inspector) = Exchange();
-        inspector.GetBalanceAsync(Arg.Any<ExchangeEnvironment>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        inspector.GetBalanceAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new ExchangeKeyRejectedException("Bybit does not accept the key: API key is invalid."));
 
         ConflictException exception = await Should.ThrowAsync<ConflictException>(() =>
@@ -176,7 +174,7 @@ public class ExchangeAccountHandlersTests
             new GetExchangeAccountBalanceQueryHandler(_accounts, inspector, protector).Handle(new GetExchangeAccountBalanceQuery(Account.Id), CancellationToken.None));
 
         exception.Message.ShouldBe("The secret of the account does not decrypt with the current master key; delete the account and add it again.");
-        await inspector.DidNotReceiveWithAnyArgs().GetBalanceAsync(default, default!, default!, default);
+        await inspector.DidNotReceiveWithAnyArgs().GetBalanceAsync(default!, default!, default);
     }
 
     // The account was deleted between reading it and reading its secret.
@@ -188,7 +186,7 @@ public class ExchangeAccountHandlersTests
 
         (await new GetExchangeAccountBalanceQueryHandler(_accounts, inspector, protector).Handle(new GetExchangeAccountBalanceQuery(Account.Id), CancellationToken.None))
             .ShouldBeNull();
-        await inspector.DidNotReceiveWithAnyArgs().GetBalanceAsync(default, default!, default!, default);
+        await inspector.DidNotReceiveWithAnyArgs().GetBalanceAsync(default!, default!, default);
     }
 
     [Test]
@@ -198,7 +196,7 @@ public class ExchangeAccountHandlersTests
 
         (await new GetExchangeAccountBalanceQueryHandler(_accounts, inspector, protector).Handle(new GetExchangeAccountBalanceQuery(Guid.NewGuid()), CancellationToken.None))
             .ShouldBeNull();
-        await inspector.DidNotReceiveWithAnyArgs().GetBalanceAsync(default, default!, default!, default);
+        await inspector.DidNotReceiveWithAnyArgs().GetBalanceAsync(default!, default!, default);
     }
 
     private static (ISecretProtector Protector, IExchangeKeyInspector Inspector) Exchange()

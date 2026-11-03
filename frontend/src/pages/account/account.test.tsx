@@ -2,13 +2,13 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { fakeApi, json, problem } from '@/test/fakeApi';
-import { botId, botSummary, testnetAccount } from '@/test/fixtures';
+import { botId, botSummary, exchangeAccount } from '@/test/fixtures';
 import { renderApp } from '@/test/renderApp';
 
-const path = `/accounts/${testnetAccount.id}`;
-const accountUrl = `GET /api/exchange-accounts/${testnetAccount.id}`;
-const balanceUrl = `GET /api/exchange-accounts/${testnetAccount.id}/balance`;
-const details = { ...testnetAccount, bots: [{ id: botId, name: 'BTC EMA час' }] };
+const path = `/accounts/${exchangeAccount.id}`;
+const accountUrl = `GET /api/exchange-accounts/${exchangeAccount.id}`;
+const balanceUrl = `GET /api/exchange-accounts/${exchangeAccount.id}/balance`;
+const details = { ...exchangeAccount, bots: [{ id: botId, name: 'BTC EMA час' }] };
 const balance = {
   totalEquityUsd: '1675.31',
   coins: [
@@ -27,7 +27,7 @@ describe('account page', () => {
     fakeApi({ [accountUrl]: () => json(details) });
     renderApp(path);
 
-    expect(await screen.findByText('XKz8apikeyTESTNET')).toBeInTheDocument();
+    expect(await screen.findByText('XKz8apikeyMAIN')).toBeInTheDocument();
     expect(screen.getByLabelText('Secret скрыт')).toHaveTextContent('••••••••');
     expect(screen.getByRole('link', { name: 'BTC EMA час' })).toHaveAttribute(
       'href',
@@ -43,7 +43,7 @@ describe('account page', () => {
     });
     renderApp(path);
 
-    await screen.findByText('XKz8apikeyTESTNET');
+    await screen.findByText('XKz8apikeyMAIN');
     expect(requests.some((request) => request.url.endsWith('/balance'))).toBe(false);
 
     await userEvent.click(screen.getByRole('button', { name: 'Показать баланс' }));
@@ -75,7 +75,7 @@ describe('account page', () => {
     let name = 'Проверка';
     const requests = fakeApi({
       [accountUrl]: () => json({ ...details, name }),
-      [`PUT /api/exchange-accounts/${testnetAccount.id}`]: async (request) => {
+      [`PUT /api/exchange-accounts/${exchangeAccount.id}`]: async (request) => {
         name = ((await request.json()) as { name: string }).name;
 
         return new Response(null, { status: 204 });
@@ -97,7 +97,7 @@ describe('account page', () => {
     let name = 'Проверка';
     fakeApi({
       [accountUrl]: () => json({ ...details, name }),
-      [`PUT /api/exchange-accounts/${testnetAccount.id}`]: async (request) => {
+      [`PUT /api/exchange-accounts/${exchangeAccount.id}`]: async (request) => {
         name = ((await request.json()) as { name: string }).name;
 
         return new Response(null, { status: 204 });
@@ -106,7 +106,7 @@ describe('account page', () => {
         json([
           {
             ...botSummary,
-            exchangeAccount: { id: testnetAccount.id, name, environment: 'testnet' },
+            exchangeAccount: { id: exchangeAccount.id, name },
           },
         ]),
       'GET /api/strategies': () => json([]),
@@ -128,7 +128,7 @@ describe('account page', () => {
   it('shows the error of the name at the field', async () => {
     fakeApi({
       [accountUrl]: () => json(details),
-      [`PUT /api/exchange-accounts/${testnetAccount.id}`]: () =>
+      [`PUT /api/exchange-accounts/${exchangeAccount.id}`]: () =>
         problem(400, 'x', { errors: { name: ['Name must not be empty.'] } }),
     });
     renderApp(path);
@@ -143,7 +143,7 @@ describe('account page', () => {
   it('shows a failure of the rename without field errors at the field', async () => {
     fakeApi({
       [accountUrl]: () => json(details),
-      [`PUT /api/exchange-accounts/${testnetAccount.id}`]: () => problem(500, 'Server error.'),
+      [`PUT /api/exchange-accounts/${exchangeAccount.id}`]: () => problem(500, 'Server error.'),
     });
     renderApp(path);
 
@@ -157,7 +157,7 @@ describe('account page', () => {
   it('deletes the account after confirmation and opens the list', async () => {
     fakeApi({
       [accountUrl]: () => json({ ...details, bots: [] }),
-      [`DELETE /api/exchange-accounts/${testnetAccount.id}`]: () =>
+      [`DELETE /api/exchange-accounts/${exchangeAccount.id}`]: () =>
         new Response(null, { status: 204 }),
       'GET /api/exchange-accounts': () => json([]),
     });
@@ -175,7 +175,7 @@ describe('account page', () => {
   it('names the bots that keep the account', async () => {
     fakeApi({
       [accountUrl]: () => json(details),
-      [`DELETE /api/exchange-accounts/${testnetAccount.id}`]: () =>
+      [`DELETE /api/exchange-accounts/${exchangeAccount.id}`]: () =>
         problem(409, 'Bots trade with the exchange account.', { botNames: ['BTC EMA час'] }),
     });
     const { history } = renderApp(path);

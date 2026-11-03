@@ -6,7 +6,6 @@ namespace ProfitFox.Presentation.Contracts.ExchangeAccounts;
 public sealed record ExchangeAccountDetailsResponse(
     Guid Id,
     string Name,
-    string Environment,
     string ApiKey,
     long Uid,
     IReadOnlyList<string> Categories,
@@ -20,7 +19,6 @@ public sealed record ExchangeAccountDetailsResponse(
         return new ExchangeAccountDetailsResponse(
             account.Id,
             account.Name,
-            account.Environment,
             account.ApiKey,
             account.Uid,
             account.Categories,

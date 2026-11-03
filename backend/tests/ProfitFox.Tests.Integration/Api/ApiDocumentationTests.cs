@@ -48,6 +48,21 @@ public class ApiDocumentationTests
         expected.Except(documented).ShouldBeEmpty();
     }
 
+    // The bot page takes the types of live trading from this document.
+    [Test]
+    public async Task OpenApi_document_lists_the_live_trading_endpoints()
+    {
+        using var document = JsonDocument.Parse(await _client.GetStringAsync("/openapi/v1.json"));
+        JsonElement paths = document.RootElement.GetProperty("paths");
+        JsonElement schemas = document.RootElement.GetProperty("components").GetProperty("schemas");
+
+        string[] expected = ["/api/bots/{id}/start", "/api/bots/{id}/pause", "/api/bots/{id}/resume", "/api/bots/{id}/stop", "/api/bots/{id}/close-position", "/api/bots/{id}/positions"];
+        expected.Except(paths.EnumerateObject().Select(path => path.Name)).ShouldBeEmpty();
+        schemas.GetProperty("BotResponse").GetProperty("properties").TryGetProperty("status", out _).ShouldBeTrue();
+        schemas.GetProperty("BotSummaryResponse").GetProperty("properties").TryGetProperty("statusReason", out _).ShouldBeTrue();
+        schemas.TryGetProperty("LivePositionResponse", out _).ShouldBeTrue();
+    }
+
     // The editor takes its API types from this document, so the answers it reads must be described.
     [Test]
     public async Task OpenApi_document_describes_what_the_editor_reads()

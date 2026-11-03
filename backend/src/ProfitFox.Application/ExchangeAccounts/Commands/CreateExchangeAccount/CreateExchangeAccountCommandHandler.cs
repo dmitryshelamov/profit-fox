@@ -4,7 +4,6 @@ using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.ExchangeAccounts;
 using ProfitFox.Application.Ports.Security;
 using ProfitFox.Domain.Entities.ExchangeAccounts;
-using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Repositories;
 
 namespace ProfitFox.Application.ExchangeAccounts.Commands.CreateExchangeAccount;
@@ -20,8 +19,8 @@ public sealed class CreateExchangeAccountCommandHandler(
     /// <exception cref="ExchangeUnavailableException">The exchange did not answer.</exception>
     public async Task<Guid> Handle(CreateExchangeAccountCommand request, CancellationToken cancellationToken)
     {
-        ExchangeEnvironment environment = Read(request);
-        ExchangeKeyInfo key = await InspectAsync(environment, request, cancellationToken);
+        Check(request);
+        ExchangeKeyInfo key = await InspectAsync(request, cancellationToken);
         IReadOnlyList<string> problems = ExchangeKeyRules.Check(key);
 
         if (problems.Count > 0)
@@ -29,28 +28,23 @@ public sealed class CreateExchangeAccountCommandHandler(
             throw KeyError(string.Join(" ", problems));
         }
 
-        var account = new ExchangeAccount(Guid.NewGuid(), request.Name, environment, request.ApiKey, key.Uid, key.TradableCategories, time.GetUtcNow());
+        var account = new ExchangeAccount(Guid.NewGuid(), request.Name, request.ApiKey, key.Uid, key.TradableCategories, time.GetUtcNow());
 
         if (!await repository.AddAsync(account, protector.Encrypt(account.Id, request.ApiSecret), cancellationToken))
         {
-            throw KeyError($"Bybit account {key.Uid} is already added in {environment.ToCode()}.");
+            throw KeyError($"Bybit account {key.Uid} is already added.");
         }
 
         return account.Id;
     }
 
-    private static ExchangeEnvironment Read(CreateExchangeAccountCommand request)
+    private static void Check(CreateExchangeAccountCommand request)
     {
         var errors = new Dictionary<string, string>();
 
         if (string.IsNullOrWhiteSpace(request.Name))
         {
             errors["name"] = "Name must not be empty.";
-        }
-
-        if (!ExchangeAccountCodes.TryParseEnvironment(request.Environment, out ExchangeEnvironment environment))
-        {
-            errors["environment"] = "Environment must be mainnet or testnet.";
         }
 
         if (string.IsNullOrWhiteSpace(request.ApiKey))
@@ -63,14 +57,17 @@ public sealed class CreateExchangeAccountCommandHandler(
             errors["apiSecret"] = "API secret must not be empty.";
         }
 
-        return errors.Count > 0 ? throw new ValidationFailedException(errors) : environment;
+        if (errors.Count > 0)
+        {
+            throw new ValidationFailedException(errors);
+        }
     }
 
-    private async Task<ExchangeKeyInfo> InspectAsync(ExchangeEnvironment environment, CreateExchangeAccountCommand request, CancellationToken cancellationToken)
+    private async Task<ExchangeKeyInfo> InspectAsync(CreateExchangeAccountCommand request, CancellationToken cancellationToken)
     {
         try
         {
-            return await inspector.InspectAsync(environment, request.ApiKey, request.ApiSecret, cancellationToken);
+            return await inspector.InspectAsync(request.ApiKey, request.ApiSecret, cancellationToken);
         }
         catch (ExchangeKeyRejectedException exception)
         {
