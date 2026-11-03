@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Threading.Channels;
 
 using ProfitFox.Application.Exceptions;
@@ -16,7 +15,6 @@ using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Repositories;
-using ProfitFox.Domain.Services.LiveTrading;
 using ProfitFox.Domain.Services.Strategies.Execution;
 using ProfitFox.Domain.ValueObjects.LiveTrading;
 using ProfitFox.Domain.ValueObjects.MarketData;
@@ -25,10 +23,19 @@ using ProfitFox.Domain.ValueObjects.Strategies;
 namespace ProfitFox.Application.LiveTrading.Runtime;
 
 /// <summary>
-///     Keeps one live bot for the take of its lease. Every input goes through one queue and one at a time, so the run of the
-///     strategy needs no lock; every change is written in one unit of work with the lease checked first, and orders go to the
-///     exchange only once they are written. Any gap, a restart, a reconnect or a resume rebuilds the run from the database.
+///     Trades one live bot while this Worker holds its lease.
+///     <list type="number">
+///         <item><see cref="RunAsync" /> takes the lease, subscribes to candles and to the account and puts every event into one queue.</item>
+///         <item><see cref="RebuildAsync" /> builds the run of the strategy from the database, warms up the indicators, applies what the exchange did meanwhile and reconciles the books with the exchange.</item>
+///         <item>The loop takes the events one by one: <see cref="AdvanceAsync" /> moves the bot by its status, <see cref="HandleAsync" /> applies the event, <see cref="SendAsync" /> sends the orders and cancels that are due.</item>
+///     </list>
+///     Events are handled one at a time, so the run needs no lock. Every change goes through <c>WriteAsync</c>: one unit of
+///     work that checks the lease first. Orders go to the exchange only after they are written.
 /// </summary>
+/// <remarks>
+///     <c>_bot</c>, <c>_orders</c> and <c>_run</c> change inside a unit of work and run ahead of the database when it rolls back. Any
+///     failure of an event is therefore followed by <see cref="RebuildAsync" />, and so is a gap in a stream or a resume.
+/// </remarks>
 internal sealed class LiveBotSession(
     LeasedBot leased,
     ILiveBotRepository repository,
@@ -48,17 +55,18 @@ internal sealed class LiveBotSession(
     WorkerIdentity worker,
     TimeProvider time)
 {
-    // The most closed candles one request of the exchange gives, which the indicators are warmed up with.
-    private const int WarmUpCandles = 1000;
-
     // How many times the books are compared with the exchange before the bots of the account and the symbol stop.
     private const int ReconcileAttempts = 3;
 
     private readonly Channel<LiveInput> _inputs = Channel.CreateUnbounded<LiveInput>(new UnboundedChannelOptions { SingleReader = true });
+    private static readonly Task<IReadOnlyList<OrderCommand>> NoCommands = Task.FromResult<IReadOnlyList<OrderCommand>>([]);
+
+    // The unfinished orders of the bot by number.
     private readonly Dictionary<int, LiveOrder> _orders = [];
 
-    // The ends the exchange told of orders whose fills have not all come yet.
     private readonly Guid _id = leased.Bot.BotId;
+    private readonly LiveBotReconciler _reconciler = new LiveBotReconciler(repository, library, ledger, catalog, executor, journal, worker, time);
+    private readonly LiveWarmUpHistory _history = new LiveWarmUpHistory(history, time);
     private LiveBot _bot = leased.Bot;
     private LiveBotContext _context = null!;
     private StrategyRun _run = null!;
@@ -113,7 +121,7 @@ internal sealed class LiveBotSession(
 
             if (_bot.SessionFailures > 0 || _bot.SessionError is not null)
             {
-                await WriteAsync(_ => Task.FromResult<IReadOnlyList<OrderCommand>>([]), bot => bot.SessionUp(), lease.Token);
+                await WriteBotAsync(bot => bot.SessionUp(), lease.Token);
             }
 
             while (!await AdvanceAsync(lease.Token))
@@ -223,7 +231,7 @@ internal sealed class LiveBotSession(
                     _orders[order.Number] = order;
                 }
 
-                _run = StrategyRun.Restore(_context.Strategy.Definition, _context.Strategy.Catalog(), _bot.ParameterValues, _context.Conditions, Snapshot(position, pastPnl));
+                _run = StrategyRun.Restore(_context.Strategy.Definition, _context.Strategy.Catalog(), _bot.ParameterValues, _context.Conditions, LiveRunMapping.Snapshot(position, pastPnl, _orders.Values, _bot.LastOrderNumber));
 
                 return 0;
             },
@@ -244,34 +252,6 @@ internal sealed class LiveBotSession(
         {
             await WriteAsync(token => Task.FromResult(_run.Handle(new RunStarted(time.GetUtcNow()))), bot => bot.Started(), cancellationToken);
         }
-    }
-
-    private RunSnapshot Snapshot(LivePosition? position, decimal pastPnl)
-    {
-        return new RunSnapshot(
-            position?.Number ?? 1,
-            position?.Quantity ?? 0m,
-            position?.Invested ?? 0m,
-            position?.Collateral ?? 0m,
-            pastPnl,
-            position?.RealizedPnl ?? 0m,
-            position?.Fees ?? 0m,
-            position?.LastEntryPrice,
-            position?.LastEntryAt,
-            position?.Closing ?? false,
-            position?.SkippedOrders ?? 0,
-            [
-                .. _orders.Values.Select(order => new RunOrder(
-                    RunId(order.Number),
-                    order.NodePath,
-                    order.Side,
-                    order.Price,
-                    order.Type == OrderType.Limit ? order.Quantity - order.FilledQuantity : null,
-                    order.Status is LiveOrderStatus.PendingCancel or LiveOrderStatus.CancelSent,
-                    order.Reserve,
-                    order.FilledQuantity > 0m))
-            ],
-            _bot.LastOrderNumber);
     }
 
     /// <summary>The fills and the ends of the orders of the bot that the exchange reported while nobody listened.</summary>
@@ -316,9 +296,10 @@ internal sealed class LiveBotSession(
         }
     }
 
+    /// <summary>Compares the books with the exchange and stops the bots of a difference that stays after the exchange is read again.</summary>
     private async Task ReconcileAsync(CancellationToken cancellationToken)
     {
-        (IReadOnlyList<Guid> bots, IReadOnlyList<string> differences) = await CompareAsync(cancellationToken);
+        (IReadOnlyList<Guid> bots, IReadOnlyList<string> differences) = await _reconciler.CompareAsync(_context, cancellationToken);
 
         // A fill may land between the catch-up and the read of the exchange, and a neighbour bot may write its fill a moment after
         // the exchange shows it: the books are read again right away and once more after a pause before any bot stops.
@@ -330,138 +311,22 @@ internal sealed class LiveBotSession(
             }
 
             await CatchUpAsync(cancellationToken);
-            (bots, differences) = await CompareAsync(cancellationToken);
+            (bots, differences) = await _reconciler.CompareAsync(_context, cancellationToken);
         }
 
         if (differences.Count > 0)
         {
-            await FailAllAsync(bots, string.Join(" ", differences), cancellationToken);
+            _bot = await _reconciler.FailAllAsync(leased, bots, string.Join(" ", differences), cancellationToken) ?? _bot;
         }
     }
 
-    /// <summary>The bots the books of this bot are compared with, and what differs.</summary>
-    private async Task<(IReadOnlyList<Guid> Bots, IReadOnlyList<string> Differences)> CompareAsync(CancellationToken cancellationToken)
-    {
-        Bot bot = _context.Bot;
-        IReadOnlyList<Bot> neighbours = await NeighboursAsync(cancellationToken);
-        var holdings = new List<BotHolding>();
-        var pending = new HashSet<ClientOrderId>();
-
-        foreach (Bot neighbour in neighbours)
-        {
-            LiveBot live = await repository.GetAsync(neighbour.Id, cancellationToken);
-
-            if (live.StrategyVersion is not { } number)
-            {
-                continue;
-            }
-
-            StrategyDirection direction = neighbour.Id == _id
-                ? _context.Direction
-                : (await library.GetVersionAsync(neighbour.StrategyId, number, cancellationToken))!.Snapshot.Definition.Direction;
-            LivePosition? position = (await repository.GetPositionsAsync(neighbour.Id, cancellationToken)).FirstOrDefault();
-            LiveOrder[] unfinished = [.. (await repository.GetOrdersAsync(neighbour.Id, cancellationToken)).Where(Unfinished)];
-            pending.UnionWith(unfinished.Where(order => order.Status == LiveOrderStatus.PendingSubmit).Select(order => order.ClientId));
-            holdings.Add(new BotHolding(
-                neighbour.Id,
-                direction,
-                position?.ClosedAt is null ? position?.Quantity ?? 0m : 0m,
-                [.. unfinished.Where(order => order.Status != LiveOrderStatus.PendingSubmit).Select(order => order.Number)]));
-        }
-
-        var ids = holdings.Select(holding => holding.BotId).ToHashSet();
-        ClientOrderId[] open =
-        [
-            .. (await ledger.GetOpenOrdersAsync(_context.Key, bot.Instrument, cancellationToken))
-                .Select(order => ClientOrderId.TryParse(order.ClientId, out ClientOrderId? id) ? id : null)
-                .OfType<ClientOrderId>()
-                .Where(id => ids.Contains(id.BotId) && !pending.Contains(id))
-        ];
-        var finished = new List<ClientOrderId>();
-
-        foreach (BotHolding holding in holdings)
-        {
-            foreach (ClientOrderId id in holding.ActiveOrders.Select(number => new ClientOrderId(holding.BotId, number)).Where(id => !open.Contains(id)))
-            {
-                if (await ledger.FindOrderAsync(_context.Key, bot.Instrument, id.Code, cancellationToken) is { State: not ExchangeOrderState.Open })
-                {
-                    finished.Add(id);
-                }
-            }
-        }
-
-        decimal held = await ledger.GetHoldingAsync(_context.Key, bot.Instrument, _context.BaseCoin, cancellationToken);
-        IReadOnlyList<string> differences = Reconciliation.Check(bot.Instrument.Category, _context.Conditions.Rules.QuantityStep, holdings, new ExchangeHoldings(held, open, finished));
-
-        return ([.. holdings.Select(holding => holding.BotId)], differences);
-    }
-
-    /// <summary>The bots of the account on the instrument of this bot, on the spot on any instrument of its coin.</summary>
-    private async Task<IReadOnlyList<Bot>> NeighboursAsync(CancellationToken cancellationToken)
-    {
-        Bot bot = _context.Bot;
-        IReadOnlyList<Bot> bots = [.. (await library.GetBotsAsync(cancellationToken)).Where(other => other.ExchangeAccountId == bot.ExchangeAccountId)];
-
-        if (bot.Instrument.Category == MarketCategory.Linear)
-        {
-            return [.. bots.Where(other => other.Instrument == bot.Instrument)];
-        }
-
-        var coins = (await catalog.ListAsync(MarketCategory.Spot, cancellationToken)).ToDictionary(item => item.Symbol, item => item.BaseCoin);
-
-        return [.. bots.Where(other => other.Instrument.Category == MarketCategory.Spot && coins.GetValueOrDefault(other.Instrument.Symbol) == _context.BaseCoin)];
-    }
-
-    /// <summary>Stops every working bot of the difference with its reason; a fix is never guessed.</summary>
-    private async Task FailAllAsync(IEnumerable<Guid> bots, string reason, CancellationToken cancellationToken)
-    {
-        journal.Failed(_id, reason);
-        await executor.ExecuteAsync(
-            async token =>
-            {
-                foreach (Guid id in bots)
-                {
-                    LiveBot bot = id == _id
-                        ? await repository.LockLeasedAsync(_id, worker.Id, leased.Epoch, token) ?? throw new LeaseLostException()
-                        : (await repository.LockAsync(id, time.GetUtcNow(), token))!;
-
-                    if (bot.Status is LiveBotStatus.Running or LiveBotStatus.Paused)
-                    {
-                        bot = bot.Fail(reason);
-                        await repository.SaveAsync(bot, time.GetUtcNow(), token);
-                    }
-
-                    if (id == _id)
-                    {
-                        _bot = bot;
-                    }
-                }
-
-                return 0;
-            },
-            cancellationToken);
-    }
-
-    /// <summary>Gives the run the closed candles of the history but the last one, which is returned.</summary>
     /// <summary>
     ///     Warms the indicators up with the closed candles of the history; only a last candle a restored running bot has not seen
     ///     is held back for the strategy, and returned.
     /// </summary>
     private async Task<Candle?> WarmUpAsync(bool fresh, CancellationToken cancellationToken)
     {
-        Bot bot = _context.Bot;
-        DateTimeOffset now = time.GetUtcNow();
-        // A Monday at midnight opens a candle of every interval; a month is taken at its longest.
-        DateTimeOffset aligned = DateTimeOffset.UnixEpoch.AddDays(4);
-        TimeSpan length = bot.Interval.CandleEnd(aligned) - aligned;
-        var candles = new List<Candle>();
-
-        await foreach (IReadOnlyList<Candle> page in history.GetCandlePagesAsync(bot.Instrument, bot.Interval, now - length * WarmUpCandles, now, cancellationToken))
-        {
-            candles.AddRange(page.Where(candle => candle.IsClosedAt(bot.Interval, now)));
-        }
-
-        Candle[] closed = [.. candles.DistinctBy(candle => candle.OpenTime).OrderBy(candle => candle.OpenTime).TakeLast(WarmUpCandles)];
+        Candle[] closed = await _history.ClosedCandlesAsync(_context.Bot.Instrument, _context.Bot.Interval, cancellationToken);
 
         if (closed.Length == 0)
         {
@@ -469,7 +334,7 @@ internal sealed class LiveBotSession(
         }
 
         Candle last = closed[^1];
-        bool unseen = !fresh && _bot.Status == LiveBotStatus.Running && last.OpenTime > (_bot.LastBarAt ?? DateTimeOffset.MinValue);
+        bool unseen = !fresh && _bot.Awaits(last.OpenTime);
 
         foreach (Candle candle in unseen ? closed[..^1] : closed)
         {
@@ -481,7 +346,7 @@ internal sealed class LiveBotSession(
         // The history may lag behind the stream: the bot never goes back to a candle before the last it saw.
         if (!unseen && !(_bot.LastBarAt >= last.OpenTime))
         {
-            await WriteAsync(_ => Task.FromResult<IReadOnlyList<OrderCommand>>([]), live => live with { LastBarAt = last.OpenTime }, cancellationToken);
+            await WriteBotAsync(live => live with { LastBarAt = last.OpenTime }, cancellationToken);
         }
 
         return unseen ? last : null;
@@ -501,7 +366,7 @@ internal sealed class LiveBotSession(
             case CandleInput { Candle: var candle }:
                 _lastClose = candle.Close.Value;
 
-                if (_bot.Status == LiveBotStatus.Running && candle.OpenTime > (_bot.LastBarAt ?? DateTimeOffset.MinValue))
+                if (_bot.Awaits(candle.OpenTime))
                 {
                     await CandleAsync(candle, cancellationToken);
                 }
@@ -547,12 +412,7 @@ internal sealed class LiveBotSession(
     private Task CandleAsync(Candle candle, CancellationToken cancellationToken)
     {
         return WriteAsync(
-            _ =>
-            {
-                bool seen = _bot.LastBarAt >= candle.OpenTime;
-
-                return Task.FromResult(!seen && _bot.Status == LiveBotStatus.Running ? _run.Handle(Bar(candle)) : []);
-            },
+            _ => _bot.Awaits(candle.OpenTime) ? Task.FromResult(_run.Handle(Bar(candle))) : NoCommands,
             bot => bot.LastBarAt >= candle.OpenTime ? bot : bot with { LastBarAt = candle.OpenTime },
             cancellationToken);
     }
@@ -578,7 +438,6 @@ internal sealed class LiveBotSession(
 
                 return [];
             },
-            bot => bot,
             cancellationToken);
     }
 
@@ -625,7 +484,7 @@ internal sealed class LiveBotSession(
                     next = next.Grown(order.FilledQuantity, order.FilledValue, order.Fee, filled);
                     await SaveOrderAsync(next, token);
                     decimal price = value > 0m ? value / grown : live.Price ?? _lastClose ?? 0m;
-                    commands.AddRange(Apply(new OrderFilled(time.GetUtcNow(), RunId(live.Number), grown, price, filled, fee, Asset(order.FeeCoin))));
+                    commands.AddRange(Apply(new OrderFilled(time.GetUtcNow(), LiveRunMapping.RunId(live.Number), grown, price, filled, fee, Asset(order.FeeCoin))));
 
                     if (filled)
                     {
@@ -639,14 +498,14 @@ internal sealed class LiveBotSession(
                     case ExchangeOrderState.Cancelled:
                         // An order done with no growth left: the run keeps what it got, the order keeps how it ended.
                         await SaveOrderAsync(order.State == ExchangeOrderState.Filled ? next.Completed() : next.Cancelled(), token);
-                        commands.AddRange(Apply(new OrderCancelled(time.GetUtcNow(), RunId(live.Number))));
+                        commands.AddRange(Apply(new OrderCancelled(time.GetUtcNow(), LiveRunMapping.RunId(live.Number))));
 
                         break;
                     case ExchangeOrderState.Rejected:
                         LiveOrder rejected = next.Rejected(order.RejectReason ?? "Bybit rejected the order.");
                         await SaveOrderAsync(rejected, token);
                         _bot = _bot.Fail(rejected.RejectReason!);
-                        commands.AddRange(Apply(new OrderCancelled(time.GetUtcNow(), RunId(live.Number))));
+                        commands.AddRange(Apply(new OrderCancelled(time.GetUtcNow(), LiveRunMapping.RunId(live.Number))));
 
                         break;
                     default:
@@ -657,7 +516,6 @@ internal sealed class LiveBotSession(
 
                 return commands;
             },
-            bot => bot,
             cancellationToken);
     }
 
@@ -678,9 +536,8 @@ internal sealed class LiveBotSession(
                     _bot = _bot.Fail(reason);
                 }
 
-                return Apply(new OrderCancelled(time.GetUtcNow(), RunId(number)));
+                return Apply(new OrderCancelled(time.GetUtcNow(), LiveRunMapping.RunId(number)));
             },
-            bot => bot,
             cancellationToken);
     }
 
@@ -714,35 +571,28 @@ internal sealed class LiveBotSession(
             cancellationToken);
     }
 
+    private Task WriteAsync(Func<CancellationToken, Task<IReadOnlyList<OrderCommand>>> change, CancellationToken cancellationToken)
+    {
+        return WriteAsync(change, bot => bot, cancellationToken);
+    }
+
+    /// <summary>A unit of work that changes only the bot.</summary>
+    private Task WriteBotAsync(Func<LiveBot, LiveBot> bot, CancellationToken cancellationToken)
+    {
+        return WriteAsync(_ => NoCommands, bot, cancellationToken);
+    }
+
     /// <summary>The current position of the run, and the one it closed with this change.</summary>
     private async Task SavePositionsAsync(LivePosition? before, CancellationToken cancellationToken)
     {
-        RunSnapshot snapshot = _run.Snapshot();
         RunState state = _run.State;
 
-        if (state.Closed is { } closed && before is { ClosedAt: null } && before.Number == closed.Number)
+        if (LiveRunMapping.Closed(before, state) is { } closed)
         {
-            await repository.SavePositionAsync(
-                before with { Open = false, Closing = false, Quantity = 0m, Invested = 0m, Collateral = 0m, RealizedPnl = closed.RealizedPnl, Fees = closed.Fees, ClosedAt = closed.At },
-                cancellationToken);
+            await repository.SavePositionAsync(closed, cancellationToken);
         }
 
-        await repository.SavePositionAsync(
-            new LivePosition(
-                _id,
-                snapshot.Position,
-                state.Status == PositionStatus.Open,
-                snapshot.Closing,
-                snapshot.Quantity,
-                snapshot.Invested,
-                snapshot.Collateral,
-                snapshot.RealizedPnl,
-                snapshot.Fees,
-                snapshot.LastEntryPrice,
-                snapshot.LastEntryAt,
-                snapshot.SkippedOrders,
-                null),
-            cancellationToken);
+        await repository.SavePositionAsync(LiveRunMapping.Current(_id, _run.Snapshot(), state), cancellationToken);
     }
 
     private async Task CommandsAsync(IReadOnlyList<OrderCommand> commands, CancellationToken cancellationToken)
@@ -758,7 +608,7 @@ internal sealed class LiveBotSession(
                     RunOrder? active = snapshot.Orders.SingleOrDefault(order => order.Id == place.OrderId);
                     var order = LiveOrder.New(
                         _id,
-                        Number(place.OrderId),
+                        LiveRunMapping.Number(place.OrderId),
                         snapshot.Position,
                         place.NodePath,
                         place.Side,
@@ -771,7 +621,7 @@ internal sealed class LiveBotSession(
                     await SaveOrderAsync(order, cancellationToken);
 
                     break;
-                case CancelOrder cancel when _orders.TryGetValue(Number(cancel.OrderId), out LiveOrder? target):
+                case CancelOrder cancel when _orders.TryGetValue(LiveRunMapping.Number(cancel.OrderId), out LiveOrder? target):
                     await SaveOrderAsync(target.RequestCancel(now), cancellationToken);
 
                     break;
@@ -796,7 +646,7 @@ internal sealed class LiveBotSession(
     {
         await repository.SaveOrderAsync(order, cancellationToken);
 
-        if (Unfinished(order))
+        if (order.Unfinished)
         {
             _orders[order.Number] = order;
         }
@@ -806,11 +656,6 @@ internal sealed class LiveBotSession(
         }
     }
 
-    private static bool Unfinished(LiveOrder order)
-    {
-        return order.Status is LiveOrderStatus.PendingSubmit or LiveOrderStatus.Active or LiveOrderStatus.PendingCancel or LiveOrderStatus.CancelSent;
-    }
-
     /// <summary>Sends the saved orders and cancels that are due, by number, outside any unit of work.</summary>
     private async Task SendAsync(CancellationToken cancellationToken)
     {
@@ -818,7 +663,7 @@ internal sealed class LiveBotSession(
         LiveOrder[] due =
         [
             .. _orders.Values
-                .Where(order => order.Status is LiveOrderStatus.PendingSubmit or LiveOrderStatus.PendingCancel && (order.NextAttemptAt is null || order.NextAttemptAt <= now))
+                .Where(order => order.DueAt(now))
                 .OrderBy(order => order.Number)
         ];
 
@@ -864,13 +709,8 @@ internal sealed class LiveBotSession(
                         // The order stays on the exchange and is never left unwatched: the bot stops with the reason and asks
                         // again ever more slowly, until Bybit takes the cancel or the owner cancels the order on Bybit.
                         LiveOrder paused = order.Deferred(now);
-                        await WriteAsync(
-                            async token =>
-                            {
-                                await SaveOrderAsync(paused with { UpdatedAt = time.GetUtcNow() }, token);
-
-                                return [];
-                            },
+                        await WriteOrderAsync(
+                            paused,
                             bot => bot.Fail($"Bybit refused to cancel order {code}: {outcome.Reason} Cancel it on Bybit: the bot stops once Bybit shows the order done."),
                             cancellationToken);
                         _ = LaterAsync(new WakeInput(), paused.NextAttemptAt!.Value - now, cancellationToken);
@@ -883,6 +723,12 @@ internal sealed class LiveBotSession(
 
     private Task WriteOrderAsync(LiveOrder order, CancellationToken cancellationToken)
     {
+        return WriteOrderAsync(order, bot => bot, cancellationToken);
+    }
+
+    /// <summary>A unit of work that saves one order, stamped with the time of the write, and changes the bot.</summary>
+    private Task WriteOrderAsync(LiveOrder order, Func<LiveBot, LiveBot> bot, CancellationToken cancellationToken)
+    {
         return WriteAsync(
             async token =>
             {
@@ -890,7 +736,7 @@ internal sealed class LiveBotSession(
 
                 return [];
             },
-            bot => bot,
+            bot,
             cancellationToken);
     }
 
@@ -930,7 +776,6 @@ internal sealed class LiveBotSession(
 
                             return [];
                         },
-                        bot => bot,
                         cancellationToken);
                     await SendAsync(cancellationToken);
 
@@ -939,14 +784,14 @@ internal sealed class LiveBotSession(
 
                 if (_orders.Count == 0)
                 {
-                    await WriteAsync(_ => Task.FromResult<IReadOnlyList<OrderCommand>>([]), bot => bot.Stopped(), cancellationToken);
+                    await WriteBotAsync(bot => bot.Stopped(), cancellationToken);
                 }
 
                 return false;
             case LiveBotStatus.Stopped or LiveBotStatus.Failed when _bot.CloseRequested:
                 if (_run.State.Status is PositionStatus.Open && _orders.Count == 0)
                 {
-                    await WriteAsync(token => Task.FromResult(_run.Close(time.GetUtcNow())), bot => bot, cancellationToken);
+                    await WriteAsync(_ => Task.FromResult(_run.Close(time.GetUtcNow())), cancellationToken);
                     await SendAsync(cancellationToken);
 
                     return false;
@@ -954,7 +799,7 @@ internal sealed class LiveBotSession(
 
                 if (_run.State.Status is not (PositionStatus.Open or PositionStatus.Closing) && _orders.Count == 0)
                 {
-                    await WriteAsync(_ => Task.FromResult<IReadOnlyList<OrderCommand>>([]), bot => bot.Closed(), cancellationToken);
+                    await WriteBotAsync(bot => bot.Closed(), cancellationToken);
 
                     return true;
                 }
@@ -965,15 +810,5 @@ internal sealed class LiveBotSession(
             default:
                 return false;
         }
-    }
-
-    private static string RunId(int number)
-    {
-        return string.Create(CultureInfo.InvariantCulture, $"o-{number}");
-    }
-
-    private static int Number(string runId)
-    {
-        return int.Parse(runId.AsSpan(2), CultureInfo.InvariantCulture);
     }
 }
