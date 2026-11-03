@@ -329,7 +329,7 @@ internal sealed class LiveBotSession(
             // A cancel of an order the exchange never took ends the order.
             if (order.Status == LiveOrderStatus.CancelSent || (order.Status == LiveOrderStatus.PendingCancel && order.Attempts == 0 && order.ExchangeOrderId is null))
             {
-                await EndAsync(order.Number, LiveOrderStatus.Cancelled, null, cancellationToken);
+                await EndAsync(order.Number, live => live.Cancelled(), cancellationToken);
             }
 
             return;
@@ -642,24 +642,14 @@ internal sealed class LiveBotSession(
             async token =>
             {
                 var commands = new List<OrderCommand>();
-                LiveOrder next = live with
-                {
-                    ExchangeOrderId = order.ExchangeId,
-                    Status = live.Status == LiveOrderStatus.PendingSubmit ? LiveOrderStatus.Active : live.Status
-                };
+                LiveOrder next = live.Taken(order.ExchangeId);
 
                 if (grown > 0m)
                 {
                     decimal value = order.FilledValue - live.FilledValue;
                     decimal fee = order.Fee - live.Fee;
                     bool filled = order.State == ExchangeOrderState.Filled;
-                    next = next with
-                    {
-                        FilledQuantity = order.FilledQuantity,
-                        FilledValue = order.FilledValue,
-                        Fee = order.Fee,
-                        Status = filled ? LiveOrderStatus.Filled : next.Status
-                    };
+                    next = next.Grown(order.FilledQuantity, order.FilledValue, order.Fee, filled);
                     await SaveOrderAsync(next, token);
                     decimal price = value > 0m ? value / grown : live.Price ?? _lastClose ?? 0m;
                     commands.AddRange(Apply(new OrderFilled(time.GetUtcNow(), RunId(live.Number), grown, price, filled, fee, Asset(order.FeeCoin))));
@@ -675,13 +665,14 @@ internal sealed class LiveBotSession(
                     case ExchangeOrderState.Filled:
                     case ExchangeOrderState.Cancelled:
                         // An order done with no growth left: the run keeps what it got, the order keeps how it ended.
-                        await SaveOrderAsync(next with { Status = order.State == ExchangeOrderState.Filled ? LiveOrderStatus.Filled : LiveOrderStatus.Cancelled }, token);
+                        await SaveOrderAsync(order.State == ExchangeOrderState.Filled ? next.Completed() : next.Cancelled(), token);
                         commands.AddRange(Apply(new OrderCancelled(time.GetUtcNow(), RunId(live.Number))));
 
                         break;
                     case ExchangeOrderState.Rejected:
-                        await SaveOrderAsync(next with { Status = LiveOrderStatus.Rejected, RejectReason = order.RejectReason ?? "Bybit rejected the order." }, token);
-                        _bot = _bot.Fail(order.RejectReason ?? "Bybit rejected the order.");
+                        LiveOrder rejected = next.Rejected(order.RejectReason ?? "Bybit rejected the order.");
+                        await SaveOrderAsync(rejected, token);
+                        _bot = _bot.Fail(rejected.RejectReason!);
                         commands.AddRange(Apply(new OrderCancelled(time.GetUtcNow(), RunId(live.Number))));
 
                         break;
@@ -701,15 +692,15 @@ internal sealed class LiveBotSession(
     ///     Ends an order without a fill to come; a refusal stops the bot with its reason first, so the strategy does not place the
     ///     order again.
     /// </summary>
-    private Task EndAsync(int number, LiveOrderStatus status, string? reason, CancellationToken cancellationToken)
+    private Task EndAsync(int number, Func<LiveOrder, LiveOrder> end, CancellationToken cancellationToken)
     {
         return WriteAsync(
             async token =>
             {
-                LiveOrder order = _orders[number];
-                await SaveOrderAsync(order with { Status = status, RejectReason = reason }, token);
+                LiveOrder ended = end(_orders[number]);
+                await SaveOrderAsync(ended, token);
 
-                if (reason is not null)
+                if (ended.RejectReason is { } reason)
                 {
                     _bot = _bot.Fail(reason);
                 }
@@ -792,7 +783,7 @@ internal sealed class LiveBotSession(
             {
                 case PlaceOrder place:
                     RunOrder? active = snapshot.Orders.SingleOrDefault(order => order.Id == place.OrderId);
-                    var order = new LiveOrder(
+                    var order = LiveOrder.New(
                         _id,
                         Number(place.OrderId),
                         snapshot.Position,
@@ -803,19 +794,12 @@ internal sealed class LiveBotSession(
                         place.Quantity ?? QuantityOf(place.Amount),
                         place.Amount,
                         active?.Reserve ?? 0m,
-                        LiveOrderStatus.PendingSubmit,
-                        0m,
-                        null,
-                        null,
-                        0,
-                        null,
-                        now,
                         now);
                     await SaveOrderAsync(order, cancellationToken);
 
                     break;
                 case CancelOrder cancel when _orders.TryGetValue(Number(cancel.OrderId), out LiveOrder? target):
-                    await SaveOrderAsync(target with { Status = LiveOrderStatus.PendingCancel, NextAttemptAt = null, UpdatedAt = now }, cancellationToken);
+                    await SaveOrderAsync(target.RequestCancel(now), cancellationToken);
 
                     break;
             }
@@ -877,22 +861,22 @@ internal sealed class LiveBotSession(
             {
                 case OrderOutcomeKind.Accepted when order.Status == LiveOrderStatus.PendingSubmit:
                     journal.Sent(_id, code);
-                    await WriteOrderAsync(order with { Status = LiveOrderStatus.Active, ExchangeOrderId = outcome.ExchangeId ?? order.ExchangeOrderId }, cancellationToken);
+                    await WriteOrderAsync(order.Taken(outcome.ExchangeId), cancellationToken);
 
                     break;
                 case OrderOutcomeKind.Accepted:
-                    await WriteOrderAsync(order with { Status = LiveOrderStatus.CancelSent }, cancellationToken);
+                    await WriteOrderAsync(order.CancelTaken(), cancellationToken);
 
                     break;
                 case OrderOutcomeKind.AlreadyDone:
-                    await WriteOrderAsync(order with { Status = LiveOrderStatus.CancelSent }, cancellationToken);
+                    await WriteOrderAsync(order.CancelTaken(), cancellationToken);
                     await RefreshAsync(order.Number, cancellationToken);
 
                     break;
                 case OrderOutcomeKind.Transient:
-                    var delay = TimeSpan.FromSeconds(Math.Min(Math.Pow(2, order.Attempts), 60));
-                    await WriteOrderAsync(order with { Attempts = order.Attempts + 1, NextAttemptAt = now + delay }, cancellationToken);
-                    _ = LaterAsync(new WakeInput(), delay, cancellationToken);
+                    LiveOrder deferred = order.Deferred(now);
+                    await WriteOrderAsync(deferred, cancellationToken);
+                    _ = LaterAsync(new WakeInput(), deferred.NextAttemptAt!.Value - now, cancellationToken);
 
                     break;
                 case OrderOutcomeKind.Permanent:
@@ -900,23 +884,23 @@ internal sealed class LiveBotSession(
 
                     if (order.Status == LiveOrderStatus.PendingSubmit)
                     {
-                        await EndAsync(order.Number, LiveOrderStatus.Rejected, outcome.Reason ?? "Bybit refused the order.", cancellationToken);
+                        await EndAsync(order.Number, live => live.Rejected(outcome.Reason ?? "Bybit refused the order."), cancellationToken);
                     }
                     else
                     {
                         // The order stays on the exchange and is never left unwatched: the bot stops with the reason and asks
                         // again ever more slowly, until Bybit takes the cancel or the owner cancels the order on Bybit.
-                        var pause = TimeSpan.FromSeconds(Math.Min(Math.Pow(2, order.Attempts), 60));
+                        LiveOrder paused = order.Deferred(now);
                         await WriteAsync(
                             async token =>
                             {
-                                await SaveOrderAsync(order with { Attempts = order.Attempts + 1, NextAttemptAt = now + pause, UpdatedAt = time.GetUtcNow() }, token);
+                                await SaveOrderAsync(paused with { UpdatedAt = time.GetUtcNow() }, token);
 
                                 return [];
                             },
                             bot => bot.Fail($"Bybit refused to cancel order {code}: {outcome.Reason} Cancel it on Bybit: the bot stops once Bybit shows the order done."),
                             cancellationToken);
-                        _ = LaterAsync(new WakeInput(), pause, cancellationToken);
+                        _ = LaterAsync(new WakeInput(), paused.NextAttemptAt!.Value - now, cancellationToken);
                     }
 
                     break;
@@ -968,7 +952,7 @@ internal sealed class LiveBotSession(
                         {
                             foreach (LiveOrder order in cancel)
                             {
-                                await SaveOrderAsync(order with { Status = LiveOrderStatus.PendingCancel, NextAttemptAt = null, UpdatedAt = time.GetUtcNow() }, token);
+                                await SaveOrderAsync(order.RequestCancel(time.GetUtcNow()), token);
                             }
 
                             return [];
