@@ -87,10 +87,10 @@ public sealed record LiveBot(
             : throw new LiveBotConflictException("Only a running or paused bot stops.");
     }
 
-    /// <summary>Stops the bot as <see cref="Stop" /> does; the first reason stays.</summary>
+    /// <summary>Stops the bot as <see cref="Stop" /> does; the first reason stays. A failed bot gives up a close of its position.</summary>
     public LiveBot Fail(string reason)
     {
-        return this with { Status = LiveBotStatus.Stopping, StopReason = StopReason ?? reason };
+        return this with { Status = LiveBotStatus.Stopping, StopReason = StopReason ?? reason, CloseRequested = false };
     }
 
     /// <summary>Every cancel of a stopping bot is confirmed.</summary>

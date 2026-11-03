@@ -518,14 +518,14 @@ internal sealed class LiveBotSession(
                     case ExchangeOrderState.Cancelled:
                         // An order done with no growth left: the run keeps what it got, the order keeps how it ended.
                         await SaveOrderAsync(order.State == ExchangeOrderState.Filled ? next.Completed() : next.Cancelled(), token);
-                        commands.AddRange(Apply(new OrderCancelled(time.GetUtcNow(), LiveRunMapping.RunId(live.Number))));
+                        commands.AddRange(Apply(Cancelled(live)));
 
                         break;
                     case ExchangeOrderState.Rejected:
                         LiveOrder rejected = next.Rejected(order.RejectReason ?? "Bybit rejected the order.");
                         await SaveOrderAsync(rejected, token);
                         _bot = _bot.Fail(rejected.RejectReason!);
-                        commands.AddRange(Apply(new OrderCancelled(time.GetUtcNow(), LiveRunMapping.RunId(live.Number))));
+                        commands.AddRange(Apply(new OrderRejected(time.GetUtcNow(), LiveRunMapping.RunId(live.Number))));
 
                         break;
                     default:
@@ -548,17 +548,29 @@ internal sealed class LiveBotSession(
         return WriteAsync(
             async token =>
             {
-                LiveOrder ended = end(_orders[number]);
+                LiveOrder before = _orders[number];
+                LiveOrder ended = end(before);
                 await SaveOrderAsync(ended, token);
 
                 if (ended.RejectReason is { } reason)
                 {
                     _bot = _bot.Fail(reason);
+
+                    return Apply(new OrderRejected(time.GetUtcNow(), LiveRunMapping.RunId(number)));
                 }
 
-                return Apply(new OrderCancelled(time.GetUtcNow(), LiveRunMapping.RunId(number)));
+                return Apply(Cancelled(before));
             },
             cancellationToken);
+    }
+
+    /// <summary>A cancel the bot asked for is told apart from one it did not ask for: only the latter brings back the exit of a closing position.</summary>
+    private StrategyEvent Cancelled(LiveOrder order)
+    {
+        DateTimeOffset at = time.GetUtcNow();
+        string id = LiveRunMapping.RunId(order.Number);
+
+        return order.Cancelling ? new OrderCancelled(at, id) : new OrderCancelledByVenue(at, id);
     }
 
     /// <summary>The strategy reacts while the bot runs; otherwise only the books are kept.</summary>
@@ -811,7 +823,8 @@ internal sealed class LiveBotSession(
             case LiveBotStatus.Stopped or LiveBotStatus.Failed when _bot.CloseRequested:
                 if (_run.State.Status is PositionStatus.Open && _orders.Count == 0)
                 {
-                    await WriteAsync(_ => Task.FromResult(_run.Close(time.GetUtcNow())), cancellationToken);
+                    // The row is read again under the lock: a renewal may have brought the request of a close the bot gave up since.
+                    await WriteAsync(_ => Task.FromResult(_bot.CloseRequested ? _run.Close(time.GetUtcNow()) : []), cancellationToken);
                     await SendAsync(cancellationToken);
 
                     return false;

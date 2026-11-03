@@ -66,7 +66,7 @@ public class LiveRunTests
     public void Cancelled_exit_of_a_closing_position_is_sold_again(bool strategyRuns)
     {
         StrategyRun run = LadderClosingAfterExitSold(0.4m, Conditions.Neutral);
-        var cancelled = new OrderCancelled(Start, "o-4");
+        var cancelled = new OrderCancelledByVenue(Start, "o-4");
 
         IReadOnlyList<OrderCommand> commands = strategyRuns ? run.Handle(cancelled) : run.Record(cancelled);
 
@@ -99,11 +99,35 @@ public class LiveRunTests
     {
         StrategyRun run = LadderClosingAfterExitSold(0.9995m, Conditions.Reference);
 
-        run.Record(new OrderCancelled(Start, "o-4")).ShouldBeEmpty();
+        run.Record(new OrderCancelledByVenue(Start, "o-4")).ShouldBeEmpty();
 
         run.State.Closed!.Number.ShouldBe(1);
         run.Position.ShouldBe(2);
         run.State.Quantity.ShouldBe(0.0005m);
+    }
+
+    // Scenario "Остановка, пока позиция закрывается": a cancel the bot asked for does not bring the exit back.
+    [Test]
+    public void Exit_cancelled_at_the_request_of_the_bot_is_not_sold_again()
+    {
+        StrategyRun run = LadderClosingAfterExitSold(0.4m, Conditions.Neutral);
+
+        run.Record(new OrderCancelled(Start, "o-4")).ShouldBeEmpty();
+
+        run.State.Closed!.Number.ShouldBe(1);
+        run.State.Quantity.ShouldBe(0.6m);
+    }
+
+    // Scenario "Постоянный отказ биржи": a refused exit is not sold again; the position closes and carries what it holds.
+    [Test]
+    public void Refused_exit_of_a_closing_position_is_not_sold_again()
+    {
+        StrategyRun run = LadderClosingAfterExitSold(0.4m, Conditions.Neutral);
+
+        run.Record(new OrderRejected(Start, "o-4")).ShouldBeEmpty();
+
+        run.State.Closed!.Number.ShouldBe(1);
+        run.State.Quantity.ShouldBe(0.6m);
     }
 
     // The exchange may confirm a cancel the run has already seen.
@@ -112,7 +136,7 @@ public class LiveRunTests
     {
         StrategyRun run = LadderClosingAfterExitSold(0.4m, Conditions.Neutral);
 
-        run.Record(new OrderCancelled(Start, "o-99")).ShouldBeEmpty();
+        run.Record(new OrderCancelledByVenue(Start, "o-99")).ShouldBeEmpty();
 
         run.State.Status.ShouldBe(PositionStatus.Closing);
         run.State.Quantity.ShouldBe(0.6m);
