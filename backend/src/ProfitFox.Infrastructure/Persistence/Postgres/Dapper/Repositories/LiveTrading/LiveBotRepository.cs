@@ -93,6 +93,7 @@ internal sealed class LiveBotRepository(NpgsqlDataSource dataSource, PostgresTra
     public async Task<LiveBot?> LockLeasedAsync(Guid botId, Guid owner, long epoch, CancellationToken cancellationToken)
     {
         PostgresTransaction current = accessor.Current;
+        await current.Connection.ExecuteAsync(LiveBotRepositoryQueries.ShareBot(botId, current.Transaction, cancellationToken));
         LiveBotDb? bot = await current.Connection.QuerySingleOrDefaultAsync<LiveBotDb>(
             LiveBotRepositoryQueries.LockLeased(botId, owner, epoch, current.Transaction, cancellationToken));
 

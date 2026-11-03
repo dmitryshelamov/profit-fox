@@ -133,6 +133,12 @@ internal static class LiveBotRepositoryQueries
             cancellationToken: cancellationToken);
     }
 
+    // The share a new position takes through its foreign key, taken before the live bot, so a session keeps the order of Lock.
+    public static CommandDefinition ShareBot(Guid botId, NpgsqlTransaction transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition("SELECT id FROM bots WHERE id = @BotId FOR KEY SHARE", new { BotId = botId }, transaction, cancellationToken: cancellationToken);
+    }
+
     public static CommandDefinition LockLeased(Guid botId, Guid owner, long epoch, NpgsqlTransaction transaction, CancellationToken cancellationToken)
     {
         return new CommandDefinition(
