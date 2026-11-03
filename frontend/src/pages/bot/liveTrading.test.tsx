@@ -109,6 +109,114 @@ describe('live trading on the bot page', () => {
     expect(screen.getByRole('button', { name: 'Остановить' })).toBeEnabled();
   });
 
+  // Scenario "Действия запущенного бота": each action sends its own request.
+  it.each([
+    ['running', 'Пауза', 'pause'],
+    ['paused', 'Продолжить', 'resume'],
+    ['running', 'Остановить', 'stop'],
+  ])('a %s bot sends %s as its request', async (status, button, action) => {
+    const requests = open({ status }, [], {
+      [`POST /api/bots/${botId}/${action}`]: () => new Response(null, { status: 204 }),
+    });
+
+    await userEvent.click(await screen.findByRole('button', { name: button }));
+
+    await waitFor(() =>
+      expect(
+        requests
+          .filter((request) => request.method === 'POST')
+          .map((request) => new URL(request.url).pathname),
+      ).toEqual([`/api/bots/${botId}/${action}`]),
+    );
+  });
+
+  // A second click while the first action is on its way sends nothing more.
+  it('sends an action once while it is on its way', async () => {
+    let answer = () => {};
+    const requests = open({ status: 'running' }, [], {
+      [`POST /api/bots/${botId}/stop`]: () =>
+        new Promise<Response>((resolve) => {
+          answer = () => resolve(new Response(null, { status: 204 }));
+        }),
+    });
+    const stop = await screen.findByRole('button', { name: 'Остановить' });
+
+    await userEvent.click(stop);
+    await userEvent.click(stop);
+    answer();
+
+    await waitFor(() => expect(stop).toBeEnabled());
+    expect(requests.filter((request) => request.method === 'POST')).toHaveLength(1);
+  });
+
+  it('sends nothing when the owner cancels the confirmation', async () => {
+    const requests = open({ status: 'stopped' }, [position({ orders: [] })]);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Закрыть позицию' }));
+    await userEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Отмена' }),
+    );
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(requests.some((request) => request.method === 'POST')).toBe(false);
+  });
+
+  it('shows why the server refused to close the position', async () => {
+    open({ status: 'stopped' }, [position({ orders: [] })], {
+      [`POST /api/bots/${botId}/close-position`]: () =>
+        problem(409, 'The bot has no open position.'),
+    });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Закрыть позицию' }));
+    await userEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Закрыть позицию' }),
+    );
+
+    expect(await screen.findByText('The bot has no open position.')).toBeInTheDocument();
+  });
+
+  // A stopping bot waits for its cancels: nothing is offered meanwhile.
+  it('offers nothing to a stopping bot', async () => {
+    open({ status: 'stopping' }, [position({ orders: [] })]);
+
+    expect(await screen.findByText('Останавливается')).toBeInTheDocument();
+    for (const name of ['Запустить', 'Пауза', 'Продолжить', 'Остановить', 'Закрыть позицию']) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+    }
+  });
+
+  // A remainder below the minimum is no open position: there is nothing to close.
+  it('offers no close for a position that waits for its entry', async () => {
+    open({ status: 'stopped' }, [position({ status: 'waiting', quantity: '0.0001', orders: [] })]);
+
+    expect(await screen.findByRole('button', { name: 'Запустить' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Закрыть позицию' })).not.toBeInTheDocument();
+  });
+
+  // Requirement "Опрос статуса": the page reads the bot every 5 seconds while it works, and stops once it is stopped.
+  it('reads a working bot every 5 seconds and a stopped one no more', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let status = 'running';
+    const requests = open({}, [], {
+      [`GET /api/bots/${botId}`]: () => json({ ...botDetails, exchangeAccount: account, status }),
+    });
+    await screen.findByText('Запущен');
+    const reads = () =>
+      requests.filter(
+        (request) => request.method === 'GET' && request.url.endsWith(`/api/bots/${botId}`),
+      ).length;
+    const first = reads();
+
+    status = 'stopped';
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+    await screen.findByText('Остановлен');
+    const after = reads();
+    await act(() => vi.advanceTimersByTimeAsync(15000));
+
+    expect(after).toBeGreaterThan(first);
+    expect(reads()).toBe(after);
+  });
+
   // Scenario "Причина ошибки".
   it('shows the reason of a failed bot', async () => {
     open({ status: 'failed', statusReason: 'Insufficient balance.' });
@@ -393,7 +501,8 @@ describe('live trading on the bot page', () => {
     expect(within(current).getByText(/Insufficient balance\./)).toBeInTheDocument();
   });
 
-  it('lists the closed positions the newest first', async () => {
+  // The server sends the positions the newest first; the page keeps its order.
+  it('lists the closed positions in the order of the server', async () => {
     open({ status: 'stopped' }, [
       position({ number: 3, status: 'waiting', quantity: '0', orders: [] }),
       position({

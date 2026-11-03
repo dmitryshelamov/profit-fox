@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 
 import { fakeApi, json, problem } from '@/test/fakeApi';
 import { botSummary, emaSummary, ladderSummary, progressOf } from '@/test/fixtures';
@@ -6,6 +6,7 @@ import { renderApp } from '@/test/renderApp';
 
 describe('bot list', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -158,5 +159,28 @@ describe('bot list', () => {
     expect(
       within(screen.getByText('Второй').closest('tr')!).getByText('Запущен'),
     ).toBeInTheDocument();
+  });
+
+  // Requirement "Опрос статуса": the list follows its working bots every 5 seconds, and stops once none works.
+  it('reads the bots every 5 seconds while one of them works', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let status = 'running';
+    const requests = fakeApi({
+      'GET /api/bots': () => json([{ ...botSummary, status }]),
+      'GET /api/strategies': () => json([emaSummary, ladderSummary]),
+    });
+    renderApp('/bots');
+    await screen.findByText('Запущен');
+    const reads = () => requests.filter((request) => request.url.endsWith('/api/bots')).length;
+    const first = reads();
+
+    status = 'stopped';
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+    await screen.findByText('Остановлен');
+    const after = reads();
+    await act(() => vi.advanceTimersByTimeAsync(15000));
+
+    expect(after).toBeGreaterThan(first);
+    expect(reads()).toBe(after);
   });
 });
