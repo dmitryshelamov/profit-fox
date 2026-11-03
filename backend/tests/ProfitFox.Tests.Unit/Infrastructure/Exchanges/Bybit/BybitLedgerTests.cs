@@ -112,8 +112,8 @@ public class BybitLedgerTests
 
         fills.ShouldBe(
         [
-            new ExchangeFill("e-1", "c-1", 0.4m, 100m, 0.0004m, "BTC", DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_000_000)),
-            new ExchangeFill("e-2", "c-1", 0.6m, 101m, 0.06m, "USDT", DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_060_000))
+            new ExchangeFill("e-1", "c-1", 0.4m, 100m, 0.0004m, "BTC", DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_000_000), Spot),
+            new ExchangeFill("e-2", "c-1", 0.6m, 101m, 0.06m, "USDT", DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_060_000), Spot)
         ]);
         BybitRequests.Describe(handler.Requests.Single()).ShouldBe(BybitRequests.Describe("/v5/execution/list?category=spot&symbol=BTCUSDT&orderLinkId=c-1"));
     }

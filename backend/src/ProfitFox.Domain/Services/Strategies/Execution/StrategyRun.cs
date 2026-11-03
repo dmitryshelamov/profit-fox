@@ -249,6 +249,18 @@ public sealed class StrategyRun
                 _orders.Remove(cancelled.OrderId);
 
                 break;
+            case OrderRejected rejected:
+                _orders.Remove(rejected.OrderId);
+
+                break;
+            case OrderCancelledByVenue cancelledByVenue:
+                // An exit with no node belongs to the closing position: what the venue cancelled of it is sold again.
+                if (_orders.Remove(cancelledByVenue.OrderId, out ActiveOrder? removed) && removed.Node is null)
+                {
+                    SellWhatCameWhileClosing();
+                }
+
+                break;
         }
     }
 

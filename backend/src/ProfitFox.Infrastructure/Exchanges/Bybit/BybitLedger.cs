@@ -93,7 +93,7 @@ internal sealed class BybitLedger(HttpClient http, ILoggerFactory loggers, Bybit
         [
             .. trades
                 .OrderBy(trade => trade.Timestamp)
-                .Select(trade => new ExchangeFill(trade.TradeId, trade.ClientOrderId ?? "", trade.Quantity, trade.Price, trade.Fee ?? 0m, trade.FeeAsset ?? "", Utc(trade.Timestamp)))
+                .Select(trade => new ExchangeFill(trade.TradeId, trade.ClientOrderId ?? "", trade.Quantity, trade.Price, trade.Fee ?? 0m, trade.FeeAsset ?? "", Utc(trade.Timestamp), instrument))
         ];
     }
 
