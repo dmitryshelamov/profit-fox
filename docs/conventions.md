@@ -11,7 +11,7 @@ enforces a rule, the check is the source of truth.
   (a bot on the exchange: `LiveBot` with its status and lease, its positions, orders and fills; `ClientOrderId`, the id an
   order carries to the exchange; `Reconciliation` and `StartFunds`, the pure checks against the exchange).
 - `Entities/<Area>` holds entities (`Candle`, `CandleImportJob`, `Bot`, `Backtest`, `BacktestChunk`); `Entities/<Area>/Enums` holds enums
-  and their pure domain extensions (`Interval`, `IntervalExtensions.CandleEnd`, `BacktestStatus`); `Entities/Base` holds
+  and their pure domain extensions (`Interval`, `IntervalExtensions.CandleEnd`, `IntervalExtensions.CandleOpen`, the start of the candle that contains a moment, `BacktestStatus`); `Entities/Base` holds
   `AggregateRoot`. A bot is part of the `StrategyLibrary` aggregate: it must stay valid against the latest version of its
   strategy.
 - `ValueObjects/<Area>` holds value objects (`Instrument`, `Price`, `Volume`, `InstrumentRules`, `StrategySnapshot`,
@@ -48,6 +48,18 @@ enforces a rule, the check is the source of truth.
   list with the pure function `InstrumentSearch.Find`: a case-insensitive substring (spaces around the query are ignored) of the symbol or a coin, symbols that start
   with the query first, then by symbol ordinally, cut to `limit` (1 to 100, 20 by default). Its result carries field errors
   like `GetCandlesQuery`.
+- `MarketData/CandleReadThrough` reads a period of closed candles from storage and fills what is missing with one request
+  of `IMarketHistoryClient.GetCandlesOnceAsync` (a single attempt, at most 1000 candles), writing only the missing closed
+  candles; an `ExchangeException` gives the stored candles and `Unavailable`. It is not a candle import: no job, no lease.
+  `Bots/Queries/GetBotCandles` aligns and cuts the period of a bot's chart (`from` down to the start of its candle, `to` up
+  to the start of the current one, 1000 candles at most) and reads it through.
+- `MarketData/FormingCandles` holds the feeds of the current candle, which only the API uses: `FormingCandleFeeds` (a
+  singleton) keeps one feed per series (`FormingSeries`, instrument and interval) however many connections watch it,
+  subscribes `Ports/MarketData/IFormingCandleStreams` for the first viewer and takes it off after the last, and tells the
+  viewers through `Ports/MarketData/IFormingCandleBroadcast`; its state is `Connecting`, `Live` or `NoData` (a lost
+  connection, a refused or closed subscription, or 90 s of silence). `FormingCandleThrottle` lets one update a second through. A
+  `FormingCandle` is only for showing: it is never stored and never reaches a strategy, so the Worker's code path takes
+  closed candles from `IExchangeStreams` alone.
 - `Exceptions` holds `BaseApplicationException` and its subclasses, also vendor-neutral (`ExchangeException`,
   `ExchangeKeyRejectedException`).
 - `ExchangeAccounts` holds the commands and queries of exchange accounts and `ExchangeKeyRules`, the pure check of what a key may do. The secret of an account is decrypted only in the query
@@ -89,7 +101,8 @@ enforces a rule, the check is the source of truth.
   Bybit follow the pairs and accounts, not the bots: one public socket client whose connections carry one kline topic
   per category, symbol and interval, and one private client per account key with the `order` and `execution` topics.
   The first subscriber of a topic subscribes it at Bybit, the others join; the last to leave takes it off. Every
-  subscriber of a topic gets all its events and a restored connection; a session picks its own orders by `orderLinkId`.
+  subscriber of a topic gets all its events and a restored connection (a listener of `IFormingCandleStreams`, the same
+  singleton, gets every kline update instead of the closed candles only, and also a lost and a closed connection); a session picks its own orders by `orderLinkId`.
 - `Persistence/Postgres/Dapper/Repositories/<Area>` holds repositories, with `Contracts` (`*Db` rows), `Converters`
   (`*DbConverter`) and `Queries` (`*RepositoryQueries`, the SQL). `Persistence/Postgres/FluentMigrator/Migrations` holds
   raw-SQL migrations, `FluentMigrator/Extensions` holds `MigrateToLatestVersion`.
@@ -184,6 +197,14 @@ enforces a rule, the check is the source of truth.
 - `Controllers` holds controllers only (`BotsController`, `BacktestsController`, `InstrumentsController`: `GET /api/market-data/instruments?category&query&limit`
   → `[{ category, symbol, baseCoin, quoteCoin }]`; field errors 400, exchange unavailable 503); request and response types go to
   `Contracts/<Area>` (`Contracts/Bots`, `Contracts/Backtests`).
+- `Hubs` holds SignalR hubs. `BotChartHub` is the first: `/api/hubs/bot-chart` (under `/api`, so the proxy of the web image
+  and of Vite carry it, Vite with `ws: true`). A connection calls `Subscribe(botId)`, which answers `{ state, candle }`
+  (`connecting`, `live` or `noData`; the newest candle or `null`) or fails with `bot_not_found`, then receives
+  `FormingCandle` (`openTime`, `open`, `high`, `low`, `close`, `volume` as decimal strings, `isClosed`) and `FormingStatus`
+  (the state) until `Unsubscribe()` or the disconnect. The hub is not in the OpenAPI document; the frontend writes its
+  message types itself. `BotChartBroadcast` implements `IFormingCandleBroadcast` over `IHubContext`, one group per series;
+  `Program` registers it and SignalR, `InfrastructureRegistrar.Configure` registers `FormingCandleFeeds`, and the Worker has
+  neither.
 - Mark required contract members with `[Required]`, not the C# `required` keyword: a missing JSON property is then
   reported under its own name, not under `$`.
 - An endpoint the frontend calls declares every answer with `[ProducesResponseType]`: the frontend takes its API types
@@ -246,7 +267,14 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
   intervals), `exchange-accounts` (queries, `AccountForm`, `EnvironmentBadge`, `BalanceTable`, server problems of an
   account; the balance query is disabled and runs only on the page's action), `comparison` (the set of results on `useSyncExternalStore` over `sessionStorage`, the bar in
   `AppShell`, the mark checkbox), `market-chart` (`PriceEquityChart` and `EquityComparisonChart` on
-  `lightweight-charts`, fill markers, candles per point). `shared/format` shows decimal strings with thousands
+  `lightweight-charts`, fill markers, candles per point; for the bot chart `BotCandleChart` with volume, fill arrows,
+  dashed order lines and the current candle, over the pure `chartPaging`, `tradeMarkers`, `liveCandles`, `volumeBars` and
+  `orderLines`). `bots` also holds the bot chart's data: `useBotCandles` (pages going back, a minute-by-minute tail,
+  start over when too far behind), `useFormingCandle` over `realtime/followFormingCandle` (the SignalR hub
+  `/api/hubs/bot-chart`, which is not in OpenAPI: its message types are written by hand in `model/formingCandle.ts`,
+  with the reducer and the channel text) and `chartIntervals` (the interval switcher; the `?interval=` of the bot route
+  is read there, the bot's own interval never goes to the address). The router writes text search values as they are, so
+  `?interval=5` is not quoted. `shared/format` shows decimal strings with thousands
   spacing without float math, and UTC dates. Decimal strings become numbers only in `market-chart/model`, for drawing.
 - `src/shared/api` holds the only HTTP client (`openapi-fetch`) and the types generated from the API's OpenAPI document
   in `generated/schema.d.ts`. That file is committed: after changing an API contract, run the API and
@@ -255,4 +283,5 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
   colors.
 - Tests: Vitest next to the code (`*.test.ts(x)`). Pure functions follow red → green → refactor like the backend.
   Screens are tested through `renderApp` against `fakeApi`, which replaces `fetch` with a routing table; an unrouted
-  request answers 404. End-to-end tests in `e2e/` run Playwright against the real API through the `web` image.
+  request answers 404. The test setup replaces `lightweight-charts` with inert series and `@microsoft/signalr` with a silent
+  connection; a test of the channel mocks `followFormingCandle` or the library itself. End-to-end tests in `e2e/` run Playwright against the real API through the `web` image.

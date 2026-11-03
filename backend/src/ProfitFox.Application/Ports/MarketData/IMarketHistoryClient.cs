@@ -16,6 +16,17 @@ public interface IMarketHistoryClient
         DateTimeOffset to,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    ///     One page of the exchange, up to 1000 candles with open time in <c>[from, to)</c>, newest first, in a single attempt: the
+    ///     caller waits for it. Throws <see cref="ExchangeUnavailableException" /> when the exchange does not answer.
+    /// </summary>
+    Task<IReadOnlyList<Candle>> GetCandlesOnceAsync(
+        Instrument instrument,
+        Interval interval,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken);
+
     /// <summary>Whether the exchange lists the symbol in the category; throws <see cref="ExchangeException" /> when the exchange cannot answer.</summary>
     Task<bool> InstrumentExistsAsync(Instrument instrument, CancellationToken cancellationToken);
 }

@@ -14,4 +14,17 @@ public class IntervalCandleCountTests
     {
         interval.CandleCount(DateTimeOffset.Parse(from), DateTimeOffset.Parse(to)).ShouldBe(count);
     }
+
+    [Test]
+    [CancelAfter(2000)]
+    public void Counting_stops_one_past_the_limit_so_a_huge_period_costs_no_more_than_the_limit()
+    {
+        Interval.OneMinute.CandleCount(DateTimeOffset.Parse("0001-01-01T00:00:00Z"), DateTimeOffset.Parse("2100-01-01T00:00:00Z"), limit: 1000).ShouldBe(1001);
+    }
+
+    [Test]
+    public void A_period_within_the_limit_is_counted_in_full()
+    {
+        Interval.OneHour.CandleCount(DateTimeOffset.Parse("2024-01-01T00:00:00Z"), DateTimeOffset.Parse("2024-01-02T00:00:00Z"), limit: 24).ShouldBe(24);
+    }
 }

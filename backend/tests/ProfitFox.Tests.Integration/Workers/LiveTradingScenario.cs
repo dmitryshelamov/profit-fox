@@ -47,9 +47,10 @@ public sealed class LiveTradingScenario : IAsyncDisposable
 
     public IReadOnlyList<WorkerHost> Workers => _workers;
 
-    public static async Task<LiveTradingScenario> CreateAsync()
+    /// <param name="bybitSocketAddress">The streams of Bybit the API's chart hub connects to; without it the API's streams use the live Bybit.</param>
+    public static async Task<LiveTradingScenario> CreateAsync(string? bybitSocketAddress = null)
     {
-        var factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { Workers = 0 };
+        var factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { Workers = 0, BybitSocketAddress = bybitSocketAddress };
         foreach (string category in new[] { "spot", "linear" })
         {
             factory.Bybit.Instruments.Add((category, "BTCUSDT"));
@@ -75,14 +76,23 @@ public sealed class LiveTradingScenario : IAsyncDisposable
         return scenario;
     }
 
-    /// <summary>A trading Worker whose exchange is <see cref="Exchange" />, with <paramref name="settings" /> over its own.</summary>
-    public WorkerHost StartWorker(Serilog.Core.ILogEventSink? logSink = null, IReadOnlyDictionary<string, string?>? settings = null)
+    /// <summary>
+    ///     A trading Worker whose exchange is <see cref="Exchange" />, with <paramref name="settings" /> over its own. With
+    ///     <paramref name="bybitSocketAddress" /> its candles and account events come from the Bybit streams at that address, not
+    ///     from <see cref="Exchange" />.
+    /// </summary>
+    public WorkerHost StartWorker(Serilog.Core.ILogEventSink? logSink = null, IReadOnlyDictionary<string, string?>? settings = null, string? bybitSocketAddress = null)
     {
         var workerSettings = new Dictionary<string, string?>
         {
             ["Trading:Enabled"] = "true",
             ["ExchangeAccounts:MasterKey"] = ProfitFoxFactory.TestMasterKey
         };
+
+        if (bybitSocketAddress is not null)
+        {
+            workerSettings["Bybit:SocketAddress"] = bybitSocketAddress;
+        }
 
         foreach ((string key, string? value) in settings ?? new Dictionary<string, string?>())
         {
@@ -94,10 +104,14 @@ public sealed class LiveTradingScenario : IAsyncDisposable
             {
                 services.RemoveAll<IExchangeLedger>();
                 services.RemoveAll<IOrderGateway>();
-                services.RemoveAll<IExchangeStreams>();
                 services.AddSingleton<IExchangeLedger>(Exchange);
                 services.AddSingleton<IOrderGateway>(Exchange);
-                services.AddSingleton<IExchangeStreams>(Exchange);
+
+                if (bybitSocketAddress is null)
+                {
+                    services.RemoveAll<IExchangeStreams>();
+                    services.AddSingleton<IExchangeStreams>(Exchange);
+                }
             },
             workerSettings: workerSettings,
             logSink: logSink);

@@ -18,6 +18,7 @@ import { formatDay, formatMoment, groupDigits } from '@/shared/format/format';
 import { Badge } from '@/shared/ui/Badge';
 
 import { BotActions } from './BotActions';
+import { BotChart } from './BotChart';
 import { LiveControls } from './LiveControls';
 import { LivePositions } from './LivePositions';
 
@@ -34,7 +35,7 @@ function Bar({ status, progress }: { status: string; progress: Progress }) {
   return percent === undefined ? null : <ProgressBar percent={percent} />;
 }
 
-export function BotPage({ botId }: { botId: string }) {
+export function BotPage({ botId, interval }: { botId: string; interval?: string }) {
   const bot = useQuery({
     ...botQuery(botId),
     refetchInterval: (query) => (isFollowed(query.state.data) ? 5000 : false),
@@ -141,6 +142,7 @@ export function BotPage({ botId }: { botId: string }) {
           </div>
         )}
       </header>
+      <BotChart bot={data} positions={positions.data ?? []} asked={interval} />
       <LiveControls
         botId={botId}
         status={data.status}

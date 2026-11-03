@@ -11,6 +11,7 @@ using Microsoft.Extensions.Options;
 
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.LiveTrading;
+using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.ValueObjects.MarketData;
@@ -26,7 +27,7 @@ namespace ProfitFox.Infrastructure.Exchanges.Bybit;
 ///     topic per instrument and interval however many subscribers listen to it, and the private order and execution topics of
 ///     an account. CryptoExchange.Net reconnects; a restored connection is told to every subscriber of its topics.
 /// </summary>
-internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings settings) : IExchangeStreams
+internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings settings) : IExchangeStreams, IFormingCandleStreams
 {
     private readonly BybitSocketClient _public = new BybitSocketClient(Options.Create(new BybitSocketOptions { Environment = settings.Environment() }), loggers);
     private readonly Lock _lock = new Lock();
@@ -37,15 +38,33 @@ internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings setting
 
     public Task<IAsyncDisposable> SubscribeCandlesAsync(Instrument instrument, Interval interval, Action<Candle> closed, Action restored, CancellationToken cancellationToken)
     {
-        Topic<CandleListener> topic;
+        Topic<CandleListener> topic = CandleTopic(instrument, interval);
 
+        return JoinAsync(topic, new CandleListener(closed, null, restored), () => OpenCandlesAsync(instrument, interval, topic), cancellationToken);
+    }
+
+    private Topic<CandleListener> CandleTopic(Instrument instrument, Interval interval)
+    {
         lock (_lock)
         {
             (MarketCategory, string, Interval) key = (instrument.Category, instrument.Symbol, interval);
-            topic = _candles.TryGetValue(key, out Topic<CandleListener>? known) ? known : _candles[key] = new Topic<CandleListener>();
-        }
 
-        return JoinAsync(topic, new CandleListener(closed, restored), () => OpenCandlesAsync(instrument, interval, topic), cancellationToken);
+            return _candles.TryGetValue(key, out Topic<CandleListener>? known) ? known : _candles[key] = new Topic<CandleListener>();
+        }
+    }
+
+    public Task<IAsyncDisposable> SubscribeAsync(
+        Instrument instrument,
+        Interval interval,
+        Action<FormingCandle> update,
+        Action lost,
+        Action restored,
+        Action closed,
+        CancellationToken cancellationToken)
+    {
+        Topic<CandleListener> topic = CandleTopic(instrument, interval);
+
+        return JoinAsync(topic, new CandleListener(null, update, restored, lost, closed), () => OpenCandlesAsync(instrument, interval, topic), cancellationToken);
     }
 
     public Task<IAsyncDisposable> SubscribeAccountAsync(
@@ -114,8 +133,8 @@ internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings setting
     private async Task<IAsyncDisposable> OpenCandlesAsync(Instrument instrument, Interval interval, Topic<CandleListener> topic)
     {
         WebSocketResult<UpdateSubscription> result = instrument.Category == MarketCategory.Spot
-            ? await _public.V5SpotApi.SubscribeToKlineUpdatesAsync(instrument.Symbol, interval.ToBybit(), update => Closed(update.Data, topic), CancellationToken.None)
-            : await _public.V5LinearApi.SubscribeToKlineUpdatesAsync(instrument.Symbol, interval.ToBybit(), update => Closed(update.Data, topic), CancellationToken.None);
+            ? await _public.V5SpotApi.SubscribeToKlineUpdatesAsync(instrument.Symbol, interval.ToBybit(), update => Klines(update.Data, topic), CancellationToken.None)
+            : await _public.V5LinearApi.SubscribeToKlineUpdatesAsync(instrument.Symbol, interval.ToBybit(), update => Klines(update.Data, topic), CancellationToken.None);
         UpdateSubscription subscription = Watch(result, topic);
 
         return new Leave(() => new ValueTask(_public.UnsubscribeAsync(subscription)));
@@ -190,26 +209,47 @@ internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings setting
                 listener.Restored();
             }
         };
+        result.Data.ConnectionLost += () =>
+        {
+            foreach (T listener in topic.Listeners)
+            {
+                listener.Lost?.Invoke();
+            }
+        };
+        result.Data.ConnectionClosed += () =>
+        {
+            foreach (T listener in topic.Listeners)
+            {
+                listener.Closed?.Invoke();
+            }
+        };
 
         return result.Data;
     }
 
-    private static void Closed(IEnumerable<BybitKlineUpdate> klines, Topic<CandleListener> topic)
+    private static void Klines(IEnumerable<BybitKlineUpdate> klines, Topic<CandleListener> topic)
     {
-        foreach (BybitKlineUpdate kline in klines.Where(kline => kline.Confirm))
+        foreach (BybitKlineUpdate kline in klines)
         {
-            var candle = new Candle(
+            var update = new FormingCandle(
                 Utc(kline.StartTime),
                 new Price(kline.OpenPrice),
                 new Price(kline.HighPrice),
                 new Price(kline.LowPrice),
                 new Price(kline.ClosePrice),
                 new Volume(kline.Volume),
-                new Volume(kline.Turnover));
+                kline.Confirm,
+                Utc(kline.Timestamp));
+            var candle = new Candle(update.OpenTime, update.Open, update.High, update.Low, update.Close, update.Volume, new Volume(kline.Turnover));
 
             foreach (CandleListener listener in topic.Listeners)
             {
-                listener.Closed(candle);
+                listener.Update?.Invoke(update);
+
+                if (kline.Confirm)
+                {
+                    listener.ClosedCandle?.Invoke(candle);
+                }
             }
         }
     }
@@ -243,9 +283,14 @@ internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings setting
     private interface IListener
     {
         Action Restored { get; }
+
+        Action? Lost => null;
+
+        Action? Closed => null;
     }
 
-    private sealed record CandleListener(Action<Candle> Closed, Action Restored) : IListener;
+    /// <summary>A listener of a kline topic: of its closed candles (a Worker), of every update (the API), or both.</summary>
+    private sealed record CandleListener(Action<Candle>? ClosedCandle, Action<FormingCandle>? Update, Action Restored, Action? Lost = null, Action? Closed = null) : IListener;
 
     private sealed record AccountListener(Action<ExchangeOrder> Order, Action<ExchangeFill> Fill, Action Restored) : IListener;
 

@@ -1,4 +1,20 @@
+export {
+  candleEnd,
+  chartPageCandles,
+  intervalSeconds,
+  mergeCandles,
+  pageBefore,
+  tooFarBehind,
+} from './model/chartPaging';
 export { candlesPerPoint, candlesText, perPointText, pointsText } from './model/density';
+export {
+  type Bar,
+  type BarInput,
+  drawnBars,
+  type LiveCandle,
+  liveCandles,
+} from './model/liveCandles';
+export { type OrderInput, type OrderLine, orderLines } from './model/orderLines';
 export {
   drawable,
   drawableEquity,
@@ -9,5 +25,8 @@ export {
   markersOf,
   type PricePoint,
 } from './model/pricePoint';
+export { type FillInput, type TradeMarker, tradeMarkers } from './model/tradeMarkers';
+export { type VolumeBar, volumeBars } from './model/volumeBars';
+export { BotCandleChart } from './ui/BotCandleChart';
 export { EquityComparisonChart, type EquityLine } from './ui/EquityComparisonChart';
 export { PriceEquityChart } from './ui/PriceEquityChart';

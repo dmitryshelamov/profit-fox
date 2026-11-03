@@ -31,6 +31,9 @@ public class FakeBybitHandler : HttpMessageHandler
     /// <summary>The <c>[start, end]</c> of every kline request, in order.</summary>
     public List<(DateTimeOffset Start, DateTimeOffset End)> KlineRequests { get; } = [];
 
+    /// <summary>How many HTTP requests the app made, answered or not.</summary>
+    public int Requests { get; private set; }
+
     public bool Unavailable { get; set; }
 
     /// <summary>Kline requests get an error Bybit does not ask to retry.</summary>
@@ -44,6 +47,8 @@ public class FakeBybitHandler : HttpMessageHandler
 
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
+        Requests++;
+
         if (Unavailable)
         {
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));

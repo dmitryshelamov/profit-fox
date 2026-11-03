@@ -53,7 +53,10 @@ Object.defineProperties(HTMLElement.prototype, {
 vi.mock('lightweight-charts', () => {
   const series = () => ({
     setData: vi.fn(),
+    update: vi.fn(),
     applyOptions: vi.fn(),
+    createPriceLine: vi.fn(() => ({})),
+    removePriceLine: vi.fn(),
     priceScale: () => ({ applyOptions: vi.fn() }),
   });
   const timeScale = {
@@ -66,6 +69,7 @@ vi.mock('lightweight-charts', () => {
 
   return {
     CandlestickSeries: 'Candlestick',
+    HistogramSeries: 'Histogram',
     LineSeries: 'Line',
     ColorType: { Solid: 'solid' },
     createChart: vi.fn(() => ({
@@ -75,5 +79,32 @@ vi.mock('lightweight-charts', () => {
       timeScale: () => timeScale,
     })),
     createSeriesMarkers: vi.fn(() => ({ setMarkers: vi.fn() })),
+  };
+});
+
+// A page with a bot chart opens a SignalR connection; jsdom has no server for it, so the connection stays silent. A test of
+// the channel replaces this with its own fake.
+vi.mock('@microsoft/signalr', () => {
+  const connection = {
+    on: vi.fn(),
+    onreconnecting: vi.fn(),
+    onreconnected: vi.fn(),
+    onclose: vi.fn(),
+    start: vi.fn(() => new Promise<void>(() => undefined)),
+    stop: vi.fn(() => Promise.resolve()),
+    invoke: vi.fn(() => new Promise(() => undefined)),
+  };
+  const builder = {
+    withUrl: () => builder,
+    withAutomaticReconnect: () => builder,
+    configureLogging: () => builder,
+    build: () => connection,
+  };
+
+  return {
+    HubConnectionBuilder: vi.fn(function () {
+      return builder;
+    }),
+    LogLevel: { None: 6 },
   };
 });

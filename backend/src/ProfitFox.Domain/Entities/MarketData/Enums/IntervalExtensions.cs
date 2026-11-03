@@ -23,6 +23,27 @@ public static class IntervalExtensions
         };
     }
 
+    /// <summary>
+    ///     Open time of the candle that contains <paramref name="at" />: a grid from the UTC epoch for minutes, hours and days,
+    ///     Monday 00:00 for a week, the first of the month for a month. A moment on a boundary is its own candle's open time.
+    /// </summary>
+    public static DateTimeOffset CandleOpen(this Interval interval, DateTimeOffset at)
+    {
+        DateTimeOffset utc = at.ToUniversalTime();
+
+        switch (interval)
+        {
+            case Interval.OneWeek:
+                int sinceMonday = ((int)utc.DayOfWeek + 6) % 7;
+                return new DateTimeOffset(utc.Date.AddDays(-sinceMonday), TimeSpan.Zero);
+            case Interval.OneMonth:
+                return new DateTimeOffset(utc.Year, utc.Month, 1, 0, 0, 0, TimeSpan.Zero);
+            default:
+                TimeSpan length = interval.CandleEnd(DateTimeOffset.UnixEpoch) - DateTimeOffset.UnixEpoch;
+                return DateTimeOffset.UnixEpoch + TimeSpan.FromTicks((utc - DateTimeOffset.UnixEpoch).Ticks / length.Ticks * length.Ticks);
+        }
+    }
+
     /// <summary>End of the last candle that opens in <c>[from, to)</c>, the first one at <paramref name="from" />; <paramref name="to" /> may lie inside it.</summary>
     public static DateTimeOffset LastCandleEnd(this Interval interval, DateTimeOffset from, DateTimeOffset to)
     {
@@ -36,12 +57,15 @@ public static class IntervalExtensions
         return end;
     }
 
-    /// <summary>How many candles open in <c>[from, to)</c>, the first one at <paramref name="from" />.</summary>
-    public static long CandleCount(this Interval interval, DateTimeOffset from, DateTimeOffset to)
+    /// <summary>
+    ///     How many candles open in <c>[from, to)</c>, the first one at <paramref name="from" />; counting stops at
+    ///     <c><paramref name="limit" /> + 1</c>, so a huge period costs no more than the limit.
+    /// </summary>
+    public static long CandleCount(this Interval interval, DateTimeOffset from, DateTimeOffset to, long limit = long.MaxValue - 1)
     {
         long count = 0;
 
-        for (DateTimeOffset openTime = from; openTime < to; openTime = interval.CandleEnd(openTime))
+        for (DateTimeOffset openTime = from; openTime < to && count <= limit; openTime = interval.CandleEnd(openTime))
         {
             count++;
         }
