@@ -468,6 +468,21 @@ public class LiveTradingTests
         _scenario.Exchange.FeeRequests.ShouldBeGreaterThanOrEqualTo(2);
     }
 
+    // A cancellation that is not the session's own, such as a timeout of a client, ends the take the same way.
+    [Test]
+    public async Task Session_ended_by_a_cancellation_not_its_own_takes_the_bot_again_soon()
+    {
+        Guid bot = await _scenario.CreateBotAsync();
+        _scenario.Exchange.FeesTimedOut = true;
+        _scenario.StartWorker(settings: MinuteLeases);
+        await _scenario.ActAsync(bot, "start");
+        await _scenario.WaitAsync(() => _scenario.Exchange.FeeRequests >= 1, "the first take");
+
+        await AdvanceAtMostAsync(TimeSpan.FromSeconds(45), () => Task.FromResult(_scenario.Exchange.FeeRequests >= 2));
+
+        _scenario.Exchange.FeeRequests.ShouldBeGreaterThanOrEqualTo(2);
+    }
+
     // The same for a failure that counts against the bot: three of them in a row fail it in minutes, not a quarter of an hour.
     [Test]
     public async Task Failed_takes_follow_each_other_after_a_short_pause()

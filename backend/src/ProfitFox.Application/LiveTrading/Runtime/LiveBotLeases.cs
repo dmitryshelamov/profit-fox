@@ -18,7 +18,14 @@ public sealed class LiveBotLeases(ILiveBotRepository repository, TradingSettings
     // The clocks of the API and of the Worker may differ, and an earlier write may commit later: each poll looks back this far.
     private static readonly TimeSpan LookBack = TimeSpan.FromSeconds(30);
 
+    // A failed session hands its bot back to any Worker after this pause rather than at the end of its lease: soon enough to
+    // watch the bot again, late enough not to ask a failing exchange every second.
+    private static readonly TimeSpan HandBackPause = TimeSpan.FromSeconds(30);
+
     private readonly ConcurrentDictionary<Guid, Holder> _held = new ConcurrentDictionary<Guid, Holder>();
+
+    // A renewal and a hand back write the same leases one after the other, so a renewal on the way cannot undo a hand back.
+    private readonly SemaphoreSlim _writing = new SemaphoreSlim(1, 1);
 
     /// <summary>
     ///     Holds a bot the Worker has just taken; disposing lets it go. A take of the bot held before has lost it: its session is
@@ -46,6 +53,34 @@ public sealed class LiveBotLeases(ILiveBotRepository repository, TradingSettings
         return new Release(() => _held.TryRemove(new KeyValuePair<Guid, Holder>(leased.Bot.BotId, holder)));
     }
 
+    /// <summary>
+    ///     A session that failed stops holding its bot and shortens the lease of its take to a pause, never past the lease it had.
+    ///     A database that does not answer leaves the lease to run out instead.
+    /// </summary>
+    public async Task HandBackAsync(Guid botId, long epoch)
+    {
+        if (_held.TryGetValue(botId, out Holder? holder) && holder.Epoch == epoch)
+        {
+            _held.TryRemove(new KeyValuePair<Guid, Holder>(botId, holder));
+        }
+
+        await _writing.WaitAsync();
+
+        try
+        {
+            TimeSpan pause = HandBackPause < trading.LeaseDuration ? HandBackPause : trading.LeaseDuration;
+            await repository.RenewAllAsync(worker.Id, [(botId, epoch)], time.GetUtcNow() + pause, CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            // The lease runs out as it would have.
+        }
+        finally
+        {
+            _writing.Release();
+        }
+    }
+
     public async Task RunAsync(CancellationToken stoppingToken)
     {
         DateTimeOffset seen = time.GetUtcNow();
@@ -65,6 +100,7 @@ public sealed class LiveBotLeases(ILiveBotRepository repository, TradingSettings
                 }
 
                 seen = await PollAsync(seen, stoppingToken);
+                LoseExpiring();
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -74,6 +110,20 @@ public sealed class LiveBotLeases(ILiveBotRepository repository, TradingSettings
     }
 
     private async Task RenewAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await _writing.WaitAsync(cancellationToken);
+
+        try
+        {
+            await RenewHeldAsync(now, cancellationToken);
+        }
+        finally
+        {
+            _writing.Release();
+        }
+    }
+
+    private async Task RenewHeldAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
         KeyValuePair<Guid, Holder>[] held = [.. _held];
 
@@ -91,15 +141,7 @@ public sealed class LiveBotLeases(ILiveBotRepository repository, TradingSettings
         }
         catch (Exception) when (!cancellationToken.IsCancellationRequested)
         {
-            // Tried again on the next renewal while the lease holds; another Worker may take the bot once it expired. A failure
-            // may take long, as on a database that does not answer, so the next try is counted from when this one ended.
-            DateTimeOffset next = time.GetUtcNow() + trading.LeaseRenewal;
-
-            foreach (KeyValuePair<Guid, Holder> item in held.Where(item => next >= item.Value.LeasedUntil))
-            {
-                Lose(item);
-            }
-
+            // Tried again on the next renewal while the lease holds; the loop gives the bot up before it expires.
             return;
         }
 
@@ -144,6 +186,20 @@ public sealed class LiveBotLeases(ILiveBotRepository repository, TradingSettings
         }
 
         return changed.Select(bot => bot.UpdatedAt).Append(seen).Max();
+    }
+
+    /// <summary>
+    ///     Gives up every bot whose lease would expire before the next renewal, since another Worker may take it then. Counted
+    ///     after each round, so calls that fail slowly, as on a database that does not answer, cannot carry a bot past its lease.
+    /// </summary>
+    private void LoseExpiring()
+    {
+        DateTimeOffset next = time.GetUtcNow() + trading.LeaseRenewal;
+
+        foreach (KeyValuePair<Guid, Holder> item in _held.Where(item => next >= item.Value.LeasedUntil))
+        {
+            Lose(item);
+        }
     }
 
     private void Lose(KeyValuePair<Guid, Holder> item)
