@@ -37,6 +37,9 @@ function position(overrides: object = {}) {
         quantity: '0.5',
         amount: null,
         status: 'filled',
+        filledQuantity: '0.5',
+        averagePrice: '100',
+        fee: '0.05',
         rejectReason: null,
         fills: [
           {
@@ -57,6 +60,9 @@ function position(overrides: object = {}) {
         quantity: '0.5',
         amount: null,
         status: 'active',
+        filledQuantity: '0',
+        averagePrice: null,
+        fee: '0',
         rejectReason: null,
         fills: [],
       },
@@ -446,6 +452,16 @@ describe('live trading on the bot page', () => {
     expect(within(current).getByText('активен')).toBeInTheDocument();
   });
 
+  // Requirement "Позиции на странице бота": the totals of an order are the truth, its trades only detail that may lag.
+  it('shows what an order filled and marks trades that fall short of it', async () => {
+    const [bought, sell] = position().orders;
+    open({ status: 'running' }, [position({ orders: [{ ...bought, fills: [] }, sell] })]);
+
+    const current = await screen.findByRole('region', { name: 'Текущая позиция' });
+    expect(within(current).getByText('0.5 по 100')).toBeInTheDocument();
+    expect(within(current).getByText('детализация неполная')).toBeInTheDocument();
+  });
+
   // The orders read as a table: named columns, words for the type, coins for the amounts and fees, and the reason of a
   // refusal as text.
   it('shows the orders of the position with their columns, coins and reasons', async () => {
@@ -461,6 +477,9 @@ describe('live trading on the bot page', () => {
             quantity: null,
             amount: '100',
             status: 'filled',
+            filledQuantity: '0.5',
+            averagePrice: '100',
+            fee: '0.05',
             rejectReason: null,
             fills: [
               {
@@ -481,6 +500,9 @@ describe('live trading on the bot page', () => {
             quantity: '0.5',
             amount: null,
             status: 'rejected',
+            filledQuantity: '0',
+            averagePrice: null,
+            fee: '0',
             rejectReason: 'Insufficient balance.',
             fills: [],
           },
@@ -493,7 +515,7 @@ describe('live trading on the bot page', () => {
       within(current)
         .getAllByRole('columnheader')
         .map((header) => header.textContent),
-    ).toEqual(['Узел', 'Сторона', 'Тип', 'Цена', 'Объём', 'Статус']);
+    ).toEqual(['Узел', 'Сторона', 'Тип', 'Цена', 'Объём', 'Исполнено', 'Статус']);
     expect(within(current).getByText('рыночный')).toBeInTheDocument();
     expect(within(current).getByText('лимитный')).toBeInTheDocument();
     expect(within(current).getByText('100 USDT')).toBeInTheDocument();

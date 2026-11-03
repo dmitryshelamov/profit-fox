@@ -97,8 +97,20 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
         }
     }
 
-    /// <summary>Fills an order and tells the streams; <paramref name="silently" /> keeps it from them, as a dropped connection does.</summary>
-    public void Fill(string clientId, decimal quantity, decimal price, decimal fee = 0m, string feeCoin = "USDT", bool silently = false, string? execId = null)
+    /// <summary>
+    ///     Fills an order and tells the streams as Bybit may: the update of the order with its totals first, its trade after it.
+    ///     <paramref name="silently" /> keeps both from the streams, as a dropped connection does; without <paramref name="trades" />
+    ///     the trade never comes.
+    /// </summary>
+    public void Fill(
+        string clientId,
+        decimal quantity,
+        decimal price,
+        decimal fee = 0m,
+        string feeCoin = "USDT",
+        bool silently = false,
+        string? execId = null,
+        bool trades = true)
     {
         ExchangeFill fill;
         ExchangeOrder order;
@@ -111,29 +123,37 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
             ExchangeOrder before = _orders[clientId];
             decimal filled = before.FilledQuantity + quantity;
             fill = new ExchangeFill(execId ?? $"e-{++_execs}", clientId, quantity, price, fee, feeCoin, DateTimeOffset.Parse("2024-03-10T12:30:00Z"));
-            order = before with { FilledQuantity = filled, State = filled >= (request.Quantity ?? filled) ? ExchangeOrderState.Filled : ExchangeOrderState.Open };
+            bool complete = filled >= (request.Quantity ?? filled);
+            order = before with
+            {
+                FilledQuantity = filled,
+                FilledValue = before.FilledValue + quantity * price,
+                Fee = before.Fee + fee,
+                FeeCoin = feeCoin,
+                State = complete ? ExchangeOrderState.Filled : ExchangeOrderState.Open
+            };
             _orders[clientId] = order;
             _fills.TryAdd(clientId, []);
             _fills[clientId].Add(fill);
             Holding += request.Side == OrderSide.Buy ? quantity - (feeCoin == "USDT" ? 0m : fee) : -quantity;
-            fills = silently ? [] : [.. _fillUpdates];
+            fills = silently || !trades ? [] : [.. _fillUpdates];
             orders = silently ? [] : [.. _orderUpdates];
-        }
-
-        foreach (Action<ExchangeFill> handler in fills)
-        {
-            handler(fill);
         }
 
         foreach (Action<ExchangeOrder> handler in orders)
         {
             handler(order);
         }
+
+        foreach (Action<ExchangeFill> handler in fills)
+        {
+            handler(fill);
+        }
     }
 
     /// <summary>
-    ///     Fills an order as Bybit often reports it: the order update with its filled quantity comes first, while the fill is
-    ///     neither on the stream nor in the trade history yet. <see cref="Deliver" /> lets it out.
+    ///     Fills an order as Bybit often reports it: the order update with its totals comes first, while the trade is neither on
+    ///     the stream nor in the trade history yet. <see cref="Deliver" /> lets it out.
     /// </summary>
     public void FillLate(string clientId, decimal quantity, decimal price)
     {
@@ -145,7 +165,13 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
             OrderRequest request = _requests[clientId];
             ExchangeOrder before = _orders[clientId];
             decimal filled = before.FilledQuantity + quantity;
-            order = before with { FilledQuantity = filled, State = filled >= (request.Quantity ?? filled) ? ExchangeOrderState.Filled : ExchangeOrderState.Open };
+            order = before with
+            {
+                FilledQuantity = filled,
+                FilledValue = before.FilledValue + quantity * price,
+                FeeCoin = "USDT",
+                State = filled >= (request.Quantity ?? filled) ? ExchangeOrderState.Filled : ExchangeOrderState.Open
+            };
             _orders[clientId] = order;
             _late.TryAdd(clientId, []);
             _late[clientId].Add(new ExchangeFill($"e-{++_execs}", clientId, quantity, price, 0m, "USDT", DateTimeOffset.Parse("2024-03-10T12:30:00Z")));
@@ -159,7 +185,7 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
         }
     }
 
-    /// <summary>The late fills of an order reach the trade history and, unless <paramref name="silently" />, the stream.</summary>
+    /// <summary>The late trades of an order reach the trade history and, unless <paramref name="silently" />, the stream.</summary>
     public void Deliver(string clientId, bool silently = false)
     {
         ExchangeFill[] late;
@@ -180,6 +206,24 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
             {
                 handler(fill);
             }
+        }
+    }
+
+    /// <summary>Repeats the last update of an order on the stream, as Bybit may after a reconnect.</summary>
+    public void RepeatOrder(string clientId)
+    {
+        ExchangeOrder order;
+        Action<ExchangeOrder>[] handlers;
+
+        lock (_lock)
+        {
+            order = _orders[clientId];
+            handlers = [.. _orderUpdates];
+        }
+
+        foreach (Action<ExchangeOrder> handler in handlers)
+        {
+            handler(order);
         }
     }
 

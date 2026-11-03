@@ -67,14 +67,15 @@ public class BybitLedgerTests
         (await Ledger(handler).GetHoldingAsync(Key, Spot, "BTC", CancellationToken.None)).ShouldBe(0.4m);
     }
 
+    // The totals of an order are the truth of its fills: quantity, value and fee with its coin.
     [Test]
-    public async Task Open_orders_carry_their_client_id_and_fill()
+    public async Task Open_orders_carry_their_client_id_and_totals()
     {
         using StubHttpHandler handler = new StubHttpHandler().RespondJson(Orders(Order("c-1", "PartiallyFilled", "0.4")));
 
         IReadOnlyList<ExchangeOrder> orders = await Ledger(handler).GetOpenOrdersAsync(Key, Linear, CancellationToken.None);
 
-        orders.ShouldBe([new ExchangeOrder("c-1", "x-c-1", ExchangeOrderState.Open, 0.4m, null)]);
+        orders.ShouldBe([new ExchangeOrder("c-1", "x-c-1", ExchangeOrderState.Open, 0.4m, null, 40.4m, 0.0004m, "BTC")]);
         BybitRequests.Describe(handler.Requests.Single()).ShouldBe(BybitRequests.Describe("/v5/order/realtime?category=linear&symbol=BTCUSDT&openOnly=0&limit=50"));
     }
 
@@ -202,7 +203,7 @@ public class BybitLedgerTests
     {
         return $$"""
                  {"orderId":"x-{{clientId}}","orderLinkId":"{{clientId}}","symbol":"BTCUSDT","price":"101","qty":"1","side":"Sell","orderStatus":"{{status}}",
-                 "cumExecQty":"{{filled}}","cumExecValue":"0","cumExecFee":"0","orderType":"Limit","timeInForce":"GTC","rejectReason":"EC_NoError",
+                 "cumExecQty":"{{filled}}","cumExecValue":"40.4","cumExecFee":"0.0004","feeCurrency":"BTC","orderType":"Limit","timeInForce":"GTC","rejectReason":"EC_NoError",
                  "createdTime":"1684738540559","updatedTime":"1684738540561"}
                  """;
     }

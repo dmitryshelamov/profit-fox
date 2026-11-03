@@ -26,6 +26,10 @@ internal sealed class LiveOrderDb
 
     public decimal FilledQuantity { get; init; }
 
+    public decimal FilledValue { get; init; }
+
+    public decimal Fee { get; init; }
+
     public string? ExchangeOrderId { get; init; }
 
     public string? RejectReason { get; init; }

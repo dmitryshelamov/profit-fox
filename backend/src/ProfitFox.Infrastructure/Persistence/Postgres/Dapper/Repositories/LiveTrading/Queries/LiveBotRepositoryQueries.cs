@@ -23,7 +23,7 @@ internal static class LiveBotRepositoryQueries
 
     private const string OrderColumns = """
                                         bot_id AS "BotId", number, position_number AS "PositionNumber", node_path AS "NodePath", side, type, price,
-                                        quantity, amount, reserve, status, filled_quantity AS "FilledQuantity", exchange_order_id AS "ExchangeOrderId",
+                                        quantity, amount, reserve, status, filled_quantity AS "FilledQuantity", filled_value AS "FilledValue", fee, exchange_order_id AS "ExchangeOrderId",
                                         reject_reason AS "RejectReason", attempts, next_attempt_at AS "NextAttemptAt", created_at AS "CreatedAt",
                                         updated_at AS "UpdatedAt"
                                         """;
@@ -195,10 +195,10 @@ internal static class LiveBotRepositoryQueries
     {
         return new CommandDefinition(
             """
-            INSERT INTO live_orders (bot_id, number, position_number, node_path, side, type, price, quantity, amount, reserve, status, filled_quantity, exchange_order_id, reject_reason, attempts, next_attempt_at, created_at, updated_at)
-            VALUES (@BotId, @Number, @PositionNumber, @NodePath, @Side, @Type, @Price, @Quantity, @Amount, @Reserve, @Status, @FilledQuantity, @ExchangeOrderId, @RejectReason, @Attempts, @NextAttemptAt, @CreatedAt, @UpdatedAt)
+            INSERT INTO live_orders (bot_id, number, position_number, node_path, side, type, price, quantity, amount, reserve, status, filled_quantity, filled_value, fee, exchange_order_id, reject_reason, attempts, next_attempt_at, created_at, updated_at)
+            VALUES (@BotId, @Number, @PositionNumber, @NodePath, @Side, @Type, @Price, @Quantity, @Amount, @Reserve, @Status, @FilledQuantity, @FilledValue, @Fee, @ExchangeOrderId, @RejectReason, @Attempts, @NextAttemptAt, @CreatedAt, @UpdatedAt)
             ON CONFLICT (bot_id, number) DO UPDATE SET
-                status = EXCLUDED.status, filled_quantity = EXCLUDED.filled_quantity, exchange_order_id = EXCLUDED.exchange_order_id,
+                status = EXCLUDED.status, filled_quantity = EXCLUDED.filled_quantity, filled_value = EXCLUDED.filled_value, fee = EXCLUDED.fee, exchange_order_id = EXCLUDED.exchange_order_id,
                 reject_reason = EXCLUDED.reject_reason, attempts = EXCLUDED.attempts, next_attempt_at = EXCLUDED.next_attempt_at,
                 updated_at = EXCLUDED.updated_at
             """,

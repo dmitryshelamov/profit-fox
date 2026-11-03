@@ -142,8 +142,9 @@ public sealed class FakeBybitSocketServer : IAsyncDisposable
             ["orderStatus"] = status,
             ["leavesQty"] = "0",
             ["cumExecQty"] = Text(filled),
-            ["cumExecValue"] = "0",
-            ["cumExecFee"] = "0",
+            ["cumExecValue"] = Text(filled * 100m),
+            ["cumExecFee"] = "0.02",
+            ["feeCurrency"] = "USDT",
             ["rejectReason"] = "EC_NoError",
             ["createdTime"] = "1672364262444",
             ["updatedTime"] = "1672364262457"

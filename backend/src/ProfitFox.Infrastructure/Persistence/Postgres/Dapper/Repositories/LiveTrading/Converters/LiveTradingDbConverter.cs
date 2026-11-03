@@ -99,6 +99,8 @@ internal static class LiveTradingDbConverter
             Reserve = order.Reserve,
             Status = order.Status.ToCode(),
             FilledQuantity = order.FilledQuantity,
+            FilledValue = order.FilledValue,
+            Fee = order.Fee,
             ExchangeOrderId = order.ExchangeOrderId,
             RejectReason = order.RejectReason,
             Attempts = order.Attempts,
@@ -128,7 +130,9 @@ internal static class LiveTradingDbConverter
             order.Attempts,
             order.NextAttemptAt,
             order.CreatedAt,
-            order.UpdatedAt);
+            order.UpdatedAt,
+            order.FilledValue,
+            order.Fee);
     }
 
     internal static LiveFillDb FromDomain(LiveFill fill)

@@ -62,7 +62,7 @@ internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings setting
             {
                 foreach (BybitUserTradeUpdate trade in update.Data)
                 {
-                    fill(new ExchangeFill(trade.TradeId, trade.ClientOrderId, trade.Quantity, trade.Price, trade.Fee ?? 0m, trade.FeeAsset, Utc(trade.Timestamp)));
+                    fill(new ExchangeFill(trade.TradeId, trade.ClientOrderId ?? "", trade.Quantity, trade.Price, trade.Fee ?? 0m, trade.FeeAsset ?? "", Utc(trade.Timestamp)));
                 }
             },
             cancellationToken);
@@ -118,7 +118,15 @@ internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings setting
             _ => ExchangeOrderState.Open
         };
 
-        return new ExchangeOrder(order.ClientOrderId, order.OrderId, state, order.QuantityFilled ?? 0m, state == ExchangeOrderState.Rejected ? order.RejectReason : null);
+        return new ExchangeOrder(
+            order.ClientOrderId ?? "",
+            order.OrderId,
+            state,
+            order.QuantityFilled ?? 0m,
+            state == ExchangeOrderState.Rejected ? order.RejectReason : null,
+            order.ValueFilled ?? 0m,
+            order.ExecutedFee ?? 0m,
+            order.FeeAsset ?? "");
     }
 
     private static DateTimeOffset Utc(DateTime time)

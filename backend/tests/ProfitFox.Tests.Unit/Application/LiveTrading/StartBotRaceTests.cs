@@ -59,7 +59,7 @@ public class StartBotRaceTests
         live.LockAsync(bot.Id, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(LiveBot.New(bot.Id));
         ITransactionExecutor executor = Substitute.For<ITransactionExecutor>();
         executor.ExecuteAsync(Arg.Any<Func<CancellationToken, Task<int>>>(), Arg.Any<CancellationToken>())
-            .Returns(call => call.Arg<Func<CancellationToken, Task<int>>>()(CancellationToken.None));
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<int>>>(0)(CancellationToken.None));
         var handler = new StartBotCommandHandler(repository, accounts, protector, inspector, ledger, catalog, live, executor, new FakeTimeProvider(Now));
 
         await Should.ThrowAsync<ConflictException>(() => handler.Handle(new StartBotCommand(bot.Id), CancellationToken.None));

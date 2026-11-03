@@ -64,11 +64,12 @@ public sealed class GetBotPositionsQueryHandler(IStrategyLibraryRepository libra
             : PositionStatus.Waiting;
     }
 
+    /// <summary>The average price of the orders by their totals: a trade may not have come yet, the totals have.</summary>
     private static decimal? Average(IEnumerable<LiveOrderDetails> orders)
     {
-        LiveFill[] fills = [.. orders.SelectMany(order => order.Fills)];
-        decimal quantity = fills.Sum(fill => fill.Quantity);
+        LiveOrder[] filled = [.. orders.Select(order => order.Order).Where(order => order.FilledQuantity > 0m)];
+        decimal quantity = filled.Sum(order => order.FilledQuantity);
 
-        return quantity > 0m ? fills.Sum(fill => fill.Price * fill.Quantity) / quantity : null;
+        return quantity > 0m ? filled.Sum(order => order.FilledValue) / quantity : null;
     }
 }

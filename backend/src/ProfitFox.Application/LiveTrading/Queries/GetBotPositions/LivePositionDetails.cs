@@ -5,8 +5,8 @@ using ProfitFox.Domain.Services.Strategies.Execution;
 namespace ProfitFox.Application.LiveTrading.Queries.GetBotPositions;
 
 /// <summary>
-///     A position of a live bot with its orders and their fills. <see cref="OpenedAt" /> is the time of its first fill; the prices
-///     are averages of its own entry and exit fills, <c>null</c> without them. <see cref="ExitSide" /> is the side of its market
+///     A position of a live bot with its orders and their trades. <see cref="OpenedAt" /> is the time of its first trade; the
+///     prices are averages of the totals of its entry and exit orders, <c>null</c> before a fill. <see cref="ExitSide" /> is the side of its market
 ///     exit by the version of the strategy the bot trades.
 /// </summary>
 public sealed record LivePositionDetails(

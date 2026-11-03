@@ -31,7 +31,7 @@ const ORDER_STATUS: Record<string, string> = {
 
 const ORDER_TYPE: Record<string, string> = { market: 'рыночный', limit: 'лимитный' };
 
-const ORDER_COLUMNS = ['Узел', 'Сторона', 'Тип', 'Цена', 'Объём', 'Статус'];
+const ORDER_COLUMNS = ['Узел', 'Сторона', 'Тип', 'Цена', 'Объём', 'Исполнено', 'Статус'];
 
 /** The coins of the instrument: quantities are in the base coin, amounts and quote fees in the quote coin. */
 interface Coins {
@@ -58,7 +58,19 @@ function OrderHead() {
   );
 }
 
-/** The orders with their fills under them, each fill in the columns of its order: time, price, quantity and fee. */
+/** Whether the trades of an order fall short of what it filled: they are detail and may come late or not at all. */
+function shortOfTrades(order: Order): boolean {
+  const traded = order.fills.reduce((sum, fill) => sum + Number(fill.quantity), 0);
+
+  return (
+    Number(order.filledQuantity) > 0 && Math.abs(traded - Number(order.filledQuantity)) > 1e-12
+  );
+}
+
+/**
+ * The orders with their trades under them. What an order filled, at its average price, is the truth of its fills; its trades,
+ * each in the columns of its order (time, price, quantity and fee), are detail.
+ */
 function OrderRows({ orders, coins }: { orders: readonly Order[]; coins: Coins }) {
   return orders.map((order) => (
     <Fragment key={order.number}>
@@ -71,6 +83,12 @@ function OrderRows({ orders, coins }: { orders: readonly Order[]; coins: Coins }
           {order.quantity ?? withCoin(groupDigits(order.amount ?? '0'), coins.quote)}
         </td>
         <td className={inner}>
+          {order.averagePrice === null
+            ? MISSING
+            : `${order.filledQuantity} по ${groupDigits(order.averagePrice)}`}
+          {shortOfTrades(order) && <span className="ml-2 text-faint">детализация неполная</span>}
+        </td>
+        <td className={inner}>
           {ORDER_STATUS[order.status] ?? order.status}
           {order.rejectReason && <span className="text-err">{` · ${order.rejectReason}`}</span>}
         </td>
@@ -79,9 +97,10 @@ function OrderRows({ orders, coins }: { orders: readonly Order[]; coins: Coins }
         <tr key={index} className="bg-panel-2 text-faint">
           <td className={`${inner} pl-8`}>{formatUtc(fill.at)}</td>
           <td className={inner} />
-          <td className={inner}>исполнение</td>
+          <td className={inner}>сделка</td>
           <td className={inner}>{groupDigits(fill.price)}</td>
           <td className={inner}>{fill.quantity}</td>
+          <td className={inner} />
           <td className={inner}>
             {withCoin(fill.fee, fill.feeAsset === 'base' ? coins.base : coins.quote)}
           </td>

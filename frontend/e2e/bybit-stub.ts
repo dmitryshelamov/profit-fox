@@ -282,7 +282,9 @@ function orderView(order: StubOrder) {
     ...order,
     timeInForce: 'GTC',
     leavesQty: leaves(order),
+    // The stub takes no fee; the totals of the order are what a bot books its fills by.
     cumExecFee: '0',
+    feeCurrency: 'USDT',
     rejectReason: 'EC_NoError',
     createdTime: String(Date.now()),
     updatedTime: String(Date.now()),

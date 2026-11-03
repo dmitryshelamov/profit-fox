@@ -51,12 +51,11 @@ public class LiveBotPositionsApiTests
             await repository.SavePositionAsync(new LivePosition(bot, 1, false, false, 0m, 0m, 0m, 5m, 0.2m, 100m, Now, 0, Now.AddHours(1)), cancellationToken);
             await repository.SavePositionAsync(new LivePosition(bot, 2, false, false, 0m, 0m, 0m, -1m, 0.2m, 100m, Now.AddHours(2), 0, Now.AddHours(3)), cancellationToken);
             await repository.SavePositionAsync(new LivePosition(bot, 3, true, false, 0.5m, 50m, 50m, 0m, 0.05m, 100m, Now.AddHours(4), 0, null), cancellationToken);
-            await repository.SaveOrderAsync(Order(bot, 1, 1, OrderSide.Buy, LiveOrderStatus.Filled, 1m), cancellationToken);
-            await repository.SaveOrderAsync(Order(bot, 2, 1, OrderSide.Sell, LiveOrderStatus.Filled, 1m), cancellationToken);
-            await repository.SaveOrderAsync(Order(bot, 5, 3, OrderSide.Buy, LiveOrderStatus.Filled, 0.5m), cancellationToken);
+            await repository.SaveOrderAsync(Order(bot, 1, 1, OrderSide.Buy, LiveOrderStatus.Filled, 1m) with { FilledValue = 100m, Fee = 0.1m }, cancellationToken);
+            await repository.SaveOrderAsync(Order(bot, 2, 1, OrderSide.Sell, LiveOrderStatus.Filled, 1m) with { FilledValue = 105m, Fee = 0.1m }, cancellationToken);
+            await repository.SaveOrderAsync(Order(bot, 5, 3, OrderSide.Buy, LiveOrderStatus.Filled, 0.5m) with { FilledValue = 50m, Fee = 0.05m }, cancellationToken);
             await repository.SaveOrderAsync(Order(bot, 6, 3, OrderSide.Sell, LiveOrderStatus.Active, 0m) with { Price = 101m }, cancellationToken);
             await repository.AddFillAsync(new LiveFill("e-1", bot, 1, 1m, 100m, 0.1m, FeeAsset.Quote, Now), cancellationToken);
-            await repository.AddFillAsync(new LiveFill("e-2", bot, 2, 1m, 105m, 0.1m, FeeAsset.Quote, Now.AddHours(1)), cancellationToken);
             await repository.AddFillAsync(new LiveFill("e-5", bot, 5, 0.5m, 100m, 0.05m, FeeAsset.Quote, Now.AddHours(4)), cancellationToken);
         });
 
@@ -69,6 +68,11 @@ public class LiveBotPositionsApiTests
         current.GetProperty("openedAt").GetDateTimeOffset().ShouldBe(Now.AddHours(4));
         current.GetProperty("orders").EnumerateArray().Select(order => (order.GetProperty("status").GetString(), order.GetProperty("fills").GetArrayLength()))
             .ShouldBe([("filled", 1), ("active", 0)]);
+        JsonElement bought = current.GetProperty("orders")[0];
+        (bought.GetProperty("filledQuantity").GetString(), bought.GetProperty("averagePrice").GetString(), bought.GetProperty("fee").GetString())
+            .ShouldBe(("0.5", "100", "0.05"));
+
+        // The exit of position 1 has no trade yet: its prices come from the totals of its orders.
         JsonElement first = positions[2];
         (first.GetProperty("status").GetString(), first.GetProperty("entryPrice").GetString(), first.GetProperty("exitPrice").GetString(), first.GetProperty("pnl").GetString())
             .ShouldBe(("closed", "100", "105", "5"));

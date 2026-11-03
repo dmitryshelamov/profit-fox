@@ -164,6 +164,13 @@ public sealed class LiveTradingScenario : IAsyncDisposable
         return await scope.ServiceProvider.GetRequiredService<ILiveBotRepository>().GetOrdersAsync(bot, CancellationToken.None);
     }
 
+    public async Task<IReadOnlyList<LiveFill>> FillsAsync(Guid bot)
+    {
+        using IServiceScope scope = Factory.Services.CreateScope();
+
+        return await scope.ServiceProvider.GetRequiredService<ILiveBotRepository>().GetFillsAsync(bot, CancellationToken.None);
+    }
+
     /// <summary>Moves the clock a second at a time until the condition holds, so the Workers poll and renew their leases.</summary>
     public async Task WaitAsync(Func<Task<bool>> condition, string what)
     {

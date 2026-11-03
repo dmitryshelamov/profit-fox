@@ -64,7 +64,7 @@ public class BybitStreamsTests
         await _server.PushAsync("execution", [FakeBybitSocketServer.Execution("linear", "c-1", "e-1", 0.4m, 100m, 0.02m, "USDT", Open)]);
 
         orders.TryTake(out ExchangeOrder? order, TimeSpan.FromSeconds(10)).ShouldBeTrue();
-        order.ShouldBe(new ExchangeOrder("c-1", "x-c-1", ExchangeOrderState.Open, 0.4m, null));
+        order.ShouldBe(new ExchangeOrder("c-1", "x-c-1", ExchangeOrderState.Open, 0.4m, null, 40m, 0.02m, "USDT"));
         fills.TryTake(out ExchangeFill? fill, TimeSpan.FromSeconds(10)).ShouldBeTrue();
         fill.ShouldBe(new ExchangeFill("e-1", "c-1", 0.4m, 100m, 0.02m, "USDT", Open));
         _server.Authentications.ShouldBe(1);

@@ -66,6 +66,9 @@ public sealed record LivePositionResponse(
 /// <param name="Quantity"></param>
 /// <param name="Amount">The amount of a market order sized by amount.</param>
 /// <param name="Status"><c>pending_submit</c>, <c>active</c>, <c>pending_cancel</c>, <c>cancel_sent</c>, <c>filled</c>, <c>cancelled</c> or <c>rejected</c>.</param>
+/// <param name="FilledQuantity">What the exchange filled of it so far: the truth of its fills, its trades are detail.</param>
+/// <param name="AveragePrice">The average price of what filled; <c>null</c> before a fill.</param>
+/// <param name="Fee">The fee of what filled, in the coin of its trades.</param>
 /// <param name="RejectReason">Why the exchange refused it.</param>
 /// <param name="Fills"></param>
 public sealed record LiveOrderResponse(
@@ -77,6 +80,9 @@ public sealed record LiveOrderResponse(
     string? Quantity,
     string? Amount,
     string Status,
+    string FilledQuantity,
+    string? AveragePrice,
+    string Fee,
     string? RejectReason,
     IReadOnlyList<FillResponse> Fills)
 {
@@ -91,6 +97,9 @@ public sealed record LiveOrderResponse(
             LivePositionResponse.Text(details.Order.Quantity),
             LivePositionResponse.Text(details.Order.Amount),
             details.Order.Status.ToCode(),
+            BacktestResponse.Text(details.Order.FilledQuantity),
+            details.Order.FilledQuantity > 0m ? BacktestResponse.Text(details.Order.FilledValue / details.Order.FilledQuantity) : null,
+            BacktestResponse.Text(details.Order.Fee),
             details.Order.RejectReason,
             [
                 .. details.Fills.Select(fill => new FillResponse(

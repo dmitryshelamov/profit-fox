@@ -2672,6 +2672,12 @@ export interface components {
             amount: null | string;
             /** @description `pending_submit`, `active`, `pending_cancel`, `cancel_sent`, `filled`, `cancelled` or `rejected`. */
             status: string;
+            /** @description What the exchange filled of it so far: the truth of its fills, its trades are detail. */
+            filledQuantity: string;
+            /** @description The average price of what filled; `null` before a fill. */
+            averagePrice: null | string;
+            /** @description The fee of what filled, in the coin of its trades. */
+            fee: string;
             /** @description Why the exchange refused it. */
             rejectReason: null | string;
             fills: components["schemas"]["FillResponse"][];

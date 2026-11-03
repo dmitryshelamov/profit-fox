@@ -76,10 +76,23 @@ public class LiveTradingTests
     {
         Guid bot = await StartedAndFilledAsync();
 
+        _scenario.Exchange.RepeatOrder(LiveTradingScenario.ClientId(bot, 1));
         _scenario.Exchange.Repeat(LiveTradingScenario.ClientId(bot, 1));
         await SettleAsync();
 
         (await _scenario.PositionsAsync(bot))[0].Quantity.ShouldBe(1m);
+    }
+
+    // Scenario "Сделка после конца ордера": the trade is kept as detail and the position stays.
+    [Test]
+    public async Task Trade_after_the_end_of_its_order_is_kept_as_detail()
+    {
+        Guid bot = await StartedAndFilledAsync();
+
+        await _scenario.WaitAsync(async () => (await _scenario.FillsAsync(bot)).Count == 1, "the trade of the order");
+        (await _scenario.PositionsAsync(bot))[0].Quantity.ShouldBe(1m);
+        LiveOrder order = (await _scenario.OrdersAsync(bot)).Single();
+        (order.FilledQuantity, order.FilledValue).ShouldBe((1m, 100m));
     }
 
     // Scenario "Чужой ордер".
@@ -106,35 +119,21 @@ public class LiveTradingTests
         await _scenario.WaitAsync(async () => (await _scenario.PositionsAsync(bot)).FirstOrDefault()?.Quantity == 1m, "the missed fill");
     }
 
-    // Bybit tells the end of an order on its own topic, often before the fill, and its trade history lags behind: the order
-    // waits for the fills the exchange counted.
+    // Scenario "Конец ордера раньше сделок": Bybit tells the end of an order with its totals, often before its trade, and the
+    // trade history lags behind; the totals are the truth, the late trade only adds detail and counts nothing again.
     [Test]
-    public async Task Fill_that_comes_after_the_end_of_its_order_counts()
+    public async Task Trade_that_comes_after_the_end_of_its_order_counts_once()
     {
         Guid bot = await StartedAsync();
         string start = LiveTradingScenario.ClientId(bot, 1);
 
         _scenario.Exchange.FillLate(start, 1m, 100m);
-        await SettleAsync();
+        await _scenario.WaitAsync(async () => (await _scenario.OrdersAsync(bot)).Single().Status == LiveOrderStatus.Filled, "the filled order");
+        (await _scenario.PositionsAsync(bot))[0].Quantity.ShouldBe(1m);
         _scenario.Exchange.Deliver(start);
 
-        await _scenario.WaitAsync(async () => (await _scenario.PositionsAsync(bot)).FirstOrDefault()?.Quantity == 1m, "the late fill");
-        (await _scenario.OrdersAsync(bot)).Single().Status.ShouldBe(LiveOrderStatus.Filled);
-    }
-
-    // The late fill never comes on the stream: the trade history is read again until it has it.
-    [Test]
-    public async Task Fill_missing_from_the_trade_history_is_read_again_later()
-    {
-        Guid bot = await StartedAsync();
-        string start = LiveTradingScenario.ClientId(bot, 1);
-
-        _scenario.Exchange.FillLate(start, 1m, 100m);
-        await SettleAsync();
-        _scenario.Exchange.Deliver(start, silently: true);
-
-        await _scenario.WaitAsync(async () => (await _scenario.PositionsAsync(bot)).FirstOrDefault()?.Quantity == 1m, "the fill read again");
-        (await _scenario.OrdersAsync(bot)).Single().Status.ShouldBe(LiveOrderStatus.Filled);
+        await _scenario.WaitAsync(async () => (await _scenario.FillsAsync(bot)).Count == 1, "the late trade as detail");
+        (await _scenario.PositionsAsync(bot))[0].Quantity.ShouldBe(1m);
     }
 
     // A fill read after a restart reaches the strategy once its indicators are warm: the sell limit goes at the average of
@@ -420,7 +419,7 @@ public class LiveTradingTests
     {
         var events = new ConcurrentQueue<LogEvent>();
         ILogEventSink sink = Substitute.For<ILogEventSink>();
-        sink.When(target => target.Emit(Arg.Any<LogEvent>())).Do(call => events.Enqueue(call.Arg<LogEvent>()));
+        sink.When(target => target.Emit(Arg.Any<LogEvent>())).Do(call => events.Enqueue(call.Arg<LogEvent>()!));
         Guid bot = await _scenario.CreateBotAsync();
         _scenario.StartWorker(sink);
 

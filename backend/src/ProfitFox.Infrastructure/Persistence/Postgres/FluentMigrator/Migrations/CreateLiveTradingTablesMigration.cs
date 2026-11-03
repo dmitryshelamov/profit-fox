@@ -62,6 +62,8 @@ public sealed class CreateLiveTradingTablesMigration : ForwardOnlyMigration
                 reserve numeric NOT NULL,
                 status text NOT NULL,
                 filled_quantity numeric NOT NULL,
+                filled_value numeric NOT NULL,
+                fee numeric NOT NULL,
                 exchange_order_id text NULL,
                 reject_reason text NULL,
                 attempts integer NOT NULL,

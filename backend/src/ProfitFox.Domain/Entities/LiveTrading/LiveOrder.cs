@@ -7,7 +7,8 @@ namespace ProfitFox.Domain.Entities.LiveTrading;
 /// <summary>
 ///     An order of a live bot, numbered within the bot; <see cref="NodePath" /> is the node that placed it, <c>null</c> for the
 ///     market exit of a closing position. <see cref="Attempts" /> and <see cref="NextAttemptAt" /> pace the sends after a transient
-///     refusal of the exchange.
+///     refusal of the exchange. The filled quantity, <see cref="FilledValue" /> and <see cref="Fee" /> are the totals of the
+///     order as the exchange reported them; what they grow by is a fill of the position.
 /// </summary>
 public sealed record LiveOrder(
     Guid BotId,
@@ -27,7 +28,9 @@ public sealed record LiveOrder(
     int Attempts,
     DateTimeOffset? NextAttemptAt,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt)
+    DateTimeOffset UpdatedAt,
+    decimal FilledValue = 0m,
+    decimal Fee = 0m)
 {
     public ClientOrderId ClientId => new ClientOrderId(BotId, Number);
 }
