@@ -246,7 +246,11 @@ public sealed class StrategyRun
 
                 break;
             case OrderCancelled cancelled:
-                _orders.Remove(cancelled.OrderId);
+                // An exit with no node belongs to the closing position: what it did not sell is sold again.
+                if (_orders.Remove(cancelled.OrderId, out ActiveOrder? removed) && removed.Node is null)
+                {
+                    SellWhatCameWhileClosing();
+                }
 
                 break;
         }
