@@ -151,7 +151,9 @@ enforces a rule, the check is the source of truth.
   `Trading:Enabled`, as it decrypts keys only to trade; its `appsettings.Development.json` and `appsettings.Testing.json`
   carry the same keys as the API's.
 - The `Trading` section of the Worker (`TradingSettings`): `Enabled`, `false` by default. Only a trading Worker takes live
-  bots (`LiveTradingBackgroundService`); a Worker on another machine that only runs backtests leaves it off.
+  bots (`LiveTradingBackgroundService`); a Worker on another machine that only runs backtests leaves it off. A local run
+  never sends real orders: in Development a trading Worker does not start unless both `Bybit:RestAddress` and
+  `Bybit:SocketAddress` point at a stub.
 
   ```json
   "ExchangeAccounts": { "MasterKey": "<openssl rand -base64 32>" }
