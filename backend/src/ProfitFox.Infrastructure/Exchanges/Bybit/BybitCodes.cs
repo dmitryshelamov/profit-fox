@@ -15,6 +15,8 @@ internal static class BybitCodes
         [MarketCategory.Linear] = Category.Linear
     };
 
+    private static readonly Dictionary<Category, MarketCategory> DomainCategories = Categories.ToDictionary(pair => pair.Value, pair => pair.Key);
+
     private static readonly Dictionary<Interval, KlineInterval> Intervals = new Dictionary<Interval, KlineInterval>
     {
         [Interval.OneMinute] = KlineInterval.OneMinute,
@@ -35,6 +37,12 @@ internal static class BybitCodes
     internal static Category ToBybit(this MarketCategory category)
     {
         return Categories[category];
+    }
+
+    /// <summary>The category of the market, or <c>null</c> for a market the system does not trade, such as inverse or option.</summary>
+    internal static MarketCategory? ToDomain(this Category category)
+    {
+        return DomainCategories.TryGetValue(category, out MarketCategory known) ? known : null;
     }
 
     internal static KlineInterval ToBybit(this Interval interval)

@@ -102,7 +102,10 @@ enforces a rule, the check is the source of truth.
   per category, symbol and interval, and one private client per account key with the `order` and `execution` topics.
   The first subscriber of a topic subscribes it at Bybit, the others join; the last to leave takes it off. Every
   subscriber of a topic gets all its events and a restored connection (a listener of `IFormingCandleStreams`, the same
-  singleton, gets every kline update instead of the closed candles only, and also a lost and a closed connection); a session picks its own orders by `orderLinkId`.
+  singleton, gets every kline update instead of the closed candles only, and also a lost and a closed connection); a
+  session picks its own orders by `orderLinkId`. A fill carries its instrument (none for a market the system does not
+  trade): a fill of an order that belongs to no bot, on the instrument of a session, makes the session compare the books
+  after a pause.
 - `Persistence/Postgres/Dapper/Repositories/<Area>` holds repositories, with `Contracts` (`*Db` rows), `Converters`
   (`*DbConverter`) and `Queries` (`*RepositoryQueries`, the SQL). `Persistence/Postgres/FluentMigrator/Migrations` holds
   raw-SQL migrations, `FluentMigrator/Extensions` holds `MigrateToLatestVersion`.

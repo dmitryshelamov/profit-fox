@@ -14,6 +14,7 @@ using ProfitFox.Domain.Entities.LiveTrading;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.LiveTrading;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Tests.Integration.Infrastructure;
 using ProfitFox.Tests.Shared.Fixtures.Strategies;
 
@@ -28,6 +29,11 @@ namespace ProfitFox.Tests.Integration.Workers;
 public sealed class LiveTradingScenario : IAsyncDisposable
 {
     public static readonly DateTimeOffset LastOpen = DateTimeOffset.Parse("2024-03-10T11:00:00Z");
+
+    /// <summary>The instrument of the bots of a scenario, on the spot or on the linear market.</summary>
+    public static readonly Instrument Spot = new Instrument(MarketCategory.Spot, "BTCUSDT");
+
+    public static readonly Instrument Linear = new Instrument(MarketCategory.Linear, "BTCUSDT");
 
     private readonly List<WorkerHost> _workers = [];
 
