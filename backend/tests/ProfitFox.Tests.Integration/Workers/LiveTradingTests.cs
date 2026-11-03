@@ -326,6 +326,22 @@ public class LiveTradingTests
         _scenario.Exchange.Orders.Count.ShouldBe(1);
     }
 
+    // The history of the exchange may lag behind its stream: a rebuild never takes the bot back to a candle it has passed,
+    // so no candle reaches the strategy twice.
+    [Test]
+    public async Task Rebuild_on_a_lagging_history_keeps_the_last_candle_seen()
+    {
+        Guid bot = await StartedAndFilledAsync();
+        DateTimeOffset streamed = LiveTradingScenario.LastOpen.AddHours(2);
+        _scenario.Exchange.CloseCandle(streamed, 100m);
+        await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).LastBarAt == streamed, "the streamed candle");
+
+        _scenario.Exchange.Restore();
+        await SettleAsync();
+
+        (await _scenario.LiveAsync(bot)).LastBarAt.ShouldBe(streamed);
+    }
+
     // Scenario "Снятие с паузы": candles of the pause are only history, the strategy goes on with the next one.
     [Test]
     public async Task Resumed_bot_goes_on_with_the_next_candle()

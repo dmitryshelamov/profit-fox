@@ -499,7 +499,8 @@ internal sealed class LiveBotSession(
         {
             _run.WarmUp(Bar(last));
 
-            if (_bot.LastBarAt != last.OpenTime)
+            // The history may lag behind the stream: the bot never goes back to a candle before the last it saw.
+            if (!(_bot.LastBarAt >= last.OpenTime))
             {
                 await WriteAsync(_ => Task.FromResult<IReadOnlyList<OrderCommand>>([]), live => live with { LastBarAt = last.OpenTime }, cancellationToken);
             }
