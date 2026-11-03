@@ -97,6 +97,11 @@ enforces a rule, the check is the source of truth.
 - A lease of a live bot also has an epoch, `lease_epoch`, grown by every claim: every write of a session locks the row of
   its bot with the owner and the epoch it took, so a Worker that lost the bot and took it again is told from its
   stalled self.
+- A transaction that locks both rows of a bot takes `bots` first, then `live_bots`, each in its own statement, never
+  relying on the order inside one statement or CTE. A change of the owner (`LockAsync`) and a save of the library lock
+  the `bots` row `FOR UPDATE`; a write of a session (`LockLeasedAsync`) takes it `FOR KEY SHARE` before the `live_bots`
+  row, since the foreign key of a new `live_positions` row takes that share later anyway. A session that fails several
+  bots after a reconciliation locks them one bot after another in the order of the library, `created_at, id`.
 - `Persistence/Postgres/Transactions` implements the unit of work: `PostgresTransactionExecutor` opens the connection
   and the transaction, the scoped `PostgresTransactionAccessor.Current` hands them to repositories that write inside a
   unit. Only repositories of live trading use it; the older repositories open a connection per call and keep their

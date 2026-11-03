@@ -184,6 +184,45 @@ public class LiveBotRepositoryTests
         (await _repository.ClaimAsync(OwnerB, Now.AddSeconds(32), Now.AddSeconds(300), CancellationToken.None)).ShouldBeNull();
     }
 
+    // An owner's command locks the bot row and then the live bot; a write of the session that adds a position must not hold the
+    // live bot while it waits for the bot row of its position.
+    [Test]
+    public async Task Owner_command_waits_for_a_session_write_that_adds_a_position()
+    {
+        Guid bot = await AddRunningBotAsync();
+        LeasedBot leased = (await _repository.ClaimAsync(OwnerA, Now, Now.AddSeconds(30), CancellationToken.None))!;
+        var ownerAccessor = new PostgresTransactionAccessor();
+        var ownerRepository = new LiveBotRepository(_dataSource, ownerAccessor);
+        var sessionLocked = new TaskCompletionSource();
+
+        Task session = _executor.ExecuteAsync(
+            async cancellationToken =>
+            {
+                (await _repository.LockLeasedAsync(bot, OwnerA, leased.Epoch, cancellationToken)).ShouldNotBeNull();
+                sessionLocked.SetResult();
+                await WaitForLockWaitAsync();
+                await _repository.SavePositionAsync(new LivePosition(bot, 1, true, false, 1m, 100m, 100m, 0m, 0m, 100m, Now, 0, null), cancellationToken);
+
+                return 0;
+            },
+            CancellationToken.None);
+        await sessionLocked.Task;
+        Task owner = new PostgresTransactionExecutor(_dataSource, ownerAccessor).ExecuteAsync(
+            async cancellationToken =>
+            {
+                LiveBot locked = (await ownerRepository.LockAsync(bot, Now, cancellationToken))!;
+                await ownerRepository.SaveAsync(locked.Stop(), Now, cancellationToken);
+
+                return 0;
+            },
+            CancellationToken.None);
+
+        await Task.WhenAll(session, owner);
+
+        (await _repository.GetAsync(bot, CancellationToken.None)).Status.ShouldBe(LiveBotStatus.Stopping);
+        (await _repository.GetPositionsAsync(bot, CancellationToken.None)).ShouldHaveSingleItem().Number.ShouldBe(1);
+    }
+
     [Test]
     public async Task Positions_orders_and_fills_are_kept()
     {
@@ -308,6 +347,18 @@ public class LiveBotRepositoryTests
                 return 0;
             },
             CancellationToken.None);
+    }
+
+    // Until another transaction of the test database waits for a row lock.
+    private async Task WaitForLockWaitAsync()
+    {
+        await using NpgsqlConnection connection = await _dataSource.OpenConnectionAsync();
+
+        while (!await connection.ExecuteScalarAsync<bool>(
+                   "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock')"))
+        {
+            await Task.Delay(10);
+        }
     }
 
     private async Task<Guid> AddBotAsync()
