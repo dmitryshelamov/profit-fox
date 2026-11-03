@@ -39,6 +39,14 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
     /// <summary>The fee rates of the account do not come, so no session of a bot gets up.</summary>
     public bool FeesUnavailable { get; set; }
 
+    /// <summary>The exchange refuses the fee rates, a failure another attempt meets again.</summary>
+    public bool FeesRefused { get; set; }
+
+    /// <summary>How many times the fee rates were asked for: once per take of a bot.</summary>
+    public int FeeRequests => _feeRequests;
+
+    private int _feeRequests;
+
     /// <summary>When each cancel came, by the clock of the app.</summary>
     public List<(string ClientId, DateTimeOffset At)> CancelTimes { get; } = [];
 
@@ -302,8 +310,15 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
         return Task.FromResult(false);
     }
 
+    /// <summary>How many times the holding of the account was read: once per comparison of a reconciliation.</summary>
+    public int HoldingReads => _holdingReads;
+
+    private int _holdingReads;
+
     public Task<decimal> GetHoldingAsync(ExchangeKey key, Instrument instrument, string baseCoin, CancellationToken cancellationToken)
     {
+        Interlocked.Increment(ref _holdingReads);
+
         Interlocked.Exchange(ref _onHoldingRead, null)?.Invoke();
 
         return Task.FromResult(Holding);
@@ -338,6 +353,13 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
 
     public Task<FeeSchedule> GetFeesAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
     {
+        Interlocked.Increment(ref _feeRequests);
+
+        if (FeesRefused)
+        {
+            throw new ProfitFox.Application.Exceptions.ExchangeException("Bybit refused the fee rates.");
+        }
+
         if (FeesUnavailable)
         {
             throw new ProfitFox.Application.Exceptions.ExchangeUnavailableException("Bybit is unavailable: fee rates did not come.");
@@ -414,6 +436,25 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
         foreach (Action<ExchangeOrder> handler in handlers)
         {
             handler(finished);
+        }
+    }
+
+    /// <summary>The owner cancels the order on Bybit by hand, and the streams are told.</summary>
+    public void CancelOnBybit(string clientId)
+    {
+        ExchangeOrder cancelled;
+        Action<ExchangeOrder>[] handlers;
+
+        lock (_lock)
+        {
+            cancelled = _orders[clientId] with { State = ExchangeOrderState.Cancelled };
+            _orders[clientId] = cancelled;
+            handlers = [.. _orderUpdates];
+        }
+
+        foreach (Action<ExchangeOrder> handler in handlers)
+        {
+            handler(cancelled);
         }
     }
 

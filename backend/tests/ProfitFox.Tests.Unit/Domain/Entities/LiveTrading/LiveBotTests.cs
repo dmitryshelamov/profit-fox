@@ -12,27 +12,40 @@ public class LiveBotTests
     private static readonly Guid Bot = Guid.Parse("11111111-1111-4111-8111-111111111111");
     private static readonly IReadOnlyDictionary<string, NodeValue> Values = new Dictionary<string, NodeValue> { ["fast"] = new NumberValue(10m) };
 
-    // A session that fails before it is up is counted; the bot goes on, another take tries again.
+    // A session that fails is counted; the bot goes on, another take tries again.
     [Test]
-    public void Session_that_fails_to_start_is_counted()
+    public void Session_that_fails_is_counted()
     {
         LiveBot bot = LiveBot.New(Bot).Start(1, Values);
 
-        LiveBot failed = bot.SessionFailed("Bybit is unavailable.");
+        LiveBot failed = bot.SessionFailed("Bybit refused the fee rates.", holdsOrders: false);
 
-        (failed.Status, failed.SessionFailures, failed.StopReason).ShouldBe((LiveBotStatus.Running, 1, null));
+        (failed.Status, failed.SessionFailures, failed.StopReason, failed.SessionError).ShouldBe((LiveBotStatus.Running, 1, null, null));
     }
 
-    // The third failure in a row stops trying: the bot fails with the reason, and a close of its position is given up too.
+    // The third failure in a row of a bot with nothing on the exchange stops trying: the bot fails with the reason, and a
+    // close of its position is given up too.
     [Test]
-    public void Third_session_failure_in_a_row_fails_the_bot()
+    public void Third_session_failure_in_a_row_fails_a_bot_without_orders()
     {
         LiveBot bot = LiveBot.New(Bot) with { Status = LiveBotStatus.Stopping, CloseRequested = true, SessionFailures = 2 };
 
-        LiveBot failed = bot.SessionFailed("Bybit is unavailable.");
+        LiveBot failed = bot.SessionFailed("Bybit refused the fee rates.", holdsOrders: false);
 
         (failed.Status, failed.CloseRequested, failed.Kept).ShouldBe((LiveBotStatus.Failed, false, false));
-        failed.StopReason.ShouldBe("The Worker failed to take the bot 3 times in a row: Bybit is unavailable.");
+        failed.StopReason.ShouldBe("The Worker failed to take the bot 3 times in a row: Bybit refused the fee rates.");
+    }
+
+    // A bot whose orders are on the exchange is never left unwatched: it stays kept, and the owner sees why it is not taken up.
+    [Test]
+    public void Third_session_failure_keeps_a_bot_with_orders_kept()
+    {
+        LiveBot bot = LiveBot.New(Bot).Start(1, Values) with { SessionFailures = 2 };
+
+        LiveBot failing = bot.SessionFailed("Bybit refused the fee rates.", holdsOrders: true);
+
+        (failing.Status, failing.Kept, failing.StopReason).ShouldBe((LiveBotStatus.Running, true, null));
+        failing.SessionError.ShouldBe("The Worker failed to take the bot 3 times in a row and keeps trying, as its orders are on the exchange: Bybit refused the fee rates.");
     }
 
     // As with any failure, the first reason stays: the bot was stopping for it before its Worker failed.
@@ -41,15 +54,27 @@ public class LiveBotTests
     {
         LiveBot bot = LiveBot.New(Bot) with { Status = LiveBotStatus.Stopping, StopReason = "Order c-7 of the bot is unknown.", SessionFailures = 2 };
 
-        bot.SessionFailed("Bybit is unavailable.").StopReason.ShouldBe("Order c-7 of the bot is unknown.");
+        bot.SessionFailed("Bybit refused the fee rates.", holdsOrders: false).StopReason.ShouldBe("Order c-7 of the bot is unknown.");
     }
 
     [Test]
     public void Session_that_is_up_forgets_the_failures()
     {
-        LiveBot bot = LiveBot.New(Bot).Start(1, Values) with { SessionFailures = 2 };
+        LiveBot bot = LiveBot.New(Bot).Start(1, Values) with { SessionFailures = 3, SessionError = "Failed." };
 
-        bot.SessionUp().SessionFailures.ShouldBe(0);
+        LiveBot up = bot.SessionUp();
+
+        (up.SessionFailures, up.SessionError).ShouldBe((0, null));
+    }
+
+    // A manual start or close begins the count again, as a manual retry of an import or a backtest does.
+    [Test]
+    public void Owner_actions_begin_the_count_again()
+    {
+        LiveBot failed = LiveBot.New(Bot) with { Status = LiveBotStatus.Failed, SessionFailures = 3, SessionError = "Failed." };
+
+        (failed.Start(1, Values).SessionFailures, failed.Start(1, Values).SessionError).ShouldBe((0, null));
+        failed.RequestClose(hasOpenPosition: true).SessionFailures.ShouldBe(0);
     }
 
     // Scenario "Новый бот".

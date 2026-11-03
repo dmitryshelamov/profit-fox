@@ -7,7 +7,8 @@ namespace ProfitFox.Domain.Entities.LiveTrading;
 /// <summary>
 ///     A bot in live trading: its status, the strategy version and parameter values fixed when it started, and what the Worker
 ///     that keeps it needs to go on. <see cref="StartPending" /> gives the strategy its start event once; <see cref="CloseRequested" />
-///     asks a Worker to close the position of a stopped bot; <see cref="SessionFailures" /> counts the failures in a row to take it up.
+///     asks a Worker to close the position of a stopped bot; <see cref="SessionFailures" /> counts the failures in a row to take it up,
+///     and <see cref="SessionError" /> tells why a bot with orders on the exchange is still not taken up.
 /// </summary>
 public sealed record LiveBot(
     Guid BotId,
@@ -19,7 +20,8 @@ public sealed record LiveBot(
     bool CloseRequested,
     int LastOrderNumber,
     DateTimeOffset? LastBarAt,
-    int SessionFailures = 0)
+    int SessionFailures = 0,
+    string? SessionError = null)
 {
     // How many failures in a row to take the bot up a Worker makes before the bot fails.
     private const int MaxSessionFailures = 3;
@@ -49,7 +51,9 @@ public sealed record LiveBot(
             StopReason = null,
             StrategyVersion = strategyVersion,
             ParameterValues = parameterValues,
-            StartPending = true
+            StartPending = true,
+            SessionFailures = 0,
+            SessionError = null
         };
     }
 
@@ -97,7 +101,7 @@ public sealed record LiveBot(
             throw new LiveBotConflictException("Only the position of a stopped bot is closed.");
         }
 
-        return hasOpenPosition ? this with { CloseRequested = true } : throw new LiveBotConflictException("The bot has no open position.");
+        return hasOpenPosition ? this with { CloseRequested = true, SessionFailures = 0, SessionError = null } : throw new LiveBotConflictException("The bot has no open position.");
     }
 
     public LiveBot Closed()
@@ -109,12 +113,25 @@ public sealed record LiveBot(
     ///     A Worker failed to take the bot up. The third failure in a row stops trying: the bot fails with the reason and gives up a
     ///     close of its position, so no Worker takes it again until the owner starts it.
     /// </summary>
-    public LiveBot SessionFailed(string reason)
+    /// <summary>
+    ///     A Worker failed to take the bot up. The third failure in a row fails a bot with nothing on the exchange; a bot whose
+    ///     orders are on the exchange is never left unwatched: it stays kept, with the reason for the owner to see.
+    /// </summary>
+    public LiveBot SessionFailed(string reason, bool holdsOrders)
     {
         int failures = SessionFailures + 1;
 
-        return failures < MaxSessionFailures
-            ? this with { SessionFailures = failures }
+        if (failures < MaxSessionFailures)
+        {
+            return this with { SessionFailures = failures };
+        }
+
+        return holdsOrders
+            ? this with
+            {
+                SessionFailures = failures,
+                SessionError = $"The Worker failed to take the bot {failures} times in a row and keeps trying, as its orders are on the exchange: {reason}"
+            }
             : this with
             {
                 Status = LiveBotStatus.Failed,
@@ -127,7 +144,7 @@ public sealed record LiveBot(
     /// <summary>A Worker took the bot up: the failures before are forgotten.</summary>
     public LiveBot SessionUp()
     {
-        return this with { SessionFailures = 0 };
+        return this with { SessionFailures = 0, SessionError = null };
     }
 
     public LiveBot Started()

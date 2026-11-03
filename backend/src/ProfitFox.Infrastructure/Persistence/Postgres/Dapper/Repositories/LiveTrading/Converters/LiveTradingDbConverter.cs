@@ -24,7 +24,8 @@ internal static class LiveTradingDbConverter
             CloseRequested = bot.CloseRequested,
             LastOrderNumber = bot.LastOrderNumber,
             LastBarAt = bot.LastBarAt,
-            SessionFailures = bot.SessionFailures
+            SessionFailures = bot.SessionFailures,
+            SessionError = bot.SessionError
         };
     }
 
@@ -42,7 +43,8 @@ internal static class LiveTradingDbConverter
             bot.CloseRequested,
             bot.LastOrderNumber,
             bot.LastBarAt,
-            bot.SessionFailures);
+            bot.SessionFailures,
+            bot.SessionError);
     }
 
     internal static LivePositionDb FromDomain(LivePosition position)

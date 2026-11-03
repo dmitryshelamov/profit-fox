@@ -43,7 +43,7 @@ public sealed record BotResponse(
             bot.UpdatedAt,
             BotAccountResponse.Of(result.Account),
             result.Live.Status.ToCode(),
-            result.Live.StopReason,
+            result.Live.StopReason ?? result.Live.SessionError,
             result.Live.CloseRequested);
     }
 }

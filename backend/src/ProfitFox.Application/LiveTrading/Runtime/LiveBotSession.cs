@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Threading.Channels;
 
+using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.Ports.Security;
@@ -49,6 +50,9 @@ internal sealed class LiveBotSession(
     // The most closed candles one request of the exchange gives, which the indicators are warmed up with.
     private const int WarmUpCandles = 1000;
 
+    // How many times the books are compared with the exchange before the bots of the account and the symbol stop.
+    private const int ReconcileAttempts = 3;
+
     private readonly Channel<LiveInput> _inputs = Channel.CreateUnbounded<LiveInput>(new UnboundedChannelOptions { SingleReader = true });
     private readonly Dictionary<int, LiveOrder> _orders = [];
 
@@ -65,7 +69,6 @@ internal sealed class LiveBotSession(
         Task keeper = KeepAsync(lease);
         var subscriptions = new List<IAsyncDisposable>();
         journal.Took(_id, leased.Epoch);
-        var up = false;
 
         try
         {
@@ -95,9 +98,8 @@ internal sealed class LiveBotSession(
                 () => _inputs.Writer.TryWrite(new RestoreInput()),
                 lease.Token));
             await RebuildAsync(fresh: _bot.StartPending, lease.Token);
-            up = true;
 
-            if (_bot.SessionFailures > 0)
+            if (_bot.SessionFailures > 0 || _bot.SessionError is not null)
             {
                 await WriteAsync(_ => Task.FromResult<IReadOnlyList<OrderCommand>>([]), bot => bot.SessionUp(), lease.Token);
             }
@@ -123,9 +125,10 @@ internal sealed class LiveBotSession(
         {
             journal.Lost(_id);
         }
-        catch (Exception exception) when (!up && exception is not OperationCanceledException)
+        catch (Exception exception) when (exception is not (OperationCanceledException or ExchangeUnavailableException))
         {
-            // The bot is counted as failed to take up; the third failure in a row fails it, so no Worker keeps trying.
+            // An exchange that does not answer for a while is no failure of the bot; anything else is counted, after the bot
+            // was up too, and the third failure in a row fails a bot with nothing on the exchange.
             await SessionFailedAsync(exception.Message);
 
             throw;
@@ -153,7 +156,8 @@ internal sealed class LiveBotSession(
             async token =>
             {
                 LiveBot bot = await repository.LockLeasedAsync(_id, worker.Id, leased.Epoch, token) ?? throw new LeaseLostException();
-                await repository.SaveAsync(bot.SessionFailed(reason), time.GetUtcNow(), token);
+                bool holdsOrders = (await repository.GetUnfinishedOrdersAsync(_id, token)).Count > 0;
+                await repository.SaveAsync(bot.SessionFailed(reason, holdsOrders), time.GetUtcNow(), token);
 
                 return 0;
             },
@@ -252,14 +256,15 @@ internal sealed class LiveBotSession(
             },
             cancellationToken);
 
-        // The indicators are warm before the strategy meets the fills it missed; the last candle comes after them.
-        Candle? last = await WarmUpAsync(cancellationToken);
+        // The indicators are warm with every candle the bot saw before the strategy meets the fills it missed; a last candle it
+        // has not seen comes after them.
+        Candle? unseen = await WarmUpAsync(fresh, cancellationToken);
         await CatchUpAsync(cancellationToken);
         await ReconcileAsync(cancellationToken);
 
-        if (last is not null)
+        if (unseen is not null)
         {
-            await LastCandleAsync(last, fresh, cancellationToken);
+            await CandleAsync(unseen, cancellationToken);
         }
 
         if (_bot is { StartPending: true, Status: LiveBotStatus.Running })
@@ -342,9 +347,15 @@ internal sealed class LiveBotSession(
     {
         (IReadOnlyList<Guid> bots, IReadOnlyList<string> differences) = await CompareAsync(cancellationToken);
 
-        if (differences.Count > 0)
+        // A fill may land between the catch-up and the read of the exchange, and a neighbour bot may write its fill a moment after
+        // the exchange shows it: the books are read again right away and once more after a pause before any bot stops.
+        for (var attempt = 1; differences.Count > 0 && attempt < ReconcileAttempts; attempt++)
         {
-            // A fill may land between the catch-up and the read of the exchange: the books are read again before any bot stops.
+            if (attempt > 1)
+            {
+                await Task.Delay(settings.PollInterval * 3, time, cancellationToken);
+            }
+
             await CatchUpAsync(cancellationToken);
             (bots, differences) = await CompareAsync(cancellationToken);
         }
@@ -459,7 +470,11 @@ internal sealed class LiveBotSession(
     }
 
     /// <summary>Gives the run the closed candles of the history but the last one, which is returned.</summary>
-    private async Task<Candle?> WarmUpAsync(CancellationToken cancellationToken)
+    /// <summary>
+    ///     Warms the indicators up with the closed candles of the history; only a last candle a restored running bot has not seen
+    ///     is held back for the strategy, and returned.
+    /// </summary>
+    private async Task<Candle?> WarmUpAsync(bool fresh, CancellationToken cancellationToken)
     {
         Bot bot = _context.Bot;
         DateTimeOffset now = time.GetUtcNow();
@@ -480,33 +495,23 @@ internal sealed class LiveBotSession(
             return null;
         }
 
-        foreach (Candle candle in closed[..^1])
+        Candle last = closed[^1];
+        bool unseen = !fresh && _bot.Status == LiveBotStatus.Running && last.OpenTime > (_bot.LastBarAt ?? DateTimeOffset.MinValue);
+
+        foreach (Candle candle in unseen ? closed[..^1] : closed)
         {
             _run.WarmUp(Bar(candle));
         }
 
-        _lastClose = closed[^1].Close.Value;
+        _lastClose = last.Close.Value;
 
-        return closed[^1];
-    }
-
-    /// <summary>The last closed candle reaches a restored running strategy if it has not seen it; otherwise it is history.</summary>
-    private async Task LastCandleAsync(Candle last, bool fresh, CancellationToken cancellationToken)
-    {
-        if (!fresh && _bot.Status == LiveBotStatus.Running && last.OpenTime > (_bot.LastBarAt ?? DateTimeOffset.MinValue))
+        // The history may lag behind the stream: the bot never goes back to a candle before the last it saw.
+        if (!unseen && !(_bot.LastBarAt >= last.OpenTime))
         {
-            await CandleAsync(last, cancellationToken);
+            await WriteAsync(_ => Task.FromResult<IReadOnlyList<OrderCommand>>([]), live => live with { LastBarAt = last.OpenTime }, cancellationToken);
         }
-        else
-        {
-            _run.WarmUp(Bar(last));
 
-            // The history may lag behind the stream: the bot never goes back to a candle before the last it saw.
-            if (!(_bot.LastBarAt >= last.OpenTime))
-            {
-                await WriteAsync(_ => Task.FromResult<IReadOnlyList<OrderCommand>>([]), live => live with { LastBarAt = last.OpenTime }, cancellationToken);
-            }
-        }
+        return unseen ? last : null;
     }
 
     private BarClosed Bar(Candle candle)
@@ -899,7 +904,8 @@ internal sealed class LiveBotSession(
                     }
                     else
                     {
-                        // The order stays on the exchange: the bot stops with the reason and asks again ever more slowly.
+                        // The order stays on the exchange and is never left unwatched: the bot stops with the reason and asks
+                        // again ever more slowly, until Bybit takes the cancel or the owner cancels the order on Bybit.
                         var pause = TimeSpan.FromSeconds(Math.Min(Math.Pow(2, order.Attempts), 60));
                         await WriteAsync(
                             async token =>
@@ -908,7 +914,7 @@ internal sealed class LiveBotSession(
 
                                 return [];
                             },
-                            bot => bot.Fail(outcome.Reason ?? "Bybit refused the cancel."),
+                            bot => bot.Fail($"Bybit refused to cancel order {code}: {outcome.Reason} Cancel it on Bybit: the bot stops once Bybit shows the order done."),
                             cancellationToken);
                         _ = LaterAsync(new WakeInput(), pause, cancellationToken);
                     }

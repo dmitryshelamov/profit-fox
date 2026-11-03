@@ -223,6 +223,20 @@ describe('live trading on the bot page', () => {
     expect(reads()).toBe(after);
   });
 
+  // A bot with orders on the exchange that no Worker takes up stays running: the page tells why.
+  it('shows why a working bot is not taken up', async () => {
+    open({
+      status: 'running',
+      statusReason: 'The Worker failed to take the bot 3 times in a row and keeps trying.',
+    });
+
+    expect(
+      await screen.findByText(
+        'The Worker failed to take the bot 3 times in a row and keeps trying.',
+      ),
+    ).toBeInTheDocument();
+  });
+
   // Scenario "Причина ошибки".
   it('shows the reason of a failed bot', async () => {
     open({ status: 'failed', statusReason: 'Insufficient balance.' });

@@ -23,7 +23,7 @@ public sealed record BotSummaryResponse(Guid Id, string Name, Guid StrategyId, s
             item.LastBacktest is { } backtest ? new LastBacktestResponse(backtest.Id, backtest.Status.ToCode(), ProgressResponse.Of(backtest)) : null,
             BotAccountResponse.Of(item.Account),
             item.Live.Status.ToCode(),
-            item.Live.StopReason,
+            item.Live.StopReason ?? item.Live.SessionError,
             item.Live.CloseRequested);
     }
 }

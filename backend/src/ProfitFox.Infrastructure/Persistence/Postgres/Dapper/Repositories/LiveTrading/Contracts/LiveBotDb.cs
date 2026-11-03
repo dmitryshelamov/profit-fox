@@ -22,5 +22,7 @@ internal sealed class LiveBotDb
 
     public int SessionFailures { get; init; }
 
+    public string? SessionError { get; init; }
+
     public long LeaseEpoch { get; init; }
 }

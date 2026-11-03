@@ -72,9 +72,7 @@ export function LiveControls({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <LiveStatusBadge status={status} />
-          {(status === 'failed' || status === 'stopping') && reason && (
-            <span className="text-sm text-err">{reason}</span>
-          )}
+          {reason && <span className="text-sm text-err">{reason}</span>}
           {closing && <span className="text-sm text-muted">Позиция закрывается по рынку…</span>}
         </div>
         <div className="flex gap-2">

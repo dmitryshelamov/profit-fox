@@ -164,6 +164,34 @@ public sealed class LiveTradingScenario : IAsyncDisposable
         return await scope.ServiceProvider.GetRequiredService<ILiveBotRepository>().GetOrdersAsync(bot, CancellationToken.None);
     }
 
+    public Task SetLiveAsync(Guid bot, Func<LiveBot, LiveBot> change)
+    {
+        return InUnitAsync(async (repository, cancellationToken) =>
+        {
+            LiveBot live = (await repository.LockAsync(bot, Factory.Time.GetUtcNow(), cancellationToken))!;
+            await repository.SaveAsync(change(live), Factory.Time.GetUtcNow(), cancellationToken);
+        });
+    }
+
+    public Task SavePositionAsync(Guid bot, LivePosition position)
+    {
+        return InUnitAsync((repository, cancellationToken) => repository.SavePositionAsync(position, cancellationToken));
+    }
+
+    private async Task InUnitAsync(Func<ILiveBotRepository, CancellationToken, Task> work)
+    {
+        using IServiceScope scope = Factory.Services.CreateScope();
+        ILiveBotRepository repository = scope.ServiceProvider.GetRequiredService<ILiveBotRepository>();
+        await scope.ServiceProvider.GetRequiredService<ProfitFox.Application.Transactions.ITransactionExecutor>().ExecuteAsync(
+            async cancellationToken =>
+            {
+                await work(repository, cancellationToken);
+
+                return 0;
+            },
+            CancellationToken.None);
+    }
+
     public async Task<IReadOnlyList<LiveFill>> FillsAsync(Guid bot)
     {
         using IServiceScope scope = Factory.Services.CreateScope();
