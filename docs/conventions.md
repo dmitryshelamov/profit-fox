@@ -61,7 +61,8 @@ enforces a rule, the check is the source of truth.
   one at a time from a queue, writes every change in one unit of work after checking the lease, and sends orders only
   once they are written; `Runtime/LiveBotReconciler` compares the books of a bot and of the bots that share its
   holding with the exchange and stops them all on a difference; `Runtime/LiveRunMapping` maps the stored position and
-  orders of a bot to the snapshot of its run and back. `Ports/LiveTrading` holds `IExchangeLedger` (REST reads of an account), `IOrderGateway` (orders
+  orders of a bot to the snapshot of its run and back; `Runtime/LiveWarmUpHistory` reads the last closed candles a bot
+  warms up its indicators with. `Ports/LiveTrading` holds `IExchangeLedger` (REST reads of an account), `IOrderGateway` (orders
   and cancels, a refusal is an outcome) and `IExchangeStreams` (closed candles, order updates and fills, and a signal
   when a stream is back after a gap).
 - `Workers` holds what the Worker needs to share work with other Workers: `WorkerSettings`, `WorkerIdentity` (the

@@ -59,9 +59,6 @@ internal sealed class LiveBotSession(
     // to watch the bot again, late enough not to ask a failing exchange every second.
     private static readonly TimeSpan FailedTakePause = TimeSpan.FromSeconds(30);
 
-    // The most closed candles one request of the exchange gives, which the indicators are warmed up with.
-    private const int WarmUpCandles = 1000;
-
     // How many times the books are compared with the exchange before the bots of the account and the symbol stop.
     private const int ReconcileAttempts = 3;
 
@@ -73,6 +70,7 @@ internal sealed class LiveBotSession(
 
     private readonly Guid _id = leased.Bot.BotId;
     private readonly LiveBotReconciler _reconciler = new LiveBotReconciler(repository, library, ledger, catalog, executor, journal, worker, time);
+    private readonly LiveWarmUpHistory _history = new LiveWarmUpHistory(history, time);
     private LiveBot _bot = leased.Bot;
     private LiveBotContext _context = null!;
     private StrategyRun _run = null!;
@@ -338,19 +336,7 @@ internal sealed class LiveBotSession(
     /// </summary>
     private async Task<Candle?> WarmUpAsync(bool fresh, CancellationToken cancellationToken)
     {
-        Bot bot = _context.Bot;
-        DateTimeOffset now = time.GetUtcNow();
-        // A Monday at midnight opens a candle of every interval; a month is taken at its longest.
-        DateTimeOffset aligned = DateTimeOffset.UnixEpoch.AddDays(4);
-        TimeSpan length = bot.Interval.CandleEnd(aligned) - aligned;
-        var candles = new List<Candle>();
-
-        await foreach (IReadOnlyList<Candle> page in history.GetCandlePagesAsync(bot.Instrument, bot.Interval, now - length * WarmUpCandles, now, cancellationToken))
-        {
-            candles.AddRange(page.Where(candle => candle.IsClosedAt(bot.Interval, now)));
-        }
-
-        Candle[] closed = [.. candles.DistinctBy(candle => candle.OpenTime).OrderBy(candle => candle.OpenTime).TakeLast(WarmUpCandles)];
+        Candle[] closed = await _history.ClosedCandlesAsync(_context.Bot.Instrument, _context.Bot.Interval, cancellationToken);
 
         if (closed.Length == 0)
         {
