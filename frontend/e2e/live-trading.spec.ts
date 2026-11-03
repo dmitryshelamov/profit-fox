@@ -18,7 +18,7 @@ async function stubOrders(
   }[];
 }
 
-test('a bot starts, its fill opens the position, it survives a drop, stops and closes the position', async ({
+test('a bot starts, its fill opens the position, a candle buys again, a missed fill is read after a drop, it stops and closes the position', async ({
   page,
   request,
 }) => {
@@ -36,7 +36,8 @@ test('a bot starts, its fill opens the position, it survives a drop, stops and c
       category: 'spot',
       symbol: 'BTCUSDT',
       interval: '60',
-      balance: 200,
+      // Room for the second purchase of DCA after an entry filled above the price it was sized at.
+      balance: 300,
       exchangeAccountId: accountId,
     },
   });
@@ -62,7 +63,24 @@ test('a bot starts, its fill opens the position, it survives a drop, stops and c
   await expect(current).toBeVisible({ timeout: 15_000 });
   await expect(current.getByText('открыта')).toBeVisible();
 
+  // A candle closes an hour after the entry: DCA buys again.
+  const hour = 3_600_000;
+  const next = Math.floor(Date.now() / hour) * hour + 2 * hour;
+  await request.post(
+    `${stub}/control/candle?symbol=BTCUSDT&interval=60&start=${next}&close=100000`,
+  );
+  await expect
+    .poll(async () => (await stubOrders(request)).length, { timeout: 30_000 })
+    .toBe(before + 2);
+  const second = (await stubOrders(request)).at(-1)!;
+  expect(second.side).toBe('Buy');
+
+  // The fill comes while the streams are down: once they are back, the bot reads it from the history.
+  await request.post(
+    `${stub}/control/fill?orderLinkId=${second.orderLinkId}&price=100000&silent=1`,
+  );
   await request.post(`${stub}/control/drop`);
+  await expect(current.getByText('исполнен', { exact: true })).toHaveCount(2, { timeout: 30_000 });
   await expect(page.getByText('Запущен')).toBeVisible();
 
   await page.getByRole('button', { name: 'Остановить' }).click();
@@ -74,7 +92,7 @@ test('a bot starts, its fill opens the position, it survives a drop, stops and c
   await page.getByRole('dialog').getByRole('button', { name: 'Закрыть позицию' }).click();
   await expect
     .poll(async () => (await stubOrders(request)).length, { timeout: 30_000 })
-    .toBe(before + 2);
+    .toBe(before + 3);
   const exit = (await stubOrders(request)).at(-1)!;
   expect(exit.side).toBe('Sell');
   await request.post(`${stub}/control/fill?orderLinkId=${exit.orderLinkId}&price=101000`);

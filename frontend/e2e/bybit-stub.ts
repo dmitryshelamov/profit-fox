@@ -420,8 +420,12 @@ function fill(url: URL) {
     seq: execs,
   };
   executions.set(order.orderLinkId, [...(executions.get(order.orderLinkId) ?? []), execution]);
-  push('execution', [execution]);
-  push('order', [orderView(order)]);
+
+  // A silent fill is missed by the streams, as during a drop: only the history has it.
+  if (url.searchParams.get('silent') !== '1') {
+    push('execution', [execution]);
+    push('order', [orderView(order)]);
+  }
 
   return ok(execution);
 }
