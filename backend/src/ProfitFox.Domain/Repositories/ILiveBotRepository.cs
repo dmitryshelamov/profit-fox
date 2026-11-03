@@ -18,11 +18,18 @@ public interface ILiveBotRepository
     /// <summary>Takes a bot a Worker must keep and nobody keeps, and grows its lease epoch; <c>null</c> when there is none.</summary>
     Task<LeasedBot?> ClaimAsync(Guid owner, DateTimeOffset now, DateTimeOffset leasedUntil, CancellationToken cancellationToken);
 
-    /// <summary>The bot as it is now, or <c>null</c> when the lease of this take is lost.</summary>
-    Task<LiveBot?> RenewAsync(Guid botId, Guid owner, long epoch, DateTimeOffset leasedUntil, CancellationToken cancellationToken);
+    /// <summary>Renews the lease of every bot this Worker holds by the epoch of its take, in one query.</summary>
+    /// <returns>The renewed bots as they are now; a bot that is not there has lost its lease.</returns>
+    Task<IReadOnlyList<LeasedBot>> RenewAllAsync(Guid owner, IReadOnlyCollection<(Guid BotId, long Epoch)> bots, DateTimeOffset leasedUntil, CancellationToken cancellationToken);
+
+    /// <summary>The bots this Worker holds that were written after <paramref name="since" />.</summary>
+    Task<IReadOnlyList<ChangedLiveBot>> GetChangedAsync(Guid owner, DateTimeOffset since, CancellationToken cancellationToken);
 
     /// <summary>Gives the bot up, if this take still holds it.</summary>
     Task ReleaseAsync(Guid botId, Guid owner, long epoch, CancellationToken cancellationToken);
+
+    /// <summary>Gives up every bot this Worker still holds by the epoch of its take, in one query.</summary>
+    Task ReleaseAllAsync(Guid owner, IReadOnlyCollection<(Guid BotId, long Epoch)> bots, CancellationToken cancellationToken);
 
     /// <summary>In a unit of work: locks the bot and its live row for a change of the owner, creating the row of a new bot.</summary>
     /// <returns><c>null</c> when there is no such bot.</returns>

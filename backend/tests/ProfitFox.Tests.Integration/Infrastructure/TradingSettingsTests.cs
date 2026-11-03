@@ -62,6 +62,37 @@ public class TradingSettingsTests
         await Should.ThrowAsync<InvalidOperationException>(() => WorkerAsync("Development", trading: true, new Dictionary<string, string?> { [key] = address }));
     }
 
+    // Scenario "Продление бота не короче аренды".
+    [Test]
+    public async Task Trading_worker_whose_bot_lease_would_expire_before_its_renewal_does_not_start()
+    {
+        Exception exception = await Should.ThrowAsync<InvalidOperationException>(() => WorkerAsync(
+            "Development",
+            trading: true,
+            new Dictionary<string, string?>
+            {
+                ["Bybit:RestAddress"] = "http://127.0.0.1:5296",
+                ["Bybit:SocketAddress"] = "ws://127.0.0.1:5296",
+                ["Trading:LeaseDuration"] = "00:01:00",
+                ["Trading:LeaseRenewal"] = "00:01:00"
+            }));
+
+        exception.Message.ShouldContain("Trading:LeaseRenewal");
+    }
+
+    // A Worker that only runs backtests keeps no bot, so the lease of bots is none of its business.
+    [Test]
+    public async Task Worker_without_trading_does_not_check_the_bot_lease()
+    {
+        using IHost host = await WorkerAsync(
+            "Production",
+            trading: false,
+            new Dictionary<string, string?> { ["Trading:LeaseDuration"] = "00:01:00", ["Trading:LeaseRenewal"] = "00:01:00" });
+
+        await host.StartAsync();
+        await host.StopAsync();
+    }
+
     private static Task<IHost> ProductionWorkerAsync(bool trading)
     {
         return WorkerAsync("Production", trading);

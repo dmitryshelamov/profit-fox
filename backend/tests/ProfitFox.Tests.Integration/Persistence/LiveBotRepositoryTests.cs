@@ -105,7 +105,7 @@ public class LiveBotRepositoryTests
 
         first.Bot.Status.ShouldBe(LiveBotStatus.Running);
         (await _repository.ClaimAsync(OwnerB, Now.AddSeconds(10), Now.AddSeconds(40), CancellationToken.None)).ShouldBeNull();
-        (await _repository.RenewAsync(bot, OwnerA, first.Epoch, Now.AddSeconds(50), CancellationToken.None))!.Status.ShouldBe(LiveBotStatus.Running);
+        (await _repository.RenewAllAsync(OwnerA, [(bot, first.Epoch)], Now.AddSeconds(50), CancellationToken.None)).ShouldHaveSingleItem().Bot.Status.ShouldBe(LiveBotStatus.Running);
     }
 
     // Scenario "Аренда перехвачена": the stalled take is fenced off even when its Worker takes the bot again.
@@ -118,7 +118,7 @@ public class LiveBotRepositoryTests
         LeasedBot second = (await _repository.ClaimAsync(OwnerA, Now.AddSeconds(31), Now.AddSeconds(61), CancellationToken.None))!;
 
         second.Epoch.ShouldBeGreaterThan(first.Epoch);
-        (await _repository.RenewAsync(bot, OwnerA, first.Epoch, Now.AddSeconds(70), CancellationToken.None)).ShouldBeNull();
+        (await _repository.RenewAllAsync(OwnerA, [(bot, first.Epoch)], Now.AddSeconds(70), CancellationToken.None)).ShouldBeEmpty();
         LiveBot? fenced = await _executor.ExecuteAsync(cancellationToken => _repository.LockLeasedAsync(bot, OwnerA, first.Epoch, cancellationToken), CancellationToken.None);
         fenced.ShouldBeNull();
         LiveBot? held = await _executor.ExecuteAsync(cancellationToken => _repository.LockLeasedAsync(bot, OwnerA, second.Epoch, cancellationToken), CancellationToken.None);
@@ -134,6 +134,54 @@ public class LiveBotRepositoryTests
         await _repository.ReleaseAsync(bot, OwnerA, first.Epoch, CancellationToken.None);
 
         (await _repository.ClaimAsync(OwnerB, Now.AddSeconds(1), Now.AddSeconds(31), CancellationToken.None))!.Bot.BotId.ShouldBe(bot);
+    }
+
+    // Requirement "Продление аренд ботов": one query renews every bot of the Worker that this take still holds.
+    [Test]
+    public async Task Renewal_of_all_bots_skips_a_bot_another_worker_took()
+    {
+        await AddTwoRunningBotsAsync();
+        LeasedBot held = (await _repository.ClaimAsync(OwnerA, Now, Now.AddSeconds(60), CancellationToken.None))!;
+        LeasedBot lost = (await _repository.ClaimAsync(OwnerA, Now, Now.AddSeconds(30), CancellationToken.None))!;
+        (await _repository.ClaimAsync(OwnerB, Now.AddSeconds(31), Now.AddSeconds(300), CancellationToken.None))!.Bot.BotId.ShouldBe(lost.Bot.BotId);
+
+        IReadOnlyList<LeasedBot> renewed = await _repository.RenewAllAsync(
+            OwnerA, [(held.Bot.BotId, held.Epoch), (lost.Bot.BotId, lost.Epoch)], Now.AddSeconds(90), CancellationToken.None);
+
+        renewed.Select(bot => (bot.Bot.BotId, bot.Epoch)).ShouldBe([(held.Bot.BotId, held.Epoch)]);
+        (await _repository.ClaimAsync(OwnerB, Now.AddSeconds(80), Now.AddSeconds(110), CancellationToken.None)).ShouldBeNull();
+    }
+
+    // Requirement "Команды владельца доходят до бота": the Worker reads which of its bots changed since it looked last.
+    [Test]
+    public async Task Changed_bots_of_the_worker_are_read_with_the_time_of_their_change()
+    {
+        await AddTwoRunningBotsAsync();
+        LeasedBot mine = (await _repository.ClaimAsync(OwnerA, Now, Now.AddSeconds(30), CancellationToken.None))!;
+        LeasedBot other = (await _repository.ClaimAsync(OwnerB, Now, Now.AddSeconds(30), CancellationToken.None))!;
+        await SaveAsync(mine.Bot.Stop(), Now.AddSeconds(10));
+        await SaveAsync(other.Bot.Stop(), Now.AddSeconds(10));
+
+        IReadOnlyList<ChangedLiveBot> changed = await _repository.GetChangedAsync(OwnerA, Now.AddSeconds(5), CancellationToken.None);
+
+        changed.Select(bot => (bot.Bot.BotId, bot.Bot.Status, bot.Epoch, bot.UpdatedAt)).ShouldBe([(mine.Bot.BotId, LiveBotStatus.Stopping, mine.Epoch, Now.AddSeconds(10))]);
+        (await _repository.GetChangedAsync(OwnerA, Now.AddSeconds(10), CancellationToken.None)).ShouldBeEmpty();
+    }
+
+    // Requirement "Отпускание аренд при остановке": only the takes the Worker still holds are given up.
+    [Test]
+    public async Task Release_of_all_bots_gives_up_only_the_takes_still_held()
+    {
+        await AddTwoRunningBotsAsync();
+        LeasedBot held = (await _repository.ClaimAsync(OwnerA, Now, Now.AddSeconds(300), CancellationToken.None))!;
+        LeasedBot stale = (await _repository.ClaimAsync(OwnerA, Now, Now.AddSeconds(30), CancellationToken.None))!;
+        LeasedBot again = (await _repository.ClaimAsync(OwnerA, Now.AddSeconds(31), Now.AddSeconds(300), CancellationToken.None))!;
+        again.Bot.BotId.ShouldBe(stale.Bot.BotId);
+
+        await _repository.ReleaseAllAsync(OwnerA, [(held.Bot.BotId, held.Epoch), (stale.Bot.BotId, stale.Epoch)], CancellationToken.None);
+
+        (await _repository.ClaimAsync(OwnerB, Now.AddSeconds(32), Now.AddSeconds(300), CancellationToken.None))!.Bot.BotId.ShouldBe(held.Bot.BotId);
+        (await _repository.ClaimAsync(OwnerB, Now.AddSeconds(32), Now.AddSeconds(300), CancellationToken.None)).ShouldBeNull();
     }
 
     [Test]
@@ -232,13 +280,30 @@ public class LiveBotRepositoryTests
         return bot;
     }
 
-    private Task SaveAsync(LiveBot bot)
+    private async Task AddTwoRunningBotsAsync()
+    {
+        var library = new StrategyLibrary(0, [], []);
+        Strategy ema = library.AddStrategy(Guid.NewGuid(), "EMA", StrategyJson.ParseStrategy(StrategyFixtures.Element("ema")), Now);
+        Guid[] bots =
+        [
+            .. Enumerable.Range(1, 2).Select(number => library.AddBot(
+                Guid.NewGuid(), $"EMA BTC {number}", ema.Id, new Dictionary<string, NodeValue>(), new Instrument(MarketCategory.Linear, "BTCUSDT"), Interval.OneHour, 1000m, Now).Id)
+        ];
+        await new StrategyLibraryRepository(_dataSource).SaveAsync(library.Change, 0, CancellationToken.None);
+
+        foreach (Guid bot in bots)
+        {
+            await SaveAsync(LiveBot.New(bot).Start(1, new Dictionary<string, NodeValue>()));
+        }
+    }
+
+    private Task SaveAsync(LiveBot bot, DateTimeOffset? at = null)
     {
         return _executor.ExecuteAsync(
             async cancellationToken =>
             {
                 await _repository.LockAsync(bot.BotId, Now, cancellationToken);
-                await _repository.SaveAsync(bot, Now, cancellationToken);
+                await _repository.SaveAsync(bot, at ?? Now, cancellationToken);
 
                 return 0;
             },

@@ -60,15 +60,36 @@ internal static class LiveBotRepositoryQueries
             cancellationToken: cancellationToken);
     }
 
-    public static CommandDefinition Renew(Guid botId, Guid owner, long epoch, DateTimeOffset leasedUntil, CancellationToken cancellationToken)
+    public static CommandDefinition RenewAll(Guid owner, Guid[] botIds, long[] epochs, DateTimeOffset leasedUntil, CancellationToken cancellationToken)
     {
         return new CommandDefinition(
             $"""
              UPDATE live_bots SET leased_until = @LeasedUntil
-             WHERE bot_id = @BotId AND lease_owner = @Owner AND lease_epoch = @Epoch
+             FROM unnest(@BotIds, @Epochs) AS held(held_bot, held_epoch)
+             WHERE bot_id = held_bot AND lease_epoch = held_epoch AND lease_owner = @Owner
              RETURNING {BotColumns}
              """,
-            new { BotId = botId, Owner = owner, Epoch = epoch, LeasedUntil = leasedUntil },
+            new { Owner = owner, BotIds = botIds, Epochs = epochs, LeasedUntil = leasedUntil },
+            cancellationToken: cancellationToken);
+    }
+
+    public static CommandDefinition GetChanged(Guid owner, DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            $"SELECT {BotColumns}, updated_at AS \"UpdatedAt\" FROM live_bots WHERE lease_owner = @Owner AND updated_at > @Since",
+            new { Owner = owner, Since = since },
+            cancellationToken: cancellationToken);
+    }
+
+    public static CommandDefinition ReleaseAll(Guid owner, Guid[] botIds, long[] epochs, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            """
+            UPDATE live_bots SET lease_owner = NULL, leased_until = NULL
+            FROM unnest(@BotIds, @Epochs) AS held(held_bot, held_epoch)
+            WHERE bot_id = held_bot AND lease_epoch = held_epoch AND lease_owner = @Owner
+            """,
+            new { Owner = owner, BotIds = botIds, Epochs = epochs },
             cancellationToken: cancellationToken);
     }
 

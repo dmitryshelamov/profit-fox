@@ -75,9 +75,20 @@ public sealed class LiveTradingScenario : IAsyncDisposable
         return scenario;
     }
 
-    /// <summary>A trading Worker whose exchange is <see cref="Exchange" />.</summary>
-    public WorkerHost StartWorker(Serilog.Core.ILogEventSink? logSink = null)
+    /// <summary>A trading Worker whose exchange is <see cref="Exchange" />, with <paramref name="settings" /> over its own.</summary>
+    public WorkerHost StartWorker(Serilog.Core.ILogEventSink? logSink = null, IReadOnlyDictionary<string, string?>? settings = null)
     {
+        var workerSettings = new Dictionary<string, string?>
+        {
+            ["Trading:Enabled"] = "true",
+            ["ExchangeAccounts:MasterKey"] = ProfitFoxFactory.TestMasterKey
+        };
+
+        foreach ((string key, string? value) in settings ?? new Dictionary<string, string?>())
+        {
+            workerSettings[key] = value;
+        }
+
         WorkerHost worker = Factory.StartWorker(
             services =>
             {
@@ -88,11 +99,7 @@ public sealed class LiveTradingScenario : IAsyncDisposable
                 services.AddSingleton<IOrderGateway>(Exchange);
                 services.AddSingleton<IExchangeStreams>(Exchange);
             },
-            workerSettings: new Dictionary<string, string?>
-            {
-                ["Trading:Enabled"] = "true",
-                ["ExchangeAccounts:MasterKey"] = ProfitFoxFactory.TestMasterKey
-            },
+            workerSettings: workerSettings,
             logSink: logSink);
         _workers.Add(worker);
 

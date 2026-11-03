@@ -1,12 +1,15 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 
+using Microsoft.Extensions.DependencyInjection;
+
 using NSubstitute;
 
 using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Domain.Entities.LiveTrading;
 using ProfitFox.Domain.Entities.LiveTrading.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
+using ProfitFox.Domain.Repositories;
 
 using ProfitFox.Tests.Integration.Infrastructure;
 
@@ -217,6 +220,80 @@ public class LiveTradingTests
         await _scenario.WaitAsync(async () => (await _scenario.PositionsAsync(bot)).FirstOrDefault()?.Quantity == 1m, "the fill on pause");
         await SettleAsync();
         _scenario.Exchange.Orders.Count.ShouldBe(1);
+    }
+
+    // Scenario "Остановка при минутной аренде": the stop comes by the poll of the Worker, a minute before the next renewal.
+    [Test]
+    public async Task Stop_reaches_the_bot_within_a_poll_while_its_lease_is_renewed_each_minute()
+    {
+        Guid bot = await _scenario.CreateBotAsync("ladder");
+        _scenario.StartWorker(settings: new Dictionary<string, string?> { ["Trading:LeaseDuration"] = "00:05:00", ["Trading:LeaseRenewal"] = "00:01:00" });
+        await _scenario.ActAsync(bot, "start");
+        await _scenario.WaitAsync(async () => (await _scenario.OrdersAsync(bot)).SingleOrDefault()?.Status == LiveOrderStatus.Active, "the start order on the exchange");
+
+        await _scenario.ActAsync(bot, "stop");
+        _scenario.Factory.Time.Advance(TimeSpan.FromSeconds(1));
+        await Task.Delay(50);
+        _scenario.Factory.Time.Advance(TimeSpan.FromSeconds(1));
+
+        DateTime until = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+
+        while (!_scenario.Exchange.Cancels.Contains(LiveTradingScenario.ClientId(bot, 1)) && DateTime.UtcNow < until)
+        {
+            await Task.Delay(50);
+        }
+
+        _scenario.Exchange.Cancels.ShouldContain(LiveTradingScenario.ClientId(bot, 1));
+    }
+
+    // Scenario "Деплой Worker'а": a Worker stopped gracefully gives its bots up, so the next one takes them before the lease ends.
+    [Test]
+    public async Task Bots_of_a_worker_stopped_gracefully_are_taken_again_at_once()
+    {
+        await StartedAsync();
+        await _scenario.StopWorkerAsync(WorkerOf());
+
+        _scenario.StartWorker();
+
+        for (var second = 0; second < 3 && _scenario.Exchange.Subscribers != 1; second++)
+        {
+            _scenario.Factory.Time.Advance(TimeSpan.FromSeconds(1));
+            DateTime until = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+
+            while (_scenario.Exchange.Subscribers != 1 && DateTime.UtcNow < until)
+            {
+                await Task.Delay(50);
+            }
+        }
+
+        _scenario.Exchange.Subscribers.ShouldBe(1);
+    }
+
+    // Scenario "Worker упал": a Worker gone without giving its bots up holds them until the lease ends, then the next one goes on.
+    [Test]
+    public async Task Bots_of_a_worker_gone_are_taken_again_once_the_lease_ends()
+    {
+        Guid bot = await StartedAndFilledAsync();
+        await _scenario.StopWorkerAsync(WorkerOf());
+        using (IServiceScope scope = _scenario.Factory.Services.CreateScope())
+        {
+            // The take of a Worker that is gone: nobody renews it.
+            DateTimeOffset now = _scenario.Factory.Time.GetUtcNow();
+            (await scope.ServiceProvider.GetRequiredService<ILiveBotRepository>().ClaimAsync(Guid.NewGuid(), now, now.AddSeconds(30), CancellationToken.None)).ShouldNotBeNull();
+        }
+
+        _scenario.StartWorker();
+
+        for (var second = 0; second < 25; second++)
+        {
+            _scenario.Factory.Time.Advance(TimeSpan.FromSeconds(1));
+            await Task.Delay(25);
+        }
+
+        _scenario.Exchange.Subscribers.ShouldBe(0);
+        await _scenario.WaitAsync(() => _scenario.Exchange.Subscribers == 1, "the bot taken once the lease ended");
+        (await _scenario.PositionsAsync(bot))[0].Quantity.ShouldBe(1m);
+        (await _scenario.LiveAsync(bot)).Status.ShouldBe(LiveBotStatus.Running);
     }
 
     // Scenarios "Остановка с лимитками" and "Закрытие лонга".
@@ -446,6 +523,23 @@ public class LiveTradingTests
 
         await _scenario.WaitAsync(() => _scenario.Exchange.Subscribers == 0, "the session to end");
         (await _scenario.PositionsAsync(bot)).Single().Quantity.ShouldBe(0m);
+    }
+
+    // A take that lost the bot ends at the next renewal of the Worker, even when nothing happens to the bot meanwhile.
+    [Test]
+    public async Task Session_whose_lease_was_taken_over_ends_at_the_next_renewal()
+    {
+        Guid bot = await StartedAsync();
+        await using (var connection = new Npgsql.NpgsqlConnection(_scenario.Factory.ConnectionString))
+        {
+            await connection.OpenAsync();
+            await Dapper.SqlMapper.ExecuteAsync(
+                connection,
+                "UPDATE live_bots SET lease_owner = @Owner, lease_epoch = lease_epoch + 1, leased_until = @Until WHERE bot_id = @Bot",
+                new { Owner = Guid.NewGuid(), Until = DateTimeOffset.Parse("2030-01-01T00:00:00Z"), Bot = bot });
+        }
+
+        await _scenario.WaitAsync(() => _scenario.Exchange.Subscribers == 0, "the session to end");
     }
 
     // The log tells what the Worker took and sent, and never carries the secret of the account.

@@ -43,6 +43,7 @@ internal sealed class LiveBotSession(
     IInstrumentCatalog catalog,
     ITransactionExecutor executor,
     ILiveTradingJournal journal,
+    LiveBotLeases leases,
     WorkerSettings settings,
     WorkerIdentity worker,
     TimeProvider time)
@@ -66,7 +67,16 @@ internal sealed class LiveBotSession(
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         using var lease = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        Task keeper = KeepAsync(lease);
+
+        // The Worker renews the lease and reads the bot for all its sessions; a lost lease ends this one.
+        using IDisposable held = leases.Hold(
+            leased,
+            bot => _inputs.Writer.TryWrite(new StatusInput(bot)),
+            () =>
+            {
+                journal.Lost(_id);
+                lease.Cancel();
+            });
         var subscriptions = new List<IAsyncDisposable>();
         journal.Took(_id, leased.Epoch);
 
@@ -145,8 +155,6 @@ internal sealed class LiveBotSession(
             {
                 await subscription.DisposeAsync();
             }
-
-            await keeper;
         }
     }
 
@@ -162,51 +170,6 @@ internal sealed class LiveBotSession(
                 return 0;
             },
             CancellationToken.None);
-    }
-
-    /// <summary>Renews the lease on every poll and hands the bot as the database holds it to the session; a lost lease ends it.</summary>
-    private async Task KeepAsync(CancellationTokenSource lease)
-    {
-        TimeSpan interval = settings.PollInterval < settings.LeaseRenewal ? settings.PollInterval : settings.LeaseRenewal;
-        DateTimeOffset leasedUntil = time.GetUtcNow() + settings.LeaseDuration;
-
-        try
-        {
-            while (true)
-            {
-                await Task.Delay(interval, time, lease.Token);
-                DateTimeOffset until = time.GetUtcNow() + settings.LeaseDuration;
-                LiveBot? bot;
-
-                try
-                {
-                    bot = await repository.RenewAsync(_id, worker.Id, leased.Epoch, until, lease.Token);
-                }
-                catch (Exception) when (!lease.IsCancellationRequested && time.GetUtcNow() + interval < leasedUntil)
-                {
-                    continue;
-                }
-
-                if (bot is null)
-                {
-                    journal.Lost(_id);
-                    await lease.CancelAsync();
-
-                    return;
-                }
-
-                leasedUntil = until;
-                _inputs.Writer.TryWrite(new StatusInput(bot));
-            }
-        }
-        catch (OperationCanceledException) when (lease.IsCancellationRequested)
-        {
-            // The session ended.
-        }
-        catch (Exception)
-        {
-            await lease.CancelAsync();
-        }
     }
 
     private bool Mine(string clientId)

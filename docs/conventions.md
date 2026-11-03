@@ -82,6 +82,11 @@ enforces a rule, the check is the source of truth.
 - `Exchanges/Bybit/BybitAccountClient` implements `IExchangeKeyInspector`: a typed `HttpClient` that builds a Bybit client
   with the key for one call and drops it, one attempt per call. `Security/AesGcmSecretProtector` encrypts secrets with the
   master key (AES-256-GCM, the account id as associated data).
+- `Exchanges/Bybit/BybitStreams` implements `IExchangeStreams` as one singleton for the process, so the connections to
+  Bybit follow the pairs and accounts, not the bots: one public socket client whose connections carry one kline topic
+  per category, symbol and interval, and one private client per account key with the `order` and `execution` topics.
+  The first subscriber of a topic subscribes it at Bybit, the others join; the last to leave takes it off. Every
+  subscriber of a topic gets all its events and a restored connection; a session picks its own orders by `orderLinkId`.
 - `Persistence/Postgres/Dapper/Repositories/<Area>` holds repositories, with `Contracts` (`*Db` rows), `Converters`
   (`*DbConverter`) and `Queries` (`*RepositoryQueries`, the SQL). `Persistence/Postgres/FluentMigrator/Migrations` holds
   raw-SQL migrations, `FluentMigrator/Extensions` holds `MigrateToLatestVersion`.
@@ -153,7 +158,14 @@ enforces a rule, the check is the source of truth.
 - The `Trading` section of the Worker (`TradingSettings`): `Enabled`, `false` by default. Only a trading Worker takes live
   bots (`LiveTradingBackgroundService`); a Worker on another machine that only runs backtests leaves it off. A local run
   never sends real orders: in Development a trading Worker does not start unless both `Bybit:RestAddress` and
-  `Bybit:SocketAddress` point at a stub.
+  `Bybit:SocketAddress` point at a stub. `LeaseDuration` and `LeaseRenewal` are the lease of a live bot, apart from the
+  `Worker` lease of chunks and imports: 5 minutes renewed each minute by default, the renewal shorter than the lease or
+  a trading Worker does not start. `appsettings.Testing.json` keeps 30 and 10 seconds, so tests that wait for a lease
+  to expire move the clock less.
+
+  ```json
+  "Trading": { "Enabled": false, "LeaseDuration": "00:05:00", "LeaseRenewal": "00:01:00" }
+  ```
 
   ```json
   "ExchangeAccounts": { "MasterKey": "<openssl rand -base64 32>" }

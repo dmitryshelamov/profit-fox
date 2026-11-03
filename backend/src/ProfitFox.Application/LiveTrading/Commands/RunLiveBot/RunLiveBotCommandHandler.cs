@@ -23,6 +23,7 @@ public sealed class RunLiveBotCommandHandler(
     IInstrumentCatalog catalog,
     ITransactionExecutor executor,
     ILiveTradingJournal journal,
+    LiveBotLeases leases,
     WorkerSettings settings,
     WorkerIdentity worker,
     TimeProvider time) : IRequestHandler<RunLiveBotCommand>
@@ -43,6 +44,7 @@ public sealed class RunLiveBotCommandHandler(
             catalog,
             executor,
             journal,
+            leases,
             settings,
             worker,
             time);

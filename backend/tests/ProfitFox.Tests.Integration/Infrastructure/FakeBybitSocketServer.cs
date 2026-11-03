@@ -15,7 +15,8 @@ namespace ProfitFox.Tests.Integration.Infrastructure;
 
 /// <summary>
 ///     The streams of Bybit v5 on a local port: <c>/v5/public/spot</c>, <c>/v5/public/linear</c> and <c>/v5/private</c>. It
-///     answers <c>auth</c>, <c>subscribe</c> and <c>ping</c> as Bybit does and pushes the messages a test gives it.
+///     answers <c>auth</c>, <c>subscribe</c>, <c>unsubscribe</c> and <c>ping</c> as Bybit does, pushes the messages a test gives
+///     it and counts the connections and subscriptions clients make.
 /// </summary>
 public sealed class FakeBybitSocketServer : IAsyncDisposable
 {
@@ -36,7 +37,26 @@ public sealed class FakeBybitSocketServer : IAsyncDisposable
     /// <summary>How many times a client authenticated on the private stream.</summary>
     public int Authentications => _authentications;
 
+    private readonly ConcurrentDictionary<string, int> _subscribes = new ConcurrentDictionary<string, int>();
     private int _authentications;
+
+    /// <summary>The connections open now to <paramref name="path" />, such as <c>/v5/public/linear</c> or <c>/v5/private</c>.</summary>
+    public int Connections(string path)
+    {
+        return _connections.Values.Count(connection => connection.Path == path);
+    }
+
+    /// <summary>How many times a client asked to subscribe to <paramref name="topic" />.</summary>
+    public int Subscribes(string topic)
+    {
+        return _subscribes.GetValueOrDefault(topic);
+    }
+
+    /// <summary>Whether a client is subscribed to <paramref name="topic" /> now.</summary>
+    public bool Subscribed(string topic)
+    {
+        return _connections.Values.Any(connection => connection.Topics.ContainsKey(topic));
+    }
 
     public static async Task<FakeBybitSocketServer> StartAsync()
     {
@@ -192,7 +212,7 @@ public sealed class FakeBybitSocketServer : IAsyncDisposable
         }
 
         using WebSocket socket = await context.WebSockets.AcceptWebSocketAsync();
-        var connection = new Connection(socket);
+        var connection = new Connection(socket, context.Request.Path.Value ?? "");
         _connections[socket] = connection;
         var buffer = new byte[64 * 1024];
 
@@ -247,6 +267,7 @@ public sealed class FakeBybitSocketServer : IAsyncDisposable
                 foreach (string topic in topics)
                 {
                     connection.Topics[topic] = true;
+                    _subscribes.AddOrUpdate(topic, 1, (_, count) => count + 1);
                 }
 
                 await connection.SendAsync(
@@ -270,9 +291,11 @@ public sealed class FakeBybitSocketServer : IAsyncDisposable
         }
     }
 
-    private sealed class Connection(WebSocket socket)
+    private sealed class Connection(WebSocket socket, string path)
     {
         private readonly SemaphoreSlim _sending = new SemaphoreSlim(1, 1);
+
+        public string Path { get; } = path;
 
         public ConcurrentDictionary<string, bool> Topics { get; } = new ConcurrentDictionary<string, bool>();
 

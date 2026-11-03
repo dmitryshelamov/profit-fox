@@ -22,89 +22,191 @@ using OrderStatus = Bybit.Net.Enums.OrderStatus;
 namespace ProfitFox.Infrastructure.Exchanges.Bybit;
 
 /// <summary>
-///     Bybit v5 streams, a socket client of their own each: the public kline of an instrument and the private order and
-///     execution topics of an account. CryptoExchange.Net reconnects; a restored connection is told to the subscriber.
+///     Bybit v5 streams shared by every subscriber of the process: one public socket client, whose connections carry one kline
+///     topic per instrument and interval however many subscribers listen to it, and the private order and execution topics of
+///     an account. CryptoExchange.Net reconnects; a restored connection is told to every subscriber of its topics.
 /// </summary>
 internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings settings) : IExchangeStreams
 {
-    public async Task<IAsyncDisposable> SubscribeCandlesAsync(Instrument instrument, Interval interval, Action<Candle> closed, Action restored, CancellationToken cancellationToken)
-    {
-        var client = new BybitSocketClient(Options.Create(new BybitSocketOptions { Environment = settings.Environment() }), loggers);
-        WebSocketResult<UpdateSubscription> result = instrument.Category == MarketCategory.Spot
-            ? await client.V5SpotApi.SubscribeToKlineUpdatesAsync(instrument.Symbol, interval.ToBybit(), update => Closed(update.Data, closed), cancellationToken)
-            : await client.V5LinearApi.SubscribeToKlineUpdatesAsync(instrument.Symbol, interval.ToBybit(), update => Closed(update.Data, closed), cancellationToken);
+    private readonly BybitSocketClient _public = new BybitSocketClient(Options.Create(new BybitSocketOptions { Environment = settings.Environment() }), loggers);
+    private readonly Lock _lock = new Lock();
 
-        return Watch(client, restored, result);
+    // A topic stays here once made; only its subscription comes and goes, under the gate of the topic.
+    private readonly Dictionary<(MarketCategory, string, Interval), Topic<CandleListener>> _candles = [];
+    private readonly Dictionary<string, Topic<AccountListener>> _accounts = [];
+
+    public Task<IAsyncDisposable> SubscribeCandlesAsync(Instrument instrument, Interval interval, Action<Candle> closed, Action restored, CancellationToken cancellationToken)
+    {
+        Topic<CandleListener> topic;
+
+        lock (_lock)
+        {
+            (MarketCategory, string, Interval) key = (instrument.Category, instrument.Symbol, interval);
+            topic = _candles.TryGetValue(key, out Topic<CandleListener>? known) ? known : _candles[key] = new Topic<CandleListener>();
+        }
+
+        return JoinAsync(topic, new CandleListener(closed, restored), token => OpenCandlesAsync(instrument, interval, topic, token), cancellationToken);
     }
 
-    public async Task<IAsyncDisposable> SubscribeAccountAsync(
+    public Task<IAsyncDisposable> SubscribeAccountAsync(
         ExchangeKey key,
         Action<ExchangeOrder> order,
         Action<ExchangeFill> fill,
         Action restored,
         CancellationToken cancellationToken)
     {
+        Topic<AccountListener> topic;
+
+        lock (_lock)
+        {
+            topic = _accounts.TryGetValue(key.ApiKey, out Topic<AccountListener>? known) ? known : _accounts[key.ApiKey] = new Topic<AccountListener>();
+        }
+
+        return JoinAsync(topic, new AccountListener(order, fill, restored), token => OpenAccountAsync(key, topic, token), cancellationToken);
+    }
+
+    /// <summary>The first subscriber opens the subscription of the topic; the others only join it.</summary>
+    private static async Task<IAsyncDisposable> JoinAsync<T>(Topic<T> topic, T listener, Func<CancellationToken, Task<IAsyncDisposable>> open, CancellationToken cancellationToken)
+        where T : class, IListener
+    {
+        await topic.Gate.WaitAsync(cancellationToken);
+
+        try
+        {
+            topic.Subscription ??= await open(cancellationToken);
+            topic.Add(listener);
+        }
+        finally
+        {
+            topic.Gate.Release();
+        }
+
+        return new Leave(() => LeaveAsync(topic, listener));
+    }
+
+    /// <summary>The last subscriber to leave takes the subscription of the topic off.</summary>
+    private static async ValueTask LeaveAsync<T>(Topic<T> topic, T listener)
+        where T : class, IListener
+    {
+        await topic.Gate.WaitAsync();
+
+        try
+        {
+            topic.Remove(listener);
+
+            if (topic.Listeners.Count == 0 && topic.Subscription is { } subscription)
+            {
+                topic.Subscription = null;
+                await subscription.DisposeAsync();
+            }
+        }
+        finally
+        {
+            topic.Gate.Release();
+        }
+    }
+
+    /// <summary>A kline topic on the shared public client; a connection with no topic left is closed by the client.</summary>
+    private async Task<IAsyncDisposable> OpenCandlesAsync(Instrument instrument, Interval interval, Topic<CandleListener> topic, CancellationToken cancellationToken)
+    {
+        WebSocketResult<UpdateSubscription> result = instrument.Category == MarketCategory.Spot
+            ? await _public.V5SpotApi.SubscribeToKlineUpdatesAsync(instrument.Symbol, interval.ToBybit(), update => Closed(update.Data, topic), cancellationToken)
+            : await _public.V5LinearApi.SubscribeToKlineUpdatesAsync(instrument.Symbol, interval.ToBybit(), update => Closed(update.Data, topic), cancellationToken);
+        UpdateSubscription subscription = Watch(result, topic);
+
+        return new Leave(() => new ValueTask(_public.UnsubscribeAsync(subscription)));
+    }
+
+    /// <summary>The order and execution topics of an account on a client of its own key; leaving closes the client.</summary>
+    private async Task<IAsyncDisposable> OpenAccountAsync(ExchangeKey key, Topic<AccountListener> topic, CancellationToken cancellationToken)
+    {
         var client = new BybitSocketClient(
             Options.Create(new BybitSocketOptions { Environment = settings.Environment(), ApiCredentials = new BybitCredentials(key.ApiKey, key.Secret) }),
             loggers);
-        WebSocketResult<UpdateSubscription> orders = await client.V5PrivateApi.SubscribeToOrderUpdatesAsync(
-            update =>
-            {
-                foreach (BybitOrderUpdate item in update.Data)
-                {
-                    order(Order(item));
-                }
-            },
-            cancellationToken);
-        Subscription orderStream = Watch(client, restored, orders);
-        WebSocketResult<UpdateSubscription> trades = await client.V5PrivateApi.SubscribeToUserTradeUpdatesAsync(
-            update =>
-            {
-                foreach (BybitUserTradeUpdate trade in update.Data)
-                {
-                    fill(new ExchangeFill(trade.TradeId, trade.ClientOrderId ?? "", trade.Quantity, trade.Price, trade.Fee ?? 0m, trade.FeeAsset ?? "", Utc(trade.Timestamp)));
-                }
-            },
-            cancellationToken);
+        var stream = new Subscription(client);
 
-        if (!trades.Success)
+        try
         {
-            await orderStream.DisposeAsync();
+            Watch(
+                await client.V5PrivateApi.SubscribeToOrderUpdatesAsync(
+                    update =>
+                    {
+                        foreach (BybitOrderUpdate item in update.Data)
+                        {
+                            ExchangeOrder order = Order(item);
 
-            throw new ExchangeUnavailableException($"Bybit refused the stream: {trades.Error!.Message}");
+                            foreach (AccountListener listener in topic.Listeners)
+                            {
+                                listener.Order(order);
+                            }
+                        }
+                    },
+                    cancellationToken),
+                topic);
+            Watch(
+                await client.V5PrivateApi.SubscribeToUserTradeUpdatesAsync(
+                    update =>
+                    {
+                        foreach (BybitUserTradeUpdate trade in update.Data)
+                        {
+                            var fill = new ExchangeFill(trade.TradeId, trade.ClientOrderId ?? "", trade.Quantity, trade.Price, trade.Fee ?? 0m, trade.FeeAsset ?? "", Utc(trade.Timestamp));
+
+                            foreach (AccountListener listener in topic.Listeners)
+                            {
+                                listener.Fill(fill);
+                            }
+                        }
+                    },
+                    cancellationToken),
+                topic);
+        }
+        catch
+        {
+            await stream.DisposeAsync();
+
+            throw;
         }
 
-        trades.Data.ConnectionRestored += _ => restored();
-
-        return orderStream;
+        return stream;
     }
 
-    private static Subscription Watch(BybitSocketClient client, Action restored, WebSocketResult<UpdateSubscription> result)
+    /// <summary>A subscription Bybit took, whose restored connection is told to every subscriber of the topic.</summary>
+    private static UpdateSubscription Watch<T>(WebSocketResult<UpdateSubscription> result, Topic<T> topic)
+        where T : class, IListener
     {
         if (!result.Success)
         {
-            client.Dispose();
-
             throw new ExchangeUnavailableException($"Bybit refused the stream: {result.Error!.Message}");
         }
 
-        result.Data.ConnectionRestored += _ => restored();
+        result.Data.ConnectionRestored += _ =>
+        {
+            foreach (T listener in topic.Listeners)
+            {
+                listener.Restored();
+            }
+        };
 
-        return new Subscription(client);
+        return result.Data;
     }
 
-    private static void Closed(IEnumerable<BybitKlineUpdate> klines, Action<Candle> closed)
+    private static void Closed(IEnumerable<BybitKlineUpdate> klines, Topic<CandleListener> topic)
     {
         foreach (BybitKlineUpdate kline in klines.Where(kline => kline.Confirm))
         {
-            closed(new Candle(
+            var candle = new Candle(
                 Utc(kline.StartTime),
                 new Price(kline.OpenPrice),
                 new Price(kline.HighPrice),
                 new Price(kline.LowPrice),
                 new Price(kline.ClosePrice),
                 new Volume(kline.Volume),
-                new Volume(kline.Turnover)));
+                new Volume(kline.Turnover));
+
+            foreach (CandleListener listener in topic.Listeners)
+            {
+                listener.Closed(candle);
+            }
         }
     }
 
@@ -132,6 +234,49 @@ internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings setting
     private static DateTimeOffset Utc(DateTime time)
     {
         return new DateTimeOffset(DateTime.SpecifyKind(time, DateTimeKind.Utc));
+    }
+
+    private interface IListener
+    {
+        Action Restored { get; }
+    }
+
+    private sealed record CandleListener(Action<Candle> Closed, Action Restored) : IListener;
+
+    private sealed record AccountListener(Action<ExchangeOrder> Order, Action<ExchangeFill> Fill, Action Restored) : IListener;
+
+    /// <summary>
+    ///     The subscribers of one topic. They come and go under <see cref="Gate" />; the stream reads them meanwhile, so each
+    ///     change makes a new array.
+    /// </summary>
+    private sealed class Topic<T>
+        where T : class
+    {
+        private T[] _listeners = [];
+
+        public SemaphoreSlim Gate { get; } = new SemaphoreSlim(1, 1);
+
+        public IAsyncDisposable? Subscription { get; set; }
+
+        public IReadOnlyList<T> Listeners => Volatile.Read(ref _listeners);
+
+        public void Add(T listener)
+        {
+            Volatile.Write(ref _listeners, [.. _listeners, listener]);
+        }
+
+        public void Remove(T listener)
+        {
+            Volatile.Write(ref _listeners, [.. _listeners.Where(item => !ReferenceEquals(item, listener))]);
+        }
+    }
+
+    private sealed class Leave(Func<ValueTask> leave) : IAsyncDisposable
+    {
+        public ValueTask DisposeAsync()
+        {
+            return leave();
+        }
     }
 
     private sealed class Subscription(BybitSocketClient client) : IAsyncDisposable
