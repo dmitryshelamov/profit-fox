@@ -89,7 +89,9 @@ enforces a rule, the check is the source of truth.
   Bybit follow the pairs and accounts, not the bots: one public socket client whose connections carry one kline topic
   per category, symbol and interval, and one private client per account key with the `order` and `execution` topics.
   The first subscriber of a topic subscribes it at Bybit, the others join; the last to leave takes it off. Every
-  subscriber of a topic gets all its events and a restored connection; a session picks its own orders by `orderLinkId`.
+  subscriber of a topic gets all its events and a restored connection; a session picks its own orders by `orderLinkId`. A fill
+  carries its instrument (none for a market the system does not trade): a fill of an order that belongs to no bot, on the
+  instrument of a session, makes the session compare the books after a pause.
 - `Persistence/Postgres/Dapper/Repositories/<Area>` holds repositories, with `Contracts` (`*Db` rows), `Converters`
   (`*DbConverter`) and `Queries` (`*RepositoryQueries`, the SQL). `Persistence/Postgres/FluentMigrator/Migrations` holds
   raw-SQL migrations, `FluentMigrator/Extensions` holds `MigrateToLatestVersion`.

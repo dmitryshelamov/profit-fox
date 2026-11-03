@@ -16,6 +16,7 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
     private readonly Lock _lock = new Lock();
     private readonly Dictionary<string, ExchangeOrder> _orders = [];
     private readonly Dictionary<string, OrderRequest> _requests = [];
+    private readonly Dictionary<string, Instrument> _instruments = [];
     private readonly Dictionary<string, List<ExchangeFill>> _fills = [];
     private readonly Dictionary<string, List<ExchangeFill>> _late = [];
     private readonly List<Action<Candle>> _candles = [];
@@ -133,7 +134,7 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
             OrderRequest request = _requests[clientId];
             ExchangeOrder before = _orders[clientId];
             decimal filled = before.FilledQuantity + quantity;
-            fill = new ExchangeFill(execId ?? $"e-{++_execs}", clientId, quantity, price, fee, feeCoin, DateTimeOffset.Parse("2024-03-10T12:30:00Z"));
+            fill = new ExchangeFill(execId ?? $"e-{++_execs}", clientId, quantity, price, fee, feeCoin, DateTimeOffset.Parse("2024-03-10T12:30:00Z"), _instruments.GetValueOrDefault(clientId));
             bool complete = filled >= (request.Quantity ?? filled);
             order = before with
             {
@@ -185,7 +186,7 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
             };
             _orders[clientId] = order;
             _late.TryAdd(clientId, []);
-            _late[clientId].Add(new ExchangeFill($"e-{++_execs}", clientId, quantity, price, 0m, "USDT", DateTimeOffset.Parse("2024-03-10T12:30:00Z")));
+            _late[clientId].Add(new ExchangeFill($"e-{++_execs}", clientId, quantity, price, 0m, "USDT", DateTimeOffset.Parse("2024-03-10T12:30:00Z"), _instruments.GetValueOrDefault(clientId)));
             Holding += request.Side == OrderSide.Buy ? quantity : -quantity;
             orders = [.. _orderUpdates];
         }
@@ -257,7 +258,7 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
     }
 
     /// <summary>A fill of an order nobody of the system placed, such as the owner by hand, made on <paramref name="instrument" />.</summary>
-    public void ForeignFill(string clientId, decimal quantity, decimal price, Instrument instrument)
+    public void ForeignFill(string clientId, decimal quantity, decimal price, Instrument? instrument)
     {
         Action<ExchangeFill>[] handlers;
 
@@ -398,6 +399,7 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
             }
 
             _requests[order.ClientId] = order;
+            _instruments[order.ClientId] = instrument;
             _orders[order.ClientId] = new ExchangeOrder(order.ClientId, $"x-{order.ClientId}", ExchangeOrderState.Open, 0m, null);
         }
 

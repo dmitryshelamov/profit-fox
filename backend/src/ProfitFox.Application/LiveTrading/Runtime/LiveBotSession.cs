@@ -71,6 +71,7 @@ internal sealed class LiveBotSession(
     private LiveBotContext _context = null!;
     private StrategyRun _run = null!;
     private decimal? _lastClose;
+    private bool _reconcileScheduled;
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -113,6 +114,10 @@ internal sealed class LiveBotSession(
                     if (Mine(fill.ClientId))
                     {
                         _inputs.Writer.TryWrite(new FillInput(fill));
+                    }
+                    else if (!ClientOrderId.TryParse(fill.ClientId, out _) && fill.Instrument == _context.Bot.Instrument)
+                    {
+                        _inputs.Writer.TryWrite(new ForeignFillInput());
                     }
                 },
                 () => _inputs.Writer.TryWrite(new RestoreInput()),
@@ -378,6 +383,21 @@ internal sealed class LiveBotSession(
                 break;
             case OrderInput { Order: var order }:
                 await OrderAsync(order, cancellationToken);
+
+                break;
+            case ForeignFillInput when !_reconcileScheduled:
+                // The REST reads may lag behind the stream: the comparison waits as long as the one repeated after a difference.
+                _reconcileScheduled = true;
+                _ = LaterAsync(new ReconcileInput(), settings.PollInterval * 3, cancellationToken);
+
+                break;
+            case ReconcileInput:
+                _reconcileScheduled = false;
+
+                if (_bot.Status is LiveBotStatus.Running or LiveBotStatus.Paused)
+                {
+                    await ReconcileAsync(cancellationToken);
+                }
 
                 break;
             case RestoreInput:

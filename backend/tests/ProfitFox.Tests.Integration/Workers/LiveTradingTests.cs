@@ -8,9 +8,10 @@ using NSubstitute;
 using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Domain.Entities.LiveTrading;
 using ProfitFox.Domain.Entities.LiveTrading.Enums;
+using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Repositories;
-
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Tests.Integration.Infrastructure;
 
 using Serilog.Core;
@@ -780,6 +781,149 @@ public class LiveTradingTests
         await _scenario.WaitAsync(async () => !(await _scenario.LiveAsync(bot)).CloseRequested, "the closed position");
         (await _scenario.PositionsAsync(bot)).Single(position => position.Number == 1).ClosedAt.ShouldNotBeNull();
         (await _scenario.LiveAsync(bot)).Status.ShouldBe(LiveBotStatus.Stopped);
+    }
+
+    // Scenario "Позицию закрыли руками в linear": the fill of the owner's own order sets the comparison off, so the bot does not
+    // sell what it no longer holds and open a short.
+    [Test]
+    public async Task Position_closed_by_hand_on_linear_stops_the_bot_at_once()
+    {
+        Guid bot = await _scenario.CreateBotAsync(category: "linear");
+        _scenario.StartWorker();
+        await _scenario.ActAsync(bot, "start");
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the start order");
+        _scenario.Exchange.Fill(LiveTradingScenario.ClientId(bot, 1), 1m, 100m);
+        await _scenario.WaitAsync(async () => (await _scenario.PositionsAsync(bot)).FirstOrDefault()?.Quantity == 1m, "the open linear position");
+        await SettleAsync();
+        _scenario.Exchange.Holding = 0m;
+
+        _scenario.Exchange.ForeignFill("manual-1", 1m, 100m, LiveTradingScenario.Linear);
+
+        await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).Status == LiveBotStatus.Failed, "the failed bot");
+        (await _scenario.LiveAsync(bot)).StopReason!.ShouldContain("Exchange position 0 does not match the positions of the bots 1");
+        _scenario.Exchange.Sent.ShouldNotContain(order => order.Side == OrderSide.Sell);
+    }
+
+    // Scenario "Ручная докупка на споте": the comparison runs once the pause is over and passes, the bot goes on.
+    [Test]
+    public async Task Coin_the_owner_bought_by_hand_on_the_spot_passes_the_comparison()
+    {
+        Guid bot = await StartedAndFilledAsync();
+        await SettleAsync();
+        int reads = _scenario.Exchange.HoldingReads;
+        _scenario.Exchange.Holding = 1.3m;
+
+        _scenario.Exchange.ForeignFill("manual-1", 0.3m, 100m, LiveTradingScenario.Spot);
+
+        await _scenario.WaitAsync(() => _scenario.Exchange.HoldingReads > reads, "the comparison");
+        await SettleAsync();
+        (await _scenario.LiveAsync(bot)).Status.ShouldBe(LiveBotStatus.Running);
+    }
+
+    // Scenario "Ручная сделка на другом инструменте": another symbol, another market, or a market the system does not trade
+    // (no instrument) wait for the next ordinary comparison.
+    [TestCase("linear", "ETHUSDT")]
+    [TestCase("spot", "BTCUSDT")]
+    [TestCase(null, null)]
+    public async Task Fill_of_the_owner_on_another_instrument_sets_no_comparison_off(string? category, string? symbol)
+    {
+        Guid bot = await _scenario.CreateBotAsync(category: "linear");
+        _scenario.StartWorker();
+        await _scenario.ActAsync(bot, "start");
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the start order");
+        _scenario.Exchange.Fill(LiveTradingScenario.ClientId(bot, 1), 1m, 100m);
+        await _scenario.WaitAsync(async () => (await _scenario.PositionsAsync(bot)).FirstOrDefault()?.Quantity == 1m, "the open linear position");
+        await SettleAsync();
+        int reads = _scenario.Exchange.HoldingReads;
+        _scenario.Exchange.Holding = 0m;
+        Instrument? other = category is null ? null : new Instrument(Enum.Parse<MarketCategory>(category, ignoreCase: true), symbol!);
+
+        _scenario.Exchange.ForeignFill("manual-1", 1m, 100m, other);
+
+        await SettleAsync();
+        _scenario.Exchange.HoldingReads.ShouldBe(reads);
+        (await _scenario.LiveAsync(bot)).Status.ShouldBe(LiveBotStatus.Running);
+    }
+
+    // Scenario "Ордер исполнился несколькими сделками": one comparison for the lot; a fill after it sets the next one off.
+    [Test]
+    public async Task Several_fills_of_the_owner_in_a_row_give_one_comparison()
+    {
+        await StartedAndFilledAsync();
+        await SettleAsync();
+        int reads = _scenario.Exchange.HoldingReads;
+
+        for (var i = 0; i < 3; i++)
+        {
+            _scenario.Exchange.ForeignFill("manual-1", 0.1m, 100m, LiveTradingScenario.Spot);
+        }
+
+        await _scenario.WaitAsync(() => _scenario.Exchange.HoldingReads > reads, "the comparison");
+        await SettleAsync();
+        _scenario.Exchange.HoldingReads.ShouldBe(reads + 1);
+
+        _scenario.Exchange.ForeignFill("manual-2", 0.1m, 100m, LiveTradingScenario.Spot);
+
+        await _scenario.WaitAsync(() => _scenario.Exchange.HoldingReads > reads + 1, "the comparison of the next fill");
+    }
+
+    // The fill of a neighbour bot is no foreign fill: the bots of one symbol do not compare the books on each other's fills.
+    [Test]
+    public async Task Fill_of_a_bot_of_the_system_sets_no_comparison_off()
+    {
+        Guid first = await _scenario.CreateBotAsync();
+        Guid second = await _scenario.CreateBotAsync();
+        _scenario.StartWorker();
+        await _scenario.ActAsync(first, "start");
+        await _scenario.ActAsync(second, "start");
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 2, "a start order of each bot");
+        await SettleAsync();
+        int reads = _scenario.Exchange.HoldingReads;
+
+        _scenario.Exchange.Fill(LiveTradingScenario.ClientId(first, 1), 1m, 100m);
+
+        await _scenario.WaitAsync(async () => (await _scenario.PositionsAsync(first)).FirstOrDefault()?.Quantity == 1m, "the fill of the first bot");
+        await SettleAsync();
+        _scenario.Exchange.HoldingReads.ShouldBe(reads);
+    }
+
+    // Requirement "Сверка после чужого исполнения": a paused bot keeps its books, so it is compared too.
+    [Test]
+    public async Task Paused_bot_is_stopped_by_a_difference_after_a_fill_of_the_owner()
+    {
+        Guid bot = await StartedAndFilledAsync();
+        await _scenario.ActAsync(bot, "pause");
+        await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).Status == LiveBotStatus.Paused, "the pause");
+        await SettleAsync();
+        _scenario.Exchange.Holding = 0m;
+
+        _scenario.Exchange.ForeignFill("manual-1", 1m, 100m, LiveTradingScenario.Spot);
+
+        await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).Status == LiveBotStatus.Failed, "the failed bot");
+        (await _scenario.LiveAsync(bot)).StopReason!.ShouldContain("less than the positions of the bots 1");
+    }
+
+    // A bot that is stopping only cancels its orders: nothing is compared on its behalf.
+    [Test]
+    public async Task Stopping_bot_is_not_compared_after_a_fill_of_the_owner()
+    {
+        Guid bot = await StartedWithLimitsAsync();
+        for (var i = 0; i < 100; i++)
+        {
+            _scenario.Exchange.CancelRefusals.Enqueue(new OrderOutcome(OrderOutcomeKind.Permanent, Reason: "Permission denied."));
+        }
+
+        await _scenario.ActAsync(bot, "stop");
+        await _scenario.WaitAsync(() => _scenario.Exchange.Cancels.Count >= 2, "the cancels asked");
+        await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).Status == LiveBotStatus.Stopping, "the stopping bot");
+        int reads = _scenario.Exchange.HoldingReads;
+        _scenario.Exchange.Holding = 0m;
+
+        _scenario.Exchange.ForeignFill("manual-1", 1m, 100m, LiveTradingScenario.Spot);
+
+        await SettleAsync();
+        _scenario.Exchange.HoldingReads.ShouldBe(reads);
+        (await _scenario.LiveAsync(bot)).Status.ShouldBe(LiveBotStatus.Stopping);
     }
 
     // A neighbour bot of the account and the symbol may write its fill a moment after the exchange shows it: the comparison is

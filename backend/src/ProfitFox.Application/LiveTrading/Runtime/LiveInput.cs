@@ -24,3 +24,9 @@ internal sealed record StatusInput(LiveBot Bot) : LiveInput;
 
 /// <summary>The time of a delayed send has come.</summary>
 internal sealed record WakeInput : LiveInput;
+
+/// <summary>An execution of an order of nobody in the system, on the instrument of the bot, such as a trade of the owner by hand.</summary>
+internal sealed record ForeignFillInput : LiveInput;
+
+/// <summary>The pause after a foreign execution is over: the books are compared with the exchange.</summary>
+internal sealed record ReconcileInput : LiveInput;

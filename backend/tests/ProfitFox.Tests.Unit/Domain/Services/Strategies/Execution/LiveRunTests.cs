@@ -106,6 +106,18 @@ public class LiveRunTests
         run.State.Quantity.ShouldBe(0.0005m);
     }
 
+    // The exchange may confirm a cancel the run has already seen.
+    [Test]
+    public void Cancel_of_an_order_the_run_does_not_know_changes_nothing()
+    {
+        StrategyRun run = LadderClosingAfterExitSold(0.4m, Conditions.Neutral);
+
+        run.Record(new OrderCancelled(Start, "o-99")).ShouldBeEmpty();
+
+        run.State.Status.ShouldBe(PositionStatus.Closing);
+        run.State.Quantity.ShouldBe(0.6m);
+    }
+
     /// <summary>Buys 1 at the market when the close is above its EMA of 3.</summary>
     private static StrategyRun BuyAboveEma()
     {
