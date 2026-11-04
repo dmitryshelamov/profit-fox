@@ -75,9 +75,136 @@ docker compose -f docker-compose.worker.yml up -d --build
 
 The machines need synchronized clocks (NTP, on by default in Ubuntu): leases are compared by each Worker's clock.
 
-On production, Postgres listens on the LAN interface, `pg_hba.conf` admits only `192.168.8.0/24`, and the password
-comes from an environment variable. Deploy the API first, then the Workers, all from the same commit: stop the Workers,
-deploy the API, which migrates the database, then start the Workers again.
+The production database publishes no port yet (see [Production](#production)): a Worker on another machine comes
+with its own change, which opens the port to the local network. Deploy the API first, then the Workers, all from the
+same commit: stop the Workers, deploy the API, which migrates the database, then start the Workers again.
+
+## Production
+
+Production runs on soyo-01 (`192.168.8.111`) in the local network only: the interface and the API are at
+`http://192.168.8.111/` (the market scanner at `/market`). It is the `profit-fox` compose project of
+`docker-compose.prod.yml`:
+
+| Service | What it does |
+|---|---|
+| `db` | TimescaleDB on the volume `profit-fox-db`; no port leaves the server |
+| `api` | the API; migrates the database on start; `127.0.0.1:8080` on the server for the deploy to wait for it |
+| `worker` | the Worker, with live trading on (`Trading__Enabled=true`): real money |
+| `scanner` | the market scanner; it gets no master key |
+| `web` | Caddy on port 80: the interface, and `/api` forwarded to the API |
+
+Nothing is built on soyo-01 or anywhere in the LAN: from Russian networks some nuget.org addresses fail at TLS. A
+GitHub-hosted runner builds the images, soyo-01 pulls them from the public GHCR packages
+`ghcr.io/dmitryshelamov/profit-fox-{api,worker,scanner,web}`, and a self-hosted GitHub Actions runner on soyo-03
+(`192.168.8.142`, label `soyo-03`) only starts the deploy on soyo-01 over SSH.
+
+### Versions
+
+A version is a number `N`: tag `vN` on a commit of `main`, and images `:N` built from that commit (label
+`org.opencontainers.image.revision`). Every service runs the same `N`. A rebuild of a commit keeps its number.
+
+### Deploy and roll back
+
+1. A merge into `main` runs CI, then `.github/workflows/deploy.yml`. Once CI passes, and Frontend and E2E pass where
+   the commit has them, the `build` job tags the commit `v<max+1>` and pushes the four images `:N`.
+2. The `images` job checks that the four images `:N` are in GHCR, and the `deploy` job on soyo-03 waits for the owner's approval in the `production` environment: Actions → the Deploy run →
+   Review deployments → Approve. The time of the approval is the time of the deploy: live bots stop for it.
+3. The job runs `deploy N` on soyo-01 over SSH. `~/profit-fox/deploy.sh` checks on GitHub that tag `vN` is on a commit
+   of `main`, downloads `docker-compose.prod.yml` of that commit to `~/profit-fox/releases/N/`, pulls the images and
+   checks they are built from that commit. Then it stops the Worker and the scanner, starts the database, updates the
+   API and waits up to 120 s for `/openapi/v1.json`, and only then starts the Worker, the scanner and the web of version
+   `N`. If the API does not answer, the deploy fails and the Worker and the scanner stay stopped. The running version
+   is in `~/profit-fox/current`.
+
+To roll back, or to deploy a version again: Actions → Deploy → Run workflow on `main` with the version number, then
+approve. Such a run builds nothing; the images `:N` must be in GHCR. A rollback keeps the data, but the database keeps
+the migrations of the newer version: roll back only to a version that works with them.
+
+On the server, `docker compose -p profit-fox ps` lists the services and `docker compose -p profit-fox logs api` shows
+the logs of one.
+
+### Secrets
+
+The secrets live only in `~/profit-fox/.env.prod` on soyo-01 (mode `600`), never in git, the images or GitHub:
+
+```text
+PROFITFOX_DB_PASSWORD=<64 hex characters>
+PROFITFOX_MASTER_KEY=<32 bytes in base64>
+```
+
+The master key decrypts the exchange keys saved in the database: a new key makes the saved ones unreadable.
+
+### A new deploy.sh
+
+The deploy key can run only `~/profit-fox/deploy.sh`, so a change to `deploy/deploy.sh` reaches the server by hand,
+after its PR is merged and before its version is deployed. A change of the command raises `DEPLOY_PROTOCOL` in the
+script and in `deploy.yml`, and the old copy refuses the new workflow until it is replaced:
+
+```bash
+ssh 192.168.8.111 'curl -fsSL https://raw.githubusercontent.com/dmitryshelamov/profit-fox/main/deploy/deploy.sh -o ~/profit-fox/deploy.sh && chmod 700 ~/profit-fox/deploy.sh'
+```
+
+### Setting up the machines
+
+Done once. Steps with `sudo` or in the GitHub settings are the owner's.
+
+The owner, on soyo-03: the runner only runs `ssh`, so `soyo` needs no Docker there. Settings → Actions → Runners →
+New self-hosted runner (Linux) in GitHub gives the commands that download the runner to `~/actions-runner` on soyo-03
+and a token. Configure it with the label and run it as a service of `soyo`:
+
+```bash
+./config.sh --url https://github.com/dmitryshelamov/profit-fox --token <token> --labels soyo-03 --unattended
+```
+
+```bash
+sudo ./svc.sh install soyo && sudo ./svc.sh start
+```
+
+The owner, on soyo-01: `deploy.sh` needs `curl` and `jq`:
+
+```bash
+ssh -t 192.168.8.111 'command -v jq || sudo apt-get install -y jq'
+```
+
+The owner, in GitHub:
+
+- Settings → Environments → New environment `production`: required reviewer — the owner; deployment branches —
+  selected branches, `main`.
+- Settings → Actions → General → Approval for running fork pull request workflows from contributors: "Require approval
+  for all external contributors".
+- Settings → Rules → Rulesets → New tag ruleset for `v*`: restrict updates and deletions, block force pushes. Creation
+  stays allowed: the `build` job creates the tags.
+- After the first build: each package `profit-fox-api`, `-worker`, `-scanner`, `-web` → Package settings → Change
+  visibility → Public. Until then soyo-01 cannot pull the images and the deploy fails at the pull, before anything stops.
+
+The agent, with the owner's approval. On soyo-03, the deploy key and the host key of soyo-01:
+
+```bash
+ssh soyo@192.168.8.142 'ssh-keygen -t ed25519 -N "" -C profit-fox-deploy -f ~/.ssh/profit-fox-deploy && ssh-keyscan -t ed25519 192.168.8.111 >> ~/.ssh/known_hosts'
+```
+
+On soyo-01, the script and the secrets, generated on the server and never printed:
+
+```bash
+ssh 192.168.8.111 'mkdir -p ~/profit-fox && curl -fsSL https://raw.githubusercontent.com/dmitryshelamov/profit-fox/main/deploy/deploy.sh -o ~/profit-fox/deploy.sh && chmod 700 ~/profit-fox/deploy.sh'
+```
+
+```bash
+ssh 192.168.8.111 'umask 077 && test ! -e ~/profit-fox/.env.prod && printf "PROFITFOX_DB_PASSWORD=%s\nPROFITFOX_MASTER_KEY=%s\n" "$(openssl rand -hex 32)" "$(openssl rand -base64 32)" > ~/profit-fox/.env.prod'
+```
+
+The deploy key in `authorized_keys` of soyo-01, allowed only from soyo-03 and only as `deploy.sh`:
+
+```bash
+ssh soyo@192.168.8.142 'cat ~/.ssh/profit-fox-deploy.pub' | sed 's|^|from="192.168.8.142",command="/home/soyo/profit-fox/deploy.sh",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-user-rc |' | ssh 192.168.8.111 'cat >> ~/.ssh/authorized_keys'
+```
+
+Check from soyo-03: the deploy key without a command and with any other command is refused, and the usual login of
+`soyo` still works:
+
+```bash
+ssh soyo@192.168.8.142 'ssh -i ~/.ssh/profit-fox-deploy -o IdentitiesOnly=yes soyo@192.168.8.111; ssh -i ~/.ssh/profit-fox-deploy -o IdentitiesOnly=yes soyo@192.168.8.111 id'
+```
 
 ## Market data API
 

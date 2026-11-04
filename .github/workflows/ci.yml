@@ -44,3 +44,24 @@ jobs:
 
       - name: Verify format
         run: dotnet format backend/ProfitFox.sln --verify-no-changes --no-restore
+
+  # Files of the production deploy; deploy.sh runs on the server, where its command is the only input.
+  deploy-files:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Shellcheck
+        run: shellcheck deploy/*.sh
+
+      - name: Deploy script tests
+        run: bash deploy/deploy.test.sh
+
+      # Test values: the real ones live only on the server.
+      - name: Production compose file
+        run: docker compose -f docker-compose.prod.yml config -q
+        env:
+          PROFITFOX_VERSION: 1
+          PROFITFOX_DB_PASSWORD: test
+          PROFITFOX_MASTER_KEY: test
