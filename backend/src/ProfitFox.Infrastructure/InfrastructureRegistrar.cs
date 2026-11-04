@@ -28,6 +28,7 @@ using ProfitFox.Infrastructure.Exchanges;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
 using ProfitFox.Infrastructure.Exchanges.Retry;
 using ProfitFox.Infrastructure.Mediatr;
+using ProfitFox.Infrastructure.Observability;
 using ProfitFox.Infrastructure.Persistence.Postgres;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.LiveTrading;
 using ProfitFox.Infrastructure.Persistence.Postgres.Transactions;
@@ -41,6 +42,7 @@ public static class InfrastructureRegistrar
     public static void Configure(IConfiguration configuration, IServiceCollection services)
     {
         ConfigureCommon(configuration, services);
+        MetricsRegistrar.Configure(configuration, services, "api");
         RequireMasterKey(configuration, services);
         services.AddHostedService<StrategyVersionsInitializationService>();
 
@@ -63,6 +65,7 @@ public static class InfrastructureRegistrar
         }
 
         ConfigureCommon(configuration, services);
+        MetricsRegistrar.Configure(configuration, services, "worker");
         TradingSettings trading = Trading(configuration);
 
         if (trading.Enabled && trading.LeaseRenewal >= trading.LeaseDuration)
@@ -103,6 +106,7 @@ public static class InfrastructureRegistrar
         }
 
         ConfigureCommon(configuration, services);
+        MetricsRegistrar.Configure(configuration, services, "scanner");
         services.AddSingleton(settings);
         services.AddSingleton<ScannerRestGate>();
         services.AddSingleton<IMarketDataFeed, BybitPublicDataClient>();
@@ -141,6 +145,11 @@ public static class InfrastructureRegistrar
             }
         });
         services.AddSingleton(bybit);
+
+        // Every client of the factory, Bybit.Net's own included, counts its attempts to Bybit REST; other hosts pass uncounted.
+        services.AddSingleton<BybitLimitHeadroom>();
+        services.AddTransient<BybitRestMetricsHandler>();
+        services.ConfigureHttpClientDefaults(builder => builder.AddHttpMessageHandler<BybitRestMetricsHandler>());
         services.AddHttpClient<IExchangeKeyInspector, BybitAccountClient>();
         services.AddHttpClient<IExchangeLedger, BybitLedger>();
         services.AddHttpClient<IOrderGateway, BybitOrderGateway>();

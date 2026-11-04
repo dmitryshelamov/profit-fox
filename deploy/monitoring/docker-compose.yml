@@ -1,0 +1,39 @@
+# The monitoring stack on soyo-03: Prometheus receives the metrics api, worker and scanner push over OTLP, Grafana shows them.
+# Started by hand in this folder: `docker compose up -d`, with `.env` (mode 600, see .env.example) next to this file.
+# Both ports are open on the LAN interfaces of soyo-03, without TLS; OTLP is accepted without authorization.
+name: profitfox-monitoring
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      # Services push to /api/v1/otlp/v1/metrics; nothing is scraped.
+      - --web.enable-otlp-receiver
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.4.14
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:?set GF_SECURITY_ADMIN_PASSWORD in .env}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  grafana-data:
