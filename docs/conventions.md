@@ -101,6 +101,21 @@ enforces a rule, the check is the source of truth.
   `ConfigureScanner` for the scanner.
   Both call internal registrars such as `Mediatr/MediatrRegistrar` and `Persistence/Postgres/PostgresRegistrar`; only
   `ConfigureWorker` registers the background services that run work.
+- `Observability` holds the metrics of the services: `MetricsSettings` (the `Metrics` section) and
+  `MetricsRegistrar.Configure(configuration, services, serviceName)`, which `Configure`, `ConfigureWorker` and `ConfigureScanner`
+  call with `api`, `worker` and `scanner`. With `Metrics:OtlpEndpoint` set, OpenTelemetry pushes the meters it lists over OTLP
+  (`http/protobuf`, cumulative) every `Metrics:ExportInterval`; the name becomes `service.name`, which Prometheus turns into the
+  `job` label. Without it no meter provider is registered and the instruments record into nothing. Instruments are made with
+  `System.Diagnostics.Metrics` through `IMeterFactory`, never with OpenTelemetry types.
+- The metrics of Bybit REST live next to the adapters, on the meter `ProfitFox.Bybit`: `Exchanges/Bybit/BybitRestMetricsHandler`,
+  a `DelegatingHandler` that `ConfigureHttpClientDefaults` puts on every client of `IHttpClientFactory`, counts each attempt to
+  the Bybit REST address of `BybitSettings` (retries included) as `profitfox.bybit.rest.requests` by `bybit.endpoint` (the path),
+  `http.response.status_code` and `bybit.outcome` (`ok`, `rate_limited` for HTTP 403, 429 or `retCode` 10006, `error`); requests
+  to other hosts pass uncounted. It hands the `X-Bapi-Limit` headers to `Exchanges/Bybit/BybitLimitHeadroom`, a singleton whose
+  gauges `profitfox.bybit.rest.limit` and `profitfox.bybit.rest.limit_remaining` give the last limit of an endpoint and its
+  lowest remainder since the previous collection, which takes it; so the meter has one reader, the exporter.
+- A new HTTP client to Bybit is made only through `IHttpClientFactory` (`AddHttpClient`), or its requests are missing from the
+  metrics.
 - `Exchanges/<Vendor>` holds adapters over vendor SDKs, including the mapping of domain values to SDK types
   (`BybitCodes`). `Exchanges/Retry` holds Polly pipelines. `BybitMarketDataClient` implements `IInstrumentCatalog` (spot in one
   answer, linear by following the cursor; one attempt per request). The registered `IInstrumentCatalog` is
@@ -191,6 +206,15 @@ enforces a rule, the check is the source of truth.
 
   ```json
   "Bybit": { "RestAddress": "http://127.0.0.1:5296" }
+  ```
+
+- The `Metrics` section (`MetricsSettings`, bound in `MetricsRegistrar`): `OtlpEndpoint`, the full URL of the metrics path of an
+  OTLP receiver, empty by default, so tests and local runs push nothing; `ExportInterval`, 5 seconds by default. Nothing is in
+  `appsettings.json`: production sets `Metrics__OtlpEndpoint` (Prometheus on soyo-03, `http://192.168.8.142:9090/api/v1/otlp/v1/metrics`)
+  in the environment of `api`, `worker` and `scanner`.
+
+  ```json
+  "Metrics": { "OtlpEndpoint": "http://127.0.0.1:9090/api/v1/otlp/v1/metrics", "ExportInterval": "00:00:05" }
   ```
 
 - The `ExchangeAccounts` section (`ExchangeAccountSettings`): `MasterKey`, 32 bytes in base64, encrypts the secrets of
@@ -298,6 +322,10 @@ enforces a rule, the check is the source of truth.
   `IExchangeLedger`, `IOrderGateway` and `IExchangeStreams` for the live trading runtime, whose orders, fills and streams
   depend on each other as a mock cannot keep.
 - Assertions use Shouldly.
+- Metrics are read in tests with `MetricCollector` (`Microsoft.Extensions.Diagnostics.Testing`) over the `IMeterFactory` of a
+  `ServiceCollection().AddMetrics()` or of the host; a gauge is collected with `RecordObservableInstruments`
+  (`BybitRestMetricsHandlerTests`, `BybitLimitHeadroomTests`, `BybitRestMetricsTests`). `MetricsExportTests` runs a Worker against a
+  local `HttpListener` that stands in for the OTLP receiver.
 - Generators randomize only values the test does not check. Reference data (decimal precision, period bounds, interval
   codes) stays explicit in the test.
 - A vendor SDK that builds its own `HttpClient` is replaced in tests as a whole client. `OutboundHttpGuard` sends any

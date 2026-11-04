@@ -8,6 +8,10 @@ name: profit-fox
 x-database: &database
   ConnectionStrings__MarketData: Host=db;Port=5432;Database=profitfox;Username=profitfox;Password=${PROFITFOX_DB_PASSWORD:?}
 
+# The services push their metrics to Prometheus on soyo-03 (deploy/monitoring); no port is published for them here.
+x-metrics: &metrics
+  Metrics__OtlpEndpoint: http://192.168.8.142:9090/api/v1/otlp/v1/metrics
+
 services:
   # The port is not published: everything that uses the database runs in this project.
   db:
@@ -33,7 +37,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      <<: *database
+      <<: [*database, *metrics]
       ASPNETCORE_ENVIRONMENT: Production
       ExchangeAccounts__MasterKey: ${PROFITFOX_MASTER_KEY:?}
     ports:
@@ -48,7 +52,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      <<: *database
+      <<: [*database, *metrics]
       DOTNET_ENVIRONMENT: Production
       ExchangeAccounts__MasterKey: ${PROFITFOX_MASTER_KEY:?}
       Trading__Enabled: "true"
@@ -61,7 +65,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      <<: *database
+      <<: [*database, *metrics]
       DOTNET_ENVIRONMENT: Production
 
   # The interface and the API for the local network: Caddy forwards /api to api:8080.

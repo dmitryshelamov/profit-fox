@@ -13,6 +13,8 @@
         <PackageReference Include="Dapper"/>
         <PackageReference Include="FluentMigrator.Runner.Postgres"/>
         <PackageReference Include="Npgsql"/>
+        <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol"/>
+        <PackageReference Include="OpenTelemetry.Extensions.Hosting"/>
         <PackageReference Include="Polly"/>
     </ItemGroup>
 

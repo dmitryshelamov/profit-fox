@@ -12,6 +12,8 @@
 *.env
 .env
 .env.*
+# A template without values; the real .env lives only on the server.
+!deploy/monitoring/.env.example
 **/.DS_Store
 
 # User-specific files (MonoDevelop/Xamarin Studio)
