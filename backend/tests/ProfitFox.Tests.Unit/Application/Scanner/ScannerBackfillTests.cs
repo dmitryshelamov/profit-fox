@@ -105,6 +105,24 @@ public class ScannerBackfillTests
         });
     }
 
+    // Requirement "Загрузка истории на экране": the last day of 1,100 pairs takes many minutes, and the screen counts them from the start.
+    [Test]
+    public async Task Progress_counts_the_pairs_before_the_last_day_of_any_pair_is_requested()
+    {
+        _market.Keep([new ScannerPair(Btc, true), new ScannerPair(Sol, true)]);
+        _state.SetProgressAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                _requests.Add($"progress {call.ArgAt<int>(0)} {call.ArgAt<int>(1)}");
+
+                return Task.CompletedTask;
+            });
+
+        await RunAsync(new ScannerSettings { HistoryDays = 2 });
+
+        _requests[0].ShouldBe("progress 2 0");
+    }
+
     // Requirement "История за 90 дней": the history of a younger pair starts with its first candle.
     [Test]
     public async Task History_of_a_pair_younger_than_the_window_starts_with_its_launch()

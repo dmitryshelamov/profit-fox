@@ -50,12 +50,13 @@ public sealed class ScannerBackfill(
 
         if (behind.Length > 0)
         {
+            // The last day of every pair takes many minutes: the screen counts the pairs from the start of it.
+            await ProgressAsync(cancellationToken);
+
             foreach (ScannerPair pair in behind)
             {
                 await CatchUpAsync(pair.Instrument, cancellationToken);
             }
-
-            await ProgressAsync(cancellationToken);
 
             return true;
         }
