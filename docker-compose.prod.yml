@@ -1,0 +1,76 @@
+# Production on soyo-01. deploy/deploy.sh runs it for one version, never by hand:
+#   PROFITFOX_VERSION=<N> docker compose -f docker-compose.prod.yml --env-file ~/profit-fox/.env.prod up -d
+# Every service runs the images of one version N, built from a commit of main. The secrets come from .env.prod on the
+# server (mode 600, never committed): PROFITFOX_DB_PASSWORD (hex, so it needs no escaping in the connection string) and
+# PROFITFOX_MASTER_KEY (32 bytes in base64). Each service gets only the settings it needs.
+name: profit-fox
+
+x-database: &database
+  ConnectionStrings__MarketData: Host=db;Port=5432;Database=profitfox;Username=profitfox;Password=${PROFITFOX_DB_PASSWORD:?}
+
+services:
+  # The port is not published: everything that uses the database runs in this project.
+  db:
+    image: timescale/timescaledb:2.30.2-pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: profitfox
+      POSTGRES_USER: profitfox
+      POSTGRES_PASSWORD: ${PROFITFOX_DB_PASSWORD:?}
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "profitfox", "-d", "profitfox"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Migrates the database on start. The port on 127.0.0.1 lets deploy.sh wait for it; the web service reaches it inside.
+  api:
+    image: ghcr.io/dmitryshelamov/profit-fox-api:${PROFITFOX_VERSION:?}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *database
+      ASPNETCORE_ENVIRONMENT: Production
+      ExchangeAccounts__MasterKey: ${PROFITFOX_MASTER_KEY:?}
+    ports:
+      - "127.0.0.1:8080:8080"
+
+  # Trades with real money. The grace period lets it release the leases of its bots on stop.
+  worker:
+    image: ghcr.io/dmitryshelamov/profit-fox-worker:${PROFITFOX_VERSION:?}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *database
+      DOTNET_ENVIRONMENT: Production
+      ExchangeAccounts__MasterKey: ${PROFITFOX_MASTER_KEY:?}
+      Trading__Enabled: "true"
+
+  # Reads only public Bybit data, so it gets no master key.
+  scanner:
+    image: ghcr.io/dmitryshelamov/profit-fox-scanner:${PROFITFOX_VERSION:?}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *database
+      DOTNET_ENVIRONMENT: Production
+
+  # The interface and the API for the local network: Caddy forwards /api to api:8080.
+  web:
+    image: ghcr.io/dmitryshelamov/profit-fox-web:${PROFITFOX_VERSION:?}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+
+volumes:
+  db:
+    name: profit-fox-db

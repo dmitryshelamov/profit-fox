@@ -1,0 +1,168 @@
+name: Deploy
+
+# A commit of main whose checks passed gets the next version number N (tag vN), its images are built on a GitHub-hosted
+# runner and pushed to GHCR as :N, and soyo-03 deploys them to soyo-01 once the owner approves the production
+# environment. Nothing is built in Russia: from there some nuget.org addresses fail at TLS.
+# Run by hand with a version number to deploy that version again or roll back to it; that run builds nothing.
+# Never runs for pull requests: workflow_run runs this file from main, and only for a push to main of this repository.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to deploy, the N of tag vN
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  # The same number as DEPLOY_PROTOCOL in deploy/deploy.sh; the copy on the server refuses another one.
+  DEPLOY_PROTOCOL: 1
+
+jobs:
+  # CI has passed. Frontend and E2E run only when their paths change: a run that exists must pass, none means not needed.
+  checks:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      actions: read
+    steps:
+      - name: Wait for Frontend and E2E
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          for workflow in frontend.yml e2e.yml; do
+            while true; do
+              run="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?head_sha=$COMMIT&event=push" \
+                --jq '.workflow_runs[0] // empty | "\(.status) \(.conclusion)"')"
+              case "$run" in
+                "") echo "$workflow: not run for this commit"; break ;;
+                "completed success") echo "$workflow: success"; break ;;
+                completed*) echo "$workflow: $run"; exit 1 ;;
+                *) echo "$workflow: $run, waiting"; sleep 30 ;;
+              esac
+            done
+          done
+
+  # One build at a time, so two commits never take the same number.
+  build:
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      packages: write
+    concurrency:
+      group: deploy-build
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    env:
+      COMMIT: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          # Every tag, to find the number of this commit or the largest one.
+          fetch-depth: 0
+
+      # A commit keeps the number it got; a new one gets the largest plus one. The push of a tag that exists fails.
+      - name: Version
+        id: version
+        run: |
+          numbers() { sed -n 's/^v\([1-9][0-9]*\)$/\1/p' | sort -n; }
+          version="$(git tag --points-at HEAD --list 'v*' | numbers | head -n 1)"
+          if [[ -z "$version" ]]; then
+            last="$(git tag --list 'v*' | numbers | tail -n 1)"
+            version=$((${last:-0} + 1))
+            git tag "v$version"
+            git push origin "refs/tags/v$version"
+          fi
+          echo "Version $version"
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+
+      - name: Sign in to GHCR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin <<<"$GH_TOKEN"
+
+      # An image of this number that is already in GHCR stays as it is.
+      - name: Build and push images
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          build() {
+            local image="ghcr.io/$GITHUB_REPOSITORY-$1:$VERSION"
+            if docker manifest inspect "$image" >/dev/null 2>&1; then
+              echo "$image is already published"
+              return
+            fi
+            docker build --tag "$image" --file "$2" \
+              --label "org.opencontainers.image.revision=$COMMIT" \
+              --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+              "$3"
+            docker push "$image"
+          }
+          build api backend/src/ProfitFox.Presentation/Dockerfile backend
+          build worker backend/src/ProfitFox.Worker/Dockerfile backend
+          build scanner backend/src/ProfitFox.Scanner/Dockerfile backend
+          build web frontend/Dockerfile frontend
+
+  # The four images of the version are in GHCR. Checked here, so the runner on soyo-03 needs neither Docker nor a token.
+  images:
+    needs: build
+    if: >-
+      !cancelled() && (needs.build.result == 'success' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      packages: read
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    env:
+      VERSION: ${{ needs.build.outputs.version || inputs.version }}
+    steps:
+      - name: Sign in to GHCR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin <<<"$GH_TOKEN"
+
+      - name: Check the images
+        id: check
+        run: |
+          [[ "$VERSION" =~ ^[1-9][0-9]*$ ]] || { echo "Not a version: $VERSION"; exit 1; }
+          for image in api worker scanner web; do
+            docker manifest inspect "ghcr.io/$GITHUB_REPOSITORY-$image:$VERSION" >/dev/null ||
+              { echo "ghcr.io/$GITHUB_REPOSITORY-$image:$VERSION is not published"; exit 1; }
+          done
+          echo "version=$VERSION" >>"$GITHUB_OUTPUT"
+
+  # One deploy at a time. The production environment waits for the owner's approval and admits only main.
+  deploy:
+    needs: images
+    if: ${{ !cancelled() && needs.images.result == 'success' }}
+    runs-on: [self-hosted, soyo-03]
+    timeout-minutes: 15
+    environment: production
+    concurrency:
+      group: deploy-production
+    env:
+      VERSION: ${{ needs.images.outputs.version }}
+    steps:
+      # The key can only run deploy.sh on soyo-01; the key and known_hosts live in the runner's home, not in GitHub.
+      - name: Deploy
+        run: >-
+          ssh -i ~/.ssh/profit-fox-deploy -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes
+          soyo@192.168.8.111 deploy "$VERSION" "$DEPLOY_PROTOCOL"
