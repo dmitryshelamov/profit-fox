@@ -1,0 +1,4 @@
+[
+  {"category": "spot", "symbol": "BTCUSDT", "last": "100.25", "bid": "99.5", "ask": "100.5"},
+  {"category": "linear", "symbol": "SOLUSDT", "last": "100.25", "bid": "99.5", "ask": "100.5", "openInterest": "2000", "fundingRate": "0.0001"}
+]

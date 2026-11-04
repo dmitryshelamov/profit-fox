@@ -46,8 +46,8 @@ public class BybitInstrumentCatalogTests
 
         listed.ShouldBe(
         [
-            new ListedInstrument(MarketCategory.Spot, "BTCUSDT", "BTC", "USDT"),
-            new ListedInstrument(MarketCategory.Spot, "ETHUSDT", "ETH", "USDT")
+            new ListedInstrument(MarketCategory.Spot, "BTCUSDT", "BTC", "USDT", Trading: true),
+            new ListedInstrument(MarketCategory.Spot, "ETHUSDT", "ETH", "USDT", Trading: true)
         ]);
     }
 
@@ -60,8 +60,56 @@ public class BybitInstrumentCatalogTests
 
         listed.Select(instrument => instrument.Symbol).ShouldBe(["ADAUSDT", "BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT"]);
         listed.ShouldAllBe(instrument => instrument.Category == MarketCategory.Linear);
-        listed.Single(instrument => instrument.Symbol == "SOLUSDT").ShouldBe(new ListedInstrument(MarketCategory.Linear, "SOLUSDT", "SOL", "USDT"));
+        listed.Single(instrument => instrument.Symbol == "SOLUSDT").ShouldBe(new ListedInstrument(
+            MarketCategory.Linear,
+            "SOLUSDT",
+            "SOL",
+            "USDT",
+            Trading: true,
+            Perpetual: true,
+            ListedAt: new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero)));
         _factory.Bybit.ListRequests.Count.ShouldBe(3);
+    }
+
+    // Decision 3: the scanner keeps only instruments that trade.
+    [TestCase("spot")]
+    [TestCase("linear")]
+    public async Task Instrument_out_of_trading_is_listed_as_not_trading(string category)
+    {
+        _factory.Bybit.Statuses[(category, "ETHUSDT")] = category == "spot" ? "Closed" : "PreLaunch";
+
+        IReadOnlyList<ListedInstrument> listed = await Catalog().ListAsync(category == "spot" ? MarketCategory.Spot : MarketCategory.Linear, CancellationToken.None);
+
+        listed.Single(instrument => instrument.Symbol == "ETHUSDT").Trading.ShouldBeFalse();
+        listed.Single(instrument => instrument.Symbol == "BTCUSDT").Trading.ShouldBeTrue();
+    }
+
+    // Decision 3: a dated linear future is no perpetual, and a spot pair is never one.
+    [Test]
+    public async Task Only_a_linear_perpetual_is_listed_as_perpetual()
+    {
+        _factory.Bybit.Instruments.Add(("linear", "BTCUSDT-27DEC24"));
+        _factory.Bybit.ContractTypes["BTCUSDT-27DEC24"] = "LinearFutures";
+
+        IReadOnlyList<ListedInstrument> linear = await Catalog().ListAsync(MarketCategory.Linear, CancellationToken.None);
+        IReadOnlyList<ListedInstrument> spot = await Catalog().ListAsync(MarketCategory.Spot, CancellationToken.None);
+
+        linear.Single(instrument => instrument.Symbol == "BTCUSDT").Perpetual.ShouldBeTrue();
+        linear.Single(instrument => instrument.Symbol == "BTCUSDT-27DEC24").Perpetual.ShouldBeFalse();
+        spot.ShouldAllBe(instrument => !instrument.Perpetual);
+    }
+
+    // The scanner loads the history of a younger pair from its launch; Bybit tells it for linear only.
+    [Test]
+    public async Task Linear_instrument_is_listed_with_its_launch_time_and_spot_without()
+    {
+        _factory.Bybit.LaunchTimes["SOLUSDT"] = new DateTimeOffset(2024, 2, 20, 8, 0, 0, TimeSpan.Zero);
+
+        IReadOnlyList<ListedInstrument> linear = await Catalog().ListAsync(MarketCategory.Linear, CancellationToken.None);
+        IReadOnlyList<ListedInstrument> spot = await Catalog().ListAsync(MarketCategory.Spot, CancellationToken.None);
+
+        linear.Single(instrument => instrument.Symbol == "SOLUSDT").ListedAt.ShouldBe(new DateTimeOffset(2024, 2, 20, 8, 0, 0, TimeSpan.Zero));
+        spot.ShouldAllBe(instrument => instrument.ListedAt == null);
     }
 
     // Scenario "Bybit не отвечает".

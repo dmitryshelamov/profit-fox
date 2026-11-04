@@ -9,6 +9,7 @@ import {
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
   type LogicalRange,
+  type MouseEventParams,
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts';
@@ -32,6 +33,8 @@ const initialBars = 120;
 
 /** How close to the oldest loaded candle the view must come before older candles are asked for. */
 const loadAheadBars = 10;
+
+const nothing: never[] = [];
 
 const formingAlpha = 0.45;
 const volumeAlpha = 0.5;
@@ -80,22 +83,26 @@ function formingStyle(bar: Bar) {
  */
 export function BotCandleChart({
   history,
-  live,
+  live = nothing,
   fills,
   orders,
   interval,
   label,
   onReachStart,
+  onHover,
 }: {
   history: readonly BarInput[];
   /** The current candle, and the one before it until the history has it; the history wins over a repeated one. */
-  live: readonly LiveCandle[];
-  fills: readonly FillInput[];
-  orders: readonly OrderInput[];
+  live?: readonly LiveCandle[];
+  /** Without fills and orders, as on the page of a pair, the chart is described by its label alone. */
+  fills?: readonly FillInput[];
+  orders?: readonly OrderInput[];
   /** The Bybit interval of the candles, which says where each one ends. */
   interval: string;
   label: string;
   onReachStart: () => void;
+  /** Tells the open time in seconds of the candle under the cursor, or `null` once the cursor leaves the candles. */
+  onHover?: (time: number | null) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const chart = useRef<{
@@ -108,6 +115,7 @@ export function BotCandleChart({
   const firstTime = useRef<number | null>(null);
   const drawnHistory = useRef<unknown>(null);
   const reachStart = useRef(onReachStart);
+  const hover = useRef(onHover);
   /** True while the chart takes in data: the view it announces then is not the reader's and must not page back. */
   const applying = useRef(false);
   const closed = useMemo(() => drawnBars(history, false), [history]);
@@ -116,14 +124,16 @@ export function BotCandleChart({
     [history, live],
   );
   const markers = useMemo(
-    () => tradeMarkers([...closed, ...current], fills, (time) => candleEnd(time, interval)),
+    () =>
+      tradeMarkers([...closed, ...current], fills ?? nothing, (time) => candleEnd(time, interval)),
     [closed, current, fills, interval],
   );
-  const lines = useMemo(() => orderLines(orders), [orders]);
+  const lines = useMemo(() => orderLines(orders ?? nothing), [orders]);
 
   useEffect(() => {
     reachStart.current = onReachStart;
-  }, [onReachStart]);
+    hover.current = onHover;
+  }, [onReachStart, onHover]);
 
   useEffect(() => {
     if (!container.current) {
@@ -164,6 +174,9 @@ export function BotCandleChart({
       }
     };
     api.timeScale().subscribeVisibleLogicalRangeChange(onRange);
+    const onCrosshair = (moved: MouseEventParams) =>
+      hover.current?.(typeof moved.time === 'number' ? moved.time : null);
+    api.subscribeCrosshairMove(onCrosshair);
     chart.current = {
       api,
       candles,
@@ -174,6 +187,7 @@ export function BotCandleChart({
 
     return () => {
       api.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
+      api.unsubscribeCrosshairMove(onCrosshair);
       api.remove();
       chart.current = null;
       firstTime.current = null;
@@ -277,7 +291,11 @@ export function BotCandleChart({
   return (
     <figure
       role="img"
-      aria-label={`${label}, исполнений: ${markers.length}, ордеров: ${lines.length}`}
+      aria-label={
+        fills === undefined && orders === undefined
+          ? label
+          : `${label}, исполнений: ${markers.length}, ордеров: ${lines.length}`
+      }
       className="m-0 h-90 w-full overflow-hidden rounded-md"
     >
       <div ref={container} className="size-full" />

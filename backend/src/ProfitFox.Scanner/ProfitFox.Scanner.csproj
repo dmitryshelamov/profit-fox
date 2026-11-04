@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+    <ItemGroup>
+        <PackageReference Include="Serilog.AspNetCore"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\ProfitFox.Infrastructure\ProfitFox.Infrastructure.csproj"/>
+    </ItemGroup>
+
+</Project>

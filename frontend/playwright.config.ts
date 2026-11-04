@@ -42,9 +42,21 @@ const worker = [
   'dotnet run --no-launch-profile --project ../backend/src/ProfitFox.Worker',
 ].join(' ');
 
+// The scanner keeps three symbols in both categories with a day of history, so its first snapshot comes within minutes.
+const scanner = [
+  `until curl -sf http://127.0.0.1:${apiPort}/openapi/v1.json > /dev/null; do sleep 1; done;`,
+  'DOTNET_ENVIRONMENT=Testing',
+  'Scanner__Symbols__0=BTCUSDT',
+  'Scanner__Symbols__1=ETHUSDT',
+  'Scanner__Symbols__2=SOLUSDT',
+  'Scanner__HistoryDays=1',
+  ...shared,
+  'dotnet run --no-launch-profile --project ../backend/src/ProfitFox.Scanner',
+].join(' ');
+
 /**
- * End-to-end tests drive the interface through the web image (Caddy) against the real API and Worker on a disposable
- * database, dropped afterwards. Bybit is a local stub, so nothing reaches the exchange.
+ * End-to-end tests drive the interface through the web image (Caddy) against the real API, Worker and scanner on a
+ * disposable database, dropped afterwards. Bybit is a local stub, so nothing reaches the exchange.
  */
 export default defineConfig({
   testDir: './e2e',
@@ -77,6 +89,13 @@ export default defineConfig({
       command: worker,
       // Testing logs the host lifetime only from Warning, so the Worker is ready at its own start-up line.
       wait: { stdout: /Worker .* runs on/ },
+      reuseExistingServer: false,
+      timeout: 180_000,
+    },
+    {
+      command: scanner,
+      // Testing logs ProfitFox from Information: the scanner is ready once it holds the stream.
+      wait: { stdout: /Took the stream of the market/ },
       reuseExistingServer: false,
       timeout: 180_000,
     },

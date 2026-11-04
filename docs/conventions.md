@@ -26,6 +26,9 @@ enforces a rule, the check is the source of truth.
   Replay observers see each placed order with the number of its position, each confirmed cancel and each fill; the
   details they collect are value objects in `ValueObjects/Backtests` (`BacktestPosition`, `BacktestOrder`,
   `BacktestFill`).
+- `Market` is the area of the scanner: `Entities/Market` holds `ScannerPair` (the bounds of coverage, with the rules that move
+  them) and `ScannerState`; `ValueObjects/Market` holds `MarketMinute`, `OpenInterestPoint`, `FundingRatePoint`, `MarketTicker`,
+  `PairMetrics` and `MarketSnapshotRow`; `Services/Market/MarketMetrics` is the pure function of the metrics of a pair.
 - `Exceptions` holds domain exceptions: a broken domain rule that the caller reports to the user
   (`GraphValidationException`, `NodeInUseException`, `BotsAffectedException`).
 - The domain knows no wire codes and no vendor names: enums, not strings. Codes are mapped at the boundaries:
@@ -77,6 +80,13 @@ enforces a rule, the check is the source of truth.
   warms up its indicators with. `Ports/LiveTrading` holds `IExchangeLedger` (REST reads of an account), `IOrderGateway` (orders
   and cancels, a refusal is an outcome) and `IExchangeStreams` (closed candles, order updates and fills, and a signal
   when a stream is back after a gap).
+- `Scanner` holds the scanner: `ScannerSettings`, `ScannerMarket` (memory of the last day of every pair, the snapshot from it),
+  `Universe/ScannerUniverse` (the list of pairs), `Backfill/ScannerBackfill` (the last day, the gaps, the history, funding),
+  `Minute/ScannerMinuteCycle` (tickers, the point of open interest, the snapshot) and `ScannerSession`, which runs them while the
+  scanner holds the stream. `Ports/Market` holds `IMarketDataFeed` (REST of public data, through the scanner's own rate limit),
+  `IMarketStreams` (minute candles in batches) and `IScannerJournal`. `Market/Queries` holds the queries of the market API
+  (`GetMarket`, `GetMarketPair`, `GetMarketCandles`, `GetMarketSeries`); `MarketData/ChartCandles` is the period of a chart the
+  bot and the pair share.
 - `Workers` holds what the Worker needs to share work with other Workers: `WorkerSettings`, `WorkerIdentity` (the
   lease owner of this process) and `LeaseKeeper`, which renews a lease while the work runs. Work the Worker takes is a
   command that returns whether it found any (`RunNextCandleImportCommand`, `RunNextBacktestWorkCommand`).
@@ -87,13 +97,19 @@ enforces a rule, the check is the source of truth.
 
 ## Infrastructure (`ProfitFox.Infrastructure`)
 
-- `InfrastructureRegistrar` is the only public entry point: `Configure` for the API, `ConfigureWorker` for the Worker.
+- `InfrastructureRegistrar` is the only public entry point: `Configure` for the API, `ConfigureWorker` for the Worker,
+  `ConfigureScanner` for the scanner.
   Both call internal registrars such as `Mediatr/MediatrRegistrar` and `Persistence/Postgres/PostgresRegistrar`; only
   `ConfigureWorker` registers the background services that run work.
 - `Exchanges/<Vendor>` holds adapters over vendor SDKs, including the mapping of domain values to SDK types
   (`BybitCodes`). `Exchanges/Retry` holds Polly pipelines. `BybitMarketDataClient` implements `IInstrumentCatalog` (spot in one
   answer, linear by following the cursor; one attempt per request). The registered `IInstrumentCatalog` is
   `Exchanges/CachedInstrumentCatalog` over it: a list per category is kept for 5 minutes on `TimeProvider`, a failure is not kept.
+- `Exchanges/ScannerRestGate` is the one way of the scanner's REST requests: a token bucket of `Scanner:RestRequestsPerSecond`
+  on `TimeProvider`, one attempt with the ladder of retries for a transient failure, none for `ExchangeRateLimitedException`
+  (HTTP 429, code 10006, HTTP 403), after which no request goes for `Scanner:RestPause`. `Exchanges/Bybit/BybitPublicDataClient`
+  implements `IMarketDataFeed` through it; `Exchanges/Bybit/BybitMarketStreams` implements `IMarketStreams` on a socket client of its
+  own, apart from `BybitStreams`.
 - `Exchanges/Bybit/BybitAccountClient` implements `IExchangeKeyInspector`: a typed `HttpClient` that builds a Bybit client
   with the key for one call and drops it, one attempt per call. `Security/AesGcmSecretProtector` encrypts secrets with the
   master key (AES-256-GCM, the account id as associated data).
@@ -121,6 +137,9 @@ enforces a rule, the check is the source of truth.
   the `bots` row `FOR UPDATE`; a write of a session (`LockLeasedAsync`) takes it `FOR KEY SHARE` before the `live_bots`
   row, since the foreign key of a new `live_positions` row takes that share later anyway. A session that fails several
   bots after a reconciliation locks them one bot after another in the order of the library, `created_at, id`.
+- `Repositories/Market` holds `scanner_state` (one row: the lease of the stream, the snapshot time, the progress of history,
+  the end of the REST pause), `scanner_pairs`, `open_interest` (a hypertable), `funding_rates` and `market_snapshot`, which the
+  holder replaces in one transaction that locks the row of the state with its lease.
 - `Persistence/Postgres/Transactions` implements the unit of work: `PostgresTransactionExecutor` opens the connection
   and the transaction, the scoped `PostgresTransactionAccessor.Current` hands them to repositories that write inside a
   unit. Only repositories of live trading use it; the older repositories open a connection per call and keep their
@@ -195,11 +214,34 @@ enforces a rule, the check is the source of truth.
   "ExchangeAccounts": { "MasterKey": "<openssl rand -base64 32>" }
   ```
 
+- The `Scanner` section, in the scanner's `appsettings.json` only (`ScannerSettings`): the symbols it keeps (empty keeps the whole
+  market; Development keeps three), the days of history, the REST requests per second and the pause after a rate limit, how often it
+  reads the list of pairs, the delay of the snapshot after a minute, the lease of the stream (the renewal shorter than the lease, or
+  the scanner does not start) and the topics on one connection of the stream.
+
+  ```json
+  "Scanner": {
+    "Symbols": [],
+    "HistoryDays": 90,
+    "RestRequestsPerSecond": 20,
+    "RestPause": "00:10:00",
+    "UniverseRefresh": "01:00:00",
+    "SnapshotDelay": "00:00:10",
+    "LeaseDuration": "00:00:30",
+    "LeaseRenewal": "00:00:10",
+    "TopicsPerConnection": 100
+  }
+  ```
+
 ## Presentation (`ProfitFox.Presentation`)
 
 - `Controllers` holds controllers only (`BotsController`, `BacktestsController`, `InstrumentsController`: `GET /api/market-data/instruments?category&query&limit`
   → `[{ category, symbol, baseCoin, quoteCoin }]`; field errors 400, exchange unavailable 503); request and response types go to
   `Contracts/<Area>` (`Contracts/Bots`, `Contracts/Backtests`).
+- `MarketController`: `GET /api/market` (the snapshot and the state of the scanner), `GET /api/market/{category}/{symbol}` (a row;
+  404 when the snapshot has no such pair), `.../candles?interval&from&to` (as the bot chart), `.../open-interest?from&to` and
+  `.../funding?from&to` (linear only, from storage, at most 1000 points); contracts in `Contracts/Market`. It never calls Bybit
+  but for the candles of a pair.
 - `Hubs` holds SignalR hubs. `BotChartHub` is the first: `/api/hubs/bot-chart` (under `/api`, so the proxy of the web image
   and of Vite carry it, Vite with `ws: true`). A connection calls `Subscribe(botId)`, which answers `{ state, candle }`
   (`connecting`, `live` or `noData`; the newest candle or `null`) or fails with `bot_not_found`, then receives
@@ -224,6 +266,13 @@ enforces a rule, the check is the source of truth.
   builder; `Main` builds and runs it, and a test host calls `Configure` too. The Worker never migrates the database: the
   API does.
 - Log levels and format follow the same rules as the API, in the Worker's own `appsettings*.json`.
+
+## Scanner (`ProfitFox.Scanner`)
+
+- A generic host with no HTTP, like the Worker: `Program.Configure` adds Serilog and `InfrastructureRegistrar.ConfigureScanner`;
+  a test host (`ScannerHost`) calls `Configure` too. It never migrates the database and never reads keys: public Bybit data only.
+- `ScannerBackgroundService` waits for the lease of the stream and, while it holds it, runs a `ScannerSession` in a scope of its own;
+  a second scanner opens no connection to Bybit.
 
 ## Files
 
@@ -260,7 +309,7 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
 
 - `src/app` holds the router (TanStack Router) and the providers (TanStack Query). `src/pages/<screen>` holds one screen
   each (`strategies`, `strategy-editor`, `nodes`, `node-editor`, `bots`, `bot-editor`, `bot`, `backtest-setup`, `backtest`,
-  `backtest-result`, `compare`, `accounts`, `account-new`, `account`); a page never imports another page.
+  `backtest-result`, `compare`, `accounts`, `account-new`, `account`, `market`, `market-pair`); a page never imports another page.
 - `src/modules/<area>` holds a feature: `model` for pure functions, `ui` for components, `api.ts` for queries. Other
   code imports a module only through its `index.ts`. `modules/graph-editor/model` is the logic of the editor that can be
   wrong (definition ↔ canvas, pins, wire types, error paths, draft comparison): plain TypeScript without React.
@@ -272,7 +321,10 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
   `AppShell`, the mark checkbox), `market-chart` (`PriceEquityChart` and `EquityComparisonChart` on
   `lightweight-charts`, fill markers, candles per point; for the bot chart `BotCandleChart` with volume, fill arrows,
   dashed order lines and the current candle, over the pure `chartPaging`, `tradeMarkers`, `liveCandles`, `volumeBars` and
-  `orderLines`). `bots` also holds the bot chart's data: `useBotCandles` (pages going back, a minute-by-minute tail,
+  `orderLines`, `useCandlePages` — the paging of a chart over a function that reads a page, which the bot and the pair use with their
+  own endpoints — and `OpenInterestChart`, `FundingChart`), `market` (the snapshot query polled every 15 s, the row, open
+  interest and funding of a pair; `model` for the category filter, search, sort with empty values last, the age of the snapshot and
+  compact numbers; `MarketTable`, the banners and the mark of incomplete data). `bots` also holds the bot chart's data: `useBotCandles` (pages going back, a minute-by-minute tail,
   start over when too far behind), `useFormingCandle` over `realtime/followFormingCandle` (the SignalR hub
   `/api/hubs/bot-chart`, which is not in OpenAPI: its message types are written by hand in `model/formingCandle.ts`,
   with the reducer and the channel text) and `chartIntervals` (the interval switcher; the `?interval=` of the bot route

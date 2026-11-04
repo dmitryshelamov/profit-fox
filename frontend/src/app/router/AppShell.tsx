@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router';
+import { Link, useMatchRoute } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 
 import { ComparisonBar, useComparison } from '@/modules/comparison';
@@ -7,6 +7,8 @@ const navLink = 'border-b-2 border-transparent py-3 text-muted hover:text-text';
 
 export function AppShell({ children }: { children: ReactNode }) {
   const barShown = useComparison().length > 0;
+  // The market table has fourteen columns: it takes the width of the mockup, 1376 px.
+  const wide = useMatchRoute()({ to: '/market' }) !== false;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -33,6 +35,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             Составные узлы
           </Link>
           <Link
+            to="/market"
+            className={navLink}
+            activeProps={{ className: 'border-accent! text-text!', 'aria-current': 'page' }}
+          >
+            Рынок
+          </Link>
+          <Link
             to="/bots"
             className={navLink}
             activeProps={{ className: 'border-accent! text-text!', 'aria-current': 'page' }}
@@ -49,7 +58,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
       </header>
       <main
-        className={`mx-auto w-full max-w-[1100px] flex-1 px-4 pt-9 ${barShown ? 'pb-28' : 'pb-9'}`}
+        className={`mx-auto w-full ${wide ? 'max-w-[1376px]' : 'max-w-[1100px]'} flex-1 px-4 pt-9 ${barShown ? 'pb-28' : 'pb-9'}`}
       >
         {children}
       </main>

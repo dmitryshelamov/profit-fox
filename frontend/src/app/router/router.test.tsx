@@ -1,9 +1,9 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { clearComparison, toggleComparison } from '@/modules/comparison';
 import { fakeApi, json } from '@/test/fakeApi';
-import { backtestFull, backtestId, resultOf } from '@/test/fixtures';
+import { backtestFull, backtestId, marketSnapshot, resultOf } from '@/test/fixtures';
 import { renderApp } from '@/test/renderApp';
 
 describe('routes', () => {
@@ -79,5 +79,38 @@ describe('bot section', () => {
 
     expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Разделы' })).toBeInTheDocument();
+  });
+});
+
+describe('menu', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // Scenario "Раздел «Рынок»".
+  it('lists the sections with the market between composite nodes and bots', async () => {
+    fakeApi({ 'GET /api/strategies': () => json([]) });
+    renderApp('/strategies');
+
+    const menu = await screen.findByRole('navigation', { name: 'Разделы' });
+
+    expect(
+      within(menu)
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual(['Стратегии', 'Составные узлы', 'Рынок', 'Боты', 'Аккаунты']);
+  });
+
+  it('opens the market from the menu and marks it as current', async () => {
+    fakeApi({
+      'GET /api/strategies': () => json([]),
+      'GET /api/market': () => json(marketSnapshot([], { snapshotAt: null })),
+    });
+    const { history } = renderApp('/strategies');
+
+    await userEvent.click(await screen.findByRole('link', { name: 'Рынок' }));
+
+    await waitFor(() => expect(history.location.pathname).toBe('/market'));
+    expect(screen.getByRole('link', { name: 'Рынок' })).toHaveAttribute('aria-current', 'page');
   });
 });

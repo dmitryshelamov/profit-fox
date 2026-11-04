@@ -1613,6 +1613,306 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/market": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MarketResponse"];
+                        "application/json": components["schemas"]["MarketResponse"];
+                        "text/json": components["schemas"]["MarketResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/{category}/{symbol}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    category: string;
+                    symbol: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MarketRowResponse"];
+                        "application/json": components["schemas"]["MarketRowResponse"];
+                        "text/json": components["schemas"]["MarketRowResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/{category}/{symbol}/candles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The closed candles of a pair in `[from, to)` on `interval`, as the history of the bot chart: what storage lacks is first
+         *     read from Bybit, `to` is cut to the last closed candle, at most 1000 candles.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description A Bybit interval. */
+                    Interval?: string;
+                    /** @description ISO 8601 with an offset or `Z`. */
+                    From?: string;
+                    /** @description ISO 8601 with an offset or `Z`. */
+                    To?: string;
+                };
+                header?: never;
+                path: {
+                    category: string;
+                    symbol: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MarketCandlesResponse"];
+                        "application/json": components["schemas"]["MarketCandlesResponse"];
+                        "text/json": components["schemas"]["MarketCandlesResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/{category}/{symbol}/open-interest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The points of open interest of a linear pair in `[from, to)` in USDT, at the close of the minute before each, from storage; at
+         *     most 1000.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description ISO 8601 with an offset or `Z`. */
+                    From?: string;
+                    /** @description ISO 8601 with an offset or `Z`. */
+                    To?: string;
+                };
+                header?: never;
+                path: {
+                    category: string;
+                    symbol: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OpenInterestPointResponse"][];
+                        "application/json": components["schemas"]["OpenInterestPointResponse"][];
+                        "text/json": components["schemas"]["OpenInterestPointResponse"][];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/{category}/{symbol}/funding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The funding settlements of a linear pair in `[from, to)`, from storage; at most 1000. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description ISO 8601 with an offset or `Z`. */
+                    From?: string;
+                    /** @description ISO 8601 with an offset or `Z`. */
+                    To?: string;
+                };
+                header?: never;
+                path: {
+                    category: string;
+                    symbol: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["FundingRateResponse"][];
+                        "application/json": components["schemas"]["FundingRateResponse"][];
+                        "text/json": components["schemas"]["FundingRateResponse"][];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/strategies": {
         parameters: {
             query?: never;
@@ -2722,6 +3022,12 @@ export interface components {
             /** @description `quote` or `base`. */
             feeAsset: string;
         };
+        /** @description A funding settlement: its time and rate, a fraction such as `0.0001`, as a decimal string. */
+        FundingRateResponse: {
+            /** Format: date-time */
+            time: string;
+            rate: string;
+        };
         GapResponse: {
             /** Format: date-time */
             from: string;
@@ -2795,6 +3101,52 @@ export interface components {
             fees: string;
             orders: components["schemas"]["LiveOrderResponse"][];
         };
+        /** @description Closed candles of a pair, oldest first; bool MarketCandlesResponse.Unavailable says Bybit could not fill the period. */
+        MarketCandlesResponse: {
+            interval: string;
+            candles: components["schemas"]["CandleResponse"][];
+            unavailable: boolean;
+        };
+        /** @description How many pairs of the scanner have their history loaded whole, of all its pairs. */
+        MarketHistoryResponse: {
+            /** Format: int32 */
+            loaded: number | string;
+            /** Format: int32 */
+            total: number | string;
+        };
+        /** @description The market snapshot with the state of the scanner; DateTimeOffset? MarketResponse.RestPausedUntil only while the pause lasts. */
+        MarketResponse: {
+            /** Format: date-time */
+            snapshotAt: null | string;
+            history: components["schemas"]["MarketHistoryResponse"];
+            /** Format: date-time */
+            restPausedUntil: null | string;
+            rows: components["schemas"]["MarketRowResponse"][];
+        };
+        /**
+         * @description The row of a pair in the market snapshot, with the time it was computed. Numbers are decimal strings, an empty metric is `null`; changes and spread in
+         *     percent, turnovers and open interest in USDT.
+         */
+        MarketRowResponse: {
+            category: string;
+            symbol: string;
+            /** Format: date-time */
+            computedAt: string;
+            price: null | string;
+            change5m: null | string;
+            change15m: null | string;
+            change1h: null | string;
+            change4h: null | string;
+            change24h: null | string;
+            turnover1h: null | string;
+            turnover24h: null | string;
+            openInterest: null | string;
+            openInterestChange1h: null | string;
+            openInterestChange24h: null | string;
+            fundingRate: null | string;
+            spread: null | string;
+            incomplete: boolean;
+        };
         /** @description Money and percentages are decimal strings, counts are numbers; names match the codes results sort by. */
         MetricsResponse: {
             startEquity: string;
@@ -2833,6 +3185,12 @@ export interface components {
             /** @description The settings of a simple node; empty for a composite node. */
             settings: components["schemas"]["SettingResponse"][];
             definition: null | components["schemas"]["JsonObject"];
+        };
+        /** @description The open interest at the start of a 5 minute step in USDT, at the close of the minute before it, as a decimal string. */
+        OpenInterestPointResponse: {
+            /** Format: date-time */
+            time: string;
+            value: string;
         };
         /** @description An order of a position with its fills. */
         OrderResponse: {

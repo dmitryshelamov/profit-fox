@@ -1,7 +1,8 @@
 // A local stand-in for Bybit in end-to-end tests: deterministic instruments and candles over REST, the private
 // calls about an account key, orders and their fills, and the v5 streams over WebSocket, so no test ever reaches the
 // exchange. A test closes candles (`/control/candle`), sends a forming one (`/control/forming`), fills orders and drops the streams through the `/control/*` routes. Signatures are not checked: the key alone picks the
-// answer (`e2e-valid-<uid>`, `e2e-withdraw`, anything else is rejected). Response shapes follow the integration tests' FakeBybitHandler.
+// answer (`e2e-valid-<uid>`, `e2e-withdraw`, anything else is rejected). The scanner also reads tickers, open interest and
+// funding history here, and subscribes minute candles in batches. Response shapes follow the integration tests' FakeBybitHandler.
 // Usage: node e2e/bybit-stub.ts <port>
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 
@@ -28,17 +29,26 @@ const instruments = [
   { symbol: 'BTCUSDT', baseCoin: 'BTC', quoteCoin: 'USDT', basePrice: 100_000 },
   { symbol: 'ETHUSDT', baseCoin: 'ETH', quoteCoin: 'USDT', basePrice: 3_000 },
   { symbol: 'ETHBTC', baseCoin: 'ETH', quoteCoin: 'BTC', basePrice: 0.03 },
-  { symbol: 'SOLUSDT', baseCoin: 'SOL', quoteCoin: 'USDT', basePrice: 150 },
+  // A whole number of saw-tooth periods fits an hour, so the others change by nothing over an hour; this one also creeps
+  // up, so the market table has a pair that grows.
+  { symbol: 'SOLUSDT', baseCoin: 'SOL', quoteCoin: 'USDT', basePrice: 150, trend: 1e-8 },
 ];
 const categories = ['spot', 'linear'];
 const linearPageSize = 2;
+const fiveMinutes = 5 * 60_000;
+const eightHours = 8 * 60 * 60_000;
 
-/** A saw-tooth around the base price with a 12-candle period: no randomness, so every run sees the same candles. */
-function price(basePrice: number, index: number): number {
+/**
+ * A saw-tooth around the base price with a 12-candle period, which an instrument with a trend tilts up by that share a
+ * candle: no randomness, so every run sees the same candles.
+ */
+function price(instrument: { basePrice: number; trend?: number }, index: number): number {
   const phase = ((index % 12) + 12) % 12;
   const factor = 1 + ((phase < 6 ? phase : 12 - phase) - 3) / 100;
 
-  return Number((basePrice * factor).toPrecision(8));
+  return Number(
+    (instrument.basePrice * factor * (1 + (instrument.trend ?? 0) * index)).toPrecision(8),
+  );
 }
 
 function send(response: ServerResponse, body: unknown, status = 200) {
@@ -78,8 +88,8 @@ function klines(url: URL) {
     }
 
     const index = (time - listedAt) / step;
-    const open = price(instrument.basePrice, index - 1);
-    const close = price(instrument.basePrice, index);
+    const open = price(instrument, index - 1);
+    const close = price(instrument, index);
     rows.push([
       String(time),
       String(open),
@@ -138,6 +148,9 @@ function instrumentsInfo(url: URL) {
     baseCoin: instrument.baseCoin,
     quoteCoin: instrument.quoteCoin,
     status: 'Trading',
+    ...(category === 'linear'
+      ? { contractType: 'LinearPerpetual', launchTime: String(listedAt) }
+      : {}),
     ...rules(instrument),
   });
 
@@ -159,6 +172,92 @@ function instrumentsInfo(url: URL) {
     category,
     list: all.slice(offset, offset + pageSize).map(describe),
     nextPageCursor: cursor,
+  });
+}
+
+/** The tickers of every instrument of the category at the close of the last minute; linear ones with open interest and funding. */
+function tickers(url: URL) {
+  const category = url.searchParams.get('category') ?? '';
+  const index = Math.floor((Date.now() - listedAt) / 60_000);
+
+  return ok({
+    category,
+    list: instruments.map((instrument) => {
+      const last = price(instrument, index);
+      const linear =
+        category === 'linear'
+          ? {
+              openInterest: String(1000 + (index % 12)),
+              openInterestValue: '0',
+              fundingRate: '0.0001',
+              markPrice: String(last),
+              indexPrice: String(last),
+              nextFundingTime: '0',
+            }
+          : {};
+
+      return {
+        symbol: instrument.symbol,
+        lastPrice: String(last),
+        bid1Price: String(Number((last * 0.9999).toPrecision(8))),
+        bid1Size: '1',
+        ask1Price: String(Number((last * 1.0001).toPrecision(8))),
+        ask1Size: '1',
+        prevPrice24h: String(last),
+        price24hPcnt: '0',
+        highPrice24h: String(last),
+        lowPrice24h: String(last),
+        turnover24h: '0',
+        volume24h: '0',
+        ...linear,
+      };
+    }),
+  });
+}
+
+/** Times every `step` from the listing inside the inclusive [startTime, endTime], newest first. */
+function times(url: URL, step: number): number[] {
+  const start = Math.max(Number(url.searchParams.get('startTime') ?? '0'), listedAt);
+  const end = Math.min(Number(url.searchParams.get('endTime') ?? String(Date.now())), Date.now());
+  const all: number[] = [];
+
+  for (let time = Math.floor(end / step) * step; time >= start; time -= step) {
+    all.push(time);
+  }
+
+  return all;
+}
+
+/** Open interest every 5 minutes in coins, a page at a time by cursor, like Bybit. */
+function openInterest(url: URL) {
+  const limit = Number(url.searchParams.get('limit') ?? '50');
+  const offset = Number(url.searchParams.get('cursor') || '0');
+  const all = times(url, fiveMinutes);
+
+  return ok({
+    category: 'linear',
+    symbol: url.searchParams.get('symbol'),
+    list: all.slice(offset, offset + limit).map((time) => ({
+      openInterest: String(1000 + (((time - listedAt) / fiveMinutes) % 12)),
+      timestamp: String(time),
+    })),
+    nextPageCursor: offset + limit < all.length ? String(offset + limit) : '',
+  });
+}
+
+/** A settlement every 8 hours, newest first and at most `limit`: Bybit pages funding history by time only. */
+function funding(url: URL) {
+  const limit = Number(url.searchParams.get('limit') ?? '200');
+
+  return ok({
+    category: 'linear',
+    list: times(url, eightHours)
+      .slice(0, limit)
+      .map((time) => ({
+        symbol: url.searchParams.get('symbol'),
+        fundingRate: (time / eightHours) % 2 === 0 ? '0.0001' : '-0.00005',
+        fundingRateTimestamp: String(time),
+      })),
   });
 }
 
@@ -499,6 +598,12 @@ const server = createServer((request, response) => {
     send(response, { ok: true });
   } else if (url.pathname === '/v5/market/kline') {
     send(response, klines(url));
+  } else if (url.pathname === '/v5/market/tickers') {
+    send(response, tickers(url));
+  } else if (url.pathname === '/v5/market/open-interest') {
+    send(response, openInterest(url));
+  } else if (url.pathname === '/v5/market/funding/history') {
+    send(response, funding(url));
   } else if (url.pathname === '/v5/market/instruments-info') {
     send(response, instrumentsInfo(url));
   } else if (url.pathname === '/v5/user/query-api') {
@@ -569,5 +674,57 @@ server.on('upgrade', (request, socket, head) => {
     client.on('close', () => sockets.delete(client));
   });
 });
+
+/** Closes the minute that just ended on every subscribed `kline.1` topic, as Bybit does, so the scanner's minutes keep up. */
+let closedMinute = Math.floor(Date.now() / 60_000) * 60_000;
+
+setInterval(() => {
+  const minute = Math.floor(Date.now() / 60_000) * 60_000;
+
+  if (minute === closedMinute) {
+    return;
+  }
+
+  closedMinute = minute;
+  const start = minute - 60_000;
+  const index = (start - listedAt) / 60_000;
+
+  for (const [socket, connection] of sockets) {
+    for (const topic of connection.topics) {
+      const instrument = instruments.find((candidate) => `kline.1.${candidate.symbol}` === topic);
+
+      if (!instrument) {
+        continue;
+      }
+
+      const open = price(instrument, index - 1);
+      const close = price(instrument, index);
+      socket.send(
+        JSON.stringify({
+          topic,
+          id: String(Date.now()),
+          type: 'snapshot',
+          ts: Date.now(),
+          creationTime: Date.now(),
+          data: [
+            {
+              start,
+              end: minute - 1,
+              interval: '1',
+              open: String(open),
+              close: String(close),
+              high: String(Math.max(open, close)),
+              low: String(Math.min(open, close)),
+              volume: '10',
+              turnover: String(Number((10 * close).toPrecision(8))),
+              confirm: true,
+              timestamp: Date.now(),
+            },
+          ],
+        }),
+      );
+    }
+  }
+}, 500);
 
 server.listen(port, '127.0.0.1');
