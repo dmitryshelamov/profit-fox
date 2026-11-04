@@ -7,6 +7,8 @@ import type { FillMarker, PricePoint } from '../model/pricePoint';
 import type { FillInput } from '../model/tradeMarkers';
 import { BotCandleChart } from './BotCandleChart';
 import { EquityComparisonChart, type EquityLine } from './EquityComparisonChart';
+import { FundingChart } from './FundingChart';
+import { OpenInterestChart } from './OpenInterestChart';
 import { PriceEquityChart } from './PriceEquityChart';
 
 const points: PricePoint[] = [
@@ -305,6 +307,23 @@ describe('bot candle chart', () => {
     ).toBeInTheDocument();
   });
 
+  it('describes a chart without fills and orders, as the chart of a pair, by its label only', () => {
+    const { getByRole } = render(
+      <BotCandleChart
+        history={history}
+        interval="60"
+        label="График свечей SOLUSDT"
+        onReachStart={() => undefined}
+      />,
+    );
+
+    expect(getByRole('img', { name: 'График свечей SOLUSDT' })).toBeInTheDocument();
+    expect(seriesOf('Candlestick').setData).toHaveBeenLastCalledWith([
+      expect.objectContaining({ time: t10 }),
+      expect.objectContaining({ time: t10 + hour }),
+    ]);
+  });
+
   it('asks for older candles when the view comes near the first one', () => {
     const onReachStart = vi.fn();
     show({ onReachStart });
@@ -376,5 +395,80 @@ describe('bot candle chart', () => {
     );
 
     expect(scale().setVisibleLogicalRange).toHaveBeenLastCalledWith({ from: 3, to: 5 });
+  });
+});
+
+describe('open interest and funding charts', () => {
+  const t0 = Date.parse('2026-11-04T08:00:00Z') / 1000;
+  const lastSeries = () => {
+    const add = vi.mocked(createChart).mock.results.at(-1)!.value.addSeries as ReturnType<
+      typeof vi.fn
+    >;
+
+    return add.mock.results[0]!.value as { setData: ReturnType<typeof vi.fn> };
+  };
+  const fitContent = () =>
+    vi.mocked(createChart).mock.results.at(-1)!.value.timeScale().fitContent as ReturnType<
+      typeof vi.fn
+    >;
+
+  it('draws the open interest as a line over the whole period', () => {
+    const { getByRole } = render(
+      <OpenInterestChart
+        formatValue={String}
+        points={[
+          { time: '2026-11-04T08:00:00Z', value: '1200.5' },
+          { time: '2026-11-04T08:05:00Z', value: '1190' },
+        ]}
+        label="Открытый интерес SOLUSDT"
+      />,
+    );
+
+    expect(vi.mocked(createChart).mock.results.at(-1)!.value.addSeries).toHaveBeenCalledWith(
+      'Line',
+      expect.anything(),
+    );
+    expect(lastSeries().setData).toHaveBeenLastCalledWith([
+      { time: t0, value: 1200.5 },
+      { time: t0 + 300, value: 1190 },
+    ]);
+    expect(fitContent()).toHaveBeenCalled();
+    expect(getByRole('img', { name: 'Открытый интерес SOLUSDT' })).toBeInTheDocument();
+  });
+
+  it('draws funding as columns, green above zero and red below', () => {
+    render(
+      <FundingChart
+        points={[
+          { time: '2026-11-04T08:00:00Z', rate: '0.0001' },
+          { time: '2026-11-04T16:00:00Z', rate: '-0.00005' },
+        ]}
+        label="Фандинг SOLUSDT"
+      />,
+    );
+
+    expect(vi.mocked(createChart).mock.results.at(-1)!.value.addSeries).toHaveBeenCalledWith(
+      'Histogram',
+      expect.anything(),
+    );
+    expect(lastSeries().setData).toHaveBeenLastCalledWith([
+      { time: t0, value: 0.01, color: '#3fb37f' },
+      { time: t0 + 8 * 3600, value: -0.005, color: '#e5484d' },
+    ]);
+    expect(fitContent()).toHaveBeenCalled();
+  });
+
+  it('draws the new points when they change', () => {
+    const { rerender } = render(<OpenInterestChart points={[]} label="c" formatValue={String} />);
+
+    rerender(
+      <OpenInterestChart
+        points={[{ time: '2026-11-04T08:00:00Z', value: '5' }]}
+        label="c"
+        formatValue={String}
+      />,
+    );
+
+    expect(lastSeries().setData).toHaveBeenLastCalledWith([{ time: t0, value: 5 }]);
   });
 });

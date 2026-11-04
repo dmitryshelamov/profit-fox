@@ -48,6 +48,33 @@ public class CandleRepositoryUpsertTests
         closes.ShouldBe(new[] { 10m, 20m });
     }
 
+    // Decision 9: the closed minutes of every pair go to storage in one batch.
+    [Test]
+    public async Task Candles_of_several_instruments_are_stored_in_one_batch_without_duplicates()
+    {
+        var store = new CandleRepository(_dataSource);
+        var sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
+        var btc = new Instrument(MarketCategory.Spot, "BTCUSDT");
+        await store.UpsertAsync(Interval.OneMinute, [(sol, Candle("2024-01-01T00:00:00Z", close: 1m)), (btc, Candle("2024-01-01T00:00:00Z", close: 2m))], CancellationToken.None);
+
+        await store.UpsertAsync(Interval.OneMinute, [(sol, Candle("2024-01-01T00:00:00Z", close: 3m))], CancellationToken.None);
+
+        List<(string, string, string, decimal)> rows = await QueryAsync<(string, string, string, decimal)>("SELECT category, symbol, \"interval\", close FROM candles ORDER BY symbol");
+        rows.ShouldBe([("spot", "BTCUSDT", "1", 2m), ("linear", "SOLUSDT", "1", 3m)]);
+    }
+
+    // The stream may confirm a minute twice before the batch goes out; one statement cannot write a row twice.
+    [Test]
+    public async Task Batch_that_has_a_candle_twice_keeps_the_later_one()
+    {
+        var store = new CandleRepository(_dataSource);
+        var sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
+
+        await store.UpsertAsync(Interval.OneMinute, [(sol, Candle("2024-01-01T00:00:00Z", close: 1m)), (sol, Candle("2024-01-01T00:00:00Z", close: 2m))], CancellationToken.None);
+
+        (await QueryAsync<decimal>("SELECT close FROM candles")).ShouldBe([2m]);
+    }
+
     // Scenario "Один символ в разных категориях".
     [Test]
     public async Task Same_symbol_in_spot_and_linear_is_stored_independently()

@@ -1,0 +1,122 @@
+using ProfitFox.Application.Exceptions;
+using ProfitFox.Application.Scanner;
+using ProfitFox.Domain.Repositories;
+using ProfitFox.Infrastructure.Exchanges.Retry;
+
+namespace ProfitFox.Infrastructure.Exchanges;
+
+/// <summary>
+///     The one way of the scanner's REST requests to the exchange (decision 7): at most <see cref="ScannerSettings.RestRequestsPerSecond" />
+///     attempts a second, one attempt per request with the retries of a transient failure, and none at all for
+///     <see cref="ScannerSettings.RestPause" /> after the exchange says the requests went over its limit. The bots share the IP, and a
+///     ban stops them.
+/// </summary>
+internal sealed class ScannerRestGate : IDisposable
+{
+    private readonly ScannerSettings _settings;
+    private readonly ExchangeResilienceExecutor _resilience;
+    private readonly IScannerStateRepository _state;
+    private readonly TimeProvider _time;
+    private readonly SemaphoreSlim _tokens;
+    private readonly ITimer _replenish;
+    private long _pausedUntil = DateTimeOffset.MinValue.UtcTicks;
+    private Task? _restored;
+
+    public ScannerRestGate(ScannerSettings settings, ExchangeResilienceExecutor resilience, IScannerStateRepository state, TimeProvider time)
+    {
+        _settings = settings;
+        _resilience = resilience;
+        _state = state;
+        _time = time;
+
+        // A token bucket on the clock of the scanner, so tests do not wait for real time: the bucket fills up again every second.
+        // Only the timer adds tokens, and requests only take them, so a fill never goes over the limit.
+        _tokens = new SemaphoreSlim(settings.RestRequestsPerSecond, settings.RestRequestsPerSecond);
+        _replenish = time.CreateTimer(
+            _ =>
+            {
+                int missing = settings.RestRequestsPerSecond - _tokens.CurrentCount;
+
+                if (missing > 0)
+                {
+                    _tokens.Release(missing);
+                }
+            },
+            null,
+            TimeSpan.FromSeconds(1),
+            TimeSpan.FromSeconds(1));
+    }
+
+    /// <exception cref="ExchangeRateLimitedException">The exchange said the requests went over its limit, now or before the pause ended.</exception>
+    /// <exception cref="ExchangeUnavailableException">The retries of a transient failure ran out.</exception>
+    public async Task<T> SendAsync<T>(Func<CancellationToken, ValueTask<T>> request, CancellationToken cancellationToken)
+    {
+        // The pause outlives the process that recorded it: the first request of this process takes it from the state; a read that
+        // failed is tried again with the next request.
+        Task restored = LazyInitializer.EnsureInitialized(ref _restored, () => RestoreAsync(cancellationToken));
+
+        try
+        {
+            await restored;
+        }
+        catch
+        {
+            _ = Interlocked.CompareExchange(ref _restored, null, restored);
+
+            throw;
+        }
+
+        var pausedUntil = new DateTimeOffset(Interlocked.Read(ref _pausedUntil), TimeSpan.Zero);
+
+        if (_time.GetUtcNow() < pausedUntil)
+        {
+            throw new ExchangeRateLimitedException($"Bybit limited the requests of the scanner; they wait until {pausedUntil:O}.");
+        }
+
+        try
+        {
+            return await _resilience.ExecuteWithRetriesAsync(
+                async token =>
+                {
+                    await _tokens.WaitAsync(token);
+
+                    try
+                    {
+                        return await request(token);
+                    }
+                    catch (TransientExchangeException exception) when (exception.RateLimited)
+                    {
+                        // Never retried: another attempt would hit the limit again.
+                        throw new ExchangeRateLimitedException($"Bybit limited the requests of the scanner: {exception.Message}");
+                    }
+                },
+                cancellationToken);
+        }
+        catch (ExchangeRateLimitedException)
+        {
+            DateTimeOffset until = _time.GetUtcNow() + _settings.RestPause;
+            Interlocked.Exchange(ref _pausedUntil, until.UtcTicks);
+            await _state.PauseRestAsync(until, cancellationToken);
+
+            throw;
+        }
+        catch (TransientExchangeException exception)
+        {
+            throw exception.Unavailable($"Bybit request failed after {_resilience.RetryCount} retries: {exception.Message}");
+        }
+    }
+
+    private async Task RestoreAsync(CancellationToken cancellationToken)
+    {
+        if ((await _state.GetAsync(cancellationToken)).RestPausedUntil is { } until)
+        {
+            Interlocked.Exchange(ref _pausedUntil, until.UtcTicks);
+        }
+    }
+
+    public void Dispose()
+    {
+        _replenish.Dispose();
+        _tokens.Dispose();
+    }
+}

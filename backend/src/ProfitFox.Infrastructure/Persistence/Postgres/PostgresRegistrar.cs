@@ -10,6 +10,7 @@ using ProfitFox.Domain.Repositories;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Backtests;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.ExchangeAccounts;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.LiveTrading;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Market;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Strategies;
 using ProfitFox.Infrastructure.Persistence.Postgres.Transactions;
@@ -30,6 +31,13 @@ internal static class PostgresRegistrar
         services.AddScoped<PostgresTransactionAccessor>();
         services.AddScoped<ITransactionExecutor, PostgresTransactionExecutor>();
         services.AddScoped<ILiveBotRepository, LiveBotRepository>();
+        services.AddScoped<IScannerPairRepository, ScannerPairRepository>();
+        services.AddScoped<IOpenInterestRepository, OpenInterestRepository>();
+        services.AddScoped<IFundingRateRepository, FundingRateRepository>();
+        services.AddScoped<IMarketSnapshotRepository, MarketSnapshotRepository>();
+
+        // The gate of the scanner's REST requests and its lease lane are singletons; the repository keeps nothing but the data source.
+        services.AddSingleton<IScannerStateRepository, ScannerStateRepository>();
         services
             .AddFluentMigratorCore()
             .ConfigureRunner(runner => runner

@@ -1,3 +1,5 @@
+import type { Schemas } from '@/shared/api/client';
+
 export const emaSummary = {
   id: '11111111-1111-4111-8111-111111111111',
   name: 'EMA',
@@ -212,3 +214,39 @@ export const exchangeAccount = {
   categories: ['spot', 'linear'],
   createdAt: '2026-11-02T10:00:00Z',
 };
+
+/** A row of the market snapshot with every metric empty; a test sets the ones it needs. */
+export const marketRow = (overrides: Partial<Schemas['MarketRowResponse']> = {}) =>
+  ({
+    category: 'linear',
+    symbol: 'BTCUSDT',
+    price: '67000',
+    change5m: null,
+    change15m: null,
+    change1h: null,
+    change4h: null,
+    change24h: null,
+    turnover1h: null,
+    turnover24h: null,
+    openInterest: null,
+    openInterestChange1h: null,
+    openInterestChange24h: null,
+    fundingRate: null,
+    spread: null,
+    incomplete: false,
+    computedAt: new Date().toISOString(),
+    ...overrides,
+  }) satisfies Schemas['MarketRowResponse'];
+
+/** The answer of `GET /api/market`: a complete history and no pause unless a test says otherwise. */
+export const marketSnapshot = (
+  rows: Schemas['MarketRowResponse'][],
+  overrides: Partial<Schemas['MarketResponse']> = {},
+) =>
+  ({
+    snapshotAt: new Date().toISOString(),
+    history: { loaded: rows.length, total: rows.length },
+    restPausedUntil: null,
+    rows,
+    ...overrides,
+  }) satisfies Schemas['MarketResponse'];

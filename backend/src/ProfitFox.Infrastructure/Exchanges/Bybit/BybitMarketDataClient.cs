@@ -1,6 +1,7 @@
 using System.Net;
 using System.Runtime.CompilerServices;
 
+using Bybit.Net.Enums;
 using Bybit.Net.Interfaces.Clients;
 using Bybit.Net.Objects.Models.V5;
 
@@ -71,7 +72,7 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
         }
         catch (TransientExchangeException exception)
         {
-            throw new ExchangeUnavailableException($"Bybit is unavailable: {exception.Message}");
+            throw exception.Unavailable($"Bybit is unavailable: {exception.Message}");
         }
     }
 
@@ -137,37 +138,45 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
     {
         try
         {
-            return await resilience.ExecuteOnceAsync(
-                async token =>
-                {
-                    if (category == MarketCategory.Spot)
-                    {
-                        // Bybit lists all spot instruments in one answer.
-                        return Unwrap(await bybit.V5Api.ExchangeData.GetSpotSymbolsAsync(ct: token)).List
-                            .Select(spot => new ListedInstrument(category, spot.Name, spot.BaseAsset, spot.QuoteAsset))
-                            .ToList();
-                    }
-
-                    var listed = new List<ListedInstrument>();
-                    string? cursor = null;
-
-                    do
-                    {
-                        BybitResponse<BybitLinearInverseSymbol> page = Unwrap(
-                            await bybit.V5Api.ExchangeData.GetLinearInverseSymbolsAsync(category.ToBybit(), limit: PageSize, cursor: cursor, ct: token));
-                        listed.AddRange(page.List.Select(linear => new ListedInstrument(category, linear.Name, linear.BaseAsset, linear.QuoteAsset)));
-                        cursor = page.NextPageCursor;
-                    }
-                    while (!string.IsNullOrEmpty(cursor));
-
-                    return listed;
-                },
-                cancellationToken);
+            return await resilience.ExecuteOnceAsync(async token => await RequestListAsync(bybit, category, token), cancellationToken);
         }
         catch (TransientExchangeException exception)
         {
             throw new ExchangeUnavailableException($"Bybit is unavailable: {exception.Message}");
         }
+    }
+
+    /// <summary>Every instrument of the category in one attempt per request: spot in one answer, linear by following the cursor.</summary>
+    internal static async ValueTask<IReadOnlyList<ListedInstrument>> RequestListAsync(IBybitRestClient bybit, MarketCategory category, CancellationToken cancellationToken)
+    {
+        if (category == MarketCategory.Spot)
+        {
+            // Bybit lists all spot instruments in one answer.
+            return Unwrap(await bybit.V5Api.ExchangeData.GetSpotSymbolsAsync(ct: cancellationToken)).List
+                .Select(spot => new ListedInstrument(category, spot.Name, spot.BaseAsset, spot.QuoteAsset, spot.Status == SymbolStatus.Trading))
+                .ToList();
+        }
+
+        var listed = new List<ListedInstrument>();
+        string? cursor = null;
+
+        do
+        {
+            BybitResponse<BybitLinearInverseSymbol> page = Unwrap(
+                await bybit.V5Api.ExchangeData.GetLinearInverseSymbolsAsync(category.ToBybit(), limit: PageSize, cursor: cursor, ct: cancellationToken));
+            listed.AddRange(page.List.Select(linear => new ListedInstrument(
+                category,
+                linear.Name,
+                linear.BaseAsset,
+                linear.QuoteAsset,
+                linear.Status == SymbolStatus.Trading,
+                linear.ContractType == ContractTypeV5.LinearPerpetual,
+                new DateTimeOffset(DateTime.SpecifyKind(linear.LaunchTime, DateTimeKind.Utc)))));
+            cursor = page.NextPageCursor;
+        }
+        while (!string.IsNullOrEmpty(cursor));
+
+        return listed;
     }
 
     private static T Listed<T>(T[] symbols, Instrument instrument)
@@ -194,7 +203,19 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
         }
     }
 
-    private async ValueTask<IReadOnlyList<Candle>> RequestPageAsync(
+    private ValueTask<IReadOnlyList<Candle>> RequestPageAsync(
+        Instrument instrument,
+        Interval interval,
+        DateTimeOffset from,
+        DateTimeOffset end,
+        CancellationToken cancellationToken)
+    {
+        return RequestPageAsync(bybit, instrument, interval, from, end, cancellationToken);
+    }
+
+    /// <summary>One page of at most 1000 candles with open time in the inclusive <c>[from, end]</c>, newest first, in one attempt.</summary>
+    internal static async ValueTask<IReadOnlyList<Candle>> RequestPageAsync(
+        IBybitRestClient bybit,
         Instrument instrument,
         Interval interval,
         DateTimeOffset from,
@@ -215,7 +236,7 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
     }
 
     /// <summary>The data of a successful call; a failure worth retrying is a <see cref="TransientExchangeException" />, any other an <see cref="ExchangeException" />.</summary>
-    private static T Unwrap<T>(HttpResult<T> result)
+    internal static T Unwrap<T>(HttpResult<T> result)
     {
         if (result.Success)
         {
@@ -224,8 +245,12 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
 
         // Rate limit (HTTP 429 or retCode 10006), timeout and no connection come as error types; a 5xx and a ban of the IP
         // for the rate limit (HTTP 403) only by their status.
-        if (result.ResponseStatusCode is HttpStatusCode.Forbidden or >= HttpStatusCode.InternalServerError
-            || result.Error!.ErrorType is ErrorType.RateLimitRequest or ErrorType.Timeout or ErrorType.NetworkError)
+        if (result.ResponseStatusCode is HttpStatusCode.Forbidden || result.Error!.ErrorType is ErrorType.RateLimitRequest)
+        {
+            throw new TransientExchangeException(Describe(result), rateLimited: true);
+        }
+
+        if (result.ResponseStatusCode is >= HttpStatusCode.InternalServerError || result.Error.ErrorType is ErrorType.Timeout or ErrorType.NetworkError)
         {
             throw new TransientExchangeException(Describe(result));
         }

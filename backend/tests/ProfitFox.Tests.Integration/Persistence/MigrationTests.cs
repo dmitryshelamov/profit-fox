@@ -16,7 +16,7 @@ public class MigrationTests
 
         IEnumerable<string> hypertables = await connection.QueryAsync<string>("SELECT hypertable_name FROM timescaledb_information.hypertables");
 
-        hypertables.ShouldBe(new[] { "candles" });
+        hypertables.ShouldBe(["candles", "open_interest"], ignoreOrder: true);
     }
 
     // Jobs created before the column existed must read as never interrupted; the column is now the count of lost leases.

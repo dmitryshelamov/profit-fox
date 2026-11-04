@@ -13,6 +13,12 @@ public static class MarketDataDatabase
     /// <summary>A fresh database with all migrations applied.</summary>
     public static async Task<NpgsqlDataSource> CreateAsync()
     {
+        return NpgsqlDataSource.Create(await CreateConnectionStringAsync());
+    }
+
+    /// <summary>The connection string, with its password, of a fresh database with all migrations applied, for a host of the test.</summary>
+    public static async Task<string> CreateConnectionStringAsync()
+    {
         string connectionString = await IntegrationEnvironment.CreateDatabaseAsync();
         IConfigurationRoot configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:MarketData"] = connectionString })
@@ -25,6 +31,6 @@ public static class MarketDataDatabase
             provider.MigrateToLatestVersion();
         }
 
-        return NpgsqlDataSource.Create(connectionString);
+        return connectionString;
     }
 }

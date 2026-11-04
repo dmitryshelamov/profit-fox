@@ -22,6 +22,18 @@ internal sealed class CandleRepository(NpgsqlDataSource dataSource) : ICandleRep
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task UpsertAsync(Interval interval, IReadOnlyCollection<(Instrument Instrument, Candle Candle)> candles, CancellationToken cancellationToken)
+    {
+        // One statement cannot write a row twice, so the later of two candles with the same key wins.
+        var dbCandles = candles
+            .Select(item => CandleDbConverter.FromDomain(item.Instrument, interval, item.Candle))
+            .GroupBy(candle => (candle.Category, candle.Symbol, candle.OpenTime))
+            .Select(same => same.Last())
+            .ToList();
+        await using NpgsqlCommand command = CandleRepositoryQueries.Upsert(dataSource, dbCandles);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<Candle>> GetAsync(
         Instrument instrument,
         Interval interval,

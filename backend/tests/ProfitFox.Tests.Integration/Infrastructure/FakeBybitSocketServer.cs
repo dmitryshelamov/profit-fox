@@ -40,6 +40,15 @@ public sealed class FakeBybitSocketServer : IAsyncDisposable
     private readonly ConcurrentDictionary<string, int> _subscribes = new ConcurrentDictionary<string, int>();
     private int _authentications;
 
+    /// <summary>How many topics each subscribe request carried, in order, on any path.</summary>
+    public ConcurrentQueue<int> SubscribeSizes { get; } = new ConcurrentQueue<int>();
+
+    /// <summary>How many topics each connection open now to <paramref name="path" /> carries.</summary>
+    public IReadOnlyList<int> TopicsPerConnection(string path)
+    {
+        return [.. _connections.Values.Where(connection => connection.Path == path).Select(connection => connection.Topics.Count)];
+    }
+
     /// <summary>The connections open now to <paramref name="path" />, such as <c>/v5/public/linear</c> or <c>/v5/private</c>.</summary>
     public int Connections(string path)
     {
@@ -263,6 +272,8 @@ public sealed class FakeBybitSocketServer : IAsyncDisposable
 
                     break;
                 }
+
+                SubscribeSizes.Enqueue(topics.Length);
 
                 foreach (string topic in topics)
                 {

@@ -19,6 +19,8 @@ import { BotPage } from '@/pages/bot/BotPage';
 import { BotEditorPage } from '@/pages/bot-editor/BotEditorPage';
 import { BotsPage } from '@/pages/bots/BotsPage';
 import { ComparePage } from '@/pages/compare/ComparePage';
+import { MarketPage } from '@/pages/market/MarketPage';
+import { MarketPairPage } from '@/pages/market-pair/MarketPairPage';
 import { NodeEditorPage } from '@/pages/node-editor/NodeEditorPage';
 import { NodesPage } from '@/pages/nodes/NodesPage';
 import { StrategiesPage } from '@/pages/strategies/StrategiesPage';
@@ -72,6 +74,28 @@ const nodesRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/nodes',
   component: NodesPage,
+});
+
+const marketRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/market',
+  component: MarketPage,
+});
+
+const marketPairRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/market/$category/$symbol',
+  // The router reads `?interval=5` as the number 5, so a number is taken as its text.
+  validateSearch: (search: Record<string, unknown>): { interval?: string } =>
+    typeof search.interval === 'string' || typeof search.interval === 'number'
+      ? { interval: String(search.interval) }
+      : {},
+  component: function MarketPairRoute() {
+    const { category, symbol } = marketPairRoute.useParams();
+    const { interval } = marketPairRoute.useSearch();
+
+    return <MarketPairPage category={category} symbol={symbol} interval={interval} />;
+  },
 });
 
 const botsRoute = createRoute({
@@ -219,6 +243,8 @@ const routeTree = rootRoute.addChildren([
   shellRoute.addChildren([
     strategiesRoute,
     nodesRoute,
+    marketRoute,
+    marketPairRoute,
     botsRoute,
     newBotRoute,
     editBotRoute,

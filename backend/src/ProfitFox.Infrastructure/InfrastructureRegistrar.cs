@@ -14,8 +14,13 @@ using ProfitFox.Application.MarketData;
 using ProfitFox.Application.MarketData.FormingCandles;
 using ProfitFox.Application.Ports.ExchangeAccounts;
 using ProfitFox.Application.Ports.LiveTrading;
+using ProfitFox.Application.Ports.Market;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.Ports.Security;
+using ProfitFox.Application.Scanner;
+using ProfitFox.Application.Scanner.Backfill;
+using ProfitFox.Application.Scanner.Minute;
+using ProfitFox.Application.Scanner.Universe;
 using ProfitFox.Application.Workers;
 using ProfitFox.Domain.Services.Backtests;
 using ProfitFox.Infrastructure.BackgroundServices;
@@ -84,6 +89,31 @@ public static class InfrastructureRegistrar
         services.AddHostedService<WorkerStartLogService>();
         services.AddHostedService<CandleImportBackgroundService>();
         services.AddHostedService<BacktestBackgroundService>();
+    }
+
+    /// <summary>The services of the scanner: the data of the whole market, from public Bybit data only; no master key, no Worker lanes.</summary>
+    /// <exception cref="InvalidOperationException">The lease of the stream would expire before the scanner renews it.</exception>
+    public static void ConfigureScanner(IConfiguration configuration, IServiceCollection services)
+    {
+        ScannerSettings settings = configuration.GetSection("Scanner").Get<ScannerSettings>() ?? new ScannerSettings();
+
+        if (settings.LeaseRenewal >= settings.LeaseDuration)
+        {
+            throw new InvalidOperationException("Scanner:LeaseRenewal must be shorter than Scanner:LeaseDuration.");
+        }
+
+        ConfigureCommon(configuration, services);
+        services.AddSingleton(settings);
+        services.AddSingleton<ScannerRestGate>();
+        services.AddSingleton<IMarketDataFeed, BybitPublicDataClient>();
+        services.AddSingleton<IMarketStreams, BybitMarketStreams>();
+        services.AddSingleton<IScannerJournal, LoggingScannerJournal>();
+        services.AddScoped<ScannerMarket>();
+        services.AddScoped<ScannerUniverse>();
+        services.AddScoped<ScannerBackfill>();
+        services.AddScoped<ScannerMinuteCycle>();
+        services.AddScoped<ScannerSession>();
+        services.AddHostedService<ScannerBackgroundService>();
     }
 
     private static void RequireMasterKey(IConfiguration configuration, IServiceCollection services)
