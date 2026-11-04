@@ -87,7 +87,7 @@
 
 ## 6. Настройка машин и первая выкатка
 
-- [ ] 6.1 **[владелец]** soyo-03:
+- [x] 6.1 **[владелец]** soyo-03:
   - поставить GitHub Actions runner для `dmitryshelamov/profit-fox` с меткой `soyo-03` службой.
 
   GitHub:
@@ -96,7 +96,7 @@
   - добавить правило защиты тегов `v*`: нельзя удалять и перезаписывать. `GITHUB_TOKEN` workflow должен иметь право их создавать.
 
   Проверка: runner в статусе Idle в Settings → Actions → Runners.
-- [ ] 6.2 **[агент, с разрешения]**
+- [x] 6.2 **[агент, с разрешения]**
   - на soyo-03 создать ключ `~/.ssh/profit-fox-deploy` и записать `known_hosts` soyo-01;
   - на soyo-01 добавить строку ключа с `from=`, `command=` и запретами в `authorized_keys`, поставить
     `~/profit-fox/deploy.sh` и создать `~/profit-fox/.env.prod` (`600`), генерируя секреты на сервере и не выводя их.
