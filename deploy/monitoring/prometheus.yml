@@ -1,0 +1,10 @@
+# Prometheus of the monitoring stack: OTLP push only, no scrape_configs.
+storage:
+  tsdb:
+    # Three services push on their own schedules, so samples of one series may come out of order.
+    out_of_order_time_window: 30m
+
+otlp:
+  # The default: service.name and service.instance.id of the resource become `job` and `instance`; names get underscores and
+  # the `_total` suffix, as in `profitfox_bybit_rest_requests_total`, which the dashboards query.
+  translation_strategy: UnderscoreEscapingWithSuffixes
