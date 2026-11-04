@@ -1,0 +1,337 @@
+using System.Globalization;
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+
+using Npgsql;
+
+using ProfitFox.Domain.Entities.Ideas;
+using ProfitFox.Domain.Entities.Ideas.Enums;
+using ProfitFox.Domain.Entities.MarketData;
+using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.Services.Ideas;
+using ProfitFox.Domain.ValueObjects.Ideas;
+using ProfitFox.Domain.ValueObjects.Market;
+using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Market;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.MarketData;
+using ProfitFox.Tests.Integration.Infrastructure;
+using ProfitFox.Tests.Shared.Generators.Domain.Entity.Ideas;
+
+using Shouldly;
+
+namespace ProfitFox.Tests.Integration.Api;
+
+/// <summary>Requirements "Чтение идей", "Своя идея" and "Сетапы пары в снимке", decision 8.</summary>
+public class IdeasApiTests
+{
+    // The clock of the app reads 2024-03-10T12:30Z.
+    private static readonly DateTimeOffset SnapshotAt = DateTimeOffset.Parse("2024-03-10T12:29:10Z", CultureInfo.InvariantCulture);
+    private static readonly Instrument Sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
+    private static readonly Instrument Eth = new Instrument(MarketCategory.Spot, "ETHUSDT");
+
+    private ProfitFoxFactory _factory = null!;
+    private HttpClient _client = null!;
+    private NpgsqlDataSource _database = null!;
+    private Guid _holder;
+
+    [SetUp]
+    public async Task SetUp()
+    {
+        _factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        _client = _factory.CreateClient();
+        _database = NpgsqlDataSource.Create(_factory.ConnectionString);
+        _holder = Guid.NewGuid();
+        await new ScannerStateRepository(_database).ClaimAsync(_holder, SnapshotAt, SnapshotAt.AddSeconds(30), CancellationToken.None);
+    }
+
+    [TearDown]
+    public async Task TearDown()
+    {
+        _client.Dispose();
+        await _database.DisposeAsync();
+        await _factory.DisposeAsync();
+    }
+
+    // Scenario "Только long": each idea has the probability of its bucket, numbers as decimal strings.
+    [Test]
+    public async Task Ideas_of_one_side_come_with_the_statistics_of_their_bucket()
+    {
+        Idea impulse = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), IdeaStatus.Active, Sol);
+        Idea drop = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-10), instrument: Sol, setup: IdeaSetup.Drop, side: IdeaSide.Short);
+        Idea closedLongAgo = IdeaGenerator.Generate(SnapshotAt.AddDays(-3), IdeaStatus.Stop, Sol, setup: IdeaSetup.EarlyImpulse, statusAt: SnapshotAt.AddDays(-2));
+        await new IdeaRepository(_database).AddAsync([impulse, drop, closedLongAgo], CancellationToken.None);
+        var key = new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear);
+        await new IdeaBucketRepository(_database).ReplaceAsync(
+            IdeasEngineVersion.Current,
+            [
+                new IdeaBucket(key, 90, BucketStatisticsCalculator.Compute(180, 200, 20, 2m, 40m)),
+                new IdeaBucket(key, 30, BucketStatisticsCalculator.Compute(6, 5, 1, 2m, 2.4m))
+            ],
+            CancellationToken.None);
+
+        JsonElement ideas = await GetAsync("/api/ideas?side=long");
+
+        JsonElement idea = ideas.EnumerateArray().Single();
+        idea.GetProperty("id").GetGuid().ShouldBe(impulse.Id);
+        (idea.GetProperty("category").GetString(), idea.GetProperty("symbol").GetString(), idea.GetProperty("setup").GetString()).ShouldBe(("linear", "SOLUSDT", "impulse"));
+        (idea.GetProperty("interval").GetString(), idea.GetProperty("type").GetString(), idea.GetProperty("side").GetString()).ShouldBe(("15", "target_2r", "long"));
+        (idea.GetProperty("entry").GetString(), idea.GetProperty("stop").GetString(), idea.GetProperty("target").GetString(), idea.GetProperty("riskReward").GetString())
+            .ShouldBe(("105", "100", "115", "2"));
+        (idea.GetProperty("status").GetString(), idea.GetProperty("move").GetString(), idea.GetProperty("volumeRatio").GetString()).ShouldBe(("active", "3.5", "2.25"));
+        JsonElement bucket = idea.GetProperty("bucket");
+        (bucket.GetProperty("cases").GetInt32(), bucket.GetProperty("expired").GetInt32(), bucket.GetProperty("enoughData").GetBoolean()).ShouldBe((400, 20, true));
+        decimal.Parse(bucket.GetProperty("probability").GetString()!, CultureInfo.InvariantCulture).ShouldBe(0.4737m, 0.0001m);
+        decimal.Parse(bucket.GetProperty("probabilityLow").GetString()!, CultureInfo.InvariantCulture).ShouldBe(0.4240m, 0.0001m);
+        bucket.GetProperty("expectancy").GetString().ShouldBe("0.1");
+        JsonElement recent = idea.GetProperty("recent");
+        (recent.GetProperty("cases").GetInt32(), recent.GetProperty("enoughData").GetBoolean(), recent.GetProperty("probability").ValueKind).ShouldBe((12, false, JsonValueKind.Null));
+    }
+
+    // An idea of a bucket without cases has only its own baseline; the list goes by expectancy.
+    [Test]
+    public async Task Ideas_without_a_bucket_have_their_own_baseline_and_come_last()
+    {
+        Idea withBucket = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol);
+        Idea without = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-5), instrument: Sol, type: IdeaType.BeyondExtreme);
+        await new IdeaRepository(_database).AddAsync([without, withBucket], CancellationToken.None);
+        await new IdeaBucketRepository(_database).ReplaceAsync(
+            IdeasEngineVersion.Current,
+            [new IdeaBucket(new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear), 90, BucketStatisticsCalculator.Compute(10, 30, 0, 2m, -10m))],
+            CancellationToken.None);
+
+        JsonElement[] ideas = [.. (await GetAsync("/api/ideas")).EnumerateArray()];
+
+        ideas.Select(idea => idea.GetProperty("id").GetGuid()).ShouldBe([withBucket.Id, without.Id]);
+        (ideas[1].GetProperty("bucket").ValueKind, ideas[1].GetProperty("baseline").GetString()).ShouldBe((JsonValueKind.Null, (1m / 3m).ToString(CultureInfo.InvariantCulture)));
+        (await GetAsync("/api/ideas?nonNegativeExpectancy=true")).GetArrayLength().ShouldBe(0);
+    }
+
+    [Test]
+    public async Task Idea_is_read_by_its_id_and_the_buckets_whole()
+    {
+        Idea idea = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol);
+        await new IdeaRepository(_database).AddAsync([idea], CancellationToken.None);
+        var key = new IdeaBucketKey(IdeaSetup.Drop, IdeaType.Pullback, Interval.OneHour, IdeaSide.Short, MarketCategory.Spot);
+        await new IdeaBucketRepository(_database).ReplaceAsync(IdeasEngineVersion.Current, [new IdeaBucket(key, 30, BucketStatisticsCalculator.Compute(6, 5, 1, 3m, 2.4m))], CancellationToken.None);
+
+        (await GetAsync($"/api/ideas/{idea.Id}")).GetProperty("symbol").GetString().ShouldBe("SOLUSDT");
+        (await _client.GetAsync($"/api/ideas/{Guid.NewGuid()}")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        JsonElement bucket = (await GetAsync("/api/ideas/buckets")).EnumerateArray().Single();
+        (bucket.GetProperty("setup").GetString(), bucket.GetProperty("type").GetString(), bucket.GetProperty("interval").GetString(), bucket.GetProperty("side").GetString())
+            .ShouldBe(("drop", "pullback", "60", "short"));
+        (bucket.GetProperty("category").GetString(), bucket.GetProperty("days").GetInt32(), bucket.GetProperty("statistics").GetProperty("baseline").GetString()).ShouldBe(("spot", 30, "0.25"));
+    }
+
+    [TestCase("setup=drop", "drop")]
+    [TestCase("interval=60", "hour")]
+    [TestCase("type=pullback", "pullback")]
+    [TestCase("category=spot", "spot")]
+    [TestCase("side=short", "drop")]
+    public async Task Ideas_are_filtered_by_each_field(string query, string expected)
+    {
+        Idea impulse = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol);
+        var ideas = new Dictionary<string, Idea>
+        {
+            ["drop"] = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-19), instrument: Sol, setup: IdeaSetup.Drop, side: IdeaSide.Short),
+            ["hour"] = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-18), instrument: Sol, interval: Interval.OneHour),
+            ["pullback"] = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-17), instrument: Sol, type: IdeaType.Pullback),
+            ["spot"] = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-16), instrument: Eth)
+        };
+        await new IdeaRepository(_database).AddAsync([impulse, .. ideas.Values], CancellationToken.None);
+
+        (await GetAsync($"/api/ideas?{query}")).EnumerateArray().Select(idea => idea.GetProperty("id").GetGuid()).ShouldBe([ideas[expected].Id]);
+    }
+
+    [TestCase("setup=rocket", "setup")]
+    [TestCase("interval=30", "interval")]
+    [TestCase("type=scalp", "type")]
+    [TestCase("side=up", "side")]
+    [TestCase("category=inverse", "category")]
+    public async Task Unknown_filter_is_a_validation_error(string query, string key)
+    {
+        HttpResponseMessage response = await _client.GetAsync($"/api/ideas?{query}");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("errors").TryGetProperty(key, out _).ShouldBeTrue();
+    }
+
+    [Test]
+    public async Task Ideas_of_a_pair_are_its_own()
+    {
+        Idea ofSol = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol);
+        await new IdeaRepository(_database).AddAsync([ofSol, IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Eth)], CancellationToken.None);
+
+        (await GetAsync("/api/market/linear/SOLUSDT/ideas")).EnumerateArray().Select(idea => idea.GetProperty("id").GetGuid()).ShouldBe([ofSol.Id]);
+        (await _client.GetAsync("/api/market/inverse/SOLUSD/ideas")).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    // Scenario "Два сетапа на 15 минутах"; a pair without setups lists every interval empty.
+    [Test]
+    public async Task Row_of_the_snapshot_has_the_setups_of_the_pair_by_interval()
+    {
+        await SnapshotAsync(Sol, 100.5m);
+        await SnapshotAsync(Eth, 3000m);
+        await new MarketSnapshotRepository(_database).ReplaceSetupsAsync(
+            _holder,
+            new Dictionary<Instrument, IReadOnlyList<PairSetup>> { [Sol] = [new PairSetup(Interval.FifteenMinutes, IdeaSetup.Impulse), new PairSetup(Interval.FifteenMinutes, IdeaSetup.HighVolatility)] },
+            CancellationToken.None);
+
+        JsonElement[] rows = [.. (await GetAsync("/api/market")).GetProperty("rows").EnumerateArray()];
+        JsonElement sol = rows.Single(row => row.GetProperty("symbol").GetString() == "SOLUSDT").GetProperty("setups");
+        JsonElement eth = rows.Single(row => row.GetProperty("symbol").GetString() == "ETHUSDT").GetProperty("setups");
+
+        sol.GetProperty("15").EnumerateArray().Select(setup => setup.GetString()).ShouldBe(["impulse", "high_volatility"], ignoreOrder: true);
+        sol.GetProperty("5").GetArrayLength().ShouldBe(0);
+        new[] { "5", "15", "60", "240" }.ShouldAllBe(interval => eth.GetProperty(interval).GetArrayLength() == 0);
+        (await GetAsync("/api/market/linear/SOLUSDT")).GetProperty("setups").GetProperty("15").GetArrayLength().ShouldBe(2);
+    }
+
+    // Scenario "Своя идея short": the stop above the nearest resistance, 105.0–105.2, with k × ATR, the target at 2R, the baseline 1 / 3.
+    [Test]
+    public async Task Own_idea_is_measured_from_the_price_now_by_the_rules_of_its_type()
+    {
+        IReadOnlyList<Candle> minutes = await MinutesAsync();
+        await SnapshotAsync(Sol, 100.5m);
+        decimal atr = Atr.Compute(Hours(minutes))!.Value;
+
+        HttpResponseMessage response = await _client.PostAsJsonAsync("/api/market/linear/SOLUSDT/own-idea", new { type = "target_2r", interval = "60", side = "short" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        JsonElement idea = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        decimal stop = 105.2m + (1.5m * atr);
+        idea.GetProperty("made").GetBoolean().ShouldBeTrue();
+        (idea.GetProperty("entry").GetString(), idea.GetProperty("stop").GetString(), idea.GetProperty("target").GetString())
+            .ShouldBe(("100.5", Text(stop), Text(100.5m - (2m * (stop - 100.5m)))));
+        (idea.GetProperty("riskReward").GetString(), idea.GetProperty("baseline").GetString()).ShouldBe(("2", Text(1m / 3m)));
+    }
+
+    // Without the zone it needs the rules make no idea.
+    [Test]
+    public async Task Own_idea_without_its_zone_is_not_made()
+    {
+        await MinutesAsync();
+        await SnapshotAsync(Sol, 100.5m);
+
+        HttpResponseMessage response = await _client.PostAsJsonAsync("/api/market/linear/SOLUSDT/own-idea", new { type = "levels", interval = "60", side = "short" });
+
+        JsonElement idea = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        (idea.GetProperty("made").GetBoolean(), idea.GetProperty("entry").ValueKind).ShouldBe((false, JsonValueKind.Null));
+    }
+
+    // Without 14 closed candles there is no ATR to measure by: no idea and no zones.
+    [Test]
+    public async Task Pair_without_history_has_no_own_idea_and_no_zones()
+    {
+        await SnapshotAsync(Sol, 100.5m);
+
+        HttpResponseMessage response = await _client.PostAsJsonAsync("/api/market/linear/SOLUSDT/own-idea", new { type = "beyond_extreme", interval = "15", side = "long" });
+
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("made").GetBoolean().ShouldBeFalse();
+        (await GetAsync("/api/market/linear/SOLUSDT/zones?interval=15")).GetProperty("zones").GetArrayLength().ShouldBe(0);
+    }
+
+    // Scenario "Своя идея на spot".
+    [Test]
+    public async Task Own_short_idea_on_spot_is_a_validation_error()
+    {
+        await SnapshotAsync(Eth, 3000m);
+
+        HttpResponseMessage response = await _client.PostAsJsonAsync("/api/market/spot/ETHUSDT/own-idea", new { type = "target_2r", interval = "60", side = "short" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("errors").GetProperty("side")[0].GetString().ShouldBe("Spot has no short ideas.");
+    }
+
+    [Test]
+    public async Task Own_idea_needs_known_codes_and_a_pair_of_the_snapshot()
+    {
+        (await _client.PostAsJsonAsync("/api/market/linear/SOLUSDT/own-idea", new { type = "scalp", interval = "30", side = "up" })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await _client.PostAsJsonAsync("/api/market/linear/NOPEUSDT/own-idea", new { type = "target_2r", interval = "60", side = "long" })).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Test]
+    public async Task Zones_of_an_interval_are_told_against_the_price()
+    {
+        await MinutesAsync();
+        await SnapshotAsync(Sol, 100.5m);
+
+        JsonElement zones = await GetAsync("/api/market/linear/SOLUSDT/zones?interval=60");
+
+        zones.GetProperty("price").GetString().ShouldBe("100.5");
+        JsonElement zone = zones.GetProperty("zones").EnumerateArray().Single();
+        (zone.GetProperty("low").GetString(), zone.GetProperty("high").GetString(), zone.GetProperty("strength").GetInt32(), zone.GetProperty("kind").GetString())
+            .ShouldBe(("105.0", "105.2", 2, "resistance"));
+        (await _client.GetAsync("/api/market/linear/SOLUSDT/zones?interval=30")).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await _client.GetAsync("/api/market/inverse/SOLUSD/zones?interval=60")).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await _client.GetAsync("/api/market/linear/NOPEUSDT/zones?interval=60")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [TestCase("105.1", "around")]
+    [TestCase("106", "support")]
+    public async Task Zone_around_the_price_or_below_it_is_told_so(string price, string kind)
+    {
+        await MinutesAsync();
+        await SnapshotAsync(Sol, decimal.Parse(price, CultureInfo.InvariantCulture));
+
+        (await GetAsync("/api/market/linear/SOLUSDT/zones?interval=60")).GetProperty("zones")[0].GetProperty("kind").GetString().ShouldBe(kind);
+    }
+
+    // 30 hours of SOLUSDT before 11:00 at 100 with a high of 101 and a low of 99 a hour, but highs of 105.0 and 105.2 in the hours of
+    // 15:00 and 01:00; then flat at 100.5 up to the snapshot.
+    private async Task<IReadOnlyList<Candle>> MinutesAsync()
+    {
+        var from = DateTimeOffset.Parse("2024-03-09T05:00:00Z", CultureInfo.InvariantCulture);
+        var hoursEnd = DateTimeOffset.Parse("2024-03-10T11:00:00Z", CultureInfo.InvariantCulture);
+        var minutes = new List<Candle>();
+
+        for (DateTimeOffset time = from; time < SnapshotAt.AddSeconds(-10); time = time.AddMinutes(1))
+        {
+            int hour = (int)(time - from).TotalHours;
+            decimal high = time.Minute == 30 ? hour == 10 ? 105.0m : hour == 20 ? 105.2m : 101m : 100m;
+            decimal low = time.Minute == 31 ? 99m : 100m;
+            minutes.Add(time < hoursEnd ? Candle(time, 100m, high, low, 100m) : Candle(time, 100.5m, 100.5m, 100.5m, 100.5m));
+        }
+
+        await new CandleRepository(_database).UpsertAsync(Sol, Interval.OneMinute, minutes, CancellationToken.None);
+
+        return minutes;
+    }
+
+    private static IReadOnlyList<IdeaCandle> Hours(IReadOnlyList<Candle> minutes)
+    {
+        IdeaCandle[] ideaMinutes = [.. minutes.Select(candle => new IdeaCandle(candle.OpenTime, candle.Open.Value, candle.High.Value, candle.Low.Value, candle.Close.Value, candle.Turnover.Value))];
+
+        return IdeaCandles.FromMinutes(Interval.OneHour, ideaMinutes, ideaMinutes[0].OpenTime, DateTimeOffset.Parse("2024-03-10T11:00:00Z", CultureInfo.InvariantCulture));
+    }
+
+    private async Task SnapshotAsync(Instrument instrument, decimal price)
+    {
+        var store = new MarketSnapshotRepository(_database);
+        MarketSnapshotRow[] rows =
+        [
+            .. (await store.GetAllAsync(CancellationToken.None)),
+            new MarketSnapshotRow(instrument, SnapshotAt, new PairMetrics(price, null, null, null, null, null, null, null, null, null, null, null, 0.01m), false)
+        ];
+        await store.ReplaceAsync(_holder, rows, SnapshotAt, CancellationToken.None);
+    }
+
+    private static Candle Candle(DateTimeOffset time, decimal open, decimal high, decimal low, decimal close)
+    {
+        return new Candle(time, new Price(open), new Price(high), new Price(low), new Price(close), new Volume(1m), new Volume(100m));
+    }
+
+    private static string Text(decimal value)
+    {
+        return value.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private async Task<JsonElement> GetAsync(string path)
+    {
+        HttpResponseMessage response = await _client.GetAsync(path);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+    }
+}

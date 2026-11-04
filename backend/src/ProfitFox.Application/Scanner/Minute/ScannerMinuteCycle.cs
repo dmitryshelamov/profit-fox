@@ -1,8 +1,10 @@
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.Market;
+using ProfitFox.Application.Scanner.Ideas;
 using ProfitFox.Application.Workers;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
@@ -11,7 +13,8 @@ namespace ProfitFox.Application.Scanner.Minute;
 /// <summary>
 ///     The minute of the scanner (decision 9): right after the end of a minute the tickers of each category, in one request each, and the
 ///     point of open interest at the start of a 5 minute step when the read falls in its first minute (it never replaces a stored point); <see cref="ScannerSettings.SnapshotDelay" /> later, so that the closed candles of the
-///     minute have come, the snapshot of every pair, which replaces the previous one if this scanner still holds the stream.
+///     minute have come, the snapshot of every pair, which replaces the previous one if this scanner still holds the stream. Then the ideas of
+///     the minute and the setups of the pairs into their rows; a failure of the ideas is logged and leaves the snapshot as it is.
 /// </summary>
 public sealed class ScannerMinuteCycle(
     IMarketDataFeed feed,
@@ -19,6 +22,9 @@ public sealed class ScannerMinuteCycle(
     IMarketSnapshotRepository snapshots,
     IScannerPairRepository pairs,
     ScannerMarket market,
+    LiveIdeas ideas,
+    ScannerPace pace,
+    IScannerJournal journal,
     ScannerSettings settings,
     WorkerIdentity identity,
     TimeProvider time)
@@ -50,7 +56,23 @@ public sealed class ScannerMinuteCycle(
             throw new ScannerLeaseLostException();
         }
 
+        pace.Snapshot(end + settings.SnapshotDelay, time.GetUtcNow());
         await pairs.SaveAsync(market.TakeChanged(), cancellationToken);
+        IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>>? setups = null;
+
+        try
+        {
+            setups = await ideas.RunAsync(end, cancellationToken);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            journal.Failed("ideas", exception);
+        }
+
+        if (setups is not null && !await snapshots.ReplaceSetupsAsync(identity.Id, setups, cancellationToken))
+        {
+            throw new ScannerLeaseLostException();
+        }
 
         return market.Lagging(end);
     }

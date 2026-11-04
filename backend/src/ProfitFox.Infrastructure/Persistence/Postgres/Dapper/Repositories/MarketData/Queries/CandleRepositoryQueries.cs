@@ -34,6 +34,25 @@ internal static class CandleRepositoryQueries
                                            ORDER BY open_time
                                            """;
 
+    // time_bucket of TimescaleDB aligns buckets of timestamptz to 2000-01-03 UTC, which lies on the grid of every interval up to a day.
+    private const string GetAggregatedSql = """
+                                            SELECT time_bucket(make_interval(mins => @Minutes), open_time) AS "OpenTime", min(open_time) AS "FirstMinute",
+                                                first(open, open_time) AS open, max(high) AS high, min(low) AS low, last(close, open_time) AS close,
+                                                sum(turnover) AS volume
+                                            FROM candles
+                                            WHERE category = @Category AND symbol = @Symbol AND "interval" = '1' AND open_time >= @From AND open_time < @To
+                                            GROUP BY 1
+                                            ORDER BY 1
+                                            """;
+
+    private const string GetCloseBeforeSql = """
+                                             SELECT close
+                                             FROM candles
+                                             WHERE category = @Category AND symbol = @Symbol AND "interval" = '1' AND open_time < @From
+                                             ORDER BY open_time DESC
+                                             LIMIT 1
+                                             """;
+
     internal static NpgsqlCommand Upsert(NpgsqlDataSource dataSource, IReadOnlyCollection<CandleDb> candles)
     {
         NpgsqlCommand command = dataSource.CreateCommand(UpsertSql);
@@ -77,5 +96,18 @@ internal static class CandleRepositoryQueries
             GetOpenTimesSql,
             new { Category = category, Symbol = symbol, Interval = interval, From = from, To = to },
             cancellationToken: cancellationToken);
+    }
+
+    internal static CommandDefinition GetAggregated(string category, string symbol, int minutes, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            GetAggregatedSql,
+            new { Category = category, Symbol = symbol, Minutes = minutes, From = from, To = to },
+            cancellationToken: cancellationToken);
+    }
+
+    internal static CommandDefinition GetCloseBefore(string category, string symbol, DateTimeOffset from, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(GetCloseBeforeSql, new { Category = category, Symbol = symbol, From = from }, cancellationToken: cancellationToken);
     }
 }

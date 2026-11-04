@@ -32,6 +32,8 @@ function open(answer: () => unknown) {
   return fakeApi({ 'GET /api/market': () => json(answer()) });
 }
 
+const snapshotReads = (requests: Request[]) =>
+  requests.filter((request) => new URL(request.url).pathname === '/api/market');
 const tableOf = () => screen.findByRole('table');
 const symbolsIn = (table: HTMLElement) =>
   within(table)
@@ -81,9 +83,9 @@ describe('market screen', () => {
     renderApp('/market');
     await tableOf();
 
-    expect(screen.getByText('4 инструмента')).toBeInTheDocument();
+    expect(screen.getByText('4 из 4 инструментов')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'spot 2' }));
-    expect(screen.getByText('2 инструмента')).toBeInTheDocument();
+    expect(screen.getByText('2 из 4 инструментов')).toBeInTheDocument();
     expect(
       screen.getByText(
         'Изменения и оборот — по закрытым минутным свечам. OI, фандинг и спред обновляются раз в минуту, у spot их нет («—»). Фандинг — текущая ставка за период.',
@@ -112,6 +114,7 @@ describe('market screen', () => {
     // Groups of columns above, the columns of a group under them.
     expect(names).toEqual([
       'Инструмент',
+      'Сетап · 15 мин',
       'Цена',
       'Изменение, %',
       'Оборот, USDT',
@@ -136,11 +139,19 @@ describe('market screen', () => {
     renderApp('/market');
     await tableOf();
 
-    expect(screen.getByRole('button', { name: 'Все 4' })).toHaveAttribute('aria-pressed', 'true');
+    expect(
+      within(screen.getByRole('group', { name: 'Категория' })).getByRole('button', {
+        name: 'Все 4',
+      }),
+    ).toHaveAttribute('aria-pressed', 'true');
     await userEvent.click(screen.getByRole('button', { name: 'spot 2' }));
     expect(symbolsIn(screen.getByRole('table'))).toEqual(['DOGEUSDT', 'ETHUSDT']);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Все 4' }));
+    await userEvent.click(
+      within(screen.getByRole('group', { name: 'Категория' })).getByRole('button', {
+        name: 'Все 4',
+      }),
+    );
     await userEvent.type(screen.getByRole('searchbox', { name: 'Поиск по символу' }), 'ge');
     expect(symbolsIn(screen.getByRole('table'))).toEqual(['DOGEUSDT']);
   });
@@ -200,7 +211,7 @@ describe('market screen', () => {
 
     await act(() => vi.advanceTimersByTimeAsync(15_000));
 
-    await waitFor(() => expect(requests).toHaveLength(2));
+    await waitFor(() => expect(snapshotReads(requests)).toHaveLength(2));
     await waitFor(() =>
       expect(symbolsIn(screen.getByRole('table'))).toEqual(['WIFUSDT', 'SOLUSDT']),
     );

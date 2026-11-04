@@ -16,6 +16,7 @@ import {
 import { useEffect, useMemo, useRef } from 'react';
 
 import { candleEnd } from '../model/chartPaging';
+import { type LevelInput, levelLines, zoneBands, type ZoneInput } from '../model/ideaOverlay';
 import {
   type Bar,
   type BarInput,
@@ -27,6 +28,7 @@ import { type OrderInput, orderLines } from '../model/orderLines';
 import { type FillInput, tradeMarkers } from '../model/tradeMarkers';
 import { type VolumeBar, volumeBars } from '../model/volumeBars';
 import { token, withAlpha } from './tokens';
+import { ZoneBandsPrimitive } from './ZoneBandsPrimitive';
 
 /** How many candles the chart shows when it first opens. */
 const initialBars = 120;
@@ -86,6 +88,9 @@ export function BotCandleChart({
   live = nothing,
   fills,
   orders,
+  levels,
+  zones,
+  signalTime,
   interval,
   label,
   onReachStart,
@@ -97,6 +102,12 @@ export function BotCandleChart({
   /** Without fills and orders, as on the page of a pair, the chart is described by its label alone. */
   fills?: readonly FillInput[];
   orders?: readonly OrderInput[];
+  /** Price lines of a trade idea: entry, stop and target. */
+  levels?: readonly LevelInput[];
+  /** Support and resistance zones, drawn as bands behind the candles. */
+  zones?: readonly ZoneInput[];
+  /** The open time in seconds of the candle an idea fired in, marked on the chart. */
+  signalTime?: number;
   /** The Bybit interval of the candles, which says where each one ends. */
   interval: string;
   label: string;
@@ -111,6 +122,8 @@ export function BotCandleChart({
     volume: ISeriesApi<'Histogram'>;
     markers: ISeriesMarkersPluginApi<Time>;
     lines: IPriceLine[];
+    levelLines: IPriceLine[];
+    zones: ZoneBandsPrimitive;
   } | null>(null);
   const firstTime = useRef<number | null>(null);
   const drawnHistory = useRef<unknown>(null);
@@ -129,6 +142,8 @@ export function BotCandleChart({
     [closed, current, fills, interval],
   );
   const lines = useMemo(() => orderLines(orders ?? nothing), [orders]);
+  const levelsDrawn = useMemo(() => levelLines(levels ?? nothing), [levels]);
+  const bands = useMemo(() => zoneBands(zones ?? nothing), [zones]);
 
   useEffect(() => {
     reachStart.current = onReachStart;
@@ -177,12 +192,16 @@ export function BotCandleChart({
     const onCrosshair = (moved: MouseEventParams) =>
       hover.current?.(typeof moved.time === 'number' ? moved.time : null);
     api.subscribeCrosshairMove(onCrosshair);
+    const zonePrimitive = new ZoneBandsPrimitive();
+    candles.attachPrimitive(zonePrimitive);
     chart.current = {
       api,
       candles,
       volume,
       markers: createSeriesMarkers(candles, []),
       lines: [],
+      levelLines: [],
+      zones: zonePrimitive,
     };
 
     return () => {
@@ -251,8 +270,8 @@ export function BotCandleChart({
   useEffect(() => {
     const { up, down } = colors();
 
-    chart.current?.markers.setMarkers(
-      markers.map((marker) => ({
+    chart.current?.markers.setMarkers([
+      ...markers.map((marker) => ({
         time: marker.time as UTCTimestamp,
         position: marker.position,
         shape: marker.shape,
@@ -260,8 +279,19 @@ export function BotCandleChart({
         text: marker.text,
         color: marker.shape === 'arrowUp' ? up : down,
       })),
-    );
-  }, [markers]);
+      ...(signalTime === undefined
+        ? []
+        : [
+            {
+              time: signalTime as UTCTimestamp,
+              position: 'aboveBar' as const,
+              shape: 'circle' as const,
+              color: token('--color-accent', '#f28c28'),
+              text: 'Сигнал',
+            },
+          ]),
+    ]);
+  }, [markers, signalTime]);
 
   useEffect(() => {
     const drawn = chart.current;
@@ -287,6 +317,39 @@ export function BotCandleChart({
       }),
     );
   }, [lines]);
+
+  useEffect(() => {
+    const drawn = chart.current;
+
+    if (!drawn) {
+      return;
+    }
+
+    const colour = {
+      entry: token('--color-run', '#7aa7ff'),
+      stop: colors().down,
+      target: colors().up,
+    };
+
+    for (const line of drawn.levelLines) {
+      drawn.candles.removePriceLine(line);
+    }
+
+    drawn.levelLines = levelsDrawn.map((level) =>
+      drawn.candles.createPriceLine({
+        price: level.price,
+        color: colour[level.kind],
+        lineStyle: 0,
+        lineWidth: 1,
+        axisLabelVisible: true,
+        title: level.title,
+      }),
+    );
+  }, [levelsDrawn]);
+
+  useEffect(() => {
+    chart.current?.zones.setBands(bands);
+  }, [bands]);
 
   return (
     <figure

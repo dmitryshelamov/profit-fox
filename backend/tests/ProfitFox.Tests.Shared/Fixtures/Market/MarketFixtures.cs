@@ -64,11 +64,14 @@ public static class MarketFixtures
     {
         return
         [
-            .. Rows(name).Select(row => new MarketMinute(
-                Time(row.GetProperty("openTime")),
-                Number(row.GetProperty("open")),
-                Number(row.GetProperty("close")),
-                Number(row.GetProperty("turnover"))))
+            .. Rows(name).Select(row =>
+            {
+                decimal open = Number(row.GetProperty("open"));
+                decimal close = Number(row.GetProperty("close"));
+
+                // The metrics need no high and low, so the windows keep none: the body of a minute stands for them.
+                return new MarketMinute(Time(row.GetProperty("openTime")), open, Math.Max(open, close), Math.Min(open, close), close, Number(row.GetProperty("turnover")));
+            })
         ];
     }
 

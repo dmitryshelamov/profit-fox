@@ -67,6 +67,11 @@ export function instrumentsText(count: number): string {
   return `${groupDigits(String(count))} ${word}`;
 }
 
+/** How many instruments the screen shows of all: «7 из 1 104 инструментов». */
+export function shownOfText(shown: number, total: number): string {
+  return `${groupDigits(String(shown))} из ${groupDigits(String(total))} инструментов`;
+}
+
 /** The direction of a change, which the table colours: growth, fall or none. */
 export function trend(value: string): 'up' | 'down' | 'flat' {
   const amount = Number(value);

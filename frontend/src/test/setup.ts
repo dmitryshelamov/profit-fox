@@ -57,6 +57,9 @@ vi.mock('lightweight-charts', () => {
     applyOptions: vi.fn(),
     createPriceLine: vi.fn(() => ({})),
     removePriceLine: vi.fn(),
+    attachPrimitive: vi.fn(),
+    detachPrimitive: vi.fn(),
+    priceToCoordinate: vi.fn(() => null),
     priceScale: () => ({ applyOptions: vi.fn() }),
   });
   const timeScale = {

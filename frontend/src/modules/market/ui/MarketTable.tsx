@@ -1,6 +1,9 @@
 import { Link, useNavigate } from '@tanstack/react-router';
 
+import { intervalLabel } from '@/modules/market-data';
+
 import type { MarketRow } from '../model/rows';
+import { setupLabel, setupsOn } from '../model/setups';
 import type { SortColumn, SortDirection } from '../model/sorting';
 import { CategoryBadge } from './CategoryBadge';
 import { type MetricColumn, metricColumns } from './metricColumns';
@@ -74,11 +77,14 @@ export function MarketTable({
   sort,
   onSort,
   dimmed,
+  setupInterval,
 }: {
   rows: readonly MarketRow[];
   sort: Sort | null;
   onSort: (column: SortColumn) => void;
   dimmed: boolean;
+  /** The interval of the setups the column shows. */
+  setupInterval: string;
 }) {
   const navigate = useNavigate();
 
@@ -101,6 +107,9 @@ export function MarketTable({
               sort={sort}
               onSort={onSort}
             />
+          </th>
+          <th scope="col" rowSpan={2} className={`${cell} align-bottom`}>
+            Сетап · {intervalLabel(setupInterval)}
           </th>
           {groups.map((group) =>
             group.title === undefined ? (
@@ -188,6 +197,18 @@ export function MarketTable({
                   !
                 </span>
               )}
+            </td>
+            <td className={cell}>
+              <span className="flex flex-wrap gap-1">
+                {setupsOn(row, setupInterval).map((setup) => (
+                  <span
+                    key={setup}
+                    className="rounded bg-panel-2 px-1.5 py-0.5 text-xs whitespace-nowrap"
+                  >
+                    {setupLabel(setup)}
+                  </span>
+                ))}
+              </span>
             </td>
             {metricColumns.map(({ column, render }) => (
               <td key={column} className={number}>

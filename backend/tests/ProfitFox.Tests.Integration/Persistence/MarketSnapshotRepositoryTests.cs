@@ -2,7 +2,9 @@ using System.Globalization;
 
 using Npgsql;
 
+using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Market;
@@ -79,5 +81,31 @@ public class MarketSnapshotRepositoryTests
         written.ShouldBeFalse();
         (await _store.GetAllAsync(CancellationToken.None)).ShouldBe([new MarketSnapshotRow(Sol, Now, Full, false)]);
         (await _state.GetAsync(CancellationToken.None)).SnapshotAt.ShouldBe(Now);
+    }
+
+    // Requirement "Сетапы пары в снимке": after the snapshot the scanner writes the setups of the minute into its rows.
+    [Test]
+    public async Task Setups_of_the_minute_go_into_the_rows_and_replace_the_ones_before()
+    {
+        await _store.ReplaceAsync(_holder, [new MarketSnapshotRow(Sol, Now, Full, false), new MarketSnapshotRow(Btc, Now, Empty, false)], Now, CancellationToken.None);
+        PairSetup[] wif = [new PairSetup(Interval.FifteenMinutes, IdeaSetup.Impulse), new PairSetup(Interval.FifteenMinutes, IdeaSetup.HighVolatility), new PairSetup(Interval.FourHours, IdeaSetup.Drop)];
+        await _store.ReplaceSetupsAsync(_holder, new Dictionary<Instrument, IReadOnlyList<PairSetup>> { [Btc] = [new PairSetup(Interval.OneHour, IdeaSetup.EarlyDrop)] }, CancellationToken.None);
+
+        (await _store.ReplaceSetupsAsync(_holder, new Dictionary<Instrument, IReadOnlyList<PairSetup>> { [Sol] = wif, [Btc] = [] }, CancellationToken.None)).ShouldBeTrue();
+
+        IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>> setups = await _store.GetSetupsAsync(CancellationToken.None);
+        setups.Keys.ShouldBe([Sol]);
+        setups[Sol].ShouldBe(wif, ignoreOrder: true);
+    }
+
+    [Test]
+    public async Task Setups_are_not_written_by_a_scanner_that_lost_the_stream()
+    {
+        await _store.ReplaceAsync(_holder, [new MarketSnapshotRow(Sol, Now, Full, false)], Now, CancellationToken.None);
+
+        (await _store.ReplaceSetupsAsync(Guid.NewGuid(), new Dictionary<Instrument, IReadOnlyList<PairSetup>> { [Sol] = [new PairSetup(Interval.OneHour, IdeaSetup.Drop)] }, CancellationToken.None))
+            .ShouldBeFalse();
+
+        (await _store.GetSetupsAsync(CancellationToken.None)).ShouldBeEmpty();
     }
 }

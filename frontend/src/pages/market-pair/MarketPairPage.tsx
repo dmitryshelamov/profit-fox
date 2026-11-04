@@ -4,6 +4,16 @@ import { useNavigate } from '@tanstack/react-router';
 import { type ReactNode, useState } from 'react';
 
 import {
+  type Idea,
+  levelsOf,
+  OwnIdeaBlock,
+  type OwnIdeaInput,
+  PairIdeasList,
+  pairIdeasQuery,
+  useOwnIdea,
+  zonesQuery,
+} from '@/modules/ideas';
+import {
   CategoryBadge,
   compactNumber,
   fundingQuery,
@@ -12,6 +22,7 @@ import {
   openInterestQuery,
   pairIntervals,
   PercentChange,
+  setupIntervals,
   shownPairInterval,
   spreadText,
   UpdatedAt,
@@ -21,8 +32,11 @@ import {
 import {
   BotCandleChart,
   candleLegend,
+  firedMark,
   FundingChart,
+  type LevelInput,
   OpenInterestChart,
+  type ZoneInput,
 } from '@/modules/market-chart';
 import { intervalLabel } from '@/modules/market-data';
 import { ApiError } from '@/shared/api/client';
@@ -37,10 +51,19 @@ function PairChart({
   category,
   symbol,
   interval,
+  idea,
+  levels,
+  zones,
+  signalTime,
 }: {
   category: string;
   symbol: string;
   interval: string;
+  /** The selected idea, which stays in the address when the interval changes. */
+  idea: string | undefined;
+  levels: readonly LevelInput[] | undefined;
+  zones: readonly ZoneInput[] | undefined;
+  signalTime: number | undefined;
 }) {
   const navigate = useNavigate();
   const history = usePairCandles(category, symbol, interval);
@@ -62,7 +85,8 @@ function PairChart({
               void navigate({
                 to: '/market/$category/$symbol',
                 params: { category, symbol },
-                search: { interval: item.value },
+                search:
+                  idea === undefined ? { interval: item.value } : { interval: item.value, idea },
               })
             }
             className="h-7 rounded-md px-2.5 text-xs font-semibold text-muted hover:bg-panel-2 aria-pressed:bg-panel-2 aria-pressed:text-text"
@@ -88,6 +112,9 @@ function PairChart({
       <BotCandleChart
         history={history.candles}
         interval={interval}
+        levels={levels}
+        zones={zones}
+        signalTime={signalTime}
         label={`График свечей ${symbol}, ${intervalLabel(interval)}`}
         onReachStart={history.loadEarlier}
         onHover={setHovered}
@@ -193,17 +220,113 @@ const percent = (value: string | null, digits = 2) => (
 const unitOf = (value: string | null, format: (value: string) => string, unit = '') =>
   value === null ? '—' : `${format(value)}${unit}`;
 
-export function MarketPairPage({
+const defaultOwnIdea: OwnIdeaInput = { type: 'levels', interval: '15', side: 'long' };
+
+/**
+ * The ideas of the pair on the left, the chart on the right. A selected idea (`?idea=`) puts its interval, levels,
+ * zones and the mark of its signal on the chart; an own idea draws its levels the same way.
+ */
+function IdeasHub({
   category,
   symbol,
+  selectedId,
+  ownInput,
+  onOwnInput,
   interval,
 }: {
   category: string;
   symbol: string;
+  selectedId: string | undefined;
+  ownInput: OwnIdeaInput;
+  onOwnInput: (input: OwnIdeaInput) => void;
+  /** The interval the address asks for, if any. */
+  interval: string | undefined;
+}) {
+  const navigate = useNavigate();
+  const ideas = useQuery(pairIdeasQuery(category, symbol));
+  const own = useOwnIdea(category, symbol, ownInput).data;
+  const selected: Idea | undefined = ideas.data?.find((item) => item.id === selectedId);
+  const ownLevels = !selected && own?.made ? own : null;
+  const shown = shownPairInterval(
+    interval ?? selected?.interval ?? (ownLevels ? ownInput.interval : undefined),
+  );
+  const overlay = selected !== undefined || ownLevels !== null;
+  const zones = useQuery({
+    ...zonesQuery(category, symbol, shown),
+    enabled: overlay && setupIntervals.some((item) => item.value === shown),
+  });
+  const levels = selected
+    ? levelsOf(selected)
+    : ownLevels
+      ? levelsOf({ entry: ownLevels.entry!, stop: ownLevels.stop!, target: ownLevels.target! })
+      : undefined;
+  const select = (idea: string | undefined) =>
+    void navigate({
+      to: '/market/$category/$symbol',
+      params: { category, symbol },
+      search: idea === undefined ? {} : { idea },
+    });
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[22rem_1fr]">
+      <div className="space-y-4">
+        <section
+          aria-label="Идеи пары"
+          className="space-y-3 rounded-xl border border-line bg-panel px-4 py-4"
+        >
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Идеи</h2>
+            {selectedId !== undefined && (
+              <button
+                type="button"
+                onClick={() => select(undefined)}
+                className="text-xs text-accent hover:underline"
+              >
+                Снять выбор
+              </button>
+            )}
+          </div>
+          {ideas.isError && <p role="alert">Не удалось загрузить идеи пары.</p>}
+          {ideas.isPending && <p className="text-sm text-muted">Загрузка идей…</p>}
+          {ideas.data && (
+            <PairIdeasList
+              ideas={ideas.data}
+              selectedId={selected?.id}
+              onSelect={(idea) => select(idea.id)}
+            />
+          )}
+        </section>
+        <OwnIdeaBlock category={category} symbol={symbol} input={ownInput} onChange={onOwnInput} />
+      </div>
+      <PairChart
+        category={category}
+        symbol={symbol}
+        interval={shown}
+        idea={selectedId}
+        levels={levels}
+        zones={overlay ? zones.data?.zones : undefined}
+        signalTime={
+          selected && selected.interval === shown ? firedMark(selected.firedAt, shown) : undefined
+        }
+      />
+    </div>
+  );
+}
+
+export function MarketPairPage({
+  category,
+  symbol,
+  interval,
+  idea,
+}: {
+  category: string;
+  symbol: string;
   interval?: string;
+  idea?: string;
 }) {
   const row = useQuery(marketPairQuery(category, symbol));
   const now = useNow();
+  const [ownInput, setOwnInput] = useState(defaultOwnIdea);
 
   if (row.error instanceof ApiError && row.error.status === 404) {
     return (
@@ -293,7 +416,14 @@ export function MarketPairPage({
           )}
         </dl>
       </section>
-      <PairChart category={category} symbol={symbol} interval={shownPairInterval(interval)} />
+      <IdeasHub
+        category={category}
+        symbol={symbol}
+        selectedId={idea}
+        ownInput={ownInput}
+        onOwnInput={setOwnInput}
+        interval={interval}
+      />
       {linear && <SideCharts category={category} symbol={symbol} />}
       <p className="text-xs text-faint">Цифры обновляются вместе с таблицей рынка.</p>
     </section>

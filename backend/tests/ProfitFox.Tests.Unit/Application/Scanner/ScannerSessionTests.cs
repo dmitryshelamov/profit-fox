@@ -4,10 +4,12 @@ using Microsoft.Extensions.Time.Testing;
 
 using NSubstitute;
 
+using ProfitFox.Application.Backtests;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.Market;
 using ProfitFox.Application.Scanner;
 using ProfitFox.Application.Scanner.Backfill;
+using ProfitFox.Application.Scanner.Ideas;
 using ProfitFox.Application.Scanner.Minute;
 using ProfitFox.Application.Scanner.Universe;
 using ProfitFox.Application.Workers;
@@ -15,6 +17,8 @@ using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.Services.Ideas;
+using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
@@ -33,6 +37,9 @@ public class ScannerSessionTests
     private IMarketStreams _streams = null!;
     private IMarketSnapshotRepository _snapshots = null!;
     private IScannerJournal _journal = null!;
+    private IIdeaRepository _ideaStore = null!;
+    private IIdeaCaseRepository _ideaCases = null!;
+    private IIdeaReplayRepository _cursors = null!;
     private IAsyncDisposable _subscription = null!;
     private FakeTimeProvider _time = null!;
     private Action<Instrument, Candle> _closed = null!;
@@ -58,7 +65,12 @@ public class ScannerSessionTests
             });
         _snapshots = Substitute.For<IMarketSnapshotRepository>();
         _snapshots.ReplaceAsync(Arg.Any<Guid>(), Arg.Any<IReadOnlyCollection<MarketSnapshotRow>>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(true);
+        _snapshots.ReplaceSetupsAsync(Arg.Any<Guid>(), Arg.Any<IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>>>(), Arg.Any<CancellationToken>()).Returns(true);
         _journal = Substitute.For<IScannerJournal>();
+        _ideaStore = Substitute.For<IIdeaRepository>();
+        _ideaCases = Substitute.For<IIdeaCaseRepository>();
+        _cursors = Substitute.For<IIdeaReplayRepository>();
+        _cursors.GetAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new Dictionary<Instrument, DateTimeOffset>());
         _time = new FakeTimeProvider(Start);
         _closed = null!;
         _stored = [];
@@ -182,10 +194,33 @@ public class ScannerSessionTests
         _subscription.ClearReceivedCalls();
     }
 
+    // Requirement "Прогон идей в фоне сканера": the lane of ideas starts by clearing other versions, recomputes the buckets every 10 minutes,
+    // and a failure in it is logged and tried again.
+    [Test]
+    public async Task Lane_of_ideas_clears_other_versions_and_logs_its_failure()
+    {
+        var failure = new InvalidOperationException("replay");
+        _ideaCases.DeleteOtherVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Task.FromException(failure), Task.CompletedTask);
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session().RunAsync(cancellation.Token);
+
+        await WaitAsync(() => _journal.ReceivedCalls().Any(call => Equals(call.GetArguments()[0], "ideas")));
+        await WaitAsync(() => _ideaCases.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaCaseRepository.DeleteOtherVersionsAsync)) == 2, advance: true);
+        await WaitAsync(() => _ideaCases.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaCaseRepository.CountAsync)), advance: true);
+
+        _journal.Received(1).Failed("ideas", failure);
+        int counts = _ideaCases.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaCaseRepository.CountAsync));
+        await WaitAsync(() => _ideaCases.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaCaseRepository.CountAsync)) > counts, advance: true);
+        await cancellation.CancelAsync();
+        await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
     private ScannerSession Session()
     {
         var market = new ScannerMarket();
         var settings = new ScannerSettings { HistoryDays = 1 };
+        var pace = new ScannerPace();
+        var ideas = new LiveIdeas(_ideaStore, Substitute.For<IIdeaVolatilityRepository>(), _candles, market, new IdeasSettings(), _time);
         IScannerPairRepository pairs = Substitute.For<IScannerPairRepository>();
         pairs.GetAllAsync(Arg.Any<CancellationToken>()).Returns(_stored);
         IScannerStateRepository state = Substitute.For<IScannerStateRepository>();
@@ -196,7 +231,32 @@ public class ScannerSessionTests
             _streams,
             new ScannerUniverse(_feed, pairs, settings, _time),
             new ScannerBackfill(_feed, _candles, Substitute.For<IOpenInterestRepository>(), Substitute.For<IFundingRateRepository>(), pairs, state, market, settings, _time),
-            new ScannerMinuteCycle(_feed, Substitute.For<IOpenInterestRepository>(), _snapshots, pairs, market, settings, new WorkerIdentity(Guid.NewGuid()), _time),
+            new ScannerMinuteCycle(
+                _feed,
+                Substitute.For<IOpenInterestRepository>(),
+                _snapshots,
+                pairs,
+                market,
+                ideas,
+                pace,
+                _journal,
+                settings,
+                new WorkerIdentity(Guid.NewGuid()),
+                _time),
+            ideas,
+            new IdeasReplay(
+                _candles,
+                _ideaCases,
+                _cursors,
+                Substitute.For<IIdeaVolatilityRepository>(),
+                Substitute.For<IIdeaBucketRepository>(),
+                market,
+                new IdeasSettings(),
+                new BacktestSettings(),
+                settings,
+                new IdeasEngineVersion(IdeasEngineVersion.Current),
+                pace,
+                _time),
             market,
             _journal,
             _time);

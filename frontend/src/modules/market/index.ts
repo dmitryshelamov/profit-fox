@@ -10,10 +10,21 @@ export {
   compactNumber,
   fundingText,
   instrumentsText,
+  shownOfText,
   spreadText,
 } from './model/numbers';
 export { pairIntervals, shownPairInterval } from './model/pairIntervals';
 export { type CategoryFilter, categoryOptions, filterRows, type MarketRow } from './model/rows';
+export {
+  defaultSetupInterval,
+  filterBySetup,
+  setupChoices,
+  type SetupFilter,
+  setupIntervals,
+  setupLabel,
+  setupOptions,
+  setupsOn,
+} from './model/setups';
 export { ageText, isStale } from './model/snapshotAge';
 export { type SortColumn, sortRows } from './model/sorting';
 export { useNow } from './model/useNow';

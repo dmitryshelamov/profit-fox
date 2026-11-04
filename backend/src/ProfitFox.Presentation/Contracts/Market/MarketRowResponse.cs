@@ -1,13 +1,17 @@
 using System.Globalization;
 
+using ProfitFox.Application.Ideas;
 using ProfitFox.Application.MarketData;
+using ProfitFox.Application.Scanner.Ideas;
+using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.Market;
 
 namespace ProfitFox.Presentation.Contracts.Market;
 
 /// <summary>
 ///     The row of a pair in the market snapshot, with the time it was computed. Numbers are decimal strings, an empty metric is <c>null</c>; changes and spread in
-///     percent, turnovers and open interest in USDT.
+///     percent, turnovers and open interest in USDT. <see cref="Setups" /> are the codes of the setups that hold on the last closed minute by
+///     interval code, every one of <c>5</c>, <c>15</c>, <c>60</c> and <c>240</c> present.
 /// </summary>
 public sealed record MarketRowResponse(
     string Category,
@@ -26,9 +30,10 @@ public sealed record MarketRowResponse(
     string? OpenInterestChange24h,
     string? FundingRate,
     string? Spread,
-    bool Incomplete)
+    bool Incomplete,
+    IReadOnlyDictionary<string, IReadOnlyList<string>> Setups)
 {
-    public static MarketRowResponse Of(MarketSnapshotRow row)
+    public static MarketRowResponse Of(MarketSnapshotRow row, IReadOnlyList<PairSetup> setups)
     {
         PairMetrics metrics = row.Metrics;
 
@@ -49,7 +54,10 @@ public sealed record MarketRowResponse(
             Format(metrics.OpenInterestChange24h),
             Format(metrics.FundingRate),
             Format(metrics.Spread),
-            row.Incomplete);
+            row.Incomplete,
+            IdeasSettings.Intervals.ToDictionary(
+                interval => interval.ToCode(),
+                interval => (IReadOnlyList<string>)[.. setups.Where(setup => setup.Interval == interval).Select(setup => setup.Setup.ToCode())]));
     }
 
     private static string? Format(decimal? value)

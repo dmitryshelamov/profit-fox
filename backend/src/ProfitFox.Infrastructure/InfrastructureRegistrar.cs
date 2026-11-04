@@ -19,10 +19,12 @@ using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.Ports.Security;
 using ProfitFox.Application.Scanner;
 using ProfitFox.Application.Scanner.Backfill;
+using ProfitFox.Application.Scanner.Ideas;
 using ProfitFox.Application.Scanner.Minute;
 using ProfitFox.Application.Scanner.Universe;
 using ProfitFox.Application.Workers;
 using ProfitFox.Domain.Services.Backtests;
+using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Infrastructure.BackgroundServices;
 using ProfitFox.Infrastructure.Exchanges;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
@@ -111,6 +113,9 @@ public static class InfrastructureRegistrar
         services.AddScoped<ScannerMarket>();
         services.AddScoped<ScannerUniverse>();
         services.AddScoped<ScannerBackfill>();
+        services.AddScoped<ScannerPace>();
+        services.AddScoped<LiveIdeas>();
+        services.AddScoped<IdeasReplay>();
         services.AddScoped<ScannerMinuteCycle>();
         services.AddScoped<ScannerSession>();
         services.AddHostedService<ScannerBackgroundService>();
@@ -157,7 +162,9 @@ public static class InfrastructureRegistrar
             provider.GetRequiredService<IServiceScopeFactory>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddSingleton(configuration.GetSection("Backtests").Get<BacktestSettings>() ?? new BacktestSettings());
+        services.AddSingleton(configuration.GetSection("Ideas").Get<IdeasSettings>() ?? new IdeasSettings());
         services.AddSingleton(new EngineVersion(EngineVersion.Current));
+        services.AddSingleton(new IdeasEngineVersion(IdeasEngineVersion.Current));
         services.AddSingleton(configuration.GetSection("ExchangeAccounts").Get<ExchangeAccountSettings>() ?? new ExchangeAccountSettings());
         services.AddSingleton<ISecretProtector, AesGcmSecretProtector>();
 

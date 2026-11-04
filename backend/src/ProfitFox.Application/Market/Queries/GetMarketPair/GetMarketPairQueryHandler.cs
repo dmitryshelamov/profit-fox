@@ -3,6 +3,7 @@ using MediatR;
 using ProfitFox.Application.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Application.Market.Queries.GetMarketPair;
@@ -16,6 +17,9 @@ public sealed class GetMarketPairQueryHandler(IMarketSnapshotRepository snapshot
             return new GetMarketPairResult(null, new Dictionary<string, string> { ["category"] = MarketQueries.InvalidCategory });
         }
 
-        return new GetMarketPairResult(await snapshots.GetAsync(new Instrument(category, request.Symbol), cancellationToken), new Dictionary<string, string>());
+        var instrument = new Instrument(category, request.Symbol);
+        IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>> setups = await snapshots.GetSetupsAsync(cancellationToken);
+
+        return new GetMarketPairResult(await snapshots.GetAsync(instrument, cancellationToken), new Dictionary<string, string>(), setups.GetValueOrDefault(instrument) ?? []);
     }
 }

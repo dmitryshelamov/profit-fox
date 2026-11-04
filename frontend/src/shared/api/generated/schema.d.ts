@@ -1549,6 +1549,150 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ideas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The open ideas and the ones closed in the last 24 hours, by expectancy, highest first. */
+        get: {
+            parameters: {
+                query?: {
+                    Setup?: string;
+                    Interval?: string;
+                    Type?: string;
+                    Side?: string;
+                    Category?: string;
+                    /** @description Only ideas whose bucket expects at least 0 R. */
+                    NonNegativeExpectancy?: boolean;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IdeaResponse"][];
+                        "application/json": components["schemas"]["IdeaResponse"][];
+                        "text/json": components["schemas"]["IdeaResponse"][];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ideas/buckets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IdeaBucketResponse"][];
+                        "application/json": components["schemas"]["IdeaBucketResponse"][];
+                        "text/json": components["schemas"]["IdeaBucketResponse"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ideas/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IdeaResponse"];
+                        "application/json": components["schemas"]["IdeaResponse"];
+                        "text/json": components["schemas"]["IdeaResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/market-data/instruments": {
         parameters: {
             query?: never;
@@ -1908,6 +2052,398 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/{category}/{symbol}/ideas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The open ideas of a pair and the ones closed in the last 24 hours, by expectancy, highest first. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    category: string;
+                    symbol: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IdeaResponse"][];
+                        "application/json": components["schemas"]["IdeaResponse"][];
+                        "text/json": components["schemas"]["IdeaResponse"][];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/{category}/{symbol}/zones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The zones of support and resistance of a pair on an interval of the setups (5, 15, 60, 240), from its last 200 closed candles. */
+        get: {
+            parameters: {
+                query?: {
+                    interval?: string;
+                };
+                header?: never;
+                path: {
+                    category: string;
+                    symbol: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ZonesResponse"];
+                        "application/json": components["schemas"]["ZonesResponse"];
+                        "text/json": components["schemas"]["ZonesResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/{category}/{symbol}/own-idea": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** An idea of the pair from the price now by the rules of the type, without a setup; it is not stored and has only the baseline. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    category: string;
+                    symbol: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["OwnIdeaBody"];
+                    "text/json": components["schemas"]["OwnIdeaBody"];
+                    "application/*+json": components["schemas"]["OwnIdeaBody"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OwnIdeaResponse"];
+                        "application/json": components["schemas"]["OwnIdeaResponse"];
+                        "text/json": components["schemas"]["OwnIdeaResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/saved-filters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SavedFilterResponse"][];
+                        "application/json": components["schemas"]["SavedFilterResponse"][];
+                        "text/json": components["schemas"]["SavedFilterResponse"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SavedFilterBody"];
+                    "text/json": components["schemas"]["SavedFilterBody"];
+                    "application/*+json": components["schemas"]["SavedFilterBody"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CreatedResponse"];
+                        "application/json": components["schemas"]["CreatedResponse"];
+                        "text/json": components["schemas"]["CreatedResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/saved-filters/fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The catalog of the fields a condition may test, with their units and operators. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SavedFilterFieldResponse"][];
+                        "application/json": components["schemas"]["SavedFilterFieldResponse"][];
+                        "text/json": components["schemas"]["SavedFilterFieldResponse"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/saved-filters/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SavedFilterBody"];
+                    "text/json": components["schemas"]["SavedFilterBody"];
+                    "application/*+json": components["schemas"]["SavedFilterBody"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -2918,6 +3454,22 @@ export interface components {
             statusReason: null | string;
             closeRequested: boolean;
         };
+        /**
+         * @description The statistics of a bucket: its cases with an outcome and the expired ones, the share of targets with its 95 % Wilson interval (none
+         *     with bool BucketStatisticsResponse.EnoughData false, «мало данных»), the baseline and the expectancy in R. Shares are fractions as decimal strings.
+         */
+        BucketStatisticsResponse: {
+            /** Format: int32 */
+            cases: number | string;
+            /** Format: int32 */
+            expired: number | string;
+            probability: null | string;
+            probabilityLow: null | string;
+            probabilityHigh: null | string;
+            baseline: string;
+            expectancy: string;
+            enoughData: boolean;
+        };
         /** @description Prices and volumes as decimal strings: JSON numbers lose precision in JavaScript clients. */
         CandleResponse: {
             /** Format: date-time */
@@ -3034,6 +3586,49 @@ export interface components {
             /** Format: date-time */
             to: string;
         };
+        /** @description A bucket setup × type × interval × side × category with its statistics over the last int IdeaBucketResponse.Days days (90 or 30). */
+        IdeaBucketResponse: {
+            setup: string;
+            type: string;
+            interval: string;
+            side: string;
+            category: string;
+            /** Format: int32 */
+            days: number | string;
+            statistics: components["schemas"]["BucketStatisticsResponse"];
+        };
+        /**
+         * @description A trade idea with its levels and where it stands, and the statistics of its bucket over 90 days (BucketStatisticsResponse? IdeaResponse.Bucket) and over the last
+         *     30 (BucketStatisticsResponse? IdeaResponse.Recent), none while the bucket has no case. string IdeaResponse.Baseline is the bucket's, or 1 / (1 + R:R) of the idea.
+         *     Numbers are decimal strings; string IdeaResponse.Move in ATR, string IdeaResponse.VolumeRatio in medians of volume.
+         */
+        IdeaResponse: {
+            /** Format: uuid */
+            id: string;
+            category: string;
+            symbol: string;
+            setup: string;
+            interval: string;
+            type: string;
+            side: string;
+            /** Format: date-time */
+            firedAt: string;
+            entry: string;
+            stop: string;
+            target: string;
+            riskReward: string;
+            status: string;
+            /** Format: date-time */
+            statusAt: string;
+            /** Format: date-time */
+            enteredAt: null | string;
+            exitPrice: null | string;
+            move: string;
+            volumeRatio: string;
+            baseline: string;
+            bucket: null | components["schemas"]["BucketStatisticsResponse"];
+            recent: null | components["schemas"]["BucketStatisticsResponse"];
+        };
         InstrumentResponse: {
             category: string;
             symbol: string;
@@ -3125,7 +3720,8 @@ export interface components {
         };
         /**
          * @description The row of a pair in the market snapshot, with the time it was computed. Numbers are decimal strings, an empty metric is `null`; changes and spread in
-         *     percent, turnovers and open interest in USDT.
+         *     percent, turnovers and open interest in USDT. IReadOnlyDictionary&lt;string, IReadOnlyList&lt;string&gt;&gt; MarketRowResponse.Setups are the codes of the setups that hold on the last closed minute by
+         *     interval code, every one of `5`, `15`, `60` and `240` present.
          */
         MarketRowResponse: {
             category: string;
@@ -3146,6 +3742,9 @@ export interface components {
             fundingRate: null | string;
             spread: null | string;
             incomplete: boolean;
+            setups: {
+                [key: string]: string[];
+            };
         };
         /** @description Money and percentages are decimal strings, counts are numbers; names match the codes results sort by. */
         MetricsResponse: {
@@ -3208,6 +3807,24 @@ export interface components {
             status: string;
             fills: components["schemas"]["FillResponse"][];
         };
+        /** @description The type, interval and side of an own idea: codes as in the ideas. */
+        OwnIdeaBody: {
+            type: null | string;
+            interval: null | string;
+            side: null | string;
+        };
+        /**
+         * @description An own idea from the price now: its levels, R:R and the baseline 1 / (1 + R:R), its only probability («без сетапа: только базовая
+         *     линия»); bool OwnIdeaResponse.Made false and no levels when the rules of its type make none. Numbers are decimal strings.
+         */
+        OwnIdeaResponse: {
+            made: boolean;
+            entry: null | string;
+            stop: null | string;
+            target: null | string;
+            riskReward: null | string;
+            baseline: null | string;
+        };
         PinResponse: {
             name: string;
             type: string;
@@ -3264,6 +3881,39 @@ export interface components {
             quantityStep: string;
             minQuantity: string;
             minAmount: string;
+        };
+        /** @description A saved filter: its name, where it is shown (`market`, `ideas` or `both`) and its conditions joined by «и». */
+        SavedFilterBody: {
+            name?: null | string;
+            place?: null | string;
+            conditions?: null | components["schemas"]["SavedFilterConditionBody"][];
+        };
+        /**
+         * @description A condition: a field code of the catalog, an operator (`&gt;`, `&gt;=`, `&lt;`, `&lt;=`, `=`, `between` or
+         *     `above_baseline`), its value and for `between` its upper bound, as decimal strings.
+         */
+        SavedFilterConditionBody: {
+            field: null | string;
+            operator: null | string;
+            value: null | string;
+            to: null | string;
+        };
+        /**
+         * @description A field of the catalog of saved filters: its code, the unit of its value (`usdt`, `percent`, `ratio`, `r`, `count`
+         *     or `flag`), whether it is a field of an idea, which acts only on «Идеи», and the operators it takes.
+         */
+        SavedFilterFieldResponse: {
+            code: string;
+            unit: string;
+            ofIdea: boolean;
+            operators: string[];
+        };
+        SavedFilterResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            place: string;
+            conditions: components["schemas"]["SavedFilterConditionBody"][];
         };
         SettingResponse: {
             /** @description The property under `settings` of a node, such as `side`. */
@@ -3363,6 +4013,19 @@ export interface components {
             /** @description The built-in node code or the custom node id, as graphs refer to the node. */
             ref: string;
             definition: components["schemas"]["JsonObject"];
+        };
+        /** @description A zone from its lowest touch to its highest, its strength the number of touches; string ZoneResponse.Kind is `support` below the price, `resistance` above it, `around` when the price stands in it. */
+        ZoneResponse: {
+            low: string;
+            high: string;
+            /** Format: int32 */
+            strength: number | string;
+            kind: string;
+        };
+        /** @description The zones of support and resistance of a pair on an interval, lowest first, and the price they are told by. */
+        ZonesResponse: {
+            price: string;
+            zones: components["schemas"]["ZoneResponse"][];
         };
     };
     responses: never;

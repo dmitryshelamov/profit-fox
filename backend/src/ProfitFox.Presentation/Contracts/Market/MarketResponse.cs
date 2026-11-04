@@ -11,6 +11,6 @@ public sealed record MarketResponse(DateTimeOffset? SnapshotAt, MarketHistoryRes
             result.State.SnapshotAt,
             new MarketHistoryResponse(result.State.PairsBackfilled, result.State.PairsTotal),
             result.State.RestPausedUntil,
-            [.. result.Rows.Select(MarketRowResponse.Of)]);
+            [.. result.Rows.Select(row => MarketRowResponse.Of(row, result.Setups.GetValueOrDefault(row.Instrument) ?? []))]);
     }
 }

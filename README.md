@@ -79,6 +79,42 @@ The production database publishes no port yet (see [Production](#production)): a
 with its own change, which opens the port to the local network. Deploy the API first, then the Workers, all from the
 same commit: stop the Workers, deploy the API, which migrates the database, then start the Workers again.
 
+### Market scanner and trade ideas
+
+The scanner (`backend/src/ProfitFox.Scanner`) keeps the data of the whole Bybit market and computes the trade ideas; it never
+trades. Start it after the API:
+
+```bash
+dotnet run --project backend/src/ProfitFox.Scanner
+```
+
+Every closed minute, after the market snapshot, it reads the setups of every pair on 5 and 15 minutes, 1 and 4 hours, makes
+ideas of the setups that fire and moves the open ones; the setups go into the rows of the snapshot. In the background it
+replays the same rules over the stored minutes of the last 90 days, pair by pair and day by day, and every 10 minutes
+recomputes the probability of each bucket (setup × type × interval × side × category) from those cases. The replay pauses
+while the snapshot comes late, and starts again from scratch when `IdeasEngineVersion.Current` is raised: a change of the
+rules raises it, the version test in `ProfitFox.Tests.Unit` fails until it does.
+
+The `Ideas` section of the scanner's `appsettings.json` sets the thresholds of the setups (`Thresholds`, common to all pairs,
+`ByInterval` for values of one interval), the floors the replay writes its cases with (`Floors`), the stop buffer k and the
+rules of the zones; `Backtests:DefaultFees` sets the fees the cases are counted with. The starting thresholds are
+provisional. Because every case stores the move and the volume it fired with, other thresholds are tried with queries on
+`idea_cases` without a new replay, for example the expectancy and the share of targets of impulses at A = 3.5 and V = 2.5
+on the first 60 of the 90 days, then checked on the last 30:
+
+```sql
+SELECT setup, type, "interval", side, category, count(*) AS cases,
+    avg(result) AS expectancy, avg((status = 'target')::int) FILTER (WHERE status <> 'expired') AS share
+FROM idea_cases
+WHERE engine_version = 1 AND setup IN ('impulse', 'drop') AND move >= 3.5 AND volume_ratio >= 2.5
+    AND fired_at < now() - interval '30 days'
+GROUP BY 1, 2, 3, 4, 5
+ORDER BY expectancy DESC;
+```
+
+Put the chosen values into `Ideas:Thresholds` and raise `IdeasEngineVersion.Current`, so the cases are replayed by the new
+rules.
+
 ## Production
 
 Production runs on soyo-01 (`192.168.8.111`) in the local network only: the interface and the API are at

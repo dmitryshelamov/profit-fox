@@ -1,5 +1,6 @@
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Domain.Repositories;
@@ -28,4 +29,10 @@ public interface ICandleRepository
         DateTimeOffset from,
         DateTimeOffset to,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     The candles of <paramref name="interval" /> that lie whole in <c>[from, to)</c>, joined from the stored minutes in one query, oldest
+    ///     first; a minute without a candle had no trades, as <c>IdeaCandles.Join</c> says. The volume is the turnover.
+    /// </summary>
+    Task<IReadOnlyList<IdeaCandle>> GetAggregatedAsync(Instrument instrument, Interval interval, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken);
 }

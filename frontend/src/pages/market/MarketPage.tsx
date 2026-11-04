@@ -1,21 +1,36 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
+import { ideasQuery } from '@/modules/ideas';
 import {
   type CategoryFilter,
   categoryOptions,
+  defaultSetupInterval,
+  filterBySetup,
   filterRows,
-  instrumentsText,
   isStale,
   marketQuery,
   MarketTable,
   ScannerBanners,
+  type SetupFilter,
+  setupIntervals,
+  setupOptions,
+  shownOfText,
   type Sort,
   type SortColumn,
   sortRows,
   UpdatedAt,
   useNow,
 } from '@/modules/market';
+import {
+  FilterBar,
+  FilterEditor,
+  filterFieldsQuery,
+  filtersOfPlace,
+  matchesMarketRow,
+  type SavedFilter,
+  savedFiltersQuery,
+} from '@/modules/saved-filters';
 import { groupDigits } from '@/shared/format/format';
 
 export function MarketPage() {
@@ -24,6 +39,13 @@ export function MarketPage() {
   // Kept here, not in the query: a new snapshot every 15 seconds must not reset what the owner chose.
   const [category, setCategory] = useState<CategoryFilter>('all');
   const [search, setSearch] = useState('');
+  const [setup, setSetup] = useState<SetupFilter>('all');
+  const [setupInterval, setSetupInterval] = useState(defaultSetupInterval);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ filter: SavedFilter | null } | null>(null);
+  const saved = useQuery(savedFiltersQuery);
+  const fields = useQuery(filterFieldsQuery);
+  const ideas = useQuery(ideasQuery());
   // As the mockup opens it: growth over the last hour first.
   const [sort, setSort] = useState<Sort>({ column: 'change1h', direction: 'desc' });
   const data = market.data;
@@ -40,8 +62,17 @@ export function MarketPage() {
             ? 'asc'
             : 'desc',
     }));
-  const filtered = data ? filterRows(data.rows, category, search) : [];
-  const rows = sortRows(filtered, sort.column, sort.direction);
+  const mine = filtersOfPlace(saved.data ?? [], 'market');
+  const selected = mine.find((filter) => filter.id === selectedId) ?? null;
+  // The chips count what the other filters leave, so a chip says how many pairs it would show.
+  const beforeSetup = (data ? filterRows(data.rows, category, search) : []).filter(
+    (row) => selected === null || matchesMarketRow(selected, row),
+  );
+  const rows = sortRows(
+    filterBySetup(beforeSetup, setup, setupInterval),
+    sort.column,
+    sort.direction,
+  );
 
   return (
     <section className="space-y-4">
@@ -87,11 +118,48 @@ export function MarketPage() {
               onChange={(event) => setSearch(event.target.value)}
               className="h-9 w-64 rounded-lg border border-line bg-panel px-3 text-sm"
             />
-            <p className="text-sm text-muted">{instrumentsText(rows.length)}</p>
+            <p className="text-sm text-muted">{shownOfText(rows.length, data.rows.length)}</p>
             <div className="ml-auto">
               <UpdatedAt at={data.snapshotAt} now={now} />
             </div>
           </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div role="group" aria-label="Сетап" className="flex flex-wrap gap-1">
+              {setupOptions(beforeSetup, setupInterval).map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={option.value === setup}
+                  onClick={() => setSetup(option.value)}
+                  className="h-7 rounded-full border border-line bg-panel px-3 text-xs text-muted hover:bg-panel-2 aria-pressed:border-accent aria-pressed:text-text"
+                >
+                  {option.label}{' '}
+                  <span className="ml-1 text-faint">{groupDigits(String(option.count))}</span>
+                </button>
+              ))}
+            </div>
+            <div role="group" aria-label="ТФ сетапа" className="ml-auto flex items-center gap-1">
+              <span className="mr-1 text-xs text-faint">ТФ сетапа</span>
+              {setupIntervals.map((interval) => (
+                <button
+                  key={interval.value}
+                  type="button"
+                  aria-pressed={interval.value === setupInterval}
+                  onClick={() => setSetupInterval(interval.value)}
+                  className="h-7 rounded-md px-2.5 text-xs font-semibold text-muted hover:bg-panel-2 aria-pressed:bg-panel-2 aria-pressed:text-text"
+                >
+                  {interval.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <FilterBar
+            filters={mine}
+            selected={selected}
+            onSelect={setSelectedId}
+            onNew={() => setEditing({ filter: null })}
+            onEdit={(filter) => setEditing({ filter })}
+          />
           {rows.length === 0 ? (
             <p className="text-sm text-muted">Ничего не найдено.</p>
           ) : (
@@ -100,6 +168,7 @@ export function MarketPage() {
               sort={sort}
               onSort={sortBy}
               dimmed={isStale(data.snapshotAt, now)}
+              setupInterval={setupInterval}
             />
           )}
           <p className="text-xs text-faint">
@@ -107,6 +176,25 @@ export function MarketPage() {
             минуту, у spot их нет («—»). Фандинг — текущая ставка за период.
           </p>
         </>
+      )}
+      {editing && fields.data && data && (
+        <FilterEditor
+          key={editing.filter?.id ?? 'new'}
+          filter={editing.filter}
+          place="market"
+          fields={fields.data}
+          rows={data.rows}
+          ideas={ideas.data ?? []}
+          onClose={() => setEditing(null)}
+          onSaved={(filter) => {
+            setEditing(null);
+            setSelectedId(filter.id);
+          }}
+          onDeleted={(id) => {
+            setEditing(null);
+            setSelectedId((current) => (current === id ? null : current));
+          }}
+        />
       )}
     </section>
   );
