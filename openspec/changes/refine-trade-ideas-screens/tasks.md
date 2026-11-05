@@ -37,9 +37,21 @@
 
   Проверка: `npm run test:e2e`.
 
-## 5. Проверки
+## 5. Сумма на идею (решение 2, после первого apply)
 
-- [x] 5.1 Полный прогон: `dotnet build`, `dotnet test` (и с `TZ=Asia/Tokyo`), `dotnet format --verify-no-changes`,
+- [ ] 5.1 Домен: доли идеи на 1 USDT суммы — `profitPerUsdt`, `lossPerUsdt`, `riskPerUsdt` по правилу комиссий
+  `CaseResult` (taker на рынке, maker на лимите «Отката», taker на выходе). Проверка: unit-тесты на эталонах — сценарий
+  «Деньги на 1 USDT суммы», short, «Откат» с maker, spot.
+- [ ] 5.2 API: три доли в `IdeaResponse` с комиссиями `DefaultFees` категории идеи; перегенерировать `schema.d.ts`.
+  Проверка: интеграционный тест API на сценарий «Деньги на 1 USDT суммы».
+- [ ] 5.3 Интерфейс: поле «Сумма на идею» (по умолчанию 10, новый ключ хранения) вместо «Риска на идею»; прибыль,
+  убыток и ожидание в USDT от суммы в таблице и в карточке пары; «Прибыль / убыток» сортируется по `profitPerUsdt`.
+  Проверка: unit-тесты модели и тесты в jsdom на сценарии «Риск на идею», «Цели 2R дают разную прибыль» и «Деньги в
+  карточке»; e2e из 4.1 обновлены под сумму.
+
+## 6. Проверки
+
+- [ ] 6.1 Полный прогон: `dotnet build`, `dotnet test` (и с `TZ=Asia/Tokyo`), `dotnet format --verify-no-changes`,
   frontend lint, format:check, typecheck, test, build, `npm run test:e2e`. Проверка: всё зелёное.
 
 ## Workflow follow-up
