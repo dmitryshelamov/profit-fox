@@ -41,5 +41,7 @@ internal sealed class IdeaDb
 
     public int EngineVersion { get; init; }
 
+    public decimal? Tick { get; init; }
+
     public decimal Result { get; init; }
 }

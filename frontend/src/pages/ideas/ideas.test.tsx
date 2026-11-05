@@ -64,20 +64,19 @@ describe('ideas screen', () => {
         .getAllByRole('columnheader')
         .map((header) => header.textContent),
     ).toEqual([
-      'Время',
+      'Найдена',
       'Инструмент',
       'Сетап',
       'ТФ',
-      'Тип',
+      'Тип идеи',
       'Сторона',
       'Вход',
       'Стоп',
       'Цель',
       'R:R',
       'Вероятность',
-      'Ожидание',
-      'Прибыль',
-      'Убыток',
+      'Ожидание ↓',
+      'Прибыль / убыток',
       'Статус',
     ]);
     expect(
@@ -89,24 +88,41 @@ describe('ideas screen', () => {
     expect(within(row).getByText('Импульс')).toBeInTheDocument();
     expect(within(row).getByText('15 мин')).toBeInTheDocument();
     expect(within(row).getByText('Откат')).toBeInTheDocument();
-    expect(within(row).getByText('Long')).toHaveClass('text-ok');
+    expect(within(row).getByText('Лонг')).toHaveClass('text-ok');
     expect(within(row).getByText('2.40')).toBeInTheDocument();
     expect(within(row).getByText('2.00')).toBeInTheDocument();
     expect(within(row).getByText('+0.38 R')).toBeInTheDocument();
+    expect(within(row).getByText('+20.0')).toBeInTheDocument();
+    expect(within(row).getByText('−10.0')).toBeInTheDocument();
     expect(within(row).getByText('Ждёт входа')).toBeInTheDocument();
     expect(await screen.findByText('3 идеи')).toBeInTheDocument();
+    expect(
+      screen.getByRole('group', { name: 'Категория' }).querySelectorAll('button'),
+    ).toHaveLength(3);
+  });
+
+  it('explains the probability, the badges and the profit under the table', async () => {
+    open();
+    renderApp('/ideas');
+    await rowOf('WIFUSDT');
+
+    expect(screen.getByText(/Вероятность: доля «Цель» среди «Цель» и «Стоп»/)).toBeInTheDocument();
+    expect(screen.getByText(/интервал вероятности выше, пересекает или ниже/)).toBeInTheDocument();
+    expect(screen.getByText(/прибыль = R:R × риск, убыток = −риск/)).toBeInTheDocument();
   });
 
   // Scenario "Идея выше базовой линии".
-  it('shows the probability with N and ▲ when the interval is above the baseline', async () => {
+  it('shows the probability with N, and ▲ before the expectancy when the interval is above the baseline', async () => {
     open();
     renderApp('/ideas');
 
     const row = await rowOf('WIFUSDT');
 
     expect(within(row).getByText(/^46 %/)).toBeInTheDocument();
-    expect(within(row).getByText('N 120')).toBeInTheDocument();
-    expect(within(row).getByRole('img', { name: 'выше базовой линии' })).toHaveTextContent('▲');
+    expect(within(row).getByText('· 120')).toBeInTheDocument();
+    const badge = within(row).getByRole('img', { name: 'выше базовой линии' });
+    expect(badge).toHaveTextContent('▲');
+    expect(badge.parentElement).toHaveTextContent('▲+0.38 R');
   });
 
   // Scenario "Мало данных".
@@ -120,8 +136,9 @@ describe('ideas screen', () => {
     expect(within(few).getByText('мало данных')).toBeInTheDocument();
     expect(within(few).queryByRole('img')).not.toBeInTheDocument();
     expect(within(none).getByText('мало данных')).toBeInTheDocument();
-    // No expectancy either, and no risk typed yet: three dashes.
-    expect(within(none).getAllByText('—')).toHaveLength(3);
+    // No expectancy either: one dash. The profit and the loss come from the risk, which does not need the bucket.
+    expect(within(none).getAllByText('—')).toHaveLength(1);
+    expect(within(none).getByText('+20.0')).toBeInTheDocument();
   });
 
   // Scenario "Риск на идею".
@@ -130,13 +147,19 @@ describe('ideas screen', () => {
     renderApp('/ideas');
     const row = await rowOf('WIFUSDT');
 
-    expect(within(row).getAllByText('—')).toHaveLength(2);
-    await userEvent.type(screen.getByRole('textbox', { name: 'Риск на идею' }), '10');
+    const risk = screen.getByRole('textbox', { name: 'Риск на идею' });
 
+    expect(risk).toHaveValue('10');
+    expect(screen.getAllByText('USDT')).toHaveLength(1);
     expect(within(row).getByText('+20.0')).toBeInTheDocument();
-    expect(within(row).getByText('−10.0')).toBeInTheDocument();
-    expect(within(await rowOf('SOLUSDT')).getByText('+15.0')).toBeInTheDocument();
-    expect(localStorage.getItem('profit-fox.ideas.risk')).toBe('10');
+    await userEvent.clear(risk);
+    expect(within(row).getByText('—')).toBeInTheDocument();
+    await userEvent.type(risk, '30');
+
+    expect(within(row).getByText('+60.0')).toBeInTheDocument();
+    expect(within(row).getByText('−30.0')).toBeInTheDocument();
+    expect(within(await rowOf('SOLUSDT')).getByText('+45.0')).toBeInTheDocument();
+    expect(localStorage.getItem('profit-fox.ideas.risk')).toBe('30');
   });
 
   it('starts with the risk it remembers', async () => {
@@ -155,10 +178,14 @@ describe('ideas screen', () => {
 
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Сетап' }), 'drop');
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'ТФ' }), '60');
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Тип' }), 'pullback');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Тип идеи' }), 'pullback');
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Сторона' }), 'long');
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Категория' }), 'linear');
-    await userEvent.click(screen.getByRole('switch', { name: 'Ожидание ≥ 0 R' }));
+    await userEvent.click(
+      within(screen.getByRole('group', { name: 'Категория' })).getByRole('button', {
+        name: 'linear',
+      }),
+    );
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Ожидание ≥ 0 R' }));
 
     await waitFor(() => {
       const last = requests

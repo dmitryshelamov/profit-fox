@@ -1,11 +1,12 @@
 const key = 'profit-fox.ideas.risk';
+const defaultRisk = '10';
 
-/** The risk per idea the owner typed last time, or an empty text; a browser without storage gives nothing. */
+/** The risk per idea the owner typed last time, 10 before the first time; a browser without storage gives 10 too. */
 export function loadRisk(): string {
   try {
-    return localStorage.getItem(key) ?? '';
+    return localStorage.getItem(key) ?? defaultRisk;
   } catch {
-    return '';
+    return defaultRisk;
   }
 }
 

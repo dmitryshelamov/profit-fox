@@ -124,6 +124,18 @@ describe('saved filters on the market screen', () => {
   describe('editor', () => {
     const editor = () => within(screen.getByRole('dialog', { name: 'Редактор фильтра' }));
 
+    /** Opens the picker of the last condition and takes a field of it. */
+    async function pickField(label: string, column: 'Рынок' | 'Идея' = 'Рынок') {
+      const pickers = editor().getAllByRole('button', { name: 'Поле' });
+
+      await userEvent.click(pickers.at(-1)!);
+      await userEvent.click(
+        within(editor().getByRole('group', { name: column })).getByRole('menuitemradio', {
+          name: label,
+        }),
+      );
+    }
+
     async function openNew() {
       await screen.findByRole('table');
       await userEvent.click(await screen.findByRole('button', { name: '+ Новый фильтр' }));
@@ -137,10 +149,7 @@ describe('saved filters on the market screen', () => {
 
       expect(editor().getByText('Подходит: 3 инструмента · 2 идеи')).toBeInTheDocument();
       await userEvent.click(editor().getByRole('button', { name: '+ Условие' }));
-      await userEvent.selectOptions(
-        editor().getByRole('combobox', { name: 'Поле' }),
-        'turnover24h',
-      );
+      await pickField('Оборот 24ч');
       await userEvent.type(editor().getByRole('textbox', { name: 'Значение' }), '50000000');
 
       expect(editor().getByText('Подходит: 2 инструмента · 2 идеи')).toBeInTheDocument();
@@ -153,10 +162,7 @@ describe('saved filters on the market screen', () => {
       await openNew();
 
       await userEvent.click(editor().getByRole('button', { name: '+ Условие' }));
-      await userEvent.selectOptions(
-        editor().getByRole('combobox', { name: 'Поле' }),
-        'probability',
-      );
+      await pickField('Вероятность', 'Идея');
       await userEvent.type(editor().getByRole('textbox', { name: 'Значение' }), '50');
 
       // The idea fields are marked «Идеи»; the probability is typed in percent: 50 is 0.5, above the 0.46 of both ideas.
@@ -184,12 +190,9 @@ describe('saved filters on the market screen', () => {
       renderApp('/market');
       await openNew();
 
-      await userEvent.type(editor().getByRole('textbox', { name: 'Имя' }), 'Фандинг');
+      await userEvent.type(editor().getByRole('textbox', { name: 'Название' }), 'Фандинг');
       await userEvent.click(editor().getByRole('button', { name: '+ Условие' }));
-      await userEvent.selectOptions(
-        editor().getByRole('combobox', { name: 'Поле' }),
-        'fundingRate',
-      );
+      await pickField('Фандинг');
       await userEvent.type(editor().getByRole('textbox', { name: 'Значение' }), '0.03');
       await userEvent.click(editor().getByRole('button', { name: 'Сохранить' }));
 
@@ -242,7 +245,7 @@ describe('saved filters on the market screen', () => {
 
       await userEvent.click(screen.getByRole('button', { name: 'Изменить' }));
 
-      expect(editor().getByRole('textbox', { name: 'Имя' })).toHaveValue('Шорт перегретых');
+      expect(editor().getByRole('textbox', { name: 'Название' })).toHaveValue('Шорт перегретых');
       // Funding is typed in percent: 0.0003 is 0.03.
       expect(
         editor()
@@ -269,8 +272,9 @@ describe('saved filters on the market screen', () => {
       open();
       renderApp('/market');
       await openNew();
-      await userEvent.type(editor().getByRole('textbox', { name: 'Имя' }), 'Ф');
+      await userEvent.type(editor().getByRole('textbox', { name: 'Название' }), 'Ф');
       await userEvent.click(editor().getByRole('button', { name: '+ Условие' }));
+      await pickField('Изменение 5м');
 
       await userEvent.type(editor().getByRole('textbox', { name: 'Значение' }), 'много');
 
@@ -280,12 +284,130 @@ describe('saved filters on the market screen', () => {
       expect(editor().getByRole('button', { name: 'Сохранить' })).toBeEnabled();
     });
 
+    it('lists the fields of the market and of the idea in two columns, in the order of the catalog', async () => {
+      open();
+      renderApp('/market');
+      await openNew();
+      await userEvent.click(editor().getByRole('button', { name: '+ Условие' }));
+
+      await userEvent.click(editor().getByRole('button', { name: 'Поле' }));
+
+      const names = (column: string) =>
+        within(editor().getByRole('group', { name: column }))
+          .getAllByRole('menuitemradio')
+          .map((item) => item.textContent);
+
+      expect(names('Рынок')).toEqual([
+        'Категория',
+        'Изменение 5м',
+        'Изменение 15м',
+        'Изменение 1ч',
+        'Изменение 4ч',
+        'Изменение 24ч',
+        'Оборот 1ч',
+        'Оборот 24ч',
+        'OI',
+        'ΔOI 1ч',
+        'ΔOI 24ч',
+        'Фандинг',
+        'Спред',
+        'Сетап',
+      ]);
+      expect(names('Идея')).toEqual([
+        'Сетап',
+        'Тип идеи',
+        'ТФ',
+        'Сторона',
+        'R:R',
+        'Вероятность',
+        'Ожидание',
+      ]);
+    });
+
+    it('takes a choice field as a select of named choices and stores the code', async () => {
+      let posted: unknown = null;
+      open(undefined, {
+        'POST /api/saved-filters': async (request) => {
+          posted = await request.json();
+
+          return json(savedFilterOf({ id: 'new' }), 201);
+        },
+      });
+      renderApp('/market');
+      await openNew();
+      await userEvent.type(editor().getByRole('textbox', { name: 'Название' }), 'Шорты');
+      await userEvent.click(editor().getByRole('button', { name: 'Идеи' }));
+      await userEvent.click(editor().getByRole('button', { name: '+ Условие' }));
+      await pickField('Сторона', 'Идея');
+
+      expect(editor().getByRole('combobox', { name: 'Оператор' })).toHaveValue('=');
+      expect(
+        within(editor().getByRole('combobox', { name: 'Значение' }))
+          .getAllByRole('option')
+          .map((option) => option.textContent),
+      ).toEqual(['Лонг', 'Шорт']);
+      expect(editor().getByText('Идеи', { selector: 'span' })).toBeInTheDocument();
+      await userEvent.selectOptions(editor().getByRole('combobox', { name: 'Значение' }), 'Шорт');
+      await userEvent.click(editor().getByRole('button', { name: 'Сохранить' }));
+
+      await waitFor(() =>
+        expect(posted).toEqual({
+          name: 'Шорты',
+          place: 'ideas',
+          conditions: [{ field: 'side', operator: '=', value: 'short', to: null }],
+        }),
+      );
+    });
+
+    it('offers «выше базовой» as an operator of the probability and needs no value for it', async () => {
+      open();
+      renderApp('/market');
+      await openNew();
+      await userEvent.click(editor().getByRole('button', { name: '+ Условие' }));
+      await pickField('Вероятность', 'Идея');
+
+      await userEvent.selectOptions(
+        editor().getByRole('combobox', { name: 'Оператор' }),
+        'above_baseline',
+      );
+
+      expect(editor().queryByRole('textbox', { name: 'Значение' })).not.toBeInTheDocument();
+      expect(editor().getByText('Подходит: 3 инструмента · 2 идеи')).toBeInTheDocument();
+    });
+
+    it('has the header, the note about the ideas and no «Удалить фильтр» for a new filter', async () => {
+      open();
+      renderApp('/market');
+      await openNew();
+
+      expect(editor().getByRole('heading', { name: 'Фильтр' })).toBeInTheDocument();
+      expect(editor().getByText('Условия · соединяются через «и»')).toBeInTheDocument();
+      expect(
+        editor().getByText('Условия по идеям действуют только в «Идеях»; в «Рынке» их нет.'),
+      ).toBeInTheDocument();
+      expect(editor().getByRole('button', { name: 'Рынок' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      expect(editor().queryByRole('button', { name: 'Удалить фильтр' })).not.toBeInTheDocument();
+    });
+
     it('closes without saving on «Отмена»', async () => {
       open();
       renderApp('/market');
       await openNew();
 
       await userEvent.click(editor().getByRole('button', { name: 'Отмена' }));
+
+      expect(screen.queryByRole('dialog', { name: 'Редактор фильтра' })).not.toBeInTheDocument();
+    });
+
+    it('closes without saving on the cross', async () => {
+      open();
+      renderApp('/market');
+      await openNew();
+
+      await userEvent.click(editor().getByRole('button', { name: 'Закрыть' }));
 
       expect(screen.queryByRole('dialog', { name: 'Редактор фильтра' })).not.toBeInTheDocument();
     });

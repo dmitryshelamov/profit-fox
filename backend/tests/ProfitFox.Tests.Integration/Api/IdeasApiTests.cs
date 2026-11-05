@@ -7,6 +7,7 @@ using Npgsql;
 
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
+using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Services.Ideas;
@@ -200,7 +201,8 @@ public class IdeasApiTests
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         JsonElement idea = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        decimal stop = 105.2m + (1.5m * atr);
+        // The stop goes on the price step of the pair away from the entry.
+        decimal stop = Math.Ceiling((105.2m + (1.5m * atr)) / 0.01m) * 0.01m;
         idea.GetProperty("made").GetBoolean().ShouldBeTrue();
         (idea.GetProperty("entry").GetString(), idea.GetProperty("stop").GetString(), idea.GetProperty("target").GetString())
             .ShouldBe(("100.5", Text(stop), Text(100.5m - (2m * (stop - 100.5m)))));
@@ -230,6 +232,18 @@ public class IdeasApiTests
 
         JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("made").GetBoolean().ShouldBeFalse();
         (await GetAsync("/api/market/linear/SOLUSDT/zones?interval=15")).GetProperty("zones").GetArrayLength().ShouldBe(0);
+    }
+
+    // A pair whose price step the list of instruments has not told yet has no own idea.
+    [Test]
+    public async Task Own_idea_of_a_pair_without_its_price_step_is_not_made()
+    {
+        await MinutesAsync();
+        await SnapshotAsync(Sol, 100.5m, tick: null);
+
+        HttpResponseMessage response = await _client.PostAsJsonAsync("/api/market/linear/SOLUSDT/own-idea", new { type = "target_2r", interval = "60", side = "short" });
+
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("made").GetBoolean().ShouldBeFalse();
     }
 
     // Scenario "Своя идея на spot".
@@ -306,8 +320,10 @@ public class IdeasApiTests
         return IdeaCandles.FromMinutes(Interval.OneHour, ideaMinutes, ideaMinutes[0].OpenTime, DateTimeOffset.Parse("2024-03-10T11:00:00Z", CultureInfo.InvariantCulture));
     }
 
-    private async Task SnapshotAsync(Instrument instrument, decimal price)
+    // The pair of the scanner with its price step, which the list of instruments told.
+    private async Task SnapshotAsync(Instrument instrument, decimal price, decimal? tick = 0.01m)
     {
+        await new ScannerPairRepository(_database).SaveAsync([new ScannerPair(instrument, true, TickSize: tick)], CancellationToken.None);
         var store = new MarketSnapshotRepository(_database);
         MarketSnapshotRow[] rows =
         [

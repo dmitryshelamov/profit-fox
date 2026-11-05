@@ -17,7 +17,7 @@ public sealed record SavedFilterResponse(Guid Id, string Name, string Place, IRe
                 .. filter.Conditions.Select(condition => new SavedFilterConditionBody(
                     SavedFilterFields.Of(condition.Field).Code,
                     condition.Operator.ToCode(),
-                    condition.Value?.ToString(CultureInfo.InvariantCulture),
+                    condition.Choice ?? condition.Value?.ToString(CultureInfo.InvariantCulture),
                     condition.To?.ToString(CultureInfo.InvariantCulture)))
             ]);
     }

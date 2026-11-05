@@ -117,9 +117,10 @@ test('an impulse of the stub shows in the market chips, has its idea on the pair
   await expect(rows.first()).toBeVisible();
   await page.getByRole('button', { name: '+ Новый фильтр' }).click();
   const editor = page.getByRole('dialog', { name: 'Редактор фильтра' });
-  await editor.getByRole('textbox', { name: 'Имя' }).fill('Рост за час');
+  await editor.getByRole('textbox', { name: 'Название' }).fill('Рост за час');
   await editor.getByRole('button', { name: '+ Условие' }).click();
-  await editor.getByRole('combobox', { name: 'Поле' }).selectOption({ label: 'Изменение 1ч' });
+  await editor.getByRole('button', { name: 'Поле' }).click();
+  await editor.getByRole('menuitemradio', { name: 'Изменение 1ч' }).click();
   await editor.getByRole('textbox', { name: 'Значение' }).fill('1');
   await expect(editor.getByText(/^Подходит: 2 инструмента/)).toBeVisible();
   await editor.getByRole('button', { name: 'Сохранить' }).click();

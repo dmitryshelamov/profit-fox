@@ -68,6 +68,8 @@ public class IdeasReplayDelayTests
             bybit.Instruments.Add(("linear", symbol));
             bybit.Coins[("linear", symbol)] = (symbol[..^4], "USDT");
             bybit.Tickers[("linear", symbol)] = ("100", "99.9", "100.1", "1000", "0.0001");
+            // The replay takes a pair once the list tells its price step.
+            bybit.Rules[("linear", symbol)] = ("0.01", "0.001", "0.001", "5");
         }
 
         FakeBybitSocketServer sockets = await FakeBybitSocketServer.StartAsync();

@@ -15,7 +15,7 @@ public class IdeaRulesTests
 {
     private static readonly Zone Support = new Zone(101m, 102m, 3);
     private static readonly Zone Resistance = new Zone(115m, 116m, 2);
-    private static readonly IdeaContext Context = new IdeaContext(MarketCategory.Linear, 105m, 100m, 110m, 1m, [Support, Resistance], 0.01m, 0.5m);
+    private static readonly IdeaContext Context = new IdeaContext(MarketCategory.Linear, 105m, 100m, 110m, 1m, [Support, Resistance], 0.01m, 0.5m, 0.01m);
 
     [Test]
     public void Levels_long_stops_below_the_nearest_support_and_targets_the_nearest_resistance()
@@ -93,6 +93,29 @@ public class IdeaRulesTests
     public void Without_a_spread_the_buffer_is_k_times_atr()
     {
         IdeaRules.Plan(IdeaType.BeyondExtreme, IdeaSide.Long, Context with { Spread = null })!.Stop.ShouldBe(99.5m);
+    }
+
+    // Fix after review: levels go on the price step of the pair. A stop goes away from the entry and a target towards it, so neither is
+    // better than the rules give; the limit of a pullback goes towards the market, so it fills no better than the rules give. Price step
+    // 0.25: the long stop 99.7 goes down to 99.5, the target 116.3 down to 116.25; short mirrors it.
+    [Test]
+    public void Levels_go_on_the_price_step_of_the_pair()
+    {
+        IdeaContext context = Context with { Price = 105.1m, Atr = 0.3m, StopBuffer = 1m, Tick = 0.25m };
+
+        IdeaRules.Plan(IdeaType.BeyondExtreme, IdeaSide.Long, context).ShouldBe(new IdeaPlan(IdeaType.BeyondExtreme, IdeaSide.Long, 105.1m, 99.5m, 116.25m));
+        IdeaRules.Plan(IdeaType.BeyondExtreme, IdeaSide.Short, context).ShouldBe(new IdeaPlan(IdeaType.BeyondExtreme, IdeaSide.Short, 105.1m, 110.5m, 94.5m));
+        IdeaRules.Plan(IdeaType.Levels, IdeaSide.Long, context with { Zones = [Support, new Zone(115.1m, 116m, 2)] })!.Target.ShouldBe(115m);
+    }
+
+    // The window from 100 to 110.1 has its middle at 105.05: a buy limit goes up to 105.25, a sell limit down to 105.
+    [Test]
+    public void Pullback_limit_goes_on_the_price_step_towards_the_market()
+    {
+        IdeaContext context = Context with { WindowHigh = 110.1m, Tick = 0.25m };
+
+        IdeaRules.Plan(IdeaType.Pullback, IdeaSide.Long, context with { Price = 109m })!.Entry.ShouldBe(105.25m);
+        IdeaRules.Plan(IdeaType.Pullback, IdeaSide.Short, context with { Price = 101m })!.Entry.ShouldBe(105m);
     }
 
     // Scenario "Падение на spot".

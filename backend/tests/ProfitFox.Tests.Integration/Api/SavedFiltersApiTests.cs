@@ -50,17 +50,18 @@ public class SavedFiltersApiTests
         {
             name = "Выше базы",
             place = "ideas",
-            conditions = new object[] { new { field = "aboveBaseline", @operator = "above_baseline" } }
+            conditions = new object[] { new { field = "probability", @operator = "above_baseline" }, new { field = "side", @operator = "=", value = "short" } }
         });
         changed.StatusCode.ShouldBe(HttpStatusCode.NoContent);
         JsonElement updated = (await ListAsync()).Single();
         (updated.GetProperty("name").GetString(), updated.GetProperty("place").GetString()).ShouldBe(("Выше базы", "ideas"));
         updated.GetProperty("conditions")[0].GetProperty("value").ValueKind.ShouldBe(JsonValueKind.Null);
+        (updated.GetProperty("conditions")[1].GetProperty("field").GetString(), updated.GetProperty("conditions")[1].GetProperty("value").GetString()).ShouldBe(("side", "short"));
 
         (await _client.DeleteAsync($"/api/saved-filters/{id}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
         (await ListAsync()).ShouldBeEmpty();
         (await _client.DeleteAsync($"/api/saved-filters/{id}")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
-        (await _client.PutAsJsonAsync($"/api/saved-filters/{id}", new { name = "Нет", place = "both", conditions = new object[] { new { field = "price", @operator = ">", value = "1" } } }))
+        (await _client.PutAsJsonAsync($"/api/saved-filters/{id}", new { name = "Нет", place = "both", conditions = new object[] { new { field = "change1h", @operator = ">", value = "1" } } }))
             .StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
@@ -74,15 +75,24 @@ public class SavedFiltersApiTests
         (await ListAsync()).ShouldBeEmpty();
     }
 
-    [TestCase("", "market", "price", ">", "1", null, "name")]
-    [TestCase("Ф", "everywhere", "price", ">", "1", null, "place")]
+    [TestCase("", "market", "change1h", ">", "1", null, "name")]
+    [TestCase("Ф", "everywhere", "change1h", ">", "1", null, "place")]
     [TestCase("Ф", "market", "volatility", ">", "1", null, "conditions[0].field")]
-    [TestCase("Ф", "market", "price", "above_baseline", null, null, "conditions[0].operator")]
-    [TestCase("Ф", "market", "aboveBaseline", ">", "1", null, "conditions[0].operator")]
-    [TestCase("Ф", "market", "price", ">", "много", null, "conditions[0].value")]
+    [TestCase("Ф", "market", "change1h", "above_baseline", null, null, "conditions[0].operator")]
+    [TestCase("Ф", "market", "price", ">", "1", null, "conditions[0].field")]
+    [TestCase("Ф", "market", "cases", ">", "1", null, "conditions[0].field")]
+    [TestCase("Ф", "market", "aboveBaseline", "above_baseline", null, null, "conditions[0].field")]
+    [TestCase("Ф", "market", "change1h", ">", "много", null, "conditions[0].value")]
+    [TestCase("Ф", "market", "side", "=", "up", null, "conditions[0].value")]
+    [TestCase("Ф", "market", "side", ">", "short", null, "conditions[0].operator")]
+    [TestCase("Ф", "market", "category", "=", "inverse", null, "conditions[0].value")]
+    [TestCase("Ф", "market", "setup", "=", "rocket", null, "conditions[0].value")]
+    [TestCase("Ф", "market", "ideaSetup", "=", "rocket", null, "conditions[0].value")]
+    [TestCase("Ф", "market", "type", "=", "scalp", null, "conditions[0].value")]
+    [TestCase("Ф", "market", "interval", "=", "30", null, "conditions[0].value")]
     [TestCase("Ф", "market", "change1h", ">", "3,5", null, "conditions[0].value")]
     [TestCase("Ф", "market", "turnover24h", ">", "1,000", null, "conditions[0].value")]
-    [TestCase("Ф", "market", "price", "between", "1", null, "conditions[0].to")]
+    [TestCase("Ф", "market", "change1h", "between", "1", null, "conditions[0].to")]
     public async Task Invalid_filter_names_what_is_wrong(string name, string place, string field, string op, string? value, string? to, string key)
     {
         HttpResponseMessage response = await _client.PostAsJsonAsync("/api/saved-filters", new { name, place, conditions = new object[] { new { field, @operator = op, value, to } } });
@@ -98,7 +108,7 @@ public class SavedFiltersApiTests
         {
             name = "Ф",
             place = "both",
-            conditions = new object[] { new { field = "price", @operator = ">", value = "1", to = "5" }, new { field = "aboveBaseline", @operator = "above_baseline", value = "1" } }
+            conditions = new object[] { new { field = "change1h", @operator = ">", value = "1", to = "5" }, new { field = "probability", @operator = "above_baseline", value = "1" } }
         });
 
         JsonElement[] conditions = [.. (await ListAsync()).Single().GetProperty("conditions").EnumerateArray()];
@@ -113,10 +123,20 @@ public class SavedFiltersApiTests
 
         JsonElement[] fields = [.. JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.EnumerateArray()];
         JsonElement turnover = fields.Single(field => field.GetProperty("code").GetString() == "turnover24h");
-        JsonElement above = fields.Single(field => field.GetProperty("code").GetString() == "aboveBaseline");
+        JsonElement probability = fields.Single(field => field.GetProperty("code").GetString() == "probability");
+        JsonElement side = fields.Single(field => field.GetProperty("code").GetString() == "side");
         (turnover.GetProperty("unit").GetString(), turnover.GetProperty("ofIdea").GetBoolean(), turnover.GetProperty("operators").GetArrayLength()).ShouldBe(("usdt", false, 6));
-        (above.GetProperty("unit").GetString(), above.GetProperty("ofIdea").GetBoolean(), above.GetProperty("operators")[0].GetString()).ShouldBe(("flag", true, "above_baseline"));
-        fields.Count(field => field.GetProperty("ofIdea").GetBoolean()).ShouldBe(5);
+        probability.GetProperty("operators").EnumerateArray().Select(op => op.GetString()).ShouldContain("above_baseline");
+        (side.GetProperty("unit").GetString(), side.GetProperty("ofIdea").GetBoolean(), side.GetProperty("operators")[0].GetString()).ShouldBe(("choice", true, "="));
+        side.GetProperty("choices").EnumerateArray().Select(choice => choice.GetString()).ShouldBe(["long", "short"]);
+        // The fields of the board «Фильтр — редактор».
+        fields.Where(field => !field.GetProperty("ofIdea").GetBoolean()).Select(field => field.GetProperty("code").GetString()).ShouldBe(
+        [
+            "category", "change5m", "change15m", "change1h", "change4h", "change24h", "turnover1h", "turnover24h", "openInterest", "openInterestChange1h",
+            "openInterestChange24h", "fundingRate", "spread", "setup"
+        ]);
+        fields.Where(field => field.GetProperty("ofIdea").GetBoolean()).Select(field => field.GetProperty("code").GetString())
+            .ShouldBe(["ideaSetup", "type", "interval", "side", "riskReward", "probability", "expectancy"]);
     }
 
     private async Task<JsonElement[]> ListAsync()

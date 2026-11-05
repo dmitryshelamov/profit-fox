@@ -28,6 +28,9 @@ public class IdeaEngineTests
         1.5m,
         ZoneRules.Default);
 
+    // The price step of the pair: a cent on prices about 100.
+    private static readonly IdeaInputs Ticked = new IdeaInputs(null, new Dictionary<Interval, decimal>(), 0.01m);
+
     [Test]
     public void Impulse_that_fires_makes_its_ideas_of_every_type_its_levels_allow()
     {
@@ -42,6 +45,18 @@ public class IdeaEngineTests
             (IdeaSetup.Impulse, IdeaType.Pullback, IdeaSide.Long, Interval.FifteenMinutes)
         ]);
         fired.Created.ShouldAllBe(idea => idea.Track.Status == IdeaStatus.AwaitingEntry && idea.EngineVersion == IdeasEngineVersion.Current && idea.Move >= 3m);
+        // The levels go on the price step of the pair, and the idea keeps it for a target that follows the entry.
+        fired.Created.ShouldAllBe(idea => idea.Track.Plan.Stop % 0.01m == 0m && idea.Track.Tick == 0.01m);
+    }
+
+    // A pair whose price step the list of instruments has not told yet holds its setups but makes no ideas.
+    [Test]
+    public void Pair_without_a_price_step_holds_its_setups_and_makes_no_ideas()
+    {
+        IReadOnlyList<IdeaStep> steps = Run(Impulse(), Wif, Three, IdeaInputs.None);
+
+        steps.ShouldContain(step => step.Setups.Contains(new PairSetup(Interval.FifteenMinutes, IdeaSetup.Impulse)));
+        steps.SelectMany(step => step.Created).ShouldBeEmpty();
     }
 
     // The ideas at the market enter on the next minute: the step reports them moved.
@@ -97,7 +112,7 @@ public class IdeaEngineTests
         IReadOnlyList<IdeaCandle> minutes = Impulse();
         engine.Warm(Wif, Closed(minutes, Five), [.. minutes.Where(minute => minute.OpenTime < Five)], [open], IdeaInputs.None);
 
-        IdeaStep step = engine.Step(Wif, minutes.Single(minute => minute.OpenTime == Five), IdeaInputs.None, false);
+        IdeaStep step = engine.Step(Wif, minutes.Single(minute => minute.OpenTime == Five), Ticked, false);
 
         step.Setups.ShouldBeEmpty();
         step.Created.ShouldBeEmpty();
@@ -125,7 +140,7 @@ public class IdeaEngineTests
         IReadOnlyList<IdeaCandle> minutes = Impulse();
         engine.Warm(Wif, Closed(minutes, Three), [.. minutes.Where(minute => minute.OpenTime < Three)], [open], IdeaInputs.None);
 
-        IdeaStep[] steps = [.. minutes.Where(minute => minute.OpenTime >= Three).Select(minute => engine.Step(Wif, minute, IdeaInputs.None, true))];
+        IdeaStep[] steps = [.. minutes.Where(minute => minute.OpenTime >= Three).Select(minute => engine.Step(Wif, minute, Ticked, true))];
 
         steps[0].Changed.Single().Track.Status.ShouldBe(IdeaStatus.Expired);
         steps.SelectMany(step => step.Created).ShouldContain(created => created.Track.Plan.Type == IdeaType.TwoR);
@@ -138,7 +153,7 @@ public class IdeaEngineTests
         var engine = new IdeaEngine(Rules, IdeasEngineVersion.Current);
         IReadOnlyList<IdeaCandle> minutes = Impulse();
         engine.Warm(Wif, Closed(minutes, Three), [.. minutes.Where(minute => minute.OpenTime < Three)], [], IdeaInputs.None);
-        var inputs = new IdeaInputs(0.01m, new Dictionary<Interval, decimal> { [Interval.FifteenMinutes] = 0.0186m });
+        var inputs = new IdeaInputs(0.01m, new Dictionary<Interval, decimal> { [Interval.FifteenMinutes] = 0.0186m }, 0.01m);
 
         IdeaStep[] steps = [.. minutes.Where(minute => minute.OpenTime >= Three).Select(minute => engine.Step(Wif, minute, inputs, true))];
 
@@ -157,7 +172,7 @@ public class IdeaEngineTests
 
         foreach (IdeaCandle minute in minutes.Where(minute => minute.OpenTime >= Three))
         {
-            engine.Step(Wif, minute, IdeaInputs.None, true);
+            engine.Step(Wif, minute, Ticked, true);
         }
 
         engine.MinutesHeld(Wif).ShouldBe(90);
@@ -172,7 +187,7 @@ public class IdeaEngineTests
 
         foreach (IdeaCandle minute in Impulse().Where(minute => minute.OpenTime < Three))
         {
-            engine.Step(Wif, minute, IdeaInputs.None, true);
+            engine.Step(Wif, minute, Ticked, true);
         }
 
         engine.Series(Wif, Interval.FifteenMinutes).Closed.ShouldBe(IdeaCandles.FromMinutes(Interval.FifteenMinutes, Impulse(), Start, Three));
@@ -256,12 +271,12 @@ public class IdeaEngineTests
         ];
     }
 
-    private static IReadOnlyList<IdeaStep> Run(IReadOnlyList<IdeaCandle> minutes, Instrument instrument, DateTimeOffset warmAt)
+    private static IReadOnlyList<IdeaStep> Run(IReadOnlyList<IdeaCandle> minutes, Instrument instrument, DateTimeOffset warmAt, IdeaInputs? inputs = null)
     {
         var engine = new IdeaEngine(Rules, IdeasEngineVersion.Current);
         engine.Warm(instrument, Closed(minutes, warmAt), [.. minutes.Where(minute => minute.OpenTime < warmAt)], [], IdeaInputs.None);
 
-        return [.. minutes.Where(minute => minute.OpenTime >= warmAt).Select(minute => engine.Step(instrument, minute, IdeaInputs.None, true))];
+        return [.. minutes.Where(minute => minute.OpenTime >= warmAt).Select(minute => engine.Step(instrument, minute, inputs ?? Ticked, true))];
     }
 
     private static Dictionary<Interval, IReadOnlyList<IdeaCandle>> Closed(IReadOnlyList<IdeaCandle> minutes, DateTimeOffset at)

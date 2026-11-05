@@ -32,7 +32,7 @@ public static class IdeaTracker
 
     private static IdeaTrack EnterAtMarket(IdeaTrack track, IdeaCandle minute)
     {
-        IdeaPlan plan = track.Plan.Type == IdeaType.Levels ? track.Plan with { Entry = minute.Open } : TwoR(track.Plan, minute.Open);
+        IdeaPlan plan = track.Plan.Type == IdeaType.Levels ? track.Plan with { Entry = minute.Open } : TwoR(track, minute.Open);
 
         // Beyond its stop an idea has no risk to measure, beyond its target nothing to gain.
         if (Ahead(plan) * (minute.Open - plan.Stop) <= 0 || Ahead(plan) * (plan.Target - minute.Open) <= 0)
@@ -84,9 +84,14 @@ public static class IdeaTracker
             : track;
     }
 
-    private static IdeaPlan TwoR(IdeaPlan plan, decimal entry)
+    // An idea of a pair without a price step keeps the target of 2R as it comes.
+    private static IdeaPlan TwoR(IdeaTrack track, decimal entry)
     {
-        return plan with { Entry = entry, Target = entry + (2m * (entry - plan.Stop)) };
+        IdeaPlan plan = track.Plan;
+
+        return track.Tick is { } tick
+            ? IdeaRules.TwoR(plan.Type, plan.Side, entry, plan.Stop, tick)
+            : plan with { Entry = entry, Target = entry + (2m * (entry - plan.Stop)) };
     }
 
     private static decimal Ahead(IdeaPlan plan)

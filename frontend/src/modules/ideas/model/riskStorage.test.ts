@@ -12,7 +12,13 @@ describe('risk per idea in the browser', () => {
     expect(loadRisk()).toBe('25');
   });
 
-  it('is empty before anything is saved', () => {
+  it('is 10 before anything is saved', () => {
+    expect(loadRisk()).toBe('10');
+  });
+
+  it('keeps a risk the owner cleared', () => {
+    saveRisk('');
+
     expect(loadRisk()).toBe('');
   });
 
@@ -24,7 +30,7 @@ describe('risk per idea in the browser', () => {
       throw new Error('blocked');
     });
 
-    expect(loadRisk()).toBe('');
+    expect(loadRisk()).toBe('10');
     expect(() => saveRisk('10')).not.toThrow();
   });
 });

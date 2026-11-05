@@ -7,7 +7,15 @@ export type SavedFilter = Schemas['SavedFilterResponse'];
 export type Condition = Schemas['SavedFilterConditionBody'];
 export type Idea = Schemas['IdeaResponse'];
 
-const ideaFields = new Set(['riskReward', 'probability', 'expectancy', 'cases', 'aboveBaseline']);
+const ideaFields = new Set([
+  'ideaSetup',
+  'type',
+  'interval',
+  'side',
+  'riskReward',
+  'probability',
+  'expectancy',
+]);
 
 export const isIdeaField = (code: string | null) => code !== null && ideaFields.has(code);
 
@@ -35,6 +43,26 @@ function holds(condition: Condition, actual: string | null): boolean {
   }
 }
 
+/** The codes a choice field has on a pair or an idea; a condition on it holds when the chosen code is among them. */
+function choiceValues(field: string, row: MarketRow | undefined, idea: Idea | undefined) {
+  switch (field) {
+    case 'category':
+      return row === undefined ? [] : [row.category];
+    case 'setup':
+      return row === undefined ? [] : Object.values(row.setups).flat();
+    case 'ideaSetup':
+      return [idea!.setup];
+    case 'type':
+      return [idea!.type];
+    case 'interval':
+      return [idea!.interval];
+    default:
+      return [idea!.side];
+  }
+}
+
+const choiceFields = new Set(['category', 'setup', 'ideaSetup', 'type', 'interval', 'side']);
+
 const marketValue = (row: MarketRow, field: string): string | null =>
   (row as unknown as Record<string, string | null>)[field] ?? null;
 
@@ -44,10 +72,8 @@ function ideaValue(idea: Idea, field: string): string | null {
       return idea.riskReward;
     case 'probability':
       return idea.bucket?.probability ?? null;
-    case 'expectancy':
-      return idea.bucket?.expectancy ?? null;
     default:
-      return idea.bucket === null ? null : String(idea.bucket.cases);
+      return idea.bucket?.expectancy ?? null;
   }
 }
 
@@ -55,7 +81,10 @@ function ideaValue(idea: Idea, field: string): string | null {
 export function matchesMarketRow(filter: SavedFilter, row: MarketRow): boolean {
   return filter.conditions.every(
     (condition) =>
-      isIdeaField(condition.field) || holds(condition, marketValue(row, condition.field!)),
+      isIdeaField(condition.field) ||
+      (choiceFields.has(condition.field!)
+        ? choiceValues(condition.field!, row, undefined).includes(condition.value!)
+        : holds(condition, marketValue(row, condition.field!))),
   );
 }
 
@@ -67,7 +96,11 @@ export function matchesIdea(filter: SavedFilter, idea: Idea, row: MarketRow | un
   return filter.conditions.every((condition) => {
     const field = condition.field!;
 
-    if (field === 'aboveBaseline') {
+    if (choiceFields.has(field)) {
+      return choiceValues(field, row, idea).includes(condition.value!);
+    }
+
+    if (condition.operator === 'above_baseline') {
       return probabilityView(idea.bucket, idea.baseline).badge === '▲';
     }
 

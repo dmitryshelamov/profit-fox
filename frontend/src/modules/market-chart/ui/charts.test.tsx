@@ -321,6 +321,37 @@ describe('bot candle chart', () => {
     expect(candles.removePriceLine).toHaveBeenCalledTimes(3);
   });
 
+  it('widens the autoscale of the candles to the levels of the idea and drops them with the idea', () => {
+    const { rerender } = show({
+      levels: [
+        { kind: 'entry', price: '160.68', title: 'Вход' },
+        { kind: 'stop', price: '150', title: 'Стоп' },
+        { kind: 'target', price: '189', title: 'Цель' },
+      ],
+    });
+    const candles = seriesOf('Candlestick');
+    const provider = () =>
+      candles.applyOptions.mock.calls.at(-1)![0].autoscaleInfoProvider as (
+        base: () => unknown,
+      ) => unknown;
+    const base = () => ({ priceRange: { minValue: 90, maxValue: 120 } });
+
+    expect(provider()(base)).toEqual({ priceRange: { minValue: 90, maxValue: 189 } });
+    expect(chartApi().addSeries.mock.calls[0]![1].autoscaleInfoProvider).toBe(provider());
+
+    rerender(
+      <BotCandleChart
+        history={history}
+        interval="60"
+        label="c"
+        levels={[]}
+        onReachStart={() => undefined}
+      />,
+    );
+
+    expect(provider()(base)).toEqual(base());
+  });
+
   it('marks the candle an idea fired in', () => {
     show({ signalTime: t10 });
 

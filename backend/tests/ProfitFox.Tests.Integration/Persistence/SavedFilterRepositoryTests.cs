@@ -34,7 +34,8 @@ public class SavedFilterRepositoryTests
     {
         SavedFilter filter = Filter("Шорт перегретых", SavedFilterPlace.Market, new FilterCondition(FilterField.Change1h, FilterOperator.Greater, 3m),
             new FilterCondition(FilterField.FundingRate, FilterOperator.Between, 0.0003m, 0.001m));
-        SavedFilter other = Filter("Выше базы", SavedFilterPlace.Ideas, new FilterCondition(FilterField.AboveBaseline, FilterOperator.AboveBaseline)) with
+        SavedFilter other = Filter("Выше базы", SavedFilterPlace.Ideas, new FilterCondition(FilterField.Probability, FilterOperator.AboveBaseline),
+            new FilterCondition(FilterField.IdeaSide, FilterOperator.Equal, Choice: "short")) with
         {
             CreatedAt = Now.AddMinutes(1)
         };

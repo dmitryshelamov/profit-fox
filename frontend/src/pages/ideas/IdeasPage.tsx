@@ -11,6 +11,7 @@ import {
   loadRisk,
   noIdeaFilters,
   saveRisk,
+  sideLabel,
 } from '@/modules/ideas';
 import { marketQuery, setupChoices, setupIntervals } from '@/modules/market';
 import {
@@ -24,6 +25,12 @@ import {
 } from '@/modules/saved-filters';
 
 const control = 'h-9 rounded-lg border border-line bg-panel px-2 text-sm';
+
+const categories = [
+  { value: '', label: 'Все' },
+  { value: 'linear', label: 'linear' },
+  { value: 'spot', label: 'spot' },
+];
 
 function Select({
   label,
@@ -100,7 +107,7 @@ export function IdeasPage() {
           options={setupIntervals}
         />
         <Select
-          label="Тип"
+          label="Тип идеи"
           value={filters.type}
           onChange={(type) => set({ type })}
           options={ideaTypes}
@@ -110,43 +117,46 @@ export function IdeasPage() {
           value={filters.side}
           onChange={(side) => set({ side })}
           options={[
-            { value: 'long', label: 'Long' },
-            { value: 'short', label: 'Short' },
+            { value: 'long', label: sideLabel('long') },
+            { value: 'short', label: sideLabel('short') },
           ]}
         />
-        <Select
-          label="Категория"
-          value={filters.category}
-          onChange={(category) => set({ category })}
-          options={[
-            { value: 'linear', label: 'linear' },
-            { value: 'spot', label: 'spot' },
-          ]}
-        />
+        <div role="group" aria-label="Категория" className="flex rounded-lg border border-line">
+          {categories.map((category) => (
+            <button
+              key={category.value}
+              type="button"
+              aria-pressed={filters.category === category.value}
+              onClick={() => set({ category: category.value })}
+              className="h-8 px-3 text-sm text-muted first:rounded-l-lg last:rounded-r-lg hover:bg-panel-2 aria-pressed:bg-panel-2 aria-pressed:text-text"
+            >
+              {category.label}
+            </button>
+          ))}
+        </div>
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
-            role="switch"
             checked={filters.nonNegativeExpectancy}
             onChange={(event) => set({ nonNegativeExpectancy: event.target.checked })}
           />
           Ожидание ≥ 0 R
         </label>
-        <label className="ml-auto flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 text-sm">
           <span className="text-muted">Риск на идею</span>
           <input
             inputMode="decimal"
             aria-label="Риск на идею"
-            placeholder="USDT"
             value={risk}
             onChange={(event) => {
               setRisk(event.target.value);
               saveRisk(event.target.value);
             }}
-            className={`${control} w-28 text-right font-mono`}
+            className={`${control} w-20 text-right font-mono`}
           />
           <span className="text-muted">USDT</span>
         </label>
+        {ideas.data && <p className="ml-auto text-sm text-muted">{ideasText(shown.length)}</p>}
       </div>
       <FilterBar
         filters={mine}
@@ -159,11 +169,23 @@ export function IdeasPage() {
       {ideas.isPending && <p className="text-sm text-muted">Загрузка идей…</p>}
       {ideas.data && (
         <>
-          <p className="text-sm text-muted">{ideasText(shown.length)}</p>
           {shown.length === 0 ? (
             <p className="text-sm text-muted">Идей по этим условиям нет.</p>
           ) : (
-            <IdeasTable ideas={shown} risk={risk} />
+            <>
+              <IdeasTable ideas={shown} risk={risk} />
+              <ul className="space-y-1 text-xs text-faint">
+                <li>
+                  Вероятность: доля «Цель» среди «Цель» и «Стоп» случаев корзины за 90 дней; после
+                  неё число случаев N. Меньше 30 случаев: «мало данных».
+                </li>
+                <li>
+                  ▲ ≈ ▼: 95 % интервал вероятности выше, пересекает или ниже базовой линии 1 / (1 +
+                  R:R).
+                </li>
+                <li>Прибыль / убыток при риске на идею: прибыль = R:R × риск, убыток = −риск.</li>
+              </ul>
+            </>
           )}
         </>
       )}

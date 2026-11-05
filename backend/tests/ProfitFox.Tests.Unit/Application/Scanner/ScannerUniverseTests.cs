@@ -94,6 +94,28 @@ public class ScannerUniverseTests
         changed.ShouldBe([new ScannerPair(new Instrument(MarketCategory.Linear, "NEWUSDT"), true, ListedAt: Now.AddDays(-3))]);
     }
 
+    // Fix after review: the ideas of a pair go on the step of its price, which the list tells; a pair keeps the step the list last told.
+    [Test]
+    public void Pair_keeps_the_price_step_the_list_tells()
+    {
+        var same = new ScannerPair(new Instrument(MarketCategory.Linear, "SOLUSDT"), true, Now.AddDays(-90), Now, TickSize: 0.01m);
+        var changing = new ScannerPair(new Instrument(MarketCategory.Linear, "WIFUSDT"), true, Now.AddDays(-90), Now);
+        var untold = new ScannerPair(new Instrument(MarketCategory.Linear, "ETHUSDT"), true, Now.AddDays(-90), Now, TickSize: 0.01m);
+
+        IReadOnlyList<ScannerPair> changed = ScannerUniverse.Merge(
+            [same, changing, untold],
+            [
+                Linear("SOLUSDT", "USDT", trading: true, perpetual: true) with { TickSize = 0.01m },
+                Linear("ETHUSDT", "USDT", trading: true, perpetual: true),
+                Linear("WIFUSDT", "USDT", trading: true, perpetual: true) with { TickSize = 0.0001m },
+                Linear("NEWUSDT", "USDT", trading: true, perpetual: true) with { TickSize = 0.5m }
+            ]);
+
+        changed.ShouldBe(
+            [changing with { TickSize = 0.0001m }, new ScannerPair(new Instrument(MarketCategory.Linear, "NEWUSDT"), true, TickSize: 0.5m)],
+            ignoreOrder: true);
+    }
+
     [Test]
     public void Pair_back_in_trading_is_listed_again_with_its_data()
     {

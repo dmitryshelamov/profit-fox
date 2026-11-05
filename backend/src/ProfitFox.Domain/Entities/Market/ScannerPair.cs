@@ -7,7 +7,8 @@ namespace ProfitFox.Domain.Entities.Market;
 ///     <see cref="CoveredUntil" /> is known, a missing one is a minute without trades; the same for the points of open interest and
 ///     the funding rates. <see cref="HistoryFrom" /> is set once the history of the pair is loaded whole. A pair that is not
 ///     <see cref="Listed" /> is out of trading: it stays with its data but is not kept. <see cref="ListedAt" /> is the launch the
-///     exchange tells (linear only): the history does not go before it.
+///     exchange tells (linear only): the history does not go before it. <see cref="TickSize" /> is the step of its price as the list of the
+///     exchange last told it; the ideas of a pair wait for it.
 /// </summary>
 public sealed record ScannerPair(
     Instrument Instrument,
@@ -16,7 +17,8 @@ public sealed record ScannerPair(
     DateTimeOffset? CoveredUntil = null,
     DateTimeOffset? OpenInterestCoveredUntil = null,
     DateTimeOffset? FundingCoveredUntil = null,
-    DateTimeOffset? ListedAt = null)
+    DateTimeOffset? ListedAt = null,
+    decimal? TickSize = null)
 {
     private static readonly TimeSpan Minute = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan Step = TimeSpan.FromMinutes(5);

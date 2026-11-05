@@ -378,7 +378,7 @@ describe('ideas on the pair page', () => {
 
       await userEvent.selectOptions(blockOf().getByRole('combobox', { name: 'Тип' }), 'pullback');
       await userEvent.selectOptions(blockOf().getByRole('combobox', { name: 'ТФ' }), '240');
-      await userEvent.click(blockOf().getByRole('button', { name: 'Short' }));
+      await userEvent.click(blockOf().getByRole('button', { name: 'Шорт' }));
 
       await waitFor(async () =>
         expect(
@@ -406,10 +406,10 @@ describe('ideas on the pair page', () => {
       renderApp('/market/spot/SOLUSDT');
       await ready();
 
-      expect(await blockOf().findByRole('button', { name: 'Short' })).toBeDisabled();
-      expect(blockOf().getByRole('button', { name: 'Long' })).toBeEnabled();
-      expect(blockOf().getByText('на spot short нет')).toBeInTheDocument();
-      await userEvent.click(blockOf().getByRole('button', { name: 'Short' }));
+      expect(await blockOf().findByRole('button', { name: 'Шорт' })).toBeDisabled();
+      expect(blockOf().getByRole('button', { name: 'Лонг' })).toBeEnabled();
+      expect(blockOf().getByText('на spot шорта нет')).toBeInTheDocument();
+      await userEvent.click(blockOf().getByRole('button', { name: 'Шорт' }));
       await waitFor(async () =>
         expect(
           await Promise.all(

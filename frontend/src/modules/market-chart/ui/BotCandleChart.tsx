@@ -1,4 +1,5 @@
 import {
+  type AutoscaleInfo,
   CandlestickSeries,
   ColorType,
   createChart,
@@ -16,7 +17,13 @@ import {
 import { useEffect, useMemo, useRef } from 'react';
 
 import { candleEnd } from '../model/chartPaging';
-import { type LevelInput, levelLines, zoneBands, type ZoneInput } from '../model/ideaOverlay';
+import {
+  type LevelInput,
+  levelLines,
+  withLevels,
+  zoneBands,
+  type ZoneInput,
+} from '../model/ideaOverlay';
 import {
   type Bar,
   type BarInput,
@@ -123,8 +130,11 @@ export function BotCandleChart({
     markers: ISeriesMarkersPluginApi<Time>;
     lines: IPriceLine[];
     levelLines: IPriceLine[];
+    /** Widens the autoscale of the candles to the prices of the levels. */
+    autoscale: (base: () => AutoscaleInfo | null) => AutoscaleInfo | null;
     zones: ZoneBandsPrimitive;
   } | null>(null);
+  const levelPrices = useRef<readonly number[]>([]);
   const firstTime = useRef<number | null>(null);
   const drawnHistory = useRef<unknown>(null);
   const reachStart = useRef(onReachStart);
@@ -169,7 +179,10 @@ export function BotCandleChart({
       },
       timeScale: { timeVisible: true, secondsVisible: false },
     });
+    // The price scale fits the candles; the levels of an idea (entry, stop, target) may lie far outside them.
+    const autoscale = (base: () => AutoscaleInfo | null) => withLevels(base(), levelPrices.current);
     const candles = api.addSeries(CandlestickSeries, {
+      autoscaleInfoProvider: autoscale,
       upColor: up,
       downColor: down,
       wickUpColor: up,
@@ -201,6 +214,7 @@ export function BotCandleChart({
       markers: createSeriesMarkers(candles, []),
       lines: [],
       levelLines: [],
+      autoscale,
       zones: zonePrimitive,
     };
 
@@ -345,6 +359,9 @@ export function BotCandleChart({
         title: level.title,
       }),
     );
+    // Applying the options makes the price scale fit again with the new levels.
+    levelPrices.current = levelsDrawn.map((level) => level.price);
+    drawn.candles.applyOptions({ autoscaleInfoProvider: drawn.autoscale });
   }, [levelsDrawn]);
 
   useEffect(() => {

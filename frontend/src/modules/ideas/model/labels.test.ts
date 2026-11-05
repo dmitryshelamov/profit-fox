@@ -1,4 +1,4 @@
-import { ideasText } from './labels';
+import { ideasText, sideLabel } from './labels';
 
 describe('ideasText', () => {
   it.each([
@@ -11,5 +11,12 @@ describe('ideasText', () => {
     [1234, '1 234 идеи'],
   ])('writes %i as %s', (count, expected) => {
     expect(ideasText(count)).toBe(expected);
+  });
+});
+
+describe('sideLabel', () => {
+  it('names the sides in Russian', () => {
+    expect(sideLabel('long')).toBe('Лонг');
+    expect(sideLabel('short')).toBe('Шорт');
   });
 });

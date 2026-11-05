@@ -7,6 +7,7 @@ import { ApiError, type Schemas } from '@/shared/api/client';
 import { useDeleteFilter, useSaveFilter } from '../api';
 import { matchesIdea, matchesMarketRow, type SavedFilter } from '../model/apply';
 import {
+  choiceLabel,
   fieldLabel,
   fromTyped,
   operatorLabel,
@@ -14,17 +15,10 @@ import {
   toTyped as toTypedValue,
   unitLabel,
 } from '../model/conditions';
+import { type Draft, draftOf, switchField } from '../model/draft';
 import { filterErrorTexts } from '../model/errors';
 
 type Field = Schemas['SavedFilterFieldResponse'];
-
-/** A condition as the owner types it: percent for funding and probability, the numbers themselves otherwise. */
-interface Draft {
-  field: string;
-  operator: string;
-  value: string;
-  to: string;
-}
 
 const control = 'h-8 rounded-md border border-line bg-panel-2 px-2 text-sm';
 
@@ -42,6 +36,74 @@ const toStored = (drafts: readonly Draft[]) =>
     to: draft.operator === 'between' ? fromTyped(draft.field, draft.to) : null,
   }));
 
+/** The field of a condition as a button that opens its catalog in two columns: the fields of the market and of the idea. */
+function FieldPicker({
+  value,
+  fields,
+  onPick,
+}: {
+  value: string;
+  fields: readonly Field[];
+  onPick: (field: Field) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const column = (title: string, ofIdea: boolean) => (
+    <div role="group" aria-label={title} className="space-y-1">
+      <h4 className="px-2 text-[11px] tracking-wide text-faint uppercase">{title}</h4>
+      {fields
+        .filter((field) => field.ofIdea === ofIdea)
+        .map((field) => (
+          <button
+            key={field.code}
+            type="button"
+            role="menuitemradio"
+            aria-checked={field.code === value}
+            onClick={() => {
+              setOpen(false);
+              onPick(field);
+            }}
+            className="block w-full rounded px-2 py-1 text-left text-sm whitespace-nowrap hover:bg-panel-2 aria-checked:text-accent"
+          >
+            {fieldLabel(field.code)}
+          </button>
+        ))}
+    </div>
+  );
+
+  return (
+    <div
+      className="relative"
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && open) {
+          event.stopPropagation();
+          setOpen(false);
+        }
+      }}
+    >
+      <button
+        type="button"
+        aria-label="Поле"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className={`${control} w-32 truncate text-left`}
+      >
+        {fieldLabel(value)} ▾
+      </button>
+      {open && (
+        <div
+          role="menu"
+          aria-label="Поля"
+          className="absolute left-0 z-10 mt-1 grid w-max grid-cols-2 gap-4 rounded-lg border border-line bg-panel p-2 shadow-xl"
+        >
+          {column('Рынок', false)}
+          {column('Идея', true)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DraftRow({
   draft,
   fields,
@@ -57,31 +119,16 @@ function DraftRow({
   const unit = unitLabel(draft.field);
 
   return (
-    <li className="flex flex-wrap items-center gap-2" aria-label="Условие">
-      <select
-        aria-label="Поле"
+    <li className="flex items-center gap-2" aria-label="Условие">
+      <FieldPicker
         value={draft.field}
-        onChange={(event) => {
-          const next = fields.find((item) => item.code === event.target.value)!;
-
-          onChange({
-            ...draft,
-            field: next.code,
-            operator: next.operators.includes(draft.operator) ? draft.operator : next.operators[0]!,
-          });
-        }}
-        className={control}
-      >
-        {fields.map((item) => (
-          <option key={item.code} value={item.code}>
-            {fieldLabel(item.code)}
-            {item.ofIdea ? ' · Идеи' : ''}
-          </option>
-        ))}
-      </select>
-      {field?.ofIdea && (
-        <span className="rounded bg-panel-2 px-1.5 py-0.5 text-xs text-accent">Идеи</span>
-      )}
+        fields={fields}
+        onPick={(next) =>
+          onChange(
+            switchField(draft, field ?? { code: draft.field, operators: [], choices: null }, next),
+          )
+        }
+      />
       <select
         aria-label="Оператор"
         value={draft.operator}
@@ -94,14 +141,29 @@ function DraftRow({
           </option>
         ))}
       </select>
-      {draft.operator !== 'above_baseline' && (
-        <input
+      {field?.choices ? (
+        <select
           aria-label="Значение"
-          inputMode="decimal"
           value={draft.value}
           onChange={(event) => onChange({ ...draft, value: event.target.value })}
-          className={`${control} w-24`}
-        />
+          className={`${control} min-w-0 flex-1`}
+        >
+          {field.choices.map((code) => (
+            <option key={code} value={code}>
+              {choiceLabel(draft.field, code)}
+            </option>
+          ))}
+        </select>
+      ) : (
+        draft.operator !== 'above_baseline' && (
+          <input
+            aria-label="Значение"
+            inputMode="decimal"
+            value={draft.value}
+            onChange={(event) => onChange({ ...draft, value: event.target.value })}
+            className={`${control} w-20 min-w-0`}
+          />
+        )
       )}
       {draft.operator === 'between' && (
         <>
@@ -111,11 +173,14 @@ function DraftRow({
             inputMode="decimal"
             value={draft.to}
             onChange={(event) => onChange({ ...draft, to: event.target.value })}
-            className={`${control} w-24`}
+            className={`${control} w-20 min-w-0`}
           />
         </>
       )}
       {unit !== '' && <span className="text-xs text-muted">{unit}</span>}
+      {field?.ofIdea && (
+        <span className="rounded bg-panel-2 px-1.5 py-0.5 text-xs text-accent">Идеи</span>
+      )}
       <button
         type="button"
         aria-label="Удалить условие"
@@ -191,33 +256,58 @@ export function FilterEditor({
     <aside
       role="dialog"
       aria-label="Редактор фильтра"
-      className="fixed inset-y-0 right-0 z-20 w-[28rem] max-w-full space-y-4 overflow-y-auto border-l border-line bg-panel p-5 shadow-xl"
+      className="fixed inset-y-0 right-0 z-20 w-[31rem] max-w-full space-y-4 overflow-y-auto border-l border-line bg-panel p-5 shadow-xl"
     >
-      <h2 className="text-lg font-bold">{filter ? 'Изменить фильтр' : 'Новый фильтр'}</h2>
+      <header className="flex items-center justify-between">
+        <h2 className="text-lg font-bold">Фильтр</h2>
+        <button
+          type="button"
+          aria-label="Закрыть"
+          onClick={onClose}
+          className="h-8 rounded-md px-2 text-muted hover:bg-panel-2"
+        >
+          ×
+        </button>
+      </header>
       <label className="block space-y-1 text-sm">
-        <span className="text-muted">Имя</span>
+        <span className="text-muted">Название</span>
         <input
           value={name}
           onChange={(event) => setName(event.target.value)}
           className={`${control} w-full`}
         />
       </label>
-      <label className="block space-y-1 text-sm">
+      <div className="space-y-1 text-sm">
         <span className="text-muted">Где показывать</span>
-        <select
-          value={where}
-          onChange={(event) => setWhere(event.target.value)}
-          className={`${control} w-full`}
+        <div
+          role="group"
+          aria-label="Где показывать"
+          className="flex rounded-md border border-line"
         >
           {places.map((item) => (
-            <option key={item.value} value={item.value}>
+            <button
+              key={item.value}
+              type="button"
+              aria-pressed={where === item.value}
+              onClick={() => setWhere(item.value)}
+              className="h-8 flex-1 text-sm text-muted first:rounded-l-md last:rounded-r-md hover:bg-panel-2 aria-pressed:bg-panel-2 aria-pressed:text-text"
+            >
               {item.label}
-            </option>
+            </button>
           ))}
-        </select>
-      </label>
+        </div>
+      </div>
       <div className="space-y-2">
-        <h3 className="text-sm text-muted">Условия</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm text-muted">Условия · соединяются через «и»</h3>
+          <button
+            type="button"
+            onClick={() => setDrafts((all) => [...all, draftOf(fields[0]!)])}
+            className="text-sm text-accent hover:underline"
+          >
+            + Условие
+          </button>
+        </div>
         <ul className="space-y-2">
           {drafts.map((draft, index) => (
             <DraftRow
@@ -231,22 +321,15 @@ export function FilterEditor({
             />
           ))}
         </ul>
-        <button
-          type="button"
-          onClick={() =>
-            setDrafts((all) => [
-              ...all,
-              { field: fields[0]!.code, operator: fields[0]!.operators[0]!, value: '', to: '' },
-            ])
-          }
-          className="text-sm text-accent hover:underline"
-        >
-          + Условие
-        </button>
       </div>
-      <p className="text-sm" aria-live="polite">
-        Подходит: {instrumentsText(fitRows)} · {ideasText(fitIdeas)}
-      </p>
+      <div className="space-y-1">
+        <p className="text-sm" aria-live="polite">
+          Подходит: {instrumentsText(fitRows)} · {ideasText(fitIdeas)}
+        </p>
+        <p className="text-xs text-faint">
+          Условия по идеям действуют только в «Идеях»; в «Рынке» их нет.
+        </p>
+      </div>
       {problems.length > 0 && (
         <ul role="alert" className="space-y-1 rounded-md bg-err-bg p-3 text-sm text-err">
           {problems.map((problem) => (
@@ -254,7 +337,29 @@ export function FilterEditor({
           ))}
         </ul>
       )}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex items-center gap-2">
+        {filter && (
+          <button
+            type="button"
+            disabled={remove.isPending}
+            onClick={() =>
+              remove.mutate(filter.id, {
+                onSuccess: () => onDeleted(filter.id),
+                onError: failed,
+              })
+            }
+            className="h-9 rounded-md px-4 text-sm text-err hover:bg-panel-2"
+          >
+            Удалить фильтр
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onClose}
+          className="ml-auto h-9 rounded-md px-4 text-sm hover:bg-panel-2"
+        >
+          Отмена
+        </button>
         <button
           type="button"
           disabled={save.isPending || readyConditions(stored).length !== stored.length}
@@ -268,28 +373,6 @@ export function FilterEditor({
         >
           Сохранить
         </button>
-        <button
-          type="button"
-          onClick={onClose}
-          className="h-9 rounded-md px-4 text-sm hover:bg-panel-2"
-        >
-          Отмена
-        </button>
-        {filter && (
-          <button
-            type="button"
-            disabled={remove.isPending}
-            onClick={() =>
-              remove.mutate(filter.id, {
-                onSuccess: () => onDeleted(filter.id),
-                onError: failed,
-              })
-            }
-            className="ml-auto h-9 rounded-md px-4 text-sm text-err hover:bg-panel-2"
-          >
-            Удалить фильтр
-          </button>
-        )}
       </div>
     </aside>
   );

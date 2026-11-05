@@ -1,3 +1,6 @@
+import { sideLabel, typeLabel } from '@/modules/ideas';
+import { setupLabel } from '@/modules/market';
+import { intervalLabel } from '@/modules/market-data';
 import { isDecimalText } from '@/shared/api/jsonNumber';
 import { shiftDecimal } from '@/shared/format/decimal';
 import { groupDigits } from '@/shared/format/format';
@@ -5,7 +8,7 @@ import { groupDigits } from '@/shared/format/format';
 import type { Condition } from './apply';
 
 const fieldLabels: Record<string, string> = {
-  price: 'Цена',
+  category: 'Категория',
   change5m: 'Изменение 5м',
   change15m: 'Изменение 15м',
   change1h: 'Изменение 1ч',
@@ -18,11 +21,30 @@ const fieldLabels: Record<string, string> = {
   openInterestChange24h: 'ΔOI 24ч',
   fundingRate: 'Фандинг',
   spread: 'Спред',
+  setup: 'Сетап',
+  ideaSetup: 'Сетап',
+  type: 'Тип идеи',
+  interval: 'ТФ',
+  side: 'Сторона',
   riskReward: 'R:R',
   probability: 'Вероятность',
   expectancy: 'Ожидание',
-  cases: 'Случаев (N)',
-  aboveBaseline: 'Выше базовой линии',
+};
+
+/** In a phrase a field of the idea says whose it is, since «Сетап» of a pair is another field. */
+const phraseLabels: Record<string, string> = {
+  ideaSetup: 'Сетап идеи',
+  type: 'Тип идеи',
+  interval: 'ТФ идеи',
+  side: 'Сторона идеи',
+};
+
+const choiceLabels: Record<string, (code: string) => string> = {
+  setup: setupLabel,
+  ideaSetup: setupLabel,
+  type: typeLabel,
+  interval: intervalLabel,
+  side: sideLabel,
 };
 
 const operatorLabels: Record<string, string> = {
@@ -48,9 +70,13 @@ const percentFields = new Set([
   'openInterestChange24h',
   'spread',
 ]);
-const usdtFields = new Set(['price', 'turnover1h', 'turnover24h', 'openInterest']);
+const usdtFields = new Set(['turnover1h', 'turnover24h', 'openInterest']);
+
+export const isChoiceField = (code: string) => code === 'category' || code in choiceLabels;
 
 export const fieldLabel = (code: string) => fieldLabels[code] ?? code;
+/** The name of a code of a choice field; the category is shown as it is. */
+export const choiceLabel = (field: string, code: string) => choiceLabels[field]?.(code) ?? code;
 export const operatorLabel = (code: string) => operatorLabels[code] ?? code;
 
 export function unitLabel(code: string): string {
@@ -87,15 +113,21 @@ export function conditionText(condition: Condition): string {
   const unit = unitLabel(field);
   const tail = unit === '' ? '' : ` ${unit}`;
 
+  const label = phraseLabels[field] ?? fieldLabel(field);
+
   if (condition.operator === 'above_baseline') {
-    return fieldLabel(field);
+    return `${label} ${operatorLabel(condition.operator)}`;
+  }
+
+  if (isChoiceField(field)) {
+    return `${label} ${operatorLabel(condition.operator!)} ${choiceLabel(field, condition.value!)}`;
   }
 
   if (condition.operator === 'between') {
-    return `${fieldLabel(field)} между ${shown(field, condition.value)} и ${shown(field, condition.to)}${tail}`;
+    return `${label} между ${shown(field, condition.value)} и ${shown(field, condition.to)}${tail}`;
   }
 
-  return `${fieldLabel(field)} ${operatorLabel(condition.operator!)} ${shown(field, condition.value)}${tail}`;
+  return `${label} ${operatorLabel(condition.operator!)} ${shown(field, condition.value)}${tail}`;
 }
 
 /** The conditions that are filled in enough to test rows now, as the live counter of the editor needs. */
@@ -105,6 +137,7 @@ export function readyConditions(conditions: readonly Condition[]): Condition[] {
   return conditions.filter(
     (condition) =>
       condition.operator === 'above_baseline' ||
+      (isChoiceField(condition.field!) && condition.value !== null && condition.value !== '') ||
       (number(condition.value) && (condition.operator !== 'between' || number(condition.to))),
   );
 }

@@ -44,7 +44,7 @@ public class LiveIdeasTests
         ICandleRepository candles = _candles = Substitute.For<ICandleRepository>();
         _market = new ScannerMarket();
         _time = new FakeTimeProvider(Four);
-        _market.Keep([new ScannerPair(Wif, true, CoveredUntil: Four)]);
+        _market.Keep([new ScannerPair(Wif, true, CoveredUntil: Four, TickSize: 0.01m)]);
         IReadOnlyList<IdeaCandle> minutes = IdeaFixtures.Setup("impulse");
         _market.Loaded(Wif, Start, Four, minutes.Where(minute => minute.OpenTime < Four).Select(Candle));
 
@@ -57,7 +57,7 @@ public class LiveIdeasTests
         _live = new LiveIdeas(_ideas, _volatility, candles, _market, new IdeasSettings(), _time);
     }
 
-    // Requirement "Буфер стопа": three spreads of the ticker, 3 × 20, are wider than k × ATR.
+    // Requirement "Буфер стопа": three spreads of the ticker, 3 × 20, are wider than k × ATR; the stop 99.375 − 60 goes on the cent below.
     [Test]
     public async Task Spread_of_the_ticker_sets_the_least_stop_buffer()
     {
@@ -65,7 +65,7 @@ public class LiveIdeasTests
 
         IReadOnlyList<Idea> created = await RunAsync(Four.AddMinutes(70));
 
-        created.Single(idea => idea.Interval == Interval.FifteenMinutes && idea.Track.Plan.Type == IdeaType.BeyondExtreme).Track.Plan.Stop.ShouldBe(99.375m - 60m);
+        created.Single(idea => idea.Interval == Interval.FifteenMinutes && idea.Track.Plan.Type == IdeaType.BeyondExtreme).Track.Plan.Stop.ShouldBe(39.37m);
     }
 
     // Decision 5: the replay writes the percentiles once a day; the live ideas read them again every hour.

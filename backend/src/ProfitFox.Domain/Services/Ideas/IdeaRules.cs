@@ -5,8 +5,10 @@ using ProfitFox.Domain.ValueObjects.Ideas;
 namespace ProfitFox.Domain.Services.Ideas;
 
 /// <summary>
-///     The levels of an idea by the rules of its type, long; short mirrors them. The stop buffer is k × ATR, at least three spreads. An idea
-///     without the zone it needs, with a reward under 1.5 risks, short on spot, or a pullback whose limit the price has passed is not made.
+///     The levels of an idea by the rules of its type, long; short mirrors them. The stop buffer is k × ATR, at least three spreads. The levels
+///     go on the price step of the pair: the stop away from the entry and the target towards it, the limit of a pullback towards the market,
+///     so none of them is better than the rules give. An idea without the zone it needs, with a reward under 1.5 risks, short on spot, or a
+///     pullback whose limit the price has passed is not made.
 /// </summary>
 public static class IdeaRules
 {
@@ -28,12 +30,20 @@ public static class IdeaRules
         Zone? next = side == IdeaSide.Long ? ZoneFinder.Resistance(context.Zones, context.Price) : ZoneFinder.Support(context.Zones, context.Price);
         decimal extreme = side == IdeaSide.Long ? context.WindowLow : context.WindowHigh;
 
+        decimal tick = context.Tick;
+        decimal Stop(decimal price) => PriceStep.Round(price - (ahead * buffer), tick, ahead > 0);
+
         IdeaPlan? plan = type switch
         {
-            IdeaType.Levels when behind is not null && next is not null => new IdeaPlan(type, side, context.Price, Edge(behind, ahead) - (ahead * buffer), Edge(next, ahead)),
-            IdeaType.TwoR when behind is not null => TwoR(type, side, context.Price, Edge(behind, ahead) - (ahead * buffer)),
-            IdeaType.BeyondExtreme => TwoR(type, side, context.Price, extreme - (ahead * buffer)),
-            IdeaType.Pullback => TwoR(type, side, (context.WindowLow + context.WindowHigh) / 2, extreme - (ahead * buffer)),
+            IdeaType.Levels when behind is not null && next is not null => new IdeaPlan(
+                type,
+                side,
+                context.Price,
+                Stop(Edge(behind, ahead)),
+                PriceStep.Round(Edge(next, ahead), tick, ahead > 0)),
+            IdeaType.TwoR when behind is not null => TwoR(type, side, context.Price, Stop(Edge(behind, ahead)), tick),
+            IdeaType.BeyondExtreme => TwoR(type, side, context.Price, Stop(extreme), tick),
+            IdeaType.Pullback => TwoR(type, side, PriceStep.Round((context.WindowLow + context.WindowHigh) / 2, tick, ahead < 0), Stop(extreme), tick),
             _ => null
         };
 
@@ -46,9 +56,10 @@ public static class IdeaRules
         return plan?.RiskReward >= MinimumRiskReward ? plan : null;
     }
 
-    private static IdeaPlan TwoR(IdeaType type, IdeaSide side, decimal entry, decimal stop)
+    /// <summary>A target of 2R from the entry, on the price step towards the entry.</summary>
+    public static IdeaPlan TwoR(IdeaType type, IdeaSide side, decimal entry, decimal stop, decimal tick)
     {
-        return new IdeaPlan(type, side, entry, stop, entry + (TargetRisks * (entry - stop)));
+        return new IdeaPlan(type, side, entry, stop, PriceStep.Round(entry + (TargetRisks * (entry - stop)), tick, side == IdeaSide.Long));
     }
 
     // A long stop goes below the low of a support and a long target stops at the low of a resistance; short, the highs.

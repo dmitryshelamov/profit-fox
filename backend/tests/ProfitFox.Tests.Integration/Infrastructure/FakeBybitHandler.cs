@@ -178,7 +178,11 @@ public class FakeBybitHandler : HttpMessageHandler
                 ? $",\"contractType\":\"{ContractTypes.GetValueOrDefault(instrument.Symbol, "LinearPerpetual")}\",\"launchTime\":\"{launch}\""
                 : "";
 
-            return $$"""{"symbol":"{{instrument.Symbol}}","baseCoin":"{{baseCoin}}","quoteCoin":"{{quoteCoin}}","status":"{{status}}"{{contract}}}""";
+            string price = Rules.TryGetValue(instrument, out (string TickSize, string QuantityStep, string MinQuantity, string MinAmount) rules)
+                ? $$""","priceFilter":{"tickSize":"{{rules.TickSize}}"}"""
+                : "";
+
+            return $$"""{"symbol":"{{instrument.Symbol}}","baseCoin":"{{baseCoin}}","quoteCoin":"{{quoteCoin}}","status":"{{status}}"{{contract}}{{price}}}""";
         });
         var cursor = category == "linear" && offset + pageSize < all.Count ? (offset + pageSize).ToString() : "";
 

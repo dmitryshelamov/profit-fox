@@ -109,7 +109,7 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
 
     /// <param name="instrument">A pair warmed up.</param>
     /// <param name="minute">The next closed minute of the pair.</param>
-    /// <param name="inputs">The spread and the percentiles of the pair now.</param>
+    /// <param name="inputs">The spread, the percentiles and the price step of the pair now.</param>
     /// <param name="detect">Whether the pair's data is complete: without it the minute only steps the open ideas and grows the series.</param>
     public IdeaStep Step(Instrument instrument, IdeaCandle minute, IdeaInputs inputs, bool detect)
     {
@@ -138,11 +138,12 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
             {
                 setups.AddRange(pair.Holding[interval].Select(setup => new PairSetup(interval, setup)));
 
-                if (fired.Count > 0)
+                // A pair without its price step yet holds its setups and makes no ideas: their levels would not go on the step.
+                if (fired.Count > 0 && inputs.Tick is { } tick)
                 {
                     IReadOnlyList<IdeaCandle> closed = pair.Series[interval].Base(end);
                     IReadOnlyList<Zone> zones = ZoneFinder.Find(closed, reading!.Atr, rules.Zones);
-                    created.AddRange(fired.SelectMany(signal => Ideas(pair, interval, signal, minute, reading.Atr, zones, inputs.Spread, end)));
+                    created.AddRange(fired.SelectMany(signal => Ideas(pair, interval, signal, minute, reading.Atr, zones, inputs.Spread, tick, end)));
                 }
             }
         }
@@ -191,9 +192,9 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
         return changed;
     }
 
-    private List<Idea> Ideas(Pair pair, Interval interval, SetupSignal signal, IdeaCandle minute, decimal atr, IReadOnlyList<Zone> zones, decimal? spread, DateTimeOffset end)
+    private List<Idea> Ideas(Pair pair, Interval interval, SetupSignal signal, IdeaCandle minute, decimal atr, IReadOnlyList<Zone> zones, decimal? spread, decimal tick, DateTimeOffset end)
     {
-        var context = new IdeaContext(pair.Instrument.Category, minute.Close, signal.WindowLow, signal.WindowHigh, atr, zones, spread, rules.StopBuffer);
+        var context = new IdeaContext(pair.Instrument.Category, minute.Close, signal.WindowLow, signal.WindowHigh, atr, zones, spread, rules.StopBuffer, tick);
         var ideas = new List<Idea>();
 
         foreach (IdeaSide side in Sides(signal.Setup))
@@ -207,7 +208,7 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
                     continue;
                 }
 
-                var idea = new Idea(Guid.NewGuid(), pair.Instrument, signal.Setup, interval, IdeaTrack.Fired(plan, end, Minutes(interval)), signal.Move, signal.VolumeRatio, engineVersion);
+                var idea = new Idea(Guid.NewGuid(), pair.Instrument, signal.Setup, interval, IdeaTrack.Fired(plan, end, Minutes(interval), tick), signal.Move, signal.VolumeRatio, engineVersion);
                 pair.Open.Add(idea);
                 ideas.Add(idea);
             }

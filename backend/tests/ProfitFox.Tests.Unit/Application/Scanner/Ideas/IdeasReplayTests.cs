@@ -31,6 +31,7 @@ public class IdeasReplayTests
     private static readonly Instrument Wif = new Instrument(MarketCategory.Linear, "WIFUSDT");
     private static readonly DateTimeOffset March1 = DateTimeOffset.Parse("2024-03-01T00:00:00Z");
     private static readonly FeeRates Fees = new FeeRates(0.02m, 0.055m);
+    private const decimal Tick = 0.01m;
     private static readonly IdeasSettings Settings = new IdeasSettings();
 
     private ICandleRepository _candles = null!;
@@ -113,7 +114,7 @@ public class IdeasReplayTests
     [Test]
     public async Task Days_before_the_first_minute_of_a_pair_pass_and_move_the_cursor()
     {
-        _market.Keep([new ScannerPair(Wif, true, HistoryFrom: March1.AddDays(-3), CoveredUntil: March1.AddDays(1))]);
+        _market.Keep([new ScannerPair(Wif, true, HistoryFrom: March1.AddDays(-3), CoveredUntil: March1.AddDays(1), TickSize: Tick)]);
         IdeasReplay replay = Replay();
 
         (await replay.StepAsync(CancellationToken.None)).ShouldBeTrue();
@@ -129,7 +130,7 @@ public class IdeasReplayTests
     {
         var sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
         _stored[Wif] = new IdeaReplayCursor(March1, []);
-        _market.Keep([new ScannerPair(sol, true, HistoryFrom: March1, CoveredUntil: March1.AddDays(1))]);
+        _market.Keep([new ScannerPair(sol, true, HistoryFrom: March1, CoveredUntil: March1.AddDays(1), TickSize: Tick)]);
 
         await Replay().StepAsync(CancellationToken.None);
 
@@ -156,7 +157,16 @@ public class IdeasReplayTests
     [Test]
     public async Task Pair_without_its_whole_history_is_not_replayed()
     {
-        _market.Keep([new ScannerPair(Wif, true, CoveredUntil: March1.AddDays(1))]);
+        _market.Keep([new ScannerPair(Wif, true, CoveredUntil: March1.AddDays(1), TickSize: Tick)]);
+
+        (await Replay().StepAsync(CancellationToken.None)).ShouldBeFalse();
+    }
+
+    // A pair whose price step the list of instruments has not told yet waits for it: a day replayed without ideas would never be replayed again.
+    [Test]
+    public async Task Pair_without_its_price_step_is_not_replayed()
+    {
+        _market.Keep([new ScannerPair(Wif, true, HistoryFrom: March1, CoveredUntil: March1.AddDays(1))]);
 
         (await Replay().StepAsync(CancellationToken.None)).ShouldBeFalse();
     }
@@ -290,7 +300,7 @@ public class IdeasReplayTests
 
     private void Keep(DateTimeOffset coveredUntil)
     {
-        _market.Keep([new ScannerPair(Wif, true, HistoryFrom: March1, CoveredUntil: coveredUntil)]);
+        _market.Keep([new ScannerPair(Wif, true, HistoryFrom: March1, CoveredUntil: coveredUntil, TickSize: Tick)]);
     }
 
     private IdeasReplay Replay(int version = IdeasEngineVersion.Current, IdeasSettings? settings = null)
@@ -326,7 +336,7 @@ public class IdeasReplayTests
         return
         [
             .. IdeaCandles.Minutes(_minutes, March1, March1.AddDays(1), warm[^1].Close)
-                .SelectMany(minute => engine.Step(Wif, minute, IdeaInputs.None, true).Changed)
+                .SelectMany(minute => engine.Step(Wif, minute, IdeaInputs.None with { Tick = Tick }, true).Changed)
                 .Where(idea => !idea.IsOpen && idea.Track.EnteredAt is not null)
                 .Select(idea => new IdeaCase(idea, CaseResult.R(idea.Track, Fees)!.Value))
         ];

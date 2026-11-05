@@ -25,6 +25,16 @@ public class IdeaTrackerTests
         track.ShouldBe(new IdeaTrack(TwoR with { Entry = 106m, Target = 118m }, Fired, 5, IdeaStatus.Active, Fired, Fired));
     }
 
+    // The target of 2R follows the entry onto the price step of the pair, towards the entry: 106.1 + 2 × 6.1 = 118.3 goes down to 118.25.
+    [Test]
+    public void Target_that_follows_the_entry_goes_on_the_price_step()
+    {
+        var shortPlan = new IdeaPlan(IdeaType.TwoR, IdeaSide.Short, 105m, 110m, 95m);
+
+        Run(TwoR, 0.25m, Minute(0, 106.1m, 107m, 105.5m, 106.5m)).Plan.Target.ShouldBe(118.25m);
+        Run(shortPlan, 0.25m, Minute(0, 104.1m, 104.5m, 103m, 104m)).Plan.Target.ShouldBe(92.5m);
+    }
+
     [Test]
     public void Levels_keep_their_target_at_the_entry()
     {
@@ -146,6 +156,11 @@ public class IdeaTrackerTests
     private static IdeaTrack Run(IdeaPlan plan, params IdeaCandle[] minutes)
     {
         return minutes.Aggregate(IdeaTrack.Fired(plan, Fired, 5), IdeaTracker.Step);
+    }
+
+    private static IdeaTrack Run(IdeaPlan plan, decimal tick, params IdeaCandle[] minutes)
+    {
+        return minutes.Aggregate(IdeaTrack.Fired(plan, Fired, 5, tick), IdeaTracker.Step);
     }
 
     private static IdeaCandle Minute(int index, decimal open, decimal high, decimal low, decimal close)

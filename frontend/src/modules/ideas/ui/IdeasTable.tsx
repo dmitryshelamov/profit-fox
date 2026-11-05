@@ -5,35 +5,34 @@ import { intervalLabel } from '@/modules/market-data';
 import { formatMoment, groupDigits, showDecimal } from '@/shared/format/format';
 
 import { typeLabel } from '../model/labels';
-import { expectancyText, riskOutcome } from '../model/stats';
-import { type Idea, ProbabilityCell, SideText, StatusText } from './IdeaCells';
+import { riskOutcome } from '../model/stats';
+import { ExpectancyCell, type Idea, ProbabilityCell, SideText, StatusText } from './IdeaCells';
 
 const cell = 'px-3 py-3';
 const number = `${cell} text-right font-mono whitespace-nowrap`;
 
 const headers = [
-  'Время',
+  'Найдена',
   'Инструмент',
   'Сетап',
   'ТФ',
-  'Тип',
+  'Тип идеи',
   'Сторона',
   'Вход',
   'Стоп',
   'Цель',
   'R:R',
   'Вероятность',
-  'Ожидание',
-  'Прибыль',
-  'Убыток',
+  'Ожидание ↓',
+  'Прибыль / убыток',
   'Статус',
 ];
 
-const rightAligned = new Set(['Вход', 'Стоп', 'Цель', 'R:R', 'Ожидание', 'Прибыль', 'Убыток']);
+const rightAligned = new Set(['Вход', 'Стоп', 'Цель', 'R:R', 'Ожидание ↓', 'Прибыль / убыток']);
 
 /**
  * The ideas as a table. Clicking a row opens the pair with the idea selected; the symbol is also a link, for the keyboard.
- * The profit and the loss come from the risk per idea.
+ * The profit and the loss, in one column, come from the risk per idea.
  */
 export function IdeasTable({ ideas, risk }: { ideas: readonly Idea[]; risk: string }) {
   const navigate = useNavigate();
@@ -96,9 +95,19 @@ export function IdeasTable({ ideas, risk }: { ideas: readonly Idea[]; risk: stri
               <td className={cell}>
                 <ProbabilityCell idea={idea} />
               </td>
-              <td className={number}>{expectancyText(idea.bucket)}</td>
-              <td className={`${number} text-ok`}>{outcome?.profit ?? '—'}</td>
-              <td className={`${number} text-err`}>{outcome?.loss ?? '—'}</td>
+              <td className={number}>
+                <ExpectancyCell idea={idea} />
+              </td>
+              <td className={number}>
+                {outcome === null ? (
+                  '—'
+                ) : (
+                  <>
+                    <span className="text-ok">{outcome.profit}</span> /{' '}
+                    <span className="text-err">{outcome.loss}</span>
+                  </>
+                )}
+              </td>
               <td className={`${cell} whitespace-nowrap`}>
                 <StatusText status={idea.status} />
               </td>

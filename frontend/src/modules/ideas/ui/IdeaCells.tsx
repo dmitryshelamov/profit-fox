@@ -3,13 +3,13 @@ import { intervalLabel } from '@/modules/market-data';
 import type { Schemas } from '@/shared/api/client';
 
 import { sideLabel, statusLabel } from '../model/labels';
-import { probabilityView } from '../model/stats';
+import { expectancyText, probabilityView } from '../model/stats';
 
 export type Idea = Schemas['IdeaResponse'];
 
 const badgeColour = { '▲': 'text-ok', '▼': 'text-err', '≈': 'text-muted' } as const;
 
-/** The probability of an idea's bucket with N and the badge against the baseline, or «мало данных». */
+/** The probability of an idea's bucket with the number of cases after it: «46 % · 412», or «мало данных». */
 export function ProbabilityCell({ idea }: { idea: Idea }) {
   const view = probabilityView(idea.bucket, idea.baseline);
 
@@ -19,20 +19,33 @@ export function ProbabilityCell({ idea }: { idea: Idea }) {
 
   return (
     <span className="whitespace-nowrap">
-      {view.percent} %<span className="ml-1 text-xs text-faint">N {view.cases}</span>
-      <span
-        role="img"
-        aria-label={
-          view.badge === '▲'
-            ? 'выше базовой линии'
-            : view.badge === '▼'
-              ? 'ниже базовой линии'
-              : 'не отличается от базовой линии'
-        }
-        className={`ml-1 ${badgeColour[view.badge!]}`}
-      >
-        {view.badge}
-      </span>
+      {view.percent} %<span className="ml-1 text-xs text-faint">· {view.cases}</span>
+    </span>
+  );
+}
+
+/** The expectancy of an idea's bucket in R, the badge against the baseline before it when the bucket has enough data. */
+export function ExpectancyCell({ idea }: { idea: Idea }) {
+  const { badge } = probabilityView(idea.bucket, idea.baseline);
+
+  return (
+    <span className="whitespace-nowrap">
+      {badge !== null && (
+        <span
+          role="img"
+          aria-label={
+            badge === '▲'
+              ? 'выше базовой линии'
+              : badge === '▼'
+                ? 'ниже базовой линии'
+                : 'не отличается от базовой линии'
+          }
+          className={`mr-1 ${badgeColour[badge]}`}
+        >
+          {badge}
+        </span>
+      )}
+      {expectancyText(idea.bucket)}
     </span>
   );
 }

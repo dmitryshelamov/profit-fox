@@ -36,6 +36,7 @@ internal static class IdeaDbConverter
             Move = idea.Move,
             VolumeRatio = idea.VolumeRatio,
             EngineVersion = idea.EngineVersion,
+            Tick = track.Tick,
             Result = result
         };
     }
@@ -55,7 +56,8 @@ internal static class IdeaDbConverter
             IdeaCodes.ParseStatus(row.Status),
             row.StatusAt,
             row.EnteredAt,
-            row.ExitPrice);
+            row.ExitPrice,
+            row.Tick);
 
         return new Idea(row.Id, new Instrument(category, row.Symbol), setup, interval, track, row.Move, row.VolumeRatio, row.EngineVersion);
     }

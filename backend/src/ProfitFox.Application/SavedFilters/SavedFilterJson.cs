@@ -21,7 +21,7 @@ public static class SavedFilterJson
             {
                 ["field"] = SavedFilterFields.Of(condition.Field).Code,
                 ["operator"] = condition.Operator.ToCode(),
-                ["value"] = Text(condition.Value),
+                ["value"] = condition.Choice ?? Text(condition.Value),
                 ["to"] = Text(condition.To)
             })
         ]);
@@ -39,12 +39,11 @@ public static class SavedFilterJson
             .. document.RootElement.EnumerateArray().Select(element =>
             {
                 SavedFilterFields.TryParseOperator(element.GetProperty("operator").GetString()!, out FilterOperator op);
+                SavedFilterField field = SavedFilterFields.Find(element.GetProperty("field").GetString()!)!;
 
-                return new FilterCondition(
-                    SavedFilterFields.Find(element.GetProperty("field").GetString()!)!.Field,
-                    op,
-                    Number(element.GetProperty("value")),
-                    Number(element.GetProperty("to")));
+                return field.Choices is null
+                    ? new FilterCondition(field.Field, op, Number(element.GetProperty("value")), Number(element.GetProperty("to")))
+                    : new FilterCondition(field.Field, op, Choice: element.GetProperty("value").GetString());
             })
         ];
     }

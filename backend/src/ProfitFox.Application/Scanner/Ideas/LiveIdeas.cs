@@ -186,7 +186,10 @@ public sealed class LiveIdeas(
     {
         MarketTicker? ticker = market.TickerOf(instrument);
 
-        return new IdeaInputs(ticker is { Bid: { } bid, Ask: { } ask } ? ask - bid : null, _percentiles.GetValueOrDefault(instrument) ?? []);
+        return new IdeaInputs(
+            ticker is { Bid: { } bid, Ask: { } ask } ? ask - bid : null,
+            _percentiles.GetValueOrDefault(instrument) ?? [],
+            market.Find(instrument)?.TickSize);
     }
 
     /// <summary>Drops the state of every pair: storage is read again and the pairs warm up again from it.</summary>

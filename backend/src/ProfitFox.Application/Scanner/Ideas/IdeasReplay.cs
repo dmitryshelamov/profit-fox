@@ -16,7 +16,8 @@ namespace ProfitFox.Application.Scanner.Ideas;
 ///     thresholds of the live ideas and without a spread. A pair's turn replays the days from its cursor up to its coverage and goes on from
 ///     the ideas the cursor keeps open, warmed up as one run would stand at it, so the cases do not depend on how the days fall into turns.
 ///     The percentile of volatility of a day comes from the 90 days before it, and the last one goes to storage for the live ideas. Between
-///     days the turn waits while the minute cycle is late.
+///     days the turn waits while the minute cycle is late. The levels go on today's price step of the pair, the only one the list of
+///     instruments tells.
 /// </summary>
 public sealed class IdeasReplay(
     ICandleRepository candles,
@@ -71,7 +72,8 @@ public sealed class IdeasReplay(
         DateTimeOffset now = time.GetUtcNow();
         DateTimeOffset historyStart = Ceiling(now.AddDays(-scanner.HistoryDays));
         Turn? next = market.Listed()
-            .Where(pair => pair is { HistoryFrom: not null, CoveredUntil: not null })
+            // A pair waits for its price step too: a day replayed without ideas would never be replayed again.
+            .Where(pair => pair is { HistoryFrom: not null, CoveredUntil: not null, TickSize: not null })
             .Select(pair =>
             {
                 DateTimeOffset start = Max(historyStart, Ceiling(pair.HistoryFrom!.Value));
@@ -109,7 +111,7 @@ public sealed class IdeasReplay(
                 await Task.Delay(PaceWait, time, cancellationToken);
             }
 
-            var inputs = new IdeaInputs(null, Percentiles(ratios, day));
+            var inputs = new IdeaInputs(null, Percentiles(ratios, day), turn.Pair.TickSize);
             IReadOnlyList<IdeaCandle> known = Minutes(await candles.GetAsync(instrument, Interval.OneMinute, day, day + Day, 1440, cancellationToken));
 
             // Before the first trade of a pair there is nothing to replay; after it every minute of the day is fed, the ones without trades flat.
@@ -178,7 +180,7 @@ public sealed class IdeasReplay(
         decimal? closeBefore = histories[Interval.FiveMinutes].LastOrDefault(candle => Interval.FiveMinutes.CandleEnd(candle.OpenTime) <= from - span)?.Close;
         IReadOnlyList<IdeaCandle> minutes = IdeaCandles.Minutes(known, from - span, from, closeBefore);
         // The cursor keeps its ideas where a run stood at it, so the warm-up moves none of them.
-        engine.Warm(instrument, closed, minutes, turn.Cursor?.Open ?? [], new IdeaInputs(null, Percentiles(ratios, from - Day)));
+        engine.Warm(instrument, closed, minutes, turn.Cursor?.Open ?? [], new IdeaInputs(null, Percentiles(ratios, from - Day), turn.Pair.TickSize));
 
         return (ratios, minutes.Count > 0 ? minutes[^1] : null);
     }

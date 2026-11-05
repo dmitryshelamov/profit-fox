@@ -3899,14 +3899,16 @@ export interface components {
             to: null | string;
         };
         /**
-         * @description A field of the catalog of saved filters: its code, the unit of its value (`usdt`, `percent`, `ratio`, `r`, `count`
-         *     or `flag`), whether it is a field of an idea, which acts only on «Идеи», and the operators it takes.
+         * @description A field of the catalog of saved filters: its code, the unit of its value (`usdt`, `percent`, `ratio`, `r` or
+         *     `choice`), whether it is a field of an idea, which acts only on «Идеи», the operators it takes and the codes a field of choices
+         *     takes.
          */
         SavedFilterFieldResponse: {
             code: string;
             unit: string;
             ofIdea: boolean;
             operators: string[];
+            choices: null | string[];
         };
         SavedFilterResponse: {
             /** Format: uuid */

@@ -12,7 +12,11 @@ using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Application.Ideas.Queries.GetOwnIdea;
 
-public sealed class GetOwnIdeaQueryHandler(IMarketSnapshotRepository snapshots, ICandleRepository candles, IdeasSettings settings) : IRequestHandler<GetOwnIdeaQuery, GetOwnIdeaResult>
+public sealed class GetOwnIdeaQueryHandler(
+    IMarketSnapshotRepository snapshots,
+    IScannerPairRepository pairs,
+    ICandleRepository candles,
+    IdeasSettings settings) : IRequestHandler<GetOwnIdeaQuery, GetOwnIdeaResult>
 {
     public async Task<GetOwnIdeaResult> Handle(GetOwnIdeaQuery request, CancellationToken cancellationToken)
     {
@@ -47,19 +51,22 @@ public sealed class GetOwnIdeaQueryHandler(IMarketSnapshotRepository snapshots, 
             return new GetOwnIdeaResult(null, false, errors);
         }
 
-        if (await snapshots.GetAsync(new Instrument(category, request.Symbol), cancellationToken) is not { Metrics.Price: not null } row)
+        var instrument = new Instrument(category, request.Symbol);
+
+        if (await snapshots.GetAsync(instrument, cancellationToken) is not { Metrics.Price: not null } row)
         {
             return new GetOwnIdeaResult(null, true, errors);
         }
 
         IdeaLevels levels = await IdeaLevels.ReadAsync(candles, row, interval, settings, cancellationToken);
 
-        if (levels.Atr is not { } atr)
+        // Like the live ideas, a pair whose price step the list of instruments has not told yet has none.
+        if (levels.Atr is not { } atr || await pairs.GetAsync(instrument, cancellationToken) is not { TickSize: { } tick })
         {
             return new GetOwnIdeaResult(null, false, errors);
         }
 
-        var context = new IdeaContext(category, levels.Price, levels.WindowLow, levels.WindowHigh, atr, levels.Zones, levels.Spread, settings.StopBuffer);
+        var context = new IdeaContext(category, levels.Price, levels.WindowLow, levels.WindowHigh, atr, levels.Zones, levels.Spread, settings.StopBuffer, tick);
 
         return new GetOwnIdeaResult(IdeaRules.Plan(type, side, context), false, errors);
     }

@@ -3,8 +3,14 @@ import { groupDigits } from '@/shared/format/format';
 
 import { groupPairIdeas } from '../model/groups';
 import { typeLabel } from '../model/labels';
-import { expectancyText } from '../model/stats';
-import { type Idea, ProbabilityCell, SetupBadge, SideText, StatusText } from './IdeaCells';
+import {
+  ExpectancyCell,
+  type Idea,
+  ProbabilityCell,
+  SetupBadge,
+  SideText,
+  StatusText,
+} from './IdeaCells';
 
 function IdeaItem({
   idea,
@@ -38,7 +44,9 @@ function IdeaItem({
         </span>
         <span className="flex flex-wrap gap-x-3 text-xs text-muted">
           <ProbabilityCell idea={idea} />
-          <span className="font-mono">{expectancyText(idea.bucket)}</span>
+          <span className="font-mono">
+            <ExpectancyCell idea={idea} />
+          </span>
           <span className="text-faint">{intervalLabel(idea.interval)}</span>
         </span>
       </button>

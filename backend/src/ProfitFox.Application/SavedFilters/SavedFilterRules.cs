@@ -50,6 +50,20 @@ public static class SavedFilterRules
                 continue;
             }
 
+            if (field.Choices is { } choices)
+            {
+                if (choices.Contains(condition.Value ?? ""))
+                {
+                    conditions.Add(new FilterCondition(field.Field, op, Choice: condition.Value));
+                }
+                else
+                {
+                    errors[$"{key}.value"] = $"Field {field.Code} takes {string.Join(", ", choices)}.";
+                }
+
+                continue;
+            }
+
             decimal? value = Number(condition.Value);
             decimal? to = Number(condition.To);
 

@@ -140,7 +140,8 @@ public class IdeaCaseRepositoryTests
     {
         var replay = new IdeaReplayRepository(_dataSource);
         var sol = new Instrument(MarketCategory.Spot, "SOLUSDT");
-        Idea open = IdeaGenerator.Generate(Now, IdeaStatus.Active, statusAt: Now.AddMinutes(1));
+        Idea active = IdeaGenerator.Generate(Now, IdeaStatus.Active, statusAt: Now.AddMinutes(1));
+        Idea open = active with { Track = active.Track with { Tick = 0.0001m } };
         await replay.SetAsync(IdeaGenerator.Wif, 1, new IdeaReplayCursor(Now, [open]), CancellationToken.None);
         await replay.SetAsync(IdeaGenerator.Wif, 1, new IdeaReplayCursor(Now.AddDays(1), [open]), CancellationToken.None);
         await replay.SetAsync(sol, 2, new IdeaReplayCursor(Now, []), CancellationToken.None);

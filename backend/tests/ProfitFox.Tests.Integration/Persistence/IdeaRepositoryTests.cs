@@ -35,7 +35,8 @@ public class IdeaRepositoryTests
     [Test]
     public async Task Ideas_are_read_back_exactly()
     {
-        Idea idea = IdeaGenerator.Generate(Now, IdeaStatus.Active) with { Move = 3.123456789m };
+        Idea generated = IdeaGenerator.Generate(Now, IdeaStatus.Active);
+        Idea idea = generated with { Move = 3.123456789m, Track = generated.Track with { Tick = 0.0001m } };
 
         (await _store.SaveAsync([idea], [], CancellationToken.None)).ShouldBe([idea]);
 

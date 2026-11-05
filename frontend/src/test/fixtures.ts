@@ -300,53 +300,80 @@ export const savedFilterOf = (overrides: Partial<Schemas['SavedFilterResponse']>
     ...overrides,
   }) satisfies Schemas['SavedFilterResponse'];
 
-/** The catalog of the fields of saved filters, as the API gives it. */
+const comparisons = ['>', '>=', '<', '<=', '=', 'between'];
+
+/** The catalog of the fields of saved filters, as the API gives it, in its order. */
 export const filterFields = [
-  ...['price', 'turnover1h', 'turnover24h', 'openInterest'].map((code) => ({
-    code,
-    unit: 'usdt',
+  {
+    code: 'category',
+    unit: 'choice',
     ofIdea: false,
-    operators: ['>', '>=', '<', '<=', '=', 'between'],
-  })),
-  ...[
-    'change5m',
-    'change15m',
-    'change1h',
-    'change4h',
-    'change24h',
-    'openInterestChange1h',
-    'openInterestChange24h',
-    'spread',
-  ].map((code) => ({
+    operators: ['='],
+    choices: ['spot', 'linear'],
+  },
+  ...['change5m', 'change15m', 'change1h', 'change4h', 'change24h'].map((code) => ({
     code,
     unit: 'percent',
     ofIdea: false,
-    operators: ['>', '>=', '<', '<=', '=', 'between'],
+    operators: comparisons,
+    choices: null,
   })),
-  {
-    code: 'fundingRate',
-    unit: 'ratio',
+  ...['turnover1h', 'turnover24h', 'openInterest'].map((code) => ({
+    code,
+    unit: 'usdt',
     ofIdea: false,
-    operators: ['>', '>=', '<', '<=', '=', 'between'],
+    operators: comparisons,
+    choices: null,
+  })),
+  ...['openInterestChange1h', 'openInterestChange24h'].map((code) => ({
+    code,
+    unit: 'percent',
+    ofIdea: false,
+    operators: comparisons,
+    choices: null,
+  })),
+  { code: 'fundingRate', unit: 'ratio', ofIdea: false, operators: comparisons, choices: null },
+  { code: 'spread', unit: 'percent', ofIdea: false, operators: comparisons, choices: null },
+  {
+    code: 'setup',
+    unit: 'choice',
+    ofIdea: false,
+    operators: ['='],
+    choices: ['impulse', 'early_impulse', 'drop', 'early_drop', 'high_volatility'],
   },
   {
-    code: 'riskReward',
-    unit: 'ratio',
+    code: 'ideaSetup',
+    unit: 'choice',
     ofIdea: true,
-    operators: ['>', '>=', '<', '<=', '=', 'between'],
+    operators: ['='],
+    choices: ['impulse', 'early_impulse', 'drop', 'early_drop', 'high_volatility'],
   },
+  {
+    code: 'type',
+    unit: 'choice',
+    ofIdea: true,
+    operators: ['='],
+    choices: ['levels', 'target_2r', 'beyond_extreme', 'pullback'],
+  },
+  {
+    code: 'interval',
+    unit: 'choice',
+    ofIdea: true,
+    operators: ['='],
+    choices: ['5', '15', '60', '240'],
+  },
+  { code: 'side', unit: 'choice', ofIdea: true, operators: ['='], choices: ['long', 'short'] },
+  { code: 'riskReward', unit: 'ratio', ofIdea: true, operators: comparisons, choices: null },
   {
     code: 'probability',
     unit: 'ratio',
     ofIdea: true,
-    operators: ['>', '>=', '<', '<=', '=', 'between'],
+    operators: [
+      ...comparisons.filter((operator) => operator !== 'between'),
+      'between',
+      'above_baseline',
+    ],
+    choices: null,
   },
-  {
-    code: 'expectancy',
-    unit: 'r',
-    ofIdea: true,
-    operators: ['>', '>=', '<', '<=', '=', 'between'],
-  },
-  { code: 'cases', unit: 'count', ofIdea: true, operators: ['>', '>=', '<', '<=', '=', 'between'] },
-  { code: 'aboveBaseline', unit: 'flag', ofIdea: true, operators: ['above_baseline'] },
+  { code: 'expectancy', unit: 'r', ofIdea: true, operators: comparisons, choices: null },
 ] satisfies Schemas['SavedFilterFieldResponse'][];

@@ -55,3 +55,29 @@ export function bandRect(
     ? null
     : { top: Math.min(high, low), height: Math.abs(low - high) };
 }
+
+export interface PriceRange {
+  readonly minValue: number;
+  readonly maxValue: number;
+}
+
+/**
+ * The autoscale info of the candles widened to hold the prices of the levels, so that the lines of an idea stay in view
+ * even when the entry or the target is far from the candles. Without levels the info is returned as it is.
+ */
+export function withLevels<T extends { priceRange: PriceRange | null }>(
+  info: T | null,
+  prices: readonly number[],
+): T | { priceRange: PriceRange } | null {
+  if (prices.length === 0) {
+    return info;
+  }
+
+  return {
+    ...info,
+    priceRange: {
+      minValue: Math.min(...prices, info?.priceRange?.minValue ?? Infinity),
+      maxValue: Math.max(...prices, info?.priceRange?.maxValue ?? -Infinity),
+    },
+  };
+}

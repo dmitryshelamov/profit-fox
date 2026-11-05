@@ -1,6 +1,7 @@
 import { savedFilterOf } from '@/test/fixtures';
 
 import {
+  choiceLabel,
   conditionText,
   fieldLabel,
   fromTyped,
@@ -49,14 +50,29 @@ describe('typed values', () => {
 describe('labels', () => {
   it('names fields, operators and units', () => {
     expect(fieldLabel('change1h')).toBe('Изменение 1ч');
-    expect(fieldLabel('aboveBaseline')).toBe('Выше базовой линии');
+    expect(fieldLabel('category')).toBe('Категория');
+    expect(fieldLabel('setup')).toBe('Сетап');
+    expect(fieldLabel('ideaSetup')).toBe('Сетап');
+    expect(fieldLabel('type')).toBe('Тип идеи');
+    expect(fieldLabel('interval')).toBe('ТФ');
+    expect(fieldLabel('side')).toBe('Сторона');
     expect(operatorLabel('>=')).toBe('≥');
     expect(operatorLabel('between')).toBe('между');
     expect(unitLabel('turnover24h')).toBe('USDT');
     expect(unitLabel('change1h')).toBe('%');
     expect(unitLabel('fundingRate')).toBe('%');
     expect(unitLabel('expectancy')).toBe('R');
-    expect(unitLabel('cases')).toBe('');
+    expect(unitLabel('side')).toBe('');
+  });
+
+  it('names the codes of a choice field', () => {
+    expect(choiceLabel('setup', 'impulse')).toBe('Импульс');
+    expect(choiceLabel('ideaSetup', 'early_drop')).toBe('Раннее падение');
+    expect(choiceLabel('type', 'levels')).toBe('Уровни');
+    expect(choiceLabel('side', 'long')).toBe('Лонг');
+    expect(choiceLabel('side', 'short')).toBe('Шорт');
+    expect(choiceLabel('interval', '5')).toBe('5 мин');
+    expect(choiceLabel('category', 'spot')).toBe('spot');
   });
 });
 
@@ -69,14 +85,22 @@ describe('conditionText', () => {
     );
   });
 
-  it('writes a range and a flag', () => {
+  it('writes a choice with the name of the code, an idea field marked as the idea’s', () => {
+    expect(conditionText(condition('side', '=', 'short'))).toBe('Сторона идеи = Шорт');
+    expect(conditionText(condition('ideaSetup', '=', 'drop'))).toBe('Сетап идеи = Падение');
+    expect(conditionText(condition('type', '=', 'pullback'))).toBe('Тип идеи = Откат');
+    expect(conditionText(condition('interval', '=', '60'))).toBe('ТФ идеи = 1 ч');
+    expect(conditionText(condition('setup', '=', 'impulse'))).toBe('Сетап = Импульс');
+    expect(conditionText(condition('category', '=', 'linear'))).toBe('Категория = linear');
+  });
+
+  it('writes a range and «выше базовой»', () => {
     expect(conditionText(condition('change5m', 'between', '1', '3'))).toBe(
       'Изменение 5м между 1 и 3 %',
     );
-    expect(conditionText(condition('aboveBaseline', 'above_baseline', null))).toBe(
-      'Выше базовой линии',
+    expect(conditionText(condition('probability', 'above_baseline', null))).toBe(
+      'Вероятность выше базовой',
     );
-    expect(conditionText(condition('cases', '>', '30'))).toBe('Случаев (N) > 30');
   });
 });
 
@@ -87,14 +111,17 @@ describe('readyConditions', () => {
         condition('change1h', '>', '3'),
         condition('change5m', '>', ''),
         condition('change15m', 'between', '1', ''),
-        condition('aboveBaseline', 'above_baseline', null),
+        condition('probability', 'above_baseline', null),
         condition('spread', '<', 'abc'),
+        condition('side', '=', 'short'),
+        condition('side', '=', null),
       ],
     });
 
     expect(readyConditions(filter.conditions).map((item) => item.field)).toEqual([
       'change1h',
-      'aboveBaseline',
+      'probability',
+      'side',
     ]);
   });
 });

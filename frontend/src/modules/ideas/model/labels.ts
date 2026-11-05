@@ -19,7 +19,7 @@ export const ideaTypes = Object.entries(types).map(([value, label]) => ({ value,
 
 export const typeLabel = (code: string) => types[code] ?? code;
 export const statusLabel = (code: string) => statuses[code] ?? code;
-export const sideLabel = (code: string) => (code === 'long' ? 'Long' : 'Short');
+export const sideLabel = (code: string) => (code === 'long' ? 'Лонг' : 'Шорт');
 
 /** How many ideas, with the word in the form that goes with the count: «21 идея». */
 export function ideasText(count: number): string {

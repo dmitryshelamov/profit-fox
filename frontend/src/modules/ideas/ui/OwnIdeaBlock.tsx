@@ -5,7 +5,7 @@ import { shiftDecimal } from '@/shared/format/decimal';
 import { groupDigits, roundDecimal, showDecimal } from '@/shared/format/format';
 
 import { type OwnIdeaInput, ownIdeaQuery } from '../api';
-import { ideaTypes } from '../model/labels';
+import { ideaTypes, sideLabel } from '../model/labels';
 
 const field = 'h-8 rounded-md border border-line bg-panel-2 px-2 text-sm';
 
@@ -20,7 +20,7 @@ export function useOwnIdea(category: string, symbol: string, input: OwnIdeaInput
 
 /**
  * «Своя идея»: the owner picks a type, an interval and a side, and sees the entry, stop, target, R:R and the baseline, the
- * only probability an idea without a setup has. Short is not offered on spot.
+ * only probability an idea without a setup has. a short is not offered on spot.
  */
 export function OwnIdeaBlock({
   category,
@@ -78,12 +78,12 @@ export function OwnIdeaBlock({
               onClick={() => onChange({ ...input, side })}
               className="h-8 rounded-md px-3 text-sm text-muted hover:bg-panel-2 disabled:opacity-40 aria-pressed:bg-panel-2 aria-pressed:text-text"
             >
-              {side === 'long' ? 'Long' : 'Short'}
+              {sideLabel(side)}
             </button>
           ))}
         </div>
       </div>
-      {spot && <p className="text-xs text-muted">на spot short нет</p>}
+      {spot && <p className="text-xs text-muted">на spot шорта нет</p>}
       {own.isError && <p role="alert">Не удалось посчитать идею.</p>}
       {own.isPending && !own.isError && <p className="text-sm text-muted">Расчёт…</p>}
       {result && !result.made && (

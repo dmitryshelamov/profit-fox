@@ -7,5 +7,5 @@ namespace ProfitFox.Domain.Services.Ideas;
 public sealed record IdeasEngineVersion(int Number)
 {
     /// <summary>Raised with every change that changes the cases; the reference test of the version fails until it is.</summary>
-    public const int Current = 2;
+    public const int Current = 3;
 }

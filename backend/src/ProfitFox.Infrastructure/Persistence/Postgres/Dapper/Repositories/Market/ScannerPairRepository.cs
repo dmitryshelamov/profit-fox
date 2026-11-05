@@ -4,6 +4,7 @@ using Npgsql;
 
 using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Market.Contracts;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Market.Converters;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Market.Queries;
@@ -18,6 +19,14 @@ internal sealed class ScannerPairRepository(NpgsqlDataSource dataSource) : IScan
         IEnumerable<ScannerPairDb> pairs = await connection.QueryAsync<ScannerPairDb>(ScannerPairRepositoryQueries.GetAll(cancellationToken));
 
         return pairs.Select(ScannerPairDbConverter.ToDomain).ToList();
+    }
+
+    public async Task<ScannerPair?> GetAsync(Instrument instrument, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        ScannerPairDb? pair = await connection.QuerySingleOrDefaultAsync<ScannerPairDb>(ScannerPairRepositoryQueries.Get(instrument, cancellationToken));
+
+        return pair is null ? null : ScannerPairDbConverter.ToDomain(pair);
     }
 
     public async Task SaveAsync(IReadOnlyCollection<ScannerPair> pairs, CancellationToken cancellationToken)
