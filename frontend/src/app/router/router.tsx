@@ -19,6 +19,7 @@ import { BotPage } from '@/pages/bot/BotPage';
 import { BotEditorPage } from '@/pages/bot-editor/BotEditorPage';
 import { BotsPage } from '@/pages/bots/BotsPage';
 import { ComparePage } from '@/pages/compare/ComparePage';
+import { IdeaTradesPage } from '@/pages/idea-trades/IdeaTradesPage';
 import { IdeasPage } from '@/pages/ideas/IdeasPage';
 import { MarketPage } from '@/pages/market/MarketPage';
 import { MarketPairPage } from '@/pages/market-pair/MarketPairPage';
@@ -105,6 +106,12 @@ const ideasRoute = createRoute({
 
     return <IdeasPage page={page ?? 1} />;
   },
+});
+
+const ideaTradesRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/idea-trades',
+  component: IdeaTradesPage,
 });
 
 const marketPairRoute = createRoute({
@@ -273,6 +280,7 @@ const routeTree = rootRoute.addChildren([
     marketRoute,
     marketPairRoute,
     ideasRoute,
+    ideaTradesRoute,
     botsRoute,
     newBotRoute,
     editBotRoute,
