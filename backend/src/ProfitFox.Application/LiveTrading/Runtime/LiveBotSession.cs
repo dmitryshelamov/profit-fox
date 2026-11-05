@@ -707,46 +707,44 @@ internal sealed class LiveBotSession(
                 ? await gateway.PlaceAsync(_context.Key, _context.Bot.Instrument, new OrderRequest(code, order.Side, order.Type, order.Price, order.Quantity, order.Quantity is null ? order.Amount : null), cancellationToken)
                 : await gateway.CancelAsync(_context.Key, _context.Bot.Instrument, code, cancellationToken);
 
-            switch (outcome.Kind)
+            switch (OrderSending.Resolve(order.Status == LiveOrderStatus.PendingSubmit, outcome.Kind))
             {
-                case OrderOutcomeKind.Accepted when order.Status == LiveOrderStatus.PendingSubmit:
+                case SendStep.Taken:
                     journal.Sent(_id, code);
                     await WriteOrderAsync(order.Taken(outcome.ExchangeId), cancellationToken);
 
                     break;
-                case OrderOutcomeKind.Accepted:
+                case SendStep.CancelTaken:
                     await WriteOrderAsync(order.CancelTaken(), cancellationToken);
 
                     break;
-                case OrderOutcomeKind.AlreadyDone:
+                case SendStep.CancelTakenAndRefresh:
                     await WriteOrderAsync(order.CancelTaken(), cancellationToken);
                     await RefreshAsync(order.Number, cancellationToken);
 
                     break;
-                case OrderOutcomeKind.Transient:
+                case SendStep.Deferred:
                     LiveOrder deferred = order.Deferred(now);
                     await WriteOrderAsync(deferred, cancellationToken);
                     _ = LaterAsync(new WakeInput(), deferred.NextAttemptAt!.Value - now, cancellationToken);
 
                     break;
-                case OrderOutcomeKind.Permanent:
+                case SendStep.Rejected:
+                    journal.Refused(_id, code, outcome.Reason ?? "refused");
+                    await EndAsync(order.Number, live => live.Rejected(outcome.Reason ?? "Bybit refused the order."), cancellationToken);
+
+                    break;
+                case SendStep.CancelRefused:
                     journal.Refused(_id, code, outcome.Reason ?? "refused");
 
-                    if (order.Status == LiveOrderStatus.PendingSubmit)
-                    {
-                        await EndAsync(order.Number, live => live.Rejected(outcome.Reason ?? "Bybit refused the order."), cancellationToken);
-                    }
-                    else
-                    {
-                        // The order stays on the exchange and is never left unwatched: the bot stops with the reason and asks
-                        // again ever more slowly, until Bybit takes the cancel or the owner cancels the order on Bybit.
-                        LiveOrder paused = order.Deferred(now);
-                        await WriteOrderAsync(
-                            paused,
-                            bot => bot.Fail($"Bybit refused to cancel order {code}: {outcome.Reason} Cancel it on Bybit: the bot stops once Bybit shows the order done."),
-                            cancellationToken);
-                        _ = LaterAsync(new WakeInput(), paused.NextAttemptAt!.Value - now, cancellationToken);
-                    }
+                    // The order stays on the exchange and is never left unwatched: the bot stops with the reason and asks
+                    // again ever more slowly, until Bybit takes the cancel or the owner cancels the order on Bybit.
+                    LiveOrder paused = order.Deferred(now);
+                    await WriteOrderAsync(
+                        paused,
+                        bot => bot.Fail($"Bybit refused to cancel order {code}: {outcome.Reason} Cancel it on Bybit: the bot stops once Bybit shows the order done."),
+                        cancellationToken);
+                    _ = LaterAsync(new WakeInput(), paused.NextAttemptAt!.Value - now, cancellationToken);
 
                     break;
             }
