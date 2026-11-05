@@ -101,13 +101,21 @@ test('an impulse of the stub shows in the market chips, has its idea on the pair
   // A click on «R:R» sorts the list by it, the highest first; the second click turns it round.
   const riskReward = page.getByRole('columnheader', { name: /R:R/ });
   const riskRewards = async () =>
-    (await page.locator('tbody tr td:nth-child(10)').allTextContents()).map(Number);
+    (
+      await page.locator('tbody tr td:nth-child(10) > span > span:first-child').allTextContents()
+    ).map(Number);
+  // The header changes at once, the rows when the answer comes: wait until they stand in the order.
+  const standsIn = (order: (a: number, b: number) => number) => async () => {
+    const values = await riskRewards();
+
+    return values.every((value, index) => index === 0 || order(values[index - 1]!, value) <= 0);
+  };
   await riskReward.getByRole('button').click();
   await expect(riskReward).toHaveAttribute('aria-sort', 'descending');
-  expect(await riskRewards()).toEqual([...(await riskRewards())].sort((a, b) => b - a));
+  await expect.poll(standsIn((a, b) => b - a)).toBe(true);
   await riskReward.getByRole('button').click();
   await expect(riskReward).toHaveAttribute('aria-sort', 'ascending');
-  expect(await riskRewards()).toEqual([...(await riskRewards())].sort((a, b) => a - b));
+  await expect.poll(standsIn((a, b) => a - b)).toBe(true);
 
   await idea.click();
 
@@ -204,7 +212,7 @@ test('an impulse of the stub shows in the market chips, has its idea on the pair
 });
 
 // The lists come from the server a page at a time. The ideas are put into the database of the run, since the scanner makes
-// too few to fill a page: 120 closed ideas of pairs the market lacks, with a risk to reward from 11 to 130, and three of
+// too few to fill a page: 120 closed ideas of pairs the market lacks, with a risk to reward of the prices from 11 to 130, and three of
 // BTCUSDT (see `seedIdeas`).
 test('ideas come a page at a time: the page is in the address and survives Back, a sort orders all pages, the size is kept, a saved filter and the counter of the editor are counted by the server', async ({
   page,
@@ -223,7 +231,9 @@ test('ideas come a page at a time: the page is in the address and survives Back,
   await page.goto('/ideas');
   const rows = page.locator('tbody tr');
   const riskRewards = async () =>
-    (await page.locator('tbody tr td:nth-child(10)').allTextContents()).map(Number);
+    (
+      await page.locator('tbody tr td:nth-child(10) > span > span:first-child').allTextContents()
+    ).map(Number);
   const range = (from: number, to: number) => page.getByText(`${from}–${to} из ${total}`);
   await expect(range(1, 50)).toBeVisible();
   await expect(rows).toHaveCount(50);
@@ -244,9 +254,11 @@ test('ideas come a page at a time: the page is in the address and survives Back,
   await expect(riskReward).toHaveAttribute('aria-sort', 'descending');
   await expect(page).toHaveURL(/\/ideas$/);
   await expect(range(1, 50)).toBeVisible();
+  await expect.poll(async () => (await riskRewards())[0]).toBe(180.07);
   const first = await riskRewards();
   expect(first).toEqual([...first].sort((a, b) => b - a));
-  expect(first.slice(0, 3)).toEqual([200, 200, 130]);
+  // The risk to reward after the fees of the stub: 200 and 130 of the prices come to 180.07 and 166.47 (BTCUSDT) and 117.01.
+  expect(first.slice(0, 3)).toEqual([180.07, 166.47, 117.01]);
   await page.getByRole('button', { name: 'Следующая страница' }).click();
   await expect(range(51, 100)).toBeVisible();
   const second = await riskRewards();
@@ -262,47 +274,47 @@ test('ideas come a page at a time: the page is in the address and survives Back,
   await expect(rows).toHaveCount(100);
 
   // A filter of both places with a condition of the market and one of the idea: the idea has to be a linear one with a risk
-  // to reward of 100, and its pair has to be in the snapshot.
+  // to reward after the fees of 150, and its pair has to be in the snapshot.
   const filter = await request.post('/api/saved-filters', {
     data: {
-      name: 'Линейные от 100',
+      name: 'Линейные от 150',
       place: 'both',
       conditions: [
         { field: 'category', operator: '=', value: 'linear', to: null },
-        { field: 'riskReward', operator: '>=', value: '100', to: null },
+        { field: 'riskReward', operator: '>=', value: '150', to: null },
       ],
     },
   });
   expect(filter.status()).toBe(201);
   await page.reload();
-  await page.getByRole('button', { name: 'Линейные от 100' }).click();
+  await page.getByRole('button', { name: 'Линейные от 150' }).click();
   await expect(page.getByText('1 идея', { exact: true })).toBeVisible();
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toContainText('BTCUSDT');
   await expect(rows.first()).toContainText('linear');
 
   await page.goto('/market');
-  await expect(page.getByRole('button', { name: 'Линейные от 100' })).toHaveAttribute(
+  await expect(page.getByRole('button', { name: 'Линейные от 150' })).toHaveAttribute(
     'aria-pressed',
     'false',
   );
-  await page.getByRole('button', { name: 'Линейные от 100' }).click();
+  await page.getByRole('button', { name: 'Линейные от 150' }).click();
   await expect(page.getByText('3 из 6 инструментов')).toBeVisible();
   await expect(rows).toHaveCount(3);
   await expect(rows.filter({ hasText: 'spot' })).toHaveCount(0);
 
   // The counter of the editor is what the server counts for the conditions typed.
   const fit = await request.post('/api/saved-filters/fit', {
-    data: { conditions: [{ field: 'riskReward', operator: '>', value: '100', to: null }] },
+    data: { conditions: [{ field: 'riskReward', operator: '>', value: '150', to: null }] },
   });
   const { pairs, ideas } = (await fit.json()) as { pairs: number; ideas: number };
-  expect(ideas).toBeGreaterThanOrEqual(32);
+  expect(ideas).toBeGreaterThanOrEqual(2);
   await page.getByRole('button', { name: '+ Новый фильтр' }).click();
   const editor = page.getByRole('dialog', { name: 'Редактор фильтра' });
   await editor.getByRole('button', { name: '+ Условие' }).click();
   await editor.getByRole('button', { name: 'Поле' }).click();
   await editor.getByRole('menuitemradio', { name: 'R:R' }).click();
-  await editor.getByRole('textbox', { name: 'Значение' }).fill('100');
+  await editor.getByRole('textbox', { name: 'Значение' }).fill('150');
   await expect(
     editor.getByText(new RegExp(`^Подходит: ${pairs} \\S+ · ${ideas} \\S+$`)),
   ).toBeVisible();

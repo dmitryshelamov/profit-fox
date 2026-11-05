@@ -6,7 +6,7 @@ namespace ProfitFox.Application.Ideas;
 ///     The order of the ideas of «Идеи»: by a column in either direction, ideas without a value in the column last whichever way it goes, and
 ///     equal values by <see cref="ByExpectancy" />, so the order of the same ideas never changes. Setup, type, side and status go in the order of
 ///     their lists, which is the order of the enums; the probability counts only for a bucket of enough cases; the profit goes by the profit on
-///     1 USDT.
+///     1 USDT and the R:R by the reward to risk after the fees.
 /// </summary>
 public static class IdeaOrder
 {
@@ -77,7 +77,7 @@ public static class IdeaOrder
             IdeaSortColumn.Entry => view.Idea.Track.Plan.Entry,
             IdeaSortColumn.Stop => view.Idea.Track.Plan.Stop,
             IdeaSortColumn.Target => view.Idea.Track.Plan.Target,
-            IdeaSortColumn.RiskReward => view.Idea.Track.Plan.RiskReward,
+            IdeaSortColumn.RiskReward => view.Shares.NetRiskReward,
             IdeaSortColumn.Probability => view.Probability,
             IdeaSortColumn.Expectancy => view.Bucket?.Expectancy,
             IdeaSortColumn.Profit => view.Shares.ProfitPerUsdt,

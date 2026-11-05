@@ -1,6 +1,8 @@
 import { setupLabel } from '@/modules/market';
 import { intervalLabel } from '@/modules/market-data';
 import type { Schemas } from '@/shared/api/client';
+import { compareDecimals } from '@/shared/format/decimal';
+import { showDecimal } from '@/shared/format/format';
 
 import { sideLabel, statusLabel } from '../model/labels';
 import { expectancyText, probabilityView } from '../model/stats';
@@ -46,6 +48,31 @@ export function ExpectancyCell({ idea }: { idea: Idea }) {
         </span>
       )}
       {expectancyText(idea.bucket)}
+    </span>
+  );
+}
+
+/**
+ * The reward to risk after the fees in a chip, green from 1, where the profit at the target equals the loss at the stop, red below;
+ * under it, small, the ratio of the prices.
+ */
+export function RiskRewardCell({
+  netRiskReward,
+  riskReward,
+}: {
+  netRiskReward: string;
+  riskReward: string;
+}) {
+  const enough = compareDecimals(netRiskReward, '1') >= 0;
+
+  return (
+    <span className="inline-flex flex-col items-end gap-0.5">
+      <span
+        className={`rounded px-1.5 py-0.5 ${enough ? 'bg-ok/15 text-ok' : 'bg-err-bg text-err'}`}
+      >
+        {showDecimal(netRiskReward, 2)}
+      </span>
+      <span className="text-[11px] text-faint">без ком. {showDecimal(riskReward, 2)}</span>
     </span>
   );
 }

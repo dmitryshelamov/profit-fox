@@ -136,12 +136,14 @@ public class SavedFilterMatchTests
         SavedFilterMatch.Pair(conditions, Row(None), [setups[0], setups[2]]).ShouldBeFalse();
     }
 
+    // Scenario "Условие R:R в фильтре": the price ratio of the idea is 2, after the fees it is 1.56.
     [Test]
-    public void An_idea_is_tested_by_its_risk_reward_probability_and_expectancy()
+    public void An_idea_is_tested_by_its_risk_reward_after_the_fees_probability_and_expectancy()
     {
-        IdeaView idea = View(IdeaViewGenerator.Bucket(0.38m, 0.46m));
+        IdeaView idea = View(IdeaViewGenerator.Bucket(0.38m, 0.46m), new IdeaShares(0.0156m, 0.01m, 0.01m));
 
-        Passes(idea, Compare(FilterField.RiskReward, FilterOperator.GreaterOrEqual, 2m)).ShouldBeTrue();
+        Passes(idea, Compare(FilterField.RiskReward, FilterOperator.GreaterOrEqual, 1.5m)).ShouldBeTrue();
+        Passes(idea, Compare(FilterField.RiskReward, FilterOperator.GreaterOrEqual, 1.9m)).ShouldBeFalse();
         Passes(idea, Compare(FilterField.Probability, FilterOperator.Greater, 0.45m)).ShouldBeTrue();
         Passes(idea, Compare(FilterField.Probability, FilterOperator.Greater, 0.47m)).ShouldBeFalse();
         Passes(idea, Compare(FilterField.Expectancy, FilterOperator.Greater, 0.3m)).ShouldBeTrue();
@@ -214,7 +216,7 @@ public class SavedFilterMatchTests
     [Test]
     public void An_idea_must_meet_every_condition()
     {
-        FilterCondition[] conditions = [Compare(FilterField.RiskReward, FilterOperator.GreaterOrEqual, 2m), Is(FilterField.IdeaSide, "short")];
+        FilterCondition[] conditions = [Compare(FilterField.RiskReward, FilterOperator.GreaterOrEqual, 1.5m), Is(FilterField.IdeaSide, "short")];
 
         SavedFilterMatch.Idea(conditions, View(null), Row(None), NoSetups).ShouldBeFalse();
     }
@@ -224,9 +226,9 @@ public class SavedFilterMatchTests
         return SavedFilterMatch.Idea([condition], idea, Row(None), NoSetups);
     }
 
-    private static IdeaView View(BucketStatistics? bucket)
+    private static IdeaView View(BucketStatistics? bucket, IdeaShares? shares = null)
     {
-        return IdeaViewGenerator.Generate(IdeaGenerator.Generate(DateTimeOffset.Parse("2024-03-10T12:00:00Z", CultureInfo.InvariantCulture)), bucket);
+        return IdeaViewGenerator.Generate(IdeaGenerator.Generate(DateTimeOffset.Parse("2024-03-10T12:00:00Z", CultureInfo.InvariantCulture)), bucket, shares);
     }
 
     private static MarketSnapshotRow Row(PairMetrics metrics, MarketCategory category = MarketCategory.Linear)

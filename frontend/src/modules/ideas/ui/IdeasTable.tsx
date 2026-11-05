@@ -2,13 +2,20 @@ import { Link, useNavigate } from '@tanstack/react-router';
 
 import { CategoryBadge, setupLabel } from '@/modules/market';
 import { intervalLabel } from '@/modules/market-data';
-import { formatMoment, showDecimal } from '@/shared/format/format';
+import { formatMoment } from '@/shared/format/format';
 
 import { typeLabel } from '../model/labels';
 import { priceByTick } from '../model/price';
 import type { IdeaSort, IdeaSortColumn } from '../model/sort';
 import { moneyOutcome } from '../model/stats';
-import { ExpectancyCell, type Idea, ProbabilityCell, SideText, StatusText } from './IdeaCells';
+import {
+  ExpectancyCell,
+  type Idea,
+  ProbabilityCell,
+  RiskRewardCell,
+  SideText,
+  StatusText,
+} from './IdeaCells';
 
 const cell = 'px-3 py-3';
 const number = `${cell} text-right font-mono whitespace-nowrap`;
@@ -125,7 +132,9 @@ export function IdeasTable({
               <td className={number}>{priceByTick(idea.entry, idea.tick)}</td>
               <td className={number}>{priceByTick(idea.stop, idea.tick)}</td>
               <td className={number}>{priceByTick(idea.target, idea.tick)}</td>
-              <td className={number}>{showDecimal(idea.riskReward, 2)}</td>
+              <td className={number}>
+                <RiskRewardCell netRiskReward={idea.netRiskReward} riskReward={idea.riskReward} />
+              </td>
               <td className={cell}>
                 <ProbabilityCell idea={idea} />
               </td>

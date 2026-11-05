@@ -11,6 +11,7 @@ using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Services.Ideas;
+using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
@@ -300,6 +301,9 @@ public class IdeasApiTests
         (idea.GetProperty("entry").GetString(), idea.GetProperty("stop").GetString(), idea.GetProperty("target").GetString())
             .ShouldBe(("100.5", Text(stop), Text(100.5m - (2m * (stop - 100.5m)))));
         (idea.GetProperty("riskReward").GetString(), idea.GetProperty("baseline").GetString()).ShouldBe(("2", Text(1m / 3m)));
+        // Scenario "Своя идея": the R:R after the fees of linear, a market entry.
+        decimal target = 100.5m - (2m * (stop - 100.5m));
+        idea.GetProperty("netRiskReward").GetString().ShouldBe(Text(IdeaMoney.PerUsdt(new IdeaPlan(IdeaType.TwoR, IdeaSide.Short, 100.5m, stop, target), new FeeRates(0.02m, 0.055m)).NetRiskReward));
         idea.GetProperty("tick").GetString().ShouldBe("0.01");
     }
 
@@ -433,7 +437,7 @@ public class IdeasApiTests
     }
 
     // Scenario "Деньги на 1 USDT суммы" for the idea of the generator on linear (entry 105, stop 100, target 115, taker 0.055 %):
-    // (10 − 0.05775 − 0.06325) / 105, (5 + 0.05775 + 0.055) / 105, 5 / 105.
+    // (10 − 0.05775 − 0.06325) / 105, (5 + 0.05775 + 0.055) / 105, 5 / 105, and the first over the second.
     private static void ShouldHaveMoney(JsonElement idea)
     {
         decimal Share(string name) => decimal.Parse(idea.GetProperty(name).GetString()!, CultureInfo.InvariantCulture);
@@ -441,6 +445,8 @@ public class IdeasApiTests
         Share("profitPerUsdt").ShouldBe(0.0940857m, 0.0000001m);
         Share("lossPerUsdt").ShouldBe(0.0486929m, 0.0000001m);
         Share("riskPerUsdt").ShouldBe(0.0476190m, 0.0000001m);
+        // Scenario "R:R идеи после комиссий": the profit over the loss, not the 2 of the prices.
+        Share("netRiskReward").ShouldBe(1.9322m, 0.0001m);
     }
 
     private static string Text(decimal value)

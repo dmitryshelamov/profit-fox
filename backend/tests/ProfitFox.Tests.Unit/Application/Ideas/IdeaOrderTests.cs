@@ -31,8 +31,12 @@ public class IdeaOrderTests
         yield return Case(IdeaSortColumn.Target, [View("a", Plan(target: 2.6m)), View("b", Plan(target: 2.4m)), View("c", Plan(target: 2.55m))], "bca");
         yield return Case(
             IdeaSortColumn.RiskReward,
-            [View("a", Plan(entry: 100m, stop: 95m, target: 110m)), View("b", Plan(entry: 100m, stop: 94m, target: 109.3m)), View("c", Plan(entry: 100m, stop: 99m, target: 110m))],
-            "bac");
+            [
+                View("a", Plan(entry: 100m, stop: 95m, target: 110m), shares: new IdeaShares(0.0156m, 0.01m, 0)),
+                View("b", Plan(entry: 100m, stop: 94m, target: 109.3m), shares: new IdeaShares(0.0197m, 0.01m, 0)),
+                View("c", Plan(entry: 100m, stop: 99m, target: 110m), shares: new IdeaShares(0.012m, 0.01m, 0))
+            ],
+            "cab");
         yield return Case(
             IdeaSortColumn.Probability,
             [View("a", bucket: IdeaViewGenerator.Bucket(0m, 0.46m)), View("b", bucket: IdeaViewGenerator.Bucket(0m, 0.5m)), View("c", bucket: IdeaViewGenerator.Bucket(0m, 0.405m))],
@@ -118,7 +122,7 @@ public class IdeaOrderTests
             View("e", FiredAt(Noon.AddHours(-3)))
         ];
 
-        // The R:R is the same for all five.
+        // The R:R after the fees is the same for all five.
         Names(IdeaOrder.Sort(views, IdeaSortColumn.RiskReward, direction)).ShouldBe("dabce");
     }
 

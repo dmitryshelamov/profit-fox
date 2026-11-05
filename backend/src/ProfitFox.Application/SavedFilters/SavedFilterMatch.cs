@@ -34,7 +34,7 @@ public static class SavedFilterMatch
             FilterField.IdeaType => view.Idea.Track.Plan.Type.ToCode() == condition.Choice,
             FilterField.IdeaInterval => view.Idea.Interval.ToCode() == condition.Choice,
             FilterField.IdeaSide => view.Idea.Track.Plan.Side.ToCode() == condition.Choice,
-            FilterField.RiskReward => Holds(condition, view.Idea.Track.Plan.RiskReward),
+            FilterField.RiskReward => Holds(condition, view.Shares.NetRiskReward),
             FilterField.Probability when condition.Operator == FilterOperator.AboveBaseline => view.Probability is not null && view.Bucket!.IsAboveBaseline,
             FilterField.Probability => Holds(condition, view.Probability),
             FilterField.Expectancy => Holds(condition, view.Bucket?.Expectancy),
