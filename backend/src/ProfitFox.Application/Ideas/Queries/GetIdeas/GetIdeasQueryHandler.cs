@@ -3,16 +3,28 @@ using MediatR;
 using ProfitFox.Application.Backtests;
 using ProfitFox.Application.Market;
 using ProfitFox.Application.MarketData;
+using ProfitFox.Application.Paging;
+using ProfitFox.Application.SavedFilters;
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.Entities.SavedFilters;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.Services.Ideas;
+using ProfitFox.Domain.ValueObjects.Ideas;
+using ProfitFox.Domain.ValueObjects.Market;
+using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Application.Ideas.Queries.GetIdeas;
 
-public sealed class GetIdeasQueryHandler(IIdeaRepository ideas, IIdeaBucketRepository buckets, IdeasEngineVersion version, BacktestSettings backtests, TimeProvider time)
-    : IRequestHandler<GetIdeasQuery, GetIdeasResult>
+public sealed class GetIdeasQueryHandler(
+    IIdeaRepository ideas,
+    IIdeaBucketRepository buckets,
+    IMarketSnapshotRepository snapshots,
+    ISavedFilterRepository filters,
+    IdeasEngineVersion version,
+    BacktestSettings backtests,
+    TimeProvider time) : IRequestHandler<GetIdeasQuery, GetIdeasResult>
 {
     public async Task<GetIdeasResult> Handle(GetIdeasQuery request, CancellationToken cancellationToken)
     {
@@ -22,6 +34,8 @@ public sealed class GetIdeasQueryHandler(IIdeaRepository ideas, IIdeaBucketRepos
         IdeaType type = default;
         IdeaSide side = default;
         MarketCategory category = default;
+        IdeaSortColumn column = IdeaSortColumn.Expectancy;
+        OrderDirection direction = OrderDirection.Descending;
 
         if (request.Setup is not null && !IdeaCodes.TryParseSetup(request.Setup, out setup))
         {
@@ -48,6 +62,29 @@ public sealed class GetIdeasQueryHandler(IIdeaRepository ideas, IIdeaBucketRepos
             errors["category"] = MarketQueries.InvalidCategory;
         }
 
+        if (request.Sort is not null && !IdeaOrder.TryParseColumn(request.Sort, out column))
+        {
+            errors["sort"] = IdeaOrder.InvalidColumn;
+        }
+
+        if (request.Direction is not null && !OrderDirections.TryParse(request.Direction, out direction))
+        {
+            errors["direction"] = OrderDirections.Invalid;
+        }
+
+        var page = PageRequest.Parse(request.Page, request.PageSize, errors);
+        SavedFilter? filter = null;
+
+        if (request.SavedFilter is { } filterId)
+        {
+            filter = await filters.GetAsync(filterId, cancellationToken);
+
+            if (filter is null)
+            {
+                errors["savedFilter"] = SavedFilterQueries.NotFound;
+            }
+        }
+
         if (errors.Count > 0)
         {
             return new GetIdeasResult(null, errors);
@@ -67,12 +104,30 @@ public sealed class GetIdeasQueryHandler(IIdeaRepository ideas, IIdeaBucketRepos
             views = views.Where(view => view.Bucket?.Expectancy >= 0);
         }
 
-        return new GetIdeasResult([.. ByExpectancy(views)], errors);
+        if (filter is not null)
+        {
+            views = await MeetingAsync(views, filter, cancellationToken);
+        }
+
+        return new GetIdeasResult(page.Slice(IdeaOrder.Sort(views, column, direction)), errors);
     }
 
-    /// <summary>Highest expectancy first, ideas of a bucket without cases last; newest first among equals.</summary>
-    public static IEnumerable<IdeaView> ByExpectancy(IEnumerable<IdeaView> views)
+    // The snapshot is read only for a condition on a metric or a setup of the market.
+    private async Task<IEnumerable<IdeaView>> MeetingAsync(IEnumerable<IdeaView> views, SavedFilter filter, CancellationToken cancellationToken)
     {
-        return views.OrderByDescending(view => view.Bucket?.Expectancy ?? decimal.MinValue).ThenByDescending(view => view.Idea.Track.FiredAt);
+        IReadOnlyDictionary<Instrument, MarketSnapshotRow> rows = new Dictionary<Instrument, MarketSnapshotRow>();
+        IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>> setups = new Dictionary<Instrument, IReadOnlyList<PairSetup>>();
+
+        if (filter.Conditions.Any(condition => !SavedFilterFields.Of(condition.Field).OfIdea))
+        {
+            rows = (await snapshots.GetAllAsync(cancellationToken)).ToDictionary(row => row.Instrument);
+            setups = await snapshots.GetSetupsAsync(cancellationToken);
+        }
+
+        return views.Where(view => SavedFilterMatch.Idea(
+            filter.Conditions,
+            view,
+            rows.GetValueOrDefault(view.Idea.Instrument),
+            setups.GetValueOrDefault(view.Idea.Instrument) ?? []));
     }
 }

@@ -3,7 +3,19 @@ using MediatR;
 namespace ProfitFox.Application.Ideas.Queries.GetIdeas;
 
 /// <summary>
-///     The open ideas and the ones closed in the last 24 hours, by expectancy, highest first; each filter is a code as the user sent it, none
-///     takes every idea.
+///     One page of the open ideas and the ones closed in the last 24 hours, by a column of the list (the expectancy, highest first, when none is
+///     named); each filter is a code as the user sent it, none takes every idea. <paramref name="SavedFilter" /> is the id of a saved filter that
+///     the ideas must meet. A page is a number from 1 and a size of 50, 100 or 200, the first page of 50 when left out.
 /// </summary>
-public sealed record GetIdeasQuery(string? Setup, string? Interval, string? Type, string? Side, string? Category, bool NonNegativeExpectancy) : IRequest<GetIdeasResult>;
+public sealed record GetIdeasQuery(
+    string? Setup,
+    string? Interval,
+    string? Type,
+    string? Side,
+    string? Category,
+    bool NonNegativeExpectancy,
+    Guid? SavedFilter,
+    string? Sort,
+    string? Direction,
+    int? Page,
+    int? PageSize) : IRequest<GetIdeasResult>;
