@@ -8,6 +8,7 @@ using Npgsql;
 
 using ProfitFox.Application.Backtests;
 using ProfitFox.Application.ExchangeAccounts;
+using ProfitFox.Application.IdeaTrades;
 using ProfitFox.Application.IdeaTrades.Runtime;
 using ProfitFox.Application.LiveTrading;
 using ProfitFox.Application.LiveTrading.Runtime;
@@ -170,6 +171,7 @@ public static class InfrastructureRegistrar
         services.AddSingleton<ExchangeResilienceExecutor>();
         services.AddTransient<IMarketHistoryClient, BybitMarketDataClient>();
         services.AddTransient<CandleReadThrough>();
+        services.AddTransient<IdeaTradeEntryCalculator>();
         services.AddTransient<IInstrumentRulesProvider, BybitMarketDataClient>();
         services.AddKeyedTransient<IInstrumentCatalog, BybitMarketDataClient>(CachedInstrumentCatalog.InnerKey);
         services.AddSingleton<IInstrumentCatalog>(provider => new CachedInstrumentCatalog(

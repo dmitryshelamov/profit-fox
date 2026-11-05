@@ -39,6 +39,23 @@ public static class IdeaTradeCodes
         ["ioc"] = TimeInForce.ImmediateOrCancel
     };
 
+    private static readonly Dictionary<IdeaTradeRefusal, string> RefusalsByCode = new Dictionary<IdeaTradeRefusal, string>
+    {
+        [IdeaTradeRefusal.IdeaNotOpen] = "idea_not_open",
+        [IdeaTradeRefusal.PriceBeyondStop] = "price_beyond_stop",
+        [IdeaTradeRefusal.PriceBeyondTarget] = "price_beyond_target",
+        [IdeaTradeRefusal.RiskRewardTooLow] = "risk_reward_too_low",
+        [IdeaTradeRefusal.TooManyOpenTrades] = "too_many_open_trades",
+        [IdeaTradeRefusal.TotalRiskExceeded] = "total_risk_exceeded",
+        [IdeaTradeRefusal.OppositeSideOpen] = "opposite_side_open",
+        [IdeaTradeRefusal.NotEnoughMoney] = "not_enough_money",
+        [IdeaTradeRefusal.QuantityBelowMinimum] = "quantity_below_minimum",
+        [IdeaTradeRefusal.AmountBelowMinimum] = "amount_below_minimum",
+        [IdeaTradeRefusal.NoKey] = "no_key",
+        [IdeaTradeRefusal.CategoryNotTraded] = "category_not_traded",
+        [IdeaTradeRefusal.HedgeMode] = "hedge_mode"
+    };
+
     public static bool TryParseStatus(string code, out IdeaTradeStatus status)
     {
         return StatusesByCode.TryGetValue(code, out status);
@@ -57,6 +74,11 @@ public static class IdeaTradeCodes
     public static bool TryParseTimeInForce(string code, out TimeInForce timeInForce)
     {
         return TimesInForceByCode.TryGetValue(code, out timeInForce);
+    }
+
+    public static string ToCode(this IdeaTradeRefusal refusal)
+    {
+        return RefusalsByCode[refusal];
     }
 
     public static string ToCode(this IdeaTradeStatus status)
