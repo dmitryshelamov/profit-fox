@@ -48,6 +48,9 @@ public sealed class StrategyRun
         return node.Kind switch
         {
             SimpleNodeKind.Ema => new EmaState(),
+            SimpleNodeKind.Sma or SimpleNodeKind.StdDev => new WindowState(),
+            SimpleNodeKind.Rsi => new RsiState(),
+            SimpleNodeKind.Previous => new PreviousState(),
             SimpleNodeKind.Cross => new CrossState(),
             _ => new object()
         };
@@ -379,7 +382,23 @@ public sealed class StrategyRun
 
                 break;
             case SimpleNodeKind.Ema:
-                outputs["value"] = Ema(node, (EmaState)state);
+                outputs["value"] = Indicator(node, (EmaState)state, ema => ema.Value);
+
+                break;
+            case SimpleNodeKind.Sma:
+                outputs["value"] = Indicator(node, (WindowState)state, (window, period) => window.Average(period));
+
+                break;
+            case SimpleNodeKind.StdDev:
+                outputs["value"] = Indicator(node, (WindowState)state, (window, period) => window.Deviation(period));
+
+                break;
+            case SimpleNodeKind.Rsi:
+                outputs["value"] = Indicator(node, (RsiState)state, rsi => rsi.Value);
+
+                break;
+            case SimpleNodeKind.Previous:
+                outputs["value"] = Previous(node, (PreviousState)state);
 
                 break;
             case SimpleNodeKind.Cross:
@@ -600,8 +619,15 @@ public sealed class StrategyRun
         _commands.Add(new PlaceOrder(id, node.Path, side, type, price, quantity, amount));
     }
 
-    /// <summary>Only a closed bar moves the average; a period below one gives no value.</summary>
-    private NumberValue? Ema(RunNode node, EmaState state)
+    /// <summary>Only a closed bar with a value moves an indicator; a period below one gives no value.</summary>
+    private NumberValue? Indicator<TState>(RunNode node, TState state, Func<TState, decimal?> read)
+        where TState : IIndicatorState
+    {
+        return Indicator(node, state, (_, _) => read(state));
+    }
+
+    private NumberValue? Indicator<TState>(RunNode node, TState state, Func<TState, decimal, decimal?> read)
+        where TState : IIndicatorState
     {
         if (Input(node, "period") is not NumberValue { Value: >= 1m and var period })
         {
@@ -613,7 +639,18 @@ public sealed class StrategyRun
             state.Add(source, period);
         }
 
-        return Number(state.Value);
+        return Number(read(state, period));
+    }
+
+    /// <summary>Only a closed bar moves the node on, whether its input has a value or not.</summary>
+    private NumberValue? Previous(RunNode node, PreviousState state)
+    {
+        if (_event is BarClosed)
+        {
+            state.Close((Input(node, "value") as NumberValue)?.Value);
+        }
+
+        return Number(state.Previous);
     }
 
     /// <summary>A cross is a signal of the closed bar it happened on; every other event sees no cross.</summary>

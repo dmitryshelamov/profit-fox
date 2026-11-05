@@ -13,6 +13,10 @@ public class StrategyCodesTests
         [
             ("parameters", SimpleNodeKind.Parameters), ("inputs", SimpleNodeKind.Inputs), ("outputs", SimpleNodeKind.Outputs),
             ("candle", SimpleNodeKind.Candle), ("position", SimpleNodeKind.Position), ("ema", SimpleNodeKind.Ema),
+            ("sma", SimpleNodeKind.Sma),
+            ("std-dev", SimpleNodeKind.StdDev),
+            ("rsi", SimpleNodeKind.Rsi),
+            ("previous", SimpleNodeKind.Previous),
             ("cross", SimpleNodeKind.Cross), ("add", SimpleNodeKind.Add), ("subtract", SimpleNodeKind.Subtract),
             ("multiply", SimpleNodeKind.Multiply), ("divide", SimpleNodeKind.Divide), ("compare", SimpleNodeKind.Compare),
             ("and", SimpleNodeKind.And), ("or", SimpleNodeKind.Or), ("not", SimpleNodeKind.Not),
@@ -54,7 +58,7 @@ public class StrategyCodesTests
         StrategyCodes.TryParse(typeof(BuiltInNode), code, out _).ShouldBeFalse();
     }
 
-    [TestCase("rsi")]
+    [TestCase("wma")]
     [TestCase("Ema")]
     [TestCase("")]
     public void Unknown_code_is_rejected(string code)

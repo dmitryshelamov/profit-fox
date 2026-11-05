@@ -61,6 +61,20 @@ public class StrategyNodesApiTests
         custom.GetProperty("outputs")[0].GetProperty("type").GetString().ShouldBe("boolean");
     }
 
+    [TestCase("sma", "source period", "value")]
+    [TestCase("rsi", "source period", "value")]
+    [TestCase("std-dev", "source period", "value")]
+    [TestCase("previous", "value", "value")]
+    public async Task Catalog_contains_the_indicator_nodes_with_their_pins(string id, string inputs, string outputs)
+    {
+        JsonElement catalog = await _client.GetFromJsonAsync<JsonElement>(Nodes);
+
+        JsonElement node = catalog.EnumerateArray().Single(entry => entry.GetProperty("id").GetString() == id);
+        node.GetProperty("group").GetString().ShouldBe("simple");
+        string.Join(" ", node.GetProperty("inputs").EnumerateArray().Select(pin => pin.GetProperty("name").GetString())).ShouldBe(inputs);
+        string.Join(" ", node.GetProperty("outputs").EnumerateArray().Select(pin => pin.GetProperty("name").GetString())).ShouldBe(outputs);
+    }
+
     [Test]
     public async Task Catalog_describes_the_settings_of_a_market_order()
     {
