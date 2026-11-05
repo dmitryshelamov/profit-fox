@@ -198,6 +198,19 @@ public class BybitOrderGatewayTests
         handler.Bodies.Single().ShouldContain("\"orderLinkId\":\"c-1\"");
     }
 
+    // The stop and the target of an entry have no client id: a cancel names them by the exchange's id.
+    [Test]
+    public async Task Cancel_is_sent_by_the_id_of_the_exchange()
+    {
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(Answer(0, "OK", """{"orderId":"x-stop","orderLinkId":""}"""));
+
+        (await Gateway(handler).CancelByExchangeIdAsync(Key, new Instrument(MarketCategory.Linear, "BTCUSDT"), "x-stop", CancellationToken.None)).Kind.ShouldBe(OrderOutcomeKind.Accepted);
+
+        handler.Requests.Single().AbsolutePath.ShouldBe("/v5/order/cancel");
+        handler.Bodies.Single().ShouldContain("\"orderId\":\"x-stop\"");
+        handler.Bodies.Single().ShouldNotContain("orderLinkId");
+    }
+
     // An order that filled or was cancelled meanwhile has nothing to cancel; its end comes with its events.
     [TestCase(110001)]
     [TestCase(170213)]

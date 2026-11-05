@@ -60,20 +60,40 @@ internal sealed class BybitLedger(HttpClient http, ILoggerFactory loggers, Bybit
         return orders;
     }
 
-    public async Task<ExchangeOrder?> FindOrderAsync(ExchangeKey key, Instrument instrument, string clientId, CancellationToken cancellationToken)
+    public Task<ExchangeOrder?> FindOrderAsync(ExchangeKey key, Instrument instrument, string clientId, CancellationToken cancellationToken)
+    {
+        return FindAsync(key, instrument, clientId, null, cancellationToken);
+    }
+
+    public Task<ExchangeOrder?> FindOrderByExchangeIdAsync(ExchangeKey key, Instrument instrument, string exchangeOrderId, CancellationToken cancellationToken)
+    {
+        return FindAsync(key, instrument, null, exchangeOrderId, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<ExchangeFill>> GetFillsAsync(ExchangeKey key, Instrument instrument, string clientId, CancellationToken cancellationToken)
+    {
+        return FillsAsync(key, instrument, clientId, null, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<ExchangeFill>> GetOrderFillsAsync(ExchangeKey key, Instrument instrument, string exchangeOrderId, CancellationToken cancellationToken)
+    {
+        return FillsAsync(key, instrument, null, exchangeOrderId, cancellationToken);
+    }
+
+    private async Task<ExchangeOrder?> FindAsync(ExchangeKey key, Instrument instrument, string? clientId, string? exchangeOrderId, CancellationToken cancellationToken)
     {
         using BybitRestClient client = Client(key);
         BybitOrder? open = BybitKeyClients.Unwrap(await client.V5Api.Trading.GetOrdersAsync(
-            instrument.Category.ToBybit(), instrument.Symbol, clientOrderId: clientId, ct: cancellationToken)).List.FirstOrDefault();
+            instrument.Category.ToBybit(), instrument.Symbol, orderId: exchangeOrderId, clientOrderId: clientId, ct: cancellationToken)).List.FirstOrDefault();
 
         // An order that finished leaves the open orders for the history.
         BybitOrder? order = open ?? BybitKeyClients.Unwrap(await client.V5Api.Trading.GetOrderHistoryAsync(
-            instrument.Category.ToBybit(), instrument.Symbol, clientOrderId: clientId, ct: cancellationToken)).List.FirstOrDefault();
+            instrument.Category.ToBybit(), instrument.Symbol, orderId: exchangeOrderId, clientOrderId: clientId, ct: cancellationToken)).List.FirstOrDefault();
 
         return order is null ? null : Order(order);
     }
 
-    public async Task<IReadOnlyList<ExchangeFill>> GetFillsAsync(ExchangeKey key, Instrument instrument, string clientId, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<ExchangeFill>> FillsAsync(ExchangeKey key, Instrument instrument, string? clientId, string? exchangeOrderId, CancellationToken cancellationToken)
     {
         using BybitRestClient client = Client(key);
         var trades = new List<BybitUserTrade>();
@@ -83,7 +103,7 @@ internal sealed class BybitLedger(HttpClient http, ILoggerFactory loggers, Bybit
         do
         {
             BybitResponse<BybitUserTrade> page = BybitKeyClients.Unwrap(await client.V5Api.Trading.GetUserTradesAsync(
-                instrument.Category.ToBybit(), instrument.Symbol, clientOrderId: clientId, cursor: cursor, ct: cancellationToken));
+                instrument.Category.ToBybit(), instrument.Symbol, orderId: exchangeOrderId, clientOrderId: clientId, cursor: cursor, ct: cancellationToken));
             trades.AddRange(page.List);
             cursor = string.IsNullOrEmpty(page.NextPageCursor) ? null : page.NextPageCursor;
         }
@@ -93,7 +113,7 @@ internal sealed class BybitLedger(HttpClient http, ILoggerFactory loggers, Bybit
         [
             .. trades
                 .OrderBy(trade => trade.Timestamp)
-                .Select(trade => new ExchangeFill(trade.TradeId, trade.ClientOrderId ?? "", trade.Quantity, trade.Price, trade.Fee ?? 0m, trade.FeeAsset ?? "", Utc(trade.Timestamp), instrument))
+                .Select(trade => new ExchangeFill(trade.TradeId, trade.ClientOrderId ?? "", trade.Quantity, trade.Price, trade.Fee ?? 0m, trade.FeeAsset ?? "", Utc(trade.Timestamp), instrument, trade.OrderId))
         ];
     }
 

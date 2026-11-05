@@ -76,6 +76,14 @@ internal sealed class BybitOrderGateway(HttpClient http, ILoggerFactory loggers,
         return result.Success ? new OrderOutcome(OrderOutcomeKind.Accepted, result.Data.OrderId) : Refusal(result, FinishedOrderCodes, OrderOutcomeKind.AlreadyDone);
     }
 
+    public async Task<OrderOutcome> CancelByExchangeIdAsync(ExchangeKey key, Instrument instrument, string exchangeOrderId, CancellationToken cancellationToken)
+    {
+        using BybitRestClient client = BybitKeyClients.Create(http, loggers, settings, key.ApiKey, key.Secret);
+        HttpResult<BybitOrderId> result = await client.V5Api.Trading.CancelOrderAsync(instrument.Category.ToBybit(), instrument.Symbol, orderId: exchangeOrderId, ct: cancellationToken);
+
+        return result.Success ? new OrderOutcome(OrderOutcomeKind.Accepted, result.Data.OrderId) : Refusal(result, FinishedOrderCodes, OrderOutcomeKind.AlreadyDone);
+    }
+
     /// <param name="result"></param>
     /// <param name="known">Codes that are no refusal for this call.</param>
     /// <param name="knownKind">What they mean.</param>

@@ -19,6 +19,7 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
     private readonly Dictionary<string, Instrument> _instruments = [];
     private readonly Dictionary<string, List<ExchangeFill>> _fills = [];
     private readonly Dictionary<string, List<ExchangeFill>> _late = [];
+    private readonly Dictionary<string, Child> _children = [];
     private readonly List<Action<Candle>> _candles = [];
     private readonly List<Action<ExchangeOrder>> _orderUpdates = [];
     private readonly List<Action<ExchangeFill>> _fillUpdates = [];
@@ -36,6 +37,18 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
 
     /// <summary>Every client id a cancel was sent for.</summary>
     public List<string> Cancels { get; } = [];
+
+    /// <summary>Every exchange id of a stop or a target a cancel was sent for.</summary>
+    public List<string> ChildCancels { get; } = [];
+
+    /// <summary>The stops and targets Bybit made for entries with a stop and a target, by the client id of their entry.</summary>
+    public IReadOnlyList<ExchangeOrder> ChildrenOf(string parentClientId)
+    {
+        lock (_lock)
+        {
+            return [.. _children.Values.Where(child => child.Order.ParentClientId == parentClientId).Select(child => child.Order)];
+        }
+    }
 
     /// <summary>The fee rates of the account do not come, so no session of a bot gets up.</summary>
     public bool FeesUnavailable { get; set; }
@@ -128,6 +141,7 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
         ExchangeOrder order;
         Action<ExchangeFill>[] fills;
         Action<ExchangeOrder>[] orders;
+        (IReadOnlyList<ExchangeOrder> Order, Action<ExchangeOrder>[] Handlers) made;
 
         lock (_lock)
         {
@@ -150,6 +164,7 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
             Holding += request.Side == OrderSide.Buy ? quantity - (feeCoin == "USDT" ? 0m : fee) : -quantity;
             fills = silently || !trades ? [] : [.. _fillUpdates];
             orders = silently ? [] : [.. _orderUpdates];
+            made = MakeChildren(request, clientId, filled, silently);
         }
 
         foreach (Action<ExchangeOrder> handler in orders)
@@ -160,6 +175,89 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
         foreach (Action<ExchangeFill> handler in fills)
         {
             handler(fill);
+        }
+
+        Tell(made.Order, made.Handlers);
+    }
+
+    /// <summary>
+    ///     The stop or the target Bybit made for an entry fires at <paramref name="price" />: its order is filled, the position shrinks,
+    ///     the other one is cancelled. <paramref name="silently" /> keeps all of it from the streams, as a Worker that is down misses it.
+    /// </summary>
+    public void TriggerChild(string parentClientId, StopOrderKind kind, decimal price, bool silently = false)
+    {
+        var told = new List<ExchangeOrder>();
+        ExchangeFill fill;
+        Action<ExchangeFill>[] fills;
+        Action<ExchangeOrder>[] orders;
+
+        lock (_lock)
+        {
+            Child fired = _children.Values.Single(child => child.Order.ParentClientId == parentClientId && child.Order.StopKind == kind);
+            decimal quantity = fired.Quantity;
+            ExchangeOrder done = fired.Order with { State = ExchangeOrderState.Filled, FilledQuantity = quantity, FilledValue = quantity * price, FeeCoin = "USDT" };
+            _children[fired.Order.ExchangeId] = fired with { Order = done };
+            told.Add(done);
+            fill = new ExchangeFill($"e-{++_execs}", "", quantity, price, 0m, "USDT", DateTimeOffset.Parse("2024-03-10T12:30:00Z"), fired.Instrument, done.ExchangeId);
+            _fills.TryAdd(done.ExchangeId, []);
+            _fills[done.ExchangeId].Add(fill);
+            Holding -= _requests[parentClientId].Side == OrderSide.Buy ? quantity : -quantity;
+
+            foreach (Child other in _children.Values.Where(child => child.Order.ParentClientId == parentClientId && child.Order.ExchangeId != done.ExchangeId && child.Order.State == ExchangeOrderState.Open).ToArray())
+            {
+                ExchangeOrder cancelled = other.Order with { State = ExchangeOrderState.Cancelled };
+                _children[other.Order.ExchangeId] = other with { Order = cancelled };
+                told.Add(cancelled);
+            }
+
+            fills = silently ? [] : [.. _fillUpdates];
+            orders = silently ? [] : [.. _orderUpdates];
+        }
+
+        foreach (ExchangeOrder order in told)
+        {
+            foreach (Action<ExchangeOrder> handler in orders)
+            {
+                handler(order);
+            }
+        }
+
+        foreach (Action<ExchangeFill> handler in fills)
+        {
+            handler(fill);
+        }
+    }
+
+    private (IReadOnlyList<ExchangeOrder> Order, Action<ExchangeOrder>[] Handlers) MakeChildren(OrderRequest request, string parentClientId, decimal filled, bool silently)
+    {
+        // Bybit makes them for an entry of the linear market on its first fill; the spot is not known yet.
+        if (request.Protection is null
+            || _instruments.GetValueOrDefault(parentClientId) is not { Category: MarketCategory.Linear } instrument
+            || _children.Values.Any(child => child.Order.ParentClientId == parentClientId))
+        {
+            return ([], []);
+        }
+
+        var made = new List<ExchangeOrder>();
+
+        foreach ((StopOrderKind kind, string name) in new[] { (StopOrderKind.TakeProfit, "tp"), (StopOrderKind.StopLoss, "sl") })
+        {
+            var child = new ExchangeOrder("", $"x-{parentClientId}-{name}", ExchangeOrderState.Open, 0m, null, ParentClientId: parentClientId, StopKind: kind);
+            _children[child.ExchangeId] = new Child(child, instrument, request.Quantity ?? filled);
+            made.Add(child);
+        }
+
+        return (made, silently ? [] : [.. _orderUpdates]);
+    }
+
+    private static void Tell(IReadOnlyList<ExchangeOrder> orders, Action<ExchangeOrder>[] handlers)
+    {
+        foreach (ExchangeOrder order in orders)
+        {
+            foreach (Action<ExchangeOrder> handler in handlers)
+            {
+                handler(order);
+            }
         }
     }
 
@@ -338,13 +436,32 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
     {
         lock (_lock)
         {
-            return Task.FromResult<IReadOnlyList<ExchangeOrder>>([.. _orders.Values.Where(order => order.State == ExchangeOrderState.Open)]);
+            return Task.FromResult<IReadOnlyList<ExchangeOrder>>(
+                [.. _orders.Values.Where(order => order.State == ExchangeOrderState.Open), .. _children.Values.Select(child => child.Order).Where(order => order.State == ExchangeOrderState.Open)]);
         }
     }
 
     public Task<ExchangeOrder?> FindOrderAsync(ExchangeKey key, Instrument instrument, string clientId, CancellationToken cancellationToken)
     {
         return Task.FromResult(Order(clientId));
+    }
+
+    public Task<ExchangeOrder?> FindOrderByExchangeIdAsync(ExchangeKey key, Instrument instrument, string exchangeOrderId, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            return Task.FromResult(_children.GetValueOrDefault(exchangeOrderId)?.Order ?? _orders.Values.FirstOrDefault(order => order.ExchangeId == exchangeOrderId));
+        }
+    }
+
+    public Task<IReadOnlyList<ExchangeFill>> GetOrderFillsAsync(ExchangeKey key, Instrument instrument, string exchangeOrderId, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            string? clientId = _orders.Values.FirstOrDefault(order => order.ExchangeId == exchangeOrderId)?.ClientId;
+
+            return Task.FromResult<IReadOnlyList<ExchangeFill>>([.. _fills.GetValueOrDefault(clientId ?? exchangeOrderId) ?? []]);
+        }
     }
 
     public Task<IReadOnlyList<ExchangeFill>> GetFillsAsync(ExchangeKey key, Instrument instrument, string clientId, CancellationToken cancellationToken)
@@ -502,6 +619,34 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
         return Task.FromResult(new OrderOutcome(OrderOutcomeKind.Accepted, cancelled.ExchangeId));
     }
 
+    /// <summary>A cancel of a stop or a target takes it off at once and tells the streams.</summary>
+    public Task<OrderOutcome> CancelByExchangeIdAsync(ExchangeKey key, Instrument instrument, string exchangeOrderId, CancellationToken cancellationToken)
+    {
+        ExchangeOrder cancelled;
+        Action<ExchangeOrder>[] handlers;
+
+        lock (_lock)
+        {
+            ChildCancels.Add(exchangeOrderId);
+
+            if (!_children.TryGetValue(exchangeOrderId, out Child? child) || child.Order.State != ExchangeOrderState.Open)
+            {
+                return Task.FromResult(new OrderOutcome(OrderOutcomeKind.AlreadyDone));
+            }
+
+            cancelled = child.Order with { State = ExchangeOrderState.Cancelled };
+            _children[exchangeOrderId] = child with { Order = cancelled };
+            handlers = [.. _orderUpdates];
+        }
+
+        foreach (Action<ExchangeOrder> handler in handlers)
+        {
+            handler(cancelled);
+        }
+
+        return Task.FromResult(new OrderOutcome(OrderOutcomeKind.Accepted, exchangeOrderId));
+    }
+
     public Task<IAsyncDisposable> SubscribeCandlesAsync(Instrument instrument, Interval interval, Action<Candle> closed, Action restored, CancellationToken cancellationToken)
     {
         lock (_lock)
@@ -537,6 +682,8 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
             }
         }));
     }
+
+    private sealed record Child(ExchangeOrder Order, Instrument Instrument, decimal Quantity);
 
     private sealed class Unsubscribe(Action action) : IAsyncDisposable
     {

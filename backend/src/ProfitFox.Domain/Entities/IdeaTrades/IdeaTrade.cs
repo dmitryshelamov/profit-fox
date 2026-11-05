@@ -121,7 +121,7 @@ public sealed record IdeaTrade(
             _ => this with { Manual = totals }
         };
 
-        if (grown.HeldQuantity > 0m)
+        if (grown.Entry.Quantity == 0m || grown.HeldQuantity > 0m)
         {
             return grown;
         }

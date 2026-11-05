@@ -112,8 +112,8 @@ public class BybitLedgerTests
 
         fills.ShouldBe(
         [
-            new ExchangeFill("e-1", "c-1", 0.4m, 100m, 0.0004m, "BTC", DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_000_000), Spot),
-            new ExchangeFill("e-2", "c-1", 0.6m, 101m, 0.06m, "USDT", DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_060_000), Spot)
+            new ExchangeFill("e-1", "c-1", 0.4m, 100m, 0.0004m, "BTC", DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_000_000), Spot, "x-c-1"),
+            new ExchangeFill("e-2", "c-1", 0.6m, 101m, 0.06m, "USDT", DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_060_000), Spot, "x-c-1")
         ]);
         BybitRequests.Describe(handler.Requests.Single()).ShouldBe(BybitRequests.Describe("/v5/execution/list?category=spot&symbol=BTCUSDT&orderLinkId=c-1"));
     }
@@ -130,6 +130,30 @@ public class BybitLedgerTests
 
         fills.Select(fill => fill.ExecId).ShouldBe(["e-1", "e-2"]);
         BybitRequests.Describe(handler.Requests[1]).ShouldBe(BybitRequests.Describe("/v5/execution/list?category=spot&symbol=BTCUSDT&orderLinkId=c-1&cursor=page-2"));
+    }
+
+    // The stop and the target of an entry have no client id: they are found by the exchange's id, open or in the history.
+    [Test]
+    public async Task Order_is_found_by_the_id_of_the_exchange_in_the_open_orders_or_in_the_history()
+    {
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(Orders()).RespondJson(Orders(Order("", "Filled", "1")));
+
+        ExchangeOrder? order = await Ledger(handler).FindOrderByExchangeIdAsync(Key, Linear, "x-stop", CancellationToken.None);
+
+        order!.State.ShouldBe(ExchangeOrderState.Filled);
+        BybitRequests.Describe(handler.Requests[0]).ShouldBe(BybitRequests.Describe("/v5/order/realtime?category=linear&symbol=BTCUSDT&orderId=x-stop"));
+        BybitRequests.Describe(handler.Requests[1]).ShouldBe(BybitRequests.Describe("/v5/order/history?category=linear&symbol=BTCUSDT&orderId=x-stop"));
+    }
+
+    [Test]
+    public async Task Fills_of_an_order_are_found_by_the_id_of_the_exchange()
+    {
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(Executions(Execution("e-1", "0.4", "100", "0.0004", "BTC", 1_700_000_000_000)));
+
+        IReadOnlyList<ExchangeFill> fills = await Ledger(handler).GetOrderFillsAsync(Key, Linear, "x-stop", CancellationToken.None);
+
+        fills.Select(fill => fill.ExecId).ShouldBe(["e-1"]);
+        BybitRequests.Describe(handler.Requests.Single()).ShouldBe(BybitRequests.Describe("/v5/execution/list?category=linear&symbol=BTCUSDT&orderId=x-stop"));
     }
 
     [Test]

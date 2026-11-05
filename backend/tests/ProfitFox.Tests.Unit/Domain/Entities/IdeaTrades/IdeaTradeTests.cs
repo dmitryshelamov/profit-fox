@@ -135,6 +135,15 @@ public class IdeaTradeTests
         trade.Result.ShouldBeNull();
     }
 
+    // The exchange may tell of the stop before the books count the entry: nothing is held yet, and nothing is closed.
+    [Test]
+    public void Exit_counted_before_the_entry_does_not_close_the_trade()
+    {
+        IdeaTrade trade = New().ExitGrown(IdeaTradeLeg.StopLoss, new LegTotals(0.47m, 10.8147m, 0.0059m), Now.AddMinutes(5));
+
+        trade.Status.ShouldBe(IdeaTradeStatus.AwaitingEntry);
+    }
+
     [Test]
     public void Short_trade_earns_when_it_buys_back_lower()
     {
