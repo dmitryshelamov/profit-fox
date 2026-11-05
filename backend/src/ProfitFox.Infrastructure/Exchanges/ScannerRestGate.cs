@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Scanner;
 using ProfitFox.Domain.Repositories;
@@ -23,20 +25,22 @@ internal sealed class ScannerRestGate : IDisposable
     private long _limitPause;
     private Task? _restored;
 
-    public ScannerRestGate(ScannerSettings settings, ExchangeResilienceExecutor resilience, IScannerStateRepository state, TimeProvider time)
+    public ScannerRestGate(IOptionsMonitor<ScannerSettings> monitor, ExchangeResilienceExecutor resilience, IScannerStateRepository state, TimeProvider time)
     {
+        ScannerSettings settings = monitor.CurrentValue;
         _settings = settings;
         _resilience = resilience;
         _state = state;
         _time = time;
 
         // A token bucket on the clock of the scanner, so tests do not wait for real time: the bucket fills up again every second.
-        // Only the timer adds tokens, and requests only take them, so a fill never goes over the limit.
-        _tokens = new SemaphoreSlim(settings.RestRequestsPerSecond, settings.RestRequestsPerSecond);
+        // Only the timer adds tokens, and requests only take them, so a fill never goes over the limit. The limit is read at each
+        // fill, so a new one holds from the next second; the bucket has no capacity of its own, or a higher limit would overfill it.
+        _tokens = new SemaphoreSlim(settings.RestRequestsPerSecond);
         _replenish = time.CreateTimer(
             _ =>
             {
-                int missing = settings.RestRequestsPerSecond - _tokens.CurrentCount;
+                int missing = monitor.CurrentValue.RestRequestsPerSecond - _tokens.CurrentCount;
 
                 if (missing > 0)
                 {

@@ -1,5 +1,6 @@
 using System.Globalization;
 
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 
 using NSubstitute;
@@ -48,6 +49,27 @@ public class ScannerRestGateTests
 
         first.ShouldBe(2);
         second.ShouldBe(4);
+        sent.ShouldBe(5);
+    }
+
+    // The limit changes while the scanner runs, from the settings file on the server.
+    [Test]
+    public async Task Changed_setting_holds_from_the_next_second()
+    {
+        IOptionsMonitor<ScannerSettings> settings = Monitor(new ScannerSettings { RestRequestsPerSecond = 1 });
+        using ScannerRestGate gate = Gate(settings);
+        var sent = 0;
+
+        Task<int>[] requests = [.. Enumerable.Range(0, 5).Select(_ => gate.SendAsync(_ => ValueTask.FromResult(Interlocked.Increment(ref sent)), CancellationToken.None))];
+        await Task.Delay(50);
+        sent.ShouldBe(1);
+        settings.CurrentValue.Returns(new ScannerSettings { RestRequestsPerSecond = 3 });
+        _time.Advance(TimeSpan.FromSeconds(1));
+        await Task.Delay(50);
+        sent.ShouldBe(4);
+        _time.Advance(TimeSpan.FromSeconds(1));
+        await Task.WhenAll(requests);
+
         sent.ShouldBe(5);
     }
 
@@ -230,6 +252,19 @@ public class ScannerRestGateTests
 
     private ScannerRestGate Gate(ScannerSettings settings)
     {
+        return Gate(Monitor(settings));
+    }
+
+    private ScannerRestGate Gate(IOptionsMonitor<ScannerSettings> settings)
+    {
         return new ScannerRestGate(settings, new ExchangeResilienceExecutor(_time), _state, _time);
+    }
+
+    private static IOptionsMonitor<ScannerSettings> Monitor(ScannerSettings settings)
+    {
+        IOptionsMonitor<ScannerSettings> monitor = Substitute.For<IOptionsMonitor<ScannerSettings>>();
+        monitor.CurrentValue.Returns(settings);
+
+        return monitor;
     }
 }

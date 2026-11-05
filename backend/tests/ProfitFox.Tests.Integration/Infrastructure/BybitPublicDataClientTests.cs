@@ -41,8 +41,10 @@ public class BybitPublicDataClientTests
         _bybit = new FakeBybitHandler();
         _state = Substitute.For<IScannerStateRepository>();
         _state.GetAsync(Arg.Any<CancellationToken>()).Returns(new ScannerState(null, 0, 0, null));
+        IOptionsMonitor<ScannerSettings> settings = Substitute.For<IOptionsMonitor<ScannerSettings>>();
+        settings.CurrentValue.Returns(new ScannerSettings { RestRequestsPerSecond = 1000 });
         var time = new FakeTimeProvider(Start);
-        _gate = new ScannerRestGate(new ScannerSettings { RestRequestsPerSecond = 1000 }, new ExchangeResilienceExecutor(time), _state, time);
+        _gate = new ScannerRestGate(settings, new ExchangeResilienceExecutor(time), _state, time);
         _client = new BybitPublicDataClient(
             new BybitRestClient(new HttpClient(_bybit, disposeHandler: false), NullLoggerFactory.Instance, Options.Create(new BybitRestOptions { RateLimiterEnabled = false })),
             _gate);

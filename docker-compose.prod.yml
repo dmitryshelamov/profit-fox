@@ -57,7 +57,9 @@ services:
       ExchangeAccounts__MasterKey: ${PROFITFOX_MASTER_KEY:?}
       Trading__Enabled: "true"
 
-  # Reads only public Bybit data, so it gets no master key.
+  # Reads only public Bybit data, so it gets no master key. scanner.json in the mounted folder, if there, overrides its
+  # settings and is read again on each change, such as Scanner:RestRequestsPerSecond (README, "Production"). The folder,
+  # not the file, is mounted: an editor that saves a new file in place of the old one would leave a mounted file stale.
   scanner:
     image: ghcr.io/dmitryshelamov/profit-fox-scanner:${PROFITFOX_VERSION:?}
     restart: unless-stopped
@@ -67,6 +69,8 @@ services:
     environment:
       <<: [*database, *metrics]
       DOTNET_ENVIRONMENT: Production
+    volumes:
+      - ${HOME:?}/profit-fox/config/scanner:/app/config:ro
 
   # The interface and the API for the local network: Caddy forwards /api to api:8080.
   web:
