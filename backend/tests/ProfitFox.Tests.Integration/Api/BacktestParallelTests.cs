@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 
 using ProfitFox.Application.Backtests.Commands.RunNextBacktestWork;
+using ProfitFox.Application.Workers;
 using ProfitFox.Domain.Entities.Backtests;
 using ProfitFox.Domain.Entities.Backtests.Enums;
 using ProfitFox.Domain.Repositories;
@@ -34,7 +35,9 @@ public class BacktestParallelTests
         var progress = new List<Backtest>();
         IBacktestRepository spy = BacktestScenario.Spy(stored, (saved, _) => progress.Add(saved!));
         var time = new FakeTimeProvider(factory.Time.GetUtcNow()) { AutoAdvanceAmount = TimeSpan.FromSeconds(1) };
-        RunNextBacktestWorkCommandHandler handler = BacktestScenario.Handler(scope, spy, time);
+        // The speed of a backtest counts the chunks whose lease holds, and the threads that read this clock decide how far it runs
+        // before a renewal is written: the lease outlasts the run instead.
+        RunNextBacktestWorkCommandHandler handler = BacktestScenario.Handler(scope, spy, time, new WorkerSettings { LeaseDuration = TimeSpan.FromHours(1) });
 
         await BacktestScenario.RunUntilIdleAsync(handler);
 
