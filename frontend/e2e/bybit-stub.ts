@@ -924,8 +924,10 @@ const server = createServer((request, response) => {
     }
 
     send(response, ok({}));
+  } else if (url.pathname === '/control/children') {
+    send(response, [...children.values()]);
   } else if (url.pathname === '/control/orders') {
-    send(response, allOrders());
+    send(response, [...orders.values()]);
   } else if (url.pathname === '/v5/market/time') {
     const now = Date.now();
     send(response, {

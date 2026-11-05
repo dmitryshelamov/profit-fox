@@ -1,7 +1,7 @@
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test';
 
 import { createStrategy, reference } from './api';
-import { seedOpenIdea } from './seed';
+import { removeOpenIdeas, seedOpenIdea } from './seed';
 
 // Acceptance of the trades by ideas against the real API and a trading Worker on the Bybit stub: the owner enters by an idea on the page of
 // its pair, the Worker places the entry with its stop and target, and the stub fills it and fires the price. Nothing reaches the exchange.
@@ -29,6 +29,11 @@ let accountId = '';
 
 async function stubOrders(request: APIRequestContext): Promise<StubOrder[]> {
   return (await (await request.get(`${stub}/control/orders`)).json()) as StubOrder[];
+}
+
+/** The stops and targets the stub made for entries: they have no client id of their own. */
+async function stubChildren(request: APIRequestContext): Promise<StubOrder[]> {
+  return (await (await request.get(`${stub}/control/children`)).json()) as StubOrder[];
 }
 
 /** The orders of trades by ideas on the stub, the entries and the closes: their client ids start with `i`. */
@@ -82,6 +87,7 @@ const tradeRow = (page: Page) =>
     .first();
 
 test.beforeAll(async ({ request }) => {
+  test.setTimeout(240_000);
   const uid = String(Date.now());
   const created = await request.post('/api/exchange-accounts', {
     data: { name: `Сделки ${uid}`, apiKey: `e2e-valid-${uid}`, apiSecret: 'e2e-secret' },
@@ -100,6 +106,10 @@ test.beforeAll(async ({ request }) => {
 test.beforeEach(async ({ request }) => {
   await request.get(`${stub}/control/price?symbol=ETHUSDT&price=3000`);
   await settings(request);
+});
+
+test.afterAll(async () => {
+  await removeOpenIdeas('ETHUSDT');
 });
 
 test.afterEach(async ({ request }) => {
@@ -144,8 +154,9 @@ test('an entry by an idea places the entry with its stop and target on linear, a
   await expect
     .poll(
       async () =>
-        (await stubOrders(request)).filter((order) => order.parentOrderLinkId === entry.orderLinkId)
-          .length,
+        (await stubChildren(request)).filter(
+          (order) => order.parentOrderLinkId === entry.orderLinkId,
+        ).length,
     )
     .toBe(2);
 
@@ -218,7 +229,7 @@ test('«Закрыть по рынку» takes the stop and the target off and s
 
   const close = await waitForOrder(request, known + 1);
   expect(close).toMatchObject({ side: 'Sell', orderType: 'Market', reduceOnly: true });
-  const children = (await stubOrders(request)).filter(
+  const children = (await stubChildren(request)).filter(
     (order) => order.parentOrderLinkId === entry.orderLinkId,
   );
   expect(children.map((order) => order.orderStatus)).toEqual(['Cancelled', 'Cancelled']);

@@ -83,3 +83,18 @@ export async function seedOpenIdea(idea: OpenIdea): Promise<string> {
     await client.end();
   }
 }
+
+/** Removes the ideas a test seeded for a pair, so the lists of the other tests are as they were. */
+export async function removeOpenIdeas(symbol: string): Promise<void> {
+  const client = await connect();
+
+  try {
+    await client.query(
+      `DELETE FROM ideas WHERE category = 'linear' AND symbol = $1 AND setup = 'impulse' AND "interval" = '15'
+         AND type IN ('levels', 'pullback')`,
+      [symbol],
+    );
+  } finally {
+    await client.end();
+  }
+}
