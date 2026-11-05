@@ -26,7 +26,7 @@ public class StrategyCodesTests
             ("buy", OrderSide.Buy), ("sell", OrderSide.Sell),
             ("quantity", OrderSizeMode.Quantity), ("amount", OrderSizeMode.Amount),
             ("gt", CompareOperation.Greater), ("ge", CompareOperation.GreaterOrEqual), ("lt", CompareOperation.Less), ("le", CompareOperation.LessOrEqual),
-            ("ema-cross", BuiltInNode.EmaCross),
+            ("ema-cross", BuiltInNode.EmaCross), ("macd", BuiltInNode.Macd), ("bollinger", BuiltInNode.Bollinger),
             ("strategy", UsageKind.Strategy), ("node", UsageKind.Composite),
             ("market", OrderType.Market), ("limit", OrderType.Limit)
         ];

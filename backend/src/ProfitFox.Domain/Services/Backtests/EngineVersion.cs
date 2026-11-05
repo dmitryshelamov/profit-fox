@@ -7,5 +7,5 @@ namespace ProfitFox.Domain.Services.Backtests;
 public sealed record EngineVersion(int Number)
 {
     /// <summary>Raised with every change that changes results; the reference test of the engine version fails until it is.</summary>
-    public const int Current = 2;
+    public const int Current = 3;
 }

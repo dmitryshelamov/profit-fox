@@ -168,6 +168,7 @@ public sealed class StrategyRun
     {
         _event = bar;
         _lastBar = bar.Bar;
+        _position.CountBar(bar.At);
 
         for (int index = 0; index < _nodes.Count; index++)
         {
@@ -242,6 +243,7 @@ public sealed class StrategyRun
         {
             case BarClosed closed:
                 _lastBar = closed.Bar;
+                _position.CountBar(closed.At);
 
                 break;
             case OrderFilled filled:
@@ -249,7 +251,10 @@ public sealed class StrategyRun
 
                 break;
             case OrderCancelled cancelled:
-                _orders.Remove(cancelled.OrderId);
+                if (_orders.Remove(cancelled.OrderId, out ActiveOrder? gone) && gone.Node is not null && _position.Status == PositionStatus.Closing)
+                {
+                    SellWhenNoNodeOrderIsLeft();
+                }
 
                 break;
             case OrderRejected rejected:
@@ -257,10 +262,19 @@ public sealed class StrategyRun
 
                 break;
             case OrderCancelledByVenue cancelledByVenue:
+                if (!_orders.Remove(cancelledByVenue.OrderId, out ActiveOrder? removed))
+                {
+                    break;
+                }
+
                 // An exit with no node belongs to the closing position: what the venue cancelled of it is sold again.
-                if (_orders.Remove(cancelledByVenue.OrderId, out ActiveOrder? removed) && removed.Node is null)
+                if (removed.Node is null)
                 {
                     SellWhatCameWhileClosing();
+                }
+                else if (_position.Status == PositionStatus.Closing)
+                {
+                    SellWhenNoNodeOrderIsLeft();
                 }
 
                 break;
@@ -378,7 +392,10 @@ public sealed class StrategyRun
                 outputs["invested"] = new NumberValue(open ? _position.Invested : 0m);
                 outputs["lastEntryPrice"] = Number(open ? _position.LastEntryPrice : null);
                 outputs["sinceLastEntry"] = open && _position.LastEntryAt is { } at ? new DurationValue(_event.At - at) : null;
+                outputs["barsSinceEntry"] = open ? new NumberValue(_position.BarsSinceEntry) : null;
                 outputs["free"] = new NumberValue(Free());
+                outputs["closedPositions"] = new NumberValue(_position.Number - 1);
+                outputs["closedPnl"] = new NumberValue(_pastPnl);
 
                 break;
             case SimpleNodeKind.Ema:
@@ -430,7 +447,7 @@ public sealed class StrategyRun
 
                 break;
             case SimpleNodeKind.ClosePosition:
-                ClosePosition(index, node);
+                ClosePosition(node);
 
                 break;
             case SimpleNodeKind.HoldLimit:
@@ -466,11 +483,27 @@ public sealed class StrategyRun
         }
     }
 
-    private void ClosePosition(int index, RunNode node)
+    /// <summary>The position closes as it does for its owner: every order of its nodes is cancelled and the position sells what it holds.</summary>
+    private void ClosePosition(RunNode node)
     {
-        if (!HasOrder(index) && IsTrue(node, "when") && IsOpen())
+        if (IsTrue(node, "when") && IsOpen())
         {
-            Place(index, node, _entrySide == OrderSide.Buy ? OrderSide.Sell : OrderSide.Buy, ExitableQuantity(), null);
+            _position.BeginClosing();
+            CancelAll();
+            SellWhenNoNodeOrderIsLeft();
+            CloseWhenDone();
+        }
+    }
+
+    /// <summary>
+    ///     A standing order of a node may still fill, so the position sells only once every one of them is gone: right away when it has
+    ///     none, otherwise on the confirmation of the last cancel.
+    /// </summary>
+    private void SellWhenNoNodeOrderIsLeft()
+    {
+        if (_orders.Values.All(order => order.Node is null))
+        {
+            SellWhatCameWhileClosing();
         }
     }
 

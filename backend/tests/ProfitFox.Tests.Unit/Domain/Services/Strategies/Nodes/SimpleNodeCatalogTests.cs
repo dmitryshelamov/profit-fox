@@ -13,7 +13,7 @@ public class SimpleNodeCatalogTests
     private static IEnumerable<TestCaseData> Kinds()
     {
         yield return Case(SimpleNodeKind.Candle, "", "open:N high:N low:N close:N volume:N");
-        yield return Case(SimpleNodeKind.Position, "", "hasPosition:B quantity:N averagePrice:N invested:N lastEntryPrice:N sinceLastEntry:D free:N");
+        yield return Case(SimpleNodeKind.Position, "", "hasPosition:B quantity:N averagePrice:N invested:N lastEntryPrice:N sinceLastEntry:D barsSinceEntry:N free:N closedPositions:N closedPnl:N");
         yield return Case(SimpleNodeKind.Ema, "source:N period:N", "value:N");
         yield return Case(SimpleNodeKind.Sma, "source:N period:N", "value:N");
         yield return Case(SimpleNodeKind.StdDev, "source:N period:N", "value:N");

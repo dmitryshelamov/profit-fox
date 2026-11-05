@@ -405,6 +405,32 @@ public class LiveTradingTests
         _scenario.Exchange.Orders.Count.ShouldBe(1);
     }
 
+    // Scenario "Рестарт бота": the positions before the current one are the bot's, so a restarted Worker does not forget them.
+    [TestCase("closedPositions", "1")]
+    [TestCase("closedPnl", "10")]
+    public async Task Restarted_worker_knows_the_closed_positions_and_their_pnl(string pin, string limit)
+    {
+        string strategy = OneTrade.Replace("GATE_PIN", pin).Replace("GATE_LIMIT", limit);
+        Guid bot = await _scenario.CreateBotAsync("one-trade", JsonDocument.Parse(strategy).RootElement);
+        WorkerHost first = _scenario.StartWorker();
+        await _scenario.ActAsync(bot, "start");
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the start order");
+        _scenario.Exchange.Fill(LiveTradingScenario.ClientId(bot, 1), 1m, 100m);
+        await _scenario.WaitAsync(async () => (await _scenario.PositionsAsync(bot)).FirstOrDefault()?.Quantity == 1m, "the open position");
+        _scenario.Exchange.CloseCandle(DateTimeOffset.Parse("2024-03-10T13:00:00Z"), 110m);
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 2, "the exit");
+        _scenario.Exchange.Fill(LiveTradingScenario.ClientId(bot, 2), 1m, 110m);
+        await _scenario.WaitAsync(async () => (await _scenario.PositionsAsync(bot)).Count == 2, "the next position");
+        await SettleAsync();
+        _scenario.Exchange.Orders.Count.ShouldBe(2);
+
+        await _scenario.StopWorkerAsync(first);
+        _scenario.StartWorker();
+        await SettleAsync();
+
+        _scenario.Exchange.Orders.Count.ShouldBe(2);
+    }
+
     // The history of the exchange may lag behind its stream: a rebuild never takes the bot back to a candle it has passed,
     // so no candle reaches the strategy twice.
     [Test]
@@ -1116,6 +1142,33 @@ public class LiveTradingTests
         await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 2, "the sell limit");
         _scenario.Exchange.Orders.Single(order => order.ClientId == LiveTradingScenario.ClientId(bot, 2)).Price.ShouldBe(143m);
     }
+
+    // Buys 100 when flat and the gate holds; closes the position when the close reaches 110. The gate is replaced by the test.
+    private const string OneTrade = """
+        {
+          "formatVersion": 1, "direction": "long", "parameters": [],
+          "nodes": [
+            { "id": "candle", "kind": "candle" },
+            { "id": "position", "kind": "position" },
+            { "id": "flat", "kind": "not" },
+            { "id": "gate", "kind": "compare", "settings": { "operation": "lt" }, "inputs": { "b": GATE_LIMIT } },
+            { "id": "allowed", "kind": "and" },
+            { "id": "target", "kind": "compare", "settings": { "operation": "ge" }, "inputs": { "b": 110 } },
+            { "id": "enter", "kind": "market-order", "settings": { "side": "buy", "size": "amount" }, "inputs": { "size": 100 } },
+            { "id": "exit", "kind": "close-position" }
+          ],
+          "wires": [
+            { "from": "position.hasPosition", "to": "flat.value" },
+            { "from": "position.GATE_PIN", "to": "gate.a" },
+            { "from": "flat.result", "to": "allowed.a" },
+            { "from": "gate.result", "to": "allowed.b" },
+            { "from": "allowed.result", "to": "enter.when" },
+            { "from": "candle.close", "to": "target.a" },
+            { "from": "target.result", "to": "exit.when" }
+          ],
+          "layout": {}
+        }
+        """;
 
     // Buys 100 when flat; closes the position when the close falls below 100.
     private const string SellOnFall = """
