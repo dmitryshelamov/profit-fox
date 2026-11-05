@@ -21,7 +21,7 @@ public class RunNextCandleImportTests
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2024-03-10T12:30:00Z");
 
-    private FakeTimeProvider _time = null!;
+    private WaitingClock _time = null!;
     private IMarketHistoryClient _marketHistory = null!;
     private ICandleImportJobRepository _jobs = null!;
     private ICandleRepository _candles = null!;
@@ -31,7 +31,7 @@ public class RunNextCandleImportTests
     [SetUp]
     public void SetUp()
     {
-        _time = new FakeTimeProvider(Now);
+        _time = new WaitingClock(Now);
         _marketHistory = Substitute.For<IMarketHistoryClient>();
         _jobs = Substitute.For<ICandleImportJobRepository>();
         _candles = Substitute.For<ICandleRepository>();
@@ -222,7 +222,7 @@ public class RunNextCandleImportTests
             [() => Candles("2024-01-01T02:00:00Z"), () => throw Unavailable()],
             [() => Candles("2024-01-01T01:00:00Z", "2024-01-01T00:00:00Z")]);
 
-        await RunAsync(movesClock: true);
+        await RunAsync();
 
         RequestedRanges()
             .ShouldBe([("2024-01-01T00:00:00Z", "2024-01-01T03:00:00Z"), ("2024-01-01T00:00:00Z", "2024-01-01T02:00:00Z")]);
@@ -240,7 +240,7 @@ public class RunNextCandleImportTests
         var requestTimes = new List<DateTimeOffset>();
         ServeAttempts(job, requestTimes, Enumerable.Repeat<Func<IReadOnlyList<Candle>>[]>([() => throw Unavailable()], 6).ToArray());
 
-        await RunAsync(movesClock: true);
+        await RunAsync();
 
         requestTimes.Select(time => (time - Now).TotalSeconds).ShouldBe([0d, 1, 6, 21, 51, 111]);
         SavedStates()[^1]
@@ -255,7 +255,7 @@ public class RunNextCandleImportTests
         Func<IReadOnlyList<Candle>>[] progressThenOutage = [() => Candles("2024-01-01T02:00:00Z"), () => throw Unavailable()];
         ServeAttempts(job, [], Enumerable.Repeat(progressThenOutage, 7).Append([]).ToArray());
 
-        await RunAsync(movesClock: true);
+        await RunAsync();
 
         SavedStates()[^1].Status.ShouldBe(CandleImportStatus.Succeeded);
         RequestedRanges().Count.ShouldBe(8);
@@ -269,7 +269,7 @@ public class RunNextCandleImportTests
         Func<IReadOnlyList<Candle>>[] openCandleThenOutage = [() => Candles("2024-03-10T12:00:00Z"), () => throw Unavailable()];
         ServeAttempts(job, [], Enumerable.Repeat(openCandleThenOutage, 6).ToArray());
 
-        await RunAsync(movesClock: true);
+        await RunAsync();
 
         SavedStates()[^1].Status.ShouldBe(CandleImportStatus.Failed);
         RequestedRanges().Count.ShouldBe(6);
@@ -415,7 +415,7 @@ public class RunNextCandleImportTests
             .Returns(_ => throw Unavailable());
         _jobs.RenewLeaseAsync(job.Id, _worker.Id, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(false);
 
-        bool found = await RunAsync(movesClock: true);
+        bool found = await RunAsync();
 
         found.ShouldBeTrue();
         SavedStates().ShouldHaveSingleItem().Status.ShouldBe(CandleImportStatus.Running);
@@ -429,7 +429,7 @@ public class RunNextCandleImportTests
         _marketHistory.GetCandlePagesAsync(job.Instrument, job.Interval, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns(_ => ++attempts < 4 ? throw Unavailable() : Pages([() => Candles("2024-01-01T02:00:00Z")]));
 
-        await RunAsync(movesClock: true);
+        await RunAsync();
 
         SavedStates()[^1].Status.ShouldBe(CandleImportStatus.Succeeded);
         await _jobs.Received().RenewLeaseAsync(job.Id, _worker.Id, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
@@ -474,20 +474,28 @@ public class RunNextCandleImportTests
         _jobs.ClaimNextAsync(_worker.Id, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(job, (CandleImportJob?)null);
     }
 
-    /// <summary>Runs the next job, moving fake time forward while it waits between attempts.</summary>
-    // A job that waits for no pause or renewal runs on the clock as it stands, so the times it writes are Now however slow the machine is;
-    // one that waits moves the clock a second at a time, giving the job a moment after each step.
-    private async Task<bool> RunAsync(bool movesClock = false)
+    /// <summary>
+    ///     Runs the next job. The clock moves only while the job waits on a pause and its lease keeper on the next renewal, and then
+    ///     straight to the earlier of the two: a slow runner cannot move it while the job is still working.
+    /// </summary>
+    private async Task<bool> RunAsync()
     {
+        const int idleTimers = 2;
         Task<bool> run = _handler.Handle(new RunNextCandleImportCommand(), CancellationToken.None);
 
-        while (movesClock && !run.IsCompleted)
+        while (!run.IsCompleted)
         {
-            await Task.Delay(20);
-            _time.Advance(TimeSpan.FromSeconds(1));
+            if (_time.PendingTimers == idleTimers)
+            {
+                _time.AdvanceToNextTimer();
+            }
+            else
+            {
+                await Task.Delay(1);
+            }
         }
 
-        return await run.WaitAsync(TimeSpan.FromSeconds(10));
+        return await run;
     }
 
     private void Stored(CandleImportJob job, params string[] openTimes)
@@ -569,5 +577,95 @@ public class RunNextCandleImportTests
     private static string Format(DateTimeOffset time)
     {
         return time.ToString("yyyy-MM-ddTHH:mm:ssZ");
+    }
+
+    /// <summary>A fake clock that knows its timers which have neither fired nor been disposed, i.e. the delays someone still waits on.</summary>
+    private sealed class WaitingClock(DateTimeOffset start) : TimeProvider
+    {
+        private readonly FakeTimeProvider _fake = new FakeTimeProvider(start);
+        private readonly List<PendingTimer> _pending = [];
+
+        public int PendingTimers
+        {
+            get
+            {
+                lock (_pending)
+                {
+                    return _pending.Count;
+                }
+            }
+        }
+
+        public override DateTimeOffset GetUtcNow()
+        {
+            return _fake.GetUtcNow();
+        }
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            var timer = new PendingTimer(this, _fake.GetUtcNow() + dueTime);
+
+            lock (_pending)
+            {
+                _pending.Add(timer);
+            }
+
+            timer.Inner = _fake.CreateTimer(
+                s =>
+                {
+                    Forget(timer);
+                    callback(s);
+                },
+                state,
+                dueTime,
+                period);
+
+            return timer;
+        }
+
+        public void AdvanceToNextTimer()
+        {
+            DateTimeOffset due;
+
+            lock (_pending)
+            {
+                due = _pending.Min(timer => timer.Due);
+            }
+
+            _fake.Advance(due - _fake.GetUtcNow());
+        }
+
+        private void Forget(PendingTimer timer)
+        {
+            lock (_pending)
+            {
+                _pending.Remove(timer);
+            }
+        }
+
+        private sealed class PendingTimer(WaitingClock clock, DateTimeOffset due) : ITimer
+        {
+            public DateTimeOffset Due { get; } = due;
+
+            public ITimer Inner { get; set; } = null!;
+
+            public bool Change(TimeSpan dueTime, TimeSpan period)
+            {
+                throw new NotSupportedException();
+            }
+
+            public void Dispose()
+            {
+                clock.Forget(this);
+                Inner.Dispose();
+            }
+
+            public ValueTask DisposeAsync()
+            {
+                Dispose();
+
+                return ValueTask.CompletedTask;
+            }
+        }
     }
 }

@@ -146,6 +146,28 @@ the migrations of the newer version: roll back only to a version that works with
 On the server, `docker compose -p profit-fox ps` lists the services and `docker compose -p profit-fox logs api` shows
 the logs of one.
 
+### Scanner settings without a restart
+
+`~/profit-fox/config/scanner/scanner.json` on soyo-01, if it exists, overrides the settings of the scanner, environment
+included, and the scanner reads it again on each change. So far only `Scanner:RestRequestsPerSecond` takes effect at once,
+from the next second; another setting waits for the next start of the scanner. Create the folder as `soyo` once, before the
+first deploy that mounts it, or Docker creates it owned by root:
+
+```bash
+mkdir -p ~/profit-fox/config/scanner
+```
+
+```bash
+nano ~/profit-fox/config/scanner/scanner.json
+```
+
+```json
+{ "Scanner": { "RestRequestsPerSecond": 15 } }
+```
+
+A file that is not valid JSON, or no file, leaves the scanner on the settings of its image (20). A limit of `0` stops every REST
+request of the scanner.
+
 ### Secrets
 
 The secrets live only in `~/profit-fox/.env.prod` on soyo-01 (mode `600`), never in git, the images or GitHub:

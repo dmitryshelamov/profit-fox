@@ -12,7 +12,8 @@ internal static class ScannerStateRepositoryQueries
 
     private const string RenewSql = "UPDATE scanner_state SET leased_until = @LeasedUntil WHERE id = 1 AND lease_owner = @Owner";
 
-    private const string PauseRestSql = "UPDATE scanner_state SET rest_paused_until = @Until WHERE id = 1";
+    // A pause only ever ends later; GREATEST skips the NULL of a scanner that was never paused.
+    private const string PauseRestSql = "UPDATE scanner_state SET rest_paused_until = GREATEST(rest_paused_until, @Until) WHERE id = 1";
 
     private const string GetSql = """
                                   SELECT snapshot_at AS "SnapshotAt", pairs_total AS "PairsTotal", pairs_backfilled AS "PairsBackfilled",

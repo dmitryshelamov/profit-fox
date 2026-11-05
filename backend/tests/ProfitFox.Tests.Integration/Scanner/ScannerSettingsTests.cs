@@ -1,5 +1,9 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
+
+using ProfitFox.Application.Scanner;
 
 using ProfitFox.Tests.Integration.Infrastructure;
 using ProfitFox.Tests.Integration.Persistence;
@@ -37,6 +41,47 @@ public class ScannerSettingsTests
         IConfigurationRoot configuration = new ConfigurationBuilder().AddJsonFile(Path.Combine(folder, "appsettings.json")).Build();
 
         return configuration.GetSection("Ideas").AsEnumerable().Where(entry => entry.Value is not null).ToDictionary(entry => entry.Key, entry => entry.Value);
+    }
+
+    // The file on the server, mounted into the container, changes the settings without a restart; without it the scanner starts as before.
+    [Test]
+    public async Task Settings_file_in_the_config_folder_changes_the_settings_while_the_scanner_runs()
+    {
+        DirectoryInfo root = Directory.CreateTempSubdirectory("profit-fox-scanner-");
+
+        try
+        {
+            string file = Path.Combine(root.CreateSubdirectory("config").FullName, "scanner.json");
+            await File.WriteAllTextAsync(file, """{ "Scanner": { "RestRequestsPerSecond": 7 } }""");
+            using IHost scanner = Scanner(root.FullName, new Dictionary<string, string?> { ["Scanner:RestRequestsPerSecond"] = "5" });
+            IOptionsMonitor<ScannerSettings> settings = scanner.Services.GetRequiredService<IOptionsMonitor<ScannerSettings>>();
+            int before = settings.CurrentValue.RestRequestsPerSecond;
+            var changed = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using IDisposable? listener = settings.OnChange(current => changed.TrySetResult(current.RestRequestsPerSecond));
+
+            await File.WriteAllTextAsync(file, """{ "Scanner": { "RestRequestsPerSecond": 9 } }""");
+
+            before.ShouldBe(7);
+            (await changed.Task.WaitAsync(TimeSpan.FromSeconds(10))).ShouldBe(9);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    private static IHost Scanner(string contentRoot, IReadOnlyDictionary<string, string?> settings)
+    {
+        HostApplicationBuilder builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
+        {
+            EnvironmentName = "Production",
+            ContentRootPath = contentRoot
+        });
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:MarketData"] = "Host=127.0.0.1;Database=unused" });
+        builder.Configuration.AddInMemoryCollection(settings);
+        ScannerProgram.Configure(builder);
+
+        return builder.Build();
     }
 
     private static async Task<IHost> ScannerAsync(IReadOnlyDictionary<string, string?> settings)

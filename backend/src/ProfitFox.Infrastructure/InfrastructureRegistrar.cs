@@ -110,6 +110,9 @@ public static class InfrastructureRegistrar
         ConfigureCommon(configuration, services);
         MetricsRegistrar.Configure(configuration, services, "scanner");
         services.AddSingleton(settings);
+
+        // Only the gate follows a change of the settings while the scanner runs; the rest read them once at the start.
+        services.Configure<ScannerSettings>(configuration.GetSection("Scanner"));
         services.AddSingleton<ScannerRestGate>();
         services.AddSingleton<IMarketDataFeed, BybitPublicDataClient>();
         services.AddSingleton<IMarketStreams, BybitMarketStreams>();

@@ -1,5 +1,6 @@
 using System.Globalization;
 
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 
 using NSubstitute;
@@ -51,14 +52,35 @@ public class ScannerRestGateTests
         sent.ShouldBe(5);
     }
 
+    // The limit changes while the scanner runs, from the settings file on the server.
+    [Test]
+    public async Task Changed_setting_holds_from_the_next_second()
+    {
+        IOptionsMonitor<ScannerSettings> settings = Monitor(new ScannerSettings { RestRequestsPerSecond = 1 });
+        using ScannerRestGate gate = Gate(settings);
+        var sent = 0;
+
+        Task<int>[] requests = [.. Enumerable.Range(0, 5).Select(_ => gate.SendAsync(_ => ValueTask.FromResult(Interlocked.Increment(ref sent)), CancellationToken.None))];
+        await Task.Delay(50);
+        sent.ShouldBe(1);
+        settings.CurrentValue.Returns(new ScannerSettings { RestRequestsPerSecond = 3 });
+        _time.Advance(TimeSpan.FromSeconds(1));
+        await Task.Delay(50);
+        sent.ShouldBe(4);
+        _time.Advance(TimeSpan.FromSeconds(1));
+        await Task.WhenAll(requests);
+
+        sent.ShouldBe(5);
+    }
+
     // Scenario "Bybit ответил 403".
     [Test]
-    public async Task No_request_goes_until_the_pause_after_a_rate_limit_ends()
+    public async Task No_request_goes_until_the_pause_after_a_ban_of_the_ip_ends()
     {
         using ScannerRestGate gate = Gate(new ScannerSettings { RestPause = TimeSpan.FromMinutes(10) });
         var sent = 0;
 
-        await Should.ThrowAsync<ExchangeRateLimitedException>(() => gate.SendAsync<int>(_ => throw new TransientExchangeException("HTTP 403", rateLimited: true), CancellationToken.None));
+        await Should.ThrowAsync<ExchangeRateLimitedException>(() => gate.SendAsync<int>(_ => throw new TransientExchangeException("HTTP 403", rateLimited: true, ipBanned: true), CancellationToken.None));
         _time.Advance(TimeSpan.FromMinutes(10) - TimeSpan.FromSeconds(1));
         await Should.ThrowAsync<ExchangeRateLimitedException>(() => gate.SendAsync(_ => ValueTask.FromResult(++sent), CancellationToken.None));
         _time.Advance(TimeSpan.FromSeconds(1));
@@ -66,6 +88,98 @@ public class ScannerRestGateTests
 
         after.ShouldBe(1);
         await _state.Received(1).PauseRestAsync(Start.AddMinutes(10), Arg.Any<CancellationToken>());
+    }
+
+    // Scenario "Bybit ответил 10006".
+    [Test]
+    public async Task No_request_goes_until_the_short_pause_after_a_limit_ends()
+    {
+        using ScannerRestGate gate = Gate(new ScannerSettings { RestLimitPause = TimeSpan.FromSeconds(30) });
+        var sent = 0;
+
+        await Should.ThrowAsync<ExchangeRateLimitedException>(() => gate.SendAsync<int>(_ => throw Limit(), CancellationToken.None));
+        _time.Advance(TimeSpan.FromSeconds(29));
+        await Should.ThrowAsync<ExchangeRateLimitedException>(() => gate.SendAsync(_ => ValueTask.FromResult(++sent), CancellationToken.None));
+        _time.Advance(TimeSpan.FromSeconds(1));
+        int after = await gate.SendAsync(_ => ValueTask.FromResult(++sent), CancellationToken.None);
+
+        after.ShouldBe(1);
+        await _state.Received(1).PauseRestAsync(Start.AddSeconds(30), Arg.Any<CancellationToken>());
+    }
+
+    // Scenario "Bybit ответил 10006 несколько раз подряд".
+    [Test]
+    public async Task Limits_in_a_row_double_the_short_pause_up_to_the_rest_pause()
+    {
+        using ScannerRestGate gate = Gate(new ScannerSettings { RestLimitPause = TimeSpan.FromSeconds(30), RestPause = TimeSpan.FromMinutes(10) });
+        List<TimeSpan> pauses = RecordPauses();
+
+        for (var i = 0; i < 7; i++)
+        {
+            await Should.ThrowAsync<ExchangeRateLimitedException>(() => gate.SendAsync<int>(_ => throw Limit(), CancellationToken.None));
+            _time.Advance(pauses[^1]);
+        }
+
+        pauses.ShouldBe(
+        [
+            TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(4), TimeSpan.FromMinutes(8),
+            TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(10)
+        ]);
+    }
+
+    // Scenario "Успешный ответ после 10006".
+    [Test]
+    public async Task Request_that_went_through_starts_the_short_pause_again()
+    {
+        using ScannerRestGate gate = Gate(new ScannerSettings { RestLimitPause = TimeSpan.FromSeconds(30) });
+        List<TimeSpan> pauses = RecordPauses();
+
+        await Should.ThrowAsync<ExchangeRateLimitedException>(() => gate.SendAsync<int>(_ => throw Limit(), CancellationToken.None));
+        _time.Advance(pauses[^1]);
+        await gate.SendAsync(_ => ValueTask.FromResult(1), CancellationToken.None);
+        await Should.ThrowAsync<ExchangeRateLimitedException>(() => gate.SendAsync<int>(_ => throw Limit(), CancellationToken.None));
+
+        pauses.ShouldBe([TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30)]);
+    }
+
+    // A ban of the IP pauses for the whole RestPause however many limits came before it, and leaves the ladder where it was.
+    [Test]
+    public async Task Ban_of_the_ip_after_limits_pauses_for_the_rest_pause_and_keeps_the_ladder()
+    {
+        using ScannerRestGate gate = Gate(new ScannerSettings { RestLimitPause = TimeSpan.FromSeconds(30), RestPause = TimeSpan.FromMinutes(10) });
+        List<TimeSpan> pauses = RecordPauses();
+
+        foreach (TransientExchangeException answer in new[] { Limit(), Limit(), new TransientExchangeException("HTTP 403", rateLimited: true, ipBanned: true), Limit() })
+        {
+            await Should.ThrowAsync<ExchangeRateLimitedException>(() => gate.SendAsync<int>(_ => throw answer, CancellationToken.None));
+            _time.Advance(pauses[^1]);
+        }
+
+        pauses.ShouldBe([TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(2)]);
+    }
+
+    // The REST lane and the minute cycle send at once: a limit on a request sent before the ban of the IP does not shorten its pause.
+    [Test]
+    public async Task Limit_that_comes_after_a_ban_of_the_ip_does_not_shorten_its_pause()
+    {
+        using ScannerRestGate gate = Gate(new ScannerSettings { RestLimitPause = TimeSpan.FromSeconds(30), RestPause = TimeSpan.FromMinutes(10) });
+        var answered = new TaskCompletionSource();
+        Task<int> sentBefore = gate.SendAsync<int>(
+            async _ =>
+            {
+                await answered.Task;
+
+                throw Limit();
+            },
+            CancellationToken.None);
+
+        await Should.ThrowAsync<ExchangeRateLimitedException>(() =>
+            gate.SendAsync<int>(_ => throw new TransientExchangeException("HTTP 403", rateLimited: true, ipBanned: true), CancellationToken.None));
+        answered.SetResult();
+        await Should.ThrowAsync<ExchangeRateLimitedException>(() => sentBefore);
+        _time.Advance(TimeSpan.FromSeconds(30));
+
+        await Should.ThrowAsync<ExchangeRateLimitedException>(() => gate.SendAsync(_ => ValueTask.FromResult(1), CancellationToken.None));
     }
 
     // A pause recorded by the scanner before a restart, or by the holder another scanner took over from, still holds.
@@ -121,8 +235,36 @@ public class ScannerRestGateTests
         times.ShouldBe([Start, Start.AddSeconds(1)]);
     }
 
+    // Each pause the gate records, as its length from the moment it was recorded.
+    private List<TimeSpan> RecordPauses()
+    {
+        var pauses = new List<TimeSpan>();
+        _state.When(state => state.PauseRestAsync(Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()))
+            .Do(call => pauses.Add(call.Arg<DateTimeOffset>() - _time.GetUtcNow()));
+
+        return pauses;
+    }
+
+    private static TransientExchangeException Limit()
+    {
+        return new TransientExchangeException("10006: Too many visits!", rateLimited: true);
+    }
+
     private ScannerRestGate Gate(ScannerSettings settings)
     {
+        return Gate(Monitor(settings));
+    }
+
+    private ScannerRestGate Gate(IOptionsMonitor<ScannerSettings> settings)
+    {
         return new ScannerRestGate(settings, new ExchangeResilienceExecutor(_time), _state, _time);
+    }
+
+    private static IOptionsMonitor<ScannerSettings> Monitor(ScannerSettings settings)
+    {
+        IOptionsMonitor<ScannerSettings> monitor = Substitute.For<IOptionsMonitor<ScannerSettings>>();
+        monitor.CurrentValue.Returns(settings);
+
+        return monitor;
     }
 }
