@@ -2,7 +2,7 @@
 // calls about an account key, orders and their fills, and the v5 streams over WebSocket, so no test ever reaches the
 // exchange. A test closes candles (`/control/candle`), sends a forming one (`/control/forming`), fills orders and drops the streams through the `/control/*` routes. Signatures are not checked: the key alone picks the
 // answer (`e2e-valid-<uid>`, `e2e-withdraw`, anything else is rejected). The scanner also reads tickers, open interest and
-// funding history here, and subscribes minute candles in batches. Response shapes follow the integration tests' FakeBybitHandler.
+// funding history here, and subscribes minute candles in batches. `/control/pump` starts a steep, loud rise of one symbol from the next minute, which the scanner's setups read as an impulse. Response shapes follow the integration tests' FakeBybitHandler.
 // Usage: node e2e/bybit-stub.ts <port>
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 
@@ -51,6 +51,45 @@ function price(instrument: { basePrice: number; trend?: number }, index: number)
   );
 }
 
+/** A rise of one symbol that the market scanner reads as an impulse; it is started through `/control/pump`. */
+let pump: { symbol: string; startIndex: number; minutes: number } | null = null;
+const pumpStep = 1.03;
+/** The volume of a pumped minute: 20 times a quiet one, so the volume of the window is far above the median. */
+const pumpedVolume = 200;
+
+/** How many minutes of the pump have passed by the minute with this index, the first pumped minute counting as one. */
+function pumped(instrument: { symbol: string }, index: number): number {
+  return pump?.symbol === instrument.symbol
+    ? Math.min(Math.max(index - pump.startIndex + 1, 0), pump.minutes)
+    : 0;
+}
+
+/** The price at the close of a minute: the saw-tooth, raised by a pump by 3 % a minute for its length and left there after. */
+function minutePrice(
+  instrument: { symbol: string; basePrice: number; trend?: number },
+  index: number,
+): number {
+  return Number((price(instrument, index) * pumpStep ** pumped(instrument, index)).toPrecision(8));
+}
+
+/** The volume of a minute: 10, and loud while a pump runs. */
+function minuteVolume(instrument: { symbol: string }, index: number): number {
+  return pump?.symbol === instrument.symbol &&
+    index >= pump.startIndex &&
+    index < pump.startIndex + pump.minutes
+    ? pumpedVolume
+    : 10;
+}
+
+/** Starts a pump of `symbol` for `minutes` minutes from the next minute on. */
+function startPump(url: URL) {
+  const symbol = url.searchParams.get('symbol') ?? 'SOLUSDT';
+  const startIndex = Math.floor((Date.now() - listedAt) / 60_000) + 1;
+  pump = { symbol, startIndex, minutes: Number(url.searchParams.get('minutes') ?? '12') };
+
+  return ok({ symbol, startIndex });
+}
+
 function send(response: ServerResponse, body: unknown, status = 200) {
   response.writeHead(status, { 'Content-Type': 'application/json' });
   response.end(JSON.stringify(body));
@@ -88,16 +127,19 @@ function klines(url: URL) {
     }
 
     const index = (time - listedAt) / step;
-    const open = price(instrument, index - 1);
-    const close = price(instrument, index);
+    // Only the minute candles the scanner reads carry a pump.
+    const level = interval === 1 ? minutePrice : price;
+    const volume = interval === 1 ? minuteVolume(instrument, index) : 10;
+    const open = level(instrument, index - 1);
+    const close = level(instrument, index);
     rows.push([
       String(time),
       String(open),
       String(Number((Math.max(open, close) * 1.001).toPrecision(8))),
       String(Number((Math.min(open, close) * 0.999).toPrecision(8))),
       String(close),
-      '10',
-      String(Number((10 * close).toPrecision(8))),
+      String(volume),
+      String(Number((volume * close).toPrecision(8))),
     ]);
   }
 
@@ -183,7 +225,7 @@ function tickers(url: URL) {
   return ok({
     category,
     list: instruments.map((instrument) => {
-      const last = price(instrument, index);
+      const last = minutePrice(instrument, index);
       const linear =
         category === 'linear'
           ? {
@@ -643,6 +685,8 @@ const server = createServer((request, response) => {
     send(response, candle(url));
   } else if (url.pathname === '/control/forming') {
     send(response, candle(url, false));
+  } else if (url.pathname === '/control/pump') {
+    send(response, startPump(url));
   } else if (url.pathname === '/control/drop') {
     for (const socket of sockets.keys()) {
       socket.terminate();
@@ -697,8 +741,9 @@ setInterval(() => {
         continue;
       }
 
-      const open = price(instrument, index - 1);
-      const close = price(instrument, index);
+      const open = minutePrice(instrument, index - 1);
+      const close = minutePrice(instrument, index);
+      const volume = minuteVolume(instrument, index);
       socket.send(
         JSON.stringify({
           topic,
@@ -715,8 +760,8 @@ setInterval(() => {
               close: String(close),
               high: String(Math.max(open, close)),
               low: String(Math.min(open, close)),
-              volume: '10',
-              turnover: String(Number((10 * close).toPrecision(8))),
+              volume: String(volume),
+              turnover: String(Number((volume * close).toPrecision(8))),
               confirm: true,
               timestamp: Date.now(),
             },

@@ -4,7 +4,7 @@ namespace ProfitFox.Domain.ValueObjects.MarketData;
 
 /// <summary>
 ///     An instrument the exchange lists in a market category, with the coins it trades, whether it trades now and whether it is a
-///     perpetual contract (never on spot), and since when it trades if the exchange tells (on linear only).
+///     perpetual contract (never on spot), since when it trades if the exchange tells (on linear only), and the step of its price.
 /// </summary>
 public sealed record ListedInstrument(
     MarketCategory Category,
@@ -13,4 +13,5 @@ public sealed record ListedInstrument(
     string QuoteCoin,
     bool Trading = false,
     bool Perpetual = false,
-    DateTimeOffset? ListedAt = null);
+    DateTimeOffset? ListedAt = null,
+    decimal? TickSize = null);

@@ -153,7 +153,7 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
         {
             // Bybit lists all spot instruments in one answer.
             return Unwrap(await bybit.V5Api.ExchangeData.GetSpotSymbolsAsync(ct: cancellationToken)).List
-                .Select(spot => new ListedInstrument(category, spot.Name, spot.BaseAsset, spot.QuoteAsset, spot.Status == SymbolStatus.Trading))
+                .Select(spot => new ListedInstrument(category, spot.Name, spot.BaseAsset, spot.QuoteAsset, spot.Status == SymbolStatus.Trading, TickSize: spot.PriceFilter?.TickSize))
                 .ToList();
         }
 
@@ -171,7 +171,8 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
                 linear.QuoteAsset,
                 linear.Status == SymbolStatus.Trading,
                 linear.ContractType == ContractTypeV5.LinearPerpetual,
-                new DateTimeOffset(DateTime.SpecifyKind(linear.LaunchTime, DateTimeKind.Utc)))));
+                new DateTimeOffset(DateTime.SpecifyKind(linear.LaunchTime, DateTimeKind.Utc)),
+                linear.PriceFilter?.TickSize)));
             cursor = page.NextPageCursor;
         }
         while (!string.IsNullOrEmpty(cursor));

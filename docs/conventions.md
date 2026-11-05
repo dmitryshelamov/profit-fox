@@ -29,6 +29,15 @@ enforces a rule, the check is the source of truth.
 - `Market` is the area of the scanner: `Entities/Market` holds `ScannerPair` (the bounds of coverage, with the rules that move
   them) and `ScannerState`; `ValueObjects/Market` holds `MarketMinute`, `OpenInterestPoint`, `FundingRatePoint`, `MarketTicker`,
   `PairMetrics` and `MarketSnapshotRow`; `Services/Market/MarketMetrics` is the pure function of the metrics of a pair.
+- `Ideas` is the area of trade ideas: `Entities/Ideas` holds `Idea` (a live idea, one open per `IdeaKey`) and the enums `IdeaSetup`,
+  `IdeaType`, `IdeaSide`, `IdeaStatus`; `ValueObjects/Ideas` holds `IdeaCandle` (a minute or a candle of an interval, its volume the
+  turnover), `MinuteAggregate`, `SetupThresholds`, `SetupSignal`, `SetupReading`, `Zone`, `ZoneRules`, `IdeaPlan`, `IdeaContext`,
+  `IdeaTrack`, `IdeaCase`, `IdeaBucketKey`, `IdeaBucketCounts`, `IdeaBucket`, `BucketStatistics`, `IdeaVolatility` and `PairSetup`.
+  `Services/Ideas` holds the pure functions: `Atr` (Wilder, 14), `IdeaCandles` (candles of an interval from minutes, a minute without
+  trades flat at the close before it), `SetupDetector`, `ZoneFinder`, `IdeaRules`, `IdeaTracker`, `CaseResult`,
+  `BucketStatisticsCalculator`, `Volatility` and `IdeasEngineVersion`.
+- `SavedFilters` is the area of saved filters: `Entities/SavedFilters` holds `SavedFilter` and the enums `SavedFilterPlace`, `FilterField`,
+  `FilterOperator`; `ValueObjects/SavedFilters` holds `FilterCondition`.
 - `Exceptions` holds domain exceptions: a broken domain rule that the caller reports to the user
   (`GraphValidationException`, `NodeInUseException`, `BotsAffectedException`).
 - The domain knows no wire codes and no vendor names: enums, not strings. Codes are mapped at the boundaries:
@@ -87,6 +96,17 @@ enforces a rule, the check is the source of truth.
   `IMarketStreams` (minute candles in batches) and `IScannerJournal`. `Market/Queries` holds the queries of the market API
   (`GetMarket`, `GetMarketPair`, `GetMarketCandles`, `GetMarketSeries`); `MarketData/ChartCandles` is the period of a chart the
   bot and the pair share.
+- `Scanner/Ideas` holds the ideas of the scanner: `IdeasSettings` (the `Ideas` section, with `ThresholdSettings` and `ThresholdOverride`),
+  `IdeaRuleSet`, `IdeaSeries` (at most 220 closed candles of a pair on an interval and the minutes of the forming one), `IdeaEngine` (the
+  minutes of a pair one by one: steps the open ideas, reads the setups, makes the ideas of the setups that fire; the same for live and
+  replay), `LiveIdeas` (the warm-ups and the minute of live ideas after the snapshot) and `IdeasReplay` (the replay of history pair by pair
+  and day by day, the buckets every 10 minutes, the clean-up of other versions). `Scanner/ScannerPace` tells the replay whether the
+  snapshot came late.
+- `Ideas` holds `IdeaCodes` (codes of setups, types, sides, statuses), `IdeaView` (an idea with its buckets), `IdeaLevels` (what the API
+  measures a pair by: price, spread, ATR, zones, window) and the queries of the ideas API (`GetIdeas`, `GetIdea`, `GetIdeaBuckets`,
+  `GetPairIdeas`, `GetZones`, `GetOwnIdea`). `SavedFilters` holds `SavedFilterFields`, the one catalog of fields with their units and
+  operators, `SavedFilterJson`, the codec of conditions for the API and the stored `jsonb`, `SavedFilterRules`, which checks a filter by the
+  catalog, and the commands and queries of saved filters.
 - `Workers` holds what the Worker needs to share work with other Workers: `WorkerSettings`, `WorkerIdentity` (the
   lease owner of this process) and `LeaseKeeper`, which renews a lease while the work runs. Work the Worker takes is a
   command that returns whether it found any (`RunNextCandleImportCommand`, `RunNextBacktestWorkCommand`).
@@ -159,6 +179,11 @@ enforces a rule, the check is the source of truth.
 - `Repositories/Market` holds `scanner_state` (one row: the lease of the stream, the snapshot time, the progress of history,
   the end of the REST pause), `scanner_pairs`, `open_interest` (a hypertable), `funding_rates` and `market_snapshot`, which the
   holder replaces in one transaction that locks the row of the state with its lease.
+- `Repositories/Ideas` holds `ideas` (one open idea per key kept by a partial unique index; the ideas made and moved on a minute are
+  written in one transaction), `idea_cases` (a hypertable, written once per key, fired time and version), `idea_buckets`, `idea_replay`
+  (the cursor of a pair per version with the ideas of the replay open at it) and `idea_volatility`;
+  `Repositories/SavedFilters` holds `saved_filters`. `market_snapshot.setups` (`jsonb`, interval code → setup codes) is written after the
+  snapshot under the same lease. `CandleRepository.GetAggregatedAsync` joins stored minutes into candles of an interval with `time_bucket`.
 - `Persistence/Postgres/Transactions` implements the unit of work: `PostgresTransactionExecutor` opens the connection
   and the transaction, the scoped `PostgresTransactionAccessor.Current` hands them to repositories that write inside a
   unit. Only repositories of live trading use it; the older repositories open a connection per call and keep their
@@ -266,6 +291,21 @@ enforces a rule, the check is the source of truth.
   }
   ```
 
+- The `Ideas` section of the scanner (`IdeasSettings`), which the API reads too for its own idea and the zones: the thresholds of the
+  setups, common to all pairs, with values of an interval's own by interval code, by which the live ideas and the replay both run; k of the
+  stop buffer and the rules of the zones. The defaults are the starting values of decision 7, provisional until tuned by history. The scanner's
+  `appsettings.json` also carries `Backtests:DefaultFees`, the fee rates its cases are counted with.
+
+  ```json
+  "Ideas": {
+    "Thresholds": { "Candles": 6, "Move": 3.0, "Volume": 2.0, "EarlyMove": 1.5, "EarlyVolume": 3.0 },
+    "ByInterval": { "240": { "Move": 2.5 } },
+    "StopBuffer": 1.5,
+    "ZoneMerge": 0.5,
+    "ZoneStrength": 2
+  }
+  ```
+
 ## Presentation (`ProfitFox.Presentation`)
 
 - `Controllers` holds controllers only (`BotsController`, `BacktestsController`, `InstrumentsController`: `GET /api/market-data/instruments?category&query&limit`
@@ -275,6 +315,10 @@ enforces a rule, the check is the source of truth.
   404 when the snapshot has no such pair), `.../candles?interval&from&to` (as the bot chart), `.../open-interest?from&to` and
   `.../funding?from&to` (linear only, from storage, at most 1000 points); contracts in `Contracts/Market`. It never calls Bybit
   but for the candles of a pair.
+  `MarketController` also has `.../ideas` (the ideas of a pair), `.../zones?interval` (5, 15, 60, 240) and `POST .../own-idea`; the rows of
+  `GET /api/market` and of a pair carry `setups`. `IdeasController`: `GET /api/ideas` (filters `setup`, `interval`, `type`, `side`,
+  `category`, `nonNegativeExpectancy`), `GET /api/ideas/{id}`, `GET /api/ideas/buckets`. `SavedFiltersController`: CRUD of
+  `/api/saved-filters` and the catalog `GET /api/saved-filters/fields`.
 - `Hubs` holds SignalR hubs. `BotChartHub` is the first: `/api/hubs/bot-chart` (under `/api`, so the proxy of the web image
   and of Vite carry it, Vite with `ws: true`). A connection calls `Subscribe(botId)`, which answers `{ state, candle }`
   (`connecting`, `live` or `noData`; the newest candle or `null`) or fails with `bot_not_found`, then receives
@@ -324,7 +368,8 @@ enforces a rule, the check is the source of truth.
   `Generators/Domain/{Entity,ValueObject}/<Area>`, each a static `<Type>Generator.Generate(...)`. `Builders/<Area>` holds
   fluent builders for structures a generator cannot randomize meaningfully (`GraphBuilder` for strategy graphs), and
   `Fixtures/<Area>` holds reference documents as embedded resources (the reference strategies EMA, EMA Short, DCA, Ladder;
-  reference candle sets for backtests in `Fixtures/Backtests`).
+  reference candle sets for backtests in `Fixtures/Backtests`; reference minutes and candles of the ideas and the fingerprints of
+  `IdeasEngineVersion` in `Fixtures/Ideas`).
 - Ports are replaced with NSubstitute mocks. Hand-written stubs exist only for transport and the exchange: HTTP
   (`StubHttpHandler`, `FakeBybitHandler`), because NSubstitute cannot replace the protected `SendAsync`; the Bybit v5
   streams on a local port (`FakeBybitSocketServer`); and `FakeExchange`, one exchange account in memory behind
@@ -346,7 +391,7 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
 
 - `src/app` holds the router (TanStack Router) and the providers (TanStack Query). `src/pages/<screen>` holds one screen
   each (`strategies`, `strategy-editor`, `nodes`, `node-editor`, `bots`, `bot-editor`, `bot`, `backtest-setup`, `backtest`,
-  `backtest-result`, `compare`, `accounts`, `account-new`, `account`, `market`, `market-pair`); a page never imports another page.
+  `backtest-result`, `compare`, `accounts`, `account-new`, `account`, `market`, `market-pair`, `ideas`); a page never imports another page.
 - `src/modules/<area>` holds a feature: `model` for pure functions, `ui` for components, `api.ts` for queries. Other
   code imports a module only through its `index.ts`. `modules/graph-editor/model` is the logic of the editor that can be
   wrong (definition ↔ canvas, pins, wire types, error paths, draft comparison): plain TypeScript without React.
@@ -361,7 +406,15 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
   `orderLines`, `useCandlePages` — the paging of a chart over a function that reads a page, which the bot and the pair use with their
   own endpoints — and `OpenInterestChart`, `FundingChart`), `market` (the snapshot query polled every 15 s, the row, open
   interest and funding of a pair; `model` for the category filter, search, sort with empty values last, the age of the snapshot and
-  compact numbers; `MarketTable`, the banners and the mark of incomplete data). `bots` also holds the bot chart's data: `useBotCandles` (pages going back, a minute-by-minute tail,
+  compact numbers; `setups` for the chips, the interval of setups and the column «Сетап»; `MarketTable`, the banners and the mark of
+  incomplete data), `ideas` (queries of the ideas, of a pair's ideas, zones and the own idea; `model` for the labels, the badge against the
+  baseline and «мало данных» (`stats`), profit and loss at the risk per idea and its storage in the browser (`riskStorage`), the groups of a
+  pair's list (`groups`) and the levels drawn on the chart (`levels`); `IdeasTable`, `PairIdeasList`, `OwnIdeaBlock`), `saved-filters`
+  (queries of filters and the catalog of fields; `model` for applying conditions to rows and ideas in exact decimals, conditions on idea
+  fields only on «Идеи» (`apply`), the text of conditions (`conditions`) and the server errors by field (`errors`); `FilterBar`,
+  `FilterEditor`). `BotCandleChart` also takes optional price lines, zones (bands drawn by the series primitive `ZoneBandsPrimitive`)
+  and the marker of a fired setup, from the pure `market-chart/model/ideaOverlay`; `shared/format/decimal` compares decimal strings
+  without float math. `bots` also holds the bot chart's data: `useBotCandles` (pages going back, a minute-by-minute tail,
   start over when too far behind), `useFormingCandle` over `realtime/followFormingCandle` (the SignalR hub
   `/api/hubs/bot-chart`, which is not in OpenAPI: its message types are written by hand in `model/formingCandle.ts`,
   with the reducer and the channel text) and `chartIntervals` (the interval switcher; the `?interval=` of the bot route

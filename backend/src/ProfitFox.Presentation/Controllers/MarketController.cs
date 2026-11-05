@@ -1,11 +1,18 @@
+using System.Globalization;
+
 using MediatR;
 
 using Microsoft.AspNetCore.Mvc;
 
+using ProfitFox.Application.Ideas.Queries.GetOwnIdea;
+using ProfitFox.Application.Ideas.Queries.GetPairIdeas;
+using ProfitFox.Application.Ideas.Queries.GetZones;
 using ProfitFox.Application.Market.Queries.GetMarket;
 using ProfitFox.Application.Market.Queries.GetMarketCandles;
 using ProfitFox.Application.Market.Queries.GetMarketPair;
 using ProfitFox.Application.Market.Queries.GetMarketSeries;
+using ProfitFox.Domain.ValueObjects.Ideas;
+using ProfitFox.Presentation.Contracts.Ideas;
 using ProfitFox.Presentation.Contracts.Market;
 
 namespace ProfitFox.Presentation.Controllers;
@@ -35,7 +42,7 @@ public sealed class MarketController(ISender sender) : ControllerBase
             return Invalid(result.Errors);
         }
 
-        return result.Row is null ? NotFound() : Ok(MarketRowResponse.Of(result.Row));
+        return result.Row is null ? NotFound() : Ok(MarketRowResponse.Of(result.Row, result.Setups ?? []));
     }
 
     /// <summary>
@@ -77,6 +84,70 @@ public sealed class MarketController(ISender sender) : ControllerBase
         GetMarketSeriesResult result = await sender.Send(new GetMarketSeriesQuery(MarketSeries.Funding, category, symbol, parameters.From, parameters.To), cancellationToken);
 
         return Series(result, points => points.Select(FundingRateResponse.Of).ToList());
+    }
+
+    /// <summary>The open ideas of a pair and the ones closed in the last 24 hours, by expectancy, highest first.</summary>
+    [HttpGet("{category}/{symbol}/ideas")]
+    [ProducesResponseType<IReadOnlyList<IdeaResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Ideas(string category, string symbol, CancellationToken cancellationToken)
+    {
+        GetPairIdeasResult result = await sender.Send(new GetPairIdeasQuery(category, symbol), cancellationToken);
+
+        return result.Ideas is null ? Invalid(result.Errors) : Ok(result.Ideas.Select(IdeaResponse.Of).ToList());
+    }
+
+    /// <summary>The zones of support and resistance of a pair on an interval of the setups (5, 15, 60, 240), from its last 200 closed candles.</summary>
+    [HttpGet("{category}/{symbol}/zones")]
+    [ProducesResponseType<ZonesResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Zones(string category, string symbol, [FromQuery] string? interval, CancellationToken cancellationToken)
+    {
+        GetZonesResult result = await sender.Send(new GetZonesQuery(category, symbol, interval), cancellationToken);
+
+        if (result.NotFound)
+        {
+            return NotFound();
+        }
+
+        return result.Zones is null ? Invalid(result.Errors) : Ok(new ZonesResponse(Text(result.Price!.Value), [.. result.Zones.Select(zone => Zone(zone, result.Price.Value))]));
+    }
+
+    /// <summary>An idea of the pair from the price now by the rules of the type, without a setup; it is not stored and has only the baseline.</summary>
+    [HttpPost("{category}/{symbol}/own-idea")]
+    [ProducesResponseType<OwnIdeaResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> OwnIdea(string category, string symbol, OwnIdeaBody body, CancellationToken cancellationToken)
+    {
+        GetOwnIdeaResult result = await sender.Send(new GetOwnIdeaQuery(category, symbol, body.Type, body.Interval, body.Side), cancellationToken);
+
+        if (result.Errors.Count > 0)
+        {
+            return Invalid(result.Errors);
+        }
+
+        if (result.NotFound)
+        {
+            return NotFound();
+        }
+
+        return Ok(result.Plan is { } plan
+            ? new OwnIdeaResponse(true, Text(plan.Entry), Text(plan.Stop), Text(plan.Target), Text(plan.RiskReward), Text(result.Baseline!.Value))
+            : new OwnIdeaResponse(false, null, null, null, null, null));
+    }
+
+    private static ZoneResponse Zone(Zone zone, decimal price)
+    {
+        string kind = zone.High < price ? "support" : zone.Low > price ? "resistance" : "around";
+
+        return new ZoneResponse(Text(zone.Low), Text(zone.High), zone.Strength, kind);
+    }
+
+    private static string Text(decimal value)
+    {
+        return value.ToString(CultureInfo.InvariantCulture);
     }
 
     private IActionResult Series<T>(GetMarketSeriesResult result, Func<IReadOnlyList<(DateTimeOffset Time, decimal Value)>, T> map)

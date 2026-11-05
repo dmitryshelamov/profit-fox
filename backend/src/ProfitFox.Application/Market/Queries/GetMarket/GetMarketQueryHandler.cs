@@ -14,6 +14,9 @@ public sealed class GetMarketQueryHandler(IMarketSnapshotRepository snapshots, I
         ScannerState scanner = await state.GetAsync(cancellationToken);
         IReadOnlyList<MarketSnapshotRow> rows = await snapshots.GetAllAsync(cancellationToken);
 
-        return new GetMarketResult(scanner.RestPausedUntil > time.GetUtcNow() ? scanner : scanner with { RestPausedUntil = null }, rows);
+        return new GetMarketResult(
+            scanner.RestPausedUntil > time.GetUtcNow() ? scanner : scanner with { RestPausedUntil = null },
+            rows,
+            await snapshots.GetSetupsAsync(cancellationToken));
     }
 }

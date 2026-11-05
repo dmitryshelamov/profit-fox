@@ -79,6 +79,29 @@ The production database publishes no port yet (see [Production](#production)): a
 with its own change, which opens the port to the local network. Deploy the API first, then the Workers, all from the
 same commit: stop the Workers, deploy the API, which migrates the database, then start the Workers again.
 
+### Market scanner and trade ideas
+
+The scanner (`backend/src/ProfitFox.Scanner`) keeps the data of the whole Bybit market and computes the trade ideas; it never
+trades. Start it after the API:
+
+```bash
+dotnet run --project backend/src/ProfitFox.Scanner
+```
+
+Every closed minute, after the market snapshot, it reads the setups of every pair on 5 and 15 minutes, 1 and 4 hours, makes
+ideas of the setups that fire and moves the open ones; the setups go into the rows of the snapshot. In the background it
+replays the same rules over the stored minutes of the last 90 days, pair by pair and day by day, and every 10 minutes
+recomputes the probability of each bucket (setup × type × interval × side × category) from those cases. The replay pauses
+while the snapshot comes late, and starts again from scratch when `IdeasEngineVersion.Current` is raised: a change of the
+rules raises it, the version test in `ProfitFox.Tests.Unit` fails until it does.
+
+The `Ideas` section of the scanner's `appsettings.json` sets the thresholds of the setups (`Thresholds`, common to all pairs,
+`ByInterval` for values of one interval), the stop buffer k and the rules of the zones; `Backtests:DefaultFees` sets the fees the
+cases are counted with. The live ideas and the replay run by the same thresholds, so a bucket counts every case of the current
+version. The starting thresholds are provisional: to try others, put them into `Ideas:Thresholds`, raise
+`IdeasEngineVersion.Current`, deploy and wait for the replay of the new version (about a day on production), then compare its
+buckets with the version before. Every case keeps the move and the volume it fired with, for analysis.
+
 ## Production
 
 Production runs on soyo-01 (`192.168.8.111`) in the local network only: the interface and the API are at

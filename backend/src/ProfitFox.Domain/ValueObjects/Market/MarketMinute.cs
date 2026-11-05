@@ -1,4 +1,7 @@
 namespace ProfitFox.Domain.ValueObjects.Market;
 
-/// <summary>What the metrics need of a closed minute candle: its open time, open, close and turnover in the quote coin.</summary>
-public sealed record MarketMinute(DateTimeOffset OpenTime, decimal Open, decimal Close, decimal Turnover);
+/// <summary>
+///     A closed minute candle as the scanner keeps it: its open time, prices and turnover in the quote coin. The metrics use open, close and
+///     turnover; the ideas also the high and low.
+/// </summary>
+public sealed record MarketMinute(DateTimeOffset OpenTime, decimal Open, decimal High, decimal Low, decimal Close, decimal Turnover);

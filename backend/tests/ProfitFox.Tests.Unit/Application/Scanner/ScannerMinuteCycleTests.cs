@@ -8,19 +8,24 @@ using NSubstitute.ExceptionExtensions;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.Market;
 using ProfitFox.Application.Scanner;
+using ProfitFox.Application.Scanner.Ideas;
 using ProfitFox.Application.Scanner.Minute;
 using ProfitFox.Application.Workers;
+using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Market;
+using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Tests.Shared.Generators.Domain.Entity.Ideas;
 
 using Shouldly;
 
 namespace ProfitFox.Tests.Unit.Application.Scanner;
 
-/// <summary>Requirements "Тикеры раз в минуту", "Снимок рынка" and "Состояние сканера".</summary>
+/// <summary>Requirements "Тикеры раз в минуту", "Снимок рынка", "Состояние сканера" and "Сетапы и идеи в минутном цикле".</summary>
 public class ScannerMinuteCycleTests
 {
     private static readonly DateTimeOffset Minute = DateTimeOffset.Parse("2024-03-10T12:05:00Z", CultureInfo.InvariantCulture);
@@ -34,6 +39,10 @@ public class ScannerMinuteCycleTests
     private ScannerMarket _market = null!;
     private FakeTimeProvider _time = null!;
     private WorkerIdentity _identity = null!;
+    private IIdeaRepository _ideaStore = null!;
+    private IScannerJournal _journal = null!;
+    private LiveIdeas _ideas = null!;
+    private ScannerPace _pace = null!;
     private ScannerMinuteCycle _cycle = null!;
 
     [SetUp]
@@ -47,12 +56,28 @@ public class ScannerMinuteCycleTests
         _time = new FakeTimeProvider(Minute.AddSeconds(-30));
         _identity = new WorkerIdentity(Guid.NewGuid());
         _snapshots.ReplaceAsync(Arg.Any<Guid>(), Arg.Any<IReadOnlyCollection<MarketSnapshotRow>>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(true);
+        _snapshots.ReplaceSetupsAsync(Arg.Any<Guid>(), Arg.Any<IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>>>(), Arg.Any<CancellationToken>()).Returns(true);
+        _ideaStore = Substitute.For<IIdeaRepository>();
+        _journal = Substitute.For<IScannerJournal>();
         _feed.GetTickersAsync(MarketCategory.Spot, Arg.Any<CancellationToken>()).Returns([new MarketTicker(Btc, 64000m, 63999m, 64001m)]);
         _feed.GetTickersAsync(MarketCategory.Linear, Arg.Any<CancellationToken>())
             .Returns([new MarketTicker(Sol, 150m, 149.9m, 150.1m, 1000m, 0.0001m), new MarketTicker(new Instrument(MarketCategory.Linear, "XRPUSDT"), 1m, 1m, 1m, 5m, 0m)]);
         _market.Keep([new ScannerPair(Sol, true, CoveredUntil: Minute, OpenInterestCoveredUntil: Minute), new ScannerPair(Btc, true, CoveredUntil: Minute.AddMinutes(-2))]);
         _market.TakeChanged();
-        _cycle = new ScannerMinuteCycle(_feed, _openInterest, _snapshots, _pairs, _market, new ScannerSettings { SnapshotDelay = TimeSpan.FromSeconds(10) }, _identity, _time);
+        _pace = new ScannerPace();
+        _ideas = new LiveIdeas(_ideaStore, Substitute.For<IIdeaVolatilityRepository>(), Substitute.For<ICandleRepository>(), _market, new IdeasSettings(), _time);
+        _cycle = new ScannerMinuteCycle(
+            _feed,
+            _openInterest,
+            _snapshots,
+            _pairs,
+            _market,
+            _ideas,
+            _pace,
+            _journal,
+            new ScannerSettings { SnapshotDelay = TimeSpan.FromSeconds(10) },
+            _identity,
+            _time);
     }
 
     // Scenario "Открытый интерес из тикеров": the first read after the start of 5 minutes stores a point of every linear pair the scanner keeps.
@@ -131,6 +156,18 @@ public class ScannerMinuteCycleTests
         await RunMinuteAsync();
 
         await _snapshots.Received(1).ReplaceAsync(_identity.Id, Arg.Any<IReadOnlyCollection<MarketSnapshotRow>>(), Minute.AddSeconds(15), Arg.Any<CancellationToken>());
+        _pace.IsLate.ShouldBeTrue();
+    }
+
+    // Decision 1: the replay of history pauses while the snapshot comes late; one on time lets it go on.
+    [Test]
+    public async Task Snapshot_on_time_tells_the_replay_it_may_go_on()
+    {
+        _pace.Snapshot(Minute, Minute.AddSeconds(5));
+
+        await RunMinuteAsync();
+
+        _pace.IsLate.ShouldBeFalse();
     }
 
     // Decision 2: a holder that lost the stream stops writing.
@@ -140,6 +177,79 @@ public class ScannerMinuteCycleTests
         _snapshots.ReplaceAsync(Arg.Any<Guid>(), Arg.Any<IReadOnlyCollection<MarketSnapshotRow>>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(false);
 
         await Should.ThrowAsync<ScannerLeaseLostException>(RunMinuteAsync);
+    }
+
+    // Requirement "Сетапы и идеи в минутном цикле": after the snapshot the setups of the complete pairs go into their rows.
+    [Test]
+    public async Task Setups_of_the_complete_pairs_go_into_the_snapshot_after_it()
+    {
+        _market.Loaded(Sol, Minute.AddDays(-1), Minute, Flat(Minute.AddDays(-1), Minute));
+        await _ideas.ReadWarmUpsAsync(CancellationToken.None);
+        await RunMinuteAsync();
+
+        _market.Closed(Sol, Flat(Minute, Minute.AddMinutes(1)).Single());
+        await RunMinuteAsync();
+
+        await _snapshots.Received(1).ReplaceSetupsAsync(
+            _identity.Id,
+            Arg.Is<IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>>>(setups => setups!.Keys.Single() == Sol && setups[Sol].Count == 0),
+            Arg.Any<CancellationToken>());
+    }
+
+    // Scenario "Пропуск у пары": while the gap is loaded the pair gets no setups; once it is, its open idea moves by the minutes of the gap.
+    [Test]
+    public async Task Pair_with_a_gap_gets_no_setups_and_its_ideas_move_once_the_gap_is_loaded()
+    {
+        Idea open = IdeaGenerator.Generate(Minute.AddMinutes(-2), instrument: Btc);
+        _ideaStore.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([open]);
+        _market.Loaded(Btc, Minute.AddDays(-1), Minute.AddMinutes(-2), Flat(Minute.AddDays(-1), Minute.AddMinutes(-2)));
+        await _ideas.ReadWarmUpsAsync(CancellationToken.None);
+
+        await RunMinuteAsync();
+
+        await _snapshots.Received(1).ReplaceSetupsAsync(_identity.Id, Arg.Is<IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>>>(setups => setups!.Count == 0), Arg.Any<CancellationToken>());
+        await _ideaStore.DidNotReceive().SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Is<IReadOnlyCollection<Idea>>(ideas => ideas!.Count > 0), Arg.Any<CancellationToken>());
+
+        _market.Loaded(Btc, Minute.AddMinutes(-2), Minute.AddMinutes(1), Flat(Minute.AddMinutes(-2), Minute.AddMinutes(1), 102m));
+        await RunMinuteAsync();
+
+        await _ideaStore.Received(1).SaveAsync(
+            Arg.Any<IReadOnlyCollection<Idea>>(),
+            Arg.Is<IReadOnlyCollection<Idea>>(ideas => ideas!.Single().Id == open.Id && ideas!.Single().Track.EnteredAt == Minute.AddMinutes(-2)),
+            Arg.Any<CancellationToken>());
+        await _snapshots.Received(1).ReplaceSetupsAsync(_identity.Id, Arg.Is<IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>>>(setups => setups!.ContainsKey(Btc)), Arg.Any<CancellationToken>());
+    }
+
+    // Scenario "Сбой расчёта идей".
+    [Test]
+    public async Task Failure_of_the_ideas_leaves_the_snapshot_and_is_logged()
+    {
+        var failure = new InvalidOperationException("ideas");
+        _ideaStore.GetOpenAsync(Arg.Any<CancellationToken>()).ThrowsAsync(failure);
+
+        IReadOnlyList<Instrument> lagging = await RunMinuteAsync();
+
+        lagging.ShouldBe([Btc]);
+        await _snapshots.Received(1).ReplaceAsync(_identity.Id, Arg.Any<IReadOnlyCollection<MarketSnapshotRow>>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+        await _snapshots.DidNotReceiveWithAnyArgs().ReplaceSetupsAsync(default, default!, default);
+        _journal.Received(1).Failed("ideas", failure);
+    }
+
+    [Test]
+    public async Task Lost_lease_on_the_setups_stops_the_cycle()
+    {
+        _snapshots.ReplaceSetupsAsync(Arg.Any<Guid>(), Arg.Any<IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>>>(), Arg.Any<CancellationToken>()).Returns(false);
+
+        await Should.ThrowAsync<ScannerLeaseLostException>(RunMinuteAsync);
+    }
+
+    // Flat minutes with a volume of 1.
+    private static IEnumerable<Candle> Flat(DateTimeOffset from, DateTimeOffset to, decimal price = 100m)
+    {
+        for (DateTimeOffset time = from; time < to; time = time.AddMinutes(1))
+        {
+            yield return new Candle(time, new Price(price), new Price(price), new Price(price), new Price(price), new Volume(1m), new Volume(100m));
+        }
     }
 
     // Moves the clock until the minute of the cycle is done.

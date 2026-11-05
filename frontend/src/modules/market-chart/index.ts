@@ -8,6 +8,8 @@ export {
   tooFarBehind,
 } from './model/chartPaging';
 export { candlesPerPoint, candlesText, perPointText, pointsText } from './model/density';
+export { type LevelInput, type LevelKind, type ZoneInput } from './model/ideaOverlay';
+export { firedMark } from './model/ideaOverlay';
 export {
   type Bar,
   type BarInput,

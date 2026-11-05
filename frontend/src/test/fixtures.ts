@@ -235,6 +235,7 @@ export const marketRow = (overrides: Partial<Schemas['MarketRowResponse']> = {})
     spread: null,
     incomplete: false,
     computedAt: new Date().toISOString(),
+    setups: { '5': [], '15': [], '60': [], '240': [] },
     ...overrides,
   }) satisfies Schemas['MarketRowResponse'];
 
@@ -250,3 +251,129 @@ export const marketSnapshot = (
     rows,
     ...overrides,
   }) satisfies Schemas['MarketResponse'];
+
+/** A trade idea of the API: a long «Откат» on 15 minutes, awaiting entry, with a bucket that has enough data. */
+export const ideaOf = (overrides: Partial<Schemas['IdeaResponse']> = {}) =>
+  ({
+    id: '11111111-1111-4111-8111-111111111111',
+    category: 'linear',
+    symbol: 'WIFUSDT',
+    setup: 'impulse',
+    interval: '15',
+    type: 'pullback',
+    side: 'long',
+    firedAt: '2026-11-04T11:45:00Z',
+    entry: '2.40',
+    stop: '2.30',
+    target: '2.60',
+    riskReward: '2',
+    status: 'awaiting_entry',
+    statusAt: '2026-11-04T11:46:00Z',
+    enteredAt: null,
+    exitPrice: null,
+    move: '3.1',
+    volumeRatio: '4.2',
+    baseline: '0.33',
+    bucket: {
+      cases: 120,
+      expired: 4,
+      probability: '0.46',
+      probabilityLow: '0.41',
+      probabilityHigh: '0.51',
+      baseline: '0.33',
+      expectancy: '0.38',
+      enoughData: true,
+    },
+    recent: null,
+    ...overrides,
+  }) satisfies Schemas['IdeaResponse'];
+
+export const savedFilterOf = (overrides: Partial<Schemas['SavedFilterResponse']> = {}) =>
+  ({
+    id: '22222222-2222-4222-8222-222222222222',
+    name: 'Шорт перегретых',
+    place: 'market',
+    conditions: [
+      { field: 'change1h', operator: '>', value: '3', to: null },
+      { field: 'fundingRate', operator: '>', value: '0.0003', to: null },
+    ],
+    ...overrides,
+  }) satisfies Schemas['SavedFilterResponse'];
+
+const comparisons = ['>', '>=', '<', '<=', '=', 'between'];
+
+/** The catalog of the fields of saved filters, as the API gives it, in its order. */
+export const filterFields = [
+  {
+    code: 'category',
+    unit: 'choice',
+    ofIdea: false,
+    operators: ['='],
+    choices: ['spot', 'linear'],
+  },
+  ...['change5m', 'change15m', 'change1h', 'change4h', 'change24h'].map((code) => ({
+    code,
+    unit: 'percent',
+    ofIdea: false,
+    operators: comparisons,
+    choices: null,
+  })),
+  ...['turnover1h', 'turnover24h', 'openInterest'].map((code) => ({
+    code,
+    unit: 'usdt',
+    ofIdea: false,
+    operators: comparisons,
+    choices: null,
+  })),
+  ...['openInterestChange1h', 'openInterestChange24h'].map((code) => ({
+    code,
+    unit: 'percent',
+    ofIdea: false,
+    operators: comparisons,
+    choices: null,
+  })),
+  { code: 'fundingRate', unit: 'ratio', ofIdea: false, operators: comparisons, choices: null },
+  { code: 'spread', unit: 'percent', ofIdea: false, operators: comparisons, choices: null },
+  {
+    code: 'setup',
+    unit: 'choice',
+    ofIdea: false,
+    operators: ['='],
+    choices: ['impulse', 'early_impulse', 'drop', 'early_drop', 'high_volatility'],
+  },
+  {
+    code: 'ideaSetup',
+    unit: 'choice',
+    ofIdea: true,
+    operators: ['='],
+    choices: ['impulse', 'early_impulse', 'drop', 'early_drop', 'high_volatility'],
+  },
+  {
+    code: 'type',
+    unit: 'choice',
+    ofIdea: true,
+    operators: ['='],
+    choices: ['levels', 'target_2r', 'beyond_extreme', 'pullback'],
+  },
+  {
+    code: 'interval',
+    unit: 'choice',
+    ofIdea: true,
+    operators: ['='],
+    choices: ['5', '15', '60', '240'],
+  },
+  { code: 'side', unit: 'choice', ofIdea: true, operators: ['='], choices: ['long', 'short'] },
+  { code: 'riskReward', unit: 'ratio', ofIdea: true, operators: comparisons, choices: null },
+  {
+    code: 'probability',
+    unit: 'ratio',
+    ofIdea: true,
+    operators: [
+      ...comparisons.filter((operator) => operator !== 'between'),
+      'between',
+      'above_baseline',
+    ],
+    choices: null,
+  },
+  { code: 'expectancy', unit: 'r', ofIdea: true, operators: comparisons, choices: null },
+] satisfies Schemas['SavedFilterFieldResponse'][];

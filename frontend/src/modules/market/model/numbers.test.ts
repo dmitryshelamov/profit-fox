@@ -3,6 +3,7 @@ import {
   compactNumber,
   fundingText,
   instrumentsText,
+  shownOfText,
   spreadText,
   trend,
 } from './numbers';
@@ -72,6 +73,17 @@ describe('instruments text', () => {
     [1104, '1\u00a0104 инструмента'],
   ])('counts %i as «%s»', (count, text) => {
     expect(instrumentsText(count)).toBe(text);
+  });
+});
+
+describe('shown of instruments', () => {
+  // Scenario "Импульсы на 15 минутах".
+  it.each([
+    [7, 1104, '7 из 1\u00a0104 инструментов'],
+    [4, 4, '4 из 4 инструментов'],
+    [0, 21, '0 из 21 инструментов'],
+  ])('counts %i of %i as «%s»', (shown, total, text) => {
+    expect(shownOfText(shown, total)).toBe(text);
   });
 });
 

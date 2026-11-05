@@ -4,15 +4,18 @@ using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 
+using ProfitFox.Application.Backtests;
 using ProfitFox.Application.Ports.Market;
 using ProfitFox.Application.Scanner;
 using ProfitFox.Application.Scanner.Backfill;
+using ProfitFox.Application.Scanner.Ideas;
 using ProfitFox.Application.Scanner.Minute;
 using ProfitFox.Application.Scanner.Universe;
 using ProfitFox.Application.Workers;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.BackgroundServices;
 
@@ -64,6 +67,17 @@ public class ScannerBackgroundServiceTests
             .AddScoped<ScannerMarket>()
             .AddScoped<ScannerUniverse>()
             .AddScoped<ScannerBackfill>()
+            .AddSingleton(Substitute.For<IIdeaRepository>())
+            .AddSingleton(Substitute.For<IIdeaCaseRepository>())
+            .AddSingleton(Substitute.For<IIdeaReplayRepository>())
+            .AddSingleton(Substitute.For<IIdeaVolatilityRepository>())
+            .AddSingleton(Substitute.For<IIdeaBucketRepository>())
+            .AddSingleton(new IdeasSettings())
+            .AddSingleton(new BacktestSettings())
+            .AddSingleton(new IdeasEngineVersion(IdeasEngineVersion.Current))
+            .AddScoped<ScannerPace>()
+            .AddScoped<LiveIdeas>()
+            .AddScoped<IdeasReplay>()
             .AddScoped<ScannerMinuteCycle>()
             .AddScoped<ScannerSession>()
             .BuildServiceProvider();

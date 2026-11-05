@@ -2,6 +2,10 @@ using System.Data;
 
 using Dapper;
 
+using Npgsql;
+
+using NpgsqlTypes;
+
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Market.Contracts;
 
 namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Market.Queries;
@@ -61,5 +65,32 @@ internal static class MarketSnapshotRepositoryQueries
             $"SELECT {Columns} FROM market_snapshot WHERE category = @Category AND symbol = @Symbol",
             new { Category = category, Symbol = symbol },
             cancellationToken: cancellationToken);
+    }
+
+    internal static CommandDefinition ClearSetups(IDbTransaction transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition("UPDATE market_snapshot SET setups = '{}' WHERE setups <> '{}'", transaction: transaction, cancellationToken: cancellationToken);
+    }
+
+    internal static NpgsqlCommand SetSetups(NpgsqlConnection connection, NpgsqlTransaction transaction, string[] categories, string[] symbols, string[] setups)
+    {
+        var command = new NpgsqlCommand(
+            """
+            UPDATE market_snapshot s SET setups = t.setups
+            FROM unnest(@categories, @symbols, @setups) AS t(category, symbol, setups)
+            WHERE s.category = t.category AND s.symbol = t.symbol
+            """,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("categories", categories);
+        command.Parameters.AddWithValue("symbols", symbols);
+        command.Parameters.AddWithValue("setups", NpgsqlDbType.Array | NpgsqlDbType.Jsonb, setups);
+
+        return command;
+    }
+
+    internal static CommandDefinition GetSetups(CancellationToken cancellationToken)
+    {
+        return new CommandDefinition("SELECT category, symbol, setups::text FROM market_snapshot WHERE setups <> '{}'", cancellationToken: cancellationToken);
     }
 }

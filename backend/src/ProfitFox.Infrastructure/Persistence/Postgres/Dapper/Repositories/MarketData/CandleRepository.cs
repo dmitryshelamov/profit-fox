@@ -6,6 +6,8 @@ using ProfitFox.Application.MarketData;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.Services.Ideas;
+using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.MarketData.Contracts;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.MarketData.Converters;
@@ -62,5 +64,23 @@ internal sealed class CandleRepository(NpgsqlDataSource dataSource) : ICandleRep
             CandleRepositoryQueries.GetOpenTimes(instrument.Category.ToCode(), instrument.Symbol, interval.ToCode(), from, to, cancellationToken));
 
         return openTimes.Select(openTime => new DateTimeOffset(openTime)).ToList();
+    }
+
+    public async Task<IReadOnlyList<IdeaCandle>> GetAggregatedAsync(
+        Instrument instrument,
+        Interval interval,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        string category = instrument.Category.ToCode();
+        var minutes = (int)(interval.CandleEnd(from) - from).TotalMinutes;
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        IEnumerable<MinuteAggregateDb> rows = await connection.QueryAsync<MinuteAggregateDb>(
+            CandleRepositoryQueries.GetAggregated(category, instrument.Symbol, minutes, from, to, cancellationToken));
+        decimal? closeBefore = await connection.ExecuteScalarAsync<decimal?>(CandleRepositoryQueries.GetCloseBefore(category, instrument.Symbol, from, cancellationToken));
+        MinuteAggregate[] aggregates = [.. rows.Select(row => new MinuteAggregate(row.OpenTime, row.FirstMinute, row.Open, row.High, row.Low, row.Close, row.Volume))];
+
+        return IdeaCandles.Join(interval, aggregates, from, to, closeBefore);
     }
 }

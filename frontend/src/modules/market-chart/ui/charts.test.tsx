@@ -292,6 +292,129 @@ describe('bot candle chart', () => {
     expect(candles.removePriceLine).toHaveBeenCalledTimes(1);
   });
 
+  it('draws the levels of an idea as solid lines and replaces them when the idea changes', () => {
+    const { rerender } = show({
+      levels: [
+        { kind: 'entry', price: '2.4', title: 'Вход 2.4' },
+        { kind: 'stop', price: '2.3', title: 'Стоп 2.3' },
+        { kind: 'target', price: '2.6', title: 'Цель 2.6' },
+      ],
+    });
+    const candles = seriesOf('Candlestick');
+
+    expect(candles.createPriceLine.mock.calls.map(([line]) => line)).toEqual([
+      expect.objectContaining({ price: 2.4, color: '#7aa7ff', lineStyle: 0, title: 'Вход 2.4' }),
+      expect.objectContaining({ price: 2.3, color: '#e5484d', title: 'Стоп 2.3' }),
+      expect.objectContaining({ price: 2.6, color: '#3fb37f', title: 'Цель 2.6' }),
+    ]);
+
+    rerender(
+      <BotCandleChart
+        history={history}
+        interval="60"
+        label="c"
+        levels={[]}
+        onReachStart={() => undefined}
+      />,
+    );
+
+    expect(candles.removePriceLine).toHaveBeenCalledTimes(3);
+  });
+
+  it('widens the autoscale of the candles to the levels of the idea and drops them with the idea', () => {
+    const { rerender } = show({
+      levels: [
+        { kind: 'entry', price: '160.68', title: 'Вход' },
+        { kind: 'stop', price: '150', title: 'Стоп' },
+        { kind: 'target', price: '189', title: 'Цель' },
+      ],
+    });
+    const candles = seriesOf('Candlestick');
+    const provider = () =>
+      candles.applyOptions.mock.calls.at(-1)![0].autoscaleInfoProvider as (
+        base: () => unknown,
+      ) => unknown;
+    const base = () => ({ priceRange: { minValue: 90, maxValue: 120 } });
+
+    expect(provider()(base)).toEqual({ priceRange: { minValue: 90, maxValue: 189 } });
+    expect(chartApi().addSeries.mock.calls[0]![1].autoscaleInfoProvider).toBe(provider());
+
+    rerender(
+      <BotCandleChart
+        history={history}
+        interval="60"
+        label="c"
+        levels={[]}
+        onReachStart={() => undefined}
+      />,
+    );
+
+    expect(provider()(base)).toEqual(base());
+  });
+
+  it('marks the candle an idea fired in', () => {
+    show({ signalTime: t10 });
+
+    expect(markersPlugin(0).setMarkers).toHaveBeenLastCalledWith([
+      expect.objectContaining({ time: t10, shape: 'circle', text: 'Сигнал' }),
+    ]);
+  });
+
+  describe('zones', () => {
+    type Primitive = {
+      attached: (param: unknown) => void;
+      paneViews: () => {
+        renderer: () => { draw: (target: unknown) => void };
+      }[];
+    };
+
+    /** Draws the primitive the chart attached on a fake canvas and returns the rectangles it filled. */
+    function bandsDrawn() {
+      const candles = seriesOf('Candlestick') as unknown as {
+        attachPrimitive: ReturnType<typeof vi.fn>;
+        priceToCoordinate: ReturnType<typeof vi.fn>;
+      };
+      candles.priceToCoordinate.mockImplementation((price: number) => 1000 - price * 10);
+      const primitive = candles.attachPrimitive.mock.calls[0]![0] as Primitive;
+      // The library hands the series to the primitive when it attaches it; the inert chart does not.
+      primitive.attached({ series: candles, requestUpdate: () => undefined });
+      const fills: { colour: string; rect: number[] }[] = [];
+      const context = {
+        fillStyle: '',
+        fillRect: (...rect: number[]) => fills.push({ colour: context.fillStyle, rect }),
+      };
+      primitive
+        .paneViews()[0]!
+        .renderer()
+        .draw({
+          useBitmapCoordinateSpace: (draw: (scope: unknown) => void) =>
+            draw({ context, bitmapSize: { width: 800, height: 400 }, verticalPixelRatio: 2 }),
+        });
+
+      return fills;
+    }
+
+    it('draws each zone as a band across the pane, support green and resistance red', () => {
+      show({
+        zones: [
+          { low: '20', high: '30', kind: 'support' },
+          { low: '50', high: '55', kind: 'resistance' },
+        ],
+      });
+
+      expect(bandsDrawn()).toEqual([
+        { colour: 'rgba(63, 179, 127, 0.16)', rect: [0, 1400, 800, 200] },
+        { colour: 'rgba(229, 72, 77, 0.16)', rect: [0, 900, 800, 100] },
+      ]);
+    });
+
+    it('draws nothing without zones', () => {
+      show();
+
+      expect(bandsDrawn()).toEqual([]);
+    });
+  });
+
   it('describes what it shows with the number of fills and of orders', () => {
     const { getByRole } = show({
       orders: [sell],

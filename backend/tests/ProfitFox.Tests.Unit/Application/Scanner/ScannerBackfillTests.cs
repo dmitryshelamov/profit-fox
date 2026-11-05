@@ -244,7 +244,7 @@ public class ScannerBackfillTests
         {
             if (time >= _listedSince && !_quietMinutes.Contains(time))
             {
-                yield return new MarketMinute(time, 100m, 100m, 1m);
+                yield return new MarketMinute(time, 100m, 100m, 100m, 100m, 1m);
             }
         }
     }

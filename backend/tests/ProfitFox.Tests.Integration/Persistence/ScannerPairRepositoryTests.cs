@@ -34,12 +34,22 @@ public class ScannerPairRepositoryTests
     [Test]
     public async Task Saved_pairs_are_read_back_with_their_coverage()
     {
-        var sol = new ScannerPair(new Instrument(MarketCategory.Linear, "SOLUSDT"), true, Now.AddDays(-90), Now, Now.AddMinutes(-5), Now.AddHours(-8), Now.AddDays(-400));
+        var sol = new ScannerPair(new Instrument(MarketCategory.Linear, "SOLUSDT"), true, Now.AddDays(-90), Now, Now.AddMinutes(-5), Now.AddHours(-8), Now.AddDays(-400), 0.001m);
         var btc = new ScannerPair(new Instrument(MarketCategory.Spot, "BTCUSDT"), true);
 
         await _store.SaveAsync([sol, btc], CancellationToken.None);
 
         (await _store.GetAllAsync(CancellationToken.None)).OrderBy(pair => pair.Instrument.Symbol).ShouldBe([btc, sol]);
+    }
+
+    [Test]
+    public async Task Pair_is_read_by_its_instrument()
+    {
+        var sol = new ScannerPair(new Instrument(MarketCategory.Linear, "SOLUSDT"), true, TickSize: 0.001m);
+        await _store.SaveAsync([sol, new ScannerPair(new Instrument(MarketCategory.Spot, "SOLUSDT"), true)], CancellationToken.None);
+
+        (await _store.GetAsync(sol.Instrument, CancellationToken.None)).ShouldBe(sol);
+        (await _store.GetAsync(new Instrument(MarketCategory.Linear, "NOPEUSDT"), CancellationToken.None)).ShouldBeNull();
     }
 
     // Scenario "Пара снята с торгов": the pair stays with its coverage.

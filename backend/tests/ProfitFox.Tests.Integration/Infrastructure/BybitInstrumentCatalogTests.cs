@@ -51,6 +51,21 @@ public class BybitInstrumentCatalogTests
         ]);
     }
 
+    // Fix after review: the list tells the step of each price, which the ideas of the scanner go on.
+    [Test]
+    public async Task List_tells_the_price_step_of_each_instrument()
+    {
+        _factory.Bybit.Rules[("spot", "BTCUSDT")] = ("0.01", "0.000001", "0.000048", "1");
+        _factory.Bybit.Rules[("linear", "SOLUSDT")] = ("0.001", "0.1", "0.1", "5");
+
+        IReadOnlyList<ListedInstrument> spot = await Catalog().ListAsync(MarketCategory.Spot, CancellationToken.None);
+        IReadOnlyList<ListedInstrument> linear = await Catalog().ListAsync(MarketCategory.Linear, CancellationToken.None);
+
+        spot.Single(instrument => instrument.Symbol == "BTCUSDT").TickSize.ShouldBe(0.01m);
+        spot.Single(instrument => instrument.Symbol == "ETHUSDT").TickSize.ShouldBeNull();
+        linear.Single(instrument => instrument.Symbol == "SOLUSDT").TickSize.ShouldBe(0.001m);
+    }
+
     [Test]
     public async Task Linear_list_follows_the_cursor_and_collects_every_page()
     {

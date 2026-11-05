@@ -174,6 +174,18 @@ public class ScannerMarketTests
         return MarketFixtures.Day().Select(AsCandle);
     }
 
+    // Change 2: the ideas measure minutes by their high and low.
+    [Test]
+    public void Minutes_keep_their_high_and_low()
+    {
+        var market = new ScannerMarket();
+        market.Keep([new ScannerPair(Sol, true, CoveredUntil: End)]);
+
+        market.Closed(Sol, new Candle(End, new Price(100m), new Price(102m), new Price(99m), new Price(101m), new Volume(3m), new Volume(300m)));
+
+        market.Minutes(Sol).ShouldBe([new MarketMinute(End, 100m, 102m, 99m, 101m, 300m)]);
+    }
+
     private static Candle AsCandle(MarketMinute minute)
     {
         return new Candle(minute.OpenTime, new Price(minute.Open), new Price(minute.Open), new Price(minute.Close), new Price(minute.Close), new Volume(1m), new Volume(minute.Turnover));

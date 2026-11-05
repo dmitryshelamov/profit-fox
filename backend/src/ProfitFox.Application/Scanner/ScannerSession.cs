@@ -3,6 +3,7 @@ using System.Threading.Channels;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.Market;
 using ProfitFox.Application.Scanner.Backfill;
+using ProfitFox.Application.Scanner.Ideas;
 using ProfitFox.Application.Scanner.Minute;
 using ProfitFox.Application.Scanner.Universe;
 using ProfitFox.Domain.Entities.Market;
@@ -14,10 +15,11 @@ using ProfitFox.Domain.ValueObjects.MarketData;
 namespace ProfitFox.Application.Scanner;
 
 /// <summary>
-///     The scanner while it holds the stream: the list of pairs, the stream of minute candles, the loads and the minute cycle. Three lanes
-///     run side by side: the stream's candles go to storage in batches; the REST lane catches up the pairs that lag behind, reads the list
-///     again, tops up funding and loads history, one piece at a time; the minute cycle computes the snapshot. A failed step is logged and
-///     tried again; only the end of the lease stops the session.
+///     The scanner while it holds the stream: the list of pairs, the stream of minute candles, the loads, the minute cycle and the ideas. Four
+///     lanes run side by side: the stream's candles go to storage in batches; the REST lane catches up the pairs that lag behind, reads the list
+///     again, tops up funding and loads history, one piece at a time; the minute cycle computes the snapshot and the live ideas; the lane of
+///     ideas reads the warm-ups of the live ideas, replays history from storage only and recomputes the buckets every 10 minutes. A failed
+///     step is logged and tried again; only the end of the lease stops the session.
 /// </summary>
 public sealed class ScannerSession(
     IScannerPairRepository pairs,
@@ -26,12 +28,15 @@ public sealed class ScannerSession(
     ScannerUniverse universe,
     ScannerBackfill backfill,
     ScannerMinuteCycle minute,
+    LiveIdeas ideas,
+    IdeasReplay replay,
     ScannerMarket market,
     IScannerJournal journal,
     TimeProvider time)
 {
     private static readonly TimeSpan Retry = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan FundingTopUp = TimeSpan.FromHours(1);
+    private static readonly TimeSpan BucketsRefresh = TimeSpan.FromMinutes(10);
 
     private readonly Channel<(Instrument, Candle)> _closed = Channel.CreateUnbounded<(Instrument, Candle)>();
     private readonly Lock _lock = new Lock();
@@ -61,7 +66,7 @@ public sealed class ScannerSession(
         try
         {
             await SubscribeAsync(session.Token);
-            Task[] lanes = [WriteCandlesAsync(session.Token), RestAsync(session.Token), MinutesAsync(session.Token)];
+            Task[] lanes = [WriteCandlesAsync(session.Token), RestAsync(session.Token), MinutesAsync(session.Token), IdeasAsync(session.Token)];
             Task first = await Task.WhenAny(lanes);
 
             // The lanes use the services of the session, so none of them outlives it.
@@ -185,6 +190,43 @@ public sealed class ScannerSession(
             catch (Exception exception) when (exception is not ScannerLeaseLostException && !cancellationToken.IsCancellationRequested)
             {
                 journal.Failed("minute", exception);
+            }
+        }
+    }
+
+    private async Task IdeasAsync(CancellationToken cancellationToken)
+    {
+        bool cleaned = false;
+        DateTimeOffset bucketsAt = time.GetUtcNow();
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                if (!cleaned)
+                {
+                    await replay.CleanUpAsync(cancellationToken);
+                    cleaned = true;
+                }
+
+                // The warm-ups of the live ideas go before the history.
+                bool warmed = await ideas.ReadWarmUpsAsync(cancellationToken);
+
+                if (time.GetUtcNow() >= bucketsAt)
+                {
+                    await replay.RecomputeBucketsAsync(cancellationToken);
+                    bucketsAt = time.GetUtcNow() + BucketsRefresh;
+                }
+
+                if (!warmed && !await replay.StepAsync(cancellationToken))
+                {
+                    await Task.Delay(TimeSpan.FromMinutes(1), time, cancellationToken);
+                }
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                journal.Failed("ideas", exception);
+                await Task.Delay(Retry, time, cancellationToken);
             }
         }
     }

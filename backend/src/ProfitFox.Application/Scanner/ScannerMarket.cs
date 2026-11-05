@@ -151,6 +151,14 @@ public sealed class ScannerMarket
         }
     }
 
+    public MarketTicker? TickerOf(Instrument instrument)
+    {
+        lock (_lock)
+        {
+            return _books.GetValueOrDefault(instrument)?.Ticker;
+        }
+    }
+
     /// <summary>Changes the record of a pair, such as once its history is loaded.</summary>
     public void Update(Instrument instrument, Func<ScannerPair, ScannerPair> change)
     {
@@ -252,7 +260,7 @@ public sealed class ScannerMarket
 
     private static MarketMinute Minute(Candle candle)
     {
-        return new MarketMinute(candle.OpenTime, candle.Open.Value, candle.Close.Value, candle.Turnover.Value);
+        return new MarketMinute(candle.OpenTime, candle.Open.Value, candle.High.Value, candle.Low.Value, candle.Close.Value, candle.Turnover.Value);
     }
 
     private sealed class Book(ScannerPair pair)

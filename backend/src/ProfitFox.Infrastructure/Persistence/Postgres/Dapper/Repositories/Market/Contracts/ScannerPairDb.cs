@@ -17,4 +17,6 @@ internal sealed class ScannerPairDb
     public DateTimeOffset? FundingCoveredUntil { get; init; }
 
     public DateTimeOffset? ListedAt { get; init; }
+
+    public decimal? TickSize { get; init; }
 }

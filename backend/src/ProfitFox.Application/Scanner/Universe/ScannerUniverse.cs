@@ -23,18 +23,23 @@ public sealed class ScannerUniverse(IMarketDataFeed feed, IScannerPairRepository
     }
 
     /// <summary>
-    ///     The pairs that change once <paramref name="selected" /> is the list: a new pair, a pair back in trading, and a pair that is
-    ///     no longer listed. A pair keeps its data either way.
+    ///     The pairs that change once <paramref name="selected" /> is the list: a new pair, a pair back in trading, a pair that is no
+    ///     longer listed, and a pair whose step of price the list tells anew. A pair keeps its data either way.
     /// </summary>
     public static IReadOnlyList<ScannerPair> Merge(IReadOnlyList<ScannerPair> known, IReadOnlyList<ListedInstrument> selected)
     {
-        var wanted = selected.Select(Instrument).ToHashSet();
+        var wanted = selected.ToDictionary(Instrument);
         var knownInstruments = known.Select(pair => pair.Instrument).ToHashSet();
 
         return
         [
-            .. known.Where(pair => pair.Listed != wanted.Contains(pair.Instrument)).Select(pair => pair with { Listed = !pair.Listed }),
-            .. selected.Where(listed => !knownInstruments.Contains(Instrument(listed))).Select(listed => new ScannerPair(Instrument(listed), true, ListedAt: listed.ListedAt))
+            .. known
+                .Select(pair => wanted.TryGetValue(pair.Instrument, out ListedInstrument? listed)
+                    ? pair with { Listed = true, TickSize = listed.TickSize ?? pair.TickSize }
+                    : pair with { Listed = false })
+                .Where(pair => !known.Contains(pair)),
+            .. selected.Where(listed => !knownInstruments.Contains(Instrument(listed)))
+                .Select(listed => new ScannerPair(Instrument(listed), true, ListedAt: listed.ListedAt, TickSize: listed.TickSize))
         ];
     }
 

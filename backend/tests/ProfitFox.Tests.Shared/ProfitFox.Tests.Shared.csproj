@@ -12,6 +12,7 @@
         <EmbeddedResource Include="Fixtures\Strategies\*.json"/>
         <EmbeddedResource Include="Fixtures\Backtests\*.json"/>
         <EmbeddedResource Include="Fixtures\Market\*.json"/>
+        <EmbeddedResource Include="Fixtures\Ideas\*.json"/>
     </ItemGroup>
 
     <ItemGroup>

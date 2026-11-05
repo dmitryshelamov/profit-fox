@@ -26,6 +26,23 @@ public class ScannerSettingsTests
         exception.Message.ShouldContain("Scanner:LeaseRenewal");
     }
 
+    // Decision 8: the API measures the own idea and the zones by the same k and rules of the zones as the scanner.
+    [Test]
+    public void Api_and_scanner_hold_the_same_ideas_settings()
+    {
+        string root = Path.GetDirectoryName(ScannerHost.ContentRoot())!;
+
+        Ideas(Path.Combine(root, "ProfitFox.Presentation")).ShouldBe(Ideas(ScannerHost.ContentRoot()));
+        Ideas(ScannerHost.ContentRoot()).ShouldContainKey("Ideas:StopBuffer");
+    }
+
+    private static Dictionary<string, string?> Ideas(string folder)
+    {
+        IConfigurationRoot configuration = new ConfigurationBuilder().AddJsonFile(Path.Combine(folder, "appsettings.json")).Build();
+
+        return configuration.GetSection("Ideas").AsEnumerable().Where(entry => entry.Value is not null).ToDictionary(entry => entry.Key, entry => entry.Value);
+    }
+
     // The file on the server, mounted into the container, changes the settings without a restart; without it the scanner starts as before.
     [Test]
     public async Task Settings_file_in_the_config_folder_changes_the_settings_while_the_scanner_runs()
