@@ -7,9 +7,9 @@
 - [x] 1.1 `IdeaShares.NetRiskReward` — прибыль на 1 USDT, делённая на убыток на 1 USDT. Готово, когда NUnit на примере
   из спеки (вход 100, стоп 98, цель 104, `linear` по рынку) даёт `0.038878 / 0.021089`, а пример со стопом 43.78 при
   входе 44.06 даёт 1.56 с округлением до двух знаков.
-- [ ] 1.2 `IdeaOrder`: колонка `riskReward` сортирует по `Shares.NetRiskReward`. Готово, когда тест «Сортировка по R:R
+- [x] 1.2 `IdeaOrder`: колонка `riskReward` сортирует по `Shares.NetRiskReward`. Готово, когда тест «Сортировка по R:R
   после комиссий» зелёный, а прежний тест колонки обновлён под новое значение.
-- [ ] 1.3 `SavedFilterMatch.Idea`: условие `riskReward` сравнивает `Shares.NetRiskReward`. Готово, когда тест «Условие
+- [x] 1.3 `SavedFilterMatch.Idea`: условие `riskReward` сравнивает `Shares.NetRiskReward`. Готово, когда тест «Условие
   R:R в фильтре» зелёный.
 - [ ] 1.4 `IdeaResponse.NetRiskReward`: десятичная строка рядом с `RiskReward`. Готово, когда интеграционный тест
   `GET /api/ideas` видит поле у идеи из примера спеки.
