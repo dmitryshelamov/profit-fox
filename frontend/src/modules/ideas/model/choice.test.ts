@@ -16,6 +16,7 @@ describe('the choice of the ideas screen in the browser', () => {
     },
     savedFilterId: null,
     sort: { column: 'expectancy', direction: 'desc' },
+    pageSize: 50,
   };
 
   it('opens as before while nothing is stored', () => {
@@ -35,6 +36,7 @@ describe('the choice of the ideas screen in the browser', () => {
       },
       savedFilterId: 'f-1',
       sort: { column: 'riskReward', direction: 'asc' },
+      pageSize: 200,
     } as const;
 
     saveIdeasChoice(choice);
@@ -69,6 +71,13 @@ describe('the choice of the ideas screen in the browser', () => {
       ...defaults,
       filters: { ...defaults.filters, interval: '60' },
     });
+  });
+
+  // Scenario "Размер страницы".
+  it.each([75, '100', null, 'x'])('takes the size 50 for a stored size that is %s', (size) => {
+    localStorage.setItem(key, JSON.stringify({ pageSize: size }));
+
+    expect(loadIdeasChoice().pageSize).toBe(50);
   });
 
   it('keeps the column of a sort whose direction is stale', () => {

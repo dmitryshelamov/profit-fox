@@ -4,14 +4,9 @@ import { intervalLabel } from '@/modules/market-data';
 
 import type { MarketRow } from '../model/rows';
 import { setupLabel, setupsOn } from '../model/setups';
-import type { SortColumn, SortDirection } from '../model/sorting';
+import type { Sort, SortColumn } from '../model/sorting';
 import { CategoryBadge } from './CategoryBadge';
 import { type MetricColumn, metricColumns } from './metricColumns';
-
-export interface Sort {
-  readonly column: SortColumn;
-  readonly direction: SortDirection;
-}
 
 const cell = 'px-3 py-3';
 const number = `${cell} text-right font-mono whitespace-nowrap`;

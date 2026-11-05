@@ -34,6 +34,8 @@ function open(answer: () => unknown) {
 
 const snapshotReads = (requests: Request[]) =>
   requests.filter((request) => new URL(request.url).pathname === '/api/market');
+const lastRead = (requests: Request[]) =>
+  Object.fromEntries(new URL(snapshotReads(requests).at(-1)!.url).searchParams);
 const tableOf = () => screen.findByRole('table');
 const symbolsIn = (table: HTMLElement) =>
   within(table)
@@ -79,13 +81,20 @@ describe('market screen', () => {
   });
 
   it('counts the pairs it shows and says what the columns are', async () => {
-    open(() => marketSnapshot([sol, wif, eth, doge]));
+    fakeApi({
+      'GET /api/market': (request) =>
+        json(
+          new URL(request.url).searchParams.get('Category') === 'spot'
+            ? marketSnapshot([eth, doge], { pairs: 4, categories: { linear: 2, spot: 2 } })
+            : marketSnapshot([sol, wif, eth, doge]),
+        ),
+    });
     renderApp('/market');
     await tableOf();
 
     expect(screen.getByText('4 из 4 инструментов')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'spot 2' }));
-    expect(screen.getByText('2 из 4 инструментов')).toBeInTheDocument();
+    expect(await screen.findByText('2 из 4 инструментов')).toBeInTheDocument();
     expect(
       screen.getByText(
         'Изменения и оборот — по закрытым минутным свечам. OI, фандинг и спред обновляются раз в минуту, у spot их нет («—»). Фандинг — текущая ставка за период.',
@@ -134,8 +143,9 @@ describe('market screen', () => {
     ]);
   });
 
-  it('filters by category with the number of pairs and searches by part of the symbol', async () => {
-    open(() => marketSnapshot([sol, wif, eth, doge]));
+  // Scenario "Поиск на второй странице рынка": the API filters; the screen names the category and the search.
+  it('asks for a category with the number of pairs and for a search by part of the symbol', async () => {
+    const requests = open(() => marketSnapshot([sol, wif, eth, doge]));
     renderApp('/market');
     await tableOf();
 
@@ -144,8 +154,15 @@ describe('market screen', () => {
         name: 'Все 4',
       }),
     ).toHaveAttribute('aria-pressed', 'true');
+    expect(lastRead(requests)).toEqual({
+      Interval: '15',
+      Sort: 'change1h',
+      Direction: 'desc',
+      Page: '1',
+      PageSize: '50',
+    });
     await userEvent.click(screen.getByRole('button', { name: 'spot 2' }));
-    expect(symbolsIn(screen.getByRole('table'))).toEqual(['DOGEUSDT', 'ETHUSDT']);
+    await waitFor(() => expect(lastRead(requests)).toMatchObject({ Category: 'spot' }));
 
     await userEvent.click(
       within(screen.getByRole('group', { name: 'Категория' })).getByRole('button', {
@@ -153,12 +170,36 @@ describe('market screen', () => {
       }),
     );
     await userEvent.type(screen.getByRole('searchbox', { name: 'Поиск по символу' }), 'ge');
-    expect(symbolsIn(screen.getByRole('table'))).toEqual(['DOGEUSDT']);
+    await waitFor(() => expect(lastRead(requests)).toMatchObject({ Search: 'ge' }));
+    expect(lastRead(requests)).not.toHaveProperty('Category');
   });
 
-  // Scenario "Сортировка по изменению за 1 час": as in the mockup, the table opens sorted by it, growth first.
-  it('sorts by the change over an hour from the start and the other way on a click, the empty values last', async () => {
-    open(() => marketSnapshot([sol, wif, eth, doge]));
+  // The search goes after a pause of 300 ms in the typing, not on every letter.
+  it('sends the search once, after the pause in the typing', async () => {
+    const requests = open(() => marketSnapshot([sol]));
+    renderApp('/market');
+    await tableOf();
+    const before = snapshotReads(requests).length;
+
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Поиск по символу' }), 'sol');
+
+    expect(snapshotReads(requests)).toHaveLength(before);
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    await waitFor(() => expect(lastRead(requests)).toMatchObject({ Search: 'sol' }));
+    expect(snapshotReads(requests)).toHaveLength(before + 1);
+  });
+
+  it('never asks for the ideas', async () => {
+    const requests = open(() => marketSnapshot([sol]));
+    renderApp('/market');
+    await tableOf();
+
+    expect(requests.some((request) => new URL(request.url).pathname === '/api/ideas')).toBe(false);
+  });
+
+  // Scenario "Сортировка по изменению за 1 час": as in the mockup, the table opens sorted by it, growth first; the API sorts.
+  it('asks to sort by the change over an hour from the start and the other way on a click', async () => {
+    const requests = open(() => marketSnapshot([doge, sol, wif, eth]));
     renderApp('/market');
     await tableOf();
 
@@ -173,45 +214,48 @@ describe('market screen', () => {
     expect(hour).toHaveTextContent('1ч ↓');
 
     await userEvent.click(screen.getByRole('button', { name: 'Изменение за 1ч' }));
-    expect(symbolsIn(screen.getByRole('table'))).toEqual([
-      'WIFUSDT',
-      'SOLUSDT',
-      'DOGEUSDT',
-      'ETHUSDT',
-    ]);
+
+    await waitFor(() =>
+      expect(lastRead(requests)).toMatchObject({ Sort: 'change1h', Direction: 'asc' }),
+    );
     expect(hour).toHaveAttribute('aria-sort', 'ascending');
     expect(hour).toHaveTextContent('1ч ↑');
   });
 
-  it('sorts by symbol from A to Z first', async () => {
-    open(() => marketSnapshot([sol, wif, eth, doge]));
+  it('asks to sort by symbol from A to Z first', async () => {
+    const requests = open(() => marketSnapshot([sol, wif, eth, doge]));
     renderApp('/market');
     await tableOf();
 
     await userEvent.click(screen.getByRole('button', { name: 'Инструмент' }));
 
-    expect(symbolsIn(screen.getByRole('table'))).toEqual([
-      'DOGEUSDT',
-      'ETHUSDT',
-      'SOLUSDT',
-      'WIFUSDT',
-    ]);
+    await waitFor(() =>
+      expect(lastRead(requests)).toMatchObject({ Sort: 'symbol', Direction: 'asc' }),
+    );
   });
 
   // Scenario "Новая минута".
-  it('reads the snapshot every 15 seconds and keeps the filter, the search and the sort', async () => {
-    let answer = marketSnapshot([sol, wif, doge, eth]);
+  it('reads the snapshot every 15 seconds with the same filter, search and sort', async () => {
+    let answer = marketSnapshot([sol, wif]);
     const requests = open(() => answer);
     renderApp('/market');
     await tableOf();
-    await userEvent.click(screen.getByRole('button', { name: 'linear 2' }));
+    await userEvent.click(screen.getByRole('button', { name: /^linear/ }));
     await userEvent.type(screen.getByRole('searchbox', { name: 'Поиск по символу' }), 'USDT');
-    expect(symbolsIn(screen.getByRole('table'))).toEqual(['SOLUSDT', 'WIFUSDT']);
-    answer = marketSnapshot([{ ...sol, change1h: '-5' }, { ...wif, change1h: '-1' }, doge, eth]);
+    await waitFor(() => expect(lastRead(requests)).toMatchObject({ Search: 'USDT' }));
+    await waitFor(() =>
+      expect(symbolsIn(screen.getByRole('table'))).toEqual(['SOLUSDT', 'WIFUSDT']),
+    );
+    const asked = snapshotReads(requests).length;
+    answer = marketSnapshot([
+      { ...wif, change1h: '-1' },
+      { ...sol, change1h: '-5' },
+    ]);
 
     await act(() => vi.advanceTimersByTimeAsync(15_000));
 
-    await waitFor(() => expect(snapshotReads(requests)).toHaveLength(2));
+    await waitFor(() => expect(snapshotReads(requests)).toHaveLength(asked + 1));
+    expect(lastRead(requests)).toMatchObject({ Category: 'linear', Search: 'USDT' });
     await waitFor(() =>
       expect(symbolsIn(screen.getByRole('table'))).toEqual(['WIFUSDT', 'SOLUSDT']),
     );
@@ -334,14 +378,22 @@ describe('market screen', () => {
   });
 
   it('says that no pair matches the search', async () => {
-    open(() => marketSnapshot([sol]));
+    fakeApi({
+      'GET /api/market': (request) =>
+        json(
+          new URL(request.url).searchParams.has('Search')
+            ? marketSnapshot([], { pairs: 1 })
+            : marketSnapshot([sol]),
+        ),
+    });
     renderApp('/market');
     await tableOf();
 
     await userEvent.type(screen.getByRole('searchbox', { name: 'Поиск по символу' }), 'zzz');
 
-    expect(screen.getByText('Ничего не найдено.')).toBeInTheDocument();
+    expect(await screen.findByText('Ничего не найдено.')).toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'На странице' })).not.toBeInTheDocument();
   });
 
   it('says that the market is loading', async () => {
@@ -367,5 +419,103 @@ describe('market screen', () => {
     await tableOf();
 
     expect(screen.getByRole('main')).toHaveClass('max-w-[1376px]');
+  });
+
+  describe('the pages', () => {
+    // 1 104 pairs, the page the request names; the pairs of a page are named after their number.
+    const pagedApi = (total = 1104) =>
+      fakeApi({
+        'GET /api/market': (request) => {
+          const query = new URL(request.url).searchParams;
+          const size = Number(query.get('PageSize') ?? 50);
+          const last = Math.ceil(total / size);
+          const page = Math.min(Number(query.get('Page') ?? 1), last);
+          const from = (page - 1) * size;
+          const rows = Array.from({ length: Math.min(size, total - from) }, (_, index) =>
+            marketRow({ symbol: `P${from + index + 1}USDT` }),
+          );
+
+          return json(marketSnapshot(rows, { page, pageSize: size, total, pairs: total }));
+        },
+        'GET /api/saved-filters': () => json([]),
+        'GET /api/saved-filters/fields': () => json([]),
+      });
+
+    // Scenario "Вторая страница рынка".
+    it('turns the pages with the numbers of the rows shown and writes the page into the address', async () => {
+      localStorage.setItem('profit-fox.market.choice', JSON.stringify({ pageSize: 100 }));
+      const requests = pagedApi();
+      const { history } = renderApp('/market');
+      await screen.findByText('1–100 из 1 104');
+      expect(screen.getByText('1 из 12')).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Следующая страница' }));
+
+      expect(await screen.findByText('101–200 из 1 104')).toBeInTheDocument();
+      expect(lastRead(requests)).toMatchObject({ Page: '2', PageSize: '100' });
+      expect(history.location.search).toBe('?page=2');
+      localStorage.clear();
+    });
+
+    it('goes back to the first page when the search, the category or the sorting changes', async () => {
+      const requests = pagedApi();
+      const { history } = renderApp('/market?page=3');
+      await screen.findByText('101–150 из 1 104');
+
+      await userEvent.type(screen.getByRole('searchbox', { name: 'Поиск по символу' }), 'btc');
+
+      await waitFor(() => expect(lastRead(requests)).toMatchObject({ Search: 'btc', Page: '1' }));
+      expect(history.location.search).toBe('');
+    });
+
+    it.each([
+      [
+        'the category',
+        () => userEvent.click(screen.getByRole('button', { name: /^spot/ })),
+        { Category: 'spot' },
+      ],
+      [
+        'the sorting',
+        () => userEvent.click(screen.getByRole('button', { name: 'Инструмент' })),
+        { Sort: 'symbol' },
+      ],
+      [
+        'the size of a page',
+        () => userEvent.selectOptions(screen.getByRole('combobox', { name: 'На странице' }), '200'),
+        { PageSize: '200' },
+      ],
+    ])('goes back to the first page on a change of %s', async (_name, change, expected) => {
+      const requests = pagedApi();
+      const { history } = renderApp('/market?page=3');
+      await screen.findByText('101–150 из 1 104');
+
+      await change();
+
+      await waitFor(() => expect(lastRead(requests)).toMatchObject({ ...expected, Page: '1' }));
+      expect(history.location.search).toBe('');
+    });
+
+    // Scenario "Размер страницы".
+    it('remembers the size of a page in the browser', async () => {
+      pagedApi();
+      const first = renderApp('/market');
+      await screen.findByText('1–50 из 1 104');
+      await userEvent.selectOptions(screen.getByRole('combobox', { name: 'На странице' }), '200');
+      await screen.findByText('1–200 из 1 104');
+      first.unmount();
+
+      renderApp('/market');
+
+      expect(await screen.findByText('1–200 из 1 104')).toBeInTheDocument();
+      localStorage.clear();
+    });
+
+    it('moves the address to the last page when the table became shorter', async () => {
+      pagedApi(80);
+      const { history } = renderApp('/market?page=3');
+
+      expect(await screen.findByText('51–80 из 80')).toBeInTheDocument();
+      await waitFor(() => expect(history.location.search).toBe('?page=2'));
+    });
   });
 });

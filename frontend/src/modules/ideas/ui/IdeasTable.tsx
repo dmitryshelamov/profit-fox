@@ -6,7 +6,7 @@ import { formatMoment, showDecimal } from '@/shared/format/format';
 
 import { typeLabel } from '../model/labels';
 import { priceByTick } from '../model/price';
-import type { IdeaSortColumn, SortDirection } from '../model/sort';
+import type { IdeaSort, IdeaSortColumn } from '../model/sort';
 import { moneyOutcome } from '../model/stats';
 import { ExpectancyCell, type Idea, ProbabilityCell, SideText, StatusText } from './IdeaCells';
 
@@ -38,11 +38,6 @@ const rightAligned = new Set<IdeaSortColumn>([
   'expectancy',
   'profit',
 ]);
-
-export interface IdeaSort {
-  readonly column: IdeaSortColumn;
-  readonly direction: SortDirection;
-}
 
 /**
  * The ideas as a table. Clicking a row opens the pair with the idea selected; the symbol is also a link, for the keyboard.

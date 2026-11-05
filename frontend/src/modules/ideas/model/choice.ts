@@ -1,4 +1,5 @@
 import { setupChoices, setupIntervals } from '@/modules/market';
+import { pageSizeOf } from '@/shared/paging/pageSizes';
 import { oneOf, readStoredObject, writeStored } from '@/shared/storage/storedChoice';
 
 import { type IdeaFilters, noIdeaFilters } from '../api';
@@ -7,11 +8,12 @@ import { type IdeaSortColumn, ideaSortColumns, type SortDirection } from './sort
 
 const key = 'profit-fox.ideas.choice';
 
-/** What the owner chose on the screen of the ideas: the filters, the saved filter and the sorting. */
+/** What the owner chose on the screen of the ideas: the filters, the saved filter, the sorting and the size of a page. */
 export interface IdeasChoice {
   readonly filters: IdeaFilters;
   readonly savedFilterId: string | null;
   readonly sort: { readonly column: IdeaSortColumn; readonly direction: SortDirection };
+  readonly pageSize: number;
 }
 
 const record = (value: unknown): Record<string, unknown> =>
@@ -48,6 +50,7 @@ export function loadIdeasChoice(): IdeasChoice {
     },
     savedFilterId: typeof stored.savedFilterId === 'string' ? stored.savedFilterId : null,
     sort: sortOf(sort),
+    pageSize: pageSizeOf(stored.pageSize),
   };
 }
 

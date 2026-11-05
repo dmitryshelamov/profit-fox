@@ -239,7 +239,10 @@ export const marketRow = (overrides: Partial<Schemas['MarketRowResponse']> = {})
     ...overrides,
   }) satisfies Schemas['MarketRowResponse'];
 
-/** The answer of `GET /api/market`: a complete history and no pause unless a test says otherwise. */
+/**
+ * The answer of `GET /api/market`: the page of the rows given as the first page of 50, a complete history and no pause unless a
+ * test says otherwise. The counts are those of the rows: the pairs of each category and, on 15 minutes, of each setup.
+ */
 export const marketSnapshot = (
   rows: Schemas['MarketRowResponse'][],
   overrides: Partial<Schemas['MarketResponse']> = {},
@@ -248,9 +251,39 @@ export const marketSnapshot = (
     snapshotAt: new Date().toISOString(),
     history: { loaded: rows.length, total: rows.length },
     restPausedUntil: null,
-    rows,
+    items: rows,
+    page: 1,
+    pageSize: 50,
+    total: rows.length,
+    pairs: rows.length,
+    categories: {
+      linear: rows.filter((row) => row.category === 'linear').length,
+      spot: rows.filter((row) => row.category === 'spot').length,
+    },
+    setups: {
+      all: rows.length,
+      ...Object.fromEntries(
+        ['impulse', 'early_impulse', 'drop', 'early_drop', 'high_volatility'].map((setup) => [
+          setup,
+          rows.filter((row) => row.setups['15']?.includes(setup)).length,
+        ]),
+      ),
+    },
     ...overrides,
   }) satisfies Schemas['MarketResponse'];
+
+/** The answer of `GET /api/ideas`: the ideas given as the first page of 50, all that there are. */
+export const ideasPage = (
+  items: Schemas['IdeaResponse'][],
+  overrides: Partial<Schemas['IdeasPageResponse']> = {},
+) =>
+  ({
+    items,
+    page: 1,
+    pageSize: 50,
+    total: items.length,
+    ...overrides,
+  }) satisfies Schemas['IdeasPageResponse'];
 
 /** A trade idea of the API: a long «Откат» on 15 minutes, awaiting entry, with a bucket that has enough data. */
 export const ideaOf = (overrides: Partial<Schemas['IdeaResponse']> = {}) =>

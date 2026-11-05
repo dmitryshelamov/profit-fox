@@ -1,3 +1,4 @@
+import { pageSizeOf } from '@/shared/paging/pageSizes';
 import { oneOf, readStoredObject, writeStored } from '@/shared/storage/storedChoice';
 
 import type { CategoryFilter } from './rows';
@@ -6,13 +7,14 @@ import { type SortColumn, sortColumns, type SortDirection } from './sorting';
 
 const key = 'profit-fox.market.choice';
 
-/** What the owner chose on the market screen, but the search: the category, the setup chip and its interval, the saved filter and the sorting. */
+/** What the owner chose on the market screen, but the search: the category, the setup chip and its interval, the saved filter, the sorting and the size of a page. */
 export interface MarketChoice {
   readonly category: CategoryFilter;
   readonly setup: SetupFilter;
   readonly setupInterval: string;
   readonly savedFilterId: string | null;
   readonly sort: { readonly column: SortColumn; readonly direction: SortDirection };
+  readonly pageSize: number;
 }
 
 const record = (value: unknown): Record<string, unknown> =>
@@ -49,11 +51,12 @@ export function loadMarketChoice(): MarketChoice {
     ),
     savedFilterId: typeof stored.savedFilterId === 'string' ? stored.savedFilterId : null,
     sort: sortOf(sort),
+    pageSize: pageSizeOf(stored.pageSize),
   };
 }
 
 export function saveMarketChoice(choice: MarketChoice): void {
-  const { category, setup, setupInterval, savedFilterId, sort } = choice;
+  const { category, setup, setupInterval, savedFilterId, sort, pageSize } = choice;
 
-  writeStored(key, { category, setup, setupInterval, savedFilterId, sort });
+  writeStored(key, { category, setup, setupInterval, savedFilterId, sort, pageSize });
 }

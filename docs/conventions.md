@@ -414,15 +414,20 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
   `lightweight-charts`, fill markers, candles per point; for the bot chart `BotCandleChart` with volume, fill arrows,
   dashed order lines and the current candle, over the pure `chartPaging`, `tradeMarkers`, `liveCandles`, `volumeBars` and
   `orderLines`, `useCandlePages` — the paging of a chart over a function that reads a page, which the bot and the pair use with their
-  own endpoints — and `OpenInterestChart`, `FundingChart`), `market` (the snapshot query polled every 15 s, the row, open
-  interest and funding of a pair; `model` for the category filter, search, sort with empty values last, the age of the snapshot and
-  compact numbers; `setups` for the chips, the interval of setups and the column «Сетап»; `MarketTable`, the banners and the mark of
-  incomplete data), `ideas` (queries of the ideas, of a pair's ideas, zones and the own idea; `model` for the labels, the badge against the
+  own endpoints — and `OpenInterestChart`, `FundingChart`), `market` (the query of one page of the snapshot, polled
+  every 15 s and asked with the category, the search (after a pause of 300 ms), the setup chip and its interval, the saved filter, the sort and the page,
+  the row, open interest and funding of a pair; the counts of the category buttons and of the chips come from the answer, nothing is filtered or sorted in the browser;
+  `model` for the codes of the sort columns, the size of a page and the rest of the choice kept in the browser (`choice`), the age of the snapshot and
+  compact numbers; `setups` for the setups, the interval of setups and the column «Сетап»; `MarketTable`, the banners and the mark of
+  incomplete data), `ideas` (queries of one page of the ideas, of a pair's ideas, zones and the own idea; `model` for the labels, the codes of the sort columns, the badge against the
   baseline and «мало данных» (`stats`), profit and loss at the risk per idea and its storage in the browser (`riskStorage`), the groups of a
   pair's list (`groups`) and the levels drawn on the chart (`levels`); `IdeasTable`, `PairIdeasList`, `OwnIdeaBlock`), `saved-filters`
-  (queries of filters and the catalog of fields; `model` for applying conditions to rows and ideas in exact decimals, conditions on idea
-  fields only on «Идеи» (`apply`), the text of conditions (`conditions`) and the server errors by field (`errors`); `FilterBar`,
-  `FilterEditor`). `BotCandleChart` also takes optional price lines, zones (bands drawn by the series primitive `ZoneBandsPrimitive`)
+  (queries of filters and the catalog of fields, and the count of a draft, `fitQuery`; `model` for the text of conditions (`conditions`) and the
+  server errors by field (`errors`); `FilterBar`, `FilterEditor`, whose counter «Подходит» is the answer of `POST /api/saved-filters/fit` for the ready
+  conditions, after a pause of 300 ms; the API applies saved filters, the browser only names the chosen one). The lists «Идеи» and «Рынок» show one page: the number is
+  in the address (`?page=`, a whole number from 1, otherwise the first page; a page past the end moves the address to the page the API gave), the size
+  (50, 100 or 200) in the choice kept in the browser, and a change of any other choice goes back to the first page. `shared/ui/Pager` is the page buttons,
+  the rows shown and the size; `shared/paging` holds the sizes; `shared/hooks/useDebounced` is the pause. `BotCandleChart` also takes optional price lines, zones (bands drawn by the series primitive `ZoneBandsPrimitive`)
   and the marker of a fired setup, from the pure `market-chart/model/ideaOverlay`; `shared/format/decimal` compares decimal strings
   without float math. `bots` also holds the bot chart's data: `useBotCandles` (pages going back, a minute-by-minute tail,
   start over when too far behind), `useFormingCandle` over `realtime/followFormingCandle` (the SignalR hub

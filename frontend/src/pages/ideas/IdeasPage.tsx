@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 
 import {
-  type Idea,
   type IdeaFilters,
   type IdeaSort,
   type IdeaSortColumn,
@@ -15,18 +15,17 @@ import {
   saveAmount,
   saveIdeasChoice,
   sideLabel,
-  sortIdeas,
 } from '@/modules/ideas';
-import { marketQuery, setupChoices, setupIntervals } from '@/modules/market';
+import { setupChoices, setupIntervals } from '@/modules/market';
 import {
   FilterBar,
   FilterEditor,
   filterFieldsQuery,
   filtersOfPlace,
-  matchesIdea,
   type SavedFilter,
   savedFiltersQuery,
 } from '@/modules/saved-filters';
+import { Pager } from '@/shared/ui/Pager';
 
 const control = 'h-9 rounded-lg border border-line bg-panel px-2 text-sm';
 
@@ -64,46 +63,63 @@ function Select({
   );
 }
 
-export function IdeasPage() {
+/** The ideas of the scanner, one page at a time: the API filters, sorts and cuts the list, the address holds the number of the page. */
+export function IdeasPage({ page }: { page: number }) {
+  const navigate = useNavigate();
   // What the owner chose last time; the saved filter that is gone since selects nothing.
   const [remembered] = useState(loadIdeasChoice);
   const [filters, setFilters] = useState<IdeaFilters>(remembered.filters);
   const [amount, setAmount] = useState(loadAmount);
   const [sort, setSort] = useState<IdeaSort>(remembered.sort);
   const [selectedId, setSelectedId] = useState<string | null>(remembered.savedFilterId);
+  const [pageSize, setPageSize] = useState(remembered.pageSize);
   const [editing, setEditing] = useState<{ filter: SavedFilter | null } | null>(null);
-  const ideas = useQuery(ideasQuery(filters));
-  const allIdeas = useQuery(ideasQuery());
-  const market = useQuery(marketQuery);
   const saved = useQuery(savedFiltersQuery);
   const fields = useQuery(filterFieldsQuery);
-  const rows = market.data?.rows ?? [];
   const mine = filtersOfPlace(saved.data ?? [], 'ideas');
   const selected = mine.find((filter) => filter.id === selectedId) ?? null;
-  const shown: readonly Idea[] = sortIdeas(
-    (ideas.data ?? []).filter(
-      (idea) =>
-        selected === null ||
-        matchesIdea(
-          selected,
-          idea,
-          rows.find((row) => row.category === idea.category && row.symbol === idea.symbol),
-        ),
+  // A saved filter that is remembered waits for the list of filters, so one that is gone is never asked for.
+  const ideas = useQuery(
+    ideasQuery(
+      { filters, savedFilterId: selected?.id ?? null, sort, page, pageSize },
+      selectedId === null || saved.isFetched,
     ),
-    sort.column,
-    sort.direction,
   );
+  const answered = ideas.data?.page;
+  const showPage = (number: number, replace = false) =>
+    void navigate({ to: '/ideas', search: { page: number === 1 ? undefined : number }, replace });
+  // Any other choice starts the list over from its first page.
+  const firstPage = () => {
+    if (page !== 1) {
+      showPage(1, true);
+    }
+  };
+  // The list may have become shorter: the address follows the page the API gave.
+  useEffect(() => {
+    if (answered !== undefined && !ideas.isPlaceholderData && Number(answered) !== page) {
+      showPage(Number(answered), true);
+    }
+  }, [answered, ideas.isPlaceholderData, page]);
   // A click on the column of the sorting turns it round; another column starts from the highest value.
-  const sortBy = (column: IdeaSortColumn) =>
+  const sortBy = (column: IdeaSortColumn) => {
     setSort((current) => ({
       column,
       direction: current.column === column && current.direction === 'desc' ? 'asc' : 'desc',
     }));
+    firstPage();
+  };
   useEffect(
-    () => saveIdeasChoice({ filters, savedFilterId: selectedId, sort }),
-    [filters, selectedId, sort],
+    () => saveIdeasChoice({ filters, savedFilterId: selectedId, sort, pageSize }),
+    [filters, selectedId, sort, pageSize],
   );
-  const set = (patch: Partial<IdeaFilters>) => setFilters((current) => ({ ...current, ...patch }));
+  const set = (patch: Partial<IdeaFilters>) => {
+    setFilters((current) => ({ ...current, ...patch }));
+    firstPage();
+  };
+  const select = (id: string | null) => {
+    setSelectedId(id);
+    firstPage();
+  };
 
   return (
     <section className="space-y-4">
@@ -177,12 +193,14 @@ export function IdeasPage() {
           />
           <span className="text-muted">USDT</span>
         </label>
-        {ideas.data && <p className="ml-auto text-sm text-muted">{ideasText(shown.length)}</p>}
+        {ideas.data && (
+          <p className="ml-auto text-sm text-muted">{ideasText(Number(ideas.data.total))}</p>
+        )}
       </div>
       <FilterBar
         filters={mine}
         selected={selected}
-        onSelect={setSelectedId}
+        onSelect={select}
         onNew={() => setEditing({ filter: null })}
         onEdit={(filter) => setEditing({ filter })}
       />
@@ -190,11 +208,21 @@ export function IdeasPage() {
       {ideas.isPending && <p className="text-sm text-muted">Загрузка идей…</p>}
       {ideas.data && (
         <>
-          {shown.length === 0 ? (
+          {ideas.data.items.length === 0 ? (
             <p className="text-sm text-muted">Идей по этим условиям нет.</p>
           ) : (
             <>
-              <IdeasTable ideas={shown} amount={amount} sort={sort} onSort={sortBy} />
+              <IdeasTable ideas={ideas.data.items} amount={amount} sort={sort} onSort={sortBy} />
+              <Pager
+                page={Number(ideas.data.page)}
+                pageSize={Number(ideas.data.pageSize)}
+                total={Number(ideas.data.total)}
+                onPage={showPage}
+                onPageSize={(size) => {
+                  setPageSize(size);
+                  firstPage();
+                }}
+              />
               <ul className="space-y-1 text-xs text-faint">
                 <li>
                   Вероятность: доля «Цель» среди «Цель» и «Стоп» случаев корзины за 90 дней; после
@@ -216,16 +244,16 @@ export function IdeasPage() {
           filter={editing.filter}
           place="ideas"
           fields={fields.data}
-          rows={rows}
-          ideas={allIdeas.data ?? []}
           onClose={() => setEditing(null)}
           onSaved={(id) => {
             setEditing(null);
-            setSelectedId(id);
+            select(id);
           }}
           onDeleted={(id) => {
             setEditing(null);
-            setSelectedId((current) => (current === id ? null : current));
+            if (selectedId === id) {
+              select(null);
+            }
           }}
         />
       )}

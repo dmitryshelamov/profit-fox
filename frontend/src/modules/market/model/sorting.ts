@@ -1,5 +1,3 @@
-import type { MarketRow } from './rows';
-
 export const sortColumns = [
   'symbol',
   'price',
@@ -21,22 +19,7 @@ export type SortColumn = (typeof sortColumns)[number];
 
 export type SortDirection = 'asc' | 'desc';
 
-/** Sorts by a column in either direction; pairs with an empty value in it come last whichever way it goes. */
-export function sortRows(
-  rows: readonly MarketRow[],
-  column: SortColumn,
-  direction: SortDirection,
-): MarketRow[] {
-  const sign = direction === 'asc' ? 1 : -1;
-  const valueOf = (row: MarketRow) => (column === 'symbol' ? row.symbol : Number(row[column]));
-
-  return rows
-    .filter((row) => row[column] !== null)
-    .sort((left, right) => {
-      const a = valueOf(left);
-      const b = valueOf(right);
-
-      return a < b ? -sign : a > b ? sign : 0;
-    })
-    .concat(rows.filter((row) => row[column] === null));
+export interface Sort {
+  readonly column: SortColumn;
+  readonly direction: SortDirection;
 }

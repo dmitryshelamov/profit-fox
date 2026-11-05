@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { fakeApi, type FakeRoute, json, problem } from '@/test/fakeApi';
-import { filterFields, ideaOf, marketRow, marketSnapshot, savedFilterOf } from '@/test/fixtures';
+import { filterFields, marketRow, marketSnapshot, savedFilterOf } from '@/test/fixtures';
 import { renderApp } from '@/test/renderApp';
 
 const hot = marketRow({
@@ -40,17 +40,29 @@ const both = savedFilterOf({
   ],
 });
 
-const symbolsIn = (table: HTMLElement) =>
-  within(table)
-    .getAllByRole('link')
-    .map((link) => link.textContent);
+const lastRead = (requests: Request[]) =>
+  Object.fromEntries(
+    new URL(
+      requests.filter((request) => new URL(request.url).pathname === '/api/market').at(-1)!.url,
+    ).searchParams,
+  );
+
+// The API counts what fits: 3 pairs and 2 ideas, and a condition on the turnover leaves 2 pairs.
+const fitting = async (request: Request) => {
+  const body = (await request.json()) as { conditions: { field: string }[] };
+
+  return json({
+    pairs: body.conditions.some((condition) => condition.field === 'turnover24h') ? 2 : 3,
+    ideas: body.conditions.some((condition) => condition.field === 'probability') ? 0 : 2,
+  });
+};
 
 function open(filters = [shorting, onIdeas, both], extra: Record<string, FakeRoute> = {}) {
   return fakeApi({
     'GET /api/market': () => json(marketSnapshot([hot, warm, cold])),
     'GET /api/saved-filters': () => json(filters),
     'GET /api/saved-filters/fields': () => json(filterFields),
-    'GET /api/ideas': () => json([ideaOf({ symbol: 'HOTUSDT' }), ideaOf({ symbol: 'COLDUSDT' })]),
+    'POST /api/saved-filters/fit': fitting,
     ...extra,
   });
 }
@@ -73,52 +85,52 @@ describe('saved filters on the market screen', () => {
     );
   });
 
-  // Scenario "Выбор фильтра на рынке".
-  it('keeps the pairs with both conditions, counts them and writes the conditions under the chips', async () => {
-    open();
+  // Scenario "Выбор фильтра на рынке": the API applies the filter, the screen names it and writes its conditions under the chips.
+  it('asks for the pairs that meet the filter, counts them and writes the conditions under the chips', async () => {
+    const requests = open();
     renderApp('/market');
     await screen.findByRole('table');
 
     await userEvent.click(await screen.findByRole('button', { name: 'Шорт перегретых' }));
 
-    expect(symbolsIn(screen.getByRole('table'))).toEqual(['HOTUSDT']);
-    expect(screen.getByText('1 из 3 инструментов')).toBeInTheDocument();
+    await waitFor(() => expect(lastRead(requests)).toMatchObject({ SavedFilter: shorting.id }));
+    expect(screen.getByText('3 из 3 инструментов')).toBeInTheDocument();
     expect(screen.getByLabelText('Условия фильтра')).toHaveTextContent(
       'Изменение 1ч > 3 % и Фандинг > 0.03 %',
     );
   });
 
-  it('ignores the conditions on idea fields of a filter of both places', async () => {
-    open();
-    renderApp('/market');
-    await screen.findByRole('table');
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Крупные' }));
-
-    expect(symbolsIn(screen.getByRole('table')).sort()).toEqual(['COLDUSDT', 'HOTUSDT']);
-  });
-
   it('takes the filter off with «Снять» and brings the pairs back', async () => {
-    open();
+    open(undefined, {
+      'GET /api/market': (request) =>
+        json(
+          new URL(request.url).searchParams.has('SavedFilter')
+            ? marketSnapshot([hot], { pairs: 3 })
+            : marketSnapshot([hot, warm, cold]),
+        ),
+    });
     renderApp('/market');
     await screen.findByRole('table');
     await userEvent.click(await screen.findByRole('button', { name: 'Шорт перегретых' }));
+    expect(await screen.findByText('1 из 3 инструментов')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Снять' }));
 
-    expect(screen.getByText('3 из 3 инструментов')).toBeInTheDocument();
+    expect(await screen.findByText('3 из 3 инструментов')).toBeInTheDocument();
     expect(screen.queryByLabelText('Условия фильтра')).not.toBeInTheDocument();
   });
 
-  it('applies the filter together with the setup chip', async () => {
-    open();
+  it('asks for the filter together with the setup chip', async () => {
+    const requests = open();
     renderApp('/market');
     await screen.findByRole('table');
     await userEvent.click(await screen.findByRole('button', { name: 'Шорт перегретых' }));
 
     await userEvent.click(screen.getByRole('button', { name: 'Импульс 0' }));
 
-    expect(screen.getByText('Ничего не найдено.')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(lastRead(requests)).toMatchObject({ SavedFilter: shorting.id, Setup: 'impulse' }),
+    );
   });
 
   describe('editor', () => {
@@ -141,23 +153,52 @@ describe('saved filters on the market screen', () => {
       await userEvent.click(await screen.findByRole('button', { name: '+ Новый фильтр' }));
     }
 
-    // Scenario "Живой счётчик".
+    const fits = (requests: Request[]) =>
+      requests.filter((request) => new URL(request.url).pathname === '/api/saved-filters/fit');
+    const lastFit = async (requests: Request[]) =>
+      (await fits(requests).at(-1)!.clone().json()) as { conditions: unknown[] };
+
+    // Scenario "Живой счётчик": the API counts, after a pause, by the conditions that are ready.
     it('recounts what fits while a condition is edited, without saving', async () => {
       const requests = open();
       renderApp('/market');
       await openNew();
 
-      expect(editor().getByText('Подходит: 3 инструмента · 2 идеи')).toBeInTheDocument();
+      expect(await editor().findByText('Подходит: 3 инструмента · 2 идеи')).toBeInTheDocument();
       await userEvent.click(editor().getByRole('button', { name: '+ Условие' }));
       await pickField('Оборот 24ч');
       await userEvent.type(editor().getByRole('textbox', { name: 'Значение' }), '50000000');
 
-      expect(editor().getByText('Подходит: 2 инструмента · 2 идеи')).toBeInTheDocument();
-      expect(requests.filter((request) => request.method === 'POST')).toHaveLength(0);
+      expect(await editor().findByText('Подходит: 2 инструмента · 2 идеи')).toBeInTheDocument();
+      expect(await lastFit(requests)).toEqual({
+        conditions: [{ field: 'turnover24h', operator: '>', value: '50000000', to: null }],
+      });
+      expect(
+        requests.filter(
+          (request) =>
+            request.method === 'POST' && new URL(request.url).pathname === '/api/saved-filters',
+        ),
+      ).toHaveLength(0);
     });
 
-    it('counts the ideas by the idea fields and the market fields of their pair', async () => {
-      open();
+    it('asks once for the conditions typed, after the pause, and not for one that is not a number yet', async () => {
+      const requests = open();
+      renderApp('/market');
+      await openNew();
+      await editor().findByText('Подходит: 3 инструмента · 2 идеи');
+      await userEvent.click(editor().getByRole('button', { name: '+ Условие' }));
+      await pickField('Оборот 24ч');
+      const before = fits(requests).length;
+
+      await userEvent.type(editor().getByRole('textbox', { name: 'Значение' }), '5e');
+
+      expect(fits(requests)).toHaveLength(before);
+      await userEvent.type(editor().getByRole('textbox', { name: 'Значение' }), '0');
+      await editor().findByText('Подходит: 3 инструмента · 2 идеи');
+    });
+
+    it('counts the ideas by the idea fields', async () => {
+      const requests = open();
       renderApp('/market');
       await openNew();
 
@@ -165,9 +206,12 @@ describe('saved filters on the market screen', () => {
       await pickField('Вероятность', 'Идея');
       await userEvent.type(editor().getByRole('textbox', { name: 'Значение' }), '50');
 
-      // The idea fields are marked «Идеи»; the probability is typed in percent: 50 is 0.5, above the 0.46 of both ideas.
+      // The idea fields are marked «Идеи»; the probability is typed in percent: 50 is 0.5.
       expect(editor().getByText('Идеи', { selector: 'span' })).toBeInTheDocument();
-      expect(editor().getByText('Подходит: 3 инструмента · 0 идей')).toBeInTheDocument();
+      expect(await editor().findByText('Подходит: 3 инструмента · 0 идей')).toBeInTheDocument();
+      expect(await lastFit(requests)).toEqual({
+        conditions: [{ field: 'probability', operator: '>', value: '0.5', to: null }],
+      });
     });
 
     it('saves the filter with funding as a fraction and shows it as chosen', async () => {
@@ -372,7 +416,7 @@ describe('saved filters on the market screen', () => {
       );
 
       expect(editor().queryByRole('textbox', { name: 'Значение' })).not.toBeInTheDocument();
-      expect(editor().getByText('Подходит: 3 инструмента · 2 идеи')).toBeInTheDocument();
+      expect(await editor().findByText('Подходит: 3 инструмента · 2 идеи')).toBeInTheDocument();
     });
 
     it('has the header, the note about the ideas and no «Удалить фильтр» for a new filter', async () => {

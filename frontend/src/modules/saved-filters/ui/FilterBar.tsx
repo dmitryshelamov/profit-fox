@@ -1,5 +1,5 @@
-import type { SavedFilter } from '../model/apply';
 import { conditionText } from '../model/conditions';
+import type { SavedFilter } from '../model/savedFilter';
 
 export type FilterPlace = 'market' | 'ideas';
 

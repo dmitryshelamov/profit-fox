@@ -2,6 +2,8 @@ import { keepPreviousData, queryOptions } from '@tanstack/react-query';
 
 import { api, unwrap } from '@/shared/api/client';
 
+import type { IdeaSort } from './model/sort';
+
 /** What the list of ideas is asked for; an empty text means no limit. */
 export interface IdeaFilters {
   readonly setup: string;
@@ -23,10 +25,24 @@ export const noIdeaFilters: IdeaFilters = {
 
 const given = (text: string) => (text === '' ? undefined : text);
 
-/** The open ideas and the ones closed in the last 24 hours, by expectancy, read again every 15 seconds. */
-export function ideasQuery(filters: IdeaFilters = noIdeaFilters) {
+/** What a page of the list of ideas is asked for: the filters, the saved filter, the order, and the number and the size of the page. */
+export interface IdeasRequest {
+  readonly filters: IdeaFilters;
+  readonly savedFilterId: string | null;
+  readonly sort: IdeaSort;
+  readonly page: number;
+  readonly pageSize: number;
+}
+
+/**
+ * One page of the open ideas and the ones closed in the last 24 hours, read again every 15 seconds; the API filters, sorts and
+ * cuts it. The old page stays on the screen while a new one loads.
+ */
+export function ideasQuery(request: IdeasRequest, enabled = true) {
+  const { filters, savedFilterId, sort, page, pageSize } = request;
+
   return queryOptions({
-    queryKey: ['ideas', filters],
+    queryKey: ['ideas', 'page', request],
     queryFn: async () =>
       unwrap(
         await api.GET('/api/ideas', {
@@ -38,12 +54,18 @@ export function ideasQuery(filters: IdeaFilters = noIdeaFilters) {
               Side: given(filters.side),
               Category: given(filters.category),
               NonNegativeExpectancy: filters.nonNegativeExpectancy ? true : undefined,
+              SavedFilter: savedFilterId ?? undefined,
+              Sort: sort.column,
+              Direction: sort.direction,
+              Page: page,
+              PageSize: pageSize,
             },
           },
         }),
       ),
     placeholderData: keepPreviousData,
     refetchInterval: 15_000,
+    enabled,
   });
 }
 

@@ -5,7 +5,7 @@ import { isDecimalText } from '@/shared/api/jsonNumber';
 import { shiftDecimal } from '@/shared/format/decimal';
 import { groupDigits } from '@/shared/format/format';
 
-import type { Condition } from './apply';
+import type { Condition } from './savedFilter';
 
 const fieldLabels: Record<string, string> = {
   category: 'Категория',
