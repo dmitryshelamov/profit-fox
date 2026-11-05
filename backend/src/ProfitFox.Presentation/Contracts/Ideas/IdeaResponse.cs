@@ -10,7 +10,7 @@ namespace ProfitFox.Presentation.Contracts.Ideas;
 /// <summary>
 ///     A trade idea with its levels and where it stands, and the statistics of its bucket over 90 days (<see cref="Bucket" />) and over the last
 ///     30 (<see cref="Recent" />), none while the bucket has no case. <see cref="Baseline" /> is the bucket's, or 1 / (1 + R:R) of the idea.
-///     Numbers are decimal strings; <see cref="Move" /> in ATR, <see cref="VolumeRatio" /> in medians of volume.
+///     <see cref="Tick" /> is the price step of the pair, none for an idea made before it was kept. Numbers are decimal strings; <see cref="Move" /> in ATR, <see cref="VolumeRatio" /> in medians of volume.
 /// </summary>
 public sealed record IdeaResponse(
     Guid Id,
@@ -25,6 +25,7 @@ public sealed record IdeaResponse(
     string Stop,
     string Target,
     string RiskReward,
+    string? Tick,
     string Status,
     DateTimeOffset StatusAt,
     DateTimeOffset? EnteredAt,
@@ -53,6 +54,7 @@ public sealed record IdeaResponse(
             Text(track.Plan.Stop),
             Text(track.Plan.Target),
             Text(track.Plan.RiskReward),
+            track.Tick?.ToString(CultureInfo.InvariantCulture),
             track.Status.ToCode(),
             track.StatusAt,
             track.EnteredAt,

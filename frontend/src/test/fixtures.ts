@@ -267,6 +267,7 @@ export const ideaOf = (overrides: Partial<Schemas['IdeaResponse']> = {}) =>
     stop: '2.30',
     target: '2.60',
     riskReward: '2',
+    tick: null,
     status: 'awaiting_entry',
     statusAt: '2026-11-04T11:46:00Z',
     enteredAt: null,

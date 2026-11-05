@@ -4,6 +4,8 @@ import { useState } from 'react';
 import {
   type Idea,
   type IdeaFilters,
+  type IdeaSort,
+  type IdeaSortColumn,
   ideasQuery,
   IdeasTable,
   ideasText,
@@ -12,6 +14,7 @@ import {
   noIdeaFilters,
   saveRisk,
   sideLabel,
+  sortIdeas,
 } from '@/modules/ideas';
 import { marketQuery, setupChoices, setupIntervals } from '@/modules/market';
 import {
@@ -63,6 +66,7 @@ function Select({
 export function IdeasPage() {
   const [filters, setFilters] = useState<IdeaFilters>(noIdeaFilters);
   const [risk, setRisk] = useState(loadRisk);
+  const [sort, setSort] = useState<IdeaSort>({ column: 'expectancy', direction: 'desc' });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ filter: SavedFilter | null } | null>(null);
   const ideas = useQuery(ideasQuery(filters));
@@ -73,15 +77,25 @@ export function IdeasPage() {
   const rows = market.data?.rows ?? [];
   const mine = filtersOfPlace(saved.data ?? [], 'ideas');
   const selected = mine.find((filter) => filter.id === selectedId) ?? null;
-  const shown: readonly Idea[] = (ideas.data ?? []).filter(
-    (idea) =>
-      selected === null ||
-      matchesIdea(
-        selected,
-        idea,
-        rows.find((row) => row.category === idea.category && row.symbol === idea.symbol),
-      ),
+  const shown: readonly Idea[] = sortIdeas(
+    (ideas.data ?? []).filter(
+      (idea) =>
+        selected === null ||
+        matchesIdea(
+          selected,
+          idea,
+          rows.find((row) => row.category === idea.category && row.symbol === idea.symbol),
+        ),
+    ),
+    sort.column,
+    sort.direction,
   );
+  // A click on the column of the sorting turns it round; another column starts from the highest value.
+  const sortBy = (column: IdeaSortColumn) =>
+    setSort((current) => ({
+      column,
+      direction: current.column === column && current.direction === 'desc' ? 'asc' : 'desc',
+    }));
   const set = (patch: Partial<IdeaFilters>) => setFilters((current) => ({ ...current, ...patch }));
 
   return (
@@ -173,7 +187,7 @@ export function IdeasPage() {
             <p className="text-sm text-muted">Идей по этим условиям нет.</p>
           ) : (
             <>
-              <IdeasTable ideas={shown} risk={risk} />
+              <IdeasTable ideas={shown} risk={risk} sort={sort} onSort={sortBy} />
               <ul className="space-y-1 text-xs text-faint">
                 <li>
                   Вероятность: доля «Цель» среди «Цель» и «Стоп» случаев корзины за 90 дней; после

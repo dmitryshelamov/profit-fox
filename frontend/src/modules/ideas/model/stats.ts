@@ -49,9 +49,11 @@ export interface RiskOutcome {
   readonly loss: string;
 }
 
+const isPositive = (risk: string) => isDecimalText(risk) && compareDecimals(risk, '0') > 0;
+
 /** The profit (R:R × risk) and the loss (minus the risk) of an idea in USDT; none while the risk is not a positive number. */
 export function riskOutcome(riskReward: string, risk: string): RiskOutcome | null {
-  if (!isDecimalText(risk) || compareDecimals(risk, '0') <= 0) {
+  if (!isPositive(risk)) {
     return null;
   }
 
@@ -59,4 +61,13 @@ export function riskOutcome(riskReward: string, risk: string): RiskOutcome | nul
     profit: showDecimal(multiplyDecimals(riskReward, risk), 1, true),
     loss: `−${showDecimal(risk, 1)}`,
   };
+}
+
+/** The expectancy of the bucket in USDT (the expectancy in R times the risk), with a sign; none for no bucket or a risk that is not positive. */
+export function expectancyInUsdt(bucket: Bucket | null, risk: string): string | null {
+  if (bucket === null || !isPositive(risk)) {
+    return null;
+  }
+
+  return showDecimal(multiplyDecimals(bucket.expectancy, risk), 1, true);
 }

@@ -88,6 +88,7 @@ function PairChart({
                 params: { category, symbol },
                 search:
                   idea === undefined ? { interval: item.value } : { interval: item.value, idea },
+                resetScroll: false,
               })
             }
             className="h-7 rounded-md px-2.5 text-xs font-semibold text-muted hover:bg-panel-2 aria-pressed:bg-panel-2 aria-pressed:text-text"
@@ -275,6 +276,7 @@ function IdeasHub({
       to: '/market/$category/$symbol',
       params: { category, symbol },
       search: idea === undefined ? (interval === undefined ? {} : { interval }) : { idea },
+      resetScroll: false,
     });
 
   return (

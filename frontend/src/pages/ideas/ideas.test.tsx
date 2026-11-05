@@ -202,6 +202,100 @@ describe('ideas screen', () => {
     });
   });
 
+  const symbolsInTable = () =>
+    within(screen.getByRole('table'))
+      .getAllByRole('link')
+      .map((link) => link.textContent);
+  const header = (name: RegExp) => screen.getByRole('columnheader', { name });
+
+  // Scenario "Вход по рынку и лимитный вход".
+  it('shows the entry, the stop and the target by the price step of the pair', async () => {
+    open({
+      'GET /api/ideas': () =>
+        json([ideaOf({ entry: '184.7', stop: '180', target: '197.00', tick: '0.01' })]),
+    });
+    renderApp('/ideas');
+
+    const row = await rowOf('WIFUSDT');
+
+    expect(within(row).getByText('184.70')).toBeInTheDocument();
+    expect(within(row).getByText('180.00')).toBeInTheDocument();
+    expect(within(row).getByText('197.00')).toBeInTheDocument();
+  });
+
+  // Scenario "Сортировка по R:R".
+  it('sorts by a column on a click on its header and the other way on the second click', async () => {
+    open({
+      'GET /api/ideas': () =>
+        json([
+          ideaOf({ id: 'a', symbol: 'AAAUSDT', riskReward: '2' }),
+          ideaOf({ id: 'b', symbol: 'BBBUSDT', riskReward: '1.5' }),
+          ideaOf({ id: 'c', symbol: 'CCCUSDT', riskReward: '3' }),
+        ]),
+    });
+    renderApp('/ideas');
+    await rowOf('AAAUSDT');
+    expect(header(/Ожидание/)).toHaveAttribute('aria-sort', 'descending');
+    expect(header(/R:R/)).toHaveAttribute('aria-sort', 'none');
+
+    await userEvent.click(within(header(/R:R/)).getByRole('button'));
+
+    expect(symbolsInTable()).toEqual(['CCCUSDT', 'AAAUSDT', 'BBBUSDT']);
+    expect(header(/R:R/)).toHaveAttribute('aria-sort', 'descending');
+    expect(header(/R:R/)).toHaveTextContent('R:R ↓');
+    expect(header(/Ожидание/)).toHaveAttribute('aria-sort', 'none');
+    expect(header(/Ожидание/)).toHaveTextContent(/^Ожидание$/);
+
+    await userEvent.click(within(header(/R:R/)).getByRole('button'));
+
+    expect(symbolsInTable()).toEqual(['BBBUSDT', 'AAAUSDT', 'CCCUSDT']);
+    expect(header(/R:R/)).toHaveAttribute('aria-sort', 'ascending');
+    expect(header(/R:R/)).toHaveTextContent('R:R ↑');
+  });
+
+  // Scenario "Вероятность без данных".
+  it('keeps the ideas without a probability under the others in both directions', async () => {
+    const withData = (probability: string) => ({ ...ideaOf().bucket!, probability });
+    open({
+      'GET /api/ideas': () =>
+        json([
+          fewData,
+          noBucket,
+          ideaOf({ id: 'p1', symbol: 'LOWUSDT', bucket: withData('0.46') }),
+          ideaOf({ id: 'p2', symbol: 'HIGHUSDT', bucket: withData('0.5') }),
+        ]),
+    });
+    renderApp('/ideas');
+    await rowOf('LOWUSDT');
+
+    await userEvent.click(within(header(/Вероятность/)).getByRole('button'));
+    expect(symbolsInTable()).toEqual(['HIGHUSDT', 'LOWUSDT', 'SOLUSDT', 'DOGEUSDT']);
+
+    await userEvent.click(within(header(/Вероятность/)).getByRole('button'));
+    expect(symbolsInTable()).toEqual(['LOWUSDT', 'HIGHUSDT', 'SOLUSDT', 'DOGEUSDT']);
+  });
+
+  it('keeps the sorting when the list is read again with other filters', async () => {
+    const ideas = [
+      ideaOf({ id: 'a', symbol: 'AAAUSDT', riskReward: '2' }),
+      ideaOf({ id: 'b', symbol: 'BBBUSDT', riskReward: '3' }),
+    ];
+    const requests = open({ 'GET /api/ideas': () => json(ideas) });
+    renderApp('/ideas');
+    await rowOf('AAAUSDT');
+    await userEvent.click(within(header(/R:R/)).getByRole('button'));
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Ожидание ≥ 0 R' }));
+
+    await waitFor(() =>
+      expect(
+        requests.some((request) => new URL(request.url).searchParams.has('NonNegativeExpectancy')),
+      ).toBe(true),
+    );
+    expect(symbolsInTable()).toEqual(['BBBUSDT', 'AAAUSDT']);
+    expect(header(/R:R/)).toHaveAttribute('aria-sort', 'descending');
+  });
+
   it('opens the pair with the idea selected when a row is clicked', async () => {
     open();
     const { history } = renderApp('/ideas');

@@ -1,6 +1,12 @@
 import type { Schemas } from '@/shared/api/client';
 
-import { baselineBadge, expectancyText, probabilityView, riskOutcome } from './stats';
+import {
+  baselineBadge,
+  expectancyInUsdt,
+  expectancyText,
+  probabilityView,
+  riskOutcome,
+} from './stats';
 
 type Bucket = Schemas['BucketStatisticsResponse'];
 
@@ -110,5 +116,21 @@ describe('riskOutcome', () => {
 
   it.each(['', 'abc', '0', '-5'])('has no outcome for the risk "%s"', (risk) => {
     expect(riskOutcome('2', risk)).toBeNull();
+  });
+});
+
+describe('expectancyInUsdt', () => {
+  // Scenario "Деньги в карточке".
+  it('is the expectancy in R times the risk', () => {
+    expect(expectancyInUsdt(bucket({ expectancy: '-0.05' }), '10')).toBe('-0.5');
+    expect(expectancyInUsdt(bucket({ expectancy: '0.38' }), '10')).toBe('+3.8');
+  });
+
+  it('has no value for a bucket without a case', () => {
+    expect(expectancyInUsdt(null, '10')).toBeNull();
+  });
+
+  it.each(['', 'abc', '0', '-5'])('has no value for the risk "%s"', (risk) => {
+    expect(expectancyInUsdt(bucket(), risk)).toBeNull();
   });
 });

@@ -134,8 +134,8 @@ public sealed class MarketController(ISender sender) : ControllerBase
         }
 
         return Ok(result.Plan is { } plan
-            ? new OwnIdeaResponse(true, Text(plan.Entry), Text(plan.Stop), Text(plan.Target), Text(plan.RiskReward), Text(result.Baseline!.Value))
-            : new OwnIdeaResponse(false, null, null, null, null, null));
+            ? new OwnIdeaResponse(true, Text(plan.Entry), Text(plan.Stop), Text(plan.Target), Text(plan.RiskReward), Text(result.Baseline!.Value), result.Tick?.ToString(CultureInfo.InvariantCulture))
+            : new OwnIdeaResponse(false, null, null, null, null, null, null));
     }
 
     private static ZoneResponse Zone(Zone zone, decimal price)
