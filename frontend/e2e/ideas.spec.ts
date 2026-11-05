@@ -157,8 +157,18 @@ test('an impulse of the stub shows in the market chips, has its idea on the pair
   await expect(page).toHaveURL(/\/market\/linear\/SOLUSDT\?interval=15$/);
 
   // A saved filter is saved and applied: only the pumped pair grew over 1 % in an hour.
+  // «Рынок» opens with the setup chip and its interval chosen above; this part starts from all the pairs.
   await page.goto('/market');
-  await expect(rows.first()).toBeVisible();
+  await expect(
+    page.getByRole('group', { name: 'Сетап', exact: true }).getByRole('button', { pressed: true }),
+  ).toContainText(setupLabels[setup]!);
+  await expect(rows.filter({ hasText: 'linear' }).filter({ hasText: 'SOLUSDT' })).toHaveCount(1);
+  await expect(rows.filter({ hasNotText: 'SOLUSDT' })).toHaveCount(0);
+  await page
+    .getByRole('group', { name: 'Сетап', exact: true })
+    .getByRole('button', { name: /^Все/ })
+    .click();
+  await expect(rows).toHaveCount(6);
   await page.getByRole('button', { name: '+ Новый фильтр' }).click();
   const editor = page.getByRole('dialog', { name: 'Редактор фильтра' });
   await editor.getByRole('textbox', { name: 'Название' }).fill('Рост за час');
@@ -174,9 +184,18 @@ test('an impulse of the stub shows in the market chips, has its idea on the pair
   await expect(rows.filter({ hasNotText: 'SOLUSDT' })).toHaveCount(0);
   await expect(rows.first()).toContainText('SOLUSDT');
 
-  // The filter is kept on the server: a reload offers it again, and choosing it applies it.
+  // The filter is kept on the server and the choice of it in the browser: a reload opens the market with it applied.
   await page.reload();
-  await expect(rows).toHaveCount(6, { timeout: 60_000 });
+  await expect(page.getByRole('button', { name: 'Рост за час' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(rows.first()).toContainText('SOLUSDT');
+  await expect(rows.filter({ hasNotText: 'SOLUSDT' })).toHaveCount(0);
+
+  // Taking it off shows all the pairs again, and choosing it applies it once more.
+  await page.getByRole('button', { name: 'Рост за час' }).click();
+  await expect(rows).toHaveCount(6);
   await page.getByRole('button', { name: 'Рост за час' }).click();
   await expect(rows.filter({ hasNotText: 'SOLUSDT' })).toHaveCount(0);
 

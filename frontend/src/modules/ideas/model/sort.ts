@@ -6,21 +6,24 @@ import { sideLabel, typeLabel } from './labels';
 
 type Idea = Schemas['IdeaResponse'];
 
-export type IdeaSortColumn =
-  | 'firedAt'
-  | 'symbol'
-  | 'setup'
-  | 'interval'
-  | 'type'
-  | 'side'
-  | 'entry'
-  | 'stop'
-  | 'target'
-  | 'riskReward'
-  | 'probability'
-  | 'expectancy'
-  | 'profit'
-  | 'status';
+export const ideaSortColumns = [
+  'firedAt',
+  'symbol',
+  'setup',
+  'interval',
+  'type',
+  'side',
+  'entry',
+  'stop',
+  'target',
+  'riskReward',
+  'probability',
+  'expectancy',
+  'profit',
+  'status',
+] as const;
+
+export type IdeaSortColumn = (typeof ideaSortColumns)[number];
 
 export type SortDirection = 'asc' | 'desc';
 

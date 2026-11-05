@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
   type Idea,
@@ -11,8 +11,9 @@ import {
   ideasText,
   ideaTypes,
   loadAmount,
-  noIdeaFilters,
+  loadIdeasChoice,
   saveAmount,
+  saveIdeasChoice,
   sideLabel,
   sortIdeas,
 } from '@/modules/ideas';
@@ -64,10 +65,12 @@ function Select({
 }
 
 export function IdeasPage() {
-  const [filters, setFilters] = useState<IdeaFilters>(noIdeaFilters);
+  // What the owner chose last time; the saved filter that is gone since selects nothing.
+  const [remembered] = useState(loadIdeasChoice);
+  const [filters, setFilters] = useState<IdeaFilters>(remembered.filters);
   const [amount, setAmount] = useState(loadAmount);
-  const [sort, setSort] = useState<IdeaSort>({ column: 'expectancy', direction: 'desc' });
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [sort, setSort] = useState<IdeaSort>(remembered.sort);
+  const [selectedId, setSelectedId] = useState<string | null>(remembered.savedFilterId);
   const [editing, setEditing] = useState<{ filter: SavedFilter | null } | null>(null);
   const ideas = useQuery(ideasQuery(filters));
   const allIdeas = useQuery(ideasQuery());
@@ -96,6 +99,10 @@ export function IdeasPage() {
       column,
       direction: current.column === column && current.direction === 'desc' ? 'asc' : 'desc',
     }));
+  useEffect(
+    () => saveIdeasChoice({ filters, savedFilterId: selectedId, sort }),
+    [filters, selectedId, sort],
+  );
   const set = (patch: Partial<IdeaFilters>) => setFilters((current) => ({ ...current, ...patch }));
 
   return (

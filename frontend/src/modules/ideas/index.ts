@@ -8,6 +8,7 @@ export {
   zonesQuery,
 } from './api';
 export { loadAmount, saveAmount } from './model/amountStorage';
+export { loadIdeasChoice, saveIdeasChoice } from './model/choice';
 export { ideasText, ideaTypes, sideLabel, typeLabel } from './model/labels';
 export { levelsOf } from './model/levels';
 export { priceByTick } from './model/price';

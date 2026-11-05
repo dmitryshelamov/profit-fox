@@ -318,6 +318,73 @@ describe('ideas screen', () => {
     expect(header(/R:R/)).toHaveAttribute('aria-sort', 'descending');
   });
 
+  // Scenario "Возврат на «Идеи»".
+  it('comes back with the filters, the switch and the sorting that were chosen', async () => {
+    const requests = open();
+    const first = renderApp('/ideas');
+    await rowOf('WIFUSDT');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'ТФ' }), '60');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Сторона' }), 'short');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Ожидание ≥ 0 R' }));
+    await userEvent.click(within(header(/R:R/)).getByRole('button'));
+    first.unmount();
+    requests.length = 0;
+
+    renderApp('/ideas');
+    await rowOf('WIFUSDT');
+
+    expect(screen.getByRole('combobox', { name: 'ТФ' })).toHaveValue('60');
+    expect(screen.getByRole('combobox', { name: 'Сторона' })).toHaveValue('short');
+    expect(screen.getByRole('checkbox', { name: 'Ожидание ≥ 0 R' })).toBeChecked();
+    expect(header(/R:R/)).toHaveAttribute('aria-sort', 'descending');
+    expect(
+      Object.fromEntries(
+        new URL(requests.find((request) => new URL(request.url).searchParams.has('Side'))!.url)
+          .searchParams,
+      ),
+    ).toEqual({ Interval: '60', Side: 'short', NonNegativeExpectancy: 'true' });
+  });
+
+  it('opens with the saved filter that was chosen', async () => {
+    localStorage.setItem('profit-fox.ideas.choice', JSON.stringify({ savedFilterId: 'big' }));
+    open();
+    renderApp('/ideas');
+
+    await rowOf('WIFUSDT');
+
+    expect(await screen.findByRole('button', { name: 'Вероятные' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(symbolsInTable()).toEqual(['WIFUSDT']);
+  });
+
+  // Scenario "Удалённый фильтр".
+  it('opens without a saved filter that was deleted since', async () => {
+    localStorage.setItem('profit-fox.ideas.choice', JSON.stringify({ savedFilterId: 'gone' }));
+    open();
+    renderApp('/ideas');
+
+    await rowOf('WIFUSDT');
+
+    expect(await screen.findByRole('button', { name: 'Вероятные' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    expect(symbolsInTable()).toEqual(['WIFUSDT', 'SOLUSDT', 'DOGEUSDT']);
+  });
+
+  it('opens as before when what is stored is broken', async () => {
+    localStorage.setItem('profit-fox.ideas.choice', '{broken');
+    open();
+    renderApp('/ideas');
+
+    await rowOf('WIFUSDT');
+
+    expect(screen.getByRole('combobox', { name: 'ТФ' })).toHaveValue('');
+    expect(header(/Ожидание/)).toHaveAttribute('aria-sort', 'descending');
+  });
+
   it('opens the pair with the idea selected when a row is clicked', async () => {
     open();
     const { history } = renderApp('/ideas');

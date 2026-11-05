@@ -5,6 +5,7 @@ export {
   openInterestQuery,
   usePairCandles,
 } from './api';
+export { loadMarketChoice, saveMarketChoice } from './model/choice';
 export {
   changeText,
   compactNumber,

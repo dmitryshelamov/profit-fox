@@ -1,16 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { ideasQuery } from '@/modules/ideas';
 import {
   type CategoryFilter,
   categoryOptions,
-  defaultSetupInterval,
   filterBySetup,
   filterRows,
   isStale,
+  loadMarketChoice,
   marketQuery,
   MarketTable,
+  saveMarketChoice,
   ScannerBanners,
   type SetupFilter,
   setupIntervals,
@@ -37,17 +38,22 @@ export function MarketPage() {
   const market = useQuery(marketQuery);
   const now = useNow();
   // Kept here, not in the query: a new snapshot every 15 seconds must not reset what the owner chose.
-  const [category, setCategory] = useState<CategoryFilter>('all');
+  // What the owner chose last time, but the search; the saved filter that is gone since selects nothing.
+  const [remembered] = useState(loadMarketChoice);
+  const [category, setCategory] = useState<CategoryFilter>(remembered.category);
   const [search, setSearch] = useState('');
-  const [setup, setSetup] = useState<SetupFilter>('all');
-  const [setupInterval, setSetupInterval] = useState(defaultSetupInterval);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [setup, setSetup] = useState<SetupFilter>(remembered.setup);
+  const [setupInterval, setSetupInterval] = useState(remembered.setupInterval);
+  const [selectedId, setSelectedId] = useState<string | null>(remembered.savedFilterId);
   const [editing, setEditing] = useState<{ filter: SavedFilter | null } | null>(null);
   const saved = useQuery(savedFiltersQuery);
   const fields = useQuery(filterFieldsQuery);
   const ideas = useQuery(ideasQuery());
-  // As the mockup opens it: growth over the last hour first.
-  const [sort, setSort] = useState<Sort>({ column: 'change1h', direction: 'desc' });
+  const [sort, setSort] = useState<Sort>(remembered.sort);
+  useEffect(
+    () => saveMarketChoice({ category, setup, setupInterval, savedFilterId: selectedId, sort }),
+    [category, setup, setupInterval, selectedId, sort],
+  );
   const data = market.data;
 
   const sortBy = (column: SortColumn) =>
