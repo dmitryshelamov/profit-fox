@@ -64,6 +64,20 @@ describe('strategy list', () => {
       expect(history.location.pathname).toMatch(/^\/strategies\/new\/[0-9a-f-]{36}$/),
     );
   });
+
+  // Served over plain HTTP, as on the server, the page is not a secure context and has no crypto.randomUUID.
+  it('starts a new strategy on a page that is not a secure context', async () => {
+    const { getRandomValues } = crypto;
+    vi.stubGlobal('crypto', { getRandomValues: getRandomValues.bind(crypto) });
+    fakeApi({ 'GET /api/strategies': () => json([]) });
+
+    const { history } = renderApp('/strategies');
+
+    await userEvent.click(await screen.findByRole('button', { name: '+ Новая стратегия' }));
+    await waitFor(() =>
+      expect(history.location.pathname).toMatch(/^\/strategies\/new\/[0-9a-f-]{36}$/),
+    );
+  });
 });
 
 describe('strategy list actions', () => {
