@@ -30,6 +30,10 @@ public static class Program
     /// <summary>The services of the scanner; a test host replaces some of them afterwards.</summary>
     public static void Configure(HostApplicationBuilder builder)
     {
+        // The settings file on the server, mounted into the container; it overrides every other source and is read again on each
+        // change. Without it the scanner runs on its own settings.
+        builder.Configuration.AddJsonFile("config/scanner.json", optional: true, reloadOnChange: true);
+
         // The static logger stays the one Main logs startup failures with; a scanner in the process of a test leaves the API's alone.
         builder.Services.AddSerilog(
             (services, logger) => logger
