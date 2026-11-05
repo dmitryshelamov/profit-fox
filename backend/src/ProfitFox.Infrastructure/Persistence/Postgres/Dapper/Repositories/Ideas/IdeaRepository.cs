@@ -59,4 +59,11 @@ internal sealed class IdeaRepository(NpgsqlDataSource dataSource) : IIdeaReposit
 
         return row is null ? null : IdeaDbConverter.ToDomain(row);
     }
+
+    public async Task<int> DeleteClosedBeforeAsync(DateTimeOffset closedBefore, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        return await connection.ExecuteAsync(IdeaRepositoryQueries.DeleteClosedBefore(closedBefore, cancellationToken));
+    }
 }

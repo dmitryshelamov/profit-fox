@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Locator, test } from '@playwright/test';
 
 import { seedIdeas } from './seed';
 
@@ -89,11 +89,11 @@ test('an impulse of the stub shows in the market chips, has its idea on the pair
 
   await page.getByRole('link', { name: 'Идеи', exact: true }).click();
   await expect(page).toHaveURL(/\/ideas$/);
-  const idea = page
+  const ideasOfSol = page
     .locator('tbody tr')
     .filter({ hasText: 'linear' })
-    .filter({ hasText: 'SOLUSDT' })
-    .first();
+    .filter({ hasText: 'SOLUSDT' });
+  const idea = ideasOfSol.first();
   await expect(idea).toBeVisible();
   await page.getByRole('textbox', { name: 'Сумма на идею' }).fill('10');
   await expect(idea).toContainText(/\+\d+\.\d{2} \/ −\d+\.\d{2}/);
@@ -117,30 +117,43 @@ test('an impulse of the stub shows in the market chips, has its idea on the pair
   await expect(riskReward).toHaveAttribute('aria-sort', 'ascending');
   await expect.poll(standsIn((a, b) => a - b)).toBe(true);
 
-  await idea.click();
+  // An open idea, so that its row on the pair page is not in the closed group of the expired ones.
+  await ideasOfSol
+    .filter({ hasText: /Ждёт входа|Активна/ })
+    .first()
+    .click();
 
   await expect(page).toHaveURL(/\/market\/linear\/SOLUSDT\?idea=/);
-  const selected = page.getByRole('region', { name: 'Идеи пары' }).getByRole('button', {
-    pressed: true,
-  });
+  const hub = page.getByRole('region', { name: 'Идеи пары' });
+  const selected = hub
+    .getByRole('row')
+    .filter({ has: page.getByRole('button', { pressed: true }) });
   await expect(selected).toHaveCount(1);
-  await expect(page.getByRole('region', { name: 'График' }).locator('figure')).toBeVisible();
+  const chart = page.getByRole('region', { name: 'График' });
+  await expect(chart.locator('figure')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Снять выбор' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Своя идея' })).toBeVisible();
 
-  // The card of the idea has the profit and the loss in USDT of the same amount per idea.
-  await expect(selected).toContainText('Прибыль');
-  await expect(selected).toContainText('Убыток');
-  await expect(selected).toContainText(/Прибыль \+\d+\.\d{2}/);
-  await expect(selected).toContainText(/Убыток −\d+\.\d{2}/);
-  await expect(selected).toContainText('USDT');
+  // The chart goes across the page above the table of the ideas.
+  const chartBox = (await chart.boundingBox())!;
+  const hubBox = (await hub.boundingBox())!;
+  expect(chartBox.y + chartBox.height).toBeLessThanOrEqual(hubBox.y);
+  expect(chartBox.width).toBe(hubBox.width);
+
+  // The row of the idea has the profit and the loss in USDT of the same amount per idea.
+  await expect(selected).toContainText(/\+\d+\.\d{2} \/ −\d+\.\d{2}/);
 
   // Selecting an idea, removing the selection and switching the interval leave the page where it is.
-  const hub = page.getByRole('region', { name: 'Идеи пары' });
-  const hubTop = await hub.evaluate((element) => element.getBoundingClientRect().top + scrollY);
-  await page.evaluate((top) => window.scrollTo(0, top - 80), hubTop);
-  const scrolled = await page.evaluate(() => window.scrollY);
-  expect(scrolled).toBeGreaterThan(0);
+  // The page is scrolled to just above a part of it, and away from the top.
+  const scrollAbove = async (part: Locator) => {
+    const top = await part.evaluate((element) => element.getBoundingClientRect().top + scrollY);
+    await page.evaluate((y) => window.scrollTo(0, y - 80), top);
+    const y = await page.evaluate(() => window.scrollY);
+    expect(y).toBeGreaterThan(0);
+
+    return y;
+  };
+  let scrolled = await scrollAbove(hub);
   const stays = async () => {
     await page.waitForTimeout(500);
     expect(await page.evaluate(() => window.scrollY)).toBe(scrolled);
@@ -151,14 +164,15 @@ test('an impulse of the stub shows in the market chips, has its idea on the pair
   await expect(page.getByRole('button', { name: 'Снять выбор' })).toHaveCount(0);
   await stays();
 
-  await hub.getByRole('list').first().getByRole('button').first().click();
+  // The first row under the header: an open idea.
+  await hub.getByRole('row').nth(1).click();
   await expect(page).toHaveURL(/\/market\/linear\/SOLUSDT\?idea=/);
   await stays();
 
-  await page
-    .getByRole('group', { name: 'Интервал' })
-    .getByRole('button', { name: '15 мин', exact: true })
-    .click();
+  // The intervals are on the chart above the ideas: a click on one out of view would scroll to it first.
+  const intervals = page.getByRole('group', { name: 'Интервал' });
+  scrolled = await scrollAbove(intervals);
+  await intervals.getByRole('button', { name: '15 мин', exact: true }).click();
   await expect(page).toHaveURL(/interval=15/);
   await stays();
 
