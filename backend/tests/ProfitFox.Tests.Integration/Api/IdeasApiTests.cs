@@ -272,7 +272,7 @@ public class IdeasApiTests
             new Dictionary<Instrument, IReadOnlyList<PairSetup>> { [Sol] = [new PairSetup(Interval.FifteenMinutes, IdeaSetup.Impulse), new PairSetup(Interval.FifteenMinutes, IdeaSetup.HighVolatility)] },
             CancellationToken.None);
 
-        JsonElement[] rows = [.. (await GetAsync("/api/market")).GetProperty("rows").EnumerateArray()];
+        JsonElement[] rows = [.. (await GetAsync("/api/market")).GetProperty("items").EnumerateArray()];
         JsonElement sol = rows.Single(row => row.GetProperty("symbol").GetString() == "SOLUSDT").GetProperty("setups");
         JsonElement eth = rows.Single(row => row.GetProperty("symbol").GetString() == "ETHUSDT").GetProperty("setups");
 

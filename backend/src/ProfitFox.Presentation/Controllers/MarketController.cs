@@ -22,11 +22,26 @@ namespace ProfitFox.Presentation.Controllers;
 [Route("api/market")]
 public sealed class MarketController(ISender sender) : ControllerBase
 {
+    /// <summary>One page of the snapshot that meets the filters, in the order asked for, with the counts of the screen and the state of the scanner.</summary>
     [HttpGet]
     [ProducesResponseType<MarketResponse>(StatusCodes.Status200OK)]
-    public async Task<IActionResult> Get(CancellationToken cancellationToken)
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Get([FromQuery] MarketQueryParameters parameters, CancellationToken cancellationToken)
     {
-        return Ok(MarketResponse.Of(await sender.Send(new GetMarketQuery(), cancellationToken)));
+        GetMarketResult result = await sender.Send(
+            new GetMarketQuery(
+                parameters.Category,
+                parameters.Search,
+                parameters.Setup,
+                parameters.Interval,
+                parameters.SavedFilter,
+                parameters.Sort,
+                parameters.Direction,
+                parameters.Page,
+                parameters.PageSize),
+            cancellationToken);
+
+        return result.Page is null ? Invalid(result.Errors) : Ok(MarketResponse.Of(result));
     }
 
     [HttpGet("{category}/{symbol}")]
