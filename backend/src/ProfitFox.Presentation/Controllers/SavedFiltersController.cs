@@ -6,13 +6,14 @@ using ProfitFox.Application.SavedFilters;
 using ProfitFox.Application.SavedFilters.Commands.CreateSavedFilter;
 using ProfitFox.Application.SavedFilters.Commands.DeleteSavedFilter;
 using ProfitFox.Application.SavedFilters.Commands.UpdateSavedFilter;
+using ProfitFox.Application.SavedFilters.Queries.FitSavedFilter;
 using ProfitFox.Application.SavedFilters.Queries.GetSavedFilters;
 using ProfitFox.Presentation.Contracts.SavedFilters;
 using ProfitFox.Presentation.Contracts.Strategies;
 
 namespace ProfitFox.Presentation.Controllers;
 
-/// <summary>Named filters of «Рынок» and «Идеи» (decision 8); the browser applies them to the snapshot and the ideas it has.</summary>
+/// <summary>Named filters of «Рынок» and «Идеи» (decision 8); the API applies them when it reads the snapshot and the ideas.</summary>
 [ApiController]
 [Route("api/saved-filters")]
 public sealed class SavedFiltersController(ISender sender) : ControllerBase
@@ -30,6 +31,22 @@ public sealed class SavedFiltersController(ISender sender) : ControllerBase
     public IActionResult Fields()
     {
         return Ok(SavedFilterFields.All.Select(SavedFilterFieldResponse.Of).ToList());
+    }
+
+    /// <summary>How many pairs of the snapshot and how many ideas meet the conditions of a draft of a filter; saves nothing.</summary>
+    [HttpPost("fit")]
+    [ProducesResponseType<SavedFilterFitResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Fit(SavedFilterFitBody body, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(SavedFilterFitResponse.Of(await sender.Send(new FitSavedFilterQuery(Conditions(body.Conditions)), cancellationToken)));
+        }
+        catch (Exception exception) when (StrategyProblems.Of(exception) is { } problem)
+        {
+            return problem;
+        }
     }
 
     [HttpPost]
@@ -86,9 +103,11 @@ public sealed class SavedFiltersController(ISender sender) : ControllerBase
 
     private static SavedFilterInput Input(SavedFilterBody body)
     {
-        return new SavedFilterInput(
-            body.Name,
-            body.Place,
-            body.Conditions?.Select(condition => new SavedFilterConditionInput(condition.Field, condition.Operator, condition.Value, condition.To)).ToList());
+        return new SavedFilterInput(body.Name, body.Place, Conditions(body.Conditions));
+    }
+
+    private static List<SavedFilterConditionInput>? Conditions(IReadOnlyList<SavedFilterConditionBody>? conditions)
+    {
+        return conditions?.Select(condition => new SavedFilterConditionInput(condition.Field, condition.Operator, condition.Value, condition.To)).ToList();
     }
 }

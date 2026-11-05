@@ -35,3 +35,32 @@ test('the market shows the pairs of the scanner, sorts by the change over an hou
   ).toBeVisible();
   await expect(page.getByRole('region', { name: 'Фандинг' }).locator('figure')).toBeVisible();
 });
+
+test('the market comes a page at a time: a page past the end moves the address, the size is kept, the search goes to the server', async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await page.goto('/market?page=5');
+
+  const rows = page.locator('tbody tr');
+  await expect(rows).toHaveCount(6, { timeout: 180_000 });
+  // The six pairs are the first page of 50: the address follows the page the server gave.
+  await expect(page).toHaveURL(/\/market$/);
+  await expect(page.getByText('1–6 из 6', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Предыдущая страница' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Следующая страница' })).toBeDisabled();
+
+  // The size is kept in the browser.
+  await page.getByRole('combobox', { name: 'На странице' }).selectOption('100');
+  await page.reload();
+  await expect(page.getByRole('combobox', { name: 'На странице' })).toHaveValue('100');
+  await expect(rows).toHaveCount(6);
+
+  // The search is applied by the server after a pause in the typing, and the counts of the chips follow it.
+  await page.getByRole('searchbox', { name: 'Поиск по символу' }).fill('SOL');
+  await expect(rows).toHaveCount(2);
+  await expect(page.getByText('2 из 6 инструментов')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'SOLUSDT', exact: true })).toHaveCount(2);
+  await page.getByRole('searchbox', { name: 'Поиск по символу' }).fill('');
+  await expect(rows).toHaveCount(6);
+});

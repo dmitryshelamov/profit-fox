@@ -1,4 +1,4 @@
 export { filterFieldsQuery, savedFiltersQuery } from './api';
-export { matchesIdea, matchesMarketRow, type SavedFilter } from './model/apply';
+export { type SavedFilter } from './model/savedFilter';
 export { FilterBar, filtersOfPlace } from './ui/FilterBar';
 export { FilterEditor } from './ui/FilterEditor';

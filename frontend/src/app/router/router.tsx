@@ -77,16 +77,34 @@ const nodesRoute = createRoute({
   component: NodesPage,
 });
 
+// The page of a list is a whole number from 1; anything else is the first page.
+const pageOf = (search: Record<string, unknown>): { page?: number | undefined } => ({
+  page:
+    typeof search.page === 'number' && Number.isInteger(search.page) && search.page > 1
+      ? search.page
+      : undefined,
+});
+
 const marketRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/market',
-  component: MarketPage,
+  validateSearch: pageOf,
+  component: function MarketRoute() {
+    const { page } = marketRoute.useSearch();
+
+    return <MarketPage page={page ?? 1} />;
+  },
 });
 
 const ideasRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/ideas',
-  component: IdeasPage,
+  validateSearch: pageOf,
+  component: function IdeasRoute() {
+    const { page } = ideasRoute.useSearch();
+
+    return <IdeasPage page={page ?? 1} />;
+  },
 });
 
 const marketPairRoute = createRoute({

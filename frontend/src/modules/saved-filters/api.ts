@@ -1,4 +1,10 @@
-import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  type QueryClient,
+  queryOptions,
+  useMutation,
+  useQueryClient,
+} from '@tanstack/react-query';
 
 import { api, type Schemas, unwrap } from '@/shared/api/client';
 
@@ -16,6 +22,24 @@ export const filterFieldsQuery = queryOptions({
 
 export type FilterBody = Schemas['SavedFilterBody'];
 
+/** How many pairs and ideas meet the conditions of a draft of a filter; the API counts, nothing is saved. The old count stays while a new one loads. */
+export function fitQuery(conditions: NonNullable<Schemas['SavedFilterFitBody']['conditions']>) {
+  return queryOptions({
+    queryKey: ['saved-filter-fit', conditions],
+    queryFn: async () => unwrap(await api.POST('/api/saved-filters/fit', { body: { conditions } })),
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** The lists of filters, and the pages of ideas and of the market, which the API cuts by the filter that is chosen, are read again. */
+function refreshAfterChange(client: QueryClient) {
+  return Promise.all([
+    client.invalidateQueries({ queryKey: savedFiltersQuery.queryKey }),
+    client.invalidateQueries({ queryKey: ['ideas', 'page'] }),
+    client.invalidateQueries({ queryKey: ['market', 'page'] }),
+  ]);
+}
+
 /** Creates a filter, or changes the one with `id`, and gives its id; the lists of filters are read again afterwards. */
 export function useSaveFilter() {
   const client = useQueryClient();
@@ -30,7 +54,7 @@ export function useSaveFilter() {
 
       return id;
     },
-    onSuccess: () => client.invalidateQueries({ queryKey: savedFiltersQuery.queryKey }),
+    onSuccess: () => refreshAfterChange(client),
   });
 }
 
@@ -40,6 +64,6 @@ export function useDeleteFilter() {
   return useMutation({
     mutationFn: async (id: string) =>
       unwrap(await api.DELETE('/api/saved-filters/{id}', { params: { path: { id } } })),
-    onSuccess: () => client.invalidateQueries({ queryKey: savedFiltersQuery.queryKey }),
+    onSuccess: () => refreshAfterChange(client),
   });
 }

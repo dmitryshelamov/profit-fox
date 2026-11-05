@@ -11,6 +11,7 @@ describe('the choice of the market screen in the browser', () => {
     setupInterval: '15',
     savedFilterId: null,
     sort: { column: 'change1h', direction: 'desc' },
+    pageSize: 50,
   };
 
   it('opens as before while nothing is stored', () => {
@@ -25,6 +26,7 @@ describe('the choice of the market screen in the browser', () => {
       setupInterval: '60',
       savedFilterId: 'f-1',
       sort: { column: 'change1h', direction: 'asc' },
+      pageSize: 100,
     } as const;
 
     saveMarketChoice(choice);
@@ -36,6 +38,13 @@ describe('the choice of the market screen in the browser', () => {
     saveMarketChoice({ ...defaults, search: 'SOL' } as never);
 
     expect(localStorage.getItem(key)).not.toContain('SOL');
+  });
+
+  // Scenario "Размер страницы".
+  it.each([75, '100', null, 'x'])('takes the size 50 for a stored size that is %s', (size) => {
+    localStorage.setItem(key, JSON.stringify({ pageSize: size }));
+
+    expect(loadMarketChoice().pageSize).toBe(50);
   });
 
   it.each(['{broken', '5', '[]', 'null'])('ignores a stored value that is %s', (stored) => {

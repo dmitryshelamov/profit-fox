@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { fakeApi, json } from '@/test/fakeApi';
-import { filterFields, ideaOf, marketRow, marketSnapshot, savedFilterOf } from '@/test/fixtures';
+import { filterFields, ideaOf, ideasPage, savedFilterOf } from '@/test/fixtures';
 import { renderApp } from '@/test/renderApp';
 
 const wifIdea = ideaOf({ id: 'wif-1', symbol: 'WIFUSDT' });
@@ -36,10 +36,9 @@ const bigFilter = savedFilterOf({
   conditions: [{ field: 'probability', operator: '>', value: '0.45', to: null }],
 });
 
-function open(overrides: Record<string, () => Response> = {}) {
+function open(overrides: Record<string, (request: Request) => Response> = {}) {
   return fakeApi({
-    'GET /api/ideas': () => json([wifIdea, fewData, noBucket]),
-    'GET /api/market': () => json(marketSnapshot([marketRow({ symbol: 'WIFUSDT' })])),
+    'GET /api/ideas': () => json(ideasPage([wifIdea, fewData, noBucket])),
     'GET /api/saved-filters': () => json([bigFilter]),
     'GET /api/saved-filters/fields': () => json(filterFields),
     ...overrides,
@@ -170,10 +169,12 @@ describe('ideas screen', () => {
   it('gives the money by the distance to the stop: a farther stop gives more', async () => {
     open({
       'GET /api/ideas': () =>
-        json([
-          ideaOf({ id: 'near', symbol: 'NEARUSDT', profitPerUsdt: '0.02', lossPerUsdt: '0.01' }),
-          ideaOf({ id: 'far', symbol: 'FARUSDT', profitPerUsdt: '0.06', lossPerUsdt: '0.03' }),
-        ]),
+        json(
+          ideasPage([
+            ideaOf({ id: 'near', symbol: 'NEARUSDT', profitPerUsdt: '0.02', lossPerUsdt: '0.01' }),
+            ideaOf({ id: 'far', symbol: 'FARUSDT', profitPerUsdt: '0.06', lossPerUsdt: '0.03' }),
+          ]),
+        ),
     });
     renderApp('/ideas');
 
@@ -193,6 +194,30 @@ describe('ideas screen', () => {
     expect(screen.getByRole('textbox', { name: 'Сумма на идею' })).toHaveValue('25');
   });
 
+  const lastIdeasQuery = (requests: Request[]) => {
+    const last = requests
+      .filter((request) => new URL(request.url).pathname === '/api/ideas')
+      .at(-1)!;
+
+    return Object.fromEntries(new URL(last.url).searchParams);
+  };
+  const ideasRequests = (requests: Request[]) =>
+    requests.filter((request) => new URL(request.url).pathname === '/api/ideas');
+
+  it('asks the API for the first page of 50 by the expectancy, without a filter', async () => {
+    const requests = open();
+    renderApp('/ideas');
+    await rowOf('WIFUSDT');
+
+    expect(lastIdeasQuery(requests)).toEqual({
+      Sort: 'expectancy',
+      Direction: 'desc',
+      Page: '1',
+      PageSize: '50',
+    });
+    expect(ideasRequests(requests)).toHaveLength(1);
+  });
+
   it('asks the API for the ideas the filters name', async () => {
     const requests = open();
     renderApp('/ideas');
@@ -209,19 +234,20 @@ describe('ideas screen', () => {
     );
     await userEvent.click(screen.getByRole('checkbox', { name: 'Ожидание ≥ 0 R' }));
 
-    await waitFor(() => {
-      const last = requests
-        .filter((request) => new URL(request.url).pathname === '/api/ideas')
-        .at(-1)!;
-      expect(Object.fromEntries(new URL(last.url).searchParams)).toEqual({
+    await waitFor(() =>
+      expect(lastIdeasQuery(requests)).toEqual({
         Setup: 'drop',
         Interval: '60',
         Type: 'pullback',
         Side: 'long',
         Category: 'linear',
         NonNegativeExpectancy: 'true',
-      });
-    });
+        Sort: 'expectancy',
+        Direction: 'desc',
+        Page: '1',
+        PageSize: '50',
+      }),
+    );
   });
 
   const symbolsInTable = () =>
@@ -234,7 +260,7 @@ describe('ideas screen', () => {
   it('shows the entry, the stop and the target by the price step of the pair', async () => {
     open({
       'GET /api/ideas': () =>
-        json([ideaOf({ entry: '184.7', stop: '180', target: '197.00', tick: '0.01' })]),
+        json(ideasPage([ideaOf({ entry: '184.7', stop: '180', target: '197.00', tick: '0.01' })])),
     });
     renderApp('/ideas');
 
@@ -245,24 +271,19 @@ describe('ideas screen', () => {
     expect(within(row).getByText('197.00')).toBeInTheDocument();
   });
 
-  // Scenario "Сортировка по R:R".
-  it('sorts by a column on a click on its header and the other way on the second click', async () => {
-    open({
-      'GET /api/ideas': () =>
-        json([
-          ideaOf({ id: 'a', symbol: 'AAAUSDT', riskReward: '2' }),
-          ideaOf({ id: 'b', symbol: 'BBBUSDT', riskReward: '1.5' }),
-          ideaOf({ id: 'c', symbol: 'CCCUSDT', riskReward: '3' }),
-        ]),
-    });
+  // Scenario "Сортировка по R:R" and "Сортировка по всем страницам": the API sorts, the screen asks and shows the order it got.
+  it('asks the API to sort by a column on a click on its header and the other way on the second click', async () => {
+    const requests = open();
     renderApp('/ideas');
-    await rowOf('AAAUSDT');
+    await rowOf('WIFUSDT');
     expect(header(/Ожидание/)).toHaveAttribute('aria-sort', 'descending');
     expect(header(/R:R/)).toHaveAttribute('aria-sort', 'none');
 
     await userEvent.click(within(header(/R:R/)).getByRole('button'));
 
-    expect(symbolsInTable()).toEqual(['CCCUSDT', 'AAAUSDT', 'BBBUSDT']);
+    await waitFor(() =>
+      expect(lastIdeasQuery(requests)).toMatchObject({ Sort: 'riskReward', Direction: 'desc' }),
+    );
     expect(header(/R:R/)).toHaveAttribute('aria-sort', 'descending');
     expect(header(/R:R/)).toHaveTextContent('R:R ↓');
     expect(header(/Ожидание/)).toHaveAttribute('aria-sort', 'none');
@@ -270,56 +291,50 @@ describe('ideas screen', () => {
 
     await userEvent.click(within(header(/R:R/)).getByRole('button'));
 
-    expect(symbolsInTable()).toEqual(['BBBUSDT', 'AAAUSDT', 'CCCUSDT']);
+    await waitFor(() =>
+      expect(lastIdeasQuery(requests)).toMatchObject({ Sort: 'riskReward', Direction: 'asc' }),
+    );
     expect(header(/R:R/)).toHaveAttribute('aria-sort', 'ascending');
     expect(header(/R:R/)).toHaveTextContent('R:R ↑');
   });
 
-  // Scenario "Вероятность без данных".
-  it('keeps the ideas without a probability under the others in both directions', async () => {
-    const withData = (probability: string) => ({ ...ideaOf().bucket!, probability });
+  it('shows the ideas in the order the API gave', async () => {
     open({
       'GET /api/ideas': () =>
-        json([
-          fewData,
-          noBucket,
-          ideaOf({ id: 'p1', symbol: 'LOWUSDT', bucket: withData('0.46') }),
-          ideaOf({ id: 'p2', symbol: 'HIGHUSDT', bucket: withData('0.5') }),
-        ]),
+        json(
+          ideasPage([
+            ideaOf({ id: 'c', symbol: 'CCCUSDT' }),
+            ideaOf({ id: 'a', symbol: 'AAAUSDT' }),
+            ideaOf({ id: 'b', symbol: 'BBBUSDT' }),
+          ]),
+        ),
     });
     renderApp('/ideas');
-    await rowOf('LOWUSDT');
+    await rowOf('AAAUSDT');
 
-    await userEvent.click(within(header(/Вероятность/)).getByRole('button'));
-    expect(symbolsInTable()).toEqual(['HIGHUSDT', 'LOWUSDT', 'SOLUSDT', 'DOGEUSDT']);
-
-    await userEvent.click(within(header(/Вероятность/)).getByRole('button'));
-    expect(symbolsInTable()).toEqual(['LOWUSDT', 'HIGHUSDT', 'SOLUSDT', 'DOGEUSDT']);
+    expect(symbolsInTable()).toEqual(['CCCUSDT', 'AAAUSDT', 'BBBUSDT']);
   });
 
   it('keeps the sorting when the list is read again with other filters', async () => {
-    const ideas = [
-      ideaOf({ id: 'a', symbol: 'AAAUSDT', riskReward: '2' }),
-      ideaOf({ id: 'b', symbol: 'BBBUSDT', riskReward: '3' }),
-    ];
-    const requests = open({ 'GET /api/ideas': () => json(ideas) });
+    const requests = open();
     renderApp('/ideas');
-    await rowOf('AAAUSDT');
+    await rowOf('WIFUSDT');
     await userEvent.click(within(header(/R:R/)).getByRole('button'));
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Ожидание ≥ 0 R' }));
 
     await waitFor(() =>
-      expect(
-        requests.some((request) => new URL(request.url).searchParams.has('NonNegativeExpectancy')),
-      ).toBe(true),
+      expect(lastIdeasQuery(requests)).toMatchObject({
+        NonNegativeExpectancy: 'true',
+        Sort: 'riskReward',
+        Direction: 'desc',
+      }),
     );
-    expect(symbolsInTable()).toEqual(['BBBUSDT', 'AAAUSDT']);
     expect(header(/R:R/)).toHaveAttribute('aria-sort', 'descending');
   });
 
   // Scenario "Возврат на «Идеи»".
-  it('comes back with the filters, the switch and the sorting that were chosen', async () => {
+  it('comes back with the filters, the switch, the sorting and the page size that were chosen', async () => {
     const requests = open();
     const first = renderApp('/ideas');
     await rowOf('WIFUSDT');
@@ -337,17 +352,32 @@ describe('ideas screen', () => {
     expect(screen.getByRole('combobox', { name: 'Сторона' })).toHaveValue('short');
     expect(screen.getByRole('checkbox', { name: 'Ожидание ≥ 0 R' })).toBeChecked();
     expect(header(/R:R/)).toHaveAttribute('aria-sort', 'descending');
-    expect(
-      Object.fromEntries(
-        new URL(requests.find((request) => new URL(request.url).searchParams.has('Side'))!.url)
-          .searchParams,
-      ),
-    ).toEqual({ Interval: '60', Side: 'short', NonNegativeExpectancy: 'true' });
+    expect(lastIdeasQuery(requests)).toEqual({
+      Interval: '60',
+      Side: 'short',
+      NonNegativeExpectancy: 'true',
+      Sort: 'riskReward',
+      Direction: 'desc',
+      Page: '1',
+      PageSize: '50',
+    });
+  });
+
+  // Scenario "Сохранённый фильтр в запросе": the API applies it, the screen only names it.
+  it('asks the API for the ideas that meet the saved filter that is chosen', async () => {
+    const requests = open();
+    renderApp('/ideas');
+    await rowOf('WIFUSDT');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Вероятные' }));
+
+    await waitFor(() => expect(lastIdeasQuery(requests)).toMatchObject({ SavedFilter: 'big' }));
+    expect(screen.getByLabelText('Условия фильтра')).toHaveTextContent('Вероятность > 45 %');
   });
 
   it('opens with the saved filter that was chosen', async () => {
     localStorage.setItem('profit-fox.ideas.choice', JSON.stringify({ savedFilterId: 'big' }));
-    open();
+    const requests = open();
     renderApp('/ideas');
 
     await rowOf('WIFUSDT');
@@ -356,13 +386,13 @@ describe('ideas screen', () => {
       'aria-pressed',
       'true',
     );
-    expect(symbolsInTable()).toEqual(['WIFUSDT']);
+    expect(lastIdeasQuery(requests)).toMatchObject({ SavedFilter: 'big' });
   });
 
-  // Scenario "Удалённый фильтр".
+  // Scenario "Удалённый фильтр": the ideas wait for the list of filters, so a filter that is gone is never asked for.
   it('opens without a saved filter that was deleted since', async () => {
     localStorage.setItem('profit-fox.ideas.choice', JSON.stringify({ savedFilterId: 'gone' }));
-    open();
+    const requests = open();
     renderApp('/ideas');
 
     await rowOf('WIFUSDT');
@@ -371,7 +401,11 @@ describe('ideas screen', () => {
       'aria-pressed',
       'false',
     );
-    expect(symbolsInTable()).toEqual(['WIFUSDT', 'SOLUSDT', 'DOGEUSDT']);
+    expect(
+      ideasRequests(requests).filter((request) =>
+        new URL(request.url).searchParams.has('SavedFilter'),
+      ),
+    ).toHaveLength(0);
   });
 
   it('opens as before when what is stored is broken', async () => {
@@ -396,24 +430,160 @@ describe('ideas screen', () => {
   });
 
   it('says that there are no ideas for the filters', async () => {
-    open({ 'GET /api/ideas': () => json([]) });
+    open({ 'GET /api/ideas': () => json(ideasPage([])) });
     renderApp('/ideas');
 
     expect(await screen.findByText('Идей по этим условиям нет.')).toBeInTheDocument();
   });
 
-  it('applies a saved filter of the ideas to the list', async () => {
-    open();
+  it('asks for the ideas again when the saved filter that is chosen is changed', async () => {
+    localStorage.setItem('profit-fox.ideas.choice', JSON.stringify({ savedFilterId: 'big' }));
+    const requests = open({
+      'PUT /api/saved-filters/big': () => new Response(null, { status: 204 }),
+    });
     renderApp('/ideas');
     await rowOf('WIFUSDT');
+    await userEvent.click(await screen.findByRole('button', { name: 'Изменить' }));
+    const before = ideasRequests(requests).length;
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Вероятные' }));
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Редактор фильтра' })).getByRole('button', {
+        name: 'Сохранить',
+      }),
+    );
 
-    expect(
-      within(screen.getByRole('table'))
-        .getAllByRole('link')
-        .map((link) => link.textContent),
-    ).toEqual(['WIFUSDT']);
-    expect(screen.getByLabelText('Условия фильтра')).toHaveTextContent('Вероятность > 45 %');
+    await waitFor(() => expect(ideasRequests(requests)).toHaveLength(before + 1));
+  });
+
+  describe('the pages', () => {
+    // 120 ideas, the page the request names; the ideas of a page are named after their number.
+    const pagedApi = (total = 120) => {
+      const answer = (request: Request) => {
+        const query = new URL(request.url).searchParams;
+        const size = Number(query.get('PageSize') ?? 50);
+        const last = Math.max(1, Math.ceil(total / size));
+        const page = Math.min(Number(query.get('Page') ?? 1), last);
+        const from = (page - 1) * size;
+        const items = Array.from({ length: Math.min(size, total - from) }, (_, index) =>
+          ideaOf({ id: `i${from + index + 1}`, symbol: `P${from + index + 1}USDT` }),
+        );
+
+        return json(ideasPage(items, { page, pageSize: size, total }));
+      };
+
+      return open({ 'GET /api/ideas': answer });
+    };
+
+    // Scenario "Вторая страница".
+    it('shows the rows of the page and turns it with ›, writing the number into the address', async () => {
+      const requests = pagedApi();
+      const { history } = renderApp('/ideas');
+      await rowOf('P1USDT');
+      expect(screen.getByText('1–50 из 120')).toBeInTheDocument();
+      expect(screen.getByText('120 идей')).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Следующая страница' }));
+
+      expect(await screen.findByText('51–100 из 120')).toBeInTheDocument();
+      await rowOf('P51USDT');
+      expect(lastIdeasQuery(requests)).toMatchObject({ Page: '2', PageSize: '50' });
+      expect(history.location.search).toBe('?page=2');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Предыдущая страница' }));
+
+      expect(await screen.findByText('1–50 из 120')).toBeInTheDocument();
+      expect(history.location.search).toBe('');
+    });
+
+    it('opens the page the address names', async () => {
+      const requests = pagedApi();
+      renderApp('/ideas?page=3');
+
+      expect(await screen.findByText('101–120 из 120')).toBeInTheDocument();
+      expect(lastIdeasQuery(requests)).toMatchObject({ Page: '3' });
+    });
+
+    // Scenario "Смена фильтра на третьей странице".
+    it.each([
+      [
+        'a filter',
+        () => userEvent.selectOptions(screen.getByRole('combobox', { name: 'Сторона' }), 'short'),
+        { Side: 'short' },
+      ],
+      [
+        'the sorting',
+        () => userEvent.click(within(header(/R:R/)).getByRole('button')),
+        { Sort: 'riskReward' },
+      ],
+      [
+        'the size of a page',
+        () => userEvent.selectOptions(screen.getByRole('combobox', { name: 'На странице' }), '100'),
+        { PageSize: '100' },
+      ],
+    ])('goes back to the first page on a change of %s', async (_name, change, expected) => {
+      const requests = pagedApi();
+      const { history } = renderApp('/ideas?page=3');
+      await screen.findByText('101–120 из 120');
+
+      await change();
+
+      await waitFor(() =>
+        expect(lastIdeasQuery(requests)).toMatchObject({ ...expected, Page: '1' }),
+      );
+      expect(history.location.search).toBe('');
+    });
+
+    it('goes back to the first page when a saved filter is chosen', async () => {
+      const requests = pagedApi();
+      const { history } = renderApp('/ideas?page=3');
+      await screen.findByText('101–120 из 120');
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Вероятные' }));
+
+      await waitFor(() =>
+        expect(lastIdeasQuery(requests)).toMatchObject({ SavedFilter: 'big', Page: '1' }),
+      );
+      expect(history.location.search).toBe('');
+    });
+
+    // Scenario "Идей стало меньше".
+    it('moves the address to the page the API gave when the one asked for is past the end', async () => {
+      pagedApi(80);
+      const { history } = renderApp('/ideas?page=3');
+
+      expect(await screen.findByText('51–80 из 80')).toBeInTheDocument();
+      await waitFor(() => expect(history.location.search).toBe('?page=2'));
+    });
+
+    // Scenario "Размер страницы".
+    it('remembers the size of a page in the browser', async () => {
+      const requests = pagedApi();
+      const first = renderApp('/ideas');
+      await rowOf('P1USDT');
+      await userEvent.selectOptions(screen.getByRole('combobox', { name: 'На странице' }), '200');
+      await screen.findByText('1–120 из 120');
+      first.unmount();
+      requests.length = 0;
+
+      renderApp('/ideas');
+
+      expect(await screen.findByText('1–120 из 120')).toBeInTheDocument();
+      expect(lastIdeasQuery(requests)).toMatchObject({ PageSize: '200' });
+      expect(screen.getByRole('combobox', { name: 'На странице' })).toHaveValue('200');
+    });
+
+    // Scenario "Назад со страницы пары".
+    it('comes back to the page it left with Back from the pair', async () => {
+      pagedApi();
+      const { history } = renderApp('/ideas?page=2');
+      await rowOf('P51USDT');
+
+      await userEvent.click(within(await rowOf('P51USDT')).getByText('Откат'));
+      await waitFor(() => expect(history.location.pathname).toBe('/market/linear/P51USDT'));
+      history.back();
+
+      expect(await screen.findByText('51–100 из 120')).toBeInTheDocument();
+      expect(history.location.search).toBe('?page=2');
+    });
   });
 });
