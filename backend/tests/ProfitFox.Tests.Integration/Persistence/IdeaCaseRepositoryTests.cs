@@ -96,6 +96,23 @@ public class IdeaCaseRepositoryTests
         counts.AverageRiskReward.ShouldBe(((10m / 1.1m * 2) + (10m / 1.2m)) / 3m, 0.000000000001m);
     }
 
+    // 4 / 3 has 28 digits after the point, and the mean keeps them: past 10 it holds more digits than System.Decimal.
+    [Test]
+    public async Task Mean_risk_reward_past_ten_is_read_rounded()
+    {
+        IdeaCase[] cases =
+        [
+            .. new[] { (Stop: 97m, Target: 104m), (Stop: 99m, Target: 120m) }.Select((plan, index) => Case(Now.AddMinutes(index), IdeaStatus.Target, 2m) is var item
+                ? item with { Idea = item.Idea with { Track = item.Idea.Track with { Plan = new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 100m, plan.Stop, plan.Target) } } }
+                : null!)
+        ];
+        await _cases.AddAsync(cases, CancellationToken.None);
+
+        IdeaBucketCounts counts = (await _cases.CountAsync(2, Now.AddDays(-90), CancellationToken.None)).Single();
+
+        counts.AverageRiskReward.ShouldBe(((4m / 3m) + 20m) / 2m, 0.000000000001m);
+    }
+
     // A result in R is often a repeating fraction of 28 digits; a total of several of them past 8 holds more digits than System.Decimal.
     [Test]
     public async Task Total_of_long_fractions_is_read_rounded()
