@@ -153,6 +153,7 @@ describe('ideas on the pair page', () => {
     expect(
       within(open)
         .getAllByRole('button')
+        .filter((item) => item.hasAttribute('aria-pressed'))
         .map((item) => item.textContent),
     ).toEqual([expect.stringContaining('Откат'), expect.stringContaining('Уровни')]);
     expect(within(closed).getAllByRole('button')).toHaveLength(1);

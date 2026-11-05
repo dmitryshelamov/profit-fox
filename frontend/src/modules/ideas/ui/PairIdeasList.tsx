@@ -21,11 +21,13 @@ function IdeaItem({
   amount,
   selected,
   onSelect,
+  onEnter,
 }: {
   idea: Idea;
   amount: string;
   selected: boolean;
   onSelect: (idea: Idea) => void;
+  onEnter?: (idea: Idea) => void;
 }) {
   const outcome = moneyOutcome(idea, amount);
   const expectancy = expectancyInUsdt(idea.bucket, idea.riskPerUsdt, amount);
@@ -71,6 +73,15 @@ function IdeaItem({
           <span className="text-faint">{intervalLabel(idea.interval)}</span>
         </span>
       </button>
+      {onEnter && (idea.status === 'awaiting_entry' || idea.status === 'active') && (
+        <button
+          type="button"
+          onClick={() => onEnter(idea)}
+          className="mt-1 h-7 rounded-md border border-line px-3 text-xs font-semibold hover:bg-panel-2"
+        >
+          Войти
+        </button>
+      )}
     </li>
   );
 }
@@ -84,10 +95,13 @@ export function PairIdeasList({
   ideas,
   selectedId,
   onSelect,
+  onEnter,
 }: {
   ideas: readonly Idea[];
   selectedId: string | undefined;
   onSelect: (idea: Idea) => void;
+  /** Called by «Войти» on a card of an idea that waits for entry or is active; without it the cards have no such button. */
+  onEnter?: (idea: Idea) => void;
 }) {
   const { open, closed } = groupPairIdeas(ideas);
   const [amount] = useState(loadAmount);
@@ -112,6 +126,7 @@ export function PairIdeasList({
               amount={amount}
               selected={idea.id === selectedId}
               onSelect={onSelect}
+              onEnter={onEnter}
             />
           ))}
         </ul>

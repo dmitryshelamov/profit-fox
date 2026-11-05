@@ -127,7 +127,7 @@ export function IdeasPage({ page }: { page: number }) {
         <h1 className="text-2xl font-bold">Идеи</h1>
         <p className="text-sm text-muted">
           Идеи по сетапам сканера: открытые и закрытые за последние 24 часа, по ожиданию корзины.
-          Только просмотр: отсюда ничего не торгуется.
+          Войти по идее можно со страницы пары.
         </p>
       </header>
       <div className="flex flex-wrap items-center gap-2">

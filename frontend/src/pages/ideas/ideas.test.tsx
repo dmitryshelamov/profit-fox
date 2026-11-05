@@ -587,3 +587,17 @@ describe('ideas screen', () => {
     });
   });
 });
+
+describe('caption of the ideas', () => {
+  // Requirement "Кнопка «Войти» на идее": the screen no longer says that nothing is traded from it.
+  it('tells that an entry is made from the page of the pair', async () => {
+    fakeApi({
+      'GET /api/ideas': () => json({ items: [], page: 1, pageSize: 50, total: 0 }),
+      'GET /api/saved-filters': () => json([]),
+    });
+    renderApp('/ideas');
+
+    expect(await screen.findByText(/Войти по идее можно со страницы пары/)).toBeInTheDocument();
+    expect(screen.queryByText(/Только просмотр/)).toBeNull();
+  });
+});
