@@ -3600,7 +3600,8 @@ export interface components {
         /**
          * @description A trade idea with its levels and where it stands, and the statistics of its bucket over 90 days (BucketStatisticsResponse? IdeaResponse.Bucket) and over the last
          *     30 (BucketStatisticsResponse? IdeaResponse.Recent), none while the bucket has no case. string IdeaResponse.Baseline is the bucket's, or 1 / (1 + R:R) of the idea.
-         *     Numbers are decimal strings; string IdeaResponse.Move in ATR, string IdeaResponse.VolumeRatio in medians of volume.
+         *     string IdeaResponse.ProfitPerUsdt, string IdeaResponse.LossPerUsdt and string IdeaResponse.RiskPerUsdt are its money on 1 USDT of the amount of a deal,
+         *     after the fees. string? IdeaResponse.Tick is the price step of the pair, none for an idea made before it was kept. Numbers are decimal strings; string IdeaResponse.Move in ATR, string IdeaResponse.VolumeRatio in medians of volume.
          */
         IdeaResponse: {
             /** Format: uuid */
@@ -3617,6 +3618,10 @@ export interface components {
             stop: string;
             target: string;
             riskReward: string;
+            tick: null | string;
+            profitPerUsdt: string;
+            lossPerUsdt: string;
+            riskPerUsdt: string;
             status: string;
             /** Format: date-time */
             statusAt: string;
@@ -3815,7 +3820,7 @@ export interface components {
         };
         /**
          * @description An own idea from the price now: its levels, R:R and the baseline 1 / (1 + R:R), its only probability («без сетапа: только базовая
-         *     линия»); bool OwnIdeaResponse.Made false and no levels when the rules of its type make none. Numbers are decimal strings.
+         *     линия»); bool OwnIdeaResponse.Made false and no levels when the rules of its type make none. string? OwnIdeaResponse.Tick is the price step of the pair. Numbers are decimal strings.
          */
         OwnIdeaResponse: {
             made: boolean;
@@ -3824,6 +3829,7 @@ export interface components {
             target: null | string;
             riskReward: null | string;
             baseline: null | string;
+            tick: null | string;
         };
         PinResponse: {
             name: string;

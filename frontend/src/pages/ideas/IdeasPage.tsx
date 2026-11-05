@@ -1,17 +1,21 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
   type Idea,
   type IdeaFilters,
+  type IdeaSort,
+  type IdeaSortColumn,
   ideasQuery,
   IdeasTable,
   ideasText,
   ideaTypes,
-  loadRisk,
-  noIdeaFilters,
-  saveRisk,
+  loadAmount,
+  loadIdeasChoice,
+  saveAmount,
+  saveIdeasChoice,
   sideLabel,
+  sortIdeas,
 } from '@/modules/ideas';
 import { marketQuery, setupChoices, setupIntervals } from '@/modules/market';
 import {
@@ -61,9 +65,12 @@ function Select({
 }
 
 export function IdeasPage() {
-  const [filters, setFilters] = useState<IdeaFilters>(noIdeaFilters);
-  const [risk, setRisk] = useState(loadRisk);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // What the owner chose last time; the saved filter that is gone since selects nothing.
+  const [remembered] = useState(loadIdeasChoice);
+  const [filters, setFilters] = useState<IdeaFilters>(remembered.filters);
+  const [amount, setAmount] = useState(loadAmount);
+  const [sort, setSort] = useState<IdeaSort>(remembered.sort);
+  const [selectedId, setSelectedId] = useState<string | null>(remembered.savedFilterId);
   const [editing, setEditing] = useState<{ filter: SavedFilter | null } | null>(null);
   const ideas = useQuery(ideasQuery(filters));
   const allIdeas = useQuery(ideasQuery());
@@ -73,14 +80,28 @@ export function IdeasPage() {
   const rows = market.data?.rows ?? [];
   const mine = filtersOfPlace(saved.data ?? [], 'ideas');
   const selected = mine.find((filter) => filter.id === selectedId) ?? null;
-  const shown: readonly Idea[] = (ideas.data ?? []).filter(
-    (idea) =>
-      selected === null ||
-      matchesIdea(
-        selected,
-        idea,
-        rows.find((row) => row.category === idea.category && row.symbol === idea.symbol),
-      ),
+  const shown: readonly Idea[] = sortIdeas(
+    (ideas.data ?? []).filter(
+      (idea) =>
+        selected === null ||
+        matchesIdea(
+          selected,
+          idea,
+          rows.find((row) => row.category === idea.category && row.symbol === idea.symbol),
+        ),
+    ),
+    sort.column,
+    sort.direction,
+  );
+  // A click on the column of the sorting turns it round; another column starts from the highest value.
+  const sortBy = (column: IdeaSortColumn) =>
+    setSort((current) => ({
+      column,
+      direction: current.column === column && current.direction === 'desc' ? 'asc' : 'desc',
+    }));
+  useEffect(
+    () => saveIdeasChoice({ filters, savedFilterId: selectedId, sort }),
+    [filters, selectedId, sort],
   );
   const set = (patch: Partial<IdeaFilters>) => setFilters((current) => ({ ...current, ...patch }));
 
@@ -143,14 +164,14 @@ export function IdeasPage() {
           Ожидание ≥ 0 R
         </label>
         <label className="flex items-center gap-2 text-sm">
-          <span className="text-muted">Риск на идею</span>
+          <span className="text-muted">Сумма на идею</span>
           <input
             inputMode="decimal"
-            aria-label="Риск на идею"
-            value={risk}
+            aria-label="Сумма на идею"
+            value={amount}
             onChange={(event) => {
-              setRisk(event.target.value);
-              saveRisk(event.target.value);
+              setAmount(event.target.value);
+              saveAmount(event.target.value);
             }}
             className={`${control} w-20 text-right font-mono`}
           />
@@ -173,7 +194,7 @@ export function IdeasPage() {
             <p className="text-sm text-muted">Идей по этим условиям нет.</p>
           ) : (
             <>
-              <IdeasTable ideas={shown} risk={risk} />
+              <IdeasTable ideas={shown} amount={amount} sort={sort} onSort={sortBy} />
               <ul className="space-y-1 text-xs text-faint">
                 <li>
                   Вероятность: доля «Цель» среди «Цель» и «Стоп» случаев корзины за 90 дней; после
@@ -183,7 +204,7 @@ export function IdeasPage() {
                   ▲ ≈ ▼: 95 % интервал вероятности выше, пересекает или ниже базовой линии 1 / (1 +
                   R:R).
                 </li>
-                <li>Прибыль / убыток при риске на идею: прибыль = R:R × риск, убыток = −риск.</li>
+                <li>Прибыль / убыток на сумму на идею: при цели и при стопе, после комиссий.</li>
               </ul>
             </>
           )}

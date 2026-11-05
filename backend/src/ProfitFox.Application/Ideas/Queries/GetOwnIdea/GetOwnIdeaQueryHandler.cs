@@ -68,6 +68,6 @@ public sealed class GetOwnIdeaQueryHandler(
 
         var context = new IdeaContext(category, levels.Price, levels.WindowLow, levels.WindowHigh, atr, levels.Zones, levels.Spread, settings.StopBuffer, tick);
 
-        return new GetOwnIdeaResult(IdeaRules.Plan(type, side, context), false, errors);
+        return new GetOwnIdeaResult(IdeaRules.Plan(type, side, context), false, errors, tick);
     }
 }

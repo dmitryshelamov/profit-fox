@@ -1,8 +1,12 @@
-import { intervalLabel } from '@/modules/market-data';
-import { groupDigits } from '@/shared/format/format';
+import { useState } from 'react';
 
+import { intervalLabel } from '@/modules/market-data';
+
+import { loadAmount } from '../model/amountStorage';
 import { groupPairIdeas } from '../model/groups';
 import { typeLabel } from '../model/labels';
+import { priceByTick } from '../model/price';
+import { expectancyInUsdt, moneyOutcome } from '../model/stats';
 import {
   ExpectancyCell,
   type Idea,
@@ -14,13 +18,18 @@ import {
 
 function IdeaItem({
   idea,
+  amount,
   selected,
   onSelect,
 }: {
   idea: Idea;
+  amount: string;
   selected: boolean;
   onSelect: (idea: Idea) => void;
 }) {
+  const outcome = moneyOutcome(idea, amount);
+  const expectancy = expectancyInUsdt(idea.bucket, idea.riskPerUsdt, amount);
+
   return (
     <li>
       <button
@@ -38,10 +47,22 @@ function IdeaItem({
           </span>
         </span>
         <span className="flex flex-wrap gap-x-3 font-mono text-xs text-muted">
-          <span>Вход {groupDigits(idea.entry)}</span>
-          <span>Стоп {groupDigits(idea.stop)}</span>
-          <span>Цель {groupDigits(idea.target)}</span>
+          <span>Вход {priceByTick(idea.entry, idea.tick)}</span>
+          <span>Стоп {priceByTick(idea.stop, idea.tick)}</span>
+          <span>Цель {priceByTick(idea.target, idea.tick)}</span>
         </span>
+        {outcome !== null && (
+          <span className="flex flex-wrap gap-x-3 font-mono text-xs text-muted">
+            <span>
+              Прибыль <span className="text-ok">{outcome.profit}</span>
+            </span>
+            <span>
+              Убыток <span className="text-err">{outcome.loss}</span>
+            </span>
+            {expectancy !== null && <span>Ожидание {expectancy}</span>}
+            <span>USDT</span>
+          </span>
+        )}
         <span className="flex flex-wrap gap-x-3 text-xs text-muted">
           <ProbabilityCell idea={idea} />
           <span className="font-mono">
@@ -56,7 +77,8 @@ function IdeaItem({
 
 /**
  * The ideas of a pair: those waiting for entry and the active ones first, in the order the API gave them (by expectancy),
- * then the group of the expired ones, closed in the last 24 hours. The selected idea is marked.
+ * then the group of the expired ones, closed in the last 24 hours. The selected idea is marked. Each card shows its money
+ * for the amount per idea that the owner set on the screen of the ideas.
  */
 export function PairIdeasList({
   ideas,
@@ -68,6 +90,7 @@ export function PairIdeasList({
   onSelect: (idea: Idea) => void;
 }) {
   const { open, closed } = groupPairIdeas(ideas);
+  const [amount] = useState(loadAmount);
 
   if (ideas.length === 0) {
     return (
@@ -86,6 +109,7 @@ export function PairIdeasList({
             <IdeaItem
               key={idea.id}
               idea={idea}
+              amount={amount}
               selected={idea.id === selectedId}
               onSelect={onSelect}
             />
@@ -100,6 +124,7 @@ export function PairIdeasList({
               <IdeaItem
                 key={idea.id}
                 idea={idea}
+                amount={amount}
                 selected={idea.id === selectedId}
                 onSelect={onSelect}
               />

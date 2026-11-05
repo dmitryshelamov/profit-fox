@@ -94,8 +94,19 @@ test('an impulse of the stub shows in the market chips, has its idea on the pair
     .filter({ hasText: 'SOLUSDT' })
     .first();
   await expect(idea).toBeVisible();
-  await page.getByRole('textbox', { name: 'Риск на идею' }).fill('10');
-  await expect(idea).toContainText('−10.0');
+  await page.getByRole('textbox', { name: 'Сумма на идею' }).fill('10');
+  await expect(idea).toContainText(/\+\d+\.\d{2} \/ −\d+\.\d{2}/);
+
+  // A click on «R:R» sorts the list by it, the highest first; the second click turns it round.
+  const riskReward = page.getByRole('columnheader', { name: /R:R/ });
+  const riskRewards = async () =>
+    (await page.locator('tbody tr td:nth-child(10)').allTextContents()).map(Number);
+  await riskReward.getByRole('button').click();
+  await expect(riskReward).toHaveAttribute('aria-sort', 'descending');
+  expect(await riskRewards()).toEqual([...(await riskRewards())].sort((a, b) => b - a));
+  await riskReward.getByRole('button').click();
+  await expect(riskReward).toHaveAttribute('aria-sort', 'ascending');
+  expect(await riskRewards()).toEqual([...(await riskRewards())].sort((a, b) => a - b));
 
   await idea.click();
 
@@ -108,13 +119,56 @@ test('an impulse of the stub shows in the market chips, has its idea on the pair
   await expect(page.getByRole('button', { name: 'Снять выбор' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Своя идея' })).toBeVisible();
 
+  // The card of the idea has the profit and the loss in USDT of the same amount per idea.
+  await expect(selected).toContainText('Прибыль');
+  await expect(selected).toContainText('Убыток');
+  await expect(selected).toContainText(/Прибыль \+\d+\.\d{2}/);
+  await expect(selected).toContainText(/Убыток −\d+\.\d{2}/);
+  await expect(selected).toContainText('USDT');
+
+  // Selecting an idea, removing the selection and switching the interval leave the page where it is.
+  const hub = page.getByRole('region', { name: 'Идеи пары' });
+  const hubTop = await hub.evaluate((element) => element.getBoundingClientRect().top + scrollY);
+  await page.evaluate((top) => window.scrollTo(0, top - 80), hubTop);
+  const scrolled = await page.evaluate(() => window.scrollY);
+  expect(scrolled).toBeGreaterThan(0);
+  const stays = async () => {
+    await page.waitForTimeout(500);
+    expect(await page.evaluate(() => window.scrollY)).toBe(scrolled);
+  };
+
   await page.getByRole('button', { name: 'Снять выбор' }).click();
   await expect(page).toHaveURL(/\/market\/linear\/SOLUSDT$/);
   await expect(page.getByRole('button', { name: 'Снять выбор' })).toHaveCount(0);
+  await stays();
+
+  await hub.getByRole('list').first().getByRole('button').first().click();
+  await expect(page).toHaveURL(/\/market\/linear\/SOLUSDT\?idea=/);
+  await stays();
+
+  await page
+    .getByRole('group', { name: 'Интервал' })
+    .getByRole('button', { name: '15 мин', exact: true })
+    .click();
+  await expect(page).toHaveURL(/interval=15/);
+  await stays();
+
+  await page.getByRole('button', { name: 'Снять выбор' }).click();
+  await expect(page).toHaveURL(/\/market\/linear\/SOLUSDT\?interval=15$/);
 
   // A saved filter is saved and applied: only the pumped pair grew over 1 % in an hour.
+  // «Рынок» opens with the setup chip and its interval chosen above; this part starts from all the pairs.
   await page.goto('/market');
-  await expect(rows.first()).toBeVisible();
+  await expect(
+    page.getByRole('group', { name: 'Сетап', exact: true }).getByRole('button', { pressed: true }),
+  ).toContainText(setupLabels[setup]!);
+  await expect(rows.filter({ hasText: 'linear' }).filter({ hasText: 'SOLUSDT' })).toHaveCount(1);
+  await expect(rows.filter({ hasNotText: 'SOLUSDT' })).toHaveCount(0);
+  await page
+    .getByRole('group', { name: 'Сетап', exact: true })
+    .getByRole('button', { name: /^Все/ })
+    .click();
+  await expect(rows).toHaveCount(6);
   await page.getByRole('button', { name: '+ Новый фильтр' }).click();
   const editor = page.getByRole('dialog', { name: 'Редактор фильтра' });
   await editor.getByRole('textbox', { name: 'Название' }).fill('Рост за час');
@@ -130,9 +184,18 @@ test('an impulse of the stub shows in the market chips, has its idea on the pair
   await expect(rows.filter({ hasNotText: 'SOLUSDT' })).toHaveCount(0);
   await expect(rows.first()).toContainText('SOLUSDT');
 
-  // The filter is kept on the server: a reload offers it again, and choosing it applies it.
+  // The filter is kept on the server and the choice of it in the browser: a reload opens the market with it applied.
   await page.reload();
-  await expect(rows).toHaveCount(6, { timeout: 60_000 });
+  await expect(page.getByRole('button', { name: 'Рост за час' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(rows.first()).toContainText('SOLUSDT');
+  await expect(rows.filter({ hasNotText: 'SOLUSDT' })).toHaveCount(0);
+
+  // Taking it off shows all the pairs again, and choosing it applies it once more.
+  await page.getByRole('button', { name: 'Рост за час' }).click();
+  await expect(rows).toHaveCount(6);
   await page.getByRole('button', { name: 'Рост за час' }).click();
   await expect(rows.filter({ hasNotText: 'SOLUSDT' })).toHaveCount(0);
 
