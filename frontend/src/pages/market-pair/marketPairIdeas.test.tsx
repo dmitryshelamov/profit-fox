@@ -178,8 +178,7 @@ describe('ideas on the pair page', () => {
               ideaOf({
                 id: 'idea-money',
                 symbol: 'SOLUSDT',
-                riskReward: '2',
-                bucket: withBucket('-0.05'),
+                bucket: withBucket('0.5'),
               }),
             ]),
         }),
@@ -188,46 +187,46 @@ describe('ideas on the pair page', () => {
 
       const money = within(await card(/Откат/));
 
-      expect(money.getByText('+20.0')).toBeInTheDocument();
-      expect(money.getByText('−10.0')).toBeInTheDocument();
-      expect(money.getByText('Ожидание -0.5')).toBeInTheDocument();
+      expect(money.getByText('+0.39')).toBeInTheDocument();
+      expect(money.getByText('−0.21')).toBeInTheDocument();
+      expect(money.getByText('Ожидание +0.10')).toBeInTheDocument();
       expect(money.getByText('USDT')).toBeInTheDocument();
     });
 
-    it('takes the risk the owner set on the screen of the ideas', async () => {
-      localStorage.setItem('profit-fox.ideas.risk', '30');
+    it('takes the amount the owner set on the screen of the ideas', async () => {
+      localStorage.setItem('profit-fox.ideas.amount', '30');
       fakeApi(
         routes('linear', {
           'GET /api/market/linear/SOLUSDT/ideas': () =>
-            json([ideaOf({ symbol: 'SOLUSDT', riskReward: '2', bucket: withBucket('0.38') })]),
+            json([ideaOf({ symbol: 'SOLUSDT', bucket: withBucket('0.38') })]),
         }),
       );
       renderApp('/market/linear/SOLUSDT');
 
       const money = within(await card(/Откат/));
 
-      expect(money.getByText('+60.0')).toBeInTheDocument();
-      expect(money.getByText('−30.0')).toBeInTheDocument();
-      expect(money.getByText('Ожидание +11.4')).toBeInTheDocument();
+      expect(money.getByText('+1.17')).toBeInTheDocument();
+      expect(money.getByText('−0.63')).toBeInTheDocument();
+      expect(money.getByText('Ожидание +0.23')).toBeInTheDocument();
     });
 
     it('shows no expectancy in USDT for an idea whose bucket has no case', async () => {
       fakeApi(
         routes('linear', {
           'GET /api/market/linear/SOLUSDT/ideas': () =>
-            json([ideaOf({ symbol: 'SOLUSDT', riskReward: '2', bucket: null })]),
+            json([ideaOf({ symbol: 'SOLUSDT', bucket: null })]),
         }),
       );
       renderApp('/market/linear/SOLUSDT');
 
       const money = within(await card(/Откат/));
 
-      expect(money.getByText('+20.0')).toBeInTheDocument();
+      expect(money.getByText('+0.39')).toBeInTheDocument();
       expect(money.queryByText(/Ожидание/)).not.toBeInTheDocument();
     });
 
-    it('shows no money while the risk is not a positive number', async () => {
-      localStorage.setItem('profit-fox.ideas.risk', '0');
+    it('shows no money while the amount is not a positive number', async () => {
+      localStorage.setItem('profit-fox.ideas.amount', '0');
       fakeApi(routes('linear'));
       renderApp('/market/linear/SOLUSDT');
 

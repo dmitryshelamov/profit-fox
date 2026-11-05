@@ -3600,7 +3600,8 @@ export interface components {
         /**
          * @description A trade idea with its levels and where it stands, and the statistics of its bucket over 90 days (BucketStatisticsResponse? IdeaResponse.Bucket) and over the last
          *     30 (BucketStatisticsResponse? IdeaResponse.Recent), none while the bucket has no case. string IdeaResponse.Baseline is the bucket's, or 1 / (1 + R:R) of the idea.
-         *     string? IdeaResponse.Tick is the price step of the pair, none for an idea made before it was kept. Numbers are decimal strings; string IdeaResponse.Move in ATR, string IdeaResponse.VolumeRatio in medians of volume.
+         *     string IdeaResponse.ProfitPerUsdt, string IdeaResponse.LossPerUsdt and string IdeaResponse.RiskPerUsdt are its money on 1 USDT of the amount of a deal,
+         *     after the fees. string? IdeaResponse.Tick is the price step of the pair, none for an idea made before it was kept. Numbers are decimal strings; string IdeaResponse.Move in ATR, string IdeaResponse.VolumeRatio in medians of volume.
          */
         IdeaResponse: {
             /** Format: uuid */
@@ -3618,6 +3619,9 @@ export interface components {
             target: string;
             riskReward: string;
             tick: null | string;
+            profitPerUsdt: string;
+            lossPerUsdt: string;
+            riskPerUsdt: string;
             status: string;
             /** Format: date-time */
             statusAt: string;

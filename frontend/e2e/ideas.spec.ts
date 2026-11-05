@@ -94,8 +94,8 @@ test('an impulse of the stub shows in the market chips, has its idea on the pair
     .filter({ hasText: 'SOLUSDT' })
     .first();
   await expect(idea).toBeVisible();
-  await page.getByRole('textbox', { name: 'Риск на идею' }).fill('10');
-  await expect(idea).toContainText('−10.0');
+  await page.getByRole('textbox', { name: 'Сумма на идею' }).fill('10');
+  await expect(idea).toContainText(/\+\d+\.\d{2} \/ −\d+\.\d{2}/);
 
   // A click on «R:R» sorts the list by it, the highest first; the second click turns it round.
   const riskReward = page.getByRole('columnheader', { name: /R:R/ });
@@ -119,10 +119,11 @@ test('an impulse of the stub shows in the market chips, has its idea on the pair
   await expect(page.getByRole('button', { name: 'Снять выбор' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Своя идея' })).toBeVisible();
 
-  // The card of the idea has the profit and the loss in USDT of the same risk per idea.
+  // The card of the idea has the profit and the loss in USDT of the same amount per idea.
   await expect(selected).toContainText('Прибыль');
   await expect(selected).toContainText('Убыток');
-  await expect(selected).toContainText('−10.0');
+  await expect(selected).toContainText(/Прибыль \+\d+\.\d{2}/);
+  await expect(selected).toContainText(/Убыток −\d+\.\d{2}/);
   await expect(selected).toContainText('USDT');
 
   // Selecting an idea, removing the selection and switching the interval leave the page where it is.

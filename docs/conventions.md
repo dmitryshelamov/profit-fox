@@ -32,10 +32,10 @@ enforces a rule, the check is the source of truth.
 - `Ideas` is the area of trade ideas: `Entities/Ideas` holds `Idea` (a live idea, one open per `IdeaKey`) and the enums `IdeaSetup`,
   `IdeaType`, `IdeaSide`, `IdeaStatus`; `ValueObjects/Ideas` holds `IdeaCandle` (a minute or a candle of an interval, its volume the
   turnover), `MinuteAggregate`, `SetupThresholds`, `SetupSignal`, `SetupReading`, `Zone`, `ZoneRules`, `IdeaPlan`, `IdeaContext`,
-  `IdeaTrack`, `IdeaCase`, `IdeaBucketKey`, `IdeaBucketCounts`, `IdeaBucket`, `BucketStatistics`, `IdeaVolatility` and `PairSetup`.
+  `IdeaTrack`, `IdeaCase`, `IdeaBucketKey`, `IdeaBucketCounts`, `IdeaBucket`, `BucketStatistics`, `IdeaVolatility`, `IdeaShares` and `PairSetup`.
   `Services/Ideas` holds the pure functions: `Atr` (Wilder, 14), `IdeaCandles` (candles of an interval from minutes, a minute without
   trades flat at the close before it), `SetupDetector`, `ZoneFinder`, `IdeaRules`, `IdeaTracker`, `CaseResult`,
-  `BucketStatisticsCalculator`, `Volatility` and `IdeasEngineVersion`.
+  `BucketStatisticsCalculator`, `IdeaMoney`, `Volatility` and `IdeasEngineVersion`.
 - `SavedFilters` is the area of saved filters: `Entities/SavedFilters` holds `SavedFilter` and the enums `SavedFilterPlace`, `FilterField`,
   `FilterOperator`; `ValueObjects/SavedFilters` holds `FilterCondition`.
 - `Exceptions` holds domain exceptions: a broken domain rule that the caller reports to the user

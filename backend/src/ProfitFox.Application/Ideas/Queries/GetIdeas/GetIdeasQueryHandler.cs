@@ -1,5 +1,6 @@
 using MediatR;
 
+using ProfitFox.Application.Backtests;
 using ProfitFox.Application.Market;
 using ProfitFox.Application.MarketData;
 using ProfitFox.Domain.Entities.Ideas;
@@ -10,7 +11,7 @@ using ProfitFox.Domain.Services.Ideas;
 
 namespace ProfitFox.Application.Ideas.Queries.GetIdeas;
 
-public sealed class GetIdeasQueryHandler(IIdeaRepository ideas, IIdeaBucketRepository buckets, IdeasEngineVersion version, TimeProvider time)
+public sealed class GetIdeasQueryHandler(IIdeaRepository ideas, IIdeaBucketRepository buckets, IdeasEngineVersion version, BacktestSettings backtests, TimeProvider time)
     : IRequestHandler<GetIdeasQuery, GetIdeasResult>
 {
     public async Task<GetIdeasResult> Handle(GetIdeasQuery request, CancellationToken cancellationToken)
@@ -59,7 +60,7 @@ public sealed class GetIdeasQueryHandler(IIdeaRepository ideas, IIdeaBucketRepos
             && (request.Type is null || idea.Track.Plan.Type == type)
             && (request.Side is null || idea.Track.Plan.Side == side)
             && (request.Category is null || idea.Instrument.Category == category));
-        IEnumerable<IdeaView> views = IdeaView.Of(matching, await buckets.GetAsync(version.Number, cancellationToken));
+        IEnumerable<IdeaView> views = IdeaView.Of(matching, await buckets.GetAsync(version.Number, cancellationToken), backtests.Policy().DefaultFees);
 
         if (request.NonNegativeExpectancy)
         {

@@ -7,7 +7,7 @@ import { formatMoment, showDecimal } from '@/shared/format/format';
 import { typeLabel } from '../model/labels';
 import { priceByTick } from '../model/price';
 import type { IdeaSortColumn, SortDirection } from '../model/sort';
-import { riskOutcome } from '../model/stats';
+import { moneyOutcome } from '../model/stats';
 import { ExpectancyCell, type Idea, ProbabilityCell, SideText, StatusText } from './IdeaCells';
 
 const cell = 'px-3 py-3';
@@ -46,17 +46,17 @@ export interface IdeaSort {
 
 /**
  * The ideas as a table. Clicking a row opens the pair with the idea selected; the symbol is also a link, for the keyboard.
- * The profit and the loss, in one column, come from the risk per idea. A header sorts the table: it shows the column and the
+ * The profit and the loss, in one column, come from the amount per idea. A header sorts the table: it shows the column and the
  * direction of the sorting, and asks `onSort` for a column when it is clicked.
  */
 export function IdeasTable({
   ideas,
-  risk,
+  amount,
   sort,
   onSort,
 }: {
   ideas: readonly Idea[];
-  risk: string;
+  amount: string;
   sort: IdeaSort;
   onSort: (column: IdeaSortColumn) => void;
 }) {
@@ -93,7 +93,7 @@ export function IdeasTable({
       </thead>
       <tbody>
         {ideas.map((idea) => {
-          const outcome = riskOutcome(idea.riskReward, risk);
+          const outcome = moneyOutcome(idea, amount);
 
           return (
             <tr

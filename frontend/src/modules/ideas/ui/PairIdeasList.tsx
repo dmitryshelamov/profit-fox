@@ -2,11 +2,11 @@ import { useState } from 'react';
 
 import { intervalLabel } from '@/modules/market-data';
 
+import { loadAmount } from '../model/amountStorage';
 import { groupPairIdeas } from '../model/groups';
 import { typeLabel } from '../model/labels';
 import { priceByTick } from '../model/price';
-import { loadRisk } from '../model/riskStorage';
-import { expectancyInUsdt, riskOutcome } from '../model/stats';
+import { expectancyInUsdt, moneyOutcome } from '../model/stats';
 import {
   ExpectancyCell,
   type Idea,
@@ -18,17 +18,17 @@ import {
 
 function IdeaItem({
   idea,
-  risk,
+  amount,
   selected,
   onSelect,
 }: {
   idea: Idea;
-  risk: string;
+  amount: string;
   selected: boolean;
   onSelect: (idea: Idea) => void;
 }) {
-  const outcome = riskOutcome(idea.riskReward, risk);
-  const expectancy = expectancyInUsdt(idea.bucket, risk);
+  const outcome = moneyOutcome(idea, amount);
+  const expectancy = expectancyInUsdt(idea.bucket, idea.riskPerUsdt, amount);
 
   return (
     <li>
@@ -78,7 +78,7 @@ function IdeaItem({
 /**
  * The ideas of a pair: those waiting for entry and the active ones first, in the order the API gave them (by expectancy),
  * then the group of the expired ones, closed in the last 24 hours. The selected idea is marked. Each card shows its money
- * for the risk per idea that the owner set on the screen of the ideas.
+ * for the amount per idea that the owner set on the screen of the ideas.
  */
 export function PairIdeasList({
   ideas,
@@ -90,7 +90,7 @@ export function PairIdeasList({
   onSelect: (idea: Idea) => void;
 }) {
   const { open, closed } = groupPairIdeas(ideas);
-  const [risk] = useState(loadRisk);
+  const [amount] = useState(loadAmount);
 
   if (ideas.length === 0) {
     return (
@@ -109,7 +109,7 @@ export function PairIdeasList({
             <IdeaItem
               key={idea.id}
               idea={idea}
-              risk={risk}
+              amount={amount}
               selected={idea.id === selectedId}
               onSelect={onSelect}
             />
@@ -124,7 +124,7 @@ export function PairIdeasList({
               <IdeaItem
                 key={idea.id}
                 idea={idea}
-                risk={risk}
+                amount={amount}
                 selected={idea.id === selectedId}
                 onSelect={onSelect}
               />

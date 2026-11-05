@@ -44,30 +44,40 @@ export function expectancyText(bucket: Bucket | null): string {
   return bucket === null ? '—' : `${showDecimal(bucket.expectancy, 2, true)} R`;
 }
 
-export interface RiskOutcome {
+export interface MoneyOutcome {
   readonly profit: string;
   readonly loss: string;
 }
 
-const isPositive = (risk: string) => isDecimalText(risk) && compareDecimals(risk, '0') > 0;
+type Shares = Pick<Schemas['IdeaResponse'], 'profitPerUsdt' | 'lossPerUsdt'>;
 
-/** The profit (R:R × risk) and the loss (minus the risk) of an idea in USDT; none while the risk is not a positive number. */
-export function riskOutcome(riskReward: string, risk: string): RiskOutcome | null {
-  if (!isPositive(risk)) {
+const isPositive = (amount: string) => isDecimalText(amount) && compareDecimals(amount, '0') > 0;
+
+/** The profit and the loss of an idea in USDT for the amount of a deal (its shares on 1 USDT, after the fees); none while the amount is not a positive number. */
+export function moneyOutcome(idea: Shares, amount: string): MoneyOutcome | null {
+  if (!isPositive(amount)) {
     return null;
   }
 
   return {
-    profit: showDecimal(multiplyDecimals(riskReward, risk), 1, true),
-    loss: `−${showDecimal(risk, 1)}`,
+    profit: showDecimal(multiplyDecimals(idea.profitPerUsdt, amount), 2, true),
+    loss: `−${showDecimal(multiplyDecimals(idea.lossPerUsdt, amount), 2)}`,
   };
 }
 
-/** The expectancy of the bucket in USDT (the expectancy in R times the risk), with a sign; none for no bucket or a risk that is not positive. */
-export function expectancyInUsdt(bucket: Bucket | null, risk: string): string | null {
-  if (bucket === null || !isPositive(risk)) {
+/** The expectancy of the bucket in USDT (the expectancy in R times the amount times the risk on 1 USDT), with a sign; none for no bucket or an amount that is not positive. */
+export function expectancyInUsdt(
+  bucket: Bucket | null,
+  riskPerUsdt: string,
+  amount: string,
+): string | null {
+  if (bucket === null || !isPositive(amount)) {
     return null;
   }
 
-  return showDecimal(multiplyDecimals(bucket.expectancy, risk), 1, true);
+  return showDecimal(
+    multiplyDecimals(multiplyDecimals(bucket.expectancy, amount), riskPerUsdt),
+    2,
+    true,
+  );
 }

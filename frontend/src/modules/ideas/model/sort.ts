@@ -42,8 +42,8 @@ const columns: Record<IdeaSortColumn, (idea: Idea) => string | null> = {
   riskReward: (idea) => idea.riskReward,
   probability: (idea) => (idea.bucket?.enoughData ? (idea.bucket.probability ?? null) : null),
   expectancy: (idea) => idea.bucket?.expectancy ?? null,
-  // The profit is R:R times the one risk of every idea, so it goes in the order of R:R.
-  profit: (idea) => idea.riskReward,
+  // The profit is the amount, the same for every idea, times this share, so it goes in the order of the share.
+  profit: (idea) => idea.profitPerUsdt,
   status: (idea) => String(statusCourse.indexOf(idea.status)),
 };
 

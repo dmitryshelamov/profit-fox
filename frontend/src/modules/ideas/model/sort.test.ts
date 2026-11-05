@@ -64,7 +64,11 @@ describe('sortIdeas', () => {
       ],
       ['b', 'a', 'c'],
     ],
-    ['profit', [{ riskReward: '2' }, { riskReward: '1.5' }, { riskReward: '3' }], ['b', 'a', 'c']],
+    [
+      'profit',
+      [{ profitPerUsdt: '0.04' }, { profitPerUsdt: '0.0385' }, { profitPerUsdt: '0.1' }],
+      ['b', 'a', 'c'],
+    ],
     [
       'status',
       [{ status: 'stop' }, { status: 'awaiting_entry' }, { status: 'active' }],

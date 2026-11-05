@@ -82,6 +82,7 @@ public class IdeasApiTests
             .ShouldBe(("105", "100", "115", "2"));
         (idea.GetProperty("status").GetString(), idea.GetProperty("move").GetString(), idea.GetProperty("volumeRatio").GetString()).ShouldBe(("active", "3.5", "2.25"));
         idea.GetProperty("tick").GetString().ShouldBe("0.01");
+        ShouldHaveMoney(idea);
         JsonElement bucket = idea.GetProperty("bucket");
         (bucket.GetProperty("cases").GetInt32(), bucket.GetProperty("expired").GetInt32(), bucket.GetProperty("enoughData").GetBoolean()).ShouldBe((400, 20, true));
         decimal.Parse(bucket.GetProperty("probability").GetString()!, CultureInfo.InvariantCulture).ShouldBe(0.4737m, 0.0001m);
@@ -121,6 +122,7 @@ public class IdeasApiTests
 
         JsonElement read = await GetAsync($"/api/ideas/{idea.Id}");
         (read.GetProperty("symbol").GetString(), read.GetProperty("tick").GetString()).ShouldBe(("SOLUSDT", "0.5"));
+        ShouldHaveMoney(read);
         (await _client.GetAsync($"/api/ideas/{Guid.NewGuid()}")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         JsonElement bucket = (await GetAsync("/api/ideas/buckets")).EnumerateArray().Single();
         (bucket.GetProperty("setup").GetString(), bucket.GetProperty("type").GetString(), bucket.GetProperty("interval").GetString(), bucket.GetProperty("side").GetString())
@@ -170,6 +172,7 @@ public class IdeasApiTests
         JsonElement[] ofPair = [.. (await GetAsync("/api/market/linear/SOLUSDT/ideas")).EnumerateArray()];
         ofPair.Select(idea => idea.GetProperty("id").GetGuid()).ShouldBe([ofSol.Id]);
         ofPair[0].GetProperty("tick").GetString().ShouldBe("0.01");
+        ShouldHaveMoney(ofPair[0]);
         (await _client.GetAsync("/api/market/inverse/SOLUSD/ideas")).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
@@ -342,6 +345,17 @@ public class IdeasApiTests
     private static Candle Candle(DateTimeOffset time, decimal open, decimal high, decimal low, decimal close)
     {
         return new Candle(time, new Price(open), new Price(high), new Price(low), new Price(close), new Volume(1m), new Volume(100m));
+    }
+
+    // Scenario "Деньги на 1 USDT суммы" for the idea of the generator on linear (entry 105, stop 100, target 115, taker 0.055 %):
+    // (10 − 0.05775 − 0.06325) / 105, (5 + 0.05775 + 0.055) / 105, 5 / 105.
+    private static void ShouldHaveMoney(JsonElement idea)
+    {
+        decimal Share(string name) => decimal.Parse(idea.GetProperty(name).GetString()!, CultureInfo.InvariantCulture);
+
+        Share("profitPerUsdt").ShouldBe(0.0940857m, 0.0000001m);
+        Share("lossPerUsdt").ShouldBe(0.0486929m, 0.0000001m);
+        Share("riskPerUsdt").ShouldBe(0.0476190m, 0.0000001m);
     }
 
     private static string Text(decimal value)

@@ -14,6 +14,8 @@ const fewData = ideaOf({
   status: 'stop',
   interval: '60',
   riskReward: '1.5',
+  profitPerUsdt: '0.02',
+  lossPerUsdt: '0.01',
   bucket: {
     cases: 12,
     expired: 0,
@@ -92,8 +94,8 @@ describe('ideas screen', () => {
     expect(within(row).getByText('2.40')).toBeInTheDocument();
     expect(within(row).getByText('2.00')).toBeInTheDocument();
     expect(within(row).getByText('+0.38 R')).toBeInTheDocument();
-    expect(within(row).getByText('+20.0')).toBeInTheDocument();
-    expect(within(row).getByText('−10.0')).toBeInTheDocument();
+    expect(within(row).getByText('+0.39')).toBeInTheDocument();
+    expect(within(row).getByText('−0.21')).toBeInTheDocument();
     expect(within(row).getByText('Ждёт входа')).toBeInTheDocument();
     expect(await screen.findByText('3 идеи')).toBeInTheDocument();
     expect(
@@ -108,7 +110,9 @@ describe('ideas screen', () => {
 
     expect(screen.getByText(/Вероятность: доля «Цель» среди «Цель» и «Стоп»/)).toBeInTheDocument();
     expect(screen.getByText(/интервал вероятности выше, пересекает или ниже/)).toBeInTheDocument();
-    expect(screen.getByText(/прибыль = R:R × риск, убыток = −риск/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/на сумму на идею: при цели и при стопе, после комиссий/),
+    ).toBeInTheDocument();
   });
 
   // Scenario "Идея выше базовой линии".
@@ -136,39 +140,57 @@ describe('ideas screen', () => {
     expect(within(few).getByText('мало данных')).toBeInTheDocument();
     expect(within(few).queryByRole('img')).not.toBeInTheDocument();
     expect(within(none).getByText('мало данных')).toBeInTheDocument();
-    // No expectancy either: one dash. The profit and the loss come from the risk, which does not need the bucket.
+    // No expectancy either: one dash. The profit and the loss come from the amount, which does not need the bucket.
     expect(within(none).getAllByText('—')).toHaveLength(1);
-    expect(within(none).getByText('+20.0')).toBeInTheDocument();
+    expect(within(none).getByText('+0.39')).toBeInTheDocument();
   });
 
-  // Scenario "Риск на идею".
-  it('turns the risk per idea into the profit and the loss and remembers it in the browser', async () => {
+  // Scenario "Сумма на идею".
+  it('turns the amount per idea into the profit and the loss and remembers it in the browser', async () => {
     open();
     renderApp('/ideas');
     const row = await rowOf('WIFUSDT');
 
-    const risk = screen.getByRole('textbox', { name: 'Риск на идею' });
+    const amount = screen.getByRole('textbox', { name: 'Сумма на идею' });
 
-    expect(risk).toHaveValue('10');
+    expect(amount).toHaveValue('10');
     expect(screen.getAllByText('USDT')).toHaveLength(1);
-    expect(within(row).getByText('+20.0')).toBeInTheDocument();
-    await userEvent.clear(risk);
+    expect(within(row).getByText('+0.39')).toBeInTheDocument();
+    await userEvent.clear(amount);
     expect(within(row).getByText('—')).toBeInTheDocument();
-    await userEvent.type(risk, '30');
+    await userEvent.type(amount, '30');
 
-    expect(within(row).getByText('+60.0')).toBeInTheDocument();
-    expect(within(row).getByText('−30.0')).toBeInTheDocument();
-    expect(within(await rowOf('SOLUSDT')).getByText('+45.0')).toBeInTheDocument();
-    expect(localStorage.getItem('profit-fox.ideas.risk')).toBe('30');
+    expect(within(row).getByText('+1.17')).toBeInTheDocument();
+    expect(within(row).getByText('−0.63')).toBeInTheDocument();
+    expect(within(await rowOf('SOLUSDT')).getByText('+0.60')).toBeInTheDocument();
+    expect(localStorage.getItem('profit-fox.ideas.amount')).toBe('30');
   });
 
-  it('starts with the risk it remembers', async () => {
-    localStorage.setItem('profit-fox.ideas.risk', '25');
+  // Scenario "Цели 2R дают разную прибыль".
+  it('gives the money by the distance to the stop: a farther stop gives more', async () => {
+    open({
+      'GET /api/ideas': () =>
+        json([
+          ideaOf({ id: 'near', symbol: 'NEARUSDT', profitPerUsdt: '0.02', lossPerUsdt: '0.01' }),
+          ideaOf({ id: 'far', symbol: 'FARUSDT', profitPerUsdt: '0.06', lossPerUsdt: '0.03' }),
+        ]),
+    });
+    renderApp('/ideas');
+
+    const near = within(await rowOf('NEARUSDT'));
+    const far = within(await rowOf('FARUSDT'));
+
+    expect([near.getByText('+0.20'), near.getByText('−0.10')]).toHaveLength(2);
+    expect([far.getByText('+0.60'), far.getByText('−0.30')]).toHaveLength(2);
+  });
+
+  it('starts with the amount it remembers', async () => {
+    localStorage.setItem('profit-fox.ideas.amount', '25');
     open();
     renderApp('/ideas');
 
-    expect(within(await rowOf('WIFUSDT')).getByText('+50.0')).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Риск на идею' })).toHaveValue('25');
+    expect(within(await rowOf('WIFUSDT')).getByText('+0.97')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Сумма на идею' })).toHaveValue('25');
   });
 
   it('asks the API for the ideas the filters name', async () => {

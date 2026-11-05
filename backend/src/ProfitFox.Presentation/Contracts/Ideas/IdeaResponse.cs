@@ -10,7 +10,8 @@ namespace ProfitFox.Presentation.Contracts.Ideas;
 /// <summary>
 ///     A trade idea with its levels and where it stands, and the statistics of its bucket over 90 days (<see cref="Bucket" />) and over the last
 ///     30 (<see cref="Recent" />), none while the bucket has no case. <see cref="Baseline" /> is the bucket's, or 1 / (1 + R:R) of the idea.
-///     <see cref="Tick" /> is the price step of the pair, none for an idea made before it was kept. Numbers are decimal strings; <see cref="Move" /> in ATR, <see cref="VolumeRatio" /> in medians of volume.
+///     <see cref="ProfitPerUsdt" />, <see cref="LossPerUsdt" /> and <see cref="RiskPerUsdt" /> are its money on 1 USDT of the amount of a deal,
+///     after the fees. <see cref="Tick" /> is the price step of the pair, none for an idea made before it was kept. Numbers are decimal strings; <see cref="Move" /> in ATR, <see cref="VolumeRatio" /> in medians of volume.
 /// </summary>
 public sealed record IdeaResponse(
     Guid Id,
@@ -26,6 +27,9 @@ public sealed record IdeaResponse(
     string Target,
     string RiskReward,
     string? Tick,
+    string ProfitPerUsdt,
+    string LossPerUsdt,
+    string RiskPerUsdt,
     string Status,
     DateTimeOffset StatusAt,
     DateTimeOffset? EnteredAt,
@@ -55,6 +59,9 @@ public sealed record IdeaResponse(
             Text(track.Plan.Target),
             Text(track.Plan.RiskReward),
             track.Tick?.ToString(CultureInfo.InvariantCulture),
+            Text(view.Shares.ProfitPerUsdt),
+            Text(view.Shares.LossPerUsdt),
+            Text(view.Shares.RiskPerUsdt),
             track.Status.ToCode(),
             track.StatusAt,
             track.EnteredAt,
