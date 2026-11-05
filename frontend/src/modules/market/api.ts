@@ -23,7 +23,7 @@ export interface MarketRequest {
  * One page of the snapshot of the market with the counts of the screen and the state of the scanner, read again every 15
  * seconds; the API filters, sorts and cuts it. The old page stays on the screen while a new one loads.
  */
-export function marketQuery(request: MarketRequest, enabled = true) {
+export function marketQuery(request: MarketRequest, enabled: boolean) {
   const { category, search, setup, setupInterval, savedFilterId, sort, page, pageSize } = request;
 
   return queryOptions({

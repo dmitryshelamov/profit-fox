@@ -436,6 +436,25 @@ describe('ideas screen', () => {
     expect(await screen.findByText('Идей по этим условиям нет.')).toBeInTheDocument();
   });
 
+  it('asks for the ideas again when the saved filter that is chosen is changed', async () => {
+    localStorage.setItem('profit-fox.ideas.choice', JSON.stringify({ savedFilterId: 'big' }));
+    const requests = open({
+      'PUT /api/saved-filters/big': () => new Response(null, { status: 204 }),
+    });
+    renderApp('/ideas');
+    await rowOf('WIFUSDT');
+    await userEvent.click(await screen.findByRole('button', { name: 'Изменить' }));
+    const before = ideasRequests(requests).length;
+
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Редактор фильтра' })).getByRole('button', {
+        name: 'Сохранить',
+      }),
+    );
+
+    await waitFor(() => expect(ideasRequests(requests)).toHaveLength(before + 1));
+  });
+
   describe('the pages', () => {
     // 120 ideas, the page the request names; the ideas of a page are named after their number.
     const pagedApi = (total = 120) => {

@@ -75,7 +75,8 @@ export function MarketPage({ page }: { page: number }) {
         page,
         pageSize,
       },
-      selectedId === null || saved.isFetched,
+      // A search that is being typed waits: the page is already the first, and the old search is not asked for again.
+      (selectedId === null || saved.isFetched) && search === searched,
     ),
   );
   const data = market.data;

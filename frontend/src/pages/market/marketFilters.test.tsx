@@ -133,6 +133,27 @@ describe('saved filters on the market screen', () => {
     );
   });
 
+  it('asks for the pairs again when the saved filter that is chosen is changed', async () => {
+    const requests = open(undefined, {
+      [`PUT /api/saved-filters/${shorting.id}`]: () => new Response(null, { status: 204 }),
+    });
+    renderApp('/market');
+    await screen.findByRole('table');
+    await userEvent.click(await screen.findByRole('button', { name: 'Шорт перегретых' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Изменить' }));
+    const reads = () =>
+      requests.filter((request) => new URL(request.url).pathname === '/api/market').length;
+    const before = reads();
+
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Редактор фильтра' })).getByRole('button', {
+        name: 'Сохранить',
+      }),
+    );
+
+    await waitFor(() => expect(reads()).toBe(before + 1));
+  });
+
   describe('editor', () => {
     const editor = () => within(screen.getByRole('dialog', { name: 'Редактор фильтра' }));
 
@@ -179,6 +200,24 @@ describe('saved filters on the market screen', () => {
             request.method === 'POST' && new URL(request.url).pathname === '/api/saved-filters',
         ),
       ).toHaveLength(0);
+    });
+
+    it('does not count again when the filter is saved', async () => {
+      const requests = open(undefined, {
+        [`PUT /api/saved-filters/${shorting.id}`]: () => new Response(null, { status: 204 }),
+      });
+      renderApp('/market');
+      await screen.findByRole('table');
+      await userEvent.click(await screen.findByRole('button', { name: 'Шорт перегретых' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Изменить' }));
+      await editor().findByText('Подходит: 3 инструмента · 2 идеи');
+
+      await userEvent.click(editor().getByRole('button', { name: 'Сохранить' }));
+
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', { name: 'Редактор фильтра' })).not.toBeInTheDocument(),
+      );
+      expect(fits(requests)).toHaveLength(1);
     });
 
     it('shows no count until the server has answered', async () => {

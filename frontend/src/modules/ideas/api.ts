@@ -38,7 +38,7 @@ export interface IdeasRequest {
  * One page of the open ideas and the ones closed in the last 24 hours, read again every 15 seconds; the API filters, sorts and
  * cuts it. The old page stays on the screen while a new one loads.
  */
-export function ideasQuery(request: IdeasRequest, enabled = true) {
+export function ideasQuery(request: IdeasRequest, enabled: boolean) {
   const { filters, savedFilterId, sort, page, pageSize } = request;
 
   return queryOptions({

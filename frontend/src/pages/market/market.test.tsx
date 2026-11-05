@@ -468,6 +468,23 @@ describe('market screen', () => {
       expect(history.location.search).toBe('');
     });
 
+    it('does not ask for the first page of the old search while the search is typed', async () => {
+      const requests = pagedApi();
+      renderApp('/market?page=3');
+      await screen.findByText('101–150 из 1 104');
+
+      await userEvent.type(screen.getByRole('searchbox', { name: 'Поиск по символу' }), 'btc');
+
+      await waitFor(() => expect(lastRead(requests)).toMatchObject({ Search: 'btc', Page: '1' }));
+      expect(
+        snapshotReads(requests).filter(
+          (request) =>
+            new URL(request.url).searchParams.get('Page') === '1' &&
+            !new URL(request.url).searchParams.has('Search'),
+        ),
+      ).toHaveLength(0);
+    });
+
     it.each([
       [
         'the category',
