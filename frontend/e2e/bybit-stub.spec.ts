@@ -48,6 +48,10 @@ async function position(request: APIRequestContext): Promise<{ side: string; siz
     .list;
 }
 
+test.afterEach(async ({ request }) => {
+  await request.get(`${stub}/control/price?symbol=ETHUSDT`);
+});
+
 test('an entry with a stop and a target makes two orders, the price fires one, and the position follows', async ({
   request,
 }) => {

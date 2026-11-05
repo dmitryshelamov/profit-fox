@@ -445,6 +445,11 @@ function push(topic: string, data: object[]) {
   }
 }
 
+/** A product of floats without the noise of the last digits: Bybit sends exact decimals. */
+function exact(value: number): number {
+  return Number(value.toPrecision(12));
+}
+
 /** The unfilled quantity of an order in its own unit; nothing for a finished one. */
 function leaves(order: StubOrder): string {
   if (!working(order)) {
@@ -628,7 +633,7 @@ function fill(url: URL) {
   }
 
   order.cumExecQty = String(Number(order.cumExecQty) + qty);
-  order.cumExecValue = String(Number(order.cumExecValue) + qty * price);
+  order.cumExecValue = String(exact(Number(order.cumExecValue) + qty * price));
   order.orderStatus = qty >= left - 1e-12 ? 'Filled' : 'PartiallyFilled';
   settle(order, qty, price);
   const execution = executionOf(order, qty, price);
@@ -677,7 +682,7 @@ function executionOf(order: StubOrder, qty: number, price: number) {
     execFee: '0',
     feeCurrency: 'USDT',
     execType: 'Trade',
-    execValue: String(qty * price),
+    execValue: String(exact(qty * price)),
     execTime: String(Date.now()),
     isMaker: false,
     seq: execs,
@@ -777,7 +782,7 @@ function setPrice(url: URL) {
 function fire(child: StubOrder, price: number) {
   const qty = Number(child.qty);
   child.cumExecQty = String(qty);
-  child.cumExecValue = String(qty * price);
+  child.cumExecValue = String(exact(qty * price));
   child.orderStatus = 'Filled';
   settle(child, qty, price);
   const execution = executionOf(child, qty, price);

@@ -6,5 +6,5 @@ export function resultText(result: string | null, resultR: string | null): strin
     return '—';
   }
 
-  return `${signed(result)} USDT · ${signed(roundDecimal(resultR, 2))} R`;
+  return `${signed(roundDecimal(result, 2))} USDT · ${signed(roundDecimal(resultR, 2))} R`;
 }
