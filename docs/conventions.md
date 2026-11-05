@@ -122,7 +122,10 @@ enforces a rule, the check is the source of truth.
   `Exchanges/CachedInstrumentCatalog` over it: a list per category is kept for 5 minutes on `TimeProvider`, a failure is not kept.
 - `Exchanges/ScannerRestGate` is the one way of the scanner's REST requests: a token bucket of `Scanner:RestRequestsPerSecond`
   on `TimeProvider`, one attempt with the ladder of retries for a transient failure, none for `ExchangeRateLimitedException`
-  (HTTP 429, code 10006, HTTP 403), after which no request goes for `Scanner:RestPause`. `Exchanges/Bybit/BybitPublicDataClient`
+  (HTTP 429, code 10006, HTTP 403), after which no request goes for a pause: `Scanner:RestPause` after HTTP 403 (a ban of the IP,
+  `TransientExchangeException.IpBanned`), and after HTTP 429 or code 10006 a ladder kept in memory, from `Scanner:RestLimitPause`
+  doubling with each such answer in a row up to `Scanner:RestPause`, started again by a request that went through. The end of every
+  pause goes to `scanner_state` and only ever moves later, in memory and in the row, so a limit after a ban never shortens it. `Exchanges/Bybit/BybitPublicDataClient`
   implements `IMarketDataFeed` through it; `Exchanges/Bybit/BybitMarketStreams` implements `IMarketStreams` on a socket client of its
   own, apart from `BybitStreams`.
 - `Exchanges/Bybit/BybitAccountClient` implements `IExchangeKeyInspector`: a typed `HttpClient` that builds a Bybit client
@@ -239,9 +242,9 @@ enforces a rule, the check is the source of truth.
   ```
 
 - The `Scanner` section, in the scanner's `appsettings.json` only (`ScannerSettings`): the symbols it keeps (empty keeps the whole
-  market; Development keeps three), the days of history, the REST requests per second and the pause after a rate limit, how often it
-  reads the list of pairs, the delay of the snapshot after a minute, the lease of the stream (the renewal shorter than the lease, or
-  the scanner does not start) and the topics on one connection of the stream.
+  market; Development keeps three), the days of history, the REST requests per second, the pause after a ban of the IP and the first
+  pause after a rate limit, how often it reads the list of pairs, the delay of the snapshot after a minute, the lease of the stream
+  (the renewal shorter than the lease, or the scanner does not start) and the topics on one connection of the stream.
 
   ```json
   "Scanner": {
@@ -249,6 +252,7 @@ enforces a rule, the check is the source of truth.
     "HistoryDays": 90,
     "RestRequestsPerSecond": 20,
     "RestPause": "00:10:00",
+    "RestLimitPause": "00:00:30",
     "UniverseRefresh": "01:00:00",
     "SnapshotDelay": "00:00:10",
     "LeaseDuration": "00:00:30",

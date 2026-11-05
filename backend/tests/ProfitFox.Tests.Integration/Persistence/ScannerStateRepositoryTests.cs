@@ -98,6 +98,16 @@ public class ScannerStateRepositoryTests
         (await _store.GetAsync(CancellationToken.None)).RestPausedUntil.ShouldBe(Now.AddMinutes(10));
     }
 
+    // A short pause after a limit that comes after a ban of the IP leaves the end of the longer pause.
+    [Test]
+    public async Task Shorter_pause_keeps_the_later_end()
+    {
+        await _store.PauseRestAsync(Now.AddMinutes(10), CancellationToken.None);
+        await _store.PauseRestAsync(Now.AddSeconds(30), CancellationToken.None);
+
+        (await _store.GetAsync(CancellationToken.None)).RestPausedUntil.ShouldBe(Now.AddMinutes(10));
+    }
+
     // Scenario "Загрузка истории идёт".
     [Test]
     public async Task Progress_of_the_history_load_is_read_back()

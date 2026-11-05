@@ -4,11 +4,13 @@ namespace ProfitFox.Infrastructure.Exchanges.Retry;
 
 /// <summary>
 ///     An exchange failure worth retrying: rate limit, server error, timeout or no connection. <see cref="RateLimited" /> says the
-///     exchange said the requests went over its rate limit or banned the IP for it.
+///     exchange said the requests went over its rate limit or banned the IP for it; <see cref="IpBanned" /> says it banned the IP.
 /// </summary>
-internal sealed class TransientExchangeException(string message, bool rateLimited = false) : Exception(message)
+internal sealed class TransientExchangeException(string message, bool rateLimited = false, bool ipBanned = false) : Exception(message)
 {
     public bool RateLimited { get; } = rateLimited;
+
+    public bool IpBanned { get; } = ipBanned;
 
     /// <summary>What the caller is told once no more attempts are made.</summary>
     public ExchangeUnavailableException Unavailable(string message)

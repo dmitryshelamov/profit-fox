@@ -12,8 +12,14 @@ public sealed class ScannerSettings
     /// <summary>REST requests of the scanner per second, well below the limit Bybit sets for the IP, which the bots share.</summary>
     public int RestRequestsPerSecond { get; init; } = 20;
 
-    /// <summary>How long the scanner sends no REST request after Bybit says it sends too many.</summary>
+    /// <summary>How long the scanner sends no REST request after Bybit bans the IP (HTTP 403).</summary>
     public TimeSpan RestPause { get; init; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    ///     How long the scanner sends no REST request after Bybit says it sends too many (HTTP 429, code 10006); each such answer in a
+    ///     row doubles it, up to <see cref="RestPause" />.
+    /// </summary>
+    public TimeSpan RestLimitPause { get; init; } = TimeSpan.FromSeconds(30);
 
     /// <summary>How often the scanner reads the list of pairs again.</summary>
     public TimeSpan UniverseRefresh { get; init; } = TimeSpan.FromHours(1);
