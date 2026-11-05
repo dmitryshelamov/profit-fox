@@ -59,7 +59,7 @@ public class IdeasApiTests
     [Test]
     public async Task Ideas_of_one_side_come_with_the_statistics_of_their_bucket()
     {
-        Idea impulse = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), IdeaStatus.Active, Sol);
+        Idea impulse = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), IdeaStatus.Active, Sol, tick: 0.01m);
         Idea drop = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-10), instrument: Sol, setup: IdeaSetup.Drop, side: IdeaSide.Short);
         Idea closedLongAgo = IdeaGenerator.Generate(SnapshotAt.AddDays(-3), IdeaStatus.Stop, Sol, setup: IdeaSetup.EarlyImpulse, statusAt: SnapshotAt.AddDays(-2));
         await new IdeaRepository(_database).SaveAsync([impulse, drop, closedLongAgo], [], CancellationToken.None);
@@ -72,7 +72,7 @@ public class IdeasApiTests
             ],
             CancellationToken.None);
 
-        JsonElement ideas = await GetAsync("/api/ideas?side=long");
+        JsonElement ideas = await ItemsAsync("/api/ideas?side=long");
 
         JsonElement idea = ideas.EnumerateArray().Single();
         idea.GetProperty("id").GetGuid().ShouldBe(impulse.Id);
@@ -81,6 +81,8 @@ public class IdeasApiTests
         (idea.GetProperty("entry").GetString(), idea.GetProperty("stop").GetString(), idea.GetProperty("target").GetString(), idea.GetProperty("riskReward").GetString())
             .ShouldBe(("105", "100", "115", "2"));
         (idea.GetProperty("status").GetString(), idea.GetProperty("move").GetString(), idea.GetProperty("volumeRatio").GetString()).ShouldBe(("active", "3.5", "2.25"));
+        idea.GetProperty("tick").GetString().ShouldBe("0.01");
+        ShouldHaveMoney(idea);
         JsonElement bucket = idea.GetProperty("bucket");
         (bucket.GetProperty("cases").GetInt32(), bucket.GetProperty("expired").GetInt32(), bucket.GetProperty("enoughData").GetBoolean()).ShouldBe((400, 20, true));
         decimal.Parse(bucket.GetProperty("probability").GetString()!, CultureInfo.InvariantCulture).ShouldBe(0.4737m, 0.0001m);
@@ -102,22 +104,25 @@ public class IdeasApiTests
             [new IdeaBucket(new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear), 90, BucketStatisticsCalculator.Compute(10, 30, 0, 2m, -10m))],
             CancellationToken.None);
 
-        JsonElement[] ideas = [.. (await GetAsync("/api/ideas")).EnumerateArray()];
+        JsonElement[] ideas = [.. (await ItemsAsync("/api/ideas")).EnumerateArray()];
 
         ideas.Select(idea => idea.GetProperty("id").GetGuid()).ShouldBe([withBucket.Id, without.Id]);
+        ideas[1].GetProperty("tick").ValueKind.ShouldBe(JsonValueKind.Null);
         (ideas[1].GetProperty("bucket").ValueKind, ideas[1].GetProperty("baseline").GetString()).ShouldBe((JsonValueKind.Null, (1m / 3m).ToString(CultureInfo.InvariantCulture)));
-        (await GetAsync("/api/ideas?nonNegativeExpectancy=true")).GetArrayLength().ShouldBe(0);
+        (await ItemsAsync("/api/ideas?nonNegativeExpectancy=true")).GetArrayLength().ShouldBe(0);
     }
 
     [Test]
     public async Task Idea_is_read_by_its_id_and_the_buckets_whole()
     {
-        Idea idea = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol);
+        Idea idea = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol, tick: 0.5m);
         await new IdeaRepository(_database).SaveAsync([idea], [], CancellationToken.None);
         var key = new IdeaBucketKey(IdeaSetup.Drop, IdeaType.Pullback, Interval.OneHour, IdeaSide.Short, MarketCategory.Spot);
         await new IdeaBucketRepository(_database).ReplaceAsync(IdeasEngineVersion.Current, [new IdeaBucket(key, 30, BucketStatisticsCalculator.Compute(6, 5, 1, 3m, 2.4m))], CancellationToken.None);
 
-        (await GetAsync($"/api/ideas/{idea.Id}")).GetProperty("symbol").GetString().ShouldBe("SOLUSDT");
+        JsonElement read = await GetAsync($"/api/ideas/{idea.Id}");
+        (read.GetProperty("symbol").GetString(), read.GetProperty("tick").GetString()).ShouldBe(("SOLUSDT", "0.5"));
+        ShouldHaveMoney(read);
         (await _client.GetAsync($"/api/ideas/{Guid.NewGuid()}")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         JsonElement bucket = (await GetAsync("/api/ideas/buckets")).EnumerateArray().Single();
         (bucket.GetProperty("setup").GetString(), bucket.GetProperty("type").GetString(), bucket.GetProperty("interval").GetString(), bucket.GetProperty("side").GetString())
@@ -142,7 +147,92 @@ public class IdeasApiTests
         };
         await new IdeaRepository(_database).SaveAsync([impulse, .. ideas.Values], [], CancellationToken.None);
 
-        (await GetAsync($"/api/ideas?{query}")).EnumerateArray().Select(idea => idea.GetProperty("id").GetGuid()).ShouldBe([ideas[expected].Id]);
+        (await ItemsAsync($"/api/ideas?{query}")).EnumerateArray().Select(idea => idea.GetProperty("id").GetGuid()).ShouldBe([ideas[expected].Id]);
+    }
+
+    // Scenario "Страница идей": 120 ideas without a bucket come newest first.
+    [Test]
+    public async Task The_third_page_of_50_holds_ideas_101_to_120_with_the_page_number_and_the_total()
+    {
+        Idea[] ideas = await SaveIdeasAsync(120);
+
+        JsonElement page = await GetAsync("/api/ideas?page=3");
+
+        page.GetProperty("items").EnumerateArray().Select(idea => idea.GetProperty("id").GetGuid()).ShouldBe([.. ideas.Skip(100).Select(idea => idea.Id)]);
+        (page.GetProperty("page").GetInt32(), page.GetProperty("pageSize").GetInt32(), page.GetProperty("total").GetInt32()).ShouldBe((3, 50, 120));
+    }
+
+    // Scenario "Страница за концом списка".
+    [Test]
+    public async Task A_page_past_the_end_gives_the_last_page()
+    {
+        await SaveIdeasAsync(30);
+
+        JsonElement page = await GetAsync("/api/ideas?page=2");
+
+        (page.GetProperty("items").GetArrayLength(), page.GetProperty("page").GetInt32(), page.GetProperty("total").GetInt32()).ShouldBe((30, 1, 30));
+    }
+
+    // Scenario "Сортировка по всем страницам".
+    [Test]
+    public async Task A_column_orders_all_the_ideas_before_the_page_is_cut()
+    {
+        Idea[] ideas = await SaveIdeasAsync(60);
+
+        JsonElement page = await GetAsync("/api/ideas?sort=firedAt&direction=asc");
+
+        page.GetProperty("items")[0].GetProperty("id").GetGuid().ShouldBe(ideas[^1].Id);
+    }
+
+    // Scenario "Неизвестный размер страницы".
+    [TestCase("pageSize=75", "pageSize")]
+    [TestCase("page=0", "page")]
+    [TestCase("sort=move", "sort")]
+    [TestCase("direction=up", "direction")]
+    [TestCase("savedFilter=00000000-0000-0000-0000-000000000001", "savedFilter")]
+    public async Task A_wrong_order_or_page_is_a_validation_error_by_the_parameter(string query, string key)
+    {
+        HttpResponseMessage response = await _client.GetAsync($"/api/ideas?{query}");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("errors").TryGetProperty(key, out _).ShouldBeTrue();
+    }
+
+    // Scenario "Сохранённый фильтр в запросе".
+    [Test]
+    public async Task A_saved_filter_keeps_the_ideas_with_that_expectancy_whose_pair_has_that_turnover()
+    {
+        await SnapshotAsync(Sol, 100m, turnover24h: 60000000m);
+        await SnapshotAsync(Eth, 3000m, turnover24h: 1000000m);
+        Idea rich = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol);
+        Idea poor = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-19), instrument: Eth);
+        await new IdeaRepository(_database).SaveAsync([rich, poor], [], CancellationToken.None);
+        var key = new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear);
+        await new IdeaBucketRepository(_database).ReplaceAsync(
+            IdeasEngineVersion.Current,
+            [
+                new IdeaBucket(key, 90, BucketStatisticsCalculator.Compute(180, 200, 20, 2m, 100m)),
+                new IdeaBucket(key with { Category = MarketCategory.Spot }, 90, BucketStatisticsCalculator.Compute(180, 200, 20, 2m, 100m))
+            ],
+            CancellationToken.None);
+        HttpResponseMessage created = await _client.PostAsJsonAsync(
+            "/api/saved-filters",
+            new
+            {
+                name = "Rich",
+                place = "ideas",
+                conditions = new[]
+                {
+                    new { field = "expectancy", @operator = ">", value = "0.2", to = (string?)null },
+                    new { field = "turnover24h", @operator = ">", value = "50000000", to = (string?)null }
+                }
+            });
+        Guid filter = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        JsonElement page = await GetAsync($"/api/ideas?savedFilter={filter}");
+
+        page.GetProperty("items").EnumerateArray().Select(idea => idea.GetProperty("id").GetGuid()).ShouldBe([rich.Id]);
+        page.GetProperty("total").GetInt32().ShouldBe(1);
     }
 
     [TestCase("setup=rocket", "setup")]
@@ -161,10 +251,13 @@ public class IdeasApiTests
     [Test]
     public async Task Ideas_of_a_pair_are_its_own()
     {
-        Idea ofSol = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol);
+        Idea ofSol = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol, tick: 0.01m);
         await new IdeaRepository(_database).SaveAsync([ofSol, IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Eth)], [], CancellationToken.None);
 
-        (await GetAsync("/api/market/linear/SOLUSDT/ideas")).EnumerateArray().Select(idea => idea.GetProperty("id").GetGuid()).ShouldBe([ofSol.Id]);
+        JsonElement[] ofPair = [.. (await GetAsync("/api/market/linear/SOLUSDT/ideas")).EnumerateArray()];
+        ofPair.Select(idea => idea.GetProperty("id").GetGuid()).ShouldBe([ofSol.Id]);
+        ofPair[0].GetProperty("tick").GetString().ShouldBe("0.01");
+        ShouldHaveMoney(ofPair[0]);
         (await _client.GetAsync("/api/market/inverse/SOLUSD/ideas")).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
@@ -179,7 +272,7 @@ public class IdeasApiTests
             new Dictionary<Instrument, IReadOnlyList<PairSetup>> { [Sol] = [new PairSetup(Interval.FifteenMinutes, IdeaSetup.Impulse), new PairSetup(Interval.FifteenMinutes, IdeaSetup.HighVolatility)] },
             CancellationToken.None);
 
-        JsonElement[] rows = [.. (await GetAsync("/api/market")).GetProperty("rows").EnumerateArray()];
+        JsonElement[] rows = [.. (await GetAsync("/api/market")).GetProperty("items").EnumerateArray()];
         JsonElement sol = rows.Single(row => row.GetProperty("symbol").GetString() == "SOLUSDT").GetProperty("setups");
         JsonElement eth = rows.Single(row => row.GetProperty("symbol").GetString() == "ETHUSDT").GetProperty("setups");
 
@@ -207,6 +300,7 @@ public class IdeasApiTests
         (idea.GetProperty("entry").GetString(), idea.GetProperty("stop").GetString(), idea.GetProperty("target").GetString())
             .ShouldBe(("100.5", Text(stop), Text(100.5m - (2m * (stop - 100.5m)))));
         (idea.GetProperty("riskReward").GetString(), idea.GetProperty("baseline").GetString()).ShouldBe(("2", Text(1m / 3m)));
+        idea.GetProperty("tick").GetString().ShouldBe("0.01");
     }
 
     // Without the zone it needs the rules make no idea.
@@ -321,14 +415,14 @@ public class IdeasApiTests
     }
 
     // The pair of the scanner with its price step, which the list of instruments told.
-    private async Task SnapshotAsync(Instrument instrument, decimal price, decimal? tick = 0.01m)
+    private async Task SnapshotAsync(Instrument instrument, decimal price, decimal? tick = 0.01m, decimal? turnover24h = null)
     {
         await new ScannerPairRepository(_database).SaveAsync([new ScannerPair(instrument, true, TickSize: tick)], CancellationToken.None);
         var store = new MarketSnapshotRepository(_database);
         MarketSnapshotRow[] rows =
         [
             .. (await store.GetAllAsync(CancellationToken.None)),
-            new MarketSnapshotRow(instrument, SnapshotAt, new PairMetrics(price, null, null, null, null, null, null, null, null, null, null, null, 0.01m), false)
+            new MarketSnapshotRow(instrument, SnapshotAt, new PairMetrics(price, null, null, null, null, null, null, turnover24h, null, null, null, null, 0.01m), false)
         ];
         await store.ReplaceAsync(_holder, rows, SnapshotAt, CancellationToken.None);
     }
@@ -338,9 +432,34 @@ public class IdeasApiTests
         return new Candle(time, new Price(open), new Price(high), new Price(low), new Price(close), new Volume(1m), new Volume(100m));
     }
 
+    // Scenario "Деньги на 1 USDT суммы" for the idea of the generator on linear (entry 105, stop 100, target 115, taker 0.055 %):
+    // (10 − 0.05775 − 0.06325) / 105, (5 + 0.05775 + 0.055) / 105, 5 / 105.
+    private static void ShouldHaveMoney(JsonElement idea)
+    {
+        decimal Share(string name) => decimal.Parse(idea.GetProperty(name).GetString()!, CultureInfo.InvariantCulture);
+
+        Share("profitPerUsdt").ShouldBe(0.0940857m, 0.0000001m);
+        Share("lossPerUsdt").ShouldBe(0.0486929m, 0.0000001m);
+        Share("riskPerUsdt").ShouldBe(0.0476190m, 0.0000001m);
+    }
+
     private static string Text(decimal value)
     {
         return value.ToString(CultureInfo.InvariantCulture);
+    }
+
+    // Ideas of a different pair each, so none replaces another; the first is the newest.
+    private async Task<Idea[]> SaveIdeasAsync(int count)
+    {
+        Idea[] ideas = [.. Enumerable.Range(0, count).Select(number => IdeaGenerator.Generate(SnapshotAt.AddSeconds(-number), instrument: new Instrument(MarketCategory.Linear, $"S{number:000}USDT")))];
+        await new IdeaRepository(_database).SaveAsync(ideas, [], CancellationToken.None);
+
+        return ideas;
+    }
+
+    private async Task<JsonElement> ItemsAsync(string path)
+    {
+        return (await GetAsync(path)).GetProperty("items");
     }
 
     private async Task<JsonElement> GetAsync(string path)

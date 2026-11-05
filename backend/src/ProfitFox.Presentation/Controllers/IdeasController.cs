@@ -15,17 +15,28 @@ namespace ProfitFox.Presentation.Controllers;
 [Route("api/ideas")]
 public sealed class IdeasController(ISender sender) : ControllerBase
 {
-    /// <summary>The open ideas and the ones closed in the last 24 hours, by expectancy, highest first.</summary>
+    /// <summary>One page of the open ideas and the ones closed in the last 24 hours, by a column of the list, the expectancy highest first by default.</summary>
     [HttpGet]
-    [ProducesResponseType<IReadOnlyList<IdeaResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<IdeasPageResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> List([FromQuery] IdeasQueryParameters parameters, CancellationToken cancellationToken)
     {
         GetIdeasResult result = await sender.Send(
-            new GetIdeasQuery(parameters.Setup, parameters.Interval, parameters.Type, parameters.Side, parameters.Category, parameters.NonNegativeExpectancy),
+            new GetIdeasQuery(
+                parameters.Setup,
+                parameters.Interval,
+                parameters.Type,
+                parameters.Side,
+                parameters.Category,
+                parameters.NonNegativeExpectancy,
+                parameters.SavedFilter,
+                parameters.Sort,
+                parameters.Direction,
+                parameters.Page,
+                parameters.PageSize),
             cancellationToken);
 
-        return result.Ideas is null ? Invalid(result.Errors) : Ok(result.Ideas.Select(IdeaResponse.Of).ToList());
+        return result.Page is null ? Invalid(result.Errors) : Ok(IdeasPageResponse.Of(result));
     }
 
     [HttpGet("buckets")]

@@ -1,6 +1,9 @@
 import '@testing-library/jest-dom/vitest';
 
-import { vi } from 'vitest';
+import { afterEach, vi } from 'vitest';
+
+// A screen remembers the choice of the owner in the browser: a test must not leave it to the next one.
+afterEach(() => localStorage.clear());
 
 // jsdom does not implement scrolling; the router restores scroll position on navigation.
 window.scrollTo = () => undefined;

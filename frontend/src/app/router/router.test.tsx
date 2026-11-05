@@ -3,7 +3,14 @@ import userEvent from '@testing-library/user-event';
 
 import { clearComparison, toggleComparison } from '@/modules/comparison';
 import { fakeApi, json } from '@/test/fakeApi';
-import { backtestFull, backtestId, marketSnapshot, resultOf } from '@/test/fixtures';
+import {
+  backtestFull,
+  backtestId,
+  filterFields,
+  ideasPage,
+  marketSnapshot,
+  resultOf,
+} from '@/test/fixtures';
 import { renderApp } from '@/test/renderApp';
 
 describe('routes', () => {
@@ -113,4 +120,47 @@ describe('menu', () => {
     await waitFor(() => expect(history.location.pathname).toBe('/market'));
     expect(screen.getByRole('link', { name: 'Рынок' })).toHaveAttribute('aria-current', 'page');
   });
+});
+
+describe('the page of a list in the address', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  // The API answers with the page it was asked for, so the address is not moved.
+  const open = () =>
+    fakeApi({
+      'GET /api/ideas': (request) =>
+        json(ideasPage([], { page: Number(new URL(request.url).searchParams.get('Page')) })),
+      'GET /api/market': (request) =>
+        json(marketSnapshot([], { page: Number(new URL(request.url).searchParams.get('Page')) })),
+      'GET /api/saved-filters': () => json([]),
+      'GET /api/saved-filters/fields': () => json(filterFields),
+    });
+  const pageAsked = (requests: Request[], path: string) =>
+    new URL(
+      requests.find((request) => new URL(request.url).pathname === path)!.url,
+    ).searchParams.get('Page');
+
+  it.each(['/ideas', '/market'])('reads ?page=3 of %s as the third page', async (path) => {
+    const requests = open();
+
+    renderApp(`${path}?page=3`);
+
+    await waitFor(() => expect(pageAsked(requests, `/api${path}`)).toBe('3'));
+  });
+
+  it.each(['/ideas', '/market'])(
+    'reads ?page=0 and ?page=x of %s as the first page',
+    async (path) => {
+      for (const page of ['0', 'x', '-2', '1.5']) {
+        const requests = open();
+        const { unmount } = renderApp(`${path}?page=${page}`);
+
+        await waitFor(() => expect(pageAsked(requests, `/api${path}`), page).toBe('1'));
+        unmount();
+      }
+    },
+  );
 });

@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
 
-import { type Idea, ideasText } from '@/modules/ideas';
-import { instrumentsText, type MarketRow } from '@/modules/market';
+import { ideasText } from '@/modules/ideas';
+import { instrumentsText } from '@/modules/market';
 import { ApiError, type Schemas } from '@/shared/api/client';
+import { useDebounced } from '@/shared/hooks/useDebounced';
 
-import { useDeleteFilter, useSaveFilter } from '../api';
-import { matchesIdea, matchesMarketRow, type SavedFilter } from '../model/apply';
+import { fitQuery, useDeleteFilter, useSaveFilter } from '../api';
 import {
   choiceLabel,
   fieldLabel,
@@ -17,6 +18,7 @@ import {
 } from '../model/conditions';
 import { type Draft, draftOf, switchField } from '../model/draft';
 import { filterErrorTexts } from '../model/errors';
+import type { SavedFilter } from '../model/savedFilter';
 
 type Field = Schemas['SavedFilterFieldResponse'];
 
@@ -194,15 +196,13 @@ function DraftRow({
 }
 
 /**
- * The editor of a filter as a side panel: name, place, conditions and a counter of what fits now, recomputed from the
- * snapshot and the ideas the screen holds without saving anything.
+ * The editor of a filter as a side panel: name, place, conditions and a counter of what fits now, which the API counts for
+ * the conditions that are ready, after a pause in the typing, without saving anything.
  */
 export function FilterEditor({
   filter,
   place,
   fields,
-  rows,
-  ideas,
   onClose,
   onSaved,
   onDeleted,
@@ -212,8 +212,6 @@ export function FilterEditor({
   /** Where a new filter is shown by default: the screen that opened the editor. */
   place: 'market' | 'ideas';
   fields: readonly Field[];
-  rows: readonly MarketRow[];
-  ideas: readonly Idea[];
   onClose: () => void;
   /** The id of the filter saved. */
   onSaved: (id: string) => void;
@@ -234,16 +232,9 @@ export function FilterEditor({
   const remove = useDeleteFilter();
 
   const stored = toStored(drafts);
-  const trial: SavedFilter = {
-    id: filter?.id ?? '',
-    name,
-    place: where,
-    conditions: readyConditions(stored),
-  };
-  const rowOf = (idea: Idea) =>
-    rows.find((row) => row.category === idea.category && row.symbol === idea.symbol);
-  const fitRows = rows.filter((row) => matchesMarketRow(trial, row)).length;
-  const fitIdeas = ideas.filter((idea) => matchesIdea(trial, idea, rowOf(idea))).length;
+  // The pause is taken on the text of the ready conditions, which stays the same while nothing is typed.
+  const ready = useDebounced(JSON.stringify(readyConditions(stored)), 300);
+  const fit = useQuery(fitQuery(useMemo(() => JSON.parse(ready) as typeof stored, [ready])));
 
   const failed = (error: Error) =>
     setProblems(
@@ -324,7 +315,10 @@ export function FilterEditor({
       </div>
       <div className="space-y-1">
         <p className="text-sm" aria-live="polite">
-          Подходит: {instrumentsText(fitRows)} · {ideasText(fitIdeas)}
+          Подходит:{' '}
+          {fit.data
+            ? `${instrumentsText(Number(fit.data.pairs))} · ${ideasText(Number(fit.data.ideas))}`
+            : '…'}
         </p>
         <p className="text-xs text-faint">
           Условия по идеям действуют только в «Идеях»; в «Рынке» их нет.

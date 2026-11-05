@@ -16,7 +16,6 @@ public static class SavedFilterRules
     public static (string Name, SavedFilterPlace Place, IReadOnlyList<FilterCondition> Conditions) Parse(SavedFilterInput input)
     {
         var errors = new Dictionary<string, string>();
-        var conditions = new List<FilterCondition>();
         SavedFilterPlace place = default;
 
         if (string.IsNullOrWhiteSpace(input.Name))
@@ -34,7 +33,22 @@ public static class SavedFilterRules
             errors["conditions"] = "A filter needs at least one condition.";
         }
 
-        foreach ((SavedFilterConditionInput condition, int index) in (input.Conditions ?? []).Select((condition, index) => (condition, index)))
+        IReadOnlyList<FilterCondition> conditions = ParseConditions(input.Conditions, errors);
+
+        if (errors.Count > 0)
+        {
+            throw new ValidationFailedException(errors);
+        }
+
+        return (input.Name!.Trim(), place, conditions);
+    }
+
+    /// <summary>Checks the conditions of a filter by the catalog, each a known field with an operator it takes, a value for a comparison and also an upper bound for «между»; none is fine. Wrong ones go to <paramref name="errors" /> keyed by <c>conditions[i].field</c> and alike.</summary>
+    public static IReadOnlyList<FilterCondition> ParseConditions(IReadOnlyList<SavedFilterConditionInput>? input, IDictionary<string, string> errors)
+    {
+        var conditions = new List<FilterCondition>();
+
+        foreach ((SavedFilterConditionInput condition, int index) in (input ?? []).Select((condition, index) => (condition, index)))
         {
             string key = $"conditions[{index}]";
 
@@ -81,12 +95,7 @@ public static class SavedFilterRules
             }
         }
 
-        if (errors.Count > 0)
-        {
-            throw new ValidationFailedException(errors);
-        }
-
-        return (input.Name!.Trim(), place, conditions);
+        return conditions;
     }
 
     private static decimal? Number(string? text)

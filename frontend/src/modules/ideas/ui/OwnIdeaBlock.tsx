@@ -2,10 +2,11 @@ import { useQuery } from '@tanstack/react-query';
 
 import { setupIntervals } from '@/modules/market';
 import { shiftDecimal } from '@/shared/format/decimal';
-import { groupDigits, roundDecimal, showDecimal } from '@/shared/format/format';
+import { roundDecimal, showDecimal } from '@/shared/format/format';
 
 import { type OwnIdeaInput, ownIdeaQuery } from '../api';
 import { ideaTypes, sideLabel } from '../model/labels';
+import { priceByTick } from '../model/price';
 
 const field = 'h-8 rounded-md border border-line bg-panel-2 px-2 text-sm';
 
@@ -94,9 +95,9 @@ export function OwnIdeaBlock({
       )}
       {result?.made && (
         <dl className="grid grid-cols-2 gap-2 font-mono text-sm">
-          <Level label="Вход" value={groupDigits(result.entry!)} />
-          <Level label="Стоп" value={groupDigits(result.stop!)} />
-          <Level label="Цель" value={groupDigits(result.target!)} />
+          <Level label="Вход" value={priceByTick(result.entry!, result.tick)} />
+          <Level label="Стоп" value={priceByTick(result.stop!, result.tick)} />
+          <Level label="Цель" value={priceByTick(result.target!, result.tick)} />
           <Level label="R:R" value={showDecimal(result.riskReward!, 2)} />
           <Level
             label="Базовая линия"

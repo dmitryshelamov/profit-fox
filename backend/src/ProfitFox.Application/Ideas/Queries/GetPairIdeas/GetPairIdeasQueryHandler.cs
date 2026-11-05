@@ -1,6 +1,6 @@
 using MediatR;
 
-using ProfitFox.Application.Ideas.Queries.GetIdeas;
+using ProfitFox.Application.Backtests;
 using ProfitFox.Application.Market;
 using ProfitFox.Application.MarketData;
 using ProfitFox.Domain.Entities.Ideas;
@@ -11,7 +11,7 @@ using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Application.Ideas.Queries.GetPairIdeas;
 
-public sealed class GetPairIdeasQueryHandler(IIdeaRepository ideas, IIdeaBucketRepository buckets, IdeasEngineVersion version, TimeProvider time)
+public sealed class GetPairIdeasQueryHandler(IIdeaRepository ideas, IIdeaBucketRepository buckets, IdeasEngineVersion version, BacktestSettings backtests, TimeProvider time)
     : IRequestHandler<GetPairIdeasQuery, GetPairIdeasResult>
 {
     public async Task<GetPairIdeasResult> Handle(GetPairIdeasQuery request, CancellationToken cancellationToken)
@@ -24,7 +24,7 @@ public sealed class GetPairIdeasQueryHandler(IIdeaRepository ideas, IIdeaBucketR
         IReadOnlyList<Idea> recent = await ideas.GetRecentAsync(time.GetUtcNow() - IdeaQueries.ClosedShown, new Instrument(category, request.Symbol), cancellationToken);
 
         return new GetPairIdeasResult(
-            [.. GetIdeasQueryHandler.ByExpectancy(IdeaView.Of(recent, await buckets.GetAsync(version.Number, cancellationToken)))],
+            IdeaOrder.ByExpectancy(IdeaView.Of(recent, await buckets.GetAsync(version.Number, cancellationToken), backtests.Policy().DefaultFees)),
             new Dictionary<string, string>());
     }
 }

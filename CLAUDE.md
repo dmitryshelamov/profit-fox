@@ -19,7 +19,7 @@ A task is done only when build, tests and `dotnet format --verify-no-changes` al
 
 After cloning, enable the repo's git hooks once: `git config core.hooksPath .githooks`.
 The pre-commit hook runs build and `dotnet format --verify-no-changes` when the commit touches `backend/`
-or `.editorconfig`, and the frontend lint, format check and typecheck when it touches `frontend/`; CI (`.github/workflows/ci.yml`) also runs the tests, once more with `TZ=Asia/Tokyo`.
+or `.editorconfig`, and the frontend lint, format check and typecheck when it touches `frontend/`; CI (`.github/workflows/ci.yml`) also runs the tests.
 
 ## Domain rules
 

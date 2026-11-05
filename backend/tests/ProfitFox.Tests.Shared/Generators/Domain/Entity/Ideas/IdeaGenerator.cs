@@ -21,7 +21,8 @@ public static class IdeaGenerator
         IdeaSide side = IdeaSide.Long,
         Interval interval = Interval.FifteenMinutes,
         DateTimeOffset? statusAt = null,
-        int engineVersion = IdeasEngineVersion.Current)
+        int engineVersion = IdeasEngineVersion.Current,
+        decimal? tick = null)
     {
         bool entered = status is not IdeaStatus.AwaitingEntry;
         decimal? exit = status is IdeaStatus.Target ? 115m : status is IdeaStatus.Stop ? 100m : status is IdeaStatus.Expired ? 106m : null;
@@ -32,7 +33,8 @@ public static class IdeaGenerator
             status,
             statusAt ?? firedAt,
             entered ? firedAt : null,
-            exit);
+            exit,
+            tick);
 
         return new Idea(Guid.NewGuid(), instrument ?? Wif, setup, interval, track, 3.5m, 2.25m, engineVersion);
     }

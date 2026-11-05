@@ -1,8 +1,20 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 
+using Npgsql;
+
+using ProfitFox.Domain.Entities.Ideas.Enums;
+using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.Services.Ideas;
+using ProfitFox.Domain.ValueObjects.Ideas;
+using ProfitFox.Domain.ValueObjects.Market;
+using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Market;
 using ProfitFox.Tests.Integration.Infrastructure;
+using ProfitFox.Tests.Shared.Generators.Domain.Entity.Ideas;
 
 using Shouldly;
 
@@ -13,19 +25,59 @@ public class SavedFiltersApiTests
 {
     private ProfitFoxFactory _factory = null!;
     private HttpClient _client = null!;
+    private NpgsqlDataSource _database = null!;
 
     [SetUp]
     public async Task SetUp()
     {
         _factory = await ProfitFoxFactory.CreateAsync(workers: 0);
         _client = _factory.CreateClient();
+        _database = NpgsqlDataSource.Create(_factory.ConnectionString);
     }
 
     [TearDown]
     public async Task TearDown()
     {
         _client.Dispose();
+        await _database.DisposeAsync();
         await _factory.DisposeAsync();
+    }
+
+    // Scenario "Условие на поле идеи": the pairs of the snapshot are not cut by it, the ideas are; no filter is saved.
+    [Test]
+    public async Task A_draft_with_a_condition_on_an_idea_field_counts_the_pairs_and_the_ideas_and_saves_nothing()
+    {
+        var snapshotAt = DateTimeOffset.Parse("2024-03-10T12:29:10Z", CultureInfo.InvariantCulture);
+        var sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
+        var eth = new Instrument(MarketCategory.Spot, "ETHUSDT");
+        var holder = Guid.NewGuid();
+        await new ScannerStateRepository(_database).ClaimAsync(holder, snapshotAt, snapshotAt.AddSeconds(30), CancellationToken.None);
+        await new MarketSnapshotRepository(_database).ReplaceAsync(
+            holder,
+            [.. new[] { sol, eth }.Select(instrument => new MarketSnapshotRow(instrument, snapshotAt, new PairMetrics(100m, null, null, null, null, null, null, null, null, null, null, null, null), false))],
+            snapshotAt,
+            CancellationToken.None);
+        await new IdeaRepository(_database).SaveAsync(
+            [IdeaGenerator.Generate(snapshotAt.AddMinutes(-20), instrument: sol), IdeaGenerator.Generate(snapshotAt.AddMinutes(-20), instrument: eth)],
+            [],
+            CancellationToken.None);
+        var key = new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear);
+        await new IdeaBucketRepository(_database).ReplaceAsync(IdeasEngineVersion.Current, [new IdeaBucket(key, 90, BucketStatisticsCalculator.Compute(180, 200, 20, 2m, 100m))], CancellationToken.None);
+
+        HttpResponseMessage response = await _client.PostAsJsonAsync("/api/saved-filters/fit", new { conditions = new object[] { new { field = "expectancy", @operator = ">=", value = "0.2" } } });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        JsonElement fit = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        (fit.GetProperty("pairs").GetInt32(), fit.GetProperty("ideas").GetInt32()).ShouldBe((2, 1));
+        (await ListAsync()).ShouldBeEmpty();
+    }
+
+    [Test]
+    public async Task A_draft_with_a_wrong_condition_is_refused_like_a_save()
+    {
+        HttpResponseMessage response = await _client.PostAsJsonAsync("/api/saved-filters/fit", new { conditions = new object[] { new { field = "volatility", @operator = ">", value = "1" } } });
+
+        (await ErrorsAsync(response)).ShouldContainKey("conditions[0].field");
     }
 
     [Test]

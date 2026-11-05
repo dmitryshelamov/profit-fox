@@ -1556,7 +1556,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The open ideas and the ones closed in the last 24 hours, by expectancy, highest first. */
+        /** One page of the open ideas and the ones closed in the last 24 hours, by a column of the list, the expectancy highest first by default. */
         get: {
             parameters: {
                 query?: {
@@ -1567,6 +1567,16 @@ export interface paths {
                     Category?: string;
                     /** @description Only ideas whose bucket expects at least 0 R. */
                     NonNegativeExpectancy?: boolean;
+                    /** @description The id of a saved filter the ideas must meet. */
+                    SavedFilter?: string;
+                    /** @description The column of the list to order by (`firedAt`, `symbol`, `setup`, `interval`, `type`, `side`, `entry`, `stop`, `target`, `riskReward`, `probability`, `expectancy`, `profit` or `status`). */
+                    Sort?: string;
+                    /** @description `asc` or `desc`, `desc` by default. */
+                    Direction?: string;
+                    /** @description The number of the page from 1. */
+                    Page?: number | string;
+                    /** @description 50, 100 or 200. */
+                    PageSize?: number | string;
                 };
                 header?: never;
                 path?: never;
@@ -1580,9 +1590,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["IdeaResponse"][];
-                        "application/json": components["schemas"]["IdeaResponse"][];
-                        "text/json": components["schemas"]["IdeaResponse"][];
+                        "text/plain": components["schemas"]["IdeasPageResponse"];
+                        "application/json": components["schemas"]["IdeasPageResponse"];
+                        "text/json": components["schemas"]["IdeasPageResponse"];
                     };
                 };
                 /** @description Bad Request */
@@ -1764,9 +1774,29 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** One page of the snapshot that meets the filters, in the order asked for, with the counts of the screen and the state of the scanner. */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description `linear` or `spot`. */
+                    Category?: string;
+                    /** @description A part of the symbol, without regard to case. */
+                    Search?: string;
+                    /** @description A setup the pair holds on the interval of the setup. */
+                    Setup?: string;
+                    /** @description The interval of the setup, 5, 15, 60 or 240; 15 by default. */
+                    Interval?: string;
+                    /** @description The id of a saved filter the pairs must meet. */
+                    SavedFilter?: string;
+                    /** @description The column to order by (`symbol`, `price`, `change5m`, `change15m`, `change1h`, `change4h`, `change24h`, `turnover1h`, `turnover24h`, `openInterest`, `openInterestChange1h`, `openInterestChange24h`, `fundingRate` or `spread`); `change1h` by default. */
+                    Sort?: string;
+                    /** @description `asc` or `desc`, `desc` by default. */
+                    Direction?: string;
+                    /** @description The number of the page from 1. */
+                    Page?: number | string;
+                    /** @description 50, 100 or 200. */
+                    PageSize?: number | string;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -1782,6 +1812,17 @@ export interface paths {
                         "text/plain": components["schemas"]["MarketResponse"];
                         "application/json": components["schemas"]["MarketResponse"];
                         "text/json": components["schemas"]["MarketResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
                     };
                 };
             };
@@ -2350,6 +2391,61 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/saved-filters/fit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** How many pairs of the snapshot and how many ideas meet the conditions of a draft of a filter; saves nothing. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SavedFilterFitBody"];
+                    "text/json": components["schemas"]["SavedFilterFitBody"];
+                    "application/*+json": components["schemas"]["SavedFilterFitBody"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SavedFilterFitResponse"];
+                        "application/json": components["schemas"]["SavedFilterFitResponse"];
+                        "text/json": components["schemas"]["SavedFilterFitResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -3600,7 +3696,8 @@ export interface components {
         /**
          * @description A trade idea with its levels and where it stands, and the statistics of its bucket over 90 days (BucketStatisticsResponse? IdeaResponse.Bucket) and over the last
          *     30 (BucketStatisticsResponse? IdeaResponse.Recent), none while the bucket has no case. string IdeaResponse.Baseline is the bucket's, or 1 / (1 + R:R) of the idea.
-         *     Numbers are decimal strings; string IdeaResponse.Move in ATR, string IdeaResponse.VolumeRatio in medians of volume.
+         *     string IdeaResponse.ProfitPerUsdt, string IdeaResponse.LossPerUsdt and string IdeaResponse.RiskPerUsdt are its money on 1 USDT of the amount of a deal,
+         *     after the fees. string? IdeaResponse.Tick is the price step of the pair, none for an idea made before it was kept. Numbers are decimal strings; string IdeaResponse.Move in ATR, string IdeaResponse.VolumeRatio in medians of volume.
          */
         IdeaResponse: {
             /** Format: uuid */
@@ -3617,6 +3714,10 @@ export interface components {
             stop: string;
             target: string;
             riskReward: string;
+            tick: null | string;
+            profitPerUsdt: string;
+            lossPerUsdt: string;
+            riskPerUsdt: string;
             status: string;
             /** Format: date-time */
             statusAt: string;
@@ -3628,6 +3729,16 @@ export interface components {
             baseline: string;
             bucket: null | components["schemas"]["BucketStatisticsResponse"];
             recent: null | components["schemas"]["BucketStatisticsResponse"];
+        };
+        /** @description A page of ideas: its number from 1 (the last page when the one asked for is past the end), its size and the count of all the ideas that meet the filters. */
+        IdeasPageResponse: {
+            items: components["schemas"]["IdeaResponse"][];
+            /** Format: int32 */
+            page: number | string;
+            /** Format: int32 */
+            pageSize: number | string;
+            /** Format: int32 */
+            total: number | string;
         };
         InstrumentResponse: {
             category: string;
@@ -3709,14 +3820,33 @@ export interface components {
             /** Format: int32 */
             total: number | string;
         };
-        /** @description The market snapshot with the state of the scanner; DateTimeOffset? MarketResponse.RestPausedUntil only while the pause lasts. */
+        /**
+         * @description A page of the market snapshot with the state of the scanner; `restPausedUntil` only while the pause lasts. `page` is the number of
+         *     the page from 1 (the last page when the one asked for is past the end) and `total` the count of the pairs that meet the query.
+         *     `pairs` is the count of the whole snapshot and `categories` the counts of its categories; `setups` holds, by setup code and
+         *     `all`, the pairs that have the setup on the interval among those left by the category, the search and the saved filter.
+         */
         MarketResponse: {
             /** Format: date-time */
             snapshotAt: null | string;
             history: components["schemas"]["MarketHistoryResponse"];
             /** Format: date-time */
             restPausedUntil: null | string;
-            rows: components["schemas"]["MarketRowResponse"][];
+            items: components["schemas"]["MarketRowResponse"][];
+            /** Format: int32 */
+            page: number | string;
+            /** Format: int32 */
+            pageSize: number | string;
+            /** Format: int32 */
+            total: number | string;
+            /** Format: int32 */
+            pairs: number | string;
+            categories: {
+                [key: string]: number | string;
+            };
+            setups: {
+                [key: string]: number | string;
+            };
         };
         /**
          * @description The row of a pair in the market snapshot, with the time it was computed. Numbers are decimal strings, an empty metric is `null`; changes and spread in
@@ -3815,7 +3945,7 @@ export interface components {
         };
         /**
          * @description An own idea from the price now: its levels, R:R and the baseline 1 / (1 + R:R), its only probability («без сетапа: только базовая
-         *     линия»); bool OwnIdeaResponse.Made false and no levels when the rules of its type make none. Numbers are decimal strings.
+         *     линия»); bool OwnIdeaResponse.Made false and no levels when the rules of its type make none. string? OwnIdeaResponse.Tick is the price step of the pair. Numbers are decimal strings.
          */
         OwnIdeaResponse: {
             made: boolean;
@@ -3824,6 +3954,7 @@ export interface components {
             target: null | string;
             riskReward: null | string;
             baseline: null | string;
+            tick: null | string;
         };
         PinResponse: {
             name: string;
@@ -3909,6 +4040,17 @@ export interface components {
             ofIdea: boolean;
             operators: string[];
             choices: null | string[];
+        };
+        /** @description The conditions of a draft of a filter, in the form of a saved filter; none fits every pair and every idea. */
+        SavedFilterFitBody: {
+            conditions?: null | components["schemas"]["SavedFilterConditionBody"][];
+        };
+        /** @description How many pairs of the snapshot and how many ideas of the list meet the conditions of a draft. */
+        SavedFilterFitResponse: {
+            /** Format: int32 */
+            pairs: number | string;
+            /** Format: int32 */
+            ideas: number | string;
         };
         SavedFilterResponse: {
             /** Format: uuid */
