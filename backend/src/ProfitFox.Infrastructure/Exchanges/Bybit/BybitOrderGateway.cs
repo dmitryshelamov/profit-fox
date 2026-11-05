@@ -11,10 +11,12 @@ using Microsoft.Extensions.Logging;
 
 using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
 using OrderSide = ProfitFox.Domain.Entities.Strategies.Enums.OrderSide;
 using OrderType = ProfitFox.Domain.Entities.Strategies.Enums.OrderType;
+using TimeInForce = ProfitFox.Domain.Entities.Strategies.Enums.TimeInForce;
 
 namespace ProfitFox.Infrastructure.Exchanges.Bybit;
 
@@ -38,6 +40,10 @@ internal sealed class BybitOrderGateway(HttpClient http, ILoggerFactory loggers,
         MarketUnit? unit = instrument.Category == MarketCategory.Spot && order.Type == OrderType.Market
             ? byAmount ? MarketUnit.QuoteAsset : MarketUnit.BaseAsset
             : null;
+        // The stop and the target of an entry: on linear for the quantity of this order only (Partial), to the market when the last price
+        // reaches them; on the spot Bybit takes them on a limit order and knows no mode.
+        Protection? protection = order.Protection;
+        bool linear = instrument.Category == MarketCategory.Linear;
         HttpResult<BybitOrderId> result = await client.V5Api.Trading.PlaceOrderAsync(
             instrument.Category.ToBybit(),
             instrument.Symbol,
@@ -45,8 +51,17 @@ internal sealed class BybitOrderGateway(HttpClient http, ILoggerFactory loggers,
             order.Type == OrderType.Limit ? NewOrderType.Limit : NewOrderType.Market,
             byAmount ? order.QuoteAmount!.Value : order.Quantity!.Value,
             order.Price,
-            timeInForce: order.Type == OrderType.Limit ? TimeInForce.GoodTillCanceled : null,
+            timeInForce: order.Type == OrderType.Limit ? order.TimeInForce == TimeInForce.ImmediateOrCancel ? global::Bybit.Net.Enums.TimeInForce.ImmediateOrCancel : global::Bybit.Net.Enums.TimeInForce.GoodTillCanceled : null,
+            positionIdx: protection is not null && linear ? PositionIdx.OneWayMode : null,
             clientOrderId: order.ClientId,
+            takeProfitOrderType: protection is not null && linear ? global::Bybit.Net.Enums.OrderType.Market : null,
+            takeProfit: protection?.TakeProfit,
+            stopLossOrderType: protection is not null && linear ? global::Bybit.Net.Enums.OrderType.Market : null,
+            stopLoss: protection?.StopLoss,
+            takeProfitTriggerBy: protection is not null && linear ? TriggerType.LastPrice : null,
+            stopLossTriggerBy: protection is not null && linear ? TriggerType.LastPrice : null,
+            reduceOnly: order.ReduceOnly ? true : null,
+            stopLossTakeProfitMode: protection is not null && linear ? StopLossTakeProfitMode.Partial : null,
             marketUnit: unit,
             ct: cancellationToken);
 
