@@ -11,7 +11,7 @@
   после комиссий» зелёный, а прежний тест колонки обновлён под новое значение.
 - [x] 1.3 `SavedFilterMatch.Idea`: условие `riskReward` сравнивает `Shares.NetRiskReward`. Готово, когда тест «Условие
   R:R в фильтре» зелёный.
-- [ ] 1.4 `IdeaResponse.NetRiskReward`: десятичная строка рядом с `RiskReward`. Готово, когда интеграционный тест
+- [x] 1.4 `IdeaResponse.NetRiskReward`: десятичная строка рядом с `RiskReward`. Готово, когда интеграционный тест
   `GET /api/ideas` видит поле у идеи из примера спеки.
 - [ ] 1.5 Своя идея: `GetOwnIdeaQueryHandler` берёт `BacktestSettings`, считает доли по комиссиям категории,
   `GetOwnIdeaResult` и `OwnIdeaResponse` получают `NetRiskReward`. Готово, когда unit-тест обработчика и интеграционный

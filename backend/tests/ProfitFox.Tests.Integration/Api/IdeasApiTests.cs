@@ -433,7 +433,7 @@ public class IdeasApiTests
     }
 
     // Scenario "Деньги на 1 USDT суммы" for the idea of the generator on linear (entry 105, stop 100, target 115, taker 0.055 %):
-    // (10 − 0.05775 − 0.06325) / 105, (5 + 0.05775 + 0.055) / 105, 5 / 105.
+    // (10 − 0.05775 − 0.06325) / 105, (5 + 0.05775 + 0.055) / 105, 5 / 105, and the first over the second.
     private static void ShouldHaveMoney(JsonElement idea)
     {
         decimal Share(string name) => decimal.Parse(idea.GetProperty(name).GetString()!, CultureInfo.InvariantCulture);
@@ -441,6 +441,8 @@ public class IdeasApiTests
         Share("profitPerUsdt").ShouldBe(0.0940857m, 0.0000001m);
         Share("lossPerUsdt").ShouldBe(0.0486929m, 0.0000001m);
         Share("riskPerUsdt").ShouldBe(0.0476190m, 0.0000001m);
+        // Scenario "R:R идеи после комиссий": the profit over the loss, not the 2 of the prices.
+        Share("netRiskReward").ShouldBe(1.9322m, 0.0001m);
     }
 
     private static string Text(decimal value)
