@@ -12,6 +12,9 @@ namespace ProfitFox.Application.Ideas;
 /// </summary>
 public sealed record IdeaView(Idea Idea, BucketStatistics? Bucket, BucketStatistics? Recent, IdeaShares Shares)
 {
+    /// <summary>The probability of the bucket, none while the bucket has too few cases to show it.</summary>
+    public decimal? Probability => Bucket is { Cases: >= BucketStatisticsCalculator.MinimumCases } ? Bucket.Probability : null;
+
     public decimal Baseline => Bucket?.Baseline ?? (1m / (1m + Idea.Track.Plan.RiskReward));
 
     public static IReadOnlyList<IdeaView> Of(IEnumerable<Idea> ideas, IReadOnlyList<IdeaBucket> buckets, IReadOnlyDictionary<MarketCategory, FeeRates> fees)
