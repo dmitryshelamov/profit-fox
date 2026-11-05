@@ -23,7 +23,7 @@
 
 - [x] 2.1 `RiskRewardCell` в `ideas/ui/IdeaCells.tsx`: R:R после комиссий с двумя знаками в плашке (`ok` от 1, `err` ниже
   1) и строка «без ком. X.XX». Готово, когда тесты Vitest проверяют `1.56`, `0.95`, отрицательное значение и подпись.
-- [ ] 2.2 Колонка «R:R» в `IdeasTable`, карточка в `PairIdeasList` и `OwnIdeaBlock` используют `RiskRewardCell`. Готово,
+- [x] 2.2 Колонка «R:R» в `IdeasTable`, карточка в `PairIdeasList` и `OwnIdeaBlock` используют `RiskRewardCell`. Готово,
   когда тесты экранов видят `1.84` и «без ком. 2.00» у идеи из примера спеки.
 
 ## 3. Проверка

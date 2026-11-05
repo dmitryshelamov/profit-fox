@@ -261,6 +261,8 @@ describe('ideas on the pair page', () => {
     expect(card.getByText('Вход 184.70')).toBeInTheDocument();
     expect(card.getByText('Стоп 180.00')).toBeInTheDocument();
     expect(card.getByText('Цель 197.00')).toBeInTheDocument();
+    expect(card.getByText('1.84')).toHaveClass('text-ok');
+    expect(card.getByText('без ком. 2.00')).toBeInTheDocument();
   });
 
   // Scenario "Пара без идей".
@@ -420,6 +422,7 @@ describe('ideas on the pair page', () => {
             stop: '165',
             target: '175',
             riskReward: '1.9',
+            netRiskReward: '1.56',
             baseline: '0.345',
             tick: null,
           }),
@@ -457,6 +460,7 @@ describe('ideas on the pair page', () => {
             stop: '165',
             target: '175',
             riskReward: '1.9',
+            netRiskReward: '1.56',
             baseline: '0.345',
             tick: null,
           }),
@@ -499,6 +503,7 @@ describe('ideas on the pair page', () => {
               stop: '165',
               target: '175',
               riskReward: '1.9',
+              netRiskReward: '1.56',
               baseline: '0.345',
               tick: null,
             }),
@@ -508,7 +513,9 @@ describe('ideas on the pair page', () => {
       await ready();
 
       expect(await blockOf().findByText('168.42')).toBeInTheDocument();
-      expect(blockOf().getByText('1.90')).toBeInTheDocument();
+      // Scenario "Своя идея": the R:R after the fees in the chip, the price ratio under it.
+      expect(blockOf().getByText('1.56')).toHaveClass('text-ok');
+      expect(blockOf().getByText('без ком. 1.90')).toBeInTheDocument();
       expect(blockOf().getByText('35 %')).toBeInTheDocument();
       expect(blockOf().getByText('без сетапа: только базовая линия')).toBeInTheDocument();
       await waitFor(() => expect(linesOnChart()).toEqual(['Вход 168.42', 'Стоп 165', 'Цель 175']));
@@ -529,6 +536,7 @@ describe('ideas on the pair page', () => {
               stop: '165',
               target: '175.5',
               riskReward: '1.9',
+              netRiskReward: '1.56',
               baseline: '0.345',
               tick: '0.01',
             }),
