@@ -5,6 +5,7 @@ import { draftKey, drafts } from '@/modules/graph-editor';
 import { fakeApi, json, problem } from '@/test/fakeApi';
 import { emaShortSummary, emaSummary, ladderSummary } from '@/test/fixtures';
 import { renderApp } from '@/test/renderApp';
+import templates from '@/test/templates.fixture.json';
 
 const definition = { formatVersion: 1, direction: 'long' as const, nodes: [] };
 
@@ -55,11 +56,15 @@ describe('strategy list', () => {
   });
 
   it('starts a new strategy in the editor', async () => {
-    fakeApi({ 'GET /api/strategies': () => json([]) });
+    fakeApi({
+      'GET /api/strategies': () => json([]),
+      'GET /api/strategy-templates': () => json([]),
+    });
 
     const { history } = renderApp('/strategies');
 
     await userEvent.click(await screen.findByRole('button', { name: '+ Новая стратегия' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Пустая стратегия' }));
     await waitFor(() =>
       expect(history.location.pathname).toMatch(/^\/strategies\/new\/[0-9a-f-]{36}$/),
     );
@@ -69,14 +74,103 @@ describe('strategy list', () => {
   it('starts a new strategy on a page that is not a secure context', async () => {
     const { getRandomValues } = crypto;
     vi.stubGlobal('crypto', { getRandomValues: getRandomValues.bind(crypto) });
-    fakeApi({ 'GET /api/strategies': () => json([]) });
+    fakeApi({
+      'GET /api/strategies': () => json([]),
+      'GET /api/strategy-templates': () => json([]),
+    });
 
     const { history } = renderApp('/strategies');
 
     await userEvent.click(await screen.findByRole('button', { name: '+ Новая стратегия' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Пустая стратегия' }));
     await waitFor(() =>
       expect(history.location.pathname).toMatch(/^\/strategies\/new\/[0-9a-f-]{36}$/),
     );
+  });
+});
+
+describe('new strategy dialog', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  function open(routes: Parameters<typeof fakeApi>[0] = {}) {
+    const requests = fakeApi({
+      'GET /api/strategies': () => json([]),
+      'GET /api/strategy-templates': () => json(templates.list),
+      'GET /api/strategy-templates/rsi-reversion': () => json(templates.details['rsi-reversion']),
+      'GET /api/strategy-templates/ladder-plus': () => json(templates.details['ladder-plus']),
+      ...routes,
+    });
+
+    return { requests, ...renderApp('/strategies') };
+  }
+
+  async function openDialog() {
+    await userEvent.click(await screen.findByRole('button', { name: '+ Новая стратегия' }));
+
+    return screen.findByRole('dialog', { name: 'Новая стратегия' });
+  }
+
+  // Scenario "Выбор при создании".
+  it('offers an empty strategy and every template with its name, idea and direction', async () => {
+    open();
+
+    const dialog = await openDialog();
+
+    expect(await within(dialog).findByRole('button', { name: 'Пустая стратегия' })).toBeVisible();
+    expect(templates.list).toHaveLength(14);
+
+    for (const template of templates.list) {
+      const card = within(dialog).getByText(template.name, { exact: true }).closest('button')!;
+      expect(card).toHaveTextContent(template.description);
+      expect(card).toHaveTextContent(template.direction === 'short' ? 'Шорт' : 'Лонг');
+    }
+  });
+
+  // Scenario "Шаблоны недоступны".
+  it('says the templates did not load and still offers an empty strategy', async () => {
+    const { history } = open({ 'GET /api/strategy-templates': () => problem(500, 'boom') });
+
+    const dialog = await openDialog();
+
+    expect(await within(dialog).findByText('Шаблоны не загрузились.')).toBeVisible();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Пустая стратегия' }));
+    await waitFor(() =>
+      expect(history.location.pathname).toMatch(/^\/strategies\/new\/[0-9a-f-]{36}$/),
+    );
+  });
+
+  // Scenario "Стратегия из шаблона": the draft of the new strategy holds the name and the definition of the template.
+  it('opens a draft with the name and the definition of the chosen template', async () => {
+    const { history } = open();
+
+    const dialog = await openDialog();
+    await userEvent.click(await within(dialog).findByRole('button', { name: /^Отскок RSI/ }));
+
+    await waitFor(() =>
+      expect(history.location.pathname).toMatch(/^\/strategies\/new\/[0-9a-f-]{36}$/),
+    );
+    const draftId = history.location.pathname.split('/').pop()!;
+    expect(drafts.read(draftKey({ newStrategy: draftId }))).toMatchObject({
+      name: 'Отскок RSI',
+      definition: templates.details['rsi-reversion'].definition,
+    });
+  });
+
+  // Scenario "Шаблон до сохранения": the template is a draft in the browser until the first save.
+  it('keeps the chosen template as an unsaved draft the server does not have', async () => {
+    const { requests, history } = open();
+    const dialog = await openDialog();
+    await userEvent.click(await within(dialog).findByRole('button', { name: /^Ladder\+/ }));
+    await waitFor(() => expect(history.location.pathname).toMatch(/^\/strategies\/new\//));
+
+    await history.push('/strategies');
+
+    const link = await screen.findByRole('link', { name: 'Ladder+' });
+    expect(within(link.closest('tr')!).getByText('не сохранена')).toBeInTheDocument();
+    expect(requests.some((request) => request.method === 'POST')).toBe(false);
   });
 });
 

@@ -443,6 +443,9 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
   is read there, the bot's own interval never goes to the address). The router writes text search values as they are, so
   `?interval=5` is not quoted. `shared/format` shows decimal strings with thousands
   spacing without float math, and UTC dates. Decimal strings become numbers only in `market-chart/model`, for drawing.
+- «+ Новая стратегия» opens `pages/strategies/NewStrategyDialog`: an empty canvas or one of the built-in templates (`strategyTemplatesQuery`, the cards show name,
+  idea and direction). A template is read with `fetchStrategyTemplate` and written as the draft of a new strategy under a new `newDraftId()` (`shared/id`, built on
+  `crypto.getRandomValues`, since the app is served over plain HTTP); from there it is an ordinary new strategy, saved by the first save.
 - `src/shared/api` holds the only HTTP client (`openapi-fetch`) and the types generated from the API's OpenAPI document
   in `generated/schema.d.ts`. That file is committed: after changing an API contract, run the API and
   `npm run generate:api`, and commit the result with the change.

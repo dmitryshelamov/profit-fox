@@ -1,18 +1,20 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { Link } from '@tanstack/react-router';
+import { useState } from 'react';
 
 import { draftKey, drafts, newStrategyDrafts } from '@/modules/graph-editor';
 import { directionTitles, strategiesQuery } from '@/modules/strategies';
 import { Badge } from '@/shared/ui/Badge';
 import { Button } from '@/shared/ui/Button';
 
+import { NewStrategyDialog } from './NewStrategyDialog';
 import { StrategyActions } from './StrategyActions';
 
 const cell = 'px-5 py-4';
 
 export function StrategiesPage() {
   const strategies = useQuery(strategiesQuery);
-  const navigate = useNavigate();
+  const [choosing, setChoosing] = useState(false);
   const unsaved = newStrategyDrafts();
 
   return (
@@ -24,18 +26,11 @@ export function StrategiesPage() {
             Торговая логика без инструмента и интервала: их задают бот и бэктест.
           </p>
         </div>
-        <Button
-          look="primary"
-          onClick={() =>
-            void navigate({
-              to: '/strategies/new/$draftId',
-              params: { draftId: newDraftId() },
-            })
-          }
-        >
+        <Button look="primary" onClick={() => setChoosing(true)}>
           + Новая стратегия
         </Button>
       </header>
+      {choosing && <NewStrategyDialog onClose={() => setChoosing(false)} />}
       {strategies.isError && <p role="alert">Не удалось загрузить стратегии.</p>}
       <table className="w-full border-separate border-spacing-y-2 text-sm">
         <thead className="text-left text-[11px] tracking-wide text-faint uppercase">
@@ -101,19 +96,4 @@ export function StrategiesPage() {
       </table>
     </section>
   );
-}
-
-/** `crypto.randomUUID` exists only in a secure context, and the server serves the app over plain HTTP. */
-function newDraftId(): string {
-  const hex = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
-    byte.toString(16).padStart(2, '0'),
-  ).join('');
-
-  return [
-    hex.slice(0, 8),
-    hex.slice(8, 12),
-    hex.slice(12, 16),
-    hex.slice(16, 20),
-    hex.slice(20),
-  ].join('-');
 }

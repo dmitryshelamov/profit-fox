@@ -83,6 +83,6 @@ describe('pins of a node', () => {
   });
 
   it('gives an unknown node no pins', () => {
-    expect(pinsOf({ id: 'x', kind: 'rsi' }, catalog, {})).toEqual({ inputs: [], outputs: [] });
+    expect(pinsOf({ id: 'x', kind: 'wma' }, catalog, {})).toEqual({ inputs: [], outputs: [] });
   });
 });

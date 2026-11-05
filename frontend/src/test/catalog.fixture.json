@@ -87,7 +87,19 @@
         "type": "duration"
       },
       {
+        "name": "barsSinceEntry",
+        "type": "number"
+      },
+      {
         "name": "free",
+        "type": "number"
+      },
+      {
+        "name": "closedPositions",
+        "type": "number"
+      },
+      {
+        "name": "closedPnl",
         "type": "number"
       }
     ],
@@ -418,6 +430,94 @@
     "definition": null
   },
   {
+    "id": "sma",
+    "title": "SMA",
+    "group": "simple",
+    "inputs": [
+      {
+        "name": "source",
+        "type": "number"
+      },
+      {
+        "name": "period",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "value",
+        "type": "number"
+      }
+    ],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "std-dev",
+    "title": "Стандартное отклонение",
+    "group": "simple",
+    "inputs": [
+      {
+        "name": "source",
+        "type": "number"
+      },
+      {
+        "name": "period",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "value",
+        "type": "number"
+      }
+    ],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "rsi",
+    "title": "RSI",
+    "group": "simple",
+    "inputs": [
+      {
+        "name": "source",
+        "type": "number"
+      },
+      {
+        "name": "period",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "value",
+        "type": "number"
+      }
+    ],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "previous",
+    "title": "Предыдущее",
+    "group": "simple",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "value",
+        "type": "number"
+      }
+    ],
+    "settings": [],
+    "definition": null
+  },
+  {
     "id": "ema-cross",
     "title": "Пересечение EMA",
     "group": "builtIn",
@@ -443,6 +543,80 @@
       {
         "name": "down",
         "type": "boolean"
+      }
+    ],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "macd",
+    "title": "MACD",
+    "group": "builtIn",
+    "inputs": [
+      {
+        "name": "source",
+        "type": "number"
+      },
+      {
+        "name": "fast",
+        "type": "number"
+      },
+      {
+        "name": "slow",
+        "type": "number"
+      },
+      {
+        "name": "signal",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "macd",
+        "type": "number"
+      },
+      {
+        "name": "signal",
+        "type": "number"
+      },
+      {
+        "name": "histogram",
+        "type": "number"
+      }
+    ],
+    "settings": [],
+    "definition": null
+  },
+  {
+    "id": "bollinger",
+    "title": "Полосы Боллинджера",
+    "group": "builtIn",
+    "inputs": [
+      {
+        "name": "source",
+        "type": "number"
+      },
+      {
+        "name": "period",
+        "type": "number"
+      },
+      {
+        "name": "width",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "upper",
+        "type": "number"
+      },
+      {
+        "name": "middle",
+        "type": "number"
+      },
+      {
+        "name": "lower",
+        "type": "number"
       }
     ],
     "settings": [],

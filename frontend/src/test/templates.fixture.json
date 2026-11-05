@@ -1,0 +1,611 @@
+{
+  "list": [
+    {
+      "code": "ema-crossover",
+      "name": "EMA Crossover",
+      "description": "Покупка, когда быстрая EMA пересекает медленную вверх; выход на пересечении вниз или по стопу от цены входа.",
+      "direction": "long"
+    },
+    {
+      "code": "ema-short",
+      "name": "EMA Short",
+      "description": "Продажа в шорт, когда быстрая EMA пересекает медленную вниз; выход на пересечении вверх.",
+      "direction": "short"
+    },
+    {
+      "code": "sma-crossover",
+      "name": "SMA Crossover",
+      "description": "Покупка, когда быстрая SMA пересекает медленную вверх; выход на пересечении вниз.",
+      "direction": "long"
+    },
+    {
+      "code": "ladder",
+      "name": "Ladder",
+      "description": "Покупка на старте, лимитная продажа выше средней цены и докупка лимитом ниже последнего входа в пределах депозита.",
+      "direction": "long"
+    },
+    {
+      "code": "ladder-sma",
+      "name": "Ladder SMA",
+      "description": "Лесенка, у которой докупка стоит ниже SMA закрытий, а не ниже последнего входа.",
+      "direction": "long"
+    },
+    {
+      "code": "ladder-plus",
+      "name": "Ladder+",
+      "description": "Лесенка со стопом от средней цены, которая не начинает новую позицию после цели по прибыли закрытых позиций.",
+      "direction": "long"
+    },
+    {
+      "code": "dca",
+      "name": "DCA",
+      "description": "Покупка на фиксированную сумму через равные промежутки времени, пока не исчерпан лимит депозита.",
+      "direction": "long"
+    },
+    {
+      "code": "macd-trend",
+      "name": "MACD по тренду",
+      "description": "Покупка, когда линия MACD пересекает сигнальную вверх выше EMA тренда; выход на пересечении вниз или по стопу.",
+      "direction": "long"
+    },
+    {
+      "code": "rsi-reversion",
+      "name": "Отскок RSI",
+      "description": "Покупка, когда RSI поднимается выше уровня входа; выход при достижении уровня выхода или по стопу.",
+      "direction": "long"
+    },
+    {
+      "code": "bollinger-reversion",
+      "name": "Возврат от полосы Боллинджера",
+      "description": "Покупка, когда цена закрывается ниже нижней полосы; выход на возврате к средней полосе или по стопу.",
+      "direction": "long"
+    },
+    {
+      "code": "capitulation-buyback",
+      "name": "Откуп капитуляции",
+      "description": "Покупка резкого падения на всплеске объёма; выход по цели прибыли или через заданное число баров.",
+      "direction": "long"
+    },
+    {
+      "code": "volume-impulse",
+      "name": "Импульс на объёме",
+      "description": "Покупка резкого роста на всплеске объёма; выход по цели прибыли, по стопу или через заданное число баров.",
+      "direction": "long"
+    },
+    {
+      "code": "level-trade",
+      "name": "Сделка по уровням",
+      "description": "Одна сделка: лимитная покупка по цене входа, лимитная продажа по цели и рыночный выход по стопу.",
+      "direction": "long"
+    },
+    {
+      "code": "level-trade-short",
+      "name": "Сделка по уровням (шорт)",
+      "description": "Одна сделка в шорт: лимитная продажа по цене входа, лимитная покупка по цели и рыночный выход по стопу.",
+      "direction": "short"
+    }
+  ],
+  "details": {
+    "rsi-reversion": {
+      "code": "rsi-reversion",
+      "name": "Отскок RSI",
+      "description": "Покупка, когда RSI поднимается выше уровня входа; выход при достижении уровня выхода или по стопу.",
+      "definition": {
+        "formatVersion": 1,
+        "direction": "long",
+        "parameters": [
+          {
+            "name": "rsiPeriod",
+            "type": "number",
+            "default": 14,
+            "min": 1,
+            "integer": true
+          },
+          {
+            "name": "rsiEntry",
+            "type": "number",
+            "default": 30,
+            "min": 0,
+            "max": 100
+          },
+          {
+            "name": "rsiExit",
+            "type": "number",
+            "default": 70,
+            "min": 0,
+            "max": 100
+          },
+          {
+            "name": "amount",
+            "type": "number",
+            "default": 100,
+            "min": 0
+          },
+          {
+            "name": "stopLoss",
+            "type": "number",
+            "default": 0.05,
+            "min": 0,
+            "max": 1
+          }
+        ],
+        "nodes": [
+          {
+            "id": "params",
+            "kind": "parameters"
+          },
+          {
+            "id": "candle",
+            "kind": "candle"
+          },
+          {
+            "id": "position",
+            "kind": "position"
+          },
+          {
+            "id": "flat",
+            "kind": "not"
+          },
+          {
+            "id": "rsi",
+            "kind": "rsi"
+          },
+          {
+            "id": "previousRsi",
+            "kind": "previous"
+          },
+          {
+            "id": "wasLow",
+            "kind": "compare",
+            "settings": {
+              "operation": "le"
+            }
+          },
+          {
+            "id": "isAbove",
+            "kind": "compare",
+            "settings": {
+              "operation": "gt"
+            }
+          },
+          {
+            "id": "crossUp",
+            "kind": "and"
+          },
+          {
+            "id": "high",
+            "kind": "compare",
+            "settings": {
+              "operation": "ge"
+            }
+          },
+          {
+            "id": "entry",
+            "kind": "and"
+          },
+          {
+            "id": "enter",
+            "kind": "market-order",
+            "settings": {
+              "side": "buy",
+              "size": "amount"
+            }
+          },
+          {
+            "id": "stopFactor",
+            "kind": "subtract",
+            "inputs": {
+              "a": 1
+            }
+          },
+          {
+            "id": "stopPrice",
+            "kind": "multiply"
+          },
+          {
+            "id": "stopHit",
+            "kind": "compare",
+            "settings": {
+              "operation": "le"
+            }
+          },
+          {
+            "id": "leave1",
+            "kind": "or"
+          },
+          {
+            "id": "exit",
+            "kind": "close-position"
+          }
+        ],
+        "wires": [
+          {
+            "from": "position.hasPosition",
+            "to": "flat.value"
+          },
+          {
+            "from": "candle.close",
+            "to": "rsi.source"
+          },
+          {
+            "from": "params.rsiPeriod",
+            "to": "rsi.period"
+          },
+          {
+            "from": "rsi.value",
+            "to": "previousRsi.value"
+          },
+          {
+            "from": "previousRsi.value",
+            "to": "wasLow.a"
+          },
+          {
+            "from": "params.rsiEntry",
+            "to": "wasLow.b"
+          },
+          {
+            "from": "rsi.value",
+            "to": "isAbove.a"
+          },
+          {
+            "from": "params.rsiEntry",
+            "to": "isAbove.b"
+          },
+          {
+            "from": "wasLow.result",
+            "to": "crossUp.a"
+          },
+          {
+            "from": "isAbove.result",
+            "to": "crossUp.b"
+          },
+          {
+            "from": "rsi.value",
+            "to": "high.a"
+          },
+          {
+            "from": "params.rsiExit",
+            "to": "high.b"
+          },
+          {
+            "from": "crossUp.result",
+            "to": "entry.a"
+          },
+          {
+            "from": "flat.result",
+            "to": "entry.b"
+          },
+          {
+            "from": "entry.result",
+            "to": "enter.when"
+          },
+          {
+            "from": "params.amount",
+            "to": "enter.size"
+          },
+          {
+            "from": "params.stopLoss",
+            "to": "stopFactor.b"
+          },
+          {
+            "from": "position.lastEntryPrice",
+            "to": "stopPrice.a"
+          },
+          {
+            "from": "stopFactor.result",
+            "to": "stopPrice.b"
+          },
+          {
+            "from": "candle.close",
+            "to": "stopHit.a"
+          },
+          {
+            "from": "stopPrice.result",
+            "to": "stopHit.b"
+          },
+          {
+            "from": "high.result",
+            "to": "leave1.a"
+          },
+          {
+            "from": "stopHit.result",
+            "to": "leave1.b"
+          },
+          {
+            "from": "leave1.result",
+            "to": "exit.when"
+          }
+        ],
+        "layout": {}
+      }
+    },
+    "ladder-plus": {
+      "code": "ladder-plus",
+      "name": "Ladder+",
+      "description": "Лесенка со стопом от средней цены, которая не начинает новую позицию после цели по прибыли закрытых позиций.",
+      "definition": {
+        "formatVersion": 1,
+        "direction": "long",
+        "parameters": [
+          {
+            "name": "limitPerOrder",
+            "type": "number",
+            "default": 100,
+            "min": 0
+          },
+          {
+            "name": "limitDeposit",
+            "type": "number",
+            "default": 300,
+            "min": 0
+          },
+          {
+            "name": "priceDropForBuy",
+            "type": "number",
+            "default": 0.01,
+            "min": 0,
+            "max": 1
+          },
+          {
+            "name": "priceRiseForSell",
+            "type": "number",
+            "default": 0.01,
+            "min": 0
+          },
+          {
+            "name": "stopLoss",
+            "type": "number",
+            "default": 0.2,
+            "min": 0,
+            "max": 1
+          },
+          {
+            "name": "profitTarget",
+            "type": "number",
+            "default": 1000,
+            "min": 0
+          }
+        ],
+        "nodes": [
+          {
+            "id": "params",
+            "kind": "parameters"
+          },
+          {
+            "id": "position",
+            "kind": "position"
+          },
+          {
+            "id": "flat",
+            "kind": "not"
+          },
+          {
+            "id": "riseFactor",
+            "kind": "add",
+            "inputs": {
+              "a": 1
+            }
+          },
+          {
+            "id": "sellPrice",
+            "kind": "multiply"
+          },
+          {
+            "id": "dropFactor",
+            "kind": "subtract",
+            "inputs": {
+              "a": 1
+            }
+          },
+          {
+            "id": "buyPrice",
+            "kind": "multiply"
+          },
+          {
+            "id": "nextInvested",
+            "kind": "add"
+          },
+          {
+            "id": "budget",
+            "kind": "compare",
+            "settings": {
+              "operation": "le"
+            }
+          },
+          {
+            "id": "canAverage",
+            "kind": "and"
+          },
+          {
+            "id": "entry",
+            "kind": "market-order",
+            "settings": {
+              "side": "buy",
+              "size": "amount"
+            }
+          },
+          {
+            "id": "sell",
+            "kind": "hold-limit",
+            "settings": {
+              "side": "sell",
+              "size": "quantity"
+            }
+          },
+          {
+            "id": "buy",
+            "kind": "hold-limit",
+            "settings": {
+              "side": "buy",
+              "size": "amount"
+            }
+          },
+          {
+            "id": "candle",
+            "kind": "candle"
+          },
+          {
+            "id": "belowTarget",
+            "kind": "compare",
+            "settings": {
+              "operation": "lt"
+            }
+          },
+          {
+            "id": "canEnter",
+            "kind": "and"
+          },
+          {
+            "id": "stopFactor",
+            "kind": "subtract",
+            "inputs": {
+              "a": 1
+            }
+          },
+          {
+            "id": "stopPrice",
+            "kind": "multiply"
+          },
+          {
+            "id": "stopHit",
+            "kind": "compare",
+            "settings": {
+              "operation": "le"
+            }
+          },
+          {
+            "id": "exit",
+            "kind": "close-position"
+          }
+        ],
+        "wires": [
+          {
+            "from": "position.hasPosition",
+            "to": "flat.value"
+          },
+          {
+            "from": "params.priceRiseForSell",
+            "to": "riseFactor.b"
+          },
+          {
+            "from": "position.averagePrice",
+            "to": "sellPrice.a"
+          },
+          {
+            "from": "riseFactor.result",
+            "to": "sellPrice.b"
+          },
+          {
+            "from": "params.priceDropForBuy",
+            "to": "dropFactor.b"
+          },
+          {
+            "from": "position.lastEntryPrice",
+            "to": "buyPrice.a"
+          },
+          {
+            "from": "dropFactor.result",
+            "to": "buyPrice.b"
+          },
+          {
+            "from": "position.invested",
+            "to": "nextInvested.a"
+          },
+          {
+            "from": "params.limitPerOrder",
+            "to": "nextInvested.b"
+          },
+          {
+            "from": "nextInvested.result",
+            "to": "budget.a"
+          },
+          {
+            "from": "params.limitDeposit",
+            "to": "budget.b"
+          },
+          {
+            "from": "position.hasPosition",
+            "to": "canAverage.a"
+          },
+          {
+            "from": "budget.result",
+            "to": "canAverage.b"
+          },
+          {
+            "from": "canEnter.result",
+            "to": "entry.when"
+          },
+          {
+            "from": "params.limitPerOrder",
+            "to": "entry.size"
+          },
+          {
+            "from": "position.hasPosition",
+            "to": "sell.when"
+          },
+          {
+            "from": "sellPrice.result",
+            "to": "sell.price"
+          },
+          {
+            "from": "position.quantity",
+            "to": "sell.size"
+          },
+          {
+            "from": "canAverage.result",
+            "to": "buy.when"
+          },
+          {
+            "from": "buyPrice.result",
+            "to": "buy.price"
+          },
+          {
+            "from": "params.limitPerOrder",
+            "to": "buy.size"
+          },
+          {
+            "from": "position.closedPnl",
+            "to": "belowTarget.a"
+          },
+          {
+            "from": "params.profitTarget",
+            "to": "belowTarget.b"
+          },
+          {
+            "from": "flat.result",
+            "to": "canEnter.a"
+          },
+          {
+            "from": "belowTarget.result",
+            "to": "canEnter.b"
+          },
+          {
+            "from": "params.stopLoss",
+            "to": "stopFactor.b"
+          },
+          {
+            "from": "position.averagePrice",
+            "to": "stopPrice.a"
+          },
+          {
+            "from": "stopFactor.result",
+            "to": "stopPrice.b"
+          },
+          {
+            "from": "candle.close",
+            "to": "stopHit.a"
+          },
+          {
+            "from": "stopPrice.result",
+            "to": "stopHit.b"
+          },
+          {
+            "from": "stopHit.result",
+            "to": "exit.when"
+          }
+        ],
+        "layout": {}
+      }
+    }
+  }
+}
