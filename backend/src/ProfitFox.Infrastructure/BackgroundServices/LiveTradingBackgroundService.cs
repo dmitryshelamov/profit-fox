@@ -52,7 +52,9 @@ internal sealed class LiveTradingBackgroundService(
                 continue;
             }
 
-            sessions.RemoveAll(item => item.Session.IsCompleted);
+            // A session ended by a stop that came while a bot was taken stays: its bot is given up with the others. A session ends
+            // only after the stop that ends it, so the stop is seen once the session is.
+            sessions.RemoveAll(item => item.Session.IsCompleted && !stoppingToken.IsCancellationRequested);
             await Task.Delay(settings.PollInterval, time, stoppingToken).ContinueWith(_ => { }, TaskScheduler.Default);
         }
 
