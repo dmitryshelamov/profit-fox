@@ -12,6 +12,8 @@ namespace ProfitFox.Application.IdeaTrades.Commands.RunIdeaTrade;
 
 public sealed class RunIdeaTradeCommandHandler(
     IIdeaTradeRepository repository,
+    ILiveBotRepository bots,
+    IStrategyLibraryRepository library,
     IExchangeAccountRepository accounts,
     ISecretProtector protector,
     IExchangeLedger ledger,
@@ -28,7 +30,7 @@ public sealed class RunIdeaTradeCommandHandler(
 {
     public Task Handle(RunIdeaTradeCommand request, CancellationToken cancellationToken)
     {
-        var session = new IdeaTradeSession(request.Trade, repository, accounts, protector, ledger, gateway, streams, rules, catalog, executor, journal, leases, settings, worker, time);
+        var session = new IdeaTradeSession(request.Trade, repository, bots, library, accounts, protector, ledger, gateway, streams, rules, catalog, executor, journal, leases, settings, worker, time);
 
         return session.RunAsync(cancellationToken);
     }

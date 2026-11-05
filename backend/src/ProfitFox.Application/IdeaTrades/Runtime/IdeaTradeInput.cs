@@ -20,3 +20,12 @@ internal sealed record StatusInput(IdeaTrade Trade) : IdeaTradeInput;
 
 /// <summary>The time of a delayed send, or of the deadline of the entry, has come.</summary>
 internal sealed record WakeInput : IdeaTradeInput;
+
+/// <summary>
+///     An execution of nobody in the system, or of the stop or the target of another trade, on the instrument of the trade: the database
+///     tells by <see cref="ExchangeOrderId" /> which.
+/// </summary>
+internal sealed record ForeignFillInput(string? ExchangeOrderId = null) : IdeaTradeInput;
+
+/// <summary>The pause after a foreign execution is over: the books are compared with the exchange.</summary>
+internal sealed record ReconcileInput : IdeaTradeInput;

@@ -17,6 +17,7 @@ using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
+using ProfitFox.Domain.ValueObjects.LiveTrading;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Application.IdeaTrades.Runtime;
@@ -34,6 +35,8 @@ namespace ProfitFox.Application.IdeaTrades.Runtime;
 internal sealed class IdeaTradeSession(
     LeasedIdeaTrade leased,
     IIdeaTradeRepository repository,
+    ILiveBotRepository bots,
+    IStrategyLibraryRepository library,
     IExchangeAccountRepository accounts,
     ISecretProtector protector,
     IExchangeLedger ledger,
@@ -48,6 +51,9 @@ internal sealed class IdeaTradeSession(
     WorkerIdentity worker,
     TimeProvider time)
 {
+    // How many times the books are compared with the exchange before the bots and the trades of the account and the symbol fail.
+    private const int ReconcileAttempts = 3;
+
     private readonly Channel<IdeaTradeInput> _inputs = Channel.CreateUnbounded<IdeaTradeInput>(new UnboundedChannelOptions { SingleReader = true });
 
     // The unfinished orders of the trade by number.
@@ -60,6 +66,8 @@ internal sealed class IdeaTradeSession(
     private readonly HashSet<string> _childCancels = [];
 
     private readonly Guid _id = leased.Trade.Id;
+    private readonly LiveBotReconciler _reconciler = new LiveBotReconciler(bots, repository, library, ledger, catalog, executor, journal, worker, time);
+    private bool _reconcileScheduled;
     private IdeaTrade _trade = leased.Trade;
     private TradeContext _context = null!;
     private bool _deadlineScheduled;
@@ -97,6 +105,11 @@ internal sealed class IdeaTradeSession(
                     if (Mine(fill))
                     {
                         _inputs.Writer.TryWrite(new FillInput(fill));
+                    }
+                    else if (!ClientOrderId.TryParse(fill.ClientId, out _) && !IdeaTradeOrderId.TryParse(fill.ClientId, out _) && fill.Instrument == _trade.Instrument)
+                    {
+                        // An execution of nobody here, or of the stop or the target of another trade, which has no client id: the database tells.
+                        _inputs.Writer.TryWrite(new ForeignFillInput(fill.ExchangeOrderId));
                     }
                 },
                 () => _inputs.Writer.TryWrite(new RestoreInput()),
@@ -212,7 +225,37 @@ internal sealed class IdeaTradeSession(
         }
 
         await CatchUpAsync(cancellationToken);
+        await ReconcileAsync(cancellationToken);
         ScheduleDeadline(cancellationToken);
+    }
+
+    /// <summary>Compares the books with the exchange and fails the trades of a difference that stays after the exchange is read again.</summary>
+    private async Task ReconcileAsync(CancellationToken cancellationToken)
+    {
+        if (!_trade.IsOpen)
+        {
+            return;
+        }
+
+        (IReadOnlyList<Guid> neighbours, IReadOnlyList<Guid> trades, IReadOnlyList<string> differences) = await _reconciler.CompareAsync(_trade, _context.Key, _context.BaseCoin, _context.Rules, cancellationToken);
+
+        // A fill may land between the catch-up and the read of the exchange, and a neighbour may write its fill a moment after the
+        // exchange shows it: the books are read again right away and once more after a pause before anything fails.
+        for (var attempt = 1; differences.Count > 0 && attempt < ReconcileAttempts; attempt++)
+        {
+            if (attempt > 1)
+            {
+                await Task.Delay(settings.PollInterval * 3, time, cancellationToken);
+            }
+
+            await CatchUpAsync(cancellationToken);
+            (neighbours, trades, differences) = await _reconciler.CompareAsync(_trade, _context.Key, _context.BaseCoin, _context.Rules, cancellationToken);
+        }
+
+        if (differences.Count > 0)
+        {
+            _trade = await _reconciler.FailAllAsync(leased, neighbours, trades, string.Join(" ", differences), cancellationToken) ?? _trade;
+        }
     }
 
     private async Task CatchUpAsync(CancellationToken cancellationToken)
@@ -286,6 +329,22 @@ internal sealed class IdeaTradeSession(
                 break;
             case RestoreInput:
                 await RebuildAsync(cancellationToken);
+
+                break;
+            case ForeignFillInput foreign when !_reconcileScheduled:
+                if (foreign.ExchangeOrderId is { } exchangeId && await repository.IsChildAsync(exchangeId, cancellationToken))
+                {
+                    break;
+                }
+
+                // The REST reads may lag behind the stream: the comparison waits as long as the one repeated after a difference.
+                _reconcileScheduled = true;
+                _ = LaterAsync(settings.PollInterval * 3, cancellationToken, reconcile: true);
+
+                break;
+            case ReconcileInput:
+                _reconcileScheduled = false;
+                await ReconcileAsync(cancellationToken);
 
                 break;
             case StatusInput { Trade: var trade }:
@@ -573,12 +632,12 @@ internal sealed class IdeaTradeSession(
             cancellationToken);
     }
 
-    private async Task LaterAsync(TimeSpan delay, CancellationToken cancellationToken)
+    private async Task LaterAsync(TimeSpan delay, CancellationToken cancellationToken, bool reconcile = false)
     {
         try
         {
             await Task.Delay(delay, time, cancellationToken);
-            _inputs.Writer.TryWrite(new WakeInput());
+            _inputs.Writer.TryWrite(reconcile ? new ReconcileInput() : new WakeInput());
         }
         catch (OperationCanceledException)
         {

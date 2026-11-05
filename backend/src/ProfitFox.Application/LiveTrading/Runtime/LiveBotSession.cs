@@ -16,6 +16,7 @@ using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.Services.Strategies.Execution;
+using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.LiveTrading;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
@@ -39,6 +40,7 @@ namespace ProfitFox.Application.LiveTrading.Runtime;
 internal sealed class LiveBotSession(
     LeasedBot leased,
     ILiveBotRepository repository,
+    IIdeaTradeRepository ideaTrades,
     IStrategyLibraryRepository library,
     IExchangeAccountRepository accounts,
     ISecretProtector protector,
@@ -65,7 +67,7 @@ internal sealed class LiveBotSession(
     private readonly Dictionary<int, LiveOrder> _orders = [];
 
     private readonly Guid _id = leased.Bot.BotId;
-    private readonly LiveBotReconciler _reconciler = new LiveBotReconciler(repository, library, ledger, catalog, executor, journal, worker, time);
+    private readonly LiveBotReconciler _reconciler = new LiveBotReconciler(repository, ideaTrades, library, ledger, catalog, executor, journal, worker, time);
     private readonly LiveWarmUpHistory _history = new LiveWarmUpHistory(history, time);
     private LiveBot _bot = leased.Bot;
     private LiveBotContext _context = null!;
@@ -115,9 +117,10 @@ internal sealed class LiveBotSession(
                     {
                         _inputs.Writer.TryWrite(new FillInput(fill));
                     }
-                    else if (!ClientOrderId.TryParse(fill.ClientId, out _) && fill.Instrument == _context.Bot.Instrument)
+                    else if (!ClientOrderId.TryParse(fill.ClientId, out _) && !IdeaTradeOrderId.TryParse(fill.ClientId, out _) && fill.Instrument == _context.Bot.Instrument)
                     {
-                        _inputs.Writer.TryWrite(new ForeignFillInput());
+                        // An execution of the stop or the target of a trade has no client id: whose it is, the database tells.
+                        _inputs.Writer.TryWrite(new ForeignFillInput(fill.ExchangeOrderId));
                     }
                 },
                 () => _inputs.Writer.TryWrite(new RestoreInput()),
@@ -304,7 +307,7 @@ internal sealed class LiveBotSession(
     /// <summary>Compares the books with the exchange and stops the bots of a difference that stays after the exchange is read again.</summary>
     private async Task ReconcileAsync(CancellationToken cancellationToken)
     {
-        (IReadOnlyList<Guid> bots, IReadOnlyList<string> differences) = await _reconciler.CompareAsync(_context, cancellationToken);
+        (IReadOnlyList<Guid> bots, IReadOnlyList<Guid> trades, IReadOnlyList<string> differences) = await _reconciler.CompareAsync(_context, cancellationToken);
 
         // A fill may land between the catch-up and the read of the exchange, and a neighbour bot may write its fill a moment after
         // the exchange shows it: the books are read again right away and once more after a pause before any bot stops.
@@ -316,12 +319,12 @@ internal sealed class LiveBotSession(
             }
 
             await CatchUpAsync(cancellationToken);
-            (bots, differences) = await _reconciler.CompareAsync(_context, cancellationToken);
+            (bots, trades, differences) = await _reconciler.CompareAsync(_context, cancellationToken);
         }
 
         if (differences.Count > 0)
         {
-            _bot = await _reconciler.FailAllAsync(leased, bots, string.Join(" ", differences), cancellationToken) ?? _bot;
+            _bot = await _reconciler.FailAllAsync(leased, bots, trades, string.Join(" ", differences), cancellationToken) ?? _bot;
         }
     }
 
@@ -385,7 +388,12 @@ internal sealed class LiveBotSession(
                 await OrderAsync(order, cancellationToken);
 
                 break;
-            case ForeignFillInput when !_reconcileScheduled:
+            case ForeignFillInput foreign when !_reconcileScheduled:
+                if (foreign.ExchangeOrderId is { } exchangeId && await ideaTrades.IsChildAsync(exchangeId, cancellationToken))
+                {
+                    break;
+                }
+
                 // The REST reads may lag behind the stream: the comparison waits as long as the one repeated after a difference.
                 _reconcileScheduled = true;
                 _ = LaterAsync(new ReconcileInput(), settings.PollInterval * 3, cancellationToken);

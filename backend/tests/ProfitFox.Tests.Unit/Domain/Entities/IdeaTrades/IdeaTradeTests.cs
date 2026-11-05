@@ -144,6 +144,17 @@ public class IdeaTradeTests
         trade.Status.ShouldBe(IdeaTradeStatus.AwaitingEntry);
     }
 
+    // The other leg is cancelled when one fires, and its end comes after: it took out nothing and closes nothing a second time.
+    [Test]
+    public void Leg_that_took_nothing_does_not_change_the_close_of_a_closed_trade()
+    {
+        IdeaTrade closed = Entered().ExitGrown(IdeaTradeLeg.TakeProfit, new LegTotals(0.47m, 11.4774m, 0.0063m), Now.AddMinutes(5));
+
+        IdeaTrade later = closed.ExitGrown(IdeaTradeLeg.StopLoss, LegTotals.None, Now.AddMinutes(6));
+
+        later.ShouldBe(closed);
+    }
+
     [Test]
     public void Short_trade_earns_when_it_buys_back_lower()
     {
