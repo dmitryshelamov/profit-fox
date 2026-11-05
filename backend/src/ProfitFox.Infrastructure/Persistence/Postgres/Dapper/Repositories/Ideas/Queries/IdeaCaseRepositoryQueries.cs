@@ -22,7 +22,7 @@ internal static class IdeaCaseRepositoryQueries
     private const string CountSql = """
                                     SELECT setup, type, "interval", side, category,
                                         count(*) FILTER (WHERE status = 'target')::integer, count(*) FILTER (WHERE status = 'stop')::integer,
-                                        count(*) FILTER (WHERE status = 'expired')::integer, avg(risk_reward), round(sum(result), 12)
+                                        count(*) FILTER (WHERE status = 'expired')::integer, round(avg(risk_reward), 12), round(sum(result), 12)
                                     FROM idea_cases
                                     WHERE engine_version = @version AND fired_at >= @from
                                     GROUP BY setup, type, "interval", side, category
