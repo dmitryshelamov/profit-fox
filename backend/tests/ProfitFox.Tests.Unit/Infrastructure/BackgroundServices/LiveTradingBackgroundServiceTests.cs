@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 
 using NSubstitute;
+using NSubstitute.Core;
 
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.LiveTrading;
@@ -66,7 +67,26 @@ public class LiveTradingBackgroundServiceTests
         (Guid BotId, long Epoch)[] given = [(_leased.Bot.BotId, 4L)];
         await _repository.Received(1).ReleaseAllAsync(
             _worker.Id,
-            Arg.Is<IReadOnlyCollection<(Guid BotId, long Epoch)>>(bots => bots.SequenceEqual(given)),
+            Arg.Is<IReadOnlyCollection<(Guid BotId, long Epoch)>>(bots => bots!.SequenceEqual(given)),
+            CancellationToken.None);
+    }
+
+    // The stop may come while the lane takes the next bot, and the session it ends may end before the lane looks at its sessions.
+    [Test]
+    public async Task Bot_is_given_up_when_its_session_ends_with_a_stop_that_comes_while_the_next_bot_is_taken()
+    {
+        _sender.Send(Arg.Any<RunLiveBotCommand>(), Arg.Any<CancellationToken>()).Returns(call => RunUntilStopAsync(call.Arg<CancellationToken>(), failOnStop: true));
+        using LiveTradingBackgroundService service = Service();
+        var stopping = new TaskCompletionSource<Task>();
+        _sender.Send(Arg.Any<ClaimLiveBotCommand>(), Arg.Any<CancellationToken>()).Returns(_ => Task.FromResult<LeasedBot?>(_leased), _ => StopAsTheNextBotIsTakenAsync(service, stopping));
+
+        await service.StartAsync(CancellationToken.None);
+        await await stopping.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        (Guid BotId, long Epoch)[] given = [(_leased.Bot.BotId, 4L)];
+        await _repository.Received(1).ReleaseAllAsync(
+            _worker.Id,
+            Arg.Is<IReadOnlyCollection<(Guid BotId, long Epoch)>>(bots => bots!.SequenceEqual(given)),
             CancellationToken.None);
     }
 
@@ -78,25 +98,55 @@ public class LiveTradingBackgroundServiceTests
 
         await RunAndStopAsync();
 
-        _log.ReceivedCalls().Where(call => call.GetMethodInfo().Name == nameof(ILogger.Log) && (LogLevel)call.GetArguments()[0]! == LogLevel.Error).ShouldBeEmpty();
+        Failures().ShouldBeEmpty();
     }
 
     private async Task RunAndStopAsync()
     {
+        using LiveTradingBackgroundService service = Service();
+
+        await service.StartAsync(CancellationToken.None);
+        await _running.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await service.StopAsync(CancellationToken.None);
+    }
+
+    private LiveTradingBackgroundService Service()
+    {
         // NSubstitute cannot proxy ILogger<T> of an internal type, so the logger writes to a substitute of the plain ILogger.
         ILoggerFactory loggers = Substitute.For<ILoggerFactory>();
         loggers.CreateLogger(Arg.Any<string>()).Returns(_log);
-        using var service = new LiveTradingBackgroundService(
+
+        return new LiveTradingBackgroundService(
             _services.GetRequiredService<IServiceScopeFactory>(),
             new LiveBotLeases(_repository, new TradingSettings(), new WorkerSettings(), _worker, _time),
             new WorkerSettings(),
             _worker,
             _time,
             new Logger<LiveTradingBackgroundService>(loggers));
+    }
 
-        await service.StartAsync(CancellationToken.None);
+    /// <summary>Stops the service once the session of the bot taken before runs, and answers the take when that session has ended.</summary>
+    private async Task<LeasedBot?> StopAsTheNextBotIsTakenAsync(LiveTradingBackgroundService service, TaskCompletionSource<Task> stopping)
+    {
         await _running.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await service.StopAsync(CancellationToken.None);
+        // The stop waits for the lane, which waits for this take: it is awaited by the test.
+        stopping.SetResult(service.StopAsync(CancellationToken.None));
+        using var failing = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        while (!Failures().Any())
+        {
+            await Task.Delay(1, failing.Token);
+        }
+
+        // The session ends right after it logs its failure; nothing outside it tells when.
+        await Task.Delay(100);
+
+        return null;
+    }
+
+    private IEnumerable<ICall> Failures()
+    {
+        return _log.ReceivedCalls().Where(call => call.GetMethodInfo().Name == nameof(ILogger.Log) && (LogLevel)call.GetArguments()[0]! == LogLevel.Error);
     }
 
     private async Task RunUntilStopAsync(CancellationToken stoppingToken, bool failOnStop)
