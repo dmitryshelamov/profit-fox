@@ -57,6 +57,37 @@ public class MarketOrderTests
         Symbols(MarketOrder.Sort(Growth(), MarketSortColumn.Symbol, OrderDirection.Descending)).ShouldBe(["DDD", "CCC", "BBB", "AAA"]);
     }
 
+    private static IEnumerable<TestCaseData> MetricColumns()
+    {
+        yield return Metric(MarketSortColumn.Price, (metrics, value) => metrics with { Price = value });
+        yield return Metric(MarketSortColumn.Change5m, (metrics, value) => metrics with { Change5m = value });
+        yield return Metric(MarketSortColumn.Change15m, (metrics, value) => metrics with { Change15m = value });
+        yield return Metric(MarketSortColumn.Change1h, (metrics, value) => metrics with { Change1h = value });
+        yield return Metric(MarketSortColumn.Change4h, (metrics, value) => metrics with { Change4h = value });
+        yield return Metric(MarketSortColumn.Change24h, (metrics, value) => metrics with { Change24h = value });
+        yield return Metric(MarketSortColumn.Turnover1h, (metrics, value) => metrics with { Turnover1h = value });
+        yield return Metric(MarketSortColumn.Turnover24h, (metrics, value) => metrics with { Turnover24h = value });
+        yield return Metric(MarketSortColumn.OpenInterest, (metrics, value) => metrics with { OpenInterest = value });
+        yield return Metric(MarketSortColumn.OpenInterestChange1h, (metrics, value) => metrics with { OpenInterestChange1h = value });
+        yield return Metric(MarketSortColumn.OpenInterestChange24h, (metrics, value) => metrics with { OpenInterestChange24h = value });
+        yield return Metric(MarketSortColumn.FundingRate, (metrics, value) => metrics with { FundingRate = value });
+        yield return Metric(MarketSortColumn.Spread, (metrics, value) => metrics with { Spread = value });
+    }
+
+    [TestCaseSource(nameof(MetricColumns))]
+    public void Each_metric_column_goes_by_its_own_metric(MarketSortColumn column, Func<PairMetrics, decimal, PairMetrics> set)
+    {
+        MarketSnapshotRow[] rows = [Row("LOW", set(None, 1m)), Row("HIGH", set(None, 2m)), Row("NONE")];
+
+        Symbols(MarketOrder.Sort(rows, column, OrderDirection.Descending)).ShouldBe(["HIGH", "LOW", "NONE"]);
+        Symbols(MarketOrder.Sort(rows, column, OrderDirection.Ascending)).ShouldBe(["LOW", "HIGH", "NONE"]);
+    }
+
+    private static TestCaseData Metric(MarketSortColumn column, Func<PairMetrics, decimal, PairMetrics> set)
+    {
+        return new TestCaseData(column, set).SetName($"Each metric column goes by its own metric: {column}");
+    }
+
     [Test]
     public void Symbols_are_compared_ordinally()
     {

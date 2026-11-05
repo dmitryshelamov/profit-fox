@@ -181,6 +181,16 @@ describe('saved filters on the market screen', () => {
       ).toHaveLength(0);
     });
 
+    it('shows no count until the server has answered', async () => {
+      open(undefined, {
+        'POST /api/saved-filters/fit': () => new Promise<Response>(() => undefined),
+      });
+      renderApp('/market');
+      await openNew();
+
+      expect(editor().getByText('Подходит: …')).toBeInTheDocument();
+    });
+
     it('asks once for the conditions typed, after the pause, and not for one that is not a number yet', async () => {
       const requests = open();
       renderApp('/market');

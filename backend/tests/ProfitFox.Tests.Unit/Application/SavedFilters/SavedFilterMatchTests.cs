@@ -40,6 +40,37 @@ public class SavedFilterMatchTests
         SavedFilterMatch.Pair([condition], Row(None with { Turnover24h = Number(actual) }), NoSetups).ShouldBe(expected);
     }
 
+    private static IEnumerable<TestCaseData> MetricFields()
+    {
+        yield return Field(FilterField.Change5m, (metrics, value) => metrics with { Change5m = value });
+        yield return Field(FilterField.Change15m, (metrics, value) => metrics with { Change15m = value });
+        yield return Field(FilterField.Change1h, (metrics, value) => metrics with { Change1h = value });
+        yield return Field(FilterField.Change4h, (metrics, value) => metrics with { Change4h = value });
+        yield return Field(FilterField.Change24h, (metrics, value) => metrics with { Change24h = value });
+        yield return Field(FilterField.Turnover1h, (metrics, value) => metrics with { Turnover1h = value });
+        yield return Field(FilterField.Turnover24h, (metrics, value) => metrics with { Turnover24h = value });
+        yield return Field(FilterField.OpenInterest, (metrics, value) => metrics with { OpenInterest = value });
+        yield return Field(FilterField.OpenInterestChange1h, (metrics, value) => metrics with { OpenInterestChange1h = value });
+        yield return Field(FilterField.OpenInterestChange24h, (metrics, value) => metrics with { OpenInterestChange24h = value });
+        yield return Field(FilterField.FundingRate, (metrics, value) => metrics with { FundingRate = value });
+        yield return Field(FilterField.Spread, (metrics, value) => metrics with { Spread = value });
+    }
+
+    [TestCaseSource(nameof(MetricFields))]
+    public void Each_metric_field_tests_its_own_metric(FilterField field, Func<PairMetrics, decimal, PairMetrics> set)
+    {
+        FilterCondition[] conditions = [Compare(field, FilterOperator.Greater, 5m)];
+
+        SavedFilterMatch.Pair(conditions, Row(set(None, 10m)), NoSetups).ShouldBeTrue();
+        SavedFilterMatch.Pair(conditions, Row(set(None, 1m)), NoSetups).ShouldBeFalse();
+        SavedFilterMatch.Pair(conditions, Row(set(None with { Change1h = 10m }, 1m)), NoSetups).ShouldBeFalse();
+    }
+
+    private static TestCaseData Field(FilterField field, Func<PairMetrics, decimal, PairMetrics> set)
+    {
+        return new TestCaseData(field, set).SetName($"Each metric field tests its own metric: {field}");
+    }
+
     // Scenario "Выбор фильтра на рынке": percent as the row has it and funding as a fraction.
     [Test]
     public void A_pair_must_meet_every_condition()
