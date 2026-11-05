@@ -56,13 +56,13 @@
 
 ## 5. API шаблонов
 
-- [ ] 5.1 Коды шаблонов в `StrategyCodes`, запросы `GetStrategyTemplates` и `GetStrategyTemplate` — unit-тесты
+- [x] 5.1 Коды шаблонов в `StrategyCodes`, запросы `GetStrategyTemplates` и `GetStrategyTemplate` — unit-тесты
   обработчиков, неизвестный код даёт «не найдено»
-- [ ] 5.2 `StrategyTemplatesController` с `[ProducesResponseType]` и контрактами в `Contracts/Strategies` —
+- [x] 5.2 `StrategyTemplatesController` с `[ProducesResponseType]` и контрактами в `Contracts/Strategies` —
   integration-тесты «Список шаблонов», «Сетки нет», «Чтение шаблона», «Неизвестный шаблон»
-- [ ] 5.3 Integration-тест «Сохранение каждого шаблона»: `POST /api/strategies` с определением каждого шаблона проходит,
+- [x] 5.3 Integration-тест «Сохранение каждого шаблона»: `POST /api/strategies` с определением каждого шаблона проходит,
   чтение совпадает; «Правка стратегии из шаблона» — шаблон после правки стратегии прежний
-- [ ] 5.4 `docs/conventions.md`: папка `Services/Strategies/Templates` и `StrategyTemplatesController` в разделах Domain
+- [x] 5.4 `docs/conventions.md`: папка `Services/Strategies/Templates` и `StrategyTemplatesController` в разделах Domain
   и Presentation — документ обновлён
 
 ## 6. Фронтенд

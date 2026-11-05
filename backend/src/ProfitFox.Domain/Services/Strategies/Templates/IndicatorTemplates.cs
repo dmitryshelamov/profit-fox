@@ -72,7 +72,7 @@ internal static class IndicatorTemplates
     }
 
     /// <summary>Buys when the RSI rises over the entry level, leaves when it reaches the exit level.</summary>
-    public static StrategyDefinition RsiRebound()
+    public static StrategyDefinition RsiReversion()
     {
         GraphSketch sketch = Skeleton()
             .Node("rsi", SimpleNodeKind.Rsi)
@@ -105,7 +105,7 @@ internal static class IndicatorTemplates
     }
 
     /// <summary>Buys when the close falls under the lower band, leaves when it is back at the middle band.</summary>
-    public static StrategyDefinition BollingerReturn()
+    public static StrategyDefinition BollingerReversion()
     {
         GraphSketch sketch = Skeleton()
             .Composite("bands", BuiltInNode.Bollinger)

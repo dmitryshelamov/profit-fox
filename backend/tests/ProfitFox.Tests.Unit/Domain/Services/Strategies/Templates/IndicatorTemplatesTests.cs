@@ -117,7 +117,7 @@ public class IndicatorTemplatesTests
     [Test]
     public void Rsi_rebound_buys_when_the_rsi_rises_over_the_entry_level_and_closes_when_it_reaches_the_exit_level()
     {
-        StrategyRun run = TemplateRuns.Start(StrategyTemplateKind.RsiRebound, ("rsiPeriod", 2m));
+        StrategyRun run = TemplateRuns.Start(StrategyTemplateKind.RsiReversion, ("rsiPeriod", 2m));
         decimal[] closes = [96m, 102m, 92m, 104m, 96m, 90m, 98m, 106m];
 
         for (int bar = 0; bar < 6; bar++)
@@ -134,7 +134,7 @@ public class IndicatorTemplatesTests
     [Test]
     public void Bollinger_return_buys_below_the_lower_band_and_closes_at_the_middle_band()
     {
-        StrategyRun run = TemplateRuns.Start(StrategyTemplateKind.BollingerReturn, ("period", 4m), ("width", 0.5m));
+        StrategyRun run = TemplateRuns.Start(StrategyTemplateKind.BollingerReversion, ("period", 4m), ("width", 0.5m));
 
         run.Bar(0, 100m).ShouldBeEmpty();
         run.Bar(1, 100m).ShouldBeEmpty();
