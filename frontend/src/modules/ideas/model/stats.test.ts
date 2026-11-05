@@ -1,12 +1,6 @@
 import type { Schemas } from '@/shared/api/client';
 
-import {
-  baselineBadge,
-  expectancyInUsdt,
-  expectancyText,
-  moneyOutcome,
-  probabilityView,
-} from './stats';
+import { baselineBadge, expectancyText, moneyOutcome, probabilityView } from './stats';
 
 type Bucket = Schemas['BucketStatisticsResponse'];
 
@@ -132,21 +126,5 @@ describe('moneyOutcome', () => {
 
   it.each(['', 'abc', '0', '-5'])('has no outcome for the amount "%s"', (amount) => {
     expect(moneyOutcome(shares, amount)).toBeNull();
-  });
-});
-
-describe('expectancyInUsdt', () => {
-  // Scenario "Деньги в карточке": +0.5 R × 10 USDT × 0.02.
-  it('is the expectancy in R times the amount times the risk on 1 USDT', () => {
-    expect(expectancyInUsdt(bucket({ expectancy: '0.5' }), '0.02', '10')).toBe('+0.10');
-    expect(expectancyInUsdt(bucket({ expectancy: '-0.05' }), '0.02', '10')).toBe('-0.01');
-  });
-
-  it('has no value for a bucket without a case', () => {
-    expect(expectancyInUsdt(null, '0.02', '10')).toBeNull();
-  });
-
-  it.each(['', 'abc', '0', '-5'])('has no value for the amount "%s"', (amount) => {
-    expect(expectancyInUsdt(bucket(), '0.02', amount)).toBeNull();
   });
 });

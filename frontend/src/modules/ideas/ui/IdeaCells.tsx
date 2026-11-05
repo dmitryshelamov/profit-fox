@@ -1,5 +1,3 @@
-import { setupLabel } from '@/modules/market';
-import { intervalLabel } from '@/modules/market-data';
 import type { Schemas } from '@/shared/api/client';
 import { compareDecimals } from '@/shared/format/decimal';
 import { showDecimal } from '@/shared/format/format';
@@ -90,14 +88,4 @@ const statusColour: Record<string, string> = {
 
 export function StatusText({ status }: { status: string }) {
   return <span className={statusColour[status] ?? 'text-muted'}>{statusLabel(status)}</span>;
-}
-
-/** A setup of an idea as a small badge with its interval. */
-export function SetupBadge({ setup, interval }: { setup: string; interval?: string }) {
-  return (
-    <span className="rounded bg-panel-2 px-1.5 py-0.5 text-xs whitespace-nowrap">
-      {setupLabel(setup)}
-      {interval !== undefined && <span className="ml-1 text-faint">{intervalLabel(interval)}</span>}
-    </span>
-  );
 }

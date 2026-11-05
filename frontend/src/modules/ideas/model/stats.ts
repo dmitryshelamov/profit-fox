@@ -64,20 +64,3 @@ export function moneyOutcome(idea: Shares, amount: string): MoneyOutcome | null 
     loss: `−${showDecimal(multiplyDecimals(idea.lossPerUsdt, amount), 2)}`,
   };
 }
-
-/** The expectancy of the bucket in USDT (the expectancy in R times the amount times the risk on 1 USDT), with a sign; none for no bucket or an amount that is not positive. */
-export function expectancyInUsdt(
-  bucket: Bucket | null,
-  riskPerUsdt: string,
-  amount: string,
-): string | null {
-  if (bucket === null || !isPositive(amount)) {
-    return null;
-  }
-
-  return showDecimal(
-    multiplyDecimals(multiplyDecimals(bucket.expectancy, amount), riskPerUsdt),
-    2,
-    true,
-  );
-}

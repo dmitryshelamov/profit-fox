@@ -215,6 +215,42 @@ public class ScannerSessionTests
         await Should.ThrowAsync<OperationCanceledException>(session);
     }
 
+    // Requirement "Срок хранения закрытых идей": the lane of ideas removes the old closed ideas when the session starts and then once an hour.
+    [Test]
+    public async Task Lane_of_ideas_removes_the_old_closed_ideas_at_start_and_then_hourly()
+    {
+        var removed = new List<DateTimeOffset>();
+        _ideaStore.DeleteClosedBeforeAsync(Arg.Do<DateTimeOffset>(removed.Add), Arg.Any<CancellationToken>()).Returns(0);
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session().RunAsync(cancellation.Token);
+
+        await WaitAsync(() => removed.Count == 1);
+        removed[0].ShouldBe(Start.AddDays(-7));
+        _time.Advance(TimeSpan.FromMinutes(59));
+        await WaitAsync(() => removed.Count == 2, advance: true);
+
+        (removed[1] - removed[0]).ShouldBeInRange(TimeSpan.FromHours(1), TimeSpan.FromHours(1) + TimeSpan.FromMinutes(1));
+        await cancellation.CancelAsync();
+        await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
+    // Requirement "Срок хранения закрытых идей": a failed removal is logged, tried again, and the history goes on.
+    [Test]
+    public async Task Failed_removal_of_closed_ideas_is_logged_and_the_lane_goes_on()
+    {
+        var failure = new InvalidOperationException("storage down");
+        _ideaStore.DeleteClosedBeforeAsync(Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(Task.FromException<int>(failure), Task.FromResult(0));
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session().RunAsync(cancellation.Token);
+
+        await WaitAsync(() => _ideaStore.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaRepository.DeleteClosedBeforeAsync)) == 2, advance: true);
+        await WaitAsync(() => _ideaCases.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaCaseRepository.CountAsync)), advance: true);
+
+        _journal.Received(1).Failed("ideas", failure);
+        await cancellation.CancelAsync();
+        await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
     private ScannerSession Session()
     {
         var market = new ScannerMarket();

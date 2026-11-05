@@ -83,6 +83,15 @@ public class LiveIdeasTests
         await _volatility.Received(2).GetAllAsync(Arg.Any<CancellationToken>());
     }
 
+    // Requirement "Срок хранения закрытых идей": storage keeps the closed ideas for 7 days.
+    [Test]
+    public async Task Ideas_closed_more_than_seven_days_ago_are_removed()
+    {
+        await _live.RemoveClosedAsync(CancellationToken.None);
+
+        await _ideas.Received(1).DeleteClosedBeforeAsync(Four.AddDays(-7), Arg.Any<CancellationToken>());
+    }
+
     [Test]
     public async Task Percentile_of_the_pair_makes_its_high_volatility()
     {

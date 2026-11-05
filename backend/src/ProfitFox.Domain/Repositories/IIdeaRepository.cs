@@ -19,4 +19,10 @@ public interface IIdeaRepository
     Task<IReadOnlyList<Idea>> GetRecentAsync(DateTimeOffset closedSince, Instrument? instrument, CancellationToken cancellationToken);
 
     Task<Idea?> GetAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Deletes the ideas that reached the target, the stop or expired before <paramref name="closedBefore" />; returns how many went. The
+    ///     open ideas stay however old they are.
+    /// </summary>
+    Task<int> DeleteClosedBeforeAsync(DateTimeOffset closedBefore, CancellationToken cancellationToken);
 }
