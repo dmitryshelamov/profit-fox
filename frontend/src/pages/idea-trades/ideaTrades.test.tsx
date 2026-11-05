@@ -139,6 +139,23 @@ describe('screen «Сделки»', () => {
     );
   });
 
+  it('shows the refusal of the API in the question and keeps it open', async () => {
+    fakeApi(
+      routes(() => [tradeOf({ status: 'open' })], {
+        'POST /api/idea-trades/aaaaaaaa-0000-4000-8000-000000000001/close': () =>
+          problem(409, 'Only an open trade is closed.'),
+      }),
+    );
+    renderApp('/idea-trades');
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Закрыть по рынку' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Закрыть по рынку' }));
+
+    expect(await within(dialog).findByText('Only an open trade is closed.')).toBeInTheDocument();
+  });
+
   it('keeps the trade when the owner does not confirm', async () => {
     const requests = fakeApi(routes(() => [tradeOf({ status: 'open' })]));
     renderApp('/idea-trades');
@@ -193,6 +210,29 @@ describe('settings of trading by ideas', () => {
       `{"accountId":"${exchangeAccount.id}","risk":1,"maxAmount":200,"maxOpenTrades":3,"maxTotalRisk":5,"minRiskReward":1.5}`,
     );
     expect(await screen.findByText('Настройки сохранены')).toBeInTheDocument();
+  });
+
+  it('says so when the settings cannot be saved', async () => {
+    fakeApi(
+      routes(() => [], {
+        'PUT /api/idea-trading/settings': () => problem(500, 'The database is down.'),
+      }),
+    );
+    renderApp('/idea-trades');
+    const user = userEvent.setup();
+    const panel = await screen.findByRole('region', { name: 'Настройки' });
+    await within(panel).findByLabelText('Риск на сделку, USDT');
+
+    await user.click(within(panel).getByRole('button', { name: 'Сохранить' }));
+
+    expect(await within(panel).findByText('Не удалось сохранить настройки.')).toBeInTheDocument();
+  });
+
+  it('says so when the settings do not load', async () => {
+    fakeApi(routes(() => [], { 'GET /api/idea-trading/settings': () => problem(404, 'down') }));
+    renderApp('/idea-trades');
+
+    expect(await screen.findByText('Не удалось загрузить настройки.')).toBeInTheDocument();
   });
 
   // Scenario "Риск ноль": the error stands at its field.

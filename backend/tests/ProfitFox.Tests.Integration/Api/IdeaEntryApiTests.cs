@@ -4,9 +4,17 @@ using System.Text.Json;
 
 using Npgsql;
 
+using NSubstitute;
+using NSubstitute.ExceptionExtensions;
+
+using ProfitFox.Application.Exceptions;
+using ProfitFox.Application.Ports.ExchangeAccounts;
+using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
+using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.ValueObjects.Ideas;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas;
 using ProfitFox.Tests.Integration.Workers;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.Ideas;
@@ -157,6 +165,52 @@ public class IdeaEntryApiTests
         await _scenario.CreateTradeAsync(risk: 0.1m);
 
         Reasons(await EntryAsync(idea, risk: "1")).ShouldBe(["too_many_open_trades"]);
+    }
+
+    // Requirement "Когда вход отклоняется": what the key and the account allow.
+    [Test]
+    public async Task Hedge_mode_of_the_account_is_a_reason()
+    {
+        Guid idea = await SaveIdeaAsync(100m, 98m, 104m);
+        SetPrice("100");
+        _scenario.Factory.Ledger.IsHedgeModeAsync(Arg.Any<ExchangeKey>(), Arg.Any<Instrument>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        Reasons(await EntryAsync(idea, risk: "1")).ShouldBe(["hedge_mode"]);
+    }
+
+    [Test]
+    public async Task Market_the_key_does_not_trade_is_a_reason()
+    {
+        Guid idea = await SaveIdeaAsync(100m, 98m, 104m);
+        SetPrice("100");
+        _scenario.Factory.KeyInspector.InspectAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ExchangeKeyInfo(100, false, true, false, new HashSet<MarketCategory> { MarketCategory.Spot }));
+
+        Reasons(await EntryAsync(idea, risk: "1")).ShouldBe(["category_not_traded"]);
+    }
+
+    [Test]
+    public async Task Key_that_bybit_no_longer_accepts_is_the_missing_key()
+    {
+        Guid idea = await SaveIdeaAsync(100m, 98m, 104m);
+        SetPrice("100");
+        _scenario.Factory.KeyInspector.InspectAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new ExchangeKeyRejectedException("API key is invalid."));
+
+        Reasons(await EntryAsync(idea, risk: "1")).ShouldBe(["no_key"]);
+    }
+
+    [Test]
+    public async Task Free_money_below_the_amount_is_a_reason()
+    {
+        Guid idea = await SaveIdeaAsync(100m, 98m, 104m);
+        SetPrice("100");
+        _scenario.Factory.Ledger.GetFreeAsync(Arg.Any<ExchangeKey>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(10m);
+
+        JsonElement entry = await EntryAsync(idea, risk: "1");
+
+        Reasons(entry).ShouldBe(["not_enough_money"]);
+        entry.GetProperty("freeMoney").GetString().ShouldBe("10");
     }
 
     [Test]

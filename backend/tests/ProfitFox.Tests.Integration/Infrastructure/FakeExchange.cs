@@ -24,6 +24,7 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
     private readonly List<Action<ExchangeOrder>> _orderUpdates = [];
     private readonly List<Action<ExchangeFill>> _fillUpdates = [];
     private readonly List<Action> _restored = [];
+    private readonly List<Action> _accountRestored = [];
     private int _execs;
     private Action? _onHoldingRead;
 
@@ -414,6 +415,22 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
         }
     }
 
+    /// <summary>The account stream comes back after a gap, for the sessions that follow no candles, such as a trade by an idea.</summary>
+    public void RestoreAccount()
+    {
+        Action[] handlers;
+
+        lock (_lock)
+        {
+            handlers = [.. _accountRestored];
+        }
+
+        foreach (Action handler in handlers)
+        {
+            handler();
+        }
+    }
+
     public Task<decimal> GetFreeAsync(ExchangeKey key, string coin, CancellationToken cancellationToken)
     {
         return Task.FromResult(Free);
@@ -683,6 +700,7 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
         {
             _orderUpdates.Add(order);
             _fillUpdates.Add(fill);
+            _accountRestored.Add(restored);
         }
 
         return Task.FromResult<IAsyncDisposable>(new Unsubscribe(() =>
@@ -691,6 +709,7 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
             {
                 _orderUpdates.Remove(order);
                 _fillUpdates.Remove(fill);
+                _accountRestored.Remove(restored);
             }
         }));
     }

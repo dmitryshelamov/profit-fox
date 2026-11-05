@@ -208,4 +208,44 @@ describe('entry by an idea from the pair page', () => {
       ),
     ).toBe(false);
   });
+
+  it('says so when the settings do not load', async () => {
+    fakeApi(routes({ 'GET /api/idea-trading/settings': () => problem(500, 'down') }));
+    renderApp('/market/linear/SOLUSDT');
+
+    const { dialog } = await openEntry();
+
+    expect(await within(dialog).findByText('Не удалось загрузить настройки.')).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: 'Войти' })).toBeNull();
+  });
+
+  it('says so when the entry cannot be calculated, and names a risk the API refuses', async () => {
+    fakeApi(
+      routes({
+        'GET /api/ideas/idea-pullback/entry': () =>
+          problem(400, 'invalid', { errors: { risk: ['The risk must be above zero.'] } }),
+      }),
+    );
+    renderApp('/market/linear/SOLUSDT');
+
+    const { dialog } = await openEntry();
+
+    expect(await within(dialog).findByText('The risk must be above zero.')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Войти' })).toBeDisabled();
+  });
+
+  it('shows the message of an API that refuses the entry with no reason', async () => {
+    fakeApi(
+      routes({
+        'POST /api/idea-trades': () => problem(503, 'Bybit is unavailable.'),
+      }),
+    );
+    renderApp('/market/linear/SOLUSDT');
+    const { user, dialog } = await openEntry();
+    await within(dialog).findByText('168.40');
+
+    await user.click(within(dialog).getByRole('button', { name: 'Войти' }));
+
+    expect(await within(dialog).findByText('Bybit is unavailable.')).toBeInTheDocument();
+  });
 });

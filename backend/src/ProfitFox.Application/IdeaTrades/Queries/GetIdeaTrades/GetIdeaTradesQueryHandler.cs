@@ -12,6 +12,6 @@ public sealed class GetIdeaTradesQueryHandler(IIdeaTradeRepository trades, IExch
         IReadOnlyList<IdeaTrade> all = await trades.GetAllAsync(cancellationToken);
         var names = (await accounts.GetAllAsync(cancellationToken)).ToDictionary(account => account.Id, account => account.Name);
 
-        return [.. all.Select(trade => new IdeaTradeView(trade, names.GetValueOrDefault(trade.AccountId, string.Empty)))];
+        return [.. all.Select(trade => new IdeaTradeView(trade, names[trade.AccountId]))];
     }
 }
