@@ -67,7 +67,7 @@
 
 ## 6. Заглушка Bybit
 
-- [ ] 6.1 `frontend/e2e/bybit-stub.ts`:
+- [x] 6.1 `frontend/e2e/bybit-stub.ts`:
   - TP/SL на входе (`Partial` на `linear`, на лимите на `spot`);
   - дочерние ордера с `parentOrderLinkId`, их срабатывание по цене из `/control/price`;
   - IOC, reduce-only;
