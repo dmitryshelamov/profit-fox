@@ -12,7 +12,7 @@ using ProfitFox.Presentation.Contracts.Strategies;
 
 namespace ProfitFox.Presentation.Controllers;
 
-/// <summary>Named filters of «Рынок» and «Идеи» (decision 8); the browser applies them to the snapshot and the ideas it has.</summary>
+/// <summary>Named filters of «Рынок» and «Идеи» (decision 8); the API applies them when it reads the snapshot and the ideas.</summary>
 [ApiController]
 [Route("api/saved-filters")]
 public sealed class SavedFiltersController(ISender sender) : ControllerBase
