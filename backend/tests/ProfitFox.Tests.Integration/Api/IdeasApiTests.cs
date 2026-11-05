@@ -11,6 +11,7 @@ using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Services.Ideas;
+using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
@@ -300,6 +301,9 @@ public class IdeasApiTests
         (idea.GetProperty("entry").GetString(), idea.GetProperty("stop").GetString(), idea.GetProperty("target").GetString())
             .ShouldBe(("100.5", Text(stop), Text(100.5m - (2m * (stop - 100.5m)))));
         (idea.GetProperty("riskReward").GetString(), idea.GetProperty("baseline").GetString()).ShouldBe(("2", Text(1m / 3m)));
+        // Scenario "Своя идея": the R:R after the fees of linear, a market entry.
+        decimal target = 100.5m - (2m * (stop - 100.5m));
+        idea.GetProperty("netRiskReward").GetString().ShouldBe(Text(IdeaMoney.PerUsdt(new IdeaPlan(IdeaType.TwoR, IdeaSide.Short, 100.5m, stop, target), new FeeRates(0.02m, 0.055m)).NetRiskReward));
         idea.GetProperty("tick").GetString().ShouldBe("0.01");
     }
 

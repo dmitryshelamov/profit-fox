@@ -13,7 +13,7 @@
   R:R в фильтре» зелёный.
 - [x] 1.4 `IdeaResponse.NetRiskReward`: десятичная строка рядом с `RiskReward`. Готово, когда интеграционный тест
   `GET /api/ideas` видит поле у идеи из примера спеки.
-- [ ] 1.5 Своя идея: `GetOwnIdeaQueryHandler` берёт `BacktestSettings`, считает доли по комиссиям категории,
+- [x] 1.5 Своя идея: `GetOwnIdeaQueryHandler` берёт `BacktestSettings`, считает доли по комиссиям категории,
   `GetOwnIdeaResult` и `OwnIdeaResponse` получают `NetRiskReward`. Готово, когда unit-тест обработчика и интеграционный
   тест `POST .../own-idea` видят поле.
 - [ ] 1.6 Обновить комментарии контрактов и `docs/conventions.md`, где описан R:R; перегенерировать `schema.d.ts` через
