@@ -208,6 +208,27 @@ public class IdeaTradingTests
         _scenario.Exchange.ChildrenOf(entry).ShouldAllBe(child => child.State == ExchangeOrderState.Open);
     }
 
+    // Requirement "Жизнь сделки": only a trading Worker keeps a trade, as only it keeps bots.
+    [Test]
+    public async Task Only_a_trading_worker_keeps_a_trade()
+    {
+        IdeaTrade trade = await _scenario.CreateTradeAsync();
+        _scenario.StartWorker(settings: new Dictionary<string, string?> { ["Trading:Enabled"] = "false" });
+
+        for (var i = 0; i < 10; i++)
+        {
+            _scenario.Factory.Time.Advance(TimeSpan.FromSeconds(1));
+            await Task.Delay(50);
+        }
+
+        _scenario.Exchange.Sent.ShouldBeEmpty();
+
+        _scenario.StartWorker();
+
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the entry");
+        (await _scenario.TradeOrdersAsync(trade.Id)).Single().Status.ShouldBe(LiveOrderStatus.Active);
+    }
+
     /// <summary>A bot long on the linear market with the position 1; a Worker runs.</summary>
     private async Task<Guid> BotWithPositionAsync()
     {
