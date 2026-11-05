@@ -1,5 +1,7 @@
+using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades.Enums;
 using ProfitFox.Domain.Entities.LiveTrading.Enums;
+using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 
@@ -58,6 +60,27 @@ public sealed record IdeaTradeOrder(
         DateTimeOffset now)
     {
         return New(tradeId, number, IdeaTradeOrderRole.Entry, side, type, timeInForce, price, quantity, protection, false, now);
+    }
+
+    /// <summary>
+    ///     The entry of a new trade, number 1, with the stop and the target of its idea: a limit order at the price of the idea for a pullback,
+    ///     a market order for the other types on <c>linear</c>, a limit order that fills at once or not at all (IOC) at the current price on the spot.
+    /// </summary>
+    public static IdeaTradeOrder NewEntryOf(IdeaTrade trade, DateTimeOffset now)
+    {
+        bool pullback = trade.Type == IdeaType.Pullback;
+        bool market = !pullback && trade.Instrument.Category == MarketCategory.Linear;
+
+        return NewEntry(
+            trade.Id,
+            1,
+            trade.Side == IdeaSide.Long ? OrderSide.Buy : OrderSide.Sell,
+            market ? OrderType.Market : OrderType.Limit,
+            !pullback && !market ? TimeInForce.ImmediateOrCancel : TimeInForce.GoodTilCancelled,
+            market ? null : trade.EntryPrice,
+            trade.Quantity,
+            new Protection(trade.Target, trade.Stop),
+            now);
     }
 
     public static IdeaTradeOrder NewClose(Guid tradeId, int number, OrderSide side, decimal quantity, DateTimeOffset now)

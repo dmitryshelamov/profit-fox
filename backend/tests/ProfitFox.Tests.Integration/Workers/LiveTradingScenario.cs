@@ -17,9 +17,11 @@ using ProfitFox.Domain.Entities.LiveTrading;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.LiveTrading;
 using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas;
 using ProfitFox.Tests.Integration.Infrastructure;
 using ProfitFox.Tests.Shared.Fixtures.Strategies;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.Ideas;
@@ -256,6 +258,31 @@ public sealed class LiveTradingScenario : IAsyncDisposable
         await InTradesAsync((repository, cancellationToken) => repository.CreateAsync(trade, entry, now, cancellationToken));
 
         return trade;
+    }
+
+    /// <summary>An idea of the scanner on the instrument, long unless told otherwise, that fired a few minutes ago, with the levels given.</summary>
+    public async Task<Guid> SaveIdeaAsync(
+        decimal entry,
+        decimal stop,
+        decimal target,
+        IdeaType type = IdeaType.TwoR,
+        IdeaStatus status = IdeaStatus.AwaitingEntry,
+        Instrument? instrument = null,
+        IdeaSide side = IdeaSide.Long)
+    {
+        Idea idea = IdeaGenerator.Generate(Factory.Time.GetUtcNow().AddMinutes(-5), status: status, instrument: instrument ?? Linear, type: type, side: side);
+        idea = idea with { Track = idea.Track with { Plan = new IdeaPlan(type, side, entry, stop, target) } };
+        await using var database = Npgsql.NpgsqlDataSource.Create(Factory.ConnectionString);
+        await new IdeaRepository(database).SaveAsync([idea], [], CancellationToken.None);
+
+        return idea.Id;
+    }
+
+    /// <summary>The last price of the ticker of the pair on Bybit.</summary>
+    public void SetPrice(string price, Instrument? instrument = null)
+    {
+        Instrument pair = instrument ?? Linear;
+        Factory.Bybit.Tickers[(pair.Category == MarketCategory.Spot ? "spot" : "linear", pair.Symbol)] = (price, price, price, "1", "0.0001");
     }
 
     public async Task<IdeaTrade> TradeAsync(Guid trade)
