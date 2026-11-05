@@ -27,6 +27,7 @@ export class ApiError extends Error {
     readonly usages: readonly Usage[] = [],
     readonly bots: readonly AffectedBot[] = [],
     readonly botNames: readonly string[] = [],
+    readonly reasons: readonly string[] = [],
   ) {
     super(message);
     this.name = 'ApiError';
@@ -40,6 +41,7 @@ interface Problem {
   readonly usages?: Usage[];
   readonly bots?: AffectedBot[];
   readonly botNames?: string[];
+  readonly reasons?: string[];
 }
 
 /** Returns the data of a successful answer or throws {@link ApiError}. */
@@ -57,5 +59,6 @@ export function unwrap<T>(result: { data?: T; error?: unknown; response: Respons
     problem.usages,
     problem.bots,
     problem.botNames,
+    problem.reasons,
   );
 }

@@ -48,4 +48,20 @@ describe('unwrap', () => {
       }),
     ).toThrow('Bad Gateway');
   });
+
+  // A refused entry by an idea names what stops it by codes.
+  it('keeps the reasons of a refused request', () => {
+    const thrown = (() => {
+      try {
+        unwrap({
+          error: { status: 409, detail: 'The entry is refused.', reasons: ['price_beyond_target'] },
+          response: response(409),
+        });
+      } catch (caught) {
+        return caught;
+      }
+    })();
+
+    expect(thrown).toMatchObject({ status: 409, reasons: ['price_beyond_target'] });
+  });
 });
