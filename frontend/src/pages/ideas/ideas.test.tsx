@@ -91,7 +91,9 @@ describe('ideas screen', () => {
     expect(within(row).getByText('Откат')).toBeInTheDocument();
     expect(within(row).getByText('Лонг')).toHaveClass('text-ok');
     expect(within(row).getByText('2.40')).toBeInTheDocument();
-    expect(within(row).getByText('2.00')).toBeInTheDocument();
+    // Scenario "Близкий стоп": the R:R after the fees in the chip, the price ratio under it.
+    expect(within(row).getByText('1.84')).toHaveClass('text-ok');
+    expect(within(row).getByText('без ком. 2.00')).toBeInTheDocument();
     expect(within(row).getByText('+0.38 R')).toBeInTheDocument();
     expect(within(row).getByText('+0.39')).toBeInTheDocument();
     expect(within(row).getByText('−0.21')).toBeInTheDocument();

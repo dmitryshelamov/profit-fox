@@ -11,6 +11,7 @@ import {
   ExpectancyCell,
   type Idea,
   ProbabilityCell,
+  RiskRewardCell,
   SetupBadge,
   SideText,
   StatusText,
@@ -50,6 +51,7 @@ function IdeaItem({
           <span>Вход {priceByTick(idea.entry, idea.tick)}</span>
           <span>Стоп {priceByTick(idea.stop, idea.tick)}</span>
           <span>Цель {priceByTick(idea.target, idea.tick)}</span>
+          <RiskRewardCell netRiskReward={idea.netRiskReward} riskReward={idea.riskReward} />
         </span>
         {outcome !== null && (
           <span className="flex flex-wrap gap-x-3 font-mono text-xs text-muted">

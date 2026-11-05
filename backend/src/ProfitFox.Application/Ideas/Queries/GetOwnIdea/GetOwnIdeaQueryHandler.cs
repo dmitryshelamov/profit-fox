@@ -1,5 +1,6 @@
 using MediatR;
 
+using ProfitFox.Application.Backtests;
 using ProfitFox.Application.Market;
 using ProfitFox.Application.MarketData;
 using ProfitFox.Application.Scanner.Ideas;
@@ -16,7 +17,8 @@ public sealed class GetOwnIdeaQueryHandler(
     IMarketSnapshotRepository snapshots,
     IScannerPairRepository pairs,
     ICandleRepository candles,
-    IdeasSettings settings) : IRequestHandler<GetOwnIdeaQuery, GetOwnIdeaResult>
+    IdeasSettings settings,
+    BacktestSettings backtests) : IRequestHandler<GetOwnIdeaQuery, GetOwnIdeaResult>
 {
     public async Task<GetOwnIdeaResult> Handle(GetOwnIdeaQuery request, CancellationToken cancellationToken)
     {
@@ -68,6 +70,8 @@ public sealed class GetOwnIdeaQueryHandler(
 
         var context = new IdeaContext(category, levels.Price, levels.WindowLow, levels.WindowHigh, atr, levels.Zones, levels.Spread, settings.StopBuffer, tick);
 
-        return new GetOwnIdeaResult(IdeaRules.Plan(type, side, context), false, errors, tick);
+        IdeaPlan? plan = IdeaRules.Plan(type, side, context);
+
+        return new GetOwnIdeaResult(plan, false, errors, tick, plan is null ? null : IdeaMoney.PerUsdt(plan, backtests.Policy().DefaultFees[category]).NetRiskReward);
     }
 }

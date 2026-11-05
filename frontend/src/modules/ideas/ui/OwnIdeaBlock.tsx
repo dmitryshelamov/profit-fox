@@ -1,12 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 
 import { setupIntervals } from '@/modules/market';
 import { shiftDecimal } from '@/shared/format/decimal';
-import { roundDecimal, showDecimal } from '@/shared/format/format';
+import { roundDecimal } from '@/shared/format/format';
 
 import { type OwnIdeaInput, ownIdeaQuery } from '../api';
 import { ideaTypes, sideLabel } from '../model/labels';
 import { priceByTick } from '../model/price';
+import { RiskRewardCell } from './IdeaCells';
 
 const field = 'h-8 rounded-md border border-line bg-panel-2 px-2 text-sm';
 
@@ -98,7 +100,15 @@ export function OwnIdeaBlock({
           <Level label="Вход" value={priceByTick(result.entry!, result.tick)} />
           <Level label="Стоп" value={priceByTick(result.stop!, result.tick)} />
           <Level label="Цель" value={priceByTick(result.target!, result.tick)} />
-          <Level label="R:R" value={showDecimal(result.riskReward!, 2)} />
+          <Level
+            label="R:R"
+            value={
+              <RiskRewardCell
+                netRiskReward={result.netRiskReward!}
+                riskReward={result.riskReward!}
+              />
+            }
+          />
           <Level
             label="Базовая линия"
             value={`${roundDecimal(shiftDecimal(result.baseline!, 2), 0)} %`}
@@ -110,7 +120,7 @@ export function OwnIdeaBlock({
   );
 }
 
-function Level({ label, value }: { label: string; value: string }) {
+function Level({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div>
       <dt className="text-[11px] text-muted">{label}</dt>
