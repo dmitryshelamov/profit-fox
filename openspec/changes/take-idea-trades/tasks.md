@@ -36,7 +36,7 @@
 - [x] 3.1 `OrderRequest` с `Protection`, `TimeInForce`, `ReduceOnly`. `BybitOrderGateway` передаёт TP/SL в режиме Partial
   на `linear` и на лимите на `spot`. Готово, когда тест `FakeBybitHandler` видит нужные поля, а запросы ботов не
   изменились.
-- [ ] 3.2 `BybitStreams` передаёт `ParentClientId` и вид стоп-ордера. Готово, когда тест потока на
+- [x] 3.2 `BybitStreams` передаёт `ParentClientId` и вид стоп-ордера. Готово, когда тест потока на
   `FakeBybitSocketServer` видит их у дочернего ордера.
 - [ ] 3.3 Чтение текущей цены пары из тикера Bybit для API. Готово, когда тест на `FakeBybitHandler` читает цену.
 

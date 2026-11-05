@@ -90,8 +90,44 @@ public class BybitStreamsTests
         orders.TryTake(out ExchangeOrder? order, TimeSpan.FromSeconds(10)).ShouldBeTrue();
         order.ShouldBe(new ExchangeOrder("c-1", "x-c-1", ExchangeOrderState.Open, 0.4m, null, 40m, 0.02m, "USDT"));
         fills.TryTake(out ExchangeFill? fill, TimeSpan.FromSeconds(10)).ShouldBeTrue();
-        fill.ShouldBe(new ExchangeFill("e-1", "c-1", 0.4m, 100m, 0.02m, "USDT", Open, Linear));
+        fill.ShouldBe(new ExchangeFill("e-1", "c-1", 0.4m, 100m, 0.02m, "USDT", Open, Linear, "x-c-1"));
         _server.Authentications.ShouldBe(1);
+    }
+
+    // Scenario "Свои TP и SL": the stop Bybit made for an entry has no client id; it names its parent, and its execution names its order.
+    [Test]
+    public async Task Stop_made_by_the_exchange_names_its_parent_and_its_executions_name_the_order()
+    {
+        var orders = new BlockingCollection<ExchangeOrder>();
+        var fills = new BlockingCollection<ExchangeFill>();
+        await using IAsyncDisposable subscription = await _streams.SubscribeAccountAsync(
+            new ExchangeKey("key", "secret"), orders.Add, fills.Add, () => { }, CancellationToken.None);
+        await _server.WaitForTopicAsync("order");
+        await _server.WaitForTopicAsync("execution");
+
+        await _server.PushAsync("order", [FakeBybitSocketServer.Order("linear", "", "Filled", 0.47m, exchangeId: "x-stop", parentClientId: "c-1", stopOrderType: "PartialStopLoss")]);
+        await _server.PushAsync("execution", [FakeBybitSocketServer.Execution("linear", "", "e-9", 0.47m, 99m, 0.02m, "USDT", Open, exchangeId: "x-stop")]);
+
+        orders.TryTake(out ExchangeOrder? order, TimeSpan.FromSeconds(10)).ShouldBeTrue();
+        order!.ClientId.ShouldBe("");
+        order.ParentClientId.ShouldBe("c-1");
+        order.StopKind.ShouldBe(StopOrderKind.StopLoss);
+        fills.TryTake(out ExchangeFill? fill, TimeSpan.FromSeconds(10)).ShouldBeTrue();
+        fill!.ExchangeOrderId.ShouldBe("x-stop");
+    }
+
+    [Test]
+    public async Task Order_with_no_parent_is_no_stop()
+    {
+        var orders = new BlockingCollection<ExchangeOrder>();
+        await using IAsyncDisposable subscription = await _streams.SubscribeAccountAsync(
+            new ExchangeKey("key", "secret"), orders.Add, _ => { }, () => { }, CancellationToken.None);
+        await _server.WaitForTopicAsync("order");
+
+        await _server.PushAsync("order", [FakeBybitSocketServer.Order("linear", "c-1", "New", 0m)]);
+
+        orders.TryTake(out ExchangeOrder? order, TimeSpan.FromSeconds(10)).ShouldBeTrue();
+        (order!.ParentClientId, order.StopKind).ShouldBe((null, StopOrderKind.None));
     }
 
     // Scenario "Сверка после чужого исполнения": a fill carries the instrument it was made on; a market the system does not trade has none.

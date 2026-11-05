@@ -144,7 +144,9 @@ internal sealed class BybitLedger(HttpClient http, ILoggerFactory loggers, Bybit
             state == ExchangeOrderState.Rejected ? order.RejectReason : null,
             order.ValueFilled ?? 0m,
             order.ExecutedFee ?? 0m,
-            order.FeeAsset ?? "");
+            order.FeeAsset ?? "",
+            string.IsNullOrEmpty(order.ParentOrderId) ? null : order.ParentOrderId,
+            order.StopOrderType.ToStopKind());
     }
 
     private static DateTimeOffset Utc(DateTime time)

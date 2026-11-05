@@ -155,14 +155,17 @@ public sealed class FakeBybitSocketServer : IAsyncDisposable
         };
     }
 
-    public static JsonObject Order(string category, string clientId, string status, decimal filled)
+    /// <summary>An order update; the stop or the target Bybit made for an entry has no client id of its own, a parent and a stop order type.</summary>
+    public static JsonObject Order(string category, string clientId, string status, decimal filled, string? exchangeId = null, string? parentClientId = null, string? stopOrderType = null)
     {
         return new JsonObject
         {
             ["category"] = category,
             ["symbol"] = "BTCUSDT",
-            ["orderId"] = $"x-{clientId}",
+            ["orderId"] = exchangeId ?? $"x-{clientId}",
             ["orderLinkId"] = clientId,
+            ["parentOrderLinkId"] = parentClientId ?? "",
+            ["stopOrderType"] = stopOrderType ?? "UNKNOWN",
             ["side"] = "Buy",
             ["orderType"] = "Limit",
             ["price"] = "100",
@@ -180,13 +183,13 @@ public sealed class FakeBybitSocketServer : IAsyncDisposable
         };
     }
 
-    public static JsonObject Execution(string category, string clientId, string execId, decimal quantity, decimal price, decimal fee, string feeCoin, DateTimeOffset at)
+    public static JsonObject Execution(string category, string clientId, string execId, decimal quantity, decimal price, decimal fee, string feeCoin, DateTimeOffset at, string? exchangeId = null)
     {
         return new JsonObject
         {
             ["category"] = category,
             ["symbol"] = "BTCUSDT",
-            ["orderId"] = $"x-{clientId}",
+            ["orderId"] = exchangeId ?? $"x-{clientId}",
             ["orderLinkId"] = clientId,
             ["side"] = "Buy",
             ["orderType"] = "Limit",
