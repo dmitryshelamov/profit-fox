@@ -21,7 +21,7 @@ public class RunNextCandleImportTests
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2024-03-10T12:30:00Z");
 
-    private FakeTimeProvider _time = null!;
+    private WaitingClock _time = null!;
     private IMarketHistoryClient _marketHistory = null!;
     private ICandleImportJobRepository _jobs = null!;
     private ICandleRepository _candles = null!;
@@ -31,7 +31,7 @@ public class RunNextCandleImportTests
     [SetUp]
     public void SetUp()
     {
-        _time = new FakeTimeProvider(Now);
+        _time = new WaitingClock(Now);
         _marketHistory = Substitute.For<IMarketHistoryClient>();
         _jobs = Substitute.For<ICandleImportJobRepository>();
         _candles = Substitute.For<ICandleRepository>();
@@ -474,15 +474,25 @@ public class RunNextCandleImportTests
         _jobs.ClaimNextAsync(_worker.Id, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(job, (CandleImportJob?)null);
     }
 
-    /// <summary>Runs the next job, moving fake time forward while it waits between attempts.</summary>
+    /// <summary>
+    ///     Runs the next job. The clock moves only while the job waits on a pause and its lease keeper on the next renewal, and then
+    ///     straight to the earlier of the two: a slow runner cannot move it while the job is still working.
+    /// </summary>
     private async Task<bool> RunAsync()
     {
+        const int idleTimers = 2;
         Task<bool> run = _handler.Handle(new RunNextCandleImportCommand(), CancellationToken.None);
 
         while (!run.IsCompleted)
         {
-            await Task.Delay(5);
-            _time.Advance(TimeSpan.FromSeconds(1));
+            if (_time.PendingTimers == idleTimers)
+            {
+                _time.AdvanceToNextTimer();
+            }
+            else
+            {
+                await Task.Delay(1);
+            }
         }
 
         return await run;
@@ -567,5 +577,95 @@ public class RunNextCandleImportTests
     private static string Format(DateTimeOffset time)
     {
         return time.ToString("yyyy-MM-ddTHH:mm:ssZ");
+    }
+
+    /// <summary>A fake clock that knows its timers which have neither fired nor been disposed, i.e. the delays someone still waits on.</summary>
+    private sealed class WaitingClock(DateTimeOffset start) : TimeProvider
+    {
+        private readonly FakeTimeProvider _fake = new FakeTimeProvider(start);
+        private readonly List<PendingTimer> _pending = [];
+
+        public int PendingTimers
+        {
+            get
+            {
+                lock (_pending)
+                {
+                    return _pending.Count;
+                }
+            }
+        }
+
+        public override DateTimeOffset GetUtcNow()
+        {
+            return _fake.GetUtcNow();
+        }
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            var timer = new PendingTimer(this, _fake.GetUtcNow() + dueTime);
+
+            lock (_pending)
+            {
+                _pending.Add(timer);
+            }
+
+            timer.Inner = _fake.CreateTimer(
+                s =>
+                {
+                    Forget(timer);
+                    callback(s);
+                },
+                state,
+                dueTime,
+                period);
+
+            return timer;
+        }
+
+        public void AdvanceToNextTimer()
+        {
+            DateTimeOffset due;
+
+            lock (_pending)
+            {
+                due = _pending.Min(timer => timer.Due);
+            }
+
+            _fake.Advance(due - _fake.GetUtcNow());
+        }
+
+        private void Forget(PendingTimer timer)
+        {
+            lock (_pending)
+            {
+                _pending.Remove(timer);
+            }
+        }
+
+        private sealed class PendingTimer(WaitingClock clock, DateTimeOffset due) : ITimer
+        {
+            public DateTimeOffset Due { get; } = due;
+
+            public ITimer Inner { get; set; } = null!;
+
+            public bool Change(TimeSpan dueTime, TimeSpan period)
+            {
+                throw new NotSupportedException();
+            }
+
+            public void Dispose()
+            {
+                clock.Forget(this);
+                Inner.Dispose();
+            }
+
+            public ValueTask DisposeAsync()
+            {
+                Dispose();
+
+                return ValueTask.CompletedTask;
+            }
+        }
     }
 }
