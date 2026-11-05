@@ -144,6 +144,52 @@ public class IndicatorTemplatesTests
         run.Bar(4, 96m).ShouldBe([ExitAll("o-2", 1m)]);
     }
 
+    // The stop of the indicator templates: the close at or below the last entry less stopLoss, before the signal of the indicator.
+    [Test]
+    public void Macd_trend_closes_on_the_stop_before_the_cross_down()
+    {
+        StrategyRun run = MacdTrend();
+        decimal[] closes = [122m, 126m, 98m, 126m, 94m, 126m];
+
+        for (int bar = 0; bar < 5; bar++)
+        {
+            run.Bar(bar, closes[bar]).ShouldBeEmpty();
+        }
+
+        run.Bar(5, closes[5]).ShouldBe([Buy("o-1")]);
+        run.Fill(5, "o-1", 1m, 126m);
+        run.Bar(6, 118m).ShouldBe([ExitAll("o-2", 1m)]);
+    }
+
+    [Test]
+    public void Rsi_reversion_closes_on_the_stop_before_the_exit_level()
+    {
+        StrategyRun run = TemplateRuns.Start(StrategyTemplateKind.RsiReversion, ("rsiPeriod", 2m));
+        decimal[] closes = [96m, 102m, 92m, 104m, 96m, 90m, 98m];
+
+        for (int bar = 0; bar < 6; bar++)
+        {
+            run.Bar(bar, closes[bar]);
+        }
+
+        run.Bar(6, closes[6]).ShouldBe([Buy("o-1")]);
+        run.Fill(6, "o-1", 1m, 98m);
+        run.Bar(7, 93m).ShouldBe([ExitAll("o-2", 1m)]);
+    }
+
+    [Test]
+    public void Bollinger_reversion_closes_on_the_stop_before_the_middle_band()
+    {
+        StrategyRun run = TemplateRuns.Start(StrategyTemplateKind.BollingerReversion, ("period", 4m), ("width", 0.5m));
+        run.Bar(0, 100m);
+        run.Bar(1, 100m);
+        run.Bar(2, 90m);
+        run.Bar(3, 90m).ShouldBe([Buy("o-1")]);
+        run.Fill(3, "o-1", 1m, 90m);
+
+        run.Bar(4, 85.5m).ShouldBe([ExitAll("o-2", 1m)]);
+    }
+
     private static StrategyRun MacdTrend()
     {
         return TemplateRuns.Start(StrategyTemplateKind.MacdTrend, ("fast", 1m), ("slow", 3m), ("signal", 3m), ("trendPeriod", 2m));
