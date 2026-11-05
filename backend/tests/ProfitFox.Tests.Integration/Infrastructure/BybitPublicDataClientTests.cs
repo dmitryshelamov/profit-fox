@@ -5,9 +5,11 @@ using Bybit.Net.Objects.Options;
 
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 
 using NSubstitute;
 
+using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Scanner;
 using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData;
@@ -29,6 +31,7 @@ public class BybitPublicDataClientTests
     private static readonly DateTimeOffset Start = DateTimeOffset.Parse("2024-03-01T00:00:00Z", CultureInfo.InvariantCulture);
 
     private FakeBybitHandler _bybit = null!;
+    private IScannerStateRepository _state = null!;
     private ScannerRestGate _gate = null!;
     private BybitPublicDataClient _client = null!;
 
@@ -36,11 +39,12 @@ public class BybitPublicDataClientTests
     public void SetUp()
     {
         _bybit = new FakeBybitHandler();
-        IScannerStateRepository state = Substitute.For<IScannerStateRepository>();
-        state.GetAsync(Arg.Any<CancellationToken>()).Returns(new ScannerState(null, 0, 0, null));
+        _state = Substitute.For<IScannerStateRepository>();
+        _state.GetAsync(Arg.Any<CancellationToken>()).Returns(new ScannerState(null, 0, 0, null));
         IOptionsMonitor<ScannerSettings> settings = Substitute.For<IOptionsMonitor<ScannerSettings>>();
         settings.CurrentValue.Returns(new ScannerSettings { RestRequestsPerSecond = 1000 });
-        _gate = new ScannerRestGate(settings, new ExchangeResilienceExecutor(TimeProvider.System), state, TimeProvider.System);
+        var time = new FakeTimeProvider(Start);
+        _gate = new ScannerRestGate(settings, new ExchangeResilienceExecutor(time), _state, time);
         _client = new BybitPublicDataClient(
             new BybitRestClient(new HttpClient(_bybit, disposeHandler: false), NullLoggerFactory.Instance, Options.Create(new BybitRestOptions { RateLimiterEnabled = false })),
             _gate);
@@ -140,5 +144,19 @@ public class BybitPublicDataClientTests
         IReadOnlyList<ListedInstrument> listed = await _client.ListInstrumentsAsync(MarketCategory.Linear, CancellationToken.None);
 
         listed.ShouldBe([new ListedInstrument(MarketCategory.Linear, "SOLUSDT", "SOL", "USDT", Trading: true, Perpetual: true, ListedAt: new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero))]);
+    }
+
+    // Scenarios "Bybit ответил 403" and "Bybit ответил 10006": only a ban of the IP stops the requests for the whole pause.
+    [TestCase("403", 600)]
+    [TestCase("429", 30)]
+    [TestCase("10006", 30)]
+    public async Task Only_a_ban_of_the_ip_pauses_the_requests_for_the_rest_pause(string answer, int seconds)
+    {
+        _bybit.RateLimit = answer;
+
+        await Should.ThrowAsync<ExchangeRateLimitedException>(() =>
+            _client.GetMinuteCandlesAsync(new Instrument(MarketCategory.Linear, "SOLUSDT"), Start, Start.AddMinutes(1), CancellationToken.None));
+
+        await _state.Received(1).PauseRestAsync(Start.AddSeconds(seconds), Arg.Any<CancellationToken>());
     }
 }

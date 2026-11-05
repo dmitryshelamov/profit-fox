@@ -247,7 +247,7 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
         // for the rate limit (HTTP 403) only by their status.
         if (result.ResponseStatusCode is HttpStatusCode.Forbidden || result.Error!.ErrorType is ErrorType.RateLimitRequest)
         {
-            throw new TransientExchangeException(Describe(result), rateLimited: true);
+            throw new TransientExchangeException(Describe(result), rateLimited: true, ipBanned: result.ResponseStatusCode is HttpStatusCode.Forbidden);
         }
 
         if (result.ResponseStatusCode is >= HttpStatusCode.InternalServerError || result.Error.ErrorType is ErrorType.Timeout or ErrorType.NetworkError)
