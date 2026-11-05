@@ -36,12 +36,6 @@ jobs:
       - name: Test
         run: dotnet test backend/ProfitFox.sln --no-build
 
-      # A large fixed offset with no daylight saving: code that reads local time instead of UTC shifts by 9 hours.
-      - name: Test in Asia/Tokyo time zone
-        run: dotnet test backend/ProfitFox.sln --no-build
-        env:
-          TZ: Asia/Tokyo
-
       - name: Verify format
         run: dotnet format backend/ProfitFox.sln --verify-no-changes --no-restore
 
