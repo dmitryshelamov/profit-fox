@@ -6,7 +6,7 @@ namespace ProfitFox.Domain.Services.Ideas;
 
 /// <summary>
 ///     The levels of an idea by the rules of its type, long; short mirrors them. The stop buffer is k × ATR, at least three spreads. An idea
-///     without the zone it needs, with a reward under 1.5 risks or short on spot is not made.
+///     without the zone it needs, with a reward under 1.5 risks, short on spot, or a pullback whose limit the price has passed is not made.
 /// </summary>
 public static class IdeaRules
 {
@@ -36,6 +36,12 @@ public static class IdeaRules
             IdeaType.Pullback => TwoR(type, side, (context.WindowLow + context.WindowHigh) / 2, extreme - (ahead * buffer)),
             _ => null
         };
+
+        // A limit the price has already passed would fill at once, at a price the market never gave.
+        if (plan is { Type: IdeaType.Pullback } && ahead * (context.Price - plan.Entry) <= 0)
+        {
+            return null;
+        }
 
         return plan?.RiskReward >= MinimumRiskReward ? plan : null;
     }

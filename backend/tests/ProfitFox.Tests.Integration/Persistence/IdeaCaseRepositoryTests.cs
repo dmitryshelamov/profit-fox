@@ -16,7 +16,6 @@ namespace ProfitFox.Tests.Integration.Persistence;
 public class IdeaCaseRepositoryTests
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2024-03-10T12:05:00Z");
-    private static readonly SetupThresholds Thresholds = new SetupThresholds(6, 3m, 2m, 1.5m, 3m);
 
     private NpgsqlDataSource _dataSource = null!;
     private IdeaCaseRepository _cases = null!;
@@ -43,55 +42,82 @@ public class IdeaCaseRepositoryTests
 
         await _cases.AddAsync([first with { Result = 5m }, Case(Now.AddMinutes(1), IdeaStatus.Stop, -1.05m)], CancellationToken.None);
 
-        IReadOnlyList<IdeaCase> stored = await _cases.GetAsync(IdeaGenerator.Wif, 1, CancellationToken.None);
+        IReadOnlyList<IdeaCase> stored = await _cases.GetAsync(IdeaGenerator.Wif, 2, CancellationToken.None);
         stored.Select(item => (item.Idea.Track.FiredAt, item.Result)).ShouldBe([(Now, 1.94m), (Now.AddMinutes(1), -1.05m)]);
         stored[0].Idea.ShouldBe(first.Idea with { Id = Guid.Empty });
     }
 
-    // Decision 7: the cases are written with the floors of the thresholds, the buckets count the ones that pass the thresholds of now.
+    // Decision 7: the replay runs by the thresholds of the live ideas, so a bucket counts every case of the version, whatever its move and
+    // volume; a case just above the threshold counts like any other.
     [Test]
-    public async Task Buckets_count_the_cases_of_the_version_since_a_time_that_pass_the_thresholds()
+    public async Task Buckets_count_every_case_of_the_version_since_a_time()
     {
         await _cases.AddAsync(
         [
             Case(Now, IdeaStatus.Target, 2m),
             Case(Now.AddMinutes(1), IdeaStatus.Stop, -1m),
             Case(Now.AddMinutes(2), IdeaStatus.Expired, 0.5m),
-            Case(Now.AddMinutes(3), IdeaStatus.Target, 2m, move: 2.5m),
+            Case(Now.AddMinutes(3), IdeaStatus.Target, 2m, move: 3.0001m),
             Case(Now.AddMinutes(4), IdeaStatus.Target, 2m, volumeRatio: 1.8m),
             Case(Now.AddMinutes(5), IdeaStatus.Stop, -1m, setup: IdeaSetup.EarlyImpulse, move: 1.6m, volumeRatio: 3m),
             Case(Now.AddMinutes(6), IdeaStatus.Stop, -1m, setup: IdeaSetup.EarlyImpulse, move: 1.4m, volumeRatio: 3m),
             Case(Now.AddMinutes(7), IdeaStatus.Target, 2m, setup: IdeaSetup.HighVolatility, move: 0.1m, volumeRatio: 0m),
-            Case(Now.AddMinutes(8), IdeaStatus.Target, 2m, engineVersion: 2),
+            Case(Now.AddMinutes(8), IdeaStatus.Target, 2m, engineVersion: 3),
             Case(Now.AddDays(-91), IdeaStatus.Target, 2m)
         ],
             CancellationToken.None);
 
-        IReadOnlyList<IdeaBucketCounts> counts = await _cases.CountAsync(
-            1,
-            Now.AddDays(-90),
-            new Dictionary<Interval, SetupThresholds> { [Interval.FifteenMinutes] = Thresholds },
-            CancellationToken.None);
+        IReadOnlyList<IdeaBucketCounts> counts = await _cases.CountAsync(2, Now.AddDays(-90), CancellationToken.None);
 
         counts.ShouldBe(
         [
-            new IdeaBucketCounts(Key(IdeaSetup.Impulse), 1, 1, 1, 2m, 1.5m),
-            new IdeaBucketCounts(Key(IdeaSetup.EarlyImpulse), 0, 1, 0, 2m, -1m),
+            new IdeaBucketCounts(Key(IdeaSetup.Impulse), 3, 1, 1, 2m, 5.5m),
+            new IdeaBucketCounts(Key(IdeaSetup.EarlyImpulse), 0, 2, 0, 2m, -2m),
             new IdeaBucketCounts(Key(IdeaSetup.HighVolatility), 1, 0, 0, 2m, 2m)
         ],
             ignoreOrder: true);
+    }
+
+    // A guard: the mean R:R of long fractions reads as System.Decimal, so it needs no rounding, unlike the total of results.
+    [Test]
+    public async Task Mean_risk_reward_of_long_fractions_is_read()
+    {
+        IdeaCase[] cases =
+        [
+            .. new[] { 98.9m, 98.9m, 98.8m }.Select((stop, index) => Case(Now.AddMinutes(index), IdeaStatus.Target, 2m) is var item
+                ? item with { Idea = item.Idea with { Track = item.Idea.Track with { Plan = new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 100m, stop, 110m) } } }
+                : null!)
+        ];
+        await _cases.AddAsync(cases, CancellationToken.None);
+
+        IdeaBucketCounts counts = (await _cases.CountAsync(2, Now.AddDays(-90), CancellationToken.None)).Single();
+
+        // 10 / 1.1 and 10 / 1.2 have 28 digits after the point; their mean past 8 still reads as System.Decimal.
+        counts.AverageRiskReward.ShouldBe(((10m / 1.1m * 2) + (10m / 1.2m)) / 3m, 0.000000000001m);
+    }
+
+    // A result in R is often a repeating fraction of 28 digits; a total of several of them past 8 holds more digits than System.Decimal.
+    [Test]
+    public async Task Total_of_long_fractions_is_read_rounded()
+    {
+        IdeaCase[] cases = [.. Enumerable.Range(0, 3).Select(index => Case(Now.AddMinutes(index), IdeaStatus.Target, 10m / 3m))];
+        await _cases.AddAsync(cases, CancellationToken.None);
+
+        IdeaBucketCounts counts = (await _cases.CountAsync(2, Now.AddDays(-90), CancellationToken.None)).Single();
+
+        counts.TotalR.ShouldBe(10m, 0.000000000001m);
     }
 
     // Decision 6: a new version of the rules clears the cases of the old ones.
     [Test]
     public async Task Cases_of_other_versions_are_removed()
     {
-        await _cases.AddAsync([Case(Now, IdeaStatus.Target, 2m), Case(Now, IdeaStatus.Target, 2m, engineVersion: 2)], CancellationToken.None);
+        await _cases.AddAsync([Case(Now, IdeaStatus.Target, 2m), Case(Now, IdeaStatus.Target, 2m, engineVersion: 3)], CancellationToken.None);
 
-        await _cases.DeleteOtherVersionsAsync(2, CancellationToken.None);
+        await _cases.DeleteOtherVersionsAsync(3, CancellationToken.None);
 
-        (await _cases.GetAsync(IdeaGenerator.Wif, 1, CancellationToken.None)).ShouldBeEmpty();
-        (await _cases.GetAsync(IdeaGenerator.Wif, 2, CancellationToken.None)).Count.ShouldBe(1);
+        (await _cases.GetAsync(IdeaGenerator.Wif, 2, CancellationToken.None)).ShouldBeEmpty();
+        (await _cases.GetAsync(IdeaGenerator.Wif, 3, CancellationToken.None)).Count.ShouldBe(1);
     }
 
     [Test]
@@ -108,16 +134,20 @@ public class IdeaCaseRepositoryTests
         (await buckets.GetAsync(1, CancellationToken.None)).ShouldBeEmpty();
     }
 
+    // Fix after review: the cursor keeps the ideas of the replay still open at it, so the next turn goes on from them.
     [Test]
-    public async Task Cursors_of_the_replay_are_kept_per_version()
+    public async Task Cursors_of_the_replay_are_kept_per_version_with_their_open_ideas()
     {
         var replay = new IdeaReplayRepository(_dataSource);
         var sol = new Instrument(MarketCategory.Spot, "SOLUSDT");
-        await replay.SetAsync(IdeaGenerator.Wif, 1, Now, CancellationToken.None);
-        await replay.SetAsync(IdeaGenerator.Wif, 1, Now.AddDays(1), CancellationToken.None);
-        await replay.SetAsync(sol, 2, Now, CancellationToken.None);
+        Idea open = IdeaGenerator.Generate(Now, IdeaStatus.Active, statusAt: Now.AddMinutes(1));
+        await replay.SetAsync(IdeaGenerator.Wif, 1, new IdeaReplayCursor(Now, [open]), CancellationToken.None);
+        await replay.SetAsync(IdeaGenerator.Wif, 1, new IdeaReplayCursor(Now.AddDays(1), [open]), CancellationToken.None);
+        await replay.SetAsync(sol, 2, new IdeaReplayCursor(Now, []), CancellationToken.None);
 
-        (await replay.GetAsync(1, CancellationToken.None)).ShouldBe(new Dictionary<Instrument, DateTimeOffset> { [IdeaGenerator.Wif] = Now.AddDays(1) });
+        IdeaReplayCursor cursor = (await replay.GetAsync(1, CancellationToken.None)).Single().Value;
+        cursor.ReplayedUntil.ShouldBe(Now.AddDays(1));
+        cursor.Open.ShouldBe([open]);
         await replay.DeleteOtherVersionsAsync(2, CancellationToken.None);
         (await replay.GetAsync(1, CancellationToken.None)).ShouldBeEmpty();
         (await replay.GetAsync(2, CancellationToken.None)).Keys.ShouldBe([sol]);
@@ -148,7 +178,7 @@ public class IdeaCaseRepositoryTests
         IdeaSetup setup = IdeaSetup.Impulse,
         decimal move = 3.5m,
         decimal volumeRatio = 2.25m,
-        int engineVersion = 1)
+        int engineVersion = 2)
     {
         Idea idea = IdeaGenerator.Generate(firedAt, status, setup: setup, statusAt: firedAt.AddMinutes(30), engineVersion: engineVersion);
 

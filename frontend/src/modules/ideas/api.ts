@@ -47,6 +47,15 @@ export function ideasQuery(filters: IdeaFilters = noIdeaFilters) {
   });
 }
 
+/** One idea by its id, such as one of the address that left the list of its pair. */
+export function ideaQuery(id: string) {
+  return queryOptions({
+    queryKey: ['ideas', 'one', id],
+    queryFn: async () => unwrap(await api.GET('/api/ideas/{id}', { params: { path: { id } } })),
+    retry: false,
+  });
+}
+
 /** The ideas of one pair, in the order of the list. */
 export function pairIdeasQuery(category: string, symbol: string) {
   return queryOptions({

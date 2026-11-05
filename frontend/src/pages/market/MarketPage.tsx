@@ -186,9 +186,9 @@ export function MarketPage() {
           rows={data.rows}
           ideas={ideas.data ?? []}
           onClose={() => setEditing(null)}
-          onSaved={(filter) => {
+          onSaved={(id) => {
             setEditing(null);
-            setSelectedId(filter.id);
+            setSelectedId(id);
           }}
           onDeleted={(id) => {
             setEditing(null);

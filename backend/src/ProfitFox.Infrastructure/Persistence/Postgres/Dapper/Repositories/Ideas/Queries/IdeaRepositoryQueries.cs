@@ -1,3 +1,5 @@
+using System.Data;
+
 using Dapper;
 
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas.Contracts;
@@ -28,15 +30,15 @@ internal static class IdeaRepositoryQueries
                                      WHERE id = @Id
                                      """;
 
-    internal static CommandDefinition Insert(IdeaDb idea, CancellationToken cancellationToken)
+    internal static CommandDefinition Insert(IdeaDb idea, IDbTransaction transaction, CancellationToken cancellationToken)
     {
-        return new CommandDefinition(InsertSql, idea, cancellationToken: cancellationToken);
+        return new CommandDefinition(InsertSql, idea, transaction, cancellationToken: cancellationToken);
     }
 
     // Dapper runs the statement once per row.
-    internal static CommandDefinition Update(IEnumerable<IdeaDb> ideas, CancellationToken cancellationToken)
+    internal static CommandDefinition Update(IEnumerable<IdeaDb> ideas, IDbTransaction transaction, CancellationToken cancellationToken)
     {
-        return new CommandDefinition(UpdateSql, ideas, cancellationToken: cancellationToken);
+        return new CommandDefinition(UpdateSql, ideas, transaction, cancellationToken: cancellationToken);
     }
 
     internal static CommandDefinition GetOpen(CancellationToken cancellationToken)

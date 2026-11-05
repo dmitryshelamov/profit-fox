@@ -24,12 +24,18 @@ public static class IdeaTracker
         };
     }
 
+    /// <summary>Closes an open idea of a pair that is out of trading: «Истекла» where it stands, an active one at the last close known.</summary>
+    public static IdeaTrack Expire(IdeaTrack track, DateTimeOffset at, decimal? close)
+    {
+        return track with { Status = IdeaStatus.Expired, StatusAt = at, ExitPrice = track.EnteredAt is null ? null : close };
+    }
+
     private static IdeaTrack EnterAtMarket(IdeaTrack track, IdeaCandle minute)
     {
         IdeaPlan plan = track.Plan.Type == IdeaType.Levels ? track.Plan with { Entry = minute.Open } : TwoR(track.Plan, minute.Open);
 
-        // Beyond its stop an idea has no risk to measure.
-        if (Ahead(plan) * (minute.Open - plan.Stop) <= 0)
+        // Beyond its stop an idea has no risk to measure, beyond its target nothing to gain.
+        if (Ahead(plan) * (minute.Open - plan.Stop) <= 0 || Ahead(plan) * (plan.Target - minute.Open) <= 0)
         {
             return track with { Status = IdeaStatus.Expired, StatusAt = minute.OpenTime };
         }

@@ -244,6 +244,82 @@ describe('ideas on the pair page', () => {
     expect(screen.getByRole('button', { name: /Откат/ })).toHaveAttribute('aria-pressed', 'false');
   });
 
+  it('keeps the interval of the chart when the selection is removed', async () => {
+    fakeApi(routes('linear'));
+    const { history } = renderApp('/market/linear/SOLUSDT?idea=idea-pullback&interval=15');
+    await screen.findByRole('button', { name: 'Снять выбор' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Снять выбор' }));
+
+    await waitFor(() => expect(history.location.search).toBe('?interval=15'));
+  });
+
+  // An idea of the address may have left the list of the pair: it is read by its id and shown, never the own idea instead.
+  it('shows an idea of the address that is not in the list of the pair', async () => {
+    const old = ideaOf({
+      id: 'idea-old',
+      symbol: 'SOLUSDT',
+      interval: '60',
+      entry: '150',
+      stop: '140',
+      target: '170',
+    });
+    fakeApi(
+      routes('linear', {
+        'GET /api/ideas/idea-old': () => json(old),
+        'POST /api/market/linear/SOLUSDT/own-idea': () =>
+          json({
+            made: true,
+            entry: '168.42',
+            stop: '165',
+            target: '175',
+            riskReward: '1.9',
+            baseline: '0.345',
+          }),
+      }),
+    );
+    renderApp('/market/linear/SOLUSDT?idea=idea-old');
+
+    await waitFor(() => expect(linesOnChart()).toEqual(['Вход 150', 'Стоп 140', 'Цель 170']));
+    expect(screen.getByText('Идея больше не в списке пары.')).toBeInTheDocument();
+  });
+
+  it('draws nothing for an idea of the address that belongs to another pair', async () => {
+    const other = ideaOf({
+      id: 'idea-btc',
+      symbol: 'BTCUSDT',
+      interval: '60',
+      entry: '64000',
+      stop: '63000',
+      target: '66000',
+    });
+    fakeApi(routes('linear', { 'GET /api/ideas/idea-btc': () => json(other) }));
+    renderApp('/market/linear/SOLUSDT?idea=idea-btc');
+
+    expect(await screen.findByText('Идеи больше нет.')).toBeInTheDocument();
+    expect(linesOnChart()).toEqual([]);
+  });
+
+  it('draws nothing for an idea of the address that is gone', async () => {
+    fakeApi(
+      routes('linear', {
+        'POST /api/market/linear/SOLUSDT/own-idea': () =>
+          json({
+            made: true,
+            entry: '168.42',
+            stop: '165',
+            target: '175',
+            riskReward: '1.9',
+            baseline: '0.345',
+          }),
+      }),
+    );
+    renderApp('/market/linear/SOLUSDT?idea=idea-gone');
+
+    expect(await screen.findByText('Идеи больше нет.')).toBeInTheDocument();
+    expect(linesOnChart()).toEqual([]);
+  });
+
   it('keeps the idea in the address when the interval of the chart is changed', async () => {
     fakeApi(routes('linear'));
     const { history } = renderApp('/market/linear/SOLUSDT?idea=idea-pullback');

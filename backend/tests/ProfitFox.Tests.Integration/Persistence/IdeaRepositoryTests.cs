@@ -37,7 +37,7 @@ public class IdeaRepositoryTests
     {
         Idea idea = IdeaGenerator.Generate(Now, IdeaStatus.Active) with { Move = 3.123456789m };
 
-        (await _store.AddAsync([idea], CancellationToken.None)).ShouldBe([idea]);
+        (await _store.SaveAsync([idea], [], CancellationToken.None)).ShouldBe([idea]);
 
         (await _store.GetAsync(idea.Id, CancellationToken.None)).ShouldBe(idea);
         (await _store.GetOpenAsync(CancellationToken.None)).ShouldBe([idea]);
@@ -50,9 +50,9 @@ public class IdeaRepositoryTests
         Idea first = IdeaGenerator.Generate(Now);
         Idea second = IdeaGenerator.Generate(Now.AddMinutes(5), IdeaStatus.Active);
         Idea otherSide = IdeaGenerator.Generate(Now.AddMinutes(5), side: IdeaSide.Short);
-        await _store.AddAsync([first], CancellationToken.None);
+        await _store.SaveAsync([first], [], CancellationToken.None);
 
-        (await _store.AddAsync([second, otherSide], CancellationToken.None)).ShouldBe([otherSide]);
+        (await _store.SaveAsync([second, otherSide], [], CancellationToken.None)).ShouldBe([otherSide]);
 
         (await _store.GetOpenAsync(CancellationToken.None)).ShouldBe([first, otherSide], ignoreOrder: true);
     }
@@ -61,26 +61,40 @@ public class IdeaRepositoryTests
     public async Task Closed_idea_leaves_its_key_to_a_new_one()
     {
         Idea first = IdeaGenerator.Generate(Now);
-        await _store.AddAsync([first], CancellationToken.None);
+        await _store.SaveAsync([first], [], CancellationToken.None);
         Idea stopped = first with { Track = first.Track with { Status = IdeaStatus.Stop, StatusAt = Now.AddMinutes(3), EnteredAt = Now, ExitPrice = 100m } };
-        await _store.UpdateAsync([stopped], CancellationToken.None);
+        await _store.SaveAsync([], [stopped], CancellationToken.None);
         Idea next = IdeaGenerator.Generate(Now.AddMinutes(5));
 
-        (await _store.AddAsync([next], CancellationToken.None)).ShouldBe([next]);
+        (await _store.SaveAsync([next], [], CancellationToken.None)).ShouldBe([next]);
         (await _store.GetAsync(first.Id, CancellationToken.None)).ShouldBe(stopped);
+    }
+
+    // On one minute the idea of a key closes and its setup makes a new one: one write gives the key from the one to the other.
+    [Test]
+    public async Task Idea_that_closes_gives_its_key_to_a_new_one_in_the_same_write()
+    {
+        Idea first = IdeaGenerator.Generate(Now);
+        await _store.SaveAsync([first], [], CancellationToken.None);
+        Idea stopped = first with { Track = first.Track with { Status = IdeaStatus.Stop, StatusAt = Now.AddMinutes(3), EnteredAt = Now, ExitPrice = 100m } };
+        Idea next = IdeaGenerator.Generate(Now.AddMinutes(4));
+
+        (await _store.SaveAsync([next], [stopped], CancellationToken.None)).ShouldBe([next]);
+
+        (await _store.GetOpenAsync(CancellationToken.None)).ShouldBe([next]);
     }
 
     [Test]
     public async Task Update_writes_the_entry_and_the_levels()
     {
         Idea idea = IdeaGenerator.Generate(Now);
-        await _store.AddAsync([idea], CancellationToken.None);
+        await _store.SaveAsync([idea], [], CancellationToken.None);
         Idea active = idea with
         {
             Track = idea.Track with { Plan = idea.Track.Plan with { Entry = 106m, Target = 118m }, Status = IdeaStatus.Active, StatusAt = Now.AddMinutes(1), EnteredAt = Now.AddMinutes(1) }
         };
 
-        await _store.UpdateAsync([active], CancellationToken.None);
+        await _store.SaveAsync([], [active], CancellationToken.None);
 
         (await _store.GetAsync(idea.Id, CancellationToken.None)).ShouldBe(active);
     }
@@ -94,7 +108,7 @@ public class IdeaRepositoryTests
         Idea closedLately = IdeaGenerator.Generate(Now.AddHours(-30), IdeaStatus.Target, setup: IdeaSetup.Drop, statusAt: Now.AddHours(-2));
         Idea closedLongAgo = IdeaGenerator.Generate(Now.AddHours(-50), IdeaStatus.Stop, setup: IdeaSetup.EarlyDrop, statusAt: Now.AddHours(-26));
         Idea ofSol = IdeaGenerator.Generate(Now, instrument: sol);
-        await _store.AddAsync([open, closedLately, closedLongAgo, ofSol], CancellationToken.None);
+        await _store.SaveAsync([open, closedLately, closedLongAgo, ofSol], [], CancellationToken.None);
 
         (await _store.GetRecentAsync(Now.AddDays(-1), null, CancellationToken.None)).ShouldBe([open, ofSol, closedLately], ignoreOrder: true);
         (await _store.GetRecentAsync(Now.AddDays(-1), sol, CancellationToken.None)).ShouldBe([ofSol]);

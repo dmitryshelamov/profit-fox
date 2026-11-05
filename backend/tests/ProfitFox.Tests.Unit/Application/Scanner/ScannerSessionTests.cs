@@ -70,7 +70,7 @@ public class ScannerSessionTests
         _ideaStore = Substitute.For<IIdeaRepository>();
         _ideaCases = Substitute.For<IIdeaCaseRepository>();
         _cursors = Substitute.For<IIdeaReplayRepository>();
-        _cursors.GetAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new Dictionary<Instrument, DateTimeOffset>());
+        _cursors.GetAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new Dictionary<Instrument, IdeaReplayCursor>());
         _time = new FakeTimeProvider(Start);
         _closed = null!;
         _stored = [];

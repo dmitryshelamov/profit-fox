@@ -80,6 +80,8 @@ public class SavedFiltersApiTests
     [TestCase("Ф", "market", "price", "above_baseline", null, null, "conditions[0].operator")]
     [TestCase("Ф", "market", "aboveBaseline", ">", "1", null, "conditions[0].operator")]
     [TestCase("Ф", "market", "price", ">", "много", null, "conditions[0].value")]
+    [TestCase("Ф", "market", "change1h", ">", "3,5", null, "conditions[0].value")]
+    [TestCase("Ф", "market", "turnover24h", ">", "1,000", null, "conditions[0].value")]
     [TestCase("Ф", "market", "price", "between", "1", null, "conditions[0].to")]
     public async Task Invalid_filter_names_what_is_wrong(string name, string place, string field, string op, string? value, string? to, string key)
     {

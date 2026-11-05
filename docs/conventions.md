@@ -175,8 +175,9 @@ enforces a rule, the check is the source of truth.
 - `Repositories/Market` holds `scanner_state` (one row: the lease of the stream, the snapshot time, the progress of history,
   the end of the REST pause), `scanner_pairs`, `open_interest` (a hypertable), `funding_rates` and `market_snapshot`, which the
   holder replaces in one transaction that locks the row of the state with its lease.
-- `Repositories/Ideas` holds `ideas` (one open idea per key kept by a partial unique index), `idea_cases` (a hypertable, written once per
-  key, fired time and version), `idea_buckets`, `idea_replay` (the cursor of a pair per version) and `idea_volatility`;
+- `Repositories/Ideas` holds `ideas` (one open idea per key kept by a partial unique index; the ideas made and moved on a minute are
+  written in one transaction), `idea_cases` (a hypertable, written once per key, fired time and version), `idea_buckets`, `idea_replay`
+  (the cursor of a pair per version with the ideas of the replay open at it) and `idea_volatility`;
   `Repositories/SavedFilters` holds `saved_filters`. `market_snapshot.setups` (`jsonb`, interval code → setup codes) is written after the
   snapshot under the same lease. `CandleRepository.GetAggregatedAsync` joins stored minutes into candles of an interval with `time_bucket`.
 - `Persistence/Postgres/Transactions` implements the unit of work: `PostgresTransactionExecutor` opens the connection
@@ -282,15 +283,14 @@ enforces a rule, the check is the source of truth.
   ```
 
 - The `Ideas` section of the scanner (`IdeasSettings`), which the API reads too for its own idea and the zones: the thresholds of the
-  setups, common to all pairs, with values of an interval's own by interval code; the floors the replay writes its cases with; k of the stop
-  buffer and the rules of the zones. The defaults are the starting values of decision 7, provisional until tuned by history. The scanner's
+  setups, common to all pairs, with values of an interval's own by interval code, by which the live ideas and the replay both run; k of the
+  stop buffer and the rules of the zones. The defaults are the starting values of decision 7, provisional until tuned by history. The scanner's
   `appsettings.json` also carries `Backtests:DefaultFees`, the fee rates its cases are counted with.
 
   ```json
   "Ideas": {
     "Thresholds": { "Candles": 6, "Move": 3.0, "Volume": 2.0, "EarlyMove": 1.5, "EarlyVolume": 3.0 },
     "ByInterval": { "240": { "Move": 2.5 } },
-    "Floors": { "Move": 2.0, "Volume": 1.5, "EarlyMove": 1.0, "EarlyVolume": 2.0 },
     "StopBuffer": 1.5,
     "ZoneMerge": 0.5,
     "ZoneStrength": 2

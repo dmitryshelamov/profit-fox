@@ -5,6 +5,7 @@ import { type ReactNode, useState } from 'react';
 
 import {
   type Idea,
+  ideaQuery,
   levelsOf,
   OwnIdeaBlock,
   type OwnIdeaInput,
@@ -245,8 +246,17 @@ function IdeasHub({
   const navigate = useNavigate();
   const ideas = useQuery(pairIdeasQuery(category, symbol));
   const own = useOwnIdea(category, symbol, ownInput).data;
-  const selected: Idea | undefined = ideas.data?.find((item) => item.id === selectedId);
-  const ownLevels = !selected && own?.made ? own : null;
+  const listed: Idea | undefined = ideas.data?.find((item) => item.id === selectedId);
+  // An idea of the address that left the list of the pair is read by its id.
+  const outOfList = selectedId !== undefined && ideas.data !== undefined && listed === undefined;
+  const loose = useQuery({ ...ideaQuery(selectedId ?? ''), enabled: outOfList });
+  // An idea of another pair is no idea of this one.
+  const looseOfPair =
+    loose.data?.category === category && loose.data.symbol === symbol ? loose.data : undefined;
+  const gone =
+    outOfList && (loose.isError || (loose.data !== undefined && looseOfPair === undefined));
+  const selected: Idea | undefined = listed ?? (outOfList ? looseOfPair : undefined);
+  const ownLevels = selectedId === undefined && own?.made ? own : null;
   const shown = shownPairInterval(
     interval ?? selected?.interval ?? (ownLevels ? ownInput.interval : undefined),
   );
@@ -264,7 +274,7 @@ function IdeasHub({
     void navigate({
       to: '/market/$category/$symbol',
       params: { category, symbol },
-      search: idea === undefined ? {} : { idea },
+      search: idea === undefined ? (interval === undefined ? {} : { interval }) : { idea },
     });
 
   return (
@@ -288,6 +298,10 @@ function IdeasHub({
           </div>
           {ideas.isError && <p role="alert">Не удалось загрузить идеи пары.</p>}
           {ideas.isPending && <p className="text-sm text-muted">Загрузка идей…</p>}
+          {outOfList && looseOfPair && (
+            <p className="text-sm text-muted">Идея больше не в списке пары.</p>
+          )}
+          {gone && <p className="text-sm text-muted">Идеи больше нет.</p>}
           {ideas.data && (
             <PairIdeasList
               ideas={ideas.data}

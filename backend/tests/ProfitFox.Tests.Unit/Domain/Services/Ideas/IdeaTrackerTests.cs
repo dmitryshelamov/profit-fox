@@ -87,6 +87,17 @@ public class IdeaTrackerTests
         (track.Status, track.StatusAt, track.EnteredAt).ShouldBe((IdeaStatus.Expired, Fired, (DateTimeOffset?)null));
     }
 
+    // Decision 10: «Уровни» whose next open is already at or beyond the target has nothing to gain; it expires without an entry.
+    [Test]
+    public void Levels_idea_that_opens_beyond_its_target_expires_without_an_entry()
+    {
+        var levels = new IdeaPlan(IdeaType.Levels, IdeaSide.Long, 105m, 100m, 115m);
+
+        IdeaTrack track = Run(levels, Minute(0, 116m, 117m, 115.5m, 116m));
+
+        (track.Status, track.StatusAt, track.EnteredAt).ShouldBe((IdeaStatus.Expired, Fired, (DateTimeOffset?)null));
+    }
+
     // A buy limit fills when a minute's low touches it; that minute may still reach the stop, while its target only counts from the next.
     [Test]
     public void Pullback_enters_when_a_minute_touches_its_entry()
@@ -119,6 +130,17 @@ public class IdeaTrackerTests
         IdeaTrack stopped = Run(TwoR, Minute(0, 105m, 106m, 104m, 105m), Minute(1, 101m, 102m, 99.5m, 100.5m));
 
         IdeaTracker.Step(stopped, Minute(2, 120m, 130m, 110m, 125m)).ShouldBe(stopped);
+    }
+
+    // Fix after review: a pair out of trading takes its open ideas with it; an active one leaves at the last close known.
+    [Test]
+    public void Idea_of_a_pair_out_of_trading_expires_where_it_stands()
+    {
+        IdeaTrack active = Run(TwoR, Minute(0, 105m, 106m, 104m, 105m));
+        var waiting = IdeaTrack.Fired(Pullback, Fired, 5);
+
+        IdeaTracker.Expire(active, Fired.AddMinutes(30), 104.5m).ShouldBe(active with { Status = IdeaStatus.Expired, StatusAt = Fired.AddMinutes(30), ExitPrice = 104.5m });
+        IdeaTracker.Expire(waiting, Fired.AddMinutes(30), 104.5m).ShouldBe(waiting with { Status = IdeaStatus.Expired, StatusAt = Fired.AddMinutes(30) });
     }
 
     private static IdeaTrack Run(IdeaPlan plan, params IdeaCandle[] minutes)

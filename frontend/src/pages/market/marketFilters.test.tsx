@@ -231,7 +231,8 @@ describe('saved filters on the market screen', () => {
 
     it('opens a chosen filter with «Изменить», saves it with PUT and deletes it', async () => {
       const requests = open(undefined, {
-        'PUT /api/saved-filters/22222222-2222-4222-8222-222222222222': () => json(shorting),
+        'PUT /api/saved-filters/22222222-2222-4222-8222-222222222222': () =>
+          new Response(null, { status: 204 }),
         'DELETE /api/saved-filters/22222222-2222-4222-8222-222222222222': () =>
           new Response(null, { status: 204 }),
       });
@@ -250,6 +251,8 @@ describe('saved filters on the market screen', () => {
       ).toEqual(['3', '0.03']);
       await userEvent.click(editor().getByRole('button', { name: 'Сохранить' }));
       await waitFor(() => expect(requests.some((request) => request.method === 'PUT')).toBe(true));
+      // The API answers a change with no body: the filter stays chosen.
+      expect(await screen.findByLabelText('Условия фильтра')).toBeInTheDocument();
 
       await userEvent.click(screen.getByRole('button', { name: 'Изменить' }));
       await userEvent.click(editor().getByRole('button', { name: 'Удалить фильтр' }));
@@ -260,6 +263,21 @@ describe('saved filters on the market screen', () => {
       await waitFor(() =>
         expect(screen.queryByLabelText('Условия фильтра')).not.toBeInTheDocument(),
       );
+    });
+
+    it('keeps «Сохранить» off while a value is not a number', async () => {
+      open();
+      renderApp('/market');
+      await openNew();
+      await userEvent.type(editor().getByRole('textbox', { name: 'Имя' }), 'Ф');
+      await userEvent.click(editor().getByRole('button', { name: '+ Условие' }));
+
+      await userEvent.type(editor().getByRole('textbox', { name: 'Значение' }), 'много');
+
+      expect(editor().getByRole('button', { name: 'Сохранить' })).toBeDisabled();
+      await userEvent.clear(editor().getByRole('textbox', { name: 'Значение' }));
+      await userEvent.type(editor().getByRole('textbox', { name: 'Значение' }), '3,5');
+      expect(editor().getByRole('button', { name: 'Сохранить' })).toBeEnabled();
     });
 
     it('closes without saving on «Отмена»', async () => {

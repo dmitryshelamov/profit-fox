@@ -11,12 +11,13 @@ const ideaFields = new Set(['riskReward', 'probability', 'expectancy', 'cases', 
 
 export const isIdeaField = (code: string | null) => code !== null && ideaFields.has(code);
 
+/** A comparison of a saved filter always has its value, «между» also its upper bound: the server keeps no other. */
 function holds(condition: Condition, actual: string | null): boolean {
-  if (actual === null || condition.value === null) {
+  if (actual === null) {
     return false;
   }
 
-  const against = compareDecimals(actual, condition.value);
+  const against = compareDecimals(actual, condition.value!);
 
   switch (condition.operator) {
     case '>':
@@ -30,7 +31,7 @@ function holds(condition: Condition, actual: string | null): boolean {
     case '=':
       return against === 0;
     default:
-      return against >= 0 && condition.to !== null && compareDecimals(actual, condition.to) <= 0;
+      return against >= 0 && compareDecimals(actual, condition.to!) <= 0;
   }
 }
 

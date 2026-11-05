@@ -222,7 +222,7 @@ public class RunNextCandleImportTests
             [() => Candles("2024-01-01T02:00:00Z"), () => throw Unavailable()],
             [() => Candles("2024-01-01T01:00:00Z", "2024-01-01T00:00:00Z")]);
 
-        await RunAsync();
+        await RunAsync(movesClock: true);
 
         RequestedRanges()
             .ShouldBe([("2024-01-01T00:00:00Z", "2024-01-01T03:00:00Z"), ("2024-01-01T00:00:00Z", "2024-01-01T02:00:00Z")]);
@@ -240,7 +240,7 @@ public class RunNextCandleImportTests
         var requestTimes = new List<DateTimeOffset>();
         ServeAttempts(job, requestTimes, Enumerable.Repeat<Func<IReadOnlyList<Candle>>[]>([() => throw Unavailable()], 6).ToArray());
 
-        await RunAsync();
+        await RunAsync(movesClock: true);
 
         requestTimes.Select(time => (time - Now).TotalSeconds).ShouldBe([0d, 1, 6, 21, 51, 111]);
         SavedStates()[^1]
@@ -255,7 +255,7 @@ public class RunNextCandleImportTests
         Func<IReadOnlyList<Candle>>[] progressThenOutage = [() => Candles("2024-01-01T02:00:00Z"), () => throw Unavailable()];
         ServeAttempts(job, [], Enumerable.Repeat(progressThenOutage, 7).Append([]).ToArray());
 
-        await RunAsync();
+        await RunAsync(movesClock: true);
 
         SavedStates()[^1].Status.ShouldBe(CandleImportStatus.Succeeded);
         RequestedRanges().Count.ShouldBe(8);
@@ -269,7 +269,7 @@ public class RunNextCandleImportTests
         Func<IReadOnlyList<Candle>>[] openCandleThenOutage = [() => Candles("2024-03-10T12:00:00Z"), () => throw Unavailable()];
         ServeAttempts(job, [], Enumerable.Repeat(openCandleThenOutage, 6).ToArray());
 
-        await RunAsync();
+        await RunAsync(movesClock: true);
 
         SavedStates()[^1].Status.ShouldBe(CandleImportStatus.Failed);
         RequestedRanges().Count.ShouldBe(6);
@@ -415,7 +415,7 @@ public class RunNextCandleImportTests
             .Returns(_ => throw Unavailable());
         _jobs.RenewLeaseAsync(job.Id, _worker.Id, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(false);
 
-        bool found = await RunAsync();
+        bool found = await RunAsync(movesClock: true);
 
         found.ShouldBeTrue();
         SavedStates().ShouldHaveSingleItem().Status.ShouldBe(CandleImportStatus.Running);
@@ -429,7 +429,7 @@ public class RunNextCandleImportTests
         _marketHistory.GetCandlePagesAsync(job.Instrument, job.Interval, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns(_ => ++attempts < 4 ? throw Unavailable() : Pages([() => Candles("2024-01-01T02:00:00Z")]));
 
-        await RunAsync();
+        await RunAsync(movesClock: true);
 
         SavedStates()[^1].Status.ShouldBe(CandleImportStatus.Succeeded);
         await _jobs.Received().RenewLeaseAsync(job.Id, _worker.Id, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
@@ -475,17 +475,19 @@ public class RunNextCandleImportTests
     }
 
     /// <summary>Runs the next job, moving fake time forward while it waits between attempts.</summary>
-    private async Task<bool> RunAsync()
+    // A job that waits for no pause or renewal runs on the clock as it stands, so the times it writes are Now however slow the machine is;
+    // one that waits moves the clock a second at a time, giving the job a moment after each step.
+    private async Task<bool> RunAsync(bool movesClock = false)
     {
         Task<bool> run = _handler.Handle(new RunNextCandleImportCommand(), CancellationToken.None);
 
-        while (!run.IsCompleted)
+        while (movesClock && !run.IsCompleted)
         {
-            await Task.Delay(5);
+            await Task.Delay(20);
             _time.Advance(TimeSpan.FromSeconds(1));
         }
 
-        return await run;
+        return await run.WaitAsync(TimeSpan.FromSeconds(10));
     }
 
     private void Stored(CandleImportJob job, params string[] openTimes)

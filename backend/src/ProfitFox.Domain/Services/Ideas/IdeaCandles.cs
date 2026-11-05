@@ -83,18 +83,22 @@ public static class IdeaCandles
 
     /// <summary>
     ///     Every minute of the covered period <c>[from, to)</c>: the known ones as they are, the others flat at the close before them, the
-    ///     first of those at <paramref name="closeBefore" />.
+    ///     first of those at <paramref name="closeBefore" />. Without a close before, the minutes start at the first one known.
     /// </summary>
-    public static IReadOnlyList<IdeaCandle> Minutes(IReadOnlyList<IdeaCandle> known, DateTimeOffset from, DateTimeOffset to, decimal closeBefore)
+    public static IReadOnlyList<IdeaCandle> Minutes(IReadOnlyList<IdeaCandle> known, DateTimeOffset from, DateTimeOffset to, decimal? closeBefore)
     {
         var byOpenTime = known.Where(minute => minute.OpenTime >= from && minute.OpenTime < to).ToDictionary(minute => minute.OpenTime);
         var minutes = new List<IdeaCandle>();
 
         for (DateTimeOffset openTime = from; openTime < to; openTime = openTime.AddMinutes(1))
         {
-            IdeaCandle minute = byOpenTime.GetValueOrDefault(openTime) ?? new IdeaCandle(openTime, closeBefore, closeBefore, closeBefore, closeBefore, 0m);
-            minutes.Add(minute);
-            closeBefore = minute.Close;
+            IdeaCandle? minute = byOpenTime.GetValueOrDefault(openTime) ?? (closeBefore is { } close ? new IdeaCandle(openTime, close, close, close, close, 0m) : null);
+
+            if (minute is not null)
+            {
+                minutes.Add(minute);
+                closeBefore = minute.Close;
+            }
         }
 
         return minutes;

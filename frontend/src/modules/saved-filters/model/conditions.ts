@@ -70,9 +70,11 @@ export function toTyped(field: string, stored: string): string {
   return typedAsPercent.has(field) ? shiftDecimal(stored, 2) : stored;
 }
 
-/** What the owner typed as the stored value; a text that is not a number is kept for the server to refuse. */
+/** What the owner typed as the stored value, a decimal comma taken for a point; a text that is not a number is kept as it is. */
 export function fromTyped(field: string, typed: string): string {
-  return typedAsPercent.has(field) && isDecimalText(typed) ? shiftDecimal(typed, -2) : typed;
+  const text = typed.replace(',', '.');
+
+  return typedAsPercent.has(field) && isDecimalText(text) ? shiftDecimal(text, -2) : text;
 }
 
 function shown(field: string, stored: string | null): string {

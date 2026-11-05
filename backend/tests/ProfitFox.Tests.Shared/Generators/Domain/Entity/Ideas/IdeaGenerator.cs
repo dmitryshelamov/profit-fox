@@ -1,6 +1,7 @@
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
@@ -20,7 +21,7 @@ public static class IdeaGenerator
         IdeaSide side = IdeaSide.Long,
         Interval interval = Interval.FifteenMinutes,
         DateTimeOffset? statusAt = null,
-        int engineVersion = 1)
+        int engineVersion = IdeasEngineVersion.Current)
     {
         bool entered = status is not IdeaStatus.AwaitingEntry;
         decimal? exit = status is IdeaStatus.Target ? 115m : status is IdeaStatus.Stop ? 100m : status is IdeaStatus.Expired ? 106m : null;

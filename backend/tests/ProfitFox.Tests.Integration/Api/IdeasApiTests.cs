@@ -61,7 +61,7 @@ public class IdeasApiTests
         Idea impulse = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), IdeaStatus.Active, Sol);
         Idea drop = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-10), instrument: Sol, setup: IdeaSetup.Drop, side: IdeaSide.Short);
         Idea closedLongAgo = IdeaGenerator.Generate(SnapshotAt.AddDays(-3), IdeaStatus.Stop, Sol, setup: IdeaSetup.EarlyImpulse, statusAt: SnapshotAt.AddDays(-2));
-        await new IdeaRepository(_database).AddAsync([impulse, drop, closedLongAgo], CancellationToken.None);
+        await new IdeaRepository(_database).SaveAsync([impulse, drop, closedLongAgo], [], CancellationToken.None);
         var key = new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear);
         await new IdeaBucketRepository(_database).ReplaceAsync(
             IdeasEngineVersion.Current,
@@ -95,7 +95,7 @@ public class IdeasApiTests
     {
         Idea withBucket = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol);
         Idea without = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-5), instrument: Sol, type: IdeaType.BeyondExtreme);
-        await new IdeaRepository(_database).AddAsync([without, withBucket], CancellationToken.None);
+        await new IdeaRepository(_database).SaveAsync([without, withBucket], [], CancellationToken.None);
         await new IdeaBucketRepository(_database).ReplaceAsync(
             IdeasEngineVersion.Current,
             [new IdeaBucket(new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear), 90, BucketStatisticsCalculator.Compute(10, 30, 0, 2m, -10m))],
@@ -112,7 +112,7 @@ public class IdeasApiTests
     public async Task Idea_is_read_by_its_id_and_the_buckets_whole()
     {
         Idea idea = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol);
-        await new IdeaRepository(_database).AddAsync([idea], CancellationToken.None);
+        await new IdeaRepository(_database).SaveAsync([idea], [], CancellationToken.None);
         var key = new IdeaBucketKey(IdeaSetup.Drop, IdeaType.Pullback, Interval.OneHour, IdeaSide.Short, MarketCategory.Spot);
         await new IdeaBucketRepository(_database).ReplaceAsync(IdeasEngineVersion.Current, [new IdeaBucket(key, 30, BucketStatisticsCalculator.Compute(6, 5, 1, 3m, 2.4m))], CancellationToken.None);
 
@@ -139,7 +139,7 @@ public class IdeasApiTests
             ["pullback"] = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-17), instrument: Sol, type: IdeaType.Pullback),
             ["spot"] = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-16), instrument: Eth)
         };
-        await new IdeaRepository(_database).AddAsync([impulse, .. ideas.Values], CancellationToken.None);
+        await new IdeaRepository(_database).SaveAsync([impulse, .. ideas.Values], [], CancellationToken.None);
 
         (await GetAsync($"/api/ideas?{query}")).EnumerateArray().Select(idea => idea.GetProperty("id").GetGuid()).ShouldBe([ideas[expected].Id]);
     }
@@ -161,7 +161,7 @@ public class IdeasApiTests
     public async Task Ideas_of_a_pair_are_its_own()
     {
         Idea ofSol = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol);
-        await new IdeaRepository(_database).AddAsync([ofSol, IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Eth)], CancellationToken.None);
+        await new IdeaRepository(_database).SaveAsync([ofSol, IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Eth)], [], CancellationToken.None);
 
         (await GetAsync("/api/market/linear/SOLUSDT/ideas")).EnumerateArray().Select(idea => idea.GetProperty("id").GetGuid()).ShouldBe([ofSol.Id]);
         (await _client.GetAsync("/api/market/inverse/SOLUSD/ideas")).StatusCode.ShouldBe(HttpStatusCode.BadRequest);

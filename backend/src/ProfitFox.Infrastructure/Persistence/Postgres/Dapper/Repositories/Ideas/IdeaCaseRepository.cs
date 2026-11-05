@@ -32,14 +32,10 @@ internal sealed class IdeaCaseRepository(NpgsqlDataSource dataSource) : IIdeaCas
         return [.. rows.Select(row => new IdeaCase(IdeaDbConverter.ToDomain(row), row.Result))];
     }
 
-    public async Task<IReadOnlyList<IdeaBucketCounts>> CountAsync(
-        int engineVersion,
-        DateTimeOffset from,
-        IReadOnlyDictionary<Interval, SetupThresholds> thresholds,
-        CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<IdeaBucketCounts>> CountAsync(int engineVersion, DateTimeOffset from, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using NpgsqlCommand command = IdeaCaseRepositoryQueries.Count(connection, engineVersion, from, thresholds);
+        await using NpgsqlCommand command = IdeaCaseRepositoryQueries.Count(connection, engineVersion, from);
         await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
         var counts = new List<IdeaBucketCounts>();
 

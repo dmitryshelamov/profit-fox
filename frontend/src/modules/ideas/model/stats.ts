@@ -26,13 +26,8 @@ export interface ProbabilityView {
 
 /** What the probability column of an idea shows: its bucket, or «мало данных» for fewer than 30 cases or no case. */
 export function probabilityView(bucket: Bucket | null, baseline: string): ProbabilityView {
-  if (
-    bucket === null ||
-    !bucket.enoughData ||
-    bucket.probability === null ||
-    bucket.probabilityLow === null ||
-    bucket.probabilityHigh === null
-  ) {
+  // A bucket of enough cases that all expired has no share either; the interval comes with the share.
+  if (bucket === null || !bucket.enoughData || bucket.probability === null) {
     return { enough: false, percent: null, cases: Number(bucket?.cases ?? 0), badge: null };
   }
 
@@ -40,7 +35,7 @@ export function probabilityView(bucket: Bucket | null, baseline: string): Probab
     enough: true,
     percent: roundDecimal(shiftDecimal(bucket.probability, 2), 0),
     cases: Number(bucket.cases),
-    badge: baselineBadge(bucket.probabilityLow, bucket.probabilityHigh, baseline),
+    badge: baselineBadge(bucket.probabilityLow!, bucket.probabilityHigh!, baseline),
   };
 }
 

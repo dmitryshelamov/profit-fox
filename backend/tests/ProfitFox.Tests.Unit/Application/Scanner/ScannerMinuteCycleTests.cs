@@ -200,7 +200,7 @@ public class ScannerMinuteCycleTests
     [Test]
     public async Task Pair_with_a_gap_gets_no_setups_and_its_ideas_move_once_the_gap_is_loaded()
     {
-        Idea open = IdeaGenerator.Generate(Minute.AddMinutes(-3), instrument: Btc);
+        Idea open = IdeaGenerator.Generate(Minute.AddMinutes(-2), instrument: Btc);
         _ideaStore.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([open]);
         _market.Loaded(Btc, Minute.AddDays(-1), Minute.AddMinutes(-2), Flat(Minute.AddDays(-1), Minute.AddMinutes(-2)));
         await _ideas.ReadWarmUpsAsync(CancellationToken.None);
@@ -208,12 +208,13 @@ public class ScannerMinuteCycleTests
         await RunMinuteAsync();
 
         await _snapshots.Received(1).ReplaceSetupsAsync(_identity.Id, Arg.Is<IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>>>(setups => setups!.Count == 0), Arg.Any<CancellationToken>());
-        await _ideaStore.DidNotReceive().UpdateAsync(Arg.Is<IReadOnlyCollection<Idea>>(ideas => ideas!.Count > 0), Arg.Any<CancellationToken>());
+        await _ideaStore.DidNotReceive().SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Is<IReadOnlyCollection<Idea>>(ideas => ideas!.Count > 0), Arg.Any<CancellationToken>());
 
         _market.Loaded(Btc, Minute.AddMinutes(-2), Minute.AddMinutes(1), Flat(Minute.AddMinutes(-2), Minute.AddMinutes(1), 102m));
         await RunMinuteAsync();
 
-        await _ideaStore.Received(1).UpdateAsync(
+        await _ideaStore.Received(1).SaveAsync(
+            Arg.Any<IReadOnlyCollection<Idea>>(),
             Arg.Is<IReadOnlyCollection<Idea>>(ideas => ideas!.Single().Id == open.Id && ideas!.Single().Track.EnteredAt == Minute.AddMinutes(-2)),
             Arg.Any<CancellationToken>());
         await _snapshots.Received(1).ReplaceSetupsAsync(_identity.Id, Arg.Is<IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>>>(setups => setups!.ContainsKey(Btc)), Arg.Any<CancellationToken>());

@@ -14,26 +14,26 @@ namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Idea
 
 internal sealed class IdeaRepository(NpgsqlDataSource dataSource) : IIdeaRepository
 {
-    public async Task<IReadOnlyList<Idea>> AddAsync(IReadOnlyCollection<Idea> ideas, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<Idea>> SaveAsync(IReadOnlyCollection<Idea> created, IReadOnlyCollection<Idea> changed, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+        // The moved ideas go first: one that closed gives its key back to an idea made on the same minute.
+        await connection.ExecuteAsync(IdeaRepositoryQueries.Update(changed.Select(idea => IdeaDbConverter.FromDomain(idea)), transaction, cancellationToken));
         var added = new List<Idea>();
 
-        foreach (Idea idea in ideas)
+        foreach (Idea idea in created)
         {
-            if (await connection.ExecuteScalarAsync<Guid?>(IdeaRepositoryQueries.Insert(IdeaDbConverter.FromDomain(idea), cancellationToken)) is not null)
+            if (await connection.ExecuteScalarAsync<Guid?>(IdeaRepositoryQueries.Insert(IdeaDbConverter.FromDomain(idea), transaction, cancellationToken)) is not null)
             {
                 added.Add(idea);
             }
         }
 
-        return added;
-    }
+        await transaction.CommitAsync(cancellationToken);
 
-    public async Task UpdateAsync(IReadOnlyCollection<Idea> ideas, CancellationToken cancellationToken)
-    {
-        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await connection.ExecuteAsync(IdeaRepositoryQueries.Update(ideas.Select(idea => IdeaDbConverter.FromDomain(idea)), cancellationToken));
+        return added;
     }
 
     public async Task<IReadOnlyList<Idea>> GetOpenAsync(CancellationToken cancellationToken)

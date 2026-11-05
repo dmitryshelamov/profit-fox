@@ -18,7 +18,7 @@ using Shouldly;
 
 namespace ProfitFox.Tests.Integration.Persistence;
 
-/// <summary>Task 5.2: the scanner recomputes the buckets from the stored cases by the thresholds of now, over 90 and the last 30 days.</summary>
+/// <summary>Task 5.2: the scanner recomputes the buckets from every stored case of the version, over 90 and the last 30 days.</summary>
 public class IdeaBucketsRecomputeTests
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2024-06-01T00:00:00Z");
@@ -66,8 +66,8 @@ public class IdeaBucketsRecomputeTests
         var key = new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear);
         (await buckets.GetAsync(IdeasEngineVersion.Current, CancellationToken.None)).ShouldBe(
         [
-            new IdeaBucket(key, 90, BucketStatisticsCalculator.Compute(18, 22, 0, 2m, (18 * 2m) - 22m)),
-            new IdeaBucket(key, 30, BucketStatisticsCalculator.Compute(10, 10, 0, 2m, (10 * 2m) - 10m))
+            new IdeaBucket(key, 90, BucketStatisticsCalculator.Compute(19, 22, 0, 2m, (19 * 2m) - 22m)),
+            new IdeaBucket(key, 30, BucketStatisticsCalculator.Compute(11, 10, 0, 2m, (11 * 2m) - 10m))
         ],
             ignoreOrder: true);
     }

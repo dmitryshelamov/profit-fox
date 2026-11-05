@@ -1,5 +1,6 @@
 export {
   type IdeaFilters,
+  ideaQuery,
   ideasQuery,
   noIdeaFilters,
   type OwnIdeaInput,

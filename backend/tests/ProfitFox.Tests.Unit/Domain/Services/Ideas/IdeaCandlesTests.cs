@@ -75,6 +75,13 @@ public class IdeaCandlesTests
         ]);
     }
 
+    // Without a close before, a gap at the start of the period is no flat minute: the minutes start at the first one known.
+    [Test]
+    public void Without_a_close_before_the_minutes_start_at_the_first_one_known()
+    {
+        IdeaCandles.Minutes(IdeaFixtures.Minutes(), Ten.AddMinutes(20), Ten.AddMinutes(26), null).Select(minute => minute.OpenTime).ShouldBe([Ten.AddMinutes(25)]);
+    }
+
     [Test]
     public void A_gap_at_the_start_of_the_period_takes_the_close_before_it()
     {

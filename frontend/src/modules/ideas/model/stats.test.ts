@@ -53,6 +53,21 @@ describe('probabilityView', () => {
     ).toEqual({ enough: false, percent: null, cases: 12, badge: null });
   });
 
+  it('says «мало данных» for a bucket whose cases all expired', () => {
+    expect(
+      probabilityView(
+        bucket({
+          cases: 30,
+          enoughData: true,
+          probability: null,
+          probabilityLow: null,
+          probabilityHigh: null,
+        }),
+        '0.33',
+      ),
+    ).toEqual({ enough: false, percent: null, cases: 30, badge: null });
+  });
+
   it('says too little data for a bucket without a case', () => {
     expect(probabilityView(null, '0.33')).toEqual({
       enough: false,

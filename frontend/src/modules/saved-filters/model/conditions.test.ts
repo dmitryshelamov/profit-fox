@@ -35,6 +35,11 @@ describe('typed values', () => {
     expect(fromTyped('turnover24h', '50000000')).toBe('50000000');
   });
 
+  it('takes a decimal comma for a point', () => {
+    expect(fromTyped('change1h', '3,5')).toBe('3.5');
+    expect(fromTyped('fundingRate', '0,03')).toBe('0.0003');
+  });
+
   it('leaves a text that is not a number for the server to refuse', () => {
     expect(fromTyped('fundingRate', 'abc')).toBe('abc');
     expect(fromTyped('fundingRate', '')).toBe('');

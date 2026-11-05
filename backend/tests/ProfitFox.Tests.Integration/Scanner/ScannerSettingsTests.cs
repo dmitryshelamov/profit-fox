@@ -22,6 +22,23 @@ public class ScannerSettingsTests
         exception.Message.ShouldContain("Scanner:LeaseRenewal");
     }
 
+    // Decision 8: the API measures the own idea and the zones by the same k and rules of the zones as the scanner.
+    [Test]
+    public void Api_and_scanner_hold_the_same_ideas_settings()
+    {
+        string root = Path.GetDirectoryName(ScannerHost.ContentRoot())!;
+
+        Ideas(Path.Combine(root, "ProfitFox.Presentation")).ShouldBe(Ideas(ScannerHost.ContentRoot()));
+        Ideas(ScannerHost.ContentRoot()).ShouldContainKey("Ideas:StopBuffer");
+    }
+
+    private static Dictionary<string, string?> Ideas(string folder)
+    {
+        IConfigurationRoot configuration = new ConfigurationBuilder().AddJsonFile(Path.Combine(folder, "appsettings.json")).Build();
+
+        return configuration.GetSection("Ideas").AsEnumerable().Where(entry => entry.Value is not null).ToDictionary(entry => entry.Key, entry => entry.Value);
+    }
+
     private static async Task<IHost> ScannerAsync(IReadOnlyDictionary<string, string?> settings)
     {
         await using Npgsql.NpgsqlDataSource database = await MarketDataDatabase.CreateAsync();

@@ -16,15 +16,20 @@ export const filterFieldsQuery = queryOptions({
 
 export type FilterBody = Schemas['SavedFilterBody'];
 
-/** Creates a filter, or changes the one with `id`; the lists of filters are read again afterwards. */
+/** Creates a filter, or changes the one with `id`, and gives its id; the lists of filters are read again afterwards. */
 export function useSaveFilter() {
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, body }: { id: string | null; body: FilterBody }) =>
-      id === null
-        ? unwrap(await api.POST('/api/saved-filters', { body }))
-        : unwrap(await api.PUT('/api/saved-filters/{id}', { params: { path: { id } }, body })),
+    mutationFn: async ({ id, body }: { id: string | null; body: FilterBody }): Promise<string> => {
+      if (id === null) {
+        return unwrap(await api.POST('/api/saved-filters', { body })).id;
+      }
+
+      unwrap(await api.PUT('/api/saved-filters/{id}', { params: { path: { id } }, body }));
+
+      return id;
+    },
     onSuccess: () => client.invalidateQueries({ queryKey: savedFiltersQuery.queryKey }),
   });
 }

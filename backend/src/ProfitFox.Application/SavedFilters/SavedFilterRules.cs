@@ -77,6 +77,6 @@ public static class SavedFilterRules
 
     private static decimal? Number(string? text)
     {
-        return decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal value) ? value : null;
+        return decimal.TryParse(text, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out decimal value) ? value : null;
     }
 }

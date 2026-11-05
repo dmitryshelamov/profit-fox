@@ -47,10 +47,17 @@ public class IdeaRulesTests
     [Test]
     public void Pullback_enters_at_the_middle_of_the_move_of_the_window()
     {
-        IdeaContext context = Context with { Price = 109m };
+        IdeaRules.Plan(IdeaType.Pullback, IdeaSide.Long, Context with { Price = 109m }).ShouldBe(new IdeaPlan(IdeaType.Pullback, IdeaSide.Long, 105m, 99.5m, 116m));
+        IdeaRules.Plan(IdeaType.Pullback, IdeaSide.Short, Context with { Price = 101m }).ShouldBe(new IdeaPlan(IdeaType.Pullback, IdeaSide.Short, 105m, 110.5m, 94m));
+    }
 
-        IdeaRules.Plan(IdeaType.Pullback, IdeaSide.Long, context).ShouldBe(new IdeaPlan(IdeaType.Pullback, IdeaSide.Long, 105m, 99.5m, 116m));
-        IdeaRules.Plan(IdeaType.Pullback, IdeaSide.Short, context).ShouldBe(new IdeaPlan(IdeaType.Pullback, IdeaSide.Short, 105m, 110.5m, 94m));
+    // Decision 10: a limit the price has already passed would fill at once at a price the market never gave; such a pullback is not made.
+    [TestCase(IdeaSide.Long, 104)]
+    [TestCase(IdeaSide.Long, 105)]
+    [TestCase(IdeaSide.Short, 106)]
+    public void Pullback_whose_limit_the_price_has_passed_is_not_made(IdeaSide side, decimal price)
+    {
+        IdeaRules.Plan(IdeaType.Pullback, side, Context with { Price = price }).ShouldBeNull();
     }
 
     // Scenario "Нет сопротивления".

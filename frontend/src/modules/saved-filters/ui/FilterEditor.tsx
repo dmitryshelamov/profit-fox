@@ -150,7 +150,8 @@ export function FilterEditor({
   rows: readonly MarketRow[];
   ideas: readonly Idea[];
   onClose: () => void;
-  onSaved: (filter: SavedFilter) => void;
+  /** The id of the filter saved. */
+  onSaved: (id: string) => void;
   onDeleted: (id: string) => void;
 }) {
   const [name, setName] = useState(filter?.name ?? '');
@@ -256,11 +257,11 @@ export function FilterEditor({
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          disabled={save.isPending}
+          disabled={save.isPending || readyConditions(stored).length !== stored.length}
           onClick={() =>
             save.mutate(
               { id: filter?.id ?? null, body: { name, place: where, conditions: stored } },
-              { onSuccess: (saved) => onSaved(saved as SavedFilter), onError: failed },
+              { onSuccess: onSaved, onError: failed },
             )
           }
           className="h-9 rounded-md bg-accent px-4 text-sm font-semibold text-on-accent disabled:opacity-50"

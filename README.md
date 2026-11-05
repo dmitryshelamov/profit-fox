@@ -96,24 +96,11 @@ while the snapshot comes late, and starts again from scratch when `IdeasEngineVe
 rules raises it, the version test in `ProfitFox.Tests.Unit` fails until it does.
 
 The `Ideas` section of the scanner's `appsettings.json` sets the thresholds of the setups (`Thresholds`, common to all pairs,
-`ByInterval` for values of one interval), the floors the replay writes its cases with (`Floors`), the stop buffer k and the
-rules of the zones; `Backtests:DefaultFees` sets the fees the cases are counted with. The starting thresholds are
-provisional. Because every case stores the move and the volume it fired with, other thresholds are tried with queries on
-`idea_cases` without a new replay, for example the expectancy and the share of targets of impulses at A = 3.5 and V = 2.5
-on the first 60 of the 90 days, then checked on the last 30:
-
-```sql
-SELECT setup, type, "interval", side, category, count(*) AS cases,
-    avg(result) AS expectancy, avg((status = 'target')::int) FILTER (WHERE status <> 'expired') AS share
-FROM idea_cases
-WHERE engine_version = 1 AND setup IN ('impulse', 'drop') AND move >= 3.5 AND volume_ratio >= 2.5
-    AND fired_at < now() - interval '30 days'
-GROUP BY 1, 2, 3, 4, 5
-ORDER BY expectancy DESC;
-```
-
-Put the chosen values into `Ideas:Thresholds` and raise `IdeasEngineVersion.Current`, so the cases are replayed by the new
-rules.
+`ByInterval` for values of one interval), the stop buffer k and the rules of the zones; `Backtests:DefaultFees` sets the fees the
+cases are counted with. The live ideas and the replay run by the same thresholds, so a bucket counts every case of the current
+version. The starting thresholds are provisional: to try others, put them into `Ideas:Thresholds`, raise
+`IdeasEngineVersion.Current`, deploy and wait for the replay of the new version (about a day on production), then compare its
+buckets with the version before. Every case keeps the move and the volume it fired with, for analysis.
 
 ## Production
 

@@ -2,9 +2,6 @@ using Dapper;
 
 using Npgsql;
 
-using ProfitFox.Application.MarketData;
-using ProfitFox.Domain.Entities.MarketData.Enums;
-using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas.Contracts;
 
 namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas.Queries;
@@ -20,19 +17,15 @@ internal static class IdeaCaseRepositoryQueries
                                      ON CONFLICT DO NOTHING
                                      """;
 
-    // The thresholds come per interval; high volatility has none of its own.
+    // Decision 7: the replay runs by the live thresholds, so every case of the version counts. Postgres keeps every digit of a total of
+    // long fractions, more than System.Decimal holds: it comes rounded to 12 places.
     private const string CountSql = """
-                                    SELECT c.setup, c.type, c."interval", c.side, c.category,
-                                        count(*) FILTER (WHERE c.status = 'target')::integer, count(*) FILTER (WHERE c.status = 'stop')::integer,
-                                        count(*) FILTER (WHERE c.status = 'expired')::integer, avg(c.risk_reward), sum(c.result)
-                                    FROM idea_cases c
-                                    JOIN unnest(@intervals, @moves, @volumes, @early_moves, @early_volumes) AS t("interval", move, volume, early_move, early_volume)
-                                        ON t."interval" = c."interval"
-                                    WHERE c.engine_version = @version AND c.fired_at >= @from
-                                        AND ((c.setup IN ('impulse', 'drop') AND c.move >= t.move AND c.volume_ratio >= t.volume)
-                                            OR (c.setup IN ('early_impulse', 'early_drop') AND c.move >= t.early_move AND c.volume_ratio >= t.early_volume)
-                                            OR c.setup = 'high_volatility')
-                                    GROUP BY c.setup, c.type, c."interval", c.side, c.category
+                                    SELECT setup, type, "interval", side, category,
+                                        count(*) FILTER (WHERE status = 'target')::integer, count(*) FILTER (WHERE status = 'stop')::integer,
+                                        count(*) FILTER (WHERE status = 'expired')::integer, avg(risk_reward), round(sum(result), 12)
+                                    FROM idea_cases
+                                    WHERE engine_version = @version AND fired_at >= @from
+                                    GROUP BY setup, type, "interval", side, category
                                     """;
 
     internal static NpgsqlCommand Insert(NpgsqlDataSource dataSource, IReadOnlyCollection<IdeaDb> cases)
@@ -68,19 +61,11 @@ internal static class IdeaCaseRepositoryQueries
             cancellationToken: cancellationToken);
     }
 
-    internal static NpgsqlCommand Count(NpgsqlConnection connection, int engineVersion, DateTimeOffset from, IReadOnlyDictionary<Interval, SetupThresholds> thresholds)
+    internal static NpgsqlCommand Count(NpgsqlConnection connection, int engineVersion, DateTimeOffset from)
     {
         var command = new NpgsqlCommand(CountSql, connection);
-        command.Parameters.AddRange(
-            new[]
-            {
-                new NpgsqlParameter("version", engineVersion), new NpgsqlParameter("from", from),
-                new NpgsqlParameter("intervals", thresholds.Keys.Select(interval => interval.ToCode()).ToArray()),
-                new NpgsqlParameter("moves", thresholds.Values.Select(value => value.Move).ToArray()),
-                new NpgsqlParameter("volumes", thresholds.Values.Select(value => value.Volume).ToArray()),
-                new NpgsqlParameter("early_moves", thresholds.Values.Select(value => value.EarlyMove).ToArray()),
-                new NpgsqlParameter("early_volumes", thresholds.Values.Select(value => value.EarlyVolume).ToArray())
-            });
+        command.Parameters.AddWithValue("version", engineVersion);
+        command.Parameters.AddWithValue("from", from);
 
         return command;
     }

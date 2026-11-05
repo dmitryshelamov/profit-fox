@@ -47,13 +47,13 @@ public class IdeasEngineVersionTests
     }
 
     /// <summary>
-    ///     SHA-256 of every case, one JSON line each in a fixed order, of the four setup sets on linear and spot with the default rules of the
-    ///     replay and of live ideas, with a spread and a percentile of volatility, and of the zones set as minutes.
+    ///     SHA-256 of every case, one JSON line each in a fixed order, of the four setup sets on linear and spot with the default rules and with
+    ///     a stop buffer of 1, with a spread and a percentile of volatility.
     /// </summary>
     private static string Fingerprint()
     {
         string[] sets = ["impulse", "early", "drop", "early-drop"];
-        IdeaRuleSet[] rules = [new IdeasSettings().Replay(), new IdeasSettings().Live()];
+        IdeaRuleSet[] rules = [new IdeasSettings().Rules(), new IdeasSettings { StopBuffer = 1m }.Rules()];
         IEnumerable<string> lines =
             from set in sets
             from category in new[] { MarketCategory.Linear, MarketCategory.Spot }
@@ -70,7 +70,7 @@ public class IdeasEngineVersionTests
         var closed = rules.Thresholds.Keys.ToDictionary(
             interval => interval,
             interval => IdeaCandles.FromMinutes(interval, minutes, Start, interval.CandleOpen(Three)) as IReadOnlyList<IdeaCandle>);
-        engine.Warm(instrument, closed, [.. minutes.Where(minute => minute.OpenTime < Three)], []);
+        engine.Warm(instrument, closed, [.. minutes.Where(minute => minute.OpenTime < Three)], [], IdeaInputs.None);
         var inputs = new IdeaInputs(0.01m, rules.Thresholds.Keys.ToDictionary(interval => interval, _ => 0.0186m));
         decimal close = minutes[^1].Close;
         IEnumerable<IdeaCandle> flat = Enumerable.Range(0, 1440).Select(index => new IdeaCandle(minutes[^1].OpenTime.AddMinutes(1 + index), close, close, close, close, 0m));

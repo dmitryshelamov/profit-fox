@@ -21,11 +21,21 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
     // The longest window of a setup: the last N candles of the longest interval.
     private readonly int _window = rules.Thresholds.Max(entry => entry.Value.Candles * Minutes(entry.Key));
 
+    /// <summary>The minutes of the longest window of a setup, which a warm-up needs behind it.</summary>
+    public int Window => _window;
+
     /// <summary>
     ///     Starts a pair over: the closed candles of each interval, the minutes up to now without gaps, which cover the candle each interval
-    ///     forms, and its open ideas. The setups that hold on the first minute after it do not fire.
+    ///     forms, and its open ideas. Each open idea moves through the minutes since its last change (a market idea awaiting entry from the
+    ///     minute after it fired), so a restart misses none of them; the ideas that moved are returned. The setups that hold on the last minute
+    ///     are read as held, so only a setup that starts to hold after the warm-up fires.
     /// </summary>
-    public void Warm(Instrument instrument, IReadOnlyDictionary<Interval, IReadOnlyList<IdeaCandle>> closed, IReadOnlyList<IdeaCandle> minutes, IReadOnlyList<Idea> open)
+    public IReadOnlyList<Idea> Warm(
+        Instrument instrument,
+        IReadOnlyDictionary<Interval, IReadOnlyList<IdeaCandle>> closed,
+        IReadOnlyList<IdeaCandle> minutes,
+        IReadOnlyList<Idea> open,
+        IdeaInputs inputs)
     {
         var pair = new Pair(instrument);
 
@@ -51,8 +61,40 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
         }
 
         pair.Minutes.AddRange(minutes.TakeLast(_window));
-        pair.Open.AddRange(open);
+        IReadOnlyList<Idea> caught = CatchUp(open, minutes);
+        pair.Open.AddRange(caught.Where(idea => idea.IsOpen));
         _pairs[instrument] = pair;
+
+        if (minutes.Count > 0)
+        {
+            Read(pair, minutes[^1].OpenTime.AddMinutes(1), inputs);
+        }
+
+        return [.. caught.Where(idea => !open.Contains(idea))];
+    }
+
+    /// <summary>
+    ///     Moves ideas through the minutes since their last change (a market idea awaiting entry from the minute after it fired); returns
+    ///     every idea where it stands after them.
+    /// </summary>
+    public static IReadOnlyList<Idea> CatchUp(IReadOnlyList<Idea> ideas, IReadOnlyList<IdeaCandle> minutes)
+    {
+        return
+        [
+            .. ideas.Select(idea =>
+            {
+                DateTimeOffset from = idea.Track.Status == IdeaStatus.AwaitingEntry ? idea.Track.FiredAt : idea.Track.StatusAt.AddMinutes(1);
+                IdeaTrack track = minutes.Where(minute => minute.OpenTime >= from).Aggregate(idea.Track, IdeaTracker.Step);
+
+                return track == idea.Track ? idea : idea with { Track = track };
+            })
+        ];
+    }
+
+    /// <summary>The ideas of a pair awaiting entry or active.</summary>
+    public IReadOnlyList<Idea> Open(Instrument instrument)
+    {
+        return [.. _pairs[instrument].Open];
     }
 
     public IdeaSeries Series(Instrument instrument, Interval interval)
@@ -92,26 +134,36 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
         {
             DateTimeOffset end = minute.OpenTime.AddMinutes(1);
 
-            foreach ((Interval interval, SetupThresholds thresholds) in rules.Thresholds)
+            foreach ((Interval interval, SetupReading? reading, IReadOnlyList<SetupSignal> fired) in Read(pair, end, inputs))
             {
-                IReadOnlyList<IdeaCandle> closed = pair.Series[interval].Base(end);
-                decimal? percentile = inputs.Percentiles.TryGetValue(interval, out decimal value) ? value : null;
-                SetupReading? reading = SetupDetector.Detect(closed, pair.Minutes, Minutes(interval), thresholds, percentile);
-                IReadOnlyList<SetupSignal> fired = pair.Primed ? SetupDetector.Fired(pair.Holding[interval], reading) : [];
-                pair.Holding[interval] = [.. reading?.Signals.Select(signal => signal.Setup) ?? []];
                 setups.AddRange(pair.Holding[interval].Select(setup => new PairSetup(interval, setup)));
 
                 if (fired.Count > 0)
                 {
+                    IReadOnlyList<IdeaCandle> closed = pair.Series[interval].Base(end);
                     IReadOnlyList<Zone> zones = ZoneFinder.Find(closed, reading!.Atr, rules.Zones);
                     created.AddRange(fired.SelectMany(signal => Ideas(pair, interval, signal, minute, reading.Atr, zones, inputs.Spread, end)));
                 }
             }
-
-            pair.Primed = true;
         }
 
         return new IdeaStep(setups, created, changed);
+    }
+
+    /// <summary>Reads the setups of every interval on the minute that ends at <paramref name="end" />: the ones that hold and the ones that fire.</summary>
+    private List<(Interval Interval, SetupReading? Reading, IReadOnlyList<SetupSignal> Fired)> Read(Pair pair, DateTimeOffset end, IdeaInputs inputs)
+    {
+        var readings = new List<(Interval, SetupReading?, IReadOnlyList<SetupSignal>)>();
+
+        foreach ((Interval interval, SetupThresholds thresholds) in rules.Thresholds)
+        {
+            decimal? percentile = inputs.Percentiles.TryGetValue(interval, out decimal value) ? value : null;
+            SetupReading? reading = SetupDetector.Detect(pair.Series[interval].Base(end), pair.Minutes, Minutes(interval), thresholds, percentile);
+            readings.Add((interval, reading, SetupDetector.Fired(pair.Holding[interval], reading)));
+            pair.Holding[interval] = [.. reading?.Signals.Select(signal => signal.Setup) ?? []];
+        }
+
+        return readings;
     }
 
     private static List<Idea> Advance(Pair pair, IdeaCandle minute)
@@ -190,7 +242,5 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
         public List<IdeaCandle> Minutes { get; } = [];
 
         public List<Idea> Open { get; } = [];
-
-        public bool Primed { get; set; }
     }
 }

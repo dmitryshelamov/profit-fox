@@ -176,9 +176,9 @@ export function IdeasPage() {
           rows={rows}
           ideas={allIdeas.data ?? []}
           onClose={() => setEditing(null)}
-          onSaved={(filter) => {
+          onSaved={(id) => {
             setEditing(null);
-            setSelectedId(filter.id);
+            setSelectedId(id);
           }}
           onDeleted={(id) => {
             setEditing(null);
