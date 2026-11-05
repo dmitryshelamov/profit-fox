@@ -5,6 +5,7 @@ using ProfitFox.Domain.Entities.IdeaTrades.Enums;
 using ProfitFox.Domain.Entities.LiveTrading.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
+using ProfitFox.Tests.Integration.Infrastructure;
 
 using Shouldly;
 
@@ -89,5 +90,45 @@ public class IdeaTradingTests
         _scenario.Exchange.Fill(close, 0.47m, 110m, fee: 0.03m);
         await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(trade.Id)).Status == IdeaTradeStatus.ClosedManually, "the closed trade");
         (await _scenario.TradeAsync(trade.Id)).Result.ShouldBe((0.47m * 110m) - (0.47m * 105m) - 0.02m - 0.03m);
+    }
+
+    // Scenario "Стоп сработал, пока Worker лежал": the stop stands on the exchange without the Worker, and its trade is read from the history.
+    [Test]
+    public async Task Stop_that_fired_while_the_worker_was_down_closes_the_trade_from_the_history()
+    {
+        IdeaTrade trade = await _scenario.CreateTradeAsync();
+        string entry = new IdeaTradeOrderId(trade.Id, 1).Code;
+        WorkerHost first = _scenario.StartWorker();
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the entry");
+        _scenario.Exchange.Fill(entry, 0.47m, 105m, fee: 0.02m);
+        await _scenario.WaitAsync(async () => (await _scenario.TradeChildrenAsync(trade.Id)).Count == 2, "the stop and the target");
+        await _scenario.StopWorkerAsync(first);
+
+        _scenario.Exchange.TriggerChild(entry, StopOrderKind.StopLoss, 100m, silently: true);
+        _scenario.StartWorker();
+
+        await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(trade.Id)).Status == IdeaTradeStatus.ClosedAtStop, "the stop");
+        (await _scenario.TradeAsync(trade.Id)).Result.ShouldBe((0.47m * 100m) - (0.47m * 105m) - 0.02m);
+        _scenario.Exchange.Sent.Count.ShouldBe(1);
+    }
+
+    // Scenario "Ордер не ставится второй раз": a restart sends nothing again and the trade goes on.
+    [Test]
+    public async Task Restarted_worker_does_not_send_the_entry_again()
+    {
+        IdeaTrade trade = await _scenario.CreateTradeAsync();
+        string entry = new IdeaTradeOrderId(trade.Id, 1).Code;
+        WorkerHost first = _scenario.StartWorker();
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the entry");
+        _scenario.Exchange.Fill(entry, 0.47m, 105m, fee: 0.02m);
+        await _scenario.WaitAsync(async () => (await _scenario.TradeChildrenAsync(trade.Id)).Count == 2, "the stop and the target");
+        await _scenario.StopWorkerAsync(first);
+
+        _scenario.StartWorker();
+        await _scenario.WaitAsync(() => _scenario.Exchange.AccountSubscribers == 1, "the trade taken again");
+        _scenario.Exchange.TriggerChild(entry, StopOrderKind.TakeProfit, 115m);
+
+        await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(trade.Id)).Status == IdeaTradeStatus.ClosedAtTarget, "the target");
+        _scenario.Exchange.Sent.Count.ShouldBe(1);
     }
 }

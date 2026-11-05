@@ -104,6 +104,18 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
         }
     }
 
+    /// <summary>How many sessions follow the account stream now.</summary>
+    public int AccountSubscribers
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _orderUpdates.Count;
+            }
+        }
+    }
+
     public ExchangeOrder? Order(string clientId)
     {
         lock (_lock)
