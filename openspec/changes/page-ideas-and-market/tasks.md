@@ -44,7 +44,7 @@
 - [x] 4.3 `POST /api/saved-filters/fit`: запрос, обработчик и `SavedFiltersController.Fit`, ответ `{ pairs, ideas }`,
   ошибки условий как при сохранении. Готово, когда интеграционный тест «Условие на поле идеи» зелёный и в базе не
   появилось фильтра.
-- [ ] 4.4 Обновить `docs/conventions.md` (Presentation и модули фронта) и перегенерировать
+- [x] 4.4 Обновить `docs/conventions.md` (Presentation и модули фронта) и перегенерировать
   `frontend/src/shared/api/generated/schema.d.ts` через `npm run generate:api`. Готово, когда typecheck видит новые типы.
 
 ## 5. Фронт

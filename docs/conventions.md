@@ -94,8 +94,11 @@ enforces a rule, the check is the source of truth.
   `Minute/ScannerMinuteCycle` (tickers, the point of open interest, the snapshot) and `ScannerSession`, which runs them while the
   scanner holds the stream. `Ports/Market` holds `IMarketDataFeed` (REST of public data, through the scanner's own rate limit),
   `IMarketStreams` (minute candles in batches) and `IScannerJournal`. `Market/Queries` holds the queries of the market API
-  (`GetMarket`, `GetMarketPair`, `GetMarketCandles`, `GetMarketSeries`); `MarketData/ChartCandles` is the period of a chart the
-  bot and the pair share.
+  (`GetMarket`, `GetMarketPair`, `GetMarketCandles`, `GetMarketSeries`); `Market/MarketOrder` is the order of the rows of «Рынок»
+  (a column and a direction, rows without a value last, equal values by category code and symbol, ordinally); `MarketData/ChartCandles` is the period of a chart the
+  bot and the pair share. `Paging` holds `PageRequest` (the number from 1 and the size 50, 100 or 200 a client asked for, with the field errors
+  `page` and `pageSize`; `Slice` gives a `Page<T>`, the last page when the number is past the end), `OrderDirection` and its codes `asc` and `desc`.
+  `GetIdeas` and `GetMarket` filter, order and cut the page in memory, and `GetMarket` also counts the pairs for the chips; neither returns a whole list.
 - `Scanner/Ideas` holds the ideas of the scanner: `IdeasSettings` (the `Ideas` section, with `ThresholdSettings` and `ThresholdOverride`),
   `IdeaRuleSet`, `IdeaSeries` (at most 220 closed candles of a pair on an interval and the minutes of the forming one), `IdeaEngine` (the
   minutes of a pair one by one: steps the open ideas, reads the setups, makes the ideas of the setups that fire; the same for live and
@@ -103,10 +106,13 @@ enforces a rule, the check is the source of truth.
   and day by day, the buckets every 10 minutes, the clean-up of other versions). `Scanner/ScannerPace` tells the replay whether the
   snapshot came late.
 - `Ideas` holds `IdeaCodes` (codes of setups, types, sides, statuses), `IdeaView` (an idea with its buckets), `IdeaLevels` (what the API
-  measures a pair by: price, spread, ATR, zones, window) and the queries of the ideas API (`GetIdeas`, `GetIdea`, `GetIdeaBuckets`,
-  `GetPairIdeas`, `GetZones`, `GetOwnIdea`). `SavedFilters` holds `SavedFilterFields`, the one catalog of fields with their units and
-  operators, `SavedFilterJson`, the codec of conditions for the API and the stored `jsonb`, `SavedFilterRules`, which checks a filter by the
-  catalog, and the commands and queries of saved filters.
+  measures a pair by: price, spread, ATR, zones, window), `IdeaOrder` (the order of the ideas of «Идеи» by a column; setup, type, side and
+  status go in the order of their enums, which is the order of the lists on the screen, not of the Russian names) and the queries of the ideas
+  API (`GetIdeas`, `GetIdea`, `GetIdeaBuckets`, `GetPairIdeas`, `GetZones`, `GetOwnIdea`). `SavedFilters` holds `SavedFilterFields`, the one
+  catalog of fields with their units and operators, `SavedFilterJson`, the codec of conditions for the API and the stored `jsonb`,
+  `SavedFilterRules`, which checks a filter by the catalog (`ParseConditions` checks the conditions alone, as `FitSavedFilter` needs),
+  `SavedFilterMatch`, the one place where a filter is applied to a pair (`Pair`, which skips the conditions on idea fields) and to an idea
+  (`Idea`, which takes the market fields from the row of its pair and fails without one), and the commands and queries of saved filters.
 - `Workers` holds what the Worker needs to share work with other Workers: `WorkerSettings`, `WorkerIdentity` (the
   lease owner of this process) and `LeaseKeeper`, which renews a lease while the work runs. Work the Worker takes is a
   command that returns whether it found any (`RunNextCandleImportCommand`, `RunNextBacktestWorkCommand`).
@@ -311,14 +317,18 @@ enforces a rule, the check is the source of truth.
 - `Controllers` holds controllers only (`BotsController`, `BacktestsController`, `InstrumentsController`: `GET /api/market-data/instruments?category&query&limit`
   → `[{ category, symbol, baseCoin, quoteCoin }]`; field errors 400, exchange unavailable 503); request and response types go to
   `Contracts/<Area>` (`Contracts/Bots`, `Contracts/Backtests`).
-- `MarketController`: `GET /api/market` (the snapshot and the state of the scanner), `GET /api/market/{category}/{symbol}` (a row;
+- `MarketController`: `GET /api/market` (one page of the snapshot and the state of the scanner: `category`, `search`, `setup`, `interval`,
+  `savedFilter`, `sort`, `direction`, `page`, `pageSize`; the answer has `items`, `page`, `pageSize`, `total`, `pairs`, `categories` and `setups`,
+  the counts of the chips), `GET /api/market/{category}/{symbol}` (a row;
   404 when the snapshot has no such pair), `.../candles?interval&from&to` (as the bot chart), `.../open-interest?from&to` and
   `.../funding?from&to` (linear only, from storage, at most 1000 points); contracts in `Contracts/Market`. It never calls Bybit
   but for the candles of a pair.
   `MarketController` also has `.../ideas` (the ideas of a pair), `.../zones?interval` (5, 15, 60, 240) and `POST .../own-idea`; the rows of
   `GET /api/market` and of a pair carry `setups`. `IdeasController`: `GET /api/ideas` (filters `setup`, `interval`, `type`, `side`,
-  `category`, `nonNegativeExpectancy`), `GET /api/ideas/{id}`, `GET /api/ideas/buckets`. `SavedFiltersController`: CRUD of
-  `/api/saved-filters` and the catalog `GET /api/saved-filters/fields`.
+  `category`, `nonNegativeExpectancy`, `savedFilter`; `sort`, `direction`, `page`, `pageSize`; the answer is `items`, `page`, `pageSize` and
+  `total`), `GET /api/ideas/{id}`, `GET /api/ideas/buckets`. `SavedFiltersController`: CRUD of
+  `/api/saved-filters`, the catalog `GET /api/saved-filters/fields` and `POST /api/saved-filters/fit` (`{ conditions }` of a draft →
+  `{ pairs, ideas }`, saves nothing).
 - `Hubs` holds SignalR hubs. `BotChartHub` is the first: `/api/hubs/bot-chart` (under `/api`, so the proxy of the web image
   and of Vite carry it, Vite with `ws: true`). A connection calls `Subscribe(botId)`, which answers `{ state, candle }`
   (`connecting`, `live` or `noData`; the newest candle or `null`) or fails with `bot_not_found`, then receives

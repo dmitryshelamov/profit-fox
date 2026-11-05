@@ -9,7 +9,7 @@ public sealed class MarketQueryParameters
     /// <summary>A part of the symbol, without regard to case.</summary>
     public string? Search { get; init; }
 
-    /// <summary>A setup the pair holds on <see cref="Interval" />.</summary>
+    /// <summary>A setup the pair holds on the interval of the setup.</summary>
     public string? Setup { get; init; }
 
     /// <summary>The interval of the setup, 5, 15, 60 or 240; 15 by default.</summary>
