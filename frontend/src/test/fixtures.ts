@@ -300,6 +300,7 @@ export const ideaOf = (overrides: Partial<Schemas['IdeaResponse']> = {}) =>
     stop: '2.30',
     target: '2.60',
     riskReward: '2',
+    netRiskReward: '1.84345',
     tick: null,
     profitPerUsdt: '0.038878',
     lossPerUsdt: '0.021089',

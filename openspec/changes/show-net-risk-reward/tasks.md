@@ -16,7 +16,7 @@
 - [x] 1.5 Своя идея: `GetOwnIdeaQueryHandler` берёт `BacktestSettings`, считает доли по комиссиям категории,
   `GetOwnIdeaResult` и `OwnIdeaResponse` получают `NetRiskReward`. Готово, когда unit-тест обработчика и интеграционный
   тест `POST .../own-idea` видят поле.
-- [ ] 1.6 Обновить комментарии контрактов и `docs/conventions.md`, где описан R:R; перегенерировать `schema.d.ts` через
+- [x] 1.6 Обновить комментарии контрактов и `docs/conventions.md`, где описан R:R; перегенерировать `schema.d.ts` через
   `npm run generate:api`. Готово, когда typecheck видит `netRiskReward`.
 
 ## 2. Frontend
