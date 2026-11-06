@@ -5,8 +5,8 @@ namespace ProfitFox.Infrastructure.Persistence.Postgres.FluentMigrator.Migration
 [Migration(202611070011)]
 public sealed class AddIdeaAutosMigration : ForwardOnlyMigration
 {
-    // Decision 13: an auto is deleted softly and its name is unique among those that are not; the account is a foreign key that restricts, so an
-    // account with an auto cannot go. Decision 3: a paper trade has the columns of a real one but the lease, the orders, the children and the fills,
+    // Decision 13: an auto is deleted softly and its name is unique among those that are not. The account is no foreign key: a deleted auto keeps
+    // the id of an account that may go; the delete of an account checks the autos that are not deleted. Decision 3: a paper trade has the columns of a real one but the lease, the orders, the children and the fills,
     // and no foreign key to the account or the idea (the replay cleans up ideas); stepped_until is the open time of the next minute to step it by.
     // Decision 6: an entry request of an auto with money carries the account, the amount and the lowest reward to risk of the minute of the idea, and the place
     // of the auto then (rank); fired is the order of the ideas of the minute. Decision 12: a refusal copies the fields of the idea it shows, one per idea
@@ -33,7 +33,6 @@ public sealed class AddIdeaAutosMigration : ForwardOnlyMigration
                 created_at timestamp with time zone NOT NULL,
                 deleted_at timestamp with time zone NULL,
                 CONSTRAINT "PK_idea_autos" PRIMARY KEY (id),
-                CONSTRAINT "FK_idea_autos_exchange_accounts" FOREIGN KEY (account_id) REFERENCES exchange_accounts (id) ON DELETE RESTRICT,
                 CONSTRAINT "CK_idea_autos_mode" CHECK (mode IN ('off', 'paper', 'live'))
             );
 

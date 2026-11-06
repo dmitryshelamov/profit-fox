@@ -96,15 +96,21 @@ public sealed class GetIdeaJournalQueryHandler(
         ];
         IReadOnlyList<(IdeaTrade Trade, bool Paper)> opened = [.. matching.Where(item => item.Trade.IsOpen).OrderByDescending(item => item.Trade.CreatedAt).ThenBy(item => item.Trade.Id)];
         IReadOnlyDictionary<Instrument, decimal> prices = await PricesAsync(opened.Select(item => item.Trade), cancellationToken);
-        IReadOnlyList<IdeaJournalTrade> open = [.. opened.Select(item => Worth(item.Trade, names[item.Trade.AccountId], prices, item.Paper, everyAuto))];
+        IReadOnlyList<IdeaJournalTrade> open = [.. opened.Select(item => Worth(item.Trade, AccountName(names, item.Trade.AccountId), prices, item.Paper, everyAuto))];
 
         return new GetIdeaJournalResult(
             new IdeaJournal(
                 open,
-                page.Slice([.. closed.Select(item => Of(item.Trade, names[item.Trade.AccountId], item.Paper, everyAuto))]),
+                page.Slice([.. closed.Select(item => Of(item.Trade, AccountName(names, item.Trade.AccountId), item.Paper, everyAuto))]),
                 IdeaJournalTotals.Compute([.. closed.Where(item => !item.Paper).Select(item => item.Trade)]),
                 IdeaJournalTotals.Compute([.. closed.Where(item => item.Paper).Select(item => item.Trade)])),
             errors);
+    }
+
+    // A paper trade has no foreign key to its account: the account of a deleted auto may be gone, and the trade stays with no name of it.
+    private static string AccountName(IReadOnlyDictionary<Guid, string> names, Guid account)
+    {
+        return names.GetValueOrDefault(account, "—");
     }
 
     private static string OriginOf((IdeaTrade Trade, bool Paper) item)

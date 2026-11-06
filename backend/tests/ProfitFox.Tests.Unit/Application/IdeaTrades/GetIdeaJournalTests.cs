@@ -343,6 +343,17 @@ public class GetIdeaJournalTests
         view.CurrentResult.ShouldNotBeNull();
     }
 
+    // Review P3: a deleted auto does not hold its account, so the account of its paper trades may be gone; the trade stays, with no account name.
+    [Test]
+    public async Task Paper_trade_of_an_account_that_is_gone_has_no_account_name()
+    {
+        Paper([Closed(Noon.AddHours(-1)) with { AccountId = Guid.NewGuid() }]);
+
+        IdeaJournalTrade view = (await _handler.Handle(Everything, CancellationToken.None)).Journal!.Closed.Items.Single();
+
+        view.AccountName.ShouldBe("—");
+    }
+
     private void Paper(IEnumerable<IdeaTrade> trades)
     {
         _paper.GetAllAsync(Arg.Any<CancellationToken>()).Returns([.. trades.Select(trade => trade with { AutoId = trade.AutoId ?? Gone.Id }).Select(trade => new PaperIdeaTrade(trade, trade.AutoId!.Value, trade.StatusAt))]);

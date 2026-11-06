@@ -16,6 +16,7 @@ public static class ExchangeAccountProblems
             case ExchangeAccountInUseConflictException inUse:
                 var problem = new ProblemDetails { Status = StatusCodes.Status409Conflict, Detail = inUse.Message };
                 problem.Extensions["botNames"] = inUse.BotNames;
+                problem.Extensions["autoNames"] = inUse.AutoNames;
 
                 return new ConflictObjectResult(problem);
             case ConflictException conflict:

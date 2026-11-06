@@ -14,8 +14,13 @@ export function accountProblem(error: unknown): string {
     return 'Не удалось связаться с сервером.';
   }
 
-  if (error.botNames.length > 0) {
-    return `Аккаунт используют боты: ${error.botNames.join(', ')}.`;
+  const holders = [
+    ...(error.botNames.length > 0 ? [`боты: ${error.botNames.join(', ')}`] : []),
+    ...(error.autoNames.length > 0 ? [`автоматы: ${error.autoNames.join(', ')}`] : []),
+  ];
+
+  if (holders.length > 0) {
+    return `Аккаунт используют ${holders.join('; ')}.`;
   }
 
   if (error.status === 503) {
