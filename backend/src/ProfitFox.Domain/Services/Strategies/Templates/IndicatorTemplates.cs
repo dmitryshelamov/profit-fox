@@ -76,20 +76,12 @@ internal static class IndicatorTemplates
     {
         GraphSketch sketch = Skeleton()
             .Node("rsi", SimpleNodeKind.Rsi)
-            .Node("previousRsi", SimpleNodeKind.Previous)
-            .Node("wasLow", SimpleNodeKind.Compare, TemplateParts.Compare(CompareOperation.LessOrEqual))
-            .Node("isAbove", SimpleNodeKind.Compare, TemplateParts.Compare(CompareOperation.Greater))
-            .Node("crossUp", SimpleNodeKind.And)
+            .Node("cross", SimpleNodeKind.Cross)
             .Node("high", SimpleNodeKind.Compare, TemplateParts.Compare(CompareOperation.GreaterOrEqual))
             .Wire("candle.close", "rsi.source")
             .Wire("params.rsiPeriod", "rsi.period")
-            .Wire("rsi.value", "previousRsi.value")
-            .Wire("previousRsi.value", "wasLow.a")
-            .Wire("params.rsiEntry", "wasLow.b")
-            .Wire("rsi.value", "isAbove.a")
-            .Wire("params.rsiEntry", "isAbove.b")
-            .Wire("wasLow.result", "crossUp.a")
-            .Wire("isAbove.result", "crossUp.b")
+            .Wire("rsi.value", "cross.a")
+            .Wire("params.rsiEntry", "cross.b")
             .Wire("rsi.value", "high.a")
             .Wire("params.rsiExit", "high.b");
 
@@ -101,7 +93,7 @@ internal static class IndicatorTemplates
                 TemplateParts.Number("amount", 100m),
                 TemplateParts.Share("stopLoss", 0.05m)
             ],
-            LeaveOnAny(Stop(Enter(sketch, "crossUp.result"), "position.lastEntryPrice"), "high.result", "stopHit.result"));
+            LeaveOnAny(Stop(Enter(sketch, "cross.up"), "position.lastEntryPrice"), "high.result", "stopHit.result"));
     }
 
     /// <summary>Buys when the close falls under the lower band, leaves when it is back at the middle band.</summary>

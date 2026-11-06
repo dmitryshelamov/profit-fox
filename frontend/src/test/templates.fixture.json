@@ -151,26 +151,8 @@
             "kind": "rsi"
           },
           {
-            "id": "previousRsi",
-            "kind": "previous"
-          },
-          {
-            "id": "wasLow",
-            "kind": "compare",
-            "settings": {
-              "operation": "le"
-            }
-          },
-          {
-            "id": "isAbove",
-            "kind": "compare",
-            "settings": {
-              "operation": "gt"
-            }
-          },
-          {
-            "id": "crossUp",
-            "kind": "and"
+            "id": "cross",
+            "kind": "cross"
           },
           {
             "id": "high",
@@ -233,31 +215,11 @@
           },
           {
             "from": "rsi.value",
-            "to": "previousRsi.value"
-          },
-          {
-            "from": "previousRsi.value",
-            "to": "wasLow.a"
+            "to": "cross.a"
           },
           {
             "from": "params.rsiEntry",
-            "to": "wasLow.b"
-          },
-          {
-            "from": "rsi.value",
-            "to": "isAbove.a"
-          },
-          {
-            "from": "params.rsiEntry",
-            "to": "isAbove.b"
-          },
-          {
-            "from": "wasLow.result",
-            "to": "crossUp.a"
-          },
-          {
-            "from": "isAbove.result",
-            "to": "crossUp.b"
+            "to": "cross.b"
           },
           {
             "from": "rsi.value",
@@ -268,7 +230,7 @@
             "to": "high.b"
           },
           {
-            "from": "crossUp.result",
+            "from": "cross.up",
             "to": "entry.a"
           },
           {

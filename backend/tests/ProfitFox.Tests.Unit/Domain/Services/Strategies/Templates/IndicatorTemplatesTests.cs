@@ -161,6 +161,22 @@ public class IndicatorTemplatesTests
         run.Bar(6, 118m).ShouldBe([ExitAll("o-2", 1m)]);
     }
 
+    // The rise over the entry level is a cross: a signal of its closed bar alone, so a rejected buy waits for the next cross.
+    [Test]
+    public void Rsi_rebound_does_not_buy_again_on_the_rejection_of_its_buy()
+    {
+        StrategyRun run = TemplateRuns.Start(StrategyTemplateKind.RsiReversion, ("rsiPeriod", 2m));
+        decimal[] closes = [96m, 102m, 92m, 104m, 96m, 90m, 98m];
+
+        for (int bar = 0; bar < 6; bar++)
+        {
+            run.Bar(bar, closes[bar]);
+        }
+
+        run.Bar(6, closes[6]).ShouldBe([Buy("o-1")]);
+        run.Handle(new OrderRejected(TemplateRuns.At(6), "o-1")).ShouldBeEmpty();
+    }
+
     [Test]
     public void Rsi_reversion_closes_on_the_stop_before_the_exit_level()
     {
