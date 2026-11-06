@@ -275,6 +275,28 @@ public class ScannerSessionTests
         await Should.ThrowAsync<OperationCanceledException>(session);
     }
 
+    // Review of tune-idea-rules: on the market of prod the whole recompute takes over a minute; the buckets of a rule applied meanwhile do not
+    // wait for it.
+    [Test]
+    public async Task Buckets_of_a_rule_applied_do_not_wait_for_the_whole_recompute()
+    {
+        var stuck = new TaskCompletionSource();
+        DateTimeOffset appliedAt = Start.AddMinutes(1);
+        var applied = new IdeaExitRule(IdeaType.Pullback, Interval.FifteenMinutes, 48, 2.5m, 8, appliedAt);
+        _exitRules.GetAllAsync(Arg.Any<CancellationToken>()).Returns(_ => _time.GetUtcNow() >= appliedAt ? [applied] : []);
+        _ideaSignals.StreamAsync(Arg.Any<int>(), Arg.Any<DateTimeOffset>(), Arg.Any<(IdeaType, Interval)?>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<(IdeaType, Interval)?>(2) is null ? Stuck(stuck.Task) : AsyncEnumerable.Empty<IdeaSignal>());
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session().RunAsync(cancellation.Token);
+
+        await WaitAsync(() => Recomputes((IdeaType.Pullback, Interval.FifteenMinutes)) == 1, advance: true);
+
+        Recomputes(null).ShouldBe(1);
+        stuck.SetResult();
+        await cancellation.CancelAsync();
+        await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
     // Review of tune-idea-rules: when the recompute of one type × interval fails, the ones taken with it are not lost: all are done after the
     // retry.
     [Test]

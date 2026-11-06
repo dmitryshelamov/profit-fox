@@ -11,6 +11,8 @@ using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
+using Shouldly;
+
 namespace ProfitFox.Tests.Unit.Application.Scanner.Ideas;
 
 /// <summary>Decision 7: the buckets and the calibration from one pass over the signals of the version, by the exit rules applied.</summary>
@@ -58,6 +60,22 @@ public class IdeaStatisticsTests
                     && reports.Single(report => report.Days == 30 && report.Category == MarketCategory.Linear).Unchecked == 1),
                 Arg.Any<CancellationToken>());
         });
+    }
+
+    // Review of tune-idea-rules: a rule applied while the whole recompute ran is in buckets the pass wrote by the rule before it; the pass names
+    // its type × interval to recompute again. One that did not change is not named.
+    [Test]
+    public async Task Whole_recompute_names_the_rules_applied_while_it_ran()
+    {
+        var applied = new IdeaExitRule(IdeaType.Pullback, Interval.FifteenMinutes, 48, 2.5m, 8, Now);
+        var kept = new IdeaExitRule(IdeaType.TwoR, Interval.OneHour, 48, 3m, null, Now.AddDays(-1));
+        _rules.GetAllAsync(Arg.Any<CancellationToken>()).Returns([kept], [kept, applied]);
+
+        IReadOnlyList<(IdeaType Type, Interval Interval)> first = await Statistics().RecomputeAsync(CancellationToken.None);
+        IReadOnlyList<(IdeaType Type, Interval Interval)> second = await Statistics().RecomputeAsync(CancellationToken.None);
+
+        first.ShouldBe([(IdeaType.Pullback, Interval.FifteenMinutes)]);
+        second.ShouldBeEmpty();
     }
 
     // Requirement "Пересчёт корзин": after a rule is applied only the buckets of its type × interval, by the rule now applied.

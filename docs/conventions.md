@@ -134,7 +134,7 @@ enforces a rule, the check is the source of truth.
   rules every minute and puts a type × interval whose rule changed into `IdeaRecomputes`), `IdeasReplay` (the replay of history pair by pair and day
   by day, the paths of the signals open at the cursor, the clean-up of other versions), `IdeaOutcomes` (one pass over the signals by key and firing:
   the sums of the buckets and the outcomes of the calibration, `IdeaOutcomesResult`) and `IdeaStatistics` (the buckets and the calibration from that
-  pass, whole once an hour in the lane of statistics of `ScannerSession`, a type × interval after its rule changed). `Scanner/ScannerPace` tells the
+  pass, whole once an hour in a lane of `ScannerSession`, a type × interval after its rule changed in another, so it never waits for the whole one). `Scanner/ScannerPace` tells the
   replay whether the snapshot came late.
 - `Ideas` holds `IdeaCodes` (codes of setups, types, sides, statuses), `IdeaView` (an idea with its buckets), `IdeaLevels` (what the API
   measures a pair by: price, spread, ATR, zones, window), `IdeaOrder` (the order of the ideas of «Идеи» by a column; setup, type, side and

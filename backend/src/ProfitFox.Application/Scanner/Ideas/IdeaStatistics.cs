@@ -24,23 +24,27 @@ public sealed class IdeaStatistics(
 {
     private static readonly TimeSpan Read = TimeSpan.FromDays(180);
 
-    public async Task RecomputeAsync(CancellationToken cancellationToken)
+    /// <summary>The whole recompute; gives the types × intervals whose exit rule changed while it ran, which it counted by the rule before.</summary>
+    public async Task<IReadOnlyList<(IdeaType Type, Interval Interval)>> RecomputeAsync(CancellationToken cancellationToken)
     {
         DateTimeOffset now = time.GetUtcNow();
-        IdeaOutcomesResult result = await WalkAsync(now, null, cancellationToken);
+        IReadOnlyList<IdeaExitRule> used = await exitRules.GetAllAsync(cancellationToken);
+        IdeaOutcomesResult result = await WalkAsync(now, null, used, cancellationToken);
         await buckets.ReplaceAsync(version.Number, result.Buckets, null, cancellationToken);
         await calibrations.ReplaceAsync(version.Number, CalibrationCalculator.Compute(result.Outcomes, now), cancellationToken);
+
+        return [.. (await exitRules.GetAllAsync(cancellationToken)).Except(used).Select(rule => (rule.Type, rule.Interval))];
     }
 
     public async Task RecomputeAsync(IdeaType type, Interval interval, CancellationToken cancellationToken)
     {
-        IdeaOutcomesResult result = await WalkAsync(time.GetUtcNow(), (type, interval), cancellationToken);
+        IdeaOutcomesResult result = await WalkAsync(time.GetUtcNow(), (type, interval), await exitRules.GetAllAsync(cancellationToken), cancellationToken);
         await buckets.ReplaceAsync(version.Number, result.Buckets, (type, interval), cancellationToken);
     }
 
-    private async Task<IdeaOutcomesResult> WalkAsync(DateTimeOffset now, (IdeaType, Interval)? only, CancellationToken cancellationToken)
+    private async Task<IdeaOutcomesResult> WalkAsync(DateTimeOffset now, (IdeaType, Interval)? only, IReadOnlyList<IdeaExitRule> applied, CancellationToken cancellationToken)
     {
-        var rules = new IdeaExitRules(await exitRules.GetAllAsync(cancellationToken));
+        var rules = new IdeaExitRules(applied);
         IReadOnlyDictionary<MarketCategory, FeeRates> fees = backtests.Policy().DefaultFees;
 
         return await IdeaOutcomes.WalkAsync(signals.StreamAsync(version.Number, now - Read, only, cancellationToken), rules, category => fees[category], now, cancellationToken);

@@ -16,11 +16,11 @@ using ProfitFox.Domain.ValueObjects.MarketData;
 namespace ProfitFox.Application.Scanner;
 
 /// <summary>
-///     The scanner while it holds the stream: the list of pairs, the stream of minute candles, the loads, the minute cycle and the ideas. Five
+///     The scanner while it holds the stream: the list of pairs, the stream of minute candles, the loads, the minute cycle and the ideas. Six
 ///     lanes run side by side: the stream's candles go to storage in batches; the REST lane catches up the pairs that lag behind, reads the list
 ///     again, tops up funding and loads history, one piece at a time; the minute cycle computes the snapshot and the live ideas; the lane of
 ///     ideas reads the warm-ups of the live ideas, replays history from storage only and removes the ideas closed more than a week ago once an
-///     hour; the lane of statistics recomputes the buckets and the calibration once an hour and the buckets of a type × interval whose exit
+///     hour; one lane of statistics recomputes the buckets and the calibration once an hour, another the buckets of a type × interval whose exit
 ///     rule changed (requirement "Пересчёт корзин"). A failed step is logged and tried again; only the end of the lease stops the session.
 /// </summary>
 public sealed class ScannerSession(
@@ -71,7 +71,8 @@ public sealed class ScannerSession(
         try
         {
             await SubscribeAsync(session.Token);
-            Task[] lanes = [WriteCandlesAsync(session.Token), RestAsync(session.Token), MinutesAsync(session.Token), IdeasAsync(session.Token), StatisticsAsync(session.Token)];
+            Task[] lanes = [WriteCandlesAsync(session.Token), RestAsync(session.Token), MinutesAsync(session.Token), IdeasAsync(session.Token), WholeStatisticsAsync(session.Token),
+                RuleStatisticsAsync(session.Token)];
             Task first = await Task.WhenAny(lanes);
 
             // The lanes use the services of the session, so none of them outlives it.
@@ -236,21 +237,36 @@ public sealed class ScannerSession(
         }
     }
 
-    // While a recompute runs the API and the ideas read the buckets before it: storage replaces them whole when it ends.
-    private async Task StatisticsAsync(CancellationToken cancellationToken)
+    // While a recompute runs the API and the ideas read the buckets before it: storage replaces them whole when it ends. The whole pass
+    // runs over a minute on the market of prod, so the buckets of a rule applied go in a lane of their own; the rules applied while the whole
+    // pass ran go there again after it, for it wrote their buckets by the rules before.
+    private async Task WholeStatisticsAsync(CancellationToken cancellationToken)
     {
-        DateTimeOffset wholeAt = time.GetUtcNow();
-
         while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
-                if (time.GetUtcNow() >= wholeAt)
+                foreach ((IdeaType type, Interval interval) in await statistics.RecomputeAsync(cancellationToken))
                 {
-                    await statistics.RecomputeAsync(cancellationToken);
-                    wholeAt = time.GetUtcNow() + StatisticsRefresh;
+                    recomputes.Add(type, interval);
                 }
 
+                await Task.Delay(StatisticsRefresh, time, cancellationToken);
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                journal.Failed("statistics", exception);
+                await Task.Delay(Retry, time, cancellationToken);
+            }
+        }
+    }
+
+    private async Task RuleStatisticsAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
                 IReadOnlyList<(IdeaType Type, Interval Interval)> changed = recomputes.Take();
 
                 for (int index = 0; index < changed.Count; index++)
@@ -271,7 +287,7 @@ public sealed class ScannerSession(
                     }
                 }
 
-                await recomputes.WaitAsync(wholeAt - time.GetUtcNow(), time, cancellationToken);
+                await recomputes.WaitAsync(StatisticsRefresh, time, cancellationToken);
             }
             catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
             {
