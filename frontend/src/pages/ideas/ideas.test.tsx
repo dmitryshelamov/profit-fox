@@ -286,6 +286,33 @@ describe('ideas screen', () => {
     );
   });
 
+  // Scenarios "Переключатель «Только активные»", "Переключатель «Скрыть акции»" and "Переключатели после перезагрузки".
+  it('asks the API for the active ideas of crypto pairs and keeps both switches on after a reload', async () => {
+    const requests = open();
+    const first = renderApp('/ideas');
+    await rowOf('WIFUSDT');
+    expect(screen.getByRole('checkbox', { name: 'Скрыть акции' }).closest('label')).toHaveAttribute(
+      'title',
+      'акции, xStocks, ETF, сырьё и форекс',
+    );
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Только активные' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Скрыть акции' }));
+
+    await waitFor(() =>
+      expect(lastIdeasQuery(requests)).toMatchObject({ ActiveOnly: 'true', HideStocks: 'true' }),
+    );
+    first.unmount();
+    requests.length = 0;
+
+    renderApp('/ideas');
+    await rowOf('WIFUSDT');
+
+    expect(screen.getByRole('checkbox', { name: 'Только активные' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Скрыть акции' })).toBeChecked();
+    expect(lastIdeasQuery(requests)).toMatchObject({ ActiveOnly: 'true', HideStocks: 'true' });
+  });
+
   // Scenario "Фильтр по новому сетапу и типу".
   it('asks the API for the stop entries of a squeeze and names them in the row', async () => {
     const squeeze = ideaOf({
@@ -567,6 +594,16 @@ describe('ideas screen', () => {
         'a filter',
         () => userEvent.selectOptions(screen.getByRole('combobox', { name: 'Сторона' }), 'short'),
         { Side: 'short' },
+      ],
+      [
+        'a switch',
+        () => userEvent.click(screen.getByRole('checkbox', { name: 'Только активные' })),
+        { ActiveOnly: 'true' },
+      ],
+      [
+        'the stocks switch',
+        () => userEvent.click(screen.getByRole('checkbox', { name: 'Скрыть акции' })),
+        { HideStocks: 'true' },
       ],
       [
         'the sorting',

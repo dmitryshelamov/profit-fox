@@ -41,6 +41,30 @@ public sealed class ScannerMarket
         }
     }
 
+    /// <summary>
+    ///     The pairs the list of the exchange changed, from a copy taken before its requests: a new pair is added, a known one takes what the
+    ///     list tells (listed, the step of price, non-crypto) and keeps the coverage memory holds, which the stream may have moved meanwhile.
+    /// </summary>
+    public void KeepListed(IEnumerable<ScannerPair> pairs)
+    {
+        lock (_lock)
+        {
+            foreach (ScannerPair pair in pairs)
+            {
+                if (_books.TryGetValue(pair.Instrument, out Book? book))
+                {
+                    book.Pair = book.Pair with { Listed = pair.Listed, TickSize = pair.TickSize, TradFi = pair.TradFi };
+                }
+                else
+                {
+                    _books[pair.Instrument] = new Book(pair);
+                }
+
+                _changed.Add(pair.Instrument);
+            }
+        }
+    }
+
     /// <summary>Every pair the scanner knows, listed or not.</summary>
     public IReadOnlyList<ScannerPair> All()
     {

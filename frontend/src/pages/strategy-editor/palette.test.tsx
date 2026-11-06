@@ -37,6 +37,33 @@ describe('node palette', () => {
     expect(within(palette).queryByRole('button', { name: 'Входы узла' })).not.toBeInTheDocument();
   });
 
+  // Scenario "Индикаторы в палитре".
+  it('offers the indicators together and the built-in composites by the crossing of the EMAs', async () => {
+    open();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Добавить узел' }));
+
+    const palette = screen.getByRole('dialog', { name: 'Библиотека узлов' });
+    const titles = (group: string) =>
+      within(within(palette).getByRole('group', { name: group }))
+        .getAllByRole('button')
+        .map((button) => button.getAttribute('aria-label'));
+    expect(titles('Индикаторы')).toEqual([
+      'EMA',
+      'Пересечение',
+      'SMA',
+      'Стандартное отклонение',
+      'RSI',
+      'Предыдущее',
+    ]);
+    expect(titles('Составные')).toEqual([
+      'Пересечение EMA',
+      'MACD',
+      'Полосы Боллинджера',
+      'Фильтр тренда',
+    ]);
+  });
+
   it('adds the clicked node with the default settings of the catalog', async () => {
     open();
 

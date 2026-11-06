@@ -5,7 +5,10 @@ import { jsonNumberOf } from '@/shared/api/jsonNumber';
 
 import type { IdeaSort } from './model/sort';
 
-/** What the list of ideas is asked for; an empty text means no limit. */
+/**
+ * What the list of ideas is asked for; an empty text means no limit. `activeOnly` keeps the ideas awaiting entry and the active ones,
+ * `hideStocks` drops the ideas of the non-crypto pairs: stocks, xStocks, ETFs, commodities and forex.
+ */
 export interface IdeaFilters {
   readonly setup: string;
   readonly interval: string;
@@ -13,6 +16,8 @@ export interface IdeaFilters {
   readonly side: string;
   readonly category: string;
   readonly nonNegativeExpectancy: boolean;
+  readonly activeOnly: boolean;
+  readonly hideStocks: boolean;
 }
 
 export const noIdeaFilters: IdeaFilters = {
@@ -22,6 +27,8 @@ export const noIdeaFilters: IdeaFilters = {
   side: '',
   category: '',
   nonNegativeExpectancy: false,
+  activeOnly: false,
+  hideStocks: false,
 };
 
 const given = (text: string) => (text === '' ? undefined : text);
@@ -55,6 +62,8 @@ export function ideasQuery(request: IdeasRequest, enabled: boolean) {
               Side: given(filters.side),
               Category: given(filters.category),
               NonNegativeExpectancy: filters.nonNegativeExpectancy ? true : undefined,
+              ActiveOnly: filters.activeOnly ? true : undefined,
+              HideStocks: filters.hideStocks ? true : undefined,
               SavedFilter: savedFilterId ?? undefined,
               Sort: sort.column,
               Direction: sort.direction,

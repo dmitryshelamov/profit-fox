@@ -37,6 +37,9 @@ internal sealed class Position(int number, StrategyDirection direction, decimal 
 
     public DateTimeOffset? LastEntryAt { get; private set; }
 
+    /// <summary>The bars closed after the last entry; a restored position counts them again from the bars it is warmed up with.</summary>
+    public int BarsSinceEntry { get; private set; }
+
     public decimal? AveragePrice => Quantity > 0m ? Invested / Quantity : null;
 
     /// <summary>Open from the minimum quantity on, so a remainder alone is no position for the strategy.</summary>
@@ -65,6 +68,14 @@ internal sealed class Position(int number, StrategyDirection direction, decimal 
         return new Position(Number + 1, direction, minQuantity) { Quantity = Quantity, Invested = Invested, Collateral = Collateral };
     }
 
+    public void CountBar(DateTimeOffset closedAt)
+    {
+        if (closedAt > LastEntryAt)
+        {
+            BarsSinceEntry++;
+        }
+    }
+
     /// <summary>Closes the position on request, whatever it holds: it waits for its orders and sells what it holds.</summary>
     public void BeginClosing()
     {
@@ -81,6 +92,7 @@ internal sealed class Position(int number, StrategyDirection direction, decimal 
         Fees += asset == FeeAsset.Base ? fee * price : fee;
         LastEntryPrice = price;
         LastEntryAt = at;
+        BarsSinceEntry = 0;
 
         return -(quantity * price + quoteFee);
     }

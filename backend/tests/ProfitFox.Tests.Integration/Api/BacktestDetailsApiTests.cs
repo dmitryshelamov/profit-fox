@@ -61,7 +61,7 @@ public class BacktestDetailsApiTests
         JsonElement[] orders = [.. position.GetProperty("orders").EnumerateArray()];
         orders.Select(order => (order.GetProperty("side").GetString(), order.GetProperty("type").GetString(), order.GetProperty("status").GetString()))
             .ShouldBe([("buy", "market", "filled"), ("sell", "market", "filled")]);
-        orders.ShouldAllBe(order => order.GetProperty("node").ValueKind == JsonValueKind.String);
+        orders.Select(order => order.GetProperty("node").ValueKind).ShouldBe([JsonValueKind.String, JsonValueKind.Null], "The exit of a closing position belongs to the position, not to a node.");
         JsonElement fill = orders[0].GetProperty("fills").EnumerateArray().ShouldHaveSingleItem();
         fill.GetProperty("at").GetDateTimeOffset().ShouldBe(From.AddHours(6));
         Number(fill, "price").ShouldBe(10m);

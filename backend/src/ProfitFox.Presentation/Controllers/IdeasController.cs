@@ -38,7 +38,9 @@ public sealed class IdeasController(ISender sender) : ControllerBase
                 parameters.Sort,
                 parameters.Direction,
                 parameters.Page,
-                parameters.PageSize),
+                parameters.PageSize,
+                parameters.ActiveOnly,
+                parameters.HideStocks),
             cancellationToken);
 
         return result.Page is null ? Invalid(result.Errors) : Ok(IdeasPageResponse.Of(result));

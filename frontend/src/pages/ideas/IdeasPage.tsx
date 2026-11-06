@@ -180,6 +180,25 @@ export function IdeasPage({ page }: { page: number }) {
           Ожидание ≥ 0 R
         </label>
         <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={filters.activeOnly}
+            onChange={(event) => set({ activeOnly: event.target.checked })}
+          />
+          Только активные
+        </label>
+        <label
+          className="flex items-center gap-2 text-sm"
+          title="акции, xStocks, ETF, сырьё и форекс"
+        >
+          <input
+            type="checkbox"
+            checked={filters.hideStocks}
+            onChange={(event) => set({ hideStocks: event.target.checked })}
+          />
+          Скрыть акции
+        </label>
+        <label className="flex items-center gap-2 text-sm">
           <span className="text-muted">Сумма на идею</span>
           <input
             inputMode="decimal"

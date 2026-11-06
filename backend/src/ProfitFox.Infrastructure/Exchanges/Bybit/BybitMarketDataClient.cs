@@ -171,7 +171,7 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
         {
             // Bybit lists all spot instruments in one answer.
             return Unwrap(await bybit.V5Api.ExchangeData.GetSpotSymbolsAsync(ct: cancellationToken)).List
-                .Select(spot => new ListedInstrument(category, spot.Name, spot.BaseAsset, spot.QuoteAsset, spot.Status == SymbolStatus.Trading, TickSize: spot.PriceFilter?.TickSize))
+                .Select(spot => new ListedInstrument(category, spot.Name, spot.BaseAsset, spot.QuoteAsset, spot.Status == SymbolStatus.Trading, TickSize: spot.PriceFilter?.TickSize, TradFi: IsTradFi(spot.SymbolType)))
                 .ToList();
         }
 
@@ -190,12 +190,19 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
                 linear.Status == SymbolStatus.Trading,
                 linear.ContractType == ContractTypeV5.LinearPerpetual,
                 new DateTimeOffset(DateTime.SpecifyKind(linear.LaunchTime, DateTimeKind.Utc)),
-                linear.PriceFilter?.TickSize)));
+                linear.PriceFilter?.TickSize,
+                IsTradFi(linear.SymbolType))));
             cursor = page.NextPageCursor;
         }
         while (!string.IsNullOrEmpty(cursor));
 
         return listed;
+    }
+
+    // A stock (a spot xStock too), an ETF, a commodity or forex; a zone of coins, no type or a type the SDK does not know is crypto.
+    private static bool IsTradFi(SymbolType? type)
+    {
+        return type is SymbolType.Stock or SymbolType.XStocks or SymbolType.Etf or SymbolType.Commodity or SymbolType.Forex;
     }
 
     private static T Listed<T>(T[] symbols, Instrument instrument)

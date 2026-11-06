@@ -7,6 +7,17 @@ export const strategiesQuery = queryOptions({
   queryFn: async () => unwrap(await api.GET('/api/strategies')),
 });
 
+/** The built-in templates: name, idea and direction of each. */
+export const strategyTemplatesQuery = queryOptions({
+  queryKey: ['strategy-templates'],
+  queryFn: async () => unwrap(await api.GET('/api/strategy-templates')),
+});
+
+/** The name and the definition of a template, which become a new strategy as they are. */
+export async function fetchStrategyTemplate(code: string) {
+  return unwrap(await api.GET('/api/strategy-templates/{code}', { params: { path: { code } } }));
+}
+
 export function strategyQuery(id: string) {
   return queryOptions({
     queryKey: ['strategies', id],

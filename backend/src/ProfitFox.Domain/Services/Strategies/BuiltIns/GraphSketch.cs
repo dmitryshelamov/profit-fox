@@ -16,6 +16,13 @@ internal sealed class GraphSketch
         return this;
     }
 
+    public GraphSketch Composite(string id, BuiltInNode node, params (string Pin, NodeValue Value)[] inputs)
+    {
+        _nodes.Add(new GraphNode(id, new CompositeNodeType(new BuiltInNodeId(node)), inputs.ToDictionary(input => input.Pin, input => input.Value), new NodeSettings()));
+
+        return this;
+    }
+
     public GraphSketch Wire(string from, string to)
     {
         _wires.Add(new Wire(Pin(from), Pin(to)));
