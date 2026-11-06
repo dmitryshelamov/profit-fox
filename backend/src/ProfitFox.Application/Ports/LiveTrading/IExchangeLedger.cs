@@ -32,6 +32,10 @@ public interface IExchangeLedger
     /// <exception cref="ProfitFox.Application.Exceptions.ExchangeException">The exchange refused or did not answer.</exception>
     Task<ExchangeOrder?> FindOrderByExchangeIdAsync(ExchangeKey key, Instrument instrument, string exchangeOrderId, CancellationToken cancellationToken);
 
+    /// <summary>The orders of the instrument that name the order with this client id as their parent, open or finished in the recent history: the stop and the target of an entry.</summary>
+    /// <exception cref="ProfitFox.Application.Exceptions.ExchangeException">The exchange refused or did not answer.</exception>
+    Task<IReadOnlyList<ExchangeOrder>> GetOrdersOfParentAsync(ExchangeKey key, Instrument instrument, string parentClientId, CancellationToken cancellationToken);
+
     /// <summary>The executions of the order with this exchange's id, the oldest first.</summary>
     /// <exception cref="ProfitFox.Application.Exceptions.ExchangeException">The exchange refused or did not answer.</exception>
     Task<IReadOnlyList<ExchangeFill>> GetOrderFillsAsync(ExchangeKey key, Instrument instrument, string exchangeOrderId, CancellationToken cancellationToken);

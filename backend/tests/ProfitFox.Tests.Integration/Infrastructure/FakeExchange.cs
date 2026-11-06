@@ -80,7 +80,7 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
     /// <summary>Takes every order sent, then holds its answer until the test lets it through: the answer is lost when the Worker stops.</summary>
     public TaskCompletionSource? HoldAnswer { get; set; }
 
-    /// <summary>The answers to the next cancels sent.</summary>
+    /// <summary>The answers to the next cancels sent, of an order or of a stop or a target.</summary>
     public Queue<OrderOutcome> CancelRefusals { get; } = new Queue<OrderOutcome>();
 
     public IReadOnlyList<OrderRequest> Orders
@@ -470,6 +470,11 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
         }
     }
 
+    public Task<IReadOnlyList<ExchangeOrder>> GetOrdersOfParentAsync(ExchangeKey key, Instrument instrument, string parentClientId, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(ChildrenOf(parentClientId));
+    }
+
     public Task<ExchangeOrder?> FindOrderAsync(ExchangeKey key, Instrument instrument, string clientId, CancellationToken cancellationToken)
     {
         return Task.FromResult(Order(clientId));
@@ -657,6 +662,11 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
         lock (_lock)
         {
             ChildCancels.Add(exchangeOrderId);
+
+            if (CancelRefusals.TryDequeue(out OrderOutcome? refusal))
+            {
+                return Task.FromResult(refusal);
+            }
 
             if (!_children.TryGetValue(exchangeOrderId, out Child? child) || child.Order.State != ExchangeOrderState.Open)
             {

@@ -97,12 +97,20 @@ public sealed record IdeaTrade(
         return EntryDeadline <= now;
     }
 
-    /// <summary>The totals the exchange counted of the entry; the first fill opens the trade.</summary>
+    /// <summary>The totals the exchange counted of the entry; the first fill opens the trade, and one that the exits took out already closes it.</summary>
     public IdeaTrade EntryGrown(LegTotals totals, DateTimeOffset now)
     {
         IdeaTrade grown = this with { Entry = totals };
 
-        return Status == IdeaTradeStatus.AwaitingEntry && totals.Quantity > 0m ? grown with { Status = IdeaTradeStatus.Open, StatusAt = now } : grown;
+        if (Status != IdeaTradeStatus.AwaitingEntry || totals.Quantity <= 0m)
+        {
+            return grown;
+        }
+
+        IdeaTrade open = grown with { Status = IdeaTradeStatus.Open, StatusAt = now };
+        IdeaTradeLeg largest = new[] { IdeaTradeLeg.StopLoss, IdeaTradeLeg.TakeProfit, IdeaTradeLeg.Manual }.MaxBy(leg => open.ExitOf(leg).Quantity);
+
+        return open.Settled(largest, now);
     }
 
     /// <summary>The entry is over, with no more to fill: a trade it filled nothing of is cancelled, one it filled in part stays open.</summary>
@@ -111,19 +119,37 @@ public sealed record IdeaTrade(
         return Status == IdeaTradeStatus.AwaitingEntry ? this with { Status = IdeaTradeStatus.Cancelled, StatusAt = now } : this;
     }
 
-    /// <summary>The totals the exchange counted of an exit; the exit that takes out the last of the quantity closes the trade.</summary>
-    public IdeaTrade ExitGrown(IdeaTradeLeg leg, LegTotals totals, DateTimeOffset now)
+    /// <summary>
+    ///     What an order of an exit took out, added to its leg: a leg may have several orders, such as a second market close. The exit that takes
+    ///     out the last of the quantity closes the trade.
+    /// </summary>
+    public IdeaTrade ExitGrown(IdeaTradeLeg leg, LegTotals added, DateTimeOffset now)
     {
         IdeaTrade grown = leg switch
         {
-            IdeaTradeLeg.TakeProfit => this with { TakeProfit = totals },
-            IdeaTradeLeg.StopLoss => this with { StopLoss = totals },
-            _ => this with { Manual = totals }
+            IdeaTradeLeg.TakeProfit => this with { TakeProfit = TakeProfit + added },
+            IdeaTradeLeg.StopLoss => this with { StopLoss = StopLoss + added },
+            _ => this with { Manual = Manual + added }
         };
 
-        if (grown.Status != IdeaTradeStatus.Open || grown.HeldQuantity > 0m)
+        return grown.Settled(leg, now);
+    }
+
+    private LegTotals ExitOf(IdeaTradeLeg leg)
+    {
+        return leg switch
         {
-            return grown;
+            IdeaTradeLeg.TakeProfit => TakeProfit,
+            IdeaTradeLeg.StopLoss => StopLoss,
+            _ => Manual
+        };
+    }
+
+    private IdeaTrade Settled(IdeaTradeLeg leg, DateTimeOffset now)
+    {
+        if (Status != IdeaTradeStatus.Open || HeldQuantity > 0m)
+        {
+            return this;
         }
 
         IdeaTradeStatus closed = leg switch
@@ -133,7 +159,7 @@ public sealed record IdeaTrade(
             _ => IdeaTradeStatus.ClosedManually
         };
 
-        return grown with { Status = closed, StatusAt = now };
+        return this with { Status = closed, StatusAt = now };
     }
 
     /// <exception cref="IdeaTradeConflictException">The trade does not wait for its entry.</exception>

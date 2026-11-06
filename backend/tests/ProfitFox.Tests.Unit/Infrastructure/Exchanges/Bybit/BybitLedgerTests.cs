@@ -145,6 +145,21 @@ public class BybitLedgerTests
         BybitRequests.Describe(handler.Requests[1]).ShouldBe(BybitRequests.Describe("/v5/order/history?category=linear&symbol=BTCUSDT&orderId=x-stop"));
     }
 
+    // The stop and the target of an entry: the open ones, and the ones the history of the symbol shows finished, that name the entry as their parent.
+    [Test]
+    public async Task Orders_of_a_parent_are_the_open_and_the_recent_ones_that_name_it()
+    {
+        using StubHttpHandler handler = new StubHttpHandler()
+            .RespondJson(Orders(Child("x-tp", "New", "PartialTakeProfit", "c-1"), Child("x-other", "New", "PartialTakeProfit", "c-2")))
+            .RespondJson(Orders(Child("x-sl", "Filled", "PartialStopLoss", "c-1"), Child("x-old", "Filled", "", "")));
+
+        IReadOnlyList<ExchangeOrder> orders = await Ledger(handler).GetOrdersOfParentAsync(Key, Linear, "c-1", CancellationToken.None);
+
+        orders.Select(order => (order.ExchangeId, order.State, order.StopKind)).ShouldBe([("x-tp", ExchangeOrderState.Open, StopOrderKind.TakeProfit), ("x-sl", ExchangeOrderState.Filled, StopOrderKind.StopLoss)]);
+        BybitRequests.Describe(handler.Requests[0]).ShouldBe(BybitRequests.Describe("/v5/order/realtime?category=linear&symbol=BTCUSDT&openOnly=0&limit=50"));
+        BybitRequests.Describe(handler.Requests[1]).ShouldBe(BybitRequests.Describe("/v5/order/history?category=linear&symbol=BTCUSDT&limit=50"));
+    }
+
     [Test]
     public async Task Fills_of_an_order_are_found_by_the_id_of_the_exchange()
     {
@@ -237,6 +252,15 @@ public class BybitLedgerTests
         return $$"""
                  {"orderId":"x-{{clientId}}","orderLinkId":"{{clientId}}","symbol":"BTCUSDT","price":"101","qty":"1","side":"Sell","orderStatus":"{{status}}",
                  "cumExecQty":"{{filled}}","cumExecValue":"40.4","cumExecFee":"0.0004","feeCurrency":"BTC","orderType":"Limit","timeInForce":"GTC","rejectReason":"EC_NoError",
+                 "createdTime":"1684738540559","updatedTime":"1684738540561"}
+                 """;
+    }
+
+    private static string Child(string exchangeId, string status, string stopType, string parent)
+    {
+        return $$"""
+                 {"orderId":"{{exchangeId}}","orderLinkId":"","parentOrderLinkId":"{{parent}}","stopOrderType":"{{stopType}}","symbol":"BTCUSDT","price":"0","qty":"0.47","side":"Sell",
+                 "orderStatus":"{{status}}","cumExecQty":"0","cumExecValue":"0","cumExecFee":"0","feeCurrency":"USDT","orderType":"Market","timeInForce":"IOC","rejectReason":"EC_NoError",
                  "createdTime":"1684738540559","updatedTime":"1684738540561"}
                  """;
     }

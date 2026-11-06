@@ -111,6 +111,28 @@ public class IdeaTradeRepositoryTests
         (await _repository.ClaimAsync(OwnerA, Now, Now.AddSeconds(30), CancellationToken.None)).ShouldBeNull();
     }
 
+    // A failed trade whose entry still stands on the exchange is watched until the entry is gone.
+    [Test]
+    public async Task Failed_trade_is_claimed_while_an_order_of_it_stands_and_not_after()
+    {
+        IdeaTrade trade = await CreateAsync(Now);
+        await SaveAsync(trade.Fail("Bybit refused to cancel", Now));
+
+        (await _repository.ClaimAsync(OwnerA, Now, Now.AddSeconds(30), CancellationToken.None))!.Trade.Id.ShouldBe(trade.Id);
+
+        IdeaTradeOrder entry = (await _repository.GetOrdersAsync(trade.Id, CancellationToken.None)).Single();
+        await _executor.ExecuteAsync(
+            async token =>
+            {
+                await _repository.SaveOrderAsync(entry.Cancelled(), token);
+
+                return 0;
+            },
+            CancellationToken.None);
+
+        (await _repository.ClaimAsync(OwnerB, Now.AddSeconds(60), Now.AddSeconds(90), CancellationToken.None)).ShouldBeNull();
+    }
+
     [Test]
     public async Task Released_trade_is_claimed_again_and_changes_are_told_to_the_holder()
     {

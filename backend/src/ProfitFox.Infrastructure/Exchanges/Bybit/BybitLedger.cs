@@ -60,6 +60,18 @@ internal sealed class BybitLedger(HttpClient http, ILoggerFactory loggers, Bybit
         return orders;
     }
 
+    public async Task<IReadOnlyList<ExchangeOrder>> GetOrdersOfParentAsync(ExchangeKey key, Instrument instrument, string parentClientId, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<ExchangeOrder> open = await GetOpenOrdersAsync(key, instrument, cancellationToken);
+
+        // The orders that finished are in the history, newest first; the stop and the target of an entry are among the latest.
+        using BybitRestClient client = Client(key);
+        BybitResponse<BybitOrder> history = BybitKeyClients.Unwrap(await client.V5Api.Trading.GetOrderHistoryAsync(
+            instrument.Category.ToBybit(), instrument.Symbol, limit: PageSize, ct: cancellationToken));
+
+        return [.. open.Concat(history.List.Select(Order)).Where(order => order.ParentClientId == parentClientId)];
+    }
+
     public Task<ExchangeOrder?> FindOrderAsync(ExchangeKey key, Instrument instrument, string clientId, CancellationToken cancellationToken)
     {
         return FindAsync(key, instrument, clientId, null, cancellationToken);

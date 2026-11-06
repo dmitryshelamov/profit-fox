@@ -54,6 +54,12 @@ internal sealed class IdeaTradeSession(
     // How many times the books are compared with the exchange before the bots and the trades of the account and the symbol fail.
     private const int ReconcileAttempts = 3;
 
+    // A market entry is sized at the click: Bybit has to take it within this time, or the price it was sized at is stale.
+    private static readonly TimeSpan EntryWindow = TimeSpan.FromSeconds(30);
+
+    // How soon a cancel of the stop or the target that Bybit met with a pause is asked again.
+    private static readonly TimeSpan ChildCancelRetry = TimeSpan.FromSeconds(5);
+
     private readonly Channel<IdeaTradeInput> _inputs = Channel.CreateUnbounded<IdeaTradeInput>(new UnboundedChannelOptions { SingleReader = true });
 
     // The unfinished orders of the trade by number.
@@ -62,8 +68,8 @@ internal sealed class IdeaTradeSession(
     // The stops and targets the exchange made for the entry, by the exchange's id; the stream reads the keys from its own thread.
     private readonly ConcurrentDictionary<string, IdeaTradeChild> _children = new ConcurrentDictionary<string, IdeaTradeChild>();
 
-    // The stops and targets a cancel was sent for, so a close does not ask twice.
-    private readonly HashSet<string> _childCancels = [];
+    // The stops and targets Bybit refused to cancel for good: the owner is told, and nobody asks again.
+    private readonly HashSet<string> _childRefused = [];
 
     private readonly Guid _id = leased.Trade.Id;
     private readonly LiveBotReconciler _reconciler = new LiveBotReconciler(bots, repository, library, ledger, catalog, executor, journal, worker, time);
@@ -217,7 +223,7 @@ internal sealed class IdeaTradeSession(
             },
             cancellationToken);
         _children.Clear();
-        _childCancels.Clear();
+        _childRefused.Clear();
 
         foreach (IdeaTradeChild child in await repository.GetChildrenAsync(_id, cancellationToken))
         {
@@ -265,22 +271,26 @@ internal sealed class IdeaTradeSession(
             await RefreshAsync(order.Number, cancellationToken);
         }
 
+        await RefreshChildrenAsync(cancellationToken);
+
+        // The entry is filled and its stop and target are not both known yet: the exchange may have them, open or finished, naming the entry.
+        if (_trade.Status == IdeaTradeStatus.Open && _children.Values.Select(child => child.Leg).Distinct().Count() < 2)
+        {
+            foreach (ExchangeOrder child in await ledger.GetOrdersOfParentAsync(_context.Key, _context.Instrument, new IdeaTradeOrderId(_id, 1).Code, cancellationToken))
+            {
+                await OrderAsync(child, cancellationToken);
+            }
+        }
+    }
+
+    /// <summary>Reads the stop and the target that are not over in the books: one may have fired or been cancelled unheard.</summary>
+    private async Task RefreshChildrenAsync(CancellationToken cancellationToken)
+    {
         foreach (IdeaTradeChild child in _children.Values.Where(child => !child.Finished).ToArray())
         {
             if (await ledger.FindOrderByExchangeIdAsync(_context.Key, _context.Instrument, child.ExchangeOrderId, cancellationToken) is { } known)
             {
                 await OrderAsync(known, cancellationToken);
-            }
-        }
-
-        // The entry is filled and its stop and target are not known yet: they may be on the exchange, naming the entry.
-        if (_trade.Status == IdeaTradeStatus.Open && _children.IsEmpty)
-        {
-            string entry = new IdeaTradeOrderId(_id, 1).Code;
-
-            foreach (ExchangeOrder open in (await ledger.GetOpenOrdersAsync(_context.Key, _context.Instrument, cancellationToken)).Where(order => order.ParentClientId == entry))
-            {
-                await OrderAsync(open, cancellationToken);
             }
         }
     }
@@ -428,7 +438,9 @@ internal sealed class IdeaTradeSession(
                 {
                     next = next.Grown(order.FilledQuantity, order.FilledValue, order.Fee, order.State == ExchangeOrderState.Filled);
                     LegTotals totals = Totals(order, own.Side == OrderSide.Buy);
-                    _trade = own.Role == IdeaTradeOrderRole.Entry ? _trade.EntryGrown(totals, now) : _trade.ExitGrown(IdeaTradeLeg.Manual, totals, now);
+                    _trade = own.Role == IdeaTradeOrderRole.Entry
+                        ? _trade.EntryGrown(totals, now)
+                        : _trade.ExitGrown(IdeaTradeLeg.Manual, totals - new LegTotals(own.FilledQuantity, own.FilledValue, own.Fee), now);
                 }
 
                 switch (order.State)
@@ -444,11 +456,15 @@ internal sealed class IdeaTradeSession(
                         {
                             _trade = _trade.EntryEnded(now) with { CancelRequested = false };
                         }
+                        else
+                        {
+                            _trade = _trade with { Reason = $"Закрытие по рынку отменено на бирже, осталось {_trade.HeldQuantity}. Стоп и цель стоят, закрытие можно повторить." };
+                        }
 
                         break;
                     case ExchangeOrderState.Rejected:
                         next = next.Rejected(order.RejectReason ?? "Bybit rejected the order.");
-                        _trade = _trade.Fail(next.RejectReason!, now);
+                        _trade = Refused(next, now);
 
                         break;
                 }
@@ -483,10 +499,11 @@ internal sealed class IdeaTradeSession(
             async token =>
             {
                 LegTotals totals = Totals(order, false);
+                LegTotals before = _children.TryGetValue(order.ExchangeId, out IdeaTradeChild? counted) ? new LegTotals(counted.FilledQuantity, counted.FilledValue, counted.Fee) : LegTotals.None;
                 var saved = new IdeaTradeChild(_id, order.ExchangeId, leg, order.FilledQuantity, order.FilledValue, totals.Fee, order.State != ExchangeOrderState.Open);
                 await repository.SaveChildAsync(saved, token);
                 _children[order.ExchangeId] = saved;
-                _trade = _trade.ExitGrown(leg, totals, time.GetUtcNow());
+                _trade = _trade.ExitGrown(leg, totals - before, time.GetUtcNow());
             },
             cancellationToken);
     }
@@ -514,9 +531,9 @@ internal sealed class IdeaTradeSession(
                 IdeaTradeOrder ended = end(_orders[number]);
                 await SaveOrderAsync(ended, token);
 
-                if (ended.RejectReason is { } reason)
+                if (ended.RejectReason is not null)
                 {
-                    _trade = _trade.Fail(reason, time.GetUtcNow());
+                    _trade = Refused(ended, time.GetUtcNow());
                 }
                 else if (ended.Status == LiveOrderStatus.Cancelled && ended.Role == IdeaTradeOrderRole.Entry)
                 {
@@ -524,6 +541,17 @@ internal sealed class IdeaTradeSession(
                 }
             },
             cancellationToken);
+    }
+
+    /// <summary>
+    ///     What a refusal of an order does to the trade: a refused entry fails it; a refused close leaves it open, its stop and target standing,
+    ///     with the reason for the owner, who may close again.
+    /// </summary>
+    private IdeaTrade Refused(IdeaTradeOrder refused, DateTimeOffset now)
+    {
+        return refused.Role == IdeaTradeOrderRole.Close
+            ? _trade with { Reason = $"Закрытие по рынку отклонено: {refused.RejectReason} Стоп и цель стоят, закрытие можно повторить." }
+            : _trade.Fail(refused.RejectReason!, now);
     }
 
     /// <summary>One unit of work: the lease is checked first, then <paramref name="change" /> writes, and the trade is written last.</summary>
@@ -567,6 +595,14 @@ internal sealed class IdeaTradeSession(
             executor.EnsureNoTransaction();
             string code = order.ClientId.Code;
             bool placing = order.Status == LiveOrderStatus.PendingSubmit;
+
+            if (placing && order.Role == IdeaTradeOrderRole.Entry && order.Type == OrderType.Market && now - _trade.CreatedAt > EntryWindow)
+            {
+                await GiveUpEntryAsync(order, cancellationToken);
+
+                continue;
+            }
+
             OrderOutcome outcome = placing
                 ? await gateway.PlaceAsync(_context.Key, _context.Instrument, Request(order), cancellationToken)
                 : await gateway.CancelAsync(_context.Key, _context.Instrument, code, cancellationToken);
@@ -601,7 +637,7 @@ internal sealed class IdeaTradeSession(
                 case SendStep.CancelRefused:
                     journal.Refused(_id, code, outcome.Reason ?? "refused");
 
-                    // The order stays on the exchange: the trade fails with the reason, and the cancel is asked again ever more slowly.
+                    // The order stays on the exchange: the trade fails with the reason, and the session asks again ever more slowly until the order ends.
                     IdeaTradeOrder paused = order.Deferred(now);
                     await WriteOrderAsync(paused, cancellationToken, $"Bybit refused to cancel order {code}: {outcome.Reason} Cancel it on Bybit.");
                     _ = LaterAsync(paused.NextAttemptAt!.Value - now, cancellationToken);
@@ -609,6 +645,28 @@ internal sealed class IdeaTradeSession(
                     break;
             }
         }
+    }
+
+    /// <summary>
+    ///     A market entry that Bybit did not take in time is not sent: the price it was sized at is stale. The answer to a send may have been
+    ///     lost while Bybit took the order, so the exchange is asked for it first.
+    /// </summary>
+    private async Task GiveUpEntryAsync(IdeaTradeOrder entry, CancellationToken cancellationToken)
+    {
+        if (await ledger.FindOrderAsync(_context.Key, _context.Instrument, entry.ClientId.Code, cancellationToken) is { } taken)
+        {
+            await OrderAsync(taken, cancellationToken);
+
+            return;
+        }
+
+        await WriteAsync(
+            async token =>
+            {
+                await SaveOrderAsync((_orders.TryGetValue(entry.Number, out IdeaTradeOrder? current) ? current : entry).Cancelled() with { UpdatedAt = time.GetUtcNow() }, token);
+                _trade = _trade.EntryEnded(time.GetUtcNow()) with { Reason = "Вход не ушёл вовремя: Bybit не принял его за 30 секунд.", CancelRequested = false };
+            },
+            cancellationToken);
     }
 
     private static OrderRequest Request(IdeaTradeOrder order)
@@ -665,22 +723,14 @@ internal sealed class IdeaTradeSession(
     {
         if (!_trade.IsOpen)
         {
-            return true;
+            return await WindDownAsync(cancellationToken);
         }
 
         IdeaTradeOrder? entry = _orders.Values.FirstOrDefault(order => order.Role == IdeaTradeOrderRole.Entry);
 
         if (entry is { Cancelling: false } && (_trade.CancelRequested || _trade.EntryExpired(time.GetUtcNow()) || _trade.CloseRequested))
         {
-            await WriteAsync(
-                async token =>
-                {
-                    if (_orders.TryGetValue(entry.Number, out IdeaTradeOrder? current) && !current.Cancelling)
-                    {
-                        await SaveOrderAsync(current.RequestCancel(time.GetUtcNow()), token);
-                    }
-                },
-                cancellationToken);
+            await RequestCancelAsync(entry.Number, cancellationToken);
         }
         else if (_trade.CloseRequested && _trade.Status == IdeaTradeStatus.Open && entry is null)
         {
@@ -697,26 +747,83 @@ internal sealed class IdeaTradeSession(
         return false;
     }
 
-    /// <summary>Takes the stop and the target off, then closes what the trade holds by the market with an order that only reduces the position.</summary>
-    private async Task CloseAsync(CancellationToken cancellationToken)
+    private Task RequestCancelAsync(int number, CancellationToken cancellationToken)
     {
-        IdeaTradeChild[] standing = [.. _children.Values.Where(child => !child.Finished)];
+        return WriteAsync(
+            async token =>
+            {
+                if (_orders.TryGetValue(number, out IdeaTradeOrder? current) && !current.Cancelling)
+                {
+                    await SaveOrderAsync(current.RequestCancel(time.GetUtcNow()), token);
+                }
+            },
+            cancellationToken);
+    }
 
-        foreach (IdeaTradeChild child in standing.Where(child => _childCancels.Add(child.ExchangeOrderId)))
+    /// <summary>
+    ///     A trade that is over still has work while an order of it stands: the entry of a failed trade is taken off, since its stop and target
+    ///     would guard a position nobody follows, and the stop and the target a market close left are taken off. Returns whether nothing is left.
+    /// </summary>
+    private async Task<bool> WindDownAsync(CancellationToken cancellationToken)
+    {
+        if (_trade.Status == IdeaTradeStatus.Failed && _orders.Values.FirstOrDefault(order => order.Role == IdeaTradeOrderRole.Entry) is { Cancelling: false } entry)
+        {
+            await RequestCancelAsync(entry.Number, cancellationToken);
+        }
+
+        var left = false;
+
+        if (_trade.Status == IdeaTradeStatus.ClosedManually)
+        {
+            left = await TakeChildrenOffAsync(cancellationToken);
+        }
+
+        await SendAsync(cancellationToken);
+
+        return !left && _orders.Count == 0;
+    }
+
+    /// <summary>
+    ///     Asks the exchange to cancel the stop and the target that are not over, then reads them: a cancel Bybit meets with a pause is asked
+    ///     again after a while, one it refuses for good is named to the owner.
+    /// </summary>
+    /// <returns>Whether a stop or a target is still to be seen cancelled.</returns>
+    private async Task<bool> TakeChildrenOffAsync(CancellationToken cancellationToken)
+    {
+        foreach (IdeaTradeChild child in _children.Values.Where(child => !child.Finished && !_childRefused.Contains(child.ExchangeOrderId)).ToArray())
         {
             executor.EnsureNoTransaction();
             OrderOutcome outcome = await gateway.CancelByExchangeIdAsync(_context.Key, _context.Instrument, child.ExchangeOrderId, cancellationToken);
 
-            if (outcome.Kind == OrderOutcomeKind.AlreadyDone && await ledger.FindOrderByExchangeIdAsync(_context.Key, _context.Instrument, child.ExchangeOrderId, cancellationToken) is { } known)
+            if (outcome.Kind == OrderOutcomeKind.Permanent)
             {
-                await OrderAsync(known, cancellationToken);
+                _childRefused.Add(child.ExchangeOrderId);
+                journal.Refused(_id, child.ExchangeOrderId, outcome.Reason ?? "refused");
+                await WriteAsync(_ => Task.CompletedTask, cancellationToken, trade => trade with { Reason = $"Bybit отказал снять ордер {child.ExchangeOrderId}: {outcome.Reason} Снимите его на Bybit." });
             }
         }
 
-        if (_children.Values.Any(child => !child.Finished) || _orders.Values.Any(order => order.Role == IdeaTradeOrderRole.Close))
+        await RefreshChildrenAsync(cancellationToken);
+        bool left = _children.Values.Any(child => !child.Finished && !_childRefused.Contains(child.ExchangeOrderId));
+
+        if (left)
+        {
+            _ = LaterAsync(ChildCancelRetry, cancellationToken);
+        }
+
+        return left;
+    }
+
+    /// <summary>Closes what the trade holds by the market with an order that only reduces the position; the stop and the target stand until it is done.</summary>
+    private async Task CloseAsync(CancellationToken cancellationToken)
+    {
+        if (_orders.Values.Any(order => order.Role == IdeaTradeOrderRole.Close))
         {
             return;
         }
+
+        // The stop or the target may have fired unheard: the close goes only if the position is still there.
+        await RefreshChildrenAsync(cancellationToken);
 
         await WriteAsync(
             async token =>
@@ -729,7 +836,7 @@ internal sealed class IdeaTradeSession(
                 int number = _trade.LastOrderNumber + 1;
                 OrderSide side = _trade.Side == IdeaSide.Long ? OrderSide.Sell : OrderSide.Buy;
                 await SaveOrderAsync(IdeaTradeOrder.NewClose(_id, number, side, _trade.HeldQuantity, time.GetUtcNow()), token);
-                _trade = _trade with { LastOrderNumber = number, CloseRequested = false };
+                _trade = _trade with { LastOrderNumber = number, CloseRequested = false, Reason = null };
             },
             cancellationToken);
     }

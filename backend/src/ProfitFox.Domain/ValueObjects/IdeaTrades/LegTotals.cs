@@ -4,4 +4,14 @@ namespace ProfitFox.Domain.ValueObjects.IdeaTrades;
 public sealed record LegTotals(decimal Quantity, decimal Value, decimal Fee)
 {
     public static readonly LegTotals None = new LegTotals(0m, 0m, 0m);
+
+    public static LegTotals operator +(LegTotals left, LegTotals right)
+    {
+        return new LegTotals(left.Quantity + right.Quantity, left.Value + right.Value, left.Fee + right.Fee);
+    }
+
+    public static LegTotals operator -(LegTotals left, LegTotals right)
+    {
+        return new LegTotals(left.Quantity - right.Quantity, left.Value - right.Value, left.Fee - right.Fee);
+    }
 }

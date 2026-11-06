@@ -144,6 +144,30 @@ public class IdeaTradeTests
         trade.Status.ShouldBe(IdeaTradeStatus.AwaitingEntry);
     }
 
+    // The exits of a leg are told one by one (a second market close, a stop and a target for each part of a pullback): they add up.
+    [Test]
+    public void Exits_of_one_leg_add_up_and_the_last_one_closes_the_trade()
+    {
+        IdeaTrade part = Entered().ExitGrown(IdeaTradeLeg.Manual, new LegTotals(0.2m, 4.7m, 0.002m), Now.AddMinutes(5));
+
+        IdeaTrade closed = part.ExitGrown(IdeaTradeLeg.Manual, new LegTotals(0.27m, 6.4m, 0.003m), Now.AddMinutes(6));
+
+        (part.Status, part.HeldQuantity).ShouldBe((IdeaTradeStatus.Open, 0.27m));
+        (closed.Status, closed.Manual).ShouldBe((IdeaTradeStatus.ClosedManually, new LegTotals(0.47m, 11.1m, 0.005m)));
+    }
+
+    // The exchange may tell of the stop before the books count the entry: the entry that comes after finds nothing held and closes the trade.
+    [Test]
+    public void Entry_counted_after_the_exit_that_took_all_of_it_closes_the_trade()
+    {
+        IdeaTrade trade = New().ExitGrown(IdeaTradeLeg.StopLoss, new LegTotals(0.47m, 10.8147m, 0.0059m), Now.AddMinutes(5));
+
+        IdeaTrade closed = trade.EntryGrown(new LegTotals(0.47m, 11.0356m, 0.0061m), Now.AddMinutes(6));
+
+        (closed.Status, closed.StatusAt).ShouldBe((IdeaTradeStatus.ClosedAtStop, Now.AddMinutes(6)));
+        closed.Result.ShouldBe(10.8147m - 11.0356m - 0.0061m - 0.0059m);
+    }
+
     // The other leg is cancelled when one fires, and its end comes after: it took out nothing and closes nothing a second time.
     [Test]
     public void Leg_that_took_nothing_does_not_change_the_close_of_a_closed_trade()

@@ -30,6 +30,9 @@ internal static class IdeaTradeRepositoryQueries
     // A Worker keeps a trade that waits for its entry or is open.
     private const string Kept = "status IN ('awaiting_entry', 'open')";
 
+    // It also keeps a failed trade while an order of it may still stand on the exchange, the entry that Bybit would not cancel.
+    private const string Followed = "(status IN ('awaiting_entry', 'open') OR (status = 'failed' AND EXISTS (SELECT 1 FROM idea_trade_orders WHERE trade_id = idea_trades.id AND status IN ('pending_submit', 'active', 'pending_cancel', 'cancel_sent'))))";
+
     private const string Unfinished = "status IN ('pending_submit', 'active', 'pending_cancel', 'cancel_sent')";
 
     public static CommandDefinition Get(Guid tradeId, CancellationToken cancellationToken)
@@ -54,7 +57,7 @@ internal static class IdeaTradeRepositoryQueries
              UPDATE idea_trades SET lease_owner = @Owner, leased_until = @LeasedUntil, lease_epoch = lease_epoch + 1
              WHERE id = (
                  SELECT id FROM idea_trades
-                 WHERE {Kept} AND (leased_until IS NULL OR leased_until <= @Now)
+                 WHERE {Followed} AND (leased_until IS NULL OR leased_until <= @Now)
                  ORDER BY id
                  LIMIT 1
                  FOR UPDATE SKIP LOCKED)
