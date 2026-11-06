@@ -29,6 +29,9 @@ const fewData = ideaOf({
     expectancyHigh: null,
     badge: null,
     enoughData: false,
+    signals: null,
+    entryShare: null,
+    signalExpectancy: null,
   },
 });
 const noBucket = ideaOf({ id: 'doge-1', symbol: 'DOGEUSDT', bucket: null });

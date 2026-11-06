@@ -1,6 +1,7 @@
-import { keepPreviousData, queryOptions } from '@tanstack/react-query';
+import { keepPreviousData, queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api, unwrap } from '@/shared/api/client';
+import { jsonNumberOf } from '@/shared/api/jsonNumber';
 
 import type { IdeaSort } from './model/sort';
 
@@ -137,5 +138,68 @@ export function calibrationQuery(days: 90 | 30, category: string | null) {
         }),
       ),
     placeholderData: keepPreviousData,
+  });
+}
+
+/** The exit rules of every type × interval, with the defaults among them, and the grid of lifetimes of each interval. */
+export function exitRulesQuery() {
+  return queryOptions({
+    queryKey: ['ideas', 'exit-rules'],
+    queryFn: async () => unwrap(await api.GET('/api/ideas/exit-rules')),
+  });
+}
+
+/** A candidate exit rule of a type × interval: the lifetime in candles, the target in R as a decimal text and the entry window, `null` where the type has none. */
+export interface ExitRuleCandidate {
+  readonly type: string;
+  readonly interval: string;
+  readonly life: number;
+  readonly target: string | null;
+  readonly window: number | null;
+}
+
+/** What the candidate would have done against the rule now; a calculation that changes nothing. The old answer stays while a new one loads. */
+export function exitRulePreviewQuery(candidate: ExitRuleCandidate) {
+  return queryOptions({
+    queryKey: ['ideas', 'exit-rules', 'preview', candidate],
+    queryFn: async () =>
+      unwrap(
+        await api.GET('/api/ideas/exit-rules/preview', {
+          params: {
+            query: {
+              type: candidate.type,
+              interval: candidate.interval,
+              life: candidate.life,
+              target: candidate.target ?? undefined,
+              window: candidate.window ?? undefined,
+            },
+          },
+        }),
+      ),
+    placeholderData: keepPreviousData,
+  });
+}
+
+async function applyExitRule(candidate: ExitRuleCandidate) {
+  return unwrap(
+    await api.PUT('/api/ideas/exit-rules/{type}/{interval}', {
+      params: { path: { type: candidate.type, interval: candidate.interval } },
+      body: {
+        life: candidate.life,
+        target:
+          candidate.target === null ? null : (jsonNumberOf(candidate.target) as unknown as number),
+        window: candidate.window,
+      },
+    }),
+  );
+}
+
+/** Applies the candidate to its type × interval; the rules and every preview are read again. */
+export function useApplyExitRule() {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: applyExitRule,
+    onSuccess: () => client.invalidateQueries({ queryKey: ['ideas', 'exit-rules'] }),
   });
 }

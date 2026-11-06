@@ -1549,6 +1549,159 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ideas/exit-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IdeaExitRulesResponse"];
+                        "application/json": components["schemas"]["IdeaExitRulesResponse"];
+                        "text/json": components["schemas"]["IdeaExitRulesResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ideas/exit-rules/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a candidate rule would have done over the last 90 and 30 days against the rule now; a parameter the type has no use for or a value
+         *     off the grid is a 400 on its name.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    type?: string;
+                    interval?: string;
+                    life?: number | string;
+                    target?: number | string;
+                    window?: number | string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ExitRulePreviewResponse"];
+                        "application/json": components["schemas"]["ExitRulePreviewResponse"];
+                        "text/json": components["schemas"]["ExitRulePreviewResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ideas/exit-rules/{type}/{interval}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Applies the rule to the ideas of the type × interval made from now on; answers with the rule saved and when it was applied. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    type: string;
+                    interval: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ApplyExitRuleBody"];
+                    "text/json": components["schemas"]["ApplyExitRuleBody"];
+                    "application/*+json": components["schemas"]["ApplyExitRuleBody"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IdeaExitRuleResponse"];
+                        "application/json": components["schemas"]["IdeaExitRuleResponse"];
+                        "text/json": components["schemas"]["IdeaExitRuleResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ideas": {
         parameters: {
             query?: never;
@@ -3837,6 +3990,15 @@ export interface components {
                 [key: string]: string;
             };
         };
+        /** @description The exit rule to apply: the lifetime in candles, the target in R of a type with one, the entry window of a pullback and a stop entry. */
+        ApplyExitRuleBody: {
+            /** Format: int32 */
+            life: number | string;
+            /** Format: double */
+            target: null | number | string;
+            /** Format: int32 */
+            window: null | number | string;
+        };
         /** @description The positions with their orders and fills and the equity curve of a result, at most 5000 points, with the metrics they give. */
         BacktestDetailsResponse: {
             metrics: components["schemas"]["MetricsResponse"];
@@ -3987,7 +4149,8 @@ export interface components {
         /**
          * @description The statistics of a bucket: its cases with an outcome, of them the targets, the stops and the expired ones, the share of targets among
          *     all of them with its 95 % Wilson interval, the expectancy in R with its 95 % interval and the badge by it, `up`, `flat` or
-         *     `down` (no share, intervals or badge with bool BucketStatisticsResponse.EnoughData false, «мало данных»). Shares are fractions as decimal strings.
+         *     `down` (no share, intervals or badge with bool BucketStatisticsResponse.EnoughData false, «мало данных»). A bucket of «Откат» or «Стоп-вход» also has
+         *     the signals it counted, the share of them that entered and the expectancy per signal. Shares are fractions as decimal strings.
          */
         BucketStatisticsResponse: {
             /** Format: int32 */
@@ -4006,6 +4169,10 @@ export interface components {
             expectancyHigh: null | string;
             badge: null | string;
             enoughData: boolean;
+            /** Format: int32 */
+            signals: null | number | string;
+            entryShare: null | string;
+            signalExpectancy: null | string;
         };
         /**
          * @description A row of a table of calibration: the cases promised from string? CalibrationRowResponse.From up to string? CalibrationRowResponse.To (none for an open end) or with a
@@ -4124,6 +4291,38 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
+        /** @description The candles of the grid of an interval, up to 7 days. */
+        ExitRuleGridResponse: {
+            interval: string;
+            candles: (number | string)[];
+        };
+        /** @description The expectancy per entry and per signal at a lifetime in candles. */
+        ExitRuleLifeResponse: {
+            /** Format: int32 */
+            candles: number | string;
+            expectancy: null | string;
+            signalExpectancy: null | string;
+        };
+        /** @description The share of the entries that reached +R before the stop and the end of the lifetime, and the break-even of a target of R. */
+        ExitRuleMfeResponse: {
+            r: string;
+            reached: string;
+            breakEven: string;
+        };
+        /**
+         * @description The preview of a candidate exit rule: the statistics by the rule now and by the candidate over 90 and 30 days (none without an entry), the
+         *     expectancy at every lifetime of the grid and the curve of MFE. Numbers are decimal strings.
+         */
+        ExitRulePreviewResponse: {
+            last90: components["schemas"]["ExitRuleWindowResponse"];
+            last30: components["schemas"]["ExitRuleWindowResponse"];
+            lives: components["schemas"]["ExitRuleLifeResponse"][];
+            mfe: components["schemas"]["ExitRuleMfeResponse"][];
+        };
+        ExitRuleWindowResponse: {
+            current: null | components["schemas"]["BucketStatisticsResponse"];
+            candidate: null | components["schemas"]["BucketStatisticsResponse"];
+        };
         FillResponse: {
             /** Format: date-time */
             at: string;
@@ -4197,6 +4396,26 @@ export interface components {
             quote: string;
             cappedByAmount: boolean;
             reasons: string[];
+        };
+        /**
+         * @description The exit rule of a type × interval: the lifetime in candles, the target in R as a decimal string of a type with one, the entry window in
+         *     candles of a pullback and a stop entry, and when it was applied, none for the default.
+         */
+        IdeaExitRuleResponse: {
+            type: string;
+            interval: string;
+            /** Format: int32 */
+            life: number | string;
+            target: null | string;
+            /** Format: int32 */
+            window: null | number | string;
+            /** Format: date-time */
+            appliedAt: null | string;
+        };
+        /** @description The exit rules of every type × interval and the lifetimes and windows each interval takes. */
+        IdeaExitRulesResponse: {
+            rules: components["schemas"]["IdeaExitRuleResponse"][];
+            grids: components["schemas"]["ExitRuleGridResponse"][];
         };
         /**
          * @description A trade idea with its levels and where it stands, and the statistics of its bucket over 90 days (BucketStatisticsResponse? IdeaResponse.Bucket) and over the last
