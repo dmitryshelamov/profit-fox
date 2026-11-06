@@ -17,7 +17,7 @@ namespace ProfitFox.Tests.Integration.Persistence;
 public class AddIdeaAutosMigrationTests
 {
     // The last migration before the autos.
-    private const long BeforeAutos = 202611070009;
+    private const long BeforeAutos = 202611070010;
 
     private static readonly DateTimeOffset Created = DateTimeOffset.Parse("2026-11-07T10:00:00Z");
 

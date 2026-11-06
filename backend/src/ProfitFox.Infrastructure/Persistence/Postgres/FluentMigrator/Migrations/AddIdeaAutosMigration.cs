@@ -2,7 +2,7 @@ using FluentMigrator;
 
 namespace ProfitFox.Infrastructure.Persistence.Postgres.FluentMigrator.Migrations;
 
-[Migration(202611070010)]
+[Migration(202611070011)]
 public sealed class AddIdeaAutosMigration : ForwardOnlyMigration
 {
     // Decision 13: an auto is deleted softly and its name is unique among those that are not; the account is a foreign key that restricts, so an

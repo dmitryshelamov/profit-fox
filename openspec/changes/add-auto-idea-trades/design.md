@@ -35,7 +35,8 @@
 - **Модель касаний.** `IdeaTracker` уже шагает идею по минуте: «Откат» входит по касанию до срока; в минуту входа
   считается только стоп; оба касания — стоп; уровни исполняются по своей цене. Комиссии идей — `IdeaMoney`: вход maker
   у «Отката» и taker у остальных, выход taker.
-- **Последняя миграция** — `202611070009` (`TuneIdeaRulesMigration`).
+- **Последняя миграция** — `202611070010` (`AddScannerPairTradFiMigration`, #58; до него `202611070009` `TuneIdeaRulesMigration`). Номера этого
+  изменения сдвинуты на `…011` и `…012` при перебазировании на #58.
 
 ## Goals / Non-Goals
 
@@ -406,11 +407,11 @@ R:R считается от текущей цены.
 
 ## Migration Plan
 
-1. Миграция `202611070010` `AddIdeaAutosMigration`:
+1. Миграция `202611070011` `AddIdeaAutosMigration`:
    - таблицы `idea_autos`, `idea_paper_trades`, `idea_auto_entries`, `idea_auto_refusals`;
    - колонка `idea_trades.auto_id` (`NULL`, без FK: автомат удаляется мягко);
    - колонки `idea_trading_settings.daily_loss_limit` и `max_same_direction` (`NULL`).
-2. Миграция `202611070011` `AddScannerPairLotRulesMigration`: `scanner_pairs.quantity_step`, `min_quantity`,
+2. Миграция `202611070012` `AddScannerPairLotRulesMigration`: `scanner_pairs.quantity_step`, `min_quantity`,
    `min_amount` (`NULL`). Их заполнит первое перечитывание списка.
 3. Выкатка как обычно: API мигрирует, затем сканер и Worker. Автоматов нет, защиты выключены — поведение прежнее,
    пока владелец не создаст автомат.
