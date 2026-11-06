@@ -40,7 +40,7 @@ describe('requests of trades by ideas', () => {
     expect(requests.map((request) => request.method)).toEqual(['GET', 'GET']);
   });
 
-  // Requirement "Фильтры и листание журнала": the API gets the filters chosen, the page and its size; a filter left empty is not sent.
+  // Requirement "Фильтры и листание сделок": the API gets the filters chosen, the page and its size; a filter left empty is not sent.
   it('asks the journal for the filters, the page and the size, and leaves out a filter that is empty', async () => {
     const requests = fakeApi({
       'GET /api/idea-trades': () => json({}),

@@ -108,7 +108,7 @@ export function IdeaJournalPage({ page }: { page: number }) {
   return (
     <section className="space-y-4">
       <header className="space-y-2">
-        <h1 className="text-2xl font-bold">Журнал</h1>
+        <h1 className="text-2xl font-bold">Сделки</h1>
         <p className="text-sm text-muted">
           Сделки по идеям: вход, стоп и цель стоят на бирже, сделку ведёт торговый Worker. Войти по
           идее можно со страницы пары.
@@ -157,8 +157,8 @@ export function IdeaJournalPage({ page }: { page: number }) {
           Настройки
         </Link>
       </div>
-      {journal.isError && <p role="alert">Не удалось загрузить журнал.</p>}
-      {journal.isPending && <p className="text-sm text-muted">Загрузка журнала…</p>}
+      {journal.isError && <p role="alert">Не удалось загрузить сделки.</p>}
+      {journal.isPending && <p className="text-sm text-muted">Загрузка сделок…</p>}
       {journal.data && (
         <>
           <section aria-labelledby="in-work" className="space-y-2">

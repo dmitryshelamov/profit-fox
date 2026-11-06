@@ -162,8 +162,8 @@ describe('entry by an idea from the pair page', () => {
     expect(within(dialog).getByLabelText('Аккаунт')).toHaveValue('');
   });
 
-  // Requirement "Окно входа", scenario "Вход ведёт в журнал": the entry creates the trade and leads to the journal, where the trade is in work.
-  it('creates the trade and leads to «Журнал», with the trade in «В работе»', async () => {
+  // Requirement "Окно входа", scenario "Вход ведёт в «Сделки»": the entry creates the trade and leads to «Сделки», where the trade is in work.
+  it('creates the trade and leads to «Сделки», with the trade in «В работе»', async () => {
     let created = false;
     const requests = fakeApi(
       routes({

@@ -106,7 +106,7 @@ describe('menu', () => {
       within(menu)
         .getAllByRole('link')
         .map((link) => link.textContent),
-    ).toEqual(['Стратегии', 'Составные узлы', 'Рынок', 'Идеи', 'Журнал', 'Боты', 'Аккаунты']);
+    ).toEqual(['Стратегии', 'Составные узлы', 'Рынок', 'Идеи', 'Сделки', 'Боты', 'Аккаунты']);
   });
 
   it('opens the market from the menu and marks it as current', async () => {

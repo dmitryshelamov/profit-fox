@@ -39,7 +39,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('screen «Журнал»', () => {
+describe('screen «Сделки»', () => {
   // Requirement "Группа «В работе»", scenario "Открытая сделка".
   it('shows an open trade with the time in it, what it is worth now and the button to close it', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
@@ -127,7 +127,7 @@ describe('screen «Журнал»', () => {
 
     expect(await screen.findByText('В работе ничего нет.')).toBeInTheDocument();
     expect(screen.getByText('Закрытых сделок по этим условиям нет.')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Журнал' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Сделки' })).toBeInTheDocument();
   });
 
   // Requirement "Таблица закрытых сделок", scenario "Сделка с обещанием и исходом идеи".
@@ -221,7 +221,7 @@ describe('screen «Журнал»', () => {
     expect(screen.getByText('Вход не ушёл вовремя.')).toBeInTheDocument();
   });
 
-  // Requirement "Итоги на экране журнала".
+  // Requirement "Итоги на экране «Сделки»".
   it('shows the totals of the closed trades', async () => {
     fakeApi(
       routes(() =>
@@ -280,7 +280,7 @@ describe('screen «Журнал»', () => {
     fakeApi(routes(() => journalOf(), { 'GET /api/idea-trades': () => problem(404, 'down') }));
     renderApp('/idea-trades');
 
-    expect(await screen.findByText('Не удалось загрузить журнал.')).toBeInTheDocument();
+    expect(await screen.findByText('Не удалось загрузить сделки.')).toBeInTheDocument();
   });
 
   it('leads to the settings and back', async () => {
@@ -293,7 +293,7 @@ describe('screen «Журнал»', () => {
     expect(history.location.pathname).toBe('/idea-trades/settings');
     expect(await screen.findByRole('heading', { name: 'Торговля идеями' })).toBeInTheDocument();
 
-    await user.click(within(screen.getByRole('main')).getByRole('link', { name: 'Журнал' }));
+    await user.click(within(screen.getByRole('main')).getByRole('link', { name: 'Сделки' }));
 
     expect(history.location.pathname).toBe('/idea-trades');
   });

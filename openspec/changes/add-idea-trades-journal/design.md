@@ -149,7 +149,8 @@ WHERE idea_id = @IdeaId AND idea_status IS NULL
 - Модуль `idea-trades`: `api.ts` (`ideaJournalQuery`, `keepPreviousData`, 15 с), `model/journal.ts` (подписи итогов,
   времени, обещания), `ui/OpenTradesTable.tsx`, `ui/ClosedTradesTable.tsx`, `ui/JournalTotals.tsx`. `TradesTable`
   уходит. Значок и подписи ожидания берутся из `@/modules/ideas` (`badgeSymbol`, при нужде добавить в `index.ts`).
-- Меню: «Сделки» → «Журнал». Окно входа после создания ведёт на `/idea-trades`, как и раньше.
+- Меню: пункт «Сделки» остаётся, экран под ним — журнал (владелец решил не переименовывать). Окно входа после создания
+  ведёт на `/idea-trades`, как и раньше.
 
 ## Risks / Trade-offs
 
