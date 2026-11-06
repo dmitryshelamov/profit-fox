@@ -8,7 +8,7 @@ namespace ProfitFox.Tests.Unit.Infrastructure.Exchanges.Bybit;
 /// <summary>Requirement "Некриптовые пары сканера": the list of instruments tells a non-crypto pair by the symbol type Bybit gives.</summary>
 public class BybitInstrumentListTests
 {
-    // Scenarios "Спотовый xStock" and "Монета зоны Innovation" (adventure and no type on spot).
+    // Scenarios "Спотовый xStock" and "Монета зоны Innovation" (adventure, no type and a type the SDK does not know on spot).
     [Test]
     public async Task Spot_xstock_is_tradfi_and_other_spot_pairs_are_crypto()
     {
@@ -17,13 +17,14 @@ public class BybitInstrumentListTests
             {"retCode":0,"retMsg":"OK","result":{"category":"spot","list":[
             {"symbol":"TSLAXUSDT","baseCoin":"TSLAX","quoteCoin":"USDT","status":"Trading","symbolType":"xstocks"},
             {"symbol":"ADVUSDT","baseCoin":"ADV","quoteCoin":"USDT","status":"Trading","symbolType":"adventure"},
-            {"symbol":"BTCUSDT","baseCoin":"BTC","quoteCoin":"USDT","status":"Trading","symbolType":""}]},"retExtInfo":{},"time":0}
+            {"symbol":"BTCUSDT","baseCoin":"BTC","quoteCoin":"USDT","status":"Trading","symbolType":""},
+            {"symbol":"NEWUSDT","baseCoin":"NEW","quoteCoin":"USDT","status":"Trading","symbolType":"preipo"}]},"retExtInfo":{},"time":0}
             """);
 
         IReadOnlyList<ListedInstrument> listed = await BybitClients.Create(handler, TimeProvider.System).ListAsync(MarketCategory.Spot, CancellationToken.None);
 
         listed.ToDictionary(instrument => instrument.Symbol, instrument => instrument.TradFi)
-            .ShouldBe(new Dictionary<string, bool> { ["TSLAXUSDT"] = true, ["ADVUSDT"] = false, ["BTCUSDT"] = false });
+            .ShouldBe(new Dictionary<string, bool> { ["TSLAXUSDT"] = true, ["ADVUSDT"] = false, ["BTCUSDT"] = false, ["NEWUSDT"] = false });
     }
 
     // Scenarios "Перпетуал на акцию", "Сырьё, форекс и ETF" and "Монета зоны Innovation".

@@ -8,7 +8,6 @@ using ProfitFox.Application.Backtests;
 using ProfitFox.Application.Ideas.Queries.GetIdeas;
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
-using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.SavedFilters;
 using ProfitFox.Domain.Entities.SavedFilters.Enums;
@@ -171,16 +170,8 @@ public class GetIdeasTests
         Idea tesla = Idea(6) with { Instrument = new Instrument(MarketCategory.Spot, "TSLAXUSDT") };
         Idea unknown = Idea(7) with { Instrument = new Instrument(MarketCategory.Linear, "NEWUSDT") };
         _ideas.GetRecentAsync(Noon.AddHours(-24), null, Arg.Any<CancellationToken>()).Returns([btc, apple, etf, gold, euro, tesla, unknown]);
-        _pairs.GetAllAsync(Arg.Any<CancellationToken>()).Returns(
-        [
-            new ScannerPair(btc.Instrument, true),
-            new ScannerPair(apple.Instrument, true, TradFi: true),
-            new ScannerPair(etf.Instrument, true, TradFi: true),
-            new ScannerPair(gold.Instrument, true, TradFi: true),
-            new ScannerPair(euro.Instrument, true, TradFi: true),
-            new ScannerPair(tesla.Instrument, true, TradFi: true),
-            new ScannerPair(new Instrument(MarketCategory.Spot, "BTCUSDT"), true, TradFi: true)
-        ]);
+        _pairs.GetTradFiAsync(Arg.Any<CancellationToken>()).Returns(
+            [apple.Instrument, etf.Instrument, gold.Instrument, euro.Instrument, tesla.Instrument, new Instrument(MarketCategory.Spot, "BTCUSDT")]);
 
         GetIdeasResult result = await _handler.Handle(Everything with { HideTradFi = true }, CancellationToken.None);
 
@@ -197,7 +188,7 @@ public class GetIdeasTests
         GetIdeasResult result = await _handler.Handle(Everything, CancellationToken.None);
 
         result.Page!.Total.ShouldBe(3);
-        await _pairs.DidNotReceive().GetAllAsync(Arg.Any<CancellationToken>());
+        await _pairs.DidNotReceive().GetTradFiAsync(Arg.Any<CancellationToken>());
     }
 
     [Test]

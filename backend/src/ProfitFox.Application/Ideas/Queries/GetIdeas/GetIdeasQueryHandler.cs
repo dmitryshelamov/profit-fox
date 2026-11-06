@@ -92,7 +92,8 @@ public sealed class GetIdeasQueryHandler(
         }
 
         IReadOnlyList<Idea> recent = await ideas.GetRecentAsync(time.GetUtcNow() - IdeaQueries.ClosedShown, null, cancellationToken);
-        IReadOnlySet<Instrument> tradFi = request.HideTradFi ? await TradFiAsync(cancellationToken) : new HashSet<Instrument>();
+        // The non-crypto pairs of the scanner; a pair it never kept is crypto.
+        IReadOnlySet<Instrument> tradFi = request.HideTradFi ? (await pairs.GetTradFiAsync(cancellationToken)).ToHashSet() : new HashSet<Instrument>();
         IEnumerable<Idea> matching = recent.Where(idea =>
             (request.Setup is null || idea.Setup == setup)
             && (request.Interval is null || idea.Interval == interval)
@@ -114,12 +115,6 @@ public sealed class GetIdeasQueryHandler(
         }
 
         return new GetIdeasResult(page.Slice(IdeaOrder.Sort(views, column, direction)), errors);
-    }
-
-    // The non-crypto pairs of the scanner; a pair it never kept is crypto.
-    private async Task<IReadOnlySet<Instrument>> TradFiAsync(CancellationToken cancellationToken)
-    {
-        return (await pairs.GetAllAsync(cancellationToken)).Where(pair => pair.TradFi).Select(pair => pair.Instrument).ToHashSet();
     }
 
     // The snapshot is read only for a condition on a metric or a setup of the market.

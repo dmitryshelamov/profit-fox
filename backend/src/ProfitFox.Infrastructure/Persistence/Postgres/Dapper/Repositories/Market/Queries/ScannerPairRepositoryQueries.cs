@@ -15,6 +15,8 @@ internal static class ScannerPairRepositoryQueries
                                      FROM scanner_pairs
                                      """;
 
+    private const string GetTradFiSql = "SELECT category, symbol FROM scanner_pairs WHERE tradfi";
+
     private const string SaveSql = """
                                    INSERT INTO scanner_pairs (category, symbol, listed, history_from, covered_until, oi_covered_until, funding_covered_until, listed_at, tick_size, tradfi)
                                    VALUES (@Category, @Symbol, @Listed, @HistoryFrom, @CoveredUntil, @OiCoveredUntil, @FundingCoveredUntil, @ListedAt, @TickSize, @TradFi)
@@ -27,6 +29,11 @@ internal static class ScannerPairRepositoryQueries
     internal static CommandDefinition GetAll(CancellationToken cancellationToken)
     {
         return new CommandDefinition(GetAllSql, cancellationToken: cancellationToken);
+    }
+
+    internal static CommandDefinition GetTradFi(CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(GetTradFiSql, cancellationToken: cancellationToken);
     }
 
     internal static CommandDefinition Get(Instrument instrument, CancellationToken cancellationToken)

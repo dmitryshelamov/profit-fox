@@ -593,6 +593,11 @@ describe('ideas screen', () => {
         { ActiveOnly: 'true' },
       ],
       [
+        'the stocks switch',
+        () => userEvent.click(screen.getByRole('checkbox', { name: 'Скрыть акции' })),
+        { HideStocks: 'true' },
+      ],
+      [
         'the sorting',
         () => userEvent.click(within(header(/R:R/)).getByRole('button')),
         { Sort: 'riskReward' },

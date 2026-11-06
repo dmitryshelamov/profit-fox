@@ -52,6 +52,34 @@ public class ScannerMarketTests
         market.Find(Sol)!.CoveredUntil.ShouldBe(End);
     }
 
+    // Fix after review: the list is read from a copy taken before its requests, while the stream moves the coverage; a known pair takes what
+    // the list tells and keeps the coverage memory holds.
+    [Test]
+    public void Known_pair_takes_what_the_list_tells_and_keeps_the_coverage_that_moved_meanwhile()
+    {
+        var market = new ScannerMarket();
+        market.Keep([new ScannerPair(Sol, true)]);
+        market.Loaded(Sol, End.AddDays(-1), End.AddMinutes(-1), Day().SkipLast(1));
+        ScannerPair copy = market.Find(Sol)!;
+        market.Closed(Sol, AsCandle(MarketFixtures.Day()[^1]));
+
+        market.KeepListed([copy with { Listed = false, TickSize = 0.01m, TradFi = true }]);
+
+        market.Find(Sol).ShouldBe(copy with { CoveredUntil = End, Listed = false, TickSize = 0.01m, TradFi = true });
+    }
+
+    [Test]
+    public void New_pair_of_the_list_is_added_and_every_pair_the_list_changed_is_saved()
+    {
+        var market = new ScannerMarket();
+        market.Keep([new ScannerPair(Sol, true)]);
+        market.TakeChanged();
+
+        market.KeepListed([new ScannerPair(Sol, true, TradFi: true), new ScannerPair(Btc, true)]);
+
+        market.TakeChanged().ShouldBe([new ScannerPair(Sol, true, TradFi: true), new ScannerPair(Btc, true)], ignoreOrder: true);
+    }
+
     // After a restart the day before the coverage comes from storage, and the gap since it from the exchange.
     [Test]
     public void Day_read_from_storage_joins_the_gap_loaded_after_it()

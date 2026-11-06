@@ -58,7 +58,7 @@ public sealed class ScannerSession(
 
         try
         {
-            market.Keep(await universe.RefreshAsync(stored, cancellationToken) ?? []);
+            market.KeepListed(await universe.RefreshAsync(stored, cancellationToken) ?? []);
         }
         catch (ExchangeUnavailableException exception)
         {
@@ -159,7 +159,7 @@ public sealed class ScannerSession(
 
                 if (changed is { Count: > 0 })
                 {
-                    market.Keep(changed);
+                    market.KeepListed(changed);
                     await SubscribeAsync(cancellationToken);
                 }
 

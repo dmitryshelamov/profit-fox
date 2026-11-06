@@ -65,6 +65,17 @@ public class ScannerPairRepositoryTests
         (await _store.GetAllAsync(CancellationToken.None)).OrderBy(pair => pair.Instrument.Symbol).ShouldBe([stock, coin with { TradFi = false }]);
     }
 
+    // Decision 5: the ideas read only the instruments of the non-crypto pairs.
+    [Test]
+    public async Task Tradfi_instruments_are_the_non_crypto_pairs_only()
+    {
+        var stock = new ScannerPair(new Instrument(MarketCategory.Linear, "AAPLUSDT"), true, TradFi: true);
+        var xstock = new ScannerPair(new Instrument(MarketCategory.Spot, "TSLAXUSDT"), false, TradFi: true);
+        await _store.SaveAsync([stock, xstock, new ScannerPair(new Instrument(MarketCategory.Linear, "BTCUSDT"), true)], CancellationToken.None);
+
+        (await _store.GetTradFiAsync(CancellationToken.None)).ShouldBe([stock.Instrument, xstock.Instrument], ignoreOrder: true);
+    }
+
     // Scenario "Пара снята с торгов": the pair stays with its coverage.
     [Test]
     public async Task Pair_out_of_trading_is_saved_as_not_listed()

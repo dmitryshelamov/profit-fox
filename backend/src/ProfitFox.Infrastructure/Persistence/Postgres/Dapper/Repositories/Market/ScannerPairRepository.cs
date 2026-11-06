@@ -21,6 +21,14 @@ internal sealed class ScannerPairRepository(NpgsqlDataSource dataSource) : IScan
         return pairs.Select(ScannerPairDbConverter.ToDomain).ToList();
     }
 
+    public async Task<IReadOnlyList<Instrument>> GetTradFiAsync(CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        IEnumerable<ScannerPairDb> pairs = await connection.QueryAsync<ScannerPairDb>(ScannerPairRepositoryQueries.GetTradFi(cancellationToken));
+
+        return pairs.Select(pair => ScannerPairDbConverter.ToDomain(pair).Instrument).ToList();
+    }
+
     public async Task<ScannerPair?> GetAsync(Instrument instrument, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
