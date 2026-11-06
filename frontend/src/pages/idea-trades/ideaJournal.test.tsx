@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { fakeApi, json, problem } from '@/test/fakeApi';
@@ -83,6 +83,19 @@ describe('screen «Журнал»', () => {
       expect(within(row).getByText(value)).toBeInTheDocument();
     }
     expect(within(row).getByRole('button', { name: 'Закрыть по рынку' })).toBeInTheDocument();
+  });
+
+  // The time in a trade runs on while the data stands still.
+  it('lets the time in a trade run on without a new answer of the API', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    vi.setSystemTime(new Date('2026-11-05T12:15:00Z'));
+    fakeApi(routes(open([tradeOf({ status: 'open', openedAt: '2026-11-05T10:00:00Z' })])));
+    renderApp('/idea-trades');
+    expect(await screen.findByText('2 ч 15 мин')).toBeInTheDocument();
+
+    await act(() => vi.advanceTimersByTimeAsync(60_000));
+
+    expect(screen.getByText('2 ч 16 мин')).toBeInTheDocument();
   });
 
   // Scenario "Цены нет".

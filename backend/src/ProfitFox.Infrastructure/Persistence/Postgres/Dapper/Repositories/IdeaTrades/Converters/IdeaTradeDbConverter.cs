@@ -97,7 +97,7 @@ internal static class IdeaTradeDbConverter
             trade.CreatedAt,
             trade.NetRiskReward is { } netRiskReward
                 ? new IdeaPromise(
-                    trade.PromisedBadge is { } badge ? IdeaCodes.TryParseBadge(badge, out IdeaBadge parsed) ? parsed : throw Unknown("badge", badge) : null,
+                    trade.PromisedBadge is { } badge ? IdeaCodes.ParseBadge(badge) : null,
                     trade.PromisedProbability,
                     trade.PromisedExpectancy,
                     trade.PromisedCases,

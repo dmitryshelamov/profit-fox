@@ -78,6 +78,11 @@ public static class IdeaCodes
         return BadgesByCode.TryGetValue(code, out badge);
     }
 
+    public static IdeaBadge ParseBadge(string code)
+    {
+        return BadgesByCode[code];
+    }
+
     public static IdeaStatus ParseStatus(string code)
     {
         return StatusesByCode[code];

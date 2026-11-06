@@ -376,6 +376,12 @@ public class IdeaTradesApiTests
 
         await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(id)).Status == IdeaTradeStatus.Cancelled, "the cancelled trade");
         _scenario.Exchange.Cancels.ShouldBe([new IdeaTradeOrderId(id, 1).Code]);
+
+        // A trade that never opened has no time to its outcome; the idea of a pullback that expired without an entry has no result.
+        await _scenario.WriteIdeaOutcomeAsync(idea, new TradedIdeaOutcome(IdeaStatus.Expired, _scenario.Factory.Time.GetUtcNow(), null));
+        JsonElement cancelled = (await JournalAsync()).GetProperty("closed").GetProperty("items")[0];
+        cancelled.GetProperty("secondsToOutcome").ValueKind.ShouldBe(JsonValueKind.Null);
+        (cancelled.GetProperty("ideaOutcome").GetProperty("status").GetString(), cancelled.GetProperty("ideaOutcome").GetProperty("result").ValueKind).ShouldBe(("expired", JsonValueKind.Null));
     }
 
     // Scenario "Закрыть по рынку".
