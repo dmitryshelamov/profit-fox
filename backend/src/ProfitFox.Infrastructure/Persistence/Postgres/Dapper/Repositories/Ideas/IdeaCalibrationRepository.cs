@@ -6,7 +6,9 @@ using Npgsql;
 
 using NpgsqlTypes;
 
+using ProfitFox.Application.Ideas;
 using ProfitFox.Application.MarketData;
+using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.Ideas;
@@ -30,14 +32,15 @@ internal sealed class IdeaCalibrationRepository(NpgsqlDataSource dataSource) : I
         {
             await using var command = new NpgsqlCommand(
                 """
-                INSERT INTO idea_calibration (engine_version, days, category, computed_at, report)
-                VALUES (@version, @days, @category, @computedAt, @report)
+                INSERT INTO idea_calibration (engine_version, days, category, scope, computed_at, report)
+                VALUES (@version, @days, @category, @scope, @computedAt, @report)
                 """,
                 connection,
                 transaction);
             command.Parameters.AddWithValue("version", engineVersion);
             command.Parameters.AddWithValue("days", report.Days);
             command.Parameters.AddWithValue("category", report.Category?.ToCode() ?? All);
+            command.Parameters.AddWithValue("scope", report.Scope.ToCode());
             command.Parameters.AddWithValue("computedAt", report.ComputedAt);
             command.Parameters.AddWithValue("report", NpgsqlDbType.Jsonb, JsonSerializer.Serialize(CalibrationReportDbConverter.FromDomain(report)));
             await command.ExecuteNonQueryAsync(cancellationToken);
@@ -46,21 +49,21 @@ internal sealed class IdeaCalibrationRepository(NpgsqlDataSource dataSource) : I
         await transaction.CommitAsync(cancellationToken);
     }
 
-    public async Task<CalibrationReport?> GetAsync(int engineVersion, int days, MarketCategory? category, CancellationToken cancellationToken)
+    public async Task<CalibrationReport?> GetAsync(int engineVersion, int days, MarketCategory? category, CalibrationScope scope, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
         Row? row = await connection.QuerySingleOrDefaultAsync<Row>(
             new CommandDefinition(
                 """
                 SELECT computed_at AS "ComputedAt", report::text AS "Report" FROM idea_calibration
-                WHERE engine_version = @Version AND days = @Days AND category = @Category
+                WHERE engine_version = @Version AND days = @Days AND category = @Category AND scope = @Scope
                 """,
-                new { Version = engineVersion, Days = days, Category = category?.ToCode() ?? All },
+                new { Version = engineVersion, Days = days, Category = category?.ToCode() ?? All, Scope = scope.ToCode() },
                 cancellationToken: cancellationToken));
 
         return row is null
             ? null
-            : CalibrationReportDbConverter.ToDomain(JsonSerializer.Deserialize<CalibrationReportDb>(row.Report)!, row.ComputedAt, days, category);
+            : CalibrationReportDbConverter.ToDomain(JsonSerializer.Deserialize<CalibrationReportDb>(row.Report)!, row.ComputedAt, days, category, scope);
     }
 
     private sealed class Row

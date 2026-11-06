@@ -1,6 +1,7 @@
 using MediatR;
 
 using ProfitFox.Application.MarketData;
+using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.Services.Ideas;
@@ -43,6 +44,6 @@ public sealed class GetIdeaCalibrationQueryHandler(IIdeaCalibrationRepository ca
             return new GetIdeaCalibrationResult(days, category, null, errors);
         }
 
-        return new GetIdeaCalibrationResult(days, category, await calibrations.GetAsync(version.Number, days, category, cancellationToken), errors);
+        return new GetIdeaCalibrationResult(days, category, await calibrations.GetAsync(version.Number, days, category, CalibrationScope.All, cancellationToken), errors);
     }
 }

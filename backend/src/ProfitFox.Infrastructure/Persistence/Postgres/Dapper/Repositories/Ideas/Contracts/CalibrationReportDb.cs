@@ -22,4 +22,9 @@ internal sealed class CalibrationReportDb
     public required List<CalibrationRowDb> Badges { get; init; }
 
     public CalibrationRowDb? Total { get; init; }
+
+    /// <summary>The table by own data; none in a report stored before honest-idea-intervals.</summary>
+    public List<CalibrationOwnRowDb> Owns { get; init; } = [];
+
+    public CalibrationComparisonDb? Comparison { get; init; }
 }

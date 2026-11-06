@@ -264,6 +264,98 @@ public class CalibrationCalculatorTests
         report.Expectancies.Select(row => (row.From, row.To, row.Promised)).ShouldBe([(0.4m, (decimal?)null, 1.5m)]);
     }
 
+    // Scenario "Правило применено вчера": the rule of the type × interval applied at 10:00; the case fired at 09:00 is checked among all cases,
+    // not among those after the rules changed, nor is one fired at 10:00 exactly; the one fired at 11:00 is checked in both.
+    [Test]
+    public void Case_fired_before_its_rules_changed_is_checked_only_among_all_cases()
+    {
+        DateTimeOffset applied = Now.AddDays(-2).AddHours(10);
+        IdeaOutcome[] outcomes =
+        [
+            .. Mixed(Linear, Now.AddDays(-50), 30),
+            Closed(Linear, applied.AddHours(-1), IdeaStatus.Stop, -1m),
+            Closed(Linear, applied, IdeaStatus.Stop, -1m),
+            Closed(Linear, applied.AddHours(1), IdeaStatus.Target, 2m)
+        ];
+
+        IReadOnlyList<CalibrationReport> reports = CalibrationCalculator.Compute(outcomes, Now, (type, interval) => type == IdeaType.TwoR && interval == Interval.OneHour ? applied : Now);
+
+        CalibrationReport all = reports.Single(report => report is { Days: 30, Category: null, Scope: CalibrationScope.All });
+        CalibrationReport fresh = reports.Single(report => report is { Days: 30, Category: null, Scope: CalibrationScope.Fresh });
+        (all.Checked, fresh.Checked, fresh.Unchecked).ShouldBe((3, 1, 0));
+        fresh.Total!.Outcome.Targets.ShouldBe(1);
+    }
+
+    // Two windows × three categories × two scopes; a case fired 60 days ago counts in the 90 days only. The history 95 days back is checked
+    // by nothing.
+    [Test]
+    public void Reports_cover_90_and_30_days_for_all_linear_and_spot_in_both_scopes()
+    {
+        IdeaOutcome[] outcomes =
+        [
+            .. Mixed(Linear, Now.AddDays(-95), 30),
+            new IdeaOutcome(Linear, Now.AddDays(-60), Now.AddDays(-60).AddHours(1), IdeaStatus.Target, 2m),
+            new IdeaOutcome(Linear, Now.AddDays(-10), Now.AddDays(-10).AddHours(1), IdeaStatus.Stop, -1m)
+        ];
+
+        IReadOnlyList<CalibrationReport> reports = CalibrationCalculator.Compute(outcomes, Now, (_, _) => Now.AddDays(-20));
+
+        reports.Select(report => (report.Days, report.Category, report.Scope, report.Checked)).ShouldBe(
+        [
+            (90, null, CalibrationScope.All, 2),
+            (90, MarketCategory.Linear, CalibrationScope.All, 2),
+            (90, MarketCategory.Spot, CalibrationScope.All, 0),
+            (30, null, CalibrationScope.All, 1),
+            (30, MarketCategory.Linear, CalibrationScope.All, 1),
+            (30, MarketCategory.Spot, CalibrationScope.All, 0),
+            (90, null, CalibrationScope.Fresh, 1),
+            (90, MarketCategory.Linear, CalibrationScope.Fresh, 1),
+            (90, MarketCategory.Spot, CalibrationScope.Fresh, 0),
+            (30, null, CalibrationScope.Fresh, 1),
+            (30, MarketCategory.Linear, CalibrationScope.Fresh, 1),
+            (30, MarketCategory.Spot, CalibrationScope.Fresh, 0)
+        ],
+            ignoreOrder: true);
+        reports.ShouldAllBe(report => report.ComputedAt == Now);
+    }
+
+    // Requirement "Сравнение старой и новой модели": a bucket of 30 targets and 10 stops next to one of 20 targets and 180 stops. The old model
+    // promises its 30 cases its own window without clustering, the new one its model; the case of a bucket of few own cases is checked by the
+    // new model only and is not compared. All are checked by the same windows, as they close after the last one fired.
+    [Test]
+    public void Comparison_shows_both_models_on_the_cases_both_check()
+    {
+        IdeaBucketKey few = Linear with { Setup = IdeaSetup.Squeeze };
+        IdeaOutcome[] impulse = [.. Enumerable.Range(0, 40).Select(index => Closed(Linear, Now.AddDays(-60).AddHours(index), index < 30 ? IdeaStatus.Target : IdeaStatus.Stop, index < 30 ? 2m : -1m))];
+        IdeaOutcome[] drop = [.. Enumerable.Range(0, 200).Select(index => Closed(OtherLinear, Now.AddDays(-55).AddHours(index), index < 20 ? IdeaStatus.Target : IdeaStatus.Stop, index < 20 ? 2m : -1m))];
+        IdeaOutcome[] checkedCases = [.. Enumerable.Range(0, 30).Select(index => new IdeaOutcome(Linear, Now.AddDays(-29).AddHours(index * 20), Now, index % 2 == 0 ? IdeaStatus.Target : IdeaStatus.Stop, index % 2 == 0 ? 2m : -1m))];
+
+        CalibrationReport report = Report([.. impulse, .. drop, .. checkedCases, new IdeaOutcome(few, Now.AddDays(-2), Now, IdeaStatus.Target, 2m)], 30, null);
+
+        BucketStatistics old = BucketStatisticsCalculator.Compute(30, 10, 0, 50m, 130m);
+        Dictionary<BucketModel.Parent, ClusteredSums> parents = new() { [BucketModel.Parent.Of(Linear)] = Sums([.. impulse, .. drop]) };
+        BucketStatistics model = BucketModel.Build(
+            new Dictionary<IdeaBucketKey, ClusteredSums> { [Linear] = Sums(impulse), [OtherLinear] = Sums(drop) },
+            parents,
+            BucketModel.Roots(parents, new Dictionary<MarketCategory, ClusteredSums> { [MarketCategory.Linear] = Sums([.. impulse, .. drop]) }))[Linear];
+        BucketStatistics outcome = Sums(checkedCases).Statistics();
+        report.Checked.ShouldBe(31);
+        report.Comparison.ShouldNotBeNull();
+        report.Comparison.Old.ShouldBe(new CalibrationModel(30, Brier(checkedCases, old.Probability!.Value), new CalibrationRow(null, null, IdeaBadge.Up, old.Expectancy, outcome)));
+        report.Comparison.New.ShouldBe(new CalibrationModel(
+            30,
+            Brier(checkedCases, model.Probability!.Value),
+            model.Badge == IdeaBadge.Up ? new CalibrationRow(null, null, IdeaBadge.Up, model.Expectancy, outcome) : null));
+    }
+
+    [Test]
+    public void Comparison_without_a_case_both_check_is_empty()
+    {
+        CalibrationReport report = Report([], 30, null);
+
+        report.Comparison.ShouldBe(new CalibrationComparison(new CalibrationModel(0, null, null), new CalibrationModel(0, null, null)));
+    }
+
     [Test]
     public void Report_without_checked_cases_has_empty_tables()
     {
@@ -293,6 +385,11 @@ public class CalibrationCalculatorTests
     {
         return Enumerable.Range(0, count)
             .Select(index => Closed(key, from.AddHours(index), index % 3 == 0 ? IdeaStatus.Target : IdeaStatus.Stop, index % 3 == 0 ? 2m : -1m));
+    }
+
+    private static decimal Brier(IEnumerable<IdeaOutcome> outcomes, decimal promised)
+    {
+        return outcomes.Average(outcome => (promised - (outcome.Status == IdeaStatus.Target ? 1m : 0m)) * (promised - (outcome.Status == IdeaStatus.Target ? 1m : 0m)));
     }
 
     private static ClusteredSums Sums(IEnumerable<IdeaOutcome> outcomes)

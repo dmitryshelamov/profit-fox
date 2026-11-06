@@ -63,7 +63,7 @@ public class IdeaStatisticsRecomputeTests
         BucketStatistics impulse = read.Single(bucket => bucket.Days == 90 && bucket.Key.Setup == IdeaSetup.Impulse).Statistics;
         (impulse.OwnProbability, impulse.OwnExpectancyLow).ShouldNotBe((null, null));
         // The 21 cases of the last 30 days find the 32 of their parent fired 50 and 60 days ago, and are all checked by the model.
-        (await new IdeaCalibrationRepository(_dataSource).GetAsync(IdeasEngineVersion.Current, 30, null, CancellationToken.None))!.Checked.ShouldBe(21);
+        (await new IdeaCalibrationRepository(_dataSource).GetAsync(IdeasEngineVersion.Current, 30, null, CalibrationScope.All, CancellationToken.None))!.Checked.ShouldBe(21);
     }
 
     // Scenario "Смена срока без прогона": a lifetime of one candle closes the targets of 30 minutes as expired at the close of 100.

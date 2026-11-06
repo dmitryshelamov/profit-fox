@@ -7,7 +7,7 @@ namespace ProfitFox.Application.Ideas;
 ///     <c>false_breakout</c>, <c>squeeze</c>, <c>exhaustion</c>, <c>rsi_extreme</c>, <c>new_extreme</c>, <c>quiet_volume</c>), idea types
 ///     (<c>levels</c>, <c>target_2r</c>, <c>beyond_extreme</c>, <c>pullback</c>, <c>stop_entry</c>), sides (<c>long</c>, <c>short</c>) and statuses
 ///     (<c>awaiting_entry</c>, <c>active</c>, <c>target</c>, <c>stop</c>, <c>expired</c>) in the API and in stored rows, and badges of buckets
-///     (<c>up</c>, <c>flat</c>, <c>down</c>) in the API.
+///     (<c>up</c>, <c>flat</c>, <c>down</c>) and scopes of calibration (<c>all</c>, <c>fresh</c>) in the API.
 /// </summary>
 public static class IdeaCodes
 {
@@ -49,6 +49,12 @@ public static class IdeaCodes
         ["target"] = IdeaStatus.Target,
         ["stop"] = IdeaStatus.Stop,
         ["expired"] = IdeaStatus.Expired
+    };
+
+    private static readonly Dictionary<string, CalibrationScope> ScopesByCode = new Dictionary<string, CalibrationScope>
+    {
+        ["all"] = CalibrationScope.All,
+        ["fresh"] = CalibrationScope.Fresh
     };
 
     private static readonly Dictionary<string, IdeaBadge> BadgesByCode = new Dictionary<string, IdeaBadge>
@@ -101,6 +107,11 @@ public static class IdeaCodes
     public static string ToCode(this IdeaSide side)
     {
         return SidesByCode.Single(pair => pair.Value == side).Key;
+    }
+
+    public static string ToCode(this CalibrationScope scope)
+    {
+        return ScopesByCode.Single(pair => pair.Value == scope).Key;
     }
 
     public static string ToCode(this IdeaBadge badge)

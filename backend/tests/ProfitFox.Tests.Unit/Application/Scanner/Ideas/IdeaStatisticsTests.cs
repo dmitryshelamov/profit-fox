@@ -57,9 +57,9 @@ public class IdeaStatisticsTests
                 Arg.Any<CancellationToken>());
             _calibrations.ReplaceAsync(
                 2,
-                Arg.Is<IReadOnlyCollection<CalibrationReport>>(reports => reports!.Count == 6
+                Arg.Is<IReadOnlyCollection<CalibrationReport>>(reports => reports!.Count == 12
                     && reports.All(report => report.ComputedAt == Now)
-                    && reports.Single(report => report.Days == 30 && report.Category == MarketCategory.Linear).Unchecked == 1),
+                    && reports.Single(report => report.Days == 30 && report.Category == MarketCategory.Linear && report.Scope == CalibrationScope.All).Unchecked == 1),
                 Arg.Any<CancellationToken>());
         });
     }
@@ -134,6 +134,29 @@ public class IdeaStatisticsTests
         await Statistics().RecomputeAsync(IdeaType.TwoR, Interval.FifteenMinutes, CancellationToken.None);
 
         await _buckets.DidNotReceiveWithAnyArgs().ReplaceAsync(default, default!, default, default);
+    }
+
+    // Scenario "Правило не применялось" and decision 5: a type × interval whose rule was never applied, or applied before the start of the
+    // version, is fresh from that start, one applied after it from the time it was applied; without a start written no case is fresh. Every case here is unchecked, too few before it.
+    [TestCase(null, true, 1)]
+    [TestCase(3, true, 0)]
+    [TestCase(-2, true, 1)]
+    [TestCase(null, false, 0)]
+    public async Task Calibration_after_the_rules_changed_goes_by_the_rule_and_the_start_of_the_version(int? appliedDays, bool started, int fresh)
+    {
+        DateTimeOffset start = Now.AddDays(-10);
+        _versions.GetStartAsync(2, Arg.Any<CancellationToken>()).Returns(started ? start : null);
+        _rules.GetAllAsync(Arg.Any<CancellationToken>())
+            .Returns(appliedDays is { } days ? [new IdeaExitRule(IdeaType.TwoR, Interval.FifteenMinutes, 24, 2m, null, start.AddDays(days))] : []);
+        _signals.StreamAsync(2, Now.AddDays(-180), null, Arg.Any<CancellationToken>())
+            .Returns(_ => new[] { Signal(start.AddHours(-1)), Signal(start.AddDays(1)) }.ToAsyncEnumerable());
+        IReadOnlyCollection<CalibrationReport> reports = [];
+        await _calibrations.ReplaceAsync(2, Arg.Do<IReadOnlyCollection<CalibrationReport>>(written => reports = written), Arg.Any<CancellationToken>());
+
+        await Statistics().RecomputeAsync(CancellationToken.None);
+
+        reports.Single(report => report is { Days: 30, Category: null, Scope: CalibrationScope.All }).Unchecked.ShouldBe(2);
+        reports.Single(report => report is { Days: 30, Category: null, Scope: CalibrationScope.Fresh }).Unchecked.ShouldBe(fresh);
     }
 
     private IdeaStatistics Statistics()

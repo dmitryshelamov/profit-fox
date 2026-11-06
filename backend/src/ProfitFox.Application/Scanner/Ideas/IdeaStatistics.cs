@@ -43,7 +43,14 @@ public sealed class IdeaStatistics(
         IdeaOutcomesResult result = await WalkAsync(now, null, used, null, cancellationToken);
         await buckets.ReplaceAsync(version.Number, result.Buckets, null, cancellationToken);
         _roots = result.Roots;
-        await calibrations.ReplaceAsync(version.Number, CalibrationCalculator.Compute(result.Outcomes, now, (_, _) => DateTimeOffset.MinValue), cancellationToken);
+        // Requirement "Проверка после изменения правил": a rule never applied is in force from the start of the version; without a start written,
+        // no case is fresh.
+        DateTimeOffset started = await versions.GetStartAsync(version.Number, cancellationToken) ?? now;
+        var rules = new IdeaExitRules(used);
+        await calibrations.ReplaceAsync(
+            version.Number,
+            CalibrationCalculator.Compute(result.Outcomes, now, (type, interval) => rules.Of(type, interval).AppliedAt is { } applied && applied > started ? applied : started),
+            cancellationToken);
 
         return [.. (await exitRules.GetAllAsync(cancellationToken)).Except(used).Select(rule => (rule.Type, rule.Interval))];
     }
