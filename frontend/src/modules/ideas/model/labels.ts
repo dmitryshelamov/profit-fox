@@ -23,7 +23,7 @@ export const statusLabel = (code: string) => statuses[code] ?? code;
 export const sideLabel = (code: string) => (code === 'long' ? 'Лонг' : 'Шорт');
 
 /** The count with the word in the form that goes with it: one, a few (2–4), many. */
-function counted(count: number, one: string, few: string, many: string): string {
+export function counted(count: number, one: string, few: string, many: string): string {
   const rest = count % 100;
   const word =
     rest >= 11 && rest <= 14

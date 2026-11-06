@@ -10,6 +10,8 @@ const fields: ReadonlySet<string> = new Set([
   'maxOpenTrades',
   'maxTotalRisk',
   'minRiskReward',
+  'dailyLossLimit',
+  'maxSameDirection',
 ]);
 
 /** The settings the API gave, every number as text for the form; no account is an empty choice. */
@@ -20,6 +22,8 @@ export function formOfSettings(settings: {
   maxOpenTrades: number | string;
   maxTotalRisk: string;
   minRiskReward: string;
+  dailyLossLimit: string | null;
+  maxSameDirection: number | string | null;
 }): { [K in keyof SettingsInput]: string } {
   return {
     accountId: settings.accountId ?? '',
@@ -28,6 +32,8 @@ export function formOfSettings(settings: {
     maxOpenTrades: String(settings.maxOpenTrades),
     maxTotalRisk: settings.maxTotalRisk,
     minRiskReward: settings.minRiskReward,
+    dailyLossLimit: settings.dailyLossLimit ?? '',
+    maxSameDirection: settings.maxSameDirection === null ? '' : String(settings.maxSameDirection),
   };
 }
 

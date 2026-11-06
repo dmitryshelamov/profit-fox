@@ -3,9 +3,14 @@ import userEvent from '@testing-library/user-event';
 
 import { fakeApi, json, problem } from '@/test/fakeApi';
 import {
+  autoItemOf,
+  autoOf,
   exchangeAccount,
+  guardsOf,
   journalOf,
   journalTotals,
+  refusalOf,
+  refusalsPage,
   tradeOf,
   tradingSettings,
 } from '@/test/fixtures';
@@ -22,6 +27,9 @@ function routes(
     'GET /api/idea-trades': () => json(journal()),
     'GET /api/idea-trading/settings': () => json(tradingSettings),
     'GET /api/exchange-accounts': () => json([exchangeAccount]),
+    'GET /api/idea-autos': () => json([]),
+    'GET /api/idea-trading/guards': () => json(guardsOf()),
+    'GET /api/idea-autos/refusals': () => json(refusalsPage()),
     ...extra,
   };
 }
@@ -139,7 +147,7 @@ describe('screen «Сделки»', () => {
     const rows = within(await screen.findByRole('table', { name: 'Сделки в работе' })).getAllByRole(
       'row',
     );
-    const now = (row: HTMLElement) => within(row).getAllByRole('cell')[11]!.textContent;
+    const now = (row: HTMLElement) => within(row).getAllByRole('cell')[12]!.textContent;
 
     expect(now(rows[1]!)).toBe('—');
     expect(now(rows[2]!)).toBe('—');
@@ -514,5 +522,349 @@ describe('filters and pages of the journal', () => {
 
     expect(await screen.findByText('51–80 из 80')).toBeInTheDocument();
     await waitFor(() => expect(history.location.search).toBe('?page=2'));
+  });
+});
+
+const paperTrade = (overrides: Partial<Trade> = {}) =>
+  tradeOf({
+    id: 'p1',
+    origin: 'paper',
+    autoId: 'auto-3',
+    autoName: 'Пробои 5м',
+    symbol: 'DOGEUSDT',
+    status: 'open',
+    openedAt: '2026-11-07T12:50:00Z',
+    ...overrides,
+  });
+
+const autoTrade = (overrides: Partial<Trade> = {}) =>
+  tradeOf({
+    id: 'a1',
+    origin: 'auto',
+    autoId: 'auto-1',
+    autoName: 'Импульс лонг',
+    symbol: 'AVAXUSDT',
+    status: 'open',
+    openedAt: '2026-11-07T12:31:00Z',
+    ...overrides,
+  });
+
+describe('screen «Сделки»: who took the trade', () => {
+  // Requirement "Таблица закрытых сделок", scenario "Кто взял".
+  it('names who took each closed trade and marks the paper ones with a stripe', async () => {
+    fakeApi(
+      routes(() =>
+        journalOf(
+          [],
+          [
+            tradeOf({ id: 'm1', status: 'closed_at_stop', result: '-1', resultR: '-1' }),
+            autoTrade({
+              status: 'closed_at_target',
+              result: '2',
+              resultR: '1',
+              statusAt: '2026-11-07T13:00:00Z',
+            }),
+            paperTrade({
+              status: 'closed_at_target',
+              result: '2',
+              resultR: '1',
+              statusAt: '2026-11-07T13:30:00Z',
+            }),
+          ],
+        ),
+      ),
+    );
+    renderApp('/idea-trades');
+
+    const rows = within(await screen.findByRole('table', { name: 'Закрытые сделки' })).getAllByRole(
+      'row',
+    );
+    const [manual, auto, paper] = [rows[1]!, rows[2]!, rows[3]!];
+
+    expect(within(manual).getByText('Ручная')).toBeInTheDocument();
+    expect(within(auto).getByText('Авто')).toBeInTheDocument();
+    expect(within(auto).getByText('Импульс лонг')).toBeInTheDocument();
+    expect(within(paper).getByText('учебная')).toBeInTheDocument();
+    expect(within(paper).getByText('Пробои 5м')).toBeInTheDocument();
+    expect(within(paper).getAllByRole('cell')[0]).toHaveClass('border-l-[3px]');
+    expect(within(manual).getAllByRole('cell')[0]).not.toHaveClass('border-l-[3px]');
+  });
+
+  // Requirement "Группа «В работе»", scenario "Учебная открытая".
+  it('shows «без ордеров» instead of the buttons of a paper trade in work, and the buttons of the real ones', async () => {
+    fakeApi(routes(open([paperTrade(), autoTrade()])));
+    renderApp('/idea-trades');
+
+    const rows = within(await screen.findByRole('table', { name: 'Сделки в работе' })).getAllByRole(
+      'row',
+    );
+    const paper = rows.find((row) => row.dataset.origin === 'paper')!;
+    const auto = rows.find((row) => row.dataset.origin === 'auto')!;
+
+    expect(within(paper).getByText('учебная')).toBeInTheDocument();
+    expect(within(paper).getByText('Пробои 5м')).toBeInTheDocument();
+    expect(within(paper).getByText('без ордеров')).toBeInTheDocument();
+    expect(within(paper).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(auto).getByRole('button', { name: 'Закрыть по рынку' })).toBeInTheDocument();
+    expect(within(auto).queryByText('без ордеров')).not.toBeInTheDocument();
+  });
+
+  // Requirement "Итоги на экране «Сделки»".
+  it('shows two blocks of totals, with money and paper', async () => {
+    fakeApi(
+      routes(() =>
+        journalOf([], [tradeOf({ status: 'closed_at_target', result: '1', resultR: '1' })], {
+          totals: journalTotals({ targets: 1, stops: 2, meanR: '-0.26', result: '-1.34' }),
+          paperTotals: journalTotals({ targets: 2, stops: 1, meanR: '0.93', result: '8.4' }),
+        }),
+      ),
+    );
+    renderApp('/idea-trades');
+
+    const real = await screen.findByRole('region', { name: 'Итоги' });
+    const paper = screen.getByRole('region', { name: 'Итоги учебных сделок' });
+
+    expect(real).toHaveTextContent('С деньгами');
+    expect(real).toHaveTextContent('ручные и автоматы · 3 сделки');
+    expect(real).toHaveTextContent('-0.26 R');
+    expect(paper).toHaveTextContent('Учебные');
+    expect(paper).toHaveTextContent('без ордеров · 3 сделки · в защиты не входят');
+    expect(paper).toHaveTextContent('+0.93 R');
+  });
+
+  // Scenario "Только учебные".
+  it('shows only the paper totals when the owner chose «Учебные»', async () => {
+    fakeApi(routes(() => journalOf()));
+    renderApp('/idea-trades');
+    const user = userEvent.setup();
+    await screen.findByRole('region', { name: 'Итоги' });
+
+    await user.click(screen.getByRole('radio', { name: 'Учебные' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Итоги' })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole('region', { name: 'Итоги учебных сделок' })).toBeInTheDocument();
+  });
+
+  it('shows only the totals with money when the owner chose the autos or the hand', async () => {
+    fakeApi(routes(() => journalOf()));
+    renderApp('/idea-trades');
+    const user = userEvent.setup();
+    await screen.findByRole('region', { name: 'Итоги' });
+
+    await user.click(screen.getByRole('radio', { name: 'Авто' }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('region', { name: 'Итоги учебных сделок' }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole('region', { name: 'Итоги' })).toHaveTextContent('автоматы');
+  });
+
+  // Requirement "Фильтры и листание сделок".
+  it('asks for the trades of the kind chosen and keeps the choice in the browser', async () => {
+    const requests = fakeApi(routes(() => journalOf()));
+    const first = renderApp('/idea-trades');
+    const user = userEvent.setup();
+    await screen.findByRole('region', { name: 'Итоги' });
+
+    await user.click(screen.getByRole('radio', { name: 'Учебные' }));
+
+    await waitFor(() => expect(lastQuery(requests)).toMatchObject({ Origin: 'paper' }));
+    expect(screen.getByRole('radio', { name: 'Учебные' })).toBeChecked();
+    first.unmount();
+    fakeApi(routes(() => journalOf()));
+
+    renderApp('/idea-trades');
+
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'Учебные' })).toBeChecked());
+  });
+
+  // Scenario "Один автомат".
+  it('filters the journal and the refusals by one auto', async () => {
+    const requests = fakeApi(
+      routes(() => journalOf(), {
+        'GET /api/idea-autos': () =>
+          json([
+            autoItemOf(autoOf({ id: 'auto-1', name: 'Импульс лонг' })),
+            autoItemOf(autoOf({ id: 'auto-2', name: 'Падения шорт' })),
+          ]),
+      }),
+    );
+    renderApp('/idea-trades');
+    const user = userEvent.setup();
+    const select = await screen.findByRole('combobox', { name: 'Автомат' });
+    await screen.findByRole('option', { name: 'Импульс лонг' });
+
+    await user.selectOptions(select, 'auto-1');
+
+    await waitFor(() => expect(lastQuery(requests)).toMatchObject({ AutoId: 'auto-1' }));
+    await waitFor(() =>
+      expect(
+        requests.some(
+          (request) => request.url.includes('/refusals') && request.url.includes('autoId=auto-1'),
+        ),
+      ).toBe(true),
+    );
+  });
+
+  it('opens on the auto of the address and moves the address to the journal as it was', async () => {
+    const requests = fakeApi(routes(() => journalOf()));
+    const { history } = renderApp('/idea-trades?autoId=auto-1');
+
+    await waitFor(() => expect(lastQuery(requests)).toMatchObject({ AutoId: 'auto-1' }));
+    await waitFor(() => expect(history.location.search).toBe(''));
+  });
+
+  it('leads to the autos', async () => {
+    fakeApi(routes(() => journalOf()));
+    const { history } = renderApp('/idea-trades');
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('link', { name: 'Автоматы' }));
+
+    expect(history.location.pathname).toBe('/idea-trades/autos');
+  });
+});
+
+describe('block «Отказы автоматов»', () => {
+  // Requirement "Блок «Отказы автоматов»", scenario "Отказ из-за занятой пары".
+  it('shows the refusals with the idea, the pair, the reason and what exactly stopped the auto', async () => {
+    fakeApi(
+      routes(() => journalOf(), {
+        'GET /api/idea-autos/refusals': () =>
+          json(
+            refusalsPage([
+              refusalOf(),
+              refusalOf({
+                id: 'r2',
+                at: '2026-11-07T10:15:00Z',
+                autoName: 'Импульс лонг',
+                symbol: 'APTUSDT',
+                setup: 'impulse',
+                interval: '15',
+                side: 'long',
+                reasons: ['not_enough_money'],
+                detail: { actual: '212.4', limit: '300', holder: null },
+              }),
+              refusalOf({
+                id: 'r3',
+                autoName: 'Пробои 5м',
+                mode: 'paper',
+                reasons: ['late'],
+                detail: null,
+                symbol: 'WIFUSDT',
+              }),
+            ]),
+          ),
+      }),
+    );
+    renderApp('/idea-trades');
+
+    const table = await screen.findByRole('table', { name: 'Отказы автоматов' });
+    const rows = within(table).getAllByRole('row');
+
+    expect(within(rows[1]!).getByText('09:30')).toBeInTheDocument();
+    expect(within(rows[1]!).getByText('Падения шорт')).toBeInTheDocument();
+    expect(within(rows[1]!).getByText('с деньгами')).toBeInTheDocument();
+    expect(within(rows[1]!).getByText('Падение · 1 ч · Цель 2R · Шорт')).toBeInTheDocument();
+    expect(within(rows[1]!).getByText('SUIUSDT')).toBeInTheDocument();
+    expect(within(rows[1]!).getByText('Уже есть сделка по паре')).toBeInTheDocument();
+    expect(
+      within(rows[1]!).getByText('на Bybit · ideas её взял «Импульс лонг» — он выше в списке'),
+    ).toBeInTheDocument();
+    expect(within(rows[2]!).getByText('Не хватает денег')).toBeInTheDocument();
+    expect(within(rows[2]!).getByText('свободно 212.40 из 300 USDT')).toBeInTheDocument();
+    expect(within(rows[3]!).getByText('без денег')).toBeInTheDocument();
+    expect(within(rows[3]!).getByText('Не успел войти')).toBeInTheDocument();
+    expect(screen.getByText(/сегодня 3 · с 00:00 UTC/)).toBeInTheDocument();
+  });
+
+  // Scenario "Отказов нет".
+  it('says there were no refusals today', async () => {
+    fakeApi(routes(() => journalOf()));
+    renderApp('/idea-trades');
+
+    expect(await screen.findByText('Сегодня отказов не было.')).toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'Отказы автоматов' })).not.toBeInTheDocument();
+  });
+
+  it('asks for the refusals of the last seven days when the owner switches, and shows the day with the time', async () => {
+    const requests = fakeApi(
+      routes(() => journalOf(), {
+        'GET /api/idea-autos/refusals': () => json(refusalsPage([refusalOf()])),
+      }),
+    );
+    renderApp('/idea-trades');
+    const user = userEvent.setup();
+    await screen.findByRole('table', { name: 'Отказы автоматов' });
+
+    await user.click(screen.getByRole('radio', { name: '7 дней' }));
+
+    await waitFor(() =>
+      expect(requests.some((request) => request.url.includes('period=7d'))).toBe(true),
+    );
+    expect(await screen.findByText('07.11 09:30')).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: '7 дней' })).toBeChecked();
+  });
+
+  it('turns the pages of the refusals when there are more than a page', async () => {
+    const requests = fakeApi(
+      routes(() => journalOf(), {
+        'GET /api/idea-autos/refusals': () => json({ ...refusalsPage([refusalOf()]), total: 120 }),
+      }),
+    );
+    renderApp('/idea-trades');
+    const user = userEvent.setup();
+    await screen.findByRole('table', { name: 'Отказы автоматов' });
+
+    await user.click(screen.getByRole('button', { name: 'Следующая страница' }));
+
+    await waitFor(() =>
+      expect(requests.some((request) => request.url.includes('page=2'))).toBe(true),
+    );
+  });
+
+  it('says so when the refusals do not load', async () => {
+    fakeApi(
+      routes(() => journalOf(), { 'GET /api/idea-autos/refusals': () => problem(404, 'down') }),
+    );
+    renderApp('/idea-trades');
+
+    expect(await screen.findByText('Не удалось загрузить отказы.')).toBeInTheDocument();
+  });
+});
+
+describe('banner of the daily stop on «Сделки»', () => {
+  // Requirement "Баннер дневного стопа", scenario "Стоп сработал".
+  it('shows the sum of the day against the limit and when the stop held', async () => {
+    fakeApi(
+      routes(() => journalOf(), {
+        'GET /api/idea-trading/guards': () =>
+          json(
+            guardsOf({
+              daySum: '-30.15',
+              triggeredAt: '2026-11-07T15:12:00Z',
+              resumesAt: '2026-11-08T00:00:00Z',
+            }),
+          ),
+      }),
+    );
+    renderApp('/idea-trades');
+
+    const banner = await screen.findByRole('status', { name: 'Дневной стоп' });
+
+    expect(banner).toHaveTextContent('Сегодня -30.15 из 30 USDT · сработал в 15:12 UTC');
+  });
+
+  // Scenario "Стоп не сработал".
+  it('shows no banner when the stop has not held', async () => {
+    fakeApi(routes(() => journalOf()));
+    renderApp('/idea-trades');
+    await screen.findByRole('region', { name: 'Итоги' });
+
+    expect(screen.queryByRole('status', { name: 'Дневной стоп' })).not.toBeInTheDocument();
   });
 });

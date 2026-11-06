@@ -10,7 +10,9 @@ import {
   type IdeaTrade,
   InstrumentCells,
   LevelCells,
+  OriginCell,
   StatusCell,
+  stripeOf,
 } from './tradeCells';
 
 /** The closed trades: the result, the time to the outcome, what the idea promised at the entry and how the idea ended. */
@@ -26,6 +28,7 @@ export function ClosedTradesTable({ trades }: { trades: readonly IdeaTrade[] }) 
             <Heads
               names={[
                 'Закрыта',
+                'Кто взял',
                 'Инструмент',
                 'Сетап',
                 'Сторона',
@@ -45,10 +48,11 @@ export function ClosedTradesTable({ trades }: { trades: readonly IdeaTrade[] }) 
         </thead>
         <tbody>
           {trades.map((trade) => (
-            <tr key={trade.id} className="bg-panel">
-              <td className={`${cell} font-mono whitespace-nowrap text-muted`}>
+            <tr key={trade.id} data-origin={trade.origin} className="bg-panel">
+              <td className={`${cell} ${stripeOf(trade)} font-mono whitespace-nowrap text-muted`}>
                 {formatMoment(trade.statusAt)}
               </td>
+              <OriginCell trade={trade} />
               <InstrumentCells trade={trade} />
               <LevelCells trade={trade} risk={false} />
               <StatusCell trade={trade} />

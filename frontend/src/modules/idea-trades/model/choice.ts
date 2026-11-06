@@ -31,6 +31,8 @@ export function loadJournalChoice(): JournalChoice {
       side: oneOf(filters.side, ['', 'long', 'short'], noJournalFilters.side),
       badge: oneOf(filters.badge, ['', 'up', 'flat', 'down', 'none'], noJournalFilters.badge),
       days: oneOf(filters.days, ['', '7', '30', '90'], noJournalFilters.days),
+      origin: oneOf(filters.origin, ['', 'manual', 'auto', 'paper'], noJournalFilters.origin),
+      autoId: typeof filters.autoId === 'string' ? filters.autoId : noJournalFilters.autoId,
     },
     pageSize: pageSizeOf(stored.pageSize),
   };

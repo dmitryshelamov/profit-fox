@@ -488,6 +488,9 @@ export const tradeOf = (overrides: Partial<Schemas['IdeaTradeResponse']> = {}) =
     lastPrice: null,
     currentResult: null,
     currentResultR: null,
+    origin: 'manual',
+    autoId: null,
+    autoName: null,
     ...overrides,
   }) satisfies Schemas['IdeaTradeResponse'];
 
@@ -516,6 +519,7 @@ export const journalOf = (
   closed: Schemas['IdeaTradeResponse'][] = [],
   overrides: {
     totals?: Schemas['IdeaJournalTotalsResponse'];
+    paperTotals?: Schemas['IdeaJournalTotalsResponse'];
     page?: number;
     pageSize?: number;
     total?: number;
@@ -530,6 +534,7 @@ export const journalOf = (
       total: overrides.total ?? closed.length,
     },
     totals: overrides.totals ?? journalTotals(),
+    paperTotals: overrides.paperTotals ?? journalTotals(),
   }) satisfies Schemas['IdeaJournalResponse'];
 
 export const tradingSettings = {
@@ -539,6 +544,8 @@ export const tradingSettings = {
   maxOpenTrades: 5,
   maxTotalRisk: '5',
   minRiskReward: '1.5',
+  dailyLossLimit: null,
+  maxSameDirection: null,
 } satisfies Schemas['IdeaTradingSettingsResponse'];
 
 /** The entry of an idea as the API calculates it: no reason. */
@@ -719,3 +726,95 @@ export const exitPreviewOf = (overrides: Partial<Schemas['ExitRulePreviewRespons
     })),
     ...overrides,
   }) satisfies Schemas['ExitRulePreviewResponse'];
+
+/** An auto of the list as the API gives it: «Импульс лонг» with money on the account of the tests; a test sets what it needs. */
+export const autoOf = (overrides: Partial<Schemas['IdeaAutoResponse']> = {}) =>
+  ({
+    id: 'bbbbbbbb-0000-4000-8000-000000000001',
+    name: 'Импульс лонг',
+    accountId: exchangeAccount.id,
+    accountName: exchangeAccount.name,
+    amount: '300',
+    mode: 'live',
+    setups: ['impulse', 'early_impulse'],
+    types: ['pullback', 'target_2r'],
+    intervals: ['15', '60'],
+    side: 'long',
+    category: 'linear',
+    badge: 'up',
+    minRiskReward: '1.5',
+    minCases: 100,
+    position: 0,
+    ...overrides,
+  }) satisfies Schemas['IdeaAutoResponse'];
+
+/** An auto of the list with its totals: nothing closed, no refusals. */
+export const autoItemOf = (
+  auto: Schemas['IdeaAutoResponse'] = autoOf(),
+  overrides: Partial<Omit<Schemas['IdeaAutoItemResponse'], 'auto'>> = {},
+) =>
+  ({
+    auto,
+    paperClosed: 0,
+    paperMeanR: null,
+    paperSumR: '0',
+    realClosed: 0,
+    realResult: '0',
+    refusalsToday: 0,
+    ...overrides,
+  }) satisfies Schemas['IdeaAutoItemResponse'];
+
+/** The guards of the money with room to spare and none of them off; a test sets what it needs. */
+export const guardsOf = (overrides: Partial<Schemas['IdeaGuardsResponse']> = {}) =>
+  ({
+    openTrades: 3,
+    maxOpenTrades: 8,
+    openRisk: '10.22',
+    maxTotalRisk: '40',
+    daySum: '-19.05',
+    dailyLossLimit: '30',
+    triggeredAt: null,
+    resumesAt: null,
+    openLongs: 2,
+    openShorts: 1,
+    maxSameDirection: 5,
+    ...overrides,
+  }) satisfies Schemas['IdeaGuardsResponse'];
+
+/** A refusal of an auto as the API gives it: the pair taken by another auto above. */
+export const refusalOf = (overrides: Partial<Schemas['IdeaAutoRefusalResponse']> = {}) =>
+  ({
+    id: 'cccccccc-0000-4000-8000-000000000001',
+    at: '2026-11-07T09:30:00Z',
+    autoId: 'bbbbbbbb-0000-4000-8000-000000000001',
+    autoName: 'Падения шорт',
+    mode: 'live',
+    category: 'linear',
+    symbol: 'SUIUSDT',
+    setup: 'drop',
+    interval: '60',
+    type: 'target_2r',
+    side: 'short',
+    reasons: ['pair_taken'],
+    detail: {
+      actual: null,
+      limit: null,
+      holder: {
+        kind: 'other_auto',
+        autoName: 'Импульс лонг',
+        above: true,
+        paper: false,
+        accountName: 'Bybit · ideas',
+        since: '2026-11-07T08:00:00Z',
+      },
+    },
+    ...overrides,
+  }) satisfies Schemas['IdeaAutoRefusalResponse'];
+
+/** A page of refusals. */
+export const refusalsPage = (items: Schemas['IdeaAutoRefusalResponse'][] = []) => ({
+  items,
+  page: 1,
+  pageSize: 50,
+  total: items.length,
+});
