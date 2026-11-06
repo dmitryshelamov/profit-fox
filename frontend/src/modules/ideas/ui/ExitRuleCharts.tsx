@@ -64,8 +64,8 @@ export function LifeChart({
         className="stroke-series-2"
         strokeWidth={2}
       />
-      <Mark x={x(current)} label={`сейчас ${current}`} tone="stroke-faint" />
-      <Mark x={x(chosen)} label={`выбрано ${chosen}`} tone="stroke-accent" />
+      <Mark x={x(current)} label={`сейчас ${current}`} tone="stroke-faint" row={1} />
+      <Mark x={x(chosen)} label={`выбрано ${chosen}`} tone="stroke-accent" row={0} />
       {lives.map((life) => (
         <text
           key={life.candles}
@@ -122,13 +122,14 @@ export function MfeChart({
         strokeWidth={1.5}
       />
       {current !== null && (
-        <Mark x={x(Number(current))} label={`сейчас ${current}R`} tone="stroke-faint" />
+        <Mark x={x(Number(current))} label={`сейчас ${current}R`} tone="stroke-faint" row={1} />
       )}
       {at && (
         <Mark
           x={x(Number(at.r))}
           label={`цель ${at.r}R: дошли ${percent(at.reached)}, нужно ${percentUp(at.breakEven)} %`}
           tone="stroke-accent"
+          row={0}
         />
       )}
       {points.map((point) => (
@@ -146,7 +147,8 @@ export function MfeChart({
   );
 }
 
-function Mark({ x, label, tone }: { x: number; label: string; tone: string }) {
+// The chosen mark labels the first row, the one now the second, so the two never cover each other.
+function Mark({ x, label, tone, row }: { x: number; label: string; tone: string; row: number }) {
   return (
     <g>
       <line
@@ -157,7 +159,11 @@ function Mark({ x, label, tone }: { x: number; label: string; tone: string }) {
         className={tone}
         strokeDasharray="2 2"
       />
-      <text x={Math.min(x + 4, width - 180)} y={pad.top + 10} className="fill-muted text-[10px]">
+      <text
+        x={Math.min(x + 4, width - 180)}
+        y={pad.top + 10 + row * 13}
+        className="fill-muted text-[10px]"
+      >
         {label}
       </text>
     </g>
