@@ -132,6 +132,13 @@ public class IdeaTradeRefusalsTests
         Refuse(category: MarketCategory.Spot).ShouldBe([IdeaTradeRefusal.SpotNotSupported]);
     }
 
+    // A stop entry waits for the price to leave the range of its setup; taken now it would enter at the market inside the range.
+    [Test]
+    public void Stop_entry_is_named_until_it_goes_as_a_stop_order()
+    {
+        Refuse(plan: Long with { Type = IdeaType.StopEntry }).ShouldBe([IdeaTradeRefusal.StopEntryNotSupported]);
+    }
+
     [Test]
     public void Short_idea_meets_a_long_bot_as_the_opposite_side()
     {

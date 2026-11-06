@@ -83,6 +83,20 @@ public class IdeaTradesApiTests
         (await ListAsync()).GetArrayLength().ShouldBe(0);
     }
 
+    // A stop entry waits for the price to leave the range of its setup: taken now, it would enter at the market inside the range.
+    [Test]
+    public async Task Entry_by_a_stop_entry_is_refused_and_saves_nothing()
+    {
+        Guid idea = await _scenario.SaveIdeaAsync(101m, 98m, 107m, IdeaType.StopEntry);
+        _scenario.SetPrice("100");
+
+        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, risk = 1m });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("reasons").EnumerateArray().Select(reason => reason.GetString()).ShouldBe(["stop_entry_not_supported"]);
+        (await ListAsync()).GetArrayLength().ShouldBe(0);
+    }
+
     // The limits of open trades and of the total risk count every account, so one lock serialises the entries of all of them.
     [Test]
     public async Task Entries_wait_for_each_other_whatever_the_account()

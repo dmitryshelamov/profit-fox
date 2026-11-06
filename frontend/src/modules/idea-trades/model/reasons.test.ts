@@ -26,6 +26,7 @@ describe('reasons an entry is refused', () => {
       'category_not_traded',
       'hedge_mode',
       'spot_not_supported',
+      'stop_entry_not_supported',
     ];
 
     expect(codes.filter((code) => reasonText(code) === code)).toEqual([]);

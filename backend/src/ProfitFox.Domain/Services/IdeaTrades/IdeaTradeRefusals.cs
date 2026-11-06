@@ -53,6 +53,12 @@ public static class IdeaTradeRefusals
             reasons.Add(IdeaTradeRefusal.SpotNotSupported);
         }
 
+        // A stop entry waits for the price to leave the range of its setup; the entry goes at the market or with a limit only.
+        if (entry.Plan.Type == IdeaType.StopEntry)
+        {
+            reasons.Add(IdeaTradeRefusal.StopEntryNotSupported);
+        }
+
         if (entry.Category == MarketCategory.Linear && account.SymbolDirections.Any(other => other != direction))
         {
             reasons.Add(IdeaTradeRefusal.OppositeSideOpen);

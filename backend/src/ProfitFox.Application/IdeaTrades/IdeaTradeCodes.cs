@@ -54,7 +54,8 @@ public static class IdeaTradeCodes
         [IdeaTradeRefusal.NoKey] = "no_key",
         [IdeaTradeRefusal.CategoryNotTraded] = "category_not_traded",
         [IdeaTradeRefusal.HedgeMode] = "hedge_mode",
-        [IdeaTradeRefusal.SpotNotSupported] = "spot_not_supported"
+        [IdeaTradeRefusal.SpotNotSupported] = "spot_not_supported",
+        [IdeaTradeRefusal.StopEntryNotSupported] = "stop_entry_not_supported"
     };
 
     public static bool TryParseStatus(string code, out IdeaTradeStatus status)
