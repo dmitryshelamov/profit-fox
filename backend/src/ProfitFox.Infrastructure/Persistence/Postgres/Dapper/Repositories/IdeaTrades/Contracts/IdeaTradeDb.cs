@@ -72,6 +72,26 @@ internal sealed class IdeaTradeDb
 
     public DateTimeOffset CreatedAt { get; init; }
 
+    public string? PromisedBadge { get; init; }
+
+    public decimal? PromisedProbability { get; init; }
+
+    public decimal? PromisedExpectancy { get; init; }
+
+    public int? PromisedCases { get; init; }
+
+    public decimal? BreakEven { get; init; }
+
+    public decimal? NetRiskReward { get; init; }
+
+    public string? IdeaStatus { get; init; }
+
+    public DateTimeOffset? IdeaStatusAt { get; init; }
+
+    public decimal? IdeaResult { get; init; }
+
+    public DateTimeOffset? OpenedAt { get; init; }
+
     public long LeaseEpoch { get; init; }
 
     /// <summary>Read only by the queries that ask for it.</summary>
