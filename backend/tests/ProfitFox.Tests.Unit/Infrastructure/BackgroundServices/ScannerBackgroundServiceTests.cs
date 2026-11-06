@@ -80,6 +80,7 @@ public class ScannerBackgroundServiceTests
             .AddScoped<ScannerPace>()
             .AddScoped<LiveIdeas>()
             .AddScoped<IdeaStatistics>()
+            .AddScoped<IdeaRecomputes>()
             .AddScoped<IdeasReplay>()
             .AddScoped<ScannerMinuteCycle>()
             .AddScoped<ScannerSession>()

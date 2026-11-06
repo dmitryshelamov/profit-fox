@@ -6,6 +6,7 @@ using ProfitFox.Application.Scanner.Backfill;
 using ProfitFox.Application.Scanner.Ideas;
 using ProfitFox.Application.Scanner.Minute;
 using ProfitFox.Application.Scanner.Universe;
+using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
@@ -15,11 +16,12 @@ using ProfitFox.Domain.ValueObjects.MarketData;
 namespace ProfitFox.Application.Scanner;
 
 /// <summary>
-///     The scanner while it holds the stream: the list of pairs, the stream of minute candles, the loads, the minute cycle and the ideas. Four
+///     The scanner while it holds the stream: the list of pairs, the stream of minute candles, the loads, the minute cycle and the ideas. Five
 ///     lanes run side by side: the stream's candles go to storage in batches; the REST lane catches up the pairs that lag behind, reads the list
 ///     again, tops up funding and loads history, one piece at a time; the minute cycle computes the snapshot and the live ideas; the lane of
-///     ideas reads the warm-ups of the live ideas, replays history from storage only, recomputes the buckets every 10 minutes and removes the
-///     ideas closed more than a week ago once an hour. A failed step is logged and tried again; only the end of the lease stops the session.
+///     ideas reads the warm-ups of the live ideas, replays history from storage only and removes the ideas closed more than a week ago once an
+///     hour; the lane of statistics recomputes the buckets and the calibration once an hour and the buckets of a type × interval whose exit
+///     rule changed (requirement "Пересчёт корзин"). A failed step is logged and tried again; only the end of the lease stops the session.
 /// </summary>
 public sealed class ScannerSession(
     IScannerPairRepository pairs,
@@ -31,13 +33,14 @@ public sealed class ScannerSession(
     LiveIdeas ideas,
     IdeasReplay replay,
     IdeaStatistics statistics,
+    IdeaRecomputes recomputes,
     ScannerMarket market,
     IScannerJournal journal,
     TimeProvider time)
 {
     private static readonly TimeSpan Retry = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan FundingTopUp = TimeSpan.FromHours(1);
-    private static readonly TimeSpan BucketsRefresh = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan StatisticsRefresh = TimeSpan.FromHours(1);
     private static readonly TimeSpan ClosedRemoval = TimeSpan.FromHours(1);
 
     private readonly Channel<(Instrument, Candle)> _closed = Channel.CreateUnbounded<(Instrument, Candle)>();
@@ -68,7 +71,7 @@ public sealed class ScannerSession(
         try
         {
             await SubscribeAsync(session.Token);
-            Task[] lanes = [WriteCandlesAsync(session.Token), RestAsync(session.Token), MinutesAsync(session.Token), IdeasAsync(session.Token)];
+            Task[] lanes = [WriteCandlesAsync(session.Token), RestAsync(session.Token), MinutesAsync(session.Token), IdeasAsync(session.Token), StatisticsAsync(session.Token)];
             Task first = await Task.WhenAny(lanes);
 
             // The lanes use the services of the session, so none of them outlives it.
@@ -199,7 +202,6 @@ public sealed class ScannerSession(
     private async Task IdeasAsync(CancellationToken cancellationToken)
     {
         bool cleaned = false;
-        DateTimeOffset bucketsAt = time.GetUtcNow();
         DateTimeOffset closedAt = time.GetUtcNow();
 
         while (!cancellationToken.IsCancellationRequested)
@@ -221,12 +223,6 @@ public sealed class ScannerSession(
                 // The warm-ups of the live ideas go before the history.
                 bool warmed = await ideas.ReadWarmUpsAsync(cancellationToken);
 
-                if (time.GetUtcNow() >= bucketsAt)
-                {
-                    await statistics.RecomputeAsync(cancellationToken);
-                    bucketsAt = time.GetUtcNow() + BucketsRefresh;
-                }
-
                 if (!warmed && !await replay.StepAsync(cancellationToken))
                 {
                     await Task.Delay(TimeSpan.FromMinutes(1), time, cancellationToken);
@@ -235,6 +231,36 @@ public sealed class ScannerSession(
             catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
             {
                 journal.Failed("ideas", exception);
+                await Task.Delay(Retry, time, cancellationToken);
+            }
+        }
+    }
+
+    // While a recompute runs the API and the ideas read the buckets before it: storage replaces them whole when it ends.
+    private async Task StatisticsAsync(CancellationToken cancellationToken)
+    {
+        DateTimeOffset wholeAt = time.GetUtcNow();
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                if (time.GetUtcNow() >= wholeAt)
+                {
+                    await statistics.RecomputeAsync(cancellationToken);
+                    wholeAt = time.GetUtcNow() + StatisticsRefresh;
+                }
+
+                foreach ((IdeaType type, Interval interval) in recomputes.Take())
+                {
+                    await statistics.RecomputeAsync(type, interval, cancellationToken);
+                }
+
+                await recomputes.WaitAsync(wholeAt - time.GetUtcNow(), time, cancellationToken);
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                journal.Failed("statistics", exception);
                 await Task.Delay(Retry, time, cancellationToken);
             }
         }

@@ -34,6 +34,8 @@ public class LiveIdeasTests
     private ScannerMarket _market = null!;
     private FakeTimeProvider _time = null!;
     private ICandleRepository _candles = null!;
+    private IIdeaExitRuleRepository _rules = null!;
+    private IdeaRecomputes _recomputes = null!;
     private LiveIdeas _live = null!;
 
     [SetUp]
@@ -54,7 +56,26 @@ public class LiveIdeasTests
         candles.GetAggregatedAsync(Sol, Arg.Any<Interval>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns([]);
         _ideas.SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.ArgAt<IReadOnlyCollection<Idea>>(0).ToList());
-        _live = new LiveIdeas(_ideas, _volatility, candles, _market, new IdeasSettings(), _time);
+        _rules = Substitute.For<IIdeaExitRuleRepository>();
+        _rules.GetAllAsync(Arg.Any<CancellationToken>()).Returns([]);
+        _recomputes = new IdeaRecomputes();
+        _live = new LiveIdeas(_ideas, _volatility, candles, _rules, _recomputes, _market, new IdeasSettings(), _time);
+    }
+
+    // Task 6.2: the rules are read every minute; a new one makes the ideas from then on and sends its type × interval to the recompute, once.
+    [Test]
+    public async Task Exit_rule_applied_makes_the_next_ideas_and_goes_to_the_recompute()
+    {
+        var applied = new IdeaExitRule(IdeaType.BeyondExtreme, Interval.FifteenMinutes, 48, 3m, null, Four);
+        _rules.GetAllAsync(Arg.Any<CancellationToken>()).Returns([], [applied]);
+
+        IReadOnlyList<Idea> created = await RunAsync(Four.AddMinutes(70));
+
+        Idea beyond = created.Single(idea => idea.Setup == IdeaSetup.Impulse && idea.Interval == Interval.FifteenMinutes && idea.Track.Plan.Type == IdeaType.BeyondExtreme);
+        (beyond.Track.LifeCandles, beyond.Track.TargetR).ShouldBe((48, (decimal?)3m));
+        await _rules.Received(71).GetAllAsync(Arg.Any<CancellationToken>());
+        _recomputes.Take().ShouldBe([(IdeaType.BeyondExtreme, Interval.FifteenMinutes)]);
+        _recomputes.Take().ShouldBeEmpty();
     }
 
     // Requirement "Буфер стопа": three spreads of the ticker, 3 × 20, are wider than k × ATR; the stop 99.375 − 60 goes on the cent below.
@@ -224,7 +245,7 @@ public class LiveIdeasTests
     public async Task Window_of_a_setup_longer_than_a_day_warms_up_with_stored_minutes()
     {
         var settings = new IdeasSettings { ByInterval = new Dictionary<string, ThresholdOverride> { ["240"] = new ThresholdOverride { Candles = 7 } } };
-        var live = new LiveIdeas(_ideas, _volatility, _candles, _market, settings, _time);
+        var live = new LiveIdeas(_ideas, _volatility, _candles, _rules, _recomputes, _market, settings, _time);
         _candles.GetAsync(Wif, Interval.OneMinute, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
 
         await live.ReadWarmUpsAsync(CancellationToken.None);

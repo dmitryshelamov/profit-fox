@@ -126,6 +126,7 @@ public static class InfrastructureRegistrar
         services.AddScoped<ScannerPace>();
         services.AddScoped<LiveIdeas>();
         services.AddScoped<IdeaStatistics>();
+        services.AddScoped<IdeaRecomputes>();
         services.AddScoped<IdeasReplay>();
         services.AddScoped<ScannerMinuteCycle>();
         services.AddScoped<ScannerSession>();
