@@ -369,10 +369,10 @@ test('the link «Калибровка» of the ideas opens the calibration with 
       .getByRole('row', { name: /мало своих данных/ }),
   ).toContainText('0.212');
 
-  // The seed has no report after the rules changed: the scope goes to the address and the screen says so.
+  // The report after the rules changed has 120 checked cases of the 640; the scope goes to the address.
   await page.getByRole('button', { name: 'После изменения правил' }).click();
   await expect(page).toHaveURL(/\/ideas\/calibration\?scope=fresh$/);
-  await expect(page.getByText(/Калибровка ещё не посчитана/)).toBeVisible();
+  await expect(page.getByText(/Проверено 120 кейсов/)).toBeVisible();
   await page.getByRole('button', { name: 'Все случаи' }).click();
   await expect(page).toHaveURL(/\/ideas\/calibration$/);
 

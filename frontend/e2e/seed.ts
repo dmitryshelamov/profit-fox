@@ -107,8 +107,8 @@ export async function removeOpenIdeas(symbol: string): Promise<void> {
 }
 
 /**
- * A report of the calibration over 90 days of all categories among all cases, as the scanner stores it (decimals as strings), with the
- * table by own data and the comparison of the models, so the screen has
+ * The reports of the calibration over 90 days of all categories among all cases and after the rules changed (120 checked), as the
+ * scanner stores them (decimals as strings), with the table by own data and the comparison of the models, so the screen has
  * tables before the scanner has history enough to check a case. The scanner replaces the reports whole when it recomputes the
  * buckets, once an hour: a test reads the screen right after this.
  */
@@ -154,12 +154,17 @@ export async function seedCalibration(): Promise<void> {
   };
 
   try {
-    await client.query(
-      `INSERT INTO idea_calibration (engine_version, days, category, scope, computed_at, report)
-       VALUES (${engineVersion}, 90, 'all', 'all', now(), $1::jsonb)
-       ON CONFLICT (engine_version, days, category, scope) DO UPDATE SET computed_at = EXCLUDED.computed_at, report = EXCLUDED.report`,
-      [JSON.stringify(report)],
-    );
+    for (const [scope, checked] of [
+      ['all', 640],
+      ['fresh', 120],
+    ] as const) {
+      await client.query(
+        `INSERT INTO idea_calibration (engine_version, days, category, scope, computed_at, report)
+         VALUES (${engineVersion}, 90, 'all', '${scope}', now(), $1::jsonb)
+         ON CONFLICT (engine_version, days, category, scope) DO UPDATE SET computed_at = EXCLUDED.computed_at, report = EXCLUDED.report`,
+        [JSON.stringify({ ...report, Checked: checked })],
+      );
+    }
   } finally {
     await client.end();
   }
