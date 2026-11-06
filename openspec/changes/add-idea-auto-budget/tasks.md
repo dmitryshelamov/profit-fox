@@ -2,10 +2,10 @@
 
 ## 1. Домен
 
-- [ ] 1.1 `IdeaAuto.Budget`, `IdeaTradingSettings.AutosBudget`, причины `IdeaTradeRefusal.BudgetTaken` и `AutosBudgetTaken`; проверка — сборка и существующие тесты зелёные
-- [ ] 1.2 `Services/IdeaAutos/AutoBudget.Used` и `AutosUsed` по TDD на эталонном наборе (реальные «Ждёт входа» и «Открыта» на любом аккаунте, учебные, закрытые, отменённые, ручные, чужие автоматы, удалённый автомат); проверка — `AutoBudgetTests`
-- [ ] 1.3 `AutoRefusals.BudgetTaken` и бюджеты в `AutoRefusals.Check` (порядок причин, ровно в бюджет, без бюджета, бюджет всех автоматов не видит ручных); проверка — `AutoRefusalsTests`
-- [ ] 1.4 Бюджет автомата в `PaperEntry.Check`, без бюджета всех автоматов; проверка — `PaperEntryTests`
+- [x] 1.1 `IdeaAuto.Budget`, `IdeaTradingSettings.AutosBudget`, причины `IdeaTradeRefusal.BudgetTaken` и `AutosBudgetTaken`; проверка — сборка и существующие тесты зелёные
+- [x] 1.2 `Services/IdeaAutos/AutoBudget.Used` и `AutosUsed` по TDD на эталонном наборе (реальные «Ждёт входа» и «Открыта» на любом аккаунте, учебные, закрытые, отменённые, ручные, чужие автоматы, удалённый автомат); проверка — `AutoBudgetTests`
+- [x] 1.3 `AutoRefusals.BudgetTaken` и бюджеты в `AutoRefusals.Check` (порядок причин, ровно в бюджет, без бюджета, бюджет всех автоматов не видит ручных); проверка — `AutoRefusalsTests`
+- [x] 1.4 Бюджет автомата в `PaperEntry.Check`, без бюджета всех автоматов; проверка — `PaperEntryTests`
 
 ## 2. Хранение и API
 
