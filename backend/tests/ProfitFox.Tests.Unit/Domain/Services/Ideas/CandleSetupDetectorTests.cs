@@ -298,6 +298,92 @@ public class CandleSetupDetectorTests
         CandleSetupDetector.Detect(input, Thresholds).ShouldNotContain(signal => signal.Setup == IdeaSetup.QuietVolume);
     }
 
+    // The bounds of the conditions hold at equality: «не меньше», «не выше», «не ниже».
+    [Test]
+    public void Breakout_holds_at_exactly_its_volume()
+    {
+        Signal(IdeaSetup.Breakout, Input(Candle(99.8m, 101.1m, 99.7m, 101.0m, 1.5m), 2m, [Resistance])).ShouldNotBeNull();
+    }
+
+    // The close 100.8 is exactly d × ATR = 0.2 above the zone; the open 100.6 is exactly at its high.
+    [Test]
+    public void Breakout_holds_at_exactly_its_margin_and_with_the_open_at_the_edge()
+    {
+        Signal(IdeaSetup.Breakout, Input(Candle(99.8m, 101.1m, 99.7m, 100.8m, 2), 2m, [Resistance])).ShouldNotBeNull();
+        Signal(IdeaSetup.Breakout, Input(Candle(100.6m, 101.1m, 100.5m, 101.0m, 2), 2m, [Resistance])).ShouldNotBeNull();
+    }
+
+    // Down through 99.4–100.0: the close 99.2 is exactly 0.2 below the zone; the open 99.4 is exactly at its low.
+    [Test]
+    public void Breakout_down_holds_at_exactly_its_margin_and_with_the_open_at_the_edge()
+    {
+        var support = new Zone(99.4m, 100.0m, 2);
+
+        Signal(IdeaSetup.Breakout, Input(Candle(100.2m, 100.3m, 99.1m, 99.2m, 2), 2m, [support]))!.Side.ShouldBe(IdeaSide.Short);
+        Signal(IdeaSetup.Breakout, Input(Candle(99.4m, 99.5m, 98.9m, 99.0m, 2), 2m, [support]))!.Side.ShouldBe(IdeaSide.Short);
+    }
+
+    [Test]
+    public void Breakout_down_through_two_zones_takes_the_one_nearest_to_the_close()
+    {
+        var lower = new Zone(98.0m, 98.3m, 3);
+
+        Signal(IdeaSetup.Breakout, Input(Candle(100.2m, 100.3m, 97.4m, 97.5m, 2), 2m, [new Zone(99.4m, 100.0m, 2), lower]))!.Zone.ShouldBe(lower);
+    }
+
+    // ATR 1, e = 0.2: the low 49.8 is exactly 0.2 below the support 50.0–50.4, the high 50.6 exactly 0.2 above the resistance.
+    [Test]
+    public void False_breakout_holds_at_exactly_its_sweep()
+    {
+        var zone = new Zone(50.0m, 50.4m, 2);
+
+        Signal(IdeaSetup.FalseBreakout, Input(Candle(50.6m, 50.7m, 49.8m, 50.2m, 1), 1m, [zone]))!.Side.ShouldBe(IdeaSide.Long);
+        Signal(IdeaSetup.FalseBreakout, Input(Candle(49.8m, 50.6m, 49.7m, 50.2m, 1), 1m, [zone]))!.Side.ShouldBe(IdeaSide.Short);
+    }
+
+    // A close at the very edge it swept is not back beyond it.
+    [Test]
+    public void False_breakout_that_closes_at_the_edge_is_none()
+    {
+        var zone = new Zone(50.0m, 50.4m, 2);
+
+        Signal(IdeaSetup.FalseBreakout, Input(Candle(50.6m, 50.7m, 49.7m, 50.0m, 1), 1m, [zone])).ShouldBeNull();
+        Signal(IdeaSetup.FalseBreakout, Input(Candle(49.8m, 50.7m, 49.7m, 50.4m, 1), 1m, [zone])).ShouldBeNull();
+    }
+
+    // Exactly 4 medians of volume, and an upper wick of exactly one body, 0.8.
+    [Test]
+    public void Exhaustion_holds_at_exactly_its_climax_and_its_wick()
+    {
+        var impulse = new SetupSignal(IdeaSetup.Impulse, IdeaSide.Long, 3.5m, 2.2m, 96m, 101.9m);
+
+        Signal(IdeaSetup.Exhaustion, Input(Candle(100m, 101.9m, 99.9m, 100.8m, 4), 2m, []) with { Moves = [impulse] }).ShouldNotBeNull();
+        Signal(IdeaSetup.Exhaustion, Input(Candle(100m, 101.6m, 99.9m, 100.8m, 5), 2m, []) with { Moves = [impulse] }).ShouldNotBeNull();
+    }
+
+    // RSI 80 of the closed candles (a gain of 0.8 against a loss of 0.2) and 50 with the last candle down 7.8; mirrored, 20 and 50 up 7.8.
+    // The bounds are set at these values, so each holds at equality.
+    [Test]
+    public void Rsi_bounds_hold_at_equality_for_the_closed_candles_and_not_for_the_last_one()
+    {
+        Signal(IdeaSetup.RsiExtreme, Rsi(new RsiState(0.8m, 0.2m, 100m), 92.2m), Thresholds with { Overbought = 80m })!.Side.ShouldBe(IdeaSide.Short);
+        Signal(IdeaSetup.RsiExtreme, Rsi(new RsiState(0.8m, 0.2m, 100m), 92.2m), Thresholds with { Overbought = 50m }).ShouldBeNull();
+        Signal(IdeaSetup.RsiExtreme, Rsi(new RsiState(0.2m, 0.8m, 100m), 107.8m), Thresholds with { Oversold = 20m })!.Side.ShouldBe(IdeaSide.Long);
+        Signal(IdeaSetup.RsiExtreme, Rsi(new RsiState(0.2m, 0.8m, 100m), 107.8m), Thresholds with { Oversold = 50m }).ShouldBeNull();
+    }
+
+    [Test]
+    public void New_extreme_holds_with_exactly_two_hundred_closed_candles()
+    {
+        Signal(IdeaSetup.NewExtreme, Extremes(200, 120.5m))!.Side.ShouldBe(IdeaSide.Long);
+    }
+
+    [Test]
+    public void Quiet_volume_holds_at_exactly_its_volume()
+    {
+        Signal(IdeaSetup.QuietVolume, Input(Candle(100m, 100.9m, 99.3m, 100.4m, 3), 2m, [])).ShouldNotBeNull();
+    }
+
     private static SetupSignal? Signal(IdeaSetup setup, CandleSetupInput input, SetupThresholds? thresholds = null)
     {
         return CandleSetupDetector.Detect(input, thresholds ?? Thresholds).SingleOrDefault(signal => signal.Setup == setup);

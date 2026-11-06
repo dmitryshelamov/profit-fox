@@ -144,6 +144,13 @@ public class IdeaTrackerTests
         (track.Status, track.EnteredAt, track.Plan).ShouldBe((IdeaStatus.Active, Fired.AddMinutes(1), StopEntry));
     }
 
+    // A minute whose high is exactly the entry fills the stop order.
+    [Test]
+    public void Stop_entry_enters_when_a_minute_touches_its_entry_exactly()
+    {
+        Run(StopEntry, 0.01m, Minute(0, 101.8m, 102.01m, 101.7m, 102m)).Status.ShouldBe(IdeaStatus.Active);
+    }
+
     // Scenario "Вход с гэпом": the minute opened at 102.30, beyond the entry; the target of 2R follows it, 102.30 + 2 × 2.80.
     [Test]
     public void Stop_entry_with_a_gap_enters_at_the_open_and_targets_two_r_from_it()
