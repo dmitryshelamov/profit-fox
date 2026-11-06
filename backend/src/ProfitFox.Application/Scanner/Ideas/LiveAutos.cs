@@ -75,7 +75,7 @@ public sealed class LiveAutos(
     /// <summary>Keeps in memory what storage took of the minute: the paper trades stepped, and those opened for the ideas it added.</summary>
     public void Commit(AutoMinute? minute, IReadOnlyCollection<Idea> added)
     {
-        if (minute is null || _open is null)
+        if (minute is null)
         {
             return;
         }
@@ -86,11 +86,11 @@ public sealed class LiveAutos(
         {
             if (trade.Trade.IsOpen)
             {
-                _open[trade.Trade.Id] = trade;
+                _open![trade.Trade.Id] = trade;
             }
             else
             {
-                _open.Remove(trade.Trade.Id);
+                _open!.Remove(trade.Trade.Id);
             }
         }
     }

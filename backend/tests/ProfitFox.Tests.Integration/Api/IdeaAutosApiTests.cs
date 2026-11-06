@@ -66,6 +66,16 @@ public class IdeaAutosApiTests
         (Number(auto.GetProperty("minRiskReward")), auto.GetProperty("minCases").GetInt32()).ShouldBe((1.35m, 100));
     }
 
+    // A code marked twice is one condition.
+    [Test]
+    public async Task Code_marked_twice_is_kept_once()
+    {
+        HttpResponseMessage created = await _scenario.Client.PostAsJsonAsync(Url, Body("А", setups: ["impulse", "impulse", "breakout"]));
+        Guid id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        (await GetAsync(id)).GetProperty("setups").EnumerateArray().Select(item => item.GetString()).ShouldBe(["impulse", "breakout"]);
+    }
+
     [Test]
     public async Task Conditions_left_open_are_read_back_as_none()
     {
@@ -225,6 +235,22 @@ public class IdeaAutosApiTests
         JsonElement first = page.GetProperty("items")[0];
         (first.GetProperty("autoName").GetString(), first.GetProperty("mode").GetString(), first.GetProperty("symbol").GetString(), Number(first.GetProperty("detail").GetProperty("actual"))).ShouldBe(("Пробои 5м", "live", "SUIUSDT", 212.4m));
         (await RefusalsAsync("period=7d")).GetProperty("total").GetInt32().ShouldBe(4);
+    }
+
+    // The three kinds of the holder of a pair read back as codes, with who and since when.
+    [Test]
+    public async Task Refusal_tells_who_holds_the_pair_by_the_kind_of_the_holder()
+    {
+        Guid id = await CreateAsync("Падения шорт");
+        await InsertRefusalAsync(id, Now.AddMinutes(-1), "pair_taken", """{"Actual": null, "Limit": null, "Holder": {"Kind": "OtherAuto", "AutoName": "Импульс лонг", "Above": true, "Paper": false, "AccountName": "Основной", "Since": "2026-11-07T13:05:00Z"}}""");
+        await InsertRefusalAsync(id, Now.AddMinutes(-2), "pair_taken", """{"Actual": null, "Limit": null, "Holder": {"Kind": "Manual", "AutoName": null, "Above": false, "Paper": false, "AccountName": "Основной", "Since": "2026-11-07T13:05:00Z"}}""");
+        await InsertRefusalAsync(id, Now.AddMinutes(-3), "pair_taken", """{"Actual": null, "Limit": null, "Holder": {"Kind": "SameAuto", "AutoName": "Падения шорт", "Above": false, "Paper": true, "AccountName": null, "Since": "2026-11-07T12:50:00Z"}}""");
+
+        JsonElement[] holders = [.. (await RefusalsAsync("period=today")).GetProperty("items").EnumerateArray().Select(item => item.GetProperty("detail").GetProperty("holder"))];
+
+        holders.Select(holder => holder.GetProperty("kind").GetString()).ShouldBe(["other_auto", "manual", "same_auto"]);
+        (holders[0].GetProperty("autoName").GetString(), holders[0].GetProperty("above").GetBoolean(), holders[0].GetProperty("accountName").GetString()).ShouldBe(("Импульс лонг", true, "Основной"));
+        (holders[2].GetProperty("paper").GetBoolean(), holders[2].GetProperty("since").GetDateTimeOffset()).ShouldBe((true, DateTimeOffset.Parse("2026-11-07T12:50:00Z")));
     }
 
     [Test]

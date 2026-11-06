@@ -317,6 +317,19 @@ public class LiveAutosTests
         minute.Stepped.ShouldHaveSingleItem().Trade.Status.ShouldBe(IdeaTradeStatus.ClosedAtTarget);
     }
 
+    // A pair whose memory holds no minute at all (it was just listed again): the whole stretch comes from storage.
+    [Test]
+    public async Task Pair_whose_memory_holds_no_minutes_is_stepped_by_the_stored_ones()
+    {
+        _paper.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([Opened(Auto("Пробои 5м", IdeaAutoMode.Paper, amount: 50m))]);
+        _market.Keep([new ScannerPair(Wif, true, CoveredUntil: Fired.AddMinutes(4), TickSize: 0.01m, QuantityStep: 0.01m, MinQuantity: 0.01m, MinAmount: 5m)]);
+        _candles.GetAsync(Wif, Interval.OneMinute, End, Fired.AddMinutes(4), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([.. IdeaAutoFixtures.Minutes("paper-to-target").Skip(1).Select(Candle)]);
+
+        AutoMinute minute = (await RunAsync([], End.AddMinutes(3)))!;
+
+        minute.Stepped.ShouldHaveSingleItem().Trade.Status.ShouldBe(IdeaTradeStatus.ClosedAtTarget);
+    }
+
     [Test]
     public async Task Pair_that_is_not_covered_yet_is_not_stepped()
     {
