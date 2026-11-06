@@ -76,7 +76,7 @@ internal sealed class IdeaTradeSession(
     private bool _reconcileScheduled;
     private IdeaTrade _trade = leased.Trade;
     private TradeContext _context = null!;
-    private bool _deadlineScheduled;
+    private bool _fillsKept;
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -309,7 +309,7 @@ internal sealed class IdeaTradeSession(
         if (known is null)
         {
             // A cancel of an order the exchange never took ends the order.
-            if (order.Status == LiveOrderStatus.CancelSent || (order.Status == LiveOrderStatus.PendingCancel && order.Attempts == 0 && order.ExchangeOrderId is null))
+            if (order.Status == LiveOrderStatus.CancelSent)
             {
                 await EndAsync(order.Number, ended => ended.Cancelled(), cancellationToken);
             }
@@ -375,9 +375,8 @@ internal sealed class IdeaTradeSession(
     /// <summary>A trade of the exchange is kept with the trade by an idea once, by the exchange's id of it, as detail only.</summary>
     private async Task TradeAsync(ExchangeFill fill, CancellationToken cancellationToken)
     {
-        string? exchangeId = fill.ExchangeOrderId ?? _orders.Values.FirstOrDefault(order => order.ClientId.Code == fill.ClientId)?.ExchangeOrderId;
-
-        if (exchangeId is null)
+        // Bybit names the order of every execution it reports, on the stream and in its history.
+        if (fill.ExchangeOrderId is not { } exchangeId)
         {
             return;
         }
@@ -487,12 +486,6 @@ internal sealed class IdeaTradeSession(
         if (known is not { } leg)
         {
             return;
-        }
-
-        // The exchange may tell of the stop before the books count the entry: the entry is read first.
-        if (_trade.Entry.Quantity == 0m && _orders.ContainsKey(1))
-        {
-            await RefreshAsync(1, cancellationToken);
         }
 
         await WriteAsync(
@@ -706,12 +699,11 @@ internal sealed class IdeaTradeSession(
     /// <summary>Wakes the session when the entry of a pullback runs out of time.</summary>
     private void ScheduleDeadline(CancellationToken cancellationToken)
     {
-        if (_deadlineScheduled || _trade.EntryDeadline is not { } deadline)
+        if (_trade.EntryDeadline is not { } deadline)
         {
             return;
         }
 
-        _deadlineScheduled = true;
         _ = LaterAsync(deadline > time.GetUtcNow() ? deadline - time.GetUtcNow() : TimeSpan.Zero, cancellationToken);
     }
 
@@ -732,7 +724,7 @@ internal sealed class IdeaTradeSession(
         {
             await RequestCancelAsync(entry.Number, cancellationToken);
         }
-        else if (_trade.CloseRequested && _trade.Status == IdeaTradeStatus.Open && entry is null)
+        else if (_trade.CloseRequested && entry is null)
         {
             await CloseAsync(cancellationToken);
         }
@@ -771,6 +763,11 @@ internal sealed class IdeaTradeSession(
             await RequestCancelAsync(entry.Number, cancellationToken);
         }
 
+        if (!_fillsKept && _trade.Status is IdeaTradeStatus.ClosedAtTarget or IdeaTradeStatus.ClosedAtStop or IdeaTradeStatus.ClosedManually)
+        {
+            await KeepFillsAsync(cancellationToken);
+        }
+
         var left = false;
 
         if (_trade.Status == IdeaTradeStatus.ClosedManually)
@@ -781,6 +778,24 @@ internal sealed class IdeaTradeSession(
         await SendAsync(cancellationToken);
 
         return !left && _orders.Count == 0;
+    }
+
+    /// <summary>
+    ///     The executions of a trade that closed are kept with it: the session is done with the trade when the update of the last order has
+    ///     closed it, and the executions come after that update.
+    /// </summary>
+    private async Task KeepFillsAsync(CancellationToken cancellationToken)
+    {
+        _fillsKept = true;
+        IEnumerable<string> orders = (await repository.GetOrdersAsync(_id, cancellationToken)).Where(order => order.ExchangeOrderId is not null).Select(order => order.ExchangeOrderId!);
+
+        foreach (string exchangeId in orders.Concat(_children.Keys))
+        {
+            foreach (ExchangeFill fill in await ledger.GetOrderFillsAsync(_context.Key, _context.Instrument, exchangeId, cancellationToken))
+            {
+                await TradeAsync(fill, cancellationToken);
+            }
+        }
     }
 
     /// <summary>

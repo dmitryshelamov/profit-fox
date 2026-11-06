@@ -51,6 +51,22 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
         }
     }
 
+    /// <summary>The updates of a stop or a target that fires or ends come without the parent and the kind, which only its first update carried.</summary>
+    public bool BareChildUpdates { get; set; }
+
+    /// <summary>How many times the stops and targets of an entry were looked for by their parent.</summary>
+    public int ParentReads => _parentReads;
+
+    private int _parentReads;
+
+    /// <summary>How many times the executions of an order were read by the exchange's id of it.</summary>
+    public int OrderFillReads => _orderFillReads;
+
+    private int _orderFillReads;
+
+    /// <summary>When the holding was read, by the clock of the app.</summary>
+    public List<DateTimeOffset> HoldingReadTimes { get; } = [];
+
     /// <summary>The fee rates of the account do not come, so no session of a bot gets up.</summary>
     public bool FeesUnavailable { get; set; }
 
@@ -161,7 +177,7 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
             OrderRequest request = _requests[clientId];
             ExchangeOrder before = _orders[clientId];
             decimal filled = before.FilledQuantity + quantity;
-            fill = new ExchangeFill(execId ?? $"e-{++_execs}", clientId, quantity, price, fee, feeCoin, DateTimeOffset.Parse("2024-03-10T12:30:00Z"), _instruments.GetValueOrDefault(clientId));
+            fill = new ExchangeFill(execId ?? $"e-{++_execs}", clientId, quantity, price, fee, feeCoin, DateTimeOffset.Parse("2024-03-10T12:30:00Z"), _instruments.GetValueOrDefault(clientId), before.ExchangeId);
             bool complete = filled >= (request.Quantity ?? filled);
             order = before with
             {
@@ -227,7 +243,7 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
             orders = silently ? [] : [.. _orderUpdates];
         }
 
-        foreach (ExchangeOrder order in told)
+        foreach (ExchangeOrder order in told.Select(item => BareChildUpdates ? item with { ParentClientId = null, StopKind = StopOrderKind.None } : item))
         {
             foreach (Action<ExchangeOrder> handler in orders)
             {
@@ -450,6 +466,11 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
     {
         Interlocked.Increment(ref _holdingReads);
 
+        lock (_lock)
+        {
+            HoldingReadTimes.Add(Clock.GetUtcNow());
+        }
+
         Interlocked.Exchange(ref _onHoldingRead, null)?.Invoke();
 
         return Task.FromResult(Holding);
@@ -472,6 +493,8 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
 
     public Task<IReadOnlyList<ExchangeOrder>> GetOrdersOfParentAsync(ExchangeKey key, Instrument instrument, string parentClientId, CancellationToken cancellationToken)
     {
+        Interlocked.Increment(ref _parentReads);
+
         return Task.FromResult(ChildrenOf(parentClientId));
     }
 
@@ -490,6 +513,8 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
 
     public Task<IReadOnlyList<ExchangeFill>> GetOrderFillsAsync(ExchangeKey key, Instrument instrument, string exchangeOrderId, CancellationToken cancellationToken)
     {
+        Interlocked.Increment(ref _orderFillReads);
+
         lock (_lock)
         {
             string? clientId = _orders.Values.FirstOrDefault(order => order.ExchangeId == exchangeOrderId)?.ClientId;

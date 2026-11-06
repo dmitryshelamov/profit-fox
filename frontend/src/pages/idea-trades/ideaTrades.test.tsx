@@ -87,6 +87,22 @@ describe('screen «Сделки»', () => {
     ).toBeInTheDocument();
   });
 
+  // A refused close leaves the trade open, a stale entry cancels it, a stop that would not come off is named: the owner sees why.
+  it('shows the reason of a trade that is not failed', async () => {
+    fakeApi(
+      routes(() => [
+        tradeOf({ status: 'open', reason: 'Закрытие по рынку отклонено: Reduce-only rejected.' }),
+        tradeOf({ id: 'second', status: 'cancelled', reason: 'Вход не ушёл вовремя.' }),
+      ]),
+    );
+    renderApp('/idea-trades');
+
+    expect(
+      await screen.findByText('Закрытие по рынку отклонено: Reduce-only rejected.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Вход не ушёл вовремя.')).toBeInTheDocument();
+  });
+
   // Scenario "Закрытие с подтверждением".
   it('closes an open trade by the market after the owner confirms, and shows the result', async () => {
     let closed = false;

@@ -203,7 +203,7 @@ test('a pullback that is not filled by the end of its time is taken off the exch
   await expect(tradeRow(page)).toContainText('Отменена', { timeout: 45_000 });
 });
 
-test('«Закрыть по рынку» takes the stop and the target off and sells what the trade holds', async ({
+test('«Закрыть по рынку» sells what the trade holds first and takes the stop and the target off after it', async ({
   page,
   request,
 }) => {
@@ -229,13 +229,15 @@ test('«Закрыть по рынку» takes the stop and the target off and s
 
   const close = await waitForOrder(request, known + 1);
   expect(close).toMatchObject({ side: 'Sell', orderType: 'Market', reduceOnly: true });
-  const children = (await stubChildren(request)).filter(
-    (order) => order.parentOrderLinkId === entry.orderLinkId,
-  );
-  expect(children.map((order) => order.orderStatus)).toEqual(['Cancelled', 'Cancelled']);
+  const children = async () =>
+    (await stubChildren(request))
+      .filter((order) => order.parentOrderLinkId === entry.orderLinkId)
+      .map((order) => order.orderStatus);
+  expect(await children()).not.toContain('Cancelled');
   await request.get(`${stub}/control/fill?orderLinkId=${close.orderLinkId}&price=3010`);
 
   await expect(tradeRow(page)).toContainText('Закрыта вручную', { timeout: 45_000 });
+  await expect.poll(children, { timeout: 45_000 }).toEqual(['Cancelled', 'Cancelled']);
   await expect(tradeRow(page)).toContainText(/\+\d+\.\d{2} USDT/);
 });
 

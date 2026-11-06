@@ -53,6 +53,8 @@ public class IdeaTradingTests
         closed.Result.ShouldBe((0.47m * 115m) - (0.47m * 105m) - 0.02m);
         closed.ResultR.ShouldBe(closed.Result / 2m);
         (await _scenario.TradeOrdersAsync(trade.Id)).Single().Status.ShouldBe(LiveOrderStatus.Filled);
+        await _scenario.WaitAsync(async () => (await _scenario.TradeFillsAsync(trade.Id)).Count == 2, "the fills of the entry and the target");
+        (await _scenario.TradeFillsAsync(trade.Id)).Select(fill => (fill.Quantity, fill.FeeAsset)).ShouldBe([(0.47m, FeeAsset.Quote), (0.47m, FeeAsset.Quote)]);
     }
 
     // Scenario "Откат не дождался": the limit of the pullback is cancelled when the time of the entry of the idea is out.
@@ -89,6 +91,7 @@ public class IdeaTradingTests
         (await _scenario.TradeAsync(trade.Id)).Result.ShouldBe((0.47m * 110m) - (0.47m * 105m) - 0.02m - 0.03m);
         await _scenario.WaitAsync(() => _scenario.Exchange.ChildCancels.Count == 2, "the stop and the target taken off");
         await _scenario.WaitAsync(async () => (await _scenario.TradeChildrenAsync(trade.Id)).All(child => child.Finished), "the stop and the target ended");
+        await _scenario.WaitAsync(async () => (await _scenario.TradeFillsAsync(trade.Id)).Count == 2, "the fills of the entry and the close");
     }
 
     // Requirement "Отмена и закрытие сделки": a close the exchange cancels in part leaves the trade open, protected, for another try; the exits add up.
@@ -118,6 +121,7 @@ public class IdeaTradingTests
         await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(trade.Id)).Status == IdeaTradeStatus.ClosedManually, "the closed trade");
         IdeaTrade closed = await _scenario.TradeAsync(trade.Id);
         closed.Manual.ShouldBe(new LegTotals(0.47m, (0.2m * 110m) + (0.27m * 111m), 0.03m));
+        closed.Reason.ShouldBeNull();
         await _scenario.WaitAsync(() => _scenario.Exchange.ChildCancels.Count == 2, "the stop and the target taken off");
     }
 
@@ -169,6 +173,9 @@ public class IdeaTradingTests
         await SettleAsync();
         await _scenario.WaitAsync(async () => (await _scenario.TradeChildrenAsync(trade.Id)).All(child => child.Finished), "the stop and the target ended");
         _scenario.Exchange.ChildCancels.Count.ShouldBe(3);
+
+        // The executions of the entry, the close and the two children are read once, though the session came round again for the cancel.
+        _scenario.Exchange.OrderFillReads.ShouldBe(4);
     }
 
     [Test]
@@ -185,6 +192,8 @@ public class IdeaTradingTests
         IdeaTrade closed = await _scenario.TradeAsync(trade.Id);
         closed.Status.ShouldBe(IdeaTradeStatus.ClosedManually);
         closed.Reason!.ShouldContain("Not allowed.");
+        await SettleAsync();
+        _scenario.Exchange.ChildCancels.Count.ShouldBe(2);
     }
 
     // Scenario "Стоп сработал, пока Worker лежал": the stop stands on the exchange without the Worker, and its trade is read from the history.
@@ -318,8 +327,7 @@ public class IdeaTradingTests
 
         _scenario.StartWorker();
 
-        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the entry");
-        (await _scenario.TradeOrdersAsync(trade.Id)).Single().Status.ShouldBe(LiveOrderStatus.Active);
+        await _scenario.WaitAsync(async () => (await _scenario.TradeOrdersAsync(trade.Id)).Single().Status == LiveOrderStatus.Active, "the entry taken");
     }
 
     // Requirement "Ошибка сделки": a refusal for good is the end of the trade, with the reason of Bybit.
@@ -454,6 +462,245 @@ public class IdeaTradingTests
         await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(trade.Id)).Status == IdeaTradeStatus.Open, "the open trade");
         IdeaTrade open = await _scenario.TradeAsync(trade.Id);
         (open.HeldQuantity, open.Entry.Fee).ShouldBe((0.46953m, 0.04935m));
+        await _scenario.WaitAsync(async () => (await _scenario.TradeFillsAsync(trade.Id)).Count == 1, "the fill of the entry");
+        (await _scenario.TradeFillsAsync(trade.Id)).Single().FeeAsset.ShouldBe(FeeAsset.Base);
+    }
+
+    // Requirement "Отмена и закрытие сделки": a second click on «Закрыть по рынку» does not sell the position twice.
+    [Test]
+    public async Task Second_close_asked_while_the_first_stands_places_nothing()
+    {
+        IdeaTrade trade = await OpenTradeAsync(0.47m);
+        await _scenario.ChangeTradeAsync(trade.Id, locked => locked.RequestClose());
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 2, "the close");
+
+        await _scenario.ChangeTradeAsync(trade.Id, locked => locked with { CloseRequested = true });
+        await SettleAsync();
+
+        _scenario.Exchange.Orders.Count.ShouldBe(2);
+    }
+
+    // The close of an old trade goes: the time to send runs for a market entry only.
+    [Test]
+    public async Task Close_of_an_old_trade_is_sent()
+    {
+        IdeaTrade trade = await OpenTradeAsync(0.47m);
+        _scenario.Factory.Time.Advance(TimeSpan.FromMinutes(5));
+
+        await _scenario.ChangeTradeAsync(trade.Id, locked => locked.RequestClose());
+
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 2, "the close");
+    }
+
+    [Test]
+    public async Task Pullback_limit_older_than_the_time_to_send_a_market_entry_is_sent()
+    {
+        IdeaTrade trade = await _scenario.CreateTradeAsync(IdeaType.Pullback);
+        _scenario.Factory.Time.Advance(TimeSpan.FromSeconds(31));
+
+        _scenario.StartWorker();
+
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the limit");
+        (await _scenario.TradeAsync(trade.Id)).Status.ShouldBe(IdeaTradeStatus.AwaitingEntry);
+    }
+
+    // The owner closes a pullback that is filled in part: the rest of the limit goes first, then what it filled is sold.
+    [Test]
+    public async Task Close_asked_while_the_limit_stands_takes_the_limit_off_and_then_sells_what_is_held()
+    {
+        IdeaTrade trade = await _scenario.CreateTradeAsync(IdeaType.Pullback);
+        string entry = new IdeaTradeOrderId(trade.Id, 1).Code;
+        _scenario.StartWorker();
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the limit");
+        _scenario.Exchange.Fill(entry, 0.2m, 105m, fee: 0.01m);
+        await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(trade.Id)).Status == IdeaTradeStatus.Open, "the open trade");
+
+        await _scenario.ChangeTradeAsync(trade.Id, locked => locked.RequestClose());
+
+        await _scenario.WaitAsync(() => _scenario.Exchange.Cancels.Count == 1, "the cancel of the rest of the limit");
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 2, "the close");
+        _scenario.Exchange.Orders.Last().Quantity.ShouldBe(0.2m);
+    }
+
+    // The trade is cancelled before its entry went to the exchange: the cancel finds nothing there and ends the order.
+    [Test]
+    public async Task Cancel_asked_before_the_entry_was_sent_ends_it_without_sending()
+    {
+        IdeaTrade trade = await _scenario.CreateTradeAsync(IdeaType.Pullback);
+        await _scenario.ChangeTradeAsync(trade.Id, locked => locked.RequestCancel());
+
+        _scenario.StartWorker();
+
+        await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(trade.Id)).Status == IdeaTradeStatus.Cancelled, "the cancelled trade");
+        (await _scenario.TradeOrdersAsync(trade.Id)).Single().Status.ShouldBe(LiveOrderStatus.Cancelled);
+        _scenario.Exchange.Sent.ShouldBeEmpty();
+    }
+
+    // The order the exchange finished without a new fill ends in the books too.
+    [Test]
+    public async Task Entry_finished_by_the_exchange_without_a_new_fill_is_filled_in_the_books()
+    {
+        IdeaTrade trade = await _scenario.CreateTradeAsync(IdeaType.Pullback);
+        string entry = new IdeaTradeOrderId(trade.Id, 1).Code;
+        _scenario.StartWorker();
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the limit");
+        _scenario.Exchange.Fill(entry, 0.2m, 105m, fee: 0.01m);
+        await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(trade.Id)).Status == IdeaTradeStatus.Open, "the open trade");
+
+        _scenario.Exchange.Finish(entry);
+
+        await _scenario.WaitAsync(async () => (await _scenario.TradeOrdersAsync(trade.Id)).Single().Status == LiveOrderStatus.Filled, "the entry filled");
+    }
+
+    // Another trade on the same symbol: its stop is not the stop of this one.
+    [Test]
+    public async Task Stop_of_another_trade_does_not_touch_this_one()
+    {
+        IdeaTrade first = await OpenTradeAsync(0.47m);
+        IdeaTrade second = await OpenTradeAsync(0.3m);
+
+        await SettleAsync();
+        int reads = _scenario.Exchange.HoldingReads;
+
+        _scenario.Exchange.TriggerChild(new IdeaTradeOrderId(second.Id, 1).Code, StopOrderKind.StopLoss, 100m);
+
+        await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(second.Id)).Status == IdeaTradeStatus.ClosedAtStop, "the stop of the second");
+        await SettleAsync();
+        _scenario.Exchange.HoldingReads.ShouldBe(reads);
+        IdeaTrade untouched = await _scenario.TradeAsync(first.Id);
+        (untouched.Status, untouched.HeldQuantity, untouched.StopLoss).ShouldBe((IdeaTradeStatus.Open, 0.47m, LegTotals.None));
+    }
+
+    // The stop or the target may fire with an update that no longer names its entry: the books know it by its exchange id.
+    [Test]
+    public async Task Target_told_without_its_parent_still_closes_the_trade()
+    {
+        IdeaTrade trade = await OpenTradeAsync(0.47m);
+        _scenario.Exchange.BareChildUpdates = true;
+
+        _scenario.Exchange.TriggerChild(new IdeaTradeOrderId(trade.Id, 1).Code, StopOrderKind.TakeProfit, 115m);
+
+        await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(trade.Id)).Status == IdeaTradeStatus.ClosedAtTarget, "the target");
+    }
+
+    // A trade that waits does not look for a stop and a target that cannot be there yet.
+    [Test]
+    public async Task Trade_that_waits_does_not_look_for_its_stop_and_target()
+    {
+        IdeaTrade trade = await _scenario.CreateTradeAsync(IdeaType.Pullback);
+        _scenario.StartWorker();
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the limit");
+        _scenario.Exchange.RestoreAccount();
+        await SettleAsync();
+
+        _scenario.Exchange.ParentReads.ShouldBe(0);
+        (await _scenario.TradeAsync(trade.Id)).Status.ShouldBe(IdeaTradeStatus.AwaitingEntry);
+    }
+
+    // An execution of the trade's own order that names no order of the exchange cannot be kept with it, and does no harm.
+    [Test]
+    public async Task Execution_that_names_no_order_of_the_exchange_is_not_kept()
+    {
+        IdeaTrade trade = await OpenTradeAsync(0.47m);
+        await SettleAsync();
+        int before = (await _scenario.TradeFillsAsync(trade.Id)).Count;
+
+        _scenario.Exchange.ForeignFill(new IdeaTradeOrderId(trade.Id, 1).Code, 0.1m, 105m, LiveTradingScenario.Linear);
+        await SettleAsync();
+
+        (await _scenario.TradeFillsAsync(trade.Id)).Count.ShouldBe(before);
+        (await _scenario.TradeAsync(trade.Id)).Status.ShouldBe(IdeaTradeStatus.Open);
+    }
+
+    // The stop and the target of a trade that is told to be gone are no one's to refuse twice, and the others go on.
+    [Test]
+    public async Task Stop_that_cannot_be_taken_off_for_good_is_not_asked_again_while_the_other_is_retried()
+    {
+        IdeaTrade trade = await OpenTradeAsync(0.47m);
+        await _scenario.ChangeTradeAsync(trade.Id, locked => locked.RequestClose());
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 2, "the close");
+        _scenario.Exchange.CancelRefusals.Enqueue(new OrderOutcome(OrderOutcomeKind.Permanent, Reason: "Not allowed."));
+        _scenario.Exchange.CancelRefusals.Enqueue(new OrderOutcome(OrderOutcomeKind.Transient, Reason: "Too many visits."));
+
+        _scenario.Exchange.Fill(new IdeaTradeOrderId(trade.Id, 2).Code, 0.47m, 110m, fee: 0.03m);
+
+        await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(trade.Id)).Status == IdeaTradeStatus.ClosedManually, "the closed trade");
+        await SettleAsync();
+        await SettleAsync();
+        _scenario.Exchange.ChildCancels.Count.ShouldBe(3);
+        (await _scenario.TradeChildrenAsync(trade.Id)).Count(child => child.Finished).ShouldBe(1);
+    }
+
+    // A trade that is failed compares nothing: a foreign fill does not set the comparison off for its neighbours.
+    [Test]
+    public async Task Failed_trade_does_not_compare_the_exchange_on_a_foreign_fill()
+    {
+        IdeaTrade trade = await _scenario.CreateTradeAsync(IdeaType.Pullback);
+        _scenario.StartWorker();
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the limit");
+        for (var i = 0; i < 20; i++)
+        {
+            _scenario.Exchange.CancelRefusals.Enqueue(new OrderOutcome(OrderOutcomeKind.Permanent, Reason: "Not allowed."));
+        }
+
+        await _scenario.ChangeTradeAsync(trade.Id, locked => locked.RequestCancel());
+        await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(trade.Id)).Status == IdeaTradeStatus.Failed, "the failed trade");
+        await SettleAsync();
+        int reads = _scenario.Exchange.HoldingReads;
+
+        _scenario.Exchange.ForeignFill("manual-1", 0.1m, 105m, LiveTradingScenario.Linear);
+        await SettleAsync();
+
+        _scenario.Exchange.HoldingReads.ShouldBe(reads);
+    }
+
+    // A fill on another instrument is no reason to compare this one.
+    [Test]
+    public async Task Foreign_fill_on_another_instrument_does_not_set_the_comparison_off()
+    {
+        IdeaTrade trade = await OpenTradeAsync(0.47m);
+        await SettleAsync();
+        _scenario.Exchange.Holding = 0m;
+
+        _scenario.Exchange.ForeignFill("manual-1", 0.47m, 105m, LiveTradingScenario.Spot);
+        await SettleAsync();
+
+        (await _scenario.TradeAsync(trade.Id)).Status.ShouldBe(IdeaTradeStatus.Open);
+    }
+
+    // One comparison serves the foreign fills that come together.
+    [Test]
+    public async Task Foreign_fills_that_come_together_are_compared_once()
+    {
+        await OpenTradeAsync(0.47m);
+        await SettleAsync();
+        int before = _scenario.Exchange.HoldingReads;
+        _scenario.Exchange.ForeignFill("manual-1", 0.1m, 105m, LiveTradingScenario.Linear);
+        await SettleAsync();
+        int one = _scenario.Exchange.HoldingReads - before;
+
+        before = _scenario.Exchange.HoldingReads;
+        _scenario.Exchange.ForeignFill("manual-2", 0.1m, 105m, LiveTradingScenario.Linear);
+        _scenario.Exchange.ForeignFill("manual-3", 0.1m, 105m, LiveTradingScenario.Linear);
+        _scenario.Exchange.ForeignFill("manual-4", 0.1m, 105m, LiveTradingScenario.Linear);
+        await SettleAsync();
+
+        (_scenario.Exchange.HoldingReads - before).ShouldBe(one);
+    }
+
+    // A difference is read again right away and once more after a pause, which a neighbour needs to write its own fill.
+    [Test]
+    public async Task Difference_is_read_again_after_a_pause_before_the_trade_fails()
+    {
+        IdeaTrade trade = await OpenTradeAsync(0.47m);
+        await SettleAsync();
+        _scenario.Exchange.Holding = 0m;
+
+        _scenario.Exchange.ForeignFill("manual-1", 0.47m, 105m, LiveTradingScenario.Linear);
+
+        await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(trade.Id)).Status == IdeaTradeStatus.Failed, "the failed trade");
+        IReadOnlyList<DateTimeOffset> reads = _scenario.Exchange.HoldingReadTimes;
+        (reads[^1] - reads[^2]).ShouldBeGreaterThanOrEqualTo(TimeSpan.FromSeconds(3));
     }
 
     // Requirement "Ошибка сделки": the cancel of an entry Bybit refuses is asked again while the entry stands, though the trade is failed.

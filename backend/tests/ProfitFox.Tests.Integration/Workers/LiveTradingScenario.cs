@@ -306,6 +306,13 @@ public sealed class LiveTradingScenario : IAsyncDisposable
         return await scope.ServiceProvider.GetRequiredService<IIdeaTradeRepository>().GetChildrenAsync(trade, CancellationToken.None);
     }
 
+    public async Task<IReadOnlyList<IdeaTradeFill>> TradeFillsAsync(Guid trade)
+    {
+        using IServiceScope scope = Factory.Services.CreateScope();
+
+        return await scope.ServiceProvider.GetRequiredService<IIdeaTradeRepository>().GetFillsAsync(trade, CancellationToken.None);
+    }
+
     /// <summary>Changes a trade as the API does: under the lock of its row.</summary>
     public Task ChangeTradeAsync(Guid trade, Func<IdeaTrade, IdeaTrade> change)
     {

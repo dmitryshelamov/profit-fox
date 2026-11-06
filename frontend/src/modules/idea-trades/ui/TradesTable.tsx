@@ -126,8 +126,12 @@ export function TradesTable({ trades }: { trades: readonly IdeaTrade[] }) {
               <td className={number}>{trade.risk}</td>
               <td className={cell}>
                 <span>{statusLabel(trade.status)}</span>
-                {trade.status === 'failed' && trade.reason !== null && (
-                  <span className="mt-1 block max-w-xs text-xs text-err">{trade.reason}</span>
+                {trade.reason !== null && (
+                  <span
+                    className={`mt-1 block max-w-xs text-xs ${trade.status === 'failed' ? 'text-err' : 'text-warn'}`}
+                  >
+                    {trade.reason}
+                  </span>
                 )}
               </td>
               <td className={`${cell} font-mono whitespace-nowrap`}>
