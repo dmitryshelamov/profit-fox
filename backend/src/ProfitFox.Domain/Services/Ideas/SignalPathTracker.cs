@@ -46,7 +46,7 @@ public static class SignalPathTracker
         }
 
         // The minute that opens 7 days after the firing only closes the longest window.
-        if (path.FiredAt.AddMinutes(sinceFired) > path.FiredAt + SignalPath.Horizon)
+        if (sinceFired > SignalPath.Horizon.TotalMinutes)
         {
             return path;
         }

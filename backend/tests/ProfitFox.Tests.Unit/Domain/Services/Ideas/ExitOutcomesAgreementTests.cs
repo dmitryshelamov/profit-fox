@@ -100,7 +100,7 @@ public class ExitOutcomesAgreementTests
             else if (track.EnteredAt is null)
             {
                 // Without an entry the levels mean nothing; a path keeps the open of a stop entry that gapped after its window.
-                (outcome with { Plan = track.Plan }).ShouldBe(track, $"after {count} minutes");
+                (outcome.ShouldNotBeNull($"after {count} minutes") with { Plan = track.Plan }).ShouldBe(track, $"after {count} minutes");
             }
             else
             {
