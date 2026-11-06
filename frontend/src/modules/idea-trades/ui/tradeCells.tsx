@@ -2,14 +2,23 @@ import { sideLabel, typeLabel } from '@/modules/ideas';
 import { CategoryBadge, setupLabel } from '@/modules/market';
 import { intervalLabel } from '@/modules/market-data';
 import type { Schemas } from '@/shared/api/client';
+import { roundDecimal } from '@/shared/format/format';
 
 import { statusLabel } from '../model/status';
 
 export type IdeaTrade = Schemas['IdeaTradeResponse'];
 
-export const cell = 'px-3 py-3';
+export const cell = 'px-2 py-3';
 export const number = `${cell} text-right font-mono whitespace-nowrap`;
 export const head = 'bg-panel text-left text-[11px] tracking-wide text-faint uppercase';
+
+/** A text of parts joined by « · » for a narrow column: it wraps only between the parts, a part stays on one line. */
+export function byParts(text: string): string {
+  return text
+    .split(' · ')
+    .map((part) => part.replaceAll(' ', '\u00a0'))
+    .join(' · ');
+}
 
 export function Heads({ names, right }: { names: readonly string[]; right: readonly string[] }) {
   return (
@@ -40,15 +49,24 @@ export function InstrumentCells({ trade }: { trade: IdeaTrade }) {
   );
 }
 
-/** The entry, stop, target, quantity and — for the open trades — the risk of a trade. */
+/**
+ * The entry, stop, target, quantity and — for the open trades — the risk of a trade. The average of the fills is shown with
+ * the decimals of the entry, the risk in cents.
+ */
 export function LevelCells({ trade, risk }: { trade: IdeaTrade; risk: boolean }) {
+  const entryDigits = (trade.entryPrice.split('.')[1] ?? '').length;
+
   return (
     <>
-      <td className={number}>{trade.filledPrice ?? trade.entryPrice}</td>
+      <td className={number}>
+        {trade.filledPrice === null
+          ? trade.entryPrice
+          : roundDecimal(trade.filledPrice, entryDigits)}
+      </td>
       <td className={number}>{trade.stop}</td>
       <td className={number}>{trade.target}</td>
       <td className={number}>{trade.quantity}</td>
-      {risk && <td className={number}>{trade.risk}</td>}
+      {risk && <td className={number}>{roundDecimal(trade.risk, 2)}</td>}
     </>
   );
 }

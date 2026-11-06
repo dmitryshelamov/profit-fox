@@ -85,6 +85,32 @@ describe('screen «Сделки»', () => {
     expect(within(row).getByRole('button', { name: 'Закрыть по рынку' })).toBeInTheDocument();
   });
 
+  // The average of the fills and the risk come with every decimal the exchange gave; they would stretch the table.
+  it('shows the fill price by the decimals of the entry and the risk in cents', async () => {
+    fakeApi(
+      routes(
+        open([
+          tradeOf({
+            status: 'open',
+            openedAt: '2026-11-05T10:00:00Z',
+            entryPrice: '0.02064',
+            filledPrice: '0.0206137501892964230547899567',
+            stop: '0.02093',
+            target: '0.01994',
+            risk: '1.9789585200000000000000000003',
+          }),
+        ]),
+      ),
+    );
+    renderApp('/idea-trades');
+
+    const table = await screen.findByRole('table', { name: 'Сделки в работе' });
+    const row = within(table).getAllByRole('row')[1]!;
+
+    expect(within(row).getByText('0.02061')).toBeInTheDocument();
+    expect(within(row).getByText('1.98')).toBeInTheDocument();
+  });
+
   // The time in a trade runs on while the data stands still.
   it('lets the time in a trade run on without a new answer of the API', async () => {
     vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });

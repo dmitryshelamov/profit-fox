@@ -11,6 +11,7 @@ import { durationText, promiseHint, promiseText } from '../model/journal';
 import { resultText } from '../model/result';
 import { canCancel, canClose } from '../model/status';
 import {
+  byParts,
   cell,
   head,
   Heads,
@@ -98,72 +99,74 @@ export function OpenTradesTable({ trades }: { trades: readonly IdeaTrade[] }) {
 
   return (
     <>
-      <table
-        aria-label="Сделки в работе"
-        className="w-full border-separate border-spacing-y-1 text-sm"
-      >
-        <thead className={head}>
-          <tr>
-            <Heads
-              names={[
-                'Открыта',
-                'Инструмент',
-                'Сетап',
-                'Сторона',
-                'Вход',
-                'Стоп',
-                'Цель',
-                'Объём',
-                'Риск',
-                'Статус',
-                'В сделке',
-                'Сейчас',
-                'Обещание',
-                '',
-              ]}
-              right={['Вход', 'Стоп', 'Цель', 'Объём', 'Риск']}
-            />
-          </tr>
-        </thead>
-        <tbody>
-          {trades.map((trade) => (
-            <tr key={trade.id} className="bg-panel">
-              <td className={`${cell} font-mono whitespace-nowrap text-muted`}>
-                {formatMoment(trade.openedAt ?? trade.createdAt)}
-              </td>
-              <InstrumentCells trade={trade} />
-              <LevelCells trade={trade} risk />
-              <StatusCell trade={trade} />
-              <td className={`${cell} whitespace-nowrap`}>
-                {trade.openedAt === null
-                  ? '—'
-                  : durationText((now - Date.parse(trade.openedAt)) / 1000)}
-              </td>
-              <td className={`${cell} font-mono whitespace-nowrap`}>
-                {resultText(trade.currentResult, trade.currentResultR)}
-              </td>
-              <td
-                className={`${cell} font-mono whitespace-nowrap`}
-                title={trade.promise === null ? undefined : promiseHint(trade.promise)}
-              >
-                {promiseText(trade.promise)}
-              </td>
-              <td className={`${cell} text-right whitespace-nowrap`}>
-                {canCancel(trade.status) && (
-                  <Button look="ghost" onClick={() => setAsked({ trade, action: 'cancel' })}>
-                    Отменить
-                  </Button>
-                )}
-                {canClose(trade.status) && (
-                  <Button look="ghost" onClick={() => setAsked({ trade, action: 'close' })}>
-                    Закрыть по рынку
-                  </Button>
-                )}
-              </td>
+      <div className="overflow-x-auto">
+        <table
+          aria-label="Сделки в работе"
+          className="w-full border-separate border-spacing-y-1 text-sm"
+        >
+          <thead className={head}>
+            <tr>
+              <Heads
+                names={[
+                  'Открыта',
+                  'Инструмент',
+                  'Сетап',
+                  'Сторона',
+                  'Вход',
+                  'Стоп',
+                  'Цель',
+                  'Объём',
+                  'Риск',
+                  'Статус',
+                  'В сделке',
+                  'Сейчас',
+                  'Обещание',
+                  '',
+                ]}
+                right={['Вход', 'Стоп', 'Цель', 'Объём', 'Риск']}
+              />
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {trades.map((trade) => (
+              <tr key={trade.id} className="bg-panel">
+                <td className={`${cell} font-mono whitespace-nowrap text-muted`}>
+                  {formatMoment(trade.openedAt ?? trade.createdAt)}
+                </td>
+                <InstrumentCells trade={trade} />
+                <LevelCells trade={trade} risk />
+                <StatusCell trade={trade} />
+                <td className={`${cell} whitespace-nowrap`}>
+                  {trade.openedAt === null
+                    ? '—'
+                    : durationText((now - Date.parse(trade.openedAt)) / 1000)}
+                </td>
+                <td className={`${cell} font-mono`}>
+                  {byParts(resultText(trade.currentResult, trade.currentResultR))}
+                </td>
+                <td
+                  className={`${cell} font-mono`}
+                  title={trade.promise === null ? undefined : promiseHint(trade.promise)}
+                >
+                  {byParts(promiseText(trade.promise))}
+                </td>
+                <td className={`${cell} text-right whitespace-nowrap`}>
+                  {canCancel(trade.status) && (
+                    <Button look="ghost" onClick={() => setAsked({ trade, action: 'cancel' })}>
+                      Отменить
+                    </Button>
+                  )}
+                  {canClose(trade.status) && (
+                    <Button look="ghost" onClick={() => setAsked({ trade, action: 'close' })}>
+                      Закрыть по рынку
+                    </Button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {asked && <Confirm asked={asked} onDone={() => setAsked(null)} />}
     </>
   );
