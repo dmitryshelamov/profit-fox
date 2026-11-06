@@ -114,7 +114,7 @@ function EntryForm({
           <Line label="Цена входа">{calculation.entryPrice}</Line>
           <Line label="Объём">{calculation.quantity}</Line>
           <Line label="Сумма">{`${calculation.amount} ${calculation.quote}`}</Line>
-          <Line label="Настоящий риск">{`${calculation.risk} ${calculation.quote}`}</Line>
+          <Line label="Настоящий риск">{`${showDecimal(calculation.risk, 2)} ${calculation.quote}`}</Line>
           <Line label="R:R после комиссий">
             {`${showDecimal(calculation.riskReward, 2)} (без ком. ${showDecimal(calculation.riskRewardWithoutFees, 2)})`}
           </Line>
@@ -127,8 +127,8 @@ function EntryForm({
       )}
       {calculation?.cappedByAmount && (
         <p className="text-sm text-muted">
-          Сумма упёрлась в предел «Не больше суммы на сделку»: настоящий риск {calculation.risk}{' '}
-          {calculation.quote} меньше заданного {risk}.
+          Сумма упёрлась в предел «Не больше суммы на сделку»: настоящий риск{' '}
+          {showDecimal(calculation.risk, 2)} {calculation.quote} меньше заданного {risk}.
         </p>
       )}
       {reasons.length > 0 && (

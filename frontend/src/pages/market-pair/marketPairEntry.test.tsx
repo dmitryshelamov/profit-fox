@@ -136,6 +136,21 @@ describe('entry by an idea from the pair page', () => {
     expect(within(dialog).getByText(/Сумма упёрлась в предел/)).toBeInTheDocument();
   });
 
+  it('rounds the real risk to cents', async () => {
+    fakeApi(
+      routes({
+        'GET /api/ideas/idea-pullback/entry': () =>
+          json(entryOf({ risk: '0.9999982760000000000000', cappedByAmount: true })),
+      }),
+    );
+    renderApp('/market/linear/SOLUSDT');
+
+    const { dialog } = await openEntry();
+
+    expect(await within(dialog).findByText('1.00 USDT')).toBeInTheDocument();
+    expect(within(dialog).getByText(/настоящий риск 1\.00 USDT меньше/)).toBeInTheDocument();
+  });
+
   it('shows the missing account as a reason', async () => {
     fakeApi(
       routes({
