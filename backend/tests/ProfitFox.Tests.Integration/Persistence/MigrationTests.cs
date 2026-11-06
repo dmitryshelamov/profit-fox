@@ -90,4 +90,58 @@ public class MigrationTests
         ],
             ignoreOrder: true);
     }
+
+    // Decision 6 of honest-idea-intervals: the own numbers of a bucket beside those of the model, the reports of calibration by scope and the
+    // start of a version of the rules; the image before it writes its buckets and reports without the new columns.
+    [Test]
+    public async Task Buckets_keep_their_own_numbers_calibration_has_a_scope_and_versions_have_a_start()
+    {
+        await using NpgsqlDataSource dataSource = await MarketDataDatabase.CreateAsync();
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
+
+        IEnumerable<(string Table, string Name, string DataType, string IsNullable, string? Default)> columns =
+            await connection.QueryAsync<(string, string, string, string, string?)>(
+                """
+                SELECT table_name, column_name, data_type, is_nullable, column_default
+                FROM information_schema.columns
+                WHERE (table_name = 'idea_buckets' AND (column_name LIKE 'own_%' OR column_name IN ('parent_weight', 'few_own_cases')))
+                    OR (table_name = 'idea_calibration' AND column_name = 'scope') OR table_name = 'idea_engine_versions'
+                """);
+        IEnumerable<string> calibrationKey = await connection.QueryAsync<string>(
+            """
+            SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+            WHERE i.indrelid = 'idea_calibration'::regclass AND i.indisprimary
+            """);
+        string versionKey = await connection.QuerySingleAsync<string>(
+            """
+            SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+            WHERE i.indrelid = 'idea_engine_versions'::regclass AND i.indisprimary
+            """);
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO idea_buckets (engine_version, days, setup, type, "interval", side, category, cases, targets, stops, expired, probability,
+                probability_low, probability_high, expectancy, expectancy_low, expectancy_high, signals)
+            VALUES (5, 90, 'impulse', 'two_r', '15', 'long', 'linear', 12, 6, 6, 0, NULL, NULL, NULL, 0.5, NULL, NULL, NULL);
+            INSERT INTO idea_calibration (engine_version, days, category, computed_at, report) VALUES (5, 90, 'all', now(), '{}');
+            """);
+
+        columns.ShouldBe(
+        [
+            ("idea_buckets", "own_probability", "numeric", "YES", null),
+            ("idea_buckets", "own_probability_low", "numeric", "YES", null),
+            ("idea_buckets", "own_probability_high", "numeric", "YES", null),
+            ("idea_buckets", "own_expectancy", "numeric", "NO", "0"),
+            ("idea_buckets", "own_expectancy_low", "numeric", "YES", null),
+            ("idea_buckets", "own_expectancy_high", "numeric", "YES", null),
+            ("idea_buckets", "parent_weight", "numeric", "YES", null),
+            ("idea_buckets", "few_own_cases", "boolean", "NO", "false"),
+            ("idea_calibration", "scope", "text", "NO", "'all'::text"),
+            ("idea_engine_versions", "engine_version", "integer", "NO", null),
+            ("idea_engine_versions", "started_at", "timestamp with time zone", "NO", null)
+        ],
+            ignoreOrder: true);
+        calibrationKey.ShouldBe(["engine_version", "days", "category", "scope"], ignoreOrder: true);
+        versionKey.ShouldBe("engine_version");
+        (await connection.QuerySingleAsync<string>("SELECT scope FROM idea_calibration")).ShouldBe("all");
+    }
 }

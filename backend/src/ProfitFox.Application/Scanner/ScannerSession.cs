@@ -53,6 +53,7 @@ public sealed class ScannerSession(
     /// <exception cref="ScannerLeaseLostException">Another scanner took the stream.</exception>
     public async Task RunAsync(CancellationToken cancellationToken)
     {
+        await statistics.StartVersionAsync(cancellationToken);
         IReadOnlyList<ScannerPair> stored = await pairs.GetAllAsync(cancellationToken);
         market.Keep(stored);
 

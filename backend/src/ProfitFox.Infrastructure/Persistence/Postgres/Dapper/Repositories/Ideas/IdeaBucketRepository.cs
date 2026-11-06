@@ -17,7 +17,10 @@ internal sealed class IdeaBucketRepository(NpgsqlDataSource dataSource) : IIdeaB
     private const string Columns = """
                                    engine_version AS "EngineVersion", days, setup, type, "interval", side, category, cases, targets, stops, expired,
                                    probability, probability_low AS "ProbabilityLow", probability_high AS "ProbabilityHigh", expectancy,
-                                   expectancy_low AS "ExpectancyLow", expectancy_high AS "ExpectancyHigh", signals
+                                   expectancy_low AS "ExpectancyLow", expectancy_high AS "ExpectancyHigh", signals,
+                                   own_probability AS "OwnProbability", own_probability_low AS "OwnProbabilityLow", own_probability_high AS "OwnProbabilityHigh",
+                                   own_expectancy AS "OwnExpectancy", own_expectancy_low AS "OwnExpectancyLow", own_expectancy_high AS "OwnExpectancyHigh",
+                                   parent_weight AS "ParentWeight", few_own_cases AS "FewOwnCases"
                                    """;
 
     public async Task ReplaceAsync(int engineVersion, IReadOnlyCollection<IdeaBucket> buckets, (IdeaType Type, Interval Interval)? only, CancellationToken cancellationToken)
@@ -33,9 +36,11 @@ internal sealed class IdeaBucketRepository(NpgsqlDataSource dataSource) : IIdeaB
             new CommandDefinition(
                 """
                 INSERT INTO idea_buckets (engine_version, days, setup, type, "interval", side, category, cases, targets, stops, expired, probability,
-                    probability_low, probability_high, expectancy, expectancy_low, expectancy_high, signals)
+                    probability_low, probability_high, expectancy, expectancy_low, expectancy_high, signals, own_probability, own_probability_low,
+                    own_probability_high, own_expectancy, own_expectancy_low, own_expectancy_high, parent_weight, few_own_cases)
                 VALUES (@EngineVersion, @Days, @Setup, @Type, @Interval, @Side, @Category, @Cases, @Targets, @Stops, @Expired, @Probability,
-                    @ProbabilityLow, @ProbabilityHigh, @Expectancy, @ExpectancyLow, @ExpectancyHigh, @Signals)
+                    @ProbabilityLow, @ProbabilityHigh, @Expectancy, @ExpectancyLow, @ExpectancyHigh, @Signals, @OwnProbability, @OwnProbabilityLow,
+                    @OwnProbabilityHigh, @OwnExpectancy, @OwnExpectancyLow, @OwnExpectancyHigh, @ParentWeight, @FewOwnCases)
                 """,
                 buckets.Select(bucket => Row(engineVersion, bucket)),
                 transaction,
@@ -75,7 +80,15 @@ internal sealed class IdeaBucketRepository(NpgsqlDataSource dataSource) : IIdeaB
             Expectancy = statistics.Expectancy,
             ExpectancyLow = statistics.ExpectancyLow,
             ExpectancyHigh = statistics.ExpectancyHigh,
-            Signals = statistics.Signals
+            Signals = statistics.Signals,
+            OwnProbability = statistics.OwnProbability,
+            OwnProbabilityLow = statistics.OwnProbabilityLow,
+            OwnProbabilityHigh = statistics.OwnProbabilityHigh,
+            OwnExpectancy = statistics.OwnExpectancy,
+            OwnExpectancyLow = statistics.OwnExpectancyLow,
+            OwnExpectancyHigh = statistics.OwnExpectancyHigh,
+            ParentWeight = statistics.ParentWeight,
+            FewOwnCases = statistics.FewOwnCases
         };
     }
 
@@ -91,6 +104,16 @@ internal sealed class IdeaBucketRepository(NpgsqlDataSource dataSource) : IIdeaB
             new IdeaBucketKey(setup, type, interval, side, category),
             row.Days,
             new BucketStatistics(row.Cases, row.Targets, row.Stops, row.Expired, row.Probability, row.ProbabilityLow, row.ProbabilityHigh, row.Expectancy,
-                row.ExpectancyLow, row.ExpectancyHigh, row.Signals));
+                row.ExpectancyLow, row.ExpectancyHigh, row.Signals)
+            {
+                OwnProbability = row.OwnProbability,
+                OwnProbabilityLow = row.OwnProbabilityLow,
+                OwnProbabilityHigh = row.OwnProbabilityHigh,
+                OwnExpectancy = row.OwnExpectancy,
+                OwnExpectancyLow = row.OwnExpectancyLow,
+                OwnExpectancyHigh = row.OwnExpectancyHigh,
+                ParentWeight = row.ParentWeight,
+                FewOwnCases = row.FewOwnCases
+            });
     }
 }

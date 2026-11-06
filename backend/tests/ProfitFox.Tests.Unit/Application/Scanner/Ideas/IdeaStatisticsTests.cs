@@ -25,6 +25,7 @@ public class IdeaStatisticsTests
     private IIdeaExitRuleRepository _rules = null!;
     private IIdeaBucketRepository _buckets = null!;
     private IIdeaCalibrationRepository _calibrations = null!;
+    private IIdeaEngineVersionRepository _versions = null!;
 
     [SetUp]
     public void SetUp()
@@ -33,6 +34,7 @@ public class IdeaStatisticsTests
         _rules = Substitute.For<IIdeaExitRuleRepository>();
         _buckets = Substitute.For<IIdeaBucketRepository>();
         _calibrations = Substitute.For<IIdeaCalibrationRepository>();
+        _versions = Substitute.For<IIdeaEngineVersionRepository>();
         _rules.GetAllAsync(Arg.Any<CancellationToken>()).Returns([]);
         _signals.StreamAsync(2, Now.AddDays(-180), Arg.Any<(IdeaType, Interval)?>(), Arg.Any<CancellationToken>())
             .Returns(_ => new[] { Signal(Now.AddDays(-1)) }.ToAsyncEnumerable());
@@ -50,7 +52,7 @@ public class IdeaStatisticsTests
             _buckets.ReplaceAsync(
                 2,
                 Arg.Is<IReadOnlyCollection<IdeaBucket>>(buckets => buckets!.Count == 2
-                    && buckets.All(bucket => bucket.Statistics == BucketStatisticsCalculator.Compute(1, 0, 0, result, result * result, null))),
+                    && buckets.All(bucket => bucket.Statistics == new BucketStatistics(1, 1, 0, 0, null, null, null, result, null, null) { OwnExpectancy = result })),
                 null,
                 Arg.Any<CancellationToken>());
             _calibrations.ReplaceAsync(
@@ -82,9 +84,13 @@ public class IdeaStatisticsTests
     [Test]
     public async Task Recompute_of_a_type_and_interval_replaces_only_its_buckets_by_the_rule_applied()
     {
+        IdeaStatistics statistics = Statistics();
+        await statistics.RecomputeAsync(CancellationToken.None);
+        _buckets.ClearReceivedCalls();
+        _calibrations.ClearReceivedCalls();
         _rules.GetAllAsync(Arg.Any<CancellationToken>()).Returns([new IdeaExitRule(IdeaType.TwoR, Interval.FifteenMinutes, 1, 2m, null, Now)]);
 
-        await Statistics().RecomputeAsync(IdeaType.TwoR, Interval.FifteenMinutes, CancellationToken.None);
+        await statistics.RecomputeAsync(IdeaType.TwoR, Interval.FifteenMinutes, CancellationToken.None);
 
         _signals.Received(1).StreamAsync(2, Now.AddDays(-180), (IdeaType.TwoR, Interval.FifteenMinutes), Arg.Any<CancellationToken>());
         await _buckets.Received(1).ReplaceAsync(
@@ -95,21 +101,57 @@ public class IdeaStatisticsTests
         await _calibrations.DidNotReceiveWithAnyArgs().ReplaceAsync(default, default!, default);
     }
 
+    // Decision 4: the category is the root of every parent, so the pass of a type × interval takes its sums from the last whole pass. 40 cases
+    // of «Цель 2R», every other a stop, next to 40 stops of «За экстремум»: the buckets of «Цель 2R» come out of both passes the same.
+    [Test]
+    public async Task Recompute_of_a_type_and_interval_shrinks_to_the_categories_of_the_whole_pass()
+    {
+        IdeaSignal[] twoR = [.. Enumerable.Range(0, 40).Select(index => Signal(Now.AddDays(-50).AddHours(index), stop: index % 2 == 1))];
+        IdeaSignal[] beyond = [.. Enumerable.Range(0, 40).Select(index => Signal(Now.AddDays(-40).AddHours(index), stop: true, IdeaType.BeyondExtreme))];
+        _signals.StreamAsync(2, Now.AddDays(-180), null, Arg.Any<CancellationToken>()).Returns(_ => twoR.Concat(beyond).ToAsyncEnumerable());
+        _signals.StreamAsync(2, Now.AddDays(-180), (IdeaType.TwoR, Interval.FifteenMinutes), Arg.Any<CancellationToken>()).Returns(_ => twoR.ToAsyncEnumerable());
+        var written = new List<(IReadOnlyCollection<IdeaBucket> Buckets, (IdeaType, Interval)? Only)>();
+        await _buckets.ReplaceAsync(2, Arg.Do<IReadOnlyCollection<IdeaBucket>>(buckets => written.Add((buckets, null))), null, Arg.Any<CancellationToken>());
+        await _buckets.ReplaceAsync(
+            2,
+            Arg.Do<IReadOnlyCollection<IdeaBucket>>(buckets => written.Add((buckets, (IdeaType.TwoR, Interval.FifteenMinutes)))),
+            (IdeaType.TwoR, Interval.FifteenMinutes),
+            Arg.Any<CancellationToken>());
+        IdeaStatistics statistics = Statistics();
+
+        await statistics.RecomputeAsync(CancellationToken.None);
+        await statistics.RecomputeAsync(IdeaType.TwoR, Interval.FifteenMinutes, CancellationToken.None);
+
+        written.Count.ShouldBe(2);
+        written[1].Buckets.ShouldBe(written[0].Buckets.Where(bucket => bucket.Key.Type == IdeaType.TwoR), ignoreOrder: true);
+        written[1].Buckets.ShouldAllBe(bucket => bucket.Statistics.Probability != null);
+    }
+
+    // Decision 4: after a restart the pass of a type × interval waits for the first whole pass, which writes its buckets anyway.
+    [Test]
+    public async Task Recompute_of_a_type_and_interval_before_the_first_whole_pass_writes_nothing()
+    {
+        await Statistics().RecomputeAsync(IdeaType.TwoR, Interval.FifteenMinutes, CancellationToken.None);
+
+        await _buckets.DidNotReceiveWithAnyArgs().ReplaceAsync(default, default!, default, default);
+    }
+
     private IdeaStatistics Statistics()
     {
         var backtests = new BacktestSettings { DefaultFees = new Dictionary<string, FeeRateSettings> { ["linear"] = new FeeRateSettings { Limit = 0.02m, Market = 0.055m } } };
 
-        return new IdeaStatistics(_signals, _rules, _buckets, _calibrations, backtests, new IdeasEngineVersion(2), new FakeTimeProvider(Now));
+        return new IdeaStatistics(_signals, _rules, _buckets, _calibrations, _versions, backtests, new IdeasEngineVersion(2), new FakeTimeProvider(Now));
     }
 
-    // «Цель 2R» of 15 minutes entered at 100 with the stop at 98, +2 R at 30 minutes; the close of every point of the grid 100.
-    private static IdeaSignal Signal(DateTimeOffset firedAt)
+    // «Цель 2R» of 15 minutes entered at 100 with the stop at 98, +2 R at 30 minutes or the stop at 10; the close of every point of the grid 100.
+    private static IdeaSignal Signal(DateTimeOffset firedAt, bool stop = false, IdeaType type = IdeaType.TwoR)
     {
         int?[] ladder = new int?[10];
-        ladder[3] = 30;
-        SignalPath path = SignalPath.Fired(new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 100m, 98m, 104m), Interval.FifteenMinutes, firedAt, 0.01m) with
+        ladder[3] = stop ? null : 30;
+        SignalPath path = SignalPath.Fired(new IdeaPlan(type, IdeaSide.Long, 100m, 98m, 104m), Interval.FifteenMinutes, firedAt, 0.01m) with
         {
             EntryAfter = 1,
+            StopAfter = stop ? 10 : null,
             LadderAfter = ladder,
             Closes = [.. Enumerable.Repeat(100m, 19)],
             TrackedUntil = firedAt.AddDays(14)

@@ -45,6 +45,7 @@ internal static class PostgresRegistrar
         services.AddScoped<IIdeaExitRuleRepository, IdeaExitRuleRepository>();
         services.AddScoped<IIdeaBucketRepository, IdeaBucketRepository>();
         services.AddScoped<IIdeaCalibrationRepository, IdeaCalibrationRepository>();
+        services.AddScoped<IIdeaEngineVersionRepository, IdeaEngineVersionRepository>();
         services.AddScoped<IIdeaReplayRepository, IdeaReplayRepository>();
         services.AddScoped<IIdeaVolatilityRepository, IdeaVolatilityRepository>();
         services.AddScoped<ISavedFilterRepository, SavedFilterRepository>();
