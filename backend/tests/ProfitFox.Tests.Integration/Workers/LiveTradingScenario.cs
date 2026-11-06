@@ -92,11 +92,11 @@ public sealed class LiveTradingScenario : IAsyncDisposable
     }
 
     /// <summary>
-    ///     A trading Worker whose exchange is <see cref="Exchange" />, with <paramref name="settings" /> over its own. With
+    ///     A trading Worker (with <paramref name="inspectKeys" /> one that asks the fake inspector of the factory what a key may do) whose exchange is <see cref="Exchange" />, with <paramref name="settings" /> over its own. With
     ///     <paramref name="bybitSocketAddress" /> its candles and account events come from the Bybit streams at that address, not
     ///     from <see cref="Exchange" />.
     /// </summary>
-    public WorkerHost StartWorker(Serilog.Core.ILogEventSink? logSink = null, IReadOnlyDictionary<string, string?>? settings = null, string? bybitSocketAddress = null)
+    public WorkerHost StartWorker(Serilog.Core.ILogEventSink? logSink = null, IReadOnlyDictionary<string, string?>? settings = null, string? bybitSocketAddress = null, bool inspectKeys = false)
     {
         var workerSettings = new Dictionary<string, string?>
         {
@@ -121,6 +121,13 @@ public sealed class LiveTradingScenario : IAsyncDisposable
                 services.RemoveAll<IOrderGateway>();
                 services.AddSingleton<IExchangeLedger>(Exchange);
                 services.AddSingleton<IOrderGateway>(Exchange);
+
+                if (inspectKeys)
+                {
+                    // The entries of the autos ask what the key may do, as the API does for a manual entry.
+                    services.RemoveAll<IExchangeKeyInspector>();
+                    services.AddSingleton(Factory.KeyInspector);
+                }
 
                 if (bybitSocketAddress is null)
                 {

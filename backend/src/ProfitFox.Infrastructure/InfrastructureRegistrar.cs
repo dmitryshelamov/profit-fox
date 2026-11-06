@@ -92,6 +92,7 @@ public static class InfrastructureRegistrar
         {
             RequireMasterKey(configuration, services);
             services.AddHostedService<LiveTradingBackgroundService>();
+            services.AddHostedService<IdeaAutoEntryBackgroundService>();
         }
 
         services.AddHostedService<WorkerStartLogService>();
