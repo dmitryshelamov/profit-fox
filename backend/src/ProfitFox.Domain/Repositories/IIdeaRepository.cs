@@ -1,4 +1,5 @@
 using ProfitFox.Domain.Entities.Ideas;
+using ProfitFox.Domain.ValueObjects.IdeaAutos;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
@@ -21,6 +22,18 @@ public interface IIdeaRepository
         IReadOnlyCollection<Idea> created,
         IReadOnlyCollection<Idea> changed,
         IReadOnlyCollection<ClosedIdea> outcomes,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     The same, and in the same transaction writes what the autos did in the minute (<paramref name="autos" />) once it has locked the lease of the
+    ///     stream of its owner first: without the lease nothing is written and <c>ScannerLeaseLostException</c> goes up. What the autos did with an idea storage
+    ///     refused is not written, and the outcome of an idea is written on its paper trades too.
+    /// </summary>
+    Task<IReadOnlyList<Idea>> SaveAsync(
+        IReadOnlyCollection<Idea> created,
+        IReadOnlyCollection<Idea> changed,
+        IReadOnlyCollection<ClosedIdea> outcomes,
+        AutoMinute autos,
         CancellationToken cancellationToken);
 
     /// <summary>The ideas that closed and still stand, with a trade made of them that has no outcome yet.</summary>

@@ -142,6 +142,28 @@ public class ScannerUniverseTests
         changed.ShouldBe([new ScannerPair(new Instrument(MarketCategory.Linear, "AAPLUSDT"), true, TradFi: true)]);
     }
 
+    // Task 2.5: the pair keeps the step of the volume and the minimums the list last told, for the paper trades of the autos.
+    [Test]
+    public void Pair_keeps_the_step_and_the_minimums_of_the_volume_the_list_tells()
+    {
+        var known = new ScannerPair(new Instrument(MarketCategory.Linear, "SOLUSDT"), true, Now.AddDays(-90), Now, QuantityStep: 0.1m, MinQuantity: 0.1m, MinAmount: 5m);
+        var untold = new ScannerPair(new Instrument(MarketCategory.Linear, "ETHUSDT"), true, Now.AddDays(-90), Now, QuantityStep: 0.01m, MinQuantity: 0.01m, MinAmount: 5m);
+        var fresh = new ScannerPair(new Instrument(MarketCategory.Linear, "WIFUSDT"), true, Now.AddDays(-90), Now);
+
+        IReadOnlyList<ScannerPair> changed = ScannerUniverse.Merge(
+            [known, untold, fresh],
+            [
+                Linear("SOLUSDT", "USDT", trading: true, perpetual: true) with { QuantityStep = 0.1m, MinQuantity = 0.1m, MinAmount = 5m },
+                Linear("ETHUSDT", "USDT", trading: true, perpetual: true),
+                Linear("WIFUSDT", "USDT", trading: true, perpetual: true) with { QuantityStep = 1m, MinQuantity = 1m, MinAmount = 5m },
+                Linear("NEWUSDT", "USDT", trading: true, perpetual: true) with { QuantityStep = 1m, MinQuantity = 2m, MinAmount = 6m }
+            ]);
+
+        changed.ShouldBe(
+            [fresh with { QuantityStep = 1m, MinQuantity = 1m, MinAmount = 5m }, new ScannerPair(new Instrument(MarketCategory.Linear, "NEWUSDT"), true, QuantityStep: 1m, MinQuantity: 2m, MinAmount: 6m)],
+            ignoreOrder: true);
+    }
+
     [Test]
     public void Pair_back_in_trading_is_listed_again_with_its_data()
     {

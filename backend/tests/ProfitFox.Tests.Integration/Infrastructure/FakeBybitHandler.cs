@@ -178,9 +178,10 @@ public class FakeBybitHandler : HttpMessageHandler
                 ? $",\"contractType\":\"{ContractTypes.GetValueOrDefault(instrument.Symbol, "LinearPerpetual")}\",\"launchTime\":\"{launch}\""
                 : "";
 
-            string price = Rules.TryGetValue(instrument, out (string TickSize, string QuantityStep, string MinQuantity, string MinAmount) rules)
-                ? $$""","priceFilter":{"tickSize":"{{rules.TickSize}}"}"""
-                : "";
+            string price = !Rules.TryGetValue(instrument, out (string TickSize, string QuantityStep, string MinQuantity, string MinAmount) rules) ? ""
+                : category == "spot"
+                    ? $$""","priceFilter":{"tickSize":"{{rules.TickSize}}"},"lotSizeFilter":{"basePrecision":"{{rules.QuantityStep}}","minOrderQty":"{{rules.MinQuantity}}","minOrderAmt":"{{rules.MinAmount}}"}"""
+                    : $$""","priceFilter":{"tickSize":"{{rules.TickSize}}"},"lotSizeFilter":{"qtyStep":"{{rules.QuantityStep}}","minOrderQty":"{{rules.MinQuantity}}","minNotionalValue":"{{rules.MinAmount}}"}""";
 
             return $$"""{"symbol":"{{instrument.Symbol}}","baseCoin":"{{baseCoin}}","quoteCoin":"{{quoteCoin}}","status":"{{status}}"{{contract}}{{price}}}""";
         });

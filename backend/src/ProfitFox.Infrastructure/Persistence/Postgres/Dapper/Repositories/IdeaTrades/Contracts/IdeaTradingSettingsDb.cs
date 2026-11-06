@@ -13,4 +13,8 @@ internal sealed class IdeaTradingSettingsDb
     public decimal MaxTotalRisk { get; init; }
 
     public decimal MinRiskReward { get; init; }
+
+    public decimal? DailyLossLimit { get; init; }
+
+    public int? MaxSameDirection { get; init; }
 }

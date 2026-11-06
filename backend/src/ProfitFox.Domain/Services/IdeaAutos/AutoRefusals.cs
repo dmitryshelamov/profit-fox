@@ -8,7 +8,7 @@ using ProfitFox.Domain.ValueObjects.MarketData;
 namespace ProfitFox.Domain.Services.IdeaAutos;
 
 /// <summary>
-///     What stops an auto taking an idea that fits its conditions, beyond the checks of the entry itself (<see cref="IdeaTradeRefusals" /> for the
+///     What stops an auto taking an idea that fits its conditions, beyond the checks of the entry itself (<c>IdeaTradeRefusals</c> for the
 ///     real ones, <see cref="PaperEntry" /> for the paper ones): the pair held by a trade, the daily stop and the open trades of one side. It only
 ///     names the reasons, with what the first one is about.
 /// </summary>

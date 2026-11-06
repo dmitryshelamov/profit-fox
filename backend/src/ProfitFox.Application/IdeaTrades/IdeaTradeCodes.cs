@@ -55,7 +55,13 @@ public static class IdeaTradeCodes
         [IdeaTradeRefusal.NoKey] = "no_key",
         [IdeaTradeRefusal.CategoryNotTraded] = "category_not_traded",
         [IdeaTradeRefusal.HedgeMode] = "hedge_mode",
-        [IdeaTradeRefusal.StopEntryNotSupported] = "stop_entry_not_supported"
+        [IdeaTradeRefusal.StopEntryNotSupported] = "stop_entry_not_supported",
+        [IdeaTradeRefusal.DailyStop] = "daily_stop",
+        [IdeaTradeRefusal.TooManySameDirection] = "too_many_same_direction",
+        [IdeaTradeRefusal.PairTaken] = "pair_taken",
+        [IdeaTradeRefusal.Late] = "late",
+        [IdeaTradeRefusal.AutoOff] = "auto_off",
+        [IdeaTradeRefusal.RulesUnknown] = "rules_unknown"
     };
 
     public static bool TryParseStatus(string code, out IdeaTradeStatus status)
@@ -76,6 +82,23 @@ public static class IdeaTradeCodes
     public static bool TryParseTimeInForce(string code, out TimeInForce timeInForce)
     {
         return TimesInForceByCode.TryGetValue(code, out timeInForce);
+    }
+
+    public static bool TryParseRefusal(string code, out IdeaTradeRefusal refusal)
+    {
+        foreach ((IdeaTradeRefusal key, string value) in RefusalsByCode)
+        {
+            if (value == code)
+            {
+                refusal = key;
+
+                return true;
+            }
+        }
+
+        refusal = default;
+
+        return false;
     }
 
     public static string ToCode(this IdeaTradeRefusal refusal)
