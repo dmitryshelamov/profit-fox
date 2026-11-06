@@ -125,11 +125,11 @@ public class IdeaTradeRefusalsTests
         Refuse(category: MarketCategory.Spot, account: Account(directions: [StrategyDirection.Short])).ShouldNotContain(IdeaTradeRefusal.OppositeSideOpen);
     }
 
-    // Decision 9: the spot waits for the check of the real exchange, so the session cannot yet tell its TP/SL orders from the others.
+    // Decision 9: the owner opened the spot without the check of the real exchange.
     [Test]
-    public void Spot_is_named_until_its_children_can_be_told()
+    public void Spot_is_no_reason()
     {
-        Refuse(category: MarketCategory.Spot).ShouldBe([IdeaTradeRefusal.SpotNotSupported]);
+        Refuse(category: MarketCategory.Spot).ShouldBeEmpty();
     }
 
     // A stop entry waits for the price to leave the range of its setup; taken now it would enter at the market inside the range.
