@@ -27,8 +27,10 @@ public static class ExitRulePreviews
         Func<MarketCategory, FeeRates> fees,
         DateTimeOffset now)
     {
-        IReadOnlyList<Counted> now90 = Count(signals, current, fees);
-        IReadOnlyList<Counted> candidate90 = Count(signals, candidate, fees);
+        // One group of paths per key, read by every pass.
+        (FeeRates Fees, SignalPath[] Paths)[] keys = [.. signals.GroupBy(signal => signal.Key).Select(key => (fees(key.Key.Instrument.Category), key.Select(signal => signal.Path).ToArray()))];
+        IReadOnlyList<Counted> now90 = Count(keys, current);
+        IReadOnlyList<Counted> candidate90 = Count(keys, candidate);
         ExitRuleWindow[] windows =
         [
             .. Days.Select(days => new ExitRuleWindow(
@@ -39,25 +41,23 @@ public static class ExitRulePreviews
         [
             .. ExitRuleGrid.Of(candidate.Interval).Select(life =>
             {
-                BucketStatistics? statistics = Statistics(Count(signals, candidate with { LifeCandles = life }, fees));
+                BucketStatistics? statistics = Statistics(Count(keys, candidate with { LifeCandles = life }));
 
                 return new ExitRuleLife(life, statistics?.Expectancy, statistics?.SignalExpectancy);
             })
         ];
 
-        return new ExitRulePreview(windows[0], windows[1], lives, Mfe(candidate90, candidate, fees));
+        return new ExitRulePreview(windows[0], windows[1], lives, Mfe(candidate90, candidate));
     }
 
     // The signals that count by the rule, with their results; none without an entry.
-    private static List<Counted> Count(IReadOnlyList<IdeaSignal> signals, IdeaExitRule rule, Func<MarketCategory, FeeRates> fees)
+    private static List<Counted> Count((FeeRates Fees, SignalPath[] Paths)[] keys, IdeaExitRule rule)
     {
         var counted = new List<Counted>();
 
-        foreach (IGrouping<IdeaKey, IdeaSignal> key in signals.GroupBy(signal => signal.Key))
+        foreach ((FeeRates rates, SignalPath[] paths) in keys)
         {
-            FeeRates rates = fees(key.Key.Instrument.Category);
-
-            foreach ((SignalPath path, IdeaTrack outcome) in ExitOutcomes.Counted(key.Select(signal => signal.Path), rule))
+            foreach ((SignalPath path, IdeaTrack outcome) in ExitOutcomes.Counted(paths, rule))
             {
                 counted.Add(new Counted(path, outcome, CaseResult.R(outcome, rates), rates));
             }
@@ -87,7 +87,7 @@ public static class ExitRulePreviews
             all.Length);
     }
 
-    private static ExitRuleMfe[] Mfe(IReadOnlyList<Counted> counted, IdeaExitRule rule, Func<MarketCategory, FeeRates> fees)
+    private static ExitRuleMfe[] Mfe(IReadOnlyList<Counted> counted, IdeaExitRule rule)
     {
         Counted[] entered = [.. counted.Where(item => item.Result is not null)];
 

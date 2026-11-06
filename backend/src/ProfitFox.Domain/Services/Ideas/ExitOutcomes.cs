@@ -50,7 +50,7 @@ public static class ExitOutcomes
         DateTimeOffset end = entered.AddMinutes(life);
 
         return path.TrackedUntil >= end
-            ? active with { Status = IdeaStatus.Expired, StatusAt = end, ExitPrice = path.Closes[ExitRuleGrid.Of(path.Interval).ToList().IndexOf(rule.LifeCandles)] }
+            ? active with { Status = IdeaStatus.Expired, StatusAt = end, ExitPrice = path.Closes[GridIndex(path, rule.LifeCandles)] }
             : null;
     }
 
@@ -80,6 +80,19 @@ public static class ExitOutcomes
 
             yield return (path, outcome);
         }
+    }
+
+    private static int GridIndex(SignalPath path, int life)
+    {
+        IReadOnlyList<int> grid = ExitRuleGrid.Of(path.Interval);
+        int index = 0;
+
+        while (grid[index] != life)
+        {
+            index++;
+        }
+
+        return index;
     }
 
     private static int LadderIndex(decimal targetR)
