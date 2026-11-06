@@ -35,11 +35,14 @@ public sealed class IdeaRecomputes
         }
     }
 
-    /// <summary>Waits for a type × interval to be added, at most <paramref name="timeout" />; one added before the wait ends it at once.</summary>
+    /// <summary>
+    ///     Waits for a type × interval to be added, at most <paramref name="timeout" />; one added before the wait, or a timeout already past,
+    ///     ends it at once.
+    /// </summary>
     public async Task WaitAsync(TimeSpan timeout, TimeProvider time, CancellationToken cancellationToken)
     {
         TaskCompletionSource added = Volatile.Read(ref _added);
-        await Task.WhenAny(added.Task, Task.Delay(timeout, time, cancellationToken));
+        await Task.WhenAny(added.Task, Task.Delay(timeout > TimeSpan.Zero ? timeout : TimeSpan.Zero, time, cancellationToken));
         Interlocked.CompareExchange(ref _added, new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously), added);
     }
 }

@@ -275,6 +275,52 @@ public class ScannerSessionTests
         await Should.ThrowAsync<OperationCanceledException>(session);
     }
 
+    // Review of tune-idea-rules: when the recompute of one type × interval fails, the ones taken with it are not lost: all are done after the
+    // retry.
+    [Test]
+    public async Task Failed_recompute_of_a_type_and_interval_keeps_the_ones_taken_with_it()
+    {
+        DateTimeOffset appliedAt = Start.AddMinutes(1);
+        IdeaExitRule[] applied =
+        [
+            new IdeaExitRule(IdeaType.Pullback, Interval.FifteenMinutes, 48, 2.5m, 8, appliedAt),
+            new IdeaExitRule(IdeaType.TwoR, Interval.OneHour, 48, 3m, null, appliedAt)
+        ];
+        _exitRules.GetAllAsync(Arg.Any<CancellationToken>()).Returns(_ => _time.GetUtcNow() >= appliedAt ? applied : []);
+        var served = new List<(IdeaType, Interval)>();
+        bool failed = false;
+        _ideaSignals.StreamAsync(Arg.Any<int>(), Arg.Any<DateTimeOffset>(), Arg.Any<(IdeaType, Interval)?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                if (call.ArgAt<(IdeaType, Interval)?>(2) is not { } only)
+                {
+                    return AsyncEnumerable.Empty<IdeaSignal>();
+                }
+
+                if (!failed)
+                {
+                    failed = true;
+
+                    return Failing();
+                }
+
+                lock (served)
+                {
+                    served.Add(only);
+                }
+
+                return AsyncEnumerable.Empty<IdeaSignal>();
+            });
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session().RunAsync(cancellation.Token);
+
+        await WaitAsync(() => { lock (served) { return served.Distinct().Count() == 2; } }, advance: true);
+
+        _journal.Received().Failed("statistics", Arg.Any<InvalidOperationException>());
+        await cancellation.CancelAsync();
+        await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
     // Requirement "Срок хранения закрытых идей": the lane of ideas removes the old closed ideas when the session starts and then once an hour.
     [Test]
     public async Task Lane_of_ideas_removes_the_old_closed_ideas_at_start_and_then_hourly()
@@ -315,6 +361,16 @@ public class ScannerSessionTests
     {
         return _ideaSignals.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaSignalRepository.StreamAsync)
                                                           && Equals(call.GetArguments()[2], only));
+    }
+
+    private static async IAsyncEnumerable<IdeaSignal> Failing()
+    {
+        await Task.Yield();
+
+        throw new InvalidOperationException("storage down");
+#pragma warning disable CS0162
+        yield break;
+#pragma warning restore CS0162
     }
 
     private static async IAsyncEnumerable<IdeaSignal> Stuck(Task until)

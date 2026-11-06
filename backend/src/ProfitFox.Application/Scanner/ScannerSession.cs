@@ -251,9 +251,24 @@ public sealed class ScannerSession(
                     wholeAt = time.GetUtcNow() + StatisticsRefresh;
                 }
 
-                foreach ((IdeaType type, Interval interval) in recomputes.Take())
+                IReadOnlyList<(IdeaType Type, Interval Interval)> changed = recomputes.Take();
+
+                for (int index = 0; index < changed.Count; index++)
                 {
-                    await statistics.RecomputeAsync(type, interval, cancellationToken);
+                    try
+                    {
+                        await statistics.RecomputeAsync(changed[index].Type, changed[index].Interval, cancellationToken);
+                    }
+                    catch
+                    {
+                        // The one that failed and the ones after it go back, to be done after the retry.
+                        foreach ((IdeaType type, Interval interval) in changed.Skip(index))
+                        {
+                            recomputes.Add(type, interval);
+                        }
+
+                        throw;
+                    }
                 }
 
                 await recomputes.WaitAsync(wholeAt - time.GetUtcNow(), time, cancellationToken);
