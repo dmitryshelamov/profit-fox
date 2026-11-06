@@ -20,6 +20,8 @@ public class IdeaOutcomesTests
     private static readonly Instrument Wif = new Instrument(MarketCategory.Linear, "WIFUSDT");
     private static readonly Instrument Eth = new Instrument(MarketCategory.Spot, "ETHUSDT");
     private static readonly FeeRates NoFees = new FeeRates(0m, 0m);
+    // The holding of «Цель 2R» on 15 minutes by default: 24 candles.
+    private static readonly TimeSpan SixHours = TimeSpan.FromHours(6);
 
     // Three keys: «Цель 2R» of WIF with a stop 40 days ago, a target 10 days ago and a repeat while it was open; «Откат» of WIF without an
     // entry and with one that expired at +0.5 R; «Цель 2R» of ETH with a target 100 days ago and a fresh signal.
@@ -72,7 +74,7 @@ public class IdeaOutcomesTests
     }
 
     // Decision 4: 30 cases of «Импульс» and 30 of «Пролив» of one parent, a day apart, every third a +2 R target, the rest −1 R stops: the
-    // buckets have the numbers of the model over their own sums, their parent's and their category's by the hour of their firing, with their
+    // buckets have the numbers of the model over their own sums, their parent's and their category's by the 6 hour block of their firing, with their
     // own numbers beside, over 90 days and over the 15 and 20 cases of the last 30; the parent is not a bucket of the result.
     [Test]
     public async Task Pass_gives_the_buckets_the_numbers_of_the_model()
@@ -98,6 +100,56 @@ public class IdeaOutcomesTests
         result.Buckets.Single(bucket => bucket.Key == impulse && bucket.Days == 30).Statistics.FewOwnCases.ShouldBeTrue();
     }
 
+    // Decision 1 of cluster-idea-cases-by-holding: «Цель 2R» on 4 h holds 24 candles, 4 days. WIF and ETH fire at 10:00 and 14:00 of the
+    // same day every 4 days, 20 days, with equal results: a +2 R target on every third day, a −1 R stop on the others. The 40 cases are 20
+    // groups of two, not 40 hours: +0.05 R with −0.5934…+0.6934 R and a share of 35 % over 19 effective cases, 17.80…57.25 %.
+    [Test]
+    public async Task Pass_groups_the_cases_of_a_bucket_by_the_holding_of_its_rule()
+    {
+        var eth = new Instrument(MarketCategory.Linear, "ETHUSDT");
+        IdeaSignal[] signals =
+        [
+            .. Enumerable.Range(0, 20).Select(day => Signal(Wif, IdeaType.TwoR, 0, OnDay(day, Interval.FourHours, 10))),
+            .. Enumerable.Range(0, 20).Select(day => Signal(eth, IdeaType.TwoR, 0, OnDay(day, Interval.FourHours, 14)))
+        ];
+
+        IdeaOutcomesResult result = await IdeaOutcomes.WalkAsync(signals.ToAsyncEnumerable(), new IdeaExitRules([]), _ => NoFees, Now, CancellationToken.None);
+
+        BucketStatistics own = result.Buckets.Single(bucket => bucket.Days == 90).Statistics;
+        own.OwnExpectancy.ShouldBe(0.05m);
+        own.OwnExpectancyLow!.Value.ShouldBe(-0.5934m, 0.0001m);
+        own.OwnExpectancyHigh!.Value.ShouldBe(0.6934m, 0.0001m);
+        own.OwnProbabilityLow!.Value.ShouldBe(0.1780m, 0.0001m);
+        own.OwnProbabilityHigh!.Value.ShouldBe(0.5725m, 0.0001m);
+    }
+
+    // Decision 2 of cluster-idea-cases-by-holding, scenario "Категория со смешанными ТФ": WIF on 4 h at 10:00 of the last day of a block of
+    // 4 days and ETH on 1 h at 14:00 of the day before are one group of their category, by the longest holding of its cases: the variance of
+    // the mean of the category is 20 / 19 · (7 · 3.9² + 13 · 2.1²) / 40², not s² / n = 0.0525 of 40 independent hours or days.
+    [Test]
+    public async Task Pass_groups_the_cases_of_a_category_by_the_longest_holding_of_its_cases()
+    {
+        var eth = new Instrument(MarketCategory.Linear, "ETHUSDT");
+        IdeaSignal[] signals =
+        [
+            .. Enumerable.Range(0, 20).Select(day => Signal(Wif, IdeaType.TwoR, 0, OnDay(day, Interval.FourHours, 10))),
+            .. Enumerable.Range(0, 20).Select(day => Signal(eth, IdeaType.TwoR, 0, OnDay(day, Interval.OneHour, 14 - 24)))
+        ];
+
+        IdeaOutcomesResult result = await IdeaOutcomes.WalkAsync(signals.ToAsyncEnumerable(), new IdeaExitRules([]), _ => NoFees, Now, CancellationToken.None);
+
+        result.Roots[90][MarketCategory.Linear].Category.Expectancy.Variance.ShouldBe(0.107763, 0.000001);
+    }
+
+    // A signal of the interval fired at the hour of the day 80 − 4 · day days ago, the last of a block of 4 days: a +2 R target on every third
+    // day, a −1 R stop on the others.
+    private static SignalPath OnDay(int day, Interval interval, int hour)
+    {
+        SignalPath path = Path() with { Interval = interval, FiredAt = Now.AddDays(-80 + (4 * day)).AddHours(hour) };
+
+        return day % 3 == 0 ? path with { LadderAfter = Ladder(30) } : path with { StopAfter = 10 };
+    }
+
     // The model of the signals fired in the last days, without fees: a target is +2 R, a stop −1 R.
     private static IReadOnlyDictionary<IdeaBucketKey, BucketStatistics> Model(IdeaSignal[] signals, int days)
     {
@@ -111,9 +163,9 @@ public class IdeaOutcomesTests
 
             foreach (ClusteredSums sums in new[]
                      {
-                         buckets.GetValueOrDefault(signal.Bucket) ?? (buckets[signal.Bucket] = new ClusteredSums()),
-                         parents.GetValueOrDefault(BucketModel.Parent.Of(signal.Bucket)) ?? (parents[BucketModel.Parent.Of(signal.Bucket)] = new ClusteredSums()),
-                         categories.GetValueOrDefault(signal.Bucket.Category) ?? (categories[signal.Bucket.Category] = new ClusteredSums())
+                         buckets.GetValueOrDefault(signal.Bucket) ?? (buckets[signal.Bucket] = new ClusteredSums(SixHours)),
+                         parents.GetValueOrDefault(BucketModel.Parent.Of(signal.Bucket)) ?? (parents[BucketModel.Parent.Of(signal.Bucket)] = new ClusteredSums(SixHours)),
+                         categories.GetValueOrDefault(signal.Bucket.Category) ?? (categories[signal.Bucket.Category] = new ClusteredSums(SixHours))
                      })
             {
                 sums.Add(signal.Path.FiredAt, target ? IdeaStatus.Target : IdeaStatus.Stop, target ? 2m : -1m);

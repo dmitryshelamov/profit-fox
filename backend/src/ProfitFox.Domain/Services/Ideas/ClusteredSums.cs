@@ -4,16 +4,18 @@ using ProfitFox.Domain.ValueObjects.Ideas;
 namespace ProfitFox.Domain.Services.Ideas;
 
 /// <summary>
-///     The sums of a group of cases by the hours UTC they fired in (decision 1 of honest-idea-intervals): the counts of the outcomes, ΣR and ΣR²,
-///     and over the hours with a case, the groups, G of them, each with n_g cases, the total S_g of their results and T_g of their targets:
-///     Σn_g², Σn_g·S_g, ΣS_g², Σn_g·T_g and ΣT_g². A case added and then removed gives the sums back, so a window of cases can slide.
+///     The sums of a group of cases by the blocks UTC they fired in (decision 1 of honest-idea-intervals): the counts of the outcomes, ΣR and ΣR²,
+///     and over the blocks with a case, the groups, G of them, each with n_g cases, the total S_g of their results and T_g of their targets:
+///     Σn_g², Σn_g·S_g, ΣS_g², Σn_g·T_g and ΣT_g². A case added and then removed gives the sums back, so a window of cases can slide. The blocks
+///     follow one another from the Unix epoch, each as long as the holding of the cases (decision 1 of cluster-idea-cases-by-holding).
 /// </summary>
-public sealed class ClusteredSums
+/// <param name="block">The length of a block.</param>
+public sealed class ClusteredSums(TimeSpan block)
 {
     // The 97.5th percentile of the standard normal distribution: a 95 % interval.
     private const double Z = 1.96;
 
-    private readonly Dictionary<DateTimeOffset, Group> _groups = [];
+    private readonly Dictionary<long, Group> _groups = [];
 
     public int Targets { get; private set; }
 
@@ -27,7 +29,7 @@ public sealed class ClusteredSums
 
     public decimal TotalSquaredR { get; private set; }
 
-    /// <summary>G, the hours with a case.</summary>
+    /// <summary>G, the blocks with a case.</summary>
     public int Groups => _groups.Count;
 
     /// <summary>Σn_g².</summary>
@@ -46,12 +48,12 @@ public sealed class ClusteredSums
     public long SquaredTargets { get; private set; }
 
     /// <summary>
-    ///     The variance of the mean result: V_r = G / (G − 1) · (ΣS_g² − 2m·Σn_g·S_g + m²·Σn_g²) / n² over the hours, never below s² / n of
-    ///     independent cases; s², as of one case, with fewer than two hours.
+    ///     The variance of the mean result: V_r = G / (G − 1) · (ΣS_g² − 2m·Σn_g·S_g + m²·Σn_g²) / n² over the blocks, never below s² / n of
+    ///     independent cases; s², as of one case, with fewer than two blocks.
     /// </summary>
     public double ExpectancyVariance => Variance((double)SampleVariance(), SquaredResults, CountsByResults, TotalR);
 
-    /// <summary>The variance of the share of targets by the same formula on the targets of the hours, p(1 − p) taking the place of s².</summary>
+    /// <summary>The variance of the share of targets by the same formula on the targets of the blocks, p(1 − p) taking the place of s².</summary>
     public double ShareVariance
     {
         get
@@ -114,8 +116,8 @@ public sealed class ClusteredSums
         TotalR += sign * result;
         TotalSquaredR += sign * result * result;
 
-        var hour = new DateTimeOffset(firedAt.UtcDateTime.Ticks - (firedAt.UtcDateTime.Ticks % TimeSpan.TicksPerHour), TimeSpan.Zero);
-        Group before = _groups.GetValueOrDefault(hour);
+        long number = (firedAt - DateTimeOffset.UnixEpoch).Ticks / block.Ticks;
+        Group before = _groups.GetValueOrDefault(number);
         var after = new Group(before.Cases + sign, before.Results + (sign * result), before.Targets + (status == IdeaStatus.Target ? sign : 0));
 
         // The aggregates move by the difference of the contribution of the one group that changed.
@@ -127,11 +129,11 @@ public sealed class ClusteredSums
 
         if (after.Cases == 0)
         {
-            _groups.Remove(hour);
+            _groups.Remove(number);
         }
         else
         {
-            _groups[hour] = after;
+            _groups[number] = after;
         }
     }
 

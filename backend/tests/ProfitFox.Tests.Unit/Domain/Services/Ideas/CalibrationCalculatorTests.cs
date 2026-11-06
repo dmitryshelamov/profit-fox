@@ -221,6 +221,74 @@ public class CalibrationCalculatorTests
         together.ShouldBeGreaterThan(apart * 3);
     }
 
+    // Decision 2 of cluster-idea-cases-by-holding, scenario "Строка 4 ч по блокам срока": «Цель 2R» on 4 h holds 4 days, on 1 h a day. On
+    // 8 blocks of 4 days, two 1 h cases at 10:00 and 14:00 of the third day of the block and two 4 h cases at 10:00 and 14:00 of the fourth end
+    // alike, a +2 R target in every other block. The row takes the longest holding of its cases, so the 32 cases are 8 groups of 4: +0.5 R with
+    // −0.6112…+1.6112 R and a share of 50 % as of 7 cases, 20.24…79.76 %; by the hour they would be −0.028…+1.028 R, and by a day, the holding
+    // of the case fired first, 16 groups of 2.
+    [Test]
+    public void Row_groups_its_cases_by_the_longest_holding_among_them()
+    {
+        IdeaBucketKey fourHours = Linear with { Interval = Interval.FourHours };
+        IdeaOutcome[] outcomes =
+        [
+            .. Mixed(fourHours, Now.AddDays(-60), 30),
+            .. Mixed(Linear, Now.AddDays(-60), 30),
+            .. Enumerable.Range(0, 8).SelectMany(day => new[] { (Linear, 10), (Linear, 14), (fourHours, 24 + 10), (fourHours, 24 + 14) }
+                .Select(item => new IdeaOutcome(item.Item1, Now.AddDays(-29 + (4 * day)).AddHours(item.Item2), Now, day % 2 == 0 ? IdeaStatus.Target : IdeaStatus.Stop,
+                    day % 2 == 0 ? 2m : -1m)))
+        ];
+
+        BucketStatistics total = Report(outcomes, 30, null, holding: ByInterval).Total!.Outcome;
+
+        total.Cases.ShouldBe(32);
+        total.Expectancy.ShouldBe(0.5m);
+        total.ExpectancyLow!.Value.ShouldBe(-0.6112m, 0.0001m);
+        total.ExpectancyHigh!.Value.ShouldBe(1.6112m, 0.0001m);
+        total.ProbabilityLow!.Value.ShouldBe(0.2024m, 0.0001m);
+        total.ProbabilityHigh!.Value.ShouldBe(0.7976m, 0.0001m);
+    }
+
+    // Decision 2 of cluster-idea-cases-by-holding: the window of a category groups its cases by the longest holding among them. Two parents,
+    // 4 h and 1 h, have the same 30 cases each, at 10:00 and 11:00 of the last day of 15 blocks of 4 days for 4 h and of the day before for 1 h,
+    // a +2 R target in 8 blocks and a −1 R stop in 7, so nothing tells the parents apart and the case of a bucket without cases of its own is
+    // promised the numbers of the category. By 4 days the category is 15 groups of 4, +0.6 R with −0.184…+1.384 R, ≈; by the hour, by a day or
+    // by the holding of each case it would be 30 groups of 2, +0.055…+1.145 R, ▲.
+    [Test]
+    public void Window_of_a_category_groups_its_cases_by_the_longest_holding_among_them()
+    {
+        IdeaBucketKey fourHours = Linear with { Interval = Interval.FourHours };
+        IdeaOutcome[] outcomes =
+        [
+            .. Enumerable.Range(0, 15).SelectMany(day => new[] { (fourHours, 10), (fourHours, 11), (Linear, 10 - 24), (Linear, 11 - 24) }
+                .Select(item => Closed(item.Item1, Now.AddDays(-88 + (4 * day)).AddHours(item.Item2), day % 2 == 0 ? IdeaStatus.Target : IdeaStatus.Stop,
+                    day % 2 == 0 ? 2m : -1m))),
+            new IdeaOutcome(OtherLinear, Now.AddDays(-1), Now, IdeaStatus.Target, 2m)
+        ];
+
+        Report(outcomes, 30, null, holding: ByInterval).Badges.Single().Badge.ShouldBe(IdeaBadge.Flat);
+    }
+
+    // Decision 1 of cluster-idea-cases-by-holding: the windows of the buckets and the parents group their cases by the blocks of their own
+    // holding. Two buckets of one parent on 1 h, a day of holding, fire at 10:00 and 11:00 of 20 days 2 days apart with equal results:
+    // «Импульс» +2 R on every other day, «Пролив» on every fourth. The case checked later is promised what the model of the buckets by the day
+    // gives, which is not what it gives by the hour.
+    [Test]
+    public void Windows_of_the_buckets_and_the_parents_group_their_cases_by_their_holding()
+    {
+        IdeaOutcome[] history =
+        [
+            .. Enumerable.Range(0, 20).SelectMany(day => new[] { (Linear, 10, day % 2 == 0), (Linear, 11, day % 2 == 0), (OtherLinear, 10, day % 4 == 0), (OtherLinear, 11, day % 4 == 0) }
+                .Select(item => Closed(item.Item1, Now.AddDays(-80 + (2 * day)).AddHours(item.Item2), item.Item3 ? IdeaStatus.Target : IdeaStatus.Stop, item.Item3 ? 2m : -1m)))
+        ];
+        IdeaOutcome[] outcomes = [.. history, new IdeaOutcome(Linear, Now.AddDays(-1), Now, IdeaStatus.Target, 2m)];
+
+        decimal promised = Report(outcomes, 30, null, holding: ByInterval).Total!.Promised;
+
+        promised.ShouldBe(Model(history, TimeSpan.FromDays(1)), 0.000001m);
+        Math.Abs(promised - Model(history, TimeSpan.FromHours(1))).ShouldBeGreaterThan(0.001m);
+    }
+
     // Scenarios "Высокие вероятности завышены" and "Значок на деле" on a small set: one bucket, its parent and its category are the same 30
     // cases, so 30 cases checked together are all promised their 20 % and +0.2 R, which go into the rows from 20 % and from 0.2 R.
     [Test]
@@ -278,7 +346,7 @@ public class CalibrationCalculatorTests
             Closed(Linear, applied.AddHours(1), IdeaStatus.Target, 2m)
         ];
 
-        IReadOnlyList<CalibrationReport> reports = CalibrationCalculator.Compute(outcomes, Now, (type, interval) => type == IdeaType.TwoR && interval == Interval.OneHour ? applied : Now);
+        IReadOnlyList<CalibrationReport> reports = CalibrationCalculator.Compute(outcomes, Now, (type, interval) => type == IdeaType.TwoR && interval == Interval.OneHour ? applied : Now, (_, _) => TimeSpan.FromHours(1));
 
         CalibrationReport all = reports.Single(report => report is { Days: 30, Category: null, Scope: CalibrationScope.All });
         CalibrationReport fresh = reports.Single(report => report is { Days: 30, Category: null, Scope: CalibrationScope.Fresh });
@@ -298,7 +366,7 @@ public class CalibrationCalculatorTests
             new IdeaOutcome(Linear, Now.AddDays(-10), Now.AddDays(-10).AddHours(1), IdeaStatus.Stop, -1m)
         ];
 
-        IReadOnlyList<CalibrationReport> reports = CalibrationCalculator.Compute(outcomes, Now, (_, _) => Now.AddDays(-20));
+        IReadOnlyList<CalibrationReport> reports = CalibrationCalculator.Compute(outcomes, Now, (_, _) => Now.AddDays(-20), (_, _) => TimeSpan.FromHours(1));
 
         reports.Select(report => (report.Days, report.Category, report.Scope, report.Checked)).ShouldBe(
         [
@@ -368,9 +436,21 @@ public class CalibrationCalculatorTests
         report.Total.ShouldBeNull();
     }
 
-    private static CalibrationReport Report(IReadOnlyList<IdeaOutcome> outcomes, int days, MarketCategory? category, CalibrationScope scope = CalibrationScope.All)
+    // The default rule on 1 h and on 4 h: 24 candles, a day and 4 days.
+    private static TimeSpan ByInterval(IdeaType type, Interval interval)
     {
-        return CalibrationCalculator.Compute(outcomes, Now, (_, _) => DateTimeOffset.MinValue)
+        return interval == Interval.FourHours ? TimeSpan.FromDays(4) : TimeSpan.FromDays(1);
+    }
+
+    // Unless the test says otherwise, every case holds an hour, so the groups are the hours of honest-idea-intervals.
+    private static CalibrationReport Report(
+        IReadOnlyList<IdeaOutcome> outcomes,
+        int days,
+        MarketCategory? category,
+        CalibrationScope scope = CalibrationScope.All,
+        Func<IdeaType, Interval, TimeSpan>? holding = null)
+    {
+        return CalibrationCalculator.Compute(outcomes, Now, (_, _) => DateTimeOffset.MinValue, holding ?? ((_, _) => TimeSpan.FromHours(1)))
             .Single(report => report.Days == days && report.Category == category && report.Scope == scope);
     }
 
@@ -392,9 +472,29 @@ public class CalibrationCalculatorTests
         return outcomes.Average(outcome => (promised - (outcome.Status == IdeaStatus.Target ? 1m : 0m)) * (promised - (outcome.Status == IdeaStatus.Target ? 1m : 0m)));
     }
 
+    // The expectancy of the model of «Импульс» over the cases of its parent and category by blocks of the holding.
+    private static decimal Model(IEnumerable<IdeaOutcome> outcomes, TimeSpan holding)
+    {
+        var buckets = new Dictionary<IdeaBucketKey, ClusteredSums>();
+        var parent = new ClusteredSums(holding);
+        var category = new ClusteredSums(holding);
+
+        foreach (IdeaOutcome outcome in outcomes)
+        {
+            foreach (ClusteredSums sums in new[] { buckets.GetValueOrDefault(outcome.Key) ?? (buckets[outcome.Key] = new ClusteredSums(holding)), parent, category })
+            {
+                sums.Add(outcome.FiredAt, outcome.Status, outcome.Result);
+            }
+        }
+
+        var parents = new Dictionary<BucketModel.Parent, ClusteredSums> { [BucketModel.Parent.Of(Linear)] = parent };
+
+        return BucketModel.Build(buckets, parents, BucketModel.Roots(parents, new Dictionary<MarketCategory, ClusteredSums> { [MarketCategory.Linear] = category }))[Linear].Expectancy;
+    }
+
     private static ClusteredSums Sums(IEnumerable<IdeaOutcome> outcomes)
     {
-        var sums = new ClusteredSums();
+        var sums = new ClusteredSums(TimeSpan.FromHours(1));
 
         foreach (IdeaOutcome outcome in outcomes)
         {

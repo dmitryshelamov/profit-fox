@@ -27,15 +27,27 @@ public static class CalibrationCalculator
     /// <param name="outcomes"></param>
     /// <param name="now"></param>
     /// <param name="freshFrom">The time after which a case of a type × interval fired after its rules changed, for the reports of that scope.</param>
-    public static IReadOnlyList<CalibrationReport> Compute(IReadOnlyList<IdeaOutcome> outcomes, DateTimeOffset now, Func<IdeaType, Interval, DateTimeOffset> freshFrom)
+    /// <param name="holding">The holding of a type × interval by the rule the cases were counted by (decision 1 of cluster-idea-cases-by-holding).</param>
+    public static IReadOnlyList<CalibrationReport> Compute(
+        IReadOnlyList<IdeaOutcome> outcomes,
+        DateTimeOffset now,
+        Func<IdeaType, Interval, DateTimeOffset> freshFrom,
+        Func<IdeaType, Interval, TimeSpan> holding)
     {
-        List<Promise> promises = new Walk(outcomes).Check(now.AddDays(-Days.Max()));
+        List<Promise> promises = new Walk(outcomes, holding).Check(now.AddDays(-Days.Max()));
         bool[] fresh = [.. promises.Select(promise => promise.Case.FiredAt > freshFrom(promise.Case.Key.Type, promise.Case.Key.Interval))];
 
-        return [.. Scopes.SelectMany(scope => Days.SelectMany(days => Categories.Select(category => Report(now, days, category, scope, promises, fresh))))];
+        return [.. Scopes.SelectMany(scope => Days.SelectMany(days => Categories.Select(category => Report(now, days, category, scope, promises, fresh, holding))))];
     }
 
-    private static CalibrationReport Report(DateTimeOffset now, int days, MarketCategory? category, CalibrationScope scope, List<Promise> promises, bool[] fresh)
+    private static CalibrationReport Report(
+        DateTimeOffset now,
+        int days,
+        MarketCategory? category,
+        CalibrationScope scope,
+        List<Promise> promises,
+        bool[] fresh,
+        Func<IdeaType, Interval, TimeSpan> holding)
     {
         Promise[] fired =
         [
@@ -53,10 +65,10 @@ public static class CalibrationCalculator
             fired.Length - checkedCases.Length,
             Brier(checkedCases, PromisedProbability),
             Brier(checkedCases, promise => promise.BaseShare!.Value),
-            Ranges(checkedCases, ProbabilityBounds, PromisedProbability),
-            Ranges(checkedCases, ExpectancyBounds, PromisedExpectancy),
-            [.. Badges.Select(badge => Row(null, null, badge, [.. checkedCases.Where(promise => promise.Bucket!.Badge == badge)], PromisedExpectancy)).OfType<CalibrationRow>()],
-            Row(null, null, null, checkedCases, PromisedExpectancy))
+            Ranges(checkedCases, ProbabilityBounds, PromisedProbability, holding),
+            Ranges(checkedCases, ExpectancyBounds, PromisedExpectancy, holding),
+            [.. Badges.Select(badge => Row(null, null, badge, [.. checkedCases.Where(promise => promise.Bucket!.Badge == badge)], PromisedExpectancy, holding)).OfType<CalibrationRow>()],
+            Row(null, null, null, checkedCases, PromisedExpectancy, holding))
         {
             Scope = scope,
             Owns =
@@ -64,28 +76,28 @@ public static class CalibrationCalculator
                 .. new[] { false, true }
                     .Select(few => checkedCases.Where(promise => promise.Bucket!.FewOwnCases == few).ToArray())
                     .Where(cases => cases.Length > 0)
-                    .Select(cases => new CalibrationOwnRow(cases[0].Bucket!.FewOwnCases, Row(null, null, null, cases, PromisedExpectancy)!, Brier(cases, PromisedProbability)!.Value))
+                    .Select(cases => new CalibrationOwnRow(cases[0].Bucket!.FewOwnCases, Row(null, null, null, cases, PromisedExpectancy, holding)!, Brier(cases, PromisedProbability)!.Value))
             ],
-            Comparison = Comparison([.. checkedCases.Where(promise => promise.Old is not null)])
+            Comparison = Comparison([.. checkedCases.Where(promise => promise.Old is not null)], holding)
         };
     }
 
     // The old model and the new one on the cases both check: the new one checks every case the old one does, unless its category has no root.
-    private static CalibrationComparison Comparison(Promise[] compared)
+    private static CalibrationComparison Comparison(Promise[] compared, Func<IdeaType, Interval, TimeSpan> holding)
     {
         CalibrationModel Model(Func<Promise, BucketStatistics> promise)
         {
             return new CalibrationModel(
                 compared.Length,
                 Brier(compared, item => promise(item).Probability!.Value),
-                Row(null, null, IdeaBadge.Up, [.. compared.Where(item => promise(item).Badge == IdeaBadge.Up)], item => promise(item).Expectancy));
+                Row(null, null, IdeaBadge.Up, [.. compared.Where(item => promise(item).Badge == IdeaBadge.Up)], item => promise(item).Expectancy, holding));
         }
 
         return new CalibrationComparison(Model(promise => promise.Old!), Model(promise => promise.Bucket!));
     }
 
     // Half-open ranges: a promise on a bound goes to the row that starts at it.
-    private static CalibrationRow[] Ranges(Promise[] promises, decimal?[] bounds, Func<Promise, decimal> promised)
+    private static CalibrationRow[] Ranges(Promise[] promises, decimal?[] bounds, Func<Promise, decimal> promised, Func<IdeaType, Interval, TimeSpan> holding)
     {
         return
         [
@@ -95,20 +107,22 @@ public static class CalibrationCalculator
                     range.Second,
                     null,
                     [.. promises.Where(promise => promised(promise) >= (range.First ?? decimal.MinValue) && promised(promise) < (range.Second ?? decimal.MaxValue))],
-                    promised))
+                    promised,
+                    holding))
                 .OfType<CalibrationRow>()
         ];
     }
 
-    // None without cases; the outcome of the cases of a row by their clustered sums, those fired in one hour being one group.
-    private static CalibrationRow? Row(decimal? from, decimal? to, IdeaBadge? badge, Promise[] promises, Func<Promise, decimal> promised)
+    // None without cases; the outcome of the cases of a row by their clustered sums, those fired in one block of the longest holding among them
+    // being one group (decision 2 of cluster-idea-cases-by-holding).
+    private static CalibrationRow? Row(decimal? from, decimal? to, IdeaBadge? badge, Promise[] promises, Func<Promise, decimal> promised, Func<IdeaType, Interval, TimeSpan> holding)
     {
         if (promises.Length == 0)
         {
             return null;
         }
 
-        var outcome = new ClusteredSums();
+        var outcome = new ClusteredSums(promises.Max(promise => holding(promise.Case.Key.Type, promise.Case.Key.Interval)));
 
         foreach (Promise promise in promises)
         {
@@ -168,15 +182,21 @@ public static class CalibrationCalculator
         private int _leaving;
         private int _closing;
 
-        public Walk(IReadOnlyList<IdeaOutcome> outcomes)
+        // The buckets and the parents group their cases by the blocks of their own holding, the categories by the longest holding among their
+        // buckets (decisions 1 and 2 of cluster-idea-cases-by-holding).
+        public Walk(IReadOnlyList<IdeaOutcome> outcomes, Func<IdeaType, Interval, TimeSpan> holding)
         {
             _outcomes = outcomes;
             _bucketOf = Numbers(outcomes.Select(outcome => outcome.Key), out IdeaBucketKey[] buckets);
             _parentOf = Numbers(buckets.Select(BucketModel.Parent.Of), out BucketModel.Parent[] parents);
             _categoryOf = Numbers(parents.Select(parent => parent.Category), out _);
-            _buckets = [.. buckets.Select(_ => new ClusteredSums())];
-            _parents = [.. parents.Select(_ => new ClusteredSums())];
-            _categories = [.. _categoryOf.Distinct().Select(_ => new ClusteredSums())];
+            _buckets = [.. buckets.Select(bucket => new ClusteredSums(holding(bucket.Type, bucket.Interval)))];
+            _parents = [.. parents.Select(parent => new ClusteredSums(holding(parent.Type, parent.Interval)))];
+            _categories =
+            [
+                .. Enumerable.Range(0, _categoryOf.Distinct().Count())
+                    .Select(category => new ClusteredSums(parents.Where((_, parent) => _categoryOf[parent] == category).Max(parent => holding(parent.Type, parent.Interval))))
+            ];
             _bucketsOfParent = [.. Enumerable.Range(0, parents.Length).Select(parent => Enumerable.Range(0, buckets.Length).Where(bucket => _parentOf[bucket] == parent).ToArray())];
             _parentsOfCategory = [.. Enumerable.Range(0, _categories.Length).Select(category => Enumerable.Range(0, parents.Length).Where(parent => _categoryOf[parent] == category).ToArray())];
             _parentSpreads = new BucketModel.Spreads[parents.Length];

@@ -208,7 +208,7 @@ public class BucketModelTests
     [Test]
     public void Bucket_without_a_case_of_its_own_has_the_numbers_of_its_parent()
     {
-        BucketStatistics statistics = BucketModel.Statistics(new ClusteredSums(), new BucketModel.ParentModel(NineThousand, NineThousand), new BucketModel.Spreads(Tau, Tau));
+        BucketStatistics statistics = BucketModel.Statistics(new ClusteredSums(TimeSpan.FromHours(1)), new BucketModel.ParentModel(NineThousand, NineThousand), new BucketModel.Spreads(Tau, Tau));
 
         (statistics.Cases, statistics.Probability, statistics.Expectancy, statistics.ExpectancyLow, statistics.ExpectancyHigh)
             .ShouldBe((0, 0.4m, -0.2m, Parent.Low, Parent.High));
@@ -230,7 +230,7 @@ public class BucketModelTests
         // 15 cases of the first outcome, then 15 stops.
         ClusteredSums Mixed()
         {
-            var sums = new ClusteredSums();
+            var sums = new ClusteredSums(TimeSpan.FromHours(1));
 
             for (int index = 0; index < 30; index++)
             {
@@ -254,7 +254,7 @@ public class BucketModelTests
     // 30 cases each in its own hour from each of the given ones: a third are +2 R targets, the rest −1 R stops.
     private static ClusteredSums Cases(params int[] fromHours)
     {
-        var sums = new ClusteredSums();
+        var sums = new ClusteredSums(TimeSpan.FromHours(1));
 
         foreach (int fromHour in fromHours)
         {
@@ -270,7 +270,7 @@ public class BucketModelTests
     // Cases of the same outcome and result, each in its own hour, and after them as many of the next as asked for, stops of −1 R.
     private static ClusteredSums Equal(int count, IdeaStatus status, decimal result, int stops = 0)
     {
-        var sums = new ClusteredSums();
+        var sums = new ClusteredSums(TimeSpan.FromHours(1));
 
         for (int index = 0; index < count; index++)
         {
@@ -299,7 +299,7 @@ public class BucketModelTests
     // 60 cases each in its own hour from the given one into the sums, the first ones +2 R targets, the rest −1 R stops.
     private static ClusteredSums Targets(int fromHour, int targets, ClusteredSums? sums = null)
     {
-        sums ??= new ClusteredSums();
+        sums ??= new ClusteredSums(TimeSpan.FromHours(1));
 
         for (int index = 0; index < 60; index++)
         {

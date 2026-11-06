@@ -9,9 +9,9 @@ namespace ProfitFox.Application.Scanner.Ideas;
 /// <summary>
 ///     The outcomes of the signals by the exit rules in force (decision 7): one pass over the signals in the order of their key and firing, which
 ///     holds the signals of one key at a time. The signals of a key count as one open idea at a time (<see cref="ExitOutcomes.Counted" />); the
-///     cases fired in the last 90 and 30 days go into the clustered sums of their bucket, of its parent and of its category by the hour of their
-///     firing (decision 4 of honest-idea-intervals), and every case gives its outcome to the calibration. After the pass the buckets get the
-///     numbers of <see cref="BucketModel" />; the parents and the categories are not written.
+///     cases fired in the last 90 and 30 days go into the clustered sums of their bucket, of its parent and of its category by the block of their
+///     firing (decision 4 of honest-idea-intervals, decisions 1 and 2 of cluster-idea-cases-by-holding), and every case gives its outcome to the
+///     calibration. After the pass the buckets get the numbers of <see cref="BucketModel" />; the parents and the categories are not written.
 /// </summary>
 public static class IdeaOutcomes
 {
@@ -47,6 +47,7 @@ public static class IdeaOutcomes
         }
 
         Walk(key, rules, fees, now, sums, outcomes);
+        SumCategories(outcomes, rules, now, sums);
 
         Dictionary<int, IReadOnlyDictionary<MarketCategory, BucketModel.Root>> used = Days.ToDictionary(
             days => days,
@@ -92,12 +93,37 @@ public static class IdeaOutcomes
 
             foreach (int days in Days.Where(days => path.FiredAt >= now.AddDays(-days)))
             {
-                sums.Add(bucket, days, path.FiredAt, outcome.Status, result);
+                sums.Add(bucket, days, rule.Holding, path.FiredAt, outcome.Status, result);
             }
         }
     }
 
-    /// <summary>The clustered sums of the buckets, their parents and their categories by the days of the window, and the signals the buckets counted.</summary>
+    // Decision 2 of cluster-idea-cases-by-holding: a category mixes the types × intervals, so its groups are the blocks of the longest holding
+    // among its cases, known only once the pass is over.
+    private static void SumCategories(List<IdeaOutcome> outcomes, IdeaExitRules rules, DateTimeOffset now, Sums sums)
+    {
+        foreach (IGrouping<MarketCategory, IdeaOutcome> category in outcomes.GroupBy(outcome => outcome.Key.Category))
+        {
+            TimeSpan longest = category.Max(outcome => rules.Of(outcome.Key.Type, outcome.Key.Interval).Holding);
+
+            foreach (int days in Days)
+            {
+                var categorySums = new ClusteredSums(longest);
+
+                foreach (IdeaOutcome outcome in category.Where(outcome => outcome.FiredAt >= now.AddDays(-days)))
+                {
+                    categorySums.Add(outcome.FiredAt, outcome.Status, outcome.Result);
+                }
+
+                sums.Categories[days][category.Key] = categorySums;
+            }
+        }
+    }
+
+    /// <summary>
+    ///     The clustered sums of the buckets and their parents by the blocks of the holding of their rule, of their categories, by the days of the
+    ///     window, and the signals the buckets counted.
+    /// </summary>
     private sealed class Sums
     {
         public Dictionary<int, Dictionary<IdeaBucketKey, ClusteredSums>> Buckets { get; } = Days.ToDictionary(days => days, _ => new Dictionary<IdeaBucketKey, ClusteredSums>());
@@ -110,7 +136,7 @@ public static class IdeaOutcomes
         public Dictionary<(IdeaBucketKey, int), int> Signals { get; } = [];
 
         // A signal without an entry only counts as a signal.
-        public void Add(IdeaBucketKey bucket, int days, DateTimeOffset firedAt, IdeaStatus status, decimal? result)
+        public void Add(IdeaBucketKey bucket, int days, TimeSpan holding, DateTimeOffset firedAt, IdeaStatus status, decimal? result)
         {
             Signals[(bucket, days)] = Signals.GetValueOrDefault((bucket, days)) + 1;
 
@@ -119,17 +145,16 @@ public static class IdeaOutcomes
                 return;
             }
 
-            Of(Buckets[days], bucket).Add(firedAt, status, r);
-            Of(Parents[days], BucketModel.Parent.Of(bucket)).Add(firedAt, status, r);
-            Of(Categories[days], bucket.Category).Add(firedAt, status, r);
+            Of(Buckets[days], bucket, holding).Add(firedAt, status, r);
+            Of(Parents[days], BucketModel.Parent.Of(bucket), holding).Add(firedAt, status, r);
         }
 
-        private static ClusteredSums Of<TKey>(Dictionary<TKey, ClusteredSums> sums, TKey key)
+        private static ClusteredSums Of<TKey>(Dictionary<TKey, ClusteredSums> sums, TKey key, TimeSpan holding)
             where TKey : notnull
         {
             if (!sums.TryGetValue(key, out ClusteredSums? found))
             {
-                found = new ClusteredSums();
+                found = new ClusteredSums(holding);
                 sums[key] = found;
             }
 
