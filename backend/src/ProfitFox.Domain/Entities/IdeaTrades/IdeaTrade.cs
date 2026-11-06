@@ -11,7 +11,7 @@ namespace ProfitFox.Domain.Entities.IdeaTrades;
 
 /// <summary>
 ///     A trade by an idea: one entry with a stop and a target that stand on the exchange, the levels and the size it was entered with, and
-///     what the exchange counted of its orders. <see cref="Entry" /> and the exits hold the quantity, value and fee of their orders;
+///     what the exchange counted of its orders. <see cref="AutoId" /> is the auto that took the trade, none for a manual one. <see cref="Entry" /> and the exits hold the quantity, value and fee of their orders;
 ///     <see cref="CancelRequested" /> and <see cref="CloseRequested" /> ask a Worker to cancel the entry or to close the position.
 /// </summary>
 public sealed record IdeaTrade(
@@ -43,7 +43,8 @@ public sealed record IdeaTrade(
     DateTimeOffset CreatedAt,
     IdeaPromise? Promise = null,
     DateTimeOffset? OpenedAt = null,
-    TradedIdeaOutcome? IdeaOutcome = null)
+    TradedIdeaOutcome? IdeaOutcome = null,
+    Guid? AutoId = null)
 {
     public bool IsOpen => Status is IdeaTradeStatus.AwaitingEntry or IdeaTradeStatus.Open;
 
@@ -92,7 +93,7 @@ public sealed record IdeaTrade(
         TakeProfit.Value + StopLoss.Value + Manual.Value,
         TakeProfit.Fee + StopLoss.Fee + Manual.Fee);
 
-    public static IdeaTrade Create(Guid id, Idea idea, Guid accountId, decimal entryPrice, IdeaTradeSize size, DateTimeOffset now, IdeaPromise? promise = null)
+    public static IdeaTrade Create(Guid id, Idea idea, Guid accountId, decimal entryPrice, IdeaTradeSize size, DateTimeOffset now, IdeaPromise? promise = null, Guid? autoId = null)
     {
         return new IdeaTrade(
             id,
@@ -121,7 +122,8 @@ public sealed record IdeaTrade(
             LegTotals.None,
             0,
             now,
-            promise);
+            promise,
+            AutoId: autoId);
     }
 
     /// <summary>A pullback that has not entered by its deadline gives its entry up.</summary>

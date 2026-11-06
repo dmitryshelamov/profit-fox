@@ -1,5 +1,6 @@
 using ProfitFox.Application.Backtests;
 using ProfitFox.Application.Exceptions;
+using ProfitFox.Application.IdeaAutos;
 using ProfitFox.Application.Ideas;
 using ProfitFox.Application.LiveTrading;
 using ProfitFox.Application.Ports.ExchangeAccounts;
@@ -17,9 +18,11 @@ using ProfitFox.Domain.Entities.LiveTrading.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.Services.IdeaAutos;
 using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.Services.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.Backtests;
+using ProfitFox.Domain.ValueObjects.IdeaAutos;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.LiveTrading;
@@ -89,7 +92,7 @@ public sealed class IdeaTradeEntryCalculator(
     }
 
     /// <summary>Sizes the trade and names what stops it, by the books of the account as they are now.</summary>
-    public async Task<EntryCalculation> EvaluateAsync(EntryPreparation preparation, CancellationToken cancellationToken)
+    public async Task<EntryCalculation> EvaluateAsync(EntryPreparation preparation, AutoEntry? auto, CancellationToken cancellationToken)
     {
         Idea idea = preparation.Idea;
         IdeaPlan plan = idea.Track.Plan with { Entry = preparation.Price };
@@ -97,14 +100,22 @@ public sealed class IdeaTradeEntryCalculator(
         IReadOnlyList<IdeaTrade> open = await trades.GetOpenAsync(cancellationToken);
         decimal? free = preparation.Key is { } key ? await ledger.GetFreeAsync(key, preparation.Quote, cancellationToken) : null;
         IdeaTradeAccount account = await AccountAsync(preparation, free, open, cancellationToken);
-        var limits = new IdeaTradingLimits(preparation.Settings.MinRiskReward, preparation.Settings.MaxOpenTrades, preparation.Settings.MaxTotalRisk, preparation.Settings.MaxAmount);
-        IReadOnlyList<IdeaTradeRefusal> reasons = IdeaTradeRefusals.Check(
-            new IdeaTradeEntry(idea.Instrument.Category, idea.Track.Status, idea.Track.Plan, preparation.Price, preparation.Current, preparation.Amount, size, preparation.Rules),
-            limits,
-            new OpenIdeaTrades(open.Count, open.Sum(trade => trade.Risk)),
-            account);
+        var limits = new IdeaTradingLimits(auto?.MinRiskReward ?? preparation.Settings.MinRiskReward, preparation.Settings.MaxOpenTrades, preparation.Settings.MaxTotalRisk, preparation.Settings.MaxAmount);
+        var entry = new IdeaTradeEntry(idea.Instrument.Category, idea.Track.Status, idea.Track.Plan, preparation.Price, preparation.Current, preparation.Amount, size, preparation.Rules);
+        var openTrades = new OpenIdeaTrades(open.Count, open.Sum(trade => trade.Risk));
+        List<AutoRefusal> refusals =
+        [
+            .. IdeaTradeRefusals.Check(entry, limits, openTrades, account)
+                .Select(reason => new AutoRefusal(reason, IdeaTradeRefusals.DetailOf(reason, entry, limits, openTrades, account)))
+        ];
 
-        return new EntryCalculation(preparation, plan, size, free, reasons, PromiseOf(idea with { Track = idea.Track with { Plan = plan } }, preparation));
+        if (auto is not null)
+        {
+            var books = new AutoBooks(open, auto.OpenPaper, auto.Autos, preparation.Account?.Name);
+            refusals.AddRange(AutoRefusals.Check(auto.Auto, idea.Instrument, plan.Side, books, auto.DailyLoss, preparation.Settings.MaxSameDirection));
+        }
+
+        return new EntryCalculation(preparation, plan, size, free, refusals, PromiseOf(idea with { Track = idea.Track with { Plan = plan } }, preparation));
     }
 
     /// <summary>
@@ -232,5 +243,14 @@ public sealed record EntryPreparation(
     string BaseCoin,
     IReadOnlyList<IdeaBucket> Buckets);
 
-/// <summary>The entry as it would be made now: the plan from the price, the size, the free money (none without a key), the reasons it cannot be made and what the idea promises.</summary>
-public sealed record EntryCalculation(EntryPreparation Preparation, IdeaPlan Plan, IdeaTradeSize Size, decimal? FreeMoney, IReadOnlyList<IdeaTradeRefusal> Reasons, IdeaPromise Promise);
+/// <summary>
+///     The entry as it would be made now: the plan from the price, the size, the free money (none without a key), what stops it (the reasons of the
+///     entry, then those of an auto) and what the idea promises.
+/// </summary>
+public sealed record EntryCalculation(EntryPreparation Preparation, IdeaPlan Plan, IdeaTradeSize Size, decimal? FreeMoney, IReadOnlyList<AutoRefusal> Refusals, IdeaPromise Promise)
+{
+    public IReadOnlyList<IdeaTradeRefusal> Reasons => [.. Refusals.Select(refusal => refusal.Reason)];
+
+    /// <summary>What the first reason is about, none when it has nothing to tell.</summary>
+    public RefusalDetail? Detail => Refusals.FirstOrDefault()?.Detail;
+}

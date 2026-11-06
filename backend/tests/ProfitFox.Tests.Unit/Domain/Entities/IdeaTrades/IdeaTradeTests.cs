@@ -43,6 +43,16 @@ public class IdeaTradeTests
         New().Promise.ShouldBeNull();
     }
 
+    // Scenario "Сделка автомата": the auto that took the trade stays on it; a manual trade has none.
+    [Test]
+    public void New_trade_carries_the_auto_that_took_it()
+    {
+        var auto = Guid.NewGuid();
+
+        IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(Fired), Account, 106m, Size(), Now, autoId: auto).AutoId.ShouldBe(auto);
+        New().AutoId.ShouldBeNull();
+    }
+
     // Decision 8: a pullback waits the 4 candles of its window from the moment it fired; the others enter at once.
     [Test]
     public void Pullback_keeps_the_deadline_of_its_entry_and_the_price_of_its_idea()
