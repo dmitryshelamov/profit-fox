@@ -15,5 +15,6 @@ public enum IdeaTradeRefusal
     AmountBelowMinimum,
     NoKey,
     CategoryNotTraded,
-    HedgeMode
+    HedgeMode,
+    SpotNotSupported
 }

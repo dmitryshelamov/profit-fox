@@ -67,16 +67,18 @@ public class IdeaTradesApiTests
         (entry.Type, entry.TimeInForce, entry.Price).ShouldBe((OrderType.Limit, TimeInForce.GoodTilCancelled, 100m));
     }
 
-    // Scenario "Вход на споте".
+    // Decision 9: the spot is closed in the API until the real check says how its TP/SL orders are told apart.
     [Test]
-    public async Task Entry_on_the_spot_is_a_limit_that_fills_at_once_or_not_at_all()
+    public async Task Entry_on_the_spot_is_refused_and_saves_nothing()
     {
         Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 106m, instrument: LiveTradingScenario.Spot);
         _scenario.SetPrice("100.5", LiveTradingScenario.Spot);
 
-        IdeaTradeOrder entry = (await _scenario.TradeOrdersAsync(await CreateAsync(idea))).Single();
+        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, risk = 1m });
 
-        (entry.Type, entry.TimeInForce, entry.Price, entry.Protection).ShouldBe((OrderType.Limit, TimeInForce.ImmediateOrCancel, 100.5m, new Protection(106m, 98m)));
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("reasons").EnumerateArray().Select(reason => reason.GetString()).ShouldBe(["spot_not_supported"]);
+        (await ListAsync()).GetArrayLength().ShouldBe(0);
     }
 
     [Test]

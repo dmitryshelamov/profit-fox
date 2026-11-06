@@ -48,6 +48,11 @@ public static class IdeaTradeRefusals
 
         StrategyDirection direction = isLong ? StrategyDirection.Long : StrategyDirection.Short;
 
+        if (entry.Category == MarketCategory.Spot)
+        {
+            reasons.Add(IdeaTradeRefusal.SpotNotSupported);
+        }
+
         if (entry.Category == MarketCategory.Linear && account.SymbolDirections.Any(other => other != direction))
         {
             reasons.Add(IdeaTradeRefusal.OppositeSideOpen);

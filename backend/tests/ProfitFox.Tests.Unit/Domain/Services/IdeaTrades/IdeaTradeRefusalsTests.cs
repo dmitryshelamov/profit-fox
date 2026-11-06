@@ -113,7 +113,14 @@ public class IdeaTradeRefusalsTests
     [Test]
     public void Opposite_side_does_not_matter_on_the_spot()
     {
-        Refuse(category: MarketCategory.Spot, account: Account(directions: [StrategyDirection.Short])).ShouldBeEmpty();
+        Refuse(category: MarketCategory.Spot, account: Account(directions: [StrategyDirection.Short])).ShouldNotContain(IdeaTradeRefusal.OppositeSideOpen);
+    }
+
+    // Decision 9: the spot waits for the check of the real exchange, so the session cannot yet tell its TP/SL orders from the others.
+    [Test]
+    public void Spot_is_named_until_its_children_can_be_told()
+    {
+        Refuse(category: MarketCategory.Spot).ShouldBe([IdeaTradeRefusal.SpotNotSupported]);
     }
 
     [Test]
