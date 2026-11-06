@@ -63,6 +63,18 @@ public class ApiDocumentationTests
         schemas.TryGetProperty("LivePositionResponse", out _).ShouldBeTrue();
     }
 
+    // Task 7.3 of tune-idea-rules: the screen «Срок жизни и цель» takes its types from this document.
+    [Test]
+    public async Task OpenApi_document_lists_the_exit_rule_endpoints()
+    {
+        using var document = JsonDocument.Parse(await _client.GetStringAsync("/openapi/v1.json"));
+        JsonElement paths = document.RootElement.GetProperty("paths");
+
+        string[] expected = ["/api/ideas/exit-rules", "/api/ideas/exit-rules/preview", "/api/ideas/exit-rules/{type}/{interval}"];
+        expected.Except(paths.EnumerateObject().Select(path => path.Name)).ShouldBeEmpty();
+        paths.GetProperty("/api/ideas/exit-rules/{type}/{interval}").TryGetProperty("put", out _).ShouldBeTrue();
+    }
+
     // The editor takes its API types from this document, so the answers it reads must be described.
     [Test]
     public async Task OpenApi_document_describes_what_the_editor_reads()
