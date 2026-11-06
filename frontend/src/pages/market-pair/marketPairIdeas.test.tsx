@@ -326,6 +326,33 @@ describe('ideas on the pair page', () => {
     );
   });
 
+  // Scenario "Стоп-вход ждёт входа": the levels of the stop order on the chart of its interval, the status in its row.
+  it('shows a stop entry of a squeeze awaiting its entry on the chart and in the table', async () => {
+    const stopEntry = ideaOf({
+      id: 'idea-stop-entry',
+      symbol: 'SOLUSDT',
+      setup: 'squeeze',
+      type: 'stop_entry',
+      interval: '240',
+      status: 'awaiting_entry',
+      entry: '170.01',
+      stop: '164.50',
+      target: '181.03',
+    });
+    fakeApi(routes('linear', { 'GET /api/market/linear/SOLUSDT/ideas': () => json([stopEntry]) }));
+    renderApp('/market/linear/SOLUSDT?idea=idea-stop-entry');
+
+    expect(await pressed('Стоп-вход')).toBe('true');
+    expect((await rowOf('Стоп-вход')).textContent).toContain('Ждёт входа');
+    expect((await rowOf('Стоп-вход')).textContent).toContain('Сжатие');
+    expect(
+      within(screen.getByRole('group', { name: 'Интервал' })).getByRole('button', { name: '4 ч' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() =>
+      expect(linesOnChart()).toEqual(['Вход 170.01', 'Стоп 164.50', 'Цель 181.03']),
+    );
+  });
+
   // Scenario "Выбор строки в таблице пары".
   it('selects an idea of the table by putting it into the address', async () => {
     fakeApi(routes('linear'));
@@ -549,6 +576,19 @@ describe('ideas on the pair page', () => {
         interval: '15',
         side: 'long',
       });
+    });
+
+    // Scenario "Типы своей идеи": without a setup a stop entry has no range.
+    it('offers the types at the market and the pullback, without the stop entry', async () => {
+      fakeApi(routes('linear'));
+      renderApp('/market/linear/SOLUSDT');
+      await ready();
+
+      expect(
+        within(blockOf().getByRole('combobox', { name: 'Тип' }))
+          .getAllByRole('option')
+          .map((option) => option.textContent),
+      ).toEqual(['Уровни', 'Цель 2R', 'За экстремумом', 'Откат']);
     });
 
     // Scenario "Цель не окупает комиссии".

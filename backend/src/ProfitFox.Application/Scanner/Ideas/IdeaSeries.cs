@@ -1,4 +1,5 @@
 using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.ValueObjects.Ideas;
 
 namespace ProfitFox.Application.Scanner.Ideas;
@@ -6,6 +7,7 @@ namespace ProfitFox.Application.Scanner.Ideas;
 /// <summary>
 ///     The closed candles of a pair on an interval, at most 220, on the grid of the interval in UTC (decision 2), and the minutes of the
 ///     candle that forms. It warms up from stored candles and grows by closed minutes without gaps: the last minute of a candle closes it.
+///     What the setups are measured against (ATR, the zones, the smoothing of RSI) is kept until another candle joins or leaves the base.
 /// </summary>
 public sealed class IdeaSeries(Interval interval)
 {
@@ -13,6 +15,10 @@ public sealed class IdeaSeries(Interval interval)
 
     private readonly List<IdeaCandle> _closed = [];
     private readonly List<IdeaCandle> _forming = [];
+
+    // The first and last candle of the base measured, and what it gave.
+    private (DateTimeOffset First, DateTimeOffset Last)? _measuredOf;
+    private SetupBase? _measured;
 
     public Interval Interval => interval;
 
@@ -69,5 +75,20 @@ public sealed class IdeaSeries(Interval interval)
         }
 
         return _closed[..count];
+    }
+
+    /// <summary>What the setups on the minute that ends at <paramref name="end" /> are measured against; computed again only as its base changes.</summary>
+    public SetupBase? Measure(DateTimeOffset end, ZoneRules rules)
+    {
+        IReadOnlyList<IdeaCandle> closed = Base(end);
+        (DateTimeOffset, DateTimeOffset)? of = closed.Count > 0 ? (closed[0].OpenTime, closed[^1].OpenTime) : null;
+
+        if (of != _measuredOf)
+        {
+            _measured = SetupDetector.Base(closed, rules);
+            _measuredOf = of;
+        }
+
+        return _measured;
     }
 }

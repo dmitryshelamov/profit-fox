@@ -6,7 +6,7 @@ namespace ProfitFox.Domain.Services.Ideas;
 
 /// <summary>
 ///     The result of a closed idea in R: (exit − entry) / (entry − stop) for long, mirrored for short, less the fees in R. The entry pays the
-///     taker fee at the market and the maker fee with a limit, every exit the taker fee. An idea that never entered has no result.
+///     taker fee at the market and with a stop order, the maker fee with a limit, every exit the taker fee. An idea that never entered has no result.
 /// </summary>
 public static class CaseResult
 {

@@ -36,7 +36,7 @@ public sealed class LiveIdeas(
     private int _generation;
     private readonly Dictionary<Instrument, IdeaCandle> _fed = [];
     private Dictionary<Instrument, List<Idea>>? _open;
-    private Dictionary<Instrument, Dictionary<Interval, decimal>> _percentiles = [];
+    private Dictionary<Instrument, Dictionary<Interval, VolatilityPercentiles>> _percentiles = [];
     private DateTimeOffset? _percentilesAt;
 
     /// <summary>Reads the warm-up of the next pairs not warmed up yet; <c>false</c> when there is none to read.</summary>
@@ -231,7 +231,7 @@ public sealed class LiveIdeas(
 
         _percentiles = (await volatility.GetAllAsync(cancellationToken))
             .GroupBy(item => item.Instrument)
-            .ToDictionary(group => group.Key, group => group.ToDictionary(item => item.Interval, item => item.Percentile));
+            .ToDictionary(group => group.Key, group => group.ToDictionary(item => item.Interval, item => new VolatilityPercentiles(item.Low, item.Percentile)));
         _percentilesAt = now;
     }
 

@@ -40,6 +40,15 @@ public class IdeaMoneyTests
         shares.ShouldBe(new IdeaShares(0.039228m, 0.020739m, 0.02m));
     }
 
+    // A stop entry fills a stop order: taker on the entry, as at the market.
+    [Test]
+    public void Stop_entry_pays_the_taker_fee_on_its_entry()
+    {
+        IdeaShares shares = IdeaMoney.PerUsdt(new IdeaPlan(IdeaType.StopEntry, IdeaSide.Long, 100m, 98m, 104m), Linear);
+
+        shares.ShouldBe(new IdeaShares(0.038878m, 0.021089m, 0.02m));
+    }
+
     [Test]
     public void Spot_takes_its_own_fees()
     {

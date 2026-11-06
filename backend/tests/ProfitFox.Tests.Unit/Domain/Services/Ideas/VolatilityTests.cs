@@ -34,12 +34,24 @@ public class VolatilityTests
     [Test]
     public void Percentile_is_the_ninetieth_by_nearest_rank()
     {
-        Volatility.Percentile([.. Enumerable.Range(1, 200).Reverse().Select(value => (decimal)value)]).ShouldBe(180m);
+        Volatility.Percentile([.. Enumerable.Range(1, 200).Reverse().Select(value => (decimal)value)], 0.9m).ShouldBe(180m);
+    }
+
+    // Requirement "Перцентили волатильности": the 10th and the 90th of the same 200 ratios, 0.001 … 0.200 shuffled, by nearest rank are
+    // the 20th and the 180th.
+    [Test]
+    public void Tenth_and_ninetieth_percentiles_come_from_the_same_ratios()
+    {
+        decimal[] ratios = [.. Enumerable.Range(1, 200).Select(value => value * 0.001m).OrderBy(value => (value * 7919m) % 1m)];
+
+        Volatility.Percentile(ratios, 0.1m).ShouldBe(0.020m);
+        Volatility.Percentile(ratios, 0.9m).ShouldBe(0.180m);
     }
 
     [Test]
     public void Fewer_than_a_hundred_ratios_give_no_percentile()
     {
-        Volatility.Percentile([.. Enumerable.Range(1, 99).Select(value => (decimal)value)]).ShouldBeNull();
+        Volatility.Percentile([.. Enumerable.Range(1, 99).Select(value => (decimal)value)], 0.9m).ShouldBeNull();
+        Volatility.Percentile([.. Enumerable.Range(1, 99).Select(value => (decimal)value)], 0.1m).ShouldBeNull();
     }
 }

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 using ProfitFox.Application.Scanner;
+using ProfitFox.Application.Scanner.Ideas;
 
 using ProfitFox.Tests.Integration.Infrastructure;
 using ProfitFox.Tests.Integration.Persistence;
@@ -34,6 +35,18 @@ public class ScannerSettingsTests
 
         Ideas(Path.Combine(root, "ProfitFox.Presentation")).ShouldBe(Ideas(ScannerHost.ContentRoot()));
         Ideas(ScannerHost.ContentRoot()).ShouldContainKey("Ideas:StopBuffer");
+    }
+
+    // Decision 9: the settings file carries the provisional thresholds of the candle setups.
+    [Test]
+    public void Scanner_settings_carry_the_thresholds_of_the_candle_setups()
+    {
+        IConfigurationRoot configuration = new ConfigurationBuilder().AddJsonFile(Path.Combine(ScannerHost.ContentRoot(), "appsettings.json")).Build();
+
+        IdeasSettings settings = configuration.GetSection("Ideas").Get<IdeasSettings>()!;
+
+        settings.Thresholds.ShouldBeEquivalentTo(new ThresholdSettings());
+        Ideas(ScannerHost.ContentRoot()).ShouldContainKey("Ideas:Thresholds:BreakoutMargin");
     }
 
     private static Dictionary<string, string?> Ideas(string folder)

@@ -1,3 +1,5 @@
+using ProfitFox.Application.Ideas;
+using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.SavedFilters.Enums;
 
 namespace ProfitFox.Application.SavedFilters;
@@ -14,7 +16,9 @@ public static class SavedFilterFields
         FilterOperator.Greater, FilterOperator.GreaterOrEqual, FilterOperator.Less, FilterOperator.LessOrEqual, FilterOperator.Equal, FilterOperator.Between
     ];
 
-    private static readonly string[] Setups = ["impulse", "early_impulse", "drop", "early_drop", "high_volatility"];
+    // In the order of the enums, which is the order of the lists on the screen.
+    private static readonly string[] Setups = [.. Enum.GetValues<IdeaSetup>().Select(setup => setup.ToCode())];
+    private static readonly string[] Types = [.. Enum.GetValues<IdeaType>().Select(type => type.ToCode())];
 
     /// <summary>The fields in the order of the board «Фильтр — редактор»: the market first, then the idea.</summary>
     public static readonly IReadOnlyList<SavedFilterField> All =
@@ -34,7 +38,7 @@ public static class SavedFilterFields
         Market(FilterField.Spread, "spread", "percent"),
         Choice(FilterField.Setup, "setup", false, Setups),
         Choice(FilterField.IdeaSetup, "ideaSetup", true, Setups),
-        Choice(FilterField.IdeaType, "type", true, ["levels", "target_2r", "beyond_extreme", "pullback"]),
+        Choice(FilterField.IdeaType, "type", true, Types),
         Choice(FilterField.IdeaInterval, "interval", true, ["5", "15", "60", "240"]),
         Choice(FilterField.IdeaSide, "side", true, ["long", "short"]),
         Idea(FilterField.RiskReward, "riskReward", "ratio"),

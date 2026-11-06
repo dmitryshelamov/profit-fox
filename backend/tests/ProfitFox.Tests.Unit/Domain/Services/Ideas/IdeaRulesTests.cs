@@ -60,6 +60,68 @@ public class IdeaRulesTests
         IdeaRules.Plan(IdeaType.Pullback, side, Context with { Price = price }).ShouldBeNull();
     }
 
+    // Scenario "Закрытие внутри выбитой зоны": the false breakout of 50.0–50.4 closed at 50.2, inside it; the buffer is 0.3.
+    [Test]
+    public void Two_r_of_a_setup_zone_stops_beyond_it_though_the_zone_is_not_wholly_below_the_price()
+    {
+        IdeaContext context = Context with { Price = 50.2m, Zones = [], StopBuffer = 0.3m, SetupZone = new Zone(50.0m, 50.4m, 2) };
+
+        IdeaRules.Plan(IdeaType.TwoR, IdeaSide.Long, context).ShouldBe(new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 50.2m, 49.7m, 51.2m));
+    }
+
+    [Test]
+    public void Two_r_short_of_a_setup_zone_stops_above_its_high()
+    {
+        IdeaContext context = Context with { Price = 99.0m, Zones = [], StopBuffer = 0.3m, SetupZone = new Zone(99.4m, 100.0m, 2) };
+
+        IdeaRules.Plan(IdeaType.TwoR, IdeaSide.Short, context).ShouldBe(new IdeaPlan(IdeaType.TwoR, IdeaSide.Short, 99.0m, 100.3m, 96.4m));
+    }
+
+    // The target of «Уровни» is still the nearest zone ahead of the price.
+    [Test]
+    public void Levels_of_a_setup_zone_stop_beyond_it_and_target_the_nearest_zone_ahead()
+    {
+        IdeaContext context = Context with { Price = 50.2m, Zones = [new Zone(49.0m, 49.2m, 2), new Zone(52.0m, 52.2m, 2)], StopBuffer = 0.3m, SetupZone = new Zone(50.0m, 50.4m, 2) };
+
+        IdeaRules.Plan(IdeaType.Levels, IdeaSide.Long, context).ShouldBe(new IdeaPlan(IdeaType.Levels, IdeaSide.Long, 50.2m, 49.7m, 52.0m));
+    }
+
+    // Scenario "Стоп-вход после сжатия": the range 100–102, the price step 0.01, the buffer 0.5 and the price 101.
+    [Test]
+    public void Stop_entry_enters_a_step_beyond_the_range_and_stops_beyond_its_other_edge()
+    {
+        IdeaContext context = Context with { Price = 101m, WindowLow = 100m, WindowHigh = 102m };
+
+        IdeaRules.Plan(IdeaType.StopEntry, IdeaSide.Long, context).ShouldBe(new IdeaPlan(IdeaType.StopEntry, IdeaSide.Long, 102.01m, 99.5m, 107.03m));
+        IdeaRules.Plan(IdeaType.StopEntry, IdeaSide.Short, context).ShouldBe(new IdeaPlan(IdeaType.StopEntry, IdeaSide.Short, 99.99m, 102.5m, 94.97m));
+    }
+
+    // The replay takes today's price step while the range of the past lies on an older grid: a range of 99.9–102.1 at a step of 0.25 enters
+    // long at 102.35 up to 102.50 and short at 99.65 down to 99.50, away from the market, as the stop and the target go.
+    [Test]
+    public void Stop_entry_of_a_range_off_the_price_step_enters_on_the_step_away_from_the_market()
+    {
+        IdeaContext context = Context with { Price = 101m, WindowLow = 99.9m, WindowHigh = 102.1m, Tick = 0.25m };
+
+        IdeaRules.Plan(IdeaType.StopEntry, IdeaSide.Long, context).ShouldBe(new IdeaPlan(IdeaType.StopEntry, IdeaSide.Long, 102.50m, 99.25m, 109.00m));
+        IdeaRules.Plan(IdeaType.StopEntry, IdeaSide.Short, context).ShouldBe(new IdeaPlan(IdeaType.StopEntry, IdeaSide.Short, 99.50m, 102.75m, 93.00m));
+    }
+
+    // A stop order the price has already passed would fill at once, at a price the market never gave.
+    [TestCase(IdeaSide.Long, 102.01)]
+    [TestCase(IdeaSide.Long, 102.5)]
+    [TestCase(IdeaSide.Short, 99.99)]
+    public void Stop_entry_whose_entry_the_price_has_passed_is_not_made(IdeaSide side, decimal price)
+    {
+        IdeaRules.Plan(IdeaType.StopEntry, side, Context with { Price = price, WindowLow = 100m, WindowHigh = 102m }).ShouldBeNull();
+    }
+
+    [Test]
+    public void Stop_entry_short_on_spot_is_not_made()
+    {
+        IdeaRules.Plan(IdeaType.StopEntry, IdeaSide.Short, Context with { Category = MarketCategory.Spot, Price = 101m, WindowLow = 100m, WindowHigh = 102m }).ShouldBeNull();
+    }
+
     // Scenario "Нет сопротивления".
     [Test]
     public void Without_the_zone_it_needs_an_idea_is_not_made()

@@ -72,6 +72,29 @@ public class IdeaOrderTests
         Names(IdeaOrder.Sort(sides, IdeaSortColumn.Side, OrderDirection.Ascending)).ShouldBe("ba");
     }
 
+    // Requirement "Сортировка списка идей": the candle setups go after «Высокая волатильность» in the order of the list on the screen.
+    [Test]
+    public void Candle_setups_go_after_the_setups_of_a_move_in_the_order_of_the_list()
+    {
+        IdeaSetup[] order =
+        [
+            IdeaSetup.Impulse, IdeaSetup.EarlyImpulse, IdeaSetup.Drop, IdeaSetup.EarlyDrop, IdeaSetup.HighVolatility, IdeaSetup.Breakout, IdeaSetup.FalseBreakout,
+            IdeaSetup.Squeeze, IdeaSetup.Exhaustion, IdeaSetup.RsiExtreme, IdeaSetup.NewExtreme, IdeaSetup.QuietVolume
+        ];
+        IdeaView[] views = [.. order.Reverse().Select((setup, index) => View(((char)('a' + index)).ToString(), Setup(setup)))];
+
+        Names(IdeaOrder.Sort(views, IdeaSortColumn.Setup, OrderDirection.Ascending)).ShouldBe("lkjihgfedcba");
+    }
+
+    // Scenario "Сортировка по типу": «Стоп-вход» after «Откат».
+    [Test]
+    public void Stop_entry_goes_after_the_pullback()
+    {
+        IdeaView[] views = [View("a", Type(IdeaType.StopEntry)), View("b", Type(IdeaType.Pullback)), View("c", Type(IdeaType.Levels))];
+
+        Names(IdeaOrder.Sort(views, IdeaSortColumn.Type, OrderDirection.Ascending)).ShouldBe("cba");
+    }
+
     [Test]
     public void Symbols_are_compared_ordinally()
     {

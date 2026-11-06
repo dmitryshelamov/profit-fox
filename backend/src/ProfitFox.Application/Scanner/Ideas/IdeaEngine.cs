@@ -14,8 +14,6 @@ namespace ProfitFox.Application.Scanner.Ideas;
 /// </summary>
 public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
 {
-    private static readonly IdeaType[] Types = [IdeaType.Levels, IdeaType.TwoR, IdeaType.BeyondExtreme, IdeaType.Pullback];
-
     private readonly Dictionary<Instrument, Pair> _pairs = [];
 
     // The longest window of a setup: the last N candles of the longest interval.
@@ -134,16 +132,14 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
         {
             DateTimeOffset end = minute.OpenTime.AddMinutes(1);
 
-            foreach ((Interval interval, SetupReading? reading, IReadOnlyList<SetupSignal> fired) in Read(pair, end, inputs))
+            foreach ((Interval interval, SetupBase? basis, IReadOnlyList<SetupSignal> fired) in Read(pair, end, inputs))
             {
                 setups.AddRange(pair.Holding[interval].Select(setup => new PairSetup(interval, setup)));
 
                 // A pair without its price step yet holds its setups and makes no ideas: their levels would not go on the step.
                 if (fired.Count > 0 && inputs.Tick is { } tick)
                 {
-                    IReadOnlyList<IdeaCandle> closed = pair.Series[interval].Base(end);
-                    IReadOnlyList<Zone> zones = ZoneFinder.Find(closed, reading!.Atr, rules.Zones);
-                    created.AddRange(fired.SelectMany(signal => Ideas(pair, interval, signal, minute, reading.Atr, zones, inputs.Spread, tick, end)));
+                    created.AddRange(fired.SelectMany(signal => Ideas(pair, interval, signal, minute, basis!.Atr, basis.Zones, inputs.Spread, tick, end)));
                 }
             }
         }
@@ -152,15 +148,18 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
     }
 
     /// <summary>Reads the setups of every interval on the minute that ends at <paramref name="end" />: the ones that hold and the ones that fire.</summary>
-    private List<(Interval Interval, SetupReading? Reading, IReadOnlyList<SetupSignal> Fired)> Read(Pair pair, DateTimeOffset end, IdeaInputs inputs)
+    private List<(Interval Interval, SetupBase? Basis, IReadOnlyList<SetupSignal> Fired)> Read(Pair pair, DateTimeOffset end, IdeaInputs inputs)
     {
-        var readings = new List<(Interval, SetupReading?, IReadOnlyList<SetupSignal>)>();
+        var readings = new List<(Interval, SetupBase?, IReadOnlyList<SetupSignal>)>();
 
         foreach ((Interval interval, SetupThresholds thresholds) in rules.Thresholds)
         {
-            decimal? percentile = inputs.Percentiles.TryGetValue(interval, out decimal value) ? value : null;
-            SetupReading? reading = SetupDetector.Detect(pair.Series[interval].Base(end), pair.Minutes, Minutes(interval), thresholds, percentile);
-            readings.Add((interval, reading, SetupDetector.Fired(pair.Holding[interval], reading)));
+            VolatilityPercentiles percentiles = inputs.Percentiles.GetValueOrDefault(interval) ?? VolatilityPercentiles.None;
+            SetupBase? basis = pair.Series[interval].Measure(end, rules.Zones);
+            SetupReading? reading = basis is null
+                ? null
+                : SetupDetector.Detect(basis, pair.Minutes, Minutes(interval), thresholds, percentiles);
+            readings.Add((interval, basis, SetupDetector.Fired(pair.Holding[interval], reading)));
             pair.Holding[interval] = [.. reading?.Signals.Select(signal => signal.Setup) ?? []];
         }
 
@@ -194,12 +193,12 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
 
     private List<Idea> Ideas(Pair pair, Interval interval, SetupSignal signal, IdeaCandle minute, decimal atr, IReadOnlyList<Zone> zones, decimal? spread, decimal tick, DateTimeOffset end)
     {
-        var context = new IdeaContext(pair.Instrument.Category, minute.Close, signal.WindowLow, signal.WindowHigh, atr, zones, spread, rules.StopBuffer, tick);
+        var context = new IdeaContext(pair.Instrument.Category, minute.Close, signal.WindowLow, signal.WindowHigh, atr, zones, spread, rules.StopBuffer, tick, signal.Zone);
         var ideas = new List<Idea>();
 
-        foreach (IdeaSide side in Sides(signal.Setup))
+        foreach (IdeaSide side in signal.Sides)
         {
-            foreach (IdeaType type in Types)
+            foreach (IdeaType type in SetupTypes.Of(signal.Setup))
             {
                 var key = new IdeaKey(pair.Instrument, signal.Setup, type, interval, side);
 
@@ -215,16 +214,6 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
         }
 
         return ideas;
-    }
-
-    private static IdeaSide[] Sides(IdeaSetup setup)
-    {
-        return setup switch
-        {
-            IdeaSetup.Impulse or IdeaSetup.EarlyImpulse => [IdeaSide.Long],
-            IdeaSetup.Drop or IdeaSetup.EarlyDrop => [IdeaSide.Short],
-            _ => [IdeaSide.Long, IdeaSide.Short]
-        };
     }
 
     private static int Minutes(Interval interval)

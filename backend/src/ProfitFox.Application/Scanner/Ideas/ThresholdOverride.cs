@@ -12,4 +12,24 @@ public sealed class ThresholdOverride
     public decimal? EarlyMove { get; init; }
 
     public decimal? EarlyVolume { get; init; }
+
+    public decimal? BreakoutMargin { get; init; }
+
+    public decimal? BreakoutVolume { get; init; }
+
+    public decimal? SweepMargin { get; init; }
+
+    public int? SqueezeCandles { get; init; }
+
+    public decimal? ClimaxVolume { get; init; }
+
+    public decimal? Wick { get; init; }
+
+    public decimal? QuietVolume { get; init; }
+
+    public decimal? QuietBody { get; init; }
+
+    public decimal? Overbought { get; init; }
+
+    public decimal? Oversold { get; init; }
 }
