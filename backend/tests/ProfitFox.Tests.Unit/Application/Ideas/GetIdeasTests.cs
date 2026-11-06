@@ -8,6 +8,7 @@ using ProfitFox.Application.Backtests;
 using ProfitFox.Application.Ideas.Queries.GetIdeas;
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
+using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.SavedFilters;
 using ProfitFox.Domain.Entities.SavedFilters.Enums;
@@ -33,6 +34,7 @@ public class GetIdeasTests
     private IIdeaBucketRepository _buckets = null!;
     private IMarketSnapshotRepository _snapshots = null!;
     private ISavedFilterRepository _filters = null!;
+    private IScannerPairRepository _pairs = null!;
     private GetIdeasQueryHandler _handler = null!;
 
     [SetUp]
@@ -42,6 +44,7 @@ public class GetIdeasTests
         _buckets = Substitute.For<IIdeaBucketRepository>();
         _snapshots = Substitute.For<IMarketSnapshotRepository>();
         _filters = Substitute.For<ISavedFilterRepository>();
+        _pairs = Substitute.For<IScannerPairRepository>();
         _buckets.GetAsync(IdeasEngineVersion.Current, Arg.Any<CancellationToken>()).Returns([]);
         _snapshots.GetAllAsync(Arg.Any<CancellationToken>()).Returns([]);
         _snapshots.GetSetupsAsync(Arg.Any<CancellationToken>()).Returns(new Dictionary<Instrument, IReadOnlyList<PairSetup>>());
@@ -53,7 +56,7 @@ public class GetIdeasTests
                 ["linear"] = new FeeRateSettings { Limit = 0.02m, Market = 0.055m }
             }
         };
-        _handler = new GetIdeasQueryHandler(_ideas, _buckets, _snapshots, _filters, new IdeasEngineVersion(IdeasEngineVersion.Current), backtests, new FakeTimeProvider(Noon));
+        _handler = new GetIdeasQueryHandler(_ideas, _buckets, _snapshots, _filters, _pairs, new IdeasEngineVersion(IdeasEngineVersion.Current), backtests, new FakeTimeProvider(Noon));
     }
 
     // Scenario "Страница идей": the ideas come newest first, as they have no bucket and so equal expectancy.
@@ -137,6 +140,64 @@ public class GetIdeasTests
 
         result.Page!.Items.Select(view => view.Idea.Id).ShouldBe([long1.Id]);
         result.Page.Total.ShouldBe(1);
+    }
+
+    // Scenario "Только активные".
+    [Test]
+    public async Task Only_active_keeps_the_ideas_awaiting_entry_and_the_active_ones()
+    {
+        Idea awaiting = Idea(1);
+        Idea active = Idea(2, status: IdeaStatus.Active);
+        Idea target = Idea(3, status: IdeaStatus.Target);
+        Idea stop = Idea(4, status: IdeaStatus.Stop);
+        Idea expired = Idea(5, status: IdeaStatus.Expired);
+        _ideas.GetRecentAsync(Noon.AddHours(-24), null, Arg.Any<CancellationToken>()).Returns([awaiting, active, target, stop, expired]);
+
+        GetIdeasResult result = await _handler.Handle(Everything with { ActiveOnly = true }, CancellationToken.None);
+
+        result.Page!.Items.Select(view => view.Idea.Id).ShouldBe([awaiting.Id, active.Id]);
+        result.Page.Total.ShouldBe(2);
+    }
+
+    // Scenario "Скрыть акции"; an idea of a pair the list has not told about yet is crypto and stays.
+    [Test]
+    public async Task Hide_tradfi_drops_the_ideas_of_non_crypto_pairs()
+    {
+        Idea btc = Idea(1) with { Instrument = new Instrument(MarketCategory.Linear, "BTCUSDT") };
+        Idea apple = Idea(2) with { Instrument = new Instrument(MarketCategory.Linear, "AAPLUSDT") };
+        Idea etf = Idea(3) with { Instrument = new Instrument(MarketCategory.Linear, "ARKKUSDT") };
+        Idea gold = Idea(4) with { Instrument = new Instrument(MarketCategory.Linear, "XAUUSDT") };
+        Idea euro = Idea(5) with { Instrument = new Instrument(MarketCategory.Linear, "EURUSDUSDT") };
+        Idea tesla = Idea(6) with { Instrument = new Instrument(MarketCategory.Spot, "TSLAXUSDT") };
+        Idea unknown = Idea(7) with { Instrument = new Instrument(MarketCategory.Linear, "NEWUSDT") };
+        _ideas.GetRecentAsync(Noon.AddHours(-24), null, Arg.Any<CancellationToken>()).Returns([btc, apple, etf, gold, euro, tesla, unknown]);
+        _pairs.GetAllAsync(Arg.Any<CancellationToken>()).Returns(
+        [
+            new ScannerPair(btc.Instrument, true),
+            new ScannerPair(apple.Instrument, true, TradFi: true),
+            new ScannerPair(etf.Instrument, true, TradFi: true),
+            new ScannerPair(gold.Instrument, true, TradFi: true),
+            new ScannerPair(euro.Instrument, true, TradFi: true),
+            new ScannerPair(tesla.Instrument, true, TradFi: true),
+            new ScannerPair(new Instrument(MarketCategory.Spot, "BTCUSDT"), true, TradFi: true)
+        ]);
+
+        GetIdeasResult result = await _handler.Handle(Everything with { HideTradFi = true }, CancellationToken.None);
+
+        result.Page!.Items.Select(view => view.Idea.Id).ShouldBe([btc.Id, unknown.Id]);
+        result.Page.Total.ShouldBe(2);
+    }
+
+    // Decision 5: the pairs are read only for the flag.
+    [Test]
+    public async Task Without_hide_tradfi_the_pairs_are_not_read()
+    {
+        Ideas(3);
+
+        GetIdeasResult result = await _handler.Handle(Everything, CancellationToken.None);
+
+        result.Page!.Total.ShouldBe(3);
+        await _pairs.DidNotReceive().GetAllAsync(Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -234,9 +295,9 @@ public class GetIdeasTests
         _ideas.GetRecentAsync(Noon.AddHours(-24), null, Arg.Any<CancellationToken>()).Returns([.. Enumerable.Range(0, count).Select(number => Idea(number))]);
     }
 
-    private static Idea Idea(int number, IdeaSetup setup = IdeaSetup.Impulse, IdeaSide side = IdeaSide.Long)
+    private static Idea Idea(int number, IdeaSetup setup = IdeaSetup.Impulse, IdeaSide side = IdeaSide.Long, IdeaStatus status = IdeaStatus.AwaitingEntry)
     {
-        return IdeaGenerator.Generate(Noon.AddHours(-12).AddMinutes(-number), setup: setup, side: side) with { Id = Id(number) };
+        return IdeaGenerator.Generate(Noon.AddHours(-12).AddMinutes(-number), status, setup: setup, side: side) with { Id = Id(number) };
     }
 
     private static Guid Id(int number)

@@ -19,9 +19,9 @@
 
 ## 2. Фильтры в чтении идей
 
-- [ ] 2.1 `GetIdeasQuery.ActiveOnly`: только `AwaitingEntry` и `Active`. Проверка: `GetIdeasTests` — сценарий «Только
+- [x] 2.1 `GetIdeasQuery.ActiveOnly`: только `AwaitingEntry` и `Active`. Проверка: `GetIdeasTests` — сценарий «Только
   активные» (число идей `2`).
-- [ ] 2.2 `GetIdeasQuery.HideTradFi`: обработчик получает `IScannerPairRepository`, читает пары только при флаге,
+- [x] 2.2 `GetIdeasQuery.HideTradFi`: обработчик получает `IScannerPairRepository`, читает пары только при флаге,
   убирает идеи некриптовых пар; идея пары, которой нет в хранилище, остаётся. Проверка: `GetIdeasTests` — сценарий
   «Скрыть акции», пара не из хранилища, и тест, что без флага пары не читаются.
 - [ ] 2.3 `IdeasQueryParameters.ActiveOnly` и `HideStocks`, передача в запрос, описания для OpenAPI. Проверка:

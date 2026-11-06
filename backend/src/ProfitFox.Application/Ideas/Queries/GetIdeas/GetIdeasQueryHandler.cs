@@ -22,6 +22,7 @@ public sealed class GetIdeasQueryHandler(
     IIdeaBucketRepository buckets,
     IMarketSnapshotRepository snapshots,
     ISavedFilterRepository filters,
+    IScannerPairRepository pairs,
     IdeasEngineVersion version,
     BacktestSettings backtests,
     TimeProvider time) : IRequestHandler<GetIdeasQuery, GetIdeasResult>
@@ -91,12 +92,15 @@ public sealed class GetIdeasQueryHandler(
         }
 
         IReadOnlyList<Idea> recent = await ideas.GetRecentAsync(time.GetUtcNow() - IdeaQueries.ClosedShown, null, cancellationToken);
+        IReadOnlySet<Instrument> tradFi = request.HideTradFi ? await TradFiAsync(cancellationToken) : new HashSet<Instrument>();
         IEnumerable<Idea> matching = recent.Where(idea =>
             (request.Setup is null || idea.Setup == setup)
             && (request.Interval is null || idea.Interval == interval)
             && (request.Type is null || idea.Track.Plan.Type == type)
             && (request.Side is null || idea.Track.Plan.Side == side)
-            && (request.Category is null || idea.Instrument.Category == category));
+            && (request.Category is null || idea.Instrument.Category == category)
+            && (!request.ActiveOnly || idea.IsOpen)
+            && !tradFi.Contains(idea.Instrument));
         IEnumerable<IdeaView> views = IdeaView.Of(matching, await buckets.GetAsync(version.Number, cancellationToken), backtests.Policy().DefaultFees);
 
         if (request.NonNegativeExpectancy)
@@ -110,6 +114,12 @@ public sealed class GetIdeasQueryHandler(
         }
 
         return new GetIdeasResult(page.Slice(IdeaOrder.Sort(views, column, direction)), errors);
+    }
+
+    // The non-crypto pairs of the scanner; a pair it never kept is crypto.
+    private async Task<IReadOnlySet<Instrument>> TradFiAsync(CancellationToken cancellationToken)
+    {
+        return (await pairs.GetAllAsync(cancellationToken)).Where(pair => pair.TradFi).Select(pair => pair.Instrument).ToHashSet();
     }
 
     // The snapshot is read only for a condition on a metric or a setup of the market.

@@ -222,6 +222,43 @@ public class IdeasApiTests
         (await ItemsAsync($"/api/ideas?{query}")).EnumerateArray().Select(idea => idea.GetProperty("id").GetGuid()).ShouldBe([ideas[expected].Id]);
     }
 
+    // Scenarios "Только активные" and "Скрыть акции": each flag drops its ideas, the others stay.
+    [TestCase("activeOnly=true", "closed")]
+    [TestCase("hideStocks=true", "stock")]
+    public async Task Ideas_are_dropped_by_each_flag(string query, string dropped)
+    {
+        var ideas = new Dictionary<string, Idea>
+        {
+            ["crypto"] = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol),
+            ["closed"] = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-19), IdeaStatus.Target, new Instrument(MarketCategory.Linear, "BTCUSDT")),
+            ["stock"] = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-18), instrument: new Instrument(MarketCategory.Linear, "AAPLUSDT"))
+        };
+        await new IdeaRepository(_database).SaveAsync([.. ideas.Values], [], CancellationToken.None);
+        await new ScannerPairRepository(_database).SaveAsync(
+            [new ScannerPair(Sol, true), new ScannerPair(ideas["stock"].Instrument, true, TradFi: true)],
+            CancellationToken.None);
+
+        (await ItemsAsync($"/api/ideas?{query}")).EnumerateArray().Select(idea => idea.GetProperty("id").GetGuid())
+            .ShouldBe([.. ideas.Where(idea => idea.Key != dropped).Select(idea => idea.Value.Id)], ignoreOrder: true);
+    }
+
+    // Scenario "Вместе с другим фильтром".
+    [Test]
+    public async Task Flags_go_with_the_other_filters()
+    {
+        Idea wanted = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), IdeaStatus.Active, Sol);
+        Idea shortIdea = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-19), instrument: new Instrument(MarketCategory.Linear, "ETHUSDT"), side: IdeaSide.Short);
+        Idea closed = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-18), IdeaStatus.Stop, new Instrument(MarketCategory.Linear, "BTCUSDT"));
+        Idea stock = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-17), instrument: new Instrument(MarketCategory.Linear, "AAPLUSDT"));
+        await new IdeaRepository(_database).SaveAsync([wanted, shortIdea, closed, stock], [], CancellationToken.None);
+        await new ScannerPairRepository(_database).SaveAsync([new ScannerPair(stock.Instrument, true, TradFi: true)], CancellationToken.None);
+
+        JsonElement page = await GetAsync("/api/ideas?side=long&activeOnly=true&hideStocks=true");
+
+        page.GetProperty("items").EnumerateArray().Select(idea => idea.GetProperty("id").GetGuid()).ShouldBe([wanted.Id]);
+        page.GetProperty("total").GetInt32().ShouldBe(1);
+    }
+
     // Scenario "Страница идей": 120 ideas without a bucket come newest first.
     [Test]
     public async Task The_third_page_of_50_holds_ideas_101_to_120_with_the_page_number_and_the_total()
