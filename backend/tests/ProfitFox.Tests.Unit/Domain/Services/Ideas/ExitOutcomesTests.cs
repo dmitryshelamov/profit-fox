@@ -117,6 +117,43 @@ public class ExitOutcomesTests
         ExitOutcomes.Of(Market() with { EntryAfter = null, Type = IdeaType.Pullback, TrackedUntil = Fired.AddMinutes(60) }, Defaults.Of(IdeaType.Pullback, Interval.FifteenMinutes)).ShouldBeNull();
     }
 
+    // Scenario "Повтор при длинном сроке": A entered at 10:00, B of the same key fired at 14:00. With 24 candles A expires at 16:00 and B does
+    // not count; with 8, A expires at 12:00 and B counts.
+    [Test]
+    public void Signal_counts_only_after_the_one_before_closed_by_the_rule()
+    {
+        SignalPath a = Market() with { Closes = Closes(19), TrackedUntil = Fired.AddDays(7) };
+        SignalPath b = Market() with { FiredAt = Fired.AddHours(4), Closes = Closes(19), TrackedUntil = Fired.AddDays(7) };
+        IdeaExitRule rule = Defaults.Of(IdeaType.TwoR, Interval.FifteenMinutes);
+
+        ExitOutcomes.Counted([a, b], rule).Select(counted => counted.Path).ShouldBe([a]);
+        ExitOutcomes.Counted([a, b], rule with { LifeCandles = 8 }).Select(counted => (counted.Path, counted.Outcome.StatusAt)).ShouldBe([(a, Fired.AddHours(2)), (b, Fired.AddHours(6))]);
+    }
+
+    // As on the screen: a signal that fires at the end of the minute that closed the idea before it makes an idea; one a minute earlier does not.
+    // A target counts at the open of its minute, an expiry at the end of the last minute of the lifetime.
+    [Test]
+    public void Signal_at_the_end_of_the_closing_minute_counts()
+    {
+        SignalPath target = Market() with { LadderAfter = Ladder((3, 61)), StopAfter = 300, Closes = Closes(8), TrackedUntil = Fired.AddMinutes(300) };
+        SignalPath expired = Market() with { Closes = Closes(19), TrackedUntil = Fired.AddDays(7) };
+        IdeaExitRule rule = Defaults.Of(IdeaType.TwoR, Interval.FifteenMinutes);
+
+        ExitOutcomes.Counted([target, Market() with { FiredAt = Fired.AddMinutes(60) }], rule).Count().ShouldBe(1);
+        ExitOutcomes.Counted([target, Market() with { FiredAt = Fired.AddMinutes(61), EntryAfter = null, TrackedUntil = Fired.AddMinutes(62) }], rule).Count().ShouldBe(2);
+        ExitOutcomes.Counted([expired, Market() with { FiredAt = Fired.AddHours(6), TrackedUntil = Fired.AddHours(6).AddMinutes(1), EntryAfter = null }], rule).Count().ShouldBe(2);
+    }
+
+    // A signal without an outcome yet leaves the ones after it of its key undecided too.
+    [Test]
+    public void Signals_after_one_without_an_outcome_do_not_count()
+    {
+        SignalPath fresh = Market() with { TrackedUntil = Fired.AddHours(2) };
+        SignalPath later = Market() with { FiredAt = Fired.AddHours(3), EntryAfter = null, TrackedUntil = Fired.AddHours(3).AddMinutes(1) };
+
+        ExitOutcomes.Counted([fresh, later], Defaults.Of(IdeaType.TwoR, Interval.FifteenMinutes)).ShouldBeEmpty();
+    }
+
     // A long «Цель 2R» entered at the open after the firing, without touches.
     private static SignalPath Market()
     {

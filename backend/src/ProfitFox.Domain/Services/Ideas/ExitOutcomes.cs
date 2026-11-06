@@ -54,6 +54,34 @@ public static class ExitOutcomes
             : null;
     }
 
+    /// <summary>
+    ///     The signals of one key that count, in the order of firing, with their outcomes by the rule (requirement "Повтор пока идея открыта"): as
+    ///     one open idea at a time, a signal counts when it fired no earlier than the end of the minute that closed the one counted before it. A
+    ///     signal without an outcome yet ends the ones that count: the ones after it may still fall inside it.
+    /// </summary>
+    public static IEnumerable<(SignalPath Path, IdeaTrack Outcome)> Counted(IEnumerable<SignalPath> signals, IdeaExitRule rule)
+    {
+        DateTimeOffset free = DateTimeOffset.MinValue;
+
+        foreach (SignalPath path in signals)
+        {
+            if (path.FiredAt < free)
+            {
+                continue;
+            }
+
+            if (Of(path, rule) is not { } outcome)
+            {
+                yield break;
+            }
+
+            // An expiry after the entry is at the end of the last minute of the lifetime; the other outcomes at the open of their minute.
+            free = outcome is { Status: IdeaStatus.Expired, EnteredAt: not null } ? outcome.StatusAt : outcome.StatusAt.AddMinutes(1);
+
+            yield return (path, outcome);
+        }
+    }
+
     private static int LadderIndex(decimal targetR)
     {
         return (int)(targetR / 0.5m) - 1;
