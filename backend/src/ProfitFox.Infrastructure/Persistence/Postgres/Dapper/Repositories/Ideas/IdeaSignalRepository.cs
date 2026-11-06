@@ -135,6 +135,15 @@ internal sealed class IdeaSignalRepository(NpgsqlDataSource dataSource) : IIdeaS
         return signals;
     }
 
+    public async Task DeleteAsync(Instrument instrument, int engineVersion, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DELETE FROM idea_cases WHERE category = @Category AND symbol = @Symbol AND engine_version = @Version",
+            new { Category = instrument.Category.ToCode(), instrument.Symbol, Version = engineVersion },
+            cancellationToken: cancellationToken));
+    }
+
     public async Task DeleteOtherVersionsAsync(int engineVersion, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);

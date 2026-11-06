@@ -160,6 +160,23 @@ public class IdeasReplayTests
         Outcomes(_written.Values).ShouldBe(Shape(Live()));
         await _candles.DidNotReceive().GetAsync(Wif, Interval.OneMinute, March1.AddDays(-30), March1.AddDays(-29), 1440, Arg.Any<CancellationToken>());
         _stored[Wif].Open.ShouldNotContain(signal => signal.Path.FiredAt == stale.Path.FiredAt);
+        // Review of tune-idea-rules: the signals stored before are dropped first; a path left unfinished there would leave the signals of its
+        // key after it undecided.
+        string[] calls = [.. _signals.ReceivedCalls().Select(call => call.GetMethodInfo().Name)];
+        calls.First(name => name is nameof(IIdeaSignalRepository.DeleteAsync) or nameof(IIdeaSignalRepository.UpsertAsync)).ShouldBe(nameof(IIdeaSignalRepository.DeleteAsync));
+        await _signals.Received(1).DeleteAsync(Wif, IdeasEngineVersion.Current, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Pair_going_on_from_its_cursor_keeps_its_signals()
+    {
+        await Replay().StepAsync(CancellationToken.None);
+        Keep(March1.AddDays(2));
+        _time.Advance(TimeSpan.FromDays(1));
+
+        await Replay().StepAsync(CancellationToken.None);
+
+        await _signals.DidNotReceiveWithAnyArgs().DeleteAsync(default!, default, default);
     }
 
     // A pair whose history is not loaded whole waits for it.

@@ -57,9 +57,10 @@ public sealed class IdeasReplay(
                 DateTimeOffset start = Max(historyStart, Ceiling(pair.HistoryFrom!.Value));
 
                 // A cursor older than the history window starts the pair over: the days after it may hold no minutes any more.
-                IdeaReplayCursor? cursor = _cursors.GetValueOrDefault(pair.Instrument) is { } stored && stored.ReplayedUntil >= start ? stored : null;
+                IdeaReplayCursor? stored = _cursors.GetValueOrDefault(pair.Instrument);
+                IdeaReplayCursor? cursor = stored?.ReplayedUntil >= start ? stored : null;
 
-                return new Turn(pair, start, Floor(pair.CoveredUntil!.Value), cursor);
+                return new Turn(pair, start, Floor(pair.CoveredUntil!.Value), cursor, stored is not null && cursor is null);
             })
             .Where(turn => turn.From < turn.Until)
             .MinBy(turn => turn.Cursor?.ReplayedUntil ?? DateTimeOffset.MinValue);
@@ -77,6 +78,12 @@ public sealed class IdeasReplay(
     private async Task ReplayAsync(Turn turn, CancellationToken cancellationToken)
     {
         Instrument instrument = turn.Pair.Instrument;
+        // The signals a pair started over had stored stay out: a path of them left unfinished would leave the later signals of its key undecided.
+        if (turn.StartsOver)
+        {
+            await signals.DeleteAsync(instrument, version.Number, cancellationToken);
+        }
+
         var engine = new IdeaEngine(settings.Rules(), version.Number, true);
         (Dictionary<Interval, Ratios> ratios, IdeaCandle? last) = await WarmAsync(engine, instrument, turn, cancellationToken);
         List<IdeaSignal> open = [.. turn.Cursor?.Open ?? []];
@@ -224,7 +231,7 @@ public sealed class IdeasReplay(
         return left > right ? left : right;
     }
 
-    private sealed record Turn(ScannerPair Pair, DateTimeOffset Start, DateTimeOffset Until, IdeaReplayCursor? Cursor)
+    private sealed record Turn(ScannerPair Pair, DateTimeOffset Start, DateTimeOffset Until, IdeaReplayCursor? Cursor, bool StartsOver)
     {
         public DateTimeOffset From => Cursor?.ReplayedUntil ?? Start;
     }

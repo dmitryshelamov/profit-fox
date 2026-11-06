@@ -103,6 +103,22 @@ public class IdeaSignalRepositoryTests
         (await _signals.GetAsync(IdeaGenerator.Wif, 3, CancellationToken.None)).Count.ShouldBe(1);
     }
 
+    // Review of tune-idea-rules: a pair replayed over from the start loses its signals of the version, of the other pairs and versions none.
+    [Test]
+    public async Task Signals_of_a_pair_of_a_version_are_removed()
+    {
+        var sol = new Instrument(MarketCategory.Spot, "SOLUSDT");
+        await _signals.UpsertAsync(
+            [IdeaSignalGenerator.Generate(Now), IdeaSignalGenerator.Generate(Now, engineVersion: 3), IdeaSignalGenerator.Generate(Now, instrument: sol)],
+            CancellationToken.None);
+
+        await _signals.DeleteAsync(IdeaGenerator.Wif, IdeasEngineVersion.Current, CancellationToken.None);
+
+        (await _signals.GetAsync(IdeaGenerator.Wif, IdeasEngineVersion.Current, CancellationToken.None)).ShouldBeEmpty();
+        (await _signals.GetAsync(IdeaGenerator.Wif, 3, CancellationToken.None)).Count.ShouldBe(1);
+        (await _signals.GetAsync(sol, IdeasEngineVersion.Current, CancellationToken.None)).Count.ShouldBe(1);
+    }
+
     [Test]
     public async Task Buckets_of_a_version_are_replaced_whole()
     {
