@@ -51,6 +51,17 @@ public class ClosePositionNodeTests
         run.State.Position.ShouldBe(2);
     }
 
+    // The rest of the limit sell still holds the coins until its cancel is confirmed.
+    [Test]
+    public void Limit_sell_partly_filled_before_its_cancel_is_confirmed_sells_the_rest_when_the_cancel_is_confirmed()
+    {
+        StrategyRun run = StandingSell();
+        run.Handle(Bar(Start.AddHours(1), 90m));
+
+        run.Handle(new OrderFilled(Start.AddHours(1), "o-1", 0.4m, 101m, IsComplete: false)).ShouldBeEmpty();
+        run.Handle(new OrderCancelled(Start.AddHours(1), "o-1")).ShouldBe([new PlaceOrder("o-2", null, OrderSide.Sell, OrderType.Market, null, 0.6m, null)]);
+    }
+
     [Test]
     public void Close_sells_the_position_rounded_down_to_the_quantity_step()
     {

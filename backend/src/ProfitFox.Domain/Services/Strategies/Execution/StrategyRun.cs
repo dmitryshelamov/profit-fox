@@ -303,7 +303,12 @@ public sealed class StrategyRun
         if (_position.Status == PositionStatus.Closing)
         {
             CancelAll();
-            SellWhatCameWhileClosing();
+
+            // A standing exit of a node still holds what it sells, so the rest is sold once its cancel is confirmed.
+            if (!_orders.Values.Any(order => order.Node is not null && order.Side != _entrySide))
+            {
+                SellWhatCameWhileClosing();
+            }
         }
     }
 

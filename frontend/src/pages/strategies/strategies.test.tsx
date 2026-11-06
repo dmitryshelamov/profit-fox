@@ -159,6 +159,20 @@ describe('new strategy dialog', () => {
     });
   });
 
+  it('stays in the dialog with every choice open when the chosen template does not load', async () => {
+    const { history } = open({
+      'GET /api/strategy-templates/rsi-reversion': () => problem(500, 'boom'),
+    });
+
+    const dialog = await openDialog();
+    const card = await within(dialog).findByRole('button', { name: /^Отскок RSI/ });
+    await userEvent.click(card);
+
+    await waitFor(() => expect(card).toBeEnabled());
+    expect(within(dialog).getByRole('button', { name: 'Пустая стратегия' })).toBeEnabled();
+    expect(history.location.pathname).toBe('/strategies');
+  });
+
   // Scenario "Шаблон до сохранения": the template is a draft in the browser until the first save.
   it('keeps the chosen template as an unsaved draft the server does not have', async () => {
     const { requests, history } = open();
