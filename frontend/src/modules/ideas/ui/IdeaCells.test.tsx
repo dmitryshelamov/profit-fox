@@ -92,6 +92,52 @@ describe('the expectancy cell', () => {
     expect(screen.getByText('+0.38 R')).toBeInTheDocument();
   });
 
+  // Scenario "Собственные числа по наведению".
+  it('tells the own numbers of the bucket on hover', () => {
+    render(
+      <ExpectancyCell
+        idea={withBucket({
+          cases: 35,
+          expectancy: '-0.1',
+          ownProbability: '0.4',
+          ownExpectancy: '0.3',
+          parentWeight: '0.8',
+        })}
+      />,
+    );
+
+    expect(
+      screen.getByTitle('в самой корзине: 35 случаев · 40 % · +0.30 R · по родителю 80 %'),
+    ).toHaveTextContent('-0.10 R');
+    expect(screen.queryByText('мало своих данных')).not.toBeInTheDocument();
+  });
+
+  // Scenario "Мало своих данных": the numbers of the model, the badge, and the line under the expectancy; N 12 by the probability.
+  it('says «мало своих данных» under the expectancy of a bucket of few own cases', () => {
+    const idea = withBucket({
+      cases: 12,
+      probability: '0.36',
+      badge: 'flat',
+      expectancy: '-0.15',
+      ownProbability: null,
+      ownExpectancy: '0.5',
+      parentWeight: '0.92',
+      fewOwnCases: true,
+    });
+
+    render(
+      <>
+        <ProbabilityCell idea={idea} />
+        <ExpectancyCell idea={idea} />
+      </>,
+    );
+
+    expect(screen.getByText('36 %')).toHaveTextContent('36 %· 12');
+    expect(screen.getByRole('img', { name: 'ожидание не отличается от нуля' })).toBeInTheDocument();
+    expect(screen.getByText('-0.15 R')).toBeInTheDocument();
+    expect(screen.getByText('мало своих данных')).toBeInTheDocument();
+  });
+
   it('draws no badge while the bucket has too little data', () => {
     render(
       <ExpectancyCell

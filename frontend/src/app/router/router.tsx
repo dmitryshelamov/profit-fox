@@ -134,15 +134,22 @@ const ideasCalibrationRoute = createRoute({
   path: '/ideas/calibration',
   validateSearch: (
     search: Record<string, unknown>,
-  ): { days?: 30 | undefined; category?: 'linear' | 'spot' | undefined } => ({
+  ): {
+    days?: 30 | undefined;
+    category?: 'linear' | 'spot' | undefined;
+    scope?: 'fresh' | undefined;
+  } => ({
     days: search.days === 30 ? 30 : undefined,
     category:
       search.category === 'linear' || search.category === 'spot' ? search.category : undefined,
+    scope: search.scope === 'fresh' ? 'fresh' : undefined,
   }),
   component: function IdeasCalibrationRoute() {
-    const { days, category } = ideasCalibrationRoute.useSearch();
+    const { days, category, scope } = ideasCalibrationRoute.useSearch();
 
-    return <IdeasCalibrationPage days={days ?? 90} category={category ?? null} />;
+    return (
+      <IdeasCalibrationPage days={days ?? 90} category={category ?? null} scope={scope ?? 'all'} />
+    );
   },
 });
 

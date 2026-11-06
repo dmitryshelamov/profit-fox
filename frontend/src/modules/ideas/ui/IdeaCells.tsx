@@ -3,7 +3,13 @@ import { compareDecimals } from '@/shared/format/decimal';
 import { showDecimal } from '@/shared/format/format';
 
 import { sideLabel, statusLabel } from '../model/labels';
-import { breakEvenText, expectancyText, outcomeShares, probabilityView } from '../model/stats';
+import {
+  breakEvenText,
+  expectancyText,
+  outcomeShares,
+  ownNumbers,
+  probabilityView,
+} from '../model/stats';
 
 export type Idea = Schemas['IdeaResponse'];
 
@@ -38,18 +44,26 @@ export function ProbabilityCell({ idea }: { idea: Idea }) {
   );
 }
 
-/** The expectancy of an idea's bucket in R, the badge of the bucket before it when the bucket has enough data. */
+/**
+ * The expectancy of the model of an idea's bucket in R, the badge of the bucket before it when the bucket has enough data, and on hover the
+ * own numbers of the bucket; under it, small, «мало своих данных» for a bucket of fewer than 30 own cases.
+ */
 export function ExpectancyCell({ idea }: { idea: Idea }) {
   const { badge } = probabilityView(idea.bucket);
 
   return (
-    <span className="whitespace-nowrap">
-      {badge !== null && (
-        <span role="img" aria-label={badgeLabel[badge]} className={`mr-1 ${badgeColour[badge]}`}>
-          {badge}
-        </span>
+    <span className="inline-flex flex-col gap-0.5" title={ownNumbers(idea.bucket) ?? undefined}>
+      <span className="whitespace-nowrap">
+        {badge !== null && (
+          <span role="img" aria-label={badgeLabel[badge]} className={`mr-1 ${badgeColour[badge]}`}>
+            {badge}
+          </span>
+        )}
+        {expectancyText(idea.bucket)}
+      </span>
+      {idea.bucket?.fewOwnCases === true && (
+        <span className="whitespace-nowrap text-[11px] text-faint">мало своих данных</span>
       )}
-      {expectancyText(idea.bucket)}
     </span>
   );
 }
