@@ -66,8 +66,31 @@ public static class CalibrationCalculator
                     .Where(cases => cases.Length > 0)
                     .Select(cases => new CalibrationOwnRow(cases[0].Bucket!.FewOwnCases, Row(null, null, null, cases, PromisedExpectancy)!, Brier(cases, PromisedProbability)!.Value))
             ],
-            Comparison = Comparison([.. checkedCases.Where(promise => promise.Old is not null)])
+            Comparison = Comparison([.. checkedCases.Where(promise => promise.Old is not null)]),
+            Intervals =
+            [
+                .. checkedCases.GroupBy(promise => promise.Case.Key.Interval)
+                    .OrderBy(cases => cases.Key)
+                    .Select(cases => Slice(cases.Key, null, [.. cases]))
+            ],
+            Types =
+            [
+                .. checkedCases.GroupBy(promise => promise.Case.Key.Type)
+                    .OrderBy(cases => cases.Key)
+                    .Select(cases => Slice(null, cases.Key, [.. cases]))
+            ]
         };
+    }
+
+    // A row of a breakdown: its cases by promised expectancy, those promised ▲ and the comparison of the models on them.
+    private static CalibrationSlice Slice(Interval? interval, IdeaType? type, Promise[] cases)
+    {
+        return new CalibrationSlice(
+            interval,
+            type,
+            Row(null, null, null, cases, PromisedExpectancy)!,
+            Row(null, null, IdeaBadge.Up, [.. cases.Where(promise => promise.Bucket!.Badge == IdeaBadge.Up)], PromisedExpectancy),
+            Comparison([.. cases.Where(promise => promise.Old is not null)]));
     }
 
     // The old model and the new one on the cases both check: the new one checks every case the old one does, unless its category has no root.

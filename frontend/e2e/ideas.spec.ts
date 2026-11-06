@@ -435,6 +435,19 @@ test('the link «Калибровка» of the ideas opens the calibration with 
       .getByRole('row', { name: /мало своих данных/ }),
   ).toContainText('0.212');
 
+  // The breakdowns by timeframe and by type, each with its comparison of the models.
+  await expect(
+    page.getByRole('table', { name: 'По ТФ' }).getByRole('row', { name: /1 ч/ }),
+  ).toContainText('640');
+  await expect(
+    page.getByRole('table', { name: 'По типам' }).getByRole('row', { name: /Откат/ }),
+  ).toContainText('640');
+  await expect(
+    page
+      .getByRole('table', { name: 'По ТФ: старая модель → новая' })
+      .getByRole('row', { name: /1 ч Старая/ }),
+  ).toContainText('0.231');
+
   // The report after the rules changed has 120 checked cases of the 640; the scope goes to the address.
   await page.getByRole('button', { name: 'После изменения правил' }).click();
   await expect(page).toHaveURL(/\/ideas\/calibration\?scope=fresh$/);

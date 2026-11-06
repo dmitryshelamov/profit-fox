@@ -27,4 +27,10 @@ internal sealed class CalibrationReportDb
     public List<CalibrationOwnRowDb> Owns { get; init; } = [];
 
     public CalibrationComparisonDb? Comparison { get; init; }
+
+    /// <summary>The breakdown by interval; none in a report stored before calibrate-ideas-by-timeframe.</summary>
+    public List<CalibrationSliceDb> Intervals { get; init; } = [];
+
+    /// <summary>The breakdown by type; none in a report stored before calibrate-ideas-by-timeframe.</summary>
+    public List<CalibrationSliceDb> Types { get; init; } = [];
 }

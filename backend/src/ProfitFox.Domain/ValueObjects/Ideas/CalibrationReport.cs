@@ -30,4 +30,10 @@ public sealed record CalibrationReport(
 
     /// <summary>The old model against the new one; none in a report stored before it.</summary>
     public CalibrationComparison? Comparison { get; init; }
+
+    /// <summary>The breakdown by interval; empty in a report stored before it.</summary>
+    public IReadOnlyList<CalibrationSlice> Intervals { get; init; } = [];
+
+    /// <summary>The breakdown by type; empty in a report stored before it.</summary>
+    public IReadOnlyList<CalibrationSlice> Types { get; init; } = [];
 }

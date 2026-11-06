@@ -4770,6 +4770,18 @@ export interface components {
             expectancyLow: null | string;
             expectancyHigh: null | string;
         };
+        /**
+         * @description A row of a breakdown of the calibration: the code of its string? CalibrationSliceResponse.Interval (`5`, `15`, `60`, `240`) or of its
+         *     string? CalibrationSliceResponse.Type, the other none; the row of all its checked cases, the row of those promised ▲, none without one, and the old model
+         *     against the new one on the cases of the row both check.
+         */
+        CalibrationSliceResponse: {
+            interval: null | string;
+            type: null | string;
+            total: components["schemas"]["CalibrationRowResponse"];
+            up: null | components["schemas"]["CalibrationRowResponse"];
+            comparison: components["schemas"]["CalibrationComparisonResponse"];
+        };
         /** @description Prices and volumes as decimal strings: JSON numbers lose precision in JavaScript clients. */
         CandleResponse: {
             /** Format: date-time */
@@ -5037,7 +5049,8 @@ export interface components {
          *     was computed (none before the first time, with zeros and empty tables), the checked cases and the ones whose bucket had fewer than 30
          *     cases, the Brier score of the buckets and of the share of targets of the category, the rows by promised probability, by promised
          *     expectancy and by badge, the CalibrationRowResponse? IdeaCalibrationResponse.Total of all checked cases, the rows by own data and the comparison of the old model with the
-         *     new one (none before the first calibration), all in a string IdeaCalibrationResponse.Scope, `all` or `fresh`. Numbers are decimal strings.
+         *     new one (none before the first calibration) and the breakdowns by interval and by type, all in a string IdeaCalibrationResponse.Scope, `all` or
+         *     `fresh`. Numbers are decimal strings.
          */
         IdeaCalibrationResponse: {
             /** Format: date-time */
@@ -5058,6 +5071,8 @@ export interface components {
             scope: string;
             owns: components["schemas"]["CalibrationOwnRowResponse"][];
             comparison: null | components["schemas"]["CalibrationComparisonResponse"];
+            intervals: components["schemas"]["CalibrationSliceResponse"][];
+            types: components["schemas"]["CalibrationSliceResponse"][];
         };
         /** @description The trades whose idea has a result in R: how many, the mean result of their ideas and the mean result of the trades, in R. */
         IdeaComparisonResponse: {
