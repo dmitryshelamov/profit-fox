@@ -116,6 +116,32 @@ public class ScannerUniverseTests
             ignoreOrder: true);
     }
 
+    // Scenario "Признак у известной пары": the list tells anew whether a pair is non-crypto; a pair whose type did not change stays as it is.
+    [Test]
+    public void Known_pair_takes_the_tradfi_flag_the_list_tells_and_keeps_its_data()
+    {
+        var stock = new ScannerPair(new Instrument(MarketCategory.Linear, "AAPLUSDT"), true, Now.AddDays(-90), Now, Now, Now, Now.AddDays(-200), 0.01m);
+        var gold = new ScannerPair(new Instrument(MarketCategory.Linear, "XAUUSDT"), true, Now.AddDays(-90), Now, TradFi: true);
+
+        IReadOnlyList<ScannerPair> changed = ScannerUniverse.Merge(
+            [stock, gold],
+            [
+                Linear("AAPLUSDT", "USDT", trading: true, perpetual: true) with { TradFi = true },
+                Linear("XAUUSDT", "USDT", trading: true, perpetual: true) with { TradFi = true }
+            ]);
+
+        changed.ShouldBe([stock with { TradFi = true }]);
+    }
+
+    // Scenario "Перпетуал на акцию": a new pair the list tells as a stock is non-crypto.
+    [Test]
+    public void New_pair_takes_the_tradfi_flag_the_list_tells()
+    {
+        IReadOnlyList<ScannerPair> changed = ScannerUniverse.Merge([], [Linear("AAPLUSDT", "USDT", trading: true, perpetual: true) with { TradFi = true }]);
+
+        changed.ShouldBe([new ScannerPair(new Instrument(MarketCategory.Linear, "AAPLUSDT"), true, TradFi: true)]);
+    }
+
     [Test]
     public void Pair_back_in_trading_is_listed_again_with_its_data()
     {

@@ -5,16 +5,16 @@
 
 ## 1. Признак некриптовой пары
 
-- [ ] 1.1 `ListedInstrument.TradFi` и перевод `SymbolType` в `BybitMarketDataClient.RequestListAsync` для `spot` и
+- [x] 1.1 `ListedInstrument.TradFi` и перевод `SymbolType` в `BybitMarketDataClient.RequestListAsync` для `spot` и
   `linear`: `stock`, `xstocks`, `ETF`, `commodity`, `forex` → `true`; `innovation`, `adventure`, пустой → `false`.
   Проверка: юнит-тест разбора ответа `instruments-info` в `Tests.Unit/Infrastructure/Exchanges/Bybit` на сценарии
   спеки «Перпетуал на акцию», «Спотовый xStock», «Сырьё, форекс и ETF», «Монета зоны Innovation».
-- [ ] 1.2 `ScannerPair.TradFi`; `ScannerUniverse.Merge` берёт признак из списка у новой пары и у известной пары в
+- [x] 1.2 `ScannerPair.TradFi`; `ScannerUniverse.Merge` берёт признак из списка у новой пары и у известной пары в
   списке, изменившийся признак делает пару изменившейся. Проверка: тесты `ScannerUniverseTests` — сценарий «Признак у
   известной пары» и новая некриптовая пара; прежние тесты проходят.
-- [ ] 1.3 Миграция `scanner_pairs.tradfi boolean NOT NULL DEFAULT false`, `ScannerPairDb`, конвертер и SQL
+- [x] 1.3 Миграция `scanner_pairs.tradfi boolean NOT NULL DEFAULT false`, `ScannerPairDb`, конвертер и SQL
   репозитория. Проверка: `ScannerPairRepositoryTests` — некриптовая пара читается обратно с признаком.
-- [ ] 1.4 Термин «Некриптовая пара (TradFi)» в `CONTEXT.md`. Проверка: определение совпадает с требованием
+- [x] 1.4 Термин «Некриптовая пара (TradFi)» в `CONTEXT.md`. Проверка: определение совпадает с требованием
   «Некриптовые пары сканера».
 
 ## 2. Фильтры в чтении идей

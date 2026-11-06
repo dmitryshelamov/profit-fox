@@ -52,6 +52,19 @@ public class ScannerPairRepositoryTests
         (await _store.GetAsync(new Instrument(MarketCategory.Linear, "NOPEUSDT"), CancellationToken.None)).ShouldBeNull();
     }
 
+    // Requirement "Некриптовые пары сканера": the flag is kept and changes with the list.
+    [Test]
+    public async Task Tradfi_pair_is_read_back_with_its_flag()
+    {
+        var stock = new ScannerPair(new Instrument(MarketCategory.Linear, "AAPLUSDT"), true, TradFi: true);
+        var coin = new ScannerPair(new Instrument(MarketCategory.Linear, "AIOUSDT"), true, TradFi: true);
+        await _store.SaveAsync([stock, coin], CancellationToken.None);
+
+        await _store.SaveAsync([coin with { TradFi = false }], CancellationToken.None);
+
+        (await _store.GetAllAsync(CancellationToken.None)).OrderBy(pair => pair.Instrument.Symbol).ShouldBe([stock, coin with { TradFi = false }]);
+    }
+
     // Scenario "Пара снята с торгов": the pair stays with its coverage.
     [Test]
     public async Task Pair_out_of_trading_is_saved_as_not_listed()

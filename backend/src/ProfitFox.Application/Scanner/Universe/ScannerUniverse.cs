@@ -24,7 +24,7 @@ public sealed class ScannerUniverse(IMarketDataFeed feed, IScannerPairRepository
 
     /// <summary>
     ///     The pairs that change once <paramref name="selected" /> is the list: a new pair, a pair back in trading, a pair that is no
-    ///     longer listed, and a pair whose step of price the list tells anew. A pair keeps its data either way.
+    ///     longer listed, and a pair whose step of price or non-crypto flag the list tells anew. A pair keeps its data either way.
     /// </summary>
     public static IReadOnlyList<ScannerPair> Merge(IReadOnlyList<ScannerPair> known, IReadOnlyList<ListedInstrument> selected)
     {
@@ -35,11 +35,11 @@ public sealed class ScannerUniverse(IMarketDataFeed feed, IScannerPairRepository
         [
             .. known
                 .Select(pair => wanted.TryGetValue(pair.Instrument, out ListedInstrument? listed)
-                    ? pair with { Listed = true, TickSize = listed.TickSize ?? pair.TickSize }
+                    ? pair with { Listed = true, TickSize = listed.TickSize ?? pair.TickSize, TradFi = listed.TradFi }
                     : pair with { Listed = false })
                 .Where(pair => !known.Contains(pair)),
             .. selected.Where(listed => !knownInstruments.Contains(Instrument(listed)))
-                .Select(listed => new ScannerPair(Instrument(listed), true, ListedAt: listed.ListedAt, TickSize: listed.TickSize))
+                .Select(listed => new ScannerPair(Instrument(listed), true, ListedAt: listed.ListedAt, TickSize: listed.TickSize, TradFi: listed.TradFi))
         ];
     }
 
