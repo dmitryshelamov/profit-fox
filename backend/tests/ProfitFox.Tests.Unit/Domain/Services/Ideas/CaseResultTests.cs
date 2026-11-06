@@ -49,13 +49,13 @@ public class CaseResultTests
     [Test]
     public void Pullback_without_an_entry_is_no_case()
     {
-        var track = new IdeaTrack(new IdeaPlan(IdeaType.Pullback, IdeaSide.Long, 100m, 98m, 104m), Fired, 5, IdeaStatus.Expired, Fired.AddMinutes(20));
+        var track = new IdeaTrack(new IdeaPlan(IdeaType.Pullback, IdeaSide.Long, 100m, 98m, 104m), Fired, 5, 24, 2m, 4, IdeaStatus.Expired, Fired.AddMinutes(20));
 
         CaseResult.R(track, Fees).ShouldBeNull();
     }
 
     private static IdeaTrack Closed(IdeaType type, IdeaSide side, decimal entry, decimal stop, decimal target, IdeaStatus status, decimal exit)
     {
-        return new IdeaTrack(new IdeaPlan(type, side, entry, stop, target), Fired, 5, status, Fired.AddMinutes(30), Fired, exit);
+        return new IdeaTrack(new IdeaPlan(type, side, entry, stop, target), Fired, 5, 24, 2m, null, status, Fired.AddMinutes(30), Fired, exit);
     }
 }

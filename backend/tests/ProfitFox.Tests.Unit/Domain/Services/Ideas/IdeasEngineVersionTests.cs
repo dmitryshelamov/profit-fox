@@ -79,7 +79,9 @@ public class IdeasEngineVersionTests
         {
             foreach (Idea idea in engine.Step(instrument, minute, inputs, true).Changed.Where(idea => !idea.IsOpen))
             {
-                yield return JsonSerializer.Serialize(new { idea.Setup, idea.Interval, idea.Track, idea.Move, idea.VolumeRatio, Result = CaseResult.R(idea.Track, Fees) });
+                IdeaTrack t = idea.Track;
+                var track = new { t.Plan, t.FiredAt, t.CandleMinutes, t.Status, t.StatusAt, t.EnteredAt, t.ExitPrice, t.Tick };
+                yield return JsonSerializer.Serialize(new { idea.Setup, idea.Interval, Track = track, idea.Move, idea.VolumeRatio, Result = CaseResult.R(idea.Track, Fees) });
             }
         }
     }

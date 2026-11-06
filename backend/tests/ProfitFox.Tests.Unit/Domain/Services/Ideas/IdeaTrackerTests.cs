@@ -1,4 +1,5 @@
 using ProfitFox.Domain.Entities.Ideas.Enums;
+using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.ValueObjects.Ideas;
 
@@ -23,7 +24,7 @@ public class IdeaTrackerTests
     {
         IdeaTrack track = Run(TwoR, Minute(0, 106m, 107m, 105.5m, 106.5m));
 
-        track.ShouldBe(new IdeaTrack(TwoR with { Entry = 106m, Target = 118m }, Fired, 5, IdeaStatus.Active, Fired, Fired));
+        track.ShouldBe(new IdeaTrack(TwoR with { Entry = 106m, Target = 118m }, Fired, 5, 24, 2m, null, IdeaStatus.Active, Fired, Fired));
     }
 
     // The target of 2R follows the entry onto the price step of the pair, towards the entry: 106.1 + 2 × 6.1 = 118.3 goes down to 118.25.
@@ -132,7 +133,7 @@ public class IdeaTrackerTests
         IdeaCandle[] minutes = [.. Enumerable.Range(0, 21).Select(index => Minute(index, 106m, 107m, 105m, 106m))];
 
         Run(Pullback, minutes[..20]).Status.ShouldBe(IdeaStatus.AwaitingEntry);
-        Run(Pullback, minutes).ShouldBe(new IdeaTrack(Pullback, Fired, 5, IdeaStatus.Expired, Fired.AddMinutes(20)));
+        Run(Pullback, minutes).ShouldBe(new IdeaTrack(Pullback, Fired, 5, 24, 2m, 4, IdeaStatus.Expired, Fired.AddMinutes(20)));
     }
 
     // Requirement "Вход «Стоп-входа»": a minute that reaches the entry fills the stop order at it.
@@ -174,7 +175,7 @@ public class IdeaTrackerTests
     {
         IdeaTrack track = Run(StopEntry, 0.01m, Minute(0, 101m, 101.2m, 99.4m, 99.6m));
 
-        track.ShouldBe(new IdeaTrack(StopEntry, Fired, 5, IdeaStatus.Expired, Fired, Tick: 0.01m));
+        track.ShouldBe(new IdeaTrack(StopEntry, Fired, 5, 24, 2m, 12, IdeaStatus.Expired, Fired, Tick: 0.01m));
     }
 
     // Within the minute of the fill the target may have come before it; only the stop counts.
@@ -193,7 +194,7 @@ public class IdeaTrackerTests
         IdeaCandle[] minutes = [.. Enumerable.Range(0, 61).Select(index => Minute(index, 101m, 101.5m, 100.5m, 101m))];
 
         Run(StopEntry, minutes[..60]).Status.ShouldBe(IdeaStatus.AwaitingEntry);
-        Run(StopEntry, minutes).ShouldBe(new IdeaTrack(StopEntry, Fired, 5, IdeaStatus.Expired, Fired.AddMinutes(60)));
+        Run(StopEntry, minutes).ShouldBe(new IdeaTrack(StopEntry, Fired, 5, 24, 2m, 12, IdeaStatus.Expired, Fired.AddMinutes(60)));
     }
 
     [Test]
@@ -209,20 +210,65 @@ public class IdeaTrackerTests
     public void Idea_of_a_pair_out_of_trading_expires_where_it_stands()
     {
         IdeaTrack active = Run(TwoR, Minute(0, 105m, 106m, 104m, 105m));
-        var waiting = IdeaTrack.Fired(Pullback, Fired, 5);
+        IdeaTrack waiting = Track(Pullback);
 
         IdeaTracker.Expire(active, Fired.AddMinutes(30), 104.5m).ShouldBe(active with { Status = IdeaStatus.Expired, StatusAt = Fired.AddMinutes(30), ExitPrice = 104.5m });
         IdeaTracker.Expire(waiting, Fired.AddMinutes(30), 104.5m).ShouldBe(waiting with { Status = IdeaStatus.Expired, StatusAt = Fired.AddMinutes(30) });
     }
 
+    // Scenario "Срок 48 свечей": 48 candles of 15 minutes, 12 hours from the entry.
+    [Test]
+    public void Idea_lives_the_candles_of_its_own_rule()
+    {
+        var fired = IdeaTrack.Fired(TwoR, Fired, 15, Rule(IdeaType.TwoR) with { LifeCandles = 48 });
+        IdeaCandle[] minutes = [.. Enumerable.Range(0, 720).Select(index => Minute(index, 105m, 106m, 104m, 105m))];
+
+        minutes[..719].Aggregate(fired, IdeaTracker.Step).Status.ShouldBe(IdeaStatus.Active);
+        IdeaTrack track = minutes.Aggregate(fired, IdeaTracker.Step);
+        (track.Status, track.StatusAt).ShouldBe((IdeaStatus.Expired, Fired.AddMinutes(720)));
+    }
+
+    // Scenario "Окно меняется после создания": the window is the idea's own, 8 candles of 5 minutes here.
+    [Test]
+    public void Pullback_waits_the_window_of_its_own_rule()
+    {
+        var fired = IdeaTrack.Fired(Pullback, Fired, 5, Rule(IdeaType.Pullback) with { EntryCandles = 8 });
+        IdeaCandle[] minutes = [.. Enumerable.Range(0, 41).Select(index => Minute(index, 106m, 107m, 105m, 106m))];
+
+        minutes[..40].Aggregate(fired, IdeaTracker.Step).Status.ShouldBe(IdeaStatus.AwaitingEntry);
+        minutes.Aggregate(fired, IdeaTracker.Step).StatusAt.ShouldBe(Fired.AddMinutes(40));
+        IdeaTracker.EntryDeadline(fired).ShouldBe(Fired.AddMinutes(40));
+    }
+
+    [Test]
+    public void Stop_entry_waits_the_window_of_its_own_rule()
+    {
+        var fired = IdeaTrack.Fired(StopEntry, Fired, 5, Rule(IdeaType.StopEntry) with { EntryCandles = 3 });
+        IdeaCandle[] minutes = [.. Enumerable.Range(0, 16).Select(index => Minute(index, 101m, 101.5m, 100.5m, 101m))];
+
+        minutes[..15].Aggregate(fired, IdeaTracker.Step).Status.ShouldBe(IdeaStatus.AwaitingEntry);
+        minutes.Aggregate(fired, IdeaTracker.Step).Status.ShouldBe(IdeaStatus.Expired);
+    }
+
     private static IdeaTrack Run(IdeaPlan plan, params IdeaCandle[] minutes)
     {
-        return minutes.Aggregate(IdeaTrack.Fired(plan, Fired, 5), IdeaTracker.Step);
+        return minutes.Aggregate(Track(plan), IdeaTracker.Step);
     }
 
     private static IdeaTrack Run(IdeaPlan plan, decimal tick, params IdeaCandle[] minutes)
     {
-        return minutes.Aggregate(IdeaTrack.Fired(plan, Fired, 5, tick), IdeaTracker.Step);
+        return minutes.Aggregate(IdeaTrack.Fired(plan, Fired, 5, Rule(plan.Type), tick), IdeaTracker.Step);
+    }
+
+    // The track by the default rule of its type.
+    private static IdeaTrack Track(IdeaPlan plan)
+    {
+        return IdeaTrack.Fired(plan, Fired, 5, Rule(plan.Type));
+    }
+
+    private static IdeaExitRule Rule(IdeaType type)
+    {
+        return new IdeaExitRules([]).Of(type, Interval.FiveMinutes);
     }
 
     private static IdeaCandle Minute(int index, decimal open, decimal high, decimal low, decimal close)

@@ -14,12 +14,15 @@ internal static class IdeaRepositoryQueries
                                     engine_version AS "EngineVersion"
                                     """;
 
+    // The columns of a live idea beside the ones a case shares: the price step and the exit rule it fired under.
+    private const string OwnColumns = """tick, life_candles AS "LifeCandles", target_r AS "TargetR", entry_candles AS "EntryCandles" """;
+
     // A second open idea of a key conflicts with the partial unique index and is left out; RETURNING names the ones added.
     private const string InsertSql = """
                                      INSERT INTO ideas (id, category, symbol, setup, type, "interval", side, fired_at, entry, stop, target, risk_reward, status,
-                                         status_at, entered_at, exit_price, move, volume_ratio, engine_version, tick)
+                                         status_at, entered_at, exit_price, move, volume_ratio, engine_version, tick, life_candles, target_r, entry_candles)
                                      VALUES (@Id, @Category, @Symbol, @Setup, @Type, @Interval, @Side, @FiredAt, @Entry, @Stop, @Target, @RiskReward, @Status,
-                                         @StatusAt, @EnteredAt, @ExitPrice, @Move, @VolumeRatio, @EngineVersion, @Tick)
+                                         @StatusAt, @EnteredAt, @ExitPrice, @Move, @VolumeRatio, @EngineVersion, @Tick, @LifeCandles, @TargetR, @EntryCandles)
                                      ON CONFLICT (category, symbol, setup, type, "interval", side) WHERE status IN ('awaiting_entry', 'active') DO NOTHING
                                      RETURNING id
                                      """;
@@ -43,14 +46,14 @@ internal static class IdeaRepositoryQueries
 
     internal static CommandDefinition GetOpen(CancellationToken cancellationToken)
     {
-        return new CommandDefinition($"SELECT id, {Columns}, tick FROM ideas WHERE status IN ('awaiting_entry', 'active') ORDER BY fired_at", cancellationToken: cancellationToken);
+        return new CommandDefinition($"SELECT id, {Columns}, {OwnColumns} FROM ideas WHERE status IN ('awaiting_entry', 'active') ORDER BY fired_at", cancellationToken: cancellationToken);
     }
 
     internal static CommandDefinition GetRecent(DateTimeOffset closedSince, string? category, string? symbol, CancellationToken cancellationToken)
     {
         return new CommandDefinition(
             $"""
-             SELECT id, {Columns}, tick FROM ideas
+             SELECT id, {Columns}, {OwnColumns} FROM ideas
              WHERE (status IN ('awaiting_entry', 'active') OR status_at >= @ClosedSince)
                  AND (@Category::text IS NULL OR (category = @Category AND symbol = @Symbol))
              ORDER BY fired_at DESC
@@ -61,7 +64,7 @@ internal static class IdeaRepositoryQueries
 
     internal static CommandDefinition Get(Guid id, CancellationToken cancellationToken)
     {
-        return new CommandDefinition($"SELECT id, {Columns}, tick FROM ideas WHERE id = @Id", new { Id = id }, cancellationToken: cancellationToken);
+        return new CommandDefinition($"SELECT id, {Columns}, {OwnColumns} FROM ideas WHERE id = @Id", new { Id = id }, cancellationToken: cancellationToken);
     }
 
     internal static CommandDefinition DeleteClosedBefore(DateTimeOffset closedBefore, CancellationToken cancellationToken)

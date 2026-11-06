@@ -44,6 +44,20 @@ public class IdeaRepositoryTests
         (await _store.GetOpenAsync(CancellationToken.None)).ShouldBe([idea]);
     }
 
+    // Task 5.2 of tune-idea-rules: an idea keeps the exit rule it fired under.
+    [Test]
+    public async Task Idea_keeps_its_exit_rule()
+    {
+        Idea generated = IdeaGenerator.Generate(Now, type: IdeaType.Pullback);
+        Idea idea = generated with { Track = generated.Track with { LifeCandles = 48, TargetR = 2.5m, EntryCandles = 8 } };
+        Idea levels = IdeaGenerator.Generate(Now, type: IdeaType.Levels);
+
+        await _store.SaveAsync([idea, levels], [], CancellationToken.None);
+
+        (await _store.GetAsync(idea.Id, CancellationToken.None))!.Track.ShouldBe(idea.Track);
+        (await _store.GetAsync(levels.Id, CancellationToken.None))!.Track.ShouldBe(levels.Track);
+    }
+
     // Test of task 3.2: "вторая активная идея с тем же ключом отклоняется базой".
     [Test]
     public async Task Second_open_idea_with_the_same_key_is_refused_by_storage()

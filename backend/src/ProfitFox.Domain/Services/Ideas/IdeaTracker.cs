@@ -4,21 +4,17 @@ using ProfitFox.Domain.ValueObjects.Ideas;
 namespace ProfitFox.Domain.Services.Ideas;
 
 /// <summary>
-///     Steps an idea by the next closed minute. A market idea enters at the open of the minute after it fired; a pullback waits up to 4
-///     candles for a minute that touches its entry; a stop entry waits up to 12 candles for a minute that reaches its entry, and expires
-///     without one at its stop. An active idea that reaches its stop is «Стоп», its target «Цель», both in one minute
-///     «Стоп»; one that reaches neither in 24 candles from its entry expires at the close of its last minute.
+///     Steps an idea by the next closed minute, by the exit rule it keeps. A market idea enters at the open of the minute after it fired; a
+///     pullback waits its entry window for a minute that touches its entry; a stop entry waits its window for a minute that reaches its entry,
+///     and expires without one at its stop. An active idea that reaches its stop is «Стоп», its target «Цель», both in one minute «Стоп»; one
+///     that reaches neither in its lifetime from its entry expires at the close of its last minute.
 /// </summary>
 public static class IdeaTracker
 {
-    private const int EntryCandles = 4;
-    private const int StopEntryCandles = 12;
-    private const int LifeCandles = 24;
-
-    /// <summary>The moment a pullback that has not entered gives up its entry: 4 candles of its interval from when it fired.</summary>
+    /// <summary>The moment a pullback or a stop entry that has not entered gives up its entry: its window of candles from when it fired.</summary>
     public static DateTimeOffset EntryDeadline(IdeaTrack track)
     {
-        return track.FiredAt.AddMinutes(EntryCandles * track.CandleMinutes);
+        return track.FiredAt.AddMinutes(track.EntryCandles!.Value * track.CandleMinutes);
     }
 
     public static IdeaTrack Step(IdeaTrack track, IdeaCandle minute)
@@ -74,7 +70,7 @@ public static class IdeaTracker
 
     private static IdeaTrack EnterAtStop(IdeaTrack track, IdeaCandle minute)
     {
-        if (minute.OpenTime >= track.FiredAt.AddMinutes(StopEntryCandles * track.CandleMinutes))
+        if (minute.OpenTime >= EntryDeadline(track))
         {
             return track with { Status = IdeaStatus.Expired, StatusAt = minute.OpenTime };
         }
@@ -111,7 +107,7 @@ public static class IdeaTracker
 
         DateTimeOffset end = minute.OpenTime.AddMinutes(1);
 
-        return end >= track.EnteredAt!.Value.AddMinutes(LifeCandles * track.CandleMinutes)
+        return end >= track.EnteredAt!.Value.AddMinutes(track.LifeCandles * track.CandleMinutes)
             ? track with { Status = IdeaStatus.Expired, StatusAt = end, ExitPrice = minute.Close }
             : track;
     }

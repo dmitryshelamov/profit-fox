@@ -15,6 +15,7 @@ namespace ProfitFox.Application.Scanner.Ideas;
 public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
 {
     private readonly Dictionary<Instrument, Pair> _pairs = [];
+    private readonly IdeaExitRules _exitRules = new IdeaExitRules([]);
 
     // The longest window of a setup: the last N candles of the longest interval.
     private readonly int _window = rules.Thresholds.Max(entry => entry.Value.Candles * Minutes(entry.Key));
@@ -207,7 +208,7 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
                     continue;
                 }
 
-                var idea = new Idea(Guid.NewGuid(), pair.Instrument, signal.Setup, interval, IdeaTrack.Fired(plan, end, Minutes(interval), tick), signal.Move, signal.VolumeRatio, engineVersion);
+                var idea = new Idea(Guid.NewGuid(), pair.Instrument, signal.Setup, interval, IdeaTrack.Fired(plan, end, Minutes(interval), _exitRules.Of(type, interval), tick), signal.Move, signal.VolumeRatio, engineVersion);
                 pair.Open.Add(idea);
                 ideas.Add(idea);
             }

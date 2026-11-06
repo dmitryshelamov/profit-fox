@@ -43,5 +43,11 @@ internal sealed class IdeaDb
 
     public decimal? Tick { get; init; }
 
+    public int LifeCandles { get; init; }
+
+    public decimal? TargetR { get; init; }
+
+    public int? EntryCandles { get; init; }
+
     public decimal Result { get; init; }
 }

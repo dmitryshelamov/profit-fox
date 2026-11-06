@@ -37,6 +37,9 @@ internal static class IdeaDbConverter
             VolumeRatio = idea.VolumeRatio,
             EngineVersion = idea.EngineVersion,
             Tick = track.Tick,
+            LifeCandles = track.LifeCandles,
+            TargetR = track.TargetR,
+            EntryCandles = track.EntryCandles,
             Result = result
         };
     }
@@ -53,6 +56,9 @@ internal static class IdeaDbConverter
             plan,
             row.FiredAt,
             (int)(interval.CandleEnd(row.FiredAt) - row.FiredAt).TotalMinutes,
+            row.LifeCandles,
+            row.TargetR,
+            row.EntryCandles,
             IdeaCodes.ParseStatus(row.Status),
             row.StatusAt,
             row.EnteredAt,
