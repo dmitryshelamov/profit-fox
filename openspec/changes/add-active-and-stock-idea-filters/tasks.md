@@ -41,9 +41,9 @@
 
 ## 4. Проверка целиком
 
-- [ ] 4.1 `dotnet build`, `dotnet test`, `dotnet format --verify-no-changes`; во `frontend/` — lint, format check,
+- [x] 4.1 `dotnet build`, `dotnet test`, `dotnet format --verify-no-changes`; во `frontend/` — lint, format check,
   typecheck, тесты и сборка. Проверка: всё зелёное.
-- [ ] 4.2 Пройти дифф: каждое новое условие и ветка требуются тестом. Проверка: нет кода без теста.
+- [x] 4.2 Пройти дифф: каждое новое условие и ветка требуются тестом. Проверка: нет кода без теста.
 
 ## Workflow follow-up
 
