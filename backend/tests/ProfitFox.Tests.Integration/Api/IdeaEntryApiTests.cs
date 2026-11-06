@@ -89,6 +89,16 @@ public class IdeaEntryApiTests
         (await EntryAsync(idea, risk: "1")).GetProperty("entryPrice").GetString().ShouldBe("100");
     }
 
+    // The limit of a pullback is at its own price, but the market may be through the stop already.
+    [Test]
+    public async Task Pullback_with_the_market_beyond_the_stop_is_a_reason()
+    {
+        Guid idea = await SaveIdeaAsync(100m, 98m, 104m, IdeaType.Pullback);
+        SetPrice("97.5");
+
+        Reasons(await EntryAsync(idea, risk: "1")).ShouldContain("price_beyond_stop");
+    }
+
     // Scenario "Цена ушла за цель".
     [Test]
     public async Task Price_beyond_the_target_is_a_reason()

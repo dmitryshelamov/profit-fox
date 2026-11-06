@@ -108,6 +108,12 @@ internal static class IdeaTradeRepositoryQueries
             cancellationToken: cancellationToken);
     }
 
+    // An advisory lock of the transaction: it touches no row, so it waits for nothing but other entries.
+    public static CommandDefinition LockCreation(NpgsqlTransaction transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition("SELECT pg_advisory_xact_lock(hashtextextended('idea-trades:create', 0))", transaction: transaction, cancellationToken: cancellationToken);
+    }
+
     public static CommandDefinition Create(IdeaTradeDb trade, DateTimeOffset now, NpgsqlTransaction transaction, CancellationToken cancellationToken)
     {
         return new CommandDefinition(

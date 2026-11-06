@@ -21,12 +21,12 @@ public static class IdeaTradeRefusals
             reasons.Add(IdeaTradeRefusal.IdeaNotOpen);
         }
 
-        if (isLong ? entry.Price <= entry.Plan.Stop : entry.Price >= entry.Plan.Stop)
+        if (isLong ? entry.Current <= entry.Plan.Stop : entry.Current >= entry.Plan.Stop)
         {
             reasons.Add(IdeaTradeRefusal.PriceBeyondStop);
         }
 
-        if (isLong ? entry.Price >= entry.Plan.Target : entry.Price <= entry.Plan.Target)
+        if (isLong ? entry.Current >= entry.Plan.Target : entry.Current <= entry.Plan.Target)
         {
             reasons.Add(IdeaTradeRefusal.PriceBeyondTarget);
         }

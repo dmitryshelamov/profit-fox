@@ -77,6 +77,12 @@ internal sealed class IdeaTradeRepository(NpgsqlDataSource dataSource, PostgresT
         await connection.ExecuteAsync(IdeaTradeRepositoryQueries.ReleaseAll(owner, [.. trades.Select(trade => trade.TradeId)], [.. trades.Select(trade => trade.Epoch)], cancellationToken));
     }
 
+    public async Task LockCreationAsync(CancellationToken cancellationToken)
+    {
+        PostgresTransaction current = accessor.Current;
+        await current.Connection.ExecuteAsync(IdeaTradeRepositoryQueries.LockCreation(current.Transaction, cancellationToken));
+    }
+
     public async Task CreateAsync(IdeaTrade trade, IdeaTradeOrder entry, DateTimeOffset now, CancellationToken cancellationToken)
     {
         PostgresTransaction current = accessor.Current;

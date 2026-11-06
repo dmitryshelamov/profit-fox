@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 
+using Npgsql;
+
 using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
@@ -79,6 +81,28 @@ public class IdeaTradesApiTests
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
         JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("reasons").EnumerateArray().Select(reason => reason.GetString()).ShouldBe(["spot_not_supported"]);
         (await ListAsync()).GetArrayLength().ShouldBe(0);
+    }
+
+    // The limits of open trades and of the total risk count every account, so one lock serialises the entries of all of them.
+    [Test]
+    public async Task Entries_wait_for_each_other_whatever_the_account()
+    {
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m);
+        _scenario.SetPrice("100");
+        await using var database = NpgsqlDataSource.Create(_scenario.Factory.ConnectionString);
+        await using NpgsqlConnection connection = await database.OpenConnectionAsync();
+        await using NpgsqlTransaction other = await connection.BeginTransactionAsync();
+        await using (var take = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended('idea-trades:create', 0))", connection, other))
+        {
+            await take.ExecuteNonQueryAsync();
+        }
+
+        Task<HttpResponseMessage> entry = _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, risk = 1m });
+        await Task.Delay(500);
+
+        entry.IsCompleted.ShouldBeFalse();
+        await other.CommitAsync();
+        (await entry).StatusCode.ShouldBe(HttpStatusCode.Created);
     }
 
     [Test]

@@ -54,6 +54,15 @@ public class IdeaTradeRefusalsTests
         Refuse(price: 22.90m).ShouldContain(IdeaTradeRefusal.PriceBeyondStop);
     }
 
+    // A pullback enters at the price of its idea, but the market is where it is: it may be beyond the stop or the target already.
+    [Test]
+    public void Pullback_is_named_by_the_price_of_the_market_not_by_its_own_entry()
+    {
+        Refuse(price: 23.48m, current: 22.90m).ShouldContain(IdeaTradeRefusal.PriceBeyondStop);
+        Refuse(price: 23.48m, current: 24.50m).ShouldContain(IdeaTradeRefusal.PriceBeyondTarget);
+        Refuse(price: 23.48m, current: 23.60m).ShouldBeEmpty();
+    }
+
     [Test]
     public void Short_price_beyond_the_levels_is_named()
     {
@@ -170,6 +179,7 @@ public class IdeaTradeRefusalsTests
         IdeaStatus status = IdeaStatus.AwaitingEntry,
         IdeaPlan? plan = null,
         decimal price = 23.5m,
+        decimal? current = null,
         decimal quantity = 2m,
         decimal amount = 47m,
         decimal risk = 1m,
@@ -177,7 +187,7 @@ public class IdeaTradeRefusalsTests
         OpenIdeaTrades? open = null,
         IdeaTradeAccount? account = null)
     {
-        var entry = new IdeaTradeEntry(category, status, plan ?? Long, price, new IdeaTradeSize(quantity, amount, risk, riskReward, false), Rules);
+        var entry = new IdeaTradeEntry(category, status, plan ?? Long, price, current ?? price, new IdeaTradeSize(quantity, amount, risk, riskReward, false), Rules);
 
         return IdeaTradeRefusals.Check(entry, Limits, open ?? new OpenIdeaTrades(0, 0m), account ?? Account());
     }

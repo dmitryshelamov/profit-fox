@@ -75,11 +75,12 @@ public sealed class IdeaTradeEntryCalculator(
 
         Instrument instrument = idea.Instrument;
         (ExchangeKey? key, AccountAccess access) = await AccessAsync(account, instrument, cancellationToken);
-        decimal price = idea.Track.Plan.Type == IdeaType.Pullback ? idea.Track.Plan.Entry : await history.GetLastPriceAsync(instrument, cancellationToken);
+        decimal current = await history.GetLastPriceAsync(instrument, cancellationToken);
+        decimal price = idea.Track.Plan.Type == IdeaType.Pullback ? idea.Track.Plan.Entry : current;
         InstrumentRules instrumentRules = await rules.GetRulesAsync(instrument, cancellationToken);
         ListedInstrument listed = (await catalog.ListAsync(instrument.Category, cancellationToken)).Single(item => item.Symbol == instrument.Symbol);
 
-        return new EntryPreparation(idea, saved, account, key, access, price, instrumentRules, backtests.Policy().DefaultFees[instrument.Category], asked, listed.QuoteCoin, listed.BaseCoin);
+        return new EntryPreparation(idea, saved, account, key, access, price, current, instrumentRules, backtests.Policy().DefaultFees[instrument.Category], asked, listed.QuoteCoin, listed.BaseCoin);
     }
 
     /// <summary>Sizes the trade and names what stops it, by the books of the account as they are now.</summary>
@@ -93,7 +94,7 @@ public sealed class IdeaTradeEntryCalculator(
         IdeaTradeAccount account = await AccountAsync(preparation, free, open, cancellationToken);
         var limits = new IdeaTradingLimits(preparation.Settings.MinRiskReward, preparation.Settings.MaxOpenTrades, preparation.Settings.MaxTotalRisk);
         IReadOnlyList<IdeaTradeRefusal> reasons = IdeaTradeRefusals.Check(
-            new IdeaTradeEntry(idea.Instrument.Category, idea.Track.Status, idea.Track.Plan, preparation.Price, size, preparation.Rules),
+            new IdeaTradeEntry(idea.Instrument.Category, idea.Track.Status, idea.Track.Plan, preparation.Price, preparation.Current, size, preparation.Rules),
             limits,
             new OpenIdeaTrades(open.Count, open.Sum(trade => trade.Risk)),
             account);
@@ -199,7 +200,7 @@ public sealed class IdeaTradeEntryCalculator(
     }
 }
 
-/// <summary>What <see cref="IdeaTradeEntryCalculator.PrepareAsync" /> learned: the idea, the settings, the account and what its key may do, the price, the rules and the fees.</summary>
+/// <summary>What <see cref="IdeaTradeEntryCalculator.PrepareAsync" /> learned: the idea, the settings, the account and what its key may do, the price the trade enters at, the price of the market now, the rules and the fees.</summary>
 public sealed record EntryPreparation(
     Idea Idea,
     IdeaTradingSettings Settings,
@@ -207,6 +208,7 @@ public sealed record EntryPreparation(
     ExchangeKey? Key,
     AccountAccess Access,
     decimal Price,
+    decimal Current,
     InstrumentRules Rules,
     FeeRates Fees,
     decimal Risk,

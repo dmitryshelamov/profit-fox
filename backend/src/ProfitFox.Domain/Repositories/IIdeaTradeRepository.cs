@@ -33,6 +33,9 @@ public interface IIdeaTradeRepository
     /// <summary>Gives up every trade this Worker still holds by the epoch of its take, in one query.</summary>
     Task ReleaseAllAsync(Guid owner, IReadOnlyCollection<(Guid TradeId, long Epoch)> trades, CancellationToken cancellationToken);
 
+    /// <summary>In a unit of work: waits for the entry of any other trade and then holds the lock until the unit ends: the limits count the trades of every account.</summary>
+    Task LockCreationAsync(CancellationToken cancellationToken);
+
     /// <summary>In a unit of work: saves a new trade with its entry order.</summary>
     Task CreateAsync(IdeaTrade trade, IdeaTradeOrder entry, DateTimeOffset now, CancellationToken cancellationToken);
 

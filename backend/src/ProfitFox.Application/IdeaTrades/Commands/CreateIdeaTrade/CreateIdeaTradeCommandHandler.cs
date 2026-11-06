@@ -33,6 +33,9 @@ public sealed class CreateIdeaTradeCommandHandler(
             {
                 // The money and the open trades of the account are checked for one entry or start at a time.
                 await live.LockAccountAsync(preparation.Account.Id, token);
+
+                // The limits of open trades and of the total risk count every account: the entries of all of them go one at a time, after the bots.
+                await trades.LockCreationAsync(token);
                 EntryCalculation calculation = await calculator.EvaluateAsync(preparation, token);
 
                 if (calculation.Reasons.Count > 0)
