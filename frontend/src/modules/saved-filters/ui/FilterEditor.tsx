@@ -34,7 +34,7 @@ const toStored = (drafts: readonly Draft[]) =>
   drafts.map((draft) => ({
     field: draft.field,
     operator: draft.operator,
-    value: draft.operator === 'above_baseline' ? null : fromTyped(draft.field, draft.value),
+    value: draft.operator === 'reliably_positive' ? null : fromTyped(draft.field, draft.value),
     to: draft.operator === 'between' ? fromTyped(draft.field, draft.to) : null,
   }));
 
@@ -157,7 +157,7 @@ function DraftRow({
           ))}
         </select>
       ) : (
-        draft.operator !== 'above_baseline' && (
+        draft.operator !== 'reliably_positive' && (
           <input
             aria-label="Значение"
             inputMode="decimal"

@@ -5,38 +5,57 @@ import { roundDecimal, showDecimal } from '@/shared/format/format';
 
 type Bucket = Schemas['BucketStatisticsResponse'];
 
-export type BaselineBadge = '▲' | '≈' | '▼';
+export type Badge = '▲' | '≈' | '▼';
 
-/** ▲ when the whole interval of the probability is above the baseline, ▼ when it is all below it, otherwise ≈. */
-export function baselineBadge(low: string, high: string, baseline: string): BaselineBadge {
-  if (compareDecimals(low, baseline) > 0) {
-    return '▲';
-  }
+const badges: Record<string, Badge> = { up: '▲', flat: '≈', down: '▼' };
 
-  return compareDecimals(high, baseline) < 0 ? '▼' : '≈';
-}
+/** The symbol of the code of a badge of a bucket: `up` is ▲, `flat` ≈, `down` ▼. */
+export const badgeSymbol = (code: string): Badge => badges[code]!;
 
 export interface ProbabilityView {
   readonly enough: boolean;
   /** The probability in whole percent; `null` while there is too little data. */
   readonly percent: string | null;
   readonly cases: number;
-  readonly badge: BaselineBadge | null;
+  /** The badge of the bucket by the interval of its expectancy; `null` while there is too little data. */
+  readonly badge: Badge | null;
 }
 
 /** What the probability column of an idea shows: its bucket, or «мало данных» for fewer than 30 cases or no case. */
-export function probabilityView(bucket: Bucket | null, baseline: string): ProbabilityView {
-  // A bucket of enough cases that all expired has no share either; the interval comes with the share.
-  if (bucket === null || !bucket.enoughData || bucket.probability === null) {
+export function probabilityView(bucket: Bucket | null): ProbabilityView {
+  if (bucket === null || !bucket.enoughData) {
     return { enough: false, percent: null, cases: Number(bucket?.cases ?? 0), badge: null };
   }
 
   return {
     enough: true,
-    percent: roundDecimal(shiftDecimal(bucket.probability, 2), 0),
+    percent: roundDecimal(shiftDecimal(bucket.probability!, 2), 0),
     cases: Number(bucket.cases),
-    badge: baselineBadge(bucket.probabilityLow!, bucket.probabilityHigh!, baseline),
+    badge: badgeSymbol(bucket.badge!),
   };
+}
+
+/** The break-even of an idea after the fees, rounded up to a whole percent, or that its target does not cover the fees. */
+export function breakEvenText(breakEven: string | null): string {
+  if (breakEven === null) {
+    return 'не окупает комиссии';
+  }
+
+  const [whole = '0', fraction = ''] = shiftDecimal(breakEven, 2).split('.');
+
+  return `нужно ≥ ${/[1-9]/.test(fraction) ? BigInt(whole) + 1n : whole} %`;
+}
+
+/** The shares of targets, stops and expired cases of a bucket in whole percent, for the hint of its probability; none without a case. */
+export function outcomeShares(bucket: Bucket | null): string | null {
+  if (bucket === null) {
+    return null;
+  }
+
+  const percent = (count: string | number) =>
+    Math.round((Number(count) * 100) / Number(bucket.cases));
+
+  return `Цель ${percent(bucket.targets)} % · Стоп ${percent(bucket.stops)} % · Истекла ${percent(bucket.expired)} %`;
 }
 
 /** The expectancy of the bucket in R with a sign, or a dash for a bucket without a case. */
@@ -63,21 +82,4 @@ export function moneyOutcome(idea: Shares, amount: string): MoneyOutcome | null 
     profit: showDecimal(multiplyDecimals(idea.profitPerUsdt, amount), 2, true),
     loss: `−${showDecimal(multiplyDecimals(idea.lossPerUsdt, amount), 2)}`,
   };
-}
-
-/** The expectancy of the bucket in USDT (the expectancy in R times the amount times the risk on 1 USDT), with a sign; none for no bucket or an amount that is not positive. */
-export function expectancyInUsdt(
-  bucket: Bucket | null,
-  riskPerUsdt: string,
-  amount: string,
-): string | null {
-  if (bucket === null || !isPositive(amount)) {
-    return null;
-  }
-
-  return showDecimal(
-    multiplyDecimals(multiplyDecimals(bucket.expectancy, amount), riskPerUsdt),
-    2,
-    true,
-  );
 }

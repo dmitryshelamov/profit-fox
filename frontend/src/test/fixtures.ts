@@ -300,6 +300,7 @@ export const ideaOf = (overrides: Partial<Schemas['IdeaResponse']> = {}) =>
     stop: '2.30',
     target: '2.60',
     riskReward: '2',
+    netRiskReward: '1.84345',
     tick: null,
     profitPerUsdt: '0.038878',
     lossPerUsdt: '0.021089',
@@ -310,15 +311,19 @@ export const ideaOf = (overrides: Partial<Schemas['IdeaResponse']> = {}) =>
     exitPrice: null,
     move: '3.1',
     volumeRatio: '4.2',
-    baseline: '0.33',
+    breakEven: '0.3517',
     bucket: {
       cases: 120,
+      targets: 55,
+      stops: 61,
       expired: 4,
       probability: '0.46',
       probabilityLow: '0.41',
       probabilityHigh: '0.51',
-      baseline: '0.33',
       expectancy: '0.38',
+      expectancyLow: '0.12',
+      expectancyHigh: '0.64',
+      badge: 'up',
       enoughData: true,
     },
     recent: null,
@@ -401,18 +406,14 @@ export const filterFields = [
   },
   { code: 'side', unit: 'choice', ofIdea: true, operators: ['='], choices: ['long', 'short'] },
   { code: 'riskReward', unit: 'ratio', ofIdea: true, operators: comparisons, choices: null },
+  { code: 'probability', unit: 'ratio', ofIdea: true, operators: comparisons, choices: null },
   {
-    code: 'probability',
-    unit: 'ratio',
+    code: 'expectancy',
+    unit: 'r',
     ofIdea: true,
-    operators: [
-      ...comparisons.filter((operator) => operator !== 'between'),
-      'between',
-      'above_baseline',
-    ],
+    operators: [...comparisons, 'reliably_positive'],
     choices: null,
   },
-  { code: 'expectancy', unit: 'r', ofIdea: true, operators: comparisons, choices: null },
 ] satisfies Schemas['SavedFilterFieldResponse'][];
 
 /** A trade by an idea waiting for its entry on SOLUSDT; a test sets what it needs. */
@@ -469,3 +470,72 @@ export const entryOf = (overrides: Partial<Schemas['IdeaEntryResponse']> = {}) =
     reasons: [],
     ...overrides,
   }) satisfies Schemas['IdeaEntryResponse'];
+
+/** A row of a table of calibration of the API: 640 cases promised 35 % on average. */
+export const calibrationRowOf = (overrides: Partial<Schemas['CalibrationRowResponse']> = {}) =>
+  ({
+    from: '0.3',
+    to: '0.4',
+    badge: null,
+    promised: '0.35',
+    cases: 640,
+    targetShare: '0.34',
+    stopShare: '0.52',
+    expiredShare: '0.14',
+    probabilityLow: '0.31',
+    probabilityHigh: '0.37',
+    expectancy: '0.02',
+    expectancyLow: '-0.05',
+    expectancyHigh: '0.09',
+    ...overrides,
+  }) satisfies Schemas['CalibrationRowResponse'];
+
+/** A report of calibration of the API over 90 days and all categories, the numbers of the board «Идеи — калибровка». */
+export const calibrationOf = (overrides: Partial<Schemas['IdeaCalibrationResponse']> = {}) =>
+  ({
+    computedAt: '2026-11-06T00:50:00Z',
+    days: 90,
+    category: null,
+    checked: 2412,
+    unchecked: 318,
+    brier: '0.207',
+    baseBrier: '0.219',
+    probabilities: [
+      calibrationRowOf(),
+      calibrationRowOf({
+        from: '0.6',
+        to: null,
+        promised: '0.64',
+        cases: 296,
+        targetShare: '0.51',
+        stopShare: '0.38',
+        expiredShare: '0.11',
+        probabilityLow: '0.45',
+        probabilityHigh: '0.57',
+      }),
+    ],
+    expectancies: [
+      calibrationRowOf({ from: '0', to: '0.2', promised: '0.11', cases: 900, expectancy: '0.04' }),
+    ],
+    badges: [
+      calibrationRowOf({
+        from: null,
+        to: null,
+        badge: 'up',
+        promised: '0.21',
+        cases: 603,
+        targetShare: '0.46',
+        expectancy: '0.08',
+        expectancyLow: '0.02',
+        expectancyHigh: '0.14',
+      }),
+    ],
+    total: calibrationRowOf({
+      from: null,
+      to: null,
+      promised: '0.12',
+      cases: 2412,
+      expectancy: '0.03',
+    }),
+    ...overrides,
+  }) satisfies Schemas['IdeaCalibrationResponse'];

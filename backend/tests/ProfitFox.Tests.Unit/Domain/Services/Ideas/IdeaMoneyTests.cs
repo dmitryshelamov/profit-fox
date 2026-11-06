@@ -47,4 +47,22 @@ public class IdeaMoneyTests
 
         shares.ShouldBe(new IdeaShares(0.03796m, 0.02198m, 0.02m));
     }
+
+    // Scenario "R:R идеи после комиссий": the profit on 1 USDT over the loss on 1 USDT, not the prices' 2.
+    [Test]
+    public void Net_risk_reward_is_the_profit_over_the_loss_on_1_usdt()
+    {
+        IdeaShares shares = IdeaMoney.PerUsdt(new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 100m, 98m, 104m), Linear);
+
+        shares.NetRiskReward.ShouldBe(0.038878m / 0.021089m);
+    }
+
+    // Scenario "Близкий стоп": a stop 0.64 % from the entry leaves 1.56 of the 2.
+    [Test]
+    public void A_close_stop_leaves_the_fees_a_larger_part_of_the_reward()
+    {
+        IdeaShares shares = IdeaMoney.PerUsdt(new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 44.06m, 43.78m, 44.62m), Linear);
+
+        decimal.Round(shares.NetRiskReward, 2).ShouldBe(1.56m);
+    }
 }

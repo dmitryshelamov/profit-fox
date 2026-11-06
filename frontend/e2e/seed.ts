@@ -98,3 +98,48 @@ export async function removeOpenIdeas(symbol: string): Promise<void> {
     await client.end();
   }
 }
+
+/**
+ * A report of the calibration over 90 days of all categories, as the scanner stores it (decimals as strings), so the screen has
+ * tables before the scanner has history enough to check a case. The scanner replaces the reports whole when it recomputes the
+ * buckets, every 10 minutes: a test reads the screen right after this.
+ */
+export async function seedCalibration(): Promise<void> {
+  const client = await connect();
+  const row = (overrides: Record<string, unknown>) => ({
+    From: '0.3',
+    To: '0.4',
+    Badge: null,
+    Promised: '0.35',
+    Targets: 218,
+    Stops: 333,
+    Expired: 89,
+    Probability: '0.340625',
+    ProbabilityLow: '0.31',
+    ProbabilityHigh: '0.37',
+    Expectancy: '0.02',
+    ExpectancyLow: '-0.05',
+    ExpectancyHigh: '0.09',
+    ...overrides,
+  });
+  const report = {
+    Checked: 640,
+    Unchecked: 318,
+    Brier: '0.207',
+    BaseBrier: '0.219',
+    Probabilities: [row({})],
+    Expectancies: [row({ From: '0', To: '0.2', Promised: '0.11' })],
+    Badges: [row({ From: null, To: null, Badge: 'up', Promised: '0.21' })],
+    Total: row({ From: null, To: null, Promised: '0.12' }),
+  };
+
+  try {
+    await client.query(
+      `INSERT INTO idea_calibration (engine_version, days, category, computed_at, report) VALUES (3, 90, 'all', now(), $1::jsonb)
+       ON CONFLICT (engine_version, days, category) DO UPDATE SET computed_at = EXCLUDED.computed_at, report = EXCLUDED.report`,
+      [JSON.stringify(report)],
+    );
+  } finally {
+    await client.end();
+  }
+}

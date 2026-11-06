@@ -18,8 +18,8 @@ namespace ProfitFox.Application.Scanner;
 ///     The scanner while it holds the stream: the list of pairs, the stream of minute candles, the loads, the minute cycle and the ideas. Four
 ///     lanes run side by side: the stream's candles go to storage in batches; the REST lane catches up the pairs that lag behind, reads the list
 ///     again, tops up funding and loads history, one piece at a time; the minute cycle computes the snapshot and the live ideas; the lane of
-///     ideas reads the warm-ups of the live ideas, replays history from storage only and recomputes the buckets every 10 minutes. A failed
-///     step is logged and tried again; only the end of the lease stops the session.
+///     ideas reads the warm-ups of the live ideas, replays history from storage only, recomputes the buckets every 10 minutes and removes the
+///     ideas closed more than a week ago once an hour. A failed step is logged and tried again; only the end of the lease stops the session.
 /// </summary>
 public sealed class ScannerSession(
     IScannerPairRepository pairs,
@@ -37,6 +37,7 @@ public sealed class ScannerSession(
     private static readonly TimeSpan Retry = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan FundingTopUp = TimeSpan.FromHours(1);
     private static readonly TimeSpan BucketsRefresh = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan ClosedRemoval = TimeSpan.FromHours(1);
 
     private readonly Channel<(Instrument, Candle)> _closed = Channel.CreateUnbounded<(Instrument, Candle)>();
     private readonly Lock _lock = new Lock();
@@ -198,6 +199,7 @@ public sealed class ScannerSession(
     {
         bool cleaned = false;
         DateTimeOffset bucketsAt = time.GetUtcNow();
+        DateTimeOffset closedAt = time.GetUtcNow();
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -207,6 +209,12 @@ public sealed class ScannerSession(
                 {
                     await replay.CleanUpAsync(cancellationToken);
                     cleaned = true;
+                }
+
+                if (time.GetUtcNow() >= closedAt)
+                {
+                    await ideas.RemoveClosedAsync(cancellationToken);
+                    closedAt = time.GetUtcNow() + ClosedRemoval;
                 }
 
                 // The warm-ups of the live ideas go before the history.

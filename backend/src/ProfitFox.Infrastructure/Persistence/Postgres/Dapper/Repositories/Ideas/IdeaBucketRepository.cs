@@ -15,8 +15,9 @@ namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Idea
 internal sealed class IdeaBucketRepository(NpgsqlDataSource dataSource) : IIdeaBucketRepository
 {
     private const string Columns = """
-                                   engine_version AS "EngineVersion", days, setup, type, "interval", side, category, cases, expired, probability,
-                                   probability_low AS "ProbabilityLow", probability_high AS "ProbabilityHigh", baseline, expectancy
+                                   engine_version AS "EngineVersion", days, setup, type, "interval", side, category, cases, targets, stops, expired,
+                                   probability, probability_low AS "ProbabilityLow", probability_high AS "ProbabilityHigh", expectancy,
+                                   expectancy_low AS "ExpectancyLow", expectancy_high AS "ExpectancyHigh"
                                    """;
 
     public async Task ReplaceAsync(int engineVersion, IReadOnlyCollection<IdeaBucket> buckets, CancellationToken cancellationToken)
@@ -27,10 +28,10 @@ internal sealed class IdeaBucketRepository(NpgsqlDataSource dataSource) : IIdeaB
         await connection.ExecuteAsync(
             new CommandDefinition(
                 """
-                INSERT INTO idea_buckets (engine_version, days, setup, type, "interval", side, category, cases, expired, probability, probability_low,
-                    probability_high, baseline, expectancy)
-                VALUES (@EngineVersion, @Days, @Setup, @Type, @Interval, @Side, @Category, @Cases, @Expired, @Probability, @ProbabilityLow,
-                    @ProbabilityHigh, @Baseline, @Expectancy)
+                INSERT INTO idea_buckets (engine_version, days, setup, type, "interval", side, category, cases, targets, stops, expired, probability,
+                    probability_low, probability_high, expectancy, expectancy_low, expectancy_high)
+                VALUES (@EngineVersion, @Days, @Setup, @Type, @Interval, @Side, @Category, @Cases, @Targets, @Stops, @Expired, @Probability,
+                    @ProbabilityLow, @ProbabilityHigh, @Expectancy, @ExpectancyLow, @ExpectancyHigh)
                 """,
                 buckets.Select(bucket => Row(engineVersion, bucket)),
                 transaction,
@@ -61,12 +62,15 @@ internal sealed class IdeaBucketRepository(NpgsqlDataSource dataSource) : IIdeaB
             Side = bucket.Key.Side.ToCode(),
             Category = bucket.Key.Category.ToCode(),
             Cases = statistics.Cases,
+            Targets = statistics.Targets,
+            Stops = statistics.Stops,
             Expired = statistics.Expired,
             Probability = statistics.Probability,
             ProbabilityLow = statistics.ProbabilityLow,
             ProbabilityHigh = statistics.ProbabilityHigh,
-            Baseline = statistics.Baseline,
-            Expectancy = statistics.Expectancy
+            Expectancy = statistics.Expectancy,
+            ExpectancyLow = statistics.ExpectancyLow,
+            ExpectancyHigh = statistics.ExpectancyHigh
         };
     }
 
@@ -81,6 +85,7 @@ internal sealed class IdeaBucketRepository(NpgsqlDataSource dataSource) : IIdeaB
         return new IdeaBucket(
             new IdeaBucketKey(setup, type, interval, side, category),
             row.Days,
-            new BucketStatistics(row.Cases, row.Expired, row.Probability, row.ProbabilityLow, row.ProbabilityHigh, row.Baseline, row.Expectancy));
+            new BucketStatistics(row.Cases, row.Targets, row.Stops, row.Expired, row.Probability, row.ProbabilityLow, row.ProbabilityHigh, row.Expectancy,
+                row.ExpectancyLow, row.ExpectancyHigh));
     }
 }

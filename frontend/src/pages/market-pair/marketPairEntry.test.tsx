@@ -41,8 +41,8 @@ function routes(overrides: Record<string, FakeRoute> = {}) {
 
 async function openEntry() {
   const user = userEvent.setup();
-  const list = await screen.findByRole('list', { name: 'Идеи пары' });
-  await user.click(within(list).getAllByRole('button', { name: 'Войти' })[0]!);
+  const ideas = await screen.findByRole('region', { name: 'Идеи пары' });
+  await user.click((await within(ideas).findAllByRole('button', { name: 'Войти' }))[0]!);
 
   return { user, dialog: await screen.findByRole('dialog', { name: 'Вход по идее' }) };
 }
@@ -53,11 +53,15 @@ describe('entry by an idea from the pair page', () => {
     fakeApi(routes());
     renderApp('/market/linear/SOLUSDT');
 
-    const open = await screen.findByRole('list', { name: 'Идеи пары' });
-    const closed = await screen.findByRole('list', { name: 'Истёкшие идеи' });
+    const ideas = await screen.findByRole('region', { name: 'Идеи пары' });
+    expect(await within(ideas).findAllByRole('button', { name: 'Войти' })).toHaveLength(2);
 
-    expect(within(open).getAllByRole('button', { name: 'Войти' })).toHaveLength(2);
-    expect(within(closed).queryByRole('button', { name: 'Войти' })).toBeNull();
+    await userEvent.click(within(ideas).getByRole('button', { name: 'Истёкшие · 1' }));
+
+    expect(within(ideas).getAllByRole('button', { name: 'Войти' })).toHaveLength(2);
+    expect(
+      within(within(ideas).getAllByRole('row').at(-1)!).queryByRole('button', { name: 'Войти' }),
+    ).toBeNull();
   });
 
   // Requirement "Окно входа": the account and the risk come from the settings, the numbers from the API.

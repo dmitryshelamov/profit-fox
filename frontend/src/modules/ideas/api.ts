@@ -125,3 +125,17 @@ export function ownIdeaQuery(category: string, symbol: string, input: OwnIdeaInp
     staleTime: 15_000,
   });
 }
+
+/** The report of the calibration of a window of days, 90 or 30, and of a category, all of them without one. */
+export function calibrationQuery(days: 90 | 30, category: string | null) {
+  return queryOptions({
+    queryKey: ['ideas', 'calibration', days, category],
+    queryFn: async () =>
+      unwrap(
+        await api.GET('/api/ideas/calibration', {
+          params: { query: { Days: String(days), Category: category ?? undefined } },
+        }),
+      ),
+    placeholderData: keepPreviousData,
+  });
+}

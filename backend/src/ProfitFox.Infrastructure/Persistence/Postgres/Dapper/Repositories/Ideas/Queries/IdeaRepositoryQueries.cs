@@ -63,4 +63,12 @@ internal static class IdeaRepositoryQueries
     {
         return new CommandDefinition($"SELECT id, {Columns}, tick FROM ideas WHERE id = @Id", new { Id = id }, cancellationToken: cancellationToken);
     }
+
+    internal static CommandDefinition DeleteClosedBefore(DateTimeOffset closedBefore, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            "DELETE FROM ideas WHERE status NOT IN ('awaiting_entry', 'active') AND status_at < @ClosedBefore",
+            new { ClosedBefore = closedBefore },
+            cancellationToken: cancellationToken);
+    }
 }

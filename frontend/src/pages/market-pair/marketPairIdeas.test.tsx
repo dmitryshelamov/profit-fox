@@ -135,6 +135,30 @@ const lastMarkers = () =>
 const requested = (requests: Request[], pathname: string) =>
   requests.filter((request) => new URL(request.url).pathname === pathname);
 
+/** The rows of the table of the ideas of the pair under its header, by their text. */
+const rowTexts = () =>
+  within(screen.getByRole('region', { name: 'Идеи пары' }))
+    .getAllByRole('row')
+    .slice(1)
+    .map((row) => row.textContent);
+
+/** The row of the table of the pair that has the text; its found time is the button that selects it. */
+async function rowOf(text: string) {
+  const table = await within(await screen.findByRole('region', { name: 'Идеи пары' })).findByRole(
+    'table',
+  );
+
+  return within(table)
+    .getAllByRole('row')
+    .find((row) => row.textContent.includes(text))!;
+}
+
+const pressed = async (text: string) =>
+  within(await rowOf(text))
+    .getAllByRole('button')
+    .find((button) => button.hasAttribute('aria-pressed'))!
+    .getAttribute('aria-pressed');
+
 describe('ideas on the pair page', () => {
   beforeEach(() => {
     vi.mocked(createChart).mockClear();
@@ -143,87 +167,70 @@ describe('ideas on the pair page', () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
-  it('lists the open ideas first and the expired ones under «Истёкшие»', async () => {
+  // Scenario "Раскладка страницы": the chart across the page, the ideas under it, the own idea below them.
+  it('puts the chart on top, the table of the ideas under it and the own idea below', async () => {
     fakeApi(routes('linear'));
     renderApp('/market/linear/SOLUSDT');
 
-    const open = await screen.findByRole('list', { name: 'Идеи пары' });
-    const closed = screen.getByRole('list', { name: 'Истёкшие идеи' });
+    const ideas = await screen.findByRole('region', { name: 'Идеи пары' });
+    const chart = screen.getByRole('region', { name: 'График' });
+    const own = screen.getByRole('region', { name: 'Своя идея' });
 
-    expect(
-      within(open)
-        .getAllByRole('button')
-        .filter((item) => item.hasAttribute('aria-pressed'))
-        .map((item) => item.textContent),
-    ).toEqual([expect.stringContaining('Откат'), expect.stringContaining('Уровни')]);
-    expect(within(closed).getAllByRole('button')).toHaveLength(1);
-    expect(within(closed).getByText('Истекла')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Истёкшие' })).toBeInTheDocument();
+    expect(chart.compareDocumentPosition(ideas) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(ideas.compareDocumentPosition(own) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // A narrow screen scrolls the table inside its section.
+    expect((await within(ideas).findByRole('table')).parentElement).toHaveClass('overflow-x-auto');
+  });
+
+  // Scenario "Истёкшие свёрнуты".
+  it('lists the open ideas first and keeps the expired ones under a closed «Истёкшие»', async () => {
+    fakeApi(routes('linear'));
+    renderApp('/market/linear/SOLUSDT');
+
+    await rowOf('Откат');
+
+    expect(rowTexts()).toEqual([
+      expect.stringContaining('Откат'),
+      expect.stringContaining('Уровни'),
+      'Истёкшие · 1',
+    ]);
+    expect(screen.getByRole('button', { name: 'Истёкшие · 1' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
   });
 
   describe('money of an idea', () => {
-    const withBucket = (expectancy: string) => ({
-      ...ideaOf().bucket!,
-      expectancy,
-    });
-    const card = (name: RegExp) => screen.findByRole('button', { name });
-
     afterEach(() => localStorage.clear());
 
-    // Scenario "Деньги в карточке".
-    it('shows the profit, the loss and the expectancy in USDT of the risk per idea', async () => {
+    // Scenario "Деньги в строке".
+    it('shows the profit and the loss in USDT of the amount per idea', async () => {
       fakeApi(
         routes('linear', {
-          'GET /api/market/linear/SOLUSDT/ideas': () =>
-            json([
-              ideaOf({
-                id: 'idea-money',
-                symbol: 'SOLUSDT',
-                bucket: withBucket('0.5'),
-              }),
-            ]),
+          'GET /api/market/linear/SOLUSDT/ideas': () => json([ideaOf({ symbol: 'SOLUSDT' })]),
         }),
       );
       renderApp('/market/linear/SOLUSDT');
 
-      const money = within(await card(/Откат/));
+      const row = within(await rowOf('Откат'));
 
-      expect(money.getByText('+0.39')).toBeInTheDocument();
-      expect(money.getByText('−0.21')).toBeInTheDocument();
-      expect(money.getByText('Ожидание +0.10')).toBeInTheDocument();
-      expect(money.getByText('USDT')).toBeInTheDocument();
+      expect(row.getByText('+0.39')).toBeInTheDocument();
+      expect(row.getByText('−0.21')).toBeInTheDocument();
     });
 
     it('takes the amount the owner set on the screen of the ideas', async () => {
       localStorage.setItem('profit-fox.ideas.amount', '30');
       fakeApi(
         routes('linear', {
-          'GET /api/market/linear/SOLUSDT/ideas': () =>
-            json([ideaOf({ symbol: 'SOLUSDT', bucket: withBucket('0.38') })]),
+          'GET /api/market/linear/SOLUSDT/ideas': () => json([ideaOf({ symbol: 'SOLUSDT' })]),
         }),
       );
       renderApp('/market/linear/SOLUSDT');
 
-      const money = within(await card(/Откат/));
+      const row = within(await rowOf('Откат'));
 
-      expect(money.getByText('+1.17')).toBeInTheDocument();
-      expect(money.getByText('−0.63')).toBeInTheDocument();
-      expect(money.getByText('Ожидание +0.23')).toBeInTheDocument();
-    });
-
-    it('shows no expectancy in USDT for an idea whose bucket has no case', async () => {
-      fakeApi(
-        routes('linear', {
-          'GET /api/market/linear/SOLUSDT/ideas': () =>
-            json([ideaOf({ symbol: 'SOLUSDT', bucket: null })]),
-        }),
-      );
-      renderApp('/market/linear/SOLUSDT');
-
-      const money = within(await card(/Откат/));
-
-      expect(money.getByText('+0.39')).toBeInTheDocument();
-      expect(money.queryByText(/Ожидание/)).not.toBeInTheDocument();
+      expect(row.getByText('+1.17')).toBeInTheDocument();
+      expect(row.getByText('−0.63')).toBeInTheDocument();
     });
 
     it('shows no money while the amount is not a positive number', async () => {
@@ -231,10 +238,10 @@ describe('ideas on the pair page', () => {
       fakeApi(routes('linear'));
       renderApp('/market/linear/SOLUSDT');
 
-      const money = within(await card(/Откат/));
+      const row = within(await rowOf('Откат'));
 
-      expect(money.queryByText('USDT')).not.toBeInTheDocument();
-      expect(money.queryByText(/Прибыль/)).not.toBeInTheDocument();
+      expect(row.queryByText('+0.00')).not.toBeInTheDocument();
+      expect(row.getByText('—')).toBeInTheDocument();
     });
   });
 
@@ -257,11 +264,13 @@ describe('ideas on the pair page', () => {
     );
     renderApp('/market/linear/SOLUSDT');
 
-    const card = within(await screen.findByRole('button', { name: /Откат/ }));
+    const row = within(await rowOf('Откат'));
 
-    expect(card.getByText('Вход 184.70')).toBeInTheDocument();
-    expect(card.getByText('Стоп 180.00')).toBeInTheDocument();
-    expect(card.getByText('Цель 197.00')).toBeInTheDocument();
+    expect(row.getByText('184.70')).toBeInTheDocument();
+    expect(row.getByText('180.00')).toBeInTheDocument();
+    expect(row.getByText('197.00')).toBeInTheDocument();
+    expect(row.getByText('1.84')).toHaveClass('text-ok');
+    expect(row.getByText('без ком. 2.00')).toBeInTheDocument();
   });
 
   // Scenario "Пара без идей".
@@ -271,14 +280,14 @@ describe('ideas on the pair page', () => {
 
     expect(await screen.findByText(/У пары нет идей/)).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Своя идея' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Истёкшие' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
   it('draws no levels, zones or signal while no idea is selected', async () => {
     const requests = fakeApi(routes('linear'));
     renderApp('/market/linear/SOLUSDT');
 
-    await screen.findByRole('list', { name: 'Идеи пары' });
+    await rowOf('Откат');
 
     expect(linesOnChart()).toEqual([]);
     expect(lastMarkers()).toEqual([]);
@@ -291,10 +300,8 @@ describe('ideas on the pair page', () => {
     const requests = fakeApi(routes('linear'));
     renderApp('/market/linear/SOLUSDT?idea=idea-pullback');
 
-    const selected = await screen.findByRole('button', { name: /Откат/ });
-
-    expect(selected).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: /Уровни/ })).toHaveAttribute('aria-pressed', 'false');
+    expect(await pressed('Откат')).toBe('true');
+    expect(await pressed('Уровни')).toBe('false');
     expect(
       within(screen.getByRole('group', { name: 'Интервал' })).getByRole('button', { name: '1 ч' }),
     ).toHaveAttribute('aria-pressed', 'true');
@@ -319,13 +326,15 @@ describe('ideas on the pair page', () => {
     );
   });
 
-  it('selects an idea of the list by putting it into the address', async () => {
+  // Scenario "Выбор строки в таблице пары".
+  it('selects an idea of the table by putting it into the address', async () => {
     fakeApi(routes('linear'));
     const { history } = renderApp('/market/linear/SOLUSDT');
 
-    await userEvent.click(await screen.findByRole('button', { name: /Уровни/ }));
+    await userEvent.click(await rowOf('Уровни'));
 
     await waitFor(() => expect(history.location.search).toBe('?idea=idea-levels'));
+    await waitFor(async () => expect(await pressed('Уровни')).toBe('true'));
     await waitFor(() =>
       expect(
         within(screen.getByRole('group', { name: 'Интервал' })).getByRole('button', {
@@ -345,7 +354,21 @@ describe('ideas on the pair page', () => {
     await waitFor(() => expect(history.location.search).toBe(''));
     await waitFor(() => expect(linesOnChart()).toEqual([]));
     expect(lastMarkers()).toEqual([]);
-    expect(screen.getByRole('button', { name: /Откат/ })).toHaveAttribute('aria-pressed', 'false');
+    expect(await pressed('Откат')).toBe('false');
+  });
+
+  // Scenario "Выбрана истёкшая идея": the group stays closed, the chart shows the idea.
+  it('keeps «Истёкшие» closed when an expired idea is selected and draws its levels', async () => {
+    fakeApi(routes('linear'));
+    renderApp('/market/linear/SOLUSDT?idea=idea-expired');
+
+    await waitFor(() => expect(linesOnChart()).toEqual(['Вход 2.40', 'Стоп 2.30', 'Цель 2.60']));
+    expect(screen.getByRole('button', { name: 'Истёкшие · 1' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.queryByText('Истекла')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Снять выбор' })).toBeInTheDocument();
   });
 
   // Scenario "Выбор идеи внизу списка": the router scrolls to the top on a navigation unless told not to.
@@ -357,7 +380,7 @@ describe('ideas on the pair page', () => {
     it('stays where it is when an idea is selected', async () => {
       fakeApi(routes('linear'));
       const { history } = renderApp('/market/linear/SOLUSDT');
-      const idea = await screen.findByRole('button', { name: /Уровни/ });
+      const idea = await rowOf('Уровни');
       scrollTo.mockClear();
 
       await userEvent.click(idea);
@@ -421,7 +444,8 @@ describe('ideas on the pair page', () => {
             stop: '165',
             target: '175',
             riskReward: '1.9',
-            baseline: '0.345',
+            netRiskReward: '1.56',
+            breakEven: '0.3517',
             tick: null,
           }),
       }),
@@ -458,7 +482,8 @@ describe('ideas on the pair page', () => {
             stop: '165',
             target: '175',
             riskReward: '1.9',
-            baseline: '0.345',
+            netRiskReward: '1.56',
+            breakEven: '0.3517',
             tick: null,
           }),
       }),
@@ -490,7 +515,7 @@ describe('ideas on the pair page', () => {
     const blockOf = () => within(screen.getByRole('region', { name: 'Своя идея' }));
     const ready = () => screen.findByRole('region', { name: 'Своя идея' });
 
-    it('shows the levels of an own idea, its baseline and the note, and draws them on the chart', async () => {
+    it('shows the levels of an own idea, its break-even and the note, and draws them on the chart', async () => {
       const requests = fakeApi(
         routes('linear', {
           'POST /api/market/linear/SOLUSDT/own-idea': () =>
@@ -500,7 +525,8 @@ describe('ideas on the pair page', () => {
               stop: '165',
               target: '175',
               riskReward: '1.9',
-              baseline: '0.345',
+              netRiskReward: '1.56',
+              breakEven: '0.3517',
               tick: null,
             }),
         }),
@@ -509,15 +535,44 @@ describe('ideas on the pair page', () => {
       await ready();
 
       expect(await blockOf().findByText('168.42')).toBeInTheDocument();
-      expect(blockOf().getByText('1.90')).toBeInTheDocument();
-      expect(blockOf().getByText('35 %')).toBeInTheDocument();
-      expect(blockOf().getByText('без сетапа: только базовая линия')).toBeInTheDocument();
+      // Scenario "Своя идея": the R:R after the fees in the chip, the price ratio under it.
+      expect(blockOf().getByText('1.56')).toHaveClass('text-ok');
+      expect(blockOf().getByText('без ком. 1.90')).toBeInTheDocument();
+      // Scenario "Безубыток своей идеи": rounded up.
+      expect(blockOf().getByText('нужно ≥ 36 % целей')).toBeInTheDocument();
+      expect(
+        blockOf().getByText('без сетапа, при условии, что идея не истекает'),
+      ).toBeInTheDocument();
       await waitFor(() => expect(linesOnChart()).toEqual(['Вход 168.42', 'Стоп 165', 'Цель 175']));
       expect(await requested(requests, '/api/market/linear/SOLUSDT/own-idea')[0]!.json()).toEqual({
         type: 'levels',
         interval: '15',
         side: 'long',
       });
+    });
+
+    // Scenario "Цель не окупает комиссии".
+    it('says the target of an own idea does not cover the fees', async () => {
+      fakeApi(
+        routes('linear', {
+          'POST /api/market/linear/SOLUSDT/own-idea': () =>
+            json({
+              made: true,
+              entry: '168.42',
+              stop: '168.3',
+              target: '168.6',
+              riskReward: '1.5',
+              netRiskReward: '-0.2',
+              breakEven: null,
+              tick: null,
+            }),
+        }),
+      );
+      renderApp('/market/linear/SOLUSDT');
+      await ready();
+
+      expect(await blockOf().findByText('не окупает комиссии')).toBeInTheDocument();
+      expect(blockOf().queryByText(/при условии/)).not.toBeInTheDocument();
     });
 
     it('shows the levels of an own idea by the price step of the pair', async () => {
@@ -530,7 +585,8 @@ describe('ideas on the pair page', () => {
               stop: '165',
               target: '175.5',
               riskReward: '1.9',
-              baseline: '0.345',
+              netRiskReward: '1.56',
+              breakEven: '0.3517',
               tick: '0.01',
             }),
         }),

@@ -5,7 +5,7 @@ namespace ProfitFox.Application.SavedFilters;
 /// <summary>
 ///     The one catalog of the fields of saved filters (decision 8): the conditions are checked by it, and the frontend takes it from the API.
 ///     The codes of the metrics are the names of the snapshot row in the API; the market setup holds when the pair has it on any interval;
-///     the shares of an idea are fractions, and «выше базовой» is an operator of its probability.
+///     the shares of an idea are fractions, and «надёжно > 0» is an operator of its expectancy.
 /// </summary>
 public static class SavedFilterFields
 {
@@ -38,8 +38,8 @@ public static class SavedFilterFields
         Choice(FilterField.IdeaInterval, "interval", true, ["5", "15", "60", "240"]),
         Choice(FilterField.IdeaSide, "side", true, ["long", "short"]),
         Idea(FilterField.RiskReward, "riskReward", "ratio"),
-        new SavedFilterField(FilterField.Probability, "probability", "ratio", true, [.. Comparisons, FilterOperator.AboveBaseline]),
-        Idea(FilterField.Expectancy, "expectancy", "r")
+        Idea(FilterField.Probability, "probability", "ratio"),
+        new SavedFilterField(FilterField.Expectancy, "expectancy", "r", true, [.. Comparisons, FilterOperator.ReliablyPositive])
     ];
 
     private static readonly Dictionary<string, FilterOperator> OperatorsByCode = new Dictionary<string, FilterOperator>
@@ -50,7 +50,7 @@ public static class SavedFilterFields
         ["<="] = FilterOperator.LessOrEqual,
         ["="] = FilterOperator.Equal,
         ["between"] = FilterOperator.Between,
-        ["above_baseline"] = FilterOperator.AboveBaseline
+        ["reliably_positive"] = FilterOperator.ReliablyPositive
     };
 
     private static readonly Dictionary<string, SavedFilterPlace> PlacesByCode = new Dictionary<string, SavedFilterPlace>

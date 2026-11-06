@@ -18,15 +18,21 @@ internal static class IdeaCaseRepositoryQueries
                                      """;
 
     // Decision 7: the replay runs by the live thresholds, so every case of the version counts. Postgres keeps every digit of a total of
-    // long fractions, more than System.Decimal holds: it comes rounded to 12 places.
+    // long fractions, more than System.Decimal holds: the totals come rounded to 12 places.
     private const string CountSql = """
                                     SELECT setup, type, "interval", side, category,
                                         count(*) FILTER (WHERE status = 'target')::integer, count(*) FILTER (WHERE status = 'stop')::integer,
-                                        count(*) FILTER (WHERE status = 'expired')::integer, avg(risk_reward), round(sum(result), 12)
+                                        count(*) FILTER (WHERE status = 'expired')::integer, round(sum(result), 12), round(sum(result * result), 12)
                                     FROM idea_cases
                                     WHERE engine_version = @version AND fired_at >= @from
                                     GROUP BY setup, type, "interval", side, category
                                     """;
+
+    private const string OutcomesSql = """
+                                       SELECT setup, type, "interval", side, category, fired_at, status_at, status, result
+                                       FROM idea_cases
+                                       WHERE engine_version = @version AND fired_at >= @from
+                                       """;
 
     internal static NpgsqlCommand Insert(NpgsqlDataSource dataSource, IReadOnlyCollection<IdeaDb> cases)
     {
@@ -64,6 +70,15 @@ internal static class IdeaCaseRepositoryQueries
     internal static NpgsqlCommand Count(NpgsqlConnection connection, int engineVersion, DateTimeOffset from)
     {
         var command = new NpgsqlCommand(CountSql, connection);
+        command.Parameters.AddWithValue("version", engineVersion);
+        command.Parameters.AddWithValue("from", from);
+
+        return command;
+    }
+
+    internal static NpgsqlCommand Outcomes(NpgsqlConnection connection, int engineVersion, DateTimeOffset from)
+    {
+        var command = new NpgsqlCommand(OutcomesSql, connection);
         command.Parameters.AddWithValue("version", engineVersion);
         command.Parameters.AddWithValue("from", from);
 

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 
 import {
@@ -193,6 +193,9 @@ export function IdeasPage({ page }: { page: number }) {
           />
           <span className="text-muted">USDT</span>
         </label>
+        <Link to="/ideas/calibration" className="text-sm text-run hover:underline">
+          Калибровка
+        </Link>
         {ideas.data && (
           <p className="ml-auto text-sm text-muted">{ideasText(Number(ideas.data.total))}</p>
         )}
@@ -225,12 +228,12 @@ export function IdeasPage({ page }: { page: number }) {
               />
               <ul className="space-y-1 text-xs text-faint">
                 <li>
-                  Вероятность: доля «Цель» среди «Цель» и «Стоп» случаев корзины за 90 дней; после
-                  неё число случаев N. Меньше 30 случаев: «мало данных».
+                  Вероятность: доля «Цель» среди всех случаев с входом корзины за 90 дней, истёкшие
+                  тоже; после неё число случаев N, под ней безубыток идеи после комиссий, если она
+                  не истекает. Меньше 30 случаев: «мало данных».
                 </li>
                 <li>
-                  ▲ ≈ ▼: 95 % интервал вероятности выше, пересекает или ниже базовой линии 1 / (1 +
-                  R:R).
+                  ▲ ≈ ▼: 95 % интервал ожидания корзины выше нуля, содержит ноль или ниже нуля.
                 </li>
                 <li>Прибыль / убыток на сумму на идею: при цели и при стопе, после комиссий.</li>
               </ul>

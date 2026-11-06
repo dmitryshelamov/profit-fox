@@ -129,7 +129,7 @@ public sealed class MarketController(ISender sender) : ControllerBase
         return result.Zones is null ? Invalid(result.Errors) : Ok(new ZonesResponse(Text(result.Price!.Value), [.. result.Zones.Select(zone => Zone(zone, result.Price.Value))]));
     }
 
-    /// <summary>An idea of the pair from the price now by the rules of the type, without a setup; it is not stored and has only the baseline.</summary>
+    /// <summary>An idea of the pair from the price now by the rules of the type, without a setup; it is not stored and has only its break-even.</summary>
     [HttpPost("{category}/{symbol}/own-idea")]
     [ProducesResponseType<OwnIdeaResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -149,8 +149,9 @@ public sealed class MarketController(ISender sender) : ControllerBase
         }
 
         return Ok(result.Plan is { } plan
-            ? new OwnIdeaResponse(true, Text(plan.Entry), Text(plan.Stop), Text(plan.Target), Text(plan.RiskReward), Text(result.Baseline!.Value), result.Tick?.ToString(CultureInfo.InvariantCulture))
-            : new OwnIdeaResponse(false, null, null, null, null, null, null));
+            ? new OwnIdeaResponse(true, Text(plan.Entry), Text(plan.Stop), Text(plan.Target), Text(plan.RiskReward), Text(result.Shares!.NetRiskReward),
+                result.Shares.BreakEven?.ToString(CultureInfo.InvariantCulture), result.Tick?.ToString(CultureInfo.InvariantCulture))
+            : new OwnIdeaResponse(false, null, null, null, null, null, null, null));
     }
 
     private static ZoneResponse Zone(Zone zone, decimal price)

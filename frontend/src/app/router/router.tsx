@@ -21,6 +21,7 @@ import { BotsPage } from '@/pages/bots/BotsPage';
 import { ComparePage } from '@/pages/compare/ComparePage';
 import { IdeaTradesPage } from '@/pages/idea-trades/IdeaTradesPage';
 import { IdeasPage } from '@/pages/ideas/IdeasPage';
+import { IdeasCalibrationPage } from '@/pages/ideas-calibration/IdeasCalibrationPage';
 import { MarketPage } from '@/pages/market/MarketPage';
 import { MarketPairPage } from '@/pages/market-pair/MarketPairPage';
 import { NodeEditorPage } from '@/pages/node-editor/NodeEditorPage';
@@ -112,6 +113,24 @@ const ideaTradesRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/idea-trades',
   component: IdeaTradesPage,
+});
+
+// The window is 90 days but for `?days=30`, which the router reads as a number; the category is linear, spot or none.
+const ideasCalibrationRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/ideas/calibration',
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { days?: 30 | undefined; category?: 'linear' | 'spot' | undefined } => ({
+    days: search.days === 30 ? 30 : undefined,
+    category:
+      search.category === 'linear' || search.category === 'spot' ? search.category : undefined,
+  }),
+  component: function IdeasCalibrationRoute() {
+    const { days, category } = ideasCalibrationRoute.useSearch();
+
+    return <IdeasCalibrationPage days={days ?? 90} category={category ?? null} />;
+  },
 });
 
 const marketPairRoute = createRoute({
@@ -281,6 +300,7 @@ const routeTree = rootRoute.addChildren([
     marketPairRoute,
     ideasRoute,
     ideaTradesRoute,
+    ideasCalibrationRoute,
     botsRoute,
     newBotRoute,
     editBotRoute,

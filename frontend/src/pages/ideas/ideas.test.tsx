@@ -18,12 +18,16 @@ const fewData = ideaOf({
   lossPerUsdt: '0.01',
   bucket: {
     cases: 12,
+    targets: 4,
+    stops: 8,
     expired: 0,
     probability: null,
     probabilityLow: null,
     probabilityHigh: null,
-    baseline: '0.4',
     expectancy: '-0.1',
+    expectancyLow: null,
+    expectancyHigh: null,
+    badge: null,
     enoughData: false,
   },
 });
@@ -91,7 +95,9 @@ describe('ideas screen', () => {
     expect(within(row).getByText('Откат')).toBeInTheDocument();
     expect(within(row).getByText('Лонг')).toHaveClass('text-ok');
     expect(within(row).getByText('2.40')).toBeInTheDocument();
-    expect(within(row).getByText('2.00')).toBeInTheDocument();
+    // Scenario "Близкий стоп": the R:R after the fees in the chip, the price ratio under it.
+    expect(within(row).getByText('1.84')).toHaveClass('text-ok');
+    expect(within(row).getByText('без ком. 2.00')).toBeInTheDocument();
     expect(within(row).getByText('+0.38 R')).toBeInTheDocument();
     expect(within(row).getByText('+0.39')).toBeInTheDocument();
     expect(within(row).getByText('−0.21')).toBeInTheDocument();
@@ -102,20 +108,34 @@ describe('ideas screen', () => {
     ).toHaveLength(3);
   });
 
+  it('links to the calibration of the ideas', async () => {
+    open();
+    renderApp('/ideas');
+
+    expect(await screen.findByRole('link', { name: 'Калибровка' })).toHaveAttribute(
+      'href',
+      '/ideas/calibration',
+    );
+  });
+
   it('explains the probability, the badges and the profit under the table', async () => {
     open();
     renderApp('/ideas');
     await rowOf('WIFUSDT');
 
-    expect(screen.getByText(/Вероятность: доля «Цель» среди «Цель» и «Стоп»/)).toBeInTheDocument();
-    expect(screen.getByText(/интервал вероятности выше, пересекает или ниже/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Вероятность: доля «Цель» среди всех случаев с входом/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/интервал ожидания корзины выше нуля, содержит ноль или ниже нуля/),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/на сумму на идею: при цели и при стопе, после комиссий/),
     ).toBeInTheDocument();
   });
 
-  // Scenario "Идея выше базовой линии".
-  it('shows the probability with N, and ▲ before the expectancy when the interval is above the baseline', async () => {
+  // Scenario "Ожидание надёжно выше нуля".
+  it('shows the probability with N and the break-even, and ▲ of the bucket before the expectancy', async () => {
     open();
     renderApp('/ideas');
 
@@ -123,7 +143,8 @@ describe('ideas screen', () => {
 
     expect(within(row).getByText(/^46 %/)).toBeInTheDocument();
     expect(within(row).getByText('· 120')).toBeInTheDocument();
-    const badge = within(row).getByRole('img', { name: 'выше базовой линии' });
+    expect(within(row).getByText('нужно ≥ 36 %')).toBeInTheDocument();
+    const badge = within(row).getByRole('img', { name: 'ожидание надёжно выше нуля' });
     expect(badge).toHaveTextContent('▲');
     expect(badge.parentElement).toHaveTextContent('▲+0.38 R');
   });

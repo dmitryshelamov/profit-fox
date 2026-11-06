@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using ProfitFox.Application.Ideas;
 using ProfitFox.Application.Ideas.Queries.GetIdea;
 using ProfitFox.Application.Ideas.Queries.GetIdeaBuckets;
+using ProfitFox.Application.Ideas.Queries.GetIdeaCalibration;
 using ProfitFox.Application.Ideas.Queries.GetIdeas;
 using ProfitFox.Application.IdeaTrades;
 using ProfitFox.Application.IdeaTrades.Queries.GetIdeaEntry;
@@ -48,6 +49,17 @@ public sealed class IdeasController(ISender sender) : ControllerBase
     public async Task<IActionResult> Buckets(CancellationToken cancellationToken)
     {
         return Ok((await sender.Send(new GetIdeaBucketsQuery(), cancellationToken)).Select(IdeaBucketResponse.Of).ToList());
+    }
+
+    /// <summary>The calibration of the buckets on outcomes they had not seen, as the scanner last computed it.</summary>
+    [HttpGet("calibration")]
+    [ProducesResponseType<IdeaCalibrationResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Calibration([FromQuery] IdeaCalibrationParameters parameters, CancellationToken cancellationToken)
+    {
+        GetIdeaCalibrationResult result = await sender.Send(new GetIdeaCalibrationQuery(parameters.Days, parameters.Category), cancellationToken);
+
+        return result.Errors.Count > 0 ? Invalid(result.Errors) : Ok(IdeaCalibrationResponse.Of(result));
     }
 
     [HttpGet("{id:guid}")]

@@ -65,14 +65,14 @@ async function settings(request: APIRequestContext, limit = 5) {
   expect(saved.status()).toBe(204);
 }
 
-/** Opens the pair, takes «Войти» on the card of the idea of the type and waits for the calculation in the window. */
+/** Opens the pair, takes «Войти» in the row of the idea of the type and waits for the calculation in the window. */
 async function openEntry(page: Page, type: string) {
   await page.goto(pair);
-  const card = page
-    .getByRole('list', { name: 'Идеи пары' })
-    .getByRole('listitem')
+  const row = page
+    .getByRole('region', { name: 'Идеи пары' })
+    .getByRole('row')
     .filter({ hasText: type });
-  await card.getByRole('button', { name: 'Войти' }).click();
+  await row.getByRole('button', { name: 'Войти' }).click();
   const dialog = page.getByRole('dialog', { name: 'Вход по идее' });
   await expect(dialog.getByText('Цена входа')).toBeVisible();
 

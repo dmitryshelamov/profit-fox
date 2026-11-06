@@ -1,5 +1,6 @@
 using ProfitFox.Application.Ideas;
 using ProfitFox.Application.MarketData;
+using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.SavedFilters.Enums;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.Market;
@@ -9,8 +10,8 @@ namespace ProfitFox.Application.SavedFilters;
 
 /// <summary>
 ///     Applies the conditions of a saved filter, joined by «и». A metric without a value does not pass, the setup of a pair holds on any
-///     interval, a field of choices is «=» its code; the probability counts only for a bucket of enough cases, and «выше базовой» holds when the
-///     lower bound of its interval is above the baseline.
+///     interval, a field of choices is «=» its code; the probability counts only for a bucket of enough cases, and «надёжно > 0» holds when the
+///     badge of the bucket is ▲.
 /// </summary>
 public static class SavedFilterMatch
 {
@@ -34,9 +35,9 @@ public static class SavedFilterMatch
             FilterField.IdeaType => view.Idea.Track.Plan.Type.ToCode() == condition.Choice,
             FilterField.IdeaInterval => view.Idea.Interval.ToCode() == condition.Choice,
             FilterField.IdeaSide => view.Idea.Track.Plan.Side.ToCode() == condition.Choice,
-            FilterField.RiskReward => Holds(condition, view.Idea.Track.Plan.RiskReward),
-            FilterField.Probability when condition.Operator == FilterOperator.AboveBaseline => view.Probability is not null && view.Bucket!.IsAboveBaseline,
+            FilterField.RiskReward => Holds(condition, view.Shares.NetRiskReward),
             FilterField.Probability => Holds(condition, view.Probability),
+            FilterField.Expectancy when condition.Operator == FilterOperator.ReliablyPositive => view.Bucket?.Badge == IdeaBadge.Up,
             FilterField.Expectancy => Holds(condition, view.Bucket?.Expectancy),
             _ => null
         };

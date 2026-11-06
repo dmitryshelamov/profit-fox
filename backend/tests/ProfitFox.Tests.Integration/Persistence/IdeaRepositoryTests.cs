@@ -114,4 +114,20 @@ public class IdeaRepositoryTests
         (await _store.GetRecentAsync(Now.AddDays(-1), null, CancellationToken.None)).ShouldBe([open, ofSol, closedLately], ignoreOrder: true);
         (await _store.GetRecentAsync(Now.AddDays(-1), sol, CancellationToken.None)).ShouldBe([ofSol]);
     }
+
+    // Requirement "Срок хранения закрытых идей": only the ideas closed before the moment go; an open one stays however old it is.
+    [Test]
+    public async Task Ideas_closed_before_the_moment_are_deleted()
+    {
+        Idea closedLongAgo = IdeaGenerator.Generate(Now.AddDays(-9), IdeaStatus.Stop, statusAt: Now.AddDays(-8));
+        Idea closedLately = IdeaGenerator.Generate(Now.AddDays(-7), IdeaStatus.Target, setup: IdeaSetup.Drop, statusAt: Now.AddDays(-6));
+        Idea oldOpen = IdeaGenerator.Generate(Now.AddDays(-8), IdeaStatus.Active, setup: IdeaSetup.EarlyDrop);
+        await _store.SaveAsync([closedLongAgo, closedLately, oldOpen], [], CancellationToken.None);
+
+        (await _store.DeleteClosedBeforeAsync(Now.AddDays(-7), CancellationToken.None)).ShouldBe(1);
+
+        (await _store.GetAsync(closedLongAgo.Id, CancellationToken.None)).ShouldBeNull();
+        (await _store.GetAsync(closedLately.Id, CancellationToken.None)).ShouldBe(closedLately);
+        (await _store.GetAsync(oldOpen.Id, CancellationToken.None)).ShouldBe(oldOpen);
+    }
 }

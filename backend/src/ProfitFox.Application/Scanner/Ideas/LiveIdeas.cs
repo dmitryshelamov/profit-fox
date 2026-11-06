@@ -27,6 +27,7 @@ public sealed class LiveIdeas(
 {
     private static readonly TimeSpan PercentilesRefresh = TimeSpan.FromHours(1);
     private static readonly TimeSpan Day = TimeSpan.FromDays(1);
+    private static readonly TimeSpan ClosedKept = TimeSpan.FromDays(7);
 
     private readonly IdeaEngine _engine = new IdeaEngine(settings.Rules(), IdeasEngineVersion.Current);
     private readonly ConcurrentQueue<Warming> _warming = new ConcurrentQueue<Warming>();
@@ -76,6 +77,12 @@ public sealed class LiveIdeas(
         }
 
         return pending.Length > 0;
+    }
+
+    /// <summary>Deletes from storage the ideas closed more than a week ago (requirement "Срок хранения закрытых идей").</summary>
+    public Task RemoveClosedAsync(CancellationToken cancellationToken)
+    {
+        return ideas.DeleteClosedBeforeAsync(time.GetUtcNow() - ClosedKept, cancellationToken);
     }
 
     /// <summary>The ideas of the minute that ends at <paramref name="end" />; returns the setups of the complete pairs.</summary>

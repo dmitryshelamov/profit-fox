@@ -15,6 +15,9 @@ public interface IIdeaCaseRepository
     /// <summary>The cases of a version fired since <paramref name="from" /> counted by bucket.</summary>
     Task<IReadOnlyList<IdeaBucketCounts>> CountAsync(int engineVersion, DateTimeOffset from, CancellationToken cancellationToken);
 
+    /// <summary>How the cases of a version fired since <paramref name="from" /> ended, for the calibration.</summary>
+    Task<IReadOnlyList<IdeaOutcome>> GetOutcomesAsync(int engineVersion, DateTimeOffset from, CancellationToken cancellationToken);
+
     /// <summary>Removes the cases of every other version.</summary>
     Task DeleteOtherVersionsAsync(int engineVersion, CancellationToken cancellationToken);
 }
