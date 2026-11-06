@@ -11,7 +11,11 @@ export const nodeGroups: readonly NodeGroup[] = [
     color: '#2e5f96',
     kinds: ['parameters', 'inputs', 'outputs', 'candle', 'position'],
   },
-  { title: 'Индикаторы', color: '#1f7a75', kinds: ['ema', 'cross'] },
+  {
+    title: 'Индикаторы',
+    color: '#1f7a75',
+    kinds: ['ema', 'cross', 'sma', 'rsi', 'std-dev', 'previous'],
+  },
   {
     title: 'Математика',
     color: '#4a5263',

@@ -111,7 +111,7 @@ public class StrategyJsonTests
     [TestCase("""{ "direction": "long", "nodes": [] }""", "definition.formatVersion")]
     [TestCase("""{ "formatVersion": 1, "direction": "up", "nodes": [] }""", "definition.direction")]
     [TestCase("""{ "formatVersion": 1, "direction": "long" }""", "definition.nodes")]
-    [TestCase("""{ "formatVersion": 1, "direction": "long", "nodes": [ { "id": "a", "kind": "rsi" } ] }""", "definition.nodes[0].kind")]
+    [TestCase("""{ "formatVersion": 1, "direction": "long", "nodes": [ { "id": "a", "kind": "wma" } ] }""", "definition.nodes[0].kind")]
     [TestCase("""{ "formatVersion": 1, "direction": "long", "nodes": [ { "id": "a/b", "kind": "candle" } ] }""", "definition.nodes[0].id")]
     [TestCase("""{ "formatVersion": 1, "direction": "long", "nodes": [ { "kind": "candle" } ] }""", "definition.nodes[0].id")]
     [TestCase("""{ "formatVersion": 1, "direction": "long", "nodes": [ { "id": "a", "kind": "composite", "ref": "nope" } ] }""", "definition.nodes[0].ref")]

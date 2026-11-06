@@ -80,7 +80,7 @@ public class DirectionLimitsTests
         run.Handle(new RunStarted(Start)).ShouldBe([new PlaceOrder("o-1", "enter", entry, OrderType.Market, null, 0.5m, null)]);
 
         run.Handle(new OrderFilled(Start, "o-1", 0.5m, 100m, IsComplete: true))
-            .ShouldBe([new PlaceOrder("o-2", "close", exit, OrderType.Market, null, 0.5m, null)]);
+            .ShouldBe([new PlaceOrder("o-2", null, exit, OrderType.Market, null, 0.5m, null)]);
         run.Handle(new BarClosed(Start, new Bar(1m, 1m, 1m, 1m, 1m))).ShouldBeEmpty();
     }
 
@@ -92,7 +92,7 @@ public class DirectionLimitsTests
             .Node("flat", SimpleNodeKind.Not)
             .Node("enter", SimpleNodeKind.MarketOrder, Settings(OrderSide.Buy, OrderSizeMode.Quantity), ("size", Values.Number(2m)))
             .Node("take", SimpleNodeKind.HoldLimit, Settings(OrderSide.Sell, OrderSizeMode.Quantity), ("price", Values.Number(110m)))
-            .Node("stop", SimpleNodeKind.ClosePosition)
+            .Node("stop", SimpleNodeKind.MarketOrder, Settings(OrderSide.Sell, OrderSizeMode.Quantity))
             .Node("cheap", SimpleNodeKind.Compare, new NodeSettings(Operation: CompareOperation.Less), ("b", Values.Number(90m)))
             .Node("candle", SimpleNodeKind.Candle)
             .Wire("position.hasPosition", "flat.value")
@@ -101,6 +101,7 @@ public class DirectionLimitsTests
             .Wire("position.quantity", "take.size")
             .Wire("candle.close", "cheap.a")
             .Wire("cheap.result", "stop.when")
+            .Wire("position.quantity", "stop.size")
             .Build();
         var run = StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, NoValues, Conditions.Neutral);
         run.Handle(new RunStarted(Start));

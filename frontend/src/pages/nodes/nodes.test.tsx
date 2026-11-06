@@ -24,7 +24,7 @@ describe('composite node list', () => {
       within(builtIn)
         .getAllByRole('link')
         .map((link) => link.textContent),
-    ).toEqual(['Пересечение EMA']);
+    ).toEqual(['Пересечение EMA', 'MACD', 'Полосы Боллинджера']);
     expect(within(builtIn).queryByRole('button', { name: /Удалить/ })).not.toBeInTheDocument();
     expect(screen.queryByText('Свеча')).not.toBeInTheDocument();
   });

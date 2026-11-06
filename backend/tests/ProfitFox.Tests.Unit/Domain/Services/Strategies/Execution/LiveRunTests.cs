@@ -34,6 +34,32 @@ public class LiveRunTests
         warmed.ValueOf("ema", "value").ShouldBe(continuous.ValueOf("ema", "value"));
     }
 
+    [Test]
+    public void Warm_up_gives_sma_rsi_std_dev_and_previous_the_values_of_a_continuous_run()
+    {
+        StrategyRun warmed = Indicators();
+        StrategyRun continuous = Indicators();
+        BarClosed[] bars = [.. Enumerable.Range(0, 30).Select(index => IndicatorBar(index))];
+
+        foreach (BarClosed bar in bars.Take(20))
+        {
+            warmed.WarmUp(bar);
+            continuous.Handle(bar);
+        }
+
+        foreach (BarClosed bar in bars.Skip(20))
+        {
+            warmed.Handle(bar);
+            continuous.Handle(bar);
+
+            foreach (string node in new[] { "sma", "rsi", "dev", "previous" })
+            {
+                warmed.ValueOf(node, "value").ShouldNotBeNull();
+                warmed.ValueOf(node, "value").ShouldBe(continuous.ValueOf(node, "value"));
+            }
+        }
+    }
+
     // Scenario "Исполнение на паузе".
     [Test]
     public void Recorded_fill_changes_the_position_and_places_nothing()
@@ -176,6 +202,30 @@ public class LiveRunTests
             .Wire("next.result", "buy.price")
             .Wire("position.quantity", "sell.size")
             .Build();
+    }
+
+    private static StrategyRun Indicators()
+    {
+        Graph graph = new GraphBuilder()
+            .Node("candle", SimpleNodeKind.Candle)
+            .Node("sma", SimpleNodeKind.Sma, ("period", Values.Number(5m)))
+            .Node("rsi", SimpleNodeKind.Rsi, ("period", Values.Number(5m)))
+            .Node("dev", SimpleNodeKind.StdDev, ("period", Values.Number(5m)))
+            .Node("previous", SimpleNodeKind.Previous)
+            .Wire("candle.close", "sma.source")
+            .Wire("candle.close", "rsi.source")
+            .Wire("candle.close", "dev.source")
+            .Wire("candle.close", "previous.value")
+            .Build();
+
+        return StrategyRun.Start(StrategyDefinitions.Long(graph), CompositeCatalog.Empty, NoValues, Conditions.Neutral);
+    }
+
+    private static BarClosed IndicatorBar(int index)
+    {
+        decimal close = 100m + index * 7 % 11 - 5m;
+
+        return new BarClosed(Start.AddHours(index), new Bar(close, close, close, close, 1m));
     }
 
     private static BarClosed Bar(int index)

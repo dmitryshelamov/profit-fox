@@ -65,7 +65,7 @@ public class OrderMinimumTests
         StrategyRun run = Run(graph);
         run.Handle(new RunStarted(Start));
         run.Handle(new OrderFilled(Start, "o-1", 1m, 100m, IsComplete: true, Fee: 0.0005m, FeeAsset: FeeAsset.Base))
-            .ShouldBe([new PlaceOrder("o-2", "exit", OrderSide.Sell, OrderType.Market, null, 0.999m, null)]);
+            .ShouldBe([new PlaceOrder("o-2", null, OrderSide.Sell, OrderType.Market, null, 0.999m, null)]);
 
         run.Handle(new OrderFilled(Start, "o-2", 0.999m, 110m, IsComplete: true))
             .ShouldBe([new PlaceOrder("o-3", "enter", OrderSide.Buy, OrderType.Market, null, 1m, null)]);

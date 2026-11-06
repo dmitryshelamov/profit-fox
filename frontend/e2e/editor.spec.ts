@@ -45,6 +45,7 @@ async function parameter(
 test('builds EMA from scratch and saves it as the reference', async ({ page, request }) => {
   await page.goto('/strategies');
   await page.getByRole('button', { name: '+ Новая стратегия' }).click();
+  await page.getByRole('button', { name: 'Пустая стратегия' }).click();
   await expect(page.getByRole('group', { name: 'Параметры' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Параметры', exact: true }).click();

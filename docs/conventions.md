@@ -19,13 +19,16 @@ enforces a rule, the check is the source of truth.
 - `Repositories` holds storage ports, named `I<Name>Repository` (`IStrategyLibraryRepository` for strategies, nodes,
   versions and bots; `IBacktestRepository`). `Events` holds domain events.
 - `Services/<Area>` holds domain logic that has no state of its own in the database, split into folders by purpose
-  (`Services/Strategies/Nodes`, `BuiltIns`, `Validation`, `Execution`). Logic that belongs to an entity or a value object
+  (`Services/Strategies/Nodes`, `BuiltIns`, `Templates`, `Validation`, `Execution`). Logic that belongs to an entity or a value object
   stays on it. `Services/Backtests` holds the exchange simulator and the metrics of a backtest (`ParameterGrid`,
   `BacktestReplay`, its observers, `EngineVersion`); the strategy engine itself stays in `Services/Strategies/Execution`,
   with the position of a run (`Position`, `PositionStatus`, `ClosedPosition`) until positions get storage of their own.
   Replay observers see each placed order with the number of its position, each confirmed cancel and each fill; the
   details they collect are value objects in `ValueObjects/Backtests` (`BacktestPosition`, `BacktestOrder`,
   `BacktestFill`).
+- `Services/Strategies/Templates` holds the built-in strategy templates: `StrategyTemplateKind` (the id of a template in the catalog; a strategy made from one
+  keeps none), `StrategyTemplate` (name, description and definition without a layout) and `BuiltInTemplates.All`, in the order the owner sees them. Their graphs
+  are written in code with `GraphSketch` from `BuiltIns`, like the built-in nodes; the reference strategies EMA Short, Ladder and DCA are the same graphs as their test fixtures.
 - `Market` is the area of the scanner: `Entities/Market` holds `ScannerPair` (the bounds of coverage, with the rules that move
   them) and `ScannerState`; `ValueObjects/Market` holds `MarketMinute`, `OpenInterestPoint`, `FundingRatePoint`, `MarketTicker`,
   `PairMetrics` and `MarketSnapshotRow`; `Services/Market/MarketMetrics` is the pure function of the metrics of a pair.
@@ -375,6 +378,10 @@ enforces a rule, the check is the source of truth.
   type has no use for or a value off the grid) and `PUT /api/ideas/exit-rules/{type}/{interval}` (`{ life, target, window }` → the rule with its time). `SavedFiltersController`: CRUD of
   `/api/saved-filters`, the catalog `GET /api/saved-filters/fields` and `POST /api/saved-filters/fit` (`{ conditions }` of a draft →
   `{ pairs, ideas }`, saves nothing).
+- `StrategyTemplatesController`: `GET /api/strategy-templates` → `[{ code, name, description, direction }]` (`long` or `short`, 14 templates in a fixed order),
+  `GET /api/strategy-templates/{code}` → `{ code, name, description, definition }` (404 for an unknown code). The `definition` has an empty layout and goes
+  to `POST /api/strategies` as it is: a strategy made from a template is an ordinary strategy; its codes are in `StrategyCodes`, the queries `GetStrategyTemplates`
+  and `GetStrategyTemplate` in Application.
 - `IdeaTradesController`: `GET /api/idea-trades` (the journal: `open`, `closed` as `items`, `page`, `pageSize` and `total`, and `totals`; filters `setup`, `symbol`, `side`, `badge`, `days`, `page`, `pageSize`), `POST` (`{ ideaId, accountId?, risk? }` → 201 `{ id }`, or 409 with `reasons`, codes of what stops the
   entry), `POST .../{id}/cancel` and `.../close` (204; 409 when the status does not allow it). `IdeasController` also has `GET /api/ideas/{id}/entry?accountId&risk`
   (the entry as it would be made now, reading the price of the pair from Bybit; places nothing). `IdeaTradingSettingsController`: `GET` and `PUT /api/idea-trading/settings`.
@@ -492,6 +499,9 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
   is read there, the bot's own interval never goes to the address). The router writes text search values as they are, so
   `?interval=5` is not quoted. `shared/format` shows decimal strings with thousands
   spacing without float math, and UTC dates. Decimal strings become numbers only in `market-chart/model`, for drawing.
+- «+ Новая стратегия» opens `pages/strategies/NewStrategyDialog`: an empty canvas or one of the built-in templates (`strategyTemplatesQuery`, the cards show name,
+  idea and direction). A template is read with `fetchStrategyTemplate` and written as the draft of a new strategy under a new `newDraftId()` (`shared/id`, built on
+  `crypto.getRandomValues`, since the app is served over plain HTTP); from there it is an ordinary new strategy, saved by the first save.
 - `src/shared/api` holds the only HTTP client (`openapi-fetch`) and the types generated from the API's OpenAPI document
   in `generated/schema.d.ts`. That file is committed: after changing an API contract, run the API and
   `npm run generate:api`, and commit the result with the change.

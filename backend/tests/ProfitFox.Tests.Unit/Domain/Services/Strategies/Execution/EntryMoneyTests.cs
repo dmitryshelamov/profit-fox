@@ -55,7 +55,7 @@ public class EntryMoneyTests
         IReadOnlyList<OrderCommand> commands = run.Handle(new OrderFilled(Start, "o-1", 1m, 100m, IsComplete: true));
 
         run.ValueOf("position", "free").ShouldBe(Values.Number(0m));
-        commands.ShouldBe([new PlaceOrder("o-2", "exit", OrderSide.Sell, OrderType.Market, null, 1m, null)]);
+        commands.ShouldBe([new PlaceOrder("o-2", null, OrderSide.Sell, OrderType.Market, null, 1m, null)]);
         run.SkippedOrders.ShouldBe(0);
     }
 

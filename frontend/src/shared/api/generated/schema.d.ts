@@ -3997,6 +3997,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/strategy-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["StrategyTemplateSummaryResponse"][];
+                        "application/json": components["schemas"]["StrategyTemplateSummaryResponse"][];
+                        "text/json": components["schemas"]["StrategyTemplateSummaryResponse"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/strategy-templates/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    code: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["StrategyTemplateResponse"];
+                        "application/json": components["schemas"]["StrategyTemplateResponse"];
+                        "text/json": components["schemas"]["StrategyTemplateResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5028,6 +5115,22 @@ export interface components {
             name: string;
             direction: string;
             supportedCategories: string[];
+        };
+        StrategyTemplateResponse: {
+            code: string;
+            name: string;
+            /** @description The idea of the strategy in one phrase. */
+            description: string;
+            /** @description The definition of a strategy, with an empty layout: it goes to `POST /api/strategies` as it is. */
+            definition: components["schemas"]["JsonObject"];
+        };
+        StrategyTemplateSummaryResponse: {
+            code: string;
+            name: string;
+            /** @description The idea of the strategy in one phrase. */
+            description: string;
+            /** @description `long` or `short`. */
+            direction: string;
         };
         StrategyVersionResponse: {
             /** Format: int32 */

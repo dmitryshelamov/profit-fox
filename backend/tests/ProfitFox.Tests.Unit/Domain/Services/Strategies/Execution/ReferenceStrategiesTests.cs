@@ -50,7 +50,7 @@ public class ReferenceStrategiesTests
         commands.ShouldBe(
         [
             (6, new PlaceOrder("o-1", "enter", OrderSide.Buy, OrderType.Market, null, null, 100m)),
-            (9, new PlaceOrder("o-2", "exit", OrderSide.Sell, OrderType.Market, null, 10m, null))
+            (9, new PlaceOrder("o-2", null, OrderSide.Sell, OrderType.Market, null, 10m, null))
         ]);
     }
 
@@ -74,7 +74,7 @@ public class ReferenceStrategiesTests
         commands.ShouldBe(
         [
             (6, new PlaceOrder("o-1", "enter", OrderSide.Sell, OrderType.Market, null, null, 100m)),
-            (9, new PlaceOrder("o-2", "exit", OrderSide.Buy, OrderType.Market, null, 10m, null))
+            (9, new PlaceOrder("o-2", null, OrderSide.Buy, OrderType.Market, null, 10m, null))
         ]);
     }
 

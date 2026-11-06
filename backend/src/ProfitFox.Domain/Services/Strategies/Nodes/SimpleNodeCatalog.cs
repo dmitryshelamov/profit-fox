@@ -24,9 +24,13 @@ public static class SimpleNodeCatalog
                     new PinDeclaration("hasPosition", PinType.Boolean),
                     .. Numbers("quantity", "averagePrice", "invested", "lastEntryPrice"),
                     new PinDeclaration("sinceLastEntry", PinType.Duration),
-                    new PinDeclaration("free", PinType.Number)
+                    new PinDeclaration("barsSinceEntry", PinType.Number),
+                    new PinDeclaration("free", PinType.Number),
+                    .. Numbers("closedPositions", "closedPnl")
                 ]),
             SimpleNodeKind.Ema => new NodePins(Numbers("source", "period"), Numbers("value")),
+            SimpleNodeKind.Sma or SimpleNodeKind.StdDev or SimpleNodeKind.Rsi => new NodePins(Numbers("source", "period"), Numbers("value")),
+            SimpleNodeKind.Previous => new NodePins(Numbers("value"), Numbers("value")),
             SimpleNodeKind.Cross => new NodePins(Numbers("a", "b"), Booleans("up", "down")),
             SimpleNodeKind.Add or SimpleNodeKind.Subtract or SimpleNodeKind.Multiply or SimpleNodeKind.Divide =>
                 new NodePins(Numbers("a", "b"), Numbers("result")),

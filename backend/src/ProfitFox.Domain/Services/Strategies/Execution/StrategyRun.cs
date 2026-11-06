@@ -48,6 +48,9 @@ public sealed class StrategyRun
         return node.Kind switch
         {
             SimpleNodeKind.Ema => new EmaState(),
+            SimpleNodeKind.Sma or SimpleNodeKind.StdDev => new WindowState(),
+            SimpleNodeKind.Rsi => new RsiState(),
+            SimpleNodeKind.Previous => new PreviousState(),
             SimpleNodeKind.Cross => new CrossState(),
             _ => new object()
         };
@@ -165,6 +168,7 @@ public sealed class StrategyRun
     {
         _event = bar;
         _lastBar = bar.Bar;
+        _position.CountBar(bar.At);
 
         for (int index = 0; index < _nodes.Count; index++)
         {
@@ -239,6 +243,7 @@ public sealed class StrategyRun
         {
             case BarClosed closed:
                 _lastBar = closed.Bar;
+                _position.CountBar(closed.At);
 
                 break;
             case OrderFilled filled:
@@ -246,7 +251,10 @@ public sealed class StrategyRun
 
                 break;
             case OrderCancelled cancelled:
-                _orders.Remove(cancelled.OrderId);
+                if (_orders.Remove(cancelled.OrderId, out ActiveOrder? gone) && gone.Node is not null && _position.Status == PositionStatus.Closing)
+                {
+                    SellWhenNoNodeOrderIsLeft();
+                }
 
                 break;
             case OrderRejected rejected:
@@ -254,10 +262,19 @@ public sealed class StrategyRun
 
                 break;
             case OrderCancelledByVenue cancelledByVenue:
+                if (!_orders.Remove(cancelledByVenue.OrderId, out ActiveOrder? removed))
+                {
+                    break;
+                }
+
                 // An exit with no node belongs to the closing position: what the venue cancelled of it is sold again.
-                if (_orders.Remove(cancelledByVenue.OrderId, out ActiveOrder? removed) && removed.Node is null)
+                if (removed.Node is null)
                 {
                     SellWhatCameWhileClosing();
+                }
+                else if (_position.Status == PositionStatus.Closing)
+                {
+                    SellWhenNoNodeOrderIsLeft();
                 }
 
                 break;
@@ -286,7 +303,12 @@ public sealed class StrategyRun
         if (_position.Status == PositionStatus.Closing)
         {
             CancelAll();
-            SellWhatCameWhileClosing();
+
+            // A standing exit of a node still holds what it sells, so the rest is sold once its cancel is confirmed.
+            if (!_orders.Values.Any(order => order.Node is not null && order.Side != _entrySide))
+            {
+                SellWhatCameWhileClosing();
+            }
         }
     }
 
@@ -375,11 +397,30 @@ public sealed class StrategyRun
                 outputs["invested"] = new NumberValue(open ? _position.Invested : 0m);
                 outputs["lastEntryPrice"] = Number(open ? _position.LastEntryPrice : null);
                 outputs["sinceLastEntry"] = open && _position.LastEntryAt is { } at ? new DurationValue(_event.At - at) : null;
+                outputs["barsSinceEntry"] = open ? new NumberValue(_position.BarsSinceEntry) : null;
                 outputs["free"] = new NumberValue(Free());
+                outputs["closedPositions"] = new NumberValue(_position.Number - 1);
+                outputs["closedPnl"] = new NumberValue(_pastPnl);
 
                 break;
             case SimpleNodeKind.Ema:
-                outputs["value"] = Ema(node, (EmaState)state);
+                outputs["value"] = Indicator(node, (EmaState)state, ema => ema.Value);
+
+                break;
+            case SimpleNodeKind.Sma:
+                outputs["value"] = Indicator(node, (WindowState)state, (window, period) => window.Average(period));
+
+                break;
+            case SimpleNodeKind.StdDev:
+                outputs["value"] = Indicator(node, (WindowState)state, (window, period) => window.Deviation(period));
+
+                break;
+            case SimpleNodeKind.Rsi:
+                outputs["value"] = Indicator(node, (RsiState)state, rsi => rsi.Value);
+
+                break;
+            case SimpleNodeKind.Previous:
+                outputs["value"] = Previous(node, (PreviousState)state);
 
                 break;
             case SimpleNodeKind.Cross:
@@ -411,7 +452,7 @@ public sealed class StrategyRun
 
                 break;
             case SimpleNodeKind.ClosePosition:
-                ClosePosition(index, node);
+                ClosePosition(node);
 
                 break;
             case SimpleNodeKind.HoldLimit:
@@ -447,11 +488,27 @@ public sealed class StrategyRun
         }
     }
 
-    private void ClosePosition(int index, RunNode node)
+    /// <summary>The position closes as it does for its owner: every order of its nodes is cancelled and the position sells what it holds.</summary>
+    private void ClosePosition(RunNode node)
     {
-        if (!HasOrder(index) && IsTrue(node, "when") && IsOpen())
+        if (IsTrue(node, "when") && IsOpen())
         {
-            Place(index, node, _entrySide == OrderSide.Buy ? OrderSide.Sell : OrderSide.Buy, ExitableQuantity(), null);
+            _position.BeginClosing();
+            CancelAll();
+            SellWhenNoNodeOrderIsLeft();
+            CloseWhenDone();
+        }
+    }
+
+    /// <summary>
+    ///     A standing order of a node may still fill, so the position sells only once every one of them is gone: right away when it has
+    ///     none, otherwise on the confirmation of the last cancel.
+    /// </summary>
+    private void SellWhenNoNodeOrderIsLeft()
+    {
+        if (_orders.Values.All(order => order.Node is null))
+        {
+            SellWhatCameWhileClosing();
         }
     }
 
@@ -600,8 +657,15 @@ public sealed class StrategyRun
         _commands.Add(new PlaceOrder(id, node.Path, side, type, price, quantity, amount));
     }
 
-    /// <summary>Only a closed bar moves the average; a period below one gives no value.</summary>
-    private NumberValue? Ema(RunNode node, EmaState state)
+    /// <summary>Only a closed bar with a value moves an indicator; a period below one gives no value.</summary>
+    private NumberValue? Indicator<TState>(RunNode node, TState state, Func<TState, decimal?> read)
+        where TState : IIndicatorState
+    {
+        return Indicator(node, state, (_, _) => read(state));
+    }
+
+    private NumberValue? Indicator<TState>(RunNode node, TState state, Func<TState, decimal, decimal?> read)
+        where TState : IIndicatorState
     {
         if (Input(node, "period") is not NumberValue { Value: >= 1m and var period })
         {
@@ -613,7 +677,18 @@ public sealed class StrategyRun
             state.Add(source, period);
         }
 
-        return Number(state.Value);
+        return Number(read(state, period));
+    }
+
+    /// <summary>Only a closed bar moves the node on, whether its input has a value or not.</summary>
+    private NumberValue? Previous(RunNode node, PreviousState state)
+    {
+        if (_event is BarClosed)
+        {
+            state.Close((Input(node, "value") as NumberValue)?.Value);
+        }
+
+        return Number(state.Previous);
     }
 
     /// <summary>A cross is a signal of the closed bar it happened on; every other event sees no cross.</summary>

@@ -6,5 +6,10 @@
   {
     "version": 2,
     "fingerprint": "06bf67b700e55eb7be830e4c90c34d935f17fb853d0a06d01b28deb82dfba5da"
+  },
+  {
+    "version": 3,
+    "fingerprint": "75552c181cc1e3ff4643ca97745ae2c4b0ac88a3a1e36e7a8dc707ed23ceb43e",
+    "reason": "The node close-position closes the position as its owner does: the market exit belongs to the position and carries no node path, and a standing order of a node is cancelled before the exit. The trades of the reference strategies are the same; the details differ in the node path of the exit order."
   }
 ]

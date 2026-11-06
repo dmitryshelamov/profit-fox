@@ -20,5 +20,9 @@ public enum SimpleNodeKind
     Not,
     MarketOrder,
     ClosePosition,
-    HoldLimit
+    HoldLimit,
+    Sma,
+    StdDev,
+    Rsi,
+    Previous
 }
