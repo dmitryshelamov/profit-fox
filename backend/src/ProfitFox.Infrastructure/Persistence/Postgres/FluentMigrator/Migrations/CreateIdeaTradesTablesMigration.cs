@@ -2,7 +2,7 @@ using FluentMigrator;
 
 namespace ProfitFox.Infrastructure.Persistence.Postgres.FluentMigrator.Migrations;
 
-[Migration(202611070005)]
+[Migration(202611070006)]
 public sealed class CreateIdeaTradesTablesMigration : ForwardOnlyMigration
 {
     // A trade by an idea, its orders, the stop and target orders the exchange made for it, and its fills; all of it goes with the trade.
