@@ -84,14 +84,18 @@ public static class SignalPathTracker
 
         decimal best = Best(path, minute);
         int?[]? ladder = null;
+        // A minute touches every level up to its best, so the touched ones are the first of the ladder: the next one is the first untouched.
+        int next = 0;
 
-        for (int index = 0; index < SignalPath.Ladder.Count; index++)
+        while (next < SignalPath.Ladder.Count && path.LadderAfter[next] is not null)
         {
-            if (path.LadderAfter[index] is null && ahead * (best - Level(path, SignalPath.Ladder[index])) >= 0)
-            {
-                ladder ??= [.. path.LadderAfter];
-                ladder[index] = sinceEntry;
-            }
+            next++;
+        }
+
+        for (; next < SignalPath.Ladder.Count && ahead * (best - Level(path, SignalPath.Ladder[next])) >= 0; next++)
+        {
+            ladder ??= [.. path.LadderAfter];
+            ladder[next] = sinceEntry;
         }
 
         SignalPath touched = ladder is null ? path : path with { LadderAfter = ladder };
