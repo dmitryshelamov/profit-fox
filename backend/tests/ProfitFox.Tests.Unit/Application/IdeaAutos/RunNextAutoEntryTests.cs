@@ -109,9 +109,9 @@ public class RunNextAutoEntryTests
         await _live.Received(1).LockAccountAsync(AccountId, Arg.Any<CancellationToken>());
         await _trades.Received(1).LockCreationAsync(Arg.Any<CancellationToken>());
         await _trades.Received(1).CreateAsync(
-            Arg.Is<IdeaTrade>(trade => trade.AutoId == _auto.Id && trade.AccountId == AccountId && trade.IdeaId == _idea.Id && trade.Amount == 300m && trade.Quantity == 3m
+            Arg.Is<IdeaTrade>(trade => trade!.AutoId == _auto.Id && trade.AccountId == AccountId && trade.IdeaId == _idea.Id && trade.Amount == 300m && trade.Quantity == 3m
                                        && trade.Status == IdeaTradeStatus.AwaitingEntry && trade.LastOrderNumber == 1),
-            Arg.Is<IdeaTradeOrder>(order => order.Number == 1 && order.Role == IdeaTradeOrderRole.Entry),
+            Arg.Is<IdeaTradeOrder>(order => order!.Number == 1 && order.Role == IdeaTradeOrderRole.Entry),
             Now,
             Arg.Any<CancellationToken>());
         await _entries.Received(1).DeleteAsync(_entry.Id, Arg.Any<CancellationToken>());
@@ -129,7 +129,7 @@ public class RunNextAutoEntryTests
         await Run();
 
         await _trades.DidNotReceiveWithAnyArgs().CreateAsync(default!, default!, default, default);
-        await _refusals.Received(1).AddAsync(Arg.Is<IdeaAutoRefusal>(refusal => refusal.Reasons.Count == 1 && refusal.Reasons[0] == IdeaTradeRefusal.RiskRewardTooLow && refusal.Detail!.Limit == 3m), Arg.Any<CancellationToken>());
+        await _refusals.Received(1).AddAsync(Arg.Is<IdeaAutoRefusal>(refusal => refusal!.Reasons.Count == 1 && refusal.Reasons[0] == IdeaTradeRefusal.RiskRewardTooLow && refusal.Detail!.Limit == 3m), Arg.Any<CancellationToken>());
     }
 
     // Scenario "Не хватает денег": «свободно 212.40 из 300 USDT».
@@ -141,7 +141,7 @@ public class RunNextAutoEntryTests
         (await Run()).ShouldBeTrue();
 
         await _refusals.Received(1).AddAsync(
-            Arg.Is<IdeaAutoRefusal>(refusal => refusal.IdeaId == _idea.Id && refusal.AutoId == _auto.Id && refusal.Mode == IdeaAutoMode.Live && refusal.At == Now
+            Arg.Is<IdeaAutoRefusal>(refusal => refusal!.IdeaId == _idea.Id && refusal.AutoId == _auto.Id && refusal.Mode == IdeaAutoMode.Live && refusal.At == Now
                                                && refusal.Instrument == Wif && refusal.Setup == IdeaSetup.Impulse && refusal.Reasons.Single() == IdeaTradeRefusal.NotEnoughMoney
                                                && refusal.Detail!.Actual == 212.40m && refusal.Detail.Limit == 300m),
             Arg.Any<CancellationToken>());
@@ -171,7 +171,7 @@ public class RunNextAutoEntryTests
 
         await Run();
 
-        await _refusals.Received(1).AddAsync(Arg.Is<IdeaAutoRefusal>(refusal => refusal.Reasons.Single() == IdeaTradeRefusal.DailyStop && refusal.Detail!.Actual == -30.15m && refusal.Detail.Limit == 30m), Arg.Any<CancellationToken>());
+        await _refusals.Received(1).AddAsync(Arg.Is<IdeaAutoRefusal>(refusal => refusal!.Reasons.Single() == IdeaTradeRefusal.DailyStop && refusal.Detail!.Actual == -30.15m && refusal.Detail.Limit == 30m), Arg.Any<CancellationToken>());
     }
 
     // Scenario "Worker не запущен": the request is older than 60 seconds, nothing is asked of the exchange.
@@ -182,7 +182,7 @@ public class RunNextAutoEntryTests
 
         (await Run()).ShouldBeTrue();
 
-        await _refusals.Received(1).AddAsync(Arg.Is<IdeaAutoRefusal>(refusal => refusal.Reasons.Single() == IdeaTradeRefusal.Late && refusal.Detail == null), Arg.Any<CancellationToken>());
+        await _refusals.Received(1).AddAsync(Arg.Is<IdeaAutoRefusal>(refusal => refusal!.Reasons.Single() == IdeaTradeRefusal.Late && refusal.Detail == null), Arg.Any<CancellationToken>());
         await _entries.Received(1).DeleteAsync(_entry.Id, Arg.Any<CancellationToken>());
         await _history.DidNotReceiveWithAnyArgs().GetLastPriceAsync(default!, default);
     }
@@ -206,7 +206,7 @@ public class RunNextAutoEntryTests
 
         await Run();
 
-        await _refusals.Received(1).AddAsync(Arg.Is<IdeaAutoRefusal>(refusal => refusal.Reasons.Single() == IdeaTradeRefusal.AutoOff), Arg.Any<CancellationToken>());
+        await _refusals.Received(1).AddAsync(Arg.Is<IdeaAutoRefusal>(refusal => refusal!.Reasons.Single() == IdeaTradeRefusal.AutoOff), Arg.Any<CancellationToken>());
         await _history.DidNotReceiveWithAnyArgs().GetLastPriceAsync(default!, default);
     }
 
@@ -217,7 +217,7 @@ public class RunNextAutoEntryTests
 
         await Run();
 
-        await _refusals.Received(1).AddAsync(Arg.Is<IdeaAutoRefusal>(refusal => refusal.Reasons.Single() == IdeaTradeRefusal.AutoOff), Arg.Any<CancellationToken>());
+        await _refusals.Received(1).AddAsync(Arg.Is<IdeaAutoRefusal>(refusal => refusal!.Reasons.Single() == IdeaTradeRefusal.AutoOff), Arg.Any<CancellationToken>());
     }
 
     [Test]
