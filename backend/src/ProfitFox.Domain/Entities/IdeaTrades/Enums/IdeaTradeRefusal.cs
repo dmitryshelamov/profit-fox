@@ -16,5 +16,6 @@ public enum IdeaTradeRefusal
     NoKey,
     CategoryNotTraded,
     HedgeMode,
-    SpotNotSupported
+    SpotNotSupported,
+    StopEntryNotSupported
 }

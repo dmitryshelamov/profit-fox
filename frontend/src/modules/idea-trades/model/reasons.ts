@@ -14,6 +14,8 @@ const reasons: Record<string, string> = {
   category_not_traded: 'Ключ аккаунта не торгует этот рынок',
   hedge_mode: 'На аккаунте включён режим hedge: переключите его на one-way',
   spot_not_supported: 'Вход на споте пока закрыт: сначала нужна проверка TP/SL на настоящей бирже',
+  stop_entry_not_supported:
+    'Стоп-вход пока не берётся: он ждёт выхода цены из диапазона, а вход здесь — по рынку или лимиткой',
 };
 
 /** What stops an entry, in words; a code the interface does not know is shown as it is. */
