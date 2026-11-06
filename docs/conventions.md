@@ -17,7 +17,7 @@ enforces a rule, the check is the source of truth.
 - `ValueObjects/<Area>` holds value objects (`Instrument`, `Price`, `Volume`, `InstrumentRules`, `StrategySnapshot`,
   `ParameterSpec`, `SimulationSettings`).
 - `Repositories` holds storage ports, named `I<Name>Repository` (`IStrategyLibraryRepository` for strategies, nodes,
-  versions and bots; `IBacktestRepository`). `Events` holds domain events.
+  versions and bots; `IBacktestRepository`; `IIdeaEngineVersionRepository` for the start of a version of the rules of ideas). `Events` holds domain events.
 - `Services/<Area>` holds domain logic that has no state of its own in the database, split into folders by purpose
   (`Services/Strategies/Nodes`, `BuiltIns`, `Templates`, `Validation`, `Execution`). Logic that belongs to an entity or a value object
   stays on it. `Services/Backtests` holds the exchange simulator and the metrics of a backtest (`ParameterGrid`,
@@ -33,19 +33,22 @@ enforces a rule, the check is the source of truth.
   them, and `TradFi`, which `ScannerUniverse.Merge` refreshes from every read of the list) and `ScannerState`; `ValueObjects/Market` holds `MarketMinute`, `OpenInterestPoint`, `FundingRatePoint`, `MarketTicker`,
   `PairMetrics` and `MarketSnapshotRow`; `Services/Market/MarketMetrics` is the pure function of the metrics of a pair.
 - `Ideas` is the area of trade ideas: `Entities/Ideas` holds `Idea` (a live idea, one open per `IdeaKey`) and the enums `IdeaSetup`,
-  `IdeaType`, `IdeaSide`, `IdeaStatus`, `IdeaBadge` (▲ ≈ ▼ of a bucket by the interval of its expectancy); `ValueObjects/Ideas` holds `IdeaCandle` (a minute or a candle of an interval, its volume the
+  `IdeaType`, `IdeaSide`, `IdeaStatus`, `IdeaBadge` (▲ ≈ ▼ of a bucket by the interval of its expectancy), `CalibrationScope` (all cases or those after the rules changed); `ValueObjects/Ideas` holds `IdeaCandle` (a minute or a candle of an interval, its volume the
   turnover), `MinuteAggregate`, `SetupThresholds`, `SetupSignal`, `SetupReading`, `SetupBase` (what the setups of an interval are measured against
   until a candle closes), `CandleSetupInput`, `RsiState`, `VolatilityPercentiles`, `Zone`, `ZoneRules`, `IdeaPlan`, `IdeaContext`,
   `IdeaTrack` (with the exit rule the idea fired under), `SignalPath` (the plan of a signal of the replay and the first touches of its entry, stop, ladder
   +0.5 … +5 R and zone, and its closes at the grid), `IdeaSignal` (a signal with its pair, setup and path), `IdeaBucketKey`, `IdeaBucket`, `BucketStatistics`
-  (with the signals, the share of entries and the expectancy per signal of «Откат» and «Стоп-вход»), `IdeaVolatility`, `IdeaShares` (with the break-even), `PairSetup`,
-  `IdeaOutcome` (how a case ended, as the calibration reads it), `CalibrationReport`, `CalibrationRow`, `IdeaExitRule` (the lifetime, the target in R and the
+  (the numbers of the model with the own ones of the bucket beside, the weight of the parent and «мало своих данных»; with the signals, the share of entries and the expectancy per signal of «Откат» and «Стоп-вход»), `IdeaVolatility`, `IdeaShares` (with the break-even), `PairSetup`,
+  `IdeaOutcome` (how a case ended, as the calibration reads it), `CalibrationReport` (with its scope, the rows by own data and the comparison of the models), `CalibrationRow`, `CalibrationOwnRow` (a row by own data with its Brier score), `CalibrationModel` and `CalibrationComparison` (the old model against the new one), `IdeaExitRule` (the lifetime, the target in R and the
   entry window of a type × interval, and which values it can take) and `IdeaExitRules` (the rules in force, the default for a type × interval never applied).
   `Services/Ideas` holds the pure functions: `Atr` (Wilder, 14), `Rsi` (Wilder, 14, over exactly 100 candles), `IdeaCandles` (candles of an interval from minutes, a minute without
   trades flat at the close before it), `SetupDetector` (the setups of a move), `CandleSetupDetector` (the candle setups), `SetupTypes`
   (the types of ideas of each setup), `ZoneFinder`, `IdeaRules`, `IdeaTracker`, `CaseResult`,
-  `BucketStatisticsCalculator` (from the counts, ΣR and ΣR², so a window of cases can add and take them), `CalibrationCalculator` (the walk-forward
-  check of the buckets on cases they had not seen), `IdeaMoney`, `Volatility`, `IdeasEngineVersion`, `ExitRuleGrid` (the lifetimes and windows of an
+  `BucketStatisticsCalculator` (from the counts, ΣR and ΣR², so a window of cases can add and take them; the old model, kept for the comparison
+  of the calibration and the screen «Срок жизни и цель»), `ClusteredSums` (the sums of a group of cases by the hour UTC they fired in, which a
+  case can be added to and removed from, and the own numbers with the clustering), `BucketModel` (the numbers of a bucket shrunk to its parent
+  «тип × ТФ × сторона × категория» and the parent to its category by DerSimonian–Laird; `Estimate`, `Level`, `Spreads`, `Root`, `ParentModel`,
+  `Parent`), `CalibrationCalculator` (the walk-forward check of the buckets by the model on cases they had not seen, one walk in the order of time), `IdeaMoney`, `Volatility`, `IdeasEngineVersion`, `ExitRuleGrid` (the lifetimes and windows of an
   interval up to 7 days, a time up to the grid), `SignalPathTracker` (steps a path by a minute, by the touches of `IdeaTracker`) and `ExitOutcomes`
   (the outcome of a path by a rule as an `IdeaTrack`, and the signals of a key that count as one open idea at a time).
 - `IdeaTrades` is the area of trades by ideas (one entry with a stop and a target the exchange stands): `Entities/IdeaTrades` holds `IdeaTrade`
@@ -141,8 +144,11 @@ enforces a rule, the check is the source of truth.
   rules every minute and puts a type × interval whose rule changed into `IdeaRecomputes`; the ideas that closed on the minute go to storage with their
   outcome for the trades made of them, and `CatchUpTradeOutcomesAsync` writes it once at the start of the session for the trades that missed it), `IdeasReplay` (the replay of history pair by pair and day
   by day, the paths of the signals open at the cursor, the clean-up of other versions), `IdeaOutcomes` (one pass over the signals by key and firing:
-  the sums of the buckets and the outcomes of the calibration, `IdeaOutcomesResult`) and `IdeaStatistics` (the buckets and the calibration from that
-  pass, whole once an hour in a lane of `ScannerSession`, a type × interval after its rule changed in another, so it never waits for the whole one). `Scanner/ScannerPace` tells the
+  the clustered sums of the buckets, their parents and their categories, the buckets of the model and the outcomes of the calibration, `IdeaOutcomesResult`
+  with the roots of the categories) and `IdeaStatistics` (the buckets and the calibration from that
+  pass, whole once an hour in a lane of `ScannerSession`, a type × interval after its rule changed in another, so it never waits for the whole one; that
+  one shrinks to the roots of the categories of the last whole pass and writes nothing before the first; the start of the version, written when
+  the session takes the lease, and the rules applied tell the calibration after the rules changed). `Scanner/ScannerPace` tells the
   replay whether the snapshot came late.
 - `Ideas` holds `IdeaCodes` (codes of setups, types, sides, statuses), `IdeaView` (an idea with its buckets), `IdeaLevels` (what the API
   measures a pair by: price, spread, ATR, zones, window), `IdeaOrder` (the order of the ideas of «Идеи» by a column; setup, type, side and
@@ -235,7 +241,8 @@ enforces a rule, the check is the source of truth.
   its key, fired time and version, a path written again goes on; read one by one in the order of key and firing; the outcome columns of version 4 stay
   empty), `idea_exit_rules` (one row per type × interval applied), `idea_buckets`, `idea_replay`
   (the cursor of a pair per version with the paths of the replay open at it), `idea_volatility` and `idea_calibration` (one `jsonb` report per
-  version, window and category, replaced whole like the buckets);
+  version, window, category and scope, replaced whole like the buckets), `idea_engine_versions` (when the scanner first took the lease with a
+  version of the rules, `IdeaEngineVersionRepository`, written once by `ON CONFLICT DO NOTHING`);
   `Repositories/SavedFilters` holds `saved_filters`. `market_snapshot.setups` (`jsonb`, interval code → setup codes) is written after the
   snapshot under the same lease. `CandleRepository.GetAggregatedAsync` joins stored minutes into candles of an interval with `time_bucket`.
 - `Persistence/Postgres/Transactions` implements the unit of work: `PostgresTransactionExecutor` opens the connection
@@ -379,7 +386,7 @@ enforces a rule, the check is the source of truth.
   `MarketController` also has `.../ideas` (the ideas of a pair), `.../zones?interval` (5, 15, 60, 240) and `POST .../own-idea`; the rows of
   `GET /api/market` and of a pair carry `setups`. `IdeasController`: `GET /api/ideas` (filters `setup`, `interval`, `type`, `side`,
   `category`, `nonNegativeExpectancy`, `activeOnly`, `hideStocks` (the ideas of non-crypto pairs of the scanner), `savedFilter`; `sort`, `direction`, `page`, `pageSize`; the answer is `items`, `page`, `pageSize` and
-  `total`), `GET /api/ideas/{id}`, `GET /api/ideas/buckets`, `GET /api/ideas/calibration` (`days` 90 or 30, `category` linear, spot or none). `IdeaExitRulesController`: `GET /api/ideas/exit-rules`
+  `total`), `GET /api/ideas/{id}`, `GET /api/ideas/buckets`, `GET /api/ideas/calibration` (`days` 90 or 30, `category` linear, spot or none, `scope` all or fresh; the answer has `owns` and `comparison`). `IdeaExitRulesController`: `GET /api/ideas/exit-rules`
   (every type × interval with its grid), `GET /api/ideas/exit-rules/preview` (`type`, `interval`, `life`, `target`, `window`; 400 by the name of a parameter the
   type has no use for or a value off the grid) and `PUT /api/ideas/exit-rules/{type}/{interval}` (`{ life, target, window }` → the rule with its time). `SavedFiltersController`: CRUD of
   `/api/saved-filters`, the catalog `GET /api/saved-filters/fields` and `POST /api/saved-filters/fit` (`{ conditions }` of a draft →

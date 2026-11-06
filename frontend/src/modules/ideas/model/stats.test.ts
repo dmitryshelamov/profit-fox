@@ -5,6 +5,7 @@ import {
   expectancyText,
   moneyOutcome,
   outcomeShares,
+  ownNumbers,
   probabilityView,
 } from './stats';
 
@@ -26,6 +27,14 @@ const bucket = (overrides: Partial<Bucket> = {}): Bucket => ({
   signals: null,
   entryShare: null,
   signalExpectancy: null,
+  ownProbability: '0.4',
+  ownProbabilityLow: '0.35',
+  ownProbabilityHigh: '0.45',
+  ownExpectancy: '0.3',
+  ownExpectancyLow: '0.18',
+  ownExpectancyHigh: '0.42',
+  parentWeight: '0.2',
+  fewOwnCases: false,
   ...overrides,
 });
 
@@ -103,6 +112,37 @@ describe('outcomeShares', () => {
     expect(
       outcomeShares(bucket({ signals: 800, entryShare: '0.5', signalExpectancy: '-0.03' })),
     ).toBe('Цель 45 % · Стоп 50 % · Истекла 5 % · входов 50 % · на сигнал -0.03 R');
+  });
+});
+
+describe('ownNumbers', () => {
+  // Scenario "Собственные числа по наведению".
+  it('tells the own numbers of the bucket and the weight of the parent', () => {
+    expect(
+      ownNumbers(
+        bucket({ cases: 35, ownProbability: '0.4', ownExpectancy: '0.3', parentWeight: '0.8' }),
+      ),
+    ).toBe('в самой корзине: 35 случаев · 40 % · +0.30 R · по родителю 80 %');
+  });
+
+  // Scenario "Мало своих данных": no own share under 30 own cases.
+  it('tells the own expectancy of a bucket of few own cases without its share', () => {
+    expect(
+      ownNumbers(
+        bucket({
+          cases: 12,
+          ownProbability: null,
+          ownExpectancy: '0.5',
+          parentWeight: '0.92',
+          fewOwnCases: true,
+        }),
+      ),
+    ).toBe('в самой корзине: 12 случаев · +0.50 R · по родителю 92 %');
+  });
+
+  it('tells nothing of a bucket without the model or without a bucket', () => {
+    expect(ownNumbers(bucket({ enoughData: false, parentWeight: null }))).toBeNull();
+    expect(ownNumbers(null)).toBeNull();
   });
 });
 

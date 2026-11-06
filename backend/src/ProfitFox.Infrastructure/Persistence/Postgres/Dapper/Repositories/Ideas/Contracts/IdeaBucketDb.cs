@@ -37,4 +37,20 @@ internal sealed class IdeaBucketDb
     public decimal? ExpectancyHigh { get; init; }
 
     public int? Signals { get; init; }
+
+    public decimal? OwnProbability { get; init; }
+
+    public decimal? OwnProbabilityLow { get; init; }
+
+    public decimal? OwnProbabilityHigh { get; init; }
+
+    public decimal OwnExpectancy { get; init; }
+
+    public decimal? OwnExpectancyLow { get; init; }
+
+    public decimal? OwnExpectancyHigh { get; init; }
+
+    public decimal? ParentWeight { get; init; }
+
+    public bool FewOwnCases { get; init; }
 }

@@ -37,28 +37,33 @@ public class IdeaStatisticsRecomputeTests
         await _dataSource.DisposeAsync();
     }
 
+    // Decision 4 of honest-idea-intervals: the buckets of «Импульс» and of «Пролив», one parent, written with the numbers of the model and their
+    // own ones beside; «Пролив» has 12 cases of its own, and over 30 days the parent has fewer than 30, «мало данных».
     [Test]
     public async Task Buckets_of_the_stored_signals_are_written_for_90_and_30_days()
     {
         var buckets = new IdeaBucketRepository(_dataSource);
-        IdeaSignal[] old = [.. Enumerable.Range(0, 20).Select(index => IdeaSignalGenerator.Generate(Now.AddDays(-60).AddHours(index), index < 8 ? IdeaStatus.Target : IdeaStatus.Stop))];
-        IdeaSignal[] recent = [.. Enumerable.Range(0, 20).Select(index => IdeaSignalGenerator.Generate(Now.AddDays(-10).AddHours(index), index < 10 ? IdeaStatus.Target : IdeaStatus.Stop))];
-        IdeaSignal target = IdeaSignalGenerator.Generate(Now.AddDays(-5));
-        await new IdeaSignalRepository(_dataSource).UpsertAsync([.. old, .. recent, target], CancellationToken.None);
+        (DateTimeOffset FiredAt, IdeaStatus Status, IdeaSetup Setup)[] cases =
+        [
+            .. Enumerable.Range(0, 20).Select(index => (Now.AddDays(-60).AddHours(index), index < 8 ? IdeaStatus.Target : IdeaStatus.Stop, IdeaSetup.Impulse)),
+            .. Enumerable.Range(0, 20).Select(index => (Now.AddDays(-10).AddHours(index), index < 10 ? IdeaStatus.Target : IdeaStatus.Stop, IdeaSetup.Impulse)),
+            (Now.AddDays(-5), IdeaStatus.Target, IdeaSetup.Impulse),
+            .. Enumerable.Range(0, 12).Select(index => (Now.AddDays(-50).AddHours(index), index < 3 ? IdeaStatus.Target : IdeaStatus.Stop, IdeaSetup.Drop))
+        ];
+        await new IdeaSignalRepository(_dataSource).UpsertAsync(
+            [.. cases.Select(item => IdeaSignalGenerator.Generate(item.FiredAt, item.Status, setup: item.Setup))],
+            CancellationToken.None);
 
         await Statistics().RecomputeAsync(CancellationToken.None);
 
-        var key = new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear);
         IReadOnlyList<IdeaBucket> read = await buckets.GetAsync(IdeasEngineVersion.Current, CancellationToken.None);
-        read.ShouldBe(
-        [
-            new IdeaBucket(key, 90, BucketStatisticsCalculator.Compute(19, 22, 0, (19 * 2m) - 22m, (19 * 4m) + 22m)),
-            new IdeaBucket(key, 30, BucketStatisticsCalculator.Compute(11, 10, 0, (11 * 2m) - 10m, (11 * 4m) + 10m))
-        ],
-            ignoreOrder: true);
-        BucketStatistics full = read.Single(bucket => bucket.Days == 90).Statistics;
-        (full.Targets, full.Stops, full.Badge).ShouldBe((19, 22, IdeaBadge.Flat));
-        (await new IdeaCalibrationRepository(_dataSource).GetAsync(IdeasEngineVersion.Current, 30, null, CancellationToken.None))!.Checked.ShouldBe(11);
+        read.ShouldBe([.. Model(cases, 90), .. Model(cases, 30)], ignoreOrder: true);
+        BucketStatistics drop = read.Single(bucket => bucket.Days == 90 && bucket.Key.Setup == IdeaSetup.Drop).Statistics;
+        (drop.FewOwnCases, drop.OwnExpectancy, drop.ParentWeight).ShouldBe((true, -0.25m, 1m));
+        BucketStatistics impulse = read.Single(bucket => bucket.Days == 90 && bucket.Key.Setup == IdeaSetup.Impulse).Statistics;
+        (impulse.OwnProbability, impulse.OwnExpectancyLow).ShouldNotBe((null, null));
+        // The 21 cases of the last 30 days find the 32 of their parent fired 50 and 60 days ago, and are all checked by the model.
+        (await new IdeaCalibrationRepository(_dataSource).GetAsync(IdeasEngineVersion.Current, 30, null, CalibrationScope.All, CancellationToken.None))!.Checked.ShouldBe(21);
     }
 
     // Scenario "Смена срока без прогона": a lifetime of one candle closes the targets of 30 minutes as expired at the close of 100.
@@ -74,6 +79,36 @@ public class IdeaStatisticsRecomputeTests
             .ShouldAllBe(bucket => bucket.Statistics.Expired == 1 && bucket.Statistics.Targets == 0);
     }
 
+    // The buckets of the model of the cases fired in the last days: a target is +2 R, a stop −1 R.
+    private static IEnumerable<IdeaBucket> Model((DateTimeOffset FiredAt, IdeaStatus Status, IdeaSetup Setup)[] cases, int days)
+    {
+        var key = new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear);
+        var buckets = new Dictionary<IdeaBucketKey, ClusteredSums>();
+        var parent = new ClusteredSums();
+        var category = new ClusteredSums();
+
+        foreach ((DateTimeOffset firedAt, IdeaStatus status, IdeaSetup setup) in cases.Where(item => item.FiredAt >= Now.AddDays(-days)))
+        {
+            decimal result = status == IdeaStatus.Target ? 2m : -1m;
+            IdeaBucketKey bucket = key with { Setup = setup };
+
+            if (!buckets.TryGetValue(bucket, out ClusteredSums? sums))
+            {
+                sums = new ClusteredSums();
+                buckets[bucket] = sums;
+            }
+
+            sums.Add(firedAt, status, result);
+            parent.Add(firedAt, status, result);
+            category.Add(firedAt, status, result);
+        }
+
+        Dictionary<BucketModel.Parent, ClusteredSums> parents = new() { [BucketModel.Parent.Of(key)] = parent };
+
+        return BucketModel.Build(buckets, parents, BucketModel.Roots(parents, new Dictionary<MarketCategory, ClusteredSums> { [MarketCategory.Linear] = category }))
+            .Select(bucket => new IdeaBucket(bucket.Key, days, bucket.Value));
+    }
+
     private IdeaStatistics Statistics()
     {
         return new IdeaStatistics(
@@ -81,6 +116,7 @@ public class IdeaStatisticsRecomputeTests
             new IdeaExitRuleRepository(_dataSource),
             new IdeaBucketRepository(_dataSource),
             new IdeaCalibrationRepository(_dataSource),
+            new IdeaEngineVersionRepository(_dataSource),
             new BacktestSettings { DefaultFees = new Dictionary<string, FeeRateSettings> { ["linear"] = new FeeRateSettings() } },
             new IdeasEngineVersion(IdeasEngineVersion.Current),
             new FakeTimeProvider(Now));

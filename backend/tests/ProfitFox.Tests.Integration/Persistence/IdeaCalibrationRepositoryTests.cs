@@ -48,14 +48,25 @@ public class IdeaCalibrationRepositoryTests
             [new CalibrationRow(null, null, IdeaBadge.Flat, 0.2m, thirty)],
             new CalibrationRow(null, null, null, 0.18m, thirty));
         var all = new CalibrationReport(Now, 90, null, 0, 2, null, null, [], [], [], null);
+        // Decision 6 of honest-idea-intervals: the report after the rules changed, with the table by own data and the comparison of the models.
+        CalibrationReport fresh = linear with
+        {
+            Scope = CalibrationScope.Fresh,
+            Owns = [new CalibrationOwnRow(false, new CalibrationRow(null, null, null, 0.2m, thirty), 0.21m), new CalibrationOwnRow(true, new CalibrationRow(null, null, null, -0.5m, single), 1m)],
+            Comparison = new CalibrationComparison(
+                new CalibrationModel(31, 0.22m, new CalibrationRow(null, null, IdeaBadge.Up, 0.145m, thirty)),
+                new CalibrationModel(31, 0.207m, null))
+        };
         await calibrations.ReplaceAsync(1, [all with { Days = 30 }], CancellationToken.None);
 
-        await calibrations.ReplaceAsync(2, [all, linear], CancellationToken.None);
+        await calibrations.ReplaceAsync(2, [all, linear, fresh], CancellationToken.None);
 
-        ShouldMatch(await calibrations.GetAsync(2, 30, MarketCategory.Linear, CancellationToken.None), linear);
-        ShouldMatch(await calibrations.GetAsync(2, 90, null, CancellationToken.None), all);
-        (await calibrations.GetAsync(2, 90, MarketCategory.Spot, CancellationToken.None)).ShouldBeNull();
-        (await calibrations.GetAsync(1, 30, null, CancellationToken.None)).ShouldBeNull();
+        ShouldMatch(await calibrations.GetAsync(2, 30, MarketCategory.Linear, CalibrationScope.All, CancellationToken.None), linear);
+        ShouldMatch(await calibrations.GetAsync(2, 30, MarketCategory.Linear, CalibrationScope.Fresh, CancellationToken.None), fresh);
+        ShouldMatch(await calibrations.GetAsync(2, 90, null, CalibrationScope.All, CancellationToken.None), all);
+        (await calibrations.GetAsync(2, 90, null, CalibrationScope.Fresh, CancellationToken.None)).ShouldBeNull();
+        (await calibrations.GetAsync(2, 90, MarketCategory.Spot, CalibrationScope.All, CancellationToken.None)).ShouldBeNull();
+        (await calibrations.GetAsync(1, 30, null, CalibrationScope.All, CancellationToken.None)).ShouldBeNull();
     }
 
     // A record compares its lists by reference: the lists are compared by their rows, the rest as it is.
@@ -65,6 +76,7 @@ public class IdeaCalibrationRepositoryTests
         read.Probabilities.ShouldBe(expected.Probabilities);
         read.Expectancies.ShouldBe(expected.Expectancies);
         read.Badges.ShouldBe(expected.Badges);
-        (read with { Probabilities = expected.Probabilities, Expectancies = expected.Expectancies, Badges = expected.Badges }).ShouldBe(expected);
+        read.Owns.ShouldBe(expected.Owns);
+        (read with { Probabilities = expected.Probabilities, Expectancies = expected.Expectancies, Badges = expected.Badges, Owns = expected.Owns }).ShouldBe(expected);
     }
 }

@@ -59,7 +59,7 @@ public sealed class IdeasController(ISender sender) : ControllerBase
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Calibration([FromQuery] IdeaCalibrationParameters parameters, CancellationToken cancellationToken)
     {
-        GetIdeaCalibrationResult result = await sender.Send(new GetIdeaCalibrationQuery(parameters.Days, parameters.Category), cancellationToken);
+        GetIdeaCalibrationResult result = await sender.Send(new GetIdeaCalibrationQuery(parameters.Days, parameters.Category, parameters.Scope), cancellationToken);
 
         return result.Errors.Count > 0 ? Invalid(result.Errors) : Ok(IdeaCalibrationResponse.Of(result));
     }

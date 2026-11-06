@@ -32,10 +32,10 @@ public class IdeaOutcomesTests
         IdeaBucketKey pullback = twoR with { Type = IdeaType.Pullback };
         result.Buckets.ShouldBe(
         [
-            new IdeaBucket(twoR, 90, BucketStatisticsCalculator.Compute(1, 1, 0, 1m, 5m)),
-            new IdeaBucket(twoR, 30, BucketStatisticsCalculator.Compute(1, 0, 0, 2m, 4m)),
-            new IdeaBucket(pullback, 90, BucketStatisticsCalculator.Compute(0, 0, 1, 0.5m, 0.25m, 2)),
-            new IdeaBucket(pullback, 30, BucketStatisticsCalculator.Compute(0, 0, 1, 0.5m, 0.25m, 2))
+            new IdeaBucket(twoR, 90, TooLittleData(1, 1, 0, 0.5m)),
+            new IdeaBucket(twoR, 30, TooLittleData(1, 0, 0, 2m)),
+            new IdeaBucket(pullback, 90, TooLittleData(0, 0, 1, 0.5m) with { Signals = 2 }),
+            new IdeaBucket(pullback, 30, TooLittleData(0, 0, 1, 0.5m) with { Signals = 2 })
         ], ignoreOrder: true);
         result.Outcomes.ShouldBe(
         [
@@ -71,6 +71,58 @@ public class IdeaOutcomesTests
         result.Outcomes.Single(outcome => outcome.Key.Category == MarketCategory.Spot).Result.ShouldBe(2m - (0.204m / 2m));
     }
 
+    // Decision 4: 30 cases of «Импульс» and 30 of «Пролив» of one parent, a day apart, every third a +2 R target, the rest −1 R stops: the
+    // buckets have the numbers of the model over their own sums, their parent's and their category's by the hour of their firing, with their
+    // own numbers beside, over 90 days and over the 15 and 20 cases of the last 30; the parent is not a bucket of the result.
+    [Test]
+    public async Task Pass_gives_the_buckets_the_numbers_of_the_model()
+    {
+        IdeaSignal[] signals =
+        [
+            .. Enumerable.Range(0, 30).Select(index => Signal(Wif, IdeaSetup.Impulse, -45 + index, index % 3 == 0 ? Path() with { LadderAfter = Ladder(30) } : Path() with { StopAfter = 10 })),
+            .. Enumerable.Range(0, 30).Select(index => Signal(Wif, IdeaSetup.Drop, -40 + index, index % 3 == 1 ? Path() with { LadderAfter = Ladder(30) } : Path() with { StopAfter = 10 }))
+        ];
+
+        IdeaOutcomesResult result = await IdeaOutcomes.WalkAsync(signals.ToAsyncEnumerable(), new IdeaExitRules([]), _ => NoFees, Now, CancellationToken.None);
+
+        var impulse = new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear);
+        IdeaBucketKey drop = impulse with { Setup = IdeaSetup.Drop };
+        result.Buckets.ShouldBe(
+        [
+            new IdeaBucket(impulse, 90, Model(signals, 90)[impulse]),
+            new IdeaBucket(drop, 90, Model(signals, 90)[drop]),
+            new IdeaBucket(impulse, 30, Model(signals, 30)[impulse]),
+            new IdeaBucket(drop, 30, Model(signals, 30)[drop])
+        ], ignoreOrder: true);
+        result.Buckets.Single(bucket => bucket.Key == impulse && bucket.Days == 90).Statistics.OwnProbability.ShouldBe(10m / 30m);
+        result.Buckets.Single(bucket => bucket.Key == impulse && bucket.Days == 30).Statistics.FewOwnCases.ShouldBeTrue();
+    }
+
+    // The model of the signals fired in the last days, without fees: a target is +2 R, a stop −1 R.
+    private static IReadOnlyDictionary<IdeaBucketKey, BucketStatistics> Model(IdeaSignal[] signals, int days)
+    {
+        var buckets = new Dictionary<IdeaBucketKey, ClusteredSums>();
+        var parents = new Dictionary<BucketModel.Parent, ClusteredSums>();
+        var categories = new Dictionary<MarketCategory, ClusteredSums>();
+
+        foreach (IdeaSignal signal in signals.Where(signal => signal.Path.FiredAt >= Now.AddDays(-days)))
+        {
+            bool target = signal.Path.LadderAfter[3] is not null;
+
+            foreach (ClusteredSums sums in new[]
+                     {
+                         buckets.GetValueOrDefault(signal.Bucket) ?? (buckets[signal.Bucket] = new ClusteredSums()),
+                         parents.GetValueOrDefault(BucketModel.Parent.Of(signal.Bucket)) ?? (parents[BucketModel.Parent.Of(signal.Bucket)] = new ClusteredSums()),
+                         categories.GetValueOrDefault(signal.Bucket.Category) ?? (categories[signal.Bucket.Category] = new ClusteredSums())
+                     })
+            {
+                sums.Add(signal.Path.FiredAt, target ? IdeaStatus.Target : IdeaStatus.Stop, target ? 2m : -1m);
+            }
+        }
+
+        return BucketModel.Build(buckets, parents, BucketModel.Roots(parents, categories));
+    }
+
     private static async IAsyncEnumerable<IdeaSignal> Signals()
     {
         IdeaSignal[] signals =
@@ -102,12 +154,23 @@ public class IdeaOutcomesTests
         };
     }
 
+    private static IdeaSignal Signal(Instrument instrument, IdeaSetup setup, int days, SignalPath path)
+    {
+        return Signal(instrument, IdeaType.TwoR, days, path) with { Setup = setup };
+    }
+
     private static IdeaSignal Signal(Instrument instrument, IdeaType type, int days, SignalPath path)
     {
         DateTimeOffset fired = path.FiredAt == Now ? Now.AddDays(days) : path.FiredAt;
         DateTimeOffset tracked = path.TrackedUntil == Now ? fired.AddDays(14) : path.TrackedUntil;
 
         return new IdeaSignal(instrument, IdeaSetup.Impulse, path with { Type = type, FiredAt = fired, TrackedUntil = tracked }, 3m, 2m, IdeasEngineVersion.Current);
+    }
+
+    // «Мало данных»: the counts and the own expectancy.
+    private static BucketStatistics TooLittleData(int targets, int stops, int expired, decimal expectancy)
+    {
+        return new BucketStatistics(targets + stops + expired, targets, stops, expired, null, null, null, expectancy, null, null) { OwnExpectancy = expectancy };
     }
 
     // +2 R first touched at the given minute from the entry.

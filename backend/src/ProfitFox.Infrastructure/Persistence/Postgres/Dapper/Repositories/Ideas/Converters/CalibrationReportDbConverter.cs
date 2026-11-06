@@ -19,11 +19,13 @@ internal static class CalibrationReportDbConverter
             Probabilities = [.. report.Probabilities.Select(FromDomain)],
             Expectancies = [.. report.Expectancies.Select(FromDomain)],
             Badges = [.. report.Badges.Select(FromDomain)],
-            Total = report.Total is null ? null : FromDomain(report.Total)
+            Total = report.Total is null ? null : FromDomain(report.Total),
+            Owns = [.. report.Owns.Select(own => new CalibrationOwnRowDb { FewOwnCases = own.FewOwnCases, Row = FromDomain(own.Row), Brier = own.Brier })],
+            Comparison = report.Comparison is not { } comparison ? null : new CalibrationComparisonDb { Old = FromDomain(comparison.Old), New = FromDomain(comparison.New) }
         };
     }
 
-    public static CalibrationReport ToDomain(CalibrationReportDb row, DateTimeOffset computedAt, int days, MarketCategory? category)
+    public static CalibrationReport ToDomain(CalibrationReportDb row, DateTimeOffset computedAt, int days, MarketCategory? category, CalibrationScope scope)
     {
         return new CalibrationReport(
             computedAt,
@@ -36,7 +38,22 @@ internal static class CalibrationReportDbConverter
             [.. row.Probabilities.Select(ToDomain)],
             [.. row.Expectancies.Select(ToDomain)],
             [.. row.Badges.Select(ToDomain)],
-            row.Total is null ? null : ToDomain(row.Total));
+            row.Total is null ? null : ToDomain(row.Total))
+        {
+            Scope = scope,
+            Owns = [.. row.Owns.Select(own => new CalibrationOwnRow(own.FewOwnCases, ToDomain(own.Row), own.Brier))],
+            Comparison = row.Comparison is not { } comparison ? null : new CalibrationComparison(ToDomain(comparison.Old), ToDomain(comparison.New))
+        };
+    }
+
+    private static CalibrationModelDb FromDomain(CalibrationModel model)
+    {
+        return new CalibrationModelDb { Cases = model.Cases, Brier = model.Brier, Up = model.Up is null ? null : FromDomain(model.Up) };
+    }
+
+    private static CalibrationModel ToDomain(CalibrationModelDb model)
+    {
+        return new CalibrationModel(model.Cases, model.Brier, model.Up is null ? null : ToDomain(model.Up));
     }
 
     private static CalibrationRowDb FromDomain(CalibrationRow row)

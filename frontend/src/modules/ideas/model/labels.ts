@@ -47,6 +47,11 @@ export function casesText(count: number): string {
   return counted(count, 'кейс', 'кейса', 'кейсов');
 }
 
+/** How many own cases of a bucket: «35 случаев». */
+export function bucketCasesText(count: number): string {
+  return counted(count, 'случай', 'случая', 'случаев');
+}
+
 /** How many candles: «48 свечей». */
 export function candlesText(count: number): string {
   return counted(count, 'свеча', 'свечи', 'свечей');

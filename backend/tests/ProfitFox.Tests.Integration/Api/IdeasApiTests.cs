@@ -100,6 +100,52 @@ public class IdeasApiTests
         (recent.GetProperty("expectancyLow").ValueKind, recent.GetProperty("badge").ValueKind).ShouldBe((JsonValueKind.Null, JsonValueKind.Null));
     }
 
+    // Scenario "Корзина модели в ответе" and decision 7 of honest-idea-intervals: the numbers of the model with the own ones beside; a bucket of
+    // few own cases has enough data by its parent. The list goes by the expectancy of the model: −0.10 R of the impulse before −0.20 R of the
+    // drop, whose own +0.50 R would come first.
+    [Test]
+    public async Task Ideas_come_with_the_numbers_of_the_model_of_their_bucket_and_go_by_them()
+    {
+        Idea impulse = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol);
+        Idea drop = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-10), instrument: Sol, setup: IdeaSetup.Drop);
+        await new IdeaRepository(_database).SaveAsync([impulse, drop], [], CancellationToken.None);
+        var key = new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear);
+        await new IdeaBucketRepository(_database).ReplaceAsync(
+            IdeasEngineVersion.Current,
+            [
+                new IdeaBucket(key, 90, new BucketStatistics(35, 14, 21, 0, 0.36m, 0.25m, 0.47m, -0.10m, -0.279m, 0.075m)
+                {
+                    OwnProbability = 0.4m,
+                    OwnProbabilityLow = 0.25m,
+                    OwnProbabilityHigh = 0.56m,
+                    OwnExpectancy = 0.30m,
+                    OwnExpectancyLow = 0.02m,
+                    OwnExpectancyHigh = 0.58m,
+                    ParentWeight = 0.80m
+                }),
+                new IdeaBucket(key with { Setup = IdeaSetup.Drop }, 90, new BucketStatistics(12, 6, 6, 0, 0.35m, 0.3m, 0.4m, -0.20m, -0.3m, -0.1m)
+                {
+                    OwnExpectancy = 0.50m,
+                    ParentWeight = 0.92m,
+                    FewOwnCases = true
+                })
+            ],
+            null, CancellationToken.None);
+
+        JsonElement[] ideas = [.. (await ItemsAsync("/api/ideas")).EnumerateArray()];
+
+        ideas.Select(idea => idea.GetProperty("id").GetGuid()).ShouldBe([impulse.Id, drop.Id]);
+        JsonElement bucket = ideas[0].GetProperty("bucket");
+        (bucket.GetProperty("expectancy").GetString(), bucket.GetProperty("ownExpectancy").GetString(), bucket.GetProperty("parentWeight").GetString()).ShouldBe(("-0.10", "0.30", "0.80"));
+        (bucket.GetProperty("ownProbability").GetString(), bucket.GetProperty("ownProbabilityLow").GetString(), bucket.GetProperty("ownProbabilityHigh").GetString())
+            .ShouldBe(("0.4", "0.25", "0.56"));
+        (bucket.GetProperty("ownExpectancyLow").GetString(), bucket.GetProperty("ownExpectancyHigh").GetString()).ShouldBe(("0.02", "0.58"));
+        (bucket.GetProperty("badge").GetString(), bucket.GetProperty("fewOwnCases").GetBoolean()).ShouldBe(("flat", false));
+        JsonElement few = ideas[1].GetProperty("bucket");
+        (few.GetProperty("cases").GetInt32(), few.GetProperty("enoughData").GetBoolean(), few.GetProperty("fewOwnCases").GetBoolean()).ShouldBe((12, true, true));
+        (few.GetProperty("ownProbability").ValueKind, few.GetProperty("badge").GetString()).ShouldBe((JsonValueKind.Null, "down"));
+    }
+
     // An idea of a bucket without cases has only its own break-even; the list goes by expectancy.
     [Test]
     public async Task Ideas_without_a_bucket_have_their_own_break_even_and_come_last()
@@ -180,6 +226,37 @@ public class IdeasApiTests
         (withoutTotal.GetProperty("checked").GetInt32(), withoutTotal.GetProperty("total").ValueKind).ShouldBe((1, JsonValueKind.Null));
     }
 
+    // Scenario "После изменения правил": the report of the scope, with the table by own data and the comparison of the models.
+    [Test]
+    public async Task Calibration_after_the_rules_changed_is_read_by_its_scope()
+    {
+        BucketStatistics thirty = BucketStatisticsCalculator.Compute(6, 21, 3, 6.75m, 25.3125m);
+        var all = new CalibrationReport(SnapshotAt.AddMinutes(-3), 90, null, 30, 4, 0.207m, 0.219m, [], [], [], null);
+        CalibrationReport fresh = all with
+        {
+            Checked = 12,
+            Scope = CalibrationScope.Fresh,
+            Owns = [new CalibrationOwnRow(true, new CalibrationRow(null, null, null, 0.05m, thirty), 0.21m)],
+            Comparison = new CalibrationComparison(
+                new CalibrationModel(30, 0.22m, new CalibrationRow(null, null, IdeaBadge.Up, 0.145m, thirty)),
+                new CalibrationModel(30, 0.207m, null))
+        };
+        await new IdeaCalibrationRepository(_database).ReplaceAsync(IdeasEngineVersion.Current, [all, fresh], CancellationToken.None);
+
+        JsonElement report = await GetAsync("/api/ideas/calibration?scope=fresh");
+
+        (report.GetProperty("scope").GetString(), report.GetProperty("checked").GetInt32()).ShouldBe(("fresh", 12));
+        JsonElement own = report.GetProperty("owns").EnumerateArray().Single();
+        (own.GetProperty("fewOwnCases").GetBoolean(), own.GetProperty("brier").GetString(), own.GetProperty("promised").GetString(), own.GetProperty("cases").GetInt32())
+            .ShouldBe((true, "0.21", "0.05", 30));
+        JsonElement comparison = report.GetProperty("comparison");
+        (comparison.GetProperty("old").GetProperty("cases").GetInt32(), comparison.GetProperty("old").GetProperty("brier").GetString()).ShouldBe((30, "0.22"));
+        (comparison.GetProperty("old").GetProperty("up").GetProperty("promised").GetString(), comparison.GetProperty("new").GetProperty("up").ValueKind)
+            .ShouldBe(("0.145", JsonValueKind.Null));
+        JsonElement whole = await GetAsync("/api/ideas/calibration?scope=all");
+        (whole.GetProperty("scope").GetString(), whole.GetProperty("checked").GetInt32(), whole.GetProperty("comparison").ValueKind).ShouldBe(("all", 30, JsonValueKind.Null));
+    }
+
     // Scenario "Ещё не посчитана".
     [Test]
     public async Task Calibration_before_the_first_one_is_empty()
@@ -189,11 +266,13 @@ public class IdeasApiTests
         (report.GetProperty("computedAt").ValueKind, report.GetProperty("days").GetInt32(), report.GetProperty("category").GetString()).ShouldBe((JsonValueKind.Null, 90, "spot"));
         (report.GetProperty("checked").GetInt32(), report.GetProperty("unchecked").GetInt32(), report.GetProperty("brier").ValueKind).ShouldBe((0, 0, JsonValueKind.Null));
         (report.GetProperty("probabilities").GetArrayLength(), report.GetProperty("badges").GetArrayLength(), report.GetProperty("total").ValueKind).ShouldBe((0, 0, JsonValueKind.Null));
+        (report.GetProperty("scope").GetString(), report.GetProperty("owns").GetArrayLength(), report.GetProperty("comparison").ValueKind).ShouldBe(("all", 0, JsonValueKind.Null));
     }
 
-    // Scenario "Другое окно".
+    // Scenarios "Другое окно" and "Другой режим".
     [TestCase("days=60", "days")]
     [TestCase("category=inverse", "category")]
+    [TestCase("scope=old", "scope")]
     public async Task Calibration_of_another_window_or_category_is_refused(string query, string key)
     {
         HttpResponseMessage response = await _client.GetAsync($"/api/ideas/calibration?{query}");

@@ -3,6 +3,8 @@ import { isDecimalText } from '@/shared/api/jsonNumber';
 import { compareDecimals, multiplyDecimals, shiftDecimal } from '@/shared/format/decimal';
 import { roundDecimal, showDecimal } from '@/shared/format/format';
 
+import { bucketCasesText } from './labels';
+
 type Bucket = Schemas['BucketStatisticsResponse'];
 
 export type Badge = '▲' | '≈' | '▼';
@@ -64,6 +66,23 @@ export function outcomeShares(bucket: Bucket | null): string | null {
   return bucket.signalExpectancy === null
     ? shares
     : `${shares} · входов ${roundDecimal(shiftDecimal(bucket.entryShare!, 2), 0)} % · на сигнал ${showDecimal(bucket.signalExpectancy, 2, true)} R`;
+}
+
+/**
+ * The own numbers of a bucket beside those of the model, for the hint of its expectancy: its cases, its own share of targets (none under 30
+ * own cases), its own expectancy and the weight of the parent in the model; none without the numbers of the model.
+ */
+export function ownNumbers(bucket: Bucket | null): string | null {
+  if (bucket === null || bucket.parentWeight === null) {
+    return null;
+  }
+
+  const share =
+    bucket.ownProbability === null
+      ? ''
+      : ` · ${roundDecimal(shiftDecimal(bucket.ownProbability, 2), 0)} %`;
+
+  return `в самой корзине: ${bucketCasesText(Number(bucket.cases))}${share} · ${showDecimal(bucket.ownExpectancy, 2, true)} R · по родителю ${roundDecimal(shiftDecimal(bucket.parentWeight, 2), 0)} %`;
 }
 
 /** The expectancy of the bucket in R with a sign, or a dash for a bucket without a case. */

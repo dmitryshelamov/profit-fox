@@ -46,6 +46,7 @@ public class ScannerSessionTests
     private IIdeaSignalRepository _ideaSignals = null!;
     private IIdeaReplayRepository _cursors = null!;
     private IIdeaExitRuleRepository _exitRules = null!;
+    private IIdeaEngineVersionRepository _versions = null!;
     private IAsyncDisposable _subscription = null!;
     private FakeTimeProvider _time = null!;
     private Action<Instrument, Candle> _closed = null!;
@@ -82,6 +83,7 @@ public class ScannerSessionTests
         _ideaSignals.StreamAsync(Arg.Any<int>(), Arg.Any<DateTimeOffset>(), Arg.Any<(IdeaType, Interval)?>(), Arg.Any<CancellationToken>())
             .Returns(_ => AsyncEnumerable.Empty<IdeaSignal>());
         _exitRules = ExitRules();
+        _versions = Substitute.For<IIdeaEngineVersionRepository>();
         _cursors = Substitute.For<IIdeaReplayRepository>();
         _cursors.GetAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new Dictionary<Instrument, IdeaReplayCursor>());
         _time = new FakeTimeProvider(Start);
@@ -93,6 +95,20 @@ public class ScannerSessionTests
     public async Task TearDown()
     {
         await _subscription.DisposeAsync();
+    }
+
+    // Requirement "Начало версии правил": the session writes the start of its version of the rules when it takes the lease; storage keeps the first.
+    [Test]
+    public async Task Session_writes_the_start_of_its_version_of_the_rules_when_it_takes_the_lease()
+    {
+        using var lease = new CancellationTokenSource();
+        Task session = Session().RunAsync(lease.Token);
+
+        await WaitAsync(() => _versions.ReceivedCalls().Any());
+
+        await _versions.Received(1).StartAsync(IdeasEngineVersion.Current, Start, Arg.Any<CancellationToken>());
+        await lease.CancelAsync();
+        (await Should.ThrowAsync<Exception>(session)).ShouldBeAssignableTo<OperationCanceledException>();
     }
 
     [Test]
@@ -298,22 +314,26 @@ public class ScannerSessionTests
     }
 
     // Review of tune-idea-rules: on the market of prod the whole recompute takes over a minute; the buckets of a rule applied meanwhile do not
-    // wait for it.
+    // wait for it. Decision 4 of honest-idea-intervals: they shrink to the categories of the whole pass before, so the first one has ended.
     [Test]
     public async Task Buckets_of_a_rule_applied_do_not_wait_for_the_whole_recompute()
     {
         var stuck = new TaskCompletionSource();
-        DateTimeOffset appliedAt = Start.AddMinutes(1);
+        DateTimeOffset appliedAt = Start.AddMinutes(61);
         var applied = new IdeaExitRule(IdeaType.Pullback, Interval.FifteenMinutes, 48, 2.5m, 8, appliedAt);
         _exitRules.GetAllAsync(Arg.Any<CancellationToken>()).Returns(_ => _time.GetUtcNow() >= appliedAt ? [applied] : []);
         _ideaSignals.StreamAsync(Arg.Any<int>(), Arg.Any<DateTimeOffset>(), Arg.Any<(IdeaType, Interval)?>(), Arg.Any<CancellationToken>())
-            .Returns(call => call.ArgAt<(IdeaType, Interval)?>(2) is null ? Stuck(stuck.Task) : AsyncEnumerable.Empty<IdeaSignal>());
+            .Returns(call => call.ArgAt<(IdeaType, Interval)?>(2) is not null || Recomputes(null) == 1 ? AsyncEnumerable.Empty<IdeaSignal>() : Stuck(stuck.Task));
         using var cancellation = new CancellationTokenSource();
         Task session = Session().RunAsync(cancellation.Token);
+        await WaitAsync(() => Recomputes(null) == 1);
+        await Task.Delay(100);
 
+        _time.Advance(TimeSpan.FromHours(1));
+        await WaitAsync(() => Recomputes(null) == 2);
         await WaitAsync(() => Recomputes((IdeaType.Pullback, Interval.FifteenMinutes)) == 1, advance: true);
 
-        Recomputes(null).ShouldBe(1);
+        Recomputes(null).ShouldBe(2);
         stuck.SetResult();
         await cancellation.CancelAsync();
         await Should.ThrowAsync<OperationCanceledException>(session);
@@ -545,6 +565,7 @@ public class ScannerSessionTests
                 _exitRules,
                 Substitute.For<IIdeaBucketRepository>(),
                 Substitute.For<IIdeaCalibrationRepository>(),
+                _versions,
                 new BacktestSettings(),
                 new IdeasEngineVersion(IdeasEngineVersion.Current),
                 _time),

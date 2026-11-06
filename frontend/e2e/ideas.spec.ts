@@ -403,7 +403,7 @@ test('ideas come a page at a time: the page is in the address and survives Back,
 });
 
 // The calibration is a report the scanner keeps; the run puts one into its database, since one day of history checks no case.
-test('the link «Калибровка» of the ideas opens the calibration with its tiles and tables, and the window goes to the address', async ({
+test('the link «Калибровка» of the ideas opens the calibration with its tiles and tables, and the scope and the window go to the address', async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -426,6 +426,21 @@ test('the link «Калибровка» of the ideas opens the calibration with 
   await expect(
     page.getByRole('table', { name: 'Значки' }).getByRole('row', { name: /▲/ }),
   ).toBeVisible();
+  await expect(
+    page.getByRole('table', { name: 'Старая модель → новая' }).getByRole('row', { name: /Старая/ }),
+  ).toContainText('0.231');
+  await expect(
+    page
+      .getByRole('table', { name: 'По своим данным' })
+      .getByRole('row', { name: /мало своих данных/ }),
+  ).toContainText('0.212');
+
+  // The report after the rules changed has 120 checked cases of the 640; the scope goes to the address.
+  await page.getByRole('button', { name: 'После изменения правил' }).click();
+  await expect(page).toHaveURL(/\/ideas\/calibration\?scope=fresh$/);
+  await expect(page.getByText(/Проверено 120 кейсов/)).toBeVisible();
+  await page.getByRole('button', { name: 'Все случаи' }).click();
+  await expect(page).toHaveURL(/\/ideas\/calibration$/);
 
   await page.getByRole('button', { name: 'за 30 дн' }).click();
   await expect(page).toHaveURL(/\/ideas\/calibration\?days=30$/);

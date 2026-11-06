@@ -9,20 +9,29 @@ namespace ProfitFox.Application.Scanner.Ideas;
 /// <summary>
 ///     The outcomes of the signals by the exit rules in force (decision 7): one pass over the signals in the order of their key and firing, which
 ///     holds the signals of one key at a time. The signals of a key count as one open idea at a time (<see cref="ExitOutcomes.Counted" />); the
-///     cases fired in the last 90 and 30 days sum into their buckets, and every case gives its outcome to the calibration.
+///     cases fired in the last 90 and 30 days go into the clustered sums of their bucket, of its parent and of its category by the hour of their
+///     firing (decision 4 of honest-idea-intervals), and every case gives its outcome to the calibration. After the pass the buckets get the
+///     numbers of <see cref="BucketModel" />; the parents and the categories are not written.
 /// </summary>
 public static class IdeaOutcomes
 {
     private static readonly int[] Days = [90, 30];
 
+    /// <param name="signals"></param>
+
+    /// <param name="rules"></param>
+    /// <param name="fees"></param>
+    /// <param name="now"></param>
+    /// <param name="cancellationToken"></param>    /// <param name="roots">The roots of the categories by the days of the window, of the last whole pass; none takes those of this pass.</param>
     public static async Task<IdeaOutcomesResult> WalkAsync(
         IAsyncEnumerable<IdeaSignal> signals,
         IdeaExitRules rules,
         Func<MarketCategory, FeeRates> fees,
         DateTimeOffset now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<int, IReadOnlyDictionary<MarketCategory, BucketModel.Root>>? roots = null)
     {
-        var sums = new Dictionary<(IdeaBucketKey, int), Sums>();
+        var sums = new Sums();
         var outcomes = new List<IdeaOutcome>();
         var key = new List<IdeaSignal>();
 
@@ -39,13 +48,19 @@ public static class IdeaOutcomes
 
         Walk(key, rules, fees, now, sums, outcomes);
 
+        Dictionary<int, IReadOnlyDictionary<MarketCategory, BucketModel.Root>> used = Days.ToDictionary(
+            days => days,
+            days => roots?[days] ?? BucketModel.Roots(sums.Parents[days], sums.Categories[days]));
         IdeaBucket[] buckets =
         [
-            .. sums.Where(entry => entry.Value.Cases > 0)
-                .Select(entry => new IdeaBucket(entry.Key.Item1, entry.Key.Item2, entry.Value.Statistics(IdeaExitRule.HasWindow(entry.Key.Item1.Type))))
+            .. Days.SelectMany(days => BucketModel.Build(sums.Buckets[days], sums.Parents[days], used[days])
+                .Select(bucket => new IdeaBucket(
+                    bucket.Key,
+                    days,
+                    bucket.Value with { Signals = IdeaExitRule.HasWindow(bucket.Key.Type) ? sums.Signals[(bucket.Key, days)] : null })))
         ];
 
-        return new IdeaOutcomesResult(buckets, outcomes);
+        return new IdeaOutcomesResult(buckets, outcomes, used);
     }
 
     private static void Walk(
@@ -53,7 +68,7 @@ public static class IdeaOutcomes
         IdeaExitRules rules,
         Func<MarketCategory, FeeRates> fees,
         DateTimeOffset now,
-        Dictionary<(IdeaBucketKey, int), Sums> sums,
+        Sums sums,
         List<IdeaOutcome> outcomes)
     {
         if (key.Count == 0)
@@ -77,37 +92,48 @@ public static class IdeaOutcomes
 
             foreach (int days in Days.Where(days => path.FiredAt >= now.AddDays(-days)))
             {
-                sums[(bucket, days)] = sums.GetValueOrDefault((bucket, days)).Plus(outcome.Status, result);
+                sums.Add(bucket, days, path.FiredAt, outcome.Status, result);
             }
         }
     }
 
-    /// <summary>The counts of the outcomes of a bucket, the sums of their results and the signals it counted.</summary>
-    private readonly record struct Sums(int Targets, int Stops, int Expired, decimal TotalR, decimal TotalSquaredR, int Signals)
+    /// <summary>The clustered sums of the buckets, their parents and their categories by the days of the window, and the signals the buckets counted.</summary>
+    private sealed class Sums
     {
-        public int Cases => Targets + Stops + Expired;
+        public Dictionary<int, Dictionary<IdeaBucketKey, ClusteredSums>> Buckets { get; } = Days.ToDictionary(days => days, _ => new Dictionary<IdeaBucketKey, ClusteredSums>());
+
+        public Dictionary<int, Dictionary<BucketModel.Parent, ClusteredSums>> Parents { get; } =
+            Days.ToDictionary(days => days, _ => new Dictionary<BucketModel.Parent, ClusteredSums>());
+
+        public Dictionary<int, Dictionary<MarketCategory, ClusteredSums>> Categories { get; } = Days.ToDictionary(days => days, _ => new Dictionary<MarketCategory, ClusteredSums>());
+
+        public Dictionary<(IdeaBucketKey, int), int> Signals { get; } = [];
 
         // A signal without an entry only counts as a signal.
-        public Sums Plus(IdeaStatus status, decimal? result)
+        public void Add(IdeaBucketKey bucket, int days, DateTimeOffset firedAt, IdeaStatus status, decimal? result)
         {
+            Signals[(bucket, days)] = Signals.GetValueOrDefault((bucket, days)) + 1;
+
             if (result is not { } r)
             {
-                return this with { Signals = Signals + 1 };
+                return;
             }
 
-            Sums counted = status switch
-            {
-                IdeaStatus.Target => this with { Targets = Targets + 1 },
-                IdeaStatus.Stop => this with { Stops = Stops + 1 },
-                _ => this with { Expired = Expired + 1 }
-            };
-
-            return counted with { TotalR = TotalR + r, TotalSquaredR = TotalSquaredR + (r * r), Signals = Signals + 1 };
+            Of(Buckets[days], bucket).Add(firedAt, status, r);
+            Of(Parents[days], BucketModel.Parent.Of(bucket)).Add(firedAt, status, r);
+            Of(Categories[days], bucket.Category).Add(firedAt, status, r);
         }
 
-        public BucketStatistics Statistics(bool ofSignals)
+        private static ClusteredSums Of<TKey>(Dictionary<TKey, ClusteredSums> sums, TKey key)
+            where TKey : notnull
         {
-            return BucketStatisticsCalculator.Compute(Targets, Stops, Expired, TotalR, TotalSquaredR, ofSignals ? Signals : null);
+            if (!sums.TryGetValue(key, out ClusteredSums? found))
+            {
+                found = new ClusteredSums();
+                sums[key] = found;
+            }
+
+            return found;
         }
     }
 }

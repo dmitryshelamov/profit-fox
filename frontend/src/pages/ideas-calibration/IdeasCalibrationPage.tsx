@@ -15,6 +15,9 @@ import { formatMoment, groupDigits, roundDecimal, showDecimal } from '@/shared/f
 
 type Report = Schemas['IdeaCalibrationResponse'];
 type Row = Schemas['CalibrationRowResponse'];
+type Own = Schemas['CalibrationOwnRowResponse'];
+type Comparison = Schemas['CalibrationComparisonResponse'];
+type Scope = 'all' | 'fresh';
 
 const cell = 'px-3 py-2';
 const number = `${cell} text-right font-mono whitespace-nowrap`;
@@ -33,6 +36,11 @@ const categories = [
   { category: 'spot', label: 'spot' },
 ] as const;
 
+const scopes = [
+  { scope: 'all', label: 'Все случаи' },
+  { scope: 'fresh', label: 'После изменения правил' },
+] as const;
+
 const percent = (share: string) => `${roundDecimal(shiftDecimal(share, 2), 0)} %`;
 const inR = (value: string) => `${showDecimal(value, 2, true)} R`;
 
@@ -49,26 +57,29 @@ function resultInterval(low: string | null, high: string | null): string {
 }
 
 /**
- * «Калибровка»: what the buckets promised against how the cases they had not seen ended, over 90 or the last 30 days and by
- * category; the window and the category are in the address.
+ * «Калибровка»: what the model of the buckets promised against how the cases it had not seen ended, over 90 or the last 30 days, by
+ * category, among all cases or those after the rules changed; the window, the category and the scope are in the address.
  */
 export function IdeasCalibrationPage({
   days,
   category,
+  scope = 'all',
 }: {
   days: 90 | 30;
   category: string | null;
+  scope?: Scope;
 }) {
   const navigate = useNavigate();
-  const calibration = useQuery(calibrationQuery(days, category));
-  const go = (next: { days?: 90 | 30; category?: string | null }) => {
-    const chosen = { days, category, ...next };
+  const calibration = useQuery(calibrationQuery(days, category, scope));
+  const go = (next: { days?: 90 | 30; category?: string | null; scope?: Scope }) => {
+    const chosen = { days, category, scope, ...next };
 
     void navigate({
       to: '/ideas/calibration',
       search: {
         ...(chosen.days === 30 ? { days: 30 as const } : {}),
         ...(chosen.category === null ? {} : { category: chosen.category as 'linear' | 'spot' }),
+        ...(chosen.scope === 'fresh' ? { scope: 'fresh' as const } : {}),
       },
     });
   };
@@ -118,6 +129,19 @@ export function IdeasCalibrationPage({
             </button>
           ))}
         </div>
+        <div role="group" aria-label="Режим" className="flex rounded-lg border border-line">
+          {scopes.map((choice) => (
+            <button
+              key={choice.scope}
+              type="button"
+              aria-pressed={scope === choice.scope}
+              onClick={() => go({ scope: choice.scope })}
+              className={switchButton}
+            >
+              {choice.label}
+            </button>
+          ))}
+        </div>
       </div>
       {calibration.isError && <p role="alert">Не удалось загрузить калибровку.</p>}
       {calibration.isPending && <p className="text-sm text-muted">Загрузка калибровки…</p>}
@@ -150,13 +174,24 @@ function ReportView({ report }: { report: Report }) {
     <>
       <p className="text-sm text-muted">{counters}</p>
       <Tiles report={report} total={report.total} />
+      {report.comparison !== null && <ComparisonTable comparison={report.comparison} />}
       <ProbabilityTable rows={report.probabilities} />
       <ExpectancyTable rows={report.expectancies} />
       <BadgeTable rows={report.badges} checked={Number(report.checked)} />
+      <OwnTable rows={report.owns} />
       <ul className="space-y-1 text-xs text-faint">
         <li>
-          Обещали: статистика корзины по кейсам, закрытым до срабатывания кейса и сработавшим не
-          раньше чем за 90 дней до него. Кейс корзины, где таких меньше 30, не проверяется.
+          Обещали: числа модели корзины по кейсам, закрытым до срабатывания кейса и сработавшим не
+          раньше чем за 90 дней до него, — корзины, её родителя и категории. Кейс, у родителя
+          корзины которого таких меньше 30, не проверяется.
+        </li>
+        <li>
+          Старая модель: собственные числа корзины без скученности и подтягивания, от 30 своих
+          кейсов; сравнение — на кейсах, которые проверяют обе модели.
+        </li>
+        <li>
+          После изменения правил: только кейсы, сработавшие после применения правила выхода своего
+          типа × ТФ и после начала текущей версии правил идей.
         </li>
         <li>
           Без корзин: каждому кейсу обещана доля «Цель» его категории за то же окно. Чем ниже оценка
@@ -166,7 +201,7 @@ function ReportView({ report }: { report: Report }) {
           Разница серая, когда обещанное внутри интервала 95 %, жёлтая за ним, красная дальше двух
           его полуширин.
         </li>
-        <li>Интервалы считают кейсы независимыми, поэтому на деле они шире.</li>
+        <li>Интервалы считают кейсы, сработавшие в один час, одной группой.</li>
       </ul>
     </>
   );
@@ -312,6 +347,57 @@ function BadgeTable({ rows, checked }: { rows: readonly Row[]; checked: number }
           <td className={number}>{inR(row.expectancy)}</td>
           <td className={number}>{resultInterval(row.expectancyLow, row.expectancyHigh)}</td>
           <td className={number}>{percent(row.targetShare)}</td>
+        </tr>
+      ))}
+    </Table>
+  );
+}
+
+function ComparisonTable({ comparison }: { comparison: Comparison }) {
+  const models = [
+    { label: 'Старая', model: comparison.old },
+    { label: 'Новая', model: comparison.new },
+  ];
+
+  return (
+    <Table
+      label="Старая модель → новая"
+      headers={['Модель', 'Случаев', 'Брайер', 'С ▲', 'Обещали', 'Получили', 'Интервал 95 %']}
+    >
+      {models.map(({ label, model }) => (
+        <tr key={label}>
+          <td className={cell}>{label}</td>
+          <td className={number}>{groupDigits(String(model.cases))}</td>
+          <td className={number}>{model.brier === null ? '—' : roundDecimal(model.brier, 3)}</td>
+          <td className={number}>{groupDigits(String(model.up?.cases ?? 0))}</td>
+          <td className={number}>{model.up === null ? '—' : inR(model.up.promised)}</td>
+          <td className={number}>{model.up === null ? '—' : inR(model.up.expectancy)}</td>
+          <td className={number}>
+            {model.up === null
+              ? '—'
+              : resultInterval(model.up.expectancyLow, model.up.expectancyHigh)}
+          </td>
+        </tr>
+      ))}
+    </Table>
+  );
+}
+
+function OwnTable({ rows }: { rows: readonly Own[] }) {
+  return (
+    <Table
+      label="По своим данным"
+      headers={['Свои данные', 'Кейсов', 'Обещали', 'Получили', 'Интервал 95 %', 'Целей', 'Брайер']}
+    >
+      {rows.map((row) => (
+        <tr key={String(row.fewOwnCases)}>
+          <td className={cell}>{row.fewOwnCases ? 'мало своих данных' : '30 и больше своих'}</td>
+          <td className={number}>{groupDigits(String(row.cases))}</td>
+          <td className={number}>{inR(row.promised)}</td>
+          <td className={number}>{inR(row.expectancy)}</td>
+          <td className={number}>{resultInterval(row.expectancyLow, row.expectancyHigh)}</td>
+          <td className={number}>{percent(row.targetShare)}</td>
+          <td className={number}>{roundDecimal(row.brier, 3)}</td>
         </tr>
       ))}
     </Table>

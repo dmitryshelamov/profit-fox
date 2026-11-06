@@ -74,6 +74,7 @@ public class ScannerBackgroundServiceTests
             .AddSingleton(Substitute.For<IIdeaVolatilityRepository>())
             .AddSingleton(Substitute.For<IIdeaBucketRepository>())
             .AddSingleton(Substitute.For<IIdeaCalibrationRepository>())
+            .AddSingleton(Substitute.For<IIdeaEngineVersionRepository>())
             .AddSingleton(new IdeasSettings())
             .AddSingleton(new BacktestSettings())
             .AddSingleton(new IdeasEngineVersion(IdeasEngineVersion.Current))

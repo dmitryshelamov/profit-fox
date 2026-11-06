@@ -123,6 +123,124 @@ describe('calibration screen', () => {
     await waitFor(() => expect(history.location.search).toBe(''));
   });
 
+  // Scenario "Переключение режима".
+  it('asks for the cases after the rules changed and keeps the scope in the address', async () => {
+    const requests = open();
+    const { history } = renderApp('/ideas/calibration');
+    await screen.findByRole('region', { name: 'Оценка Брайера' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'После изменения правил' }));
+
+    await waitFor(() => expect(asked(requests)).toContain('Days=90&Scope=fresh'));
+    expect(history.location.search).toBe('?scope=fresh');
+    expect(screen.getByRole('button', { name: 'После изменения правил' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Все случаи' }));
+
+    await waitFor(() => expect(history.location.search).toBe(''));
+  });
+
+  it('opens the scope from the address', async () => {
+    const requests = open();
+    renderApp('/ideas/calibration?scope=fresh');
+
+    await screen.findByRole('region', { name: 'Оценка Брайера' });
+
+    expect(asked(requests)).toEqual(['Days=90&Scope=fresh']);
+  });
+
+  // Scenario "Старая модель против новой".
+  it('compares the old model with the new one, a row each', async () => {
+    open();
+    renderApp('/ideas/calibration');
+
+    const table = await screen.findByRole('table', { name: 'Старая модель → новая' });
+    const cells = (name: RegExp) =>
+      within(within(table).getByRole('row', { name }))
+        .getAllByRole('cell')
+        .map((cell) => cell.textContent);
+
+    expect(cells(/Старая/)).toEqual([
+      'Старая',
+      '1\u00a0800',
+      '0.231',
+      '1\u00a0200',
+      '+0.15 R',
+      '-0.07 R',
+      '-0.12…-0.03 R',
+    ]);
+    expect(cells(/Новая/)).toEqual([
+      'Новая',
+      '1\u00a0800',
+      '0.204',
+      '300',
+      '+0.05 R',
+      '+0.03 R',
+      '-0.04…+0.10 R',
+    ]);
+  });
+
+  it('shows dashes for a model without ▲ and no comparison without one', async () => {
+    const report = calibrationOf();
+    open(
+      calibrationOf({
+        comparison: { ...report.comparison!, new: { cases: 1800, brier: '0.204', up: null } },
+      }),
+    );
+    renderApp('/ideas/calibration');
+
+    const table = await screen.findByRole('table', { name: 'Старая модель → новая' });
+
+    expect(
+      within(within(table).getByRole('row', { name: /Новая/ }))
+        .getAllByRole('cell')
+        .map((cell) => cell.textContent),
+    ).toEqual(['Новая', '1\u00a0800', '0.204', '0', '—', '—', '—']);
+  });
+
+  it('shows no comparison in a report without one', async () => {
+    open(calibrationOf({ comparison: null }));
+    renderApp('/ideas/calibration');
+
+    await screen.findByRole('region', { name: 'Оценка Брайера' });
+
+    expect(screen.queryByRole('table', { name: 'Старая модель → новая' })).not.toBeInTheDocument();
+  });
+
+  // Scenario "Строка «мало своих данных»".
+  it('lists the cases by their own data with the Brier score', async () => {
+    open();
+    renderApp('/ideas/calibration');
+
+    const table = await screen.findByRole('table', { name: 'По своим данным' });
+
+    expect(
+      within(within(table).getByRole('row', { name: /мало своих данных/ }))
+        .getAllByRole('cell')
+        .map((cell) => cell.textContent),
+    ).toEqual(['мало своих данных', '612', '+0.09 R', '+0.01 R', '-0.07…+0.09 R', '38 %', '0.212']);
+    expect(within(table).getByRole('row', { name: /30 и больше своих/ })).toBeInTheDocument();
+  });
+
+  it('shows a dash for the Brier score of a model without a case', async () => {
+    const report = calibrationOf();
+    open(
+      calibrationOf({
+        comparison: { ...report.comparison!, old: { cases: 0, brier: null, up: null } },
+      }),
+    );
+    renderApp('/ideas/calibration');
+
+    const table = await screen.findByRole('table', { name: 'Старая модель → новая' });
+
+    expect(
+      within(within(table).getByRole('row', { name: /Старая/ })).getAllByRole('cell')[2],
+    ).toHaveTextContent('—');
+  });
+
   it('shows a dash for the intervals of a row under 30 cases and says when no idea had ▲', async () => {
     const few = calibrationRowOf({
       cases: 12,

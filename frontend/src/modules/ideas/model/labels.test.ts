@@ -1,4 +1,4 @@
-import { casesText, ideasText, sideLabel } from './labels';
+import { bucketCasesText, casesText, ideasText, sideLabel } from './labels';
 
 describe('casesText', () => {
   it.each([
@@ -9,6 +9,18 @@ describe('casesText', () => {
     [2412, '2\u00a0412 кейсов'],
   ])('writes %i as %s', (count, expected) => {
     expect(casesText(count)).toBe(expected);
+  });
+});
+
+describe('bucketCasesText', () => {
+  it.each([
+    [1, '1 случай'],
+    [21, '21 случай'],
+    [3, '3 случая'],
+    [12, '12 случаев'],
+    [35, '35 случаев'],
+  ])('writes %i as %s', (count, expected) => {
+    expect(bucketCasesText(count)).toBe(expected);
   });
 });
 

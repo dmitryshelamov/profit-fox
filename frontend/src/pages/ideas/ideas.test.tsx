@@ -32,6 +32,14 @@ const fewData = ideaOf({
     signals: null,
     entryShare: null,
     signalExpectancy: null,
+    ownProbability: null,
+    ownProbabilityLow: null,
+    ownProbabilityHigh: null,
+    ownExpectancy: '-0.1',
+    ownExpectancyLow: null,
+    ownExpectancyHigh: null,
+    parentWeight: null,
+    fewOwnCases: false,
   },
 });
 const noBucket = ideaOf({ id: 'doge-1', symbol: 'DOGEUSDT', bucket: null });
@@ -131,10 +139,10 @@ describe('ideas screen', () => {
     await rowOf('WIFUSDT');
 
     expect(
-      screen.getByText(/Вероятность: доля «Цель» среди всех случаев с входом/),
+      screen.getByText(/Вероятность и ожидание — числа модели: доля «Цель» и средний итог корзины/),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/интервал ожидания корзины выше нуля, содержит ноль или ниже нуля/),
+      screen.getByText(/интервал ожидания модели выше нуля, содержит ноль или ниже нуля/),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/на сумму на идею: при цели и при стопе, после комиссий/),

@@ -1,6 +1,7 @@
 using MediatR;
 
 using ProfitFox.Application.MarketData;
+using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.Services.Ideas;
@@ -38,11 +39,18 @@ public sealed class GetIdeaCalibrationQueryHandler(IIdeaCalibrationRepository ca
             }
         }
 
-        if (errors.Count > 0)
+        CalibrationScope scope = CalibrationScope.All;
+
+        if (request.Scope is not null && !IdeaCodes.TryParseScope(request.Scope, out scope))
         {
-            return new GetIdeaCalibrationResult(days, category, null, errors);
+            errors["scope"] = "Scope must be all or fresh.";
         }
 
-        return new GetIdeaCalibrationResult(days, category, await calibrations.GetAsync(version.Number, days, category, cancellationToken), errors);
+        if (errors.Count > 0)
+        {
+            return new GetIdeaCalibrationResult(days, category, scope, null, errors);
+        }
+
+        return new GetIdeaCalibrationResult(days, category, scope, await calibrations.GetAsync(version.Number, days, category, scope, cancellationToken), errors);
     }
 }
