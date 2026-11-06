@@ -11,10 +11,14 @@ using ProfitFox.Application.Ports.Security;
 using ProfitFox.Application.Transactions;
 using ProfitFox.Domain.Entities.Bots;
 using ProfitFox.Domain.Entities.ExchangeAccounts;
+using ProfitFox.Domain.Entities.Ideas.Enums;
+using ProfitFox.Domain.Entities.IdeaTrades;
+using ProfitFox.Domain.Entities.IdeaTrades.Enums;
 using ProfitFox.Domain.Entities.LiveTrading;
 using ProfitFox.Domain.Entities.LiveTrading.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies;
+using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.Services.LiveTrading;
 using ProfitFox.Domain.ValueObjects.LiveTrading;
@@ -30,6 +34,7 @@ public sealed class StartBotCommandHandler(
     IExchangeLedger ledger,
     IInstrumentCatalog catalog,
     ILiveBotRepository live,
+    IIdeaTradeRepository ideaTrades,
     ITransactionExecutor executor,
     TimeProvider time) : IRequestHandler<StartBotCommand>
 {
@@ -65,6 +70,7 @@ public sealed class StartBotCommandHandler(
 
                 // Under the lock of the account another start waits, so it sees this one among the working bots.
                 await live.LockAccountAsync(account.Id, token);
+                await CheckTradesAsync(bot, loaded.LatestVersion(bot.StrategyId)!.Snapshot.Definition.Direction, token);
                 await CheckFundsAsync(bot, key, quote, token);
 
                 return locked.Start(loaded.LatestVersion(bot.StrategyId)!.Number, loaded.ParameterValues(bot));
@@ -121,11 +127,39 @@ public sealed class StartBotCommandHandler(
             throw new ConflictException(exception.Message);
         }
 
-        if (!StartFunds.Enough(free, bot.Balance, others))
+        if (!StartFunds.Enough(free, bot.Balance, others, await PendingEntriesAsync(bot, quote, cancellationToken)))
         {
             throw new ConflictException(
                 $"Not enough free money on the account: {free.ToString(CultureInfo.InvariantCulture)} {quote} for the bot and the other working bots of the account.");
         }
+    }
+
+    /// <summary>A trade by an idea of the account that is open on the symbol of a bot on <c>linear</c> must not be of the other side than the bot.</summary>
+    private async Task CheckTradesAsync(Bot bot, StrategyDirection direction, CancellationToken cancellationToken)
+    {
+        if (bot.Instrument.Category == MarketCategory.Linear
+            && (await ideaTrades.GetOpenAsync(cancellationToken)).Any(trade => trade.AccountId == bot.ExchangeAccountId
+                                                                               && trade.Instrument == bot.Instrument
+                                                                               && (trade.Side == IdeaSide.Long ? StrategyDirection.Long : StrategyDirection.Short) != direction))
+        {
+            throw new ConflictException($"There is an open trade by an idea of the opposite side on {bot.Instrument.Symbol}.");
+        }
+    }
+
+    /// <summary>The entries of trades by ideas of the account that wait to be filled, in the quote coin of the bot.</summary>
+    private async Task<IReadOnlyCollection<decimal>> PendingEntriesAsync(Bot bot, string quote, CancellationToken cancellationToken)
+    {
+        var amounts = new List<decimal>();
+
+        foreach (IdeaTrade trade in (await ideaTrades.GetOpenAsync(cancellationToken)).Where(trade => trade.AccountId == bot.ExchangeAccountId && trade.Status == IdeaTradeStatus.AwaitingEntry))
+        {
+            if (await QuoteCoinAsync(trade.Instrument, cancellationToken) == quote)
+            {
+                amounts.Add(trade.Amount);
+            }
+        }
+
+        return amounts;
     }
 
     private async Task<string> QuoteCoinAsync(Instrument instrument, CancellationToken cancellationToken)

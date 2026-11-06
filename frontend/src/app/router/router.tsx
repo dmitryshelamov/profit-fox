@@ -19,6 +19,7 @@ import { BotPage } from '@/pages/bot/BotPage';
 import { BotEditorPage } from '@/pages/bot-editor/BotEditorPage';
 import { BotsPage } from '@/pages/bots/BotsPage';
 import { ComparePage } from '@/pages/compare/ComparePage';
+import { IdeaTradesPage } from '@/pages/idea-trades/IdeaTradesPage';
 import { IdeasPage } from '@/pages/ideas/IdeasPage';
 import { IdeasCalibrationPage } from '@/pages/ideas-calibration/IdeasCalibrationPage';
 import { MarketPage } from '@/pages/market/MarketPage';
@@ -106,6 +107,12 @@ const ideasRoute = createRoute({
 
     return <IdeasPage page={page ?? 1} />;
   },
+});
+
+const ideaTradesRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/idea-trades',
+  component: IdeaTradesPage,
 });
 
 // The window is 90 days but for `?days=30`, which the router reads as a number; the category is linear, spot or none.
@@ -292,6 +299,7 @@ const routeTree = rootRoute.addChildren([
     marketRoute,
     marketPairRoute,
     ideasRoute,
+    ideaTradesRoute,
     ideasCalibrationRoute,
     botsRoute,
     newBotRoute,

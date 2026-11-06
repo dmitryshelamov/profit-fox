@@ -173,7 +173,7 @@ internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings setting
                         foreach (BybitUserTradeUpdate trade in update.Data)
                         {
                             Instrument? instrument = trade.Category.ToDomain() is { } category ? new Instrument(category, trade.Symbol) : null;
-                            var fill = new ExchangeFill(trade.TradeId, trade.ClientOrderId ?? "", trade.Quantity, trade.Price, trade.Fee ?? 0m, trade.FeeAsset ?? "", Utc(trade.Timestamp), instrument);
+                            var fill = new ExchangeFill(trade.TradeId, trade.ClientOrderId ?? "", trade.Quantity, trade.Price, trade.Fee ?? 0m, trade.FeeAsset ?? "", Utc(trade.Timestamp), instrument, trade.OrderId);
 
                             foreach (AccountListener listener in topic.Listeners)
                             {
@@ -273,7 +273,9 @@ internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings setting
             state == ExchangeOrderState.Rejected ? order.RejectReason : null,
             order.ValueFilled ?? 0m,
             order.ExecutedFee ?? 0m,
-            order.FeeAsset ?? "");
+            order.FeeAsset ?? "",
+            string.IsNullOrEmpty(order.ParentOrderId) ? null : order.ParentOrderId,
+            order.StopOrderType.ToStopKind());
     }
 
     private static DateTimeOffset Utc(DateTime time)

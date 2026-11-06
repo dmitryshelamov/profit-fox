@@ -12,12 +12,14 @@ function Row({
   amount,
   selected,
   onSelect,
+  onEnter,
   className = '',
 }: {
   idea: Idea;
   amount: string;
   selected: boolean;
   onSelect: (idea: Idea) => void;
+  onEnter?: (idea: Idea) => void;
   className?: string;
 }) {
   return (
@@ -36,6 +38,23 @@ function Row({
         </button>
       </td>
       <IdeaRowCells idea={idea} amount={amount} />
+      {onEnter && (
+        <td className={`${cell} text-right`}>
+          {(idea.status === 'awaiting_entry' || idea.status === 'active') && (
+            <button
+              type="button"
+              onClick={(event) => {
+                // The row below selects its idea on a click; entering is another act.
+                event.stopPropagation();
+                onEnter(idea);
+              }}
+              className="h-7 rounded-md border border-line px-3 text-xs font-semibold hover:bg-panel-2"
+            >
+              Войти
+            </button>
+          )}
+        </td>
+      )}
     </tr>
   );
 }
@@ -51,12 +70,15 @@ export function PairIdeasTable({
   amount,
   selectedId,
   onSelect,
+  onEnter,
 }: {
   open: readonly Idea[];
   expired: readonly Idea[];
   amount: string;
   selectedId: string | undefined;
   onSelect: (idea: Idea) => void;
+  /** Adds a column with «Войти» in the rows of the ideas that can be entered. */
+  onEnter?: (idea: Idea) => void;
 }) {
   const [expiredShown, setExpiredShown] = useState(false);
 
@@ -69,6 +91,11 @@ export function PairIdeasTable({
               {label}
             </th>
           ))}
+          {onEnter && (
+            <th scope="col" className={cell}>
+              <span className="sr-only">Вход в сделку</span>
+            </th>
+          )}
         </tr>
       </thead>
       <tbody>
@@ -79,6 +106,7 @@ export function PairIdeasTable({
             amount={amount}
             selected={idea.id === selectedId}
             onSelect={onSelect}
+            onEnter={onEnter}
           />
         ))}
       </tbody>
@@ -86,7 +114,7 @@ export function PairIdeasTable({
         <tbody>
           <tr>
             <th
-              colSpan={headers.length}
+              colSpan={headers.length + (onEnter ? 1 : 0)}
               scope="rowgroup"
               className={`${cell} text-left text-xs font-normal tracking-wide text-faint uppercase`}
             >
@@ -108,6 +136,7 @@ export function PairIdeasTable({
                 amount={amount}
                 selected={idea.id === selectedId}
                 onSelect={onSelect}
+                onEnter={onEnter}
                 className="opacity-70"
               />
             ))}

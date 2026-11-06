@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { useNavigate } from '@tanstack/react-router';
 import { type ReactNode, useState } from 'react';
 
+import { EntryDialog } from '@/modules/idea-trades';
 import {
   type Idea,
   ideaQuery,
@@ -245,6 +246,7 @@ function IdeasHub({
   interval: string | undefined;
 }) {
   const navigate = useNavigate();
+  const [entering, setEntering] = useState<Idea | null>(null);
   const ideas = useQuery(pairIdeasQuery(category, symbol));
   const own = useOwnIdea(category, symbol, ownInput).data;
   const listed: Idea | undefined = ideas.data?.find((item) => item.id === selectedId);
@@ -320,11 +322,19 @@ function IdeasHub({
               ideas={ideas.data}
               selectedId={selected?.id}
               onSelect={(idea) => select(idea.id)}
+              onEnter={setEntering}
             />
           </div>
         )}
       </section>
       <OwnIdeaBlock category={category} symbol={symbol} input={ownInput} onChange={onOwnInput} />
+      {entering && (
+        <EntryDialog
+          idea={entering}
+          onClose={() => setEntering(null)}
+          onEntered={() => void navigate({ to: '/idea-trades' })}
+        />
+      )}
     </div>
   );
 }

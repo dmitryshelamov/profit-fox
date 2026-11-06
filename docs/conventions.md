@@ -40,6 +40,15 @@ enforces a rule, the check is the source of truth.
   (the types of ideas of each setup), `ZoneFinder`, `IdeaRules`, `IdeaTracker`, `CaseResult`,
   `BucketStatisticsCalculator` (from the counts, ΣR and ΣR², so a window of cases can add and take them), `CalibrationCalculator` (the walk-forward
   check of the buckets on cases they had not seen), `IdeaMoney`, `Volatility` and `IdeasEngineVersion`.
+- `IdeaTrades` is the area of trades by ideas (one entry with a stop and a target the exchange stands): `Entities/IdeaTrades` holds `IdeaTrade`
+  (its levels, size, status, the totals the exchange counted of its entry and exits, and its result in money and in R), `IdeaTradeOrder` (an entry or
+  the market close of the owner, saved before it goes to the exchange, like `LiveOrder`), `IdeaTradeChild` (the stop or the target the exchange made, by
+  its exchange id), `IdeaTradeFill` and `IdeaTradingSettings`, and the enums `IdeaTradeStatus`, `IdeaTradeLeg`, `IdeaTradeOrderRole`, `IdeaTradeRefusal`,
+  `AccountAccess`; `ValueObjects/IdeaTrades` holds `IdeaTradeOrderId` (the id of an order of a trade, `i` + 25 base-36 digits + `-` + number, which never
+  reads as a `ClientOrderId`), `IdeaTradeSize`, `IdeaTradingLimits`, `IdeaTradeEntry`, `IdeaTradeAccount`, `OpenIdeaTrades`, `TradeHolding`, `LegTotals`,
+  `Protection`, `LeasedIdeaTrade`, `ChangedIdeaTrade`; `Services/IdeaTrades` holds the pure `IdeaTradeSizing` (the volume by the risk, cut to the largest
+  amount, rounded down to the step) and `IdeaTradeRefusals` (every reason an entry is refused). `Reconciliation.Check` and `StartFunds.Enough` take the
+  trades next to the bots.
 - `SavedFilters` is the area of saved filters: `Entities/SavedFilters` holds `SavedFilter` and the enums `SavedFilterPlace`, `FilterField`,
   `FilterOperator`; `ValueObjects/SavedFilters` holds `FilterCondition`.
 - `Exceptions` holds domain exceptions: a broken domain rule that the caller reports to the user
@@ -93,6 +102,15 @@ enforces a rule, the check is the source of truth.
   warms up its indicators with. `Ports/LiveTrading` holds `IExchangeLedger` (REST reads of an account), `IOrderGateway` (orders
   and cancels, a refusal is an outcome) and `IExchangeStreams` (closed candles, order updates and fills, and a signal
   when a stream is back after a gap).
+- `IdeaTrades` holds the trades by ideas: `IdeaTradeEntryCalculator` (`PrepareAsync` asks the exchange and reads the settings, `EvaluateAsync` sizes the
+  trade and names the reasons by the books of the account, so the entry can be made again under the lock of the account), `IdeaTradeCodes` (statuses, roles,
+  legs, times in force and the reason codes), the commands `CreateIdeaTrade`, `CancelIdeaTrade`, `CloseIdeaTrade` and `SaveIdeaTradingSettings`, the queries
+  `GetIdeaEntry`, `GetIdeaTrades` and `GetIdeaTradingSettings`, and `Runtime/IdeaTradeSession`: one session keeps one trade for the take of its lease as a bot's
+  session does (one queue of inputs, one unit of work per change after the lease check, orders sent once written), sends its entry, follows the entry and the
+  stop and the target the exchange made (told by `parentOrderLinkId` on `linear`; the spot waits for the check of decision 9), cancels the entry at the end
+  of its time or on request, closes by the market on request, and compares its books with the exchange after a catch-up. `Runtime/IdeaTradeLeases` is the loop of
+  the leases of the trades of a Worker. `LiveTrading/Runtime/OrderSending` decides what a session does with the answer of the exchange to a sent order, for
+  bots and trades alike.
 - `Scanner` holds the scanner: `ScannerSettings`, `ScannerMarket` (memory of the last day of every pair, the snapshot from it),
   `Universe/ScannerUniverse` (the list of pairs), `Backfill/ScannerBackfill` (the last day, the gaps, the history, funding),
   `Minute/ScannerMinuteCycle` (tickers, the point of open interest, the snapshot) and `ScannerSession`, which runs them while the
@@ -187,6 +205,9 @@ enforces a rule, the check is the source of truth.
   the `bots` row `FOR UPDATE`; a write of a session (`LockLeasedAsync`) takes it `FOR KEY SHARE` before the `live_bots`
   row, since the foreign key of a new `live_positions` row takes that share later anyway. A session that fails several
   bots after a reconciliation locks them one bot after another in the order of the library, `created_at, id`.
+- `Repositories/IdeaTrades` holds `idea_trades` (the lease columns as `live_bots`), `idea_trade_orders`, `idea_trade_children` (the stop and the target the exchange
+  made, by exchange id), `idea_trade_fills` and `idea_trading_settings` (one row, written by the first save; the defaults come from the code). The bot session
+  asks `IsChildAsync` for an execution it does not know. A trade has no foreign key to the idea: the replay cleans up old ideas.
 - `Repositories/Market` holds `scanner_state` (one row: the lease of the stream, the snapshot time, the progress of history,
   the end of the REST pause), `scanner_pairs`, `open_interest` (a hypertable), `funding_rates` and `market_snapshot`, which the
   holder replaces in one transaction that locks the row of the state with its lease.
@@ -339,6 +360,10 @@ enforces a rule, the check is the source of truth.
   `total`), `GET /api/ideas/{id}`, `GET /api/ideas/buckets`, `GET /api/ideas/calibration` (`days` 90 or 30, `category` linear, spot or none). `SavedFiltersController`: CRUD of
   `/api/saved-filters`, the catalog `GET /api/saved-filters/fields` and `POST /api/saved-filters/fit` (`{ conditions }` of a draft →
   `{ pairs, ideas }`, saves nothing).
+- `IdeaTradesController`: `GET /api/idea-trades` (newest first), `POST` (`{ ideaId, accountId?, risk? }` → 201 `{ id }`, or 409 with `reasons`, codes of what stops the
+  entry), `POST .../{id}/cancel` and `.../close` (204; 409 when the status does not allow it). `IdeasController` also has `GET /api/ideas/{id}/entry?accountId&risk`
+  (the entry as it would be made now, reading the price of the pair from Bybit; places nothing). `IdeaTradingSettingsController`: `GET` and `PUT /api/idea-trading/settings`.
+  Numbers of these contracts are decimal strings.
 - `Hubs` holds SignalR hubs. `BotChartHub` is the first: `/api/hubs/bot-chart` (under `/api`, so the proxy of the web image
   and of Vite carry it, Vite with `ws: true`). A connection calls `Subscribe(botId)`, which answers `{ state, candle }`
   (`connecting`, `live` or `noData`; the newest candle or `null`) or fails with `bot_not_found`, then receives
@@ -395,6 +420,8 @@ enforces a rule, the check is the source of truth.
   streams on a local port (`FakeBybitSocketServer`); and `FakeExchange`, one exchange account in memory behind
   `IExchangeLedger`, `IOrderGateway` and `IExchangeStreams` for the live trading runtime, whose orders, fills and streams
   depend on each other as a mock cannot keep.
+  `FakeExchange` also makes the stop and the target of an entry with a stop and a target on `linear` (no client id, `ParentClientId`, a stop kind), fires them at a
+  price (`TriggerChild`) and cancels them by exchange id.
 - Assertions use Shouldly.
 - Metrics are read in tests with `MetricCollector` (`Microsoft.Extensions.Diagnostics.Testing`) over the `IMeterFactory` of a
   `ServiceCollection().AddMetrics()` or of the host; a gauge is collected with `RecordObservableInstruments`
@@ -411,7 +438,7 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
 
 - `src/app` holds the router (TanStack Router) and the providers (TanStack Query). `src/pages/<screen>` holds one screen
   each (`strategies`, `strategy-editor`, `nodes`, `node-editor`, `bots`, `bot-editor`, `bot`, `backtest-setup`, `backtest`,
-  `backtest-result`, `compare`, `accounts`, `account-new`, `account`, `market`, `market-pair`, `ideas`, `ideas-calibration`); a page never imports another page.
+  `backtest-result`, `compare`, `accounts`, `account-new`, `account`, `market`, `market-pair`, `ideas`, `ideas-calibration`, `idea-trades`); a page never imports another page.
 - `src/modules/<area>` holds a feature: `model` for pure functions, `ui` for components, `api.ts` for queries. Other
   code imports a module only through its `index.ts`. `modules/graph-editor/model` is the logic of the editor that can be
   wrong (definition ↔ canvas, pins, wire types, error paths, draft comparison): plain TypeScript without React.
@@ -432,7 +459,7 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
   incomplete data), `ideas` (queries of one page of the ideas, of a pair's ideas, zones, the own idea and the calibration; `model` for the labels, the codes of the sort columns, the
   badge of the bucket, «мало данных», the break-even rounded up and the shares of the outcomes (`stats`), the colour of a difference, the verdict of the Brier
   score and the names of the rows of the calibration (`calibration`), profit and loss at the risk per idea and its storage in the browser (`riskStorage`), the groups of a
-  pair's list (`groups`) and the levels drawn on the chart (`levels`); `IdeasTable`, `PairIdeasList`, `OwnIdeaBlock`), `saved-filters`
+  pair's list (`groups`) and the levels drawn on the chart (`levels`); `IdeasTable`, `PairIdeasList`, `OwnIdeaBlock`), `idea-trades` (queries of the settings, of the entry of an idea (polled every 5 s while its window is open), of the list of trades (polled every 15 s) and the entry, cancel and close; `model` for the labels of statuses and of the reasons and for the fields of the settings; `EntryDialog`, `TradesTable`, `SettingsPanel`), `saved-filters`
   (queries of filters and the catalog of fields, and the count of a draft, `fitQuery`; `model` for the text of conditions (`conditions`) and the
   server errors by field (`errors`); `FilterBar`, `FilterEditor`, whose counter «Подходит» is the answer of `POST /api/saved-filters/fit` for the ready
   conditions, after a pause of 300 ms; the API applies saved filters, the browser only names the chosen one). The lists «Идеи» and «Рынок» show one page: the number is

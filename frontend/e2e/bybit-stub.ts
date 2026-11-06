@@ -1,7 +1,9 @@
 // A local stand-in for Bybit in end-to-end tests: deterministic instruments and candles over REST, the private
 // calls about an account key, orders and their fills, and the v5 streams over WebSocket, so no test ever reaches the
 // exchange. A test closes candles (`/control/candle`), sends a forming one (`/control/forming`), fills orders and drops the streams through the `/control/*` routes. Signatures are not checked: the key alone picks the
-// answer (`e2e-valid-<uid>`, `e2e-withdraw`, anything else is rejected). The scanner also reads tickers, open interest and
+// answer (`e2e-valid-<uid>`, `e2e-withdraw`, anything else is rejected). An entry of the linear market with a stop and a target (Partial mode) makes the two orders Bybit makes for it,
+// with their parent and a stop order type; `/control/price` sets the last price of a symbol and fires them; the position of a symbol follows the fills; an IOC limit that cannot fill at once
+// is cancelled; a reduce-only order needs a position to reduce. The scanner also reads tickers, open interest and
 // funding history here, and subscribes minute candles in batches. `/control/pump` starts a steep, loud rise of one symbol from the next minute, which the scanner's setups read as an impulse. Response shapes follow the integration tests' FakeBybitHandler.
 // Usage: node e2e/bybit-stub.ts <port>
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -225,7 +227,7 @@ function tickers(url: URL) {
   return ok({
     category,
     list: instruments.map((instrument) => {
-      const last = minutePrice(instrument, index);
+      const last = lastPrices.get(instrument.symbol) ?? minutePrice(instrument, index);
       const linear =
         category === 'linear'
           ? {
@@ -255,6 +257,26 @@ function tickers(url: URL) {
       };
     }),
   });
+}
+
+/** The open position of a symbol of the linear market, one-way: none when it is flat. */
+function positionList(url: URL) {
+  const symbol = url.searchParams.get('symbol');
+  const list = [...positions.entries()]
+    .filter(([name, size]) => (symbol ? name === symbol : true) && Math.abs(size) > 1e-12)
+    .map(([name, size]) => ({
+      symbol: name,
+      side: size > 0 ? 'Buy' : 'Sell',
+      size: String(Number(Math.abs(size).toPrecision(12))),
+      positionIdx: 0,
+      avgPrice: '0',
+      positionValue: '0',
+      leverage: '1',
+      tradeMode: 0,
+      positionStatus: 'Normal',
+    }));
+
+  return ok({ category: 'linear', list, nextPageCursor: '' });
 }
 
 /** Times every `step` from the listing inside the inclusive [startTime, endTime], newest first. */
@@ -382,9 +404,26 @@ interface StubOrder {
   cumExecValue: string;
   /** The unit of `qty` of a spot market order, as Bybit reads it: a buy without one is sized in the quote coin. */
   marketUnit: string;
+  timeInForce: string;
+  reduceOnly: boolean;
+  /** The target and the stop an entry carries, empty without them. */
+  takeProfit: string;
+  stopLoss: string;
+  /** The client id of the entry a stop or a target was made for, empty for any other order. */
+  parentOrderLinkId: string;
+  stopOrderType: string;
+  /** The price a stop or a target fires at. */
+  triggerPrice: string;
 }
 
 const orders = new Map<string, StubOrder>();
+/** The stops and targets Bybit made for entries, by their order id: they have no client id. */
+const children = new Map<string, StubOrder>();
+/** The last price a test set for a symbol; without one the saw-tooth of the minute is the price. */
+const lastPrices = new Map<string, number>();
+/** The position of a symbol of the linear market, a short below zero. */
+const positions = new Map<string, number>();
+/** The executions of an order, by its client id or, for a stop or a target, by its order id. */
 const executions = new Map<string, object[]>();
 let execs = 0;
 const sockets = new Map<WebSocket, { path: string; topics: Set<string> }>();
@@ -406,9 +445,14 @@ function push(topic: string, data: object[]) {
   }
 }
 
+/** A product of floats without the noise of the last digits: Bybit sends exact decimals. */
+function exact(value: number): number {
+  return Number(value.toPrecision(12));
+}
+
 /** The unfilled quantity of an order in its own unit; nothing for a finished one. */
 function leaves(order: StubOrder): string {
-  if (order.orderStatus !== 'New' && order.orderStatus !== 'PartiallyFilled') {
+  if (!working(order)) {
     return '0';
   }
 
@@ -418,10 +462,18 @@ function leaves(order: StubOrder): string {
   );
 }
 
+/** An order that is not over: on the book, partly filled, or a stop or a target waiting for its price. */
+function working(order: StubOrder): boolean {
+  return ['New', 'PartiallyFilled', 'Untriggered'].includes(order.orderStatus);
+}
+
+function allOrders(): StubOrder[] {
+  return [...orders.values(), ...children.values()];
+}
+
 function orderView(order: StubOrder) {
   return {
     ...order,
-    timeInForce: 'GTC',
     leavesQty: leaves(order),
     // The stub takes no fee; the totals of the order are what a bot books its fills by.
     cumExecFee: '0',
@@ -456,10 +508,26 @@ function createOrder(request: Record<string, unknown>) {
     };
   }
 
+  const category = String(request.category);
+  const symbol = String(request.symbol);
+  const reduceOnly = request.reduceOnly === true || request.reduceOnly === 'true';
+  const held = positions.get(symbol) ?? 0;
+
+  // A reduce-only order that does not reduce a position is refused.
+  if (reduceOnly && (category !== 'linear' || (request.side === 'Sell' ? held <= 0 : held >= 0))) {
+    return {
+      retCode: 110017,
+      retMsg: 'Reduce-only rule not satisfied',
+      result: {},
+      retExtInfo: {},
+      time: Date.now(),
+    };
+  }
+
   const order: StubOrder = {
     orderId: `x-${orderLinkId}`,
     orderLinkId,
-    category: String(request.category),
+    category,
     symbol: String(request.symbol),
     side: String(request.side),
     orderType: String(request.orderType),
@@ -472,17 +540,38 @@ function createOrder(request: Record<string, unknown>) {
       request.category === 'spot' && request.orderType === 'Market'
         ? String(request.marketUnit ?? (request.side === 'Buy' ? 'quoteCoin' : 'baseCoin'))
         : '',
+    timeInForce: String(request.timeInForce ?? 'GTC'),
+    reduceOnly,
+    takeProfit: String(request.takeProfit ?? ''),
+    stopLoss: String(request.stopLoss ?? ''),
+    parentOrderLinkId: '',
+    stopOrderType: 'UNKNOWN',
+    triggerPrice: '0',
   };
   orders.set(orderLinkId, order);
+
+  // A limit order that cannot fill at once is cancelled when it is IOC.
+  if (order.timeInForce === 'IOC' && order.orderType === 'Limit') {
+    const last = currentPrice(order.symbol);
+    const crosses =
+      order.side === 'Buy' ? Number(order.price) >= last : Number(order.price) <= last;
+
+    if (!crosses) {
+      order.orderStatus = 'Cancelled';
+    }
+  }
+
   push('order', [orderView(order)]);
 
   return ok({ orderId: order.orderId, orderLinkId });
 }
 
 function cancelOrder(request: Record<string, unknown>) {
-  const order = orders.get(String(request.orderLinkId));
+  const order = request.orderId
+    ? children.get(String(request.orderId))
+    : orders.get(String(request.orderLinkId));
 
-  if (!order || order.orderStatus !== 'New') {
+  if (!order || !working(order)) {
     return {
       retCode: 110001,
       retMsg: 'order not exists or too late to cancel',
@@ -500,10 +589,18 @@ function cancelOrder(request: Record<string, unknown>) {
 
 function listOrders(url: URL, history: boolean) {
   const link = url.searchParams.get('orderLinkId');
-  const all = [...orders.values()].filter(
+  const id = url.searchParams.get('orderId');
+  const symbol = url.searchParams.get('symbol');
+  const all = allOrders().filter(
     (order) =>
       (link ? order.orderLinkId === link : true) &&
-      (history ? order.orderStatus !== 'New' : link ? true : order.orderStatus === 'New'),
+      (id ? order.orderId === id : true) &&
+      (symbol && !link && !id ? order.symbol === symbol : true) &&
+      (history
+        ? order.orderStatus !== 'New' && order.orderStatus !== 'Untriggered'
+        : link || id
+          ? true
+          : working(order)),
   );
 
   return ok({
@@ -520,7 +617,7 @@ function listOrders(url: URL, history: boolean) {
 function fill(url: URL) {
   const order = orders.get(url.searchParams.get('orderLinkId') ?? '');
 
-  if (!order || (order.orderStatus !== 'New' && order.orderStatus !== 'PartiallyFilled')) {
+  if (!order || !['New', 'PartiallyFilled'].includes(order.orderStatus)) {
     return { retCode: 10001, retMsg: 'No such open order', result: {} };
   }
 
@@ -536,11 +633,39 @@ function fill(url: URL) {
   }
 
   order.cumExecQty = String(Number(order.cumExecQty) + qty);
-  order.cumExecValue = String(Number(order.cumExecValue) + qty * price);
+  order.cumExecValue = String(exact(Number(order.cumExecValue) + qty * price));
   order.orderStatus = qty >= left - 1e-12 ? 'Filled' : 'PartiallyFilled';
+  settle(order, qty, price);
+  const execution = executionOf(order, qty, price);
+  const made =
+    order.category === 'linear' && order.takeProfit && order.stopLoss ? makeChildren(order) : [];
+
+  // A silent fill is missed by the streams, as during a drop: only the history has it.
+  if (url.searchParams.get('silent') !== '1') {
+    push('execution', [execution]);
+    push('order', [orderView(order), ...made.map(orderView)]);
+  }
+
+  return ok(execution);
+}
+
+/** What a fill does to the account: the coins of the spot, the position of a symbol of the linear market. */
+function settle(order: StubOrder, qty: number, price: number) {
+  if (order.category === 'linear') {
+    positions.set(
+      order.symbol,
+      (positions.get(order.symbol) ?? 0) + (order.side === 'Buy' ? qty : -qty),
+    );
+
+    return;
+  }
+
   const base = order.symbol.replace(/USDT$/, '');
   coins[base] = (coins[base] ?? 0) + (order.side === 'Buy' ? qty : -qty);
   coins.USDT = (coins.USDT ?? 0) + (order.side === 'Buy' ? -qty * price : qty * price);
+}
+
+function executionOf(order: StubOrder, qty: number, price: number) {
   const execution = {
     category: order.category,
     symbol: order.symbol,
@@ -557,20 +682,124 @@ function fill(url: URL) {
     execFee: '0',
     feeCurrency: 'USDT',
     execType: 'Trade',
-    execValue: String(qty * price),
+    execValue: String(exact(qty * price)),
     execTime: String(Date.now()),
     isMaker: false,
     seq: execs,
   };
-  executions.set(order.orderLinkId, [...(executions.get(order.orderLinkId) ?? []), execution]);
+  const key = order.orderLinkId || order.orderId;
+  executions.set(key, [...(executions.get(key) ?? []), execution]);
 
-  // A silent fill is missed by the streams, as during a drop: only the history has it.
-  if (url.searchParams.get('silent') !== '1') {
-    push('execution', [execution]);
-    push('order', [orderView(order)]);
+  return execution;
+}
+
+/**
+ * The stop and the target Bybit makes for an entry of the linear market in the Partial mode, once, on its first fill: market orders that
+ * close the quantity of the entry, wait for their price and name the entry as their parent.
+ */
+function makeChildren(parent: StubOrder): StubOrder[] {
+  if ([...children.values()].some((child) => child.parentOrderLinkId === parent.orderLinkId)) {
+    return [];
   }
 
-  return ok(execution);
+  const closing = parent.side === 'Buy' ? 'Sell' : 'Buy';
+  const made = [
+    { name: 'tp', type: 'PartialTakeProfit', trigger: parent.takeProfit },
+    { name: 'sl', type: 'PartialStopLoss', trigger: parent.stopLoss },
+  ].map(({ name, type, trigger }): StubOrder => ({
+    orderId: `x-${parent.orderLinkId}-${name}`,
+    orderLinkId: '',
+    category: parent.category,
+    symbol: parent.symbol,
+    side: closing,
+    orderType: 'Market',
+    price: '0',
+    qty: parent.qty,
+    orderStatus: 'Untriggered',
+    cumExecQty: '0',
+    cumExecValue: '0',
+    marketUnit: '',
+    timeInForce: 'IOC',
+    reduceOnly: true,
+    takeProfit: '',
+    stopLoss: '',
+    parentOrderLinkId: parent.orderLinkId,
+    stopOrderType: type,
+    triggerPrice: trigger,
+  }));
+
+  for (const child of made) {
+    children.set(child.orderId, child);
+  }
+
+  return made;
+}
+
+/** The last price of a symbol: the one a test set, otherwise the saw-tooth of the current minute. */
+function currentPrice(symbol: string): number {
+  const instrument = instruments.find((candidate) => candidate.symbol === symbol);
+
+  return (
+    lastPrices.get(symbol) ??
+    (instrument ? minutePrice(instrument, Math.floor((Date.now() - listedAt) / 60_000)) : 0)
+  );
+}
+
+/**
+ * Sets the last price of a symbol (clears it without a price) and fires the stops and targets that it reaches: the order is filled at the
+ * price, the position shrinks, the other one of the pair is cancelled, and the streams are told.
+ */
+function setPrice(url: URL) {
+  const symbol = url.searchParams.get('symbol') ?? 'BTCUSDT';
+  const asked = url.searchParams.get('price');
+
+  if (asked === null) {
+    lastPrices.delete(symbol);
+
+    return ok({ symbol });
+  }
+
+  const price = Number(asked);
+  lastPrices.set(symbol, price);
+
+  for (const child of [...children.values()].filter(
+    (candidate) => candidate.symbol === symbol && candidate.orderStatus === 'Untriggered',
+  )) {
+    const trigger = Number(child.triggerPrice);
+    const target = child.stopOrderType === 'PartialTakeProfit';
+    // A sell closes a long: its target is above, its stop below; a buy closes a short the other way round.
+    const above = child.side === 'Sell' ? target : !target;
+    const reached = above ? price >= trigger : price <= trigger;
+
+    if (reached && child.orderStatus === 'Untriggered') {
+      fire(child, price);
+    }
+  }
+
+  return ok({ symbol, price });
+}
+
+function fire(child: StubOrder, price: number) {
+  const qty = Number(child.qty);
+  child.cumExecQty = String(qty);
+  child.cumExecValue = String(exact(qty * price));
+  child.orderStatus = 'Filled';
+  settle(child, qty, price);
+  const execution = executionOf(child, qty, price);
+  const told = [child];
+
+  for (const other of children.values()) {
+    if (
+      other.parentOrderLinkId === child.parentOrderLinkId &&
+      other.orderStatus === 'Untriggered'
+    ) {
+      other.orderStatus = 'Cancelled';
+      told.push(other);
+    }
+  }
+
+  push('execution', [execution]);
+  push('order', told.map(orderView));
 }
 
 /** Sends a kline update of one candle to the subscribed sockets: the closing when `confirm` is set, otherwise a forming one. */
@@ -660,13 +889,13 @@ const server = createServer((request, response) => {
       }),
     );
   } else if (url.pathname === '/v5/position/list') {
-    send(response, ok({ category: 'linear', list: [], nextPageCursor: '' }));
+    send(response, positionList(url));
   } else if (url.pathname === '/v5/order/realtime') {
     send(response, listOrders(url, false));
   } else if (url.pathname === '/v5/order/history') {
     send(response, listOrders(url, true));
   } else if (url.pathname === '/v5/execution/list') {
-    const link = url.searchParams.get('orderLinkId') ?? '';
+    const link = url.searchParams.get('orderLinkId') ?? url.searchParams.get('orderId') ?? '';
     send(
       response,
       ok({
@@ -685,6 +914,8 @@ const server = createServer((request, response) => {
     send(response, candle(url));
   } else if (url.pathname === '/control/forming') {
     send(response, candle(url, false));
+  } else if (url.pathname === '/control/price') {
+    send(response, setPrice(url));
   } else if (url.pathname === '/control/pump') {
     send(response, startPump(url));
   } else if (url.pathname === '/control/drop') {
@@ -693,6 +924,8 @@ const server = createServer((request, response) => {
     }
 
     send(response, ok({}));
+  } else if (url.pathname === '/control/children') {
+    send(response, [...children.values()]);
   } else if (url.pathname === '/control/orders') {
     send(response, [...orders.values()]);
   } else if (url.pathname === '/v5/market/time') {

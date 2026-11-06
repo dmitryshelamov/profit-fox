@@ -155,7 +155,8 @@ async function rowOf(text: string) {
 
 const pressed = async (text: string) =>
   within(await rowOf(text))
-    .getByRole('button')
+    .getAllByRole('button')
+    .find((button) => button.hasAttribute('aria-pressed'))!
     .getAttribute('aria-pressed');
 
 describe('ideas on the pair page', () => {

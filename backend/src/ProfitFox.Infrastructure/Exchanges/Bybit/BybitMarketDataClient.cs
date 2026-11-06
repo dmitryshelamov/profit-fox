@@ -76,6 +76,24 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
         }
     }
 
+    public async Task<decimal> GetLastPriceAsync(Instrument instrument, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await resilience.ExecuteOnceAsync(
+                async token => instrument.Category == MarketCategory.Spot
+                    ? Unwrap(await bybit.V5Api.ExchangeData.GetSpotTickersAsync(instrument.Symbol, token)).List.Where(ticker => ticker.Symbol == instrument.Symbol).Select(ticker => ticker.LastPrice).FirstOrDefault()
+                    : Unwrap(await bybit.V5Api.ExchangeData.GetLinearInverseTickersAsync(instrument.Category.ToBybit(), instrument.Symbol, ct: token)).List.Where(ticker => ticker.Symbol == instrument.Symbol).Select(ticker => ticker.LastPrice).FirstOrDefault(),
+                cancellationToken) is { } price and > 0m
+                ? price
+                : throw new ExchangeUnavailableException($"Bybit has no ticker of {instrument.Symbol}.");
+        }
+        catch (TransientExchangeException exception)
+        {
+            throw new ExchangeUnavailableException($"Bybit is unavailable: {exception.Message}");
+        }
+    }
+
     // A single attempt: the caller waits for this answer synchronously.
     public async Task<bool> InstrumentExistsAsync(Instrument instrument, CancellationToken cancellationToken)
     {

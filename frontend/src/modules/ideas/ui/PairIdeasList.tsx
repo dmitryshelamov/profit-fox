@@ -14,10 +14,13 @@ export function PairIdeasList({
   ideas,
   selectedId,
   onSelect,
+  onEnter,
 }: {
   ideas: readonly Idea[];
   selectedId: string | undefined;
   onSelect: (idea: Idea) => void;
+  /** Enters a trade by an idea that waits for its entry or is active; the rows of the others have no button. */
+  onEnter?: (idea: Idea) => void;
 }) {
   const { open, closed } = groupPairIdeas(ideas);
   const [amount] = useState(loadAmount);
@@ -38,6 +41,7 @@ export function PairIdeasList({
       amount={amount}
       selectedId={selectedId}
       onSelect={onSelect}
+      onEnter={onEnter}
     />
   );
 }

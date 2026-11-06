@@ -70,6 +70,26 @@ public class BybitCandleOnceTests
         (_factory.Bybit.Requests - before).ShouldBe(1);
     }
 
+    // Requirement "Расчёт входа": the price of a market idea is the last price of the ticker of its pair, read with one attempt.
+    [TestCase(MarketCategory.Spot)]
+    [TestCase(MarketCategory.Linear)]
+    public async Task Last_price_is_read_from_the_ticker_of_the_pair(MarketCategory category)
+    {
+        _factory.Bybit.Tickers[(category == MarketCategory.Spot ? "spot" : "linear", "ETHUSDT")] = ("2500.5", "2500.4", "2500.6", "1", "0.0001");
+        _factory.Bybit.Tickers[(category == MarketCategory.Spot ? "spot" : "linear", "BTCUSDT")] = ("43000.25", "43000", "43000.5", "1", "0.0001");
+
+        decimal price = await Client().GetLastPriceAsync(new Instrument(category, "BTCUSDT"), CancellationToken.None);
+
+        price.ShouldBe(43000.25m);
+        _factory.Bybit.TickerRequests.ShouldBe([category == MarketCategory.Spot ? "spot" : "linear"]);
+    }
+
+    [Test]
+    public async Task Pair_without_a_ticker_is_unavailable()
+    {
+        await Should.ThrowAsync<ExchangeUnavailableException>(() => Client().GetLastPriceAsync(Btc, CancellationToken.None));
+    }
+
     private IMarketHistoryClient Client()
     {
         return _factory.Services.GetRequiredService<IMarketHistoryClient>();

@@ -452,6 +452,61 @@ export const filterFields = [
   },
 ] satisfies Schemas['SavedFilterFieldResponse'][];
 
+/** A trade by an idea waiting for its entry on SOLUSDT; a test sets what it needs. */
+export const tradeOf = (overrides: Partial<Schemas['IdeaTradeResponse']> = {}) =>
+  ({
+    id: 'aaaaaaaa-0000-4000-8000-000000000001',
+    ideaId: '11111111-1111-4111-8111-111111111111',
+    accountId: exchangeAccount.id,
+    accountName: exchangeAccount.name,
+    category: 'linear',
+    symbol: 'SOLUSDT',
+    setup: 'impulse',
+    interval: '15',
+    type: 'target_2r',
+    side: 'long',
+    entryPrice: '168.4',
+    filledPrice: null,
+    stop: '165',
+    target: '175',
+    quantity: '0.47',
+    amount: '79.15',
+    risk: '0.99',
+    status: 'awaiting_entry',
+    statusAt: '2026-11-05T10:00:00Z',
+    createdAt: '2026-11-05T10:00:00Z',
+    reason: null,
+    result: null,
+    resultR: null,
+    ...overrides,
+  }) satisfies Schemas['IdeaTradeResponse'];
+
+export const tradingSettings = {
+  accountId: exchangeAccount.id,
+  risk: '1',
+  maxAmount: '200',
+  maxOpenTrades: 5,
+  maxTotalRisk: '5',
+  minRiskReward: '1.5',
+} satisfies Schemas['IdeaTradingSettingsResponse'];
+
+/** The entry of an idea as the API calculates it: no reason, the amount under the limit. */
+export const entryOf = (overrides: Partial<Schemas['IdeaEntryResponse']> = {}) =>
+  ({
+    accountId: exchangeAccount.id,
+    entryPrice: '168.40',
+    quantity: '0.47',
+    amount: '79.15',
+    risk: '0.99',
+    riskReward: '1.84',
+    riskRewardWithoutFees: '2',
+    freeMoney: '1000',
+    quote: 'USDT',
+    cappedByAmount: false,
+    reasons: [],
+    ...overrides,
+  }) satisfies Schemas['IdeaEntryResponse'];
+
 /** A row of a table of calibration of the API: 640 cases promised 35 % on average. */
 export const calibrationRowOf = (overrides: Partial<Schemas['CalibrationRowResponse']> = {}) =>
   ({

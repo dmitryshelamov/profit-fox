@@ -15,6 +15,12 @@ public static class IdeaTracker
     private const int StopEntryCandles = 12;
     private const int LifeCandles = 24;
 
+    /// <summary>The moment a pullback that has not entered gives up its entry: 4 candles of its interval from when it fired.</summary>
+    public static DateTimeOffset EntryDeadline(IdeaTrack track)
+    {
+        return track.FiredAt.AddMinutes(EntryCandles * track.CandleMinutes);
+    }
+
     public static IdeaTrack Step(IdeaTrack track, IdeaCandle minute)
     {
         return track.Status switch
@@ -48,7 +54,7 @@ public static class IdeaTracker
 
     private static IdeaTrack EnterAtLimit(IdeaTrack track, IdeaCandle minute)
     {
-        if (minute.OpenTime >= track.FiredAt.AddMinutes(EntryCandles * track.CandleMinutes))
+        if (minute.OpenTime >= EntryDeadline(track))
         {
             return track with { Status = IdeaStatus.Expired, StatusAt = minute.OpenTime };
         }

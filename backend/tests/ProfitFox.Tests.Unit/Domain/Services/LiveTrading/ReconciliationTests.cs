@@ -1,6 +1,7 @@
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Services.LiveTrading;
+using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.LiveTrading;
 
 using Shouldly;
@@ -91,6 +92,64 @@ public class ReconciliationTests
         var exchange = new ExchangeHoldings(0.5m, [new ClientOrderId(B, 9)], []);
 
         Reconciliation.Check(MarketCategory.Linear, Step, [Long(A, 0.5m)], exchange).ShouldBeEmpty();
+    }
+
+    private static readonly Guid T = Guid.Parse("cccccccc-cccc-4ccc-8ccc-cccccccccccc");
+
+    // Scenario "Бот и сделка по идее".
+    [Test]
+    public void Linear_position_is_the_sum_of_the_bots_and_the_trades()
+    {
+        var exchange = new ExchangeHoldings(0.5m, [], []);
+
+        Reconciliation.Check(MarketCategory.Linear, Step, [Long(A, 0.3m)], exchange, [new TradeHolding(T, StrategyDirection.Long, 0.2m, [])]).ShouldBeEmpty();
+    }
+
+    [Test]
+    public void Linear_position_that_differs_from_the_bots_and_the_trades_is_named()
+    {
+        var exchange = new ExchangeHoldings(0m, [], []);
+
+        Reconciliation.Check(MarketCategory.Linear, Step, [], exchange, [new TradeHolding(T, StrategyDirection.Long, 0.47m, [])])
+            .ShouldBe(["Exchange position 0 does not match the positions of the bots and the idea trades 0.47."]);
+    }
+
+    [Test]
+    public void Spot_coins_below_the_bots_and_the_trades_are_named()
+    {
+        var exchange = new ExchangeHoldings(0.4m, [], []);
+
+        Reconciliation.Check(MarketCategory.Spot, Step, [Long(A, 0.1m)], exchange, [new TradeHolding(T, StrategyDirection.Long, 0.5m, [])])
+            .ShouldBe(["Exchange holds 0.4 of the coin, less than the positions of the bots and the idea trades 0.6."]);
+    }
+
+    [Test]
+    public void Saved_order_of_a_trade_the_exchange_does_not_know_is_named()
+    {
+        var holding = new TradeHolding(T, StrategyDirection.Long, 0.5m, [1, 2]);
+        var exchange = new ExchangeHoldings(0.5m, [], [], [new IdeaTradeOrderId(T, 1)], []);
+
+        Reconciliation.Check(MarketCategory.Linear, Step, [], exchange, [holding])
+            .ShouldBe([$"Order {new IdeaTradeOrderId(T, 2).Code} of the idea trade is not on the exchange."]);
+    }
+
+    [Test]
+    public void Saved_order_of_a_trade_that_finished_meanwhile_is_known()
+    {
+        var holding = new TradeHolding(T, StrategyDirection.Long, 0.5m, [1]);
+        var exchange = new ExchangeHoldings(0.5m, [], [], [], [new IdeaTradeOrderId(T, 1)]);
+
+        Reconciliation.Check(MarketCategory.Linear, Step, [], exchange, [holding]).ShouldBeEmpty();
+    }
+
+    [Test]
+    public void Open_order_of_a_trade_that_it_does_not_hold_is_named()
+    {
+        var holding = new TradeHolding(T, StrategyDirection.Long, 0.5m, []);
+        var exchange = new ExchangeHoldings(0.5m, [], [], [new IdeaTradeOrderId(T, 9)], []);
+
+        Reconciliation.Check(MarketCategory.Linear, Step, [], exchange, [holding])
+            .ShouldBe([$"Order {new IdeaTradeOrderId(T, 9).Code} of the idea trade is unknown."]);
     }
 
     private static IReadOnlyList<string> Check(MarketCategory category, decimal exchange, params BotHolding[] bots)

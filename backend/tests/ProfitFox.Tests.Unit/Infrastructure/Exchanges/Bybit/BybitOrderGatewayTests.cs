@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
+using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
 
@@ -120,6 +121,84 @@ public class BybitOrderGatewayTests
         handler.Bodies.Single().ShouldNotContain("marketUnit");
     }
 
+    // Scenario "Вход по рынку на linear": the stop and the target of the entry stand on the exchange for this trade's quantity only.
+    [Test]
+    public async Task Linear_entry_carries_its_stop_and_target_in_the_partial_mode()
+    {
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(Answer(0, "OK", """{"orderId":"x-1","orderLinkId":"c-1"}"""));
+        var order = new OrderRequest("c-1", OrderSide.Buy, OrderType.Market, null, 0.47m, null, new Protection(24.42m, 23.01m));
+
+        await Gateway(handler).PlaceAsync(Key, new Instrument(MarketCategory.Linear, "DKNGUSDT"), order, CancellationToken.None);
+
+        string body = handler.Bodies.Single();
+        body.ShouldContain("\"tpslMode\":\"Partial\"");
+        body.ShouldContain("\"takeProfit\":\"24.42\"");
+        body.ShouldContain("\"stopLoss\":\"23.01\"");
+        body.ShouldContain("\"tpOrderType\":\"Market\"");
+        body.ShouldContain("\"slOrderType\":\"Market\"");
+        body.ShouldContain("\"tpTriggerBy\":\"LastPrice\"");
+        body.ShouldContain("\"slTriggerBy\":\"LastPrice\"");
+        body.ShouldContain("\"positionIdx\":0");
+    }
+
+    // Scenario "Вход на споте": Bybit takes the stop and the target on a limit order of the spot, with no mode.
+    [Test]
+    public async Task Spot_limit_entry_carries_its_stop_and_target()
+    {
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(Answer(0, "OK", """{"orderId":"x-1","orderLinkId":"c-1"}"""));
+        var order = new OrderRequest("c-1", OrderSide.Buy, OrderType.Limit, 100m, 0.47m, null, new Protection(104m, 98m), TimeInForce.ImmediateOrCancel);
+
+        await Gateway(handler).PlaceAsync(Key, Spot, order, CancellationToken.None);
+
+        string body = handler.Bodies.Single();
+        body.ShouldContain("\"takeProfit\":\"104\"");
+        body.ShouldContain("\"stopLoss\":\"98\"");
+        body.ShouldContain("\"timeInForce\":\"IOC\"");
+        body.ShouldNotContain("tpslMode");
+        body.ShouldNotContain("positionIdx");
+    }
+
+    [Test]
+    public async Task Close_only_reduces_the_position()
+    {
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(Answer(0, "OK", """{"orderId":"x-1","orderLinkId":"c-1"}"""));
+        var order = new OrderRequest("c-1", OrderSide.Sell, OrderType.Market, null, 0.47m, null, ReduceOnly: true);
+
+        await Gateway(handler).PlaceAsync(Key, new Instrument(MarketCategory.Linear, "DKNGUSDT"), order, CancellationToken.None);
+
+        handler.Bodies.Single().ShouldContain("\"reduceOnly\":\"true\"");
+    }
+
+    // Bybit documents reduce-only for the derivatives only: the spot takes the order without it.
+    [Test]
+    public async Task Close_on_the_spot_does_not_send_reduce_only()
+    {
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(Answer(0, "OK", """{"orderId":"x-1","orderLinkId":"c-1"}"""));
+        var order = new OrderRequest("c-1", OrderSide.Sell, OrderType.Market, null, 0.47m, null, ReduceOnly: true);
+
+        await Gateway(handler).PlaceAsync(Key, new Instrument(MarketCategory.Spot, "BTCUSDT"), order, CancellationToken.None);
+
+        handler.Bodies.Single().ShouldNotContain("reduceOnly");
+    }
+
+    // A bot's request stays as it was: no stop, no target, no mode, no position index, no reduce-only.
+    [TestCase(MarketCategory.Spot)]
+    [TestCase(MarketCategory.Linear)]
+    public async Task Order_of_a_bot_carries_nothing_of_a_trade(MarketCategory category)
+    {
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(Answer(0, "OK", """{"orderId":"x-1","orderLinkId":"c-1"}"""));
+
+        await Gateway(handler).PlaceAsync(Key, new Instrument(category, "BTCUSDT"), Limit, CancellationToken.None);
+
+        string body = handler.Bodies.Single();
+        body.ShouldContain("\"timeInForce\":\"GTC\"");
+
+        foreach (string field in new[] { "takeProfit", "stopLoss", "tpslMode", "tpOrderType", "slOrderType", "tpTriggerBy", "slTriggerBy", "positionIdx", "reduceOnly" })
+        {
+            body.ShouldNotContain(field);
+        }
+    }
+
     [Test]
     public async Task Cancel_is_sent_by_the_client_id()
     {
@@ -129,6 +208,19 @@ public class BybitOrderGatewayTests
 
         handler.Requests.Single().AbsolutePath.ShouldBe("/v5/order/cancel");
         handler.Bodies.Single().ShouldContain("\"orderLinkId\":\"c-1\"");
+    }
+
+    // The stop and the target of an entry have no client id: a cancel names them by the exchange's id.
+    [Test]
+    public async Task Cancel_is_sent_by_the_id_of_the_exchange()
+    {
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(Answer(0, "OK", """{"orderId":"x-stop","orderLinkId":""}"""));
+
+        (await Gateway(handler).CancelByExchangeIdAsync(Key, new Instrument(MarketCategory.Linear, "BTCUSDT"), "x-stop", CancellationToken.None)).Kind.ShouldBe(OrderOutcomeKind.Accepted);
+
+        handler.Requests.Single().AbsolutePath.ShouldBe("/v5/order/cancel");
+        handler.Bodies.Single().ShouldContain("\"orderId\":\"x-stop\"");
+        handler.Bodies.Single().ShouldNotContain("orderLinkId");
     }
 
     // An order that filled or was cancelled meanwhile has nothing to cancel; its end comes with its events.

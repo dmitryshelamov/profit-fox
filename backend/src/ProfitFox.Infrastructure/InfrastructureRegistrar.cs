@@ -8,6 +8,8 @@ using Npgsql;
 
 using ProfitFox.Application.Backtests;
 using ProfitFox.Application.ExchangeAccounts;
+using ProfitFox.Application.IdeaTrades;
+using ProfitFox.Application.IdeaTrades.Runtime;
 using ProfitFox.Application.LiveTrading;
 using ProfitFox.Application.LiveTrading.Runtime;
 using ProfitFox.Application.MarketData;
@@ -32,6 +34,7 @@ using ProfitFox.Infrastructure.Exchanges.Retry;
 using ProfitFox.Infrastructure.Mediatr;
 using ProfitFox.Infrastructure.Observability;
 using ProfitFox.Infrastructure.Persistence.Postgres;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaTrades;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.LiveTrading;
 using ProfitFox.Infrastructure.Persistence.Postgres.Transactions;
 using ProfitFox.Infrastructure.Security;
@@ -169,6 +172,7 @@ public static class InfrastructureRegistrar
         services.AddSingleton<ExchangeResilienceExecutor>();
         services.AddTransient<IMarketHistoryClient, BybitMarketDataClient>();
         services.AddTransient<CandleReadThrough>();
+        services.AddTransient<IdeaTradeEntryCalculator>();
         services.AddTransient<IInstrumentRulesProvider, BybitMarketDataClient>();
         services.AddKeyedTransient<IInstrumentCatalog, BybitMarketDataClient>(CachedInstrumentCatalog.InnerKey);
         services.AddSingleton<IInstrumentCatalog>(provider => new CachedInstrumentCatalog(
@@ -189,6 +193,12 @@ public static class InfrastructureRegistrar
         // One loop for all bots of the Worker; it reads and renews with a connection per call, outside any unit of work.
         services.AddSingleton(provider => new LiveBotLeases(
             new LiveBotRepository(provider.GetRequiredService<NpgsqlDataSource>(), new PostgresTransactionAccessor()),
+            provider.GetRequiredService<TradingSettings>(),
+            provider.GetRequiredService<WorkerSettings>(),
+            provider.GetRequiredService<WorkerIdentity>(),
+            provider.GetRequiredService<TimeProvider>()));
+        services.AddSingleton(provider => new IdeaTradeLeases(
+            new IdeaTradeRepository(provider.GetRequiredService<NpgsqlDataSource>(), new PostgresTransactionAccessor()),
             provider.GetRequiredService<TradingSettings>(),
             provider.GetRequiredService<WorkerSettings>(),
             provider.GetRequiredService<WorkerIdentity>(),

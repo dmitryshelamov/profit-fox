@@ -1757,6 +1757,386 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ideas/{id}/entry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The entry of an idea as it would be made now, for an account and a risk (the settings give them when left out): the quantity, the amount,
+         *     the risk and the reward to the risk after the fees, and the reasons it cannot be made. Places nothing. Reads the price of the pair from Bybit.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    accountId?: string;
+                    risk?: number | string;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IdeaEntryResponse"];
+                        "application/json": components["schemas"]["IdeaEntryResponse"];
+                        "text/json": components["schemas"]["IdeaEntryResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/idea-trades": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every trade, the newest first. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IdeaTradeResponse"][];
+                        "application/json": components["schemas"]["IdeaTradeResponse"][];
+                        "text/json": components["schemas"]["IdeaTradeResponse"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Enters by an idea: the entry is calculated again and saved with the trade, which waits for its entry; a Worker sends it. A reason the
+         *     entry cannot be made is a 409 with its codes in `reasons` and saves nothing.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["IdeaTradeBody"];
+                    "text/json": components["schemas"]["IdeaTradeBody"];
+                    "application/*+json": components["schemas"]["IdeaTradeBody"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CreatedResponse"];
+                        "application/json": components["schemas"]["CreatedResponse"];
+                        "text/json": components["schemas"]["CreatedResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/idea-trades/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Asks a Worker to take the entry off a trade that waits for it. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/idea-trades/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Asks a Worker to take the stop and the target off an open trade and to close it by the market. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/idea-trading/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IdeaTradingSettingsResponse"];
+                        "application/json": components["schemas"]["IdeaTradingSettingsResponse"];
+                        "text/json": components["schemas"]["IdeaTradingSettingsResponse"];
+                    };
+                };
+            };
+        };
+        /** Replaces the settings; a value out of range is a 400 on its own field. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["IdeaTradingSettingsBody"];
+                    "text/json": components["schemas"]["IdeaTradingSettingsBody"];
+                    "application/*+json": components["schemas"]["IdeaTradingSettingsBody"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/market-data/instruments": {
         parameters: {
             query?: never;
@@ -3800,6 +4180,25 @@ export interface components {
             total: null | components["schemas"]["CalibrationRowResponse"];
         };
         /**
+         * @description The entry of an idea as it would be made now. Numbers are decimal strings: the price, the quantity, the amount, the risk it really takes at that
+         *     quantity, the reward to the risk after the fees and without them, the free money of the account (none without a key). IReadOnlyList&lt;string&gt; IdeaEntryResponse.Reasons are
+         *     the codes of what stops the entry; bool IdeaEntryResponse.CappedByAmount says the largest amount of a trade cut the quantity.
+         */
+        IdeaEntryResponse: {
+            /** Format: uuid */
+            accountId: null | string;
+            entryPrice: string;
+            quantity: string;
+            amount: string;
+            risk: string;
+            riskReward: string;
+            riskRewardWithoutFees: string;
+            freeMoney: null | string;
+            quote: string;
+            cappedByAmount: boolean;
+            reasons: string[];
+        };
+        /**
          * @description A trade idea with its levels and where it stands, and the statistics of its bucket over 90 days (BucketStatisticsResponse? IdeaResponse.Bucket) and over the last
          *     30 (BucketStatisticsResponse? IdeaResponse.Recent), none while the bucket has no case. string? IdeaResponse.BreakEven is the share of targets the idea breaks even at after the fees if it
          *     never expires, none when the target does not cover them.
@@ -3847,6 +4246,76 @@ export interface components {
             pageSize: number | string;
             /** Format: int32 */
             total: number | string;
+        };
+        /** @description An entry by an idea; without an account or a risk the settings of trading by ideas give them. */
+        IdeaTradeBody: {
+            /** Format: uuid */
+            ideaId: string;
+            /** Format: uuid */
+            accountId?: null | string;
+            /** Format: double */
+            risk?: null | number | string;
+        };
+        /**
+         * @description A trade by an idea: the pair, the setup, the interval, the type and the side of its idea as codes, the account, the levels and the size it
+         *     was entered with, its status and the time of it, the reason of an «Ошибка» and the result of a closed trade in money and in R (none before).
+         *     Numbers are decimal strings; string? IdeaTradeResponse.FilledPrice is the average price the entry was filled at, none before any fill.
+         */
+        IdeaTradeResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            ideaId: string;
+            /** Format: uuid */
+            accountId: string;
+            accountName: string;
+            category: string;
+            symbol: string;
+            setup: string;
+            interval: string;
+            type: string;
+            side: string;
+            entryPrice: string;
+            filledPrice: null | string;
+            stop: string;
+            target: string;
+            quantity: string;
+            amount: string;
+            risk: string;
+            status: string;
+            /** Format: date-time */
+            statusAt: string;
+            /** Format: date-time */
+            createdAt: string;
+            reason: null | string;
+            result: null | string;
+            resultR: null | string;
+        };
+        /** @description The settings of trading by ideas: the account to enter on, the risk and the largest amount of a trade in USDT, the most open trades and their total risk, the lowest reward to the risk after the fees. */
+        IdeaTradingSettingsBody: {
+            /** Format: uuid */
+            accountId?: null | string;
+            /** Format: double */
+            risk?: number | string;
+            /** Format: double */
+            maxAmount?: number | string;
+            /** Format: int32 */
+            maxOpenTrades?: number | string;
+            /** Format: double */
+            maxTotalRisk?: number | string;
+            /** Format: double */
+            minRiskReward?: number | string;
+        };
+        /** @description The settings of trading by ideas; numbers are decimal strings, the account is none until the owner chose one. */
+        IdeaTradingSettingsResponse: {
+            /** Format: uuid */
+            accountId: null | string;
+            risk: string;
+            maxAmount: string;
+            /** Format: int32 */
+            maxOpenTrades: number | string;
+            maxTotalRisk: string;
+            minRiskReward: string;
         };
         InstrumentResponse: {
             category: string;

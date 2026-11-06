@@ -1,5 +1,7 @@
 using Bybit.Net.Enums;
 
+using ProfitFox.Application.Ports.LiveTrading;
+
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
 
@@ -34,5 +36,17 @@ public class BybitCodesTests
     public void Interval_maps_to_bybit(Interval interval, KlineInterval expected)
     {
         interval.ToBybit().ShouldBe(expected);
+    }
+
+    // The Partial mode names the orders it makes PartialTakeProfit and PartialStopLoss.
+    [TestCase(StopOrderType.TakeProfit, StopOrderKind.TakeProfit)]
+    [TestCase(StopOrderType.PartialTakeProfit, StopOrderKind.TakeProfit)]
+    [TestCase(StopOrderType.StopLoss, StopOrderKind.StopLoss)]
+    [TestCase(StopOrderType.PartialStopLoss, StopOrderKind.StopLoss)]
+    [TestCase(StopOrderType.TrailingStop, StopOrderKind.None)]
+    [TestCase(null, StopOrderKind.None)]
+    public void Stop_order_type_maps_to_the_kind_of_the_stop(StopOrderType? type, StopOrderKind expected)
+    {
+        type.ToStopKind().ShouldBe(expected);
     }
 }
