@@ -31,6 +31,18 @@ public class IdeaTradeTests
         trade.Result.ShouldBeNull();
     }
 
+    // Scenario "Вход на ▲": the promise of the idea at the entry stays on the trade as it was given.
+    [Test]
+    public void New_trade_carries_the_promise_it_is_given()
+    {
+        var promise = new IdeaPromise(IdeaBadge.Up, 0.31m, 0.14m, 412, 0.33m, 1.84m);
+
+        var trade = IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(Fired), Account, 106m, Size(), Now, promise);
+
+        trade.Promise.ShouldBe(promise);
+        New().Promise.ShouldBeNull();
+    }
+
     // Decision 8: a pullback waits 4 candles of its interval from the moment it fired; the others enter at once.
     [Test]
     public void Pullback_keeps_the_deadline_of_its_entry_and_the_price_of_its_idea()
@@ -68,6 +80,19 @@ public class IdeaTradeTests
 
         (trade.Status, trade.HeldQuantity).ShouldBe((IdeaTradeStatus.Open, 0.47m));
         trade.StatusAt.ShouldBe(Now, "the trade opened with the first fill");
+    }
+
+    // Journal: the time in the trade runs from the first fill of the entry, and later fills and the exits do not move it.
+    [Test]
+    public void Trade_opens_at_the_first_fill_of_its_entry_and_keeps_that_time()
+    {
+        IdeaTrade waiting = New();
+        IdeaTrade part = waiting.EntryGrown(new LegTotals(0.2m, 21.2m, 0.01m), Now.AddMinutes(1));
+        IdeaTrade whole = part.EntryGrown(new LegTotals(0.47m, 49.82m, 0.02m), Now.AddMinutes(2));
+        IdeaTrade closed = whole.ExitGrown(IdeaTradeLeg.TakeProfit, new LegTotals(0.47m, 55m, 0.02m), Now.AddMinutes(3));
+
+        waiting.OpenedAt.ShouldBeNull();
+        (part.OpenedAt, whole.OpenedAt, closed.OpenedAt).ShouldBe((Now.AddMinutes(1), Now.AddMinutes(1), Now.AddMinutes(1)));
     }
 
     [Test]
@@ -188,6 +213,40 @@ public class IdeaTradeTests
             .ExitGrown(IdeaTradeLeg.TakeProfit, new LegTotals(0.47m, 44.65m, 0.03m), Now.AddMinutes(5));
 
         trade.Result.ShouldBe(49.35m - 44.65m - 0.03m - 0.03m);
+    }
+
+    // Scenario "Открытая в плюсе": long 0.47 at 23.48 (11.0356), the price 23.90 (11.233), taker 0.055 % on the exit, the fee of the entry 0.0061.
+    [Test]
+    public void Open_trade_is_worth_the_rest_closed_at_the_price_with_the_taker_fee_of_the_exit()
+    {
+        IdeaTrade trade = Entered();
+
+        trade.ResultAt(23.90m, 0.055m).ShouldBe(11.233m - 11.0356m - 0.0061m - (11.233m * 0.00055m));
+        trade.ResultRAt(23.90m, 0.055m).ShouldBe(trade.ResultAt(23.90m, 0.055m) / 0.2m);
+    }
+
+    [Test]
+    public void Open_trade_that_took_a_part_out_adds_the_exit_it_made_to_the_rest()
+    {
+        IdeaTrade trade = Entered().ExitGrown(IdeaTradeLeg.TakeProfit, new LegTotals(0.2m, 4.884m, 0.0027m), Now.AddMinutes(5));
+
+        trade.ResultAt(23.90m, 0.055m).ShouldBe(4.884m + (0.27m * 23.90m) - 11.0356m - 0.0061m - 0.0027m - (0.27m * 23.90m * 0.00055m));
+    }
+
+    [Test]
+    public void Short_trade_that_is_open_earns_when_the_price_is_lower()
+    {
+        IdeaTrade trade = IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(Fired, side: IdeaSide.Short), Account, 105m, Size(), Now)
+            .EntryGrown(new LegTotals(0.47m, 49.35m, 0.03m), Now);
+
+        trade.ResultAt(100m, 0.055m).ShouldBe(49.35m - 47m - 0.03m - (47m * 0.00055m));
+    }
+
+    [Test]
+    public void Trade_that_waits_for_its_entry_has_no_current_result()
+    {
+        New().ResultAt(23.90m, 0.055m).ShouldBeNull();
+        New().ResultRAt(23.90m, 0.055m).ShouldBeNull();
     }
 
     [Test]

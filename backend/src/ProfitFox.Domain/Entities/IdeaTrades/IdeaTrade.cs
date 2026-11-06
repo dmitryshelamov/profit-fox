@@ -40,7 +40,10 @@ public sealed record IdeaTrade(
     LegTotals StopLoss,
     LegTotals Manual,
     int LastOrderNumber,
-    DateTimeOffset CreatedAt)
+    DateTimeOffset CreatedAt,
+    IdeaPromise? Promise = null,
+    DateTimeOffset? OpenedAt = null,
+    TradedIdeaOutcome? IdeaOutcome = null)
 {
     public bool IsOpen => Status is IdeaTradeStatus.AwaitingEntry or IdeaTradeStatus.Open;
 
@@ -52,15 +55,44 @@ public sealed record IdeaTrade(
         ? (Side == IdeaSide.Long ? Exited.Value - Entry.Value : Entry.Value - Exited.Value) - Entry.Fee - Exited.Fee
         : null;
 
+    /// <summary>The fees of the entry and of the exits.</summary>
+    public decimal Fees => Entry.Fee + Exited.Fee;
+
+    /// <summary>The time from the first fill of the entry to the close of the trade; none for a trade that never opened.</summary>
+    public TimeSpan? TimeToOutcome => StatusAt - OpenedAt;
+
     /// <summary>The result in units of the risk the trade was entered with.</summary>
     public decimal? ResultR => Result / Risk;
+
+    /// <summary>
+    ///     What an open trade is worth now: the part the exits took out, plus the rest closed by the market at <paramref name="price" /> with the taker
+    ///     fee of <paramref name="takerPercent" /> in percent, less the fee of the entry; none for a trade that does not hold anything yet or is done.
+    /// </summary>
+    public decimal? ResultAt(decimal price, decimal takerPercent)
+    {
+        if (Status != IdeaTradeStatus.Open)
+        {
+            return null;
+        }
+
+        decimal rest = HeldQuantity * price;
+        decimal gross = Side == IdeaSide.Long ? Exited.Value + rest - Entry.Value : Entry.Value - Exited.Value - rest;
+
+        return gross - Entry.Fee - Exited.Fee - (rest * takerPercent / 100m);
+    }
+
+    /// <summary>The result at the price in units of the risk the trade was entered with.</summary>
+    public decimal? ResultRAt(decimal price, decimal takerPercent)
+    {
+        return ResultAt(price, takerPercent) / Risk;
+    }
 
     private LegTotals Exited => new LegTotals(
         TakeProfit.Quantity + StopLoss.Quantity + Manual.Quantity,
         TakeProfit.Value + StopLoss.Value + Manual.Value,
         TakeProfit.Fee + StopLoss.Fee + Manual.Fee);
 
-    public static IdeaTrade Create(Guid id, Idea idea, Guid accountId, decimal entryPrice, IdeaTradeSize size, DateTimeOffset now)
+    public static IdeaTrade Create(Guid id, Idea idea, Guid accountId, decimal entryPrice, IdeaTradeSize size, DateTimeOffset now, IdeaPromise? promise = null)
     {
         return new IdeaTrade(
             id,
@@ -88,7 +120,8 @@ public sealed record IdeaTrade(
             LegTotals.None,
             LegTotals.None,
             0,
-            now);
+            now,
+            promise);
     }
 
     /// <summary>A pullback that has not entered by its deadline gives its entry up.</summary>
@@ -107,7 +140,7 @@ public sealed record IdeaTrade(
             return grown;
         }
 
-        IdeaTrade open = grown with { Status = IdeaTradeStatus.Open, StatusAt = now };
+        IdeaTrade open = grown with { Status = IdeaTradeStatus.Open, StatusAt = now, OpenedAt = now };
         IdeaTradeLeg largest = new[] { IdeaTradeLeg.StopLoss, IdeaTradeLeg.TakeProfit, IdeaTradeLeg.Manual }.MaxBy(leg => open.ExitOf(leg).Quantity);
 
         return open.Settled(largest, now);
