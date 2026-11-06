@@ -71,7 +71,7 @@ public class IdeasEngineVersionTests
             interval => interval,
             interval => IdeaCandles.FromMinutes(interval, minutes, Start, interval.CandleOpen(Three)) as IReadOnlyList<IdeaCandle>);
         engine.Warm(instrument, closed, [.. minutes.Where(minute => minute.OpenTime < Three)], [], IdeaInputs.None);
-        var inputs = new IdeaInputs(0.01m, rules.Thresholds.Keys.ToDictionary(interval => interval, _ => 0.0186m), 0.01m);
+        var inputs = new IdeaInputs(0.01m, rules.Thresholds.Keys.ToDictionary(interval => interval, _ => new VolatilityPercentiles(null, 0.0186m)), 0.01m);
         decimal close = minutes[^1].Close;
         IEnumerable<IdeaCandle> flat = Enumerable.Range(0, 1440).Select(index => new IdeaCandle(minutes[^1].OpenTime.AddMinutes(1 + index), close, close, close, close, 0m));
 

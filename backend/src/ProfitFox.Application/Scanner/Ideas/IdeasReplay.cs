@@ -140,8 +140,8 @@ public sealed class IdeasReplay(
             _cursors![instrument] = cursor;
         }
 
-        IReadOnlyDictionary<Interval, decimal> latest = Percentiles(ratios, turn.Until);
-        await volatility.SaveAsync([.. latest.Select(entry => new IdeaVolatility(instrument, entry.Key, entry.Value))], cancellationToken);
+        IReadOnlyDictionary<Interval, VolatilityPercentiles> latest = Percentiles(ratios, turn.Until);
+        await volatility.SaveAsync([.. latest.Select(entry => new IdeaVolatility(instrument, entry.Key, entry.Value.High!.Value))], cancellationToken);
     }
 
     /// <summary>
@@ -191,15 +191,15 @@ public sealed class IdeasReplay(
     }
 
     /// <summary>The percentile of each interval on a day: of the ratios of the 90 days before it.</summary>
-    private static Dictionary<Interval, decimal> Percentiles(Dictionary<Interval, Ratios> ratios, DateTimeOffset day)
+    private static Dictionary<Interval, VolatilityPercentiles> Percentiles(Dictionary<Interval, Ratios> ratios, DateTimeOffset day)
     {
-        var percentiles = new Dictionary<Interval, decimal>();
+        var percentiles = new Dictionary<Interval, VolatilityPercentiles>();
 
         foreach ((Interval interval, Ratios series) in ratios)
         {
             if (Volatility.Percentile(series.Between(day - PercentileWindow, day), 0.9m) is { } percentile)
             {
-                percentiles[interval] = percentile;
+                percentiles[interval] = new VolatilityPercentiles(null, percentile);
             }
         }
 

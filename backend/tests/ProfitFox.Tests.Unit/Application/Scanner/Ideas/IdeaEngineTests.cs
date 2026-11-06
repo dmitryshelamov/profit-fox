@@ -22,6 +22,7 @@ public class IdeaEngineTests
     private static readonly DateTimeOffset Start = DateTimeOffset.Parse("2024-02-29T23:30:00Z");
     private static readonly DateTimeOffset Three = DateTimeOffset.Parse("2024-03-01T03:00:00Z");
     private static readonly DateTimeOffset Five = DateTimeOffset.Parse("2024-03-01T05:00:00Z");
+    private static readonly DateTimeOffset Six = DateTimeOffset.Parse("2024-03-01T06:00:00Z");
 
     private static readonly IdeaRuleSet Rules = new IdeaRuleSet(
         new Dictionary<Interval, SetupThresholds> { [Interval.FifteenMinutes] = new SetupThresholds(6, 3m, 2m, 1.5m, 3m, 0.1m, 1.5m, 0.2m, 20, 4m, 1m, 3m, 0.3m, 70m, 30m) },
@@ -29,7 +30,7 @@ public class IdeaEngineTests
         ZoneRules.Default);
 
     // The price step of the pair: a cent on prices about 100.
-    private static readonly IdeaInputs Ticked = new IdeaInputs(null, new Dictionary<Interval, decimal>(), 0.01m);
+    private static readonly IdeaInputs Ticked = new IdeaInputs(null, new Dictionary<Interval, VolatilityPercentiles>(), 0.01m);
 
     [Test]
     public void Impulse_that_fires_makes_its_ideas_of_every_type_its_levels_allow()
@@ -47,6 +48,42 @@ public class IdeaEngineTests
         fired.Created.ShouldAllBe(idea => idea.Track.Status == IdeaStatus.AwaitingEntry && idea.EngineVersion == IdeasEngineVersion.Current && idea.Move >= 3m);
         // The levels go on the price step of the pair, and the idea keeps it for a target that follows the entry.
         fired.Created.ShouldAllBe(idea => idea.Track.Plan.Stop % 0.01m == 0m && idea.Track.Tick == 0.01m);
+    }
+
+    // Requirement "Зона сетапа в правилах типов": the breakout of 101.6–101.8 at 103.1 stops «Цель 2R» below that zone, 101.6 − 1.5 × 2.21509…,
+    // not below 103.0–103.05, the zone nearest below the price. Without a resistance ahead it has no «Уровни». (The fall back to 101.9 later
+    // breaks 103.0–103.05 down: a breakout short.)
+    [Test]
+    public void Breakout_gives_its_types_with_the_stop_from_its_zone()
+    {
+        IReadOnlyList<IdeaStep> steps = Run(IdeaFixtures.BreakoutUnderZone(), Wif, Six);
+
+        Idea[] breakout = [.. steps.SelectMany(step => step.Created).Where(idea => idea.Setup == IdeaSetup.Breakout && idea.Track.Plan.Side == IdeaSide.Long)];
+        breakout.Select(idea => idea.Track.Plan.Type).ShouldBe([IdeaType.TwoR, IdeaType.BeyondExtreme, IdeaType.Pullback]);
+        breakout[0].Track.Plan.ShouldBe(new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 103.1m, 98.27m, 112.76m));
+    }
+
+    // Scenario "Сжатие": only «Стоп-вход» long and short, a step beyond the range of the last 20 closed candles and the last one, 99 … 101.8.
+    [Test]
+    public void Squeeze_gives_only_stop_entries()
+    {
+        var inputs = new IdeaInputs(null, new Dictionary<Interval, VolatilityPercentiles> { [Interval.FifteenMinutes] = new VolatilityPercentiles(0.05m, null) }, 0.01m);
+
+        IReadOnlyList<IdeaStep> steps = Run(IdeaFixtures.Breakout(), Wif, Six, inputs);
+
+        steps[0].Created.Where(idea => idea.Setup == IdeaSetup.Squeeze).Select(idea => (idea.Track.Plan.Type, idea.Track.Plan.Side, idea.Track.Plan.Entry))
+            .ShouldBe([(IdeaType.StopEntry, IdeaSide.Long, 101.81m), (IdeaType.StopEntry, IdeaSide.Short, 98.99m)]);
+    }
+
+    // Scenario "Два сетапа на одном движении": with an impulse of 1.2 ATR and 1 median the climb to 103.1 is an impulse and a breakout.
+    [Test]
+    public void Impulse_and_breakout_on_one_move_give_ideas_of_both()
+    {
+        IdeaRuleSet rules = Rules with { Thresholds = new Dictionary<Interval, SetupThresholds> { [Interval.FifteenMinutes] = Rules.Thresholds[Interval.FifteenMinutes] with { Move = 1.2m, Volume = 1m } } };
+
+        IdeaStep fired = Run(IdeaFixtures.BreakoutUnderZone(), Wif, Six, null, rules).First(step => step.Created.Any(idea => idea.Setup == IdeaSetup.Impulse));
+
+        fired.Created.Select(idea => idea.Setup).Distinct().ShouldBe([IdeaSetup.Impulse, IdeaSetup.Breakout]);
     }
 
     // A pair whose price step the list of instruments has not told yet holds its setups but makes no ideas.
@@ -153,7 +190,7 @@ public class IdeaEngineTests
         var engine = new IdeaEngine(Rules, IdeasEngineVersion.Current);
         IReadOnlyList<IdeaCandle> minutes = Impulse();
         engine.Warm(Wif, Closed(minutes, Three), [.. minutes.Where(minute => minute.OpenTime < Three)], [], IdeaInputs.None);
-        var inputs = new IdeaInputs(0.01m, new Dictionary<Interval, decimal> { [Interval.FifteenMinutes] = 0.0186m }, 0.01m);
+        var inputs = new IdeaInputs(0.01m, new Dictionary<Interval, VolatilityPercentiles> { [Interval.FifteenMinutes] = new VolatilityPercentiles(null, 0.0186m) }, 0.01m);
 
         IdeaStep[] steps = [.. minutes.Where(minute => minute.OpenTime >= Three).Select(minute => engine.Step(Wif, minute, inputs, true))];
 
@@ -271,9 +308,9 @@ public class IdeaEngineTests
         ];
     }
 
-    private static IReadOnlyList<IdeaStep> Run(IReadOnlyList<IdeaCandle> minutes, Instrument instrument, DateTimeOffset warmAt, IdeaInputs? inputs = null)
+    private static IReadOnlyList<IdeaStep> Run(IReadOnlyList<IdeaCandle> minutes, Instrument instrument, DateTimeOffset warmAt, IdeaInputs? inputs = null, IdeaRuleSet? rules = null)
     {
-        var engine = new IdeaEngine(Rules, IdeasEngineVersion.Current);
+        var engine = new IdeaEngine(rules ?? Rules, IdeasEngineVersion.Current);
         engine.Warm(instrument, Closed(minutes, warmAt), [.. minutes.Where(minute => minute.OpenTime < warmAt)], [], IdeaInputs.None);
 
         return [.. minutes.Where(minute => minute.OpenTime >= warmAt).Select(minute => engine.Step(instrument, minute, inputs ?? Ticked, true))];

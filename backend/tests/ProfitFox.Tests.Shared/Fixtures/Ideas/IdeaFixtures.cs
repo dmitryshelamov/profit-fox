@@ -57,6 +57,16 @@ public static class IdeaFixtures
     }
 
     /// <summary>
+    ///     The breakout set with a second zone just below the close: the candles from 04:45 and 06:00 reach 103.0 and 103.05 instead, so the
+    ///     resistances are 101.6–101.8 and 103.0–103.05; ATR(14) of the candles up to 07:15 is 2.21509…. The price climbs to 103.1 at 07:33,
+    ///     breaks the lower zone with the margin, stays at 103.1 to 07:42, and from 07:43 stands at 101.9.
+    /// </summary>
+    public static IReadOnlyList<IdeaCandle> BreakoutUnderZone()
+    {
+        return Candles("breakout-two-zones");
+    }
+
+    /// <summary>
     ///     Hourly candles for the zones: <c>two-supports</c>, 200 candles from 103 to 104 with single dips to a low of 100.0, 100.2, 100.4,
     ///     100.1 and 95 (candles 20, 60, 100, 140 and 180); <c>zones</c>, a random walk of 230 candles from 50.00 that ends at 57.55.
     /// </summary>
