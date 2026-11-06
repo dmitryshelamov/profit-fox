@@ -34,12 +34,14 @@ enforces a rule, the check is the source of truth.
   turnover), `MinuteAggregate`, `SetupThresholds`, `SetupSignal`, `SetupReading`, `SetupBase` (what the setups of an interval are measured against
   until a candle closes), `CandleSetupInput`, `RsiState`, `VolatilityPercentiles`, `Zone`, `ZoneRules`, `IdeaPlan`, `IdeaContext`,
   `IdeaTrack`, `IdeaCase`, `IdeaBucketKey`, `IdeaBucketCounts`, `IdeaBucket`, `BucketStatistics`, `IdeaVolatility`, `IdeaShares` (with the break-even), `PairSetup`,
-  `IdeaOutcome` (how a case ended, as the calibration reads it), `CalibrationReport` and `CalibrationRow`.
+  `IdeaOutcome` (how a case ended, as the calibration reads it), `CalibrationReport`, `CalibrationRow`, `IdeaExitRule` (the lifetime, the target in R and the
+  entry window of a type × interval, and which values it can take) and `IdeaExitRules` (the rules in force, the default for a type × interval never applied).
   `Services/Ideas` holds the pure functions: `Atr` (Wilder, 14), `Rsi` (Wilder, 14, over exactly 100 candles), `IdeaCandles` (candles of an interval from minutes, a minute without
   trades flat at the close before it), `SetupDetector` (the setups of a move), `CandleSetupDetector` (the candle setups), `SetupTypes`
   (the types of ideas of each setup), `ZoneFinder`, `IdeaRules`, `IdeaTracker`, `CaseResult`,
   `BucketStatisticsCalculator` (from the counts, ΣR and ΣR², so a window of cases can add and take them), `CalibrationCalculator` (the walk-forward
-  check of the buckets on cases they had not seen), `IdeaMoney`, `Volatility` and `IdeasEngineVersion`.
+  check of the buckets on cases they had not seen), `IdeaMoney`, `Volatility`, `IdeasEngineVersion` and `ExitRuleGrid` (the lifetimes and windows of an
+  interval up to 7 days, a time up to the grid).
 - `IdeaTrades` is the area of trades by ideas (one entry with a stop and a target the exchange stands): `Entities/IdeaTrades` holds `IdeaTrade`
   (its levels, size, status, the totals the exchange counted of its entry and exits, and its result in money and in R), `IdeaTradeOrder` (an entry or
   the market close of the owner, saved before it goes to the exchange, like `LiveOrder`), `IdeaTradeChild` (the stop or the target the exchange made, by
