@@ -48,11 +48,6 @@ public static class IdeaTradeRefusals
 
         StrategyDirection direction = isLong ? StrategyDirection.Long : StrategyDirection.Short;
 
-        if (entry.Category == MarketCategory.Spot)
-        {
-            reasons.Add(IdeaTradeRefusal.SpotNotSupported);
-        }
-
         // A stop entry waits for the price to leave the range of its setup; the entry goes at the market or with a limit only.
         if (entry.Plan.Type == IdeaType.StopEntry)
         {
