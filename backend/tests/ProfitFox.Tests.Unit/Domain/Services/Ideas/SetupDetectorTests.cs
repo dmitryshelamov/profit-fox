@@ -16,8 +16,8 @@ namespace ProfitFox.Tests.Unit.Domain.Services.Ideas;
 public class SetupDetectorTests
 {
     private static readonly SetupThresholds Thresholds = new SetupThresholds(6, 3m, 2m, 1.5m, 3m, 0.1m, 1.5m, 0.2m, 20, 4m, 1m, 3m, 0.3m, 70m, 30m);
-    private static readonly DateTimeOffset Start = DateTimeOffset.Parse("2024-02-29T23:30:00Z");
     private static readonly DateTimeOffset Five = DateTimeOffset.Parse("2024-03-01T05:00:00Z");
+    private static readonly DateTimeOffset Breakout = DateTimeOffset.Parse("2024-03-01T07:30:00Z");
 
     // Scenario "Импульс на 15 минутах": up 7.05 over 6 candles at ATR 2, 2.17 medians of volume. The last candle alone would be an early
     // impulse (1.65 ATR, 3 medians), which an impulse leaves out.
@@ -115,6 +115,26 @@ public class SetupDetectorTests
         fired.ShouldBe([(DateTimeOffset.Parse("2024-03-01T04:56:00Z"), IdeaSetup.Impulse)]);
     }
 
+    // Requirement "Срабатывание сетапа" for a candle setup: the breakout of 101.6–101.8 holds from 07:33 to 07:42 and fires once.
+    [Test]
+    public void Candle_setup_that_holds_fires_once()
+    {
+        var fired = new List<(DateTimeOffset, IdeaSetup)>();
+        var held = new List<DateTimeOffset>();
+        IdeaSetup[] before = [];
+
+        for (DateTimeOffset at = Breakout.AddMinutes(-10); at <= Breakout.AddMinutes(30); at = at.AddMinutes(1))
+        {
+            SetupReading? reading = Detect(IdeaFixtures.Breakout(), at, null);
+            fired.AddRange(SetupDetector.Fired(before, reading).Where(signal => signal.Setup == IdeaSetup.Breakout).Select(signal => (at, signal.Setup)));
+            held.AddRange(reading!.Signals.Where(signal => signal.Setup == IdeaSetup.Breakout).Select(_ => at));
+            before = [.. reading.Signals.Select(signal => signal.Setup)];
+        }
+
+        fired.ShouldBe([(Breakout.AddMinutes(4), IdeaSetup.Breakout)]);
+        held.Count.ShouldBe(10);
+    }
+
     private static SetupReading? Reading(string set, DateTimeOffset at, decimal? percentile = null)
     {
         return Detect(IdeaFixtures.Setup(set), at, percentile);
@@ -123,8 +143,10 @@ public class SetupDetectorTests
     // The minutes before the end of the last closed minute, and the candles that closed before the last 15 minutes.
     private static SetupReading? Detect(IReadOnlyList<IdeaCandle> minutes, DateTimeOffset at, decimal? percentile)
     {
-        IReadOnlyList<IdeaCandle> closed = IdeaCandles.FromMinutes(Interval.FifteenMinutes, minutes, Start, Interval.FifteenMinutes.CandleOpen(at.AddMinutes(-15)));
+        IReadOnlyList<IdeaCandle> closed = IdeaCandles.FromMinutes(Interval.FifteenMinutes, minutes, minutes[0].OpenTime, Interval.FifteenMinutes.CandleOpen(at.AddMinutes(-15)));
 
-        return SetupDetector.Detect(closed, [.. minutes.Where(minute => minute.OpenTime < at)], 15, Thresholds, percentile);
+        return SetupDetector.Base(closed, ZoneRules.Default) is { } basis
+            ? SetupDetector.Detect(basis, [.. minutes.Where(minute => minute.OpenTime < at)], 15, Thresholds, new VolatilityPercentiles(null, percentile))
+            : null;
     }
 }

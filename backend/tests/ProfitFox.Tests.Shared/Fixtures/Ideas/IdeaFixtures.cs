@@ -46,6 +46,17 @@ public static class IdeaFixtures
     }
 
     /// <summary>
+    ///     Minutes of 2024-03-01 from 00:00 to 08:00 for a 15 minute breakout. Until 07:30 every 15 minutes is a candle of 100 with a low of 99 at
+    ///     its first minute, a high of 101 at its last and 100 of volume a minute; the candles from 01:15, 03:00 and 04:45 reach 101.6, 101.8
+    ///     and 101.7, the one resistance at 101.6–101.8. From 07:30 the price climbs with 300 a minute, closes 102.1 at 07:33 and stays at
+    ///     102.1–102.3 to 07:42; from 07:43 it stands at 101.9 with 100 a minute.
+    /// </summary>
+    public static IReadOnlyList<IdeaCandle> Breakout()
+    {
+        return Candles("breakout");
+    }
+
+    /// <summary>
     ///     Hourly candles for the zones: <c>two-supports</c>, 200 candles from 103 to 104 with single dips to a low of 100.0, 100.2, 100.4,
     ///     100.1 and 95 (candles 20, 60, 100, 140 and 180); <c>zones</c>, a random walk of 230 candles from 50.00 that ends at 57.55.
     /// </summary>

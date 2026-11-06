@@ -65,7 +65,7 @@ public class LiveIdeasTests
 
         IReadOnlyList<Idea> created = await RunAsync(Four.AddMinutes(70));
 
-        created.Single(idea => idea.Interval == Interval.FifteenMinutes && idea.Track.Plan.Type == IdeaType.BeyondExtreme).Track.Plan.Stop.ShouldBe(39.37m);
+        created.Single(idea => idea.Setup == IdeaSetup.Impulse && idea.Interval == Interval.FifteenMinutes && idea.Track.Plan.Type == IdeaType.BeyondExtreme).Track.Plan.Stop.ShouldBe(39.37m);
     }
 
     // Decision 5: the replay writes the percentiles once a day; the live ideas read them again every hour.

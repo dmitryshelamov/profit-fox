@@ -159,7 +159,9 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
         foreach ((Interval interval, SetupThresholds thresholds) in rules.Thresholds)
         {
             decimal? percentile = inputs.Percentiles.TryGetValue(interval, out decimal value) ? value : null;
-            SetupReading? reading = SetupDetector.Detect(pair.Series[interval].Base(end), pair.Minutes, Minutes(interval), thresholds, percentile);
+            SetupReading? reading = SetupDetector.Base(pair.Series[interval].Base(end), rules.Zones) is { } basis
+                ? SetupDetector.Detect(basis, pair.Minutes, Minutes(interval), thresholds, new VolatilityPercentiles(null, percentile))
+                : null;
             readings.Add((interval, reading, SetupDetector.Fired(pair.Holding[interval], reading)));
             pair.Holding[interval] = [.. reading?.Signals.Select(signal => signal.Setup) ?? []];
         }

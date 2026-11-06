@@ -78,7 +78,7 @@ public class IdeaEngineTests
 
         int[] impulse = [.. steps.Select((step, index) => step.Setups.Any(setup => setup.Setup == IdeaSetup.Impulse) ? index : -1).Where(index => index >= 0)];
         impulse.Zip(impulse.Skip(1)).Count(pair => pair.Second > pair.First + 1).ShouldBe(1);
-        steps.SelectMany(step => step.Created).Count(idea => idea.Track.Plan.Type == IdeaType.TwoR).ShouldBe(1);
+        steps.SelectMany(step => step.Created).Count(idea => idea.Setup == IdeaSetup.Impulse && idea.Track.Plan.Type == IdeaType.TwoR).ShouldBe(1);
     }
 
     // Scenario "Падение на spot".
