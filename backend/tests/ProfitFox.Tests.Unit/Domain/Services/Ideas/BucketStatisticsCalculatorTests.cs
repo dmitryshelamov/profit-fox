@@ -75,6 +75,26 @@ public class BucketStatisticsCalculatorTests
         statistics.Badge.ShouldBeNull();
     }
 
+    // Scenarios "Половина лимиток не исполнилась" and "Корзина «Отката» на сигнал": 200 signals counted, 100 entered with −6 R in all.
+    [Test]
+    public void Bucket_of_signals_has_the_share_of_entries_and_the_expectancy_per_signal()
+    {
+        BucketStatistics statistics = BucketStatisticsCalculator.Compute(30, 60, 10, -6m, 200m, 200);
+
+        (statistics.Cases, statistics.Expectancy, statistics.Signals).ShouldBe((100, -0.06m, (int?)200));
+        (statistics.EntryShare, statistics.SignalExpectancy).ShouldBe(((decimal?)0.5m, (decimal?)-0.03m));
+        BucketStatisticsCalculator.Compute(6, 5, 1, 2.4m, 20m, 24).EntryShare.ShouldBe(0.5m);
+    }
+
+    // A market type enters with every signal it counts: no signals of its own.
+    [Test]
+    public void Bucket_without_signals_has_neither_share()
+    {
+        BucketStatistics statistics = BucketStatisticsCalculator.Compute(30, 60, 10, -6m, 200m);
+
+        (statistics.Signals, statistics.EntryShare, statistics.SignalExpectancy).ShouldBe(((int?)null, (decimal?)null, (decimal?)null));
+    }
+
     [Test]
     public void Bucket_whose_cases_all_expired_has_no_target_in_its_share()
     {

@@ -14,14 +14,20 @@ public static class BucketStatisticsCalculator
     // The 97.5th percentile of the standard normal distribution: a 95 % interval.
     private const double Z = 1.96;
 
-    public static BucketStatistics Compute(int targets, int stops, int expired, decimal totalR, decimal totalSquaredR)
+    /// <param name="targets">The cases that reached the target.</param>
+    /// <param name="stops">The cases that reached the stop.</param>
+    /// <param name="expired">The cases that expired.</param>
+    /// <param name="totalR">ΣR of the cases.</param>
+    /// <param name="totalSquaredR">ΣR² of the cases.</param>
+    /// <param name="signals">The signals counted, entered or not, of a type that waits for its entry.</param>
+    public static BucketStatistics Compute(int targets, int stops, int expired, decimal totalR, decimal totalSquaredR, int? signals = null)
     {
         int cases = targets + stops + expired;
         decimal expectancy = totalR / cases;
 
         if (cases < MinimumCases)
         {
-            return new BucketStatistics(cases, targets, stops, expired, null, null, null, expectancy, null, null);
+            return new BucketStatistics(cases, targets, stops, expired, null, null, null, expectancy, null, null, signals);
         }
 
         // Wilson score interval; a share is no money, so its square root may go through double.
@@ -35,6 +41,6 @@ public static class BucketStatisticsCalculator
         var margin = (decimal)(Z * Math.Sqrt((double)(variance / cases)));
 
         return new BucketStatistics(cases, targets, stops, expired, (decimal)targets / cases, (decimal)(centre - half), (decimal)(centre + half),
-            expectancy, expectancy - margin, expectancy + margin);
+            expectancy, expectancy - margin, expectancy + margin, signals);
     }
 }
