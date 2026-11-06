@@ -25,7 +25,6 @@ describe('reasons an entry is refused', () => {
       'no_key',
       'category_not_traded',
       'hedge_mode',
-      'spot_not_supported',
       'stop_entry_not_supported',
     ];
 

@@ -69,18 +69,16 @@ public class IdeaTradesApiTests
         (entry.Type, entry.TimeInForce, entry.Price).ShouldBe((OrderType.Limit, TimeInForce.GoodTilCancelled, 100m));
     }
 
-    // Decision 9: the spot is closed in the API until the real check says how its TP/SL orders are told apart.
+    // Scenario "Вход на споте": a limit IOC at the current price that carries the stop and the target of the idea.
     [Test]
-    public async Task Entry_on_the_spot_is_refused_and_saves_nothing()
+    public async Task Entry_on_the_spot_is_a_limit_ioc_with_its_stop_and_target()
     {
         Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 106m, instrument: LiveTradingScenario.Spot);
         _scenario.SetPrice("100.5", LiveTradingScenario.Spot);
 
-        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, risk = 1m });
+        IdeaTradeOrder entry = (await _scenario.TradeOrdersAsync(await CreateAsync(idea))).Single();
 
-        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
-        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("reasons").EnumerateArray().Select(reason => reason.GetString()).ShouldBe(["spot_not_supported"]);
-        (await ListAsync()).GetArrayLength().ShouldBe(0);
+        (entry.Type, entry.TimeInForce, entry.Price, entry.Protection).ShouldBe((OrderType.Limit, TimeInForce.ImmediateOrCancel, 100.5m, new Protection(106m, 98m)));
     }
 
     // A stop entry waits for the price to leave the range of its setup: taken now, it would enter at the market inside the range.
