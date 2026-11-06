@@ -271,6 +271,28 @@ describe('ideas screen', () => {
     );
   });
 
+  // Scenario "Фильтр по новому сетапу и типу".
+  it('asks the API for the stop entries of a squeeze and names them in the row', async () => {
+    const squeeze = ideaOf({
+      id: 'ton-1',
+      symbol: 'TONUSDT',
+      setup: 'squeeze',
+      type: 'stop_entry',
+    });
+    const requests = open({ 'GET /api/ideas': () => json(ideasPage([squeeze])) });
+    renderApp('/ideas');
+    const row = await rowOf('TONUSDT');
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Сетап' }), 'squeeze');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Тип идеи' }), 'stop_entry');
+
+    await waitFor(() =>
+      expect(lastIdeasQuery(requests)).toMatchObject({ Setup: 'squeeze', Type: 'stop_entry' }),
+    );
+    expect(within(row).getByText('Сжатие')).toBeInTheDocument();
+    expect(within(row).getByText('Стоп-вход')).toBeInTheDocument();
+  });
+
   const symbolsInTable = () =>
     within(screen.getByRole('table'))
       .getAllByRole('link')

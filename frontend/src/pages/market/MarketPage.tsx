@@ -201,7 +201,7 @@ export function MarketPage({ page }: { page: number }) {
                     setSetup(option.value);
                     firstPage();
                   }}
-                  className="h-7 rounded-full border border-line bg-panel px-3 text-xs text-muted hover:bg-panel-2 aria-pressed:border-accent aria-pressed:text-text"
+                  className="h-7 whitespace-nowrap rounded-full border border-line bg-panel px-3 text-xs text-muted hover:bg-panel-2 aria-pressed:border-accent aria-pressed:text-text"
                 >
                   {option.label}{' '}
                   <span className="ml-1 text-faint">

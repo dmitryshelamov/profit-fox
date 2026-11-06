@@ -5,6 +5,7 @@ const types: Record<string, string> = {
   target_2r: 'Цель 2R',
   beyond_extreme: 'За экстремумом',
   pullback: 'Откат',
+  stop_entry: 'Стоп-вход',
 };
 
 const statuses: Record<string, string> = {

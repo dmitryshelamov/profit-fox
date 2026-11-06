@@ -32,6 +32,38 @@ public class IdeaSeriesTests
         series.Closed.ShouldBe(IdeaCandles.FromMinutes(Interval.FiveMinutes, minutes, Ten, Ten.AddMinutes(40)));
     }
 
+    // Decision 2: what the setups are measured against is kept until the next candle closes, and equals what a reading anew gives. The
+    // breakout set from 06:00 to 08:00 on 15 minutes: the base of the minute that ends at 06:01 and 8 more, each time a candle leaves the
+    // window of the last 15 minutes, from the minute that ends at 06:15 to the one at 08:00.
+    [Test]
+    public void Base_of_a_minute_inside_a_candle_equals_the_one_computed_anew_and_is_computed_on_a_close_only()
+    {
+        IReadOnlyList<IdeaCandle> minutes = IdeaFixtures.Breakout();
+        DateTimeOffset six = Ten.AddHours(-4);
+        var series = new IdeaSeries(Interval.FifteenMinutes);
+        series.Warm(IdeaCandles.FromMinutes(Interval.FifteenMinutes, minutes, minutes[0].OpenTime, six), []);
+        var computed = new List<SetupBase>();
+
+        foreach (IdeaCandle minute in minutes.Where(minute => minute.OpenTime >= six))
+        {
+            series.Add(minute);
+            DateTimeOffset end = minute.OpenTime.AddMinutes(1);
+            SetupBase measured = series.Measure(end, ZoneRules.Default)!;
+            SetupBase anew = SetupDetector.Base(series.Base(end), ZoneRules.Default)!;
+
+            measured.Closed.ShouldBe(anew.Closed);
+            measured.Zones.ShouldBe(anew.Zones);
+            (measured.Atr, measured.Median, measured.Rsi).ShouldBe((anew.Atr, anew.Median, anew.Rsi));
+
+            if (!computed.Any(item => ReferenceEquals(item, measured)))
+            {
+                computed.Add(measured);
+            }
+        }
+
+        computed.Count.ShouldBe(9);
+    }
+
     [Test]
     public void Series_keeps_the_last_220_candles()
     {
