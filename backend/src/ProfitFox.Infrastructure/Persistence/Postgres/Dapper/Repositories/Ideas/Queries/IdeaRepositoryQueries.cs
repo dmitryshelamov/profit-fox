@@ -2,6 +2,8 @@ using System.Data;
 
 using Dapper;
 
+using ProfitFox.Application.Ideas;
+using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas.Contracts;
 
 namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas.Queries;
@@ -39,6 +41,30 @@ internal static class IdeaRepositoryQueries
     internal static CommandDefinition Update(IEnumerable<IdeaDb> ideas, IDbTransaction transaction, CancellationToken cancellationToken)
     {
         return new CommandDefinition(UpdateSql, ideas, transaction, cancellationToken: cancellationToken);
+    }
+
+    // The scanner writes three columns of the trade and leaves its updated_at alone: a Worker finds the requests of the owner by it.
+    internal static CommandDefinition WriteTradeOutcomes(IEnumerable<ClosedIdea> outcomes, IDbTransaction transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            """
+            UPDATE idea_trades SET idea_status = @Status, idea_status_at = @StatusAt, idea_result = @Result
+            WHERE idea_id = @IdeaId AND idea_status IS NULL
+            """,
+            outcomes.Select(closed => new { closed.IdeaId, Status = closed.Outcome.Status.ToCode(), closed.Outcome.StatusAt, closed.Outcome.Result }),
+            transaction,
+            cancellationToken: cancellationToken);
+    }
+
+    internal static CommandDefinition GetClosedOfTradesWithoutOutcome(CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            $"""
+             SELECT id, {Columns}, tick FROM ideas
+             WHERE status NOT IN ('awaiting_entry', 'active')
+                 AND EXISTS (SELECT 1 FROM idea_trades WHERE idea_trades.idea_id = ideas.id AND idea_trades.idea_status IS NULL)
+             """,
+            cancellationToken: cancellationToken);
     }
 
     internal static CommandDefinition GetOpen(CancellationToken cancellationToken)

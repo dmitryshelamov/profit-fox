@@ -1,4 +1,4 @@
-import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api, unwrap } from '@/shared/api/client';
 import { isDecimalText, jsonNumberOf } from '@/shared/api/jsonNumber';
@@ -8,11 +8,58 @@ const exact = (text: string) => jsonNumberOf(text) as unknown as number;
 
 const given = (text: string) => (text === '' ? undefined : text);
 
-/** Every trade by an idea, the newest first, read again every 15 seconds. */
-export function ideaTradesQuery() {
+/** What the journal is filtered by; an empty text means no limit. */
+export interface JournalFilters {
+  readonly setup: string;
+  readonly symbol: string;
+  readonly side: string;
+  /** `up`, `flat`, `down`, or `none` for a trade with no badge. */
+  readonly badge: string;
+  /** The period of the time of the close in days: 7, 30 or 90. */
+  readonly days: string;
+}
+
+export const noJournalFilters: JournalFilters = {
+  setup: '',
+  symbol: '',
+  side: '',
+  badge: '',
+  days: '',
+};
+
+/** What the journal is asked for: the filters, and the number and the size of the page of the closed trades. */
+export interface JournalRequest {
+  readonly filters: JournalFilters;
+  readonly page: number;
+  readonly pageSize: number;
+}
+
+/**
+ * The journal of the trades by ideas: the open trades, a page of the closed ones and the totals of them all, read again every 15
+ * seconds; the API filters, cuts and counts. The old page stays on the screen while a new one loads.
+ */
+export function ideaJournalQuery(request: JournalRequest) {
+  const { filters, page, pageSize } = request;
+
   return queryOptions({
-    queryKey: ['idea-trades', 'list'],
-    queryFn: async () => unwrap(await api.GET('/api/idea-trades')),
+    queryKey: ['idea-trades', 'journal', request],
+    queryFn: async () =>
+      unwrap(
+        await api.GET('/api/idea-trades', {
+          params: {
+            query: {
+              Setup: given(filters.setup),
+              Symbol: given(filters.symbol),
+              Side: given(filters.side),
+              Badge: given(filters.badge),
+              Days: given(filters.days) === undefined ? undefined : Number(filters.days),
+              Page: page,
+              PageSize: pageSize,
+            },
+          },
+        }),
+      ),
+    placeholderData: keepPreviousData,
     refetchInterval: 15_000,
   });
 }
@@ -118,7 +165,7 @@ export function useCancelTrade() {
 
   return useMutation({
     mutationFn: cancelTrade,
-    onSuccess: () => client.invalidateQueries({ queryKey: ['idea-trades', 'list'] }),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['idea-trades', 'journal'] }),
   });
 }
 
@@ -127,7 +174,7 @@ export function useCloseTrade() {
 
   return useMutation({
     mutationFn: closeTrade,
-    onSuccess: () => client.invalidateQueries({ queryKey: ['idea-trades', 'list'] }),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['idea-trades', 'journal'] }),
   });
 }
 

@@ -2,7 +2,15 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { fakeApi, type FakeRoute, json, problem } from '@/test/fakeApi';
-import { entryOf, exchangeAccount, ideaOf, marketRow, tradingSettings } from '@/test/fixtures';
+import {
+  entryOf,
+  exchangeAccount,
+  ideaOf,
+  journalOf,
+  marketRow,
+  tradeOf,
+  tradingSettings,
+} from '@/test/fixtures';
 import { renderApp } from '@/test/renderApp';
 
 const pullback = ideaOf({
@@ -169,12 +177,17 @@ describe('entry by an idea from the pair page', () => {
     expect(within(dialog).getByLabelText('Аккаунт')).toHaveValue('');
   });
 
-  // Requirement "Окно входа": the entry creates the trade and leads to the screen of trades.
-  it('creates the trade and leads to «Сделки»', async () => {
+  // Requirement "Окно входа", scenario "Вход ведёт в «Сделки»": the entry creates the trade and leads to «Сделки», where the trade is in work.
+  it('creates the trade and leads to «Сделки», with the trade in «В работе»', async () => {
+    let created = false;
     const requests = fakeApi(
       routes({
-        'POST /api/idea-trades': () => json({ id: 'trade-1' }, 201),
-        'GET /api/idea-trades': () => json([]),
+        'POST /api/idea-trades': () => {
+          created = true;
+
+          return json({ id: 'trade-1' }, 201);
+        },
+        'GET /api/idea-trades': () => json(journalOf(created ? [tradeOf({ id: 'trade-1' })] : [])),
       }),
     );
     const { history } = renderApp('/market/linear/SOLUSDT');
@@ -184,10 +197,12 @@ describe('entry by an idea from the pair page', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Войти' }));
 
     await waitFor(() => expect(history.location.pathname).toBe('/idea-trades'));
-    const created = requests.find(
+    const inWork = await screen.findByRole('table', { name: 'Сделки в работе' });
+    expect(within(inWork).getByText('Ждёт входа')).toBeInTheDocument();
+    const request = requests.find(
       (request) => request.method === 'POST' && request.url.endsWith('/api/idea-trades'),
     )!;
-    expect(await created.text()).toBe(
+    expect(await request.text()).toBe(
       `{"ideaId":"idea-pullback","accountId":"${exchangeAccount.id}","risk":1}`,
     );
   });

@@ -1,4 +1,5 @@
 using ProfitFox.Domain.Entities.Ideas;
+using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Domain.Repositories;
@@ -11,6 +12,19 @@ public interface IIdeaRepository
     ///     added. An idea whose key already has an open idea is refused by storage and left out.
     /// </summary>
     Task<IReadOnlyList<Idea>> SaveAsync(IReadOnlyCollection<Idea> created, IReadOnlyCollection<Idea> changed, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     The same, and in the same transaction writes how the ideas that closed ended on the trades made of them that have no outcome yet. It
+    ///     touches nothing else of a trade, not its time of update, so no Worker rereads it.
+    /// </summary>
+    Task<IReadOnlyList<Idea>> SaveAsync(
+        IReadOnlyCollection<Idea> created,
+        IReadOnlyCollection<Idea> changed,
+        IReadOnlyCollection<ClosedIdea> outcomes,
+        CancellationToken cancellationToken);
+
+    /// <summary>The ideas that closed and still stand, with a trade made of them that has no outcome yet.</summary>
+    Task<IReadOnlyList<Idea>> GetClosedOfTradesWithoutOutcomeAsync(CancellationToken cancellationToken);
 
     /// <summary>The ideas awaiting entry or active.</summary>
     Task<IReadOnlyList<Idea>> GetOpenAsync(CancellationToken cancellationToken);

@@ -16,7 +16,10 @@ internal static class IdeaTradeRepositoryQueries
                                         take_profit_quantity AS "TakeProfitQuantity", take_profit_value AS "TakeProfitValue", take_profit_fee AS "TakeProfitFee",
                                         stop_loss_quantity AS "StopLossQuantity", stop_loss_value AS "StopLossValue", stop_loss_fee AS "StopLossFee",
                                         manual_quantity AS "ManualQuantity", manual_value AS "ManualValue", manual_fee AS "ManualFee",
-                                        last_order_number AS "LastOrderNumber", created_at AS "CreatedAt", lease_epoch AS "LeaseEpoch"
+                                        last_order_number AS "LastOrderNumber", created_at AS "CreatedAt", lease_epoch AS "LeaseEpoch",
+                                        promised_badge AS "PromisedBadge", promised_probability AS "PromisedProbability", promised_expectancy AS "PromisedExpectancy",
+                                        promised_cases AS "PromisedCases", break_even AS "BreakEven", net_risk_reward AS "NetRiskReward",
+                                        idea_status AS "IdeaStatus", idea_status_at AS "IdeaStatusAt", idea_result AS "IdeaResult", opened_at AS "OpenedAt"
                                         """;
 
     private const string OrderColumns = """
@@ -122,12 +125,14 @@ internal static class IdeaTradeRepositoryQueries
                 id, idea_id, account_id, category, symbol, setup, interval, type, side, entry_price, stop, target, quantity, amount, risk, entry_deadline,
                 status, status_at, reason, cancel_requested, close_requested, entry_quantity, entry_value, entry_fee,
                 take_profit_quantity, take_profit_value, take_profit_fee, stop_loss_quantity, stop_loss_value, stop_loss_fee,
-                manual_quantity, manual_value, manual_fee, last_order_number, created_at, lease_epoch, updated_at)
+                manual_quantity, manual_value, manual_fee, last_order_number, created_at, lease_epoch, updated_at,
+                promised_badge, promised_probability, promised_expectancy, promised_cases, break_even, net_risk_reward)
             VALUES (
                 @Id, @IdeaId, @AccountId, @Category, @Symbol, @Setup, @Interval, @Type, @Side, @EntryPrice, @Stop, @Target, @Quantity, @Amount, @Risk, @EntryDeadline,
                 @Status, @StatusAt, @Reason, @CancelRequested, @CloseRequested, @EntryQuantity, @EntryValue, @EntryFee,
                 @TakeProfitQuantity, @TakeProfitValue, @TakeProfitFee, @StopLossQuantity, @StopLossValue, @StopLossFee,
-                @ManualQuantity, @ManualValue, @ManualFee, @LastOrderNumber, @CreatedAt, 0, @Now)
+                @ManualQuantity, @ManualValue, @ManualFee, @LastOrderNumber, @CreatedAt, 0, @Now,
+                @PromisedBadge, @PromisedProbability, @PromisedExpectancy, @PromisedCases, @BreakEven, @NetRiskReward)
             """,
             new
             {
@@ -166,6 +171,12 @@ internal static class IdeaTradeRepositoryQueries
                 trade.ManualFee,
                 trade.LastOrderNumber,
                 trade.CreatedAt,
+                trade.PromisedBadge,
+                trade.PromisedProbability,
+                trade.PromisedExpectancy,
+                trade.PromisedCases,
+                trade.BreakEven,
+                trade.NetRiskReward,
                 Now = now
             },
             transaction,
@@ -195,7 +206,7 @@ internal static class IdeaTradeRepositoryQueries
                 take_profit_quantity = @TakeProfitQuantity, take_profit_value = @TakeProfitValue, take_profit_fee = @TakeProfitFee,
                 stop_loss_quantity = @StopLossQuantity, stop_loss_value = @StopLossValue, stop_loss_fee = @StopLossFee,
                 manual_quantity = @ManualQuantity, manual_value = @ManualValue, manual_fee = @ManualFee,
-                last_order_number = @LastOrderNumber, updated_at = @Now
+                last_order_number = @LastOrderNumber, opened_at = @OpenedAt, updated_at = @Now
             WHERE id = @Id
             """,
             new
@@ -219,6 +230,7 @@ internal static class IdeaTradeRepositoryQueries
                 trade.ManualValue,
                 trade.ManualFee,
                 trade.LastOrderNumber,
+                trade.OpenedAt,
                 Now = now
             },
             transaction,

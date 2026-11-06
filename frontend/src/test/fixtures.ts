@@ -478,8 +478,56 @@ export const tradeOf = (overrides: Partial<Schemas['IdeaTradeResponse']> = {}) =
     reason: null,
     result: null,
     resultR: null,
+    openedAt: null,
+    secondsToOutcome: null,
+    promise: null,
+    ideaOutcome: null,
+    lastPrice: null,
+    currentResult: null,
+    currentResultR: null,
     ...overrides,
   }) satisfies Schemas['IdeaTradeResponse'];
+
+/** The totals of a journal with nothing closed; a test sets what it needs. */
+export const journalTotals = (overrides: Partial<Schemas['IdeaJournalTotalsResponse']> = {}) =>
+  ({
+    targets: 0,
+    stops: 0,
+    manual: 0,
+    cancelled: 0,
+    failed: 0,
+    result: '0',
+    fees: '0',
+    meanR: null,
+    meanRLow: null,
+    meanRHigh: null,
+    meanSecondsToOutcome: null,
+    promise: { count: 0, promised: null, got: null },
+    ideas: { count: 0, ideas: null, trades: null },
+    ...overrides,
+  }) satisfies Schemas['IdeaJournalTotalsResponse'];
+
+/** The journal as the API gives it: the open trades, a page of the closed ones and the totals. */
+export const journalOf = (
+  open: Schemas['IdeaTradeResponse'][] = [],
+  closed: Schemas['IdeaTradeResponse'][] = [],
+  overrides: {
+    totals?: Schemas['IdeaJournalTotalsResponse'];
+    page?: number;
+    pageSize?: number;
+    total?: number;
+  } = {},
+) =>
+  ({
+    open,
+    closed: {
+      items: closed,
+      page: overrides.page ?? 1,
+      pageSize: overrides.pageSize ?? 50,
+      total: overrides.total ?? closed.length,
+    },
+    totals: overrides.totals ?? journalTotals(),
+  }) satisfies Schemas['IdeaJournalResponse'];
 
 export const tradingSettings = {
   accountId: exchangeAccount.id,
