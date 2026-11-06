@@ -68,6 +68,22 @@ describe('screen «Автоматы»', () => {
     expect(within(row).getByText(exchangeAccount.name)).toBeInTheDocument();
   });
 
+  // Scenario "Бюджет в списке".
+  it('shows what the open trades take of the budget of an auto, or that it has none', async () => {
+    fakeApi(
+      routes(() => [
+        autoItemOf({ ...impulse, budget: '100' }, { budgetUsed: '79.9' }),
+        autoItemOf(breakouts, { budgetUsed: '30' }),
+      ]),
+    );
+    renderApp('/idea-trades/autos');
+
+    await screen.findByRole('table', { name: 'Автоматы' });
+
+    expect(within(rowOf('Импульс лонг')).getByText('занято 79.90 из 100 USDT')).toBeInTheDocument();
+    expect(within(rowOf('Пробои 5м')).getByText('без бюджета')).toBeInTheDocument();
+  });
+
   it('shows the real totals of an auto with money', async () => {
     fakeApi(
       routes(() => [autoItemOf(impulse, { realClosed: 11, realResult: '9.4', refusalsToday: 3 })]),
@@ -306,7 +322,7 @@ describe('screen «Автоматы»', () => {
 
     await waitFor(() =>
       expect(strip).toHaveTextContent(
-        'открыто 3 из 8 · риск 10.22 из 40 USDT · сегодня -19.05 из 30 USDT · в лонг 2 · в шорт 1 из 5',
+        'открыто 3 из 8 · риск 10.22 из 40 USDT · сегодня -19.05 из 30 USDT · в лонг 2 · в шорт 1 из 5 · бюджет автоматов 180.00 из 200 USDT',
       ),
     );
     expect(within(strip).getByRole('link', { name: 'Торговля идеями →' })).toHaveAttribute(
@@ -319,14 +335,16 @@ describe('screen «Автоматы»', () => {
     fakeApi({
       ...routes(() => []),
       'GET /api/idea-trading/guards': () =>
-        json(guardsOf({ dailyLossLimit: null, maxSameDirection: null })),
+        json(guardsOf({ dailyLossLimit: null, maxSameDirection: null, autosBudget: null })),
     });
     renderApp('/idea-trades/autos');
 
     const strip = await screen.findByRole('region', { name: 'Защиты' });
 
     await waitFor(() =>
-      expect(strip).toHaveTextContent('сегодня -19.05 USDT · выкл · в лонг 2 · в шорт 1 выкл'),
+      expect(strip).toHaveTextContent(
+        'сегодня -19.05 USDT · выкл · в лонг 2 · в шорт 1 выкл · бюджет автоматов 180.00 USDT · выкл',
+      ),
     );
   });
 

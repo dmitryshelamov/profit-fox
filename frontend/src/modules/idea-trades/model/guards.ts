@@ -8,7 +8,7 @@ export const openStateText = (guards: Guards) =>
   `сейчас открыто ${guards.openTrades} из ${guards.maxOpenTrades}`;
 
 export const riskStateText = (guards: Guards) =>
-  `сейчас ${roundDecimal(guards.openRisk, 2)} из ${guards.maxTotalRisk} USDT до стопов`;
+  `сейчас ${roundDecimal(guards.openRisk, 2)} из ${guards.maxTotalRisk} USDT`;
 
 /** What the day has come to, against the daily stop when it is on. */
 export function dayStateText(guards: Guards): string {
@@ -30,6 +30,15 @@ export function dayShare(guards: Guards): number | null {
   }
 
   return Math.min(1, Math.abs(Number(guards.daySum)) / Number(guards.dailyLossLimit));
+}
+
+/** What the open real trades of the autos take of the budget of all the autos, when it is on. */
+export function autosBudgetStateText(guards: Guards): string {
+  const used = roundDecimal(guards.autosBudgetUsed, 2);
+
+  return guards.autosBudget === null
+    ? `сейчас ${used} USDT · защита выключена`
+    : `сейчас ${used} из ${guards.autosBudget} USDT`;
 }
 
 export const sidesStateText = (guards: Guards) =>

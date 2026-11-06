@@ -137,10 +137,11 @@ describe('requests of trades by ideas', () => {
       minRiskReward: '1.2',
       dailyLossLimit: '30',
       maxSameDirection: '5',
+      autosBudget: '200.5',
     });
 
     expect(await requests[0]!.text()).toBe(
-      '{"accountId":"account-1","amount":25.5,"maxAmount":300,"maxOpenTrades":3,"maxTotalRisk":6,"minRiskReward":1.2,"dailyLossLimit":30,"maxSameDirection":5}',
+      '{"accountId":"account-1","amount":25.5,"maxAmount":300,"maxOpenTrades":3,"maxTotalRisk":6,"minRiskReward":1.2,"dailyLossLimit":30,"maxSameDirection":5,"autosBudget":200.5}',
     );
   });
 
@@ -159,10 +160,11 @@ describe('requests of trades by ideas', () => {
       minRiskReward: '1.2',
       dailyLossLimit: '',
       maxSameDirection: '',
+      autosBudget: '',
     });
 
     expect(await requests[0]!.text()).toBe(
-      '{"accountId":null,"amount":25.5,"maxAmount":300,"maxOpenTrades":3,"maxTotalRisk":6,"minRiskReward":1.2,"dailyLossLimit":null,"maxSameDirection":null}',
+      '{"accountId":null,"amount":25.5,"maxAmount":300,"maxOpenTrades":3,"maxTotalRisk":6,"minRiskReward":1.2,"dailyLossLimit":null,"maxSameDirection":null,"autosBudget":null}',
     );
   });
 });

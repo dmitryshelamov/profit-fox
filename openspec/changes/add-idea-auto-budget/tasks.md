@@ -24,16 +24,16 @@
 
 ## 4. Фронтенд
 
-- [ ] 4.1 Перегенерировать `schema.d.ts`; проверка — `npm run typecheck`
-- [ ] 4.2 Тексты причин и подробностей по бюджетам, новые слова причин `amount_above_max`, `total_risk_exceeded`, `risk_reward_too_low`; проверка — `reasons.test.ts`, `labels.test.ts`, `refusal.test.ts`
-- [ ] 4.3 Бюджет в форме автомата (`autoForm`, `AutoForm`) и колонка «Бюджет» в списке (`totals.budgetText`); проверка — тесты модели и экранов автоматов
-- [ ] 4.4 Строка защит и экран настроек: бюджет всех автоматов, новые подписи и подсказки; проверка — `guards.test.ts`, `totals.test.ts`, `ideaTradingSettings.test.tsx`
+- [x] 4.1 Перегенерировать `schema.d.ts`; проверка — `npm run typecheck`
+- [x] 4.2 Тексты причин и подробностей по бюджетам, новые слова причин `amount_above_max`, `total_risk_exceeded`, `risk_reward_too_low`; проверка — `reasons.test.ts`, `labels.test.ts`, `refusal.test.ts`
+- [x] 4.3 Бюджет в форме автомата (`autoForm`, `AutoForm`) и колонка «Бюджет» в списке (`totals.budgetText`); проверка — тесты модели и экранов автоматов
+- [x] 4.4 Строка защит и экран настроек: бюджет всех автоматов, новые подписи и подсказки; проверка — `guards.test.ts`, `totals.test.ts`, `ideaTradingSettings.test.tsx`
 - [ ] 4.5 e2e `idea-autos.spec.ts` на заглушке Bybit: занятый бюджет в списке, отказ «Бюджет автомата занят», бюджет автоматов в строке защит; проверка — `npm run test:e2e` (или CI)
 
 ## 5. Проверка целиком
 
 - [ ] 5.1 `dotnet build`, `dotnet test`, `dotnet format --verify-no-changes`; во `frontend/` — `npm run lint`, `format:check`, `typecheck`, `test`, `build`; что не запускалось здесь — названо в PR
-- [ ] 5.2 Обновить `docs/conventions.md` (`AutoBudget`, новые поля и причины); проверка — описание совпадает с кодом
+- [x] 5.2 Обновить `docs/conventions.md` (`AutoBudget`, новые поля и причины); проверка — описание совпадает с кодом
 
 ## Workflow follow-up
 
