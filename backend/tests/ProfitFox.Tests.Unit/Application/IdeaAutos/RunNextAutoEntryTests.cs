@@ -53,6 +53,8 @@ public class RunNextAutoEntryTests
     private ITransactionExecutor _executor = null!;
     private IAsyncDisposable _lock = null!;
 
+    private IExchangeAccountRepository _accounts = null!;
+    private IInstrumentCatalog _catalog = null!;
     private IdeaAuto _auto = null!;
     private Idea _idea = null!;
     private IdeaAutoEntry _entry = null!;
@@ -263,6 +265,32 @@ public class RunNextAutoEntryTests
         await _trades.Received(1).CreateAsync(Arg.Is<IdeaTrade>(trade => trade!.AccountId == AccountId), Arg.Any<IdeaTradeOrder>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
 
+    // Review: a request whose entry cannot be prepared for another reason than the exchange is refused, not tried again until it is late, so the
+    // requests behind it go on. The account of the request was deleted: there is no key to enter with.
+    [Test]
+    public async Task Request_whose_account_is_gone_is_refused_for_the_key_and_the_queue_goes_on()
+    {
+        _accounts.GetAsync(AccountId, Arg.Any<CancellationToken>()).Returns((ExchangeAccount?)null);
+
+        (await Run()).ShouldBeTrue();
+
+        await _refusals.Received(1).AddAsync(Arg.Is<IdeaAutoRefusal>(refusal => refusal!.Reasons.Single() == IdeaTradeRefusal.NoKey), Arg.Any<CancellationToken>());
+        await _entries.Received(1).DeleteAsync(_entry.Id, Arg.Any<CancellationToken>());
+        await _trades.DidNotReceiveWithAnyArgs().CreateAsync(default!, default!, default, default);
+    }
+
+    // The exchange no longer lists the pair of the idea, so the preparation fails: the request is refused with the error of the entry.
+    [Test]
+    public async Task Request_whose_entry_fails_to_be_prepared_is_refused_with_the_error_and_the_queue_goes_on()
+    {
+        _catalog.ListAsync(MarketCategory.Linear, Arg.Any<CancellationToken>()).Returns([]);
+
+        (await Run()).ShouldBeTrue();
+
+        await _refusals.Received(1).AddAsync(Arg.Is<IdeaAutoRefusal>(refusal => refusal!.Reasons.Single() == IdeaTradeRefusal.EntryError), Arg.Any<CancellationToken>());
+        await _entries.Received(1).DeleteAsync(_entry.Id, Arg.Any<CancellationToken>());
+    }
+
     [Test]
     public async Task No_request_is_no_work()
     {
@@ -349,7 +377,7 @@ public class RunNextAutoEntryTests
     // The calculator over the world of the test: an account with a key that trades linear, 1000 free, the rules of a lot.
     private IdeaTradeEntryCalculator Calculator()
     {
-        IExchangeAccountRepository accounts = Substitute.For<IExchangeAccountRepository>();
+        IExchangeAccountRepository accounts = _accounts = Substitute.For<IExchangeAccountRepository>();
         var account = new ExchangeAccount(AccountId, "Bybit · ideas", "key", 100, new HashSet<MarketCategory> { MarketCategory.Linear }, Now);
         accounts.GetAsync(AccountId, Arg.Any<CancellationToken>()).Returns(account);
         accounts.GetSecretAsync(AccountId, Arg.Any<CancellationToken>()).Returns(new EncryptedSecret([1], [2], [3]));
@@ -359,7 +387,7 @@ public class RunNextAutoEntryTests
         inspector.InspectAsync("key", "secret", Arg.Any<CancellationToken>()).Returns(new ExchangeKeyInfo(100, false, true, false, new HashSet<MarketCategory> { MarketCategory.Linear }));
         IInstrumentRulesProvider rules = Substitute.For<IInstrumentRulesProvider>();
         rules.GetRulesAsync(Wif, Arg.Any<CancellationToken>()).Returns(new InstrumentRules(0.01m, 1m, 1m, 5m));
-        IInstrumentCatalog catalog = Substitute.For<IInstrumentCatalog>();
+        IInstrumentCatalog catalog = _catalog = Substitute.For<IInstrumentCatalog>();
         catalog.ListAsync(MarketCategory.Linear, Arg.Any<CancellationToken>()).Returns([new ListedInstrument(MarketCategory.Linear, "WIFUSDT", "WIF", "USDT", true, true)]);
         IIdeaBucketRepository buckets = Substitute.For<IIdeaBucketRepository>();
         buckets.GetAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);

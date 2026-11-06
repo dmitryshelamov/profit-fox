@@ -105,6 +105,7 @@ const reasons: Record<string, string> = {
   late: 'Не успел войти',
   auto_off: 'Автомат выключен',
   rules_unknown: 'Правила биржи неизвестны',
+  entry_error: 'Ошибка подготовки входа',
 };
 
 /** What stopped an auto, in words; a code the interface does not know is shown as it is. */

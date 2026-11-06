@@ -33,7 +33,10 @@ public sealed class RunNextAutoEntryCommandHandler(
     ///     is made as <c>POST /api/idea-trades</c> makes it: asked of the exchange outside a transaction, then checked again under the lock of the
     ///     account and of the creation of trades, with the account, the amount and the lowest reward to risk the request carries.
     /// </summary>
-    /// <returns><c>false</c> when there is no request, another Worker holds the lock, or the exchange did not answer: the request stays.</returns>
+    /// <returns>
+    ///     <c>false</c> when there is no request, another Worker holds the lock, or the exchange did not answer: the request stays. An entry that
+    ///     cannot be prepared for another reason is refused, «Нет ключа» for an account that is gone and «Ошибка подготовки входа» otherwise.
+    /// </returns>
     public async Task<bool> Handle(RunNextAutoEntryCommand request, CancellationToken cancellationToken)
     {
         await using IAsyncDisposable? held = await entries.TryLockEntriesAsync(cancellationToken);
@@ -77,6 +80,20 @@ public sealed class RunNextAutoEntryCommandHandler(
         catch (ExchangeException)
         {
             return false;
+        }
+        catch (ValidationFailedException)
+        {
+            // The account of the request is gone: there is no key to enter with.
+            await RefuseAsync(entry, idea, [new AutoRefusal(IdeaTradeRefusal.NoKey)], now, cancellationToken);
+
+            return true;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // Tried again it would fail again and hold up every request behind it until they are all late.
+            await RefuseAsync(entry, idea, [new AutoRefusal(IdeaTradeRefusal.EntryError)], now, cancellationToken);
+
+            return true;
         }
 
         await executor.ExecuteAsync(async token => await EnterAsync(entry, idea, preparation, token), cancellationToken);

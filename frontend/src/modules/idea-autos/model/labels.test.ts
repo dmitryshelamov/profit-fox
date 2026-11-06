@@ -60,6 +60,7 @@ describe('labels of autos', () => {
     expect(reasonLabel('late')).toBe('Не успел войти');
     expect(reasonLabel('auto_off')).toBe('Автомат выключен');
     expect(reasonLabel('risk_reward_too_low')).toBe('R:R ниже минимума');
+    expect(reasonLabel('entry_error')).toBe('Ошибка подготовки входа');
     expect(reasonLabel('something_new')).toBe('something_new');
   });
 });
