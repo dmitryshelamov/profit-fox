@@ -379,6 +379,19 @@ public class IdeasApiTests
         (market.GetProperty("setups").GetProperty("breakout").GetInt32(), market.GetProperty("setups").GetProperty("quiet_volume").GetInt32()).ShouldBe((1, 0));
     }
 
+    // An unknown setup or type is answered with every code the API takes, the candle setups and «Стоп-вход» among them.
+    [Test]
+    public async Task Unknown_setup_and_type_name_every_code()
+    {
+        HttpResponseMessage response = await _client.GetAsync("/api/ideas?setup=foo&type=foo");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        JsonElement errors = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("errors");
+        errors.GetProperty("setup")[0].GetString().ShouldBe(
+            "Setup must be impulse, early_impulse, drop, early_drop, high_volatility, breakout, false_breakout, squeeze, exhaustion, rsi_extreme, new_extreme or quiet_volume.");
+        errors.GetProperty("type")[0].GetString().ShouldBe("Type must be levels, target_2r, beyond_extreme, pullback or stop_entry.");
+    }
+
     // Scenario "Своя идея «Стоп-вход»": without a setup a stop entry has no range.
     [Test]
     public async Task Own_stop_entry_is_a_validation_error()
