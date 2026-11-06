@@ -112,11 +112,11 @@ public class ReplaySequenceTests
             [
                 ("enter", Start, 1),
                 ("average", Start, 1),
-                ("exit", Start, 1),
+                (null, Start, 1),
                 ("enter", Start.AddHours(1), 2),
                 ("average", Start.AddHours(1), 2)
             ], ignoreOrder: true);
-        observer.Received(1).Cancelled("o-1", Start.AddHours(1));
+        observer.Received(1).Cancelled("o-1", Start);
     }
 
     private static StrategyDefinition HoldBuyAt(decimal price)

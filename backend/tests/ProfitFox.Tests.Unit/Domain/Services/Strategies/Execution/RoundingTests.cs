@@ -74,12 +74,13 @@ public class RoundingTests
             .Node("byAmount", SimpleNodeKind.MarketOrder, Settings(OrderSide.Buy, OrderSizeMode.Amount), ("size", Values.Number(100.0001m)))
             .Node("byQuantity", SimpleNodeKind.MarketOrder, Settings(OrderSide.Buy, OrderSizeMode.Quantity), ("size", Values.Number(0.0019m)))
             .Node("sellPart", SimpleNodeKind.MarketOrder, Settings(OrderSide.Sell, OrderSizeMode.Amount), ("size", Values.Number(0.299m)))
-            .Node("close", SimpleNodeKind.ClosePosition)
+            .Node("close", SimpleNodeKind.MarketOrder, Settings(OrderSide.Sell, OrderSizeMode.Quantity))
             .Wire("position.hasPosition", "flat.value")
             .Wire("flat.result", "byAmount.when")
             .Wire("flat.result", "byQuantity.when")
             .Wire("position.hasPosition", "sellPart.when")
             .Wire("position.hasPosition", "close.when")
+            .Wire("position.quantity", "close.size")
             .Build();
         StrategyRun run = Run(graph);
 

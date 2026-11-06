@@ -149,7 +149,7 @@ public class PositionCycleTests
         (run.State.Position, run.State.Quantity).ShouldBe((2, 0.0006m));
 
         run.Handle(new OrderFilled(Start, "o-3", 1m, 100m, IsComplete: true, Fee: 0.0005m, FeeAsset: FeeAsset.Base))
-            .ShouldBe([new PlaceOrder("o-4", "exit", OrderSide.Sell, OrderType.Market, null, 1m, null)]);
+            .ShouldBe([new PlaceOrder("o-4", null, OrderSide.Sell, OrderType.Market, null, 1m, null)]);
         run.State.Quantity.ShouldBe(1.0001m);
         run.Handle(new OrderFilled(Start, "o-4", 1m, 100m, IsComplete: true));
 

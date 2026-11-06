@@ -1,4 +1,5 @@
 using ProfitFox.Domain.Entities.Strategies.Enums;
+using ProfitFox.Domain.Services.Strategies.Templates;
 
 namespace ProfitFox.Application.Strategies;
 
@@ -14,6 +15,10 @@ public static class StrategyCodes
             ("candle", SimpleNodeKind.Candle),
             ("position", SimpleNodeKind.Position),
             ("ema", SimpleNodeKind.Ema),
+            ("sma", SimpleNodeKind.Sma),
+            ("std-dev", SimpleNodeKind.StdDev),
+            ("rsi", SimpleNodeKind.Rsi),
+            ("previous", SimpleNodeKind.Previous),
             ("cross", SimpleNodeKind.Cross),
             ("add", SimpleNodeKind.Add),
             ("subtract", SimpleNodeKind.Subtract),
@@ -35,9 +40,24 @@ public static class StrategyCodes
             ("ge", CompareOperation.GreaterOrEqual),
             ("lt", CompareOperation.Less),
             ("le", CompareOperation.LessOrEqual)),
-        [typeof(BuiltInNode)] = Map(("ema-cross", BuiltInNode.EmaCross)),
+        [typeof(BuiltInNode)] = Map(("ema-cross", BuiltInNode.EmaCross), ("macd", BuiltInNode.Macd), ("bollinger", BuiltInNode.Bollinger)),
         [typeof(UsageKind)] = Map(("strategy", UsageKind.Strategy), ("node", UsageKind.Composite)),
-        [typeof(OrderType)] = Map(("market", OrderType.Market), ("limit", OrderType.Limit))
+        [typeof(OrderType)] = Map(("market", OrderType.Market), ("limit", OrderType.Limit)),
+        [typeof(StrategyTemplateKind)] = Map(
+            ("ema-crossover", StrategyTemplateKind.EmaCrossover),
+            ("ema-short", StrategyTemplateKind.EmaShort),
+            ("sma-crossover", StrategyTemplateKind.SmaCrossover),
+            ("ladder", StrategyTemplateKind.Ladder),
+            ("ladder-sma", StrategyTemplateKind.LadderSma),
+            ("ladder-plus", StrategyTemplateKind.LadderPlus),
+            ("dca", StrategyTemplateKind.Dca),
+            ("macd-trend", StrategyTemplateKind.MacdTrend),
+            ("rsi-reversion", StrategyTemplateKind.RsiReversion),
+            ("bollinger-reversion", StrategyTemplateKind.BollingerReversion),
+            ("capitulation-buyback", StrategyTemplateKind.CapitulationBuyback),
+            ("volume-impulse", StrategyTemplateKind.VolumeImpulse),
+            ("level-trade", StrategyTemplateKind.LevelTrade),
+            ("level-trade-short", StrategyTemplateKind.LevelTradeShort))
     };
 
     private static readonly Dictionary<Enum, string> CodesByValue = ValuesByCode.Values.SelectMany(map => map).ToDictionary(pair => pair.Value, pair => pair.Key);

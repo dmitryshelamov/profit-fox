@@ -6,6 +6,7 @@ import catalog from '@/test/catalog.fixture.json';
 import { fakeApi, json } from '@/test/fakeApi';
 import { emaSummary, savedStrategy } from '@/test/fixtures';
 import { renderApp } from '@/test/renderApp';
+import templates from '@/test/templates.fixture.json';
 
 const key = draftKey({ newStrategy: 'd1' });
 
@@ -100,5 +101,27 @@ describe('new strategy', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByRole('banner', { name: 'Стратегия' })).toHaveTextContent('Моя');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Сохранить' })).toBeEnabled());
+  });
+
+  // Scenario "Стратегия из шаблона": the template saved without edits is created as it is.
+  it('creates the strategy of a template on the first save without edits', async () => {
+    const template = templates.details['rsi-reversion'];
+    drafts.save(key, { name: template.name, definition: template.definition as never }, new Date());
+    const { requests, history } = open();
+
+    expect(await screen.findByRole('group', { name: 'RSI' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Сохранить' })).toBeEnabled());
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => expect(history.location.pathname).toBe(`/strategies/${emaSummary.id}`));
+    const create = requests.find(
+      (request) => request.method === 'POST' && new URL(request.url).pathname === '/api/strategies',
+    )!;
+    const body = (await create.json()) as { name: string; definition: typeof template.definition };
+    expect(body.name).toBe('Отскок RSI');
+    expect(body.definition.parameters).toEqual(template.definition.parameters);
+    expect(body.definition.nodes).toEqual(template.definition.nodes);
+    expect(body.definition.wires).toEqual(template.definition.wires);
+    expect(drafts.read(key)).toBeUndefined();
   });
 });

@@ -61,6 +61,20 @@ public class StrategyNodesApiTests
         custom.GetProperty("outputs")[0].GetProperty("type").GetString().ShouldBe("boolean");
     }
 
+    [TestCase("sma", "source period", "value")]
+    [TestCase("rsi", "source period", "value")]
+    [TestCase("std-dev", "source period", "value")]
+    [TestCase("previous", "value", "value")]
+    public async Task Catalog_contains_the_indicator_nodes_with_their_pins(string id, string inputs, string outputs)
+    {
+        JsonElement catalog = await _client.GetFromJsonAsync<JsonElement>(Nodes);
+
+        JsonElement node = catalog.EnumerateArray().Single(entry => entry.GetProperty("id").GetString() == id);
+        node.GetProperty("group").GetString().ShouldBe("simple");
+        string.Join(" ", node.GetProperty("inputs").EnumerateArray().Select(pin => pin.GetProperty("name").GetString())).ShouldBe(inputs);
+        string.Join(" ", node.GetProperty("outputs").EnumerateArray().Select(pin => pin.GetProperty("name").GetString())).ShouldBe(outputs);
+    }
+
     [Test]
     public async Task Catalog_describes_the_settings_of_a_market_order()
     {
@@ -94,6 +108,28 @@ public class StrategyNodesApiTests
         emaCross.GetProperty("outputs").EnumerateArray().Select(pin => pin.GetProperty("name").GetString()).ShouldBe(["up", "down"]);
         emaCross.GetProperty("definition").GetProperty("nodes").GetArrayLength().ShouldBeGreaterThan(0);
         (await _client.GetAsync($"{Nodes}/nope")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    // Scenarios "MACD" and "Полосы Боллинджера".
+    [TestCase("macd", "source fast slow signal", "macd signal histogram")]
+    [TestCase("bollinger", "source period width", "upper middle lower")]
+    public async Task Built_in_macd_and_bollinger_are_read_with_their_pins_and_graph(string id, string inputs, string outputs)
+    {
+        JsonElement node = await _client.GetFromJsonAsync<JsonElement>($"{Nodes}/{id}");
+
+        string.Join(" ", node.GetProperty("inputs").EnumerateArray().Select(pin => pin.GetProperty("name").GetString())).ShouldBe(inputs);
+        string.Join(" ", node.GetProperty("outputs").EnumerateArray().Select(pin => pin.GetProperty("name").GetString())).ShouldBe(outputs);
+        node.GetProperty("definition").GetProperty("nodes").GetArrayLength().ShouldBeGreaterThan(0);
+        JsonElement catalog = await _client.GetFromJsonAsync<JsonElement>(Nodes);
+        catalog.EnumerateArray().Single(entry => entry.GetProperty("id").GetString() == id).GetProperty("group").GetString().ShouldBe("builtIn");
+    }
+
+    [TestCase("macd")]
+    [TestCase("bollinger")]
+    public async Task Built_in_macd_and_bollinger_cannot_be_changed_or_deleted(string id)
+    {
+        (await _client.PutAsJsonAsync($"{Nodes}/{id}", Body("x", Signal))).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await _client.DeleteAsync($"{Nodes}/{id}")).StatusCode.ShouldBe(HttpStatusCode.Conflict);
     }
 
     // Scenario "Ladder и DCA не встроены".

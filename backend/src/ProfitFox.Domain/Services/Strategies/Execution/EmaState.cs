@@ -1,7 +1,7 @@
 namespace ProfitFox.Domain.Services.Strategies.Execution;
 
 /// <summary>Exponential moving average seeded with the simple average of the first <c>period</c> values.</summary>
-internal sealed class EmaState
+internal sealed class EmaState : IIndicatorState
 {
     private int _count;
     private decimal _sum;
