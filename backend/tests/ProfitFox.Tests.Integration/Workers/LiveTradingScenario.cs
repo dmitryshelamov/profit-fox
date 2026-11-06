@@ -17,6 +17,7 @@ using ProfitFox.Domain.Entities.LiveTrading;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.LiveTrading;
@@ -276,6 +277,14 @@ public sealed class LiveTradingScenario : IAsyncDisposable
         await new IdeaRepository(database).SaveAsync([idea], [], CancellationToken.None);
 
         return idea.Id;
+    }
+
+    /// <summary>The bucket over 90 days of the ideas <see cref="SaveIdeaAsync" /> makes, a long of the setup and the interval of the generator, replaced by the statistics given.</summary>
+    public async Task SaveBucketAsync(BucketStatistics statistics, IdeaType type = IdeaType.TwoR)
+    {
+        var key = new IdeaBucketKey(IdeaSetup.Impulse, type, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear);
+        await using var database = Npgsql.NpgsqlDataSource.Create(Factory.ConnectionString);
+        await new IdeaBucketRepository(database).ReplaceAsync(IdeasEngineVersion.Current, [new IdeaBucket(key, 90, statistics)], CancellationToken.None);
     }
 
     /// <summary>The last price of the ticker of the pair on Bybit.</summary>

@@ -44,7 +44,7 @@ public sealed class CreateIdeaTradeCommandHandler(
                 }
 
                 DateTimeOffset now = time.GetUtcNow();
-                IdeaTrade trade = IdeaTrade.Create(Guid.NewGuid(), preparation.Idea, preparation.Account.Id, preparation.Price, calculation.Size, now) with { LastOrderNumber = 1 };
+                IdeaTrade trade = IdeaTrade.Create(Guid.NewGuid(), preparation.Idea, preparation.Account.Id, preparation.Price, calculation.Size, now, calculation.Promise) with { LastOrderNumber = 1 };
                 await trades.CreateAsync(trade, IdeaTradeOrder.NewEntryOf(trade, now), now, token);
 
                 return trade.Id;

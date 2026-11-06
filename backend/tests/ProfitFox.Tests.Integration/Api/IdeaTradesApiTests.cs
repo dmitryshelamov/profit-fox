@@ -10,6 +10,9 @@ using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.Entities.IdeaTrades.Enums;
 using ProfitFox.Domain.Entities.LiveTrading.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
+using ProfitFox.Domain.Services.Ideas;
+using ProfitFox.Domain.ValueObjects.Backtests;
+using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Tests.Integration.Workers;
 
@@ -55,6 +58,49 @@ public class IdeaTradesApiTests
         (entry.Number, entry.Role, entry.Side, entry.Type, entry.TimeInForce, entry.Price, entry.Quantity, entry.Protection, entry.ReduceOnly, entry.Status)
             .ShouldBe((1, IdeaTradeOrderRole.Entry, OrderSide.Buy, OrderType.Market, TimeInForce.GoodTilCancelled, null, 0.47m, new Protection(104m, 98m), false, LiveOrderStatus.PendingSubmit));
         _scenario.Exchange.Sent.ShouldBeEmpty();
+    }
+
+    // Requirement "Обещание на входе", scenario "Вход на ▲": the promise is the statistics of the bucket as «Идеи» shows them, with the break-even and the
+    // reward to risk after the fees from the price the trade entered at (101, not the 100 of the idea).
+    [Test]
+    public async Task Entry_on_an_up_badge_keeps_the_promise_of_the_bucket_and_a_recount_of_the_bucket_does_not_change_it()
+    {
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 96m, 112m);
+        _scenario.SetPrice("101");
+        await _scenario.SaveBucketAsync(new BucketStatistics(412, 130, 270, 12, 0.31m, 0.27m, 0.36m, 0.14m, 0.04m, 0.24m));
+
+        Guid id = await CreateAsync(idea);
+
+        IdeaShares shares = IdeaMoney.PerUsdt(new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 101m, 96m, 112m), new FeeRates(0.02m, 0.055m));
+        var promise = new IdeaPromise(IdeaBadge.Up, 0.31m, 0.14m, 412, shares.BreakEven, shares.NetRiskReward);
+        (await _scenario.TradeAsync(id)).Promise.ShouldBe(promise);
+        await _scenario.SaveBucketAsync(new BucketStatistics(450, 140, 290, 20, 0.31m, 0.27m, 0.36m, 0.01m, -0.05m, 0.07m));
+        (await _scenario.TradeAsync(id)).Promise.ShouldBe(promise);
+    }
+
+    // Scenario "Мало данных": no badge and no probability, the cases and the expectancy stay.
+    [Test]
+    public async Task Entry_on_a_bucket_with_too_few_cases_keeps_its_cases_and_expectancy_only()
+    {
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 96m, 112m);
+        _scenario.SetPrice("101");
+        await _scenario.SaveBucketAsync(new BucketStatistics(12, 4, 8, 0, null, null, null, 0.05m, null, null));
+
+        IdeaPromise promise = (await _scenario.TradeAsync(await CreateAsync(idea))).Promise!;
+
+        (promise.Badge, promise.Probability, promise.Expectancy, promise.Cases).ShouldBe((null, null, 0.05m, 12));
+    }
+
+    [Test]
+    public async Task Entry_on_an_idea_without_a_bucket_keeps_the_break_even_and_the_reward_to_risk_only()
+    {
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 96m, 112m);
+        _scenario.SetPrice("101");
+
+        IdeaPromise promise = (await _scenario.TradeAsync(await CreateAsync(idea))).Promise!;
+
+        (promise.Badge, promise.Probability, promise.Expectancy, promise.Cases).ShouldBe((null, null, null, null));
+        promise.NetRiskReward.ShouldBeGreaterThan(1m);
     }
 
     // Scenario "Откат".
