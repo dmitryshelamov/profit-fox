@@ -3,10 +3,8 @@ using System.Text;
 using System.Text.Json;
 
 using ProfitFox.Application.Scanner.Ideas;
-using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Services.Ideas;
-using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Tests.Shared.Fixtures.Ideas;
@@ -16,14 +14,13 @@ using Shouldly;
 namespace ProfitFox.Tests.Unit.Domain.Services.Ideas;
 
 /// <summary>
-///     Decision 6: the cases the engine gives on the reference sets are fingerprinted, and every fingerprint belongs to one version of the
-///     rules. A change of the cases without a new version fails here.
+///     Decision 6 of honest-idea-probability and decision 10 of tune-idea-rules: the signals and paths the replay gives on the reference sets are
+///     fingerprinted, and every fingerprint belongs to one version of the rules. A change of the signals without a new version fails here.
 /// </summary>
 public class IdeasEngineVersionTests
 {
     private static readonly DateTimeOffset Start = DateTimeOffset.Parse("2024-02-29T23:30:00Z");
     private static readonly DateTimeOffset Three = DateTimeOffset.Parse("2024-03-01T03:00:00Z");
-    private static readonly FeeRates Fees = new FeeRates(0.02m, 0.055m);
 
     // Task 5.3.
     [Test]
@@ -47,8 +44,9 @@ public class IdeasEngineVersionTests
     }
 
     /// <summary>
-    ///     SHA-256 of every case, one JSON line each in a fixed order, of the four setup sets and the two breakout sets on linear and spot with
-    ///     the default rules and with a stop buffer of 1, with a spread and both percentiles of volatility.
+    ///     SHA-256 of every signal with its path, one JSON line each in a fixed order, of the four setup sets and the two breakout sets on linear
+    ///     and spot with the default rules and with a stop buffer of 1, with a spread and both percentiles of volatility, the paths stepped a day
+    ///     past the end of each set.
     /// </summary>
     private static string Fingerprint()
     {
@@ -58,15 +56,15 @@ public class IdeasEngineVersionTests
             from set in sets
             from category in new[] { MarketCategory.Linear, MarketCategory.Spot }
             from ruleSet in rules
-            from line in Cases(IdeaFixtures.Setup(set), new Instrument(category, "WIFUSDT"), ruleSet)
+            from line in Signals(IdeaFixtures.Setup(set), new Instrument(category, "WIFUSDT"), ruleSet)
             select $"{set} {category} {line}";
 
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', lines))));
     }
 
-    private static IEnumerable<string> Cases(IReadOnlyList<IdeaCandle> minutes, Instrument instrument, IdeaRuleSet rules)
+    private static IEnumerable<string> Signals(IReadOnlyList<IdeaCandle> minutes, Instrument instrument, IdeaRuleSet rules)
     {
-        var engine = new IdeaEngine(rules, IdeasEngineVersion.Current);
+        var engine = new IdeaEngine(rules, IdeasEngineVersion.Current, true);
         var closed = rules.Thresholds.Keys.ToDictionary(
             interval => interval,
             interval => IdeaCandles.FromMinutes(interval, minutes, Start, interval.CandleOpen(Three)) as IReadOnlyList<IdeaCandle>);
@@ -74,15 +72,14 @@ public class IdeasEngineVersionTests
         var inputs = new IdeaInputs(0.01m, rules.Thresholds.Keys.ToDictionary(interval => interval, _ => new VolatilityPercentiles(0.0186m, 0.0186m)), 0.01m);
         decimal close = minutes[^1].Close;
         IEnumerable<IdeaCandle> flat = Enumerable.Range(0, 1440).Select(index => new IdeaCandle(minutes[^1].OpenTime.AddMinutes(1 + index), close, close, close, close, 0m));
+        var signals = new List<IdeaSignal>();
 
         foreach (IdeaCandle minute in minutes.Where(minute => minute.OpenTime >= Three).Concat(flat))
         {
-            foreach (Idea idea in engine.Step(instrument, minute, inputs, true).Changed.Where(idea => !idea.IsOpen))
-            {
-                IdeaTrack t = idea.Track;
-                var track = new { t.Plan, t.FiredAt, t.CandleMinutes, t.Status, t.StatusAt, t.EnteredAt, t.ExitPrice, t.Tick };
-                yield return JsonSerializer.Serialize(new { idea.Setup, idea.Interval, Track = track, idea.Move, idea.VolumeRatio, Result = CaseResult.R(idea.Track, Fees) });
-            }
+            signals = [.. signals.Select(signal => signal with { Path = SignalPathTracker.Step(signal.Path, minute) })];
+            signals.AddRange(engine.Step(instrument, minute, inputs, true).Signals);
         }
+
+        return signals.Select(signal => JsonSerializer.Serialize(new { signal.Setup, signal.Path, signal.Move, signal.VolumeRatio }));
     }
 }
