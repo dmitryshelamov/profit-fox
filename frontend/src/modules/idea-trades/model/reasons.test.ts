@@ -5,6 +5,7 @@ describe('reasons an entry is refused', () => {
     expect(reasonText('price_beyond_target')).toBe('Цена уже за целью идеи');
     expect(reasonText('price_beyond_stop')).toBe('Цена уже за стопом идеи');
     expect(reasonText('risk_reward_too_low')).toBe('R:R после комиссий ниже минимального');
+    expect(reasonText('amount_above_max')).toBe('Сумма больше предела на сделку');
     expect(reasonText('opposite_side_open')).toBe(
       'На символе открыта противоположная сторона: запущенный бот или другая сделка по идее',
     );
@@ -16,6 +17,7 @@ describe('reasons an entry is refused', () => {
       'price_beyond_stop',
       'price_beyond_target',
       'risk_reward_too_low',
+      'amount_above_max',
       'too_many_open_trades',
       'total_risk_exceeded',
       'opposite_side_open',
@@ -25,7 +27,6 @@ describe('reasons an entry is refused', () => {
       'no_key',
       'category_not_traded',
       'hedge_mode',
-      'spot_not_supported',
       'stop_entry_not_supported',
     ];
 

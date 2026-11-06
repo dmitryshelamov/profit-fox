@@ -379,6 +379,38 @@ public class ScannerSessionTests
         await Should.ThrowAsync<OperationCanceledException>(session);
     }
 
+    // Requirement "Исход идеи на сделке": the trades made before the journal get the outcome of their idea once, when the session starts.
+    [Test]
+    public async Task Outcomes_of_trades_are_caught_up_once_when_the_session_starts()
+    {
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session().RunAsync(cancellation.Token);
+
+        await WaitAsync(() => _ideaSignals.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaSignalRepository.DeleteOtherVersionsAsync)), advance: true);
+        _time.Advance(TimeSpan.FromHours(3));
+        await Task.Delay(100);
+
+        await _ideaStore.Received(1).GetClosedOfTradesWithoutOutcomeAsync(Arg.Any<CancellationToken>());
+        await cancellation.CancelAsync();
+        await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
+    // A failed catch-up is logged and the lane goes on with the clean-up and the history.
+    [Test]
+    public async Task Failed_catch_up_of_outcomes_is_logged_and_the_lane_goes_on()
+    {
+        var failure = new InvalidOperationException("storage down");
+        _ideaStore.GetClosedOfTradesWithoutOutcomeAsync(Arg.Any<CancellationToken>()).Returns(Task.FromException<IReadOnlyList<Idea>>(failure));
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session().RunAsync(cancellation.Token);
+
+        await WaitAsync(() => _ideaSignals.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaSignalRepository.DeleteOtherVersionsAsync)), advance: true);
+
+        _journal.Received(1).Failed("trade-outcomes", failure);
+        await cancellation.CancelAsync();
+        await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
     private int Recomputes((IdeaType, Interval)? only)
     {
         return _ideaSignals.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaSignalRepository.StreamAsync)
@@ -416,7 +448,7 @@ public class ScannerSessionTests
         var settings = new ScannerSettings { HistoryDays = 1 };
         var pace = new ScannerPace();
         var recomputes = new IdeaRecomputes();
-        var ideas = new LiveIdeas(_ideaStore, Substitute.For<IIdeaVolatilityRepository>(), _candles, _exitRules, recomputes, market, new IdeasSettings(), _time);
+        var ideas = new LiveIdeas(_ideaStore, Substitute.For<IIdeaVolatilityRepository>(), _candles, _exitRules, recomputes, market, new IdeasSettings(), new BacktestSettings(), _time);
         IScannerPairRepository pairs = Substitute.For<IScannerPairRepository>();
         pairs.GetAllAsync(Arg.Any<CancellationToken>()).Returns(_stored);
         IScannerStateRepository state = Substitute.For<IScannerStateRepository>();

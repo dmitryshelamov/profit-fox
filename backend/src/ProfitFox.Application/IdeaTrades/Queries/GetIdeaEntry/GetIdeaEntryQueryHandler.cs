@@ -6,7 +6,7 @@ public sealed class GetIdeaEntryQueryHandler(IdeaTradeEntryCalculator calculator
 {
     public async Task<EntryCalculation?> Handle(GetIdeaEntryQuery request, CancellationToken cancellationToken)
     {
-        EntryPreparation? preparation = await calculator.PrepareAsync(request.IdeaId, request.AccountId, request.Risk, cancellationToken);
+        EntryPreparation? preparation = await calculator.PrepareAsync(request.IdeaId, request.AccountId, request.Amount, cancellationToken);
 
         return preparation is null ? null : await calculator.EvaluateAsync(preparation, cancellationToken);
     }

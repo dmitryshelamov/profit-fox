@@ -3,10 +3,16 @@ export {
   closeTrade,
   enterIdea,
   ideaEntryQuery,
-  ideaTradesQuery,
+  ideaJournalQuery,
+  type JournalFilters,
+  noJournalFilters,
   saveSettings,
   tradingSettingsQuery,
 } from './api';
+export { loadJournalChoice, saveJournalChoice } from './model/choice';
+export { ClosedTradesTable } from './ui/ClosedTradesTable';
 export { EntryDialog } from './ui/EntryDialog';
+export { JournalTotals } from './ui/JournalTotals';
+export { OpenTradesTable } from './ui/OpenTradesTable';
 export { SettingsPanel } from './ui/SettingsPanel';
-export { type IdeaTrade, TradesTable } from './ui/TradesTable';
+export { type IdeaTrade } from './ui/tradeCells';

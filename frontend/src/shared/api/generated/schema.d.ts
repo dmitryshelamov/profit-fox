@@ -1918,14 +1918,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The entry of an idea as it would be made now, for an account and a risk (the settings give them when left out): the quantity, the amount,
-         *     the risk and the reward to the risk after the fees, and the reasons it cannot be made. Places nothing. Reads the price of the pair from Bybit.
+         * The entry of an idea as it would be made now, for an account and an amount (the settings give them when left out): the quantity, the amount,
+         *     the loss at the stop, the profit at the target and the reward to the risk after the fees, and the reasons it cannot be made. Places nothing. Reads the price of the pair from Bybit.
          */
         get: {
             parameters: {
                 query?: {
                     accountId?: string;
-                    risk?: number | string;
+                    amount?: number | string;
                 };
                 header?: never;
                 path: {
@@ -1996,10 +1996,26 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Every trade, the newest first. */
+        /**
+         * The journal: the open trades with what they are worth at the last price, a page of the closed ones, the newest closed first, and the totals of
+         *     all the closed ones of the filter.
+         */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    Setup?: string;
+                    /** @description A part of the symbol, in any case. */
+                    Symbol?: string;
+                    Side?: string;
+                    /** @description The badge of the promise, `up`, `flat` or `down`, or `none` for a trade with no badge. */
+                    Badge?: string;
+                    /** @description The period of the time of the close, 7, 30 or 90 days; it does not touch the open trades. */
+                    Days?: number | string;
+                    /** @description The number of the page of the closed trades from 1. */
+                    Page?: number | string;
+                    /** @description 50, 100 or 200. */
+                    PageSize?: number | string;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -2012,9 +2028,20 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["IdeaTradeResponse"][];
-                        "application/json": components["schemas"]["IdeaTradeResponse"][];
-                        "text/json": components["schemas"]["IdeaTradeResponse"][];
+                        "text/plain": components["schemas"]["IdeaJournalResponse"];
+                        "application/json": components["schemas"]["IdeaJournalResponse"];
+                        "text/json": components["schemas"]["IdeaJournalResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
                     };
                 };
             };
@@ -4378,10 +4405,17 @@ export interface components {
             badges: components["schemas"]["CalibrationRowResponse"][];
             total: null | components["schemas"]["CalibrationRowResponse"];
         };
+        /** @description The trades whose idea has a result in R: how many, the mean result of their ideas and the mean result of the trades, in R. */
+        IdeaComparisonResponse: {
+            /** Format: int32 */
+            count: number | string;
+            ideas: null | string;
+            trades: null | string;
+        };
         /**
-         * @description The entry of an idea as it would be made now. Numbers are decimal strings: the price, the quantity, the amount, the risk it really takes at that
-         *     quantity, the reward to the risk after the fees and without them, the free money of the account (none without a key). IReadOnlyList&lt;string&gt; IdeaEntryResponse.Reasons are
-         *     the codes of what stops the entry; bool IdeaEntryResponse.CappedByAmount says the largest amount of a trade cut the quantity.
+         * @description The entry of an idea as it would be made now. Numbers are decimal strings: the price, the quantity, the amount, the loss at the stop and the profit at the target it
+         *     really takes at that quantity after the fees, the reward to the risk after the fees and without them, the free money of the account (none without a key). IReadOnlyList&lt;string&gt; IdeaEntryResponse.Reasons are
+         *     the codes of what stops the entry.
          */
         IdeaEntryResponse: {
             /** Format: uuid */
@@ -4390,11 +4424,11 @@ export interface components {
             quantity: string;
             amount: string;
             risk: string;
+            profit: string;
             riskReward: string;
             riskRewardWithoutFees: string;
             freeMoney: null | string;
             quote: string;
-            cappedByAmount: boolean;
             reasons: string[];
         };
         /**
@@ -4416,6 +4450,59 @@ export interface components {
         IdeaExitRulesResponse: {
             rules: components["schemas"]["IdeaExitRuleResponse"][];
             grids: components["schemas"]["ExitRuleGridResponse"][];
+        };
+        /** @description The journal: the open trades, the newest first, a page of the closed ones by the time they closed, and the totals of all the closed ones of the filter. */
+        IdeaJournalResponse: {
+            open: components["schemas"]["IdeaTradeResponse"][];
+            closed: components["schemas"]["IdeaTradesPageResponse"];
+            totals: components["schemas"]["IdeaJournalTotalsResponse"];
+        };
+        /**
+         * @description The totals of the closed trades of a filter: those closed at the target, at the stop and manually, and apart from them the cancelled and
+         *     the failed. The money, the fees, the mean result in R with its 95 % interval (none for one trade, nor the mean for none) and the mean time
+         *     to the outcome are over the first three. Numbers are decimal strings.
+         */
+        IdeaJournalTotalsResponse: {
+            /** Format: int32 */
+            targets: number | string;
+            /** Format: int32 */
+            stops: number | string;
+            /** Format: int32 */
+            manual: number | string;
+            /** Format: int32 */
+            cancelled: number | string;
+            /** Format: int32 */
+            failed: number | string;
+            result: string;
+            fees: string;
+            meanR: null | string;
+            meanRLow: null | string;
+            meanRHigh: null | string;
+            /** Format: int64 */
+            meanSecondsToOutcome: null | number | string;
+            promise: components["schemas"]["PromiseComparisonResponse"];
+            ideas: components["schemas"]["IdeaComparisonResponse"];
+        };
+        /** @description How the idea of a trade ended: the status it closed with (`target`, `stop` or `expired`), when, and its result in R as a decimal string, none for an idea that never entered. */
+        IdeaOutcomeResponse: {
+            status: string;
+            /** Format: date-time */
+            statusAt: string;
+            result: null | string;
+        };
+        /**
+         * @description What the idea promised when the trade was entered: the badge of its bucket (`up`, `flat` or `down`), the probability, the
+         *     expectancy in R and the cases of the bucket over 90 days (the badge and the probability none for «мало данных», all four none without a
+         *     bucket), and the break-even and the reward to risk after the fees from the entry price. Numbers are decimal strings.
+         */
+        IdeaPromiseResponse: {
+            badge: null | string;
+            probability: null | string;
+            expectancy: null | string;
+            /** Format: int32 */
+            cases: null | number | string;
+            breakEven: null | string;
+            netRiskReward: string;
         };
         /**
          * @description A trade idea with its levels and where it stands, and the statistics of its bucket over 90 days (BucketStatisticsResponse? IdeaResponse.Bucket) and over the last
@@ -4466,19 +4553,23 @@ export interface components {
             /** Format: int32 */
             total: number | string;
         };
-        /** @description An entry by an idea; without an account or a risk the settings of trading by ideas give them. */
+        /** @description An entry by an idea; without an account the settings of trading by ideas give it; the amount in USDT is required. */
         IdeaTradeBody: {
             /** Format: uuid */
             ideaId: string;
             /** Format: uuid */
             accountId?: null | string;
             /** Format: double */
-            risk?: null | number | string;
+            amount: number | string;
         };
         /**
          * @description A trade by an idea: the pair, the setup, the interval, the type and the side of its idea as codes, the account, the levels and the size it
          *     was entered with, its status and the time of it, the reason of an «Ошибка» and the result of a closed trade in money and in R (none before).
          *     Numbers are decimal strings; string? IdeaTradeResponse.FilledPrice is the average price the entry was filled at, none before any fill.
+         *     `openedAt` is the first fill of the entry and `secondsToOutcome` the time from it to the close of a closed trade;
+         *     `promise` is what the idea promised at the entry and `ideaOutcome` how the idea ended, none for a trade made before
+         *     the journal or while the idea is open. An open trade has the last price of its pair and what it is worth at it, none while it waits for
+         *     its entry or when the exchange gave no price.
          */
         IdeaTradeResponse: {
             /** Format: uuid */
@@ -4509,13 +4600,32 @@ export interface components {
             reason: null | string;
             result: null | string;
             resultR: null | string;
+            /** Format: date-time */
+            openedAt: null | string;
+            /** Format: int64 */
+            secondsToOutcome: null | number | string;
+            promise: null | components["schemas"]["IdeaPromiseResponse"];
+            ideaOutcome: null | components["schemas"]["IdeaOutcomeResponse"];
+            lastPrice: null | string;
+            currentResult: null | string;
+            currentResultR: null | string;
         };
-        /** @description The settings of trading by ideas: the account to enter on, the risk and the largest amount of a trade in USDT, the most open trades and their total risk, the lowest reward to the risk after the fees. */
+        /** @description A page of trades: its number from 1 (the last page when the one asked for is past the end), its size and the count of all the closed trades of the filter. */
+        IdeaTradesPageResponse: {
+            items: components["schemas"]["IdeaTradeResponse"][];
+            /** Format: int32 */
+            page: number | string;
+            /** Format: int32 */
+            pageSize: number | string;
+            /** Format: int32 */
+            total: number | string;
+        };
+        /** @description The settings of trading by ideas: the account to enter on, the amount and the largest amount of a trade in USDT, the most open trades and their total risk, the lowest reward to the risk after the fees. */
         IdeaTradingSettingsBody: {
             /** Format: uuid */
             accountId?: null | string;
             /** Format: double */
-            risk?: number | string;
+            amount?: number | string;
             /** Format: double */
             maxAmount?: number | string;
             /** Format: int32 */
@@ -4529,7 +4639,7 @@ export interface components {
         IdeaTradingSettingsResponse: {
             /** Format: uuid */
             accountId: null | string;
-            risk: string;
+            amount: string;
             maxAmount: string;
             /** Format: int32 */
             maxOpenTrades: number | string;
@@ -4801,6 +4911,13 @@ export interface components {
             calculatedCombinations: number | string;
             /** Format: int64 */
             totalCombinations: number | string;
+        };
+        /** @description The trades with a promised expectancy: how many, the mean expectancy they were promised and the mean result in R they got. */
+        PromiseComparisonResponse: {
+            /** Format: int32 */
+            count: number | string;
+            promised: null | string;
+            got: null | string;
         };
         RenameExchangeAccountBody: {
             name: string;

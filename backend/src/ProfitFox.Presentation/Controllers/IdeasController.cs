@@ -73,19 +73,19 @@ public sealed class IdeasController(ISender sender) : ControllerBase
     }
 
     /// <summary>
-    ///     The entry of an idea as it would be made now, for an account and a risk (the settings give them when left out): the quantity, the amount,
-    ///     the risk and the reward to the risk after the fees, and the reasons it cannot be made. Places nothing. Reads the price of the pair from Bybit.
+    ///     The entry of an idea as it would be made now, for an account and an amount (the settings give them when left out): the quantity, the amount,
+    ///     the loss at the stop, the profit at the target and the reward to the risk after the fees, and the reasons it cannot be made. Places nothing. Reads the price of the pair from Bybit.
     /// </summary>
     [HttpGet("{id:guid}/entry")]
     [ProducesResponseType<IdeaEntryResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
-    public async Task<IActionResult> Entry(Guid id, [FromQuery] Guid? accountId, [FromQuery] decimal? risk, CancellationToken cancellationToken)
+    public async Task<IActionResult> Entry(Guid id, [FromQuery] Guid? accountId, [FromQuery] decimal? amount, CancellationToken cancellationToken)
     {
         try
         {
-            EntryCalculation? entry = await sender.Send(new GetIdeaEntryQuery(id, accountId, risk), cancellationToken);
+            EntryCalculation? entry = await sender.Send(new GetIdeaEntryQuery(id, accountId, amount), cancellationToken);
 
             return entry is null ? NotFound() : Ok(IdeaEntryResponse.Of(entry));
         }

@@ -7,6 +7,7 @@ public enum IdeaTradeRefusal
     PriceBeyondStop,
     PriceBeyondTarget,
     RiskRewardTooLow,
+    AmountAboveMax,
     TooManyOpenTrades,
     TotalRiskExceeded,
     OppositeSideOpen,
@@ -16,6 +17,5 @@ public enum IdeaTradeRefusal
     NoKey,
     CategoryNotTraded,
     HedgeMode,
-    SpotNotSupported,
     StopEntryNotSupported
 }

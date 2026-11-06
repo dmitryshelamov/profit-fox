@@ -10,6 +10,9 @@ using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.Entities.IdeaTrades.Enums;
 using ProfitFox.Domain.Entities.LiveTrading.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
+using ProfitFox.Domain.Services.Ideas;
+using ProfitFox.Domain.ValueObjects.Backtests;
+using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Tests.Integration.Workers;
 
@@ -17,7 +20,7 @@ using Shouldly;
 
 namespace ProfitFox.Tests.Integration.Api;
 
-/// <summary>Requirements "Вход в сделку", "Отмена и закрытие сделки" and "Список сделок".</summary>
+/// <summary>Requirements "Вход в сделку", "Отмена и закрытие сделки" and "Чтение журнала".</summary>
 public class IdeaTradesApiTests
 {
     private const string Url = "/api/idea-trades";
@@ -57,6 +60,49 @@ public class IdeaTradesApiTests
         _scenario.Exchange.Sent.ShouldBeEmpty();
     }
 
+    // Requirement "Обещание на входе", scenario "Вход на ▲": the promise is the statistics of the bucket as «Идеи» shows them, with the break-even and the
+    // reward to risk after the fees from the price the trade entered at (101, not the 100 of the idea).
+    [Test]
+    public async Task Entry_on_an_up_badge_keeps_the_promise_of_the_bucket_and_a_recount_of_the_bucket_does_not_change_it()
+    {
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 96m, 112m);
+        _scenario.SetPrice("101");
+        await _scenario.SaveBucketAsync(new BucketStatistics(412, 130, 270, 12, 0.31m, 0.27m, 0.36m, 0.14m, 0.04m, 0.24m));
+
+        Guid id = await CreateAsync(idea);
+
+        IdeaShares shares = IdeaMoney.PerUsdt(new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 101m, 96m, 112m), new FeeRates(0.02m, 0.055m));
+        var promise = new IdeaPromise(IdeaBadge.Up, 0.31m, 0.14m, 412, shares.BreakEven, shares.NetRiskReward);
+        (await _scenario.TradeAsync(id)).Promise.ShouldBe(promise);
+        await _scenario.SaveBucketAsync(new BucketStatistics(450, 140, 290, 20, 0.31m, 0.27m, 0.36m, 0.01m, -0.05m, 0.07m));
+        (await _scenario.TradeAsync(id)).Promise.ShouldBe(promise);
+    }
+
+    // Scenario "Мало данных": no badge and no probability, the cases and the expectancy stay.
+    [Test]
+    public async Task Entry_on_a_bucket_with_too_few_cases_keeps_its_cases_and_expectancy_only()
+    {
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 96m, 112m);
+        _scenario.SetPrice("101");
+        await _scenario.SaveBucketAsync(new BucketStatistics(12, 4, 8, 0, null, null, null, 0.05m, null, null));
+
+        IdeaPromise promise = (await _scenario.TradeAsync(await CreateAsync(idea))).Promise!;
+
+        (promise.Badge, promise.Probability, promise.Expectancy, promise.Cases).ShouldBe((null, null, 0.05m, 12));
+    }
+
+    [Test]
+    public async Task Entry_on_an_idea_without_a_bucket_keeps_the_break_even_and_the_reward_to_risk_only()
+    {
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 96m, 112m);
+        _scenario.SetPrice("101");
+
+        IdeaPromise promise = (await _scenario.TradeAsync(await CreateAsync(idea))).Promise!;
+
+        (promise.Badge, promise.Probability, promise.Expectancy, promise.Cases).ShouldBe((null, null, null, null));
+        promise.NetRiskReward.ShouldBeGreaterThan(1m);
+    }
+
     // Scenario "Откат".
     [Test]
     public async Task Pullback_enters_with_a_limit_at_the_price_of_its_idea()
@@ -69,18 +115,16 @@ public class IdeaTradesApiTests
         (entry.Type, entry.TimeInForce, entry.Price).ShouldBe((OrderType.Limit, TimeInForce.GoodTilCancelled, 100m));
     }
 
-    // Decision 9: the spot is closed in the API until the real check says how its TP/SL orders are told apart.
+    // Scenario "Вход на споте": a limit IOC at the current price that carries the stop and the target of the idea.
     [Test]
-    public async Task Entry_on_the_spot_is_refused_and_saves_nothing()
+    public async Task Entry_on_the_spot_is_a_limit_ioc_with_its_stop_and_target()
     {
         Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 106m, instrument: LiveTradingScenario.Spot);
         _scenario.SetPrice("100.5", LiveTradingScenario.Spot);
 
-        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, risk = 1m });
+        IdeaTradeOrder entry = (await _scenario.TradeOrdersAsync(await CreateAsync(idea))).Single();
 
-        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
-        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("reasons").EnumerateArray().Select(reason => reason.GetString()).ShouldBe(["spot_not_supported"]);
-        (await ListAsync()).GetArrayLength().ShouldBe(0);
+        (entry.Type, entry.TimeInForce, entry.Price, entry.Protection).ShouldBe((OrderType.Limit, TimeInForce.ImmediateOrCancel, 100.5m, new Protection(106m, 98m)));
     }
 
     // A stop entry waits for the price to leave the range of its setup: taken now, it would enter at the market inside the range.
@@ -90,11 +134,11 @@ public class IdeaTradesApiTests
         Guid idea = await _scenario.SaveIdeaAsync(101m, 98m, 107m, IdeaType.StopEntry);
         _scenario.SetPrice("100");
 
-        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, risk = 1m });
+        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, amount = 47.3m });
 
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
         JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("reasons").EnumerateArray().Select(reason => reason.GetString()).ShouldBe(["stop_entry_not_supported"]);
-        (await ListAsync()).GetArrayLength().ShouldBe(0);
+        (await NothingSavedAsync()).ShouldBeTrue();
     }
 
     // The limits of open trades and of the total risk count every account, so one lock serialises the entries of all of them.
@@ -111,7 +155,7 @@ public class IdeaTradesApiTests
             await take.ExecuteNonQueryAsync();
         }
 
-        Task<HttpResponseMessage> entry = _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, risk = 1m });
+        Task<HttpResponseMessage> entry = _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, amount = 47.3m });
         await Task.Delay(500);
 
         entry.IsCompleted.ShouldBeFalse();
@@ -138,24 +182,24 @@ public class IdeaTradesApiTests
         Guid idea = await _scenario.SaveIdeaAsync(23.48m, 23.01m, 24.42m);
         _scenario.SetPrice("24.50");
 
-        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, risk = 1m });
+        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, amount = 47.3m });
 
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
         JsonElement problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
         problem.GetProperty("reasons").EnumerateArray().Select(reason => reason.GetString()).ShouldContain("price_beyond_target");
-        (await ListAsync()).GetArrayLength().ShouldBe(0);
+        (await NothingSavedAsync()).ShouldBeTrue();
     }
 
     // Scenario "Лимит открытых сделок": the second entry sees the first one under the lock of the account.
     [Test]
     public async Task Second_entry_sees_the_first_and_the_limit_of_open_trades()
     {
-        await _scenario.Client.PutAsJsonAsync("/api/idea-trading/settings", new { accountId = _scenario.Account, risk = 1m, maxAmount = 200m, maxOpenTrades = 1, maxTotalRisk = 5m, minRiskReward = 1.5m });
+        await _scenario.Client.PutAsJsonAsync("/api/idea-trading/settings", new { accountId = _scenario.Account, amount = 47.3m, maxAmount = 200m, maxOpenTrades = 1, maxTotalRisk = 5m, minRiskReward = 1.5m });
         Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m);
         _scenario.SetPrice("100");
         await CreateAsync(idea);
 
-        HttpResponseMessage second = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea });
+        HttpResponseMessage second = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, amount = 47.3m });
 
         second.StatusCode.ShouldBe(HttpStatusCode.Conflict);
         JsonDocument.Parse(await second.Content.ReadAsStringAsync()).RootElement.GetProperty("reasons").EnumerateArray().Select(reason => reason.GetString()).ShouldBe(["too_many_open_trades"]);
@@ -164,29 +208,59 @@ public class IdeaTradesApiTests
     [Test]
     public async Task Unknown_idea_is_not_found_and_an_unknown_account_is_refused_by_its_field()
     {
-        (await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = Guid.NewGuid() })).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = Guid.NewGuid(), amount = 47.3m })).StatusCode.ShouldBe(HttpStatusCode.NotFound);
 
         Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m);
-        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = Guid.NewGuid() });
+        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = Guid.NewGuid(), amount = 47.3m });
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("errors").EnumerateObject().Select(error => error.Name).ShouldBe(["accountId"]);
     }
 
-    // Scenario "Сделка в списке".
+    // The amount is required: a body without it creates nothing.
     [Test]
-    public async Task List_gives_the_newest_trade_first_with_its_idea_and_its_numbers_as_strings()
+    public async Task Entry_without_an_amount_is_refused_by_its_field_and_saves_nothing()
+    {
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m);
+        _scenario.SetPrice("100");
+
+        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("errors").EnumerateObject().Select(error => error.Name).ShouldBe(["amount"]);
+        (await NothingSavedAsync()).ShouldBeTrue();
+    }
+
+    // Scenario "Сумма упёрлась в предел": the amount above the limit is not cut, the entry is refused.
+    [Test]
+    public async Task Entry_above_the_largest_amount_is_refused_and_saves_nothing()
+    {
+        await _scenario.Client.PutAsJsonAsync("/api/idea-trading/settings", new { accountId = _scenario.Account, amount = 47.3m, maxAmount = 100m, maxOpenTrades = 5, maxTotalRisk = 5m, minRiskReward = 1.5m });
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m);
+        _scenario.SetPrice("100");
+
+        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, amount = 100.5m });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("reasons").EnumerateArray().Select(reason => reason.GetString()).ShouldBe(["amount_above_max"]);
+        (await NothingSavedAsync()).ShouldBeTrue();
+    }
+
+    // Scenario "Сделки в работе и закрытые": the open trades newest first with their idea and their numbers as strings, nothing closed yet.
+    [Test]
+    public async Task Journal_gives_the_open_trades_newest_first_with_their_idea_and_their_numbers_as_strings()
     {
         Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m);
         _scenario.SetPrice("100");
         Guid first = await CreateAsync(idea);
         _scenario.Factory.Time.Advance(TimeSpan.FromMinutes(1));
-        Guid second = await CreateAsync(idea, risk: "0.5");
+        Guid second = await CreateAsync(idea, amount: "23.7");
 
-        JsonElement list = await ListAsync();
+        JsonElement journal = await JournalAsync();
 
-        list.EnumerateArray().Select(item => item.GetProperty("id").GetGuid()).ShouldBe([second, first]);
-        JsonElement item = list[1];
+        JsonElement open = journal.GetProperty("open");
+        open.EnumerateArray().Select(item => item.GetProperty("id").GetGuid()).ShouldBe([second, first]);
+        JsonElement item = open[1];
         item.GetProperty("category").GetString().ShouldBe("linear");
         item.GetProperty("symbol").GetString().ShouldBe("BTCUSDT");
         item.GetProperty("setup").GetString().ShouldBe("impulse");
@@ -203,10 +277,29 @@ public class IdeaTradesApiTests
         item.GetProperty("amount").GetString().ShouldBe("47.00");
         item.GetProperty("result").ValueKind.ShouldBe(JsonValueKind.Null);
         item.GetProperty("reason").ValueKind.ShouldBe(JsonValueKind.Null);
+        foreach (string absent in new[] { "openedAt", "secondsToOutcome", "ideaOutcome", "lastPrice", "currentResult", "currentResultR" })
+        {
+            item.GetProperty(absent).ValueKind.ShouldBe(JsonValueKind.Null, absent);
+        }
+
+        // A trade made now promises its break-even and reward to risk, though its idea has no bucket.
+        item.GetProperty("promise").GetProperty("badge").ValueKind.ShouldBe(JsonValueKind.Null);
+
+        JsonElement closed = journal.GetProperty("closed");
+        (closed.GetProperty("items").GetArrayLength(), closed.GetProperty("page").GetInt32(), closed.GetProperty("pageSize").GetInt32(), closed.GetProperty("total").GetInt32()).ShouldBe((0, 1, 50, 0));
+        JsonElement totals = journal.GetProperty("totals");
+        (totals.GetProperty("targets").GetInt32(), totals.GetProperty("result").GetString(), totals.GetProperty("fees").GetString()).ShouldBe((0, "0", "0"));
+        foreach (string absent in new[] { "meanR", "meanRLow", "meanRHigh", "meanSecondsToOutcome" })
+        {
+            totals.GetProperty(absent).ValueKind.ShouldBe(JsonValueKind.Null, absent);
+        }
+
+        (totals.GetProperty("promise").GetProperty("count").GetInt32(), totals.GetProperty("ideas").GetProperty("count").GetInt32()).ShouldBe((0, 0));
     }
 
+    // Scenarios "Закрытая по стопу" and "Итоги по фильтру": a closed trade has its time to the outcome, its result, and the totals are over it.
     [Test]
-    public async Task Closed_trade_in_the_list_has_its_result_in_money_and_in_r()
+    public async Task Closed_trade_in_the_journal_has_its_result_in_money_and_in_r_and_its_time_to_the_outcome()
     {
         IdeaTrade trade = await _scenario.CreateTradeAsync(risk: 0.2m);
         string entry = new IdeaTradeOrderId(trade.Id, 1).Code;
@@ -214,14 +307,86 @@ public class IdeaTradesApiTests
         await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the entry");
         _scenario.Exchange.Fill(entry, 0.47m, 105m, fee: 0.02m);
         await _scenario.WaitAsync(async () => (await _scenario.TradeChildrenAsync(trade.Id)).Count == 2, "the stop and the target");
+        _scenario.Factory.Time.Advance(TimeSpan.FromMinutes(90));
         _scenario.Exchange.TriggerChild(entry, StopOrderKind.TakeProfit, 115m);
         await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(trade.Id)).Status == IdeaTradeStatus.ClosedAtTarget, "the target");
 
-        JsonElement item = (await ListAsync())[0];
+        JsonElement journal = await JournalAsync();
 
+        journal.GetProperty("open").GetArrayLength().ShouldBe(0);
+        JsonElement item = journal.GetProperty("closed").GetProperty("items")[0];
         item.GetProperty("status").GetString().ShouldBe("closed_at_target");
         item.GetProperty("result").GetString().ShouldBe("4.68");
         item.GetProperty("resultR").GetString().ShouldBe("23.4");
+        item.GetProperty("openedAt").ValueKind.ShouldNotBe(JsonValueKind.Null);
+        item.GetProperty("secondsToOutcome").GetInt64().ShouldBeInRange(5400, 5460);
+        JsonElement totals = journal.GetProperty("totals");
+        (totals.GetProperty("targets").GetInt32(), totals.GetProperty("result").GetString(), totals.GetProperty("meanR").GetString()).ShouldBe((1, "4.68", "23.4"));
+        totals.GetProperty("meanSecondsToOutcome").GetInt64().ShouldBeInRange(5400, 5460);
+        totals.GetProperty("meanRLow").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    // Requirements "Обещание на входе" and "Исход идеи на сделке" reach the journal: the promise of the entry and the outcome the scanner wrote.
+    [Test]
+    public async Task Journal_carries_the_promise_of_the_entry_and_the_outcome_of_the_idea()
+    {
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 96m, 112m);
+        _scenario.SetPrice("101");
+        await _scenario.SaveBucketAsync(new BucketStatistics(412, 130, 270, 12, 0.31m, 0.27m, 0.36m, 0.14m, 0.04m, 0.24m));
+        Guid id = await CreateAsync(idea);
+        await _scenario.WriteIdeaOutcomeAsync(idea, new TradedIdeaOutcome(IdeaStatus.Target, _scenario.Factory.Time.GetUtcNow(), 1.84m));
+
+        JsonElement item = (await JournalAsync()).GetProperty("open")[0];
+
+        item.GetProperty("id").GetGuid().ShouldBe(id);
+        JsonElement promise = item.GetProperty("promise");
+        (promise.GetProperty("badge").GetString(), promise.GetProperty("probability").GetString(), promise.GetProperty("expectancy").GetString(), promise.GetProperty("cases").GetInt32()).ShouldBe(("up", "0.31", "0.14", 412));
+        promise.GetProperty("breakEven").GetString().ShouldNotBeNull();
+        promise.GetProperty("netRiskReward").GetString().ShouldNotBeNull();
+        JsonElement outcome = item.GetProperty("ideaOutcome");
+        (outcome.GetProperty("status").GetString(), outcome.GetProperty("result").GetString()).ShouldBe(("target", "1.84"));
+    }
+
+    // Scenario "Открытая в плюсе": the last price of the exchange gives the current result of an open trade.
+    [Test]
+    public async Task Open_trade_has_the_last_price_and_its_current_result()
+    {
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m);
+        _scenario.SetPrice("100");
+        Guid id = await CreateAsync(idea);
+        await _scenario.ChangeTradeAsync(id, trade => trade.EntryGrown(new LegTotals(0.47m, 47m, 0m), _scenario.Factory.Time.GetUtcNow()));
+        _scenario.SetPrice("101");
+
+        JsonElement item = (await JournalAsync()).GetProperty("open")[0];
+
+        item.GetProperty("lastPrice").GetString().ShouldBe("101");
+        item.GetProperty("currentResult").GetString().ShouldBe("0.4438915");
+        item.GetProperty("currentResultR").ValueKind.ShouldBe(JsonValueKind.String);
+    }
+
+    // Scenarios "Неизвестный размер страницы" and the filters: the page, the filter by the symbol and the badge, the errors by the name of the parameter.
+    [Test]
+    public async Task Journal_takes_a_page_and_filters_and_refuses_a_wrong_size()
+    {
+        foreach (int minutes in new[] { 1, 2, 3 })
+        {
+            IdeaTrade trade = await _scenario.CreateTradeAsync(risk: 0.2m);
+            DateTimeOffset now = _scenario.Factory.Time.GetUtcNow();
+            await _scenario.ChangeTradeAsync(
+                trade.Id,
+                current => current.EntryGrown(new LegTotals(0.47m, 49.35m, 0m), now).ExitGrown(IdeaTradeLeg.StopLoss, new LegTotals(0.47m, 46m, 0m), now.AddMinutes(minutes)));
+        }
+
+        JsonElement all = (await JournalAsync()).GetProperty("closed");
+        JsonElement other = (await JournalAsync("?symbol=eth")).GetProperty("closed");
+        JsonElement withoutBadge = (await JournalAsync("?badge=none&days=7&page=1&pageSize=100")).GetProperty("closed");
+        HttpResponseMessage wrong = await _scenario.Client.GetAsync($"{Url}?pageSize=75");
+
+        (all.GetProperty("total").GetInt32(), all.GetProperty("items").GetArrayLength()).ShouldBe((3, 3));
+        other.GetProperty("total").GetInt32().ShouldBe(0);
+        (withoutBadge.GetProperty("total").GetInt32(), withoutBadge.GetProperty("pageSize").GetInt32()).ShouldBe((3, 100));
+        wrong.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        JsonDocument.Parse(await wrong.Content.ReadAsStringAsync()).RootElement.GetProperty("errors").EnumerateObject().Select(error => error.Name).ShouldBe(["pageSize"]);
     }
 
     // Scenario "Отменить": the API asks, the Worker takes the entry off.
@@ -238,6 +403,12 @@ public class IdeaTradesApiTests
 
         await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(id)).Status == IdeaTradeStatus.Cancelled, "the cancelled trade");
         _scenario.Exchange.Cancels.ShouldBe([new IdeaTradeOrderId(id, 1).Code]);
+
+        // A trade that never opened has no time to its outcome; the idea of a pullback that expired without an entry has no result.
+        await _scenario.WriteIdeaOutcomeAsync(idea, new TradedIdeaOutcome(IdeaStatus.Expired, _scenario.Factory.Time.GetUtcNow(), null));
+        JsonElement cancelled = (await JournalAsync()).GetProperty("closed").GetProperty("items")[0];
+        cancelled.GetProperty("secondsToOutcome").ValueKind.ShouldBe(JsonValueKind.Null);
+        (cancelled.GetProperty("ideaOutcome").GetProperty("status").GetString(), cancelled.GetProperty("ideaOutcome").GetProperty("result").ValueKind).ShouldBe(("expired", JsonValueKind.Null));
     }
 
     // Scenario "Закрыть по рынку".
@@ -273,19 +444,26 @@ public class IdeaTradesApiTests
         (await _scenario.Client.PostAsync($"{Url}/{Guid.NewGuid()}/close", null)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
-    private async Task<Guid> CreateAsync(Guid idea, string risk = "1")
+    private async Task<Guid> CreateAsync(Guid idea, string amount = "47.3")
     {
-        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, risk = decimal.Parse(risk, System.Globalization.CultureInfo.InvariantCulture) });
+        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, amount = decimal.Parse(amount, System.Globalization.CultureInfo.InvariantCulture) });
         response.StatusCode.ShouldBe(HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
 
         return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
     }
 
-    private async Task<JsonElement> ListAsync()
+    private async Task<JsonElement> JournalAsync(string query = "")
     {
-        HttpResponseMessage response = await _scenario.Client.GetAsync(Url);
-        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        HttpResponseMessage response = await _scenario.Client.GetAsync(Url + query);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
 
         return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+    }
+
+    private async Task<bool> NothingSavedAsync()
+    {
+        JsonElement journal = await JournalAsync();
+
+        return journal.GetProperty("open").GetArrayLength() == 0 && journal.GetProperty("closed").GetProperty("total").GetInt32() == 0;
     }
 }

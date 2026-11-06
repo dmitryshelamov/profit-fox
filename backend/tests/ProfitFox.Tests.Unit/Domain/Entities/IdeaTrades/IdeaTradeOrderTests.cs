@@ -55,7 +55,7 @@ public class IdeaTradeOrderTests
         decimal? price)
     {
         Idea idea = IdeaGenerator.Generate(Now, type: type, side: side, instrument: new Instrument(category, "BTCUSDT"));
-        var trade = IdeaTrade.Create(Trade, idea, Guid.NewGuid(), 106m, new IdeaTradeSize(0.47m, 49.82m, 0.2m, 1.84m, false), Now);
+        var trade = IdeaTrade.Create(Trade, idea, Guid.NewGuid(), 106m, new IdeaTradeSize(0.47m, 49.82m, 0.2m, 0.368m, 1.84m), Now);
 
         var order = IdeaTradeOrder.NewEntryOf(trade, Now);
 

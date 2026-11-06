@@ -1,12 +1,15 @@
 using System.Collections.Concurrent;
 
+using ProfitFox.Application.Backtests;
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.Services.Ideas;
+using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.Ideas;
+using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
@@ -28,12 +31,14 @@ public sealed class LiveIdeas(
     IdeaRecomputes recomputes,
     ScannerMarket market,
     IdeasSettings settings,
+    BacktestSettings backtests,
     TimeProvider time)
 {
     private static readonly TimeSpan PercentilesRefresh = TimeSpan.FromHours(1);
     private static readonly TimeSpan Day = TimeSpan.FromDays(1);
     private static readonly TimeSpan ClosedKept = TimeSpan.FromDays(7);
 
+    private readonly IReadOnlyDictionary<MarketCategory, FeeRates> _fees = backtests.Policy().DefaultFees;
     private readonly IdeaEngine _engine = new IdeaEngine(settings.Rules(), IdeasEngineVersion.Current);
     private readonly ConcurrentQueue<Warming> _warming = new ConcurrentQueue<Warming>();
     // The generation a pair was read in; a start over begins a new one, and the warm-ups of an older generation are dropped.
@@ -84,6 +89,20 @@ public sealed class LiveIdeas(
         }
 
         return pending.Length > 0;
+    }
+
+    /// <summary>
+    ///     Writes how the ideas ended on the trades made of them that have no outcome yet and whose ideas closed and still stand: the trades made
+    ///     before the journal, and those whose idea closed before the write of the minute.
+    /// </summary>
+    public async Task CatchUpTradeOutcomesAsync(CancellationToken cancellationToken)
+    {
+        IReadOnlyList<Idea> closed = await ideas.GetClosedOfTradesWithoutOutcomeAsync(cancellationToken);
+
+        if (closed.Count > 0)
+        {
+            await ideas.SaveAsync([], [], Outcomes(closed), cancellationToken);
+        }
     }
 
     /// <summary>Deletes from storage the ideas closed more than a week ago (requirement "Срок хранения закрытых идей").</summary>
@@ -140,7 +159,7 @@ public sealed class LiveIdeas(
 
         try
         {
-            added = await ideas.SaveAsync(created, changed, cancellationToken);
+            added = await ideas.SaveAsync(created, changed, Outcomes(changed), cancellationToken);
         }
         catch
         {
@@ -154,6 +173,12 @@ public sealed class LiveIdeas(
         }
 
         return setups;
+    }
+
+    /// <summary>How the ideas that closed on this minute ended, to be written on their trades.</summary>
+    private List<ClosedIdea> Outcomes(IEnumerable<Idea> changed)
+    {
+        return [.. changed.Where(idea => !idea.IsOpen).Select(idea => new ClosedIdea(idea.Id, TradedIdeaOutcome.Of(idea.Track, _fees[idea.Instrument.Category])))];
     }
 
     /// <summary>Warms a pair up with the minutes in memory and its open ideas in storage.</summary>

@@ -1,5 +1,6 @@
 using ProfitFox.Application.Backtests;
 using ProfitFox.Application.Exceptions;
+using ProfitFox.Application.Ideas;
 using ProfitFox.Application.LiveTrading;
 using ProfitFox.Application.Ports.ExchangeAccounts;
 using ProfitFox.Application.Ports.LiveTrading;
@@ -16,6 +17,7 @@ using ProfitFox.Domain.Entities.LiveTrading.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.Services.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.Ideas;
@@ -43,12 +45,14 @@ public sealed class IdeaTradeEntryCalculator(
     IInstrumentCatalog catalog,
     ILiveBotRepository live,
     IStrategyLibraryRepository library,
+    IIdeaBucketRepository buckets,
+    IdeasEngineVersion version,
     BacktestSettings backtests)
 {
     /// <returns><c>null</c> when there is no such idea.</returns>
-    /// <exception cref="ValidationFailedException">An unknown account, or a risk not above zero.</exception>
+    /// <exception cref="ValidationFailedException">An unknown account, or an amount not above zero.</exception>
     /// <exception cref="ExchangeException">The exchange did not answer.</exception>
-    public async Task<EntryPreparation?> PrepareAsync(Guid ideaId, Guid? accountId, decimal? risk, CancellationToken cancellationToken)
+    public async Task<EntryPreparation?> PrepareAsync(Guid ideaId, Guid? accountId, decimal? amount, CancellationToken cancellationToken)
     {
         Idea? idea = await ideas.GetAsync(ideaId, cancellationToken);
 
@@ -58,11 +62,11 @@ public sealed class IdeaTradeEntryCalculator(
         }
 
         IdeaTradingSettings saved = await settings.GetAsync(cancellationToken);
-        decimal asked = risk ?? saved.Risk;
+        decimal asked = amount ?? saved.Amount;
 
         if (asked <= 0m)
         {
-            throw new ValidationFailedException(new Dictionary<string, string> { ["risk"] = "The risk must be above zero." });
+            throw new ValidationFailedException(new Dictionary<string, string> { ["amount"] = "The amount must be above zero." });
         }
 
         Guid? chosen = accountId ?? saved.AccountId;
@@ -80,7 +84,8 @@ public sealed class IdeaTradeEntryCalculator(
         InstrumentRules instrumentRules = await rules.GetRulesAsync(instrument, cancellationToken);
         ListedInstrument listed = (await catalog.ListAsync(instrument.Category, cancellationToken)).Single(item => item.Symbol == instrument.Symbol);
 
-        return new EntryPreparation(idea, saved, account, key, access, price, current, instrumentRules, backtests.Policy().DefaultFees[instrument.Category], asked, listed.QuoteCoin, listed.BaseCoin);
+        return new EntryPreparation(idea, saved, account, key, access, price, current, instrumentRules, backtests.Policy().DefaultFees[instrument.Category], asked, listed.QuoteCoin, listed.BaseCoin,
+            await buckets.GetAsync(version.Number, cancellationToken));
     }
 
     /// <summary>Sizes the trade and names what stops it, by the books of the account as they are now.</summary>
@@ -88,18 +93,29 @@ public sealed class IdeaTradeEntryCalculator(
     {
         Idea idea = preparation.Idea;
         IdeaPlan plan = idea.Track.Plan with { Entry = preparation.Price };
-        IdeaTradeSize size = IdeaTradeSizing.Calculate(plan, preparation.Fees, preparation.Risk, preparation.Settings.MaxAmount, preparation.Rules);
+        IdeaTradeSize size = IdeaTradeSizing.Calculate(plan, preparation.Fees, preparation.Amount, preparation.Rules);
         IReadOnlyList<IdeaTrade> open = await trades.GetOpenAsync(cancellationToken);
         decimal? free = preparation.Key is { } key ? await ledger.GetFreeAsync(key, preparation.Quote, cancellationToken) : null;
         IdeaTradeAccount account = await AccountAsync(preparation, free, open, cancellationToken);
-        var limits = new IdeaTradingLimits(preparation.Settings.MinRiskReward, preparation.Settings.MaxOpenTrades, preparation.Settings.MaxTotalRisk);
+        var limits = new IdeaTradingLimits(preparation.Settings.MinRiskReward, preparation.Settings.MaxOpenTrades, preparation.Settings.MaxTotalRisk, preparation.Settings.MaxAmount);
         IReadOnlyList<IdeaTradeRefusal> reasons = IdeaTradeRefusals.Check(
-            new IdeaTradeEntry(idea.Instrument.Category, idea.Track.Status, idea.Track.Plan, preparation.Price, preparation.Current, size, preparation.Rules),
+            new IdeaTradeEntry(idea.Instrument.Category, idea.Track.Status, idea.Track.Plan, preparation.Price, preparation.Current, preparation.Amount, size, preparation.Rules),
             limits,
             new OpenIdeaTrades(open.Count, open.Sum(trade => trade.Risk)),
             account);
 
-        return new EntryCalculation(preparation, plan, size, free, reasons);
+        return new EntryCalculation(preparation, plan, size, free, reasons, PromiseOf(idea with { Track = idea.Track with { Plan = plan } }, preparation));
+    }
+
+    /// <summary>
+    ///     What the idea promises at this entry: the statistics of its bucket as the list of ideas shows them, and the break-even and the reward to
+    ///     risk after the fees from the price of the entry, which <paramref name="idea" /> carries in its plan.
+    /// </summary>
+    private static IdeaPromise PromiseOf(Idea idea, EntryPreparation preparation)
+    {
+        IdeaView view = IdeaView.Of([idea], preparation.Buckets, new Dictionary<MarketCategory, FeeRates> { [idea.Instrument.Category] = preparation.Fees })[0];
+
+        return new IdeaPromise(view.Bucket?.Badge, view.Probability, view.Bucket?.Expectancy, view.Bucket?.Cases, view.Shares.BreakEven, view.Shares.NetRiskReward);
     }
 
     private async Task<(ExchangeKey? Key, AccountAccess Access)> AccessAsync(ExchangeAccount? account, Instrument instrument, CancellationToken cancellationToken)
@@ -211,9 +227,10 @@ public sealed record EntryPreparation(
     decimal Current,
     InstrumentRules Rules,
     FeeRates Fees,
-    decimal Risk,
+    decimal Amount,
     string Quote,
-    string BaseCoin);
+    string BaseCoin,
+    IReadOnlyList<IdeaBucket> Buckets);
 
-/// <summary>The entry as it would be made now: the plan from the price, the size, the free money (none without a key) and the reasons it cannot be made.</summary>
-public sealed record EntryCalculation(EntryPreparation Preparation, IdeaPlan Plan, IdeaTradeSize Size, decimal? FreeMoney, IReadOnlyList<IdeaTradeRefusal> Reasons);
+/// <summary>The entry as it would be made now: the plan from the price, the size, the free money (none without a key), the reasons it cannot be made and what the idea promises.</summary>
+public sealed record EntryCalculation(EntryPreparation Preparation, IdeaPlan Plan, IdeaTradeSize Size, decimal? FreeMoney, IReadOnlyList<IdeaTradeRefusal> Reasons, IdeaPromise Promise);

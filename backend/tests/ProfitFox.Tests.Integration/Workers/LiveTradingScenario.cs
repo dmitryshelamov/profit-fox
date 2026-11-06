@@ -17,6 +17,7 @@ using ProfitFox.Domain.Entities.LiveTrading;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.LiveTrading;
@@ -242,7 +243,7 @@ public sealed class LiveTradingScenario : IAsyncDisposable
     {
         DateTimeOffset now = Factory.Time.GetUtcNow();
         Idea idea = IdeaGenerator.Generate(now.AddMinutes(-5), instrument: instrument ?? Linear, type: type, side: side);
-        var trade = IdeaTrade.Create(Guid.NewGuid(), idea, Account, 105m, new IdeaTradeSize(quantity, quantity * 105m, risk, 2m, false), now);
+        var trade = IdeaTrade.Create(Guid.NewGuid(), idea, Account, 105m, new IdeaTradeSize(quantity, quantity * 105m, risk, risk * 2m, 2m), now);
         bool pullback = type == IdeaType.Pullback;
         var entry = IdeaTradeOrder.NewEntry(
             trade.Id,
@@ -276,6 +277,21 @@ public sealed class LiveTradingScenario : IAsyncDisposable
         await new IdeaRepository(database).SaveAsync([idea], [], CancellationToken.None);
 
         return idea.Id;
+    }
+
+    /// <summary>The bucket over 90 days of the ideas <see cref="SaveIdeaAsync" /> makes, a long of the setup and the interval of the generator, replaced by the statistics given.</summary>
+    public async Task SaveBucketAsync(BucketStatistics statistics, IdeaType type = IdeaType.TwoR)
+    {
+        var key = new IdeaBucketKey(IdeaSetup.Impulse, type, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear);
+        await using var database = Npgsql.NpgsqlDataSource.Create(Factory.ConnectionString);
+        await new IdeaBucketRepository(database).ReplaceAsync(IdeasEngineVersion.Current, [new IdeaBucket(key, 90, statistics)], null, CancellationToken.None);
+    }
+
+    /// <summary>Writes how the idea ended on the trades made of it, as the scanner does when the idea closes.</summary>
+    public async Task WriteIdeaOutcomeAsync(Guid idea, TradedIdeaOutcome outcome)
+    {
+        await using var database = Npgsql.NpgsqlDataSource.Create(Factory.ConnectionString);
+        await new IdeaRepository(database).SaveAsync([], [], [new ClosedIdea(idea, outcome)], CancellationToken.None);
     }
 
     /// <summary>The last price of the ticker of the pair on Bybit.</summary>

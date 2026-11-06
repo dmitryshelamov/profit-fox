@@ -1,5 +1,7 @@
 using System.Text;
 
+using Dapper;
+
 using Npgsql;
 
 using ProfitFox.Domain.Entities.ExchangeAccounts;
@@ -82,6 +84,42 @@ public class IdeaTradeRepositoryTests
         await SaveAsync(changed);
 
         (await _repository.GetAsync(trade.Id, CancellationToken.None)).ShouldBeEquivalentTo(changed);
+    }
+
+    // Decisions 1 and 2: the Worker's save writes neither the promise nor the outcome of the idea; the scanner writes the outcome, and the save keeps it.
+    [Test]
+    public async Task Save_of_a_Worker_keeps_the_promise_and_the_outcome_of_the_idea_and_writes_the_time_it_opened()
+    {
+        var promise = new IdeaPromise(IdeaBadge.Up, 0.31m, 0.14m, 412, 0.33m, 1.84m);
+        IdeaTrade trade = await CreateAsync(Now, promise: promise);
+        (await _repository.GetAsync(trade.Id, CancellationToken.None))!.Promise.ShouldBe(promise);
+        await using (NpgsqlConnection connection = await _dataSource.OpenConnectionAsync())
+        {
+            await connection.ExecuteAsync(
+                "UPDATE idea_trades SET idea_status = 'target', idea_status_at = @At, idea_result = 1.84 WHERE id = @Id",
+                new { At = Now.AddHours(2), trade.Id });
+        }
+
+        await SaveAsync((trade with { Promise = null }).EntryGrown(new LegTotals(0.47m, 49.82m, 0.02m), Now.AddMinutes(1)));
+
+        IdeaTrade read = (await _repository.GetAsync(trade.Id, CancellationToken.None))!;
+        (read.Promise, read.IdeaOutcome, read.OpenedAt).ShouldBe((promise, new TradedIdeaOutcome(IdeaStatus.Target, Now.AddHours(2), 1.84m), Now.AddMinutes(1)));
+    }
+
+    // A promise with no bucket has the break-even and the reward to risk only; an idea that expired without an entry has an outcome with no result.
+    [Test]
+    public async Task Promise_without_a_bucket_and_outcome_without_a_result_are_read_back()
+    {
+        var promise = new IdeaPromise(null, null, null, null, null, 1.2m);
+        IdeaTrade trade = await CreateAsync(Now, promise: promise);
+        await using (NpgsqlConnection connection = await _dataSource.OpenConnectionAsync())
+        {
+            await connection.ExecuteAsync("UPDATE idea_trades SET idea_status = 'expired', idea_status_at = @At WHERE id = @Id", new { At = Now.AddHours(1), trade.Id });
+        }
+
+        IdeaTrade read = (await _repository.GetAsync(trade.Id, CancellationToken.None))!;
+
+        (read.Promise, read.IdeaOutcome).ShouldBe((promise, new TradedIdeaOutcome(IdeaStatus.Expired, Now.AddHours(1), null)));
     }
 
     // Scenario "Два торгующих Worker'а": a trade with a live lease is nobody else's.
@@ -194,9 +232,9 @@ public class IdeaTradeRepositoryTests
         (await _repository.IsChildAsync("bybit-1", CancellationToken.None)).ShouldBeFalse();
     }
 
-    private async Task<IdeaTrade> CreateAsync(DateTimeOffset at, IdeaType type = IdeaType.TwoR)
+    private async Task<IdeaTrade> CreateAsync(DateTimeOffset at, IdeaType type = IdeaType.TwoR, IdeaPromise? promise = null)
     {
-        var trade = IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(at, type: type), _account, 106m, new IdeaTradeSize(0.47m, 49.82m, 0.2m, 1.84m, false), at);
+        var trade = IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(at, type: type), _account, 106m, new IdeaTradeSize(0.47m, 49.82m, 0.2m, 0.368m, 1.84m), at, promise);
         var entry = IdeaTradeOrder.NewEntry(trade.Id, 1, OrderSide.Buy, OrderType.Market, TimeInForce.GoodTilCancelled, null, 0.47m, new Protection(trade.Target, trade.Stop), at);
         await _executor.ExecuteAsync(
             async token =>

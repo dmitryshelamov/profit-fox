@@ -4,7 +4,7 @@ internal sealed class IdeaTradingSettingsDb
 {
     public Guid? AccountId { get; init; }
 
-    public decimal Risk { get; init; }
+    public decimal Amount { get; init; }
 
     public decimal MaxAmount { get; init; }
 

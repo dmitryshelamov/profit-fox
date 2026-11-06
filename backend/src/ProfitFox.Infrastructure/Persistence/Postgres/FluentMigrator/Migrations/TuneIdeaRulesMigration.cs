@@ -2,7 +2,7 @@ using FluentMigrator;
 
 namespace ProfitFox.Infrastructure.Persistence.Postgres.FluentMigrator.Migrations;
 
-[Migration(202611070008)]
+[Migration(202611070009)]
 public sealed class TuneIdeaRulesMigration : ForwardOnlyMigration
 {
     // Decision 5: the exit rules applied, one per type × interval; none is the default.

@@ -15,12 +15,12 @@ public sealed class CreateIdeaTradeCommandHandler(
     TimeProvider time) : IRequestHandler<CreateIdeaTradeCommand, Guid>
 {
     /// <exception cref="NotFoundException">There is no such idea.</exception>
-    /// <exception cref="ValidationFailedException">An unknown account, or a risk not above zero.</exception>
+    /// <exception cref="ValidationFailedException">An unknown account, or an amount not above zero.</exception>
     /// <exception cref="IdeaTradeRefusedException">The checks, made again under the lock of the account, stop the entry.</exception>
     /// <exception cref="ExchangeException">The exchange did not answer.</exception>
     public async Task<Guid> Handle(CreateIdeaTradeCommand request, CancellationToken cancellationToken)
     {
-        EntryPreparation preparation = await calculator.PrepareAsync(request.IdeaId, request.AccountId, request.Risk, cancellationToken)
+        EntryPreparation preparation = await calculator.PrepareAsync(request.IdeaId, request.AccountId, request.Amount, cancellationToken)
                                        ?? throw new NotFoundException($"There is no idea {request.IdeaId}.");
 
         if (preparation.Account is null)
@@ -44,7 +44,7 @@ public sealed class CreateIdeaTradeCommandHandler(
                 }
 
                 DateTimeOffset now = time.GetUtcNow();
-                IdeaTrade trade = IdeaTrade.Create(Guid.NewGuid(), preparation.Idea, preparation.Account.Id, preparation.Price, calculation.Size, now) with { LastOrderNumber = 1 };
+                IdeaTrade trade = IdeaTrade.Create(Guid.NewGuid(), preparation.Idea, preparation.Account.Id, preparation.Price, calculation.Size, now, calculation.Promise) with { LastOrderNumber = 1 };
                 await trades.CreateAsync(trade, IdeaTradeOrder.NewEntryOf(trade, now), now, token);
 
                 return trade.Id;

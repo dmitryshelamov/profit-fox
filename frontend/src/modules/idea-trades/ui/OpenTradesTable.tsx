@@ -1,21 +1,24 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { sideLabel, typeLabel } from '@/modules/ideas';
-import { CategoryBadge, setupLabel } from '@/modules/market';
-import { intervalLabel } from '@/modules/market-data';
-import { ApiError, type Schemas } from '@/shared/api/client';
+import { ApiError } from '@/shared/api/client';
 import { formatMoment } from '@/shared/format/format';
 import { Button } from '@/shared/ui/Button';
 import { Dialog } from '@/shared/ui/Dialog';
 
 import { useCancelTrade, useCloseTrade } from '../api';
+import { durationText, promiseHint, promiseText } from '../model/journal';
 import { resultText } from '../model/result';
-import { canCancel, canClose, statusLabel } from '../model/status';
-
-export type IdeaTrade = Schemas['IdeaTradeResponse'];
-
-const cell = 'px-3 py-3';
-const number = `${cell} text-right font-mono whitespace-nowrap`;
+import { canCancel, canClose } from '../model/status';
+import {
+  cell,
+  head,
+  Heads,
+  type IdeaTrade,
+  InstrumentCells,
+  LevelCells,
+  StatusCell,
+} from './tradeCells';
 
 type Asked = { trade: IdeaTrade; action: 'cancel' | 'close' };
 
@@ -75,67 +78,75 @@ function Confirm({ asked, onDone }: { asked: Asked; onDone: () => void }) {
   );
 }
 
-/** The trades by ideas, the newest first; a trade that waits can be cancelled and an open one closed, each after a question. */
-export function TradesTable({ trades }: { trades: readonly IdeaTrade[] }) {
+/** The moment now in milliseconds, taken again every half a minute so the time in a trade runs on while the data stands. */
+function useNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  return now;
+}
+
+/** The trades that wait for their entry or are open; a trade that waits can be cancelled and an open one closed, each after a question. */
+export function OpenTradesTable({ trades }: { trades: readonly IdeaTrade[] }) {
   const [asked, setAsked] = useState<Asked | null>(null);
+  const now = useNow();
 
   return (
     <>
       <table
-        aria-label="Сделки по идеям"
+        aria-label="Сделки в работе"
         className="w-full border-separate border-spacing-y-1 text-sm"
       >
-        <thead className="bg-panel text-left text-[11px] tracking-wide text-faint uppercase">
+        <thead className={head}>
           <tr>
-            {['Время', 'Инструмент', 'Сетап', 'Тип идеи', 'Сторона'].map((label) => (
-              <th key={label} scope="col" className={cell}>
-                {label}
-              </th>
-            ))}
-            {['Вход', 'Стоп', 'Цель', 'Объём', 'Риск'].map((label) => (
-              <th key={label} scope="col" className={`${cell} text-right`}>
-                {label}
-              </th>
-            ))}
-            {['Статус', 'Результат', ''].map((label, index) => (
-              <th key={label || index} scope="col" className={cell}>
-                {label}
-              </th>
-            ))}
+            <Heads
+              names={[
+                'Открыта',
+                'Инструмент',
+                'Сетап',
+                'Сторона',
+                'Вход',
+                'Стоп',
+                'Цель',
+                'Объём',
+                'Риск',
+                'Статус',
+                'В сделке',
+                'Сейчас',
+                'Обещание',
+                '',
+              ]}
+              right={['Вход', 'Стоп', 'Цель', 'Объём', 'Риск']}
+            />
           </tr>
         </thead>
         <tbody>
           {trades.map((trade) => (
             <tr key={trade.id} className="bg-panel">
               <td className={`${cell} font-mono whitespace-nowrap text-muted`}>
-                {formatMoment(trade.createdAt)}
+                {formatMoment(trade.openedAt ?? trade.createdAt)}
               </td>
+              <InstrumentCells trade={trade} />
+              <LevelCells trade={trade} risk />
+              <StatusCell trade={trade} />
               <td className={`${cell} whitespace-nowrap`}>
-                <CategoryBadge category={trade.category} />{' '}
-                <span className="ml-1.5 font-semibold">{trade.symbol}</span>
-              </td>
-              <td className={cell}>
-                {setupLabel(trade.setup)} · {intervalLabel(trade.interval)}
-              </td>
-              <td className={`${cell} whitespace-nowrap`}>{typeLabel(trade.type)}</td>
-              <td className={cell}>{sideLabel(trade.side)}</td>
-              <td className={number}>{trade.filledPrice ?? trade.entryPrice}</td>
-              <td className={number}>{trade.stop}</td>
-              <td className={number}>{trade.target}</td>
-              <td className={number}>{trade.quantity}</td>
-              <td className={number}>{trade.risk}</td>
-              <td className={cell}>
-                <span>{statusLabel(trade.status)}</span>
-                {trade.reason !== null && (
-                  <span
-                    className={`mt-1 block max-w-xs text-xs ${trade.status === 'failed' ? 'text-err' : 'text-warn'}`}
-                  >
-                    {trade.reason}
-                  </span>
-                )}
+                {trade.openedAt === null
+                  ? '—'
+                  : durationText((now - Date.parse(trade.openedAt)) / 1000)}
               </td>
               <td className={`${cell} font-mono whitespace-nowrap`}>
-                {resultText(trade.result, trade.resultR)}
+                {resultText(trade.currentResult, trade.currentResultR)}
+              </td>
+              <td
+                className={`${cell} font-mono whitespace-nowrap`}
+                title={trade.promise === null ? undefined : promiseHint(trade.promise)}
+              >
+                {promiseText(trade.promise)}
               </td>
               <td className={`${cell} text-right whitespace-nowrap`}>
                 {canCancel(trade.status) && (

@@ -3,6 +3,7 @@ const reasons: Record<string, string> = {
   price_beyond_stop: 'Цена уже за стопом идеи',
   price_beyond_target: 'Цена уже за целью идеи',
   risk_reward_too_low: 'R:R после комиссий ниже минимального',
+  amount_above_max: 'Сумма больше предела на сделку',
   too_many_open_trades: 'Уже открыто столько сделок, сколько разрешено',
   total_risk_exceeded: 'Общий риск открытых сделок был бы выше разрешённого',
   opposite_side_open:
@@ -13,7 +14,6 @@ const reasons: Record<string, string> = {
   no_key: 'У аккаунта нет рабочего ключа: выберите аккаунт',
   category_not_traded: 'Ключ аккаунта не торгует этот рынок',
   hedge_mode: 'На аккаунте включён режим hedge: переключите его на one-way',
-  spot_not_supported: 'Вход на споте пока закрыт: сначала нужна проверка TP/SL на настоящей бирже',
   stop_entry_not_supported:
     'Стоп-вход пока не берётся: он ждёт выхода цены из диапазона, а вход здесь — по рынку или лимиткой',
 };

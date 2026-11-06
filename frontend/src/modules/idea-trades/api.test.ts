@@ -7,14 +7,15 @@ import {
   closeTrade,
   enterIdea,
   ideaEntryQuery,
-  ideaTradesQuery,
+  ideaJournalQuery,
+  noJournalFilters,
   saveSettings,
   tradingSettingsQuery,
 } from './api';
 
 const settings = {
   accountId: null,
-  risk: '1',
+  amount: '20',
   maxAmount: '200',
   maxOpenTrades: 5,
   maxTotalRisk: '5',
@@ -22,19 +23,46 @@ const settings = {
 };
 
 describe('requests of trades by ideas', () => {
-  it('reads the list of trades and the settings', async () => {
+  it('reads the journal and the settings', async () => {
+    const journal = { open: [], closed: { items: [], page: 1, pageSize: 50, total: 0 } };
     const requests = fakeApi({
-      'GET /api/idea-trades': () => json([]),
+      'GET /api/idea-trades': () => json(journal),
       'GET /api/idea-trading/settings': () => json(settings),
     });
     const client = new QueryClient();
 
-    expect(await client.fetchQuery(ideaTradesQuery())).toEqual([]);
+    expect(
+      await client.fetchQuery(
+        ideaJournalQuery({ filters: noJournalFilters, page: 1, pageSize: 50 }),
+      ),
+    ).toEqual(journal);
     expect(await client.fetchQuery(tradingSettingsQuery())).toEqual(settings);
     expect(requests.map((request) => request.method)).toEqual(['GET', 'GET']);
   });
 
-  it('asks for the entry of an idea with the account and the risk typed, and without them leaves them to the settings', async () => {
+  // Requirement "Фильтры и листание сделок": the API gets the filters chosen, the page and its size; a filter left empty is not sent.
+  it('asks the journal for the filters, the page and the size, and leaves out a filter that is empty', async () => {
+    const requests = fakeApi({
+      'GET /api/idea-trades': () => json({}),
+    });
+    const client = new QueryClient();
+
+    await client.fetchQuery(ideaJournalQuery({ filters: noJournalFilters, page: 1, pageSize: 50 }));
+    await client.fetchQuery(
+      ideaJournalQuery({
+        filters: { setup: 'drop', symbol: 'eth', side: 'short', badge: 'none', days: '30' },
+        page: 3,
+        pageSize: 100,
+      }),
+    );
+
+    expect(requests.map((request) => new URL(request.url).search)).toEqual([
+      '?Page=1&PageSize=50',
+      '?Setup=drop&Symbol=eth&Side=short&Badge=none&Days=30&Page=3&PageSize=100',
+    ]);
+  });
+
+  it('asks for the entry of an idea with the account and the amount typed, and without them leaves them to the settings', async () => {
     const requests = fakeApi({
       'GET /api/ideas/idea-1/entry': () => json({ reasons: [] }),
     });
@@ -44,30 +72,30 @@ describe('requests of trades by ideas', () => {
     await client.fetchQuery(ideaEntryQuery('idea-1', null, ''));
 
     const asked = requests.map((request) => new URL(request.url).search);
-    expect(asked).toEqual(['?accountId=account-1&risk=1.5', '']);
+    expect(asked).toEqual(['?accountId=account-1&amount=1.5', '']);
   });
 
-  it('creates a trade with the idea, the account and the risk exactly as typed', async () => {
+  it('creates a trade with the idea, the account and the amount exactly as typed', async () => {
     const requests = fakeApi({
       'POST /api/idea-trades': () => json({ id: 'trade-1' }, 201),
     });
 
-    const id = await enterIdea({ ideaId: 'idea-1', accountId: 'account-1', risk: '1.50' });
+    const id = await enterIdea({ ideaId: 'idea-1', accountId: 'account-1', amount: '1.50' });
 
     expect(id).toBe('trade-1');
     expect(await requests[0]!.text()).toBe(
-      '{"ideaId":"idea-1","accountId":"account-1","risk":1.50}',
+      '{"ideaId":"idea-1","accountId":"account-1","amount":1.50}',
     );
   });
 
-  it('leaves the account and the risk out of the entry when they are not given', async () => {
+  it('leaves the account out of the entry when it is not given', async () => {
     const requests = fakeApi({
       'POST /api/idea-trades': () => json({ id: 'trade-1' }, 201),
     });
 
-    await enterIdea({ ideaId: 'idea-1', accountId: null, risk: '' });
+    await enterIdea({ ideaId: 'idea-1', accountId: null, amount: '20' });
 
-    expect(await requests[0]!.text()).toBe('{"ideaId":"idea-1"}');
+    expect(await requests[0]!.text()).toBe('{"ideaId":"idea-1","amount":20}');
   });
 
   it('cancels and closes a trade', async () => {
@@ -92,7 +120,7 @@ describe('requests of trades by ideas', () => {
 
     await saveSettings({
       accountId: 'account-1',
-      risk: '2.5',
+      amount: '25.5',
       maxAmount: '300',
       maxOpenTrades: '3',
       maxTotalRisk: '6',
@@ -100,7 +128,7 @@ describe('requests of trades by ideas', () => {
     });
 
     expect(await requests[0]!.text()).toBe(
-      '{"accountId":"account-1","risk":2.5,"maxAmount":300,"maxOpenTrades":3,"maxTotalRisk":6,"minRiskReward":1.2}',
+      '{"accountId":"account-1","amount":25.5,"maxAmount":300,"maxOpenTrades":3,"maxTotalRisk":6,"minRiskReward":1.2}',
     );
   });
 });

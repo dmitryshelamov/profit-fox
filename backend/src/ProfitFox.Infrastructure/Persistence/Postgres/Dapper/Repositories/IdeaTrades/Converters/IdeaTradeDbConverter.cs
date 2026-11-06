@@ -55,7 +55,14 @@ internal static class IdeaTradeDbConverter
             ManualValue = trade.Manual.Value,
             ManualFee = trade.Manual.Fee,
             LastOrderNumber = trade.LastOrderNumber,
-            CreatedAt = trade.CreatedAt
+            CreatedAt = trade.CreatedAt,
+            PromisedBadge = trade.Promise?.Badge?.ToCode(),
+            PromisedProbability = trade.Promise?.Probability,
+            PromisedExpectancy = trade.Promise?.Expectancy,
+            PromisedCases = trade.Promise?.Cases,
+            BreakEven = trade.Promise?.BreakEven,
+            NetRiskReward = trade.Promise?.NetRiskReward,
+            OpenedAt = trade.OpenedAt
         };
     }
 
@@ -87,7 +94,18 @@ internal static class IdeaTradeDbConverter
             new LegTotals(trade.StopLossQuantity, trade.StopLossValue, trade.StopLossFee),
             new LegTotals(trade.ManualQuantity, trade.ManualValue, trade.ManualFee),
             trade.LastOrderNumber,
-            trade.CreatedAt);
+            trade.CreatedAt,
+            trade.NetRiskReward is { } netRiskReward
+                ? new IdeaPromise(
+                    trade.PromisedBadge is { } badge ? IdeaCodes.ParseBadge(badge) : null,
+                    trade.PromisedProbability,
+                    trade.PromisedExpectancy,
+                    trade.PromisedCases,
+                    trade.BreakEven,
+                    netRiskReward)
+                : null,
+            trade.OpenedAt,
+            trade.IdeaStatus is { } ideaStatus ? new TradedIdeaOutcome(IdeaCodes.ParseStatus(ideaStatus), trade.IdeaStatusAt!.Value, trade.IdeaResult) : null);
     }
 
     internal static IdeaTradeOrderDb FromDomain(IdeaTradeOrder order)
@@ -199,7 +217,7 @@ internal static class IdeaTradeDbConverter
 
     internal static IdeaTradingSettings ToDomain(IdeaTradingSettingsDb settings)
     {
-        return new IdeaTradingSettings(settings.AccountId, settings.Risk, settings.MaxAmount, settings.MaxOpenTrades, settings.MaxTotalRisk, settings.MinRiskReward);
+        return new IdeaTradingSettings(settings.AccountId, settings.Amount, settings.MaxAmount, settings.MaxOpenTrades, settings.MaxTotalRisk, settings.MinRiskReward);
     }
 
     private static InvalidOperationException Unknown(string what, string code)

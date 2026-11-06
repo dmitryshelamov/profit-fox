@@ -33,7 +33,7 @@ public class IdeaTradingSettingsApiTests
     {
         JsonElement settings = await ReadAsync();
 
-        settings.GetProperty("risk").GetString().ShouldBe("1");
+        settings.GetProperty("amount").GetString().ShouldBe("20");
         settings.GetProperty("maxAmount").GetString().ShouldBe("200");
         settings.GetProperty("maxOpenTrades").GetInt32().ShouldBe(5);
         settings.GetProperty("maxTotalRisk").GetString().ShouldBe("5");
@@ -44,23 +44,33 @@ public class IdeaTradingSettingsApiTests
     [Test]
     public async Task Saved_settings_are_read_back()
     {
-        HttpResponseMessage saved = await _scenario.Client.PutAsJsonAsync(Url, Body(accountId: _scenario.Account, risk: 2.5m, maxOpenTrades: 3));
+        HttpResponseMessage saved = await _scenario.Client.PutAsJsonAsync(Url, Body(accountId: _scenario.Account, amount: 25.5m, maxOpenTrades: 3));
 
         saved.StatusCode.ShouldBe(HttpStatusCode.NoContent);
         JsonElement settings = await ReadAsync();
         settings.GetProperty("accountId").GetGuid().ShouldBe(_scenario.Account);
-        settings.GetProperty("risk").GetString().ShouldBe("2.5");
+        settings.GetProperty("amount").GetString().ShouldBe("25.5");
         settings.GetProperty("maxOpenTrades").GetInt32().ShouldBe(3);
+    }
+
+    // Scenario "Сумма ноль".
+    [Test]
+    public async Task Amount_of_zero_is_refused_by_its_field_and_nothing_changes()
+    {
+        HttpResponseMessage response = await _scenario.Client.PutAsJsonAsync(Url, Body(amount: 0m));
+
+        await ShouldBeRefusedOnAsync(response, "amount");
+        (await ReadAsync()).GetProperty("amount").GetString().ShouldBe("20");
     }
 
     // Scenario "Риск ноль".
     [Test]
-    public async Task Risk_of_zero_is_refused_by_its_field_and_nothing_changes()
+    public async Task Total_risk_of_zero_is_refused_by_its_field_and_nothing_changes()
     {
-        HttpResponseMessage response = await _scenario.Client.PutAsJsonAsync(Url, Body(risk: 0m));
+        HttpResponseMessage response = await _scenario.Client.PutAsJsonAsync(Url, Body(maxTotalRisk: 0m));
 
-        await ShouldBeRefusedOnAsync(response, "risk");
-        (await ReadAsync()).GetProperty("risk").GetString().ShouldBe("1");
+        await ShouldBeRefusedOnAsync(response, "maxTotalRisk");
+        (await ReadAsync()).GetProperty("maxTotalRisk").GetString().ShouldBe("5");
     }
 
     [Test]
@@ -79,9 +89,9 @@ public class IdeaTradingSettingsApiTests
         (await _scenario.Client.PutAsJsonAsync(Url, Body(minRiskReward: 0m))).StatusCode.ShouldBe(HttpStatusCode.NoContent);
     }
 
-    private static object Body(Guid? accountId = null, decimal risk = 1m, decimal maxAmount = 200m, int maxOpenTrades = 5, decimal maxTotalRisk = 5m, decimal minRiskReward = 1.5m)
+    private static object Body(Guid? accountId = null, decimal amount = 20m, decimal maxAmount = 200m, int maxOpenTrades = 5, decimal maxTotalRisk = 5m, decimal minRiskReward = 1.5m)
     {
-        return new { accountId, risk, maxAmount, maxOpenTrades, maxTotalRisk, minRiskReward };
+        return new { accountId, amount, maxAmount, maxOpenTrades, maxTotalRisk, minRiskReward };
     }
 
     private async Task<JsonElement> ReadAsync()
