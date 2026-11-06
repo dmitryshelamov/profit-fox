@@ -5,7 +5,7 @@ import type { SettingsInput } from '../api';
 /** The names of the fields of the settings in the API and in the form. */
 const fields: ReadonlySet<string> = new Set([
   'accountId',
-  'risk',
+  'amount',
   'maxAmount',
   'maxOpenTrades',
   'maxTotalRisk',
@@ -15,7 +15,7 @@ const fields: ReadonlySet<string> = new Set([
 /** The settings the API gave, every number as text for the form; no account is an empty choice. */
 export function formOfSettings(settings: {
   accountId: string | null;
-  risk: string;
+  amount: string;
   maxAmount: string;
   maxOpenTrades: number | string;
   maxTotalRisk: string;
@@ -23,7 +23,7 @@ export function formOfSettings(settings: {
 }): { [K in keyof SettingsInput]: string } {
   return {
     accountId: settings.accountId ?? '',
-    risk: settings.risk,
+    amount: settings.amount,
     maxAmount: settings.maxAmount,
     maxOpenTrades: String(settings.maxOpenTrades),
     maxTotalRisk: settings.maxTotalRisk,

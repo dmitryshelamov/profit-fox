@@ -81,10 +81,10 @@ function SettingsForm({ initial }: { initial: Form }) {
       </label>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Field
-          label="Риск на сделку, USDT"
-          value={form.risk}
-          errors={errors.fields.risk}
-          onChange={(risk) => set({ risk })}
+          label="Сумма на сделку, USDT"
+          value={form.amount}
+          errors={errors.fields.amount}
+          onChange={(amount) => set({ amount })}
         />
         <Field
           label="Не больше суммы на сделку, USDT"
@@ -131,7 +131,7 @@ function SettingsForm({ initial }: { initial: Form }) {
   );
 }
 
-/** The settings of trading by ideas, saved on the server: the account by default, the risk, the limits and the lowest R:R. */
+/** The settings of trading by ideas, saved on the server: the account by default, the amount, the limits and the lowest R:R. */
 export function SettingsPanel() {
   const settings = useQuery(tradingSettingsQuery());
 

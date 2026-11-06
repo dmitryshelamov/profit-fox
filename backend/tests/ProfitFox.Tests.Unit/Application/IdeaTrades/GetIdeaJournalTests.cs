@@ -248,6 +248,6 @@ public class GetIdeaJournalTests
 
     private static IdeaTradeSize Size()
     {
-        return new IdeaTradeSize(1m, 100m, 2m, 2m, false);
+        return new IdeaTradeSize(1m, 100m, 2m, 4m, 2m);
     }
 }

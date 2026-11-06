@@ -531,14 +531,14 @@ export const journalOf = (
 
 export const tradingSettings = {
   accountId: exchangeAccount.id,
-  risk: '1',
+  amount: '20',
   maxAmount: '200',
   maxOpenTrades: 5,
   maxTotalRisk: '5',
   minRiskReward: '1.5',
 } satisfies Schemas['IdeaTradingSettingsResponse'];
 
-/** The entry of an idea as the API calculates it: no reason, the amount under the limit. */
+/** The entry of an idea as the API calculates it: no reason. */
 export const entryOf = (overrides: Partial<Schemas['IdeaEntryResponse']> = {}) =>
   ({
     accountId: exchangeAccount.id,
@@ -546,11 +546,11 @@ export const entryOf = (overrides: Partial<Schemas['IdeaEntryResponse']> = {}) =
     quantity: '0.47',
     amount: '79.15',
     risk: '0.99',
+    profit: '1.82',
     riskReward: '1.84',
     riskRewardWithoutFees: '2',
     freeMoney: '1000',
     quote: 'USDT',
-    cappedByAmount: false,
     reasons: [],
     ...overrides,
   }) satisfies Schemas['IdeaEntryResponse'];

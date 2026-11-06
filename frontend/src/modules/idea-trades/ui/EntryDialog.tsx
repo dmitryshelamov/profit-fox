@@ -26,21 +26,21 @@ function Line({ label, children }: { label: string; children: string }) {
 function EntryForm({
   idea,
   initialAccount,
-  initialRisk,
+  initialAmount,
   onEntered,
   onClose,
 }: {
   idea: Idea;
   initialAccount: string;
-  initialRisk: string;
+  initialAmount: string;
   onEntered: () => void;
   onClose: () => void;
 }) {
   const [accountId, setAccountId] = useState(initialAccount);
-  const [risk, setRisk] = useState(initialRisk);
+  const [amount, setAmount] = useState(initialAmount);
   const accounts = useQuery(accountsQuery);
-  // The risk is asked about a moment after it was typed, not on every key.
-  const asked = useDebounced(risk, 300);
+  // The amount is asked about a moment after it was typed, not on every key.
+  const asked = useDebounced(amount, 300);
   const entry = useQuery(ideaEntryQuery(idea.id, accountId === '' ? null : accountId, asked));
   const enter = useEnterIdea();
   const calculation = entry.data;
@@ -62,7 +62,7 @@ function EntryForm({
             disabled={calculation === undefined || reasons.length > 0 || enter.isPending}
             onClick={() =>
               enter.mutate(
-                { ideaId: idea.id, accountId: accountId === '' ? null : accountId, risk },
+                { ideaId: idea.id, accountId: accountId === '' ? null : accountId, amount },
                 { onSuccess: onEntered },
               )
             }
@@ -93,10 +93,10 @@ function EntryForm({
           </select>
         </label>
         <label className="block space-y-1 text-sm">
-          <span className="text-muted">Риск, USDT</span>
+          <span className="text-muted">Сумма, USDT</span>
           <input
-            value={risk}
-            onChange={(event) => setRisk(event.target.value)}
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
             className={`${control} font-mono`}
           />
         </label>
@@ -104,8 +104,8 @@ function EntryForm({
       {entry.isPending && <p className="text-sm text-muted">Считаем вход…</p>}
       {entry.isError && (
         <p role="alert" className="text-sm text-err">
-          {entry.error instanceof ApiError && entry.error.errors.risk
-            ? entry.error.errors.risk.join(' ')
+          {entry.error instanceof ApiError && entry.error.errors.amount
+            ? entry.error.errors.amount.join(' ')
             : 'Не удалось посчитать вход.'}
         </p>
       )}
@@ -113,8 +113,9 @@ function EntryForm({
         <dl className="space-y-1.5 rounded-lg border border-line bg-panel-2 px-3 py-3">
           <Line label="Цена входа">{calculation.entryPrice}</Line>
           <Line label="Объём">{calculation.quantity}</Line>
-          <Line label="Сумма">{`${calculation.amount} ${calculation.quote}`}</Line>
-          <Line label="Настоящий риск">{`${showDecimal(calculation.risk, 2)} ${calculation.quote}`}</Line>
+          <Line label="Сумма">{`${showDecimal(calculation.amount, 2)} ${calculation.quote}`}</Line>
+          <Line label="Убыток по стопу">{`${showDecimal(calculation.risk, 2)} ${calculation.quote}`}</Line>
+          <Line label="Прибыль по цели">{`${showDecimal(calculation.profit, 2)} ${calculation.quote}`}</Line>
           <Line label="R:R после комиссий">
             {`${showDecimal(calculation.riskReward, 2)} (без ком. ${showDecimal(calculation.riskRewardWithoutFees, 2)})`}
           </Line>
@@ -124,12 +125,6 @@ function EntryForm({
               : `${showDecimal(calculation.freeMoney, 0)} ${calculation.quote}`}
           </Line>
         </dl>
-      )}
-      {calculation?.cappedByAmount && (
-        <p className="text-sm text-muted">
-          Сумма упёрлась в предел «Не больше суммы на сделку»: настоящий риск{' '}
-          {showDecimal(calculation.risk, 2)} {calculation.quote} меньше заданного {risk}.
-        </p>
       )}
       {reasons.length > 0 && (
         <ul aria-label="Причины отказа" className="space-y-1 text-sm text-err">
@@ -152,7 +147,7 @@ function EntryForm({
 }
 
 /**
- * The window of an entry by an idea: the account and the risk, by default those of the settings, and the calculation of the API for
+ * The window of an entry by an idea: the account and the amount, by default those of the settings, and the calculation of the API for
  * them, read again when they change and at least every 5 seconds. The entry is off while there is a reason, which is named. «Войти»
  * saves the trade and calls `onEntered`.
  */
@@ -193,7 +188,7 @@ export function EntryDialog({
     <EntryForm
       idea={idea}
       initialAccount={settings.data.accountId ?? ''}
-      initialRisk={settings.data.risk}
+      initialAmount={settings.data.amount}
       onEntered={onEntered}
       onClose={onClose}
     />

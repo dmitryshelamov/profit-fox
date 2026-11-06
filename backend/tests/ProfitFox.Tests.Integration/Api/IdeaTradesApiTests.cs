@@ -134,7 +134,7 @@ public class IdeaTradesApiTests
         Guid idea = await _scenario.SaveIdeaAsync(101m, 98m, 107m, IdeaType.StopEntry);
         _scenario.SetPrice("100");
 
-        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, risk = 1m });
+        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, amount = 47.3m });
 
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
         JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("reasons").EnumerateArray().Select(reason => reason.GetString()).ShouldBe(["stop_entry_not_supported"]);
@@ -155,7 +155,7 @@ public class IdeaTradesApiTests
             await take.ExecuteNonQueryAsync();
         }
 
-        Task<HttpResponseMessage> entry = _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, risk = 1m });
+        Task<HttpResponseMessage> entry = _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, amount = 47.3m });
         await Task.Delay(500);
 
         entry.IsCompleted.ShouldBeFalse();
@@ -182,7 +182,7 @@ public class IdeaTradesApiTests
         Guid idea = await _scenario.SaveIdeaAsync(23.48m, 23.01m, 24.42m);
         _scenario.SetPrice("24.50");
 
-        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, risk = 1m });
+        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, amount = 47.3m });
 
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
         JsonElement problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
@@ -194,12 +194,12 @@ public class IdeaTradesApiTests
     [Test]
     public async Task Second_entry_sees_the_first_and_the_limit_of_open_trades()
     {
-        await _scenario.Client.PutAsJsonAsync("/api/idea-trading/settings", new { accountId = _scenario.Account, risk = 1m, maxAmount = 200m, maxOpenTrades = 1, maxTotalRisk = 5m, minRiskReward = 1.5m });
+        await _scenario.Client.PutAsJsonAsync("/api/idea-trading/settings", new { accountId = _scenario.Account, amount = 47.3m, maxAmount = 200m, maxOpenTrades = 1, maxTotalRisk = 5m, minRiskReward = 1.5m });
         Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m);
         _scenario.SetPrice("100");
         await CreateAsync(idea);
 
-        HttpResponseMessage second = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea });
+        HttpResponseMessage second = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, amount = 47.3m });
 
         second.StatusCode.ShouldBe(HttpStatusCode.Conflict);
         JsonDocument.Parse(await second.Content.ReadAsStringAsync()).RootElement.GetProperty("reasons").EnumerateArray().Select(reason => reason.GetString()).ShouldBe(["too_many_open_trades"]);
@@ -208,13 +208,42 @@ public class IdeaTradesApiTests
     [Test]
     public async Task Unknown_idea_is_not_found_and_an_unknown_account_is_refused_by_its_field()
     {
-        (await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = Guid.NewGuid() })).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = Guid.NewGuid(), amount = 47.3m })).StatusCode.ShouldBe(HttpStatusCode.NotFound);
 
         Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m);
-        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = Guid.NewGuid() });
+        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = Guid.NewGuid(), amount = 47.3m });
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("errors").EnumerateObject().Select(error => error.Name).ShouldBe(["accountId"]);
+    }
+
+    // The amount is required: a body without it creates nothing.
+    [Test]
+    public async Task Entry_without_an_amount_is_refused_by_its_field_and_saves_nothing()
+    {
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m);
+        _scenario.SetPrice("100");
+
+        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("errors").EnumerateObject().Select(error => error.Name).ShouldBe(["amount"]);
+        (await NothingSavedAsync()).ShouldBeTrue();
+    }
+
+    // Scenario "Сумма упёрлась в предел": the amount above the limit is not cut, the entry is refused.
+    [Test]
+    public async Task Entry_above_the_largest_amount_is_refused_and_saves_nothing()
+    {
+        await _scenario.Client.PutAsJsonAsync("/api/idea-trading/settings", new { accountId = _scenario.Account, amount = 47.3m, maxAmount = 100m, maxOpenTrades = 5, maxTotalRisk = 5m, minRiskReward = 1.5m });
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m);
+        _scenario.SetPrice("100");
+
+        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, amount = 100.5m });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("reasons").EnumerateArray().Select(reason => reason.GetString()).ShouldBe(["amount_above_max"]);
+        (await NothingSavedAsync()).ShouldBeTrue();
     }
 
     // Scenario "Сделки в работе и закрытые": the open trades newest first with their idea and their numbers as strings, nothing closed yet.
@@ -225,7 +254,7 @@ public class IdeaTradesApiTests
         _scenario.SetPrice("100");
         Guid first = await CreateAsync(idea);
         _scenario.Factory.Time.Advance(TimeSpan.FromMinutes(1));
-        Guid second = await CreateAsync(idea, risk: "0.5");
+        Guid second = await CreateAsync(idea, amount: "23.7");
 
         JsonElement journal = await JournalAsync();
 
@@ -415,9 +444,9 @@ public class IdeaTradesApiTests
         (await _scenario.Client.PostAsync($"{Url}/{Guid.NewGuid()}/close", null)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
-    private async Task<Guid> CreateAsync(Guid idea, string risk = "1")
+    private async Task<Guid> CreateAsync(Guid idea, string amount = "47.3")
     {
-        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, risk = decimal.Parse(risk, System.Globalization.CultureInfo.InvariantCulture) });
+        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, amount = decimal.Parse(amount, System.Globalization.CultureInfo.InvariantCulture) });
         response.StatusCode.ShouldBe(HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
 
         return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();

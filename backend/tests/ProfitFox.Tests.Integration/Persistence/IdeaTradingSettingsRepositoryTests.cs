@@ -37,7 +37,7 @@ public class IdeaTradingSettingsRepositoryTests
     {
         IdeaTradingSettings settings = await _repository.GetAsync(CancellationToken.None);
 
-        settings.ShouldBe(new IdeaTradingSettings(null, 1m, 200m, 5, 5m, 1.5m));
+        settings.ShouldBe(new IdeaTradingSettings(null, 20m, 200m, 5, 5m, 1.5m));
     }
 
     [Test]
@@ -45,7 +45,7 @@ public class IdeaTradingSettingsRepositoryTests
     {
         var account = new ExchangeAccount(Guid.NewGuid(), "Main", "key", 100, new HashSet<MarketCategory> { MarketCategory.Linear }, DateTimeOffset.UtcNow);
         await new ExchangeAccountRepository(_dataSource).AddAsync(account, new EncryptedSecret([1], Encoding.UTF8.GetBytes("cipher"), [2]), CancellationToken.None);
-        var first = new IdeaTradingSettings(account.Id, 2m, 300m, 3, 6m, 1.2m);
+        var first = new IdeaTradingSettings(account.Id, 25.5m, 300m, 3, 6m, 1.2m);
 
         await _repository.SaveAsync(first, CancellationToken.None);
         (await _repository.GetAsync(CancellationToken.None)).ShouldBe(first);

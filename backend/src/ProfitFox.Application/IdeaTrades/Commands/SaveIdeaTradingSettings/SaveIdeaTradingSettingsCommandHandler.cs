@@ -8,7 +8,7 @@ namespace ProfitFox.Application.IdeaTrades.Commands.SaveIdeaTradingSettings;
 
 public sealed class SaveIdeaTradingSettingsCommandHandler(IIdeaTradingSettingsRepository repository, IExchangeAccountRepository accounts) : IRequestHandler<SaveIdeaTradingSettingsCommand>
 {
-    /// <exception cref="ValidationFailedException">An unknown account, a risk, an amount or a total risk not above zero, fewer than one trade, or a negative reward to the risk.</exception>
+    /// <exception cref="ValidationFailedException">An unknown account, an amount, a largest amount or a total risk not above zero, fewer than one trade, or a negative reward to the risk.</exception>
     public async Task Handle(SaveIdeaTradingSettingsCommand request, CancellationToken cancellationToken)
     {
         IdeaTradingSettings settings = request.Settings;
@@ -19,9 +19,9 @@ public sealed class SaveIdeaTradingSettingsCommandHandler(IIdeaTradingSettingsRe
             errors["accountId"] = "There is no such exchange account.";
         }
 
-        if (settings.Risk <= 0m)
+        if (settings.Amount <= 0m)
         {
-            errors["risk"] = "The risk must be above zero.";
+            errors["amount"] = "The amount of a trade must be above zero.";
         }
 
         if (settings.MaxAmount <= 0m)

@@ -36,6 +36,11 @@ public static class IdeaTradeRefusals
             reasons.Add(IdeaTradeRefusal.RiskRewardTooLow);
         }
 
+        if (entry.Asked > limits.MaxAmount)
+        {
+            reasons.Add(IdeaTradeRefusal.AmountAboveMax);
+        }
+
         if (open.Count >= limits.MaxOpenTrades)
         {
             reasons.Add(IdeaTradeRefusal.TooManyOpenTrades);

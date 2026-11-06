@@ -15,7 +15,7 @@ namespace ProfitFox.Tests.Unit.Domain.Services.IdeaTrades;
 /// <summary>Requirement "Когда вход отклоняется": every reason that stops an entry has a test of its own.</summary>
 public class IdeaTradeRefusalsTests
 {
-    private static readonly IdeaTradingLimits Limits = new IdeaTradingLimits(1.5m, 5, 5m);
+    private static readonly IdeaTradingLimits Limits = new IdeaTradingLimits(1.5m, 5, 5m, 200m);
     private static readonly IdeaPlan Long = new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 23.48m, 23.01m, 24.42m);
     private static readonly InstrumentRules Rules = new InstrumentRules(0.01m, 0.01m, 0.1m, 5m);
 
@@ -83,6 +83,20 @@ public class IdeaTradeRefusalsTests
     public void Risk_reward_equal_to_the_lowest_is_no_reason()
     {
         Refuse(riskReward: 1.5m).ShouldBeEmpty();
+    }
+
+    // Scenario "Сумма упёрлась в предел": the amount the owner asked is checked, not the one the rounded volume costs.
+    [Test]
+    public void Asked_amount_above_the_limit_is_named()
+    {
+        Refuse(asked: 250m).ShouldBe([IdeaTradeRefusal.AmountAboveMax]);
+        Refuse(asked: 200.01m).ShouldBe([IdeaTradeRefusal.AmountAboveMax]);
+    }
+
+    [Test]
+    public void Asked_amount_equal_to_the_limit_is_no_reason()
+    {
+        Refuse(asked: 200m).ShouldBeEmpty();
     }
 
     [Test]
@@ -189,12 +203,13 @@ public class IdeaTradeRefusalsTests
         decimal? current = null,
         decimal quantity = 2m,
         decimal amount = 47m,
+        decimal asked = 47.3m,
         decimal risk = 1m,
         decimal riskReward = 1.84m,
         OpenIdeaTrades? open = null,
         IdeaTradeAccount? account = null)
     {
-        var entry = new IdeaTradeEntry(category, status, plan ?? Long, price, current ?? price, new IdeaTradeSize(quantity, amount, risk, riskReward, false), Rules);
+        var entry = new IdeaTradeEntry(category, status, plan ?? Long, price, current ?? price, asked, new IdeaTradeSize(quantity, amount, risk, risk * riskReward, riskReward), Rules);
 
         return IdeaTradeRefusals.Check(entry, Limits, open ?? new OpenIdeaTrades(0, 0m), account ?? Account());
     }

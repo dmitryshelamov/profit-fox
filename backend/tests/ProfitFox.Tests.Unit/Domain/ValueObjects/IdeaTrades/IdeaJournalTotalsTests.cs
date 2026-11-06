@@ -137,6 +137,6 @@ public class IdeaJournalTotalsTests
 
     private static IdeaTrade New()
     {
-        return IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(Opened), Guid.NewGuid(), 100m, new IdeaTradeSize(1m, 100m, 1m, 1.8m, false), Opened);
+        return IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(Opened), Guid.NewGuid(), 100m, new IdeaTradeSize(1m, 100m, 1m, 1.8m, 1.8m), Opened);
     }
 }

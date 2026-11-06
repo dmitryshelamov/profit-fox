@@ -284,6 +284,6 @@ public class IdeaTradeTests
 
     private static IdeaTradeSize Size()
     {
-        return new IdeaTradeSize(0.47m, 50m, 0.2m, 1.84m, false);
+        return new IdeaTradeSize(0.47m, 50m, 0.2m, 0.368m, 1.84m);
     }
 }

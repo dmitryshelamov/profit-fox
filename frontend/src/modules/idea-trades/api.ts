@@ -73,18 +73,18 @@ export function tradingSettingsQuery() {
 }
 
 /**
- * The entry of an idea as it would be made now, for the account and the risk typed; left empty they come from the settings. Asking is
+ * The entry of an idea as it would be made now, for the account and the amount typed; left empty they come from the settings. Asking is
  * a calculation and places nothing, so it is a query, read again every 5 seconds while the window that shows it is open.
  */
-export function ideaEntryQuery(ideaId: string, accountId: string | null, risk: string) {
+export function ideaEntryQuery(ideaId: string, accountId: string | null, amount: string) {
   return queryOptions({
-    queryKey: ['idea-trades', 'entry', ideaId, accountId, risk],
+    queryKey: ['idea-trades', 'entry', ideaId, accountId, amount],
     queryFn: async () =>
       unwrap(
         await api.GET('/api/ideas/{id}/entry', {
           params: {
             path: { id: ideaId },
-            query: { accountId: accountId ?? undefined, risk: given(risk) },
+            query: { accountId: accountId ?? undefined, amount: given(amount) },
           },
         }),
       ),
@@ -96,17 +96,17 @@ export function ideaEntryQuery(ideaId: string, accountId: string | null, risk: s
 export interface EntryInput {
   readonly ideaId: string;
   readonly accountId: string | null;
-  readonly risk: string;
+  readonly amount: string;
 }
 
-/** Enters by an idea and gives the id of the trade. The account and the risk left out come from the settings. */
+/** Enters by an idea and gives the id of the trade. The account left out comes from the settings. */
 export async function enterIdea(input: EntryInput): Promise<string> {
   const { id } = unwrap(
     await api.POST('/api/idea-trades', {
       body: {
         ideaId: input.ideaId,
         ...(input.accountId === null ? {} : { accountId: input.accountId }),
-        ...(isDecimalText(input.risk) ? { risk: exact(input.risk) } : {}),
+        amount: field(input.amount),
       },
     }),
   );
@@ -125,7 +125,7 @@ export async function closeTrade(id: string): Promise<void> {
 /** The settings as the form holds them, every number as typed. */
 export interface SettingsInput {
   readonly accountId: string | null;
-  readonly risk: string;
+  readonly amount: string;
   readonly maxAmount: string;
   readonly maxOpenTrades: string;
   readonly maxTotalRisk: string;
@@ -140,7 +140,7 @@ export async function saveSettings(input: SettingsInput): Promise<void> {
     await api.PUT('/api/idea-trading/settings', {
       body: {
         accountId: input.accountId,
-        risk: field(input.risk),
+        amount: field(input.amount),
         maxAmount: field(input.maxAmount),
         maxOpenTrades: field(input.maxOpenTrades),
         maxTotalRisk: field(input.maxTotalRisk),

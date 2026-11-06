@@ -48,7 +48,7 @@ public sealed class IdeaTradesController(ISender sender) : ControllerBase
     {
         try
         {
-            Guid id = await sender.Send(new CreateIdeaTradeCommand(body.IdeaId, body.AccountId, body.Risk), cancellationToken);
+            Guid id = await sender.Send(new CreateIdeaTradeCommand(body.IdeaId, body.AccountId, body.Amount), cancellationToken);
 
             return Created($"/api/idea-trades/{id}", new CreatedResponse(id));
         }

@@ -55,7 +55,7 @@ async function settings(request: APIRequestContext, limit = 5) {
   const saved = await request.put('/api/idea-trading/settings', {
     data: {
       accountId,
-      risk: 1,
+      amount: 30,
       maxAmount: 200,
       maxOpenTrades: limit,
       maxTotalRisk: 5,
@@ -143,11 +143,17 @@ test('an entry by an idea places the entry with its stop and target on linear, a
   const dialog = await openEntry(page, 'Уровни');
   await expect(dialog.getByLabel('Аккаунт')).toHaveValue(accountId);
   await expect(dialog.getByText('3000')).toBeVisible();
+  // The amount of the settings buys 0.01 ETH at 3000; the window shows what that loses at the stop and earns at the target.
+  await expect(dialog.getByLabel('Сумма, USDT')).toHaveValue('30');
+  await expect(dialog.getByText('30.00 USDT')).toBeVisible();
+  await expect(dialog.getByText('Убыток по стопу')).toBeVisible();
+  await expect(dialog.getByText('Прибыль по цели')).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Войти' })).toBeEnabled();
   await dialog.getByRole('button', { name: 'Войти' }).click();
 
   await expect(page).toHaveURL(/\/idea-trades$/);
   const entry = await waitForOrder(request, known);
+  expect(entry.qty).toBe('0.010');
   // The entry is a market order that carries the stop and the target of the idea.
   expect(entry).toMatchObject({
     side: 'Buy',

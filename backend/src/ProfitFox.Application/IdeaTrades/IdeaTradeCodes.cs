@@ -45,6 +45,7 @@ public static class IdeaTradeCodes
         [IdeaTradeRefusal.PriceBeyondStop] = "price_beyond_stop",
         [IdeaTradeRefusal.PriceBeyondTarget] = "price_beyond_target",
         [IdeaTradeRefusal.RiskRewardTooLow] = "risk_reward_too_low",
+        [IdeaTradeRefusal.AmountAboveMax] = "amount_above_max",
         [IdeaTradeRefusal.TooManyOpenTrades] = "too_many_open_trades",
         [IdeaTradeRefusal.TotalRiskExceeded] = "total_risk_exceeded",
         [IdeaTradeRefusal.OppositeSideOpen] = "opposite_side_open",

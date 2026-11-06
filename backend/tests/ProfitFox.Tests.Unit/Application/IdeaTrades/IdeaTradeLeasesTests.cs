@@ -144,7 +144,7 @@ public class IdeaTradeLeasesTests
 
     private static IdeaTrade Trade(Guid id)
     {
-        return IdeaTrade.Create(id, IdeaGenerator.Generate(Start), Guid.NewGuid(), 106m, new IdeaTradeSize(0.47m, 49.82m, 0.2m, 1.84m, false), Start);
+        return IdeaTrade.Create(id, IdeaGenerator.Generate(Start), Guid.NewGuid(), 106m, new IdeaTradeSize(0.47m, 49.82m, 0.2m, 0.368m, 1.84m), Start);
     }
 
     /// <summary>Moves the clock a second at a time, so that each poll runs before the next one is due.</summary>

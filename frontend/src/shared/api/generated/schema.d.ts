@@ -1765,14 +1765,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The entry of an idea as it would be made now, for an account and a risk (the settings give them when left out): the quantity, the amount,
-         *     the risk and the reward to the risk after the fees, and the reasons it cannot be made. Places nothing. Reads the price of the pair from Bybit.
+         * The entry of an idea as it would be made now, for an account and an amount (the settings give them when left out): the quantity, the amount,
+         *     the loss at the stop, the profit at the target and the reward to the risk after the fees, and the reasons it cannot be made. Places nothing. Reads the price of the pair from Bybit.
          */
         get: {
             parameters: {
                 query?: {
                     accountId?: string;
-                    risk?: number | string;
+                    amount?: number | string;
                 };
                 header?: never;
                 path: {
@@ -4214,9 +4214,9 @@ export interface components {
             trades: null | string;
         };
         /**
-         * @description The entry of an idea as it would be made now. Numbers are decimal strings: the price, the quantity, the amount, the risk it really takes at that
-         *     quantity, the reward to the risk after the fees and without them, the free money of the account (none without a key). IReadOnlyList&lt;string&gt; IdeaEntryResponse.Reasons are
-         *     the codes of what stops the entry; bool IdeaEntryResponse.CappedByAmount says the largest amount of a trade cut the quantity.
+         * @description The entry of an idea as it would be made now. Numbers are decimal strings: the price, the quantity, the amount, the loss at the stop and the profit at the target it
+         *     really takes at that quantity after the fees, the reward to the risk after the fees and without them, the free money of the account (none without a key). IReadOnlyList&lt;string&gt; IdeaEntryResponse.Reasons are
+         *     the codes of what stops the entry.
          */
         IdeaEntryResponse: {
             /** Format: uuid */
@@ -4225,11 +4225,11 @@ export interface components {
             quantity: string;
             amount: string;
             risk: string;
+            profit: string;
             riskReward: string;
             riskRewardWithoutFees: string;
             freeMoney: null | string;
             quote: string;
-            cappedByAmount: boolean;
             reasons: string[];
         };
         /** @description The journal: the open trades, the newest first, a page of the closed ones by the time they closed, and the totals of all the closed ones of the filter. */
@@ -4334,14 +4334,14 @@ export interface components {
             /** Format: int32 */
             total: number | string;
         };
-        /** @description An entry by an idea; without an account or a risk the settings of trading by ideas give them. */
+        /** @description An entry by an idea; without an account the settings of trading by ideas give it; the amount in USDT is required. */
         IdeaTradeBody: {
             /** Format: uuid */
             ideaId: string;
             /** Format: uuid */
             accountId?: null | string;
             /** Format: double */
-            risk?: null | number | string;
+            amount: number | string;
         };
         /**
          * @description A trade by an idea: the pair, the setup, the interval, the type and the side of its idea as codes, the account, the levels and the size it
@@ -4401,12 +4401,12 @@ export interface components {
             /** Format: int32 */
             total: number | string;
         };
-        /** @description The settings of trading by ideas: the account to enter on, the risk and the largest amount of a trade in USDT, the most open trades and their total risk, the lowest reward to the risk after the fees. */
+        /** @description The settings of trading by ideas: the account to enter on, the amount and the largest amount of a trade in USDT, the most open trades and their total risk, the lowest reward to the risk after the fees. */
         IdeaTradingSettingsBody: {
             /** Format: uuid */
             accountId?: null | string;
             /** Format: double */
-            risk?: number | string;
+            amount?: number | string;
             /** Format: double */
             maxAmount?: number | string;
             /** Format: int32 */
@@ -4420,7 +4420,7 @@ export interface components {
         IdeaTradingSettingsResponse: {
             /** Format: uuid */
             accountId: null | string;
-            risk: string;
+            amount: string;
             maxAmount: string;
             /** Format: int32 */
             maxOpenTrades: number | string;
