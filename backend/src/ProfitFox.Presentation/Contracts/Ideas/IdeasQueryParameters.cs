@@ -19,6 +19,12 @@ public sealed class IdeasQueryParameters
     /// <summary>Only ideas whose bucket expects at least 0 R.</summary>
     public bool NonNegativeExpectancy { get; init; }
 
+    /// <summary>Only ideas awaiting entry and active ones: none that reached the target, the stop or expired.</summary>
+    public bool ActiveOnly { get; init; }
+
+    /// <summary>No ideas of non-crypto pairs: stocks (spot xStocks too), ETFs, commodities and forex.</summary>
+    public bool HideStocks { get; init; }
+
     /// <summary>The id of a saved filter the ideas must meet.</summary>
     public Guid? SavedFilter { get; init; }
 

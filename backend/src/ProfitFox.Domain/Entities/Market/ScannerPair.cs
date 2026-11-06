@@ -8,7 +8,8 @@ namespace ProfitFox.Domain.Entities.Market;
 ///     the funding rates. <see cref="HistoryFrom" /> is set once the history of the pair is loaded whole. A pair that is not
 ///     <see cref="Listed" /> is out of trading: it stays with its data but is not kept. <see cref="ListedAt" /> is the launch the
 ///     exchange tells (linear only): the history does not go before it. <see cref="TickSize" /> is the step of its price as the list of the
-///     exchange last told it; the ideas of a pair wait for it.
+///     exchange last told it; the ideas of a pair wait for it. <see cref="TradFi" /> tells a non-crypto pair (a stock, an ETF, a commodity
+///     or forex) as the list of the exchange last told it; a pair the list has not told about yet is crypto.
 /// </summary>
 public sealed record ScannerPair(
     Instrument Instrument,
@@ -18,7 +19,8 @@ public sealed record ScannerPair(
     DateTimeOffset? OpenInterestCoveredUntil = null,
     DateTimeOffset? FundingCoveredUntil = null,
     DateTimeOffset? ListedAt = null,
-    decimal? TickSize = null)
+    decimal? TickSize = null,
+    bool TradFi = false)
 {
     private static readonly TimeSpan Minute = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan Step = TimeSpan.FromMinutes(5);

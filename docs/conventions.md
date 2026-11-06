@@ -30,7 +30,7 @@ enforces a rule, the check is the source of truth.
   keeps none), `StrategyTemplate` (name, description and definition without a layout) and `BuiltInTemplates.All`, in the order the owner sees them. Their graphs
   are written in code with `GraphSketch` from `BuiltIns`, like the built-in nodes; the reference strategies EMA Short, Ladder and DCA are the same graphs as their test fixtures.
 - `Market` is the area of the scanner: `Entities/Market` holds `ScannerPair` (the bounds of coverage, with the rules that move
-  them) and `ScannerState`; `ValueObjects/Market` holds `MarketMinute`, `OpenInterestPoint`, `FundingRatePoint`, `MarketTicker`,
+  them, and `TradFi`, which `ScannerUniverse.Merge` refreshes from every read of the list) and `ScannerState`; `ValueObjects/Market` holds `MarketMinute`, `OpenInterestPoint`, `FundingRatePoint`, `MarketTicker`,
   `PairMetrics` and `MarketSnapshotRow`; `Services/Market/MarketMetrics` is the pure function of the metrics of a pair.
 - `Ideas` is the area of trade ideas: `Entities/Ideas` holds `Idea` (a live idea, one open per `IdeaKey`) and the enums `IdeaSetup`,
   `IdeaType`, `IdeaSide`, `IdeaStatus`, `IdeaBadge` (▲ ≈ ▼ of a bucket by the interval of its expectancy); `ValueObjects/Ideas` holds `IdeaCandle` (a minute or a candle of an interval, its volume the
@@ -77,7 +77,8 @@ enforces a rule, the check is the source of truth.
 - `Ports/<Area>` holds ports to external systems and mechanisms (`IMarketHistoryClient`, `IInstrumentRulesProvider`, `IInstrumentCatalog`,
   `IExchangeKeyInspector`, `Security/ISecretProtector`). Port names say what the port does, never which
   vendor implements it. `IInstrumentCatalog.ListAsync(category)` returns every instrument the exchange lists in a market
-  category (`ListedInstrument`: symbol, base coin, quote coin). `SearchInstrumentsQuery(category, query, limit)` filters that
+  category (`ListedInstrument`: symbol, base coin, quote coin, and `TradFi` for a stock, an xStock, an ETF, a commodity or forex by the
+  `symbolType` of Bybit). `SearchInstrumentsQuery(category, query, limit)` filters that
   list with the pure function `InstrumentSearch.Find`: a case-insensitive substring (spaces around the query are ignored) of the symbol or a coin, symbols that start
   with the query first, then by symbol ordinally, cut to `limit` (1 to 100, 20 by default). Its result carries field errors
   like `GetCandlesQuery`.
@@ -372,7 +373,7 @@ enforces a rule, the check is the source of truth.
   but for the candles of a pair.
   `MarketController` also has `.../ideas` (the ideas of a pair), `.../zones?interval` (5, 15, 60, 240) and `POST .../own-idea`; the rows of
   `GET /api/market` and of a pair carry `setups`. `IdeasController`: `GET /api/ideas` (filters `setup`, `interval`, `type`, `side`,
-  `category`, `nonNegativeExpectancy`, `savedFilter`; `sort`, `direction`, `page`, `pageSize`; the answer is `items`, `page`, `pageSize` and
+  `category`, `nonNegativeExpectancy`, `activeOnly`, `hideStocks` (the ideas of non-crypto pairs of the scanner), `savedFilter`; `sort`, `direction`, `page`, `pageSize`; the answer is `items`, `page`, `pageSize` and
   `total`), `GET /api/ideas/{id}`, `GET /api/ideas/buckets`, `GET /api/ideas/calibration` (`days` 90 or 30, `category` linear, spot or none). `IdeaExitRulesController`: `GET /api/ideas/exit-rules`
   (every type × interval with its grid), `GET /api/ideas/exit-rules/preview` (`type`, `interval`, `life`, `target`, `window`; 400 by the name of a parameter the
   type has no use for or a value off the grid) and `PUT /api/ideas/exit-rules/{type}/{interval}` (`{ life, target, window }` → the rule with its time). `SavedFiltersController`: CRUD of

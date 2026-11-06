@@ -9,6 +9,9 @@ public interface IScannerPairRepository
     /// <summary>Every pair the scanner ever kept.</summary>
     Task<IReadOnlyList<ScannerPair>> GetAllAsync(CancellationToken cancellationToken);
 
+    /// <summary>The instruments of the non-crypto pairs, listed or not.</summary>
+    Task<IReadOnlyList<Instrument>> GetTradFiAsync(CancellationToken cancellationToken);
+
     /// <summary>The pair of an instrument, or <c>null</c> when the scanner never kept it.</summary>
     Task<ScannerPair?> GetAsync(Instrument instrument, CancellationToken cancellationToken);
 

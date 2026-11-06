@@ -20,7 +20,8 @@ internal static class ScannerPairDbConverter
             OiCoveredUntil = pair.OpenInterestCoveredUntil,
             FundingCoveredUntil = pair.FundingCoveredUntil,
             ListedAt = pair.ListedAt,
-            TickSize = pair.TickSize
+            TickSize = pair.TickSize,
+            TradFi = pair.TradFi
         };
     }
 
@@ -28,6 +29,6 @@ internal static class ScannerPairDbConverter
     {
         MarketDataCodes.TryParseCategory(pair.Category, out MarketCategory category);
 
-        return new ScannerPair(new Instrument(category, pair.Symbol), pair.Listed, pair.HistoryFrom, pair.CoveredUntil, pair.OiCoveredUntil, pair.FundingCoveredUntil, pair.ListedAt, pair.TickSize);
+        return new ScannerPair(new Instrument(category, pair.Symbol), pair.Listed, pair.HistoryFrom, pair.CoveredUntil, pair.OiCoveredUntil, pair.FundingCoveredUntil, pair.ListedAt, pair.TickSize, pair.TradFi);
     }
 }

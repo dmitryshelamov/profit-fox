@@ -13,6 +13,8 @@ describe('the choice of the ideas screen in the browser', () => {
       side: '',
       category: '',
       nonNegativeExpectancy: false,
+      activeOnly: false,
+      hideStocks: false,
     },
     savedFilterId: null,
     sort: { column: 'expectancy', direction: 'desc' },
@@ -33,6 +35,8 @@ describe('the choice of the ideas screen in the browser', () => {
         side: 'short',
         category: 'linear',
         nonNegativeExpectancy: true,
+        activeOnly: true,
+        hideStocks: true,
       },
       savedFilterId: 'f-1',
       sort: { column: 'riskReward', direction: 'asc' },
@@ -42,6 +46,45 @@ describe('the choice of the ideas screen in the browser', () => {
     saveIdeasChoice(choice);
 
     expect(loadIdeasChoice()).toEqual(choice);
+  });
+
+  // Scenario "Переключатели после перезагрузки".
+  it('gives back both switches turned on', () => {
+    saveIdeasChoice({
+      ...defaults,
+      filters: { ...defaults.filters, activeOnly: true, hideStocks: true },
+      sort: { column: 'expectancy', direction: 'desc' },
+    });
+
+    expect(loadIdeasChoice().filters).toMatchObject({ activeOnly: true, hideStocks: true });
+  });
+
+  // Scenario "Выбор, сохранённый до изменения".
+  it('restores a choice saved without the two switches with both of them off', () => {
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        filters: {
+          setup: 'impulse',
+          interval: '60',
+          type: 'pullback',
+          side: 'short',
+          category: 'linear',
+          nonNegativeExpectancy: true,
+        },
+      }),
+    );
+
+    expect(loadIdeasChoice().filters).toEqual({
+      setup: 'impulse',
+      interval: '60',
+      type: 'pullback',
+      side: 'short',
+      category: 'linear',
+      nonNegativeExpectancy: true,
+      activeOnly: false,
+      hideStocks: false,
+    });
   });
 
   it.each(['{broken', '5', '[]', 'null'])('ignores a stored value that is %s', (stored) => {
@@ -59,6 +102,8 @@ describe('the choice of the ideas screen in the browser', () => {
           interval: '60',
           setup: 'gone',
           nonNegativeExpectancy: 'yes',
+          activeOnly: 'yes',
+          hideStocks: 1,
           extra: 1,
         },
         savedFilterId: 5,

@@ -19,4 +19,6 @@ internal sealed class ScannerPairDb
     public DateTimeOffset? ListedAt { get; init; }
 
     public decimal? TickSize { get; init; }
+
+    public bool TradFi { get; init; }
 }
