@@ -15,7 +15,7 @@ namespace ProfitFox.Application.Scanner.Ideas;
 public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
 {
     private readonly Dictionary<Instrument, Pair> _pairs = [];
-    private readonly IdeaExitRules _exitRules = new IdeaExitRules([]);
+    private IdeaExitRules _exitRules = new IdeaExitRules([]);
 
     // The longest window of a setup: the last N candles of the longest interval.
     private readonly int _window = rules.Thresholds.Max(entry => entry.Value.Candles * Minutes(entry.Key));
@@ -88,6 +88,12 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
                 return track == idea.Track ? idea : idea with { Track = track };
             })
         ];
+    }
+
+    /// <summary>The exit rules of the ideas made from now on; the open ones keep the rule they fired under (decision 6).</summary>
+    public void Apply(IdeaExitRules exitRules)
+    {
+        _exitRules = exitRules;
     }
 
     /// <summary>The ideas of a pair awaiting entry or active.</summary>

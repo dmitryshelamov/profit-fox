@@ -183,6 +183,26 @@ public class IdeaEngineTests
         steps.SelectMany(step => step.Created).ShouldContain(created => created.Track.Plan.Type == IdeaType.TwoR);
     }
 
+    // Scenario "Открытая идея доживает": the rule of «Цель 2R» on 15 minutes changes to 48 candles while an idea of it is open; that one keeps
+    // its 24, the next one takes 48.
+    [Test]
+    public void Idea_takes_the_exit_rule_in_force_when_it_fires()
+    {
+        Idea generated = IdeaGenerator.Generate(Three.AddMinutes(-10), IdeaStatus.Active, Wif, IdeaSetup.Drop, side: IdeaSide.Short, statusAt: Three.AddMinutes(-9));
+        Idea open = generated with { Track = generated.Track with { Plan = new IdeaPlan(IdeaType.TwoR, IdeaSide.Short, 100m, 150m, 50m) } };
+        var engine = new IdeaEngine(Rules, IdeasEngineVersion.Current);
+        IReadOnlyList<IdeaCandle> minutes = Impulse();
+        engine.Warm(Wif, Closed(minutes, Three), [.. minutes.Where(minute => minute.OpenTime < Three)], [open], IdeaInputs.None);
+
+        engine.Apply(new IdeaExitRules([new IdeaExitRule(IdeaType.TwoR, Interval.FifteenMinutes, 48, 2.5m, null, Three)]));
+        IdeaStep[] steps = [.. minutes.Where(minute => minute.OpenTime >= Three).Select(minute => engine.Step(Wif, minute, Ticked, true))];
+
+        Idea made = steps.SelectMany(step => step.Created).Single(idea => idea.Track.Plan.Type == IdeaType.TwoR);
+        (made.Track.LifeCandles, made.Track.TargetR).ShouldBe((48, 2.5m));
+        steps.SelectMany(step => step.Created).Single(idea => idea.Track.Plan.Type == IdeaType.Pullback).Track.LifeCandles.ShouldBe(24);
+        engine.Open(Wif).Single(idea => idea.Id == open.Id).Track.LifeCandles.ShouldBe(24);
+    }
+
     // High volatility gives ideas of both sides.
     [Test]
     public void High_volatility_above_the_percentile_of_the_pair_gives_long_and_short_ideas()
