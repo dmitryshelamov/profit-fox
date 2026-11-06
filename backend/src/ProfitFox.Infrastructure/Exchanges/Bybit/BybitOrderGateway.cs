@@ -41,7 +41,7 @@ internal sealed class BybitOrderGateway(HttpClient http, ILoggerFactory loggers,
             ? byAmount ? MarketUnit.QuoteAsset : MarketUnit.BaseAsset
             : null;
         // The stop and the target of an entry: on linear for the quantity of this order only (Partial), to the market when the last price
-        // reaches them; on the spot Bybit takes them on a limit order and knows no mode.
+        // reaches them; on the spot Bybit takes them on a limit order and knows no mode, and no reduce-only: it is documented for the derivatives.
         Protection? protection = order.Protection;
         bool linear = instrument.Category == MarketCategory.Linear;
         HttpResult<BybitOrderId> result = await client.V5Api.Trading.PlaceOrderAsync(
@@ -60,7 +60,7 @@ internal sealed class BybitOrderGateway(HttpClient http, ILoggerFactory loggers,
             stopLoss: protection?.StopLoss,
             takeProfitTriggerBy: protection is not null && linear ? TriggerType.LastPrice : null,
             stopLossTriggerBy: protection is not null && linear ? TriggerType.LastPrice : null,
-            reduceOnly: order.ReduceOnly ? true : null,
+            reduceOnly: order.ReduceOnly && linear ? true : null,
             stopLossTakeProfitMode: protection is not null && linear ? StopLossTakeProfitMode.Partial : null,
             marketUnit: unit,
             ct: cancellationToken);

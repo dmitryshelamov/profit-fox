@@ -169,6 +169,18 @@ public class BybitOrderGatewayTests
         handler.Bodies.Single().ShouldContain("\"reduceOnly\":\"true\"");
     }
 
+    // Bybit documents reduce-only for the derivatives only: the spot takes the order without it.
+    [Test]
+    public async Task Close_on_the_spot_does_not_send_reduce_only()
+    {
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(Answer(0, "OK", """{"orderId":"x-1","orderLinkId":"c-1"}"""));
+        var order = new OrderRequest("c-1", OrderSide.Sell, OrderType.Market, null, 0.47m, null, ReduceOnly: true);
+
+        await Gateway(handler).PlaceAsync(Key, new Instrument(MarketCategory.Spot, "BTCUSDT"), order, CancellationToken.None);
+
+        handler.Bodies.Single().ShouldNotContain("reduceOnly");
+    }
+
     // A bot's request stays as it was: no stop, no target, no mode, no position index, no reduce-only.
     [TestCase(MarketCategory.Spot)]
     [TestCase(MarketCategory.Linear)]
