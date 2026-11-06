@@ -16,7 +16,8 @@ export {
 export { loadAmount, saveAmount } from './model/amountStorage';
 export { brierView, differenceView, rangeLabel } from './model/calibration';
 export { loadIdeasChoice, saveIdeasChoice } from './model/choice';
-export { casesText, ideasText, ideaTypes, sideLabel, typeLabel } from './model/labels';
+export { candlesOfHours, durationText, overfitWarning, sameRule } from './model/exitRules';
+export { candlesText, casesText, ideasText, ideaTypes, sideLabel, typeLabel } from './model/labels';
 export { levelsOf } from './model/levels';
 export { priceByTick } from './model/price';
 export { type IdeaSort, type IdeaSortColumn } from './model/sort';
