@@ -12,6 +12,9 @@ import { RiskRewardCell } from './IdeaCells';
 
 const field = 'h-8 rounded-md border border-line bg-panel-2 px-2 text-sm';
 
+// A stop entry comes only with a setup: without one it has no range to stand beyond.
+const ownTypes = ideaTypes.filter((type) => type.value !== 'stop_entry');
+
 /** The levels of an own idea for the choice the block holds; the page draws them on the chart. */
 export function useOwnIdea(category: string, symbol: string, input: OwnIdeaInput) {
   return useQuery({
@@ -23,7 +26,7 @@ export function useOwnIdea(category: string, symbol: string, input: OwnIdeaInput
 
 /**
  * «Своя идея»: the owner picks a type, an interval and a side, and sees the entry, stop, target, R:R and the baseline, the
- * only probability an idea without a setup has. a short is not offered on spot.
+ * only probability an idea without a setup has. A short is not offered on spot, nor a stop entry.
  */
 export function OwnIdeaBlock({
   category,
@@ -53,7 +56,7 @@ export function OwnIdeaBlock({
           onChange={(event) => onChange({ ...input, type: event.target.value })}
           className={field}
         >
-          {ideaTypes.map((type) => (
+          {ownTypes.map((type) => (
             <option key={type.value} value={type.value}>
               {type.label}
             </option>

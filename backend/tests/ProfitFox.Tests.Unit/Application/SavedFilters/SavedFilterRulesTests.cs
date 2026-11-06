@@ -33,6 +33,27 @@ public class SavedFilterRulesTests
         errors.ShouldBeEmpty();
     }
 
+    // Task 7.3: a saved filter offers the candle setups and «Стоп-вход», in the order of the lists on the screen.
+    [Test]
+    public void Catalog_offers_every_setup_and_type()
+    {
+        string[] setups = ["impulse", "early_impulse", "drop", "early_drop", "high_volatility", "breakout", "false_breakout", "squeeze", "exhaustion", "rsi_extreme", "new_extreme", "quiet_volume"];
+
+        SavedFilterFields.All.Single(field => field.Code == "setup").Choices.ShouldBe(setups);
+        SavedFilterFields.All.Single(field => field.Code == "ideaSetup").Choices.ShouldBe(setups);
+        SavedFilterFields.All.Single(field => field.Code == "type").Choices.ShouldBe(["levels", "target_2r", "beyond_extreme", "pullback", "stop_entry"]);
+    }
+
+    [Test]
+    public void A_condition_on_a_false_breakout_is_read()
+    {
+        var errors = new Dictionary<string, string>();
+
+        SavedFilterRules.ParseConditions([new SavedFilterConditionInput("ideaSetup", "=", "false_breakout", null)], errors)
+            .ShouldBe([new FilterCondition(FilterField.IdeaSetup, FilterOperator.Equal, Choice: "false_breakout")]);
+        errors.ShouldBeEmpty();
+    }
+
     [Test]
     public void A_wrong_condition_is_an_error_keyed_by_its_place()
     {

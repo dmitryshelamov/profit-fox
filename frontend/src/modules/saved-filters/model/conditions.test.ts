@@ -74,6 +74,15 @@ describe('labels', () => {
     expect(choiceLabel('interval', '5')).toBe('5 мин');
     expect(choiceLabel('category', 'spot')).toBe('spot');
   });
+
+  it('names the candle setups and «Стоп-вход»', () => {
+    expect(choiceLabel('ideaSetup', 'false_breakout')).toBe('Ложный пробой');
+    expect(choiceLabel('setup', 'rsi_extreme')).toBe('Перекупленность / перепроданность');
+    expect(choiceLabel('type', 'stop_entry')).toBe('Стоп-вход');
+    expect(conditionText(condition('ideaSetup', '=', 'false_breakout'))).toBe(
+      'Сетап идеи = Ложный пробой',
+    );
+  });
 });
 
 describe('conditionText', () => {

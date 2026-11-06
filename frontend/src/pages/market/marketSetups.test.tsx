@@ -32,10 +32,20 @@ function serverMarket(all: ReturnType<typeof pair>[]) {
     );
     const items = left.filter((row) => !query.has('Setup') || has(row, query.get('Setup')!));
     const counts = Object.fromEntries(
-      ['impulse', 'early_impulse', 'drop', 'early_drop', 'high_volatility'].map((setup) => [
-        setup,
-        left.filter((row) => has(row, setup)).length,
-      ]),
+      [
+        'impulse',
+        'early_impulse',
+        'drop',
+        'early_drop',
+        'high_volatility',
+        'breakout',
+        'false_breakout',
+        'squeeze',
+        'exhaustion',
+        'rsi_extreme',
+        'new_extreme',
+        'quiet_volume',
+      ].map((setup) => [setup, left.filter((row) => has(row, setup)).length]),
     );
 
     return json(
@@ -83,6 +93,27 @@ describe('market setups', () => {
     expect(symbolsIn(screen.getByRole('table')).sort()).toEqual(['SOLUSDT', 'WIFUSDT']);
   });
 
+  // Scenario "Пробои на часе": a breakout up or down on the hour; the badge of the pair names it.
+  it('asks for the pairs with a breakout on the hour when its chip is chosen on 1 hour', async () => {
+    const ton = pair('TONUSDT', { '60': ['breakout', 'squeeze'] });
+    const requests = fakeApi({ 'GET /api/market': serverMarket([wif, sol, ton]) });
+    renderApp('/market');
+    await screen.findByRole('table');
+
+    await userEvent.click(
+      within(screen.getByRole('group', { name: 'ТФ сетапа' })).getByRole('button', { name: '1 ч' }),
+    );
+    await userEvent.click(await chips().findByRole('button', { name: 'Пробой 1' }));
+
+    await waitFor(() =>
+      expect(lastRead(requests)).toMatchObject({ Setup: 'breakout', Interval: '60' }),
+    );
+    await waitFor(() => expect(symbolsIn(screen.getByRole('table'))).toEqual(['TONUSDT']));
+    const row = screen.getByRole('link', { name: 'TONUSDT' }).closest('tr')!;
+    expect(within(row).getByText('Пробой')).toBeInTheDocument();
+    expect(within(row).getByText('Сжатие')).toBeInTheDocument();
+  });
+
   it('shows the chips with the number of pairs of each setup and the setups of a pair as badges', async () => {
     fakeApi({ 'GET /api/market': () => json(marketSnapshot([wif, sol, doge, eth])) });
     renderApp('/market');
@@ -100,6 +131,13 @@ describe('market setups', () => {
       'Падение 1',
       'Раннее падение 0',
       'Высокая волатильность 1',
+      'Пробой 0',
+      'Ложный пробой 0',
+      'Сжатие 0',
+      'Истощение 0',
+      'Перекупленность / перепроданность 0',
+      'Новый максимум / минимум 0',
+      'Объём без движения 0',
     ]);
     // Scenario "Два сетапа у пары".
     expect(within(row).getByText('Импульс')).toBeInTheDocument();
