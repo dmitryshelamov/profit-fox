@@ -56,6 +56,17 @@ public class IdeaJournalTotalsTests
         totals.MeanTime.ShouldBe(TimeSpan.FromMinutes(75));
     }
 
+    // A trade an older Worker opened while the journal was being rolled out has no open time; it still counts, only not in the mean time.
+    [Test]
+    public void A_closed_trade_without_an_open_time_stays_out_of_the_mean_time_only()
+    {
+        var totals = IdeaJournalTotals.Compute(
+            [Closed(IdeaTradeStatus.ClosedAtTarget, 1.8m, minutes: 60), Closed(IdeaTradeStatus.ClosedAtStop, -1.1m) with { OpenedAt = null }]);
+
+        (totals.Targets, totals.Stops, totals.MeanR).ShouldBe((1, 1, 0.35m));
+        totals.MeanTime.ShouldBe(TimeSpan.FromMinutes(60));
+    }
+
     // Scenario "Обещали больше, чем получили": the promised +0.15, +0.12 and +0.18 R against +1.8, −1.1 and −1.1; a trade with no promise and one with no expectancy stay out.
     [Test]
     public void Compares_the_promised_expectancy_with_the_result_of_the_same_trades()

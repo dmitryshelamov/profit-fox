@@ -30,7 +30,8 @@ public sealed record IdeaJournalTotals(
     {
         IReadOnlyList<IdeaTrade> settled = [.. closed.Where(trade => trade.Status is IdeaTradeStatus.ClosedAtTarget or IdeaTradeStatus.ClosedAtStop or IdeaTradeStatus.ClosedManually)];
         IReadOnlyList<decimal> results = [.. settled.Select(trade => trade.ResultR!.Value)];
-        IReadOnlyList<TimeSpan> times = [.. settled.Select(trade => trade.TimeToOutcome!.Value)];
+        // A trade an older Worker opened during the rollout has no open time, so it has no time to its outcome either.
+        IReadOnlyList<TimeSpan> times = [.. settled.Select(trade => trade.TimeToOutcome).OfType<TimeSpan>()];
         (decimal? mean, decimal? low, decimal? high) = Interval(results);
         IReadOnlyList<IdeaTrade> promised = [.. settled.Where(trade => trade.Promise?.Expectancy is not null)];
         IReadOnlyList<IdeaTrade> ideas = [.. settled.Where(trade => trade.IdeaOutcome?.Result is not null)];

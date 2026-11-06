@@ -140,7 +140,7 @@ public class IdeaTradesApiTests
 
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
         JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("reasons").EnumerateArray().Select(reason => reason.GetString()).ShouldBe(["stop_entry_not_supported"]);
-        (await ListAsync()).GetArrayLength().ShouldBe(0);
+        (await NothingSavedAsync()).ShouldBeTrue();
     }
 
     // The limits of open trades and of the total risk count every account, so one lock serialises the entries of all of them.
