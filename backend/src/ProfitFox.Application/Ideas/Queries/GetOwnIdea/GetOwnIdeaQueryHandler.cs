@@ -74,7 +74,7 @@ public sealed class GetOwnIdeaQueryHandler(
 
         var context = new IdeaContext(category, levels.Price, levels.WindowLow, levels.WindowHigh, atr, levels.Zones, levels.Spread, settings.StopBuffer, tick);
 
-        IdeaPlan? plan = IdeaRules.Plan(type, side, context);
+        IdeaPlan? plan = IdeaRules.Plan(type, side, context, new IdeaExitRules([]).Of(type, interval).TargetR);
 
         return new GetOwnIdeaResult(plan, false, errors, tick, plan is null ? null : IdeaMoney.PerUsdt(plan, backtests.Policy().DefaultFees[category]));
     }

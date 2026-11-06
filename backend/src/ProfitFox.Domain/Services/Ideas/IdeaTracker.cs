@@ -37,7 +37,7 @@ public static class IdeaTracker
 
     private static IdeaTrack EnterAtMarket(IdeaTrack track, IdeaCandle minute)
     {
-        IdeaPlan plan = track.Plan.Type == IdeaType.Levels ? track.Plan with { Entry = minute.Open } : TwoR(track, minute.Open);
+        IdeaPlan plan = track.Plan.Type == IdeaType.Levels ? track.Plan with { Entry = minute.Open } : InR(track, minute.Open);
 
         // Beyond its stop an idea has no risk to measure, beyond its target nothing to gain.
         if (Ahead(plan) * (minute.Open - plan.Stop) <= 0 || Ahead(plan) * (plan.Target - minute.Open) <= 0)
@@ -83,8 +83,8 @@ public static class IdeaTracker
             return Ahead(plan) * (Worst(plan, minute) - plan.Stop) <= 0 ? track with { Status = IdeaStatus.Expired, StatusAt = minute.OpenTime } : track;
         }
 
-        // A minute that opened beyond the entry fills at its open, and the target of 2R follows it.
-        IdeaPlan filled = Ahead(plan) * (minute.Open - plan.Entry) > 0 ? TwoR(track, minute.Open) : plan;
+        // A minute that opened beyond the entry fills at its open, and the target in R follows it.
+        IdeaPlan filled = Ahead(plan) * (minute.Open - plan.Entry) > 0 ? InR(track, minute.Open) : plan;
         IdeaTrack entered = track with { Plan = filled, Status = IdeaStatus.Active, StatusAt = minute.OpenTime, EnteredAt = minute.OpenTime };
 
         // Within the minute of the fill the target may have come before it; only the stop counts.
@@ -112,14 +112,15 @@ public static class IdeaTracker
             : track;
     }
 
-    // An idea of a pair without a price step keeps the target of 2R as it comes.
-    private static IdeaPlan TwoR(IdeaTrack track, decimal entry)
+    // An idea of a pair without a price step keeps the target in R as it comes.
+    private static IdeaPlan InR(IdeaTrack track, decimal entry)
     {
         IdeaPlan plan = track.Plan;
+        decimal targetR = track.TargetR!.Value;
 
         return track.Tick is { } tick
-            ? IdeaRules.TwoR(plan.Type, plan.Side, entry, plan.Stop, tick)
-            : plan with { Entry = entry, Target = entry + (2m * (entry - plan.Stop)) };
+            ? IdeaRules.InR(plan.Type, plan.Side, entry, plan.Stop, targetR, tick)
+            : plan with { Entry = entry, Target = entry + (targetR * (entry - plan.Stop)) };
     }
 
     private static decimal Ahead(IdeaPlan plan)

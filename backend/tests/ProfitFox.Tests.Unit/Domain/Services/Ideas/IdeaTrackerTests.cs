@@ -161,6 +161,17 @@ public class IdeaTrackerTests
         (track.Status, track.Plan).ShouldBe((IdeaStatus.Active, StopEntry with { Entry = 102.30m, Target = 107.90m }));
     }
 
+    // The target follows the entry by the target of the idea's own rule: 102.30 + 3 × 2.80, and 106 + 3 × 6 at the market.
+    [Test]
+    public void Target_that_follows_the_entry_takes_the_target_of_the_rule()
+    {
+        var stopEntry = IdeaTrack.Fired(StopEntry, Fired, 5, Rule(IdeaType.StopEntry) with { TargetR = 3m }, 0.01m);
+        var market = IdeaTrack.Fired(TwoR, Fired, 5, Rule(IdeaType.TwoR) with { TargetR = 3m });
+
+        IdeaTracker.Step(stopEntry, Minute(0, 102.30m, 102.6m, 102.2m, 102.5m)).Plan.Target.ShouldBe(110.70m);
+        IdeaTracker.Step(market, Minute(0, 106m, 107m, 105.5m, 106.5m)).Plan.Target.ShouldBe(124m);
+    }
+
     [Test]
     public void Stop_entry_short_with_a_gap_enters_at_the_open()
     {

@@ -203,12 +203,14 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
             {
                 var key = new IdeaKey(pair.Instrument, signal.Setup, type, interval, side);
 
-                if (pair.Open.Any(idea => idea.Key == key) || IdeaRules.Plan(type, side, context) is not { } plan)
+                IdeaExitRule rule = _exitRules.Of(type, interval);
+
+                if (pair.Open.Any(idea => idea.Key == key) || IdeaRules.Plan(type, side, context, rule.TargetR) is not { } plan)
                 {
                     continue;
                 }
 
-                var idea = new Idea(Guid.NewGuid(), pair.Instrument, signal.Setup, interval, IdeaTrack.Fired(plan, end, Minutes(interval), _exitRules.Of(type, interval), tick), signal.Move, signal.VolumeRatio, engineVersion);
+                var idea = new Idea(Guid.NewGuid(), pair.Instrument, signal.Setup, interval, IdeaTrack.Fired(plan, end, Minutes(interval), rule, tick), signal.Move, signal.VolumeRatio, engineVersion);
                 pair.Open.Add(idea);
                 ideas.Add(idea);
             }
