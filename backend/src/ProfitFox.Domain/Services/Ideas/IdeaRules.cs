@@ -8,7 +8,7 @@ namespace ProfitFox.Domain.Services.Ideas;
 ///     The levels of an idea by the rules of its type, long; short mirrors them. The stop buffer is k × ATR, at least three spreads. The levels
 ///     go on the price step of the pair: the stop away from the entry and the target towards it, the limit of a pullback towards the market,
 ///     the stop order of a stop entry away from it, so none of them is better than the rules give. An idea without the zone it needs, with a
-///     reward under 1.5 risks, short on spot, or a pullback or a stop entry whose entry the price has passed is not made. A stop entry enters a
+///     reward under 1.5 risks, a stop or a target not above zero, short on spot, or a pullback or a stop entry whose entry the price has passed is not made. A stop entry enters a
 ///     price step beyond the range of its setup.
 /// </summary>
 public static class IdeaRules
@@ -58,6 +58,12 @@ public static class IdeaRules
         }
 
         if (plan is { Type: IdeaType.StopEntry } && ahead * (plan.Entry - context.Price) <= 0)
+        {
+            return null;
+        }
+
+        // A price is above zero: a short target or a long stop far enough off the entry to cross it is no level an order can take.
+        if (plan is { Target: <= 0 } or { Stop: <= 0 })
         {
             return null;
         }
