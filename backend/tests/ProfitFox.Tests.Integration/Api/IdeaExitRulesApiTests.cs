@@ -119,7 +119,7 @@ public class IdeaExitRulesApiTests
         (last90.GetProperty("current").GetProperty("targets").GetInt32(), last90.GetProperty("candidate").GetProperty("targets").GetInt32()).ShouldBe((1, 0));
         last90.GetProperty("candidate").GetProperty("signals").GetInt32().ShouldBe(2);
         preview.GetProperty("lives").GetArrayLength().ShouldBe(ExitRuleGrid.Of(Interval.FifteenMinutes).Count);
-        preview.GetProperty("mfe")[0].GetProperty("r").GetString().ShouldBe("0.5");
+        preview.GetProperty("mfe").EnumerateArray().Select(point => point.GetProperty("r").GetString()).Take(3).ShouldBe(["0.5", "1", "1.5"]);
     }
 
     // Scenario "Корзина «Отката» в ответе": 200 signals counted, 100 entries with −6 R.

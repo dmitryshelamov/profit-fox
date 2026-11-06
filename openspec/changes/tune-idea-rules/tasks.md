@@ -104,7 +104,7 @@
 
 ## 9. Сквозная проверка
 
-- [ ] 9.1 `frontend/e2e/seed.ts`: версия 5, сигналы в новой форме; e2e-тест экрана: открыть «Откат» 15 мин, сменить
+- [x] 9.1 `frontend/e2e/seed.ts`: версия 5, сигналы в новой форме; e2e-тест экрана: открыть «Откат» 15 мин, сменить
   срок, увидеть «станет», применить. Проверка: `npm run test:e2e`.
 - [ ] 9.2 Все проверки проходят: `dotnet build`, `dotnet test`, `dotnet format --verify-no-changes`, во `frontend/` —
   lint, format check, typecheck, тесты и build.

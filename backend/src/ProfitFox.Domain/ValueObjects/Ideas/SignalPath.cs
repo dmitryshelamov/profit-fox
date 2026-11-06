@@ -30,7 +30,7 @@ public sealed record SignalPath(
     DateTimeOffset TrackedUntil)
 {
     /// <summary>The levels of the ladder: +0.5 … +5 R by 0.5 R.</summary>
-    public static readonly IReadOnlyList<decimal> Ladder = [.. Enumerable.Range(1, 10).Select(step => step * 0.5m)];
+    public static readonly IReadOnlyList<decimal> Ladder = [.. Enumerable.Range(1, 10).Select(step => step / 2m)];
 
     /// <summary>How long a path waits for its entry, and how long it goes on after it.</summary>
     public static readonly TimeSpan Horizon = TimeSpan.FromDays(7);
