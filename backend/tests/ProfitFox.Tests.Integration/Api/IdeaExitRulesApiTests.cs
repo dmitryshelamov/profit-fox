@@ -20,7 +20,10 @@ using Shouldly;
 
 namespace ProfitFox.Tests.Integration.Api;
 
-/// <summary>Requirements "Чтение правил выхода", "Расчёт кандидата", "Применение правила через API" and "Чтение идей" of tune-idea-rules.</summary>
+/// <summary>
+///     Requirements "Чтение правил выхода", "Расчёт кандидата", "Применение правила через API" and "Чтение идей" of tune-idea-rules, and
+///     "Проверка вне выборки через API" and "Проверка параметров проверки вне выборки" of check-idea-exit-rules-out-of-sample.
+/// </summary>
 public class IdeaExitRulesApiTests
 {
     private const string Url = "/api/ideas/exit-rules";
@@ -120,6 +123,45 @@ public class IdeaExitRulesApiTests
         last90.GetProperty("candidate").GetProperty("signals").GetInt32().ShouldBe(2);
         preview.GetProperty("lives").GetArrayLength().ShouldBe(ExitRuleGrid.Of(Interval.FifteenMinutes).Count);
         preview.GetProperty("mfe").EnumerateArray().Select(point => point.GetProperty("r").GetString()).Take(3).ShouldBe(["0.5", "1", "1.5"]);
+    }
+
+    // Scenario "Ответ проверки" of check-idea-exit-rules-out-of-sample: 40 signals of their own pairs take +2 R at 30 minutes on the selection,
+    // 40 stop on the check. The best of the selection is the shortest lifetime that takes it, 2 candles at 2 R. The blocks of 15 days hold 10,
+    // 10, 11, 9, 20 and 20 entries, so the halves {0, 1, 3} and {2, 4, 5} have 29 and the 18 other splits count.
+    [Test]
+    public async Task Out_of_sample_check_has_the_candidate_the_best_rule_of_the_grid_and_the_overfitting()
+    {
+        await new IdeaSignalRepository(_database).UpsertAsync(
+            [
+                .. Enumerable.Range(0, 40).Select(index => IdeaSignalGenerator.Generate(
+                    Now.AddDays(-89).AddHours(35 * index), instrument: new Instrument(MarketCategory.Linear, $"S{index}USDT"))),
+                .. Enumerable.Range(0, 40).Select(index => IdeaSignalGenerator.Generate(
+                    Now.AddDays(-29).AddHours(17 * index), IdeaStatus.Stop, new Instrument(MarketCategory.Linear, $"C{index}USDT")))
+            ],
+            CancellationToken.None);
+
+        JsonElement check = await _client.GetFromJsonAsync<JsonElement>($"{Url}/out-of-sample?type=target_2r&interval=15&life=24&target=2");
+
+        check.GetProperty("rules").GetInt32().ShouldBe(171);
+        (check.GetProperty("selectionFrom").GetDateTimeOffset(), check.GetProperty("checkFrom").GetDateTimeOffset(), check.GetProperty("to").GetDateTimeOffset())
+            .ShouldBe((Now.AddDays(-90), Now.AddDays(-30), Now));
+        JsonElement candidate = check.GetProperty("candidate");
+        (candidate.GetProperty("selection").GetProperty("cases").GetInt32(), candidate.GetProperty("check").GetProperty("stops").GetInt32()).ShouldBe((40, 40));
+        JsonElement best = check.GetProperty("best");
+        (best.GetProperty("life").GetInt32(), best.GetProperty("target").GetString()).ShouldBe((2, "2"));
+        best.GetProperty("selection").GetProperty("targets").GetInt32().ShouldBe(40);
+        best.GetProperty("check").GetProperty("expectancy").GetString().ShouldStartWith("-1");
+        JsonElement overfitting = check.GetProperty("overfitting");
+        overfitting.GetProperty("splits").GetInt32().ShouldBe(18);
+        decimal.Parse(overfitting.GetProperty("probability").GetString()!, CultureInfo.InvariantCulture)
+            .ShouldBe(overfitting.GetProperty("overfit").GetInt32() / 18m);
+    }
+
+    // Scenario "Окно у «Цели 2R» в проверке".
+    [Test]
+    public async Task Out_of_sample_check_with_a_window_of_a_market_type_is_refused_by_it()
+    {
+        await ShouldBeRefusedOnAsync(await _client.GetAsync($"{Url}/out-of-sample?type=target_2r&interval=15&life=24&target=2&window=4"), "window");
     }
 
     // Scenario "Корзина «Отката» в ответе": 200 signals counted, 100 entries with −6 R.

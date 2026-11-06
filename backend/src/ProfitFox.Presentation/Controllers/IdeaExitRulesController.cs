@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
 using ProfitFox.Application.Ideas.Commands.ApplyExitRule;
+using ProfitFox.Application.Ideas.Queries.GetExitRuleOutOfSample;
 using ProfitFox.Application.Ideas.Queries.GetExitRulePreview;
 using ProfitFox.Application.Ideas.Queries.GetExitRules;
 using ProfitFox.Presentation.Contracts.Ideas;
@@ -10,7 +11,7 @@ using ProfitFox.Presentation.Contracts.Strategies;
 
 namespace ProfitFox.Presentation.Controllers;
 
-/// <summary>The exit rules of the ideas: the lifetime, the target and the entry window of each type × interval, their preview and their applying.</summary>
+/// <summary>The exit rules of the ideas: the lifetime, the target and the entry window of each type × interval, their preview, their out-of-sample check and their applying.</summary>
 [ApiController]
 [Route("api/ideas/exit-rules")]
 public sealed class IdeaExitRulesController(ISender sender) : ControllerBase
@@ -40,6 +41,31 @@ public sealed class IdeaExitRulesController(ISender sender) : ControllerBase
         try
         {
             return Ok(ExitRulePreviewResponse.Of(await sender.Send(new GetExitRulePreviewQuery(type, interval, life, target, window), cancellationToken)));
+        }
+        catch (Exception exception) when (StrategyProblems.Of(exception) is { } problem)
+        {
+            return problem;
+        }
+    }
+
+    /// <summary>
+    ///     How the candidate and the best rule of its grid chosen on the days 90 to 30 ago do on the last 30 days, and the probability of overfitting
+    ///     of the grid; the parameters as the preview takes them.
+    /// </summary>
+    [HttpGet("out-of-sample")]
+    [ProducesResponseType<ExitRuleOutOfSampleResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> OutOfSample(
+        [FromQuery] string? type,
+        [FromQuery] string? interval,
+        [FromQuery] int life,
+        [FromQuery] decimal? target,
+        [FromQuery] int? window,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(ExitRuleOutOfSampleResponse.Of(await sender.Send(new GetExitRuleOutOfSampleQuery(type, interval, life, target, window), cancellationToken)));
         }
         catch (Exception exception) when (StrategyProblems.Of(exception) is { } problem)
         {
