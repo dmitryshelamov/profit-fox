@@ -154,8 +154,8 @@ export async function seedCalibration(): Promise<void> {
 /**
  * Forty signals of «Откат» long on 15 minutes of `E2E001USDT`, a pair the scanner does not keep, one a day over the last 40 days,
  * as the replay stores them: the limit at 100 fills 10 minutes after the firing, with the stop at 98; +2 R at 500 minutes from the
- * entry, the stop at 900, every close of the grid at 100.5. With 24 candles each expires at +0.25 R before the fees, with 48 it
- * takes +2 R.
+ * entry after +0.5, +1 and +1.5 R at 100, 200 and 350, the stop at 900, every close of the grid at 100.5. With 24 candles each
+ * expires at +0.25 R before the fees, with 48 it takes +2 R.
  */
 export async function seedSignals(): Promise<void> {
   const client = await connect();
@@ -167,7 +167,7 @@ export async function seedSignals(): Promise<void> {
                                tracked_until)
        SELECT 'linear', 'E2E001USDT', 'impulse', 'pullback', '15', 'long', date_trunc('minute', now()) - make_interval(days => n),
               ${engineVersion}, 100, 98, NULL, 3, 2, 0.01, 10, NULL, 900,
-              ARRAY[NULL, NULL, NULL, 500, NULL, NULL, NULL, NULL, NULL, NULL]::integer[], NULL, array_fill(100.5::numeric, ARRAY[19]),
+              ARRAY[100, 200, 350, 500, NULL, NULL, NULL, NULL, NULL, NULL]::integer[], NULL, array_fill(100.5::numeric, ARRAY[19]),
               date_trunc('minute', now()) - make_interval(days => n) + interval '14 days'
        FROM generate_series(1, 40) AS n
        ON CONFLICT DO NOTHING`,

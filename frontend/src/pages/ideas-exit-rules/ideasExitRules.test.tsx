@@ -106,6 +106,54 @@ describe('screen of the exit rules', () => {
     );
   });
 
+  // Penpot board «Идеи — срок жизни и цель»: the rules compared over the columns, what the comparison is made on, and the rule of the charts.
+  it('names the rule now and the candidate over the columns and the charts', async () => {
+    open();
+    renderApp('/ideas/exit-rules');
+
+    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Цель, R' }), '2.5');
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', { name: 'Срок жизни, свечей' }),
+      '48',
+    );
+
+    // The columns name the rule the preview was asked for, 300 ms after the last change.
+    const table = await screen.findByRole('table', { name: 'Все 90 дней' });
+    await within(table).findByRole('columnheader', { name: 'станет · 48 · 2.5R · 4' });
+    expect(
+      within(table)
+        .getAllByRole('columnheader')
+        .map((header) => header.textContent),
+    ).toEqual(['', 'было · 24 · 2R · 4', 'станет · 48 · 2.5R · 4']);
+    expect(screen.getByRole('heading', { name: 'Было → станет' })).toBeInTheDocument();
+    expect(
+      screen.getByText('по прошлым сигналам «Откат» 15 мин всех сетапов и пар · после комиссий'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Ожидание от срока жизни' }).nextElementSibling,
+    ).toHaveTextContent('при цели 2.5R и окне входа 4 свечи · все 90 дней');
+    expect(
+      screen.getByRole('heading', { name: 'Кривая MFE: как далеко цена уходит в нашу сторону' })
+        .nextElementSibling,
+    ).toHaveTextContent(
+      'доля входов, дошедших до +x R раньше стопа за срок 48 свечей · все 90 дней',
+    );
+  });
+
+  // The lifetimes are signed at the first one and at a round time, the levels of MFE at the whole R and the first.
+  it('signs the axes of the charts sparsely', async () => {
+    open();
+    renderApp('/ideas/exit-rules');
+
+    const lives = await screen.findByRole('img', { name: 'Ожидание от срока' });
+    const mfe = screen.getByRole('img', { name: 'Кривая MFE' });
+    const ticks = (chart: HTMLElement) =>
+      [...chart.querySelectorAll('[data-tick]')].map((tick) => tick.textContent);
+
+    expect(ticks(lives)).toEqual(['1', '4 · 1 ч', '16 · 4 ч', '96 · 1 дн', '672 · 7 дн']);
+    expect(ticks(mfe)).toEqual(['+0.5 R', '+1 R', '+2 R', '+3 R', '+4 R', '+5 R']);
+  });
+
   // Scenario "Отметка выбранной цели".
   it('marks the target chosen on the curve of MFE with its share and its break-even', async () => {
     open();

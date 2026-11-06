@@ -2,6 +2,7 @@ import type { Schemas } from '@/shared/api/client';
 import { shiftDecimal } from '@/shared/format/decimal';
 import { roundDecimal } from '@/shared/format/format';
 
+import { durationText } from '../model/exitRules';
 import { percentUp } from '../model/stats';
 
 type Life = Schemas['ExitRuleLifeResponse'];
@@ -25,13 +26,18 @@ function line(points: readonly (readonly [number, number])[]): string {
 
 const percent = (share: string) => `${roundDecimal(shiftDecimal(share, 2), 0)} %`;
 
+// The lifetimes signed on the axis: the first and the ones of a round time, as on the board in Penpot.
+const roundTimes = ['1 ч', '4 ч', '1 дн', '7 дн'];
+
 /** The expectancy per entry and per signal at every lifetime of the grid, on a logarithmic scale of candles, with the lifetimes now and chosen. */
 export function LifeChart({
   lives,
+  interval,
   current,
   chosen,
 }: {
   lives: readonly Life[];
+  interval: string;
   current: number;
   chosen: number;
 }) {
@@ -51,7 +57,14 @@ export function LifeChart({
       viewBox={`0 0 ${width} ${height}`}
       className="w-full"
     >
-      <line x1={pad.left} x2={width - pad.right} y1={y(0)} y2={y(0)} className="stroke-line" />
+      <line
+        x1={pad.left}
+        x2={width - pad.right}
+        y1={y(0)}
+        y2={y(0)}
+        className="stroke-faint"
+        strokeDasharray="4 3"
+      />
       <path
         d={line(shown.map((life) => [x(Number(life.candles)), y(Number(life.expectancy))]))}
         fill="none"
@@ -66,23 +79,29 @@ export function LifeChart({
       />
       <Mark x={x(current)} label={`сейчас ${current}`} tone="stroke-faint" row={1} />
       <Mark x={x(chosen)} label={`выбрано ${chosen}`} tone="stroke-accent" row={0} />
-      {lives.map((life) => (
-        <text
-          key={life.candles}
-          x={x(Number(life.candles))}
-          y={height - 8}
-          textAnchor="middle"
-          className="fill-faint text-[9px]"
-        >
-          {life.candles}
-        </text>
-      ))}
-      <text x={4} y={y(high) + 4} className="fill-faint text-[9px]">
-        {high.toFixed(2)} R
-      </text>
-      <text x={4} y={y(low)} className="fill-faint text-[9px]">
-        {low.toFixed(2)} R
-      </text>
+      {lives
+        .map((life) => Number(life.candles))
+        .map((candles) => ({ candles, time: durationText(candles, interval) }))
+        .filter(({ time }, index) => index === 0 || roundTimes.includes(time))
+        .map(({ candles, time }, index) => (
+          <text
+            key={candles}
+            data-tick
+            x={x(candles)}
+            y={height - 8}
+            textAnchor={index === 0 ? 'start' : x(candles) > width - 60 ? 'end' : 'middle'}
+            className="fill-faint text-[9px]"
+          >
+            {index === 0 ? String(candles) : `${candles} · ${time}`}
+          </text>
+        ))}
+      {[high, 0, low]
+        .filter((value, index, all) => all.indexOf(value) === index)
+        .map((value) => (
+          <text key={value} x={4} y={y(value) + 3} className="fill-faint text-[9px]">
+            {value === 0 ? '0' : value.toFixed(2)} R
+          </text>
+        ))}
     </svg>
   );
 }
@@ -132,15 +151,23 @@ export function MfeChart({
           row={0}
         />
       )}
-      {points.map((point) => (
-        <text
-          key={point.r}
-          x={x(Number(point.r))}
-          y={height - 8}
-          textAnchor="middle"
-          className="fill-faint text-[9px]"
-        >
-          {point.r}
+      {points
+        .filter((point, index) => index === 0 || Number.isInteger(Number(point.r)))
+        .map((point) => (
+          <text
+            key={point.r}
+            data-tick
+            x={x(Number(point.r))}
+            y={height - 8}
+            textAnchor="middle"
+            className="fill-faint text-[9px]"
+          >
+            +{point.r} R
+          </text>
+        ))}
+      {[0, 0.5, 1].map((share) => (
+        <text key={share} x={4} y={y(share) + 3} className="fill-faint text-[9px]">
+          {share * 100} %
         </text>
       ))}
     </svg>

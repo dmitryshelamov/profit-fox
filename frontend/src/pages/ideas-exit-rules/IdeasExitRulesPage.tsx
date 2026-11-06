@@ -55,6 +55,15 @@ const candidateOf = (rule: Rule): ExitRuleCandidate => ({
   window: rule.window === null ? null : Number(rule.window),
 });
 
+/** The rule over a column: «24 · 2R · 4». */
+function ruleShort(rule: ExitRuleCandidate): string {
+  return [
+    String(rule.life),
+    ...(rule.target === null ? [] : [`${rule.target}R`]),
+    ...(rule.window === null ? [] : [String(rule.window)]),
+  ].join(' · ');
+}
+
 /** The rule as one line: «срок 24 свечи · цель 2R · окно входа 4 свечи». */
 function ruleText(rule: ExitRuleCandidate): string {
   return [
@@ -227,10 +236,26 @@ function RuleEditor({ rule, grid }: { rule: Rule; grid: readonly number[] }) {
       {preview.isError && <p role="alert">Не удалось посчитать кандидата.</p>}
       {preview.data && (
         <>
+          <header className="flex flex-wrap items-baseline gap-x-3">
+            <h2 className="font-semibold">Было → станет</h2>
+            <p className="text-xs text-faint">
+              по прошлым сигналам {label} всех сетапов и пар · после комиссий
+            </p>
+          </header>
           <div className="grid gap-4 lg:grid-cols-2">
-            <WindowTable label="Все 90 дней" window={preview.data.last90} />
+            <WindowTable
+              label="Все 90 дней"
+              window={preview.data.last90}
+              now={ruleShort(current)}
+              then={ruleShort(asked)}
+            />
             <div className="space-y-2">
-              <WindowTable label="Последние 30 дней" window={preview.data.last30} />
+              <WindowTable
+                label="Последние 30 дней"
+                window={preview.data.last30}
+                now={ruleShort(current)}
+                then={ruleShort(asked)}
+              />
               {overfitWarning(preview.data.last90, preview.data.last30) && (
                 <p role="status" className="text-sm text-warn">
                   {overfitWarning(preview.data.last90, preview.data.last30)}
@@ -240,27 +265,46 @@ function RuleEditor({ rule, grid }: { rule: Rule; grid: readonly number[] }) {
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
             <section className="space-y-2 rounded-xl border border-line bg-panel px-5 py-4">
-              <h2 className="text-sm font-semibold">Ожидание от срока</h2>
+              <h2 className="text-sm font-semibold">Ожидание от срока жизни</h2>
               <p className="text-xs text-faint">
-                на вход — синяя, на сигнал — жёлтая; свечи по логарифмической шкале
+                {[
+                  ...(asked.target === null ? [] : [`при цели ${asked.target}R`]),
+                  ...(asked.window === null ? [] : [`окне входа ${candlesText(asked.window)}`]),
+                ].join(' и ')}
+                {asked.target === null && asked.window === null ? '' : ' · '}все 90 дней
               </p>
               <LifeChart
                 lives={preview.data.lives}
+                interval={rule.interval}
                 current={current.life}
                 chosen={candidate.life}
               />
+              <p className="flex flex-wrap gap-x-4 text-xs text-muted">
+                <span className="text-series-1">— на вход</span>
+                <span className="text-series-2">— на сигнал (неисполненные лимитки = 0 R)</span>
+                <span className="text-faint">
+                  свечей {intervals.find((item) => item.value === rule.interval)?.label}, шкала
+                  логарифмическая
+                </span>
+              </p>
             </section>
             <section className="space-y-2 rounded-xl border border-line bg-panel px-5 py-4">
-              <h2 className="text-sm font-semibold">Кривая MFE</h2>
+              <h2 className="text-sm font-semibold">
+                Кривая MFE: как далеко цена уходит в нашу сторону
+              </h2>
               <p className="text-xs text-faint">
-                доля входов, дошедших до +x R раньше стопа и конца срока; пунктир — безубыток цели x
-                R
+                доля входов, дошедших до +x R раньше стопа за срок {candlesText(asked.life)} · все
+                90 дней
               </p>
               <MfeChart
                 points={preview.data.mfe}
                 current={current.target}
                 chosen={candidate.target}
               />
+              <p className="flex flex-wrap gap-x-4 text-xs text-muted">
+                <span className="text-series-1">— дошли до +x R</span>
+                <span>- - нужно, чтобы цель x R окупилась после комиссий</span>
+              </p>
             </section>
           </div>
         </>
@@ -387,7 +431,17 @@ const rows: readonly { label: string; value: (bucket: Bucket) => string }[] = [
   },
 ];
 
-function WindowTable({ label, window }: { label: string; window: Window }) {
+function WindowTable({
+  label,
+  window,
+  now,
+  then,
+}: {
+  label: string;
+  window: Window;
+  now: string;
+  then: string;
+}) {
   return (
     <section className="space-y-2">
       <h2 className="text-sm font-semibold">{label}</h2>
@@ -396,10 +450,10 @@ function WindowTable({ label, window }: { label: string; window: Window }) {
           <tr>
             <th scope="col" className={cell} />
             <th scope="col" className={`${cell} text-right`}>
-              было
+              было · {now}
             </th>
-            <th scope="col" className={`${cell} text-right`}>
-              станет
+            <th scope="col" className={`${cell} text-right text-accent`}>
+              станет · {then}
             </th>
           </tr>
         </thead>
