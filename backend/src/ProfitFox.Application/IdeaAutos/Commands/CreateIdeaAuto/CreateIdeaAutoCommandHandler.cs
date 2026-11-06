@@ -17,7 +17,7 @@ public sealed class CreateIdeaAutoCommandHandler(
     public async Task<Guid> Handle(CreateIdeaAutoCommand request, CancellationToken cancellationToken)
     {
         IdeaAutoConditions conditions = await IdeaAutoValidation.ParseAsync(request.Input, null, autos, accounts, settings, cancellationToken);
-        var auto = IdeaAuto.Create(Guid.NewGuid(), request.Input.Name.Trim(), request.Input.AccountId, request.Input.Amount, conditions, 0);
+        IdeaAuto auto = IdeaAuto.Create(Guid.NewGuid(), request.Input.Name.Trim(), request.Input.AccountId, request.Input.Amount, conditions, 0) with { Budget = request.Input.Budget };
         await autos.CreateAsync(auto, time.GetUtcNow(), cancellationToken);
 
         return auto.Id;

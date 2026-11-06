@@ -14,12 +14,12 @@
 - [ ] 2.3 `budgetUsed` в списке автоматов (`IdeaAutoSummary`); проверка — тест `GetIdeaAutos` и `IdeaAutosApiTests`
 - [ ] 2.4 `autosBudget` в настройках, 400 при значении не больше нуля; проверка — тесты `SaveIdeaTradingSettings` и `IdeaTradingSettingsApiTests`
 - [ ] 2.5 `autosBudgetUsed` и `autosBudget` в `GET /api/idea-trading/guards`; проверка — тест `GetIdeaGuards` и API-тест
-- [ ] 2.6 Коды `budget_taken` и `autos_budget_taken` в `IdeaTradeCodes`; проверка — тест кодов
+- [x] 2.6 Коды `budget_taken` и `autos_budget_taken` в `IdeaTradeCodes`; проверка — тест кодов
 
 ## 3. Сканер и Worker
 
-- [ ] 3.1 Две учебные идеи одного автомата в одной минуте: вторая получает «Бюджет автомата занят»; проверка — `LiveAutosTests`
-- [ ] 3.2 Вход с деньгами передаёт сумму заявки и бюджет всех автоматов в `AutoRefusals.Check`; проверка — `IdeaTradeEntryCalculatorTests` и `RunNextAutoEntryTests`
+- [x] 3.1 Две учебные идеи одного автомата в одной минуте: вторая получает «Бюджет автомата занят»; проверка — `LiveAutosTests`
+- [x] 3.2 Вход с деньгами передаёт сумму заявки и бюджет всех автоматов в `AutoRefusals.Check`; проверка — `IdeaTradeEntryCalculatorTests` и `RunNextAutoEntryTests`
 - [ ] 3.3 Интеграционный тест Worker'а на `FakeExchange`: две заявки одного автомата при бюджете на одну и отказ по бюджету всех автоматов; проверка — `IdeaAutoEntryTests`
 
 ## 4. Фронтенд

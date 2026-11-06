@@ -8,7 +8,7 @@ internal static class IdeaAutoRepositoryQueries
 {
     private const string Columns = """
                                    id, name, account_id AS "AccountId", amount, mode, setups, types, intervals, side, category, badge,
-                                   min_risk_reward AS "MinRiskReward", min_cases AS "MinCases", position, deleted_at AS "DeletedAt"
+                                   min_risk_reward AS "MinRiskReward", min_cases AS "MinCases", position, deleted_at AS "DeletedAt", budget
                                    """;
 
     public static CommandDefinition GetAll(CancellationToken cancellationToken)
@@ -42,9 +42,9 @@ internal static class IdeaAutoRepositoryQueries
     {
         return new CommandDefinition(
             """
-            INSERT INTO idea_autos (id, name, account_id, amount, mode, setups, types, intervals, side, category, badge, min_risk_reward, min_cases, position, created_at)
+            INSERT INTO idea_autos (id, name, account_id, amount, mode, setups, types, intervals, side, category, badge, min_risk_reward, min_cases, position, created_at, budget)
             VALUES (@Id, @Name, @AccountId, @Amount, @Mode, @Setups, @Types, @Intervals, @Side, @Category, @Badge, @MinRiskReward, @MinCases,
-                (SELECT COALESCE(MAX(position) + 1, 0) FROM idea_autos WHERE deleted_at IS NULL), @Now)
+                (SELECT COALESCE(MAX(position) + 1, 0) FROM idea_autos WHERE deleted_at IS NULL), @Now, @Budget)
             RETURNING position
             """,
             new
@@ -62,6 +62,7 @@ internal static class IdeaAutoRepositoryQueries
                 auto.Badge,
                 auto.MinRiskReward,
                 auto.MinCases,
+                auto.Budget,
                 Now = now
             },
             cancellationToken: cancellationToken);
@@ -72,7 +73,7 @@ internal static class IdeaAutoRepositoryQueries
         return new CommandDefinition(
             """
             UPDATE idea_autos SET name = @Name, account_id = @AccountId, amount = @Amount, setups = @Setups, types = @Types, intervals = @Intervals,
-                side = @Side, category = @Category, badge = @Badge, min_risk_reward = @MinRiskReward, min_cases = @MinCases
+                side = @Side, category = @Category, badge = @Badge, min_risk_reward = @MinRiskReward, min_cases = @MinCases, budget = @Budget
             WHERE id = @Id AND deleted_at IS NULL
             """,
             auto,
