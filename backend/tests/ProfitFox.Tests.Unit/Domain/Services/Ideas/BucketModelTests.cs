@@ -94,7 +94,7 @@ public class BucketModelTests
     [Test]
     public void Bucket_of_few_own_cases_takes_its_spread_from_the_parent()
     {
-        BucketStatistics statistics = BucketModel.Statistics(Equal(12, IdeaStatus.Target, 0.5m), NineThousand, NineThousand, new BucketModel.Spreads(0, Tau));
+        BucketStatistics statistics = BucketModel.Statistics(Equal(12, IdeaStatus.Target, 0.5m), new BucketModel.ParentModel(NineThousand, NineThousand), new BucketModel.Spreads(0, Tau));
 
         statistics.Expectancy.ShouldBe(-0.146m, Precision);
         statistics.ExpectancyLow!.Value.ShouldBe(-0.336m, Precision);
@@ -107,7 +107,7 @@ public class BucketModelTests
     [Test]
     public void Bucket_without_a_spread_of_its_own_takes_the_spread_of_the_parent()
     {
-        BucketStatistics statistics = BucketModel.Statistics(Equal(30, IdeaStatus.Stop, -1m), NineThousand, NineThousand, new BucketModel.Spreads(Tau, Tau));
+        BucketStatistics statistics = BucketModel.Statistics(Equal(30, IdeaStatus.Stop, -1m), new BucketModel.ParentModel(NineThousand, NineThousand), new BucketModel.Spreads(Tau, Tau));
 
         // B = 0.01 / 0.018 of the share and 0.01 / 0.058 of the expectancy.
         statistics.Probability!.Value.ShouldBe(0.1778m, 0.0001m);
@@ -201,6 +201,44 @@ public class BucketModelTests
         IReadOnlyDictionary<IdeaBucketKey, BucketStatistics> model = BucketModel.Build(buckets, parents, BucketModel.Roots(parents, new Dictionary<MarketCategory, ClusteredSums> { [MarketCategory.Linear] = category }));
 
         model[Impulse].ProbabilityHigh.ShouldBe(1m);
+    }
+
+    // Decision 5: a case of the calibration may find no case of its bucket closed before it, while its parent has them: it is promised the
+    // numbers of the model of the parent.
+    [Test]
+    public void Bucket_without_a_case_of_its_own_has_the_numbers_of_its_parent()
+    {
+        BucketStatistics statistics = BucketModel.Statistics(new ClusteredSums(), new BucketModel.ParentModel(NineThousand, NineThousand), new BucketModel.Spreads(Tau, Tau));
+
+        (statistics.Cases, statistics.Probability, statistics.Expectancy, statistics.ExpectancyLow, statistics.ExpectancyHigh)
+            .ShouldBe((0, 0.4m, -0.2m, Parent.Low, Parent.High));
+        (statistics.FewOwnCases, statistics.ParentWeight).ShouldBe((true, 1m));
+    }
+
+    // A category of 30 cases and more without a target, or whose results are all equal, has no spread to shrink by: its buckets have too
+    // little data.
+    [TestCase(IdeaStatus.Stop, -1, -0.5)]
+    [TestCase(IdeaStatus.Target, 0.5, 0.5)]
+    public void Category_without_a_spread_has_too_little_data(IdeaStatus first, decimal firstResult, decimal restResult)
+    {
+        Dictionary<IdeaBucketKey, ClusteredSums> buckets = new() { [Impulse] = Mixed() };
+
+        IReadOnlyDictionary<IdeaBucketKey, BucketStatistics> model = Build(buckets, Mixed(), Mixed());
+
+        model[Impulse].Probability.ShouldBeNull();
+
+        // 15 cases of the first outcome, then 15 stops.
+        ClusteredSums Mixed()
+        {
+            var sums = new ClusteredSums();
+
+            for (int index = 0; index < 30; index++)
+            {
+                sums.Add(Hour.AddHours(index), index < 15 ? first : IdeaStatus.Stop, index < 15 ? firstResult : restResult);
+            }
+
+            return sums;
+        }
     }
 
     private static IReadOnlyDictionary<IdeaBucketKey, BucketStatistics> Build(

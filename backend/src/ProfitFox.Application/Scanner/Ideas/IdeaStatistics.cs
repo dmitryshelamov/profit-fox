@@ -43,7 +43,7 @@ public sealed class IdeaStatistics(
         IdeaOutcomesResult result = await WalkAsync(now, null, used, null, cancellationToken);
         await buckets.ReplaceAsync(version.Number, result.Buckets, null, cancellationToken);
         _roots = result.Roots;
-        await calibrations.ReplaceAsync(version.Number, CalibrationCalculator.Compute(result.Outcomes, now), cancellationToken);
+        await calibrations.ReplaceAsync(version.Number, CalibrationCalculator.Compute(result.Outcomes, now, (_, _) => DateTimeOffset.MinValue), cancellationToken);
 
         return [.. (await exitRules.GetAllAsync(cancellationToken)).Except(used).Select(rule => (rule.Type, rule.Interval))];
     }
