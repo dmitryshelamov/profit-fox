@@ -43,6 +43,7 @@ public sealed class LiveIdeas(
     private Dictionary<Instrument, List<Idea>>? _open;
     private Dictionary<Instrument, Dictionary<Interval, VolatilityPercentiles>> _percentiles = [];
     private Dictionary<(IdeaType, Interval), IdeaExitRule>? _exitRules;
+    private readonly DateTimeOffset _startedAt = time.GetUtcNow();
     private DateTimeOffset? _percentilesAt;
 
     /// <summary>Reads the warm-up of the next pairs not warmed up yet; <c>false</c> when there is none to read.</summary>
@@ -227,18 +228,18 @@ public sealed class LiveIdeas(
         return [.. market.Minutes(instrument).Select(minute => new IdeaCandle(minute.OpenTime, minute.Open, minute.High, minute.Low, minute.Close, minute.Turnover))];
     }
 
-    // The first read only starts the rules: the whole recompute of the session counts by them anyway.
+    // The first read sends only the rules applied since the session started: the whole recompute of the session may have read the rules
+    // before them, and counts by the older ones anyway.
     private async Task RefreshExitRulesAsync(CancellationToken cancellationToken)
     {
         Dictionary<(IdeaType, Interval), IdeaExitRule> applied = (await exitRules.GetAllAsync(cancellationToken)).ToDictionary(rule => (rule.Type, rule.Interval));
+        IEnumerable<(IdeaType, Interval)> changed = _exitRules is null
+            ? applied.Values.Where(rule => rule.AppliedAt >= _startedAt).Select(rule => (rule.Type, rule.Interval))
+            : applied.Keys.Union(_exitRules.Keys).Where(key => applied.GetValueOrDefault(key) != _exitRules.GetValueOrDefault(key));
 
-        if (_exitRules is not null)
+        foreach ((IdeaType type, Interval interval) in changed)
         {
-            foreach ((IdeaType type, Interval interval) in applied.Keys.Union(_exitRules.Keys)
-                         .Where(key => applied.GetValueOrDefault(key) != _exitRules.GetValueOrDefault(key)))
-            {
-                recomputes.Add(type, interval);
-            }
+            recomputes.Add(type, interval);
         }
 
         _exitRules = applied;

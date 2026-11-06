@@ -89,6 +89,22 @@ public class LiveIdeasTests
         created.Single(idea => idea.Setup == IdeaSetup.Impulse && idea.Interval == Interval.FifteenMinutes && idea.Track.Plan.Type == IdeaType.BeyondExtreme).Track.Plan.Stop.ShouldBe(39.37m);
     }
 
+    // Review of tune-idea-rules: the whole recompute of the session may have read the rules before one was applied; the first read sends
+    // the rules applied since the session started to the recompute, not the ones before.
+    [Test]
+    public async Task First_read_sends_the_rules_applied_since_the_start_to_the_recompute()
+    {
+        _rules.GetAllAsync(Arg.Any<CancellationToken>()).Returns(
+        [
+            new IdeaExitRule(IdeaType.Pullback, Interval.FifteenMinutes, 48, 2.5m, 8, Four),
+            new IdeaExitRule(IdeaType.TwoR, Interval.OneHour, 48, 3m, null, Four.AddSeconds(-1))
+        ]);
+
+        await _live.RunAsync(Four, CancellationToken.None);
+
+        _recomputes.Take().ShouldBe([(IdeaType.Pullback, Interval.FifteenMinutes)]);
+    }
+
     // Decision 5: the replay writes the percentiles once a day; the live ideas read them again every hour.
     [Test]
     public async Task Percentiles_of_volatility_are_read_once_an_hour()
