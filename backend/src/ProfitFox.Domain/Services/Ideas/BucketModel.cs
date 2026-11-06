@@ -1,0 +1,187 @@
+using ProfitFox.Domain.Entities.Ideas.Enums;
+using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.ValueObjects.Ideas;
+
+namespace ProfitFox.Domain.Services.Ideas;
+
+/// <summary>
+///     The model of the buckets (decision 2 of honest-idea-intervals): the numbers of a bucket shrunk to the model of its parent
+///     «тип × ТФ × сторона × категория», those of the parent to its category, the root, by a normal model whose spread between the members
+///     of a level, τ², is estimated by DerSimonian–Laird from how they differ. Variances and weights are statistics, not money: they go
+///     through double, the means stay decimal.
+/// </summary>
+public static class BucketModel
+{
+    // The 97.5th percentile of the standard normal distribution: a 95 % interval.
+    private const double Z = 1.96;
+
+    /// <summary>
+    ///     The numbers of the buckets that have a case, each shrunk to the model of its parent; the parents shrunk to the
+    ///     <paramref name="roots" /> of their categories.
+    /// </summary>
+    public static IReadOnlyDictionary<IdeaBucketKey, BucketStatistics> Build(
+        IReadOnlyDictionary<IdeaBucketKey, ClusteredSums> buckets,
+        IReadOnlyDictionary<Parent, ClusteredSums> parents,
+        IReadOnlyDictionary<MarketCategory, Root> roots)
+    {
+        var models = new Dictionary<Parent, (Level Own, Level Model, Spreads Spreads)>();
+
+        foreach ((Parent parent, ClusteredSums sums) in parents)
+        {
+            // A parent of fewer than 30 cases has no model, nor one whose category the roots do not know: its buckets have too little data.
+            if (sums.Cases < BucketStatisticsCalculator.MinimumCases || !roots.TryGetValue(parent.Category, out Root? root))
+            {
+                continue;
+            }
+
+            var own = Level.Of(sums, root.Category);
+            var model = new Level(
+                own.Cases,
+                Shrink(own.Share, root.Category.Share, root.Spreads.Share).Model,
+                Shrink(own.Expectancy, root.Category.Expectancy, root.Spreads.Expectancy).Model);
+            models[parent] = (own, model, Between(buckets.Where(bucket => Parent.Of(bucket.Key) == parent).Select(bucket => bucket.Value), own));
+        }
+
+        return buckets.ToDictionary(
+            bucket => bucket.Key,
+            bucket => models.TryGetValue(Parent.Of(bucket.Key), out (Level Own, Level Model, Spreads Spreads) parent)
+                ? Statistics(bucket.Value, parent.Own, parent.Model, parent.Spreads)
+                : TooLittleData(bucket.Value));
+    }
+
+    /// <summary>The roots of the categories of 30 cases and more: the own numbers of each and the spread between its parents.</summary>
+    public static IReadOnlyDictionary<MarketCategory, Root> Roots(IReadOnlyDictionary<Parent, ClusteredSums> parents, IReadOnlyDictionary<MarketCategory, ClusteredSums> categories)
+    {
+        return categories.Where(category => category.Value.Cases >= BucketStatisticsCalculator.MinimumCases)
+            .ToDictionary(
+                category => category.Key,
+                category =>
+                {
+                    var own = Level.Root(category.Value);
+
+                    return new Root(own, Between(parents.Where(parent => parent.Key.Category == category.Key).Select(parent => parent.Value), own));
+                });
+    }
+
+    /// <summary>
+    ///     A number shrunk to that of the level above: B = τ² / (τ² + v), the mean μ + B·(m − μ) with the variance B·v + (1 − B)²·Var(μ), and the
+    ///     weight of the level above in it, 1 − B.
+    /// </summary>
+    public static (Estimate Model, double ParentWeight) Shrink(Estimate own, Estimate parent, double spread)
+    {
+        double weight = spread / (spread + own.Variance);
+        decimal mean = parent.Mean + ((decimal)weight * (own.Mean - parent.Mean));
+
+        return (new Estimate(mean, (weight * own.Variance) + ((1 - weight) * (1 - weight) * parent.Variance)), 1 - weight);
+    }
+
+    /// <summary>
+    ///     τ², the spread between the members of a level beyond chance, by DerSimonian–Laird: w = 1 / v, Q = Σw(m − m̄_w)²,
+    ///     τ² = max(0, (Q − (k − 1)) / (Σw − Σw² / Σw)); 0 with fewer than two members.
+    /// </summary>
+    public static double Spread(IReadOnlyList<Estimate> members)
+    {
+        if (members.Count < 2)
+        {
+            return 0;
+        }
+
+        double[] weights = [.. members.Select(member => 1 / member.Variance)];
+        double total = weights.Sum();
+        double mean = members.Select((member, index) => weights[index] * (double)member.Mean).Sum() / total;
+        double q = members.Select((member, index) => weights[index] * Math.Pow((double)member.Mean - mean, 2)).Sum();
+
+        return Math.Max(0, (q - (members.Count - 1)) / (total - (weights.Sum(weight => weight * weight) / total)));
+    }
+
+    /// <summary>The numbers of a bucket shrunk to the <paramref name="model" /> of its parent by the spread between the buckets of the parent.</summary>
+    public static BucketStatistics Statistics(ClusteredSums sums, Level parent, Level model, Spreads spreads)
+    {
+        var level = Level.Of(sums, parent);
+        BucketStatistics own = sums.Statistics();
+        (Estimate share, _) = Shrink(level.Share, model.Share, spreads.Share);
+        (Estimate expectancy, double parentWeight) = Shrink(level.Expectancy, model.Expectancy, spreads.Expectancy);
+
+        return new BucketStatistics(sums.Cases, sums.Targets, sums.Stops, sums.Expired, share.Mean, Math.Max(0m, share.Low), Math.Min(1m, share.High), expectancy.Mean, expectancy.Low, expectancy.High)
+        {
+            OwnProbability = own.Probability,
+            OwnProbabilityLow = own.ProbabilityLow,
+            OwnProbabilityHigh = own.ProbabilityHigh,
+            OwnExpectancy = own.Expectancy,
+            OwnExpectancyLow = own.ExpectancyLow,
+            OwnExpectancyHigh = own.ExpectancyHigh,
+            ParentWeight = (decimal)parentWeight,
+            FewOwnCases = sums.Cases < BucketStatisticsCalculator.MinimumCases
+        };
+    }
+
+    // «Мало данных»: the counts and the own expectancy only.
+    private static BucketStatistics TooLittleData(ClusteredSums sums)
+    {
+        decimal expectancy = sums.TotalR / sums.Cases;
+
+        return new BucketStatistics(sums.Cases, sums.Targets, sums.Stops, sums.Expired, null, null, null, expectancy, null, null) { OwnExpectancy = expectancy };
+    }
+
+    // The spread between the members of a level of 30 cases and more.
+    private static Spreads Between(IEnumerable<ClusteredSums> members, Level level)
+    {
+        Level[] counted = [.. members.Where(member => member.Cases >= BucketStatisticsCalculator.MinimumCases).Select(member => Level.Of(member, level))];
+
+        return new Spreads(Spread([.. counted.Select(member => member.Share)]), Spread([.. counted.Select(member => member.Expectancy)]));
+    }
+
+    /// <summary>A number of a level, a share of targets or a mean result, with the variance of it and its 95 % interval.</summary>
+    public readonly record struct Estimate(decimal Mean, double Variance)
+    {
+        public decimal Low => Mean - Margin;
+
+        public decimal High => Mean + Margin;
+
+        private decimal Margin => (decimal)(Z * Math.Sqrt(Variance));
+    }
+
+    /// <summary>The cases of a level and its share of targets and mean result.</summary>
+    public sealed record Level(int Cases, Estimate Share, Estimate Expectancy)
+    {
+        /// <summary>
+        ///     The own numbers of a level. One of fewer than 30 cases, or without a spread of its own (a share of 0 or 1, equal results), takes the
+        ///     spread of the level <paramref name="above" /> over its cases: v = V_above · n_above / n.
+        /// </summary>
+        public static Level Of(ClusteredSums sums, Level above)
+        {
+            bool enough = sums.Cases >= BucketStatisticsCalculator.MinimumCases;
+
+            return new Level(
+                sums.Cases,
+                new Estimate((decimal)sums.Targets / sums.Cases, Variance(enough ? sums.ShareVariance : 0, above.Share, above.Cases, sums.Cases)),
+                new Estimate(sums.TotalR / sums.Cases, Variance(enough ? sums.ExpectancyVariance : 0, above.Expectancy, above.Cases, sums.Cases)));
+        }
+
+        /// <summary>The own numbers of a root, a level of 30 cases and more with nothing above it.</summary>
+        public static Level Root(ClusteredSums sums)
+        {
+            return new Level(sums.Cases, new Estimate((decimal)sums.Targets / sums.Cases, sums.ShareVariance), new Estimate(sums.TotalR / sums.Cases, sums.ExpectancyVariance));
+        }
+
+        private static double Variance(double own, Estimate above, int aboveCases, int cases)
+        {
+            return own > 0 ? own : above.Variance * aboveCases / cases;
+        }
+    }
+
+    /// <summary>τ² of the share and of the mean result between the members of a level.</summary>
+    public readonly record struct Spreads(double Share, double Expectancy);
+
+    /// <summary>The root a parent is shrunk to: the own numbers of its category and the spread between the parents of the category.</summary>
+    public sealed record Root(Level Category, Spreads Spreads);
+
+    /// <summary>The parent of a bucket: its type × interval × side × category, over all setups.</summary>
+    public readonly record struct Parent(IdeaType Type, Interval Interval, IdeaSide Side, MarketCategory Category)
+    {
+        public static Parent Of(IdeaBucketKey key)
+        {
+            return new Parent(key.Type, key.Interval, key.Side, key.Category);
+        }
+    }
+}

@@ -66,14 +66,13 @@ public sealed class ClusteredSums
     ///     The own numbers of the cases: the share of targets among all of them with its 95 % Wilson interval over the effective cases
     ///     n_eff = p(1 − p) / V_p, and the mean result with its 95 % interval m ± 1.96·√V; under 30 cases only the counts and the mean.
     /// </summary>
-    /// <param name="signals">The signals counted, entered or not, of a type that waits for its entry.</param>
-    public BucketStatistics Statistics(int? signals = null)
+    public BucketStatistics Statistics()
     {
         decimal expectancy = TotalR / Cases;
 
         if (Cases < BucketStatisticsCalculator.MinimumCases)
         {
-            return new BucketStatistics(Cases, Targets, Stops, Expired, null, null, null, expectancy, null, null, signals);
+            return new BucketStatistics(Cases, Targets, Stops, Expired, null, null, null, expectancy, null, null);
         }
 
         double share = (double)Targets / Cases;
@@ -84,7 +83,7 @@ public sealed class ClusteredSums
         var margin = (decimal)(Z * Math.Sqrt(ExpectancyVariance));
 
         return new BucketStatistics(Cases, Targets, Stops, Expired, (decimal)Targets / Cases, (decimal)low, (decimal)high, expectancy,
-            expectancy - margin, expectancy + margin, signals);
+            expectancy - margin, expectancy + margin);
     }
 
     public void Add(DateTimeOffset firedAt, IdeaStatus status, decimal result)

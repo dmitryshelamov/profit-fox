@@ -155,7 +155,7 @@ public class ClusteredSumsTests
         statistics.ProbabilityHigh!.Value.ShouldBe(BucketStatisticsCalculator.Compute(0, 0, 30, -3m, 1.5m).ProbabilityHigh!.Value, Precision);
     }
 
-    // Scenario "Мало случаев": the counts and the mean, no share, interval or badge under 30 cases; the signals of a type that waits for its entry.
+    // Scenario "Мало случаев": the counts and the mean, no share, interval or badge under 30 cases.
     [Test]
     public void Fewer_than_30_cases_have_their_counts_and_mean_only()
     {
@@ -166,7 +166,7 @@ public class ClusteredSumsTests
             sums.Add(Hour.AddHours(index), index < 6 ? IdeaStatus.Target : IdeaStatus.Stop, index < 6 ? 2m : -1m);
         }
 
-        sums.Statistics(24).ShouldBe(new BucketStatistics(12, 6, 6, 0, null, null, null, 0.5m, null, null, 24));
+        sums.Statistics().ShouldBe(new BucketStatistics(12, 6, 6, 0, null, null, null, 0.5m, null, null));
     }
 
     private static (int, int, int, int, decimal, decimal, int, long, decimal, decimal, long, long) Totals(ClusteredSums sums)
