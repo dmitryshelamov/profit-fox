@@ -23,6 +23,6 @@ public interface IIdeaSignalRepository
     /// <summary>Removes the signals of a pair of a version, which the replay of the pair starts over without.</summary>
     Task DeleteAsync(Instrument instrument, int engineVersion, CancellationToken cancellationToken);
 
-    /// <summary>Removes the signals and cases of every other version.</summary>
-    Task DeleteOtherVersionsAsync(int engineVersion, CancellationToken cancellationToken);
+    /// <summary>Removes the signals and cases of other versions fired in the first hour that holds any; the number removed, 0 when none is left.</summary>
+    Task<int> DeleteOtherVersionsAsync(int engineVersion, CancellationToken cancellationToken);
 }

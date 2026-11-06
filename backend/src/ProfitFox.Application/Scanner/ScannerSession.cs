@@ -219,10 +219,10 @@ public sealed class ScannerSession(
         {
             try
             {
+                // A step of the clean-up at a time, so the warm-ups of the live ideas go between them.
                 if (!cleaned)
                 {
-                    await replay.CleanUpAsync(cancellationToken);
-                    cleaned = true;
+                    cleaned = !await replay.CleanUpAsync(cancellationToken);
                 }
 
                 if (time.GetUtcNow() >= closedAt)
@@ -234,7 +234,7 @@ public sealed class ScannerSession(
                 // The warm-ups of the live ideas go before the history.
                 bool warmed = await ideas.ReadWarmUpsAsync(cancellationToken);
 
-                if (!warmed && !await replay.StepAsync(cancellationToken))
+                if (!warmed && cleaned && !await replay.StepAsync(cancellationToken))
                 {
                     await Task.Delay(TimeSpan.FromMinutes(1), time, cancellationToken);
                 }

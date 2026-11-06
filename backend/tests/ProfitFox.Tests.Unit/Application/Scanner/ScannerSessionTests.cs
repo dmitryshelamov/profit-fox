@@ -208,7 +208,7 @@ public class ScannerSessionTests
     public async Task Lane_of_ideas_clears_other_versions_and_logs_its_failure()
     {
         var failure = new InvalidOperationException("replay");
-        _ideaSignals.DeleteOtherVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Task.FromException(failure), Task.CompletedTask);
+        _ideaSignals.DeleteOtherVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Task.FromException<int>(failure), Task.FromResult(0));
         using var cancellation = new CancellationTokenSource();
         Task session = Session().RunAsync(cancellation.Token);
 
@@ -217,6 +217,23 @@ public class ScannerSessionTests
         await WaitAsync(() => _cursors.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaReplayRepository.GetAsync)), advance: true);
 
         _journal.Received(1).Failed("ideas", failure);
+        await cancellation.CancelAsync();
+        await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
+    // Deploy of v19: the clean-up of 24 M cases of version 4 kept the warm-ups of the live ideas waiting for hours. It goes an hour of signals a
+    // step, so the warm-ups go between the steps, and the history is replayed once no signal of another version is left.
+    [Test]
+    public async Task Lane_of_ideas_clears_other_versions_step_by_step_before_the_history()
+    {
+        _ideaSignals.DeleteOtherVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(3, 2, 0);
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session().RunAsync(cancellation.Token);
+
+        await WaitAsync(() => _cursors.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaReplayRepository.GetAsync)), advance: true);
+
+        _ideaSignals.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaSignalRepository.DeleteOtherVersionsAsync)).ShouldBe(3);
+        await _cursors.Received(1).DeleteOtherVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
         await cancellation.CancelAsync();
         await Should.ThrowAsync<OperationCanceledException>(session);
     }
