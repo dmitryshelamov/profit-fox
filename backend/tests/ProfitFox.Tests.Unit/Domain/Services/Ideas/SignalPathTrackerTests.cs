@@ -43,13 +43,14 @@ public class SignalPathTrackerTests
     public void Pullback_without_a_touch_for_seven_days_ends_without_an_entry()
     {
         var pullback = new IdeaPlan(IdeaType.Pullback, IdeaSide.Long, 99m, 97m, 103m);
-        IdeaCandle[] week = Flat(0, 10080, 100m);
+        // The minute that opens 7 days after the firing touches the limit too late, and closes the longest window.
+        IdeaCandle[] week = [.. Flat(0, 10080, 100m), Minute(10080, 100m, 100m, 98m, 99m)];
 
-        SignalPath open = Run(pullback, week[..10079]);
+        SignalPath open = Run(pullback, week[..10080]);
         SignalPath path = Run(pullback, week);
 
         open.IsOpen.ShouldBeTrue();
-        (path.Entry, path.EntryAfter, path.TrackedUntil, path.IsOpen).ShouldBe((99m, (int?)null, Fired.AddDays(7), false));
+        (path.Entry, path.EntryAfter, path.TrackedUntil, path.IsOpen).ShouldBe((99m, (int?)null, Fired.AddDays(7).AddMinutes(1), false));
     }
 
     // Scenario "Цель и стоп в одной минуте": the stop counts, +2 R does not.

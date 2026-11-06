@@ -45,6 +45,12 @@ public static class SignalPathTracker
             return Exit(path with { Entry = minute.Open, EntryAfter = sinceFired }, minute, 1);
         }
 
+        // The minute that opens 7 days after the firing only closes the longest window.
+        if (path.FiredAt.AddMinutes(sinceFired) > path.FiredAt + SignalPath.Horizon)
+        {
+            return path;
+        }
+
         if (path.Type == IdeaType.Pullback)
         {
             return ahead * (Worst(path, minute) - path.Entry) > 0 ? path : Filled(path with { EntryAfter = sinceFired }, minute);

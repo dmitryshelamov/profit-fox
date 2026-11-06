@@ -43,12 +43,12 @@ public sealed record SignalPath(
     public bool IsMarket => Type is not (IdeaType.Pullback or IdeaType.StopEntry);
 
     /// <summary>
-    ///     Whether the path goes on: it ends at the stop, before or after the entry, 7 days after the entry, 7 days after the firing without one,
-    ///     or at the first minute of a market signal that did not enter.
+    ///     Whether the path goes on: it ends at the stop, before or after the entry, 7 days after the entry, at the minute that opens 7 days after
+    ///     the firing without one — which ends a window of 7 days — or at the first minute of a market signal that did not enter.
     /// </summary>
     public bool IsOpen => StopAfter is null && StopBeforeEntryAfter is null && (EnteredAt is { } entered
         ? TrackedUntil < entered + Horizon
-        : IsMarket ? TrackedUntil == FiredAt : TrackedUntil < FiredAt + Horizon);
+        : IsMarket ? TrackedUntil == FiredAt : TrackedUntil <= FiredAt + Horizon);
 
     public static SignalPath Fired(IdeaPlan plan, Interval interval, DateTimeOffset firedAt, decimal tick)
     {
