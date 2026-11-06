@@ -171,7 +171,17 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
         {
             // Bybit lists all spot instruments in one answer.
             return Unwrap(await bybit.V5Api.ExchangeData.GetSpotSymbolsAsync(ct: cancellationToken)).List
-                .Select(spot => new ListedInstrument(category, spot.Name, spot.BaseAsset, spot.QuoteAsset, spot.Status == SymbolStatus.Trading, TickSize: spot.PriceFilter?.TickSize, TradFi: IsTradFi(spot.SymbolType)))
+                .Select(spot => new ListedInstrument(
+                    category,
+                    spot.Name,
+                    spot.BaseAsset,
+                    spot.QuoteAsset,
+                    spot.Status == SymbolStatus.Trading,
+                    TickSize: spot.PriceFilter?.TickSize,
+                    TradFi: IsTradFi(spot.SymbolType),
+                    QuantityStep: spot.LotSizeFilter?.BasePrecision,
+                    MinQuantity: spot.LotSizeFilter?.MinOrderQuantity,
+                    MinAmount: spot.LotSizeFilter?.MinOrderValue))
                 .ToList();
         }
 
@@ -191,7 +201,10 @@ internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResi
                 linear.ContractType == ContractTypeV5.LinearPerpetual,
                 new DateTimeOffset(DateTime.SpecifyKind(linear.LaunchTime, DateTimeKind.Utc)),
                 linear.PriceFilter?.TickSize,
-                IsTradFi(linear.SymbolType))));
+                IsTradFi(linear.SymbolType),
+                linear.LotSizeFilter?.QuantityStep,
+                linear.LotSizeFilter?.MinOrderQuantity,
+                linear.LotSizeFilter?.MinNotionalValue)));
             cursor = page.NextPageCursor;
         }
         while (!string.IsNullOrEmpty(cursor));

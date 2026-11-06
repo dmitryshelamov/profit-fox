@@ -19,6 +19,8 @@ import { BotPage } from '@/pages/bot/BotPage';
 import { BotEditorPage } from '@/pages/bot-editor/BotEditorPage';
 import { BotsPage } from '@/pages/bots/BotsPage';
 import { ComparePage } from '@/pages/compare/ComparePage';
+import { IdeaAutoPage } from '@/pages/idea-auto/IdeaAutoPage';
+import { IdeaAutosPage } from '@/pages/idea-autos/IdeaAutosPage';
 import { IdeaJournalPage } from '@/pages/idea-trades/IdeaJournalPage';
 import { IdeaTradingSettingsPage } from '@/pages/idea-trades/IdeaTradingSettingsPage';
 import { IdeasPage } from '@/pages/ideas/IdeasPage';
@@ -114,11 +116,41 @@ const ideasRoute = createRoute({
 const ideaTradesRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/idea-trades',
-  validateSearch: pageOf,
+  // `?autoId=` comes from the count of refusals of an auto on «Автоматы»: the journal opens filtered by that auto.
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { page?: number | undefined; autoId?: string | undefined } => ({
+    ...pageOf(search),
+    autoId: typeof search.autoId === 'string' ? search.autoId : undefined,
+  }),
   component: function IdeaTradesRoute() {
-    const { page } = ideaTradesRoute.useSearch();
+    const { page, autoId } = ideaTradesRoute.useSearch();
 
-    return <IdeaJournalPage page={page ?? 1} />;
+    return <IdeaJournalPage page={page ?? 1} autoId={autoId} />;
+  },
+});
+
+const ideaAutosRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/idea-trades/autos',
+  component: IdeaAutosPage,
+});
+
+const newIdeaAutoRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/idea-trades/autos/new',
+  component: function NewIdeaAutoRoute() {
+    return <IdeaAutoPage id={null} />;
+  },
+});
+
+const ideaAutoRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/idea-trades/autos/$id',
+  component: function IdeaAutoRoute() {
+    const { id } = ideaAutoRoute.useParams();
+
+    return <IdeaAutoPage id={id} />;
   },
 });
 
@@ -320,6 +352,9 @@ const routeTree = rootRoute.addChildren([
     ideasRoute,
     ideaTradesRoute,
     ideaTradingSettingsRoute,
+    ideaAutosRoute,
+    newIdeaAutoRoute,
+    ideaAutoRoute,
     ideasCalibrationRoute,
     ideasExitRulesRoute,
     botsRoute,

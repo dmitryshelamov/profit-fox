@@ -10,6 +10,8 @@ namespace ProfitFox.Domain.Entities.Market;
 ///     exchange tells (linear only): the history does not go before it. <see cref="TickSize" /> is the step of its price as the list of the
 ///     exchange last told it; the ideas of a pair wait for it. <see cref="TradFi" /> tells a non-crypto pair (a stock, an ETF, a commodity
 ///     or forex) as the list of the exchange last told it; a pair the list has not told about yet is crypto.
+///     <see cref="QuantityStep" />, <see cref="MinQuantity" /> and <see cref="MinAmount" /> are the step and the minimums of its orders, which the paper
+///     trades of the autos are sized by.
 /// </summary>
 public sealed record ScannerPair(
     Instrument Instrument,
@@ -20,7 +22,10 @@ public sealed record ScannerPair(
     DateTimeOffset? FundingCoveredUntil = null,
     DateTimeOffset? ListedAt = null,
     decimal? TickSize = null,
-    bool TradFi = false)
+    bool TradFi = false,
+    decimal? QuantityStep = null,
+    decimal? MinQuantity = null,
+    decimal? MinAmount = null)
 {
     private static readonly TimeSpan Minute = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan Step = TimeSpan.FromMinutes(5);

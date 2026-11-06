@@ -92,6 +92,7 @@ public static class InfrastructureRegistrar
         {
             RequireMasterKey(configuration, services);
             services.AddHostedService<LiveTradingBackgroundService>();
+            services.AddHostedService<IdeaAutoEntryBackgroundService>();
         }
 
         services.AddHostedService<WorkerStartLogService>();
@@ -124,6 +125,7 @@ public static class InfrastructureRegistrar
         services.AddScoped<ScannerUniverse>();
         services.AddScoped<ScannerBackfill>();
         services.AddScoped<ScannerPace>();
+        services.AddScoped<LiveAutos>();
         services.AddScoped<LiveIdeas>();
         services.AddScoped<IdeaStatistics>();
         services.AddScoped<IdeaRecomputes>();

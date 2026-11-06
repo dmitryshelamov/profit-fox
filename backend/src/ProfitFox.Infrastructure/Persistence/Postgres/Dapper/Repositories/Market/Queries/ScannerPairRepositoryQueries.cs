@@ -11,19 +11,23 @@ internal static class ScannerPairRepositoryQueries
     private const string GetAllSql = """
                                      SELECT category, symbol, listed, history_from AS "HistoryFrom", covered_until AS "CoveredUntil",
                                          oi_covered_until AS "OiCoveredUntil", funding_covered_until AS "FundingCoveredUntil", listed_at AS "ListedAt",
-                                         tick_size AS "TickSize", tradfi AS "TradFi"
+                                         tick_size AS "TickSize", tradfi AS "TradFi", quantity_step AS "QuantityStep", min_quantity AS "MinQuantity",
+                                         min_amount AS "MinAmount"
                                      FROM scanner_pairs
                                      """;
 
     private const string GetTradFiSql = "SELECT category, symbol FROM scanner_pairs WHERE tradfi";
 
     private const string SaveSql = """
-                                   INSERT INTO scanner_pairs (category, symbol, listed, history_from, covered_until, oi_covered_until, funding_covered_until, listed_at, tick_size, tradfi)
-                                   VALUES (@Category, @Symbol, @Listed, @HistoryFrom, @CoveredUntil, @OiCoveredUntil, @FundingCoveredUntil, @ListedAt, @TickSize, @TradFi)
+                                   INSERT INTO scanner_pairs (category, symbol, listed, history_from, covered_until, oi_covered_until, funding_covered_until, listed_at, tick_size, tradfi,
+                                       quantity_step, min_quantity, min_amount)
+                                   VALUES (@Category, @Symbol, @Listed, @HistoryFrom, @CoveredUntil, @OiCoveredUntil, @FundingCoveredUntil, @ListedAt, @TickSize, @TradFi,
+                                       @QuantityStep, @MinQuantity, @MinAmount)
                                    ON CONFLICT (category, symbol) DO UPDATE SET
                                        listed = EXCLUDED.listed, history_from = EXCLUDED.history_from, covered_until = EXCLUDED.covered_until,
                                        oi_covered_until = EXCLUDED.oi_covered_until, funding_covered_until = EXCLUDED.funding_covered_until,
-                                       listed_at = EXCLUDED.listed_at, tick_size = EXCLUDED.tick_size, tradfi = EXCLUDED.tradfi
+                                       listed_at = EXCLUDED.listed_at, tick_size = EXCLUDED.tick_size, tradfi = EXCLUDED.tradfi, quantity_step = EXCLUDED.quantity_step,
+                                       min_quantity = EXCLUDED.min_quantity, min_amount = EXCLUDED.min_amount
                                    """;
 
     internal static CommandDefinition GetAll(CancellationToken cancellationToken)

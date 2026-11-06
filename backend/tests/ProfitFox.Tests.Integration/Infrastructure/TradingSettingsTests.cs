@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 using ProfitFox.Tests.Integration.Persistence;
@@ -31,6 +32,16 @@ public class TradingSettingsTests
 
         await host.StartAsync();
         await host.StopAsync();
+    }
+
+    // Task 4.2: the lane of the entries of the autos with money runs in a trading Worker only.
+    [TestCase(false, false)]
+    [TestCase(true, true)]
+    public async Task Entries_of_the_autos_are_made_by_a_trading_worker_only(bool trading, bool lane)
+    {
+        using IHost host = await ProductionWorkerAsync(trading, trading ? new Dictionary<string, string?> { ["ExchangeAccounts:MasterKey"] = Convert.ToBase64String(new byte[32]) } : null);
+
+        host.Services.GetServices<IHostedService>().Any(service => service.GetType().Name == "IdeaAutoEntryBackgroundService").ShouldBe(lane);
     }
 
     // A local run never sends real orders: a Worker in Development trades only against a stub of Bybit.
@@ -93,9 +104,9 @@ public class TradingSettingsTests
         await host.StopAsync();
     }
 
-    private static Task<IHost> ProductionWorkerAsync(bool trading)
+    private static Task<IHost> ProductionWorkerAsync(bool trading, IReadOnlyDictionary<string, string?>? settings = null)
     {
-        return WorkerAsync("Production", trading);
+        return WorkerAsync("Production", trading, settings);
     }
 
     private static async Task<IHost> WorkerAsync(string environment, bool trading, IReadOnlyDictionary<string, string?>? settings = null)

@@ -89,9 +89,17 @@ public class IdeaTradingSettingsApiTests
         (await _scenario.Client.PutAsJsonAsync(Url, Body(minRiskReward: 0m))).StatusCode.ShouldBe(HttpStatusCode.NoContent);
     }
 
-    private static object Body(Guid? accountId = null, decimal amount = 20m, decimal maxAmount = 200m, int maxOpenTrades = 5, decimal maxTotalRisk = 5m, decimal minRiskReward = 1.5m)
+    private static object Body(
+        Guid? accountId = null,
+        decimal amount = 20m,
+        decimal maxAmount = 200m,
+        int maxOpenTrades = 5,
+        decimal maxTotalRisk = 5m,
+        decimal minRiskReward = 1.5m,
+        decimal? dailyLossLimit = null,
+        int? maxSameDirection = null)
     {
-        return new { accountId, amount, maxAmount, maxOpenTrades, maxTotalRisk, minRiskReward };
+        return new { accountId, amount, maxAmount, maxOpenTrades, maxTotalRisk, minRiskReward, dailyLossLimit, maxSameDirection };
     }
 
     private async Task<JsonElement> ReadAsync()
@@ -100,6 +108,40 @@ public class IdeaTradingSettingsApiTests
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
 
         return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+    }
+
+    // Scenario "Защиты по умолчанию": both off, and none of the other settings changes.
+    [Test]
+    public async Task Guards_of_the_autos_are_off_until_they_are_saved()
+    {
+        JsonElement settings = await ReadAsync();
+
+        settings.GetProperty("dailyLossLimit").ValueKind.ShouldBe(JsonValueKind.Null);
+        settings.GetProperty("maxSameDirection").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    // Scenarios "Выключить защиту" and the save: an empty value switches the guard off.
+    [Test]
+    public async Task Guards_are_saved_and_an_empty_value_switches_one_off()
+    {
+        (await _scenario.Client.PutAsJsonAsync(Url, Body(dailyLossLimit: 30m, maxSameDirection: 5))).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        JsonElement saved = await ReadAsync();
+        (saved.GetProperty("dailyLossLimit").GetString(), saved.GetProperty("maxSameDirection").GetInt32()).ShouldBe(("30", 5));
+
+        (await _scenario.Client.PutAsJsonAsync(Url, Body(dailyLossLimit: 30m))).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        JsonElement off = await ReadAsync();
+        (off.GetProperty("dailyLossLimit").GetString(), off.GetProperty("maxSameDirection").ValueKind).ShouldBe(("30", JsonValueKind.Null));
+    }
+
+    // Scenario "Дневной стоп ноль".
+    [Test]
+    public async Task Guard_out_of_range_is_refused_by_its_own_field_and_nothing_changes()
+    {
+        await ShouldBeRefusedOnAsync(await _scenario.Client.PutAsJsonAsync(Url, Body(dailyLossLimit: 0m)), "dailyLossLimit");
+        await ShouldBeRefusedOnAsync(await _scenario.Client.PutAsJsonAsync(Url, Body(dailyLossLimit: -5m)), "dailyLossLimit");
+        await ShouldBeRefusedOnAsync(await _scenario.Client.PutAsJsonAsync(Url, Body(maxSameDirection: 0)), "maxSameDirection");
+        (await ReadAsync()).GetProperty("dailyLossLimit").ValueKind.ShouldBe(JsonValueKind.Null);
     }
 
     private static async Task ShouldBeRefusedOnAsync(HttpResponseMessage response, string field)

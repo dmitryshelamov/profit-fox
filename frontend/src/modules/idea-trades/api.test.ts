@@ -20,6 +20,8 @@ const settings = {
   maxOpenTrades: 5,
   maxTotalRisk: '5',
   minRiskReward: '1.5',
+  dailyLossLimit: null,
+  maxSameDirection: null,
 };
 
 describe('requests of trades by ideas', () => {
@@ -50,7 +52,15 @@ describe('requests of trades by ideas', () => {
     await client.fetchQuery(ideaJournalQuery({ filters: noJournalFilters, page: 1, pageSize: 50 }));
     await client.fetchQuery(
       ideaJournalQuery({
-        filters: { setup: 'drop', symbol: 'eth', side: 'short', badge: 'none', days: '30' },
+        filters: {
+          setup: 'drop',
+          symbol: 'eth',
+          side: 'short',
+          badge: 'none',
+          days: '30',
+          origin: 'paper',
+          autoId: 'auto-1',
+        },
         page: 3,
         pageSize: 100,
       }),
@@ -58,7 +68,7 @@ describe('requests of trades by ideas', () => {
 
     expect(requests.map((request) => new URL(request.url).search)).toEqual([
       '?Page=1&PageSize=50',
-      '?Setup=drop&Symbol=eth&Side=short&Badge=none&Days=30&Page=3&PageSize=100',
+      '?Setup=drop&Symbol=eth&Side=short&Badge=none&Days=30&Origin=paper&AutoId=auto-1&Page=3&PageSize=100',
     ]);
   });
 
@@ -125,10 +135,34 @@ describe('requests of trades by ideas', () => {
       maxOpenTrades: '3',
       maxTotalRisk: '6',
       minRiskReward: '1.2',
+      dailyLossLimit: '30',
+      maxSameDirection: '5',
     });
 
     expect(await requests[0]!.text()).toBe(
-      '{"accountId":"account-1","amount":25.5,"maxAmount":300,"maxOpenTrades":3,"maxTotalRisk":6,"minRiskReward":1.2}',
+      '{"accountId":"account-1","amount":25.5,"maxAmount":300,"maxOpenTrades":3,"maxTotalRisk":6,"minRiskReward":1.2,"dailyLossLimit":30,"maxSameDirection":5}',
+    );
+  });
+
+  // Requirement "Экран настроек торговли идеями": an empty field saves as a guard that is off.
+  it('saves an empty guard as none', async () => {
+    const requests = fakeApi({
+      'PUT /api/idea-trading/settings': () => new Response(null, { status: 204 }),
+    });
+
+    await saveSettings({
+      accountId: null,
+      amount: '25.5',
+      maxAmount: '300',
+      maxOpenTrades: '3',
+      maxTotalRisk: '6',
+      minRiskReward: '1.2',
+      dailyLossLimit: '',
+      maxSameDirection: '',
+    });
+
+    expect(await requests[0]!.text()).toBe(
+      '{"accountId":null,"amount":25.5,"maxAmount":300,"maxOpenTrades":3,"maxTotalRisk":6,"minRiskReward":1.2,"dailyLossLimit":null,"maxSameDirection":null}',
     );
   });
 });

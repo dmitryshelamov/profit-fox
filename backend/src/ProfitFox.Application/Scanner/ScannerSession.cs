@@ -228,6 +228,7 @@ public sealed class ScannerSession(
                 if (time.GetUtcNow() >= closedAt)
                 {
                     await ideas.RemoveClosedAsync(cancellationToken);
+                    await CleanUpAutosAsync(cancellationToken);
                     closedAt = time.GetUtcNow() + ClosedRemoval;
                 }
 
@@ -243,6 +244,23 @@ public sealed class ScannerSession(
             {
                 journal.Failed("ideas", exception);
                 await Task.Delay(Retry, time, cancellationToken);
+            }
+        }
+    }
+
+    // Next to the closed ideas, once an hour: the old refusals of the autos go and the requests nobody took become refusals. The two do not wait for
+    // each other and a failure of either is logged, so neither stops the other, the ideas of the minute or the history.
+    private async Task CleanUpAutosAsync(CancellationToken cancellationToken)
+    {
+        foreach (Func<CancellationToken, Task> step in new Func<CancellationToken, Task>[] { ideas.RemoveOldRefusalsAsync, ideas.ExpireEntriesAsync })
+        {
+            try
+            {
+                await step(cancellationToken);
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                journal.Failed("autos", exception);
             }
         }
     }

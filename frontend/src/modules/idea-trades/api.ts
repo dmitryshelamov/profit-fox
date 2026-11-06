@@ -17,6 +17,10 @@ export interface JournalFilters {
   readonly badge: string;
   /** The period of the time of the close in days: 7, 30 or 90. */
   readonly days: string;
+  /** Who took the trade: `manual`, `auto` (with money) or `paper`. */
+  readonly origin: string;
+  /** The id of one auto, real and paper trades alike. */
+  readonly autoId: string;
 }
 
 export const noJournalFilters: JournalFilters = {
@@ -25,6 +29,8 @@ export const noJournalFilters: JournalFilters = {
   side: '',
   badge: '',
   days: '',
+  origin: '',
+  autoId: '',
 };
 
 /** What the journal is asked for: the filters, and the number and the size of the page of the closed trades. */
@@ -53,6 +59,8 @@ export function ideaJournalQuery(request: JournalRequest) {
               Side: given(filters.side),
               Badge: given(filters.badge),
               Days: given(filters.days) === undefined ? undefined : Number(filters.days),
+              Origin: given(filters.origin),
+              AutoId: given(filters.autoId),
               Page: page,
               PageSize: pageSize,
             },
@@ -130,6 +138,10 @@ export interface SettingsInput {
   readonly maxOpenTrades: string;
   readonly maxTotalRisk: string;
   readonly minRiskReward: string;
+  /** The loss of a day that stops the autos with money; an empty text switches the guard off. */
+  readonly dailyLossLimit: string;
+  /** The most open trades of one side that the autos with money stand; an empty text switches the guard off. */
+  readonly maxSameDirection: string;
 }
 
 /** A number the form holds as text; text that is no number goes out as it is, so the API names the field. */
@@ -145,6 +157,8 @@ export async function saveSettings(input: SettingsInput): Promise<void> {
         maxOpenTrades: field(input.maxOpenTrades),
         maxTotalRisk: field(input.maxTotalRisk),
         minRiskReward: field(input.minRiskReward),
+        dailyLossLimit: input.dailyLossLimit === '' ? null : field(input.dailyLossLimit),
+        maxSameDirection: input.maxSameDirection === '' ? null : field(input.maxSameDirection),
       },
     }),
   );

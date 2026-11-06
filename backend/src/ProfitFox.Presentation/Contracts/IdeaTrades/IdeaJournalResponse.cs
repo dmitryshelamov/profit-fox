@@ -2,15 +2,16 @@ using ProfitFox.Application.IdeaTrades.Queries.GetIdeaJournal;
 
 namespace ProfitFox.Presentation.Contracts.IdeaTrades;
 
-/// <summary>The journal: the open trades, the newest first, a page of the closed ones by the time they closed, and the totals of all the closed ones of the filter.</summary>
-public sealed record IdeaJournalResponse(IReadOnlyList<IdeaTradeResponse> Open, IdeaTradesPageResponse Closed, IdeaJournalTotalsResponse Totals)
+/// <summary>The journal: the open trades, the newest first, a page of the closed ones by the time they closed, the totals of all the closed real ones of the filter and those of the paper ones.</summary>
+public sealed record IdeaJournalResponse(IReadOnlyList<IdeaTradeResponse> Open, IdeaTradesPageResponse Closed, IdeaJournalTotalsResponse Totals, IdeaJournalTotalsResponse PaperTotals)
 {
     public static IdeaJournalResponse Of(IdeaJournal journal)
     {
         return new IdeaJournalResponse(
             [.. journal.Open.Select(IdeaTradeResponse.Of)],
             new IdeaTradesPageResponse([.. journal.Closed.Items.Select(IdeaTradeResponse.Of)], journal.Closed.Number, journal.Closed.Size, journal.Closed.Total),
-            IdeaJournalTotalsResponse.Of(journal.Totals));
+            IdeaJournalTotalsResponse.Of(journal.Totals),
+            IdeaJournalTotalsResponse.Of(journal.PaperTotals));
     }
 }
 

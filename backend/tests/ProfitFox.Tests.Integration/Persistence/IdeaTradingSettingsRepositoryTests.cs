@@ -53,4 +53,17 @@ public class IdeaTradingSettingsRepositoryTests
         await _repository.SaveAsync(first with { AccountId = null, MaxOpenTrades = 4 }, CancellationToken.None);
         (await _repository.GetAsync(CancellationToken.None)).ShouldBe(first with { AccountId = null, MaxOpenTrades = 4 });
     }
+
+    // Task 2.6: the two guards of the autos are saved with the rest, and an empty one is saved empty.
+    [Test]
+    public async Task Guards_of_the_autos_are_saved_and_can_be_switched_off()
+    {
+        IdeaTradingSettings guarded = IdeaTradingSettings.Default with { DailyLossLimit = 30m, MaxSameDirection = 5 };
+
+        await _repository.SaveAsync(guarded, CancellationToken.None);
+        (await _repository.GetAsync(CancellationToken.None)).ShouldBe(guarded);
+
+        await _repository.SaveAsync(guarded with { DailyLossLimit = null, MaxSameDirection = null }, CancellationToken.None);
+        (await _repository.GetAsync(CancellationToken.None)).ShouldBe(IdeaTradingSettings.Default);
+    }
 }

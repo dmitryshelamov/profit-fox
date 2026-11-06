@@ -16,6 +16,12 @@ public sealed class IdeaJournalQueryParameters
     /// <summary>The period of the time of the close, 7, 30 or 90 days; it does not touch the open trades.</summary>
     public int? Days { get; init; }
 
+    /// <summary>Who took the trade: <c>manual</c>, <c>auto</c> (with money) or <c>paper</c>.</summary>
+    public string? Origin { get; init; }
+
+    /// <summary>The auto by its id, real and paper trades alike.</summary>
+    public Guid? AutoId { get; init; }
+
     /// <summary>The number of the page of the closed trades from 1.</summary>
     public int? Page { get; init; }
 

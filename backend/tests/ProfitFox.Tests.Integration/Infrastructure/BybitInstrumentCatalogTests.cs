@@ -66,6 +66,23 @@ public class BybitInstrumentCatalogTests
         linear.Single(instrument => instrument.Symbol == "SOLUSDT").TickSize.ShouldBe(0.001m);
     }
 
+    // Task 2.5: the same list tells the step of the volume and the smallest volume and amount of each instrument, spot and linear alike.
+    [Test]
+    public async Task List_tells_the_step_and_the_minimums_of_the_volume_of_each_instrument()
+    {
+        _factory.Bybit.Rules[("spot", "BTCUSDT")] = ("0.01", "0.000001", "0.000048", "1");
+        _factory.Bybit.Rules[("linear", "SOLUSDT")] = ("0.001", "0.1", "0.2", "5");
+
+        IReadOnlyList<ListedInstrument> spot = await Catalog().ListAsync(MarketCategory.Spot, CancellationToken.None);
+        IReadOnlyList<ListedInstrument> linear = await Catalog().ListAsync(MarketCategory.Linear, CancellationToken.None);
+
+        ListedInstrument btc = spot.Single(instrument => instrument.Symbol == "BTCUSDT");
+        ListedInstrument sol = linear.Single(instrument => instrument.Symbol == "SOLUSDT");
+        (btc.QuantityStep, btc.MinQuantity, btc.MinAmount).ShouldBe((0.000001m, 0.000048m, 1m));
+        (sol.QuantityStep, sol.MinQuantity, sol.MinAmount).ShouldBe((0.1m, 0.2m, 5m));
+        (spot.Single(instrument => instrument.Symbol == "ETHUSDT").QuantityStep).ShouldBeNull();
+    }
+
     [Test]
     public async Task Linear_list_follows_the_cursor_and_collects_every_page()
     {

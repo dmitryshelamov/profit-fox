@@ -3,6 +3,7 @@ using ProfitFox.Domain.Entities.IdeaTrades.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Services.LiveTrading;
+using ProfitFox.Domain.ValueObjects.IdeaAutos;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 
 namespace ProfitFox.Domain.Services.IdeaTrades;
@@ -96,5 +97,19 @@ public static class IdeaTradeRefusals
         }
 
         return reasons;
+    }
+
+    /// <summary>What a reason with numbers is about: the reward to risk and its lowest, the free money and the amount asked, and the like. None for a reason without.</summary>
+    public static RefusalDetail? DetailOf(IdeaTradeRefusal reason, IdeaTradeEntry entry, IdeaTradingLimits limits, OpenIdeaTrades open, IdeaTradeAccount account)
+    {
+        return reason switch
+        {
+            IdeaTradeRefusal.RiskRewardTooLow => RefusalDetail.Numbers(entry.Size.RiskReward, limits.MinRiskReward),
+            IdeaTradeRefusal.NotEnoughMoney => RefusalDetail.Numbers(account.FreeMoney, entry.Asked),
+            IdeaTradeRefusal.AmountAboveMax => RefusalDetail.Numbers(entry.Asked, limits.MaxAmount),
+            IdeaTradeRefusal.TooManyOpenTrades => RefusalDetail.Numbers(open.Count, limits.MaxOpenTrades),
+            IdeaTradeRefusal.TotalRiskExceeded => RefusalDetail.Numbers(open.Risk + entry.Size.Risk, limits.MaxTotalRisk),
+            _ => null
+        };
     }
 }

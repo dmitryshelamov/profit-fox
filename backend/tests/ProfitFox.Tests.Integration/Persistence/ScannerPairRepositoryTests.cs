@@ -42,6 +42,16 @@ public class ScannerPairRepositoryTests
         (await _store.GetAllAsync(CancellationToken.None)).OrderBy(pair => pair.Instrument.Symbol).ShouldBe([btc, sol]);
     }
 
+    // Task 2.5.
+    [Test]
+    public async Task Step_and_minimums_of_the_volume_of_a_pair_are_saved()
+    {
+        var sol = new ScannerPair(new Instrument(MarketCategory.Linear, "SOLUSDT"), true, TickSize: 0.001m, QuantityStep: 0.1m, MinQuantity: 0.2m, MinAmount: 5m);
+        await _store.SaveAsync([sol], CancellationToken.None);
+
+        (await _store.GetAsync(sol.Instrument, CancellationToken.None)).ShouldBe(sol);
+    }
+
     [Test]
     public async Task Pair_is_read_by_its_instrument()
     {

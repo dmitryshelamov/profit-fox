@@ -92,6 +92,11 @@ internal sealed class IdeaTradeDb
 
     public DateTimeOffset? OpenedAt { get; init; }
 
+    public Guid? AutoId { get; init; }
+
+    /// <summary>Of a paper trade only.</summary>
+    public DateTimeOffset? SteppedUntil { get; init; }
+
     public long LeaseEpoch { get; init; }
 
     /// <summary>Read only by the queries that ask for it.</summary>

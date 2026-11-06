@@ -23,6 +23,7 @@ using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Tests.Unit.Application.Scanner.Ideas;
 
 using Shouldly;
 
@@ -40,6 +41,8 @@ public class ScannerSessionTests
     private IMarketSnapshotRepository _snapshots = null!;
     private IScannerJournal _journal = null!;
     private IIdeaRepository _ideaStore = null!;
+    private IIdeaAutoEntryRepository _entries = null!;
+    private IIdeaAutoRefusalRepository _refusals = null!;
     private IIdeaSignalRepository _ideaSignals = null!;
     private IIdeaReplayRepository _cursors = null!;
     private IIdeaExitRuleRepository _exitRules = null!;
@@ -71,6 +74,8 @@ public class ScannerSessionTests
         _snapshots.ReplaceSetupsAsync(Arg.Any<Guid>(), Arg.Any<IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>>>(), Arg.Any<CancellationToken>()).Returns(true);
         _journal = Substitute.For<IScannerJournal>();
         _ideaStore = Substitute.For<IIdeaRepository>();
+        _entries = Substitute.For<IIdeaAutoEntryRepository>();
+        _refusals = Substitute.For<IIdeaAutoRefusalRepository>();
         _ideaStore.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([]);
         _ideaStore.SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<CancellationToken>()).Returns([]);
         _ideaSignals = Substitute.For<IIdeaSignalRepository>();
@@ -379,6 +384,41 @@ public class ScannerSessionTests
         await Should.ThrowAsync<OperationCanceledException>(session);
     }
 
+    // Task 3.3: next to the closed ideas the lane deletes the refusals of the autos older than 7 days and turns the requests nobody took into refusals, hourly.
+    [Test]
+    public async Task Lane_of_ideas_cleans_the_refusals_and_the_requests_of_the_autos_with_the_closed_ideas()
+    {
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session().RunAsync(cancellation.Token);
+
+        await WaitAsync(() => _refusals.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaAutoRefusalRepository.DeleteBeforeAsync)) == 1);
+        await WaitAsync(() => _entries.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaAutoEntryRepository.ExpireAsync)) == 1);
+        await _refusals.Received(1).DeleteBeforeAsync(Start.AddDays(-7), Arg.Any<CancellationToken>());
+        _time.Advance(TimeSpan.FromMinutes(59));
+        await WaitAsync(() => _refusals.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaAutoRefusalRepository.DeleteBeforeAsync)) == 2, advance: true);
+        await WaitAsync(() => _entries.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaAutoEntryRepository.ExpireAsync)) == 2, advance: true);
+
+        await cancellation.CancelAsync();
+        await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
+    // Task 3.3: a failure of one of the two is logged and does not stop the other or the ideas of the minute.
+    [Test]
+    public async Task Failed_clean_up_of_the_autos_is_logged_and_the_other_one_and_the_lane_go_on()
+    {
+        var failure = new InvalidOperationException("storage down");
+        _refusals.DeleteBeforeAsync(Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(Task.FromException<int>(failure));
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session().RunAsync(cancellation.Token);
+
+        await WaitAsync(() => _entries.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaAutoEntryRepository.ExpireAsync)), advance: true);
+        await WaitAsync(() => _cursors.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaReplayRepository.GetAsync)), advance: true);
+
+        _journal.Received(1).Failed("autos", failure);
+        await cancellation.CancelAsync();
+        await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
     // Requirement "Срок хранения закрытых идей": a failed removal is logged, tried again, and the history goes on.
     [Test]
     public async Task Failed_removal_of_closed_ideas_is_logged_and_the_lane_goes_on()
@@ -465,7 +505,7 @@ public class ScannerSessionTests
         var settings = new ScannerSettings { HistoryDays = 1 };
         var pace = new ScannerPace();
         var recomputes = new IdeaRecomputes();
-        var ideas = new LiveIdeas(_ideaStore, Substitute.For<IIdeaVolatilityRepository>(), _candles, _exitRules, recomputes, market, new IdeasSettings(), new BacktestSettings(), _time);
+        var ideas = new LiveIdeas(_ideaStore, Substitute.For<IIdeaVolatilityRepository>(), _candles, _exitRules, recomputes, market, new IdeasSettings(), new BacktestSettings(), NoAutos.Create(market, new BacktestSettings(), _time, _entries, _refusals), _time);
         IScannerPairRepository pairs = Substitute.For<IScannerPairRepository>();
         pairs.GetAllAsync(Arg.Any<CancellationToken>()).Returns(_stored);
         IScannerStateRepository state = Substitute.For<IScannerStateRepository>();

@@ -137,19 +137,19 @@ public sealed class FakeBybitSocketServer : IAsyncDisposable
         await _app.DisposeAsync();
     }
 
-    public static JsonObject Kline(DateTimeOffset openTime, TimeSpan interval, decimal close, bool confirm, decimal volume = 1m, DateTimeOffset? at = null)
+    public static JsonObject Kline(DateTimeOffset openTime, TimeSpan interval, decimal close, bool confirm, decimal volume = 1m, DateTimeOffset? at = null, decimal? open = null, decimal? high = null, decimal? low = null, decimal? turnover = null)
     {
         return new JsonObject
         {
             ["start"] = openTime.ToUnixTimeMilliseconds(),
             ["end"] = (openTime + interval).ToUnixTimeMilliseconds() - 1,
             ["interval"] = ((int)interval.TotalMinutes).ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["open"] = Text(close),
+            ["open"] = Text(open ?? close),
             ["close"] = Text(close),
-            ["high"] = Text(close),
-            ["low"] = Text(close),
+            ["high"] = Text(high ?? close),
+            ["low"] = Text(low ?? close),
             ["volume"] = Text(volume),
-            ["turnover"] = Text(close),
+            ["turnover"] = Text(turnover ?? close),
             ["confirm"] = confirm,
             ["timestamp"] = (at ?? openTime + interval).ToUnixTimeMilliseconds()
         };

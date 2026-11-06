@@ -92,11 +92,11 @@ public sealed class LiveTradingScenario : IAsyncDisposable
     }
 
     /// <summary>
-    ///     A trading Worker whose exchange is <see cref="Exchange" />, with <paramref name="settings" /> over its own. With
+    ///     A trading Worker (with <paramref name="inspectKeys" /> one that asks the fake inspector of the factory what a key may do) whose exchange is <see cref="Exchange" />, with <paramref name="settings" /> over its own. With
     ///     <paramref name="bybitSocketAddress" /> its candles and account events come from the Bybit streams at that address, not
     ///     from <see cref="Exchange" />.
     /// </summary>
-    public WorkerHost StartWorker(Serilog.Core.ILogEventSink? logSink = null, IReadOnlyDictionary<string, string?>? settings = null, string? bybitSocketAddress = null)
+    public WorkerHost StartWorker(Serilog.Core.ILogEventSink? logSink = null, IReadOnlyDictionary<string, string?>? settings = null, string? bybitSocketAddress = null, bool inspectKeys = false)
     {
         var workerSettings = new Dictionary<string, string?>
         {
@@ -121,6 +121,13 @@ public sealed class LiveTradingScenario : IAsyncDisposable
                 services.RemoveAll<IOrderGateway>();
                 services.AddSingleton<IExchangeLedger>(Exchange);
                 services.AddSingleton<IOrderGateway>(Exchange);
+
+                if (inspectKeys)
+                {
+                    // The entries of the autos ask what the key may do, as the API does for a manual entry.
+                    services.RemoveAll<IExchangeKeyInspector>();
+                    services.AddSingleton(Factory.KeyInspector);
+                }
 
                 if (bybitSocketAddress is null)
                 {
@@ -239,11 +246,11 @@ public sealed class LiveTradingScenario : IAsyncDisposable
     ///     A trade by an idea saved as the API saves it: waiting for its entry, with the entry order saved to be sent. The idea is a market
     ///     <c>TwoR</c> long on BTCUSDT on the linear market of 15 minutes that fired a few minutes ago: entry 105, stop 100, target 115.
     /// </summary>
-    public async Task<IdeaTrade> CreateTradeAsync(IdeaType type = IdeaType.TwoR, IdeaSide side = IdeaSide.Long, decimal quantity = 0.47m, Instrument? instrument = null, decimal risk = 2m)
+    public async Task<IdeaTrade> CreateTradeAsync(IdeaType type = IdeaType.TwoR, IdeaSide side = IdeaSide.Long, decimal quantity = 0.47m, Instrument? instrument = null, decimal risk = 2m, Guid? autoId = null)
     {
         DateTimeOffset now = Factory.Time.GetUtcNow();
         Idea idea = IdeaGenerator.Generate(now.AddMinutes(-5), instrument: instrument ?? Linear, type: type, side: side);
-        var trade = IdeaTrade.Create(Guid.NewGuid(), idea, Account, 105m, new IdeaTradeSize(quantity, quantity * 105m, risk, risk * 2m, 2m), now);
+        var trade = IdeaTrade.Create(Guid.NewGuid(), idea, Account, 105m, new IdeaTradeSize(quantity, quantity * 105m, risk, risk * 2m, 2m), now, autoId: autoId);
         bool pullback = type == IdeaType.Pullback;
         var entry = IdeaTradeOrder.NewEntry(
             trade.Id,

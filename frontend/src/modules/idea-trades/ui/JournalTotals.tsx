@@ -11,7 +11,21 @@ import {
 } from '../model/journal';
 
 /** The totals of the closed trades of the filter: the outcomes, the money, the mean result with its interval, the time, and the two comparisons. */
-export function JournalTotals({ totals }: { totals: Schemas['IdeaJournalTotalsResponse'] }) {
+export function JournalTotals({
+  totals,
+  title,
+  caption,
+  label = 'Итоги',
+  tone = 'plain',
+}: {
+  totals: Schemas['IdeaJournalTotalsResponse'];
+  /** The name of the block: the kind of the trades counted. */
+  title: string;
+  caption: string;
+  /** The name of the region for the screen readers. */
+  label?: string;
+  tone?: 'plain' | 'paper';
+}) {
   const excluded = excludedText(totals);
   const rows: readonly (readonly [string, string])[] = [
     ['Исходы', outcomeCountsText(totals)],
@@ -23,7 +37,14 @@ export function JournalTotals({ totals }: { totals: Schemas['IdeaJournalTotalsRe
   ];
 
   return (
-    <section aria-label="Итоги" className="space-y-1 rounded-lg bg-panel p-4 text-sm">
+    <section
+      aria-label={label}
+      className={`space-y-1 rounded-lg bg-panel p-4 text-sm ${tone === 'paper' ? 'border border-run/40' : ''}`}
+    >
+      <h3 className="flex flex-wrap items-baseline gap-3">
+        <span className={`font-semibold ${tone === 'paper' ? 'text-run' : ''}`}>{title}</span>
+        <span className="text-xs font-normal text-muted">{caption}</span>
+      </h3>
       <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1">
         {rows.map(([label, value]) => (
           <div key={label} className="contents">

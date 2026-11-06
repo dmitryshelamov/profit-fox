@@ -6,7 +6,7 @@ afterEach(() => localStorage.clear());
 
 describe('the choice of the journal screen in the browser', () => {
   const defaults = {
-    filters: { setup: '', symbol: '', side: '', badge: '', days: '' },
+    filters: { setup: '', symbol: '', side: '', badge: '', days: '', origin: '', autoId: '' },
     pageSize: 50,
   };
 
@@ -17,7 +17,15 @@ describe('the choice of the journal screen in the browser', () => {
   // Scenario "Возврат на экран".
   it('gives back what was saved', () => {
     const choice = {
-      filters: { setup: 'drop', symbol: 'eth', side: 'short', badge: 'none', days: '30' },
+      filters: {
+        setup: 'drop',
+        symbol: 'eth',
+        side: 'short',
+        badge: 'none',
+        days: '30',
+        origin: 'paper',
+        autoId: 'auto-1',
+      },
       pageSize: 100,
     } as const;
 
@@ -30,7 +38,15 @@ describe('the choice of the journal screen in the browser', () => {
     localStorage.setItem(
       key,
       JSON.stringify({
-        filters: { setup: 'gone', symbol: 5, side: 'up', badge: 'big', days: '14' },
+        filters: {
+          setup: 'gone',
+          symbol: 5,
+          side: 'up',
+          badge: 'big',
+          days: '14',
+          origin: 'robot',
+          autoId: 7,
+        },
         pageSize: 75,
       }),
     );

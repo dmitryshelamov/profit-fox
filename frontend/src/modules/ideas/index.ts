@@ -20,6 +20,7 @@ export { candlesOfHours, durationText, overfitWarning, sameRule } from './model/
 export {
   candlesText,
   casesText,
+  counted,
   ideasText,
   ideaTypes,
   sideLabel,

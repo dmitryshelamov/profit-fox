@@ -64,7 +64,7 @@ public sealed class ScannerMinuteCycle(
         {
             setups = await ideas.RunAsync(end, cancellationToken);
         }
-        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        catch (Exception exception) when (exception is not ScannerLeaseLostException && !cancellationToken.IsCancellationRequested)
         {
             journal.Failed("ideas", exception);
         }
