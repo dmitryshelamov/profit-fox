@@ -99,7 +99,7 @@ public sealed class RunNextAutoEntryCommandHandler(
         var autoEntry = new AutoEntry(
             auto,
             entry.MinRiskReward,
-            IdeaGuards.DailyLoss(await trades.GetAllAsync(cancellationToken), preparation.Settings.DailyLossLimit, now),
+            DailyLossReader.Of(await trades.GetAllAsync(cancellationToken), preparation.Settings.DailyLossLimit, now),
             await paper.GetOpenAsync(cancellationToken),
             await autos.GetEveryAsync(cancellationToken));
         EntryCalculation calculation = await calculator.EvaluateAsync(preparation, autoEntry, cancellationToken);

@@ -8,7 +8,7 @@ namespace ProfitFox.Application.IdeaTrades.Commands.SaveIdeaTradingSettings;
 
 public sealed class SaveIdeaTradingSettingsCommandHandler(IIdeaTradingSettingsRepository repository, IExchangeAccountRepository accounts) : IRequestHandler<SaveIdeaTradingSettingsCommand>
 {
-    /// <exception cref="ValidationFailedException">An unknown account, an amount, a largest amount or a total risk not above zero, fewer than one trade, or a negative reward to the risk.</exception>
+    /// <exception cref="ValidationFailedException">An unknown account, an amount, a largest amount or a total risk not above zero, fewer than one trade, a negative reward to the risk, a daily stop not above zero, or fewer than one trade of a side.</exception>
     public async Task Handle(SaveIdeaTradingSettingsCommand request, CancellationToken cancellationToken)
     {
         IdeaTradingSettings settings = request.Settings;
@@ -42,6 +42,16 @@ public sealed class SaveIdeaTradingSettingsCommandHandler(IIdeaTradingSettingsRe
         if (settings.MinRiskReward < 0m)
         {
             errors["minRiskReward"] = "The lowest reward to the risk must not be negative.";
+        }
+
+        if (settings.DailyLossLimit <= 0m)
+        {
+            errors["dailyLossLimit"] = "The daily stop must be above zero.";
+        }
+
+        if (settings.MaxSameDirection < 1)
+        {
+            errors["maxSameDirection"] = "At least one trade of a side must be allowed.";
         }
 
         if (errors.Count > 0)

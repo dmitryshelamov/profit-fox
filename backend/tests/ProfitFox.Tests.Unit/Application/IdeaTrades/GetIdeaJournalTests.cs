@@ -8,11 +8,13 @@ using ProfitFox.Application.IdeaTrades;
 using ProfitFox.Application.IdeaTrades.Queries.GetIdeaJournal;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.Entities.ExchangeAccounts;
+using ProfitFox.Domain.Entities.IdeaAutos;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.Entities.IdeaTrades.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.ValueObjects.IdeaAutos;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.Ideas;
@@ -29,8 +31,13 @@ public class GetIdeaJournalTests
     private static readonly Instrument Eth = new Instrument(MarketCategory.Linear, "ETHUSDT");
     private static readonly Instrument Btc = new Instrument(MarketCategory.Linear, "BTCUSDT");
 
+    private static readonly IdeaAuto Impulse = Auto("Импульс лонг", null);
+    private static readonly IdeaAuto Gone = Auto("Пробои 5м", Noon.AddDays(-1));
+
     private readonly Guid _account = Guid.NewGuid();
     private IIdeaTradeRepository _trades = null!;
+    private IPaperIdeaTradeRepository _paper = null!;
+    private IIdeaAutoRepository _autos = null!;
     private IMarketHistoryClient _history = null!;
     private GetIdeaJournalQueryHandler _handler = null!;
 
@@ -39,10 +46,14 @@ public class GetIdeaJournalTests
     {
         _trades = Substitute.For<IIdeaTradeRepository>();
         _history = Substitute.For<IMarketHistoryClient>();
+        _paper = Substitute.For<IPaperIdeaTradeRepository>();
+        _paper.GetAllAsync(Arg.Any<CancellationToken>()).Returns([]);
+        _autos = Substitute.For<IIdeaAutoRepository>();
+        _autos.GetEveryAsync(Arg.Any<CancellationToken>()).Returns(new Dictionary<Guid, IdeaAuto> { [Impulse.Id] = Impulse, [Gone.Id] = Gone });
         IExchangeAccountRepository accounts = Substitute.For<IExchangeAccountRepository>();
         accounts.GetAllAsync(Arg.Any<CancellationToken>()).Returns([new ExchangeAccount(_account, "Основной", "key", 100, new HashSet<MarketCategory> { MarketCategory.Linear }, Noon)]);
         var backtests = new BacktestSettings { DefaultFees = new Dictionary<string, FeeRateSettings> { ["linear"] = new FeeRateSettings { Limit = 0.02m, Market = 0.055m } } };
-        _handler = new GetIdeaJournalQueryHandler(_trades, accounts, _history, backtests, new FakeTimeProvider(Noon));
+        _handler = new GetIdeaJournalQueryHandler(_trades, _paper, _autos, accounts, _history, backtests, new FakeTimeProvider(Noon));
     }
 
     // Scenario "Сделки в работе и закрытые": two open trades and 120 closed ones, the second page of 50.
@@ -244,6 +255,113 @@ public class GetIdeaJournalTests
             .ExitGrown(IdeaTradeLeg.TakeProfit, new LegTotals(1m, 104m, 0m), closedAt);
 
         return trade with { Promise = badge is null ? null : new IdeaPromise(badge, 0.3m, 0.1m, 400, 0.35m, 1.8m) };
+    }
+
+    // Requirements of the journal of the autos: a trade carries who took it, the paper ones stand with the real ones, and the filters and the totals tell them apart.
+    [Test]
+    public async Task Paper_trades_stand_among_the_real_ones_with_who_took_them_and_the_name_of_the_auto_a_deleted_one_too()
+    {
+        IdeaTrade manual = Waiting(Noon.AddHours(-3));
+        IdeaTrade auto = Waiting(Noon.AddHours(-2)) with { AutoId = Impulse.Id };
+        IdeaTrade paperOpen = Waiting(Noon.AddHours(-1)) with { AutoId = Gone.Id };
+        IdeaTrade paperClosed = Closed(Noon.AddMinutes(-30)) with { AutoId = Gone.Id };
+        IdeaTrade realClosed = Closed(Noon.AddMinutes(-10));
+        Trades([manual, auto, realClosed]);
+        Paper([paperOpen, paperClosed]);
+
+        IdeaJournal journal = (await _handler.Handle(Everything, CancellationToken.None)).Journal!;
+
+        journal.Open.Select(item => (item.Trade.Id, item.Origin, item.AutoName)).ShouldBe([(paperOpen.Id, IdeaTradeOrigin.Paper, "Пробои 5м"), (auto.Id, IdeaTradeOrigin.Auto, "Импульс лонг"), (manual.Id, IdeaTradeOrigin.Manual, null)]);
+        journal.Closed.Items.Select(item => (item.Trade.Id, item.Origin)).ShouldBe([(realClosed.Id, IdeaTradeOrigin.Manual), (paperClosed.Id, IdeaTradeOrigin.Paper)]);
+    }
+
+    // Scenario "Учебные отдельно": two real trades and three paper ones, two at the target and one at the stop.
+    [Test]
+    public async Task Totals_of_the_real_trades_leave_out_the_paper_ones_which_have_their_own()
+    {
+        Trades([Closed(Noon.AddMinutes(-1)), Closed(Noon.AddMinutes(-2))]);
+        Paper([Closed(Noon.AddMinutes(-3)), Closed(Noon.AddMinutes(-4)), Stopped(Noon.AddMinutes(-5))]);
+
+        IdeaJournal journal = (await _handler.Handle(Everything, CancellationToken.None)).Journal!;
+
+        (journal.Totals.Targets, journal.Totals.Stops).ShouldBe((2, 0));
+        (journal.PaperTotals.Targets, journal.PaperTotals.Stops, journal.PaperTotals.Manual).ShouldBe((2, 1, 0));
+    }
+
+    // Scenario "Только учебные": the real totals are zeros.
+    [TestCase("paper", 0, 3)]
+    [TestCase("manual", 1, 0)]
+    [TestCase("auto", 2, 0)]
+    public async Task Who_took_it_filters_the_trades_and_both_kinds_of_totals(string origin, int real, int paper)
+    {
+        Trades([Closed(Noon.AddMinutes(-1)), Closed(Noon.AddMinutes(-2)) with { AutoId = Impulse.Id }, Closed(Noon.AddMinutes(-3)) with { AutoId = Impulse.Id }]);
+        Paper([Closed(Noon.AddMinutes(-4)) with { AutoId = Gone.Id }, Closed(Noon.AddMinutes(-5)) with { AutoId = Gone.Id }, Closed(Noon.AddMinutes(-6)) with { AutoId = Gone.Id }]);
+
+        IdeaJournal journal = (await _handler.Handle(Everything with { Origin = origin }, CancellationToken.None)).Journal!;
+
+        journal.Totals.Targets.ShouldBe(real);
+        journal.PaperTotals.Targets.ShouldBe(paper);
+        journal.Closed.Total.ShouldBe(real + paper);
+    }
+
+    // Scenario "Один автомат": its real and its paper trades, the open ones and the closed ones.
+    [Test]
+    public async Task One_auto_leaves_its_real_and_paper_trades_only()
+    {
+        IdeaTrade mine = Closed(Noon.AddMinutes(-1)) with { AutoId = Impulse.Id };
+        IdeaTrade minePaper = Waiting(Noon.AddMinutes(-2)) with { AutoId = Impulse.Id };
+        Trades([mine, Closed(Noon.AddMinutes(-3)), Closed(Noon.AddMinutes(-4)) with { AutoId = Gone.Id }]);
+        Paper([minePaper, Closed(Noon.AddMinutes(-5)) with { AutoId = Gone.Id }]);
+
+        IdeaJournal journal = (await _handler.Handle(Everything with { AutoId = Impulse.Id }, CancellationToken.None)).Journal!;
+
+        journal.Closed.Items.Select(item => item.Trade.Id).ShouldBe([mine.Id]);
+        journal.Open.Select(item => item.Trade.Id).ShouldBe([minePaper.Id]);
+        (journal.Totals.Targets, journal.PaperTotals.Targets).ShouldBe((1, 0));
+    }
+
+    [Test]
+    public async Task Unknown_origin_and_auto_are_errors_named_by_the_parameter()
+    {
+        GetIdeaJournalResult result = await _handler.Handle(Everything with { Origin = "robot", AutoId = Guid.NewGuid() }, CancellationToken.None);
+
+        result.Journal.ShouldBeNull();
+        result.Errors.Keys.ShouldBe(["origin", "autoId"], ignoreOrder: true);
+    }
+
+    // Decision 14: an open paper trade is worth what a real one is, at the last price of Bybit.
+    [Test]
+    public async Task Open_paper_trade_gets_its_current_result_at_the_last_price()
+    {
+        IdeaTrade paperOpen = Opened(Noon.AddHours(-1), Eth) with { AutoId = Gone.Id };
+        Paper([paperOpen]);
+        _history.GetLastPriceAsync(Eth, Arg.Any<CancellationToken>()).Returns(24m);
+
+        IdeaJournalTrade view = (await _handler.Handle(Everything, CancellationToken.None)).Journal!.Open.Single();
+
+        (view.Origin, view.LastPrice).ShouldBe((IdeaTradeOrigin.Paper, 24m));
+        view.CurrentResult.ShouldNotBeNull();
+    }
+
+    private void Paper(IEnumerable<IdeaTrade> trades)
+    {
+        _paper.GetAllAsync(Arg.Any<CancellationToken>()).Returns([.. trades.Select(trade => trade with { AutoId = trade.AutoId ?? Gone.Id }).Select(trade => new PaperIdeaTrade(trade, trade.AutoId!.Value, trade.StatusAt))]);
+    }
+
+    private IdeaTrade Stopped(DateTimeOffset closedAt)
+    {
+        IdeaTrade trade = IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(closedAt.AddHours(-3)), _account, 100m, Size(), closedAt.AddHours(-3))
+            .EntryGrown(new LegTotals(1m, 100m, 0m), closedAt.AddHours(-2))
+            .ExitGrown(IdeaTradeLeg.StopLoss, new LegTotals(1m, 98m, 0m), closedAt);
+
+        return trade with { AutoId = Gone.Id };
+    }
+
+    private static IdeaAuto Auto(string name, DateTimeOffset? deletedAt)
+    {
+        var conditions = new IdeaAutoConditions([IdeaSetup.Impulse], [IdeaType.TwoR], [Interval.FifteenMinutes], null, null, null, 1.2m, 0);
+
+        return IdeaAuto.Create(Guid.NewGuid(), name, Guid.NewGuid(), 300m, conditions, 0) with { DeletedAt = deletedAt };
     }
 
     private static IdeaTradeSize Size()
