@@ -71,51 +71,17 @@ public class IdeaCaseRepositoryTests
 
         counts.ShouldBe(
         [
-            new IdeaBucketCounts(Key(IdeaSetup.Impulse), 3, 1, 1, 2m, 5.5m),
-            new IdeaBucketCounts(Key(IdeaSetup.EarlyImpulse), 0, 2, 0, 2m, -2m),
-            new IdeaBucketCounts(Key(IdeaSetup.HighVolatility), 1, 0, 0, 2m, 2m)
+            new IdeaBucketCounts(Key(IdeaSetup.Impulse), 3, 1, 1, 5.5m, 13.25m),
+            new IdeaBucketCounts(Key(IdeaSetup.EarlyImpulse), 0, 2, 0, -2m, 2m),
+            new IdeaBucketCounts(Key(IdeaSetup.HighVolatility), 1, 0, 0, 2m, 4m)
         ],
             ignoreOrder: true);
     }
 
-    // A guard: the mean R:R of long fractions reads as System.Decimal, so it needs no rounding, unlike the total of results.
+    // A result in R is often a repeating fraction of 28 digits; a total of several of them, or of their squares, past 8 holds more digits than
+    // System.Decimal.
     [Test]
-    public async Task Mean_risk_reward_of_long_fractions_is_read()
-    {
-        IdeaCase[] cases =
-        [
-            .. new[] { 98.9m, 98.9m, 98.8m }.Select((stop, index) => Case(Now.AddMinutes(index), IdeaStatus.Target, 2m) is var item
-                ? item with { Idea = item.Idea with { Track = item.Idea.Track with { Plan = new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 100m, stop, 110m) } } }
-                : null!)
-        ];
-        await _cases.AddAsync(cases, CancellationToken.None);
-
-        IdeaBucketCounts counts = (await _cases.CountAsync(2, Now.AddDays(-90), CancellationToken.None)).Single();
-
-        // 10 / 1.1 and 10 / 1.2 have 28 digits after the point; their mean past 8 still reads as System.Decimal.
-        counts.AverageRiskReward.ShouldBe(((10m / 1.1m * 2) + (10m / 1.2m)) / 3m, 0.000000000001m);
-    }
-
-    // 4 / 3 has 28 digits after the point, and the mean keeps them: past 10 it holds more digits than System.Decimal.
-    [Test]
-    public async Task Mean_risk_reward_past_ten_is_read_rounded()
-    {
-        IdeaCase[] cases =
-        [
-            .. new[] { (Stop: 97m, Target: 104m), (Stop: 99m, Target: 120m) }.Select((plan, index) => Case(Now.AddMinutes(index), IdeaStatus.Target, 2m) is var item
-                ? item with { Idea = item.Idea with { Track = item.Idea.Track with { Plan = new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 100m, plan.Stop, plan.Target) } } }
-                : null!)
-        ];
-        await _cases.AddAsync(cases, CancellationToken.None);
-
-        IdeaBucketCounts counts = (await _cases.CountAsync(2, Now.AddDays(-90), CancellationToken.None)).Single();
-
-        counts.AverageRiskReward.ShouldBe(((4m / 3m) + 20m) / 2m, 0.000000000001m);
-    }
-
-    // A result in R is often a repeating fraction of 28 digits; a total of several of them past 8 holds more digits than System.Decimal.
-    [Test]
-    public async Task Total_of_long_fractions_is_read_rounded()
+    public async Task Totals_of_long_fractions_are_read_rounded()
     {
         IdeaCase[] cases = [.. Enumerable.Range(0, 3).Select(index => Case(Now.AddMinutes(index), IdeaStatus.Target, 10m / 3m))];
         await _cases.AddAsync(cases, CancellationToken.None);
@@ -123,6 +89,30 @@ public class IdeaCaseRepositoryTests
         IdeaBucketCounts counts = (await _cases.CountAsync(2, Now.AddDays(-90), CancellationToken.None)).Single();
 
         counts.TotalR.ShouldBe(10m, 0.000000000001m);
+        counts.TotalSquaredR.ShouldBe(100m / 3m, 0.000000000001m);
+    }
+
+    // Decision 6 of the calibration: the outcomes of the cases of a version fired since a time, with their bucket and both times.
+    [Test]
+    public async Task Outcomes_of_the_version_since_a_time_are_read()
+    {
+        await _cases.AddAsync(
+        [
+            Case(Now, IdeaStatus.Target, 2m),
+            Case(Now.AddMinutes(1), IdeaStatus.Expired, 0.25m, setup: IdeaSetup.Drop),
+            Case(Now.AddMinutes(2), IdeaStatus.Target, 2m, engineVersion: 3),
+            Case(Now.AddDays(-91), IdeaStatus.Stop, -1m)
+        ],
+            CancellationToken.None);
+
+        IReadOnlyList<IdeaOutcome> outcomes = await _cases.GetOutcomesAsync(2, Now.AddDays(-90), CancellationToken.None);
+
+        outcomes.ShouldBe(
+        [
+            new IdeaOutcome(Key(IdeaSetup.Impulse), Now, Now.AddMinutes(30), IdeaStatus.Target, 2m),
+            new IdeaOutcome(Key(IdeaSetup.Drop), Now.AddMinutes(1), Now.AddMinutes(31), IdeaStatus.Expired, 0.25m)
+        ],
+            ignoreOrder: true);
     }
 
     // Decision 6: a new version of the rules clears the cases of the old ones.
@@ -141,8 +131,8 @@ public class IdeaCaseRepositoryTests
     public async Task Buckets_of_a_version_are_replaced_whole()
     {
         var buckets = new IdeaBucketRepository(_dataSource);
-        var full = new IdeaBucket(Key(IdeaSetup.Impulse), 90, new BucketStatistics(400, 20, 0.47m, 0.42m, 0.52m, 0.333m, 0.12m));
-        var few = new IdeaBucket(Key(IdeaSetup.Drop), 30, new BucketStatistics(12, 1, null, null, null, 0.25m, -0.1m));
+        var full = new IdeaBucket(Key(IdeaSetup.Impulse), 90, new BucketStatistics(400, 180, 200, 20, 0.45m, 0.40m, 0.50m, 0.12m, 0.002m, 0.238m));
+        var few = new IdeaBucket(Key(IdeaSetup.Drop), 30, new BucketStatistics(12, 5, 6, 1, null, null, null, -0.1m, null, null));
         await buckets.ReplaceAsync(1, [new IdeaBucket(Key(IdeaSetup.EarlyDrop), 90, few.Statistics)], CancellationToken.None);
 
         await buckets.ReplaceAsync(2, [full, few], CancellationToken.None);

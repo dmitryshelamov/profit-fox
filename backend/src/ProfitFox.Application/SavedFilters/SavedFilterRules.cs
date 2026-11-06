@@ -81,7 +81,7 @@ public static class SavedFilterRules
             decimal? value = Number(condition.Value);
             decimal? to = Number(condition.To);
 
-            if (op != FilterOperator.AboveBaseline && value is null)
+            if (op != FilterOperator.ReliablyPositive && value is null)
             {
                 errors[$"{key}.value"] = "Value must be a decimal number.";
             }
@@ -91,7 +91,7 @@ public static class SavedFilterRules
             }
             else
             {
-                conditions.Add(new FilterCondition(field.Field, op, op == FilterOperator.AboveBaseline ? null : value, op == FilterOperator.Between ? to : null));
+                conditions.Add(new FilterCondition(field.Field, op, op == FilterOperator.ReliablyPositive ? null : value, op == FilterOperator.Between ? to : null));
             }
         }
 

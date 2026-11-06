@@ -1653,6 +1653,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ideas/calibration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The calibration of the buckets on outcomes they had not seen, as the scanner last computed it. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description `90` or `30`. */
+                    Days?: string;
+                    /** @description `linear` or `spot`. */
+                    Category?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IdeaCalibrationResponse"];
+                        "application/json": components["schemas"]["IdeaCalibrationResponse"];
+                        "text/json": components["schemas"]["IdeaCalibrationResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ideas/{id}": {
         parameters: {
             query?: never;
@@ -2224,7 +2278,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** An idea of the pair from the price now by the rules of the type, without a setup; it is not stored and has only the baseline. */
+        /** An idea of the pair from the price now by the rules of the type, without a setup; it is not stored and has only its break-even. */
         post: {
             parameters: {
                 query?: never;
@@ -3551,20 +3605,49 @@ export interface components {
             closeRequested: boolean;
         };
         /**
-         * @description The statistics of a bucket: its cases with an outcome and the expired ones, the share of targets with its 95 % Wilson interval (none
-         *     with bool BucketStatisticsResponse.EnoughData false, «мало данных»), the baseline and the expectancy in R. Shares are fractions as decimal strings.
+         * @description The statistics of a bucket: its cases with an outcome, of them the targets, the stops and the expired ones, the share of targets among
+         *     all of them with its 95 % Wilson interval, the expectancy in R with its 95 % interval and the badge by it, `up`, `flat` or
+         *     `down` (no share, intervals or badge with bool BucketStatisticsResponse.EnoughData false, «мало данных»). Shares are fractions as decimal strings.
          */
         BucketStatisticsResponse: {
             /** Format: int32 */
             cases: number | string;
             /** Format: int32 */
+            targets: number | string;
+            /** Format: int32 */
+            stops: number | string;
+            /** Format: int32 */
             expired: number | string;
             probability: null | string;
             probabilityLow: null | string;
             probabilityHigh: null | string;
-            baseline: string;
             expectancy: string;
+            expectancyLow: null | string;
+            expectancyHigh: null | string;
+            badge: null | string;
             enoughData: boolean;
+        };
+        /**
+         * @description A row of a table of calibration: the cases promised from string? CalibrationRowResponse.From up to string? CalibrationRowResponse.To (none for an open end) or with a
+         *     string? CalibrationRowResponse.Badge (`up`, `flat`, `down`), the mean of what they were promised, the shares of their outcomes, the 95 %
+         *     Wilson interval of the share of targets and their mean result in R with its 95 % interval (no intervals under 30 cases). Numbers are
+         *     decimal strings.
+         */
+        CalibrationRowResponse: {
+            from: null | string;
+            to: null | string;
+            badge: null | string;
+            promised: string;
+            /** Format: int32 */
+            cases: number | string;
+            targetShare: string;
+            stopShare: string;
+            expiredShare: string;
+            probabilityLow: null | string;
+            probabilityHigh: null | string;
+            expectancy: string;
+            expectancyLow: null | string;
+            expectancyHigh: null | string;
         };
         /** @description Prices and volumes as decimal strings: JSON numbers lose precision in JavaScript clients. */
         CandleResponse: {
@@ -3694,8 +3777,32 @@ export interface components {
             statistics: components["schemas"]["BucketStatisticsResponse"];
         };
         /**
+         * @description The calibration of the cases fired in the last int IdeaCalibrationResponse.Days days of a string? IdeaCalibrationResponse.Category, all of them without one: when it
+         *     was computed (none before the first time, with zeros and empty tables), the checked cases and the ones whose bucket had fewer than 30
+         *     cases, the Brier score of the buckets and of the share of targets of the category, the rows by promised probability, by promised
+         *     expectancy and by badge, and the CalibrationRowResponse? IdeaCalibrationResponse.Total of all checked cases. Numbers are decimal strings.
+         */
+        IdeaCalibrationResponse: {
+            /** Format: date-time */
+            computedAt: null | string;
+            /** Format: int32 */
+            days: number | string;
+            category: null | string;
+            /** Format: int32 */
+            checked: number | string;
+            /** Format: int32 */
+            unchecked: number | string;
+            brier: null | string;
+            baseBrier: null | string;
+            probabilities: components["schemas"]["CalibrationRowResponse"][];
+            expectancies: components["schemas"]["CalibrationRowResponse"][];
+            badges: components["schemas"]["CalibrationRowResponse"][];
+            total: null | components["schemas"]["CalibrationRowResponse"];
+        };
+        /**
          * @description A trade idea with its levels and where it stands, and the statistics of its bucket over 90 days (BucketStatisticsResponse? IdeaResponse.Bucket) and over the last
-         *     30 (BucketStatisticsResponse? IdeaResponse.Recent), none while the bucket has no case. string IdeaResponse.Baseline is the bucket's, or 1 / (1 + R:R) of the idea.
+         *     30 (BucketStatisticsResponse? IdeaResponse.Recent), none while the bucket has no case. string? IdeaResponse.BreakEven is the share of targets the idea breaks even at after the fees if it
+         *     never expires, none when the target does not cover them.
          *     string IdeaResponse.ProfitPerUsdt, string IdeaResponse.LossPerUsdt and string IdeaResponse.RiskPerUsdt are its money on 1 USDT of the amount of a deal,
          *     after the fees. string IdeaResponse.RiskReward is the ratio of the prices, string IdeaResponse.NetRiskReward the profit over the loss after the fees. string? IdeaResponse.Tick is the price step of the pair, none for an idea made before it was kept. Numbers are decimal strings; string IdeaResponse.Move in ATR, string IdeaResponse.VolumeRatio in medians of volume.
          */
@@ -3727,7 +3834,7 @@ export interface components {
             exitPrice: null | string;
             move: string;
             volumeRatio: string;
-            baseline: string;
+            breakEven: null | string;
             bucket: null | components["schemas"]["BucketStatisticsResponse"];
             recent: null | components["schemas"]["BucketStatisticsResponse"];
         };
@@ -3945,8 +4052,9 @@ export interface components {
             side: null | string;
         };
         /**
-         * @description An own idea from the price now: its levels, R:R of the prices, string? OwnIdeaResponse.NetRiskReward after the fees and the baseline 1 / (1 + R:R),
-         *     its only probability («без сетапа: только базовая линия»); bool OwnIdeaResponse.Made false and no levels when the rules of its type make none. string? OwnIdeaResponse.Tick is the price step of the pair. Numbers are decimal strings.
+         * @description An own idea from the price now: its levels, R:R of the prices, string? OwnIdeaResponse.NetRiskReward after the fees and string? OwnIdeaResponse.BreakEven,
+         *     the share of targets it breaks even at after the fees if it never expires, none when the target does not cover them; bool OwnIdeaResponse.Made
+         *     false and no levels when the rules of its type make none. string? OwnIdeaResponse.Tick is the price step of the pair. Numbers are decimal strings.
          */
         OwnIdeaResponse: {
             made: boolean;
@@ -3955,7 +4063,7 @@ export interface components {
             target: null | string;
             riskReward: null | string;
             netRiskReward: null | string;
-            baseline: null | string;
+            breakEven: null | string;
             tick: null | string;
         };
         PinResponse: {
@@ -4023,7 +4131,7 @@ export interface components {
         };
         /**
          * @description A condition: a field code of the catalog, an operator (`&gt;`, `&gt;=`, `&lt;`, `&lt;=`, `=`, `between` or
-         *     `above_baseline`), its value and for `between` its upper bound, as decimal strings.
+         *     `reliably_positive`), its value and for `between` its upper bound, as decimal strings.
          */
         SavedFilterConditionBody: {
             field: null | string;

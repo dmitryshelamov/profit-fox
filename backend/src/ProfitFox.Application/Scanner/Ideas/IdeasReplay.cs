@@ -25,6 +25,7 @@ public sealed class IdeasReplay(
     IIdeaReplayRepository cursors,
     IIdeaVolatilityRepository volatility,
     IIdeaBucketRepository buckets,
+    IdeaCalibration calibration,
     ScannerMarket market,
     IdeasSettings settings,
     BacktestSettings backtests,
@@ -47,7 +48,7 @@ public sealed class IdeasReplay(
         await cursors.DeleteOtherVersionsAsync(version.Number, cancellationToken);
     }
 
-    /// <summary>The statistics of every bucket over the last 90 and 30 days.</summary>
+    /// <summary>The statistics of every bucket over the last 90 and 30 days, then the calibration of the buckets.</summary>
     public async Task RecomputeBucketsAsync(CancellationToken cancellationToken)
     {
         DateTimeOffset now = time.GetUtcNow();
@@ -59,10 +60,11 @@ public sealed class IdeasReplay(
             computed.AddRange(counts.Select(count => new IdeaBucket(
                 count.Key,
                 days,
-                BucketStatisticsCalculator.Compute(count.Targets, count.Stops, count.Expired, count.AverageRiskReward, count.TotalR))));
+                BucketStatisticsCalculator.Compute(count.Targets, count.Stops, count.Expired, count.TotalR, count.TotalSquaredR))));
         }
 
         await buckets.ReplaceAsync(version.Number, computed, cancellationToken);
+        await calibration.RecomputeAsync(now, cancellationToken);
     }
 
     /// <summary>Replays the turn of the pair furthest behind; <c>false</c> when every pair is replayed up to its coverage.</summary>
