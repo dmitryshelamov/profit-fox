@@ -85,7 +85,10 @@ export function IdeasCalibrationPage({
         <h1 className="text-2xl font-bold">Калибровка</h1>
         <p className="text-sm text-muted">
           Что обещали корзины и как закончились кейсы, которых они ещё не видели. Сканер
-          пересчитывает калибровку вместе с корзинами.
+          пересчитывает калибровку вместе с корзинами.{' '}
+          <Link to="/ideas/exit-rules" className="text-run hover:underline">
+            Срок жизни и цель
+          </Link>
         </p>
       </header>
       <div className="flex flex-wrap items-center gap-3">
@@ -127,7 +130,7 @@ function ReportView({ report }: { report: Report }) {
   if (report.computedAt === null) {
     return (
       <p className="text-sm text-muted">
-        Калибровка ещё не посчитана: сканер считает её вместе с корзинами раз в 10 минут.
+        Калибровка ещё не посчитана: сканер считает её вместе с корзинами раз в час.
       </p>
     );
   }

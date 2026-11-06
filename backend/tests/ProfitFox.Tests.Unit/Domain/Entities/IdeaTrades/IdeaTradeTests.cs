@@ -43,7 +43,7 @@ public class IdeaTradeTests
         New().Promise.ShouldBeNull();
     }
 
-    // Decision 8: a pullback waits 4 candles of its interval from the moment it fired; the others enter at once.
+    // Decision 8: a pullback waits the 4 candles of its window from the moment it fired; the others enter at once.
     [Test]
     public void Pullback_keeps_the_deadline_of_its_entry_and_the_price_of_its_idea()
     {
@@ -54,6 +54,16 @@ public class IdeaTradeTests
         trade.EntryDeadline.ShouldBe(Fired.AddMinutes(60));
         trade.EntryExpired(Fired.AddMinutes(59)).ShouldBeFalse();
         trade.EntryExpired(Fired.AddMinutes(60)).ShouldBeTrue();
+    }
+
+    // tune-idea-rules task 2.4: the deadline follows the entry window of the idea, 8 candles of 15 minutes here.
+    [Test]
+    public void Pullback_waits_the_entry_window_of_its_idea()
+    {
+        Idea generated = IdeaGenerator.Generate(Fired, type: IdeaType.Pullback);
+        Idea idea = generated with { Track = generated.Track with { EntryCandles = 8 } };
+
+        IdeaTrade.Create(Guid.NewGuid(), idea, Account, 105m, Size(), Now).EntryDeadline.ShouldBe(Fired.AddMinutes(120));
     }
 
     [Test]

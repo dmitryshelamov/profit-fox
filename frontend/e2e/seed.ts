@@ -1,7 +1,10 @@
 import pg from 'pg';
 
-/** The version of the rules of ideas the scanner runs (`IdeasEngineVersion.Current`): the screens read only its calibration. */
-const engineVersion = 4;
+/**
+ * The version of the rules of ideas the scanner runs (`IdeasEngineVersion.Current`): the screens read only its calibration and
+ * signals.
+ */
+const engineVersion = 5;
 
 /** A client of the disposable database of the run, whose name playwright.config.ts gave to every worker. */
 async function connect(): Promise<pg.Client> {
@@ -54,7 +57,7 @@ export interface OpenIdea {
   readonly entry: number;
   readonly stop: number;
   readonly target: number;
-  /** Minutes since the idea fired; a pullback lives 4 candles of 15 minutes from then. */
+  /** Minutes since the idea fired; a pullback waits 4 candles of 15 minutes from then, the window of its default rule. */
   readonly firedMinutesAgo: number;
 }
 
@@ -73,10 +76,11 @@ export async function seedOpenIdea(idea: OpenIdea): Promise<string> {
     );
     const inserted = await client.query<{ id: string }>(
       `INSERT INTO ideas (id, category, symbol, setup, type, "interval", side, fired_at, entry, stop, target, risk_reward,
-                          status, status_at, entered_at, exit_price, move, volume_ratio, engine_version)
+                          status, status_at, entered_at, exit_price, move, volume_ratio, engine_version, life_candles, target_r, entry_candles)
        VALUES (gen_random_uuid(), 'linear', $1, 'impulse', $2, '15', $3, now() - make_interval(mins => $4), $5, $6, $7,
                abs($7::numeric - $5::numeric) / abs($5::numeric - $6::numeric), 'awaiting_entry', now() - interval '1 minute',
-               NULL, NULL, 3, 2, 3)
+               NULL, NULL, 3, 2, 3, 24, CASE WHEN $2 = 'levels' THEN NULL ELSE 2 END,
+               CASE $2 WHEN 'pullback' THEN 4 WHEN 'stop_entry' THEN 12 END)
        RETURNING id`,
       [idea.symbol, idea.type, idea.side, idea.firedMinutesAgo, idea.entry, idea.stop, idea.target],
     );
@@ -105,7 +109,7 @@ export async function removeOpenIdeas(symbol: string): Promise<void> {
 /**
  * A report of the calibration over 90 days of all categories, as the scanner stores it (decimals as strings), so the screen has
  * tables before the scanner has history enough to check a case. The scanner replaces the reports whole when it recomputes the
- * buckets, every 10 minutes: a test reads the screen right after this.
+ * buckets, once an hour: a test reads the screen right after this.
  */
 export async function seedCalibration(): Promise<void> {
   const client = await connect();
@@ -142,6 +146,43 @@ export async function seedCalibration(): Promise<void> {
        ON CONFLICT (engine_version, days, category) DO UPDATE SET computed_at = EXCLUDED.computed_at, report = EXCLUDED.report`,
       [JSON.stringify(report)],
     );
+  } finally {
+    await client.end();
+  }
+}
+
+/**
+ * Forty signals of «Откат» long on 15 minutes of `E2E001USDT`, a pair the scanner does not keep, one a day over the last 40 days,
+ * as the replay stores them: the limit at 100 fills 10 minutes after the firing, with the stop at 98; +2 R at 500 minutes from the
+ * entry after +0.5, +1 and +1.5 R at 100, 200 and 350, the stop at 900, every close of the grid at 100.5. With 24 candles each
+ * expires at +0.25 R before the fees, with 48 it takes +2 R.
+ */
+export async function seedSignals(): Promise<void> {
+  const client = await connect();
+
+  try {
+    await client.query(
+      `INSERT INTO idea_cases (category, symbol, setup, type, "interval", side, fired_at, engine_version, entry, stop, target, move,
+                               volume_ratio, tick, entry_after, stop_before_entry_after, stop_after, ladder_after, target_after, closes,
+                               tracked_until)
+       SELECT 'linear', 'E2E001USDT', 'impulse', 'pullback', '15', 'long', date_trunc('minute', now()) - make_interval(days => n),
+              ${engineVersion}, 100, 98, NULL, 3, 2, 0.01, 10, NULL, 900,
+              ARRAY[100, 200, 350, 500, NULL, NULL, NULL, NULL, NULL, NULL]::integer[], NULL, array_fill(100.5::numeric, ARRAY[19]),
+              date_trunc('minute', now()) - make_interval(days => n) + interval '14 days'
+       FROM generate_series(1, 40) AS n
+       ON CONFLICT DO NOTHING`,
+    );
+  } finally {
+    await client.end();
+  }
+}
+
+/** Removes the exit rules a test applied, so the ideas of the other tests live by the defaults. */
+export async function removeExitRules(): Promise<void> {
+  const client = await connect();
+
+  try {
+    await client.query('DELETE FROM idea_exit_rules');
   } finally {
     await client.end();
   }

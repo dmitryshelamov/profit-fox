@@ -6,6 +6,7 @@ using ProfitFox.Application.Scanner.Backfill;
 using ProfitFox.Application.Scanner.Ideas;
 using ProfitFox.Application.Scanner.Minute;
 using ProfitFox.Application.Scanner.Universe;
+using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
@@ -15,11 +16,12 @@ using ProfitFox.Domain.ValueObjects.MarketData;
 namespace ProfitFox.Application.Scanner;
 
 /// <summary>
-///     The scanner while it holds the stream: the list of pairs, the stream of minute candles, the loads, the minute cycle and the ideas. Four
+///     The scanner while it holds the stream: the list of pairs, the stream of minute candles, the loads, the minute cycle and the ideas. Six
 ///     lanes run side by side: the stream's candles go to storage in batches; the REST lane catches up the pairs that lag behind, reads the list
 ///     again, tops up funding and loads history, one piece at a time; the minute cycle computes the snapshot and the live ideas; the lane of
-///     ideas reads the warm-ups of the live ideas, replays history from storage only, recomputes the buckets every 10 minutes and removes the
-///     ideas closed more than a week ago once an hour. A failed step is logged and tried again; only the end of the lease stops the session.
+///     ideas reads the warm-ups of the live ideas, replays history from storage only and removes the ideas closed more than a week ago once an
+///     hour; one lane of statistics recomputes the buckets and the calibration once an hour, another the buckets of a type × interval whose exit
+///     rule changed (requirement "Пересчёт корзин"). A failed step is logged and tried again; only the end of the lease stops the session.
 /// </summary>
 public sealed class ScannerSession(
     IScannerPairRepository pairs,
@@ -30,13 +32,15 @@ public sealed class ScannerSession(
     ScannerMinuteCycle minute,
     LiveIdeas ideas,
     IdeasReplay replay,
+    IdeaStatistics statistics,
+    IdeaRecomputes recomputes,
     ScannerMarket market,
     IScannerJournal journal,
     TimeProvider time)
 {
     private static readonly TimeSpan Retry = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan FundingTopUp = TimeSpan.FromHours(1);
-    private static readonly TimeSpan BucketsRefresh = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan StatisticsRefresh = TimeSpan.FromHours(1);
     private static readonly TimeSpan ClosedRemoval = TimeSpan.FromHours(1);
 
     private readonly Channel<(Instrument, Candle)> _closed = Channel.CreateUnbounded<(Instrument, Candle)>();
@@ -67,7 +71,8 @@ public sealed class ScannerSession(
         try
         {
             await SubscribeAsync(session.Token);
-            Task[] lanes = [WriteCandlesAsync(session.Token), RestAsync(session.Token), MinutesAsync(session.Token), IdeasAsync(session.Token)];
+            Task[] lanes = [WriteCandlesAsync(session.Token), RestAsync(session.Token), MinutesAsync(session.Token), IdeasAsync(session.Token), WholeStatisticsAsync(session.Token),
+                RuleStatisticsAsync(session.Token)];
             Task first = await Task.WhenAny(lanes);
 
             // The lanes use the services of the session, so none of them outlives it.
@@ -198,7 +203,6 @@ public sealed class ScannerSession(
     private async Task IdeasAsync(CancellationToken cancellationToken)
     {
         bool cleaned = false;
-        DateTimeOffset bucketsAt = time.GetUtcNow();
         DateTimeOffset closedAt = time.GetUtcNow();
 
         try
@@ -230,12 +234,6 @@ public sealed class ScannerSession(
                 // The warm-ups of the live ideas go before the history.
                 bool warmed = await ideas.ReadWarmUpsAsync(cancellationToken);
 
-                if (time.GetUtcNow() >= bucketsAt)
-                {
-                    await replay.RecomputeBucketsAsync(cancellationToken);
-                    bucketsAt = time.GetUtcNow() + BucketsRefresh;
-                }
-
                 if (!warmed && !await replay.StepAsync(cancellationToken))
                 {
                     await Task.Delay(TimeSpan.FromMinutes(1), time, cancellationToken);
@@ -244,6 +242,66 @@ public sealed class ScannerSession(
             catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
             {
                 journal.Failed("ideas", exception);
+                await Task.Delay(Retry, time, cancellationToken);
+            }
+        }
+    }
+
+    // While a recompute runs the API and the ideas read the buckets before it: storage replaces them whole when it ends. The whole pass
+    // runs over a minute on the market of prod, so the buckets of a rule applied go in a lane of their own; the rules applied while the whole
+    // pass ran go there again after it, for it wrote their buckets by the rules before.
+    private async Task WholeStatisticsAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                foreach ((IdeaType type, Interval interval) in await statistics.RecomputeAsync(cancellationToken))
+                {
+                    recomputes.Add(type, interval);
+                }
+
+                await Task.Delay(StatisticsRefresh, time, cancellationToken);
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                journal.Failed("statistics", exception);
+                await Task.Delay(Retry, time, cancellationToken);
+            }
+        }
+    }
+
+    private async Task RuleStatisticsAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                IReadOnlyList<(IdeaType Type, Interval Interval)> changed = recomputes.Take();
+
+                for (int index = 0; index < changed.Count; index++)
+                {
+                    try
+                    {
+                        await statistics.RecomputeAsync(changed[index].Type, changed[index].Interval, cancellationToken);
+                    }
+                    catch
+                    {
+                        // The one that failed and the ones after it go back, to be done after the retry.
+                        foreach ((IdeaType type, Interval interval) in changed.Skip(index))
+                        {
+                            recomputes.Add(type, interval);
+                        }
+
+                        throw;
+                    }
+                }
+
+                await recomputes.WaitAsync(StatisticsRefresh, time, cancellationToken);
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                journal.Failed("statistics", exception);
                 await Task.Delay(Retry, time, cancellationToken);
             }
         }

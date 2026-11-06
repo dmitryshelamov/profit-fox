@@ -14,6 +14,7 @@ using ProfitFox.Application.Scanner.Minute;
 using ProfitFox.Application.Scanner.Universe;
 using ProfitFox.Application.Workers;
 using ProfitFox.Domain.Entities.Ideas;
+using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
@@ -39,8 +40,9 @@ public class ScannerSessionTests
     private IMarketSnapshotRepository _snapshots = null!;
     private IScannerJournal _journal = null!;
     private IIdeaRepository _ideaStore = null!;
-    private IIdeaCaseRepository _ideaCases = null!;
+    private IIdeaSignalRepository _ideaSignals = null!;
     private IIdeaReplayRepository _cursors = null!;
+    private IIdeaExitRuleRepository _exitRules = null!;
     private IAsyncDisposable _subscription = null!;
     private FakeTimeProvider _time = null!;
     private Action<Instrument, Candle> _closed = null!;
@@ -69,7 +71,12 @@ public class ScannerSessionTests
         _snapshots.ReplaceSetupsAsync(Arg.Any<Guid>(), Arg.Any<IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>>>(), Arg.Any<CancellationToken>()).Returns(true);
         _journal = Substitute.For<IScannerJournal>();
         _ideaStore = Substitute.For<IIdeaRepository>();
-        _ideaCases = Substitute.For<IIdeaCaseRepository>();
+        _ideaStore.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([]);
+        _ideaStore.SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<CancellationToken>()).Returns([]);
+        _ideaSignals = Substitute.For<IIdeaSignalRepository>();
+        _ideaSignals.StreamAsync(Arg.Any<int>(), Arg.Any<DateTimeOffset>(), Arg.Any<(IdeaType, Interval)?>(), Arg.Any<CancellationToken>())
+            .Returns(_ => AsyncEnumerable.Empty<IdeaSignal>());
+        _exitRules = ExitRules();
         _cursors = Substitute.For<IIdeaReplayRepository>();
         _cursors.GetAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new Dictionary<Instrument, IdeaReplayCursor>());
         _time = new FakeTimeProvider(Start);
@@ -195,23 +202,143 @@ public class ScannerSessionTests
         _subscription.ClearReceivedCalls();
     }
 
-    // Requirement "Прогон идей в фоне сканера": the lane of ideas starts by clearing other versions, recomputes the buckets every 10 minutes,
-    // and a failure in it is logged and tried again.
+    // Requirement "Прогон идей в фоне сканера": the lane of ideas starts by clearing other versions, then replays history, and a failure in it
+    // is logged and tried again.
     [Test]
     public async Task Lane_of_ideas_clears_other_versions_and_logs_its_failure()
     {
         var failure = new InvalidOperationException("replay");
-        _ideaCases.DeleteOtherVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Task.FromException(failure), Task.CompletedTask);
+        _ideaSignals.DeleteOtherVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Task.FromException(failure), Task.CompletedTask);
         using var cancellation = new CancellationTokenSource();
         Task session = Session().RunAsync(cancellation.Token);
 
         await WaitAsync(() => _journal.ReceivedCalls().Any(call => Equals(call.GetArguments()[0], "ideas")));
-        await WaitAsync(() => _ideaCases.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaCaseRepository.DeleteOtherVersionsAsync)) == 2, advance: true);
-        await WaitAsync(() => _ideaCases.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaCaseRepository.CountAsync)), advance: true);
+        await WaitAsync(() => _ideaSignals.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaSignalRepository.DeleteOtherVersionsAsync)) == 2, advance: true);
+        await WaitAsync(() => _cursors.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaReplayRepository.GetAsync)), advance: true);
 
         _journal.Received(1).Failed("ideas", failure);
-        int counts = _ideaCases.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaCaseRepository.CountAsync));
-        await WaitAsync(() => _ideaCases.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaCaseRepository.CountAsync)) > counts, advance: true);
+        await cancellation.CancelAsync();
+        await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
+    // Scenario "Минута во время пересчёта": the statistics have a lane of their own; while a recompute stands, the replay goes on.
+    [Test]
+    public async Task Replay_goes_on_while_the_statistics_are_recomputed()
+    {
+        var stuck = new TaskCompletionSource();
+        _ideaSignals.StreamAsync(Arg.Any<int>(), Arg.Any<DateTimeOffset>(), Arg.Any<(IdeaType, Interval)?>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Stuck(stuck.Task));
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session().RunAsync(cancellation.Token);
+
+        await WaitAsync(() => _ideaSignals.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaSignalRepository.StreamAsync)));
+        await WaitAsync(() => _cursors.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaReplayRepository.GetAsync)), advance: true);
+        await WaitAsync(() => _snapshots.ReceivedCalls().Count() >= 2, advance: true);
+
+        stuck.SetResult();
+        await cancellation.CancelAsync();
+        await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
+    // Scenario "Час без применений": the whole recompute starts the session and comes again an hour later, not before.
+    [Test]
+    public async Task Statistics_are_recomputed_once_an_hour()
+    {
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session().RunAsync(cancellation.Token);
+
+        await WaitAsync(() => Recomputes(null) == 1);
+        _time.Advance(TimeSpan.FromMinutes(59));
+        await Task.Delay(200);
+        Recomputes(null).ShouldBe(1);
+        _time.Advance(TimeSpan.FromMinutes(1));
+        await WaitAsync(() => Recomputes(null) == 2);
+
+        await cancellation.CancelAsync();
+        await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
+    // Scenario "Пересчёт после применения": the minute after a rule is applied its buckets are recomputed by it.
+    [Test]
+    public async Task Buckets_of_a_rule_applied_are_recomputed_within_two_minutes()
+    {
+        DateTimeOffset appliedAt = Start.AddMinutes(1);
+        var applied = new IdeaExitRule(IdeaType.Pullback, Interval.FifteenMinutes, 48, 2.5m, 8, appliedAt);
+        _exitRules.GetAllAsync(Arg.Any<CancellationToken>()).Returns(_ => _time.GetUtcNow() >= appliedAt ? [applied] : []);
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session().RunAsync(cancellation.Token);
+
+        await WaitAsync(() => Recomputes((IdeaType.Pullback, Interval.FifteenMinutes)) == 1, advance: true);
+
+        (_time.GetUtcNow() - appliedAt).ShouldBeLessThan(TimeSpan.FromMinutes(2));
+        await cancellation.CancelAsync();
+        await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
+    // Review of tune-idea-rules: on the market of prod the whole recompute takes over a minute; the buckets of a rule applied meanwhile do not
+    // wait for it.
+    [Test]
+    public async Task Buckets_of_a_rule_applied_do_not_wait_for_the_whole_recompute()
+    {
+        var stuck = new TaskCompletionSource();
+        DateTimeOffset appliedAt = Start.AddMinutes(1);
+        var applied = new IdeaExitRule(IdeaType.Pullback, Interval.FifteenMinutes, 48, 2.5m, 8, appliedAt);
+        _exitRules.GetAllAsync(Arg.Any<CancellationToken>()).Returns(_ => _time.GetUtcNow() >= appliedAt ? [applied] : []);
+        _ideaSignals.StreamAsync(Arg.Any<int>(), Arg.Any<DateTimeOffset>(), Arg.Any<(IdeaType, Interval)?>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<(IdeaType, Interval)?>(2) is null ? Stuck(stuck.Task) : AsyncEnumerable.Empty<IdeaSignal>());
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session().RunAsync(cancellation.Token);
+
+        await WaitAsync(() => Recomputes((IdeaType.Pullback, Interval.FifteenMinutes)) == 1, advance: true);
+
+        Recomputes(null).ShouldBe(1);
+        stuck.SetResult();
+        await cancellation.CancelAsync();
+        await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
+    // Review of tune-idea-rules: when the recompute of one type × interval fails, the ones taken with it are not lost: all are done after the
+    // retry.
+    [Test]
+    public async Task Failed_recompute_of_a_type_and_interval_keeps_the_ones_taken_with_it()
+    {
+        DateTimeOffset appliedAt = Start.AddMinutes(1);
+        IdeaExitRule[] applied =
+        [
+            new IdeaExitRule(IdeaType.Pullback, Interval.FifteenMinutes, 48, 2.5m, 8, appliedAt),
+            new IdeaExitRule(IdeaType.TwoR, Interval.OneHour, 48, 3m, null, appliedAt)
+        ];
+        _exitRules.GetAllAsync(Arg.Any<CancellationToken>()).Returns(_ => _time.GetUtcNow() >= appliedAt ? applied : []);
+        var served = new List<(IdeaType, Interval)>();
+        bool failed = false;
+        _ideaSignals.StreamAsync(Arg.Any<int>(), Arg.Any<DateTimeOffset>(), Arg.Any<(IdeaType, Interval)?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                if (call.ArgAt<(IdeaType, Interval)?>(2) is not { } only)
+                {
+                    return AsyncEnumerable.Empty<IdeaSignal>();
+                }
+
+                if (!failed)
+                {
+                    failed = true;
+
+                    return Failing();
+                }
+
+                lock (served)
+                {
+                    served.Add(only);
+                }
+
+                return AsyncEnumerable.Empty<IdeaSignal>();
+            });
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session().RunAsync(cancellation.Token);
+
+        await WaitAsync(() => { lock (served) { return served.Distinct().Count() == 2; } }, advance: true);
+
+        _journal.Received().Failed("statistics", Arg.Any<InvalidOperationException>());
         await cancellation.CancelAsync();
         await Should.ThrowAsync<OperationCanceledException>(session);
     }
@@ -245,7 +372,7 @@ public class ScannerSessionTests
         Task session = Session().RunAsync(cancellation.Token);
 
         await WaitAsync(() => _ideaStore.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaRepository.DeleteClosedBeforeAsync)) == 2, advance: true);
-        await WaitAsync(() => _ideaCases.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaCaseRepository.CountAsync)), advance: true);
+        await WaitAsync(() => _cursors.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaReplayRepository.GetAsync)), advance: true);
 
         _journal.Received(1).Failed("ideas", failure);
         await cancellation.CancelAsync();
@@ -259,7 +386,7 @@ public class ScannerSessionTests
         using var cancellation = new CancellationTokenSource();
         Task session = Session().RunAsync(cancellation.Token);
 
-        await WaitAsync(() => _ideaCases.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaCaseRepository.CountAsync)), advance: true);
+        await WaitAsync(() => _ideaSignals.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaSignalRepository.DeleteOtherVersionsAsync)), advance: true);
         _time.Advance(TimeSpan.FromHours(3));
         await Task.Delay(100);
 
@@ -277,11 +404,42 @@ public class ScannerSessionTests
         using var cancellation = new CancellationTokenSource();
         Task session = Session().RunAsync(cancellation.Token);
 
-        await WaitAsync(() => _ideaCases.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaCaseRepository.CountAsync)), advance: true);
+        await WaitAsync(() => _ideaSignals.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaSignalRepository.DeleteOtherVersionsAsync)), advance: true);
 
         _journal.Received(1).Failed("trade-outcomes", failure);
         await cancellation.CancelAsync();
         await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
+    private int Recomputes((IdeaType, Interval)? only)
+    {
+        return _ideaSignals.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaSignalRepository.StreamAsync)
+                                                          && Equals(call.GetArguments()[2], only));
+    }
+
+    private static async IAsyncEnumerable<IdeaSignal> Failing()
+    {
+        await Task.Yield();
+
+        throw new InvalidOperationException("storage down");
+#pragma warning disable CS0162
+        yield break;
+#pragma warning restore CS0162
+    }
+
+    private static async IAsyncEnumerable<IdeaSignal> Stuck(Task until)
+    {
+        await until;
+
+        yield break;
+    }
+
+    private static IIdeaExitRuleRepository ExitRules()
+    {
+        IIdeaExitRuleRepository rules = Substitute.For<IIdeaExitRuleRepository>();
+        rules.GetAllAsync(Arg.Any<CancellationToken>()).Returns([]);
+
+        return rules;
     }
 
     private ScannerSession Session()
@@ -289,7 +447,8 @@ public class ScannerSessionTests
         var market = new ScannerMarket();
         var settings = new ScannerSettings { HistoryDays = 1 };
         var pace = new ScannerPace();
-        var ideas = new LiveIdeas(_ideaStore, Substitute.For<IIdeaVolatilityRepository>(), _candles, market, new IdeasSettings(), new BacktestSettings(), _time);
+        var recomputes = new IdeaRecomputes();
+        var ideas = new LiveIdeas(_ideaStore, Substitute.For<IIdeaVolatilityRepository>(), _candles, _exitRules, recomputes, market, new IdeasSettings(), new BacktestSettings(), _time);
         IScannerPairRepository pairs = Substitute.For<IScannerPairRepository>();
         pairs.GetAllAsync(Arg.Any<CancellationToken>()).Returns(_stored);
         IScannerStateRepository state = Substitute.For<IScannerStateRepository>();
@@ -315,18 +474,24 @@ public class ScannerSessionTests
             ideas,
             new IdeasReplay(
                 _candles,
-                _ideaCases,
+                _ideaSignals,
                 _cursors,
                 Substitute.For<IIdeaVolatilityRepository>(),
-                Substitute.For<IIdeaBucketRepository>(),
-                new IdeaCalibration(_ideaCases, Substitute.For<IIdeaCalibrationRepository>(), new IdeasEngineVersion(IdeasEngineVersion.Current)),
                 market,
                 new IdeasSettings(),
-                new BacktestSettings(),
                 settings,
                 new IdeasEngineVersion(IdeasEngineVersion.Current),
                 pace,
                 _time),
+            new IdeaStatistics(
+                _ideaSignals,
+                _exitRules,
+                Substitute.For<IIdeaBucketRepository>(),
+                Substitute.For<IIdeaCalibrationRepository>(),
+                new BacktestSettings(),
+                new IdeasEngineVersion(IdeasEngineVersion.Current),
+                _time),
+            recomputes,
             market,
             _journal,
             _time);

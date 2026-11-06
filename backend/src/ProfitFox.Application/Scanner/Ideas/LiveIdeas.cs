@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 
 using ProfitFox.Application.Backtests;
 using ProfitFox.Domain.Entities.Ideas;
+using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
@@ -19,11 +20,15 @@ namespace ProfitFox.Application.Scanner.Ideas;
 ///     up with from storage; the minute cycle, after the snapshot, warms up the pairs read, feeds each pair its minutes up to its coverage,
 ///     reads the setups of the last minute of the complete pairs, closes the ideas of pairs out of trading and stores the ideas made and moved
 ///     in one transaction. Storage stays the truth: a failed write starts every pair over from it, an idea it refused starts its pair over.
+///     Every minute it reads the exit rules applied: the ideas made from then on take them, and a type × interval whose rule changed goes to
+///     the recompute of its buckets (decision 5 of tune-idea-rules).
 /// </summary>
 public sealed class LiveIdeas(
     IIdeaRepository ideas,
     IIdeaVolatilityRepository volatility,
     ICandleRepository candles,
+    IIdeaExitRuleRepository exitRules,
+    IdeaRecomputes recomputes,
     ScannerMarket market,
     IdeasSettings settings,
     BacktestSettings backtests,
@@ -42,6 +47,8 @@ public sealed class LiveIdeas(
     private readonly Dictionary<Instrument, IdeaCandle> _fed = [];
     private Dictionary<Instrument, List<Idea>>? _open;
     private Dictionary<Instrument, Dictionary<Interval, VolatilityPercentiles>> _percentiles = [];
+    private Dictionary<(IdeaType, Interval), IdeaExitRule>? _exitRules;
+    private readonly DateTimeOffset _startedAt = time.GetUtcNow();
     private DateTimeOffset? _percentilesAt;
 
     /// <summary>Reads the warm-up of the next pairs not warmed up yet; <c>false</c> when there is none to read.</summary>
@@ -109,6 +116,7 @@ public sealed class LiveIdeas(
     {
         _open ??= (await ideas.GetOpenAsync(cancellationToken)).GroupBy(idea => idea.Instrument).ToDictionary(group => group.Key, group => group.ToList());
         await RefreshPercentilesAsync(cancellationToken);
+        await RefreshExitRulesAsync(cancellationToken);
 
         var setups = new Dictionary<Instrument, IReadOnlyList<PairSetup>>();
         var created = new List<Idea>();
@@ -243,6 +251,24 @@ public sealed class LiveIdeas(
     private IReadOnlyList<IdeaCandle> Known(Instrument instrument)
     {
         return [.. market.Minutes(instrument).Select(minute => new IdeaCandle(minute.OpenTime, minute.Open, minute.High, minute.Low, minute.Close, minute.Turnover))];
+    }
+
+    // The first read sends only the rules applied since the session started: the whole recompute of the session may have read the rules
+    // before them, and counts by the older ones anyway.
+    private async Task RefreshExitRulesAsync(CancellationToken cancellationToken)
+    {
+        Dictionary<(IdeaType, Interval), IdeaExitRule> applied = (await exitRules.GetAllAsync(cancellationToken)).ToDictionary(rule => (rule.Type, rule.Interval));
+        IEnumerable<(IdeaType, Interval)> changed = _exitRules is null
+            ? applied.Values.Where(rule => rule.AppliedAt >= _startedAt).Select(rule => (rule.Type, rule.Interval))
+            : applied.Keys.Union(_exitRules.Keys).Where(key => applied.GetValueOrDefault(key) != _exitRules.GetValueOrDefault(key));
+
+        foreach ((IdeaType type, Interval interval) in changed)
+        {
+            recomputes.Add(type, interval);
+        }
+
+        _exitRules = applied;
+        _engine.Apply(new IdeaExitRules(applied.Values));
     }
 
     private async Task RefreshPercentilesAsync(CancellationToken cancellationToken)

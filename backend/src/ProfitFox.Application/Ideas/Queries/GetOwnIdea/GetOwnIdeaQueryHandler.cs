@@ -17,6 +17,7 @@ public sealed class GetOwnIdeaQueryHandler(
     IMarketSnapshotRepository snapshots,
     IScannerPairRepository pairs,
     ICandleRepository candles,
+    IIdeaExitRuleRepository exitRules,
     IdeasSettings settings,
     BacktestSettings backtests) : IRequestHandler<GetOwnIdeaQuery, GetOwnIdeaResult>
 {
@@ -74,7 +75,8 @@ public sealed class GetOwnIdeaQueryHandler(
 
         var context = new IdeaContext(category, levels.Price, levels.WindowLow, levels.WindowHigh, atr, levels.Zones, levels.Spread, settings.StopBuffer, tick);
 
-        IdeaPlan? plan = IdeaRules.Plan(type, side, context);
+        IdeaExitRule rule = new IdeaExitRules(await exitRules.GetAllAsync(cancellationToken)).Of(type, interval);
+        IdeaPlan? plan = IdeaRules.Plan(type, side, context, rule.TargetR);
 
         return new GetOwnIdeaResult(plan, false, errors, tick, plan is null ? null : IdeaMoney.PerUsdt(plan, backtests.Policy().DefaultFees[category]));
     }

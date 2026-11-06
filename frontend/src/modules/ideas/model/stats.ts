@@ -37,16 +37,20 @@ export function probabilityView(bucket: Bucket | null): ProbabilityView {
 
 /** The break-even of an idea after the fees, rounded up to a whole percent, or that its target does not cover the fees. */
 export function breakEvenText(breakEven: string | null): string {
-  if (breakEven === null) {
-    return 'не окупает комиссии';
-  }
-
-  const [whole = '0', fraction = ''] = shiftDecimal(breakEven, 2).split('.');
-
-  return `нужно ≥ ${/[1-9]/.test(fraction) ? BigInt(whole) + 1n : whole} %`;
+  return breakEven === null ? 'не окупает комиссии' : `нужно ≥ ${percentUp(breakEven)} %`;
 }
 
-/** The shares of targets, stops and expired cases of a bucket in whole percent, for the hint of its probability; none without a case. */
+/** A share in whole percent rounded up, as a break-even is: 0.2957 is 30. */
+export function percentUp(share: string): string {
+  const [whole = '0', fraction = ''] = shiftDecimal(share, 2).split('.');
+
+  return String(/[1-9]/.test(fraction) ? BigInt(whole) + 1n : BigInt(whole));
+}
+
+/**
+ * The shares of targets, stops and expired cases of a bucket in whole percent, for the hint of its probability, and of a bucket of
+ * «Откат» or «Стоп-вход» the share of its signals that entered and the expectancy per signal; none without a case.
+ */
 export function outcomeShares(bucket: Bucket | null): string | null {
   if (bucket === null) {
     return null;
@@ -55,7 +59,11 @@ export function outcomeShares(bucket: Bucket | null): string | null {
   const percent = (count: string | number) =>
     Math.round((Number(count) * 100) / Number(bucket.cases));
 
-  return `Цель ${percent(bucket.targets)} % · Стоп ${percent(bucket.stops)} % · Истекла ${percent(bucket.expired)} %`;
+  const shares = `Цель ${percent(bucket.targets)} % · Стоп ${percent(bucket.stops)} % · Истекла ${percent(bucket.expired)} %`;
+
+  return bucket.signalExpectancy === null
+    ? shares
+    : `${shares} · входов ${roundDecimal(shiftDecimal(bucket.entryShare!, 2), 0)} % · на сигнал ${showDecimal(bucket.signalExpectancy, 2, true)} R`;
 }
 
 /** The expectancy of the bucket in R with a sign, or a dash for a bucket without a case. */

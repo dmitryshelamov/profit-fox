@@ -33,13 +33,18 @@ enforces a rule, the check is the source of truth.
   `IdeaType`, `IdeaSide`, `IdeaStatus`, `IdeaBadge` (▲ ≈ ▼ of a bucket by the interval of its expectancy); `ValueObjects/Ideas` holds `IdeaCandle` (a minute or a candle of an interval, its volume the
   turnover), `MinuteAggregate`, `SetupThresholds`, `SetupSignal`, `SetupReading`, `SetupBase` (what the setups of an interval are measured against
   until a candle closes), `CandleSetupInput`, `RsiState`, `VolatilityPercentiles`, `Zone`, `ZoneRules`, `IdeaPlan`, `IdeaContext`,
-  `IdeaTrack`, `IdeaCase`, `IdeaBucketKey`, `IdeaBucketCounts`, `IdeaBucket`, `BucketStatistics`, `IdeaVolatility`, `IdeaShares` (with the break-even), `PairSetup`,
-  `IdeaOutcome` (how a case ended, as the calibration reads it), `CalibrationReport` and `CalibrationRow`.
+  `IdeaTrack` (with the exit rule the idea fired under), `SignalPath` (the plan of a signal of the replay and the first touches of its entry, stop, ladder
+  +0.5 … +5 R and zone, and its closes at the grid), `IdeaSignal` (a signal with its pair, setup and path), `IdeaBucketKey`, `IdeaBucket`, `BucketStatistics`
+  (with the signals, the share of entries and the expectancy per signal of «Откат» and «Стоп-вход»), `IdeaVolatility`, `IdeaShares` (with the break-even), `PairSetup`,
+  `IdeaOutcome` (how a case ended, as the calibration reads it), `CalibrationReport`, `CalibrationRow`, `IdeaExitRule` (the lifetime, the target in R and the
+  entry window of a type × interval, and which values it can take) and `IdeaExitRules` (the rules in force, the default for a type × interval never applied).
   `Services/Ideas` holds the pure functions: `Atr` (Wilder, 14), `Rsi` (Wilder, 14, over exactly 100 candles), `IdeaCandles` (candles of an interval from minutes, a minute without
   trades flat at the close before it), `SetupDetector` (the setups of a move), `CandleSetupDetector` (the candle setups), `SetupTypes`
   (the types of ideas of each setup), `ZoneFinder`, `IdeaRules`, `IdeaTracker`, `CaseResult`,
   `BucketStatisticsCalculator` (from the counts, ΣR and ΣR², so a window of cases can add and take them), `CalibrationCalculator` (the walk-forward
-  check of the buckets on cases they had not seen), `IdeaMoney`, `Volatility` and `IdeasEngineVersion`.
+  check of the buckets on cases they had not seen), `IdeaMoney`, `Volatility`, `IdeasEngineVersion`, `ExitRuleGrid` (the lifetimes and windows of an
+  interval up to 7 days, a time up to the grid), `SignalPathTracker` (steps a path by a minute, by the touches of `IdeaTracker`) and `ExitOutcomes`
+  (the outcome of a path by a rule as an `IdeaTrack`, and the signals of a key that count as one open idea at a time).
 - `IdeaTrades` is the area of trades by ideas (one entry with a stop and a target the exchange stands): `Entities/IdeaTrades` holds `IdeaTrade`
   (its levels, size, status, the totals the exchange counted of its entry and exits, its result in money and in R, what it is worth at a price (`ResultAt`), the time it opened (`OpenedAt`, the first fill of the entry), the promise of its idea at the entry and how its idea ended), `IdeaTradeOrder` (an entry or
   the market close of the owner, saved before it goes to the exchange, like `LiveOrder`), `IdeaTradeChild` (the stop or the target the exchange made, by
@@ -124,14 +129,20 @@ enforces a rule, the check is the source of truth.
 - `Scanner/Ideas` holds the ideas of the scanner: `IdeasSettings` (the `Ideas` section, with `ThresholdSettings` and `ThresholdOverride`),
   `IdeaRuleSet`, `IdeaSeries` (at most 220 closed candles of a pair on an interval and the minutes of the forming one, and the `SetupBase` it keeps until
   a candle closes), `IdeaEngine` (the
-  minutes of a pair one by one: steps the open ideas, reads the setups, makes the ideas of the setups that fire; the same for live and
-  replay), `LiveIdeas` (the warm-ups and the minute of live ideas after the snapshot; the ideas that closed on the minute go to storage with their outcome for the trades made of them, and `CatchUpTradeOutcomesAsync` writes it once at the start of the session for the trades that missed it) and `IdeasReplay` (the replay of history pair by pair
-  and day by day, the buckets every 10 minutes and the calibration after them, `IdeaCalibration`, the clean-up of other versions). `Scanner/ScannerPace` tells the replay whether the
-  snapshot came late.
+  minutes of a pair one by one: steps the open ideas, reads the setups, makes the ideas of the setups that fire by the exit rules in force;
+  in a replay it keeps no ideas and gives every signal), `LiveIdeas` (the warm-ups and the minute of live ideas after the snapshot; reads the exit
+  rules every minute and puts a type × interval whose rule changed into `IdeaRecomputes`; the ideas that closed on the minute go to storage with their
+  outcome for the trades made of them, and `CatchUpTradeOutcomesAsync` writes it once at the start of the session for the trades that missed it), `IdeasReplay` (the replay of history pair by pair and day
+  by day, the paths of the signals open at the cursor, the clean-up of other versions), `IdeaOutcomes` (one pass over the signals by key and firing:
+  the sums of the buckets and the outcomes of the calibration, `IdeaOutcomesResult`) and `IdeaStatistics` (the buckets and the calibration from that
+  pass, whole once an hour in a lane of `ScannerSession`, a type × interval after its rule changed in another, so it never waits for the whole one). `Scanner/ScannerPace` tells the
+  replay whether the snapshot came late.
 - `Ideas` holds `IdeaCodes` (codes of setups, types, sides, statuses), `IdeaView` (an idea with its buckets), `IdeaLevels` (what the API
   measures a pair by: price, spread, ATR, zones, window), `IdeaOrder` (the order of the ideas of «Идеи» by a column; setup, type, side and
   status go in the order of their enums, which is the order of the lists on the screen, not of the Russian names) and the queries of the ideas
-  API (`GetIdeas`, `GetIdea`, `GetIdeaBuckets`, `GetIdeaCalibration`, `GetPairIdeas`, `GetZones`, `GetOwnIdea`). `SavedFilters` holds `SavedFilterFields`, the one
+  API (`GetIdeas`, `GetIdea`, `GetIdeaBuckets`, `GetIdeaCalibration`, `GetPairIdeas`, `GetZones`, `GetOwnIdea`, `GetExitRules`, `GetExitRulePreview`) and
+  the command `ApplyExitRule`, with `ExitRuleRequests` (a rule asked for by codes, checked against the grid) and `ExitRulePreviews` (the preview of a
+  candidate rule: «было → станет» over 90 and 30 days, the expectancy at every lifetime of the grid and the curve of MFE, `ExitRulePreview`). `SavedFilters` holds `SavedFilterFields`, the one
   catalog of fields with their units and operators, `SavedFilterJson`, the codec of conditions for the API and the stored `jsonb`,
   `SavedFilterRules`, which checks a filter by the catalog (`ParseConditions` checks the conditions alone, as `FitSavedFilter` needs),
   `SavedFilterMatch`, the one place where a filter is applied to a pair (`Pair`, which skips the conditions on idea fields) and to an idea
@@ -212,8 +223,10 @@ enforces a rule, the check is the source of truth.
   the end of the REST pause), `scanner_pairs`, `open_interest` (a hypertable), `funding_rates` and `market_snapshot`, which the
   holder replaces in one transaction that locks the row of the state with its lease.
 - `Repositories/Ideas` holds `ideas` (one open idea per key kept by a partial unique index; the ideas made and moved on a minute are
-  written in one transaction), `idea_cases` (a hypertable, written once per key, fired time and version), `idea_buckets`, `idea_replay`
-  (the cursor of a pair per version with the ideas of the replay open at it), `idea_volatility` and `idea_calibration` (one `jsonb` report per
+  written in one transaction), `idea_cases` (a hypertable of the signals with their paths, `IdeaSignalRepository`: a batch goes in by binary copy and onto
+  its key, fired time and version, a path written again goes on; read one by one in the order of key and firing; the outcome columns of version 4 stay
+  empty), `idea_exit_rules` (one row per type × interval applied), `idea_buckets`, `idea_replay`
+  (the cursor of a pair per version with the paths of the replay open at it), `idea_volatility` and `idea_calibration` (one `jsonb` report per
   version, window and category, replaced whole like the buckets);
   `Repositories/SavedFilters` holds `saved_filters`. `market_snapshot.setups` (`jsonb`, interval code → setup codes) is written after the
   snapshot under the same lease. `CandleRepository.GetAggregatedAsync` joins stored minutes into candles of an interval with `time_bucket`.
@@ -357,7 +370,9 @@ enforces a rule, the check is the source of truth.
   `MarketController` also has `.../ideas` (the ideas of a pair), `.../zones?interval` (5, 15, 60, 240) and `POST .../own-idea`; the rows of
   `GET /api/market` and of a pair carry `setups`. `IdeasController`: `GET /api/ideas` (filters `setup`, `interval`, `type`, `side`,
   `category`, `nonNegativeExpectancy`, `savedFilter`; `sort`, `direction`, `page`, `pageSize`; the answer is `items`, `page`, `pageSize` and
-  `total`), `GET /api/ideas/{id}`, `GET /api/ideas/buckets`, `GET /api/ideas/calibration` (`days` 90 or 30, `category` linear, spot or none). `SavedFiltersController`: CRUD of
+  `total`), `GET /api/ideas/{id}`, `GET /api/ideas/buckets`, `GET /api/ideas/calibration` (`days` 90 or 30, `category` linear, spot or none). `IdeaExitRulesController`: `GET /api/ideas/exit-rules`
+  (every type × interval with its grid), `GET /api/ideas/exit-rules/preview` (`type`, `interval`, `life`, `target`, `window`; 400 by the name of a parameter the
+  type has no use for or a value off the grid) and `PUT /api/ideas/exit-rules/{type}/{interval}` (`{ life, target, window }` → the rule with its time). `SavedFiltersController`: CRUD of
   `/api/saved-filters`, the catalog `GET /api/saved-filters/fields` and `POST /api/saved-filters/fit` (`{ conditions }` of a draft →
   `{ pairs, ideas }`, saves nothing).
 - `IdeaTradesController`: `GET /api/idea-trades` (the journal: `open`, `closed` as `items`, `page`, `pageSize` and `total`, and `totals`; filters `setup`, `symbol`, `side`, `badge`, `days`, `page`, `pageSize`), `POST` (`{ ideaId, accountId?, risk? }` → 201 `{ id }`, or 409 with `reasons`, codes of what stops the
@@ -438,7 +453,7 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
 
 - `src/app` holds the router (TanStack Router) and the providers (TanStack Query). `src/pages/<screen>` holds one screen
   each (`strategies`, `strategy-editor`, `nodes`, `node-editor`, `bots`, `bot-editor`, `bot`, `backtest-setup`, `backtest`,
-  `backtest-result`, `compare`, `accounts`, `account-new`, `account`, `market`, `market-pair`, `ideas`, `ideas-calibration`, `idea-trades` (the journal, `/idea-trades`, with `?page=` for the closed trades, and the settings of trading by ideas, `/idea-trades/settings`)); a page never imports another page.
+  `backtest-result`, `compare`, `accounts`, `account-new`, `account`, `market`, `market-pair`, `ideas`, `ideas-calibration`, `ideas-exit-rules`, `idea-trades` (the journal, `/idea-trades`, with `?page=` for the closed trades, and the settings of trading by ideas, `/idea-trades/settings`)); a page never imports another page.
 - `src/modules/<area>` holds a feature: `model` for pure functions, `ui` for components, `api.ts` for queries. Other
   code imports a module only through its `index.ts`. `modules/graph-editor/model` is the logic of the editor that can be
   wrong (definition ↔ canvas, pins, wire types, error paths, draft comparison): plain TypeScript without React.
@@ -456,10 +471,13 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
   the row, open interest and funding of a pair; the counts of the category buttons and of the chips come from the answer, nothing is filtered or sorted in the browser;
   `model` for the codes of the sort columns, the size of a page and the rest of the choice kept in the browser (`choice`), the age of the snapshot and
   compact numbers; `setups` for the setups, the interval of setups and the column «Сетап»; `MarketTable`, the banners and the mark of
-  incomplete data), `ideas` (queries of one page of the ideas, of a pair's ideas, zones, the own idea and the calibration; `model` for the labels, the codes of the sort columns, the
+  incomplete data), `ideas` (queries of one page of the ideas, of a pair's ideas, zones, the own idea, the calibration, the exit rules and the preview of a candidate
+  rule (asked 300 ms after its last change), and the apply of a rule; `model` for the labels, the codes of the sort columns, the
   badge of the bucket, «мало данных», the break-even rounded up and the shares of the outcomes (`stats`), the colour of a difference, the verdict of the Brier
   score and the names of the rows of the calibration (`calibration`), profit and loss at the risk per idea and its storage in the browser (`riskStorage`), the groups of a
-  pair's list (`groups`) and the levels drawn on the chart (`levels`); `IdeasTable`, `PairIdeasList`, `OwnIdeaBlock`), `idea-trades` (queries of the settings, of the entry of an idea (polled every 5 s while its window is open), of the journal (`ideaJournalQuery`: the open trades, a page of the closed ones and the totals, polled every 15 s and asked with the setup, the pair (after a pause of 300 ms), the side, the badge, the period and the page; the old page stays while a new one loads) and the entry, cancel and close; `model` for the labels of statuses and of the reasons, the fields of the settings, the labels of the journal (`journal`: the time in a trade, the promise, the outcome of the idea, the totals and the two comparisons) and the choice kept in the browser (`choice`, `profit-fox.idea-journal.choice`: the filters and the size of a page); `EntryDialog`, `OpenTradesTable` (with the question before a cancel or a close), `ClosedTradesTable`, `JournalTotals`, `SettingsPanel`), `saved-filters`
+  pair's list (`groups`), the levels drawn on the chart (`levels`) and the exit rules (`exitRules`: a time up to the grid, the duration of candles, the
+  warning of a fit, the equality of two rules); `IdeasTable`, `PairIdeasList`, `OwnIdeaBlock`, and `LifeChart` and `MfeChart`, plain SVG of the screen
+  «Срок жизни и цель», which turn decimal strings into numbers only to draw them), `idea-trades` (queries of the settings, of the entry of an idea (polled every 5 s while its window is open), of the journal (`ideaJournalQuery`: the open trades, a page of the closed ones and the totals, polled every 15 s and asked with the setup, the pair (after a pause of 300 ms), the side, the badge, the period and the page; the old page stays while a new one loads) and the entry, cancel and close; `model` for the labels of statuses and of the reasons, the fields of the settings, the labels of the journal (`journal`: the time in a trade, the promise, the outcome of the idea, the totals and the two comparisons) and the choice kept in the browser (`choice`, `profit-fox.idea-journal.choice`: the filters and the size of a page); `EntryDialog`, `OpenTradesTable` (with the question before a cancel or a close), `ClosedTradesTable`, `JournalTotals`, `SettingsPanel`), `saved-filters`
   (queries of filters and the catalog of fields, and the count of a draft, `fitQuery`; `model` for the text of conditions (`conditions`) and the
   server errors by field (`errors`); `FilterBar`, `FilterEditor`, whose counter «Подходит» is the answer of `POST /api/saved-filters/fit` for the ready
   conditions, after a pause of 300 ms; the API applies saved filters, the browser only names the chosen one). The lists «Идеи», «Рынок» and the closed trades of «Журнал» show one page: the number is

@@ -23,6 +23,9 @@ const bucket = (overrides: Partial<Bucket> = {}): Bucket => ({
   expectancyHigh: '0.238',
   badge: 'up',
   enoughData: true,
+  signals: null,
+  entryShare: null,
+  signalExpectancy: null,
   ...overrides,
 });
 
@@ -93,6 +96,13 @@ describe('outcomeShares', () => {
 
   it('tells nothing for a bucket without a case', () => {
     expect(outcomeShares(null)).toBeNull();
+  });
+
+  // Scenario "Откат по наведению": a bucket of «Отката» also tells the share of its signals that entered and the expectancy per signal.
+  it('tells the entries and the expectancy per signal of a bucket of signals', () => {
+    expect(
+      outcomeShares(bucket({ signals: 800, entryShare: '0.5', signalExpectancy: '-0.03' })),
+    ).toBe('Цель 45 % · Стоп 50 % · Истекла 5 % · входов 50 % · на сигнал -0.03 R');
   });
 });
 

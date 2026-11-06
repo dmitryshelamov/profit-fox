@@ -1,8 +1,12 @@
+using Dapper;
+
 using Npgsql;
 
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.Services.Ideas;
+using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.Ideas;
@@ -42,6 +46,43 @@ public class IdeaRepositoryTests
 
         (await _store.GetAsync(idea.Id, CancellationToken.None)).ShouldBe(idea);
         (await _store.GetOpenAsync(CancellationToken.None)).ShouldBe([idea]);
+    }
+
+    // Task 5.2 of tune-idea-rules: an idea keeps the exit rule it fired under.
+    [Test]
+    public async Task Idea_keeps_its_exit_rule()
+    {
+        Idea generated = IdeaGenerator.Generate(Now, type: IdeaType.Pullback);
+        Idea idea = generated with { Track = generated.Track with { LifeCandles = 48, TargetR = 2.5m, EntryCandles = 8 } };
+        Idea levels = IdeaGenerator.Generate(Now, type: IdeaType.Levels);
+
+        await _store.SaveAsync([idea, levels], [], CancellationToken.None);
+
+        (await _store.GetAsync(idea.Id, CancellationToken.None))!.Track.ShouldBe(idea.Track);
+        (await _store.GetAsync(levels.Id, CancellationToken.None))!.Track.ShouldBe(levels.Track);
+    }
+
+    // Review of tune-idea-rules: an idea a rolled-back image of version 4 wrote has no rule columns; it reads with the defaults of its type
+    // and steps.
+    [Test]
+    public async Task Idea_without_its_rule_reads_with_the_defaults_of_its_type()
+    {
+        await using (NpgsqlConnection connection = await _dataSource.OpenConnectionAsync())
+        {
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO ideas (id, category, symbol, setup, type, "interval", side, fired_at, entry, stop, target, risk_reward, status, status_at,
+                    move, volume_ratio, engine_version, tick)
+                VALUES (gen_random_uuid(), 'linear', 'WIFUSDT', 'impulse', 'pullback', '15', 'long', @Now, 104, 100, 112, 2, 'awaiting_entry', @Now,
+                    3.5, 2.25, 4, 0.01)
+                """,
+                new { Now });
+        }
+
+        IdeaTrack track = (await _store.GetOpenAsync(CancellationToken.None)).Single().Track;
+
+        (track.LifeCandles, track.TargetR, track.EntryCandles).ShouldBe((24, (decimal?)2m, (int?)4));
+        IdeaTracker.Step(track, new IdeaCandle(Now.AddHours(1), 105m, 105m, 105m, 105m, 1m)).Status.ShouldBe(IdeaStatus.Expired);
     }
 
     // Test of task 3.2: "вторая активная идея с тем же ключом отклоняется базой".

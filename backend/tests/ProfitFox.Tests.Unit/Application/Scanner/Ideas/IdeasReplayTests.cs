@@ -2,7 +2,6 @@ using Microsoft.Extensions.Time.Testing;
 
 using NSubstitute;
 
-using ProfitFox.Application.Backtests;
 using ProfitFox.Application.Scanner;
 using ProfitFox.Application.Scanner.Ideas;
 using ProfitFox.Domain.Entities.Ideas;
@@ -12,38 +11,37 @@ using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.Services.Ideas;
-using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Tests.Shared.Fixtures.Ideas;
-using ProfitFox.Tests.Shared.Generators.Domain.Entity.Ideas;
 
 using Shouldly;
 
 namespace ProfitFox.Tests.Unit.Application.Scanner.Ideas;
 
 /// <summary>
-///     Requirement "Прогон по истории" and decisions 6 and 7 on the impulse set of <see cref="IdeaFixtures.Setup" />: the pair's history starts
-///     on 2024-03-01, its minutes are stored up to the end of the day. The replay runs by the thresholds of the live ideas.
+///     Requirement "Прогон по истории" and decision 4 of tune-idea-rules on the impulse set of <see cref="IdeaFixtures.Setup" />: the pair's
+///     history starts on 2024-03-01, its minutes are stored up to the end of the day. The replay runs by the thresholds of the live ideas and
+///     stores every signal with its path; the signals that count by the default exit rules close as the live ideas do.
 /// </summary>
 public class IdeasReplayTests
 {
     private static readonly Instrument Wif = new Instrument(MarketCategory.Linear, "WIFUSDT");
     private static readonly DateTimeOffset March1 = DateTimeOffset.Parse("2024-03-01T00:00:00Z");
-    private static readonly FeeRates Fees = new FeeRates(0.02m, 0.055m);
     private const decimal Tick = 0.01m;
+    private static readonly IdeaExitRules Defaults = new IdeaExitRules([]);
     private static readonly IdeasSettings Settings = new IdeasSettings();
 
     private ICandleRepository _candles = null!;
-    private IIdeaCaseRepository _cases = null!;
+    private IIdeaSignalRepository _signals = null!;
     private IIdeaReplayRepository _cursors = null!;
     private IIdeaVolatilityRepository _volatility = null!;
-    private IIdeaBucketRepository _buckets = null!;
-    private IIdeaCalibrationRepository _calibrations = null!;
     private ScannerMarket _market = null!;
     private ScannerPace _pace = null!;
     private FakeTimeProvider _time = null!;
-    private List<IdeaCase> _written = null!;
+    // The signals as storage holds them, by key and firing: a write of one stored goes over it.
+    private Dictionary<(IdeaKey, DateTimeOffset), IdeaSignal> _written = null!;
+    private List<IReadOnlyCollection<IdeaSignal>> _writes = null!;
     private Dictionary<Instrument, IdeaReplayCursor> _stored = null!;
     private IReadOnlyList<IdeaCandle> _minutes = null!;
 
@@ -51,15 +49,14 @@ public class IdeasReplayTests
     public void SetUp()
     {
         _candles = Substitute.For<ICandleRepository>();
-        _cases = Substitute.For<IIdeaCaseRepository>();
+        _signals = Substitute.For<IIdeaSignalRepository>();
         _cursors = Substitute.For<IIdeaReplayRepository>();
         _volatility = Substitute.For<IIdeaVolatilityRepository>();
-        _buckets = Substitute.For<IIdeaBucketRepository>();
-        _calibrations = Substitute.For<IIdeaCalibrationRepository>();
         _market = new ScannerMarket();
         _pace = new ScannerPace();
         _time = new FakeTimeProvider(March1.AddDays(1).AddMinutes(5));
         _written = [];
+        _writes = [];
         _minutes = IdeaFixtures.Setup("impulse");
         _stored = [];
         _cursors.GetAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(_ => new Dictionary<Instrument, IdeaReplayCursor>(_stored));
@@ -69,9 +66,15 @@ public class IdeasReplayTests
 
             return Task.CompletedTask;
         });
-        _cases.AddAsync(Arg.Any<IReadOnlyCollection<IdeaCase>>(), Arg.Any<CancellationToken>()).Returns(call =>
+        _signals.UpsertAsync(Arg.Any<IReadOnlyCollection<IdeaSignal>>(), Arg.Any<CancellationToken>()).Returns(call =>
         {
-            _written.AddRange(call.Arg<IReadOnlyCollection<IdeaCase>>()!);
+            IdeaSignal[] batch = [.. call.Arg<IReadOnlyCollection<IdeaSignal>>()!];
+            _writes.Add(batch);
+
+            foreach (IdeaSignal signal in batch)
+            {
+                _written[(signal.Key, signal.Path.FiredAt)] = signal;
+            }
 
             return Task.CompletedTask;
         });
@@ -82,30 +85,34 @@ public class IdeasReplayTests
         Keep(March1.AddDays(1));
     }
 
-    // Task 5.1: "прогон дня = живой цикл на тех же минутах дают одинаковые случаи".
+    // As on the screen: the signals of a day that count by the default rules close as the live engine closes its ideas on the same minutes.
     [Test]
-    public async Task Replay_of_a_day_gives_the_cases_the_live_engine_gives_on_the_same_minutes()
+    public async Task Replay_of_a_day_closes_the_signals_that_count_as_the_live_engine_closes_its_ideas()
     {
         (await Replay().StepAsync(CancellationToken.None)).ShouldBeTrue();
 
         _written.ShouldNotBeEmpty();
-        Shape(_written).ShouldBe(Shape(Live()));
+        Outcomes(_written.Values).ShouldBe(Shape(Live()));
         await _cursors.Received(1).SetAsync(Wif, IdeasEngineVersion.Current, Until(March1.AddDays(1)), Arg.Any<CancellationToken>());
     }
 
-    // Task 5.1: "новый день не трогает закрытые случаи старых дней": the next turn goes on from the cursor and its open ideas.
+    // Task 5.3: a path begun in one turn is written as far as it goes and written again by the next one; a path that ended is not written again.
     [Test]
-    public async Task New_day_leaves_the_cases_closed_before_it_as_they_are()
+    public async Task Next_turn_goes_on_with_the_paths_open_at_the_cursor()
     {
         IdeasReplay replay = Replay();
         await replay.StepAsync(CancellationToken.None);
-        int first = _written.Count;
+        IdeaSignal[] open = [.. _stored[Wif].Open];
+        IdeaSignal[] ended = [.. _written.Values.Where(signal => !signal.Path.IsOpen)];
         Keep(March1.AddDays(2));
         _time.Advance(TimeSpan.FromDays(1));
 
         (await replay.StepAsync(CancellationToken.None)).ShouldBeTrue();
 
-        _written.Count.ShouldBe(first);
+        open.ShouldNotBeEmpty();
+        open.ShouldAllBe(signal => signal.Path.TrackedUntil == March1.AddDays(1));
+        open.Select(signal => _written[(signal.Key, signal.Path.FiredAt)].Path.TrackedUntil).ShouldAllBe(until => until > March1.AddDays(1));
+        _writes.Skip(2).SelectMany(batch => batch).ShouldNotContain(signal => ended.Any(before => before.Key == signal.Key && before.Path.FiredAt == signal.Path.FiredAt));
         await _candles.Received(2).GetAsync(Wif, Interval.OneMinute, March1, March1.AddDays(1), 1440, Arg.Any<CancellationToken>());
         await _cursors.Received(1).SetAsync(Wif, IdeasEngineVersion.Current, Until(March1.AddDays(1)), Arg.Any<CancellationToken>());
         await _cursors.Received(1).SetAsync(Wif, IdeasEngineVersion.Current, Until(March1.AddDays(2)), Arg.Any<CancellationToken>());
@@ -121,7 +128,7 @@ public class IdeasReplayTests
 
         (await replay.StepAsync(CancellationToken.None)).ShouldBeTrue();
 
-        Shape(_written).ShouldBe(Shape(Live()));
+        Outcomes(_written.Values).ShouldBe(Shape(Live()));
         await _cursors.Received(1).SetAsync(Wif, IdeasEngineVersion.Current, Until(March1.AddDays(-2)), Arg.Any<CancellationToken>());
         (await replay.StepAsync(CancellationToken.None)).ShouldBeFalse();
     }
@@ -141,18 +148,35 @@ public class IdeasReplayTests
     }
 
     // Fix after review: a cursor older than the history window (the pair left trading and came back, or the replay stood still) starts the
-    // pair over from the start of its history; the ideas it kept open are dropped.
+    // pair over from the start of its history; the paths it kept open are dropped.
     [Test]
     public async Task Cursor_older_than_the_history_starts_the_pair_over()
     {
-        Idea stale = IdeaGenerator.Generate(March1.AddDays(-40), IdeaStatus.Active, Wif, statusAt: March1.AddDays(-40));
+        var stale = new IdeaSignal(Wif, IdeaSetup.Impulse, SignalPath.Fired(new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 100m, 98m, 104m), Interval.OneHour, March1.AddDays(-40), Tick), 3m, 2m, IdeasEngineVersion.Current);
         _stored[Wif] = new IdeaReplayCursor(March1.AddDays(-30), [stale]);
 
         await Replay().StepAsync(CancellationToken.None);
 
-        Shape(_written).ShouldBe(Shape(Live()));
+        Outcomes(_written.Values).ShouldBe(Shape(Live()));
         await _candles.DidNotReceive().GetAsync(Wif, Interval.OneMinute, March1.AddDays(-30), March1.AddDays(-29), 1440, Arg.Any<CancellationToken>());
-        _stored[Wif].Open.ShouldNotContain(idea => idea.Id == stale.Id);
+        _stored[Wif].Open.ShouldNotContain(signal => signal.Path.FiredAt == stale.Path.FiredAt);
+        // Review of tune-idea-rules: the signals stored before are dropped first; a path left unfinished there would leave the signals of its
+        // key after it undecided.
+        string[] calls = [.. _signals.ReceivedCalls().Select(call => call.GetMethodInfo().Name)];
+        calls.First(name => name is nameof(IIdeaSignalRepository.DeleteAsync) or nameof(IIdeaSignalRepository.UpsertAsync)).ShouldBe(nameof(IIdeaSignalRepository.DeleteAsync));
+        await _signals.Received(1).DeleteAsync(Wif, IdeasEngineVersion.Current, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Pair_going_on_from_its_cursor_keeps_its_signals()
+    {
+        await Replay().StepAsync(CancellationToken.None);
+        Keep(March1.AddDays(2));
+        _time.Advance(TimeSpan.FromDays(1));
+
+        await Replay().StepAsync(CancellationToken.None);
+
+        await _signals.DidNotReceiveWithAnyArgs().DeleteAsync(default!, default, default);
     }
 
     // A pair whose history is not loaded whole waits for it.
@@ -189,58 +213,14 @@ public class IdeasReplayTests
         _written.ShouldNotBeEmpty();
     }
 
-    // Scenario "Повторный прогон после смены правил": the cases and cursors of other versions go, so a new version replays from the start.
+    // Scenario "Повторный прогон после смены правил": the signals and cursors of other versions go, so a new version replays from the start.
     [Test]
-    public async Task Clean_up_removes_the_cases_and_cursors_of_other_versions()
+    public async Task Clean_up_removes_the_signals_and_cursors_of_other_versions()
     {
         await Replay(2).CleanUpAsync(CancellationToken.None);
 
-        await _cases.Received(1).DeleteOtherVersionsAsync(2, Arg.Any<CancellationToken>());
+        await _signals.Received(1).DeleteOtherVersionsAsync(2, Arg.Any<CancellationToken>());
         await _cursors.Received(1).DeleteOtherVersionsAsync(2, Arg.Any<CancellationToken>());
-    }
-
-    // Task 5.2: the buckets of the version over 90 and over the last 30 days.
-    [Test]
-    public async Task Buckets_are_computed_over_90_and_30_days_by_the_thresholds_of_now()
-    {
-        var key = new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.OneHour, IdeaSide.Long, MarketCategory.Linear);
-        DateTimeOffset now = _time.GetUtcNow();
-        _cases.CountAsync(2, now.AddDays(-90), Arg.Any<CancellationToken>())
-            .Returns([new IdeaBucketCounts(key, 180, 200, 20, 48m, 580.32m)]);
-        _cases.CountAsync(2, now.AddDays(-30), Arg.Any<CancellationToken>())
-            .Returns([new IdeaBucketCounts(key, 6, 5, 1, 2.4m, 20m)]);
-
-        await Replay(2).RecomputeBucketsAsync(CancellationToken.None);
-
-        await _cases.Received(2).CountAsync(2, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
-        await _buckets.Received(1).ReplaceAsync(
-            2,
-            Arg.Is<IReadOnlyCollection<IdeaBucket>>(buckets => buckets!.Count == 2
-                && buckets.Single(bucket => bucket.Days == 90).Statistics == BucketStatisticsCalculator.Compute(180, 200, 20, 48m, 580.32m)
-                && buckets.Single(bucket => bucket.Days == 30).Statistics == BucketStatisticsCalculator.Compute(6, 5, 1, 2.4m, 20m)),
-            Arg.Any<CancellationToken>());
-    }
-
-    // Task 5.6: the calibration follows the buckets, on the cases since 180 days before the time of the clock.
-    [Test]
-    public async Task Calibration_is_recomputed_after_the_buckets_at_the_time_of_the_clock()
-    {
-        DateTimeOffset now = _time.GetUtcNow();
-        var key = new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.OneHour, IdeaSide.Long, MarketCategory.Linear);
-        _cases.GetOutcomesAsync(2, now.AddDays(-180), Arg.Any<CancellationToken>()).Returns([new IdeaOutcome(key, now.AddDays(-1), now.AddHours(-1), IdeaStatus.Target, 2m)]);
-
-        await Replay(2).RecomputeBucketsAsync(CancellationToken.None);
-
-        Received.InOrder(() =>
-        {
-            _buckets.ReplaceAsync(2, Arg.Any<IReadOnlyCollection<IdeaBucket>>(), Arg.Any<CancellationToken>());
-            _calibrations.ReplaceAsync(
-                2,
-                Arg.Is<IReadOnlyCollection<CalibrationReport>>(reports => reports!.Count == 6
-                    && reports.All(report => report.ComputedAt == now)
-                    && reports.Single(report => report.Days == 30 && report.Category == MarketCategory.Linear).Unchecked == 1),
-                Arg.Any<CancellationToken>());
-        });
     }
 
     // Decision 5 and scenario "Перцентили после прогона": the percentiles of a day come from the candles before it; after the turn the last
@@ -264,12 +244,12 @@ public class IdeasReplayTests
             Arg.Any<CancellationToken>());
     }
 
-    // Fix after review: the cases do not depend on how the days fall into turns. Four days of waves replayed in one turn and day by day,
+    // Fix after review and task 5.3: the signals do not depend on how the days fall into turns. Four days of waves replayed in one turn and day by day,
     // each day by a replay of its own over the stored cursor; the third day starts without trades and opens 2 % up. The waves start 4 hours
     // before the history, so an idea of 15 minutes fired late on the second day closes on the third. Every third stretch of 211 minutes, the
     // steepest, trades three times the volume, so the candle setups have breakouts beside squeezes and RSI back from its zones.
     [Test]
-    public async Task Replay_in_one_turn_and_day_by_day_gives_the_same_cases()
+    public async Task Replay_in_one_turn_and_day_by_day_gives_the_same_signals()
     {
         DateTimeOffset end = March1.AddDays(4);
         DateTimeOffset gap = March1.AddDays(2);
@@ -280,8 +260,8 @@ public class IdeasReplayTests
         _time.Advance(TimeSpan.FromDays(3));
         Keep(end);
         await Replay().StepAsync(CancellationToken.None);
-        string[] whole = [.. Shape(_written)];
-        IReadOnlyList<Idea> openAtTheEnd = _stored[Wif].Open;
+        string[] whole = [.. Shape(_written.Values)];
+        IReadOnlyList<IdeaSignal> openAtTheEnd = _stored[Wif].Open;
         _written.Clear();
         _stored.Clear();
 
@@ -292,10 +272,10 @@ public class IdeasReplayTests
         }
 
         whole.ShouldNotBeEmpty();
-        new[] { IdeaSetup.Breakout, IdeaSetup.Squeeze, IdeaSetup.RsiExtreme }.ShouldAllBe(setup => _written.Any(item => item.Idea.Setup == setup));
-        Shape(_written).ShouldBe(whole);
-        _stored[Wif].Open.Select(idea => idea with { Id = Guid.Empty }).ShouldBe(openAtTheEnd.Select(idea => idea with { Id = Guid.Empty }));
-        _written.ShouldContain(item => item.Idea.Track.FiredAt < Interval.OneDay.CandleOpen(item.Idea.Track.StatusAt), "A case open across a cursor");
+        new[] { IdeaSetup.Breakout, IdeaSetup.Squeeze, IdeaSetup.RsiExtreme }.ShouldAllBe(setup => _written.Values.Any(signal => signal.Setup == setup));
+        Shape(_written.Values).ShouldBe(whole);
+        Shape(_stored[Wif].Open).ShouldBe(Shape(openAtTheEnd));
+        _written.Values.ShouldContain(signal => !signal.Path.IsOpen && signal.Path.FiredAt < Interval.OneDay.CandleOpen(signal.Path.TrackedUntil.AddTicks(-1)), "A path open across a cursor");
     }
 
     // Fix after review: a window of a setup longer than a day (7 candles of 4 hours) is warmed up whole: the minutes before the cursor are
@@ -309,7 +289,7 @@ public class IdeasReplayTests
         _time.Advance(TimeSpan.FromDays(3));
         Keep(end);
         await Replay(settings: settings).StepAsync(CancellationToken.None);
-        string[] whole = [.. Shape(_written)];
+        string[] whole = [.. Shape(_written.Values)];
         _written.Clear();
         _stored.Clear();
         _candles.ClearReceivedCalls();
@@ -320,7 +300,7 @@ public class IdeasReplayTests
             await Replay(settings: settings).StepAsync(CancellationToken.None);
         }
 
-        Shape(_written).ShouldBe(whole);
+        Shape(_written.Values).ShouldBe(whole);
         await _candles.Received(1).GetAsync(Wif, Interval.OneMinute, March1.AddDays(1), March1.AddDays(3), 2880, Arg.Any<CancellationToken>());
     }
 
@@ -336,26 +316,21 @@ public class IdeasReplayTests
 
     private IdeasReplay Replay(int version = IdeasEngineVersion.Current, IdeasSettings? settings = null)
     {
-        var backtests = new BacktestSettings { DefaultFees = new Dictionary<string, FeeRateSettings> { ["linear"] = new FeeRateSettings { Limit = 0.02m, Market = 0.055m } } };
-
         return new IdeasReplay(
             _candles,
-            _cases,
+            _signals,
             _cursors,
             _volatility,
-            _buckets,
-            new IdeaCalibration(_cases, _calibrations, new IdeasEngineVersion(version)),
             _market,
             settings ?? Settings,
-            backtests,
             new ScannerSettings(),
             new IdeasEngineVersion(version),
             _pace,
             _time);
     }
 
-    // The live engine warmed up the same way at the start of the day and fed the same minutes.
-    private IReadOnlyList<IdeaCase> Live()
+    // The ideas the live engine, warmed up the same way at the start of the day and fed the same minutes, closed on the day.
+    private IReadOnlyList<Idea> Live()
     {
         var engine = new IdeaEngine(Settings.Rules(), IdeasEngineVersion.Current);
         var closed = IdeasSettings.Intervals.ToDictionary(
@@ -369,14 +344,36 @@ public class IdeasReplayTests
         [
             .. IdeaCandles.Minutes(_minutes, March1, March1.AddDays(1), warm[^1].Close)
                 .SelectMany(minute => engine.Step(Wif, minute, IdeaInputs.None with { Tick = Tick }, true).Changed)
-                .Where(idea => !idea.IsOpen && idea.Track.EnteredAt is not null)
-                .Select(idea => new IdeaCase(idea, CaseResult.R(idea.Track, Fees)!.Value))
+                .Where(idea => !idea.IsOpen)
         ];
     }
 
-    private static IEnumerable<string> Shape(IEnumerable<IdeaCase> cases)
+    // How the ideas closed; the levels of one that never entered mean nothing.
+    private static IEnumerable<string> Shape(IEnumerable<Idea> ideas)
     {
-        return cases.Select(item => $"{item.Idea with { Id = Guid.Empty }} {item.Result}").Order();
+        return ideas.Select(idea => Shape(idea.Key, idea.Move, idea.VolumeRatio, idea.Track)).Order();
+    }
+
+    // The signals of each key that count by the default rules, closed as ideas.
+    private static IEnumerable<string> Outcomes(IEnumerable<IdeaSignal> signals)
+    {
+        return signals.GroupBy(signal => signal.Key)
+            .SelectMany(key => ExitOutcomes.Counted(key.OrderBy(signal => signal.Path.FiredAt).Select(signal => signal.Path), Defaults.Of(key.Key.Type, key.Key.Interval))
+                .Select(counted => (Signal: key.Single(signal => signal.Path == counted.Path), counted.Outcome)))
+            .Select(counted => Shape(counted.Signal.Key, counted.Signal.Move, counted.Signal.VolumeRatio, counted.Outcome))
+            .Order();
+    }
+
+    private static string Shape(IdeaKey key, decimal move, decimal volumeRatio, IdeaTrack track)
+    {
+        IdeaTrack shown = track.EnteredAt is null ? track with { Plan = track.Plan with { Entry = 0m, Target = 0m } } : track;
+
+        return $"{key} {move} {volumeRatio} {shown}";
+    }
+
+    private static IEnumerable<string> Shape(IEnumerable<IdeaSignal> signals)
+    {
+        return signals.Select(signal => $"{signal with { Path = signal.Path with { LadderAfter = [], Closes = [] } }} {string.Join(',', signal.Path.LadderAfter)} {string.Join(',', signal.Path.Closes)}").Order();
     }
 
     // Minutes that swing up and down by a few percent over the hours, for ratios of volatility that vary.

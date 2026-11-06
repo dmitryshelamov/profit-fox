@@ -37,6 +37,8 @@ public class LiveIdeasTests
     private ScannerMarket _market = null!;
     private FakeTimeProvider _time = null!;
     private ICandleRepository _candles = null!;
+    private IIdeaExitRuleRepository _rules = null!;
+    private IdeaRecomputes _recomputes = null!;
     private LiveIdeas _live = null!;
 
     [SetUp]
@@ -57,7 +59,26 @@ public class LiveIdeasTests
         candles.GetAggregatedAsync(Sol, Arg.Any<Interval>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns([]);
         _ideas.SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<ClosedIdea>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.ArgAt<IReadOnlyCollection<Idea>>(0).ToList());
-        _live = new LiveIdeas(_ideas, _volatility, candles, _market, new IdeasSettings(), Fees, _time);
+        _rules = Substitute.For<IIdeaExitRuleRepository>();
+        _rules.GetAllAsync(Arg.Any<CancellationToken>()).Returns([]);
+        _recomputes = new IdeaRecomputes();
+        _live = new LiveIdeas(_ideas, _volatility, candles, _rules, _recomputes, _market, new IdeasSettings(), Fees, _time);
+    }
+
+    // Task 6.2: the rules are read every minute; a new one makes the ideas from then on and sends its type × interval to the recompute, once.
+    [Test]
+    public async Task Exit_rule_applied_makes_the_next_ideas_and_goes_to_the_recompute()
+    {
+        var applied = new IdeaExitRule(IdeaType.BeyondExtreme, Interval.FifteenMinutes, 48, 3m, null, Four);
+        _rules.GetAllAsync(Arg.Any<CancellationToken>()).Returns([], [applied]);
+
+        IReadOnlyList<Idea> created = await RunAsync(Four.AddMinutes(70));
+
+        Idea beyond = created.Single(idea => idea.Setup == IdeaSetup.Impulse && idea.Interval == Interval.FifteenMinutes && idea.Track.Plan.Type == IdeaType.BeyondExtreme);
+        (beyond.Track.LifeCandles, beyond.Track.TargetR).ShouldBe((48, (decimal?)3m));
+        await _rules.Received(71).GetAllAsync(Arg.Any<CancellationToken>());
+        _recomputes.Take().ShouldBe([(IdeaType.BeyondExtreme, Interval.FifteenMinutes)]);
+        _recomputes.Take().ShouldBeEmpty();
     }
 
     // Requirement "Буфер стопа": three spreads of the ticker, 3 × 20, are wider than k × ATR; the stop 99.375 − 60 goes on the cent below.
@@ -69,6 +90,22 @@ public class LiveIdeasTests
         IReadOnlyList<Idea> created = await RunAsync(Four.AddMinutes(70));
 
         created.Single(idea => idea.Setup == IdeaSetup.Impulse && idea.Interval == Interval.FifteenMinutes && idea.Track.Plan.Type == IdeaType.BeyondExtreme).Track.Plan.Stop.ShouldBe(39.37m);
+    }
+
+    // Review of tune-idea-rules: the whole recompute of the session may have read the rules before one was applied; the first read sends
+    // the rules applied since the session started to the recompute, not the ones before.
+    [Test]
+    public async Task First_read_sends_the_rules_applied_since_the_start_to_the_recompute()
+    {
+        _rules.GetAllAsync(Arg.Any<CancellationToken>()).Returns(
+        [
+            new IdeaExitRule(IdeaType.Pullback, Interval.FifteenMinutes, 48, 2.5m, 8, Four),
+            new IdeaExitRule(IdeaType.TwoR, Interval.OneHour, 48, 3m, null, Four.AddSeconds(-1))
+        ]);
+
+        await _live.RunAsync(Four, CancellationToken.None);
+
+        _recomputes.Take().ShouldBe([(IdeaType.Pullback, Interval.FifteenMinutes)]);
     }
 
     // Decision 5: the replay writes the percentiles once a day; the live ideas read them again every hour.
@@ -294,7 +331,7 @@ public class LiveIdeasTests
     public async Task Window_of_a_setup_longer_than_a_day_warms_up_with_stored_minutes()
     {
         var settings = new IdeasSettings { ByInterval = new Dictionary<string, ThresholdOverride> { ["240"] = new ThresholdOverride { Candles = 7 } } };
-        var live = new LiveIdeas(_ideas, _volatility, _candles, _market, settings, Fees, _time);
+        var live = new LiveIdeas(_ideas, _volatility, _candles, _rules, _recomputes, _market, settings, Fees, _time);
         _candles.GetAsync(Wif, Interval.OneMinute, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
 
         await live.ReadWarmUpsAsync(CancellationToken.None);

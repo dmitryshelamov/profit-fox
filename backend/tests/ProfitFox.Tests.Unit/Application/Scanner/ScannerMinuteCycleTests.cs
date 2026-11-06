@@ -68,7 +68,7 @@ public class ScannerMinuteCycleTests
         _market.Keep([new ScannerPair(Sol, true, CoveredUntil: Minute, OpenInterestCoveredUntil: Minute), new ScannerPair(Btc, true, CoveredUntil: Minute.AddMinutes(-2))]);
         _market.TakeChanged();
         _pace = new ScannerPace();
-        _ideas = new LiveIdeas(_ideaStore, Substitute.For<IIdeaVolatilityRepository>(), Substitute.For<ICandleRepository>(), _market, new IdeasSettings(), Fees, _time);
+        _ideas = new LiveIdeas(_ideaStore, Substitute.For<IIdeaVolatilityRepository>(), Substitute.For<ICandleRepository>(), ExitRules(), new IdeaRecomputes(), _market, new IdeasSettings(), Fees, _time);
         _cycle = new ScannerMinuteCycle(
             _feed,
             _openInterest,
@@ -267,5 +267,13 @@ public class ScannerMinuteCycleTests
         }
 
         return await minute;
+    }
+
+    private static IIdeaExitRuleRepository ExitRules()
+    {
+        IIdeaExitRuleRepository rules = Substitute.For<IIdeaExitRuleRepository>();
+        rules.GetAllAsync(Arg.Any<CancellationToken>()).Returns([]);
+
+        return rules;
     }
 }

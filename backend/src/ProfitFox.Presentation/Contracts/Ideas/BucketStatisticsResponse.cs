@@ -9,7 +9,8 @@ namespace ProfitFox.Presentation.Contracts.Ideas;
 /// <summary>
 ///     The statistics of a bucket: its cases with an outcome, of them the targets, the stops and the expired ones, the share of targets among
 ///     all of them with its 95 % Wilson interval, the expectancy in R with its 95 % interval and the badge by it, <c>up</c>, <c>flat</c> or
-///     <c>down</c> (no share, intervals or badge with <see cref="EnoughData" /> false, «мало данных»). Shares are fractions as decimal strings.
+///     <c>down</c> (no share, intervals or badge with <see cref="EnoughData" /> false, «мало данных»). A bucket of «Откат» or «Стоп-вход» also has
+///     the signals it counted, the share of them that entered and the expectancy per signal. Shares are fractions as decimal strings.
 /// </summary>
 public sealed record BucketStatisticsResponse(
     int Cases,
@@ -23,7 +24,10 @@ public sealed record BucketStatisticsResponse(
     string? ExpectancyLow,
     string? ExpectancyHigh,
     string? Badge,
-    bool EnoughData)
+    bool EnoughData,
+    int? Signals,
+    string? EntryShare,
+    string? SignalExpectancy)
 {
     public static BucketStatisticsResponse? Of(BucketStatistics? statistics)
     {
@@ -41,7 +45,10 @@ public sealed record BucketStatisticsResponse(
                 Text(statistics.ExpectancyLow),
                 Text(statistics.ExpectancyHigh),
                 statistics.Badge?.ToCode(),
-                statistics.Cases >= BucketStatisticsCalculator.MinimumCases);
+                statistics.Cases >= BucketStatisticsCalculator.MinimumCases,
+                statistics.Signals,
+                Text(statistics.EntryShare),
+                Text(statistics.SignalExpectancy));
     }
 
     private static string? Text(decimal? value)
