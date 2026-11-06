@@ -96,6 +96,17 @@ public class IdeaRulesTests
         IdeaRules.Plan(IdeaType.StopEntry, IdeaSide.Short, context).ShouldBe(new IdeaPlan(IdeaType.StopEntry, IdeaSide.Short, 99.99m, 102.5m, 94.97m));
     }
 
+    // The replay takes today's price step while the range of the past lies on an older grid: a range of 99.9–102.1 at a step of 0.25 enters
+    // long at 102.35 up to 102.50 and short at 99.65 down to 99.50, away from the market, as the stop and the target go.
+    [Test]
+    public void Stop_entry_of_a_range_off_the_price_step_enters_on_the_step_away_from_the_market()
+    {
+        IdeaContext context = Context with { Price = 101m, WindowLow = 99.9m, WindowHigh = 102.1m, Tick = 0.25m };
+
+        IdeaRules.Plan(IdeaType.StopEntry, IdeaSide.Long, context).ShouldBe(new IdeaPlan(IdeaType.StopEntry, IdeaSide.Long, 102.50m, 99.25m, 109.00m));
+        IdeaRules.Plan(IdeaType.StopEntry, IdeaSide.Short, context).ShouldBe(new IdeaPlan(IdeaType.StopEntry, IdeaSide.Short, 99.50m, 102.75m, 93.00m));
+    }
+
     // A stop order the price has already passed would fill at once, at a price the market never gave.
     [TestCase(IdeaSide.Long, 102.01)]
     [TestCase(IdeaSide.Long, 102.5)]
