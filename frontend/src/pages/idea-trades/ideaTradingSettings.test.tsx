@@ -22,7 +22,7 @@ describe('settings of trading by ideas', () => {
     const panel = await screen.findByRole('region', { name: 'Настройки' });
 
     await waitFor(() =>
-      expect(within(panel).getByLabelText('Риск на сделку, USDT')).toHaveValue('1'),
+      expect(within(panel).getByLabelText('Сумма на сделку, USDT')).toHaveValue('20'),
     );
     expect(within(panel).getByLabelText('Не больше суммы на сделку, USDT')).toHaveValue('200');
     expect(within(panel).getByLabelText('Не больше открытых сделок')).toHaveValue('5');
@@ -52,7 +52,7 @@ describe('settings of trading by ideas', () => {
 
     await waitFor(() => expect(requests.some((request) => request.method === 'PUT')).toBe(true));
     expect(await requests.find((request) => request.method === 'PUT')!.text()).toBe(
-      `{"accountId":"${exchangeAccount.id}","risk":1,"maxAmount":200,"maxOpenTrades":3,"maxTotalRisk":5,"minRiskReward":1.5}`,
+      `{"accountId":"${exchangeAccount.id}","amount":20,"maxAmount":200,"maxOpenTrades":3,"maxTotalRisk":5,"minRiskReward":1.5}`,
     );
     expect(await screen.findByText('Настройки сохранены')).toBeInTheDocument();
   });
@@ -66,7 +66,7 @@ describe('settings of trading by ideas', () => {
     renderApp('/idea-trades/settings');
     const user = userEvent.setup();
     const panel = await screen.findByRole('region', { name: 'Настройки' });
-    await within(panel).findByLabelText('Риск на сделку, USDT');
+    await within(panel).findByLabelText('Сумма на сделку, USDT');
 
     await user.click(within(panel).getByRole('button', { name: 'Сохранить' }));
 
@@ -80,25 +80,25 @@ describe('settings of trading by ideas', () => {
     expect(await screen.findByText('Не удалось загрузить настройки.')).toBeInTheDocument();
   });
 
-  // Scenario "Риск ноль": the error stands at its field.
+  // Scenario "Сумма ноль": the error stands at its field.
   it('shows an error of validation at its field', async () => {
     fakeApi(
       routes(() => [], {
         'PUT /api/idea-trading/settings': () =>
-          problem(400, 'invalid', { errors: { risk: ['The risk must be above zero.'] } }),
+          problem(400, 'invalid', { errors: { amount: ['The amount must be above zero.'] } }),
       }),
     );
     renderApp('/idea-trades/settings');
     const user = userEvent.setup();
     const panel = await screen.findByRole('region', { name: 'Настройки' });
-    const risk = await within(panel).findByLabelText('Риск на сделку, USDT');
-    await waitFor(() => expect(risk).toHaveValue('1'));
+    const amount = await within(panel).findByLabelText('Сумма на сделку, USDT');
+    await waitFor(() => expect(amount).toHaveValue('20'));
 
-    await user.clear(risk);
-    await user.type(risk, '0');
+    await user.clear(amount);
+    await user.type(amount, '0');
     await user.click(within(panel).getByRole('button', { name: 'Сохранить' }));
 
-    expect(await within(panel).findByText('The risk must be above zero.')).toBeInTheDocument();
-    expect(risk).toHaveAttribute('aria-invalid', 'true');
+    expect(await within(panel).findByText('The amount must be above zero.')).toBeInTheDocument();
+    expect(amount).toHaveAttribute('aria-invalid', 'true');
   });
 });

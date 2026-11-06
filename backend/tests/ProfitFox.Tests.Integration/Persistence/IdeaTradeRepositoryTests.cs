@@ -234,7 +234,7 @@ public class IdeaTradeRepositoryTests
 
     private async Task<IdeaTrade> CreateAsync(DateTimeOffset at, IdeaType type = IdeaType.TwoR, IdeaPromise? promise = null)
     {
-        var trade = IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(at, type: type), _account, 106m, new IdeaTradeSize(0.47m, 49.82m, 0.2m, 1.84m, false), at, promise);
+        var trade = IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(at, type: type), _account, 106m, new IdeaTradeSize(0.47m, 49.82m, 0.2m, 0.368m, 1.84m), at, promise);
         var entry = IdeaTradeOrder.NewEntry(trade.Id, 1, OrderSide.Buy, OrderType.Market, TimeInForce.GoodTilCancelled, null, 0.47m, new Protection(trade.Target, trade.Stop), at);
         await _executor.ExecuteAsync(
             async token =>

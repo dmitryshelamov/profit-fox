@@ -243,7 +243,7 @@ public sealed class LiveTradingScenario : IAsyncDisposable
     {
         DateTimeOffset now = Factory.Time.GetUtcNow();
         Idea idea = IdeaGenerator.Generate(now.AddMinutes(-5), instrument: instrument ?? Linear, type: type, side: side);
-        var trade = IdeaTrade.Create(Guid.NewGuid(), idea, Account, 105m, new IdeaTradeSize(quantity, quantity * 105m, risk, 2m, false), now);
+        var trade = IdeaTrade.Create(Guid.NewGuid(), idea, Account, 105m, new IdeaTradeSize(quantity, quantity * 105m, risk, risk * 2m, 2m), now);
         bool pullback = type == IdeaType.Pullback;
         var entry = IdeaTradeOrder.NewEntry(
             trade.Id,

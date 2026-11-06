@@ -3,6 +3,7 @@ const reasons: Record<string, string> = {
   price_beyond_stop: 'Цена уже за стопом идеи',
   price_beyond_target: 'Цена уже за целью идеи',
   risk_reward_too_low: 'R:R после комиссий ниже минимального',
+  amount_above_max: 'Сумма больше предела на сделку',
   too_many_open_trades: 'Уже открыто столько сделок, сколько разрешено',
   total_risk_exceeded: 'Общий риск открытых сделок был бы выше разрешённого',
   opposite_side_open:

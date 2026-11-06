@@ -44,14 +44,14 @@ public class IdeaEntryApiTests
         await _scenario.DisposeAsync();
     }
 
-    // Scenario "Объём по риску": the loss on 1 USDT is 0.021089, so 1 / (100 × 0.021089) = 0.474 rounds down to 0.47.
+    // Scenario "Объём по сумме": 47.3 / 100 = 0.473 rounds down to 0.47; the loss on 1 USDT is 0.021089, the profit 0.038878.
     [Test]
-    public async Task Volume_comes_from_the_risk_and_the_current_price()
+    public async Task Volume_comes_from_the_amount_and_the_current_price()
     {
         Guid idea = await SaveIdeaAsync(100m, 98m, 104m);
         SetPrice("100");
 
-        JsonElement entry = await EntryAsync(idea, risk: "1");
+        JsonElement entry = await EntryAsync(idea, amount: "47.3");
 
         entry.GetProperty("entryPrice").GetString().ShouldBe("100");
         entry.GetProperty("quantity").GetString().ShouldBe("0.47");
@@ -60,23 +60,22 @@ public class IdeaEntryApiTests
         Math.Round(decimal.Parse(entry.GetProperty("riskReward").GetString()!, System.Globalization.CultureInfo.InvariantCulture), 2).ShouldBe(1.84m);
         entry.GetProperty("riskRewardWithoutFees").GetString().ShouldBe("2");
         entry.GetProperty("freeMoney").GetString().ShouldBe("10000");
-        entry.GetProperty("cappedByAmount").GetBoolean().ShouldBeFalse();
+        decimal.Parse(entry.GetProperty("profit").GetString()!, System.Globalization.CultureInfo.InvariantCulture).ShouldBe(1.827266m, 0.000001m);
         entry.GetProperty("reasons").GetArrayLength().ShouldBe(0);
         _scenario.Exchange.Sent.ShouldBeEmpty();
     }
 
-    // Scenario "Сумма упёрлась в предел".
+    // Scenario "Сумма упёрлась в предел": the amount is not cut, it is named as the reason.
     [Test]
-    public async Task Amount_that_the_risk_asks_above_the_limit_is_cut()
+    public async Task Amount_above_the_limit_is_a_reason_and_is_not_cut()
     {
-        Guid idea = await SaveIdeaAsync(100m, 99.8m, 100.4m);
+        Guid idea = await SaveIdeaAsync(100m, 98m, 104m);
         SetPrice("100");
 
-        JsonElement entry = await EntryAsync(idea, risk: "1");
+        JsonElement entry = await EntryAsync(idea, amount: "250");
 
-        entry.GetProperty("amount").GetString().ShouldBe("200.00");
-        entry.GetProperty("cappedByAmount").GetBoolean().ShouldBeTrue();
-        decimal.Parse(entry.GetProperty("risk").GetString()!, System.Globalization.CultureInfo.InvariantCulture).ShouldBeLessThan(1m);
+        entry.GetProperty("quantity").GetString().ShouldBe("2.50");
+        Reasons(entry).ShouldContain("amount_above_max");
     }
 
     // The pullback enters at the price of its idea, whatever the market does.
@@ -86,7 +85,7 @@ public class IdeaEntryApiTests
         Guid idea = await SaveIdeaAsync(100m, 98m, 104m, IdeaType.Pullback);
         SetPrice("101.5");
 
-        (await EntryAsync(idea, risk: "1")).GetProperty("entryPrice").GetString().ShouldBe("100");
+        (await EntryAsync(idea, amount: "47.3")).GetProperty("entryPrice").GetString().ShouldBe("100");
     }
 
     // The limit of a pullback is at its own price, but the market may be through the stop already.
@@ -96,7 +95,7 @@ public class IdeaEntryApiTests
         Guid idea = await SaveIdeaAsync(100m, 98m, 104m, IdeaType.Pullback);
         SetPrice("97.5");
 
-        Reasons(await EntryAsync(idea, risk: "1")).ShouldContain("price_beyond_stop");
+        Reasons(await EntryAsync(idea, amount: "47.3")).ShouldContain("price_beyond_stop");
     }
 
     // Scenario "Цена ушла за цель".
@@ -106,7 +105,7 @@ public class IdeaEntryApiTests
         Guid idea = await SaveIdeaAsync(23.48m, 23.01m, 24.42m);
         SetPrice("24.50");
 
-        Reasons(await EntryAsync(idea, risk: "1")).ShouldContain("price_beyond_target");
+        Reasons(await EntryAsync(idea, amount: "47.3")).ShouldContain("price_beyond_target");
     }
 
     // Scenario "R:R упал".
@@ -116,7 +115,7 @@ public class IdeaEntryApiTests
         Guid idea = await SaveIdeaAsync(23.48m, 23.01m, 24.42m);
         SetPrice("23.90");
 
-        Reasons(await EntryAsync(idea, risk: "1")).ShouldBe(["risk_reward_too_low"]);
+        Reasons(await EntryAsync(idea, amount: "47.3")).ShouldBe(["risk_reward_too_low"]);
     }
 
     [Test]
@@ -125,7 +124,7 @@ public class IdeaEntryApiTests
         Guid idea = await SaveIdeaAsync(100m, 98m, 104m, status: IdeaStatus.Expired);
         SetPrice("100");
 
-        Reasons(await EntryAsync(idea, risk: "1")).ShouldBe(["idea_not_open"]);
+        Reasons(await EntryAsync(idea, amount: "47.3")).ShouldBe(["idea_not_open"]);
     }
 
     // Scenario "Противоположный бот".
@@ -137,7 +136,7 @@ public class IdeaEntryApiTests
         Guid bot = await _scenario.CreateBotAsync("ema-short", category: "linear");
         await _scenario.ActAsync(bot, "start");
 
-        Reasons(await EntryAsync(idea, risk: "1")).ShouldBe(["opposite_side_open"]);
+        Reasons(await EntryAsync(idea, amount: "47.3")).ShouldBe(["opposite_side_open"]);
     }
 
     // Scenario "Та же сторона": a bot of the same direction is no reason.
@@ -149,7 +148,7 @@ public class IdeaEntryApiTests
         Guid bot = await _scenario.CreateBotAsync("ema", category: "linear");
         await _scenario.ActAsync(bot, "start");
 
-        Reasons(await EntryAsync(idea, risk: "1")).ShouldBeEmpty();
+        Reasons(await EntryAsync(idea, amount: "47.3")).ShouldBeEmpty();
     }
 
     // Scenario "Общий риск": 3 × 1.5 + 0.99 > 5.
@@ -163,7 +162,7 @@ public class IdeaEntryApiTests
             await _scenario.CreateTradeAsync(risk: 1.5m);
         }
 
-        Reasons(await EntryAsync(idea, risk: "1")).ShouldBe(["total_risk_exceeded"]);
+        Reasons(await EntryAsync(idea, amount: "47.3")).ShouldBe(["total_risk_exceeded"]);
     }
 
     [Test]
@@ -171,10 +170,10 @@ public class IdeaEntryApiTests
     {
         Guid idea = await SaveIdeaAsync(100m, 98m, 104m);
         SetPrice("100");
-        await _scenario.Client.PutAsJsonAsync("/api/idea-trading/settings", new { accountId = _scenario.Account, risk = 1m, maxAmount = 200m, maxOpenTrades = 1, maxTotalRisk = 5m, minRiskReward = 1.5m });
+        await _scenario.Client.PutAsJsonAsync("/api/idea-trading/settings", new { accountId = _scenario.Account, amount = 47.3m, maxAmount = 200m, maxOpenTrades = 1, maxTotalRisk = 5m, minRiskReward = 1.5m });
         await _scenario.CreateTradeAsync(risk: 0.1m);
 
-        Reasons(await EntryAsync(idea, risk: "1")).ShouldBe(["too_many_open_trades"]);
+        Reasons(await EntryAsync(idea, amount: "47.3")).ShouldBe(["too_many_open_trades"]);
     }
 
     // Requirement "Когда вход отклоняется": what the key and the account allow.
@@ -185,7 +184,7 @@ public class IdeaEntryApiTests
         SetPrice("100");
         _scenario.Factory.Ledger.IsHedgeModeAsync(Arg.Any<ExchangeKey>(), Arg.Any<Instrument>(), Arg.Any<CancellationToken>()).Returns(true);
 
-        Reasons(await EntryAsync(idea, risk: "1")).ShouldBe(["hedge_mode"]);
+        Reasons(await EntryAsync(idea, amount: "47.3")).ShouldBe(["hedge_mode"]);
     }
 
     [Test]
@@ -196,7 +195,7 @@ public class IdeaEntryApiTests
         _scenario.Factory.KeyInspector.InspectAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new ExchangeKeyInfo(100, false, true, false, new HashSet<MarketCategory> { MarketCategory.Spot }));
 
-        Reasons(await EntryAsync(idea, risk: "1")).ShouldBe(["category_not_traded"]);
+        Reasons(await EntryAsync(idea, amount: "47.3")).ShouldBe(["category_not_traded"]);
     }
 
     [Test]
@@ -207,7 +206,7 @@ public class IdeaEntryApiTests
         _scenario.Factory.KeyInspector.InspectAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new ExchangeKeyRejectedException("API key is invalid."));
 
-        Reasons(await EntryAsync(idea, risk: "1")).ShouldBe(["no_key"]);
+        Reasons(await EntryAsync(idea, amount: "47.3")).ShouldBe(["no_key"]);
     }
 
     [Test]
@@ -217,7 +216,7 @@ public class IdeaEntryApiTests
         SetPrice("100");
         _scenario.Factory.Ledger.GetFreeAsync(Arg.Any<ExchangeKey>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(10m);
 
-        JsonElement entry = await EntryAsync(idea, risk: "1");
+        JsonElement entry = await EntryAsync(idea, amount: "47.3");
 
         Reasons(entry).ShouldBe(["not_enough_money"]);
         entry.GetProperty("freeMoney").GetString().ShouldBe("10");
@@ -229,17 +228,17 @@ public class IdeaEntryApiTests
         Guid idea = await SaveIdeaAsync(100m, 98m, 104m);
         SetPrice("100");
 
-        HttpResponseMessage response = await _scenario.Client.GetAsync($"/api/ideas/{idea}/entry?risk=1");
+        HttpResponseMessage response = await _scenario.Client.GetAsync($"/api/ideas/{idea}/entry?amount=47.3");
 
         Reasons(JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement).ShouldBe(["no_key"]);
     }
 
     [Test]
-    public async Task Account_and_risk_come_from_the_settings_when_not_asked()
+    public async Task Account_and_amount_come_from_the_settings_when_not_asked()
     {
         Guid idea = await SaveIdeaAsync(100m, 98m, 104m);
         SetPrice("100");
-        await _scenario.Client.PutAsJsonAsync("/api/idea-trading/settings", new { accountId = _scenario.Account, risk = 2m, maxAmount = 200m, maxOpenTrades = 5, maxTotalRisk = 5m, minRiskReward = 1.5m });
+        await _scenario.Client.PutAsJsonAsync("/api/idea-trading/settings", new { accountId = _scenario.Account, amount = 94.5m, maxAmount = 200m, maxOpenTrades = 5, maxTotalRisk = 5m, minRiskReward = 1.5m });
 
         HttpResponseMessage response = await _scenario.Client.GetAsync($"/api/ideas/{idea}/entry");
 
@@ -248,15 +247,15 @@ public class IdeaEntryApiTests
     }
 
     [Test]
-    public async Task Unknown_idea_is_not_found_and_a_risk_of_zero_is_refused()
+    public async Task Unknown_idea_is_not_found_and_an_amount_of_zero_is_refused()
     {
-        (await _scenario.Client.GetAsync($"/api/ideas/{Guid.NewGuid()}/entry?risk=1")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await _scenario.Client.GetAsync($"/api/ideas/{Guid.NewGuid()}/entry?amount=47.3")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
 
         Guid idea = await SaveIdeaAsync(100m, 98m, 104m);
-        HttpResponseMessage response = await _scenario.Client.GetAsync($"/api/ideas/{idea}/entry?risk=0");
+        HttpResponseMessage response = await _scenario.Client.GetAsync($"/api/ideas/{idea}/entry?amount=0");
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("errors").EnumerateObject().Select(error => error.Name).ShouldBe(["risk"]);
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("errors").EnumerateObject().Select(error => error.Name).ShouldBe(["amount"]);
     }
 
     private static IReadOnlyList<string> Reasons(JsonElement entry)
@@ -278,9 +277,9 @@ public class IdeaEntryApiTests
         return idea.Id;
     }
 
-    private async Task<JsonElement> EntryAsync(Guid idea, string risk)
+    private async Task<JsonElement> EntryAsync(Guid idea, string amount)
     {
-        HttpResponseMessage response = await _scenario.Client.GetAsync($"/api/ideas/{idea}/entry?accountId={_scenario.Account}&risk={risk}");
+        HttpResponseMessage response = await _scenario.Client.GetAsync($"/api/ideas/{idea}/entry?accountId={_scenario.Account}&amount={amount}");
         response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
 
         return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;

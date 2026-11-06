@@ -72,8 +72,8 @@ describe('entry by an idea from the pair page', () => {
     ).toBeNull();
   });
 
-  // Requirement "Окно входа": the account and the risk come from the settings, the numbers from the API.
-  it('shows the calculation of the entry for the account and the risk of the settings', async () => {
+  // Requirement "Окно входа": the account and the amount come from the settings, the numbers from the API.
+  it('shows the calculation of the entry for the account and the amount of the settings', async () => {
     const requests = fakeApi(routes());
     renderApp('/market/linear/SOLUSDT');
 
@@ -81,30 +81,31 @@ describe('entry by an idea from the pair page', () => {
 
     expect(await within(dialog).findByText('168.40')).toBeInTheDocument();
     expect(within(dialog).getByLabelText('Аккаунт')).toHaveValue(exchangeAccount.id);
-    expect(within(dialog).getByLabelText('Риск, USDT')).toHaveValue('1');
+    expect(within(dialog).getByLabelText('Сумма, USDT')).toHaveValue('20');
     expect(within(dialog).getByText('0.47')).toBeInTheDocument();
     expect(within(dialog).getByText('79.15 USDT')).toBeInTheDocument();
     expect(within(dialog).getByText('0.99 USDT')).toBeInTheDocument();
+    expect(within(dialog).getByText('1.82 USDT')).toBeInTheDocument();
     expect(within(dialog).getByText('1.84 (без ком. 2.00)')).toBeInTheDocument();
     expect(within(dialog).getByText('1 000 USDT')).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Войти' })).toBeEnabled();
     const asked = requests.find((request) => request.url.includes('/entry'))!;
-    expect(new URL(asked.url).search).toBe(`?accountId=${exchangeAccount.id}&risk=1`);
+    expect(new URL(asked.url).search).toBe(`?accountId=${exchangeAccount.id}&amount=20`);
   });
 
-  it('asks again when the risk changes', async () => {
+  it('asks again when the amount changes', async () => {
     const requests = fakeApi(routes());
     renderApp('/market/linear/SOLUSDT');
     const { user, dialog } = await openEntry();
-    const risk = within(dialog).getByLabelText('Риск, USDT');
+    const amount = within(dialog).getByLabelText('Сумма, USDT');
     await within(dialog).findByText('168.40');
 
-    await user.clear(risk);
-    await user.type(risk, '2');
+    await user.clear(amount);
+    await user.type(amount, '50');
 
     await waitFor(() =>
       expect(
-        requests.some((request) => new URL(request.url).searchParams.get('risk') === '2'),
+        requests.some((request) => new URL(request.url).searchParams.get('amount') === '50'),
       ).toBe(true),
     );
   });
@@ -127,36 +128,37 @@ describe('entry by an idea from the pair page', () => {
     expect(within(dialog).getByRole('button', { name: 'Войти' })).toBeDisabled();
   });
 
-  // Scenario "Сумма упёрлась в предел".
-  it('says the amount hit its limit and the risk is below the asked one', async () => {
+  // Scenario "Убыток и прибыль по сумме".
+  it('shows the amount, the loss at the stop and the profit at the target in cents', async () => {
     fakeApi(
       routes({
         'GET /api/ideas/idea-pullback/entry': () =>
-          json(entryOf({ amount: '200.00', risk: '0.62', cappedByAmount: true })),
+          json(entryOf({ amount: '47.00', risk: '0.991083', profit: '1.827266' })),
       }),
     );
     renderApp('/market/linear/SOLUSDT');
 
     const { dialog } = await openEntry();
 
-    expect(await within(dialog).findByText('200.00 USDT')).toBeInTheDocument();
-    expect(within(dialog).getByText('0.62 USDT')).toBeInTheDocument();
-    expect(within(dialog).getByText(/Сумма упёрлась в предел/)).toBeInTheDocument();
+    expect(await within(dialog).findByText('47.00 USDT')).toBeInTheDocument();
+    expect(within(dialog).getByText('0.99 USDT')).toBeInTheDocument();
+    expect(within(dialog).getByText('1.83 USDT')).toBeInTheDocument();
   });
 
-  it('rounds the real risk to cents', async () => {
+  // Scenario "Сумма упёрлась в предел".
+  it('turns «Войти» off and names the reason when the amount is above the limit', async () => {
     fakeApi(
       routes({
         'GET /api/ideas/idea-pullback/entry': () =>
-          json(entryOf({ risk: '0.9999982760000000000000', cappedByAmount: true })),
+          json(entryOf({ reasons: ['amount_above_max'] })),
       }),
     );
     renderApp('/market/linear/SOLUSDT');
 
     const { dialog } = await openEntry();
 
-    expect(await within(dialog).findByText('1.00 USDT')).toBeInTheDocument();
-    expect(within(dialog).getByText(/настоящий риск 1\.00 USDT меньше/)).toBeInTheDocument();
+    expect(await within(dialog).findByText('Сумма больше предела на сделку')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Войти' })).toBeDisabled();
   });
 
   it('shows the missing account as a reason', async () => {
@@ -203,7 +205,7 @@ describe('entry by an idea from the pair page', () => {
       (request) => request.method === 'POST' && request.url.endsWith('/api/idea-trades'),
     )!;
     expect(await request.text()).toBe(
-      `{"ideaId":"idea-pullback","accountId":"${exchangeAccount.id}","risk":1}`,
+      `{"ideaId":"idea-pullback","accountId":"${exchangeAccount.id}","amount":20}`,
     );
   });
 
@@ -253,18 +255,18 @@ describe('entry by an idea from the pair page', () => {
     expect(within(dialog).queryByRole('button', { name: 'Войти' })).toBeNull();
   });
 
-  it('says so when the entry cannot be calculated, and names a risk the API refuses', async () => {
+  it('says so when the entry cannot be calculated, and names an amount the API refuses', async () => {
     fakeApi(
       routes({
         'GET /api/ideas/idea-pullback/entry': () =>
-          problem(400, 'invalid', { errors: { risk: ['The risk must be above zero.'] } }),
+          problem(400, 'invalid', { errors: { amount: ['The amount must be above zero.'] } }),
       }),
     );
     renderApp('/market/linear/SOLUSDT');
 
     const { dialog } = await openEntry();
 
-    expect(await within(dialog).findByText('The risk must be above zero.')).toBeInTheDocument();
+    expect(await within(dialog).findByText('The amount must be above zero.')).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Войти' })).toBeDisabled();
   });
 

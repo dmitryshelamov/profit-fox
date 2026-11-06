@@ -50,9 +50,9 @@ public sealed class IdeaTradeEntryCalculator(
     BacktestSettings backtests)
 {
     /// <returns><c>null</c> when there is no such idea.</returns>
-    /// <exception cref="ValidationFailedException">An unknown account, or a risk not above zero.</exception>
+    /// <exception cref="ValidationFailedException">An unknown account, or an amount not above zero.</exception>
     /// <exception cref="ExchangeException">The exchange did not answer.</exception>
-    public async Task<EntryPreparation?> PrepareAsync(Guid ideaId, Guid? accountId, decimal? risk, CancellationToken cancellationToken)
+    public async Task<EntryPreparation?> PrepareAsync(Guid ideaId, Guid? accountId, decimal? amount, CancellationToken cancellationToken)
     {
         Idea? idea = await ideas.GetAsync(ideaId, cancellationToken);
 
@@ -62,11 +62,11 @@ public sealed class IdeaTradeEntryCalculator(
         }
 
         IdeaTradingSettings saved = await settings.GetAsync(cancellationToken);
-        decimal asked = risk ?? saved.Risk;
+        decimal asked = amount ?? saved.Amount;
 
         if (asked <= 0m)
         {
-            throw new ValidationFailedException(new Dictionary<string, string> { ["risk"] = "The risk must be above zero." });
+            throw new ValidationFailedException(new Dictionary<string, string> { ["amount"] = "The amount must be above zero." });
         }
 
         Guid? chosen = accountId ?? saved.AccountId;
@@ -93,13 +93,13 @@ public sealed class IdeaTradeEntryCalculator(
     {
         Idea idea = preparation.Idea;
         IdeaPlan plan = idea.Track.Plan with { Entry = preparation.Price };
-        IdeaTradeSize size = IdeaTradeSizing.Calculate(plan, preparation.Fees, preparation.Risk, preparation.Settings.MaxAmount, preparation.Rules);
+        IdeaTradeSize size = IdeaTradeSizing.Calculate(plan, preparation.Fees, preparation.Amount, preparation.Rules);
         IReadOnlyList<IdeaTrade> open = await trades.GetOpenAsync(cancellationToken);
         decimal? free = preparation.Key is { } key ? await ledger.GetFreeAsync(key, preparation.Quote, cancellationToken) : null;
         IdeaTradeAccount account = await AccountAsync(preparation, free, open, cancellationToken);
-        var limits = new IdeaTradingLimits(preparation.Settings.MinRiskReward, preparation.Settings.MaxOpenTrades, preparation.Settings.MaxTotalRisk);
+        var limits = new IdeaTradingLimits(preparation.Settings.MinRiskReward, preparation.Settings.MaxOpenTrades, preparation.Settings.MaxTotalRisk, preparation.Settings.MaxAmount);
         IReadOnlyList<IdeaTradeRefusal> reasons = IdeaTradeRefusals.Check(
-            new IdeaTradeEntry(idea.Instrument.Category, idea.Track.Status, idea.Track.Plan, preparation.Price, preparation.Current, size, preparation.Rules),
+            new IdeaTradeEntry(idea.Instrument.Category, idea.Track.Status, idea.Track.Plan, preparation.Price, preparation.Current, preparation.Amount, size, preparation.Rules),
             limits,
             new OpenIdeaTrades(open.Count, open.Sum(trade => trade.Risk)),
             account);
@@ -227,7 +227,7 @@ public sealed record EntryPreparation(
     decimal Current,
     InstrumentRules Rules,
     FeeRates Fees,
-    decimal Risk,
+    decimal Amount,
     string Quote,
     string BaseCoin,
     IReadOnlyList<IdeaBucket> Buckets);

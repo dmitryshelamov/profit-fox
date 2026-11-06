@@ -114,7 +114,7 @@ public class IdeaTradeOutcomeStorageTests
     {
         Idea idea = IdeaGenerator.Generate(Now, setup: setup);
         await _ideas.SaveAsync([idea], [], CancellationToken.None);
-        var trade = IdeaTrade.Create(Guid.NewGuid(), idea, _account, 106m, new IdeaTradeSize(0.47m, 49.82m, 0.2m, 1.84m, false), Now);
+        var trade = IdeaTrade.Create(Guid.NewGuid(), idea, _account, 106m, new IdeaTradeSize(0.47m, 49.82m, 0.2m, 0.368m, 1.84m), Now);
         var entry = IdeaTradeOrder.NewEntry(trade.Id, 1, OrderSide.Buy, OrderType.Market, TimeInForce.GoodTilCancelled, null, 0.47m, new Protection(trade.Target, trade.Stop), Now);
         await _executor.ExecuteAsync(
             async token =>

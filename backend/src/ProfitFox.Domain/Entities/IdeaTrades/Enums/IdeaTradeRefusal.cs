@@ -7,6 +7,7 @@ public enum IdeaTradeRefusal
     PriceBeyondStop,
     PriceBeyondTarget,
     RiskRewardTooLow,
+    AmountAboveMax,
     TooManyOpenTrades,
     TotalRiskExceeded,
     OppositeSideOpen,

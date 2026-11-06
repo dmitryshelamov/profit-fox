@@ -5,7 +5,7 @@ describe('settings form', () => {
     expect(
       formOfSettings({
         accountId: null,
-        risk: '1',
+        amount: '20',
         maxAmount: '200',
         maxOpenTrades: 5,
         maxTotalRisk: '5',
@@ -13,7 +13,7 @@ describe('settings form', () => {
       }),
     ).toEqual({
       accountId: '',
-      risk: '1',
+      amount: '20',
       maxAmount: '200',
       maxOpenTrades: '5',
       maxTotalRisk: '5',
@@ -22,9 +22,9 @@ describe('settings form', () => {
   });
 
   it('lays server errors out by field and keeps the rest for the form', () => {
-    const laid = settingsFieldErrors({ risk: ['The risk must be above zero.'], other: ['x'] });
+    const laid = settingsFieldErrors({ amount: ['The amount must be above zero.'], other: ['x'] });
 
-    expect(laid.fields).toEqual({ risk: ['The risk must be above zero.'] });
+    expect(laid.fields).toEqual({ amount: ['The amount must be above zero.'] });
     expect(laid.form).toEqual(['x']);
   });
 });

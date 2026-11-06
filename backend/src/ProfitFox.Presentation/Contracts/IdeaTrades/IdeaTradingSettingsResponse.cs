@@ -8,7 +8,7 @@ namespace ProfitFox.Presentation.Contracts.IdeaTrades;
 /// <summary>The settings of trading by ideas; numbers are decimal strings, the account is none until the owner chose one.</summary>
 public sealed record IdeaTradingSettingsResponse(
     Guid? AccountId,
-    [property: Required] string Risk,
+    [property: Required] string Amount,
     [property: Required] string MaxAmount,
     int MaxOpenTrades,
     [property: Required] string MaxTotalRisk,
@@ -18,7 +18,7 @@ public sealed record IdeaTradingSettingsResponse(
     {
         return new IdeaTradingSettingsResponse(
             settings.AccountId,
-            settings.Risk.ToString(CultureInfo.InvariantCulture),
+            settings.Amount.ToString(CultureInfo.InvariantCulture),
             settings.MaxAmount.ToString(CultureInfo.InvariantCulture),
             settings.MaxOpenTrades,
             settings.MaxTotalRisk.ToString(CultureInfo.InvariantCulture),
