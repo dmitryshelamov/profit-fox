@@ -214,12 +214,19 @@ public class IdeasReplayTests
     }
 
     // Scenario "Повторный прогон после смены правил": the signals and cursors of other versions go, so a new version replays from the start.
+    // Prod held 24 M cases of version 4, more than one statement deletes within the command timeout, so a step removes an hour of them, and
+    // the cursors go once no signal is left.
     [Test]
-    public async Task Clean_up_removes_the_signals_and_cursors_of_other_versions()
+    public async Task Clean_up_removes_an_hour_of_other_versions_a_step_and_the_cursors_at_the_end()
     {
-        await Replay(2).CleanUpAsync(CancellationToken.None);
+        _signals.DeleteOtherVersionsAsync(2, Arg.Any<CancellationToken>()).Returns(4, 0);
+        IdeasReplay replay = Replay(2);
 
-        await _signals.Received(1).DeleteOtherVersionsAsync(2, Arg.Any<CancellationToken>());
+        (await replay.CleanUpAsync(CancellationToken.None)).ShouldBeTrue();
+        await _cursors.DidNotReceive().DeleteOtherVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+        (await replay.CleanUpAsync(CancellationToken.None)).ShouldBeFalse();
+
+        await _signals.Received(2).DeleteOtherVersionsAsync(2, Arg.Any<CancellationToken>());
         await _cursors.Received(1).DeleteOtherVersionsAsync(2, Arg.Any<CancellationToken>());
     }
 

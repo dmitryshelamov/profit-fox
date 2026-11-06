@@ -144,11 +144,19 @@ internal sealed class IdeaSignalRepository(NpgsqlDataSource dataSource) : IIdeaS
             cancellationToken: cancellationToken));
     }
 
-    public async Task DeleteOtherVersionsAsync(int engineVersion, CancellationToken cancellationToken)
+    // One statement over every case of an old version outran the command timeout on prod (24 M cases), so an hour of them goes at a time.
+    public async Task<int> DeleteOtherVersionsAsync(int engineVersion, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await connection.ExecuteAsync(
-            new CommandDefinition("DELETE FROM idea_cases WHERE engine_version <> @Version", new { Version = engineVersion }, cancellationToken: cancellationToken));
+
+        return await connection.ExecuteAsync(new CommandDefinition(
+            """
+            WITH first AS (SELECT min(fired_at) AS at FROM idea_cases WHERE engine_version <> @Version)
+            DELETE FROM idea_cases USING first
+            WHERE engine_version <> @Version AND fired_at >= first.at AND fired_at < first.at + interval '1 hour'
+            """,
+            new { Version = engineVersion },
+            cancellationToken: cancellationToken));
     }
 
     private static Task WriteAsync<T>(NpgsqlBinaryImporter importer, T? value, NpgsqlDbType type, CancellationToken cancellationToken)

@@ -36,11 +36,20 @@ public sealed class IdeasReplay(
 
     private Dictionary<Instrument, IdeaReplayCursor>? _cursors;
 
-    /// <summary>Removes the signals and cursors of other versions of the rules, so a new version replays history from the start.</summary>
-    public async Task CleanUpAsync(CancellationToken cancellationToken)
+    /// <summary>
+    ///     Removes an hour of the signals of other versions of the rules, and their cursors once no signal is left, so a new version replays
+    ///     history from the start; <c>true</c> while some are left.
+    /// </summary>
+    public async Task<bool> CleanUpAsync(CancellationToken cancellationToken)
     {
-        await signals.DeleteOtherVersionsAsync(version.Number, cancellationToken);
+        if (await signals.DeleteOtherVersionsAsync(version.Number, cancellationToken) > 0)
+        {
+            return true;
+        }
+
         await cursors.DeleteOtherVersionsAsync(version.Number, cancellationToken);
+
+        return false;
     }
 
     /// <summary>Replays the turn of the pair furthest behind; <c>false</c> when every pair is replayed up to its coverage.</summary>

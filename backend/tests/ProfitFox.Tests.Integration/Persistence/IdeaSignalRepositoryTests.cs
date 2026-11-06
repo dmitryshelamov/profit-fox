@@ -91,13 +91,21 @@ public class IdeaSignalRepositoryTests
         twoR.Select(signal => signal.Path.FiredAt).ShouldBe([Now.AddHours(1), Now, Now.AddHours(2), Now.AddMinutes(-1)]);
     }
 
-    // Decision 6: a new version of the rules clears the signals of the old ones, and the cases of version 4 with them.
+    // Decision 6: a new version of the rules clears the signals of the old ones, and the cases of version 4 with them, an hour of them at a
+    // time, from the first.
     [Test]
-    public async Task Signals_of_other_versions_are_removed()
+    public async Task Signals_of_other_versions_are_removed_an_hour_at_a_time()
     {
-        await _signals.UpsertAsync([IdeaSignalGenerator.Generate(Now, engineVersion: 2), IdeaSignalGenerator.Generate(Now, engineVersion: 3)], CancellationToken.None);
+        await _signals.UpsertAsync(
+        [
+            IdeaSignalGenerator.Generate(Now, engineVersion: 2), IdeaSignalGenerator.Generate(Now.AddMinutes(59), engineVersion: 2),
+            IdeaSignalGenerator.Generate(Now.AddHours(3), engineVersion: 2), IdeaSignalGenerator.Generate(Now, engineVersion: 3)
+        ], CancellationToken.None);
 
-        await _signals.DeleteOtherVersionsAsync(3, CancellationToken.None);
+        (await _signals.DeleteOtherVersionsAsync(3, CancellationToken.None)).ShouldBe(2);
+        (await _signals.GetAsync(IdeaGenerator.Wif, 2, CancellationToken.None)).Select(signal => signal.Path.FiredAt).ShouldBe([Now.AddHours(3)]);
+        (await _signals.DeleteOtherVersionsAsync(3, CancellationToken.None)).ShouldBe(1);
+        (await _signals.DeleteOtherVersionsAsync(3, CancellationToken.None)).ShouldBe(0);
 
         (await _signals.GetAsync(IdeaGenerator.Wif, 2, CancellationToken.None)).ShouldBeEmpty();
         (await _signals.GetAsync(IdeaGenerator.Wif, 3, CancellationToken.None)).Count.ShouldBe(1);
