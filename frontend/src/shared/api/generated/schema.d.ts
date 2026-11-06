@@ -1549,6 +1549,381 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/idea-autos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The autos in the order of the list, the first the most important, each with its totals. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IdeaAutoItemResponse"][];
+                        "application/json": components["schemas"]["IdeaAutoItemResponse"][];
+                        "text/json": components["schemas"]["IdeaAutoItemResponse"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Adds an auto at the end of the list, switched off; a wrong field is a 400 on its name. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["IdeaAutoBody"];
+                    "text/json": components["schemas"]["IdeaAutoBody"];
+                    "application/*+json": components["schemas"]["IdeaAutoBody"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CreatedResponse"];
+                        "application/json": components["schemas"]["CreatedResponse"];
+                        "text/json": components["schemas"]["CreatedResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/idea-autos/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IdeaAutoResponse"];
+                        "application/json": components["schemas"]["IdeaAutoResponse"];
+                        "text/json": components["schemas"]["IdeaAutoResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        /** Writes the name, the account, the amount and the conditions of an auto. The new conditions act on the ideas born after. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["IdeaAutoBody"];
+                    "text/json": components["schemas"]["IdeaAutoBody"];
+                    "application/*+json": components["schemas"]["IdeaAutoBody"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        /** Takes an auto off the list; its trades stay, the open ones go to their outcome. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/idea-autos/{id}/mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Changes the mode at once, with no question; the new mode acts on the ideas born after. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["IdeaAutoModeBody"];
+                    "text/json": components["schemas"]["IdeaAutoModeBody"];
+                    "application/*+json": components["schemas"]["IdeaAutoModeBody"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/idea-autos/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Puts the autos in the order of the ids, which hold every auto of the list once. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["IdeaAutoOrderBody"];
+                    "text/json": components["schemas"]["IdeaAutoOrderBody"];
+                    "application/*+json": components["schemas"]["IdeaAutoOrderBody"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/idea-autos/refusals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The refusals from the newest: `period` `today` (since 00:00 UTC) or `7d`, one auto or all, a page of them. */
+        get: {
+            parameters: {
+                query?: {
+                    period?: string;
+                    autoId?: string;
+                    page?: number | string;
+                    pageSize?: number | string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IdeaAutoRefusalsPageResponse"];
+                        "application/json": components["schemas"]["IdeaAutoRefusalsPageResponse"];
+                        "text/json": components["schemas"]["IdeaAutoRefusalsPageResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ideas/exit-rules": {
         parameters: {
             query?: never;
@@ -2017,6 +2392,10 @@ export interface paths {
                     Badge?: string;
                     /** @description The period of the time of the close, 7, 30 or 90 days; it does not touch the open trades. */
                     Days?: number | string;
+                    /** @description Who took the trade: `manual`, `auto` (with money) or `paper`. */
+                    Origin?: string;
+                    /** @description The auto by its id, real and paper trades alike. */
+                    AutoId?: string;
                     /** @description The number of the page of the closed trades from 1. */
                     Page?: number | string;
                     /** @description 50, 100 or 200. */
@@ -2316,6 +2695,44 @@ export interface paths {
                 };
             };
         };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/idea-trading/guards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The state of the guards over the real trades: what is open against its limits and the loss of the day against the daily stop. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IdeaGuardsResponse"];
+                        "application/json": components["schemas"]["IdeaGuardsResponse"];
+                        "text/json": components["schemas"]["IdeaGuardsResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -4501,6 +4918,109 @@ export interface components {
             /** Format: date-time */
             to: string;
         };
+        /**
+         * @description An auto to save: its name, account and amount in USDT, and its conditions: the codes of the setups, types and intervals marked (the types never hold
+         *     `stop_entry`), the side (`long` or `short`, none is both), the market (`linear` or `spot`, none is both), the lowest badge
+         *     (`up`, `flat` or `down`, none is any), the lowest reward to the risk after the fees and the least number of cases of the bucket.
+         */
+        IdeaAutoBody: {
+            name: string;
+            /** Format: uuid */
+            accountId?: string;
+            /** Format: double */
+            amount?: number | string;
+            setups: string[];
+            types: string[];
+            intervals: string[];
+            side?: null | string;
+            category?: null | string;
+            badge?: null | string;
+            /** Format: double */
+            minRiskReward?: number | string;
+            /** Format: int32 */
+            minCases?: number | string;
+        };
+        /**
+         * @description An auto of the list with its totals: the paper trades that closed (their number, their mean result and their sum in R), the real trades that closed
+         *     (their number and their sum in USDT after the fees) and the refusals since 00:00 UTC. Numbers are decimal strings.
+         */
+        IdeaAutoItemResponse: {
+            auto: components["schemas"]["IdeaAutoResponse"];
+            /** Format: int32 */
+            paperClosed: number | string;
+            paperMeanR: null | string;
+            paperSumR: string;
+            /** Format: int32 */
+            realClosed: number | string;
+            realResult: string;
+            /** Format: int32 */
+            refusalsToday: number | string;
+        };
+        /** @description The mode of an auto: `off`, `paper` or `live`. */
+        IdeaAutoModeBody: {
+            mode: string;
+        };
+        /** @description The ids of every auto of the list in the new order, the first the most important. */
+        IdeaAutoOrderBody: {
+            ids: string[];
+        };
+        /**
+         * @description A refusal: when, which auto in which mode, the pair and the setup, interval, type and side of the idea as codes, every reason as a code, and what the
+         *     first reason is about. Numbers are decimal strings.
+         */
+        IdeaAutoRefusalResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            at: string;
+            /** Format: uuid */
+            autoId: string;
+            autoName: string;
+            mode: string;
+            category: string;
+            symbol: string;
+            setup: string;
+            interval: string;
+            type: string;
+            side: string;
+            reasons: string[];
+            detail: null | components["schemas"]["RefusalDetailResponse"];
+        };
+        /** @description A page of the refusals: its number from 1 (the last page when the one asked for is past the end), its size and the count of all of them. */
+        IdeaAutoRefusalsPageResponse: {
+            items: components["schemas"]["IdeaAutoRefusalResponse"][];
+            /** Format: int32 */
+            page: number | string;
+            /** Format: int32 */
+            pageSize: number | string;
+            /** Format: int32 */
+            total: number | string;
+        };
+        /**
+         * @description An auto with its account and its conditions as codes, its place in the list (from 0) and its mode (`off`, `paper` or `live`).
+         *     Numbers are decimal strings.
+         */
+        IdeaAutoResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: uuid */
+            accountId: string;
+            accountName: string;
+            amount: string;
+            mode: string;
+            setups: string[];
+            types: string[];
+            intervals: string[];
+            side: null | string;
+            category: null | string;
+            badge: null | string;
+            minRiskReward: string;
+            /** Format: int32 */
+            minCases: number | string;
+            /** Format: int32 */
+            position: number | string;
+        };
         /** @description A bucket setup × type × interval × side × category with its statistics over the last int IdeaBucketResponse.Days days (90 or 30). */
         IdeaBucketResponse: {
             setup: string;
@@ -4585,11 +5105,37 @@ export interface components {
             rules: components["schemas"]["IdeaExitRuleResponse"][];
             grids: components["schemas"]["ExitRuleGridResponse"][];
         };
-        /** @description The journal: the open trades, the newest first, a page of the closed ones by the time they closed, and the totals of all the closed ones of the filter. */
+        /**
+         * @description The guards over the real trades: the open trades against their limit and the risk of them against theirs, the sum of the day since 00:00 UTC
+         *     against the daily stop (with the time it was reached and the time the autos enter again, once it holds), and the open longs and shorts against the
+         *     limit of one side. A guard that is off has no limit. Numbers are decimal strings.
+         */
+        IdeaGuardsResponse: {
+            /** Format: int32 */
+            openTrades: number | string;
+            /** Format: int32 */
+            maxOpenTrades: number | string;
+            openRisk: string;
+            maxTotalRisk: string;
+            daySum: string;
+            dailyLossLimit: null | string;
+            /** Format: date-time */
+            triggeredAt: null | string;
+            /** Format: date-time */
+            resumesAt: null | string;
+            /** Format: int32 */
+            openLongs: number | string;
+            /** Format: int32 */
+            openShorts: number | string;
+            /** Format: int32 */
+            maxSameDirection: null | number | string;
+        };
+        /** @description The journal: the open trades, the newest first, a page of the closed ones by the time they closed, the totals of all the closed real ones of the filter and those of the paper ones. */
         IdeaJournalResponse: {
             open: components["schemas"]["IdeaTradeResponse"][];
             closed: components["schemas"]["IdeaTradesPageResponse"];
             totals: components["schemas"]["IdeaJournalTotalsResponse"];
+            paperTotals: components["schemas"]["IdeaJournalTotalsResponse"];
         };
         /**
          * @description The totals of the closed trades of a filter: those closed at the target, at the stop and manually, and apart from them the cancelled and
@@ -4703,7 +5249,8 @@ export interface components {
          *     `openedAt` is the first fill of the entry and `secondsToOutcome` the time from it to the close of a closed trade;
          *     `promise` is what the idea promised at the entry and `ideaOutcome` how the idea ended, none for a trade made before
          *     the journal or while the idea is open. An open trade has the last price of its pair and what it is worth at it, none while it waits for
-         *     its entry or when the exchange gave no price.
+         *     its entry or when the exchange gave no price. `origin` tells who took the trade, `manual`, `auto` or `paper`, with the id and the name
+         *     of the auto, the name of a deleted one too.
          */
         IdeaTradeResponse: {
             /** Format: uuid */
@@ -4743,6 +5290,10 @@ export interface components {
             lastPrice: null | string;
             currentResult: null | string;
             currentResultR: null | string;
+            origin: string;
+            /** Format: uuid */
+            autoId: null | string;
+            autoName: null | string;
         };
         /** @description A page of trades: its number from 1 (the last page when the one asked for is past the end), its size and the count of all the closed trades of the filter. */
         IdeaTradesPageResponse: {
@@ -4768,6 +5319,16 @@ export interface components {
             maxTotalRisk?: number | string;
             /** Format: double */
             minRiskReward?: number | string;
+            /**
+             * Format: double
+             * @description The loss of a day in USDT that stops the autos with money; none switches the guard off.
+             */
+            dailyLossLimit?: null | number | string;
+            /**
+             * Format: int32
+             * @description The most open real trades of one side that the autos with money stand; none switches the guard off.
+             */
+            maxSameDirection?: null | number | string;
         };
         /** @description The settings of trading by ideas; numbers are decimal strings, the account is none until the owner chose one. */
         IdeaTradingSettingsResponse: {
@@ -4779,6 +5340,9 @@ export interface components {
             maxOpenTrades: number | string;
             maxTotalRisk: string;
             minRiskReward: string;
+            dailyLossLimit: null | string;
+            /** Format: int32 */
+            maxSameDirection: null | number | string;
         };
         InstrumentResponse: {
             category: string;
@@ -4998,6 +5562,19 @@ export interface components {
             breakEven: null | string;
             tick: null | string;
         };
+        /**
+         * @description The open trade that holds the pair: `same_auto`, `other_auto` (its name, and whether it stands above in the list) or `manual`, a paper
+         *     trade or a real one, on which account (none for a trade of the auto itself) and since when.
+         */
+        PairHolderResponse: {
+            kind: string;
+            autoName: null | string;
+            above: boolean;
+            paper: boolean;
+            accountName: null | string;
+            /** Format: date-time */
+            since: string;
+        };
         PinResponse: {
             name: string;
             type: string;
@@ -5052,6 +5629,12 @@ export interface components {
             count: number | string;
             promised: null | string;
             got: null | string;
+        };
+        /** @description What the first reason of a refusal is about: a number and its limit, or the trade that holds the pair. */
+        RefusalDetailResponse: {
+            actual: null | string;
+            limit: null | string;
+            holder: null | components["schemas"]["PairHolderResponse"];
         };
         RenameExchangeAccountBody: {
             name: string;

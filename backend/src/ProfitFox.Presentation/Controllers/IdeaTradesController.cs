@@ -26,7 +26,7 @@ public sealed class IdeaTradesController(ISender sender) : ControllerBase
     public async Task<IActionResult> Journal([FromQuery] IdeaJournalQueryParameters parameters, CancellationToken cancellationToken)
     {
         GetIdeaJournalResult result = await sender.Send(
-            new GetIdeaJournalQuery(parameters.Setup, parameters.Symbol, parameters.Side, parameters.Badge, parameters.Days, parameters.Page, parameters.PageSize),
+            new GetIdeaJournalQuery(parameters.Setup, parameters.Symbol, parameters.Side, parameters.Badge, parameters.Days, parameters.Page, parameters.PageSize, parameters.Origin, parameters.AutoId),
             cancellationToken);
 
         return result.Journal is null

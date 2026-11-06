@@ -8,6 +8,7 @@ using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.ValueObjects.Backtests;
+using ProfitFox.Domain.ValueObjects.IdeaAutos;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.Market;
@@ -32,6 +33,7 @@ public sealed class LiveIdeas(
     ScannerMarket market,
     IdeasSettings settings,
     BacktestSettings backtests,
+    LiveAutos autos,
     TimeProvider time)
 {
     private static readonly TimeSpan PercentilesRefresh = TimeSpan.FromHours(1);
@@ -111,6 +113,18 @@ public sealed class LiveIdeas(
         return ideas.DeleteClosedBeforeAsync(time.GetUtcNow() - ClosedKept, cancellationToken);
     }
 
+    /// <summary>Deletes the refusals of the autos older than a week.</summary>
+    public Task RemoveOldRefusalsAsync(CancellationToken cancellationToken)
+    {
+        return autos.RemoveOldRefusalsAsync(cancellationToken);
+    }
+
+    /// <summary>Turns the requests of the autos that no Worker took into refusals.</summary>
+    public Task ExpireEntriesAsync(CancellationToken cancellationToken)
+    {
+        return autos.ExpireEntriesAsync(cancellationToken);
+    }
+
     /// <summary>The ideas of the minute that ends at <paramref name="end" />; returns the setups of the complete pairs.</summary>
     public async Task<IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>>> RunAsync(DateTimeOffset end, CancellationToken cancellationToken)
     {
@@ -121,6 +135,7 @@ public sealed class LiveIdeas(
         var setups = new Dictionary<Instrument, IReadOnlyList<PairSetup>>();
         var created = new List<Idea>();
         var changed = new List<Idea>();
+        var births = new Dictionary<Instrument, IdeaCandle>();
 
         while (_warming.TryDequeue(out Warming? warming))
         {
@@ -150,22 +165,30 @@ public sealed class LiveIdeas(
                 if (detect)
                 {
                     setups[pair.Instrument] = step.Setups;
+                    births[pair.Instrument] = minute;
                 }
             }
         }
 
         // Ideas made this minute enter only on the next one, so none of them moved yet.
         IReadOnlyList<Idea> added;
+        AutoMinute? autoMinute;
 
         try
         {
-            added = await ideas.SaveAsync(created, changed, Outcomes(changed), cancellationToken);
+            // What the autos do goes in the transaction of the ideas, under the lease of the stream; without anything to write the ideas go alone.
+            autoMinute = await autos.RunAsync(end, created, births, cancellationToken);
+            added = autoMinute is null
+                ? await ideas.SaveAsync(created, changed, Outcomes(changed), cancellationToken)
+                : await ideas.SaveAsync(created, changed, Outcomes(changed), autoMinute, cancellationToken);
         }
         catch
         {
             StartOver();
             throw;
         }
+
+        autos.Commit(autoMinute, added);
 
         foreach (Instrument instrument in created.Except(added).Select(idea => idea.Instrument).Distinct())
         {
@@ -238,6 +261,7 @@ public sealed class LiveIdeas(
         Interlocked.Increment(ref _generation);
         _fed.Clear();
         _open = null;
+        autos.StartOver();
     }
 
     /// <summary>Drops the state of one pair, which warms up again from storage.</summary>

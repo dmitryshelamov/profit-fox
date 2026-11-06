@@ -206,3 +206,85 @@ export async function removeExitRules(): Promise<void> {
     await client.end();
   }
 }
+
+export interface AutoEntrySeed {
+  readonly ideaId: string;
+  readonly autoId: string;
+  readonly accountId: string;
+  readonly amount: number;
+  readonly minRiskReward: number;
+  /** The place of the auto in the list when the idea was born: the upper auto has the lower number. */
+  readonly rank: number;
+}
+
+/**
+ * The entry requests of the autos with money, in the form the scanner writes them in the minute an idea is born in: the account,
+ * the amount and the lowest reward to risk of the auto of that minute, its place in the list, and the order of the idea. A trading
+ * Worker takes them within seconds, and a request older than a minute is refused as late, so a test seeds them right before it looks.
+ */
+export async function seedAutoEntries(entries: readonly AutoEntrySeed[]): Promise<void> {
+  const client = await connect();
+
+  try {
+    for (const [index, entry] of entries.entries()) {
+      await client.query(
+        `INSERT INTO idea_auto_entries (id, idea_id, auto_id, account_id, amount, min_risk_reward, rank, fired, minute, created_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, date_trunc('minute', now()), now())`,
+        [
+          entry.ideaId,
+          entry.autoId,
+          entry.accountId,
+          entry.amount,
+          entry.minRiskReward,
+          entry.rank,
+          index,
+        ],
+      );
+    }
+  } finally {
+    await client.end();
+  }
+}
+
+/** The symbol of the real trades `seedClosedTrade` writes: no other test trades it, so they leave the rows of the others alone. */
+export const closedTradeSymbol = 'XRPUSDT';
+
+/**
+ * A real trade of a pair no other test trades that closed at the stop just now with a loss of `loss` USDT after the fees: the entry
+ * cost 100 and the exit brought back `100 − loss`. It counts in the loss of the day, which the daily stop of the autos reads.
+ */
+export async function seedClosedTrade(accountId: string, loss: number): Promise<void> {
+  const client = await connect();
+
+  try {
+    await client.query(
+      `INSERT INTO idea_trades (id, idea_id, account_id, category, symbol, setup, interval, type, side, entry_price, stop, target, quantity, amount, risk,
+                                status, status_at, cancel_requested, close_requested, entry_quantity, entry_value, entry_fee,
+                                take_profit_quantity, take_profit_value, take_profit_fee, stop_loss_quantity, stop_loss_value, stop_loss_fee,
+                                manual_quantity, manual_value, manual_fee, last_order_number, created_at, lease_epoch, updated_at, opened_at)
+       VALUES (gen_random_uuid(), gen_random_uuid(), $1, 'linear', $2, 'impulse', '15', 'target_2r', 'long', 100, 90, 120, 1, 100, 10,
+               'closed_at_stop', now(), false, false, 1, 100, 0, 0, 0, 0, 1, 100 - $3::numeric, 0, 0, 0, 0, 2,
+               now() - interval '2 hours', 0, now(), now() - interval '1 hour')`,
+      [accountId, closedTradeSymbol, loss],
+    );
+  } finally {
+    await client.end();
+  }
+}
+
+/** Removes the autos, their requests, refusals and paper trades, and the closed trades `seedClosedTrade` made, so the screens are as they were. */
+export async function removeAutos(): Promise<void> {
+  const client = await connect();
+
+  try {
+    await client.query('DELETE FROM idea_auto_entries');
+    await client.query('DELETE FROM idea_auto_refusals');
+    await client.query('DELETE FROM idea_paper_trades');
+    await client.query('DELETE FROM idea_trades WHERE auto_id IS NOT NULL OR symbol = $1', [
+      closedTradeSymbol,
+    ]);
+    await client.query('DELETE FROM idea_autos');
+  } finally {
+    await client.end();
+  }
+}

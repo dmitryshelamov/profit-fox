@@ -19,7 +19,7 @@ internal static class IdeaTradeRepositoryQueries
                                         last_order_number AS "LastOrderNumber", created_at AS "CreatedAt", lease_epoch AS "LeaseEpoch",
                                         promised_badge AS "PromisedBadge", promised_probability AS "PromisedProbability", promised_expectancy AS "PromisedExpectancy",
                                         promised_cases AS "PromisedCases", break_even AS "BreakEven", net_risk_reward AS "NetRiskReward",
-                                        idea_status AS "IdeaStatus", idea_status_at AS "IdeaStatusAt", idea_result AS "IdeaResult", opened_at AS "OpenedAt"
+                                        idea_status AS "IdeaStatus", idea_status_at AS "IdeaStatusAt", idea_result AS "IdeaResult", opened_at AS "OpenedAt", auto_id AS "AutoId"
                                         """;
 
     private const string OrderColumns = """
@@ -126,13 +126,13 @@ internal static class IdeaTradeRepositoryQueries
                 status, status_at, reason, cancel_requested, close_requested, entry_quantity, entry_value, entry_fee,
                 take_profit_quantity, take_profit_value, take_profit_fee, stop_loss_quantity, stop_loss_value, stop_loss_fee,
                 manual_quantity, manual_value, manual_fee, last_order_number, created_at, lease_epoch, updated_at,
-                promised_badge, promised_probability, promised_expectancy, promised_cases, break_even, net_risk_reward)
+                promised_badge, promised_probability, promised_expectancy, promised_cases, break_even, net_risk_reward, auto_id)
             VALUES (
                 @Id, @IdeaId, @AccountId, @Category, @Symbol, @Setup, @Interval, @Type, @Side, @EntryPrice, @Stop, @Target, @Quantity, @Amount, @Risk, @EntryDeadline,
                 @Status, @StatusAt, @Reason, @CancelRequested, @CloseRequested, @EntryQuantity, @EntryValue, @EntryFee,
                 @TakeProfitQuantity, @TakeProfitValue, @TakeProfitFee, @StopLossQuantity, @StopLossValue, @StopLossFee,
                 @ManualQuantity, @ManualValue, @ManualFee, @LastOrderNumber, @CreatedAt, 0, @Now,
-                @PromisedBadge, @PromisedProbability, @PromisedExpectancy, @PromisedCases, @BreakEven, @NetRiskReward)
+                @PromisedBadge, @PromisedProbability, @PromisedExpectancy, @PromisedCases, @BreakEven, @NetRiskReward, @AutoId)
             """,
             new
             {
@@ -177,6 +177,7 @@ internal static class IdeaTradeRepositoryQueries
                 trade.PromisedCases,
                 trade.BreakEven,
                 trade.NetRiskReward,
+                trade.AutoId,
                 Now = now
             },
             transaction,

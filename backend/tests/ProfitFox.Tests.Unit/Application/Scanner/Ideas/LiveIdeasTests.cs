@@ -5,18 +5,24 @@ using NSubstitute;
 using ProfitFox.Application.Backtests;
 using ProfitFox.Application.Scanner;
 using ProfitFox.Application.Scanner.Ideas;
+using ProfitFox.Application.Workers;
+using ProfitFox.Domain.Entities.IdeaAutos;
+using ProfitFox.Domain.Entities.IdeaAutos.Enums;
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
+using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.Services.Ideas;
+using ProfitFox.Domain.ValueObjects.IdeaAutos;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Tests.Shared.Fixtures.Ideas;
+using ProfitFox.Tests.Shared.Generators.Domain.Entity.IdeaAutos;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.Ideas;
 
 using Shouldly;
@@ -62,7 +68,7 @@ public class LiveIdeasTests
         _rules = Substitute.For<IIdeaExitRuleRepository>();
         _rules.GetAllAsync(Arg.Any<CancellationToken>()).Returns([]);
         _recomputes = new IdeaRecomputes();
-        _live = new LiveIdeas(_ideas, _volatility, candles, _rules, _recomputes, _market, new IdeasSettings(), Fees, _time);
+        _live = new LiveIdeas(_ideas, _volatility, candles, _rules, _recomputes, _market, new IdeasSettings(), Fees, NoAutos.Create(_market, Fees, _time), _time);
     }
 
     // Task 6.2: the rules are read every minute; a new one makes the ideas from then on and sends its type × interval to the recompute, once.
@@ -331,7 +337,7 @@ public class LiveIdeasTests
     public async Task Window_of_a_setup_longer_than_a_day_warms_up_with_stored_minutes()
     {
         var settings = new IdeasSettings { ByInterval = new Dictionary<string, ThresholdOverride> { ["240"] = new ThresholdOverride { Candles = 7 } } };
-        var live = new LiveIdeas(_ideas, _volatility, _candles, _rules, _recomputes, _market, settings, Fees, _time);
+        var live = new LiveIdeas(_ideas, _volatility, _candles, _rules, _recomputes, _market, settings, Fees, NoAutos.Create(_market, Fees, _time), _time);
         _candles.GetAsync(Wif, Interval.OneMinute, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
 
         await live.ReadWarmUpsAsync(CancellationToken.None);
@@ -440,6 +446,117 @@ public class LiveIdeasTests
 
         await _ideas.Received(2).GetOpenAsync(Arg.Any<CancellationToken>());
         (await _live.ReadWarmUpsAsync(CancellationToken.None)).ShouldBeTrue();
+    }
+
+    // Task 3.1: the ideas of the minute and what the autos did with them go in one write; the auto with money writes a request for the idea that fits it.
+    [Test]
+    public async Task Idea_of_the_minute_that_fits_an_auto_with_money_is_written_with_its_request()
+    {
+        IdeaAuto auto = Autos(IdeaAutoMode.Live, IdeaType.BeyondExtreme);
+
+        (IReadOnlyList<Idea> created, AutoMinute minute) = await RunWithAutosAsync(Four.AddMinutes(70));
+
+        Idea beyond = created.Single(idea => idea.Setup == IdeaSetup.Impulse && idea.Interval == Interval.FifteenMinutes && idea.Track.Plan.Type == IdeaType.BeyondExtreme);
+        IdeaAutoEntry entry = minute.Entries.ShouldHaveSingleItem();
+        (entry.IdeaId, entry.AutoId, entry.Minute, minute.Owner).ShouldBe((beyond.Id, auto.Id, Four.AddMinutes(56), _identity.Id));
+        minute.Opened.ShouldBeEmpty();
+    }
+
+    [Test]
+    public async Task Idea_of_the_minute_that_fits_a_paper_auto_is_written_with_its_paper_trade()
+    {
+        IdeaAuto auto = Autos(IdeaAutoMode.Paper, IdeaType.BeyondExtreme);
+
+        (IReadOnlyList<Idea> created, AutoMinute minute) = await RunWithAutosAsync(Four.AddMinutes(70));
+
+        Idea beyond = created.Single(idea => idea.Setup == IdeaSetup.Impulse && idea.Interval == Interval.FifteenMinutes && idea.Track.Plan.Type == IdeaType.BeyondExtreme);
+        PaperIdeaTrade paper = minute.Opened.ShouldHaveSingleItem();
+        (paper.Trade.IdeaId, paper.AutoId, paper.Trade.Instrument).ShouldBe((beyond.Id, auto.Id, Wif));
+        minute.Entries.ShouldBeEmpty();
+        minute.Refusals.ShouldBeEmpty();
+    }
+
+    // Requirement "Только новые идеи": the warm-up moves the ideas that stand, it makes none, so it asks nothing of the autos.
+    [Test]
+    public async Task Warm_up_gives_the_autos_no_idea()
+    {
+        Autos(IdeaAutoMode.Live, IdeaType.BeyondExtreme);
+        _ideas.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([Active() with { Instrument = Wif }]);
+        await _live.ReadWarmUpsAsync(CancellationToken.None);
+
+        await _live.RunAsync(Four, CancellationToken.None);
+
+        await _ideas.DidNotReceive().SaveAsync(
+            Arg.Any<IReadOnlyCollection<Idea>>(),
+            Arg.Any<IReadOnlyCollection<Idea>>(),
+            Arg.Any<IReadOnlyCollection<ClosedIdea>>(),
+            Arg.Any<AutoMinute>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    // An auto that is switched off is not read among the enabled ones: the ideas go alone, as before.
+    [Test]
+    public async Task Auto_that_is_off_makes_the_ideas_go_alone()
+    {
+        IReadOnlyList<Idea> created = await RunAsync(Four.AddMinutes(70));
+
+        created.ShouldNotBeEmpty();
+        await _ideas.DidNotReceive().SaveAsync(
+            Arg.Any<IReadOnlyCollection<Idea>>(),
+            Arg.Any<IReadOnlyCollection<Idea>>(),
+            Arg.Any<IReadOnlyCollection<ClosedIdea>>(),
+            Arg.Any<AutoMinute>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    private WorkerIdentity _identity = new WorkerIdentity(Guid.NewGuid());
+
+    // An auto of the given mode that takes the 15 minute «Импульс» ideas of one type, for a LiveIdeas that has it among the autos on.
+    private IdeaAuto Autos(IdeaAutoMode mode, IdeaType type)
+    {
+        var conditions = new IdeaAutoConditions([IdeaSetup.Impulse], [type], [Interval.FifteenMinutes], null, null, null, 0.5m, 0);
+        IdeaAuto auto = IdeaAutoGenerator.Generate(Guid.NewGuid(), "Импульс лонг", mode: mode, amount: 50m, conditions: conditions);
+        IIdeaAutoRepository autos = Substitute.For<IIdeaAutoRepository>();
+        autos.GetEnabledAsync(Arg.Any<CancellationToken>()).Returns([auto]);
+        autos.GetEveryAsync(Arg.Any<CancellationToken>()).Returns(new Dictionary<Guid, IdeaAuto> { [auto.Id] = auto });
+        IPaperIdeaTradeRepository paper = Substitute.For<IPaperIdeaTradeRepository>();
+        paper.GetOpenAsync(Arg.Any<CancellationToken>()).Returns(new List<PaperIdeaTrade>());
+        IIdeaTradeRepository trades = Substitute.For<IIdeaTradeRepository>();
+        trades.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([]);
+        IIdeaTradingSettingsRepository settings = Substitute.For<IIdeaTradingSettingsRepository>();
+        settings.GetAsync(Arg.Any<CancellationToken>()).Returns(IdeaTradingSettings.Default with { MaxAmount = 500m });
+        IIdeaBucketRepository buckets = Substitute.For<IIdeaBucketRepository>();
+        buckets.GetAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
+        _market.Update(Wif, pair => pair with { QuantityStep = 0.01m, MinQuantity = 0.01m, MinAmount = 5m });
+        var live = new LiveAutos(autos, paper, trades, settings, buckets, _candles, Substitute.For<IIdeaAutoEntryRepository>(), Substitute.For<IIdeaAutoRefusalRepository>(), new IdeasEngineVersion(IdeasEngineVersion.Current), _market, Fees, _identity, _time);
+        _live = new LiveIdeas(_ideas, _volatility, _candles, _rules, _recomputes, _market, new IdeasSettings(), Fees, live, _time);
+
+        return auto;
+    }
+
+    // The same run of the minutes with the write that carries the autos: the ideas made and what the autos did with them in the minute they were made.
+    private async Task<(IReadOnlyList<Idea> Created, AutoMinute Minute)> RunWithAutosAsync(DateTimeOffset until)
+    {
+        var created = new List<Idea>();
+        AutoMinute? last = null;
+        _ideas.SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<ClosedIdea>>(), Arg.Any<AutoMinute>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            created.AddRange(call.ArgAt<IReadOnlyCollection<Idea>>(0));
+            AutoMinute minute = call.ArgAt<AutoMinute>(3);
+            last ??= minute.Opened.Count + minute.Entries.Count + minute.Refusals.Count > 0 ? minute : null;
+
+            return call.ArgAt<IReadOnlyCollection<Idea>>(0).ToList();
+        });
+        await _live.ReadWarmUpsAsync(CancellationToken.None);
+        await _live.RunAsync(Four, CancellationToken.None);
+
+        foreach (IdeaCandle minute in IdeaFixtures.Setup("impulse").Where(minute => minute.OpenTime >= Four && minute.OpenTime < until))
+        {
+            _market.Closed(Wif, Candle(minute));
+            await _live.RunAsync(minute.OpenTime.AddMinutes(1), CancellationToken.None);
+        }
+
+        return (created, last!);
     }
 
     private static Idea Active()

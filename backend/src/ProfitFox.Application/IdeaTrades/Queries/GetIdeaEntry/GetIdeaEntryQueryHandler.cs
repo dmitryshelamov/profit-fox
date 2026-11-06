@@ -8,6 +8,6 @@ public sealed class GetIdeaEntryQueryHandler(IdeaTradeEntryCalculator calculator
     {
         EntryPreparation? preparation = await calculator.PrepareAsync(request.IdeaId, request.AccountId, request.Amount, cancellationToken);
 
-        return preparation is null ? null : await calculator.EvaluateAsync(preparation, cancellationToken);
+        return preparation is null ? null : await calculator.EvaluateAsync(preparation, null, cancellationToken);
     }
 }

@@ -25,7 +25,7 @@ public sealed class CreateIdeaTradeCommandHandler(
 
         if (preparation.Account is null)
         {
-            throw new IdeaTradeRefusedException((await calculator.EvaluateAsync(preparation, cancellationToken)).Reasons);
+            throw new IdeaTradeRefusedException((await calculator.EvaluateAsync(preparation, null, cancellationToken)).Reasons);
         }
 
         return await executor.ExecuteAsync(
@@ -36,7 +36,7 @@ public sealed class CreateIdeaTradeCommandHandler(
 
                 // The limits of open trades and of the total risk count every account: the entries of all of them go one at a time, after the bots.
                 await trades.LockCreationAsync(token);
-                EntryCalculation calculation = await calculator.EvaluateAsync(preparation, token);
+                EntryCalculation calculation = await calculator.EvaluateAsync(preparation, null, token);
 
                 if (calculation.Reasons.Count > 0)
                 {

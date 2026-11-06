@@ -30,6 +30,42 @@ test('an impulse of the stub shows in the market chips, has its idea on the pair
   const rows = page.locator('tbody tr');
   // The table reads the snapshot every 15 seconds; the first one comes once a minute has closed.
   await expect(rows).toHaveCount(6, { timeout: 180_000 });
+
+  // A paper auto on «Импульс» and «Ранний импульс» is on before the impulse: it takes the ideas of it on paper, with no order.
+  const uid = String(Date.now());
+  const account = await request.post('/api/exchange-accounts', {
+    data: { name: `Учебный ${uid}`, apiKey: `e2e-valid-${uid}`, apiSecret: 'e2e-secret' },
+  });
+  expect(account.status()).toBe(201);
+  const paperAuto = await request.post('/api/idea-autos', {
+    data: {
+      name: `Учебный импульс ${uid}`,
+      accountId: ((await account.json()) as { id: string }).id,
+      amount: 30,
+      setups: ['impulse', 'early_impulse'],
+      types: ['levels', 'target_2r', 'beyond_extreme', 'pullback'],
+      intervals: ['5', '15', '60', '240'],
+      side: null,
+      category: null,
+      badge: null,
+      minRiskReward: 0,
+      minCases: 0,
+    },
+  });
+  expect(paperAuto.status()).toBe(201);
+  const paperAutoId = ((await paperAuto.json()) as { id: string }).id;
+  expect(
+    (
+      await request.put(`/api/idea-autos/${paperAutoId}/mode`, { data: { mode: 'paper' } })
+    ).status(),
+  ).toBe(204);
+  const ordersBefore = (
+    (await (await request.get(`${stub}/control/orders`)).json()) as {
+      symbol: string;
+      orderLinkId: string;
+    }[]
+  ).filter((order) => order.symbol === 'SOLUSDT' && order.orderLinkId.startsWith('i')).length;
+
   expect((await request.get(`${stub}/control/pump?symbol=SOLUSDT&minutes=12`)).ok()).toBe(true);
 
   // The impulse shows on the market once the scanner has read the pumped minutes: on 5 or on 15 minutes.
@@ -221,6 +257,36 @@ test('an impulse of the stub shows in the market chips, has its idea on the pair
   await expect(rows).toHaveCount(6);
   await page.getByRole('button', { name: 'Рост за час' }).click();
   await expect(rows.filter({ hasNotText: 'SOLUSDT' })).toHaveCount(0);
+
+  // The paper auto took the impulse in the minute it was born: its trade is in the journal among the paper ones, without orders, and the
+  // stub has no order of a trade by an idea on SOLUSDT.
+  await page.goto('/idea-trades');
+  await page
+    .getByRole('radiogroup', { name: 'Кто взял' })
+    .getByRole('radio', { name: 'Учебные' })
+    .click();
+  const paperRow = page.locator('tr[data-origin="paper"]').filter({ hasText: 'SOLUSDT' }).first();
+  await expect(paperRow).toBeVisible({ timeout: 60_000 });
+  await expect(paperRow).toContainText(`Учебный импульс ${uid}`);
+  await expect(paperRow.getByRole('button')).toHaveCount(0);
+  const open = page
+    .getByRole('table', { name: 'Сделки в работе' })
+    .locator('tr[data-origin="paper"]');
+
+  if ((await open.count()) > 0) {
+    await expect(open.first()).toContainText('без ордеров');
+  }
+
+  const ordersAfter = (
+    (await (await request.get(`${stub}/control/orders`)).json()) as {
+      symbol: string;
+      orderLinkId: string;
+    }[]
+  ).filter((order) => order.symbol === 'SOLUSDT' && order.orderLinkId.startsWith('i')).length;
+  expect(ordersAfter).toBe(ordersBefore);
+  expect(
+    (await request.put(`/api/idea-autos/${paperAutoId}/mode`, { data: { mode: 'off' } })).status(),
+  ).toBe(204);
 
   expect(errors).toEqual([]);
 });

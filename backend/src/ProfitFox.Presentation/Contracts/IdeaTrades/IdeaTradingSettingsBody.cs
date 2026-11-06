@@ -14,4 +14,10 @@ public sealed class IdeaTradingSettingsBody
     public decimal MaxTotalRisk { get; init; }
 
     public decimal MinRiskReward { get; init; }
+
+    /// <summary>The loss of a day in USDT that stops the autos with money; none switches the guard off.</summary>
+    public decimal? DailyLossLimit { get; init; }
+
+    /// <summary>The most open real trades of one side that the autos with money stand; none switches the guard off.</summary>
+    public int? MaxSameDirection { get; init; }
 }

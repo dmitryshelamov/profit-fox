@@ -10,6 +10,7 @@ export {
   tradingSettingsQuery,
 } from './api';
 export { loadJournalChoice, saveJournalChoice } from './model/choice';
+export { closedCountText } from './model/journal';
 export { ClosedTradesTable } from './ui/ClosedTradesTable';
 export { EntryDialog } from './ui/EntryDialog';
 export { JournalTotals } from './ui/JournalTotals';

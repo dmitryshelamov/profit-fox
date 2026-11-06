@@ -9,6 +9,7 @@ using ProfitFox.Application.Transactions;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Backtests;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.ExchangeAccounts;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaAutos;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaTrades;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.LiveTrading;
@@ -41,6 +42,10 @@ internal static class PostgresRegistrar
         services.AddScoped<IFundingRateRepository, FundingRateRepository>();
         services.AddScoped<IMarketSnapshotRepository, MarketSnapshotRepository>();
         services.AddScoped<IIdeaRepository, IdeaRepository>();
+        services.AddScoped<IIdeaAutoRepository, IdeaAutoRepository>();
+        services.AddScoped<IPaperIdeaTradeRepository, PaperIdeaTradeRepository>();
+        services.AddScoped<IIdeaAutoEntryRepository, IdeaAutoEntryRepository>();
+        services.AddScoped<IIdeaAutoRefusalRepository, IdeaAutoRefusalRepository>();
         services.AddScoped<IIdeaSignalRepository, IdeaSignalRepository>();
         services.AddScoped<IIdeaExitRuleRepository, IdeaExitRuleRepository>();
         services.AddScoped<IIdeaBucketRepository, IdeaBucketRepository>();

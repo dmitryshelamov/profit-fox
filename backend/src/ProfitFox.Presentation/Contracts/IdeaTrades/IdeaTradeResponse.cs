@@ -15,7 +15,8 @@ namespace ProfitFox.Presentation.Contracts.IdeaTrades;
 ///     <c>openedAt</c> is the first fill of the entry and <c>secondsToOutcome</c> the time from it to the close of a closed trade;
 ///     <c>promise</c> is what the idea promised at the entry and <c>ideaOutcome</c> how the idea ended, none for a trade made before
 ///     the journal or while the idea is open. An open trade has the last price of its pair and what it is worth at it, none while it waits for
-///     its entry or when the exchange gave no price.
+///     its entry or when the exchange gave no price. <c>origin</c> tells who took the trade, <c>manual</c>, <c>auto</c> or <c>paper</c>, with the id and the name
+///     of the auto, the name of a deleted one too.
 /// </summary>
 public sealed record IdeaTradeResponse(
     Guid Id,
@@ -47,7 +48,10 @@ public sealed record IdeaTradeResponse(
     IdeaOutcomeResponse? IdeaOutcome,
     string? LastPrice,
     string? CurrentResult,
-    string? CurrentResultR)
+    string? CurrentResultR,
+    [property: Required] string Origin,
+    Guid? AutoId,
+    string? AutoName)
 {
     public static IdeaTradeResponse Of(IdeaJournalTrade view)
     {
@@ -83,7 +87,15 @@ public sealed record IdeaTradeResponse(
             IdeaOutcomeResponse.Of(trade.IdeaOutcome),
             view.LastPrice is { } price ? Text(price) : null,
             view.CurrentResult is { } current ? Text(current) : null,
-            view.CurrentResultR is { } currentR ? Text(currentR) : null);
+            view.CurrentResultR is { } currentR ? Text(currentR) : null,
+            view.Origin switch
+            {
+                IdeaTradeOrigin.Auto => "auto",
+                IdeaTradeOrigin.Paper => "paper",
+                _ => "manual"
+            },
+            trade.AutoId,
+            view.AutoName);
     }
 
     internal static string Text(decimal value)

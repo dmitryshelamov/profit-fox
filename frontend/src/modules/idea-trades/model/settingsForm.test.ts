@@ -10,6 +10,8 @@ describe('settings form', () => {
         maxOpenTrades: 5,
         maxTotalRisk: '5',
         minRiskReward: '1.5',
+        dailyLossLimit: '30',
+        maxSameDirection: 5,
       }),
     ).toEqual({
       accountId: '',
@@ -18,7 +20,25 @@ describe('settings form', () => {
       maxOpenTrades: '5',
       maxTotalRisk: '5',
       minRiskReward: '1.5',
+      dailyLossLimit: '30',
+      maxSameDirection: '5',
     });
+  });
+
+  it('holds a guard that is off as an empty field', () => {
+    const form = formOfSettings({
+      accountId: null,
+      amount: '20',
+      maxAmount: '200',
+      maxOpenTrades: 5,
+      maxTotalRisk: '5',
+      minRiskReward: '1.5',
+      dailyLossLimit: null,
+      maxSameDirection: null,
+    });
+
+    expect(form.dailyLossLimit).toBe('');
+    expect(form.maxSameDirection).toBe('');
   });
 
   it('lays server errors out by field and keeps the rest for the form', () => {

@@ -64,6 +64,21 @@ public class IdeaTradeRepositoryTests
         (await _repository.GetAsync(Guid.NewGuid(), CancellationToken.None)).ShouldBeNull();
     }
 
+    // Task 2.6: the trade of an auto keeps the auto it was made for through the saves of a Worker; a manual one has none.
+    [Test]
+    public async Task Trade_of_an_auto_keeps_its_auto_through_a_save_of_a_Worker()
+    {
+        var auto = Guid.NewGuid();
+        IdeaTrade trade = await CreateAsync(Now, autoId: auto);
+        IdeaTrade manual = await CreateAsync(Now.AddMinutes(1));
+
+        await SaveAsync(trade.EntryGrown(new LegTotals(0.47m, 49.82m, 0.02m), Now.AddMinutes(1)));
+
+        (await _repository.GetAsync(trade.Id, CancellationToken.None))!.AutoId.ShouldBe(auto);
+        (await _repository.GetAsync(manual.Id, CancellationToken.None))!.AutoId.ShouldBeNull();
+        (await _repository.GetOpenAsync(CancellationToken.None)).Select(open => open.AutoId).ShouldBe([auto, null]);
+    }
+
     [Test]
     public async Task Only_trades_that_wait_or_are_open_are_open()
     {
@@ -232,9 +247,9 @@ public class IdeaTradeRepositoryTests
         (await _repository.IsChildAsync("bybit-1", CancellationToken.None)).ShouldBeFalse();
     }
 
-    private async Task<IdeaTrade> CreateAsync(DateTimeOffset at, IdeaType type = IdeaType.TwoR, IdeaPromise? promise = null)
+    private async Task<IdeaTrade> CreateAsync(DateTimeOffset at, IdeaType type = IdeaType.TwoR, IdeaPromise? promise = null, Guid? autoId = null)
     {
-        var trade = IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(at, type: type), _account, 106m, new IdeaTradeSize(0.47m, 49.82m, 0.2m, 0.368m, 1.84m), at, promise);
+        var trade = IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(at, type: type), _account, 106m, new IdeaTradeSize(0.47m, 49.82m, 0.2m, 0.368m, 1.84m), at, promise, autoId);
         var entry = IdeaTradeOrder.NewEntry(trade.Id, 1, OrderSide.Buy, OrderType.Market, TimeInForce.GoodTilCancelled, null, 0.47m, new Protection(trade.Target, trade.Stop), at);
         await _executor.ExecuteAsync(
             async token =>

@@ -18,7 +18,9 @@ import {
   type IdeaTrade,
   InstrumentCells,
   LevelCells,
+  OriginCell,
   StatusCell,
+  stripeOf,
 } from './tradeCells';
 
 type Asked = { trade: IdeaTrade; action: 'cancel' | 'close' };
@@ -109,6 +111,7 @@ export function OpenTradesTable({ trades }: { trades: readonly IdeaTrade[] }) {
               <Heads
                 names={[
                   'Открыта',
+                  'Кто взял',
                   'Инструмент',
                   'Сетап',
                   'Сторона',
@@ -129,10 +132,11 @@ export function OpenTradesTable({ trades }: { trades: readonly IdeaTrade[] }) {
           </thead>
           <tbody>
             {trades.map((trade) => (
-              <tr key={trade.id} className="bg-panel">
-                <td className={`${cell} font-mono whitespace-nowrap text-muted`}>
+              <tr key={trade.id} data-origin={trade.origin} className="bg-panel">
+                <td className={`${cell} ${stripeOf(trade)} font-mono whitespace-nowrap text-muted`}>
                   {formatMoment(trade.openedAt ?? trade.createdAt)}
                 </td>
+                <OriginCell trade={trade} />
                 <InstrumentCells trade={trade} />
                 <LevelCells trade={trade} risk />
                 <StatusCell trade={trade} />
@@ -151,12 +155,15 @@ export function OpenTradesTable({ trades }: { trades: readonly IdeaTrade[] }) {
                   {byParts(promiseText(trade.promise))}
                 </td>
                 <td className={`${cell} text-right whitespace-nowrap`}>
-                  {canCancel(trade.status) && (
+                  {trade.origin === 'paper' && (
+                    <span className="text-xs text-faint">без ордеров</span>
+                  )}
+                  {trade.origin !== 'paper' && canCancel(trade.status) && (
                     <Button look="ghost" onClick={() => setAsked({ trade, action: 'cancel' })}>
                       Отменить
                     </Button>
                   )}
-                  {canClose(trade.status) && (
+                  {trade.origin !== 'paper' && canClose(trade.status) && (
                     <Button look="ghost" onClick={() => setAsked({ trade, action: 'close' })}>
                       Закрыть по рынку
                     </Button>

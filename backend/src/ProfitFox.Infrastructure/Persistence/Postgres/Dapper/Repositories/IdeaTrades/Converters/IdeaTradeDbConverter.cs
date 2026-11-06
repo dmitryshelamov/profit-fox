@@ -17,7 +17,9 @@ namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Idea
 
 internal static class IdeaTradeDbConverter
 {
-    internal static IdeaTradeDb FromDomain(IdeaTrade trade)
+    /// <param name="trade"></param>
+    /// <param name="steppedUntil">The cursor of a paper trade, none for a real one.</param>
+    internal static IdeaTradeDb FromDomain(IdeaTrade trade, DateTimeOffset? steppedUntil = null)
     {
         return new IdeaTradeDb
         {
@@ -62,7 +64,9 @@ internal static class IdeaTradeDbConverter
             PromisedCases = trade.Promise?.Cases,
             BreakEven = trade.Promise?.BreakEven,
             NetRiskReward = trade.Promise?.NetRiskReward,
-            OpenedAt = trade.OpenedAt
+            OpenedAt = trade.OpenedAt,
+            AutoId = trade.AutoId,
+            SteppedUntil = steppedUntil
         };
     }
 
@@ -105,7 +109,8 @@ internal static class IdeaTradeDbConverter
                     netRiskReward)
                 : null,
             trade.OpenedAt,
-            trade.IdeaStatus is { } ideaStatus ? new TradedIdeaOutcome(IdeaCodes.ParseStatus(ideaStatus), trade.IdeaStatusAt!.Value, trade.IdeaResult) : null);
+            trade.IdeaStatus is { } ideaStatus ? new TradedIdeaOutcome(IdeaCodes.ParseStatus(ideaStatus), trade.IdeaStatusAt!.Value, trade.IdeaResult) : null,
+            trade.AutoId);
     }
 
     internal static IdeaTradeOrderDb FromDomain(IdeaTradeOrder order)
@@ -217,7 +222,7 @@ internal static class IdeaTradeDbConverter
 
     internal static IdeaTradingSettings ToDomain(IdeaTradingSettingsDb settings)
     {
-        return new IdeaTradingSettings(settings.AccountId, settings.Amount, settings.MaxAmount, settings.MaxOpenTrades, settings.MaxTotalRisk, settings.MinRiskReward);
+        return new IdeaTradingSettings(settings.AccountId, settings.Amount, settings.MaxAmount, settings.MaxOpenTrades, settings.MaxTotalRisk, settings.MinRiskReward, settings.DailyLossLimit, settings.MaxSameDirection);
     }
 
     private static InvalidOperationException Unknown(string what, string code)

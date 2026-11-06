@@ -12,7 +12,9 @@ public sealed record IdeaTradingSettingsResponse(
     [property: Required] string MaxAmount,
     int MaxOpenTrades,
     [property: Required] string MaxTotalRisk,
-    [property: Required] string MinRiskReward)
+    [property: Required] string MinRiskReward,
+    string? DailyLossLimit,
+    int? MaxSameDirection)
 {
     public static IdeaTradingSettingsResponse Of(IdeaTradingSettings settings)
     {
@@ -22,6 +24,8 @@ public sealed record IdeaTradingSettingsResponse(
             settings.MaxAmount.ToString(CultureInfo.InvariantCulture),
             settings.MaxOpenTrades,
             settings.MaxTotalRisk.ToString(CultureInfo.InvariantCulture),
-            settings.MinRiskReward.ToString(CultureInfo.InvariantCulture));
+            settings.MinRiskReward.ToString(CultureInfo.InvariantCulture),
+            settings.DailyLossLimit?.ToString(CultureInfo.InvariantCulture),
+            settings.MaxSameDirection);
     }
 }

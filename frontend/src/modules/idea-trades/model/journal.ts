@@ -1,4 +1,4 @@
-import { badgeSymbol, breakEvenText, statusLabel } from '@/modules/ideas';
+import { badgeSymbol, breakEvenText, counted, statusLabel } from '@/modules/ideas';
 import type { Schemas } from '@/shared/api/client';
 import { shiftDecimal } from '@/shared/format/decimal';
 import { roundDecimal, showDecimal } from '@/shared/format/format';
@@ -87,6 +87,16 @@ export function outcomeCountsText(totals: Totals): string {
   return all === 0
     ? dash
     : `по цели ${share(targets, all)} · по стопу ${share(stops, all)} · вручную ${share(manual, all)}`;
+}
+
+/** How many trades closed at the target, at the stop and manually, with the word that goes with the count. */
+export function closedCountText(totals: Totals): string {
+  return counted(
+    Number(totals.targets) + Number(totals.stops) + Number(totals.manual),
+    'сделка',
+    'сделки',
+    'сделок',
+  );
 }
 
 /** The cancelled and the failed trades, which are not in the other totals; none when there are none. */

@@ -65,7 +65,8 @@ internal static class IdeaRepositoryQueries
             $"""
              SELECT id, {Columns}, {OwnColumns} FROM ideas
              WHERE status NOT IN ('awaiting_entry', 'active')
-                 AND EXISTS (SELECT 1 FROM idea_trades WHERE idea_trades.idea_id = ideas.id AND idea_trades.idea_status IS NULL)
+                 AND (EXISTS (SELECT 1 FROM idea_trades WHERE idea_trades.idea_id = ideas.id AND idea_trades.idea_status IS NULL)
+                     OR EXISTS (SELECT 1 FROM idea_paper_trades WHERE idea_paper_trades.idea_id = ideas.id AND idea_paper_trades.idea_status IS NULL))
              """,
             cancellationToken: cancellationToken);
     }

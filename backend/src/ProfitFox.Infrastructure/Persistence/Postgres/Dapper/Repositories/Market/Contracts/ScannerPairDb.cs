@@ -21,4 +21,10 @@ internal sealed class ScannerPairDb
     public decimal? TickSize { get; init; }
 
     public bool TradFi { get; init; }
+
+    public decimal? QuantityStep { get; init; }
+
+    public decimal? MinQuantity { get; init; }
+
+    public decimal? MinAmount { get; init; }
 }

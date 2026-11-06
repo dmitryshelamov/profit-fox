@@ -188,6 +188,35 @@ public class ExchangeAccountsApiTests
         (await _client.GetAsync($"{Accounts}/{id}")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
+    // Review P3: an auto that is not deleted keeps its account and is named in the conflict; a deleted one does not block the delete.
+    [Test]
+    public async Task Account_with_an_auto_is_kept_and_one_whose_auto_was_deleted_is_deleted()
+    {
+        Guid id = await CreateAsync();
+        Guid auto = await CreateAutoAsync(id, "Импульс лонг");
+
+        HttpResponseMessage conflict = await _client.DeleteAsync($"{Accounts}/{id}");
+
+        conflict.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        JsonElement problem = await conflict.Content.ReadFromJsonAsync<JsonElement>();
+        problem.GetProperty("autoNames").EnumerateArray().Select(name => name.GetString()).ShouldBe(["Импульс лонг"]);
+        problem.GetProperty("botNames").GetArrayLength().ShouldBe(0);
+
+        (await _client.DeleteAsync($"/api/idea-autos/{auto}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await _client.DeleteAsync($"{Accounts}/{id}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await _client.GetAsync($"{Accounts}/{id}")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    private async Task<Guid> CreateAutoAsync(Guid account, string name)
+    {
+        HttpResponseMessage created = await _client.PostAsJsonAsync(
+            "/api/idea-autos",
+            new { name, accountId = account, amount = 20m, setups = new[] { "impulse" }, types = new[] { "target_2r" }, intervals = new[] { "15" }, minRiskReward = 1.2m, minCases = 0 });
+        created.StatusCode.ShouldBe(HttpStatusCode.Created);
+
+        return (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+    }
+
     // Scenario "Баланс аккаунта".
     [Test]
     public async Task Balance_is_read_from_bybit_with_the_stored_key()

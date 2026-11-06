@@ -1,11 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { type ReactNode, useId, useState } from 'react';
 
 import { accountsQuery } from '@/modules/exchange-accounts';
-import { ApiError } from '@/shared/api/client';
+import { ApiError, type Schemas } from '@/shared/api/client';
 import { Button } from '@/shared/ui/Button';
 
 import { type SettingsInput, tradingSettingsQuery, useSaveSettings } from '../api';
+import {
+  dayShare,
+  dayStateText,
+  openStateText,
+  resumeText,
+  riskStateText,
+  sidesStateText,
+} from '../model/guards';
 import { formOfSettings, settingsFieldErrors } from '../model/settingsForm';
 
 type Form = { [K in keyof SettingsInput]: string };
@@ -17,16 +25,24 @@ function Field({
   value,
   errors,
   onChange,
+  children,
 }: {
   label: string;
   value: string;
   errors: readonly string[] | undefined;
   onChange: (value: string) => void;
+  /** What stands under the field: its state and its explanation. */
+  children?: ReactNode;
 }) {
+  const id = useId();
+
   return (
-    <label className="block space-y-1 text-sm">
-      <span className="text-muted">{label}</span>
+    <div className="space-y-1 text-sm">
+      <label htmlFor={id} className="block text-muted">
+        {label}
+      </label>
       <input
+        id={id}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         aria-invalid={errors ? true : undefined}
@@ -37,11 +53,46 @@ function Field({
           {message}
         </span>
       ))}
-    </label>
+      {children}
+    </div>
   );
 }
 
-function SettingsForm({ initial }: { initial: Form }) {
+const hint = 'block text-xs text-faint';
+
+/** The loss of the day against the limit as a bar; red once the stop has held. */
+function DayBar({ guards }: { guards: Schemas['IdeaGuardsResponse'] }) {
+  const share = dayShare(guards);
+
+  return (
+    <span className="block space-y-1">
+      <span className="flex items-center gap-3">
+        <span
+          className={`font-mono text-xs ${guards.triggeredAt === null ? 'text-warn' : 'text-err'}`}
+        >
+          {dayStateText(guards)}
+        </span>
+        {share !== null && (
+          <span aria-hidden className="h-1.5 flex-1 rounded-full bg-app">
+            <span
+              className={`block h-full rounded-full ${guards.triggeredAt === null ? 'bg-warn' : 'bg-err'}`}
+              style={{ width: `${share * 100}%` }}
+            />
+          </span>
+        )}
+      </span>
+      {resumeText(guards) && <span className="block text-xs text-err">{resumeText(guards)}</span>}
+    </span>
+  );
+}
+
+function SettingsForm({
+  initial,
+  guards,
+}: {
+  initial: Form;
+  guards: Schemas['IdeaGuardsResponse'] | undefined;
+}) {
   const [form, setForm] = useState(initial);
   const accounts = useQuery(accountsQuery);
   const save = useSaveSettings();
@@ -79,38 +130,89 @@ function SettingsForm({ initial }: { initial: Form }) {
           </span>
         ))}
       </label>
+      <span className={hint}>для ручных входов; у каждого автомата — свой</span>
+      <h3 className="pt-2 text-[11px] tracking-wide text-faint uppercase">Сделка</h3>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Field
           label="Сумма на сделку, USDT"
           value={form.amount}
           errors={errors.fields.amount}
           onChange={(amount) => set({ amount })}
-        />
+        >
+          <span className={hint}>для ручного входа; новый автомат берёт её как начальную</span>
+        </Field>
         <Field
           label="Не больше суммы на сделку, USDT"
           value={form.maxAmount}
           errors={errors.fields.maxAmount}
           onChange={(maxAmount) => set({ maxAmount })}
-        />
-        <Field
-          label="Не больше открытых сделок"
-          value={form.maxOpenTrades}
-          errors={errors.fields.maxOpenTrades}
-          onChange={(maxOpenTrades) => set({ maxOpenTrades })}
-        />
-        <Field
-          label="Не больше общего риска, USDT"
-          value={form.maxTotalRisk}
-          errors={errors.fields.maxTotalRisk}
-          onChange={(maxTotalRisk) => set({ maxTotalRisk })}
-        />
+        >
+          <span className={hint}>потолок для ручных входов и для суммы автомата</span>
+        </Field>
         <Field
           label="Минимальный R:R после комиссий"
           value={form.minRiskReward}
           errors={errors.fields.minRiskReward}
           onChange={(minRiskReward) => set({ minRiskReward })}
-        />
+        >
+          <span className={hint}>для ручных входов; у автомата — свой минимум</span>
+        </Field>
       </div>
+      <h3 className="pt-2 text-[11px] tracking-wide text-faint uppercase">
+        Защиты денег — все реальные сделки, ручные и автоматов
+      </h3>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field
+          label="Не больше открытых сделок"
+          value={form.maxOpenTrades}
+          errors={errors.fields.maxOpenTrades}
+          onChange={(maxOpenTrades) => set({ maxOpenTrades })}
+        >
+          {guards && <span className={hint}>{openStateText(guards)}</span>}
+        </Field>
+        <Field
+          label="Не больше общего риска, USDT"
+          value={form.maxTotalRisk}
+          errors={errors.fields.maxTotalRisk}
+          onChange={(maxTotalRisk) => set({ maxTotalRisk })}
+        >
+          {guards && <span className={hint}>{riskStateText(guards)}</span>}
+        </Field>
+      </div>
+      <section aria-label="Защиты автоматов" className="space-y-3">
+        <h3 className="flex items-center gap-2 pt-2 text-[11px] tracking-wide text-faint uppercase">
+          Защиты автоматов — останавливают только входы автоматов с деньгами
+          <span className="rounded bg-accent/20 px-1.5 py-px text-[10px] font-bold text-accent normal-case">
+            новое
+          </span>
+        </h3>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field
+            label="Дневной стоп по убытку, USDT"
+            value={form.dailyLossLimit}
+            errors={errors.fields.dailyLossLimit}
+            onChange={(dailyLossLimit) => set({ dailyLossLimit })}
+          >
+            {guards && <DayBar guards={guards} />}
+            <span className={hint}>
+              С 00:00 UTC — закрытые сегодня реальные сделки, ручные и автоматов; при убытке выше
+              предела автоматы не входят до следующих суток UTC. Ручные входы и открытые сделки он
+              не трогает. Пустое поле — защита выключена.
+            </span>
+          </Field>
+          <Field
+            label="Не больше сделок в одну сторону"
+            value={form.maxSameDirection}
+            errors={errors.fields.maxSameDirection}
+            onChange={(maxSameDirection) => set({ maxSameDirection })}
+          >
+            {guards && <span className={hint}>{sidesStateText(guards)}</span>}
+            <span className={hint}>
+              Ручные входы не останавливает. Пустое поле — защита выключена.
+            </span>
+          </Field>
+        </div>
+      </section>
       {errors.form.map((message) => (
         <p key={message} role="alert" className="text-sm text-err">
           {message}
@@ -131,8 +233,8 @@ function SettingsForm({ initial }: { initial: Form }) {
   );
 }
 
-/** The settings of trading by ideas, saved on the server: the account by default, the amount, the limits and the lowest R:R. */
-export function SettingsPanel() {
+/** The settings of trading by ideas, saved on the server: the account by default, the amount, the limits, the guards of the autos and the lowest R:R. The state of the guards, when it is given, stands under their fields. */
+export function SettingsPanel({ guards }: { guards?: Schemas['IdeaGuardsResponse'] | undefined }) {
   const settings = useQuery(tradingSettingsQuery());
 
   return (
@@ -142,7 +244,7 @@ export function SettingsPanel() {
     >
       <h2 className="text-sm font-semibold">Настройки</h2>
       {settings.isError && <p role="alert">Не удалось загрузить настройки.</p>}
-      {settings.data && <SettingsForm initial={formOfSettings(settings.data)} />}
+      {settings.data && <SettingsForm initial={formOfSettings(settings.data)} guards={guards} />}
     </section>
   );
 }

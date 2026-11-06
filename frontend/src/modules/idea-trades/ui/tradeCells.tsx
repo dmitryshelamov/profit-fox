@@ -86,3 +86,29 @@ export function StatusCell({ trade }: { trade: IdeaTrade }) {
     </td>
   );
 }
+
+/** The class of the first cell of a paper trade: a stripe on the left that marks it among the real ones. */
+export const stripeOf = (trade: IdeaTrade) =>
+  trade.origin === 'paper' ? 'border-l-[3px] border-run' : '';
+
+/** Who took the trade: the owner by hand, an auto with money (its name under the mark) or an auto without money. */
+export function OriginCell({ trade }: { trade: IdeaTrade }) {
+  if (trade.origin === 'manual') {
+    return (
+      <td className={cell}>
+        <span className="rounded bg-panel-2 px-1.5 py-px text-xs font-semibold">Ручная</span>
+      </td>
+    );
+  }
+
+  return (
+    <td className={cell}>
+      <span
+        className={`rounded border px-1.5 py-px text-xs font-semibold ${trade.origin === 'paper' ? 'border-run text-run' : 'border-accent text-accent'}`}
+      >
+        {trade.origin === 'paper' ? 'учебная' : 'Авто'}
+      </span>
+      <span className="mt-1 block text-xs whitespace-nowrap text-muted">{trade.autoName}</span>
+    </td>
+  );
+}

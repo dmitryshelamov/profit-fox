@@ -22,6 +22,7 @@ using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.Ideas;
+using ProfitFox.Tests.Unit.Application.Scanner.Ideas;
 
 using Shouldly;
 
@@ -68,7 +69,7 @@ public class ScannerMinuteCycleTests
         _market.Keep([new ScannerPair(Sol, true, CoveredUntil: Minute, OpenInterestCoveredUntil: Minute), new ScannerPair(Btc, true, CoveredUntil: Minute.AddMinutes(-2))]);
         _market.TakeChanged();
         _pace = new ScannerPace();
-        _ideas = new LiveIdeas(_ideaStore, Substitute.For<IIdeaVolatilityRepository>(), Substitute.For<ICandleRepository>(), ExitRules(), new IdeaRecomputes(), _market, new IdeasSettings(), Fees, _time);
+        _ideas = new LiveIdeas(_ideaStore, Substitute.For<IIdeaVolatilityRepository>(), Substitute.For<ICandleRepository>(), ExitRules(), new IdeaRecomputes(), _market, new IdeasSettings(), Fees, NoAutos.Create(_market, Fees, _time), _time);
         _cycle = new ScannerMinuteCycle(
             _feed,
             _openInterest,
@@ -236,6 +237,17 @@ public class ScannerMinuteCycleTests
         await _snapshots.Received(1).ReplaceAsync(_identity.Id, Arg.Any<IReadOnlyCollection<MarketSnapshotRow>>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
         await _snapshots.DidNotReceiveWithAnyArgs().ReplaceSetupsAsync(default, default!, default);
         _journal.Received(1).Failed("ideas", failure);
+    }
+
+    // Decision 2: the transaction of the minute locks the lease of the stream, and a scanner that lost it stops, not logs.
+    [Test]
+    public async Task Lost_lease_on_the_write_of_the_ideas_stops_the_cycle()
+    {
+        _ideaStore.SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<ClosedIdea>>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new ScannerLeaseLostException());
+
+        await Should.ThrowAsync<ScannerLeaseLostException>(RunMinuteAsync);
+        _journal.DidNotReceiveWithAnyArgs().Failed(default!, default!);
     }
 
     [Test]

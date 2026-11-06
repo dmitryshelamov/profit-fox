@@ -18,7 +18,8 @@ internal sealed class IdeaTradingSettingsRepository(NpgsqlDataSource dataSource)
             new CommandDefinition(
                 """
                 SELECT account_id AS "AccountId", amount, max_amount AS "MaxAmount", max_open_trades AS "MaxOpenTrades",
-                    max_total_risk AS "MaxTotalRisk", min_risk_reward AS "MinRiskReward"
+                    max_total_risk AS "MaxTotalRisk", min_risk_reward AS "MinRiskReward", daily_loss_limit AS "DailyLossLimit",
+                    max_same_direction AS "MaxSameDirection"
                 FROM idea_trading_settings WHERE id = 1
                 """,
                 cancellationToken: cancellationToken));
@@ -32,10 +33,11 @@ internal sealed class IdeaTradingSettingsRepository(NpgsqlDataSource dataSource)
         await connection.ExecuteAsync(
             new CommandDefinition(
                 """
-                INSERT INTO idea_trading_settings (id, account_id, amount, max_amount, max_open_trades, max_total_risk, min_risk_reward)
-                VALUES (1, @AccountId, @Amount, @MaxAmount, @MaxOpenTrades, @MaxTotalRisk, @MinRiskReward)
+                INSERT INTO idea_trading_settings (id, account_id, amount, max_amount, max_open_trades, max_total_risk, min_risk_reward, daily_loss_limit, max_same_direction)
+                VALUES (1, @AccountId, @Amount, @MaxAmount, @MaxOpenTrades, @MaxTotalRisk, @MinRiskReward, @DailyLossLimit, @MaxSameDirection)
                 ON CONFLICT (id) DO UPDATE SET account_id = EXCLUDED.account_id, amount = EXCLUDED.amount, max_amount = EXCLUDED.max_amount,
-                    max_open_trades = EXCLUDED.max_open_trades, max_total_risk = EXCLUDED.max_total_risk, min_risk_reward = EXCLUDED.min_risk_reward
+                    max_open_trades = EXCLUDED.max_open_trades, max_total_risk = EXCLUDED.max_total_risk, min_risk_reward = EXCLUDED.min_risk_reward,
+                    daily_loss_limit = EXCLUDED.daily_loss_limit, max_same_direction = EXCLUDED.max_same_direction
                 """,
                 settings,
                 cancellationToken: cancellationToken));

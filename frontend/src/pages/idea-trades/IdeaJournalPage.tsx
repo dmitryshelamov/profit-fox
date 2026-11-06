@@ -2,7 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 
+import { autosQuery, DailyStopBanner, RefusalsBlock } from '@/modules/idea-autos';
 import {
+  closedCountText,
   ClosedTradesTable,
   ideaJournalQuery,
   type JournalFilters,
@@ -68,10 +70,27 @@ function Select({
  * The journal of the trades by ideas: the trades in work with what they are worth now, the totals of the closed ones of the filter and
  * a page of them. The API filters, cuts and counts; the address holds the number of the page, the browser the filters and the size.
  */
-export function IdeaJournalPage({ page }: { page: number }) {
+const origins = [
+  { value: '', label: 'Все' },
+  { value: 'manual', label: 'Ручные' },
+  { value: 'auto', label: 'Авто' },
+  { value: 'paper', label: 'Учебные' },
+];
+
+const realCaptions: Record<string, string> = {
+  '': 'ручные и автоматы',
+  manual: 'ручные',
+  auto: 'автоматы',
+};
+
+export function IdeaJournalPage({ page, autoId }: { page: number; autoId?: string | undefined }) {
   const navigate = useNavigate();
   const [remembered] = useState(loadJournalChoice);
-  const [filters, setFilters] = useState<JournalFilters>(remembered.filters);
+  // The count of refusals on «Автоматы» opens the journal on its auto, whatever was kept in the browser.
+  const [filters, setFilters] = useState<JournalFilters>(
+    autoId === undefined ? remembered.filters : { ...remembered.filters, autoId },
+  );
+  const autos = useQuery(autosQuery());
   const [pageSize, setPageSize] = useState(remembered.pageSize);
   // The pair goes to the API after a pause in the typing.
   const [symbolText, setSymbolText] = useState(remembered.filters.symbol);
@@ -96,10 +115,29 @@ export function IdeaJournalPage({ page }: { page: number }) {
       showPage(Number(answered), true);
     }
   }, [answered, journal.isPlaceholderData, page]);
+  // The address has given its auto to the filter; the filter is what stays.
+  useEffect(() => {
+    if (autoId !== undefined) {
+      void navigate({
+        to: '/idea-trades',
+        search: { page: page === 1 ? undefined : page },
+        replace: true,
+      });
+    }
+  }, []);
   useEffect(
     () => saveJournalChoice({ filters: { ...filters, symbol: symbolText }, pageSize }),
     [filters, symbolText, pageSize],
   );
+  // An auto that is gone is still a filter the owner may have kept; it stays among the options under a name of its own.
+  const autoOptions = [
+    ...(autos.data ?? []).map((item) => ({ value: item.auto.id, label: item.auto.name })),
+    ...(filters.autoId === '' ||
+    autos.data === undefined ||
+    autos.data.some((item) => item.auto.id === filters.autoId)
+      ? []
+      : [{ value: filters.autoId, label: 'удалённый автомат' }]),
+  ];
   const set = (patch: Partial<JournalFilters>) => {
     setFilters((current) => ({ ...current, ...patch }));
     firstPage();
@@ -153,10 +191,43 @@ export function IdeaJournalPage({ page }: { page: number }) {
           onChange={(days) => set({ days })}
           options={periods}
         />
-        <Link to="/idea-trades/settings" className="ml-auto text-sm text-run hover:underline">
-          Настройки
-        </Link>
+        <div
+          role="radiogroup"
+          aria-label="Кто взял"
+          className="flex items-center gap-2 text-sm text-muted"
+        >
+          Кто взял
+          <span className="flex rounded-lg bg-panel p-0.5">
+            {origins.map((origin) => (
+              <button
+                key={origin.value}
+                type="button"
+                role="radio"
+                aria-checked={filters.origin === origin.value}
+                onClick={() => set({ origin: origin.value })}
+                className={`h-8 rounded-md px-3 ${filters.origin === origin.value ? 'bg-panel-2 font-bold text-text' : 'text-muted hover:text-text'}`}
+              >
+                {origin.label}
+              </button>
+            ))}
+          </span>
+        </div>
+        <Select
+          label="Автомат"
+          value={filters.autoId}
+          onChange={(next) => set({ autoId: next })}
+          options={autoOptions}
+        />
+        <span className="ml-auto flex gap-3 text-sm">
+          <Link to="/idea-trades/autos" className="text-run hover:underline">
+            Автоматы
+          </Link>
+          <Link to="/idea-trades/settings" className="text-run hover:underline">
+            Настройки
+          </Link>
+        </span>
       </div>
+      <DailyStopBanner />
       {journal.isError && <p role="alert">Не удалось загрузить сделки.</p>}
       {journal.isPending && <p className="text-sm text-muted">Загрузка сделок…</p>}
       {journal.data && (
@@ -164,6 +235,13 @@ export function IdeaJournalPage({ page }: { page: number }) {
           <section aria-labelledby="in-work" className="space-y-2">
             <h2 id="in-work" className="text-lg font-semibold">
               В работе
+              {journal.data.open.length > 0 && (
+                <span className="ml-3 text-xs font-normal text-faint">
+                  {journal.data.open.length} · с деньгами{' '}
+                  {journal.data.open.filter((trade) => trade.origin !== 'paper').length} · учебных{' '}
+                  {journal.data.open.filter((trade) => trade.origin === 'paper').length}
+                </span>
+              )}
             </h2>
             {journal.data.open.length === 0 ? (
               <p className="text-sm text-muted">В работе ничего нет.</p>
@@ -175,7 +253,24 @@ export function IdeaJournalPage({ page }: { page: number }) {
             <h2 id="closed" className="text-lg font-semibold">
               Закрытые сделки
             </h2>
-            <JournalTotals totals={journal.data.totals} />
+            <div className="grid gap-3 lg:grid-cols-2">
+              {filters.origin !== 'paper' && (
+                <JournalTotals
+                  title="С деньгами"
+                  caption={`${realCaptions[filters.origin]} · ${closedCountText(journal.data.totals)}`}
+                  totals={journal.data.totals}
+                />
+              )}
+              {(filters.origin === '' || filters.origin === 'paper') && (
+                <JournalTotals
+                  title="Учебные"
+                  caption={`без ордеров · ${closedCountText(journal.data.paperTotals)} · в защиты не входят`}
+                  label="Итоги учебных сделок"
+                  tone="paper"
+                  totals={journal.data.paperTotals}
+                />
+              )}
+            </div>
             {journal.data.closed.items.length === 0 ? (
               <p className="text-sm text-muted">Закрытых сделок по этим условиям нет.</p>
             ) : (
@@ -198,6 +293,7 @@ export function IdeaJournalPage({ page }: { page: number }) {
               </>
             )}
           </section>
+          <RefusalsBlock autoId={filters.autoId} />
         </>
       )}
     </section>

@@ -1,6 +1,7 @@
 import type { Schemas } from '@/shared/api/client';
 
 import {
+  closedCountText,
   durationText,
   excludedText,
   ideaComparisonText,
@@ -154,5 +155,14 @@ describe('totals of the journal', () => {
       'идеи +0.45 R → сделки +0.35 R · N 2',
     );
     expect(ideaComparisonText({ count: 0, ideas: null, trades: null })).toBe('—');
+  });
+});
+
+describe('count of the closed trades', () => {
+  it('counts the trades closed at the target, at the stop and manually, with the word that goes with the count', () => {
+    expect(closedCountText(totals({ targets: 1, stops: 0, manual: 0 }))).toBe('1 сделка');
+    expect(closedCountText(totals({ targets: 2, stops: 1, manual: 0 }))).toBe('3 сделки');
+    expect(closedCountText(totals({ targets: 3, stops: 2, manual: 1 }))).toBe('6 сделок');
+    expect(closedCountText(totals({ targets: 0, stops: 0, manual: 0 }))).toBe('0 сделок');
   });
 });

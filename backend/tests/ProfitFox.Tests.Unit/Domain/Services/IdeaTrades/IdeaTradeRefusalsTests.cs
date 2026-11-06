@@ -3,6 +3,7 @@ using ProfitFox.Domain.Entities.IdeaTrades.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Services.IdeaTrades;
+using ProfitFox.Domain.ValueObjects.IdeaAutos;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.LiveTrading;
@@ -193,6 +194,31 @@ public class IdeaTradeRefusalsTests
     public void What_the_account_cannot_do_is_named(AccountAccess access, IdeaTradeRefusal expected)
     {
         Refuse(account: Account(access: access)).ShouldBe([expected]);
+    }
+
+    // Scenarios "R:R ниже минимума" and "Не хватает денег" of the autos: the numbers the first reason is about.
+    [Test]
+    public void Reasons_with_numbers_tell_them()
+    {
+        var entry = new IdeaTradeEntry(MarketCategory.Linear, IdeaStatus.Active, Long, 23.5m, 23.5m, 300m, new IdeaTradeSize(2m, 47m, 1m, 1.08m, 1.08m), Rules);
+        var open = new OpenIdeaTrades(8, 4.5m);
+        IdeaTradeAccount account = Account(free: 212.40m);
+
+        RefusalDetail? Detail(IdeaTradeRefusal reason) => IdeaTradeRefusals.DetailOf(reason, entry, Limits, open, account);
+
+        Detail(IdeaTradeRefusal.RiskRewardTooLow).ShouldBe(RefusalDetail.Numbers(1.08m, 1.5m));
+        Detail(IdeaTradeRefusal.NotEnoughMoney).ShouldBe(RefusalDetail.Numbers(212.40m, 300m));
+        Detail(IdeaTradeRefusal.AmountAboveMax).ShouldBe(RefusalDetail.Numbers(300m, 200m));
+        Detail(IdeaTradeRefusal.TooManyOpenTrades).ShouldBe(RefusalDetail.Numbers(8m, 5m));
+        Detail(IdeaTradeRefusal.TotalRiskExceeded).ShouldBe(RefusalDetail.Numbers(5.5m, 5m));
+    }
+
+    [Test]
+    public void Reasons_without_numbers_tell_nothing()
+    {
+        var entry = new IdeaTradeEntry(MarketCategory.Linear, IdeaStatus.Active, Long, 23.5m, 23.5m, 300m, new IdeaTradeSize(2m, 47m, 1m, 1.08m, 1.08m), Rules);
+
+        IdeaTradeRefusals.DetailOf(IdeaTradeRefusal.HedgeMode, entry, Limits, new OpenIdeaTrades(0, 0m), Account()).ShouldBeNull();
     }
 
     private static IReadOnlyList<IdeaTradeRefusal> Refuse(

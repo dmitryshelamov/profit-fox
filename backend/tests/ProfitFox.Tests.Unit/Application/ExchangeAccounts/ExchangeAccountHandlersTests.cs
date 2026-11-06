@@ -19,6 +19,8 @@ using ProfitFox.Domain.ValueObjects.ExchangeAccounts;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
 
+using ProfitFox.Tests.Shared.Generators.Domain.Entity.IdeaAutos;
+
 using Shouldly;
 
 namespace ProfitFox.Tests.Unit.Application.ExchangeAccounts;
@@ -38,6 +40,7 @@ public class ExchangeAccountHandlersTests
 
     private IExchangeAccountRepository _accounts = null!;
     private IStrategyLibraryRepository _library = null!;
+    private IIdeaAutoRepository _autos = null!;
 
     [SetUp]
     public void SetUp()
@@ -48,6 +51,8 @@ public class ExchangeAccountHandlersTests
         _accounts.RenameAsync(Account.Id, Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
         _accounts.DeleteAsync(Account.Id, Arg.Any<CancellationToken>()).Returns(true);
         _library = Substitute.For<IStrategyLibraryRepository>();
+        _autos = Substitute.For<IIdeaAutoRepository>();
+        _autos.GetAllAsync(Arg.Any<CancellationToken>()).Returns([]);
         _library.GetBotsAsync(Arg.Any<CancellationToken>()).Returns([Bot("BTC EMA час", Account.Id), Bot("Без аккаунта", null)]);
     }
 
@@ -101,7 +106,7 @@ public class ExchangeAccountHandlersTests
     {
         _library.GetBotsAsync(Arg.Any<CancellationToken>()).Returns([Bot("Без аккаунта", null)]);
 
-        await new DeleteExchangeAccountCommandHandler(_accounts, _library).Handle(new DeleteExchangeAccountCommand(Account.Id), CancellationToken.None);
+        await new DeleteExchangeAccountCommandHandler(_accounts, _library, _autos).Handle(new DeleteExchangeAccountCommand(Account.Id), CancellationToken.None);
 
         await _accounts.Received(1).DeleteAsync(Account.Id, Arg.Any<CancellationToken>());
     }
@@ -111,9 +116,24 @@ public class ExchangeAccountHandlersTests
     public async Task Account_with_bots_is_a_conflict_naming_them()
     {
         ExchangeAccountInUseConflictException exception = await Should.ThrowAsync<ExchangeAccountInUseConflictException>(() =>
-            new DeleteExchangeAccountCommandHandler(_accounts, _library).Handle(new DeleteExchangeAccountCommand(Account.Id), CancellationToken.None));
+            new DeleteExchangeAccountCommandHandler(_accounts, _library, _autos).Handle(new DeleteExchangeAccountCommand(Account.Id), CancellationToken.None));
 
         exception.BotNames.ShouldBe(["BTC EMA час"]);
+        await _accounts.DidNotReceiveWithAnyArgs().DeleteAsync(default, default);
+    }
+
+    // Review P3: an auto that is not deleted holds its account and is named; the list of autos holds no deleted one.
+    [Test]
+    public async Task Account_an_auto_enters_on_is_a_conflict_naming_it()
+    {
+        _library.GetBotsAsync(Arg.Any<CancellationToken>()).Returns([]);
+        _autos.GetAllAsync(Arg.Any<CancellationToken>()).Returns([IdeaAutoGenerator.Generate(Account.Id, "Импульс лонг"), IdeaAutoGenerator.Generate(Guid.NewGuid(), "Чужой")]);
+
+        ExchangeAccountInUseConflictException exception = await Should.ThrowAsync<ExchangeAccountInUseConflictException>(() =>
+            new DeleteExchangeAccountCommandHandler(_accounts, _library, _autos).Handle(new DeleteExchangeAccountCommand(Account.Id), CancellationToken.None));
+
+        exception.BotNames.ShouldBeEmpty();
+        exception.AutoNames.ShouldBe(["Импульс лонг"]);
         await _accounts.DidNotReceiveWithAnyArgs().DeleteAsync(default, default);
     }
 
@@ -125,14 +145,14 @@ public class ExchangeAccountHandlersTests
         _accounts.DeleteAsync(Account.Id, Arg.Any<CancellationToken>()).ThrowsAsync(new ExchangeAccountInUseException());
 
         await Should.ThrowAsync<ExchangeAccountInUseConflictException>(() =>
-            new DeleteExchangeAccountCommandHandler(_accounts, _library).Handle(new DeleteExchangeAccountCommand(Account.Id), CancellationToken.None));
+            new DeleteExchangeAccountCommandHandler(_accounts, _library, _autos).Handle(new DeleteExchangeAccountCommand(Account.Id), CancellationToken.None));
     }
 
     [Test]
     public async Task Deleting_an_unknown_account_is_not_found()
     {
         await Should.ThrowAsync<NotFoundException>(() =>
-            new DeleteExchangeAccountCommandHandler(_accounts, _library).Handle(new DeleteExchangeAccountCommand(Guid.NewGuid()), CancellationToken.None));
+            new DeleteExchangeAccountCommandHandler(_accounts, _library, _autos).Handle(new DeleteExchangeAccountCommand(Guid.NewGuid()), CancellationToken.None));
     }
 
     // Scenario "Баланс аккаунта": the secret is decrypted only to call the exchange.

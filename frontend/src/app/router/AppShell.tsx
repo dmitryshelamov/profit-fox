@@ -13,6 +13,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     match({ to: '/market' }) !== false ||
     match({ to: '/ideas' }) !== false ||
     match({ to: '/idea-trades' }) !== false ||
+    match({ to: '/idea-trades/autos' }) !== false ||
     match({ to: '/market/$category/$symbol' }) !== false;
 
   return (
