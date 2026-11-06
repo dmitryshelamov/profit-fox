@@ -139,10 +139,10 @@ describe('ideas screen', () => {
     await rowOf('WIFUSDT');
 
     expect(
-      screen.getByText(/Вероятность: доля «Цель» среди всех случаев с входом/),
+      screen.getByText(/Вероятность и ожидание — числа модели: доля «Цель» и средний итог корзины/),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/интервал ожидания корзины выше нуля, содержит ноль или ниже нуля/),
+      screen.getByText(/интервал ожидания модели выше нуля, содержит ноль или ниже нуля/),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/на сумму на идею: при цели и при стопе, после комиссий/),
