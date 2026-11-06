@@ -8,7 +8,7 @@ namespace ProfitFox.Domain.Services.Ideas;
 ///     The levels of an idea by the rules of its type, long; short mirrors them. The stop buffer is k × ATR, at least three spreads. The levels
 ///     go on the price step of the pair: the stop away from the entry and the target towards it, the limit of a pullback towards the market,
 ///     so none of them is better than the rules give. An idea without the zone it needs, with a reward under 1.5 risks, short on spot, or a
-///     pullback whose limit the price has passed is not made.
+///     pullback or a stop entry whose entry the price has passed is not made. A stop entry enters a price step beyond the range of its setup.
 /// </summary>
 public static class IdeaRules
 {
@@ -26,7 +26,9 @@ public static class IdeaRules
         // Long ahead is +1, short −1: a stop lies behind the entry, a target ahead of it.
         decimal ahead = side == IdeaSide.Long ? 1m : -1m;
         decimal buffer = Math.Max(context.StopBuffer * context.Atr, SpreadsInBuffer * (context.Spread ?? 0m));
-        Zone? behind = side == IdeaSide.Long ? ZoneFinder.Support(context.Zones, context.Price) : ZoneFinder.Resistance(context.Zones, context.Price);
+        // The zone a breakout broke or a false breakout swept is behind the idea, though the price may still stand in it.
+        Zone? behind = context.SetupZone
+                       ?? (side == IdeaSide.Long ? ZoneFinder.Support(context.Zones, context.Price) : ZoneFinder.Resistance(context.Zones, context.Price));
         Zone? next = side == IdeaSide.Long ? ZoneFinder.Resistance(context.Zones, context.Price) : ZoneFinder.Support(context.Zones, context.Price);
         decimal extreme = side == IdeaSide.Long ? context.WindowLow : context.WindowHigh;
 
@@ -44,11 +46,17 @@ public static class IdeaRules
             IdeaType.TwoR when behind is not null => TwoR(type, side, context.Price, Stop(Edge(behind, ahead)), tick),
             IdeaType.BeyondExtreme => TwoR(type, side, context.Price, Stop(extreme), tick),
             IdeaType.Pullback => TwoR(type, side, PriceStep.Round((context.WindowLow + context.WindowHigh) / 2, tick, ahead < 0), Stop(extreme), tick),
+            IdeaType.StopEntry => TwoR(type, side, (ahead > 0 ? context.WindowHigh : context.WindowLow) + (ahead * tick), Stop(extreme), tick),
             _ => null
         };
 
-        // A limit the price has already passed would fill at once, at a price the market never gave.
+        // A limit or a stop order the price has already passed would fill at once, at a price the market never gave.
         if (plan is { Type: IdeaType.Pullback } && ahead * (context.Price - plan.Entry) <= 0)
+        {
+            return null;
+        }
+
+        if (plan is { Type: IdeaType.StopEntry } && ahead * (plan.Entry - context.Price) <= 0)
         {
             return null;
         }

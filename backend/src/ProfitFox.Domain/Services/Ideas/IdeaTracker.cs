@@ -5,20 +5,23 @@ namespace ProfitFox.Domain.Services.Ideas;
 
 /// <summary>
 ///     Steps an idea by the next closed minute. A market idea enters at the open of the minute after it fired; a pullback waits up to 4
-///     candles for a minute that touches its entry. An active idea that reaches its stop is «Стоп», its target «Цель», both in one minute
+///     candles for a minute that touches its entry; a stop entry waits up to 12 candles for a minute that reaches its entry, and expires
+///     without one at its stop. An active idea that reaches its stop is «Стоп», its target «Цель», both in one minute
 ///     «Стоп»; one that reaches neither in 24 candles from its entry expires at the close of its last minute.
 /// </summary>
 public static class IdeaTracker
 {
     private const int EntryCandles = 4;
+    private const int StopEntryCandles = 12;
     private const int LifeCandles = 24;
 
     public static IdeaTrack Step(IdeaTrack track, IdeaCandle minute)
     {
         return track.Status switch
         {
-            IdeaStatus.AwaitingEntry when track.Plan.Type != IdeaType.Pullback => EnterAtMarket(track, minute),
-            IdeaStatus.AwaitingEntry => EnterAtLimit(track, minute),
+            IdeaStatus.AwaitingEntry when track.Plan.Type == IdeaType.Pullback => EnterAtLimit(track, minute),
+            IdeaStatus.AwaitingEntry when track.Plan.Type == IdeaType.StopEntry => EnterAtStop(track, minute),
+            IdeaStatus.AwaitingEntry => EnterAtMarket(track, minute),
             IdeaStatus.Active => Exit(track, minute),
             _ => track
         };
@@ -58,6 +61,29 @@ public static class IdeaTracker
         }
 
         IdeaTrack entered = track with { Status = IdeaStatus.Active, StatusAt = minute.OpenTime, EnteredAt = minute.OpenTime };
+
+        // Within the minute of the fill the target may have come before it; only the stop counts.
+        return Ahead(plan) * (Worst(plan, minute) - plan.Stop) <= 0 ? entered with { Status = IdeaStatus.Stop, ExitPrice = plan.Stop } : entered;
+    }
+
+    private static IdeaTrack EnterAtStop(IdeaTrack track, IdeaCandle minute)
+    {
+        if (minute.OpenTime >= track.FiredAt.AddMinutes(StopEntryCandles * track.CandleMinutes))
+        {
+            return track with { Status = IdeaStatus.Expired, StatusAt = minute.OpenTime };
+        }
+
+        IdeaPlan plan = track.Plan;
+
+        if (Ahead(plan) * (Best(plan, minute) - plan.Entry) < 0)
+        {
+            // The way out went the other side: the range broke against the idea before it entered.
+            return Ahead(plan) * (Worst(plan, minute) - plan.Stop) <= 0 ? track with { Status = IdeaStatus.Expired, StatusAt = minute.OpenTime } : track;
+        }
+
+        // A minute that opened beyond the entry fills at its open, and the target of 2R follows it.
+        IdeaPlan filled = Ahead(plan) * (minute.Open - plan.Entry) > 0 ? TwoR(track, minute.Open) : plan;
+        IdeaTrack entered = track with { Plan = filled, Status = IdeaStatus.Active, StatusAt = minute.OpenTime, EnteredAt = minute.OpenTime };
 
         // Within the minute of the fill the target may have come before it; only the stop counts.
         return Ahead(plan) * (Worst(plan, minute) - plan.Stop) <= 0 ? entered with { Status = IdeaStatus.Stop, ExitPrice = plan.Stop } : entered;

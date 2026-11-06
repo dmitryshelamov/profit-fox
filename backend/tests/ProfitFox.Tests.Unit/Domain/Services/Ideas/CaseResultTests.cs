@@ -33,6 +33,13 @@ public class CaseResultTests
         CaseResult.R(Closed(IdeaType.Pullback, IdeaSide.Long, 100m, 98m, 104m, IdeaStatus.Target, 104m), Fees).ShouldBe(1.9614m);
     }
 
+    // Scenario "Стоп-вход с комиссией": entered with a stop order at 101 and stopped at 99; taker on both, (−2 − 0.0555 − 0.0545) / 2.
+    [Test]
+    public void Stop_entry_pays_the_taker_fee_on_its_entry_and_its_exit()
+    {
+        CaseResult.R(Closed(IdeaType.StopEntry, IdeaSide.Long, 101m, 99m, 105m, IdeaStatus.Stop, 99m), Fees).ShouldBe(-1.055m);
+    }
+
     [Test]
     public void Expired_idea_gives_what_its_last_close_gives()
     {

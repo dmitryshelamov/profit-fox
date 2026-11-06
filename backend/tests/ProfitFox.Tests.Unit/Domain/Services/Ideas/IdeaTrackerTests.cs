@@ -15,6 +15,7 @@ public class IdeaTrackerTests
     private static readonly DateTimeOffset Fired = DateTimeOffset.Parse("2024-03-01T10:01:00Z");
     private static readonly IdeaPlan TwoR = new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 105m, 100m, 115m);
     private static readonly IdeaPlan Pullback = new IdeaPlan(IdeaType.Pullback, IdeaSide.Long, 104m, 100m, 112m);
+    private static readonly IdeaPlan StopEntry = new IdeaPlan(IdeaType.StopEntry, IdeaSide.Long, 102.01m, 99.5m, 107.03m);
 
     // Decision 4: the entry is the open of the next minute, and a target of 2R follows it.
     [Test]
@@ -132,6 +133,60 @@ public class IdeaTrackerTests
 
         Run(Pullback, minutes[..20]).Status.ShouldBe(IdeaStatus.AwaitingEntry);
         Run(Pullback, minutes).ShouldBe(new IdeaTrack(Pullback, Fired, 5, IdeaStatus.Expired, Fired.AddMinutes(20)));
+    }
+
+    // Requirement "Вход «Стоп-входа»": a minute that reaches the entry fills the stop order at it.
+    [Test]
+    public void Stop_entry_enters_when_a_minute_reaches_its_entry()
+    {
+        IdeaTrack track = Run(StopEntry, 0.01m, Minute(0, 101m, 101.5m, 100.5m, 101.2m), Minute(1, 101.8m, 102.1m, 101.7m, 102m));
+
+        (track.Status, track.EnteredAt, track.Plan).ShouldBe((IdeaStatus.Active, Fired.AddMinutes(1), StopEntry));
+    }
+
+    // Scenario "Вход с гэпом": the minute opened at 102.30, beyond the entry; the target of 2R follows it, 102.30 + 2 × 2.80.
+    [Test]
+    public void Stop_entry_with_a_gap_enters_at_the_open_and_targets_two_r_from_it()
+    {
+        IdeaTrack track = Run(StopEntry, 0.01m, Minute(0, 102.30m, 102.6m, 102.2m, 102.5m));
+
+        (track.Status, track.Plan).ShouldBe((IdeaStatus.Active, StopEntry with { Entry = 102.30m, Target = 107.90m }));
+    }
+
+    [Test]
+    public void Stop_entry_short_with_a_gap_enters_at_the_open()
+    {
+        var shortPlan = new IdeaPlan(IdeaType.StopEntry, IdeaSide.Short, 99.99m, 102.5m, 94.97m);
+
+        Run(shortPlan, 0.01m, Minute(0, 99.80m, 99.9m, 99.5m, 99.6m)).Plan.ShouldBe(shortPlan with { Entry = 99.80m, Target = 94.40m });
+    }
+
+    // Scenario "Пробой в другую сторону": the stop before the entry; no entry, no case.
+    [Test]
+    public void Stop_entry_that_reaches_its_stop_before_the_entry_expires_without_an_entry()
+    {
+        IdeaTrack track = Run(StopEntry, 0.01m, Minute(0, 101m, 101.2m, 99.4m, 99.6m));
+
+        track.ShouldBe(new IdeaTrack(StopEntry, Fired, 5, IdeaStatus.Expired, Fired, Tick: 0.01m));
+    }
+
+    // Within the minute of the fill the target may have come before it; only the stop counts.
+    [Test]
+    public void Stop_entry_that_reaches_its_entry_and_stop_in_one_minute_is_a_stop()
+    {
+        IdeaTrack track = Run(StopEntry, 0.01m, Minute(0, 101.5m, 107.5m, 99.4m, 100m));
+
+        (track.Status, track.EnteredAt, track.ExitPrice).ShouldBe((IdeaStatus.Stop, Fired, 99.5m));
+    }
+
+    // Scenario "Без входа": 12 candles of 5 minutes.
+    [Test]
+    public void Stop_entry_without_an_entry_in_twelve_candles_expires()
+    {
+        IdeaCandle[] minutes = [.. Enumerable.Range(0, 61).Select(index => Minute(index, 101m, 101.5m, 100.5m, 101m))];
+
+        Run(StopEntry, minutes[..60]).Status.ShouldBe(IdeaStatus.AwaitingEntry);
+        Run(StopEntry, minutes).ShouldBe(new IdeaTrack(StopEntry, Fired, 5, IdeaStatus.Expired, Fired.AddMinutes(60)));
     }
 
     [Test]

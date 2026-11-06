@@ -13,5 +13,8 @@ public enum IdeaType
     BeyondExtreme,
 
     /// <summary>«Откат»: a limit at the middle of the move of the setup window, the stop beyond its extreme, the target at 2R.</summary>
-    Pullback
+    Pullback,
+
+    /// <summary>«Стоп-вход»: a stop order beyond the edge of the setup range, the stop beyond the other edge, the target at 2R.</summary>
+    StopEntry
 }
