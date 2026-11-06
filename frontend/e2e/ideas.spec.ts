@@ -1,6 +1,6 @@
 import { expect, type Locator, test } from '@playwright/test';
 
-import { seedIdeas } from './seed';
+import { seedCalibration, seedIdeas } from './seed';
 
 // Acceptance of the trade ideas against the real API and scanner on the Bybit stub. The scanner primes the setups of its
 // pairs on the first minute after its warm-up, so a setup that holds at start-up never fires: the stub starts a steep, loud
@@ -332,6 +332,41 @@ test('ideas come a page at a time: the page is in the address and survives Back,
   await expect(
     editor.getByText(new RegExp(`^Подходит: ${pairs} \\S+ · ${ideas} \\S+$`)),
   ).toBeVisible();
+
+  expect(errors).toEqual([]);
+});
+
+// The calibration is a report the scanner keeps; the run puts one into its database, since one day of history checks no case.
+test('the link «Калибровка» of the ideas opens the calibration with its tiles and tables, and the window goes to the address', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await seedCalibration();
+
+  await page.goto('/ideas');
+  await page.getByRole('link', { name: 'Калибровка' }).click();
+
+  await expect(page).toHaveURL(/\/ideas\/calibration$/);
+  await expect(page.getByRole('region', { name: 'Оценка Брайера' })).toContainText(
+    '0.207 против 0.219',
+  );
+  await expect(page.getByRole('region', { name: 'Оценка Брайера' })).toContainText(
+    'лучше на 5.5 %',
+  );
+  const probabilities = page.getByRole('table', { name: 'Вероятность' });
+  await expect(probabilities.getByRole('row', { name: /30–40 %/ })).toContainText('640');
+  await expect(page.getByRole('table', { name: 'Ожидание' })).toBeVisible();
+  await expect(
+    page.getByRole('table', { name: 'Значки' }).getByRole('row', { name: /▲/ }),
+  ).toBeVisible();
+
+  await page.getByRole('button', { name: 'за 30 дн' }).click();
+  await expect(page).toHaveURL(/\/ideas\/calibration\?days=30$/);
+  await expect(page.getByRole('button', { name: 'за 30 дн' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
 
   expect(errors).toEqual([]);
 });

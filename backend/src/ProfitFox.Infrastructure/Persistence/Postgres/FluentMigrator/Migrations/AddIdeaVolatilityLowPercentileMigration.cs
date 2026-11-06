@@ -2,7 +2,7 @@ using FluentMigrator;
 
 namespace ProfitFox.Infrastructure.Persistence.Postgres.FluentMigrator.Migrations;
 
-[Migration(202611070004)]
+[Migration(202611070005)]
 public sealed class AddIdeaVolatilityLowPercentileMigration : ForwardOnlyMigration
 {
     // The 10th percentile of ATR / price beside the 90th, for «Сжатие»; the rows stored before it have none until the next replay.

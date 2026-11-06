@@ -18,6 +18,10 @@ internal sealed class IdeaBucketDb
 
     public int Cases { get; init; }
 
+    public int Targets { get; init; }
+
+    public int Stops { get; init; }
+
     public int Expired { get; init; }
 
     public decimal? Probability { get; init; }
@@ -26,7 +30,9 @@ internal sealed class IdeaBucketDb
 
     public decimal? ProbabilityHigh { get; init; }
 
-    public decimal Baseline { get; init; }
-
     public decimal Expectancy { get; init; }
+
+    public decimal? ExpectancyLow { get; init; }
+
+    public decimal? ExpectancyHigh { get; init; }
 }

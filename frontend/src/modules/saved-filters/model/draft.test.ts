@@ -3,9 +3,9 @@ import { type Draft, draftOf, switchField } from './draft';
 const number = { code: 'change1h', operators: ['>', '<', 'between'], choices: null };
 const side = { code: 'side', operators: ['='], choices: ['long', 'short'] };
 const exact = { code: 'turnover24h', operators: ['>', '='], choices: null };
-const probability = {
-  code: 'probability',
-  operators: ['>', 'above_baseline'],
+const expectancy = {
+  code: 'expectancy',
+  operators: ['>', 'reliably_positive'],
   choices: null,
 };
 
@@ -32,10 +32,10 @@ describe('switchField', () => {
     expect(switchField(draft({ operator: '<', value: '5' }), number, number)).toEqual(
       draft({ operator: '<', value: '5' }),
     );
-    expect(switchField(draft({ operator: '<', value: '5' }), number, probability).operator).toBe(
+    expect(switchField(draft({ operator: '<', value: '5' }), number, expectancy).operator).toBe(
       '>',
     );
-    expect(switchField(draft({ operator: '>', value: '5' }), number, probability).value).toBe('5');
+    expect(switchField(draft({ operator: '>', value: '5' }), number, expectancy).value).toBe('5');
   });
 
   it('does not carry the «=» of a choice over to a numeric field that takes it', () => {
@@ -53,7 +53,7 @@ describe('switchField', () => {
   });
 
   it('falls back to the first operator when the new field does not take the old one', () => {
-    expect(switchField(draft({ operator: 'between', to: '7' }), number, probability).operator).toBe(
+    expect(switchField(draft({ operator: 'between', to: '7' }), number, expectancy).operator).toBe(
       '>',
     );
   });

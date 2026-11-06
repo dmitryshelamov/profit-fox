@@ -30,14 +30,16 @@ enforces a rule, the check is the source of truth.
   them) and `ScannerState`; `ValueObjects/Market` holds `MarketMinute`, `OpenInterestPoint`, `FundingRatePoint`, `MarketTicker`,
   `PairMetrics` and `MarketSnapshotRow`; `Services/Market/MarketMetrics` is the pure function of the metrics of a pair.
 - `Ideas` is the area of trade ideas: `Entities/Ideas` holds `Idea` (a live idea, one open per `IdeaKey`) and the enums `IdeaSetup`,
-  `IdeaType`, `IdeaSide`, `IdeaStatus`; `ValueObjects/Ideas` holds `IdeaCandle` (a minute or a candle of an interval, its volume the
+  `IdeaType`, `IdeaSide`, `IdeaStatus`, `IdeaBadge` (▲ ≈ ▼ of a bucket by the interval of its expectancy); `ValueObjects/Ideas` holds `IdeaCandle` (a minute or a candle of an interval, its volume the
   turnover), `MinuteAggregate`, `SetupThresholds`, `SetupSignal`, `SetupReading`, `SetupBase` (what the setups of an interval are measured against
   until a candle closes), `CandleSetupInput`, `RsiState`, `VolatilityPercentiles`, `Zone`, `ZoneRules`, `IdeaPlan`, `IdeaContext`,
-  `IdeaTrack`, `IdeaCase`, `IdeaBucketKey`, `IdeaBucketCounts`, `IdeaBucket`, `BucketStatistics`, `IdeaVolatility`, `IdeaShares` and `PairSetup`.
+  `IdeaTrack`, `IdeaCase`, `IdeaBucketKey`, `IdeaBucketCounts`, `IdeaBucket`, `BucketStatistics`, `IdeaVolatility`, `IdeaShares` (with the break-even), `PairSetup`,
+  `IdeaOutcome` (how a case ended, as the calibration reads it), `CalibrationReport` and `CalibrationRow`.
   `Services/Ideas` holds the pure functions: `Atr` (Wilder, 14), `Rsi` (Wilder, 14, over exactly 100 candles), `IdeaCandles` (candles of an interval from minutes, a minute without
   trades flat at the close before it), `SetupDetector` (the setups of a move), `CandleSetupDetector` (the candle setups), `SetupTypes`
   (the types of ideas of each setup), `ZoneFinder`, `IdeaRules`, `IdeaTracker`, `CaseResult`,
-  `BucketStatisticsCalculator`, `IdeaMoney`, `Volatility` and `IdeasEngineVersion`.
+  `BucketStatisticsCalculator` (from the counts, ΣR and ΣR², so a window of cases can add and take them), `CalibrationCalculator` (the walk-forward
+  check of the buckets on cases they had not seen), `IdeaMoney`, `Volatility` and `IdeasEngineVersion`.
 - `SavedFilters` is the area of saved filters: `Entities/SavedFilters` holds `SavedFilter` and the enums `SavedFilterPlace`, `FilterField`,
   `FilterOperator`; `ValueObjects/SavedFilters` holds `FilterCondition`.
 - `Exceptions` holds domain exceptions: a broken domain rule that the caller reports to the user
@@ -106,12 +108,12 @@ enforces a rule, the check is the source of truth.
   a candle closes), `IdeaEngine` (the
   minutes of a pair one by one: steps the open ideas, reads the setups, makes the ideas of the setups that fire; the same for live and
   replay), `LiveIdeas` (the warm-ups and the minute of live ideas after the snapshot) and `IdeasReplay` (the replay of history pair by pair
-  and day by day, the buckets every 10 minutes, the clean-up of other versions). `Scanner/ScannerPace` tells the replay whether the
+  and day by day, the buckets every 10 minutes and the calibration after them, `IdeaCalibration`, the clean-up of other versions). `Scanner/ScannerPace` tells the replay whether the
   snapshot came late.
 - `Ideas` holds `IdeaCodes` (codes of setups, types, sides, statuses), `IdeaView` (an idea with its buckets), `IdeaLevels` (what the API
   measures a pair by: price, spread, ATR, zones, window), `IdeaOrder` (the order of the ideas of «Идеи» by a column; setup, type, side and
   status go in the order of their enums, which is the order of the lists on the screen, not of the Russian names) and the queries of the ideas
-  API (`GetIdeas`, `GetIdea`, `GetIdeaBuckets`, `GetPairIdeas`, `GetZones`, `GetOwnIdea`). `SavedFilters` holds `SavedFilterFields`, the one
+  API (`GetIdeas`, `GetIdea`, `GetIdeaBuckets`, `GetIdeaCalibration`, `GetPairIdeas`, `GetZones`, `GetOwnIdea`). `SavedFilters` holds `SavedFilterFields`, the one
   catalog of fields with their units and operators, `SavedFilterJson`, the codec of conditions for the API and the stored `jsonb`,
   `SavedFilterRules`, which checks a filter by the catalog (`ParseConditions` checks the conditions alone, as `FitSavedFilter` needs),
   `SavedFilterMatch`, the one place where a filter is applied to a pair (`Pair`, which skips the conditions on idea fields) and to an idea
@@ -190,7 +192,8 @@ enforces a rule, the check is the source of truth.
   holder replaces in one transaction that locks the row of the state with its lease.
 - `Repositories/Ideas` holds `ideas` (one open idea per key kept by a partial unique index; the ideas made and moved on a minute are
   written in one transaction), `idea_cases` (a hypertable, written once per key, fired time and version), `idea_buckets`, `idea_replay`
-  (the cursor of a pair per version with the ideas of the replay open at it) and `idea_volatility`;
+  (the cursor of a pair per version with the ideas of the replay open at it), `idea_volatility` and `idea_calibration` (one `jsonb` report per
+  version, window and category, replaced whole like the buckets);
   `Repositories/SavedFilters` holds `saved_filters`. `market_snapshot.setups` (`jsonb`, interval code → setup codes) is written after the
   snapshot under the same lease. `CandleRepository.GetAggregatedAsync` joins stored minutes into candles of an interval with `time_bucket`.
 - `Persistence/Postgres/Transactions` implements the unit of work: `PostgresTransactionExecutor` opens the connection
@@ -333,7 +336,7 @@ enforces a rule, the check is the source of truth.
   `MarketController` also has `.../ideas` (the ideas of a pair), `.../zones?interval` (5, 15, 60, 240) and `POST .../own-idea`; the rows of
   `GET /api/market` and of a pair carry `setups`. `IdeasController`: `GET /api/ideas` (filters `setup`, `interval`, `type`, `side`,
   `category`, `nonNegativeExpectancy`, `savedFilter`; `sort`, `direction`, `page`, `pageSize`; the answer is `items`, `page`, `pageSize` and
-  `total`), `GET /api/ideas/{id}`, `GET /api/ideas/buckets`. `SavedFiltersController`: CRUD of
+  `total`), `GET /api/ideas/{id}`, `GET /api/ideas/buckets`, `GET /api/ideas/calibration` (`days` 90 or 30, `category` linear, spot or none). `SavedFiltersController`: CRUD of
   `/api/saved-filters`, the catalog `GET /api/saved-filters/fields` and `POST /api/saved-filters/fit` (`{ conditions }` of a draft →
   `{ pairs, ideas }`, saves nothing).
 - `Hubs` holds SignalR hubs. `BotChartHub` is the first: `/api/hubs/bot-chart` (under `/api`, so the proxy of the web image
@@ -408,7 +411,7 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
 
 - `src/app` holds the router (TanStack Router) and the providers (TanStack Query). `src/pages/<screen>` holds one screen
   each (`strategies`, `strategy-editor`, `nodes`, `node-editor`, `bots`, `bot-editor`, `bot`, `backtest-setup`, `backtest`,
-  `backtest-result`, `compare`, `accounts`, `account-new`, `account`, `market`, `market-pair`, `ideas`); a page never imports another page.
+  `backtest-result`, `compare`, `accounts`, `account-new`, `account`, `market`, `market-pair`, `ideas`, `ideas-calibration`); a page never imports another page.
 - `src/modules/<area>` holds a feature: `model` for pure functions, `ui` for components, `api.ts` for queries. Other
   code imports a module only through its `index.ts`. `modules/graph-editor/model` is the logic of the editor that can be
   wrong (definition ↔ canvas, pins, wire types, error paths, draft comparison): plain TypeScript without React.
@@ -426,8 +429,9 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
   the row, open interest and funding of a pair; the counts of the category buttons and of the chips come from the answer, nothing is filtered or sorted in the browser;
   `model` for the codes of the sort columns, the size of a page and the rest of the choice kept in the browser (`choice`), the age of the snapshot and
   compact numbers; `setups` for the setups, the interval of setups and the column «Сетап»; `MarketTable`, the banners and the mark of
-  incomplete data), `ideas` (queries of one page of the ideas, of a pair's ideas, zones and the own idea; `model` for the labels, the codes of the sort columns, the badge against the
-  baseline and «мало данных» (`stats`), profit and loss at the risk per idea and its storage in the browser (`riskStorage`), the groups of a
+  incomplete data), `ideas` (queries of one page of the ideas, of a pair's ideas, zones, the own idea and the calibration; `model` for the labels, the codes of the sort columns, the
+  badge of the bucket, «мало данных», the break-even rounded up and the shares of the outcomes (`stats`), the colour of a difference, the verdict of the Brier
+  score and the names of the rows of the calibration (`calibration`), profit and loss at the risk per idea and its storage in the browser (`riskStorage`), the groups of a
   pair's list (`groups`) and the levels drawn on the chart (`levels`); `IdeasTable`, `PairIdeasList`, `OwnIdeaBlock`), `saved-filters`
   (queries of filters and the catalog of fields, and the count of a draft, `fitQuery`; `model` for the text of conditions (`conditions`) and the
   server errors by field (`errors`); `FilterBar`, `FilterEditor`, whose counter «Подходит» is the answer of `POST /api/saved-filters/fit` for the ready

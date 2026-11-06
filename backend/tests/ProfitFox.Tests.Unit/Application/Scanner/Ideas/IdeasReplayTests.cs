@@ -39,6 +39,7 @@ public class IdeasReplayTests
     private IIdeaReplayRepository _cursors = null!;
     private IIdeaVolatilityRepository _volatility = null!;
     private IIdeaBucketRepository _buckets = null!;
+    private IIdeaCalibrationRepository _calibrations = null!;
     private ScannerMarket _market = null!;
     private ScannerPace _pace = null!;
     private FakeTimeProvider _time = null!;
@@ -54,6 +55,7 @@ public class IdeasReplayTests
         _cursors = Substitute.For<IIdeaReplayRepository>();
         _volatility = Substitute.For<IIdeaVolatilityRepository>();
         _buckets = Substitute.For<IIdeaBucketRepository>();
+        _calibrations = Substitute.For<IIdeaCalibrationRepository>();
         _market = new ScannerMarket();
         _pace = new ScannerPace();
         _time = new FakeTimeProvider(March1.AddDays(1).AddMinutes(5));
@@ -204,9 +206,9 @@ public class IdeasReplayTests
         var key = new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.OneHour, IdeaSide.Long, MarketCategory.Linear);
         DateTimeOffset now = _time.GetUtcNow();
         _cases.CountAsync(2, now.AddDays(-90), Arg.Any<CancellationToken>())
-            .Returns([new IdeaBucketCounts(key, 180, 200, 20, 2m, 40m)]);
+            .Returns([new IdeaBucketCounts(key, 180, 200, 20, 48m, 580.32m)]);
         _cases.CountAsync(2, now.AddDays(-30), Arg.Any<CancellationToken>())
-            .Returns([new IdeaBucketCounts(key, 6, 5, 1, 3m, 2.4m)]);
+            .Returns([new IdeaBucketCounts(key, 6, 5, 1, 2.4m, 20m)]);
 
         await Replay(2).RecomputeBucketsAsync(CancellationToken.None);
 
@@ -214,9 +216,31 @@ public class IdeasReplayTests
         await _buckets.Received(1).ReplaceAsync(
             2,
             Arg.Is<IReadOnlyCollection<IdeaBucket>>(buckets => buckets!.Count == 2
-                && buckets.Single(bucket => bucket.Days == 90).Statistics == BucketStatisticsCalculator.Compute(180, 200, 20, 2m, 40m)
-                && buckets.Single(bucket => bucket.Days == 30).Statistics == BucketStatisticsCalculator.Compute(6, 5, 1, 3m, 2.4m)),
+                && buckets.Single(bucket => bucket.Days == 90).Statistics == BucketStatisticsCalculator.Compute(180, 200, 20, 48m, 580.32m)
+                && buckets.Single(bucket => bucket.Days == 30).Statistics == BucketStatisticsCalculator.Compute(6, 5, 1, 2.4m, 20m)),
             Arg.Any<CancellationToken>());
+    }
+
+    // Task 5.6: the calibration follows the buckets, on the cases since 180 days before the time of the clock.
+    [Test]
+    public async Task Calibration_is_recomputed_after_the_buckets_at_the_time_of_the_clock()
+    {
+        DateTimeOffset now = _time.GetUtcNow();
+        var key = new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.OneHour, IdeaSide.Long, MarketCategory.Linear);
+        _cases.GetOutcomesAsync(2, now.AddDays(-180), Arg.Any<CancellationToken>()).Returns([new IdeaOutcome(key, now.AddDays(-1), now.AddHours(-1), IdeaStatus.Target, 2m)]);
+
+        await Replay(2).RecomputeBucketsAsync(CancellationToken.None);
+
+        Received.InOrder(() =>
+        {
+            _buckets.ReplaceAsync(2, Arg.Any<IReadOnlyCollection<IdeaBucket>>(), Arg.Any<CancellationToken>());
+            _calibrations.ReplaceAsync(
+                2,
+                Arg.Is<IReadOnlyCollection<CalibrationReport>>(reports => reports!.Count == 6
+                    && reports.All(report => report.ComputedAt == now)
+                    && reports.Single(report => report.Days == 30 && report.Category == MarketCategory.Linear).Unchecked == 1),
+                Arg.Any<CancellationToken>());
+        });
     }
 
     // Decision 5 and scenario "Перцентили после прогона": the percentiles of a day come from the candles before it; after the turn the last
@@ -320,6 +344,7 @@ public class IdeasReplayTests
             _cursors,
             _volatility,
             _buckets,
+            new IdeaCalibration(_cases, _calibrations, new IdeasEngineVersion(version)),
             _market,
             settings ?? Settings,
             backtests,

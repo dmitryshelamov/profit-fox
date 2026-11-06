@@ -5,6 +5,7 @@ using System.Text.Json;
 
 using Npgsql;
 
+using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Services.Ideas;
@@ -47,6 +48,42 @@ public class SavedFiltersApiTests
     [Test]
     public async Task A_draft_with_a_condition_on_an_idea_field_counts_the_pairs_and_the_ideas_and_saves_nothing()
     {
+        await SeedIdeasAsync();
+
+        HttpResponseMessage response = await _client.PostAsJsonAsync("/api/saved-filters/fit", new { conditions = new object[] { new { field = "expectancy", @operator = ">=", value = "0.2" } } });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        JsonElement fit = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        (fit.GetProperty("pairs").GetInt32(), fit.GetProperty("ideas").GetInt32()).ShouldBe((2, 1));
+        (await ListAsync()).ShouldBeEmpty();
+    }
+
+    // Scenario "Надёжно выше нуля": the idea of the bucket ▲ passes, the one of a pair without a bucket does not.
+    [Test]
+    public async Task Reliably_positive_expectancy_is_saved_and_picks_the_ideas()
+    {
+        Guid sol = await SeedIdeasAsync();
+        HttpResponseMessage created = await _client.PostAsJsonAsync("/api/saved-filters", new
+        {
+            name = "Надёжные",
+            place = "ideas",
+            conditions = new object[] { new { field = "expectancy", @operator = "reliably_positive" } }
+        });
+        created.StatusCode.ShouldBe(HttpStatusCode.Created);
+        Guid id = JsonDocument.Parse(await created.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
+
+        HttpResponseMessage ideas = await _client.GetAsync($"/api/ideas?savedFilter={id}");
+
+        ideas.StatusCode.ShouldBe(HttpStatusCode.OK);
+        JsonElement page = JsonDocument.Parse(await ideas.Content.ReadAsStringAsync()).RootElement;
+        page.GetProperty("items").EnumerateArray().Select(idea => idea.GetProperty("id").GetGuid()).ShouldBe([sol]);
+        JsonElement condition = (await ListAsync()).Single().GetProperty("conditions")[0];
+        (condition.GetProperty("field").GetString(), condition.GetProperty("operator").GetString()).ShouldBe(("expectancy", "reliably_positive"));
+    }
+
+    // Two pairs in the snapshot, an idea on each, and a bucket ▲ of 400 cases only for the linear one; the id of its idea.
+    private async Task<Guid> SeedIdeasAsync()
+    {
         var snapshotAt = DateTimeOffset.Parse("2024-03-10T12:29:10Z", CultureInfo.InvariantCulture);
         var sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
         var eth = new Instrument(MarketCategory.Spot, "ETHUSDT");
@@ -57,19 +94,12 @@ public class SavedFiltersApiTests
             [.. new[] { sol, eth }.Select(instrument => new MarketSnapshotRow(instrument, snapshotAt, new PairMetrics(100m, null, null, null, null, null, null, null, null, null, null, null, null), false))],
             snapshotAt,
             CancellationToken.None);
-        await new IdeaRepository(_database).SaveAsync(
-            [IdeaGenerator.Generate(snapshotAt.AddMinutes(-20), instrument: sol), IdeaGenerator.Generate(snapshotAt.AddMinutes(-20), instrument: eth)],
-            [],
-            CancellationToken.None);
+        Idea linear = IdeaGenerator.Generate(snapshotAt.AddMinutes(-20), instrument: sol);
+        await new IdeaRepository(_database).SaveAsync([linear, IdeaGenerator.Generate(snapshotAt.AddMinutes(-20), instrument: eth)], [], CancellationToken.None);
         var key = new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear);
-        await new IdeaBucketRepository(_database).ReplaceAsync(IdeasEngineVersion.Current, [new IdeaBucket(key, 90, BucketStatisticsCalculator.Compute(180, 200, 20, 2m, 100m))], CancellationToken.None);
+        await new IdeaBucketRepository(_database).ReplaceAsync(IdeasEngineVersion.Current, [new IdeaBucket(key, 90, BucketStatisticsCalculator.Compute(180, 200, 20, 100m, 1000m))], CancellationToken.None);
 
-        HttpResponseMessage response = await _client.PostAsJsonAsync("/api/saved-filters/fit", new { conditions = new object[] { new { field = "expectancy", @operator = ">=", value = "0.2" } } });
-
-        response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        JsonElement fit = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        (fit.GetProperty("pairs").GetInt32(), fit.GetProperty("ideas").GetInt32()).ShouldBe((2, 1));
-        (await ListAsync()).ShouldBeEmpty();
+        return linear.Id;
     }
 
     [Test]
@@ -100,13 +130,13 @@ public class SavedFiltersApiTests
 
         HttpResponseMessage changed = await _client.PutAsJsonAsync($"/api/saved-filters/{id}", new
         {
-            name = "Выше базы",
+            name = "Надёжные",
             place = "ideas",
-            conditions = new object[] { new { field = "probability", @operator = "above_baseline" }, new { field = "side", @operator = "=", value = "short" } }
+            conditions = new object[] { new { field = "expectancy", @operator = "reliably_positive" }, new { field = "side", @operator = "=", value = "short" } }
         });
         changed.StatusCode.ShouldBe(HttpStatusCode.NoContent);
         JsonElement updated = (await ListAsync()).Single();
-        (updated.GetProperty("name").GetString(), updated.GetProperty("place").GetString()).ShouldBe(("Выше базы", "ideas"));
+        (updated.GetProperty("name").GetString(), updated.GetProperty("place").GetString()).ShouldBe(("Надёжные", "ideas"));
         updated.GetProperty("conditions")[0].GetProperty("value").ValueKind.ShouldBe(JsonValueKind.Null);
         (updated.GetProperty("conditions")[1].GetProperty("field").GetString(), updated.GetProperty("conditions")[1].GetProperty("value").GetString()).ShouldBe(("side", "short"));
 
@@ -130,7 +160,9 @@ public class SavedFiltersApiTests
     [TestCase("", "market", "change1h", ">", "1", null, "name")]
     [TestCase("Ф", "everywhere", "change1h", ">", "1", null, "place")]
     [TestCase("Ф", "market", "volatility", ">", "1", null, "conditions[0].field")]
-    [TestCase("Ф", "market", "change1h", "above_baseline", null, null, "conditions[0].operator")]
+    [TestCase("Ф", "market", "change1h", "reliably_positive", null, null, "conditions[0].operator")]
+    [TestCase("Ф", "ideas", "probability", "above_baseline", null, null, "conditions[0].operator")]
+    [TestCase("Ф", "ideas", "probability", "reliably_positive", null, null, "conditions[0].operator")]
     [TestCase("Ф", "market", "price", ">", "1", null, "conditions[0].field")]
     [TestCase("Ф", "market", "cases", ">", "1", null, "conditions[0].field")]
     [TestCase("Ф", "market", "aboveBaseline", "above_baseline", null, null, "conditions[0].field")]
@@ -160,7 +192,7 @@ public class SavedFiltersApiTests
         {
             name = "Ф",
             place = "both",
-            conditions = new object[] { new { field = "change1h", @operator = ">", value = "1", to = "5" }, new { field = "probability", @operator = "above_baseline", value = "1" } }
+            conditions = new object[] { new { field = "change1h", @operator = ">", value = "1", to = "5" }, new { field = "expectancy", @operator = "reliably_positive", value = "1" } }
         });
 
         JsonElement[] conditions = [.. (await ListAsync()).Single().GetProperty("conditions").EnumerateArray()];
@@ -176,9 +208,11 @@ public class SavedFiltersApiTests
         JsonElement[] fields = [.. JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.EnumerateArray()];
         JsonElement turnover = fields.Single(field => field.GetProperty("code").GetString() == "turnover24h");
         JsonElement probability = fields.Single(field => field.GetProperty("code").GetString() == "probability");
+        JsonElement expectancy = fields.Single(field => field.GetProperty("code").GetString() == "expectancy");
         JsonElement side = fields.Single(field => field.GetProperty("code").GetString() == "side");
         (turnover.GetProperty("unit").GetString(), turnover.GetProperty("ofIdea").GetBoolean(), turnover.GetProperty("operators").GetArrayLength()).ShouldBe(("usdt", false, 6));
-        probability.GetProperty("operators").EnumerateArray().Select(op => op.GetString()).ShouldContain("above_baseline");
+        probability.GetProperty("operators").GetArrayLength().ShouldBe(6);
+        expectancy.GetProperty("operators").EnumerateArray().Select(op => op.GetString()).ShouldContain("reliably_positive");
         (side.GetProperty("unit").GetString(), side.GetProperty("ofIdea").GetBoolean(), side.GetProperty("operators")[0].GetString()).ShouldBe(("choice", true, "="));
         side.GetProperty("choices").EnumerateArray().Select(choice => choice.GetString()).ShouldBe(["long", "short"]);
         // The fields of the board «Фильтр — редактор».

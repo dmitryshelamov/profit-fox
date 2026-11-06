@@ -2,12 +2,11 @@ import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 import { setupIntervals } from '@/modules/market';
-import { shiftDecimal } from '@/shared/format/decimal';
-import { roundDecimal } from '@/shared/format/format';
 
 import { type OwnIdeaInput, ownIdeaQuery } from '../api';
 import { ideaTypes, sideLabel } from '../model/labels';
 import { priceByTick } from '../model/price';
+import { breakEvenText } from '../model/stats';
 import { RiskRewardCell } from './IdeaCells';
 
 const field = 'h-8 rounded-md border border-line bg-panel-2 px-2 text-sm';
@@ -25,8 +24,8 @@ export function useOwnIdea(category: string, symbol: string, input: OwnIdeaInput
 }
 
 /**
- * «Своя идея»: the owner picks a type, an interval and a side, and sees the entry, stop, target, R:R and the baseline, the
- * only probability an idea without a setup has. A short is not offered on spot, nor a stop entry.
+ * «Своя идея»: the owner picks a type, an interval and a side, and sees the entry, stop, target, R:R and the break-even after the
+ * fees, the share of targets it needs if it never expires; an idea without a setup has no probability. A short is not offered on spot, nor a stop entry.
  */
 export function OwnIdeaBlock({
   category,
@@ -113,12 +112,18 @@ export function OwnIdeaBlock({
             }
           />
           <Level
-            label="Базовая линия"
-            value={`${roundDecimal(shiftDecimal(result.baseline!, 2), 0)} %`}
+            label="Безубыток"
+            value={
+              result.breakEven === null
+                ? breakEvenText(null)
+                : `${breakEvenText(result.breakEven)} целей`
+            }
           />
         </dl>
       )}
-      {result?.made && <p className="text-xs text-faint">без сетапа: только базовая линия</p>}
+      {result?.made && result.breakEven !== null && (
+        <p className="text-xs text-faint">без сетапа, при условии, что идея не истекает</p>
+      )}
     </section>
   );
 }

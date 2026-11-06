@@ -286,6 +286,7 @@ public class ScannerSessionTests
                 _cursors,
                 Substitute.For<IIdeaVolatilityRepository>(),
                 Substitute.For<IIdeaBucketRepository>(),
+                new IdeaCalibration(_ideaCases, Substitute.For<IIdeaCalibrationRepository>(), new IdeasEngineVersion(IdeasEngineVersion.Current)),
                 market,
                 new IdeasSettings(),
                 new BacktestSettings(),

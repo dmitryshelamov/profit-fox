@@ -489,17 +489,18 @@ describe('saved filters on the market screen', () => {
       );
     });
 
-    it('offers «выше базовой» as an operator of the probability and needs no value for it', async () => {
+    it('offers «надёжно > 0» as an operator of the expectancy and needs no value for it', async () => {
       open();
       renderApp('/market');
       await openNew();
       await userEvent.click(editor().getByRole('button', { name: '+ Условие' }));
-      await pickField('Вероятность', 'Идея');
+      await pickField('Ожидание', 'Идея');
 
       await userEvent.selectOptions(
         editor().getByRole('combobox', { name: 'Оператор' }),
-        'above_baseline',
+        'reliably_positive',
       );
+      expect(editor().getByRole('option', { name: 'надёжно > 0' })).toBeInTheDocument();
 
       expect(editor().queryByRole('textbox', { name: 'Значение' })).not.toBeInTheDocument();
       expect(await editor().findByText('Подходит: 3 инструмента · 2 идеи')).toBeInTheDocument();

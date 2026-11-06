@@ -41,13 +41,8 @@ internal sealed class IdeaCaseRepository(NpgsqlDataSource dataSource) : IIdeaCas
 
         while (await reader.ReadAsync(cancellationToken))
         {
-            MarketDataCodes.TryParseInterval(reader.GetString(2), out Interval interval);
-            MarketDataCodes.TryParseCategory(reader.GetString(4), out MarketCategory category);
-            IdeaCodes.TryParseSetup(reader.GetString(0), out IdeaSetup setup);
-            IdeaCodes.TryParseType(reader.GetString(1), out IdeaType type);
-            IdeaCodes.TryParseSide(reader.GetString(3), out IdeaSide side);
             counts.Add(new IdeaBucketCounts(
-                new IdeaBucketKey(setup, type, interval, side, category),
+                Key(reader),
                 reader.GetInt32(5),
                 reader.GetInt32(6),
                 reader.GetInt32(7),
@@ -58,9 +53,41 @@ internal sealed class IdeaCaseRepository(NpgsqlDataSource dataSource) : IIdeaCas
         return counts;
     }
 
+    public async Task<IReadOnlyList<IdeaOutcome>> GetOutcomesAsync(int engineVersion, DateTimeOffset from, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using NpgsqlCommand command = IdeaCaseRepositoryQueries.Outcomes(connection, engineVersion, from);
+        await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        var outcomes = new List<IdeaOutcome>();
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            outcomes.Add(new IdeaOutcome(
+                Key(reader),
+                reader.GetFieldValue<DateTimeOffset>(5),
+                reader.GetFieldValue<DateTimeOffset>(6),
+                IdeaCodes.ParseStatus(reader.GetString(7)),
+                reader.GetDecimal(8)));
+        }
+
+        return outcomes;
+    }
+
     public async Task DeleteOtherVersionsAsync(int engineVersion, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await connection.ExecuteAsync(IdeaCaseRepositoryQueries.DeleteOtherVersions(engineVersion, cancellationToken));
+    }
+
+    // The bucket of a row whose first five columns are setup, type, interval, side and category.
+    private static IdeaBucketKey Key(NpgsqlDataReader reader)
+    {
+        IdeaCodes.TryParseSetup(reader.GetString(0), out IdeaSetup setup);
+        IdeaCodes.TryParseType(reader.GetString(1), out IdeaType type);
+        MarketDataCodes.TryParseInterval(reader.GetString(2), out Interval interval);
+        IdeaCodes.TryParseSide(reader.GetString(3), out IdeaSide side);
+        MarketDataCodes.TryParseCategory(reader.GetString(4), out MarketCategory category);
+
+        return new IdeaBucketKey(setup, type, interval, side, category);
     }
 }

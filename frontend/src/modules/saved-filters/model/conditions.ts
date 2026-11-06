@@ -54,7 +54,7 @@ const operatorLabels: Record<string, string> = {
   '<=': '≤',
   '=': '=',
   between: 'между',
-  above_baseline: 'выше базовой',
+  reliably_positive: 'надёжно > 0',
 };
 
 /** These two are fractions in the data (0.0003 is 0.03 %), but the owner types percent. */
@@ -115,7 +115,7 @@ export function conditionText(condition: Condition): string {
 
   const label = phraseLabels[field] ?? fieldLabel(field);
 
-  if (condition.operator === 'above_baseline') {
+  if (condition.operator === 'reliably_positive') {
     return `${label} ${operatorLabel(condition.operator)}`;
   }
 
@@ -136,7 +136,7 @@ export function readyConditions(conditions: readonly Condition[]): Condition[] {
 
   return conditions.filter(
     (condition) =>
-      condition.operator === 'above_baseline' ||
+      condition.operator === 'reliably_positive' ||
       (isChoiceField(condition.field!) && condition.value !== null && condition.value !== '') ||
       (number(condition.value) && (condition.operator !== 'between' || number(condition.to))),
   );

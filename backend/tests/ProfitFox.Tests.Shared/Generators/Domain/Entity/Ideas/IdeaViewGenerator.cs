@@ -12,9 +12,12 @@ public static class IdeaViewGenerator
         return new IdeaView(idea, bucket, null, shares ?? new IdeaShares(0.09m, 0.05m, 0.05m));
     }
 
-    /// <summary>The statistics of a bucket of <paramref name="cases" /> cases: the baseline 0.4 and the interval of the probability 0.05 each side of it.</summary>
-    public static BucketStatistics Bucket(decimal expectancy, decimal? probability = null, int cases = 400)
+    /// <summary>
+    ///     The statistics of a bucket of <paramref name="cases" /> cases: the interval of the probability 0.05 each side of it, and the interval
+    ///     of the expectancy the test gives, none by default.
+    /// </summary>
+    public static BucketStatistics Bucket(decimal expectancy, decimal? probability = null, int cases = 400, decimal? expectancyLow = null, decimal? expectancyHigh = null)
     {
-        return new BucketStatistics(cases, 0, probability, probability - 0.05m, probability + 0.05m, 0.4m, expectancy);
+        return new BucketStatistics(cases, 0, 0, 0, probability, probability - 0.05m, probability + 0.05m, expectancy, expectancyLow, expectancyHigh);
     }
 }
