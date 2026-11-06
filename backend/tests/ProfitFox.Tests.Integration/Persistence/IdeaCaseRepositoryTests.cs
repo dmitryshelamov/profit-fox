@@ -175,12 +175,12 @@ public class IdeaCaseRepositoryTests
     public async Task Percentiles_of_volatility_are_replaced_per_pair_and_interval()
     {
         var volatility = new IdeaVolatilityRepository(_dataSource);
-        await volatility.SaveAsync([new IdeaVolatility(IdeaGenerator.Wif, Interval.OneHour, 0.01m), new IdeaVolatility(IdeaGenerator.Wif, Interval.FiveMinutes, 0.002m)], CancellationToken.None);
+        await volatility.SaveAsync([new IdeaVolatility(IdeaGenerator.Wif, Interval.OneHour, 0.01m, null), new IdeaVolatility(IdeaGenerator.Wif, Interval.FiveMinutes, 0.002m, null)], CancellationToken.None);
 
-        await volatility.SaveAsync([new IdeaVolatility(IdeaGenerator.Wif, Interval.OneHour, 0.0125m)], CancellationToken.None);
+        await volatility.SaveAsync([new IdeaVolatility(IdeaGenerator.Wif, Interval.OneHour, 0.0125m, null)], CancellationToken.None);
 
         (await volatility.GetAllAsync(CancellationToken.None)).ShouldBe(
-            [new IdeaVolatility(IdeaGenerator.Wif, Interval.OneHour, 0.0125m), new IdeaVolatility(IdeaGenerator.Wif, Interval.FiveMinutes, 0.002m)],
+            [new IdeaVolatility(IdeaGenerator.Wif, Interval.OneHour, 0.0125m, null), new IdeaVolatility(IdeaGenerator.Wif, Interval.FiveMinutes, 0.002m, null)],
             ignoreOrder: true);
     }
 

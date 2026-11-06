@@ -231,7 +231,7 @@ public sealed class LiveIdeas(
 
         _percentiles = (await volatility.GetAllAsync(cancellationToken))
             .GroupBy(item => item.Instrument)
-            .ToDictionary(group => group.Key, group => group.ToDictionary(item => item.Interval, item => new VolatilityPercentiles(null, item.Percentile)));
+            .ToDictionary(group => group.Key, group => group.ToDictionary(item => item.Interval, item => new VolatilityPercentiles(item.Low, item.Percentile)));
         _percentilesAt = now;
     }
 

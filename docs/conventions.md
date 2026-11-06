@@ -31,10 +31,12 @@ enforces a rule, the check is the source of truth.
   `PairMetrics` and `MarketSnapshotRow`; `Services/Market/MarketMetrics` is the pure function of the metrics of a pair.
 - `Ideas` is the area of trade ideas: `Entities/Ideas` holds `Idea` (a live idea, one open per `IdeaKey`) and the enums `IdeaSetup`,
   `IdeaType`, `IdeaSide`, `IdeaStatus`; `ValueObjects/Ideas` holds `IdeaCandle` (a minute or a candle of an interval, its volume the
-  turnover), `MinuteAggregate`, `SetupThresholds`, `SetupSignal`, `SetupReading`, `Zone`, `ZoneRules`, `IdeaPlan`, `IdeaContext`,
+  turnover), `MinuteAggregate`, `SetupThresholds`, `SetupSignal`, `SetupReading`, `SetupBase` (what the setups of an interval are measured against
+  until a candle closes), `CandleSetupInput`, `RsiState`, `VolatilityPercentiles`, `Zone`, `ZoneRules`, `IdeaPlan`, `IdeaContext`,
   `IdeaTrack`, `IdeaCase`, `IdeaBucketKey`, `IdeaBucketCounts`, `IdeaBucket`, `BucketStatistics`, `IdeaVolatility`, `IdeaShares` and `PairSetup`.
-  `Services/Ideas` holds the pure functions: `Atr` (Wilder, 14), `IdeaCandles` (candles of an interval from minutes, a minute without
-  trades flat at the close before it), `SetupDetector`, `ZoneFinder`, `IdeaRules`, `IdeaTracker`, `CaseResult`,
+  `Services/Ideas` holds the pure functions: `Atr` (Wilder, 14), `Rsi` (Wilder, 14, over exactly 100 candles), `IdeaCandles` (candles of an interval from minutes, a minute without
+  trades flat at the close before it), `SetupDetector` (the setups of a move), `CandleSetupDetector` (the candle setups), `SetupTypes`
+  (the types of ideas of each setup), `ZoneFinder`, `IdeaRules`, `IdeaTracker`, `CaseResult`,
   `BucketStatisticsCalculator`, `IdeaMoney`, `Volatility` and `IdeasEngineVersion`.
 - `SavedFilters` is the area of saved filters: `Entities/SavedFilters` holds `SavedFilter` and the enums `SavedFilterPlace`, `FilterField`,
   `FilterOperator`; `ValueObjects/SavedFilters` holds `FilterCondition`.
@@ -100,7 +102,8 @@ enforces a rule, the check is the source of truth.
   `page` and `pageSize`; `Slice` gives a `Page<T>`, the last page when the number is past the end), `OrderDirection` and its codes `asc` and `desc`.
   `GetIdeas` and `GetMarket` filter, order and cut the page in memory, and `GetMarket` also counts the pairs for the chips; neither returns a whole list.
 - `Scanner/Ideas` holds the ideas of the scanner: `IdeasSettings` (the `Ideas` section, with `ThresholdSettings` and `ThresholdOverride`),
-  `IdeaRuleSet`, `IdeaSeries` (at most 220 closed candles of a pair on an interval and the minutes of the forming one), `IdeaEngine` (the
+  `IdeaRuleSet`, `IdeaSeries` (at most 220 closed candles of a pair on an interval and the minutes of the forming one, and the `SetupBase` it keeps until
+  a candle closes), `IdeaEngine` (the
   minutes of a pair one by one: steps the open ideas, reads the setups, makes the ideas of the setups that fire; the same for live and
   replay), `LiveIdeas` (the warm-ups and the minute of live ideas after the snapshot) and `IdeasReplay` (the replay of history pair by pair
   and day by day, the buckets every 10 minutes, the clean-up of other versions). `Scanner/ScannerPace` tells the replay whether the
@@ -304,7 +307,11 @@ enforces a rule, the check is the source of truth.
 
   ```json
   "Ideas": {
-    "Thresholds": { "Candles": 6, "Move": 3.0, "Volume": 2.0, "EarlyMove": 1.5, "EarlyVolume": 3.0 },
+    "Thresholds": {
+      "Candles": 6, "Move": 3.0, "Volume": 2.0, "EarlyMove": 1.5, "EarlyVolume": 3.0,
+      "BreakoutMargin": 0.1, "BreakoutVolume": 1.5, "SweepMargin": 0.2, "SqueezeCandles": 20, "ClimaxVolume": 4.0, "Wick": 1.0,
+      "QuietVolume": 3.0, "QuietBody": 0.3, "Overbought": 70, "Oversold": 30
+    },
     "ByInterval": { "240": { "Move": 2.5 } },
     "StopBuffer": 1.5,
     "ZoneMerge": 0.5,

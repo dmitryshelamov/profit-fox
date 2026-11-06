@@ -95,11 +95,22 @@ public class LiveIdeasTests
     [Test]
     public async Task Percentile_of_the_pair_makes_its_high_volatility()
     {
-        _volatility.GetAllAsync(Arg.Any<CancellationToken>()).Returns([new IdeaVolatility(Wif, Interval.FifteenMinutes, 0.0186m)]);
+        _volatility.GetAllAsync(Arg.Any<CancellationToken>()).Returns([new IdeaVolatility(Wif, Interval.FifteenMinutes, 0.0186m, null)]);
 
         IReadOnlyList<Idea> created = await RunAsync(Four.AddMinutes(70));
 
         created.ShouldContain(idea => idea.Setup == IdeaSetup.HighVolatility && idea.Interval == Interval.FifteenMinutes);
+    }
+
+    // Requirement "Перцентили волатильности": the live ideas take the 10th percentile too; ATR / price below it is a squeeze.
+    [Test]
+    public async Task Low_percentile_of_the_pair_makes_its_squeeze()
+    {
+        _volatility.GetAllAsync(Arg.Any<CancellationToken>()).Returns([new IdeaVolatility(Wif, Interval.FifteenMinutes, 1m, 0.9m)]);
+
+        IReadOnlyList<Idea> created = await RunAsync(Four.AddMinutes(70));
+
+        created.ShouldContain(idea => idea.Setup == IdeaSetup.Squeeze && idea.Interval == Interval.FifteenMinutes && idea.Track.Plan.Type == IdeaType.StopEntry);
     }
 
     // Fix after review: an idea open across a restart moves through the minutes in memory since its last change: the stop reached during the

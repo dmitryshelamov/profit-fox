@@ -15,25 +15,25 @@ public sealed class ThresholdSettings
 
     public decimal EarlyVolume { get; init; } = 3.0m;
 
-    public decimal BreakoutMargin { get; init; }
+    public decimal BreakoutMargin { get; init; } = 0.1m;
 
-    public decimal BreakoutVolume { get; init; }
+    public decimal BreakoutVolume { get; init; } = 1.5m;
 
-    public decimal SweepMargin { get; init; }
+    public decimal SweepMargin { get; init; } = 0.2m;
 
-    public int SqueezeCandles { get; init; }
+    public int SqueezeCandles { get; init; } = 20;
 
-    public decimal ClimaxVolume { get; init; }
+    public decimal ClimaxVolume { get; init; } = 4.0m;
 
-    public decimal Wick { get; init; }
+    public decimal Wick { get; init; } = 1.0m;
 
-    public decimal QuietVolume { get; init; }
+    public decimal QuietVolume { get; init; } = 3.0m;
 
-    public decimal QuietBody { get; init; }
+    public decimal QuietBody { get; init; } = 0.3m;
 
-    public decimal Overbought { get; init; }
+    public decimal Overbought { get; init; } = 70m;
 
-    public decimal Oversold { get; init; }
+    public decimal Oversold { get; init; } = 30m;
 
     /// <summary>These thresholds with the values an interval sets of its own.</summary>
     public SetupThresholds With(ThresholdOverride? own)

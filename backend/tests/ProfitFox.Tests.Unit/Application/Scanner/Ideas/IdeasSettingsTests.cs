@@ -60,6 +60,25 @@ public class IdeasSettingsTests
         (rules.StopBuffer, rules.Zones).ShouldBe((1.7m, ZoneRules.Default));
     }
 
+    // Decision 9: the provisional thresholds of the candle setups, until replays tune them.
+    [Test]
+    public void Thresholds_of_the_candle_setups_start_at_the_provisional_values()
+    {
+        new IdeasSettings().Rules().Thresholds[Interval.OneHour].ShouldBe(new SetupThresholds(6, 3m, 2m, 1.5m, 3m, 0.1m, 1.5m, 0.2m, 20, 4m, 1m, 3m, 0.3m, 70m, 30m));
+    }
+
+    // Scenario "Свой порог на ТФ": d = 0.1, and 0.2 for 5 minutes.
+    [Test]
+    public void Breakout_margin_of_an_interval_of_its_own()
+    {
+        var settings = new IdeasSettings { ByInterval = new Dictionary<string, ThresholdOverride> { ["5"] = new ThresholdOverride { BreakoutMargin = 0.2m } } };
+
+        IdeaRuleSet rules = settings.Rules();
+
+        rules.Thresholds[Interval.FiveMinutes].BreakoutMargin.ShouldBe(0.2m);
+        rules.Thresholds.Where(entry => entry.Key != Interval.FiveMinutes).ShouldAllBe(entry => entry.Value.BreakoutMargin == 0.1m);
+    }
+
     // Requirement "Пороги свечных сетапов": the thresholds of the candle setups are common too, with values of an interval's own.
     [Test]
     public void Thresholds_of_the_candle_setups_take_the_values_an_interval_sets_of_its_own()

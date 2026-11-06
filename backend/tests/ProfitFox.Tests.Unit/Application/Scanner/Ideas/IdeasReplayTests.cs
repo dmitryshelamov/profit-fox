@@ -219,9 +219,10 @@ public class IdeasReplayTests
             Arg.Any<CancellationToken>());
     }
 
-    // Decision 5: the percentile of a day comes from the candles before it; after the turn the last one goes to storage for the live ideas.
+    // Decision 5 and scenario "Перцентили после прогона": the percentiles of a day come from the candles before it; after the turn the last
+    // 10th and 90th go to storage for the live ideas, of the same ratios.
     [Test]
-    public async Task Turn_stores_the_percentile_of_volatility_of_the_days_it_replayed()
+    public async Task Turn_stores_the_percentiles_of_volatility_of_the_days_it_replayed()
     {
         _minutes = Waves(March1, March1.AddDays(2));
         Keep(March1.AddDays(2));
@@ -229,23 +230,28 @@ public class IdeasReplayTests
 
         await Replay().StepAsync(CancellationToken.None);
 
-        decimal expected = Volatility.Percentile(Volatility.Ratios(IdeaCandles.FromMinutes(Interval.FiveMinutes, _minutes, March1, March1.AddDays(2))), 0.9m)!.Value;
+        IReadOnlyList<decimal> ratios = Volatility.Ratios(IdeaCandles.FromMinutes(Interval.FiveMinutes, _minutes, March1, March1.AddDays(2)));
+        decimal expected = Volatility.Percentile(ratios, 0.9m)!.Value;
+        decimal low = Volatility.Percentile(ratios, 0.1m)!.Value;
         await _volatility.Received(1).SaveAsync(
             Arg.Is<IReadOnlyCollection<IdeaVolatility>>(saved => saved!.Single(item => item.Interval == Interval.FiveMinutes).Percentile == expected
+                && saved!.Single(item => item.Interval == Interval.FiveMinutes).Low == low
                 && saved!.Any(item => item.Interval == Interval.FifteenMinutes) && !saved!.Any(item => item.Interval == Interval.OneHour)),
             Arg.Any<CancellationToken>());
     }
 
     // Fix after review: the cases do not depend on how the days fall into turns. Four days of waves replayed in one turn and day by day,
     // each day by a replay of its own over the stored cursor; the third day starts without trades and opens 2 % up. The waves start 4 hours
-    // before the history, so an idea of 15 minutes fired late on the second day closes on the third.
+    // before the history, so an idea of 15 minutes fired late on the second day closes on the third. Every third stretch of 211 minutes, the
+    // steepest, trades three times the volume, so the candle setups have breakouts beside squeezes and RSI back from its zones.
     [Test]
     public async Task Replay_in_one_turn_and_day_by_day_gives_the_same_cases()
     {
         DateTimeOffset end = March1.AddDays(4);
         DateTimeOffset gap = March1.AddDays(2);
         _minutes = [.. Waves(March1.AddHours(-4), end).Where(minute => minute.OpenTime < gap || minute.OpenTime >= gap.AddMinutes(10))
-            .Select(minute => minute.OpenTime >= gap ? minute with { Open = minute.Open * 1.02m, High = minute.High * 1.02m, Low = minute.Low * 1.02m, Close = minute.Close * 1.02m } : minute)];
+            .Select(minute => minute.OpenTime >= gap ? minute with { Open = minute.Open * 1.02m, High = minute.High * 1.02m, Low = minute.Low * 1.02m, Close = minute.Close * 1.02m } : minute)
+            .Select((minute, index) => index / 211 % 3 == 2 ? minute with { Volume = 300m } : minute)];
         _volatility.GetAllAsync(Arg.Any<CancellationToken>()).Returns([]);
         _time.Advance(TimeSpan.FromDays(3));
         Keep(end);
@@ -262,6 +268,7 @@ public class IdeasReplayTests
         }
 
         whole.ShouldNotBeEmpty();
+        new[] { IdeaSetup.Breakout, IdeaSetup.Squeeze, IdeaSetup.RsiExtreme }.ShouldAllBe(setup => _written.Any(item => item.Idea.Setup == setup));
         Shape(_written).ShouldBe(whole);
         _stored[Wif].Open.Select(idea => idea with { Id = Guid.Empty }).ShouldBe(openAtTheEnd.Select(idea => idea with { Id = Guid.Empty }));
         _written.ShouldContain(item => item.Idea.Track.FiredAt < Interval.OneDay.CandleOpen(item.Idea.Track.StatusAt), "A case open across a cursor");

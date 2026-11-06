@@ -15,7 +15,7 @@ namespace ProfitFox.Application.Scanner.Ideas;
 ///     The replay of history (decisions 1, 6 and 7): the same engine of ideas over the stored minutes of each pair, day by day, by the
 ///     thresholds of the live ideas and without a spread. A pair's turn replays the days from its cursor up to its coverage and goes on from
 ///     the ideas the cursor keeps open, warmed up as one run would stand at it, so the cases do not depend on how the days fall into turns.
-///     The percentile of volatility of a day comes from the 90 days before it, and the last one goes to storage for the live ideas. Between
+///     The percentiles of volatility of a day come from the 90 days before it, and the last ones go to storage for the live ideas. Between
 ///     days the turn waits while the minute cycle is late. The levels go on today's price step of the pair, the only one the list of
 ///     instruments tells.
 /// </summary>
@@ -141,7 +141,7 @@ public sealed class IdeasReplay(
         }
 
         IReadOnlyDictionary<Interval, VolatilityPercentiles> latest = Percentiles(ratios, turn.Until);
-        await volatility.SaveAsync([.. latest.Select(entry => new IdeaVolatility(instrument, entry.Key, entry.Value.High!.Value))], cancellationToken);
+        await volatility.SaveAsync([.. latest.Select(entry => new IdeaVolatility(instrument, entry.Key, entry.Value.High!.Value, entry.Value.Low))], cancellationToken);
     }
 
     /// <summary>
@@ -190,16 +190,19 @@ public sealed class IdeasReplay(
         return [.. changed.Where(idea => !idea.IsOpen && idea.Track.EnteredAt is not null).Select(idea => new IdeaCase(idea, CaseResult.R(idea.Track, fees)!.Value))];
     }
 
-    /// <summary>The percentile of each interval on a day: of the ratios of the 90 days before it.</summary>
+    /// <summary>The 10th and 90th percentiles of each interval on a day: of the same ratios of the 90 days before it.</summary>
     private static Dictionary<Interval, VolatilityPercentiles> Percentiles(Dictionary<Interval, Ratios> ratios, DateTimeOffset day)
     {
         var percentiles = new Dictionary<Interval, VolatilityPercentiles>();
 
         foreach ((Interval interval, Ratios series) in ratios)
         {
-            if (Volatility.Percentile(series.Between(day - PercentileWindow, day), 0.9m) is { } percentile)
+            IReadOnlyList<decimal> between = series.Between(day - PercentileWindow, day);
+
+            // Both need the same 100 ratios: a day has both or neither.
+            if (Volatility.Percentile(between, 0.9m) is { } high)
             {
-                percentiles[interval] = new VolatilityPercentiles(null, percentile);
+                percentiles[interval] = new VolatilityPercentiles(Volatility.Percentile(between, 0.1m), high);
             }
         }
 

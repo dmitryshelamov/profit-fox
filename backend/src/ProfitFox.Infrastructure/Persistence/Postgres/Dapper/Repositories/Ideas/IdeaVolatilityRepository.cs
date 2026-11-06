@@ -25,7 +25,7 @@ internal sealed class IdeaVolatilityRepository(NpgsqlDataSource dataSource) : II
                 MarketDataCodes.TryParseCategory(row.Category, out MarketCategory category);
                 MarketDataCodes.TryParseInterval(row.Interval, out Interval interval);
 
-                return new IdeaVolatility(new Instrument(category, row.Symbol), interval, row.Percentile);
+                return new IdeaVolatility(new Instrument(category, row.Symbol), interval, row.Percentile, null);
             })
         ];
     }
