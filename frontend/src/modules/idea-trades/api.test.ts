@@ -7,7 +7,8 @@ import {
   closeTrade,
   enterIdea,
   ideaEntryQuery,
-  ideaTradesQuery,
+  ideaJournalQuery,
+  noJournalFilters,
   saveSettings,
   tradingSettingsQuery,
 } from './api';
@@ -22,16 +23,43 @@ const settings = {
 };
 
 describe('requests of trades by ideas', () => {
-  it('reads the list of trades and the settings', async () => {
+  it('reads the journal and the settings', async () => {
+    const journal = { open: [], closed: { items: [], page: 1, pageSize: 50, total: 0 } };
     const requests = fakeApi({
-      'GET /api/idea-trades': () => json([]),
+      'GET /api/idea-trades': () => json(journal),
       'GET /api/idea-trading/settings': () => json(settings),
     });
     const client = new QueryClient();
 
-    expect(await client.fetchQuery(ideaTradesQuery())).toEqual([]);
+    expect(
+      await client.fetchQuery(
+        ideaJournalQuery({ filters: noJournalFilters, page: 1, pageSize: 50 }),
+      ),
+    ).toEqual(journal);
     expect(await client.fetchQuery(tradingSettingsQuery())).toEqual(settings);
     expect(requests.map((request) => request.method)).toEqual(['GET', 'GET']);
+  });
+
+  // Requirement "Фильтры и листание журнала": the API gets the filters chosen, the page and its size; a filter left empty is not sent.
+  it('asks the journal for the filters, the page and the size, and leaves out a filter that is empty', async () => {
+    const requests = fakeApi({
+      'GET /api/idea-trades': () => json({}),
+    });
+    const client = new QueryClient();
+
+    await client.fetchQuery(ideaJournalQuery({ filters: noJournalFilters, page: 1, pageSize: 50 }));
+    await client.fetchQuery(
+      ideaJournalQuery({
+        filters: { setup: 'drop', symbol: 'eth', side: 'short', badge: 'none', days: '30' },
+        page: 3,
+        pageSize: 100,
+      }),
+    );
+
+    expect(requests.map((request) => new URL(request.url).search)).toEqual([
+      '?Page=1&PageSize=50',
+      '?Setup=drop&Symbol=eth&Side=short&Badge=none&Days=30&Page=3&PageSize=100',
+    ]);
   });
 
   it('asks for the entry of an idea with the account and the risk typed, and without them leaves them to the settings', async () => {

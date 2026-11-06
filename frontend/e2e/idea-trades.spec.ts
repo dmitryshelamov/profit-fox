@@ -3,7 +3,7 @@ import { type APIRequestContext, expect, type Page, test } from '@playwright/tes
 import { createStrategy, reference } from './api';
 import { removeOpenIdeas, seedOpenIdea } from './seed';
 
-// Acceptance of the trades by ideas against the real API and a trading Worker on the Bybit stub: the owner enters by an idea on the page of
+// Acceptance of the journal of the trades by ideas against the real API and a trading Worker on the Bybit stub: the owner enters by an idea on the page of
 // its pair, the Worker places the entry with its stop and target, and the stub fills it and fires the price. Nothing reaches the exchange.
 // The ideas are seeded: the scanner needs a quarter of an hour to make one. They are on ETHUSDT of the linear market, which the stub quotes
 // at 3000 while a test pins its price. Every test leaves no open trade behind, as they share the database.
@@ -79,9 +79,17 @@ async function openEntry(page: Page, type: string) {
   return dialog;
 }
 
-const tradeRow = (page: Page) =>
+// The trades in work are the group «В работе» of the journal; the closed ones come newest first, so the first row is the last trade closed.
+const workRow = (page: Page) =>
   page
-    .getByRole('table', { name: 'Сделки по идеям' })
+    .getByRole('table', { name: 'Сделки в работе' })
+    .getByRole('row')
+    .filter({ hasText: 'ETHUSDT' })
+    .first();
+
+const closedRow = (page: Page) =>
+  page
+    .getByRole('table', { name: 'Закрытые сделки' })
     .getByRole('row')
     .filter({ hasText: 'ETHUSDT' })
     .first();
@@ -147,10 +155,10 @@ test('an entry by an idea places the entry with its stop and target on linear, a
     takeProfit: '3200',
     stopLoss: '2900',
   });
-  await expect(tradeRow(page)).toContainText('Ждёт входа');
+  await expect(workRow(page)).toContainText('Ждёт входа');
 
   await request.get(`${stub}/control/fill?orderLinkId=${entry.orderLinkId}&price=3000`);
-  await expect(tradeRow(page)).toContainText('Открыта', { timeout: 45_000 });
+  await expect(workRow(page)).toContainText('Открыта', { timeout: 45_000 });
   await expect
     .poll(
       async () =>
@@ -160,10 +168,19 @@ test('an entry by an idea places the entry with its stop and target on linear, a
     )
     .toBe(2);
 
+  // The price above the entry: the trade in work shows what it is worth now, by the last price of the exchange.
+  await request.get(`${stub}/control/price?symbol=ETHUSDT&price=3100`);
+  await expect(workRow(page)).toContainText(/\+\d+\.\d{2} USDT · \+\d+\.\d{2} R/, {
+    timeout: 45_000,
+  });
+
   await request.get(`${stub}/control/price?symbol=ETHUSDT&price=3200`);
 
-  await expect(tradeRow(page)).toContainText('Закрыта по цели', { timeout: 45_000 });
-  await expect(tradeRow(page)).toContainText(/\+\d+\.\d{2} USDT · \+\d+\.\d{2} R/);
+  // The closed trade leaves the group «В работе» for the table of the closed ones, with its result, and the totals count it.
+  await expect(closedRow(page)).toContainText('Закрыта по цели', { timeout: 45_000 });
+  await expect(closedRow(page)).toContainText(/\+\d+\.\d{2} USDT · \+\d+\.\d{2} R/);
+  await expect(page.getByRole('table', { name: 'Сделки в работе' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Итоги' })).toContainText(/по цели [1-9]\d* \(/);
 });
 
 test('a pullback that is not filled by the end of its time is taken off the exchange and the trade is cancelled', async ({
@@ -200,7 +217,7 @@ test('a pullback that is not filled by the end of its time is taken off the exch
       },
     )
     .toBe('Cancelled');
-  await expect(tradeRow(page)).toContainText('Отменена', { timeout: 45_000 });
+  await expect(closedRow(page)).toContainText('Отменена', { timeout: 45_000 });
 });
 
 test('«Закрыть по рынку» sells what the trade holds first and takes the stop and the target off after it', async ({
@@ -222,9 +239,9 @@ test('«Закрыть по рынку» sells what the trade holds first and ta
   await dialog.getByRole('button', { name: 'Войти' }).click();
   const entry = await waitForOrder(request, known);
   await request.get(`${stub}/control/fill?orderLinkId=${entry.orderLinkId}&price=3000`);
-  await expect(tradeRow(page)).toContainText('Открыта', { timeout: 45_000 });
+  await expect(workRow(page)).toContainText('Открыта', { timeout: 45_000 });
 
-  await tradeRow(page).getByRole('button', { name: 'Закрыть по рынку' }).click();
+  await workRow(page).getByRole('button', { name: 'Закрыть по рынку' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Закрыть по рынку' }).click();
 
   const close = await waitForOrder(request, known + 1);
@@ -236,9 +253,9 @@ test('«Закрыть по рынку» sells what the trade holds first and ta
   expect(await children()).not.toContain('Cancelled');
   await request.get(`${stub}/control/fill?orderLinkId=${close.orderLinkId}&price=3010`);
 
-  await expect(tradeRow(page)).toContainText('Закрыта вручную', { timeout: 45_000 });
+  await expect(closedRow(page)).toContainText('Закрыта вручную', { timeout: 45_000 });
   await expect.poll(children, { timeout: 45_000 }).toEqual(['Cancelled', 'Cancelled']);
-  await expect(tradeRow(page)).toContainText(/\+\d+\.\d{2} USDT/);
+  await expect(closedRow(page)).toContainText(/\+\d+\.\d{2} USDT/);
 });
 
 test('a bot of the opposite direction on the symbol is a reason the entry is refused', async ({
@@ -305,7 +322,7 @@ test('the limit of open trades is a reason the second entry is refused', async (
   const first = await openEntry(page, 'Уровни');
   await first.getByRole('button', { name: 'Войти' }).click();
   await waitForOrder(request, known);
-  await expect(tradeRow(page)).toContainText('Ждёт входа');
+  await expect(workRow(page)).toContainText('Ждёт входа');
 
   const second = await openEntry(page, 'Уровни');
 
@@ -314,7 +331,7 @@ test('the limit of open trades is a reason the second entry is refused', async (
 
   // The first trade is taken back, so the database holds no open trade for the next test.
   await page.goto('/idea-trades');
-  await tradeRow(page).getByRole('button', { name: 'Отменить' }).click();
+  await workRow(page).getByRole('button', { name: 'Отменить' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Отменить сделку' }).click();
-  await expect(tradeRow(page)).toContainText('Отменена', { timeout: 45_000 });
+  await expect(closedRow(page)).toContainText('Отменена', { timeout: 45_000 });
 });

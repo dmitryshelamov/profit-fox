@@ -7,7 +7,7 @@ const navLink = 'border-b-2 border-transparent py-3 text-muted hover:text-text';
 
 export function AppShell({ children }: { children: ReactNode }) {
   const barShown = useComparison().length > 0;
-  // The market table has fourteen columns, the ideas table fifteen and the table of trades thirteen: they take the width of the mockup, 1376 px.
+  // The market table has fourteen columns, the ideas table fifteen and the tables of the journal fourteen: they take the width of the mockup, 1376 px.
   const match = useMatchRoute();
   const wide =
     match({ to: '/market' }) !== false ||
@@ -58,7 +58,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             className={navLink}
             activeProps={{ className: 'border-accent! text-text!', 'aria-current': 'page' }}
           >
-            Сделки
+            Журнал
           </Link>
           <Link
             to="/bots"
