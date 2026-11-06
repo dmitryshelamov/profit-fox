@@ -189,7 +189,9 @@ test('an entry by an idea places the entry with its stop and target on linear, a
   await expect(closedRow(page)).toContainText('Закрыта по цели', { timeout: 45_000 });
   await expect(closedRow(page)).toContainText(inProfit);
   await expect(page.getByRole('table', { name: 'Сделки в работе' })).toHaveCount(0);
-  await expect(page.getByRole('region', { name: 'Итоги' })).toContainText(/по цели [1-9]\d* \(/);
+  await expect(page.getByRole('region', { name: 'Итоги', exact: true })).toContainText(
+    /по цели [1-9]\d* \(/,
+  );
 });
 
 test('a pullback that is not filled by the end of its time is taken off the exchange and the trade is cancelled', async ({
