@@ -74,15 +74,15 @@
 
 ## 5. API
 
-- [ ] 5.1 `BucketStatisticsResponse`: собственные числа, `parentWeight`, `fewOwnCases`; `enoughData` по родителю.
+- [x] 5.1 `BucketStatisticsResponse`: собственные числа, `parentWeight`, `fewOwnCases`; `enoughData` по родителю.
   Готово, когда тесты контракта видят сценарий «Корзина модели в ответе», а `GET /api/ideas` сортирует и фильтрует по
   ожиданию модели.
-- [ ] 5.2 `GET /api/ideas/calibration` с `scope=all|fresh`, `owns` и `comparison`. Готово, когда интеграционные тесты
+- [x] 5.2 `GET /api/ideas/calibration` с `scope=all|fresh`, `owns` и `comparison`. Готово, когда интеграционные тесты
   API видят:
   - отчёт `fresh`;
   - 400 по `scope=old`;
   - ответ без расчёта с `comparison: null`.
-- [ ] 5.3 Обновить `docs/conventions.md` (`ClusteredSums`, `BucketModel`, `IIdeaEngineVersionRepository`) и схему
+- [x] 5.3 Обновить `docs/conventions.md` (`ClusteredSums`, `BucketModel`, `IIdeaEngineVersionRepository`) и схему
   OpenAPI фронта. Готово, когда `npm run typecheck` видит новые поля.
 
 ## 6. Фронт

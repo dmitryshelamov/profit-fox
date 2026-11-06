@@ -26,6 +26,14 @@ const bucket = (overrides: Partial<Bucket> = {}): Bucket => ({
   signals: null,
   entryShare: null,
   signalExpectancy: null,
+  ownProbability: '0.4',
+  ownProbabilityLow: '0.35',
+  ownProbabilityHigh: '0.45',
+  ownExpectancy: '0.3',
+  ownExpectancyLow: '0.18',
+  ownExpectancyHigh: '0.42',
+  parentWeight: '0.2',
+  fewOwnCases: false,
   ...overrides,
 });
 

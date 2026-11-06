@@ -1821,6 +1821,8 @@ export interface paths {
                     Days?: string;
                     /** @description `linear` or `spot`. */
                     Category?: string;
+                    /** @description `all` or `fresh`, the cases after the rules changed. */
+                    Scope?: string;
                 };
                 header?: never;
                 path?: never;
@@ -4175,9 +4177,11 @@ export interface components {
         };
         /**
          * @description The statistics of a bucket: its cases with an outcome, of them the targets, the stops and the expired ones, the share of targets among
-         *     all of them with its 95 % Wilson interval, the expectancy in R with its 95 % interval and the badge by it, `up`, `flat` or
-         *     `down` (no share, intervals or badge with bool BucketStatisticsResponse.EnoughData false, «мало данных»). A bucket of «Откат» or «Стоп-вход» also has
-         *     the signals it counted, the share of them that entered and the expectancy per signal. Shares are fractions as decimal strings.
+         *     all of them and the expectancy in R of the model with their 95 % intervals and the badge by the expectancy, `up`, `flat` or
+         *     `down` (no share, intervals or badge with bool BucketStatisticsResponse.EnoughData false, «мало данных»: the parent has fewer than 30 cases). Beside
+         *     them the own share and expectancy of the bucket with their intervals (none under 30 own cases), the weight of the parent in the
+         *     expectancy of the model and bool BucketStatisticsResponse.FewOwnCases, «мало своих данных». A bucket of «Откат» or «Стоп-вход» also has the signals it
+         *     counted, the share of them that entered and the expectancy per signal. Shares are fractions as decimal strings.
          */
         BucketStatisticsResponse: {
             /** Format: int32 */
@@ -4200,6 +4204,41 @@ export interface components {
             signals: null | number | string;
             entryShare: null | string;
             signalExpectancy: null | string;
+            ownProbability: null | string;
+            ownProbabilityLow: null | string;
+            ownProbabilityHigh: null | string;
+            ownExpectancy: string;
+            ownExpectancyLow: null | string;
+            ownExpectancyHigh: null | string;
+            parentWeight: null | string;
+            fewOwnCases: boolean;
+        };
+        /** @description The old model, the own numbers of a bucket from 30 own cases without clustering or shrinking, against the new one, on the cases both check. */
+        CalibrationComparisonResponse: {
+            old: components["schemas"]["CalibrationModelResponse"];
+            new: components["schemas"]["CalibrationModelResponse"];
+        };
+        /** @description How a model did: the cases compared, the Brier score of their promised probability, and the row of those it promised ▲, none without one. */
+        CalibrationModelResponse: {
+            /** Format: int32 */
+            cases: number | string;
+            brier: null | string;
+            up: null | components["schemas"]["CalibrationRowResponse"];
+        };
+        /**
+         * @description A row of the table by own data: the checked cases whose bucket had 30 own cases and more, or fewer with bool CalibrationOwnRowResponse.FewOwnCases, with
+         *     the columns of a row by badge and the Brier score of their promised probability. Numbers are decimal strings.
+         */
+        CalibrationOwnRowResponse: {
+            fewOwnCases: boolean;
+            brier: string;
+            promised: string;
+            /** Format: int32 */
+            cases: number | string;
+            targetShare: string;
+            expectancy: string;
+            expectancyLow: null | string;
+            expectancyHigh: null | string;
         };
         /**
          * @description A row of a table of calibration: the cases promised from string? CalibrationRowResponse.From up to string? CalibrationRowResponse.To (none for an open end) or with a
@@ -4386,7 +4425,8 @@ export interface components {
          * @description The calibration of the cases fired in the last int IdeaCalibrationResponse.Days days of a string? IdeaCalibrationResponse.Category, all of them without one: when it
          *     was computed (none before the first time, with zeros and empty tables), the checked cases and the ones whose bucket had fewer than 30
          *     cases, the Brier score of the buckets and of the share of targets of the category, the rows by promised probability, by promised
-         *     expectancy and by badge, and the CalibrationRowResponse? IdeaCalibrationResponse.Total of all checked cases. Numbers are decimal strings.
+         *     expectancy and by badge, the CalibrationRowResponse? IdeaCalibrationResponse.Total of all checked cases, the rows by own data and the comparison of the old model with the
+         *     new one (none before the first calibration), all in a string IdeaCalibrationResponse.Scope, `all` or `fresh`. Numbers are decimal strings.
          */
         IdeaCalibrationResponse: {
             /** Format: date-time */
@@ -4404,6 +4444,9 @@ export interface components {
             expectancies: components["schemas"]["CalibrationRowResponse"][];
             badges: components["schemas"]["CalibrationRowResponse"][];
             total: null | components["schemas"]["CalibrationRowResponse"];
+            scope: string;
+            owns: components["schemas"]["CalibrationOwnRowResponse"][];
+            comparison: null | components["schemas"]["CalibrationComparisonResponse"];
         };
         /** @description The trades whose idea has a result in R: how many, the mean result of their ideas and the mean result of the trades, in R. */
         IdeaComparisonResponse: {

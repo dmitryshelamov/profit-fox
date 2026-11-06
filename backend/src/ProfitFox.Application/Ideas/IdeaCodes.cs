@@ -84,6 +84,11 @@ public static class IdeaCodes
         return BadgesByCode.TryGetValue(code, out badge);
     }
 
+    public static bool TryParseScope(string code, out CalibrationScope scope)
+    {
+        return ScopesByCode.TryGetValue(code, out scope);
+    }
+
     public static IdeaBadge ParseBadge(string code)
     {
         return BadgesByCode[code];

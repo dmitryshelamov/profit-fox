@@ -32,6 +32,14 @@ const fewData = ideaOf({
     signals: null,
     entryShare: null,
     signalExpectancy: null,
+    ownProbability: null,
+    ownProbabilityLow: null,
+    ownProbabilityHigh: null,
+    ownExpectancy: '-0.1',
+    ownExpectancyLow: null,
+    ownExpectancyHigh: null,
+    parentWeight: null,
+    fewOwnCases: false,
   },
 });
 const noBucket = ideaOf({ id: 'doge-1', symbol: 'DOGEUSDT', bucket: null });
