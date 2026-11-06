@@ -75,6 +75,16 @@ public static class IdeaFixtures
         return Candles(name);
     }
 
+    /// <summary>
+    ///     140 minutes from 2024-03-01T10:00:00Z of a long entered at 100 with the stop at 98: 10:00 opens at 100; from 10:01 the close climbs 0.03
+    ///     a minute from 100.13, the high 0.05 above it, so 10:29 first reaches 101.02; 11:00 reaches 102.0; from 11:01 the close falls 0.065 a
+    ///     minute, the low 0.05 below it, and 12:00 reaches 97.95; from 12:01 the price stands at 97.9.
+    /// </summary>
+    public static IReadOnlyList<IdeaCandle> PathToStop()
+    {
+        return Candles("path-to-stop");
+    }
+
     public static IReadOnlyList<IdeaCandle> Candles(string name)
     {
         return [.. Rows(name).Select(Candle)];
