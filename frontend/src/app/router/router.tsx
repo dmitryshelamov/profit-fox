@@ -22,6 +22,7 @@ import { ComparePage } from '@/pages/compare/ComparePage';
 import { IdeaTradesPage } from '@/pages/idea-trades/IdeaTradesPage';
 import { IdeasPage } from '@/pages/ideas/IdeasPage';
 import { IdeasCalibrationPage } from '@/pages/ideas-calibration/IdeasCalibrationPage';
+import { IdeasExitRulesPage } from '@/pages/ideas-exit-rules/IdeasExitRulesPage';
 import { MarketPage } from '@/pages/market/MarketPage';
 import { MarketPairPage } from '@/pages/market-pair/MarketPairPage';
 import { NodeEditorPage } from '@/pages/node-editor/NodeEditorPage';
@@ -131,6 +132,12 @@ const ideasCalibrationRoute = createRoute({
 
     return <IdeasCalibrationPage days={days ?? 90} category={category ?? null} />;
   },
+});
+
+const ideasExitRulesRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/ideas/exit-rules',
+  component: IdeasExitRulesPage,
 });
 
 const marketPairRoute = createRoute({
@@ -301,6 +308,7 @@ const routeTree = rootRoute.addChildren([
     ideasRoute,
     ideaTradesRoute,
     ideasCalibrationRoute,
+    ideasExitRulesRoute,
     botsRoute,
     newBotRoute,
     editBotRoute,

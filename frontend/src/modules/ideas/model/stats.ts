@@ -37,13 +37,14 @@ export function probabilityView(bucket: Bucket | null): ProbabilityView {
 
 /** The break-even of an idea after the fees, rounded up to a whole percent, or that its target does not cover the fees. */
 export function breakEvenText(breakEven: string | null): string {
-  if (breakEven === null) {
-    return 'не окупает комиссии';
-  }
+  return breakEven === null ? 'не окупает комиссии' : `нужно ≥ ${percentUp(breakEven)} %`;
+}
 
-  const [whole = '0', fraction = ''] = shiftDecimal(breakEven, 2).split('.');
+/** A share in whole percent rounded up, as a break-even is: 0.2957 is 30. */
+export function percentUp(share: string): string {
+  const [whole = '0', fraction = ''] = shiftDecimal(share, 2).split('.');
 
-  return `нужно ≥ ${/[1-9]/.test(fraction) ? BigInt(whole) + 1n : whole} %`;
+  return String(/[1-9]/.test(fraction) ? BigInt(whole) + 1n : BigInt(whole));
 }
 
 /** The shares of targets, stops and expired cases of a bucket in whole percent, for the hint of its probability; none without a case. */

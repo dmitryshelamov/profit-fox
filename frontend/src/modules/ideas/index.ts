@@ -22,6 +22,7 @@ export { levelsOf } from './model/levels';
 export { priceByTick } from './model/price';
 export { type IdeaSort, type IdeaSortColumn } from './model/sort';
 export { badgeSymbol, moneyOutcome, probabilityView } from './model/stats';
+export { LifeChart, MfeChart } from './ui/ExitRuleCharts';
 export { type Idea } from './ui/IdeaCells';
 export { IdeasTable } from './ui/IdeasTable';
 export { OwnIdeaBlock, useOwnIdea } from './ui/OwnIdeaBlock';
