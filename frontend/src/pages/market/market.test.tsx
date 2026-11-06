@@ -413,12 +413,12 @@ describe('market screen', () => {
     );
   });
 
-  it('gives the table more width than other screens', async () => {
+  it('gives the table the whole width of the window', async () => {
     open(() => marketSnapshot([sol]));
     renderApp('/market');
     await tableOf();
 
-    expect(screen.getByRole('main')).toHaveClass('max-w-[1376px]');
+    expect(screen.getByRole('main')).toHaveClass('max-w-none');
   });
 
   describe('the pages', () => {

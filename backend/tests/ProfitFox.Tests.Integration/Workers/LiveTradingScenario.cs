@@ -10,13 +10,22 @@ using NSubstitute;
 
 using ProfitFox.Application.Ports.ExchangeAccounts;
 using ProfitFox.Application.Ports.LiveTrading;
+using ProfitFox.Domain.Entities.Ideas;
+using ProfitFox.Domain.Entities.Ideas.Enums;
+using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.Entities.LiveTrading;
 using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.Services.Ideas;
+using ProfitFox.Domain.ValueObjects.Ideas;
+using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.LiveTrading;
 using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas;
 using ProfitFox.Tests.Integration.Infrastructure;
 using ProfitFox.Tests.Shared.Fixtures.Strategies;
+using ProfitFox.Tests.Shared.Generators.Domain.Entity.Ideas;
 
 using Shouldly;
 
@@ -224,6 +233,124 @@ public sealed class LiveTradingScenario : IAsyncDisposable
         using IServiceScope scope = Factory.Services.CreateScope();
 
         return await scope.ServiceProvider.GetRequiredService<ILiveBotRepository>().GetFillsAsync(bot, CancellationToken.None);
+    }
+
+    /// <summary>
+    ///     A trade by an idea saved as the API saves it: waiting for its entry, with the entry order saved to be sent. The idea is a market
+    ///     <c>TwoR</c> long on BTCUSDT on the linear market of 15 minutes that fired a few minutes ago: entry 105, stop 100, target 115.
+    /// </summary>
+    public async Task<IdeaTrade> CreateTradeAsync(IdeaType type = IdeaType.TwoR, IdeaSide side = IdeaSide.Long, decimal quantity = 0.47m, Instrument? instrument = null, decimal risk = 2m)
+    {
+        DateTimeOffset now = Factory.Time.GetUtcNow();
+        Idea idea = IdeaGenerator.Generate(now.AddMinutes(-5), instrument: instrument ?? Linear, type: type, side: side);
+        var trade = IdeaTrade.Create(Guid.NewGuid(), idea, Account, 105m, new IdeaTradeSize(quantity, quantity * 105m, risk, risk * 2m, 2m), now);
+        bool pullback = type == IdeaType.Pullback;
+        var entry = IdeaTradeOrder.NewEntry(
+            trade.Id,
+            1,
+            side == IdeaSide.Long ? OrderSide.Buy : OrderSide.Sell,
+            pullback ? OrderType.Limit : OrderType.Market,
+            TimeInForce.GoodTilCancelled,
+            pullback ? trade.EntryPrice : null,
+            quantity,
+            new Protection(trade.Target, trade.Stop),
+            now);
+        trade = trade with { LastOrderNumber = 1 };
+        await InTradesAsync((repository, cancellationToken) => repository.CreateAsync(trade, entry, now, cancellationToken));
+
+        return trade;
+    }
+
+    /// <summary>An idea of the scanner on the instrument, long unless told otherwise, that fired a few minutes ago, with the levels given.</summary>
+    public async Task<Guid> SaveIdeaAsync(
+        decimal entry,
+        decimal stop,
+        decimal target,
+        IdeaType type = IdeaType.TwoR,
+        IdeaStatus status = IdeaStatus.AwaitingEntry,
+        Instrument? instrument = null,
+        IdeaSide side = IdeaSide.Long)
+    {
+        Idea idea = IdeaGenerator.Generate(Factory.Time.GetUtcNow().AddMinutes(-5), status: status, instrument: instrument ?? Linear, type: type, side: side);
+        idea = idea with { Track = idea.Track with { Plan = new IdeaPlan(type, side, entry, stop, target) } };
+        await using var database = Npgsql.NpgsqlDataSource.Create(Factory.ConnectionString);
+        await new IdeaRepository(database).SaveAsync([idea], [], CancellationToken.None);
+
+        return idea.Id;
+    }
+
+    /// <summary>The bucket over 90 days of the ideas <see cref="SaveIdeaAsync" /> makes, a long of the setup and the interval of the generator, replaced by the statistics given.</summary>
+    public async Task SaveBucketAsync(BucketStatistics statistics, IdeaType type = IdeaType.TwoR)
+    {
+        var key = new IdeaBucketKey(IdeaSetup.Impulse, type, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear);
+        await using var database = Npgsql.NpgsqlDataSource.Create(Factory.ConnectionString);
+        await new IdeaBucketRepository(database).ReplaceAsync(IdeasEngineVersion.Current, [new IdeaBucket(key, 90, statistics)], null, CancellationToken.None);
+    }
+
+    /// <summary>Writes how the idea ended on the trades made of it, as the scanner does when the idea closes.</summary>
+    public async Task WriteIdeaOutcomeAsync(Guid idea, TradedIdeaOutcome outcome)
+    {
+        await using var database = Npgsql.NpgsqlDataSource.Create(Factory.ConnectionString);
+        await new IdeaRepository(database).SaveAsync([], [], [new ClosedIdea(idea, outcome)], CancellationToken.None);
+    }
+
+    /// <summary>The last price of the ticker of the pair on Bybit.</summary>
+    public void SetPrice(string price, Instrument? instrument = null)
+    {
+        Instrument pair = instrument ?? Linear;
+        Factory.Bybit.Tickers[(pair.Category == MarketCategory.Spot ? "spot" : "linear", pair.Symbol)] = (price, price, price, "1", "0.0001");
+    }
+
+    public async Task<IdeaTrade> TradeAsync(Guid trade)
+    {
+        using IServiceScope scope = Factory.Services.CreateScope();
+
+        return (await scope.ServiceProvider.GetRequiredService<IIdeaTradeRepository>().GetAsync(trade, CancellationToken.None))!;
+    }
+
+    public async Task<IReadOnlyList<IdeaTradeOrder>> TradeOrdersAsync(Guid trade)
+    {
+        using IServiceScope scope = Factory.Services.CreateScope();
+
+        return await scope.ServiceProvider.GetRequiredService<IIdeaTradeRepository>().GetOrdersAsync(trade, CancellationToken.None);
+    }
+
+    public async Task<IReadOnlyList<IdeaTradeChild>> TradeChildrenAsync(Guid trade)
+    {
+        using IServiceScope scope = Factory.Services.CreateScope();
+
+        return await scope.ServiceProvider.GetRequiredService<IIdeaTradeRepository>().GetChildrenAsync(trade, CancellationToken.None);
+    }
+
+    public async Task<IReadOnlyList<IdeaTradeFill>> TradeFillsAsync(Guid trade)
+    {
+        using IServiceScope scope = Factory.Services.CreateScope();
+
+        return await scope.ServiceProvider.GetRequiredService<IIdeaTradeRepository>().GetFillsAsync(trade, CancellationToken.None);
+    }
+
+    /// <summary>Changes a trade as the API does: under the lock of its row.</summary>
+    public Task ChangeTradeAsync(Guid trade, Func<IdeaTrade, IdeaTrade> change)
+    {
+        return InTradesAsync(async (repository, cancellationToken) =>
+        {
+            IdeaTrade locked = (await repository.LockAsync(trade, cancellationToken))!;
+            await repository.SaveAsync(change(locked), Factory.Time.GetUtcNow(), cancellationToken);
+        });
+    }
+
+    private async Task InTradesAsync(Func<IIdeaTradeRepository, CancellationToken, Task> work)
+    {
+        using IServiceScope scope = Factory.Services.CreateScope();
+        IIdeaTradeRepository repository = scope.ServiceProvider.GetRequiredService<IIdeaTradeRepository>();
+        await scope.ServiceProvider.GetRequiredService<ProfitFox.Application.Transactions.ITransactionExecutor>().ExecuteAsync(
+            async cancellationToken =>
+            {
+                await work(repository, cancellationToken);
+
+                return 0;
+            },
+            CancellationToken.None);
     }
 
     /// <summary>Moves the clock a second at a time until the condition holds, so the Workers poll and renew their leases.</summary>

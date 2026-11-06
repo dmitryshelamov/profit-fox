@@ -8,6 +8,7 @@ using NSubstitute;
 using NSubstitute.Core;
 
 using ProfitFox.Application.Exceptions;
+using ProfitFox.Application.IdeaTrades.Runtime;
 using ProfitFox.Application.LiveTrading;
 using ProfitFox.Application.LiveTrading.Commands.ClaimLiveBot;
 using ProfitFox.Application.LiveTrading.Commands.RunLiveBot;
@@ -30,6 +31,7 @@ public class LiveTradingBackgroundServiceTests
     private FakeTimeProvider _time = null!;
     private ISender _sender = null!;
     private ILiveBotRepository _repository = null!;
+    private IIdeaTradeRepository _trades = null!;
     private ServiceProvider _services = null!;
     private ILogger _log = null!;
     private LeasedBot _leased = null!;
@@ -42,7 +44,9 @@ public class LiveTradingBackgroundServiceTests
         _sender = Substitute.For<ISender>();
         _repository = Substitute.For<ILiveBotRepository>();
         _repository.GetChangedAsync(default, default, default).ReturnsForAnyArgs([]);
-        _services = new ServiceCollection().AddSingleton(_sender).AddSingleton(_repository).BuildServiceProvider();
+        _trades = Substitute.For<IIdeaTradeRepository>();
+        _trades.GetChangedAsync(default, default, default).ReturnsForAnyArgs([]);
+        _services = new ServiceCollection().AddSingleton(_sender).AddSingleton(_repository).AddSingleton(_trades).BuildServiceProvider();
         _log = Substitute.For<ILogger>();
         _log.IsEnabled(Arg.Any<LogLevel>()).Returns(true);
         _leased = new LeasedBot(LiveBot.New(Guid.NewGuid()).Start(1, new Dictionary<string, NodeValue>()), 4);
@@ -119,6 +123,7 @@ public class LiveTradingBackgroundServiceTests
         return new LiveTradingBackgroundService(
             _services.GetRequiredService<IServiceScopeFactory>(),
             new LiveBotLeases(_repository, new TradingSettings(), new WorkerSettings(), _worker, _time),
+            new IdeaTradeLeases(_trades, new TradingSettings(), new WorkerSettings(), _worker, _time),
             new WorkerSettings(),
             _worker,
             _time,

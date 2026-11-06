@@ -14,6 +14,12 @@ public static class IdeaFixtures
         return Candles("atr");
     }
 
+    /// <summary>120 hourly candles from 2024-03-01T00:00:00Z, a random walk from 100.00 that closes at most 1.60 from the close before.</summary>
+    public static IReadOnlyList<IdeaCandle> Rsi()
+    {
+        return Candles("rsi");
+    }
+
     /// <summary>
     ///     The minutes of 2024-03-01 from 10:00 to 12:00 that had trades, from 50.00: none at 10:20–10:24 (a whole 5 minute candle),
     ///     11:00–11:02 (the start of an hour) and 11:58–11:59; the price stays through each gap, the minutes 10:25 and 11:03 open 0.90 above
@@ -40,12 +46,43 @@ public static class IdeaFixtures
     }
 
     /// <summary>
+    ///     Minutes of 2024-03-01 from 00:00 to 08:00 for a 15 minute breakout. Until 07:30 every 15 minutes is a candle of 100 with a low of 99 at
+    ///     its first minute, a high of 101 at its last and 100 of volume a minute; the candles from 01:15, 03:00 and 04:45 reach 101.6, 101.8
+    ///     and 101.7, the one resistance at 101.6–101.8. From 07:30 the price climbs with 300 a minute, closes 102.1 at 07:33 and stays at
+    ///     102.1–102.3 to 07:42; from 07:43 it stands at 101.9 with 100 a minute.
+    /// </summary>
+    public static IReadOnlyList<IdeaCandle> Breakout()
+    {
+        return Candles("breakout");
+    }
+
+    /// <summary>
+    ///     The breakout set with a second zone just below the close: the candles from 04:45 and 06:00 reach 103.0 and 103.05 instead, so the
+    ///     resistances are 101.6–101.8 and 103.0–103.05; ATR(14) of the candles up to 07:15 is 2.21509…. The price climbs to 103.1 at 07:33,
+    ///     breaks the lower zone with the margin, stays at 103.1 to 07:42, and from 07:43 stands at 101.9.
+    /// </summary>
+    public static IReadOnlyList<IdeaCandle> BreakoutUnderZone()
+    {
+        return Candles("breakout-two-zones");
+    }
+
+    /// <summary>
     ///     Hourly candles for the zones: <c>two-supports</c>, 200 candles from 103 to 104 with single dips to a low of 100.0, 100.2, 100.4,
     ///     100.1 and 95 (candles 20, 60, 100, 140 and 180); <c>zones</c>, a random walk of 230 candles from 50.00 that ends at 57.55.
     /// </summary>
     public static IReadOnlyList<IdeaCandle> Zones(string name)
     {
         return Candles(name);
+    }
+
+    /// <summary>
+    ///     140 minutes from 2024-03-01T10:00:00Z of a long entered at 100 with the stop at 98: 10:00 opens at 100; from 10:01 the close climbs 0.03
+    ///     a minute from 100.13, the high 0.05 above it, so 10:29 first reaches 101.02; 11:00 reaches 102.0; from 11:01 the close falls 0.065 a
+    ///     minute, the low 0.05 below it, and 12:00 reaches 97.95; from 12:01 the price stands at 97.9.
+    /// </summary>
+    public static IReadOnlyList<IdeaCandle> PathToStop()
+    {
+        return Candles("path-to-stop");
     }
 
     public static IReadOnlyList<IdeaCandle> Candles(string name)

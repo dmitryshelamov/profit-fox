@@ -66,4 +66,28 @@ public class MigrationTests
         tables.Count().ShouldBe(6);
         setups.ShouldBe(("jsonb", "NO", "'{}'::jsonb"));
     }
+
+    // Decision 3: the buckets keep the counts of their outcomes and the interval of the expectancy, and no baseline.
+    [Test]
+    public async Task Buckets_have_their_outcomes_and_the_interval_of_the_expectancy_without_a_baseline()
+    {
+        await using NpgsqlDataSource dataSource = await MarketDataDatabase.CreateAsync();
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
+
+        IEnumerable<(string Name, string DataType, string IsNullable)> columns = await connection.QueryAsync<(string, string, string)>(
+            """
+            SELECT column_name, data_type, is_nullable
+            FROM information_schema.columns
+            WHERE table_name = 'idea_buckets' AND column_name IN ('targets', 'stops', 'expectancy_low', 'expectancy_high', 'baseline')
+            """);
+
+        columns.ShouldBe(
+        [
+            ("targets", "integer", "NO"),
+            ("stops", "integer", "NO"),
+            ("expectancy_low", "numeric", "YES"),
+            ("expectancy_high", "numeric", "YES")
+        ],
+            ignoreOrder: true);
+    }
 }

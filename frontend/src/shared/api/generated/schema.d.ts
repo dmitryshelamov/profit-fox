@@ -1549,6 +1549,159 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ideas/exit-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IdeaExitRulesResponse"];
+                        "application/json": components["schemas"]["IdeaExitRulesResponse"];
+                        "text/json": components["schemas"]["IdeaExitRulesResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ideas/exit-rules/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a candidate rule would have done over the last 90 and 30 days against the rule now; a parameter the type has no use for or a value
+         *     off the grid is a 400 on its name.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    type?: string;
+                    interval?: string;
+                    life?: number | string;
+                    target?: number | string;
+                    window?: number | string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ExitRulePreviewResponse"];
+                        "application/json": components["schemas"]["ExitRulePreviewResponse"];
+                        "text/json": components["schemas"]["ExitRulePreviewResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ideas/exit-rules/{type}/{interval}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Applies the rule to the ideas of the type × interval made from now on; answers with the rule saved and when it was applied. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    type: string;
+                    interval: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ApplyExitRuleBody"];
+                    "text/json": components["schemas"]["ApplyExitRuleBody"];
+                    "application/*+json": components["schemas"]["ApplyExitRuleBody"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IdeaExitRuleResponse"];
+                        "application/json": components["schemas"]["IdeaExitRuleResponse"];
+                        "text/json": components["schemas"]["IdeaExitRuleResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ideas": {
         parameters: {
             query?: never;
@@ -1653,6 +1806,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ideas/calibration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The calibration of the buckets on outcomes they had not seen, as the scanner last computed it. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description `90` or `30`. */
+                    Days?: string;
+                    /** @description `linear` or `spot`. */
+                    Category?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IdeaCalibrationResponse"];
+                        "application/json": components["schemas"]["IdeaCalibrationResponse"];
+                        "text/json": components["schemas"]["IdeaCalibrationResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ideas/{id}": {
         parameters: {
             query?: never;
@@ -1696,6 +1903,413 @@ export interface paths {
             };
         };
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ideas/{id}/entry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The entry of an idea as it would be made now, for an account and an amount (the settings give them when left out): the quantity, the amount,
+         *     the loss at the stop, the profit at the target and the reward to the risk after the fees, and the reasons it cannot be made. Places nothing. Reads the price of the pair from Bybit.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    accountId?: string;
+                    amount?: number | string;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IdeaEntryResponse"];
+                        "application/json": components["schemas"]["IdeaEntryResponse"];
+                        "text/json": components["schemas"]["IdeaEntryResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/idea-trades": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The journal: the open trades with what they are worth at the last price, a page of the closed ones, the newest closed first, and the totals of
+         *     all the closed ones of the filter.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    Setup?: string;
+                    /** @description A part of the symbol, in any case. */
+                    Symbol?: string;
+                    Side?: string;
+                    /** @description The badge of the promise, `up`, `flat` or `down`, or `none` for a trade with no badge. */
+                    Badge?: string;
+                    /** @description The period of the time of the close, 7, 30 or 90 days; it does not touch the open trades. */
+                    Days?: number | string;
+                    /** @description The number of the page of the closed trades from 1. */
+                    Page?: number | string;
+                    /** @description 50, 100 or 200. */
+                    PageSize?: number | string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IdeaJournalResponse"];
+                        "application/json": components["schemas"]["IdeaJournalResponse"];
+                        "text/json": components["schemas"]["IdeaJournalResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Enters by an idea: the entry is calculated again and saved with the trade, which waits for its entry; a Worker sends it. A reason the
+         *     entry cannot be made is a 409 with its codes in `reasons` and saves nothing.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["IdeaTradeBody"];
+                    "text/json": components["schemas"]["IdeaTradeBody"];
+                    "application/*+json": components["schemas"]["IdeaTradeBody"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CreatedResponse"];
+                        "application/json": components["schemas"]["CreatedResponse"];
+                        "text/json": components["schemas"]["CreatedResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/idea-trades/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Asks a Worker to take the entry off a trade that waits for it. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/idea-trades/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Asks a Worker to take the stop and the target off an open trade and to close it by the market. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/idea-trading/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IdeaTradingSettingsResponse"];
+                        "application/json": components["schemas"]["IdeaTradingSettingsResponse"];
+                        "text/json": components["schemas"]["IdeaTradingSettingsResponse"];
+                    };
+                };
+            };
+        };
+        /** Replaces the settings; a value out of range is a 400 on its own field. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["IdeaTradingSettingsBody"];
+                    "text/json": components["schemas"]["IdeaTradingSettingsBody"];
+                    "application/*+json": components["schemas"]["IdeaTradingSettingsBody"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+            };
+        };
         post?: never;
         delete?: never;
         options?: never;
@@ -2224,7 +2838,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** An idea of the pair from the price now by the rules of the type, without a setup; it is not stored and has only the baseline. */
+        /** An idea of the pair from the price now by the rules of the type, without a setup; it is not stored and has only its break-even. */
         post: {
             parameters: {
                 query?: never;
@@ -3490,6 +4104,15 @@ export interface components {
                 [key: string]: string;
             };
         };
+        /** @description The exit rule to apply: the lifetime in candles, the target in R of a type with one, the entry window of a pullback and a stop entry. */
+        ApplyExitRuleBody: {
+            /** Format: int32 */
+            life: number | string;
+            /** Format: double */
+            target: null | number | string;
+            /** Format: int32 */
+            window: null | number | string;
+        };
         /** @description The positions with their orders and fills and the equity curve of a result, at most 5000 points, with the metrics they give. */
         BacktestDetailsResponse: {
             metrics: components["schemas"]["MetricsResponse"];
@@ -3638,20 +4261,54 @@ export interface components {
             closeRequested: boolean;
         };
         /**
-         * @description The statistics of a bucket: its cases with an outcome and the expired ones, the share of targets with its 95 % Wilson interval (none
-         *     with bool BucketStatisticsResponse.EnoughData false, «мало данных»), the baseline and the expectancy in R. Shares are fractions as decimal strings.
+         * @description The statistics of a bucket: its cases with an outcome, of them the targets, the stops and the expired ones, the share of targets among
+         *     all of them with its 95 % Wilson interval, the expectancy in R with its 95 % interval and the badge by it, `up`, `flat` or
+         *     `down` (no share, intervals or badge with bool BucketStatisticsResponse.EnoughData false, «мало данных»). A bucket of «Откат» or «Стоп-вход» also has
+         *     the signals it counted, the share of them that entered and the expectancy per signal. Shares are fractions as decimal strings.
          */
         BucketStatisticsResponse: {
             /** Format: int32 */
             cases: number | string;
             /** Format: int32 */
+            targets: number | string;
+            /** Format: int32 */
+            stops: number | string;
+            /** Format: int32 */
             expired: number | string;
             probability: null | string;
             probabilityLow: null | string;
             probabilityHigh: null | string;
-            baseline: string;
             expectancy: string;
+            expectancyLow: null | string;
+            expectancyHigh: null | string;
+            badge: null | string;
             enoughData: boolean;
+            /** Format: int32 */
+            signals: null | number | string;
+            entryShare: null | string;
+            signalExpectancy: null | string;
+        };
+        /**
+         * @description A row of a table of calibration: the cases promised from string? CalibrationRowResponse.From up to string? CalibrationRowResponse.To (none for an open end) or with a
+         *     string? CalibrationRowResponse.Badge (`up`, `flat`, `down`), the mean of what they were promised, the shares of their outcomes, the 95 %
+         *     Wilson interval of the share of targets and their mean result in R with its 95 % interval (no intervals under 30 cases). Numbers are
+         *     decimal strings.
+         */
+        CalibrationRowResponse: {
+            from: null | string;
+            to: null | string;
+            badge: null | string;
+            promised: string;
+            /** Format: int32 */
+            cases: number | string;
+            targetShare: string;
+            stopShare: string;
+            expiredShare: string;
+            probabilityLow: null | string;
+            probabilityHigh: null | string;
+            expectancy: string;
+            expectancyLow: null | string;
+            expectancyHigh: null | string;
         };
         /** @description Prices and volumes as decimal strings: JSON numbers lose precision in JavaScript clients. */
         CandleResponse: {
@@ -3748,6 +4405,38 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
+        /** @description The candles of the grid of an interval, up to 7 days. */
+        ExitRuleGridResponse: {
+            interval: string;
+            candles: (number | string)[];
+        };
+        /** @description The expectancy per entry and per signal at a lifetime in candles. */
+        ExitRuleLifeResponse: {
+            /** Format: int32 */
+            candles: number | string;
+            expectancy: null | string;
+            signalExpectancy: null | string;
+        };
+        /** @description The share of the entries that reached +R before the stop and the end of the lifetime, and the break-even of a target of R. */
+        ExitRuleMfeResponse: {
+            r: string;
+            reached: string;
+            breakEven: string;
+        };
+        /**
+         * @description The preview of a candidate exit rule: the statistics by the rule now and by the candidate over 90 and 30 days (none without an entry), the
+         *     expectancy at every lifetime of the grid and the curve of MFE. Numbers are decimal strings.
+         */
+        ExitRulePreviewResponse: {
+            last90: components["schemas"]["ExitRuleWindowResponse"];
+            last30: components["schemas"]["ExitRuleWindowResponse"];
+            lives: components["schemas"]["ExitRuleLifeResponse"][];
+            mfe: components["schemas"]["ExitRuleMfeResponse"][];
+        };
+        ExitRuleWindowResponse: {
+            current: null | components["schemas"]["BucketStatisticsResponse"];
+            candidate: null | components["schemas"]["BucketStatisticsResponse"];
+        };
         FillResponse: {
             /** Format: date-time */
             at: string;
@@ -3781,8 +4470,131 @@ export interface components {
             statistics: components["schemas"]["BucketStatisticsResponse"];
         };
         /**
+         * @description The calibration of the cases fired in the last int IdeaCalibrationResponse.Days days of a string? IdeaCalibrationResponse.Category, all of them without one: when it
+         *     was computed (none before the first time, with zeros and empty tables), the checked cases and the ones whose bucket had fewer than 30
+         *     cases, the Brier score of the buckets and of the share of targets of the category, the rows by promised probability, by promised
+         *     expectancy and by badge, and the CalibrationRowResponse? IdeaCalibrationResponse.Total of all checked cases. Numbers are decimal strings.
+         */
+        IdeaCalibrationResponse: {
+            /** Format: date-time */
+            computedAt: null | string;
+            /** Format: int32 */
+            days: number | string;
+            category: null | string;
+            /** Format: int32 */
+            checked: number | string;
+            /** Format: int32 */
+            unchecked: number | string;
+            brier: null | string;
+            baseBrier: null | string;
+            probabilities: components["schemas"]["CalibrationRowResponse"][];
+            expectancies: components["schemas"]["CalibrationRowResponse"][];
+            badges: components["schemas"]["CalibrationRowResponse"][];
+            total: null | components["schemas"]["CalibrationRowResponse"];
+        };
+        /** @description The trades whose idea has a result in R: how many, the mean result of their ideas and the mean result of the trades, in R. */
+        IdeaComparisonResponse: {
+            /** Format: int32 */
+            count: number | string;
+            ideas: null | string;
+            trades: null | string;
+        };
+        /**
+         * @description The entry of an idea as it would be made now. Numbers are decimal strings: the price, the quantity, the amount, the loss at the stop and the profit at the target it
+         *     really takes at that quantity after the fees, the reward to the risk after the fees and without them, the free money of the account (none without a key). IReadOnlyList&lt;string&gt; IdeaEntryResponse.Reasons are
+         *     the codes of what stops the entry.
+         */
+        IdeaEntryResponse: {
+            /** Format: uuid */
+            accountId: null | string;
+            entryPrice: string;
+            quantity: string;
+            amount: string;
+            risk: string;
+            profit: string;
+            riskReward: string;
+            riskRewardWithoutFees: string;
+            freeMoney: null | string;
+            quote: string;
+            reasons: string[];
+        };
+        /**
+         * @description The exit rule of a type × interval: the lifetime in candles, the target in R as a decimal string of a type with one, the entry window in
+         *     candles of a pullback and a stop entry, and when it was applied, none for the default.
+         */
+        IdeaExitRuleResponse: {
+            type: string;
+            interval: string;
+            /** Format: int32 */
+            life: number | string;
+            target: null | string;
+            /** Format: int32 */
+            window: null | number | string;
+            /** Format: date-time */
+            appliedAt: null | string;
+        };
+        /** @description The exit rules of every type × interval and the lifetimes and windows each interval takes. */
+        IdeaExitRulesResponse: {
+            rules: components["schemas"]["IdeaExitRuleResponse"][];
+            grids: components["schemas"]["ExitRuleGridResponse"][];
+        };
+        /** @description The journal: the open trades, the newest first, a page of the closed ones by the time they closed, and the totals of all the closed ones of the filter. */
+        IdeaJournalResponse: {
+            open: components["schemas"]["IdeaTradeResponse"][];
+            closed: components["schemas"]["IdeaTradesPageResponse"];
+            totals: components["schemas"]["IdeaJournalTotalsResponse"];
+        };
+        /**
+         * @description The totals of the closed trades of a filter: those closed at the target, at the stop and manually, and apart from them the cancelled and
+         *     the failed. The money, the fees, the mean result in R with its 95 % interval (none for one trade, nor the mean for none) and the mean time
+         *     to the outcome are over the first three. Numbers are decimal strings.
+         */
+        IdeaJournalTotalsResponse: {
+            /** Format: int32 */
+            targets: number | string;
+            /** Format: int32 */
+            stops: number | string;
+            /** Format: int32 */
+            manual: number | string;
+            /** Format: int32 */
+            cancelled: number | string;
+            /** Format: int32 */
+            failed: number | string;
+            result: string;
+            fees: string;
+            meanR: null | string;
+            meanRLow: null | string;
+            meanRHigh: null | string;
+            /** Format: int64 */
+            meanSecondsToOutcome: null | number | string;
+            promise: components["schemas"]["PromiseComparisonResponse"];
+            ideas: components["schemas"]["IdeaComparisonResponse"];
+        };
+        /** @description How the idea of a trade ended: the status it closed with (`target`, `stop` or `expired`), when, and its result in R as a decimal string, none for an idea that never entered. */
+        IdeaOutcomeResponse: {
+            status: string;
+            /** Format: date-time */
+            statusAt: string;
+            result: null | string;
+        };
+        /**
+         * @description What the idea promised when the trade was entered: the badge of its bucket (`up`, `flat` or `down`), the probability, the
+         *     expectancy in R and the cases of the bucket over 90 days (the badge and the probability none for «мало данных», all four none without a
+         *     bucket), and the break-even and the reward to risk after the fees from the entry price. Numbers are decimal strings.
+         */
+        IdeaPromiseResponse: {
+            badge: null | string;
+            probability: null | string;
+            expectancy: null | string;
+            /** Format: int32 */
+            cases: null | number | string;
+            breakEven: null | string;
+            netRiskReward: string;
+        };
+        /**
          * @description A trade idea with its levels and where it stands, and the statistics of its bucket over 90 days (BucketStatisticsResponse? IdeaResponse.Bucket) and over the last
-         *     30 (BucketStatisticsResponse? IdeaResponse.Recent), none while the bucket has no case. string IdeaResponse.Baseline is the bucket's, or 1 / (1 + R:R) of the idea.
+         *     30 (BucketStatisticsResponse? IdeaResponse.Recent), none while the bucket has no case. string? IdeaResponse.BreakEven is the share of targets the idea breaks even at after the fees if it
+         *     never expires, none when the target does not cover them.
          *     string IdeaResponse.ProfitPerUsdt, string IdeaResponse.LossPerUsdt and string IdeaResponse.RiskPerUsdt are its money on 1 USDT of the amount of a deal,
          *     after the fees. string IdeaResponse.RiskReward is the ratio of the prices, string IdeaResponse.NetRiskReward the profit over the loss after the fees. string? IdeaResponse.Tick is the price step of the pair, none for an idea made before it was kept. Numbers are decimal strings; string IdeaResponse.Move in ATR, string IdeaResponse.VolumeRatio in medians of volume.
          */
@@ -3814,7 +4626,7 @@ export interface components {
             exitPrice: null | string;
             move: string;
             volumeRatio: string;
-            baseline: string;
+            breakEven: null | string;
             bucket: null | components["schemas"]["BucketStatisticsResponse"];
             recent: null | components["schemas"]["BucketStatisticsResponse"];
         };
@@ -3827,6 +4639,99 @@ export interface components {
             pageSize: number | string;
             /** Format: int32 */
             total: number | string;
+        };
+        /** @description An entry by an idea; without an account the settings of trading by ideas give it; the amount in USDT is required. */
+        IdeaTradeBody: {
+            /** Format: uuid */
+            ideaId: string;
+            /** Format: uuid */
+            accountId?: null | string;
+            /** Format: double */
+            amount: number | string;
+        };
+        /**
+         * @description A trade by an idea: the pair, the setup, the interval, the type and the side of its idea as codes, the account, the levels and the size it
+         *     was entered with, its status and the time of it, the reason of an «Ошибка» and the result of a closed trade in money and in R (none before).
+         *     Numbers are decimal strings; string? IdeaTradeResponse.FilledPrice is the average price the entry was filled at, none before any fill.
+         *     `openedAt` is the first fill of the entry and `secondsToOutcome` the time from it to the close of a closed trade;
+         *     `promise` is what the idea promised at the entry and `ideaOutcome` how the idea ended, none for a trade made before
+         *     the journal or while the idea is open. An open trade has the last price of its pair and what it is worth at it, none while it waits for
+         *     its entry or when the exchange gave no price.
+         */
+        IdeaTradeResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            ideaId: string;
+            /** Format: uuid */
+            accountId: string;
+            accountName: string;
+            category: string;
+            symbol: string;
+            setup: string;
+            interval: string;
+            type: string;
+            side: string;
+            entryPrice: string;
+            filledPrice: null | string;
+            stop: string;
+            target: string;
+            quantity: string;
+            amount: string;
+            risk: string;
+            status: string;
+            /** Format: date-time */
+            statusAt: string;
+            /** Format: date-time */
+            createdAt: string;
+            reason: null | string;
+            result: null | string;
+            resultR: null | string;
+            /** Format: date-time */
+            openedAt: null | string;
+            /** Format: int64 */
+            secondsToOutcome: null | number | string;
+            promise: null | components["schemas"]["IdeaPromiseResponse"];
+            ideaOutcome: null | components["schemas"]["IdeaOutcomeResponse"];
+            lastPrice: null | string;
+            currentResult: null | string;
+            currentResultR: null | string;
+        };
+        /** @description A page of trades: its number from 1 (the last page when the one asked for is past the end), its size and the count of all the closed trades of the filter. */
+        IdeaTradesPageResponse: {
+            items: components["schemas"]["IdeaTradeResponse"][];
+            /** Format: int32 */
+            page: number | string;
+            /** Format: int32 */
+            pageSize: number | string;
+            /** Format: int32 */
+            total: number | string;
+        };
+        /** @description The settings of trading by ideas: the account to enter on, the amount and the largest amount of a trade in USDT, the most open trades and their total risk, the lowest reward to the risk after the fees. */
+        IdeaTradingSettingsBody: {
+            /** Format: uuid */
+            accountId?: null | string;
+            /** Format: double */
+            amount?: number | string;
+            /** Format: double */
+            maxAmount?: number | string;
+            /** Format: int32 */
+            maxOpenTrades?: number | string;
+            /** Format: double */
+            maxTotalRisk?: number | string;
+            /** Format: double */
+            minRiskReward?: number | string;
+        };
+        /** @description The settings of trading by ideas; numbers are decimal strings, the account is none until the owner chose one. */
+        IdeaTradingSettingsResponse: {
+            /** Format: uuid */
+            accountId: null | string;
+            amount: string;
+            maxAmount: string;
+            /** Format: int32 */
+            maxOpenTrades: number | string;
+            maxTotalRisk: string;
+            minRiskReward: string;
         };
         InstrumentResponse: {
             category: string;
@@ -4032,8 +4937,9 @@ export interface components {
             side: null | string;
         };
         /**
-         * @description An own idea from the price now: its levels, R:R of the prices, string? OwnIdeaResponse.NetRiskReward after the fees and the baseline 1 / (1 + R:R),
-         *     its only probability («без сетапа: только базовая линия»); bool OwnIdeaResponse.Made false and no levels when the rules of its type make none. string? OwnIdeaResponse.Tick is the price step of the pair. Numbers are decimal strings.
+         * @description An own idea from the price now: its levels, R:R of the prices, string? OwnIdeaResponse.NetRiskReward after the fees and string? OwnIdeaResponse.BreakEven,
+         *     the share of targets it breaks even at after the fees if it never expires, none when the target does not cover them; bool OwnIdeaResponse.Made
+         *     false and no levels when the rules of its type make none. string? OwnIdeaResponse.Tick is the price step of the pair. Numbers are decimal strings.
          */
         OwnIdeaResponse: {
             made: boolean;
@@ -4042,7 +4948,7 @@ export interface components {
             target: null | string;
             riskReward: null | string;
             netRiskReward: null | string;
-            baseline: null | string;
+            breakEven: null | string;
             tick: null | string;
         };
         PinResponse: {
@@ -4093,6 +4999,13 @@ export interface components {
             /** Format: int64 */
             totalCombinations: number | string;
         };
+        /** @description The trades with a promised expectancy: how many, the mean expectancy they were promised and the mean result in R they got. */
+        PromiseComparisonResponse: {
+            /** Format: int32 */
+            count: number | string;
+            promised: null | string;
+            got: null | string;
+        };
         RenameExchangeAccountBody: {
             name: string;
         };
@@ -4110,7 +5023,7 @@ export interface components {
         };
         /**
          * @description A condition: a field code of the catalog, an operator (`&gt;`, `&gt;=`, `&lt;`, `&lt;=`, `=`, `between` or
-         *     `above_baseline`), its value and for `between` its upper bound, as decimal strings.
+         *     `reliably_positive`), its value and for `between` its upper bound, as decimal strings.
          */
         SavedFilterConditionBody: {
             field: null | string;

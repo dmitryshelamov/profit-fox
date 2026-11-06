@@ -1,5 +1,6 @@
 using Bybit.Net.Enums;
 
+using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 
 using Interval = ProfitFox.Domain.Entities.MarketData.Enums.Interval;
@@ -33,6 +34,17 @@ internal static class BybitCodes
         [Interval.OneWeek] = KlineInterval.OneWeek,
         [Interval.OneMonth] = KlineInterval.OneMonth
     };
+
+    /// <summary>What Bybit says an order of its own making is; the Partial mode names its orders <c>PartialTakeProfit</c> and <c>PartialStopLoss</c>.</summary>
+    internal static StopOrderKind ToStopKind(this StopOrderType? type)
+    {
+        return type switch
+        {
+            StopOrderType.TakeProfit or StopOrderType.PartialTakeProfit => StopOrderKind.TakeProfit,
+            StopOrderType.StopLoss or StopOrderType.PartialStopLoss => StopOrderKind.StopLoss,
+            _ => StopOrderKind.None
+        };
+    }
 
     internal static Category ToBybit(this MarketCategory category)
     {

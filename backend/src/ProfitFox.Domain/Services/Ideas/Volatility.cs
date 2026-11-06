@@ -2,7 +2,9 @@ using ProfitFox.Domain.ValueObjects.Ideas;
 
 namespace ProfitFox.Domain.Services.Ideas;
 
-/// <summary>ATR / price of a pair on an interval and its 90th percentile, which «Высокая волатильность» exceeds.</summary>
+/// <summary>
+///     ATR / price of a pair on an interval and its percentiles: «Высокая волатильность» exceeds the 90th, «Сжатие» stays below the 10th.
+/// </summary>
 public static class Volatility
 {
     private const int Window = 220;
@@ -26,8 +28,8 @@ public static class Volatility
         return ratios;
     }
 
-    /// <summary>The 90th percentile by nearest rank; fewer than 100 ratios give none.</summary>
-    public static decimal? Percentile(IReadOnlyList<decimal> ratios)
+    /// <summary>The percentile of <paramref name="rank" /> (0.1 for the 10th) by nearest rank; fewer than 100 ratios give none.</summary>
+    public static decimal? Percentile(IReadOnlyList<decimal> ratios, decimal rank)
     {
         if (ratios.Count < MinimumRatios)
         {
@@ -36,6 +38,6 @@ public static class Volatility
 
         decimal[] sorted = [.. ratios.Order()];
 
-        return sorted[(int)Math.Ceiling(sorted.Length * 0.9m) - 1];
+        return sorted[(int)Math.Ceiling(sorted.Length * rank) - 1];
     }
 }

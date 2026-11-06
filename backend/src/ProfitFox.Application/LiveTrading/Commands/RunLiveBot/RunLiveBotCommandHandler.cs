@@ -12,6 +12,7 @@ namespace ProfitFox.Application.LiveTrading.Commands.RunLiveBot;
 
 public sealed class RunLiveBotCommandHandler(
     ILiveBotRepository repository,
+    IIdeaTradeRepository ideaTrades,
     IStrategyLibraryRepository library,
     IExchangeAccountRepository accounts,
     ISecretProtector protector,
@@ -33,6 +34,7 @@ public sealed class RunLiveBotCommandHandler(
         var session = new LiveBotSession(
             request.Bot,
             repository,
+            ideaTrades,
             library,
             accounts,
             protector,

@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { useNavigate } from '@tanstack/react-router';
 import { type ReactNode, useState } from 'react';
 
+import { EntryDialog } from '@/modules/idea-trades';
 import {
   type Idea,
   ideaQuery,
@@ -225,7 +226,7 @@ const unitOf = (value: string | null, format: (value: string) => string, unit = 
 const defaultOwnIdea: OwnIdeaInput = { type: 'levels', interval: '15', side: 'long' };
 
 /**
- * The ideas of the pair on the left, the chart on the right. A selected idea (`?idea=`) puts its interval, levels,
+ * The chart across the page, the table of the ideas of the pair under it, the own idea below. A selected idea (`?idea=`) puts its interval, levels,
  * zones and the mark of its signal on the chart; an own idea draws its levels the same way.
  */
 function IdeasHub({
@@ -245,6 +246,7 @@ function IdeasHub({
   interval: string | undefined;
 }) {
   const navigate = useNavigate();
+  const [entering, setEntering] = useState<Idea | null>(null);
   const ideas = useQuery(pairIdeasQuery(category, symbol));
   const own = useOwnIdea(category, symbol, ownInput).data;
   const listed: Idea | undefined = ideas.data?.find((item) => item.id === selectedId);
@@ -280,40 +282,7 @@ function IdeasHub({
     });
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[22rem_1fr]">
-      <div className="space-y-4">
-        <section
-          aria-label="Идеи пары"
-          className="space-y-3 rounded-xl border border-line bg-panel px-4 py-4"
-        >
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Идеи</h2>
-            {selectedId !== undefined && (
-              <button
-                type="button"
-                onClick={() => select(undefined)}
-                className="text-xs text-accent hover:underline"
-              >
-                Снять выбор
-              </button>
-            )}
-          </div>
-          {ideas.isError && <p role="alert">Не удалось загрузить идеи пары.</p>}
-          {ideas.isPending && <p className="text-sm text-muted">Загрузка идей…</p>}
-          {outOfList && looseOfPair && (
-            <p className="text-sm text-muted">Идея больше не в списке пары.</p>
-          )}
-          {gone && <p className="text-sm text-muted">Идеи больше нет.</p>}
-          {ideas.data && (
-            <PairIdeasList
-              ideas={ideas.data}
-              selectedId={selected?.id}
-              onSelect={(idea) => select(idea.id)}
-            />
-          )}
-        </section>
-        <OwnIdeaBlock category={category} symbol={symbol} input={ownInput} onChange={onOwnInput} />
-      </div>
+    <div className="space-y-4">
       <PairChart
         category={category}
         symbol={symbol}
@@ -325,6 +294,47 @@ function IdeasHub({
           selected && selected.interval === shown ? firedMark(selected.firedAt, shown) : undefined
         }
       />
+      <section
+        aria-label="Идеи пары"
+        className="space-y-3 rounded-xl border border-line bg-panel px-4 py-4"
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Идеи</h2>
+          {selectedId !== undefined && (
+            <button
+              type="button"
+              onClick={() => select(undefined)}
+              className="text-xs text-accent hover:underline"
+            >
+              Снять выбор
+            </button>
+          )}
+        </div>
+        {ideas.isError && <p role="alert">Не удалось загрузить идеи пары.</p>}
+        {ideas.isPending && <p className="text-sm text-muted">Загрузка идей…</p>}
+        {outOfList && looseOfPair && (
+          <p className="text-sm text-muted">Идея больше не в списке пары.</p>
+        )}
+        {gone && <p className="text-sm text-muted">Идеи больше нет.</p>}
+        {ideas.data && (
+          <div className="overflow-x-auto">
+            <PairIdeasList
+              ideas={ideas.data}
+              selectedId={selected?.id}
+              onSelect={(idea) => select(idea.id)}
+              onEnter={setEntering}
+            />
+          </div>
+        )}
+      </section>
+      <OwnIdeaBlock category={category} symbol={symbol} input={ownInput} onChange={onOwnInput} />
+      {entering && (
+        <EntryDialog
+          idea={entering}
+          onClose={() => setEntering(null)}
+          onEntered={() => void navigate({ to: '/idea-trades' })}
+        />
+      )}
     </div>
   );
 }

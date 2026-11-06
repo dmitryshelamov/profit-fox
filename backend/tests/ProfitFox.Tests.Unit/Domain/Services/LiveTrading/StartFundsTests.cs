@@ -32,4 +32,12 @@ public class StartFundsTests
     {
         StartFunds.Enough(free: 1000m, balance: 1000m, others: [new BotFunds(1000m, 1200m)]).ShouldBeTrue();
     }
+
+    // Scenario "Денег не хватает с учётом сделки по идее".
+    [Test]
+    public void A_trade_by_an_idea_that_waits_for_its_entry_takes_its_amount()
+    {
+        StartFunds.Enough(free: 1000m, balance: 900m, others: [], pendingEntries: [200m]).ShouldBeFalse();
+        StartFunds.Enough(free: 1100m, balance: 900m, others: [], pendingEntries: [200m]).ShouldBeTrue();
+    }
 }

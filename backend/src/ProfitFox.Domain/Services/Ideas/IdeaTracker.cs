@@ -4,21 +4,26 @@ using ProfitFox.Domain.ValueObjects.Ideas;
 namespace ProfitFox.Domain.Services.Ideas;
 
 /// <summary>
-///     Steps an idea by the next closed minute. A market idea enters at the open of the minute after it fired; a pullback waits up to 4
-///     candles for a minute that touches its entry. An active idea that reaches its stop is «Стоп», its target «Цель», both in one minute
-///     «Стоп»; one that reaches neither in 24 candles from its entry expires at the close of its last minute.
+///     Steps an idea by the next closed minute, by the exit rule it keeps. A market idea enters at the open of the minute after it fired; a
+///     pullback waits its entry window for a minute that touches its entry; a stop entry waits its window for a minute that reaches its entry,
+///     and expires without one at its stop. An active idea that reaches its stop is «Стоп», its target «Цель», both in one minute «Стоп»; one
+///     that reaches neither in its lifetime from its entry expires at the close of its last minute.
 /// </summary>
 public static class IdeaTracker
 {
-    private const int EntryCandles = 4;
-    private const int LifeCandles = 24;
+    /// <summary>The moment a pullback or a stop entry that has not entered gives up its entry: its window of candles from when it fired.</summary>
+    public static DateTimeOffset EntryDeadline(IdeaTrack track)
+    {
+        return track.FiredAt.AddMinutes(track.EntryCandles!.Value * track.CandleMinutes);
+    }
 
     public static IdeaTrack Step(IdeaTrack track, IdeaCandle minute)
     {
         return track.Status switch
         {
-            IdeaStatus.AwaitingEntry when track.Plan.Type != IdeaType.Pullback => EnterAtMarket(track, minute),
-            IdeaStatus.AwaitingEntry => EnterAtLimit(track, minute),
+            IdeaStatus.AwaitingEntry when track.Plan.Type == IdeaType.Pullback => EnterAtLimit(track, minute),
+            IdeaStatus.AwaitingEntry when track.Plan.Type == IdeaType.StopEntry => EnterAtStop(track, minute),
+            IdeaStatus.AwaitingEntry => EnterAtMarket(track, minute),
             IdeaStatus.Active => Exit(track, minute),
             _ => track
         };
@@ -32,7 +37,7 @@ public static class IdeaTracker
 
     private static IdeaTrack EnterAtMarket(IdeaTrack track, IdeaCandle minute)
     {
-        IdeaPlan plan = track.Plan.Type == IdeaType.Levels ? track.Plan with { Entry = minute.Open } : TwoR(track, minute.Open);
+        IdeaPlan plan = track.Plan.Type == IdeaType.Levels ? track.Plan with { Entry = minute.Open } : InR(track, minute.Open);
 
         // Beyond its stop an idea has no risk to measure, beyond its target nothing to gain.
         if (Ahead(plan) * (minute.Open - plan.Stop) <= 0 || Ahead(plan) * (plan.Target - minute.Open) <= 0)
@@ -45,7 +50,7 @@ public static class IdeaTracker
 
     private static IdeaTrack EnterAtLimit(IdeaTrack track, IdeaCandle minute)
     {
-        if (minute.OpenTime >= track.FiredAt.AddMinutes(EntryCandles * track.CandleMinutes))
+        if (minute.OpenTime >= EntryDeadline(track))
         {
             return track with { Status = IdeaStatus.Expired, StatusAt = minute.OpenTime };
         }
@@ -58,6 +63,29 @@ public static class IdeaTracker
         }
 
         IdeaTrack entered = track with { Status = IdeaStatus.Active, StatusAt = minute.OpenTime, EnteredAt = minute.OpenTime };
+
+        // Within the minute of the fill the target may have come before it; only the stop counts.
+        return Ahead(plan) * (Worst(plan, minute) - plan.Stop) <= 0 ? entered with { Status = IdeaStatus.Stop, ExitPrice = plan.Stop } : entered;
+    }
+
+    private static IdeaTrack EnterAtStop(IdeaTrack track, IdeaCandle minute)
+    {
+        if (minute.OpenTime >= EntryDeadline(track))
+        {
+            return track with { Status = IdeaStatus.Expired, StatusAt = minute.OpenTime };
+        }
+
+        IdeaPlan plan = track.Plan;
+
+        if (Ahead(plan) * (Best(plan, minute) - plan.Entry) < 0)
+        {
+            // The way out went the other side: the range broke against the idea before it entered.
+            return Ahead(plan) * (Worst(plan, minute) - plan.Stop) <= 0 ? track with { Status = IdeaStatus.Expired, StatusAt = minute.OpenTime } : track;
+        }
+
+        // A minute that opened beyond the entry fills at its open, and the target in R follows it.
+        IdeaPlan filled = Ahead(plan) * (minute.Open - plan.Entry) > 0 ? InR(track, minute.Open) : plan;
+        IdeaTrack entered = track with { Plan = filled, Status = IdeaStatus.Active, StatusAt = minute.OpenTime, EnteredAt = minute.OpenTime };
 
         // Within the minute of the fill the target may have come before it; only the stop counts.
         return Ahead(plan) * (Worst(plan, minute) - plan.Stop) <= 0 ? entered with { Status = IdeaStatus.Stop, ExitPrice = plan.Stop } : entered;
@@ -79,19 +107,20 @@ public static class IdeaTracker
 
         DateTimeOffset end = minute.OpenTime.AddMinutes(1);
 
-        return end >= track.EnteredAt!.Value.AddMinutes(LifeCandles * track.CandleMinutes)
+        return end >= track.EnteredAt!.Value.AddMinutes(track.LifeCandles * track.CandleMinutes)
             ? track with { Status = IdeaStatus.Expired, StatusAt = end, ExitPrice = minute.Close }
             : track;
     }
 
-    // An idea of a pair without a price step keeps the target of 2R as it comes.
-    private static IdeaPlan TwoR(IdeaTrack track, decimal entry)
+    // An idea of a pair without a price step keeps the target in R as it comes.
+    private static IdeaPlan InR(IdeaTrack track, decimal entry)
     {
         IdeaPlan plan = track.Plan;
+        decimal targetR = track.TargetR!.Value;
 
         return track.Tick is { } tick
-            ? IdeaRules.TwoR(plan.Type, plan.Side, entry, plan.Stop, tick)
-            : plan with { Entry = entry, Target = entry + (2m * (entry - plan.Stop)) };
+            ? IdeaRules.InR(plan.Type, plan.Side, entry, plan.Stop, targetR, tick)
+            : plan with { Entry = entry, Target = entry + (targetR * (entry - plan.Stop)) };
     }
 
     private static decimal Ahead(IdeaPlan plan)

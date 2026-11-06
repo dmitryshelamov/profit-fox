@@ -28,6 +28,18 @@ public interface IExchangeLedger
     /// <exception cref="ProfitFox.Application.Exceptions.ExchangeException">The exchange refused or did not answer.</exception>
     Task<ExchangeOrder?> FindOrderAsync(ExchangeKey key, Instrument instrument, string clientId, CancellationToken cancellationToken);
 
+    /// <summary>The order with this exchange's id, open or finished: the way to the stop or the target of an entry, which have no client id; <c>null</c> when the exchange does not know it.</summary>
+    /// <exception cref="ProfitFox.Application.Exceptions.ExchangeException">The exchange refused or did not answer.</exception>
+    Task<ExchangeOrder?> FindOrderByExchangeIdAsync(ExchangeKey key, Instrument instrument, string exchangeOrderId, CancellationToken cancellationToken);
+
+    /// <summary>The orders of the instrument that name the order with this client id as their parent, open or finished in the recent history: the stop and the target of an entry.</summary>
+    /// <exception cref="ProfitFox.Application.Exceptions.ExchangeException">The exchange refused or did not answer.</exception>
+    Task<IReadOnlyList<ExchangeOrder>> GetOrdersOfParentAsync(ExchangeKey key, Instrument instrument, string parentClientId, CancellationToken cancellationToken);
+
+    /// <summary>The executions of the order with this exchange's id, the oldest first.</summary>
+    /// <exception cref="ProfitFox.Application.Exceptions.ExchangeException">The exchange refused or did not answer.</exception>
+    Task<IReadOnlyList<ExchangeFill>> GetOrderFillsAsync(ExchangeKey key, Instrument instrument, string exchangeOrderId, CancellationToken cancellationToken);
+
     /// <summary>The executions of the order with this client id, the oldest first.</summary>
     /// <exception cref="ProfitFox.Application.Exceptions.ExchangeException">The exchange refused or did not answer.</exception>
     Task<IReadOnlyList<ExchangeFill>> GetFillsAsync(ExchangeKey key, Instrument instrument, string clientId, CancellationToken cancellationToken);

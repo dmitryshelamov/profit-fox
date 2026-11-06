@@ -1,3 +1,5 @@
+using ProfitFox.Application.Ideas;
+using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.SavedFilters.Enums;
 
 namespace ProfitFox.Application.SavedFilters;
@@ -5,7 +7,7 @@ namespace ProfitFox.Application.SavedFilters;
 /// <summary>
 ///     The one catalog of the fields of saved filters (decision 8): the conditions are checked by it, and the frontend takes it from the API.
 ///     The codes of the metrics are the names of the snapshot row in the API; the market setup holds when the pair has it on any interval;
-///     the shares of an idea are fractions, and «выше базовой» is an operator of its probability.
+///     the shares of an idea are fractions, and «надёжно > 0» is an operator of its expectancy.
 /// </summary>
 public static class SavedFilterFields
 {
@@ -14,7 +16,9 @@ public static class SavedFilterFields
         FilterOperator.Greater, FilterOperator.GreaterOrEqual, FilterOperator.Less, FilterOperator.LessOrEqual, FilterOperator.Equal, FilterOperator.Between
     ];
 
-    private static readonly string[] Setups = ["impulse", "early_impulse", "drop", "early_drop", "high_volatility"];
+    // In the order of the enums, which is the order of the lists on the screen.
+    private static readonly string[] Setups = [.. Enum.GetValues<IdeaSetup>().Select(setup => setup.ToCode())];
+    private static readonly string[] Types = [.. Enum.GetValues<IdeaType>().Select(type => type.ToCode())];
 
     /// <summary>The fields in the order of the board «Фильтр — редактор»: the market first, then the idea.</summary>
     public static readonly IReadOnlyList<SavedFilterField> All =
@@ -34,12 +38,12 @@ public static class SavedFilterFields
         Market(FilterField.Spread, "spread", "percent"),
         Choice(FilterField.Setup, "setup", false, Setups),
         Choice(FilterField.IdeaSetup, "ideaSetup", true, Setups),
-        Choice(FilterField.IdeaType, "type", true, ["levels", "target_2r", "beyond_extreme", "pullback"]),
+        Choice(FilterField.IdeaType, "type", true, Types),
         Choice(FilterField.IdeaInterval, "interval", true, ["5", "15", "60", "240"]),
         Choice(FilterField.IdeaSide, "side", true, ["long", "short"]),
         Idea(FilterField.RiskReward, "riskReward", "ratio"),
-        new SavedFilterField(FilterField.Probability, "probability", "ratio", true, [.. Comparisons, FilterOperator.AboveBaseline]),
-        Idea(FilterField.Expectancy, "expectancy", "r")
+        Idea(FilterField.Probability, "probability", "ratio"),
+        new SavedFilterField(FilterField.Expectancy, "expectancy", "r", true, [.. Comparisons, FilterOperator.ReliablyPositive])
     ];
 
     private static readonly Dictionary<string, FilterOperator> OperatorsByCode = new Dictionary<string, FilterOperator>
@@ -50,7 +54,7 @@ public static class SavedFilterFields
         ["<="] = FilterOperator.LessOrEqual,
         ["="] = FilterOperator.Equal,
         ["between"] = FilterOperator.Between,
-        ["above_baseline"] = FilterOperator.AboveBaseline
+        ["reliably_positive"] = FilterOperator.ReliablyPositive
     };
 
     private static readonly Dictionary<string, SavedFilterPlace> PlacesByCode = new Dictionary<string, SavedFilterPlace>

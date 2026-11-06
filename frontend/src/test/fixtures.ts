@@ -263,10 +263,20 @@ export const marketSnapshot = (
     setups: {
       all: rows.length,
       ...Object.fromEntries(
-        ['impulse', 'early_impulse', 'drop', 'early_drop', 'high_volatility'].map((setup) => [
-          setup,
-          rows.filter((row) => row.setups['15']?.includes(setup)).length,
-        ]),
+        [
+          'impulse',
+          'early_impulse',
+          'drop',
+          'early_drop',
+          'high_volatility',
+          'breakout',
+          'false_breakout',
+          'squeeze',
+          'exhaustion',
+          'rsi_extreme',
+          'new_extreme',
+          'quiet_volume',
+        ].map((setup) => [setup, rows.filter((row) => row.setups['15']?.includes(setup)).length]),
       ),
     },
     ...overrides,
@@ -311,16 +321,23 @@ export const ideaOf = (overrides: Partial<Schemas['IdeaResponse']> = {}) =>
     exitPrice: null,
     move: '3.1',
     volumeRatio: '4.2',
-    baseline: '0.33',
+    breakEven: '0.3517',
     bucket: {
       cases: 120,
+      targets: 55,
+      stops: 61,
       expired: 4,
       probability: '0.46',
       probabilityLow: '0.41',
       probabilityHigh: '0.51',
-      baseline: '0.33',
       expectancy: '0.38',
+      expectancyLow: '0.12',
+      expectancyHigh: '0.64',
+      badge: 'up',
       enoughData: true,
+      signals: null,
+      entryShare: null,
+      signalExpectancy: null,
     },
     recent: null,
     ...overrides,
@@ -377,21 +394,47 @@ export const filterFields = [
     unit: 'choice',
     ofIdea: false,
     operators: ['='],
-    choices: ['impulse', 'early_impulse', 'drop', 'early_drop', 'high_volatility'],
+    choices: [
+      'impulse',
+      'early_impulse',
+      'drop',
+      'early_drop',
+      'high_volatility',
+      'breakout',
+      'false_breakout',
+      'squeeze',
+      'exhaustion',
+      'rsi_extreme',
+      'new_extreme',
+      'quiet_volume',
+    ],
   },
   {
     code: 'ideaSetup',
     unit: 'choice',
     ofIdea: true,
     operators: ['='],
-    choices: ['impulse', 'early_impulse', 'drop', 'early_drop', 'high_volatility'],
+    choices: [
+      'impulse',
+      'early_impulse',
+      'drop',
+      'early_drop',
+      'high_volatility',
+      'breakout',
+      'false_breakout',
+      'squeeze',
+      'exhaustion',
+      'rsi_extreme',
+      'new_extreme',
+      'quiet_volume',
+    ],
   },
   {
     code: 'type',
     unit: 'choice',
     ofIdea: true,
     operators: ['='],
-    choices: ['levels', 'target_2r', 'beyond_extreme', 'pullback'],
+    choices: ['levels', 'target_2r', 'beyond_extreme', 'pullback', 'stop_entry'],
   },
   {
     code: 'interval',
@@ -402,16 +445,277 @@ export const filterFields = [
   },
   { code: 'side', unit: 'choice', ofIdea: true, operators: ['='], choices: ['long', 'short'] },
   { code: 'riskReward', unit: 'ratio', ofIdea: true, operators: comparisons, choices: null },
+  { code: 'probability', unit: 'ratio', ofIdea: true, operators: comparisons, choices: null },
   {
-    code: 'probability',
-    unit: 'ratio',
+    code: 'expectancy',
+    unit: 'r',
     ofIdea: true,
-    operators: [
-      ...comparisons.filter((operator) => operator !== 'between'),
-      'between',
-      'above_baseline',
-    ],
+    operators: [...comparisons, 'reliably_positive'],
     choices: null,
   },
-  { code: 'expectancy', unit: 'r', ofIdea: true, operators: comparisons, choices: null },
 ] satisfies Schemas['SavedFilterFieldResponse'][];
+
+/** A trade by an idea waiting for its entry on SOLUSDT; a test sets what it needs. */
+export const tradeOf = (overrides: Partial<Schemas['IdeaTradeResponse']> = {}) =>
+  ({
+    id: 'aaaaaaaa-0000-4000-8000-000000000001',
+    ideaId: '11111111-1111-4111-8111-111111111111',
+    accountId: exchangeAccount.id,
+    accountName: exchangeAccount.name,
+    category: 'linear',
+    symbol: 'SOLUSDT',
+    setup: 'impulse',
+    interval: '15',
+    type: 'target_2r',
+    side: 'long',
+    entryPrice: '168.4',
+    filledPrice: null,
+    stop: '165',
+    target: '175',
+    quantity: '0.47',
+    amount: '79.15',
+    risk: '0.99',
+    status: 'awaiting_entry',
+    statusAt: '2026-11-05T10:00:00Z',
+    createdAt: '2026-11-05T10:00:00Z',
+    reason: null,
+    result: null,
+    resultR: null,
+    openedAt: null,
+    secondsToOutcome: null,
+    promise: null,
+    ideaOutcome: null,
+    lastPrice: null,
+    currentResult: null,
+    currentResultR: null,
+    ...overrides,
+  }) satisfies Schemas['IdeaTradeResponse'];
+
+/** The totals of a journal with nothing closed; a test sets what it needs. */
+export const journalTotals = (overrides: Partial<Schemas['IdeaJournalTotalsResponse']> = {}) =>
+  ({
+    targets: 0,
+    stops: 0,
+    manual: 0,
+    cancelled: 0,
+    failed: 0,
+    result: '0',
+    fees: '0',
+    meanR: null,
+    meanRLow: null,
+    meanRHigh: null,
+    meanSecondsToOutcome: null,
+    promise: { count: 0, promised: null, got: null },
+    ideas: { count: 0, ideas: null, trades: null },
+    ...overrides,
+  }) satisfies Schemas['IdeaJournalTotalsResponse'];
+
+/** The journal as the API gives it: the open trades, a page of the closed ones and the totals. */
+export const journalOf = (
+  open: Schemas['IdeaTradeResponse'][] = [],
+  closed: Schemas['IdeaTradeResponse'][] = [],
+  overrides: {
+    totals?: Schemas['IdeaJournalTotalsResponse'];
+    page?: number;
+    pageSize?: number;
+    total?: number;
+  } = {},
+) =>
+  ({
+    open,
+    closed: {
+      items: closed,
+      page: overrides.page ?? 1,
+      pageSize: overrides.pageSize ?? 50,
+      total: overrides.total ?? closed.length,
+    },
+    totals: overrides.totals ?? journalTotals(),
+  }) satisfies Schemas['IdeaJournalResponse'];
+
+export const tradingSettings = {
+  accountId: exchangeAccount.id,
+  amount: '20',
+  maxAmount: '200',
+  maxOpenTrades: 5,
+  maxTotalRisk: '5',
+  minRiskReward: '1.5',
+} satisfies Schemas['IdeaTradingSettingsResponse'];
+
+/** The entry of an idea as the API calculates it: no reason. */
+export const entryOf = (overrides: Partial<Schemas['IdeaEntryResponse']> = {}) =>
+  ({
+    accountId: exchangeAccount.id,
+    entryPrice: '168.40',
+    quantity: '0.47',
+    amount: '79.15',
+    risk: '0.99',
+    profit: '1.82',
+    riskReward: '1.84',
+    riskRewardWithoutFees: '2',
+    freeMoney: '1000',
+    quote: 'USDT',
+    reasons: [],
+    ...overrides,
+  }) satisfies Schemas['IdeaEntryResponse'];
+
+/** A row of a table of calibration of the API: 640 cases promised 35 % on average. */
+export const calibrationRowOf = (overrides: Partial<Schemas['CalibrationRowResponse']> = {}) =>
+  ({
+    from: '0.3',
+    to: '0.4',
+    badge: null,
+    promised: '0.35',
+    cases: 640,
+    targetShare: '0.34',
+    stopShare: '0.52',
+    expiredShare: '0.14',
+    probabilityLow: '0.31',
+    probabilityHigh: '0.37',
+    expectancy: '0.02',
+    expectancyLow: '-0.05',
+    expectancyHigh: '0.09',
+    ...overrides,
+  }) satisfies Schemas['CalibrationRowResponse'];
+
+/** A report of calibration of the API over 90 days and all categories, the numbers of the board «Идеи — калибровка». */
+export const calibrationOf = (overrides: Partial<Schemas['IdeaCalibrationResponse']> = {}) =>
+  ({
+    computedAt: '2026-11-06T00:50:00Z',
+    days: 90,
+    category: null,
+    checked: 2412,
+    unchecked: 318,
+    brier: '0.207',
+    baseBrier: '0.219',
+    probabilities: [
+      calibrationRowOf(),
+      calibrationRowOf({
+        from: '0.6',
+        to: null,
+        promised: '0.64',
+        cases: 296,
+        targetShare: '0.51',
+        stopShare: '0.38',
+        expiredShare: '0.11',
+        probabilityLow: '0.45',
+        probabilityHigh: '0.57',
+      }),
+    ],
+    expectancies: [
+      calibrationRowOf({ from: '0', to: '0.2', promised: '0.11', cases: 900, expectancy: '0.04' }),
+    ],
+    badges: [
+      calibrationRowOf({
+        from: null,
+        to: null,
+        badge: 'up',
+        promised: '0.21',
+        cases: 603,
+        targetShare: '0.46',
+        expectancy: '0.08',
+        expectancyLow: '0.02',
+        expectancyHigh: '0.14',
+      }),
+    ],
+    total: calibrationRowOf({
+      from: null,
+      to: null,
+      promised: '0.12',
+      cases: 2412,
+      expectancy: '0.03',
+    }),
+    ...overrides,
+  }) satisfies Schemas['IdeaCalibrationResponse'];
+
+const exitRuleTypes = ['levels', 'target_2r', 'beyond_extreme', 'pullback', 'stop_entry'];
+const exitRuleIntervals = ['5', '15', '60', '240'];
+
+/** The default exit rule of a type × interval, as the API gives it. */
+export const exitRuleOf = (overrides: Partial<Schemas['IdeaExitRuleResponse']> = {}) =>
+  ({
+    type: 'pullback',
+    interval: '15',
+    life: 24,
+    target: '2',
+    window: 4,
+    appliedAt: null,
+    ...overrides,
+  }) satisfies Schemas['IdeaExitRuleResponse'];
+
+/** The rules of every type × interval at their defaults, with the ones given in place of theirs, and the grids. */
+export const exitRulesOf = (applied: Schemas['IdeaExitRuleResponse'][] = []) =>
+  ({
+    rules: exitRuleTypes.flatMap((type) =>
+      exitRuleIntervals.map(
+        (interval) =>
+          applied.find((rule) => rule.type === type && rule.interval === interval) ??
+          exitRuleOf({
+            type,
+            interval,
+            target: type === 'levels' ? null : '2',
+            window: type === 'pullback' ? 4 : type === 'stop_entry' ? 12 : null,
+          }),
+      ),
+    ),
+    grids: [
+      {
+        interval: '5',
+        candles: [
+          1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024, 1536,
+          2016,
+        ],
+      },
+      {
+        interval: '15',
+        candles: [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 672],
+      },
+      { interval: '60', candles: [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 168] },
+      { interval: '240', candles: [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 42] },
+    ],
+  }) satisfies Schemas['IdeaExitRulesResponse'];
+
+export const exitBucketOf = (overrides: Partial<Schemas['BucketStatisticsResponse']> = {}) =>
+  ({
+    cases: 100,
+    targets: 30,
+    stops: 60,
+    expired: 10,
+    probability: '0.3',
+    probabilityLow: '0.22',
+    probabilityHigh: '0.4',
+    expectancy: '-0.06',
+    expectancyLow: '-0.2',
+    expectancyHigh: '0.08',
+    badge: 'flat',
+    enoughData: true,
+    signals: 200,
+    entryShare: '0.5',
+    signalExpectancy: '-0.03',
+    ...overrides,
+  }) satisfies Schemas['BucketStatisticsResponse'];
+
+/** A preview of «Откат» 15 minutes: −0.06 → −0.02 R over 90 days, −0.09 → −0.08 R over 30, +2.5 R reached by 29 % at 30 % needed. */
+export const exitPreviewOf = (overrides: Partial<Schemas['ExitRulePreviewResponse']> = {}) =>
+  ({
+    last90: {
+      current: exitBucketOf(),
+      candidate: exitBucketOf({ expectancy: '-0.02', signalExpectancy: '-0.01' }),
+    },
+    last30: {
+      current: exitBucketOf({ cases: 40, signals: 80, expectancy: '-0.09' }),
+      candidate: exitBucketOf({ cases: 40, signals: 80, expectancy: '-0.08' }),
+    },
+    lives: [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 672].map(
+      (candles) => ({
+        candles,
+        expectancy: '-0.05',
+        signalExpectancy: '-0.025',
+      }),
+    ),
+    mfe: ['0.5', '1', '1.5', '2', '2.5', '3', '3.5', '4', '4.5', '5'].map((r) => ({
+      r,
+      reached: r === '2.5' ? '0.29' : '0.4',
+      breakEven: r === '2.5' ? '0.2957' : '0.33',
+    })),
+    ...overrides,
+  }) satisfies Schemas['ExitRulePreviewResponse'];

@@ -11,7 +11,9 @@ namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Idea
 
 internal static class IdeaDbConverter
 {
-    internal static IdeaDb FromDomain(Idea idea, decimal result = 0m)
+    private static readonly IdeaExitRules DefaultRules = new IdeaExitRules([]);
+
+    internal static IdeaDb FromDomain(Idea idea)
     {
         IdeaTrack track = idea.Track;
 
@@ -37,7 +39,9 @@ internal static class IdeaDbConverter
             VolumeRatio = idea.VolumeRatio,
             EngineVersion = idea.EngineVersion,
             Tick = track.Tick,
-            Result = result
+            LifeCandles = track.LifeCandles,
+            TargetR = track.TargetR,
+            EntryCandles = track.EntryCandles
         };
     }
 
@@ -49,10 +53,15 @@ internal static class IdeaDbConverter
         IdeaCodes.TryParseType(row.Type, out IdeaType type);
         IdeaCodes.TryParseSide(row.Side, out IdeaSide side);
         var plan = new IdeaPlan(type, side, row.Entry, row.Stop, row.Target);
+        // An idea a rolled-back image wrote has no target and window of its own: it lives by the defaults of its type.
+        IdeaExitRule defaults = DefaultRules.Of(type, interval);
         var track = new IdeaTrack(
             plan,
             row.FiredAt,
             (int)(interval.CandleEnd(row.FiredAt) - row.FiredAt).TotalMinutes,
+            row.LifeCandles,
+            row.TargetR ?? defaults.TargetR,
+            row.EntryCandles ?? defaults.EntryCandles,
             IdeaCodes.ParseStatus(row.Status),
             row.StatusAt,
             row.EnteredAt,

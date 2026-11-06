@@ -60,20 +60,52 @@ internal sealed class BybitLedger(HttpClient http, ILoggerFactory loggers, Bybit
         return orders;
     }
 
-    public async Task<ExchangeOrder?> FindOrderAsync(ExchangeKey key, Instrument instrument, string clientId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ExchangeOrder>> GetOrdersOfParentAsync(ExchangeKey key, Instrument instrument, string parentClientId, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<ExchangeOrder> open = await GetOpenOrdersAsync(key, instrument, cancellationToken);
+
+        // The orders that finished are in the history, newest first; the stop and the target of an entry are among the latest.
+        using BybitRestClient client = Client(key);
+        BybitResponse<BybitOrder> history = BybitKeyClients.Unwrap(await client.V5Api.Trading.GetOrderHistoryAsync(
+            instrument.Category.ToBybit(), instrument.Symbol, limit: PageSize, ct: cancellationToken));
+
+        return [.. open.Concat(history.List.Select(Order)).Where(order => order.ParentClientId == parentClientId)];
+    }
+
+    public Task<ExchangeOrder?> FindOrderAsync(ExchangeKey key, Instrument instrument, string clientId, CancellationToken cancellationToken)
+    {
+        return FindAsync(key, instrument, clientId, null, cancellationToken);
+    }
+
+    public Task<ExchangeOrder?> FindOrderByExchangeIdAsync(ExchangeKey key, Instrument instrument, string exchangeOrderId, CancellationToken cancellationToken)
+    {
+        return FindAsync(key, instrument, null, exchangeOrderId, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<ExchangeFill>> GetFillsAsync(ExchangeKey key, Instrument instrument, string clientId, CancellationToken cancellationToken)
+    {
+        return FillsAsync(key, instrument, clientId, null, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<ExchangeFill>> GetOrderFillsAsync(ExchangeKey key, Instrument instrument, string exchangeOrderId, CancellationToken cancellationToken)
+    {
+        return FillsAsync(key, instrument, null, exchangeOrderId, cancellationToken);
+    }
+
+    private async Task<ExchangeOrder?> FindAsync(ExchangeKey key, Instrument instrument, string? clientId, string? exchangeOrderId, CancellationToken cancellationToken)
     {
         using BybitRestClient client = Client(key);
         BybitOrder? open = BybitKeyClients.Unwrap(await client.V5Api.Trading.GetOrdersAsync(
-            instrument.Category.ToBybit(), instrument.Symbol, clientOrderId: clientId, ct: cancellationToken)).List.FirstOrDefault();
+            instrument.Category.ToBybit(), instrument.Symbol, orderId: exchangeOrderId, clientOrderId: clientId, ct: cancellationToken)).List.FirstOrDefault();
 
         // An order that finished leaves the open orders for the history.
         BybitOrder? order = open ?? BybitKeyClients.Unwrap(await client.V5Api.Trading.GetOrderHistoryAsync(
-            instrument.Category.ToBybit(), instrument.Symbol, clientOrderId: clientId, ct: cancellationToken)).List.FirstOrDefault();
+            instrument.Category.ToBybit(), instrument.Symbol, orderId: exchangeOrderId, clientOrderId: clientId, ct: cancellationToken)).List.FirstOrDefault();
 
         return order is null ? null : Order(order);
     }
 
-    public async Task<IReadOnlyList<ExchangeFill>> GetFillsAsync(ExchangeKey key, Instrument instrument, string clientId, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<ExchangeFill>> FillsAsync(ExchangeKey key, Instrument instrument, string? clientId, string? exchangeOrderId, CancellationToken cancellationToken)
     {
         using BybitRestClient client = Client(key);
         var trades = new List<BybitUserTrade>();
@@ -83,7 +115,7 @@ internal sealed class BybitLedger(HttpClient http, ILoggerFactory loggers, Bybit
         do
         {
             BybitResponse<BybitUserTrade> page = BybitKeyClients.Unwrap(await client.V5Api.Trading.GetUserTradesAsync(
-                instrument.Category.ToBybit(), instrument.Symbol, clientOrderId: clientId, cursor: cursor, ct: cancellationToken));
+                instrument.Category.ToBybit(), instrument.Symbol, orderId: exchangeOrderId, clientOrderId: clientId, cursor: cursor, ct: cancellationToken));
             trades.AddRange(page.List);
             cursor = string.IsNullOrEmpty(page.NextPageCursor) ? null : page.NextPageCursor;
         }
@@ -93,7 +125,7 @@ internal sealed class BybitLedger(HttpClient http, ILoggerFactory loggers, Bybit
         [
             .. trades
                 .OrderBy(trade => trade.Timestamp)
-                .Select(trade => new ExchangeFill(trade.TradeId, trade.ClientOrderId ?? "", trade.Quantity, trade.Price, trade.Fee ?? 0m, trade.FeeAsset ?? "", Utc(trade.Timestamp), instrument))
+                .Select(trade => new ExchangeFill(trade.TradeId, trade.ClientOrderId ?? "", trade.Quantity, trade.Price, trade.Fee ?? 0m, trade.FeeAsset ?? "", Utc(trade.Timestamp), instrument, trade.OrderId))
         ];
     }
 
@@ -144,7 +176,9 @@ internal sealed class BybitLedger(HttpClient http, ILoggerFactory loggers, Bybit
             state == ExchangeOrderState.Rejected ? order.RejectReason : null,
             order.ValueFilled ?? 0m,
             order.ExecutedFee ?? 0m,
-            order.FeeAsset ?? "");
+            order.FeeAsset ?? "",
+            string.IsNullOrEmpty(order.ParentOrderId) ? null : order.ParentOrderId,
+            order.StopOrderType.ToStopKind());
     }
 
     private static DateTimeOffset Utc(DateTime time)

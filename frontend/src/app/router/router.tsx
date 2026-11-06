@@ -19,7 +19,11 @@ import { BotPage } from '@/pages/bot/BotPage';
 import { BotEditorPage } from '@/pages/bot-editor/BotEditorPage';
 import { BotsPage } from '@/pages/bots/BotsPage';
 import { ComparePage } from '@/pages/compare/ComparePage';
+import { IdeaJournalPage } from '@/pages/idea-trades/IdeaJournalPage';
+import { IdeaTradingSettingsPage } from '@/pages/idea-trades/IdeaTradingSettingsPage';
 import { IdeasPage } from '@/pages/ideas/IdeasPage';
+import { IdeasCalibrationPage } from '@/pages/ideas-calibration/IdeasCalibrationPage';
+import { IdeasExitRulesPage } from '@/pages/ideas-exit-rules/IdeasExitRulesPage';
 import { MarketPage } from '@/pages/market/MarketPage';
 import { MarketPairPage } from '@/pages/market-pair/MarketPairPage';
 import { NodeEditorPage } from '@/pages/node-editor/NodeEditorPage';
@@ -105,6 +109,47 @@ const ideasRoute = createRoute({
 
     return <IdeasPage page={page ?? 1} />;
   },
+});
+
+const ideaTradesRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/idea-trades',
+  validateSearch: pageOf,
+  component: function IdeaTradesRoute() {
+    const { page } = ideaTradesRoute.useSearch();
+
+    return <IdeaJournalPage page={page ?? 1} />;
+  },
+});
+
+const ideaTradingSettingsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/idea-trades/settings',
+  component: IdeaTradingSettingsPage,
+});
+
+// The window is 90 days but for `?days=30`, which the router reads as a number; the category is linear, spot or none.
+const ideasCalibrationRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/ideas/calibration',
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { days?: 30 | undefined; category?: 'linear' | 'spot' | undefined } => ({
+    days: search.days === 30 ? 30 : undefined,
+    category:
+      search.category === 'linear' || search.category === 'spot' ? search.category : undefined,
+  }),
+  component: function IdeasCalibrationRoute() {
+    const { days, category } = ideasCalibrationRoute.useSearch();
+
+    return <IdeasCalibrationPage days={days ?? 90} category={category ?? null} />;
+  },
+});
+
+const ideasExitRulesRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/ideas/exit-rules',
+  component: IdeasExitRulesPage,
 });
 
 const marketPairRoute = createRoute({
@@ -273,6 +318,10 @@ const routeTree = rootRoute.addChildren([
     marketRoute,
     marketPairRoute,
     ideasRoute,
+    ideaTradesRoute,
+    ideaTradingSettingsRoute,
+    ideasCalibrationRoute,
+    ideasExitRulesRoute,
     botsRoute,
     newBotRoute,
     editBotRoute,

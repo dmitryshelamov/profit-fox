@@ -1,4 +1,5 @@
 using ProfitFox.Domain.Entities.Ideas;
+using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Domain.Repositories;
@@ -12,6 +13,19 @@ public interface IIdeaRepository
     /// </summary>
     Task<IReadOnlyList<Idea>> SaveAsync(IReadOnlyCollection<Idea> created, IReadOnlyCollection<Idea> changed, CancellationToken cancellationToken);
 
+    /// <summary>
+    ///     The same, and in the same transaction writes how the ideas that closed ended on the trades made of them that have no outcome yet. It
+    ///     touches nothing else of a trade, not its time of update, so no Worker rereads it.
+    /// </summary>
+    Task<IReadOnlyList<Idea>> SaveAsync(
+        IReadOnlyCollection<Idea> created,
+        IReadOnlyCollection<Idea> changed,
+        IReadOnlyCollection<ClosedIdea> outcomes,
+        CancellationToken cancellationToken);
+
+    /// <summary>The ideas that closed and still stand, with a trade made of them that has no outcome yet.</summary>
+    Task<IReadOnlyList<Idea>> GetClosedOfTradesWithoutOutcomeAsync(CancellationToken cancellationToken);
+
     /// <summary>The ideas awaiting entry or active.</summary>
     Task<IReadOnlyList<Idea>> GetOpenAsync(CancellationToken cancellationToken);
 
@@ -19,4 +33,10 @@ public interface IIdeaRepository
     Task<IReadOnlyList<Idea>> GetRecentAsync(DateTimeOffset closedSince, Instrument? instrument, CancellationToken cancellationToken);
 
     Task<Idea?> GetAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Deletes the ideas that reached the target, the stop or expired before <paramref name="closedBefore" />; returns how many went. The
+    ///     open ideas stay however old they are.
+    /// </summary>
+    Task<int> DeleteClosedBeforeAsync(DateTimeOffset closedBefore, CancellationToken cancellationToken);
 }

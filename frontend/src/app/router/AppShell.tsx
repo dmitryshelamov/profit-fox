@@ -7,11 +7,12 @@ const navLink = 'border-b-2 border-transparent py-3 text-muted hover:text-text';
 
 export function AppShell({ children }: { children: ReactNode }) {
   const barShown = useComparison().length > 0;
-  // The market table has fourteen columns and the ideas table fifteen: they take the width of the mockup, 1376 px.
+  // The market table has fifteen columns, the ideas table fourteen and the tables of the journal up to fourteen: they take the whole width of the window.
   const match = useMatchRoute();
   const wide =
     match({ to: '/market' }) !== false ||
     match({ to: '/ideas' }) !== false ||
+    match({ to: '/idea-trades' }) !== false ||
     match({ to: '/market/$category/$symbol' }) !== false;
 
   return (
@@ -53,6 +54,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             Идеи
           </Link>
           <Link
+            to="/idea-trades"
+            className={navLink}
+            activeProps={{ className: 'border-accent! text-text!', 'aria-current': 'page' }}
+          >
+            Сделки
+          </Link>
+          <Link
             to="/bots"
             className={navLink}
             activeProps={{ className: 'border-accent! text-text!', 'aria-current': 'page' }}
@@ -69,7 +77,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
       </header>
       <main
-        className={`mx-auto w-full ${wide ? 'max-w-[1376px]' : 'max-w-[1100px]'} flex-1 px-4 pt-9 ${barShown ? 'pb-28' : 'pb-9'}`}
+        className={`mx-auto w-full ${wide ? 'max-w-none' : 'max-w-[1100px]'} flex-1 px-4 pt-9 ${barShown ? 'pb-28' : 'pb-9'}`}
       >
         {children}
       </main>

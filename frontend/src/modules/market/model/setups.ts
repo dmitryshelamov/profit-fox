@@ -11,6 +11,13 @@ export const setupChoices = [
   { value: 'drop', label: 'Падение' },
   { value: 'early_drop', label: 'Раннее падение' },
   { value: 'high_volatility', label: 'Высокая волатильность' },
+  { value: 'breakout', label: 'Пробой' },
+  { value: 'false_breakout', label: 'Ложный пробой' },
+  { value: 'squeeze', label: 'Сжатие' },
+  { value: 'exhaustion', label: 'Истощение' },
+  { value: 'rsi_extreme', label: 'Перекупленность / перепроданность' },
+  { value: 'new_extreme', label: 'Новый максимум / минимум' },
+  { value: 'quiet_volume', label: 'Объём без движения' },
 ] as const;
 
 /** The intervals the setups are read on. */

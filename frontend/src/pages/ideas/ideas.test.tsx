@@ -18,13 +18,20 @@ const fewData = ideaOf({
   lossPerUsdt: '0.01',
   bucket: {
     cases: 12,
+    targets: 4,
+    stops: 8,
     expired: 0,
     probability: null,
     probabilityLow: null,
     probabilityHigh: null,
-    baseline: '0.4',
     expectancy: '-0.1',
+    expectancyLow: null,
+    expectancyHigh: null,
+    badge: null,
     enoughData: false,
+    signals: null,
+    entryShare: null,
+    signalExpectancy: null,
   },
 });
 const noBucket = ideaOf({ id: 'doge-1', symbol: 'DOGEUSDT', bucket: null });
@@ -104,20 +111,38 @@ describe('ideas screen', () => {
     ).toHaveLength(3);
   });
 
+  it('links to the calibration and to the exit rules of the ideas', async () => {
+    open();
+    renderApp('/ideas');
+
+    expect(await screen.findByRole('link', { name: 'Калибровка' })).toHaveAttribute(
+      'href',
+      '/ideas/calibration',
+    );
+    expect(screen.getByRole('link', { name: 'Срок жизни и цель' })).toHaveAttribute(
+      'href',
+      '/ideas/exit-rules',
+    );
+  });
+
   it('explains the probability, the badges and the profit under the table', async () => {
     open();
     renderApp('/ideas');
     await rowOf('WIFUSDT');
 
-    expect(screen.getByText(/Вероятность: доля «Цель» среди «Цель» и «Стоп»/)).toBeInTheDocument();
-    expect(screen.getByText(/интервал вероятности выше, пересекает или ниже/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Вероятность: доля «Цель» среди всех случаев с входом/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/интервал ожидания корзины выше нуля, содержит ноль или ниже нуля/),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/на сумму на идею: при цели и при стопе, после комиссий/),
     ).toBeInTheDocument();
   });
 
-  // Scenario "Идея выше базовой линии".
-  it('shows the probability with N, and ▲ before the expectancy when the interval is above the baseline', async () => {
+  // Scenario "Ожидание надёжно выше нуля".
+  it('shows the probability with N and the break-even, and ▲ of the bucket before the expectancy', async () => {
     open();
     renderApp('/ideas');
 
@@ -125,7 +150,8 @@ describe('ideas screen', () => {
 
     expect(within(row).getByText(/^46 %/)).toBeInTheDocument();
     expect(within(row).getByText('· 120')).toBeInTheDocument();
-    const badge = within(row).getByRole('img', { name: 'выше базовой линии' });
+    expect(within(row).getByText('нужно ≥ 36 %')).toBeInTheDocument();
+    const badge = within(row).getByRole('img', { name: 'ожидание надёжно выше нуля' });
     expect(badge).toHaveTextContent('▲');
     expect(badge.parentElement).toHaveTextContent('▲+0.38 R');
   });
@@ -250,6 +276,28 @@ describe('ideas screen', () => {
         PageSize: '50',
       }),
     );
+  });
+
+  // Scenario "Фильтр по новому сетапу и типу".
+  it('asks the API for the stop entries of a squeeze and names them in the row', async () => {
+    const squeeze = ideaOf({
+      id: 'ton-1',
+      symbol: 'TONUSDT',
+      setup: 'squeeze',
+      type: 'stop_entry',
+    });
+    const requests = open({ 'GET /api/ideas': () => json(ideasPage([squeeze])) });
+    renderApp('/ideas');
+    const row = await rowOf('TONUSDT');
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Сетап' }), 'squeeze');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Тип идеи' }), 'stop_entry');
+
+    await waitFor(() =>
+      expect(lastIdeasQuery(requests)).toMatchObject({ Setup: 'squeeze', Type: 'stop_entry' }),
+    );
+    expect(within(row).getByText('Сжатие')).toBeInTheDocument();
+    expect(within(row).getByText('Стоп-вход')).toBeInTheDocument();
   });
 
   const symbolsInTable = () =>
@@ -587,5 +635,19 @@ describe('ideas screen', () => {
       expect(await screen.findByText('51–100 из 120')).toBeInTheDocument();
       expect(history.location.search).toBe('?page=2');
     });
+  });
+});
+
+describe('caption of the ideas', () => {
+  // Requirement "Кнопка «Войти» на идее": the screen no longer says that nothing is traded from it.
+  it('tells that an entry is made from the page of the pair', async () => {
+    fakeApi({
+      'GET /api/ideas': () => json({ items: [], page: 1, pageSize: 50, total: 0 }),
+      'GET /api/saved-filters': () => json([]),
+    });
+    renderApp('/ideas');
+
+    expect(await screen.findByText(/Войти по идее можно со страницы пары/)).toBeInTheDocument();
+    expect(screen.queryByText(/Только просмотр/)).toBeNull();
   });
 });

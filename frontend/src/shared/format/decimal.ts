@@ -45,3 +45,29 @@ export function shiftDecimal(value: string, places: number): string {
     ? text(units * 10n ** BigInt(Math.max(0, places - scale)), Math.max(0, scale - places))
     : text(units, scale - places);
 }
+
+/** The exact difference of two decimal strings. */
+export function subtractDecimals(left: string, right: string): string {
+  const a = parts(left);
+  const b = parts(right);
+  const scale = Math.max(a.scale, b.scale);
+
+  return text(
+    a.units * 10n ** BigInt(scale - a.scale) - b.units * 10n ** BigInt(scale - b.scale),
+    scale,
+  );
+}
+
+/** The quotient of two decimal strings rounded half away from zero to `digits` decimals. */
+export function divideDecimals(left: string, right: string, digits: number): string {
+  const a = parts(left);
+  const b = parts(right);
+  const numerator = a.units * 10n ** BigInt(digits + b.scale);
+  const denominator = b.units * 10n ** BigInt(a.scale);
+  const negative = numerator < 0n !== denominator < 0n;
+  const n = numerator < 0n ? -numerator : numerator;
+  const d = denominator < 0n ? -denominator : denominator;
+  const quotient = (2n * n + d) / (2n * d);
+
+  return text(negative ? -quotient : quotient, digits);
+}

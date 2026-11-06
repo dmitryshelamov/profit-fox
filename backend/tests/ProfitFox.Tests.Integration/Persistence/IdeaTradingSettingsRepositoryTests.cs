@@ -1,0 +1,56 @@
+using System.Text;
+
+using Npgsql;
+
+using ProfitFox.Domain.Entities.ExchangeAccounts;
+using ProfitFox.Domain.Entities.IdeaTrades;
+using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.ValueObjects.ExchangeAccounts;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.ExchangeAccounts;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaTrades;
+
+using Shouldly;
+
+namespace ProfitFox.Tests.Integration.Persistence;
+
+public class IdeaTradingSettingsRepositoryTests
+{
+    private NpgsqlDataSource _dataSource = null!;
+    private IdeaTradingSettingsRepository _repository = null!;
+
+    [SetUp]
+    public async Task SetUp()
+    {
+        _dataSource = await MarketDataDatabase.CreateAsync();
+        _repository = new IdeaTradingSettingsRepository(_dataSource);
+    }
+
+    [TearDown]
+    public async Task TearDown()
+    {
+        await _dataSource.DisposeAsync();
+    }
+
+    // Scenario "Настройки по умолчанию".
+    [Test]
+    public async Task Settings_never_saved_are_the_defaults()
+    {
+        IdeaTradingSettings settings = await _repository.GetAsync(CancellationToken.None);
+
+        settings.ShouldBe(new IdeaTradingSettings(null, 20m, 200m, 5, 5m, 1.5m));
+    }
+
+    [Test]
+    public async Task Saved_settings_are_read_back_and_replaced_by_the_next_save()
+    {
+        var account = new ExchangeAccount(Guid.NewGuid(), "Main", "key", 100, new HashSet<MarketCategory> { MarketCategory.Linear }, DateTimeOffset.UtcNow);
+        await new ExchangeAccountRepository(_dataSource).AddAsync(account, new EncryptedSecret([1], Encoding.UTF8.GetBytes("cipher"), [2]), CancellationToken.None);
+        var first = new IdeaTradingSettings(account.Id, 25.5m, 300m, 3, 6m, 1.2m);
+
+        await _repository.SaveAsync(first, CancellationToken.None);
+        (await _repository.GetAsync(CancellationToken.None)).ShouldBe(first);
+
+        await _repository.SaveAsync(first with { AccountId = null, MaxOpenTrades = 4 }, CancellationToken.None);
+        (await _repository.GetAsync(CancellationToken.None)).ShouldBe(first with { AccountId = null, MaxOpenTrades = 4 });
+    }
+}

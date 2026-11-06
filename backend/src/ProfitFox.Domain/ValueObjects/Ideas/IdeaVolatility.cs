@@ -3,5 +3,8 @@ using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Domain.ValueObjects.Ideas;
 
-/// <summary>The 90th percentile of ATR(14) / price of a pair on an interval over its last 90 days, which «Высокая волатильность» exceeds.</summary>
-public sealed record IdeaVolatility(Instrument Instrument, Interval Interval, decimal Percentile);
+/// <summary>
+///     The 90th percentile of ATR(14) / price of a pair on an interval over its last 90 days, which «Высокая волатильность» exceeds, and the
+///     10th, which «Сжатие» stays below; a row stored before the 10th was kept has none.
+/// </summary>
+public sealed record IdeaVolatility(Instrument Instrument, Interval Interval, decimal Percentile, decimal? Low);

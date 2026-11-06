@@ -452,17 +452,55 @@ describe('saved filters on the market screen', () => {
       );
     });
 
-    it('offers «выше базовой» as an operator of the probability and needs no value for it', async () => {
+    // Task 7.3: the candle setups are choices of a condition too.
+    it('offers the candle setups as choices of the setup of an idea', async () => {
+      let posted: unknown = null;
+      open(undefined, {
+        'POST /api/saved-filters': async (request) => {
+          posted = await request.json();
+
+          return json(savedFilterOf({ id: 'new' }), 201);
+        },
+      });
+      renderApp('/market');
+      await openNew();
+      await userEvent.type(editor().getByRole('textbox', { name: 'Название' }), 'Ложные');
+      await userEvent.click(editor().getByRole('button', { name: 'Идеи' }));
+      await userEvent.click(editor().getByRole('button', { name: '+ Условие' }));
+      await pickField('Сетап', 'Идея');
+
+      expect(
+        within(editor().getByRole('combobox', { name: 'Значение' }))
+          .getAllByRole('option')
+          .map((option) => option.textContent),
+      ).toContain('Ложный пробой');
+      await userEvent.selectOptions(
+        editor().getByRole('combobox', { name: 'Значение' }),
+        'Ложный пробой',
+      );
+      await userEvent.click(editor().getByRole('button', { name: 'Сохранить' }));
+
+      await waitFor(() =>
+        expect(posted).toEqual({
+          name: 'Ложные',
+          place: 'ideas',
+          conditions: [{ field: 'ideaSetup', operator: '=', value: 'false_breakout', to: null }],
+        }),
+      );
+    });
+
+    it('offers «надёжно > 0» as an operator of the expectancy and needs no value for it', async () => {
       open();
       renderApp('/market');
       await openNew();
       await userEvent.click(editor().getByRole('button', { name: '+ Условие' }));
-      await pickField('Вероятность', 'Идея');
+      await pickField('Ожидание', 'Идея');
 
       await userEvent.selectOptions(
         editor().getByRole('combobox', { name: 'Оператор' }),
-        'above_baseline',
+        'reliably_positive',
       );
+      expect(editor().getByRole('option', { name: 'надёжно > 0' })).toBeInTheDocument();
 
       expect(editor().queryByRole('textbox', { name: 'Значение' })).not.toBeInTheDocument();
       expect(await editor().findByText('Подходит: 3 инструмента · 2 идеи')).toBeInTheDocument();

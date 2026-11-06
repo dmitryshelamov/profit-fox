@@ -6,6 +6,7 @@ import { fakeApi, json } from '@/test/fakeApi';
 import {
   backtestFull,
   backtestId,
+  calibrationOf,
   filterFields,
   ideasPage,
   marketSnapshot,
@@ -105,7 +106,7 @@ describe('menu', () => {
       within(menu)
         .getAllByRole('link')
         .map((link) => link.textContent),
-    ).toEqual(['Стратегии', 'Составные узлы', 'Рынок', 'Идеи', 'Боты', 'Аккаунты']);
+    ).toEqual(['Стратегии', 'Составные узлы', 'Рынок', 'Идеи', 'Сделки', 'Боты', 'Аккаунты']);
   });
 
   it('opens the market from the menu and marks it as current', async () => {
@@ -163,4 +164,37 @@ describe('the page of a list in the address', () => {
       }
     },
   );
+});
+
+describe('the calibration of the ideas', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const asked = (requests: Request[]) =>
+    new URL(
+      requests.find((request) => new URL(request.url).pathname === '/api/ideas/calibration')!.url,
+    ).searchParams.toString();
+
+  it('reads the window and the category of the address and keeps «Идеи» current', async () => {
+    const requests = fakeApi({ 'GET /api/ideas/calibration': () => json(calibrationOf()) });
+
+    renderApp('/ideas/calibration?days=30&category=spot');
+
+    expect(await screen.findByRole('heading', { name: 'Калибровка' })).toBeInTheDocument();
+    await waitFor(() => expect(asked(requests)).toBe('Days=30&Category=spot'));
+    expect(
+      within(screen.getByRole('navigation', { name: 'Разделы' })).getByRole('link', {
+        name: 'Идеи',
+      }),
+    ).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('reads another window or category of the address as 90 days of all categories', async () => {
+    const requests = fakeApi({ 'GET /api/ideas/calibration': () => json(calibrationOf()) });
+
+    renderApp('/ideas/calibration?days=60&category=inverse');
+
+    await waitFor(() => expect(asked(requests)).toBe('Days=90'));
+  });
 });

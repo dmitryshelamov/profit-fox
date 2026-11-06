@@ -74,6 +74,15 @@ describe('labels', () => {
     expect(choiceLabel('interval', '5')).toBe('5 мин');
     expect(choiceLabel('category', 'spot')).toBe('spot');
   });
+
+  it('names the candle setups and «Стоп-вход»', () => {
+    expect(choiceLabel('ideaSetup', 'false_breakout')).toBe('Ложный пробой');
+    expect(choiceLabel('setup', 'rsi_extreme')).toBe('Перекупленность / перепроданность');
+    expect(choiceLabel('type', 'stop_entry')).toBe('Стоп-вход');
+    expect(conditionText(condition('ideaSetup', '=', 'false_breakout'))).toBe(
+      'Сетап идеи = Ложный пробой',
+    );
+  });
 });
 
 describe('conditionText', () => {
@@ -94,12 +103,12 @@ describe('conditionText', () => {
     expect(conditionText(condition('category', '=', 'linear'))).toBe('Категория = linear');
   });
 
-  it('writes a range and «выше базовой»', () => {
+  it('writes a range and «надёжно > 0»', () => {
     expect(conditionText(condition('change5m', 'between', '1', '3'))).toBe(
       'Изменение 5м между 1 и 3 %',
     );
-    expect(conditionText(condition('probability', 'above_baseline', null))).toBe(
-      'Вероятность выше базовой',
+    expect(conditionText(condition('expectancy', 'reliably_positive', null))).toBe(
+      'Ожидание надёжно > 0',
     );
   });
 });
@@ -111,7 +120,7 @@ describe('readyConditions', () => {
         condition('change1h', '>', '3'),
         condition('change5m', '>', ''),
         condition('change15m', 'between', '1', ''),
-        condition('probability', 'above_baseline', null),
+        condition('expectancy', 'reliably_positive', null),
         condition('spread', '<', 'abc'),
         condition('side', '=', 'short'),
         condition('side', '=', null),
@@ -120,7 +129,7 @@ describe('readyConditions', () => {
 
     expect(readyConditions(filter.conditions).map((item) => item.field)).toEqual([
       'change1h',
-      'probability',
+      'expectancy',
       'side',
     ]);
   });

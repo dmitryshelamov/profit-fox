@@ -1,11 +1,15 @@
 using System.Collections.Concurrent;
 
+using ProfitFox.Application.Backtests;
 using ProfitFox.Domain.Entities.Ideas;
+using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.Services.Ideas;
+using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.Ideas;
+using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
@@ -16,18 +20,25 @@ namespace ProfitFox.Application.Scanner.Ideas;
 ///     up with from storage; the minute cycle, after the snapshot, warms up the pairs read, feeds each pair its minutes up to its coverage,
 ///     reads the setups of the last minute of the complete pairs, closes the ideas of pairs out of trading and stores the ideas made and moved
 ///     in one transaction. Storage stays the truth: a failed write starts every pair over from it, an idea it refused starts its pair over.
+///     Every minute it reads the exit rules applied: the ideas made from then on take them, and a type × interval whose rule changed goes to
+///     the recompute of its buckets (decision 5 of tune-idea-rules).
 /// </summary>
 public sealed class LiveIdeas(
     IIdeaRepository ideas,
     IIdeaVolatilityRepository volatility,
     ICandleRepository candles,
+    IIdeaExitRuleRepository exitRules,
+    IdeaRecomputes recomputes,
     ScannerMarket market,
     IdeasSettings settings,
+    BacktestSettings backtests,
     TimeProvider time)
 {
     private static readonly TimeSpan PercentilesRefresh = TimeSpan.FromHours(1);
     private static readonly TimeSpan Day = TimeSpan.FromDays(1);
+    private static readonly TimeSpan ClosedKept = TimeSpan.FromDays(7);
 
+    private readonly IReadOnlyDictionary<MarketCategory, FeeRates> _fees = backtests.Policy().DefaultFees;
     private readonly IdeaEngine _engine = new IdeaEngine(settings.Rules(), IdeasEngineVersion.Current);
     private readonly ConcurrentQueue<Warming> _warming = new ConcurrentQueue<Warming>();
     // The generation a pair was read in; a start over begins a new one, and the warm-ups of an older generation are dropped.
@@ -35,7 +46,9 @@ public sealed class LiveIdeas(
     private int _generation;
     private readonly Dictionary<Instrument, IdeaCandle> _fed = [];
     private Dictionary<Instrument, List<Idea>>? _open;
-    private Dictionary<Instrument, Dictionary<Interval, decimal>> _percentiles = [];
+    private Dictionary<Instrument, Dictionary<Interval, VolatilityPercentiles>> _percentiles = [];
+    private Dictionary<(IdeaType, Interval), IdeaExitRule>? _exitRules;
+    private readonly DateTimeOffset _startedAt = time.GetUtcNow();
     private DateTimeOffset? _percentilesAt;
 
     /// <summary>Reads the warm-up of the next pairs not warmed up yet; <c>false</c> when there is none to read.</summary>
@@ -78,11 +91,32 @@ public sealed class LiveIdeas(
         return pending.Length > 0;
     }
 
+    /// <summary>
+    ///     Writes how the ideas ended on the trades made of them that have no outcome yet and whose ideas closed and still stand: the trades made
+    ///     before the journal, and those whose idea closed before the write of the minute.
+    /// </summary>
+    public async Task CatchUpTradeOutcomesAsync(CancellationToken cancellationToken)
+    {
+        IReadOnlyList<Idea> closed = await ideas.GetClosedOfTradesWithoutOutcomeAsync(cancellationToken);
+
+        if (closed.Count > 0)
+        {
+            await ideas.SaveAsync([], [], Outcomes(closed), cancellationToken);
+        }
+    }
+
+    /// <summary>Deletes from storage the ideas closed more than a week ago (requirement "Срок хранения закрытых идей").</summary>
+    public Task RemoveClosedAsync(CancellationToken cancellationToken)
+    {
+        return ideas.DeleteClosedBeforeAsync(time.GetUtcNow() - ClosedKept, cancellationToken);
+    }
+
     /// <summary>The ideas of the minute that ends at <paramref name="end" />; returns the setups of the complete pairs.</summary>
     public async Task<IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>>> RunAsync(DateTimeOffset end, CancellationToken cancellationToken)
     {
         _open ??= (await ideas.GetOpenAsync(cancellationToken)).GroupBy(idea => idea.Instrument).ToDictionary(group => group.Key, group => group.ToList());
         await RefreshPercentilesAsync(cancellationToken);
+        await RefreshExitRulesAsync(cancellationToken);
 
         var setups = new Dictionary<Instrument, IReadOnlyList<PairSetup>>();
         var created = new List<Idea>();
@@ -125,7 +159,7 @@ public sealed class LiveIdeas(
 
         try
         {
-            added = await ideas.SaveAsync(created, changed, cancellationToken);
+            added = await ideas.SaveAsync(created, changed, Outcomes(changed), cancellationToken);
         }
         catch
         {
@@ -139,6 +173,12 @@ public sealed class LiveIdeas(
         }
 
         return setups;
+    }
+
+    /// <summary>How the ideas that closed on this minute ended, to be written on their trades.</summary>
+    private List<ClosedIdea> Outcomes(IEnumerable<Idea> changed)
+    {
+        return [.. changed.Where(idea => !idea.IsOpen).Select(idea => new ClosedIdea(idea.Id, TradedIdeaOutcome.Of(idea.Track, _fees[idea.Instrument.Category])))];
     }
 
     /// <summary>Warms a pair up with the minutes in memory and its open ideas in storage.</summary>
@@ -213,6 +253,24 @@ public sealed class LiveIdeas(
         return [.. market.Minutes(instrument).Select(minute => new IdeaCandle(minute.OpenTime, minute.Open, minute.High, minute.Low, minute.Close, minute.Turnover))];
     }
 
+    // The first read sends only the rules applied since the session started: the whole recompute of the session may have read the rules
+    // before them, and counts by the older ones anyway.
+    private async Task RefreshExitRulesAsync(CancellationToken cancellationToken)
+    {
+        Dictionary<(IdeaType, Interval), IdeaExitRule> applied = (await exitRules.GetAllAsync(cancellationToken)).ToDictionary(rule => (rule.Type, rule.Interval));
+        IEnumerable<(IdeaType, Interval)> changed = _exitRules is null
+            ? applied.Values.Where(rule => rule.AppliedAt >= _startedAt).Select(rule => (rule.Type, rule.Interval))
+            : applied.Keys.Union(_exitRules.Keys).Where(key => applied.GetValueOrDefault(key) != _exitRules.GetValueOrDefault(key));
+
+        foreach ((IdeaType type, Interval interval) in changed)
+        {
+            recomputes.Add(type, interval);
+        }
+
+        _exitRules = applied;
+        _engine.Apply(new IdeaExitRules(applied.Values));
+    }
+
     private async Task RefreshPercentilesAsync(CancellationToken cancellationToken)
     {
         DateTimeOffset now = time.GetUtcNow();
@@ -224,7 +282,7 @@ public sealed class LiveIdeas(
 
         _percentiles = (await volatility.GetAllAsync(cancellationToken))
             .GroupBy(item => item.Instrument)
-            .ToDictionary(group => group.Key, group => group.ToDictionary(item => item.Interval, item => item.Percentile));
+            .ToDictionary(group => group.Key, group => group.ToDictionary(item => item.Interval, item => new VolatilityPercentiles(item.Low, item.Percentile)));
         _percentilesAt = now;
     }
 

@@ -5,6 +5,7 @@ using Npgsql;
 using ProfitFox.Application.MarketData;
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas.Contracts;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas.Converters;
@@ -14,13 +15,23 @@ namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Idea
 
 internal sealed class IdeaRepository(NpgsqlDataSource dataSource) : IIdeaRepository
 {
-    public async Task<IReadOnlyList<Idea>> SaveAsync(IReadOnlyCollection<Idea> created, IReadOnlyCollection<Idea> changed, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<Idea>> SaveAsync(IReadOnlyCollection<Idea> created, IReadOnlyCollection<Idea> changed, CancellationToken cancellationToken)
+    {
+        return SaveAsync(created, changed, [], cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Idea>> SaveAsync(
+        IReadOnlyCollection<Idea> created,
+        IReadOnlyCollection<Idea> changed,
+        IReadOnlyCollection<ClosedIdea> outcomes,
+        CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
 
         // The moved ideas go first: one that closed gives its key back to an idea made on the same minute.
         await connection.ExecuteAsync(IdeaRepositoryQueries.Update(changed.Select(idea => IdeaDbConverter.FromDomain(idea)), transaction, cancellationToken));
+        await connection.ExecuteAsync(IdeaRepositoryQueries.WriteTradeOutcomes(outcomes, transaction, cancellationToken));
         var added = new List<Idea>();
 
         foreach (Idea idea in created)
@@ -43,6 +54,13 @@ internal sealed class IdeaRepository(NpgsqlDataSource dataSource) : IIdeaReposit
         return [.. (await connection.QueryAsync<IdeaDb>(IdeaRepositoryQueries.GetOpen(cancellationToken))).Select(IdeaDbConverter.ToDomain)];
     }
 
+    public async Task<IReadOnlyList<Idea>> GetClosedOfTradesWithoutOutcomeAsync(CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        return [.. (await connection.QueryAsync<IdeaDb>(IdeaRepositoryQueries.GetClosedOfTradesWithoutOutcome(cancellationToken))).Select(IdeaDbConverter.ToDomain)];
+    }
+
     public async Task<IReadOnlyList<Idea>> GetRecentAsync(DateTimeOffset closedSince, Instrument? instrument, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
@@ -58,5 +76,12 @@ internal sealed class IdeaRepository(NpgsqlDataSource dataSource) : IIdeaReposit
         IdeaDb? row = await connection.QuerySingleOrDefaultAsync<IdeaDb>(IdeaRepositoryQueries.Get(id, cancellationToken));
 
         return row is null ? null : IdeaDbConverter.ToDomain(row);
+    }
+
+    public async Task<int> DeleteClosedBeforeAsync(DateTimeOffset closedBefore, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        return await connection.ExecuteAsync(IdeaRepositoryQueries.DeleteClosedBefore(closedBefore, cancellationToken));
     }
 }

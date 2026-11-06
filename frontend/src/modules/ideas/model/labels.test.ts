@@ -1,4 +1,16 @@
-import { ideasText, sideLabel } from './labels';
+import { casesText, ideasText, sideLabel } from './labels';
+
+describe('casesText', () => {
+  it.each([
+    [1, '1 кейс'],
+    [3, '3 кейса'],
+    [12, '12 кейсов'],
+    [603, '603 кейса'],
+    [2412, '2\u00a0412 кейсов'],
+  ])('writes %i as %s', (count, expected) => {
+    expect(casesText(count)).toBe(expected);
+  });
+});
 
 describe('ideasText', () => {
   it.each([
