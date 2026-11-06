@@ -141,6 +141,20 @@ public class IdeaRulesTests
         IdeaRules.Plan(IdeaType.Levels, IdeaSide.Long, context).ShouldBeNull();
     }
 
+    // Fix: after a fall from 110 to 30 the short stop 110.5 is 80.5 above the entry, so a target of 2R would lie at −131.
+    [Test]
+    public void Short_whose_target_is_not_above_zero_is_not_made()
+    {
+        IdeaRules.Plan(IdeaType.BeyondExtreme, IdeaSide.Short, Context with { Price = 30m }).ShouldBeNull();
+    }
+
+    // Fix: a window low of 0.2 under a buffer of 0.5 would put the long stop at −0.3.
+    [Test]
+    public void Long_whose_stop_is_not_above_zero_is_not_made()
+    {
+        IdeaRules.Plan(IdeaType.BeyondExtreme, IdeaSide.Long, Context with { WindowLow = 0.2m }).ShouldBeNull();
+    }
+
     // Scenario "Узкий ATR": k × ATR = 0.15 is less than three spreads of 0.1.
     [Test]
     public void Stop_buffer_is_at_least_three_spreads()
