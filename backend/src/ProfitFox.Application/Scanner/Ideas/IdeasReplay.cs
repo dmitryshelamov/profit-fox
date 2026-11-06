@@ -1,34 +1,30 @@
-using ProfitFox.Application.Backtests;
-using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.Services.Ideas;
-using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Application.Scanner.Ideas;
 
 /// <summary>
-///     The replay of history (decisions 1, 6 and 7): the same engine of ideas over the stored minutes of each pair, day by day, by the
-///     thresholds of the live ideas and without a spread. A pair's turn replays the days from its cursor up to its coverage and goes on from
-///     the ideas the cursor keeps open, warmed up as one run would stand at it, so the cases do not depend on how the days fall into turns.
+///     The replay of history (decisions 1 and 4 of tune-idea-rules): the same engine of ideas over the stored minutes of each pair, day by day,
+///     by the thresholds of the live ideas and without a spread, giving every signal with its path. A pair's turn replays the days from its
+///     cursor up to its coverage and goes on from the paths the cursor keeps open, warmed up as one run would stand at it, so the signals do not
+///     depend on how the days fall into turns. The signals whose paths ended on a day are written at its end; the ones still open at the end of
+///     the turn are written as far as they go, and written again as they go on.
 ///     The percentiles of volatility of a day come from the 90 days before it, and the last ones go to storage for the live ideas. Between
 ///     days the turn waits while the minute cycle is late. The levels go on today's price step of the pair, the only one the list of
 ///     instruments tells.
 /// </summary>
 public sealed class IdeasReplay(
     ICandleRepository candles,
-    IIdeaCaseRepository cases,
+    IIdeaSignalRepository signals,
     IIdeaReplayRepository cursors,
     IIdeaVolatilityRepository volatility,
-    IIdeaBucketRepository buckets,
-    IdeaCalibration calibration,
     ScannerMarket market,
     IdeasSettings settings,
-    BacktestSettings backtests,
     ScannerSettings scanner,
     IdeasEngineVersion version,
     ScannerPace pace,
@@ -37,34 +33,14 @@ public sealed class IdeasReplay(
     private static readonly TimeSpan Day = TimeSpan.FromDays(1);
     private static readonly TimeSpan PercentileWindow = TimeSpan.FromDays(90);
     private static readonly TimeSpan PaceWait = TimeSpan.FromSeconds(10);
-    private static readonly int[] BucketDays = [90, 30];
 
     private Dictionary<Instrument, IdeaReplayCursor>? _cursors;
 
-    /// <summary>Removes the cases and cursors of other versions of the rules, so a new version replays history from the start.</summary>
+    /// <summary>Removes the signals and cursors of other versions of the rules, so a new version replays history from the start.</summary>
     public async Task CleanUpAsync(CancellationToken cancellationToken)
     {
-        await cases.DeleteOtherVersionsAsync(version.Number, cancellationToken);
+        await signals.DeleteOtherVersionsAsync(version.Number, cancellationToken);
         await cursors.DeleteOtherVersionsAsync(version.Number, cancellationToken);
-    }
-
-    /// <summary>The statistics of every bucket over the last 90 and 30 days, then the calibration of the buckets.</summary>
-    public async Task RecomputeBucketsAsync(CancellationToken cancellationToken)
-    {
-        DateTimeOffset now = time.GetUtcNow();
-        var computed = new List<IdeaBucket>();
-
-        foreach (int days in BucketDays)
-        {
-            IReadOnlyList<IdeaBucketCounts> counts = await cases.CountAsync(version.Number, now.AddDays(-days), cancellationToken);
-            computed.AddRange(counts.Select(count => new IdeaBucket(
-                count.Key,
-                days,
-                BucketStatisticsCalculator.Compute(count.Targets, count.Stops, count.Expired, count.TotalR, count.TotalSquaredR))));
-        }
-
-        await buckets.ReplaceAsync(version.Number, computed, cancellationToken);
-        await calibration.RecomputeAsync(now, cancellationToken);
     }
 
     /// <summary>Replays the turn of the pair furthest behind; <c>false</c> when every pair is replayed up to its coverage.</summary>
@@ -101,10 +77,10 @@ public sealed class IdeasReplay(
     private async Task ReplayAsync(Turn turn, CancellationToken cancellationToken)
     {
         Instrument instrument = turn.Pair.Instrument;
-        var engine = new IdeaEngine(settings.Rules(), version.Number);
-        FeeRates fees = backtests.Policy().DefaultFees[instrument.Category];
+        var engine = new IdeaEngine(settings.Rules(), version.Number, true);
         (Dictionary<Interval, Ratios> ratios, IdeaCandle? last) = await WarmAsync(engine, instrument, turn, cancellationToken);
-        var closed = new List<IdeaCase>();
+        List<IdeaSignal> open = [.. turn.Cursor?.Open ?? []];
+        var ended = new List<IdeaSignal>();
 
         for (DateTimeOffset day = turn.From; day < turn.Until; day += Day)
         {
@@ -121,10 +97,11 @@ public sealed class IdeasReplay(
 
             if (minutes.Count > 0)
             {
-
                 foreach (IdeaCandle minute in minutes)
                 {
-                    closed.AddRange(Cases(engine.Step(instrument, minute, inputs, true).Changed, fees));
+                    // A signal goes on from the minute after it fired.
+                    Advance(open, ended, minute);
+                    open.AddRange(engine.Step(instrument, minute, inputs, true).Signals);
                 }
 
                 foreach ((Interval interval, Ratios series) in ratios)
@@ -133,23 +110,23 @@ public sealed class IdeasReplay(
                 }
 
                 last = minutes[^1];
-                await cases.AddAsync(closed, cancellationToken);
-                closed = [];
+                await signals.UpsertAsync(ended, cancellationToken);
+                ended = [];
             }
 
-            var cursor = new IdeaReplayCursor(day + Day, engine.Open(instrument));
+            var cursor = new IdeaReplayCursor(day + Day, [.. open]);
             await cursors.SetAsync(instrument, version.Number, cursor, cancellationToken);
             _cursors![instrument] = cursor;
         }
 
+        await signals.UpsertAsync(open, cancellationToken);
         IReadOnlyDictionary<Interval, VolatilityPercentiles> latest = Percentiles(ratios, turn.Until);
         await volatility.SaveAsync([.. latest.Select(entry => new IdeaVolatility(instrument, entry.Key, entry.Value.High!.Value, entry.Value.Low))], cancellationToken);
     }
 
     /// <summary>
     ///     Warms the engine up at the start of a turn as one run would stand there: the closed candles, the day of minutes before, flat from
-    ///     the close before it where it had no trades, the open ideas of the cursor and the percentiles of that day. Also reads the candles the
-    ///     percentiles come from.
+    ///     the close before it where it had no trades, and the percentiles of that day. Also reads the candles the percentiles come from.
     /// </summary>
     private async Task<(Dictionary<Interval, Ratios> Ratios, IdeaCandle? Last)> WarmAsync(
         IdeaEngine engine,
@@ -181,15 +158,29 @@ public sealed class IdeasReplay(
         IReadOnlyList<IdeaCandle> known = Minutes(await candles.GetAsync(instrument, Interval.OneMinute, from - span, from, (int)span.TotalMinutes, cancellationToken));
         decimal? closeBefore = histories[Interval.FiveMinutes].LastOrDefault(candle => Interval.FiveMinutes.CandleEnd(candle.OpenTime) <= from - span)?.Close;
         IReadOnlyList<IdeaCandle> minutes = IdeaCandles.Minutes(known, from - span, from, closeBefore);
-        // The cursor keeps its ideas where a run stood at it, so the warm-up moves none of them.
-        engine.Warm(instrument, closed, minutes, turn.Cursor?.Open ?? [], new IdeaInputs(null, Percentiles(ratios, from - Day), turn.Pair.TickSize));
+        engine.Warm(instrument, closed, minutes, [], new IdeaInputs(null, Percentiles(ratios, from - Day), turn.Pair.TickSize));
 
         return (ratios, minutes.Count > 0 ? minutes[^1] : null);
     }
 
-    private static List<IdeaCase> Cases(IEnumerable<Idea> changed, FeeRates fees)
+    // Steps the open paths by the minute; the ones that end move to the ended.
+    private static void Advance(List<IdeaSignal> open, List<IdeaSignal> ended, IdeaCandle minute)
     {
-        return [.. changed.Where(idea => !idea.IsOpen && idea.Track.EnteredAt is not null).Select(idea => new IdeaCase(idea, CaseResult.R(idea.Track, fees)!.Value))];
+        for (int index = open.Count - 1; index >= 0; index--)
+        {
+            IdeaSignal signal = open[index];
+            SignalPath path = SignalPathTracker.Step(signal.Path, minute);
+
+            if (!path.IsOpen)
+            {
+                ended.Add(signal with { Path = path });
+                open.RemoveAt(index);
+            }
+            else
+            {
+                open[index] = signal with { Path = path };
+            }
+        }
     }
 
     /// <summary>The 10th and 90th percentiles of each interval on a day: of the same ratios of the 90 days before it.</summary>

@@ -1,6 +1,6 @@
 namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas.Contracts;
 
-/// <summary>A row of <c>ideas</c>, or of <c>idea_cases</c> with its result and no id.</summary>
+/// <summary>A row of <c>ideas</c>.</summary>
 internal sealed class IdeaDb
 {
     public Guid Id { get; init; }
@@ -49,5 +49,4 @@ internal sealed class IdeaDb
 
     public int? EntryCandles { get; init; }
 
-    public decimal Result { get; init; }
 }

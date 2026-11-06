@@ -17,21 +17,25 @@ internal sealed class IdeaBucketRepository(NpgsqlDataSource dataSource) : IIdeaB
     private const string Columns = """
                                    engine_version AS "EngineVersion", days, setup, type, "interval", side, category, cases, targets, stops, expired,
                                    probability, probability_low AS "ProbabilityLow", probability_high AS "ProbabilityHigh", expectancy,
-                                   expectancy_low AS "ExpectancyLow", expectancy_high AS "ExpectancyHigh"
+                                   expectancy_low AS "ExpectancyLow", expectancy_high AS "ExpectancyHigh", signals
                                    """;
 
-    public async Task ReplaceAsync(int engineVersion, IReadOnlyCollection<IdeaBucket> buckets, CancellationToken cancellationToken)
+    public async Task ReplaceAsync(int engineVersion, IReadOnlyCollection<IdeaBucket> buckets, (IdeaType Type, Interval Interval)? only, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
-        await connection.ExecuteAsync(new CommandDefinition("DELETE FROM idea_buckets", transaction: transaction, cancellationToken: cancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            """DELETE FROM idea_buckets WHERE @Type::text IS NULL OR engine_version <> @Version OR (type = @Type AND "interval" = @Interval)""",
+            new { Version = engineVersion, Type = only?.Type.ToCode(), Interval = only?.Interval.ToCode() },
+            transaction,
+            cancellationToken: cancellationToken));
         await connection.ExecuteAsync(
             new CommandDefinition(
                 """
                 INSERT INTO idea_buckets (engine_version, days, setup, type, "interval", side, category, cases, targets, stops, expired, probability,
-                    probability_low, probability_high, expectancy, expectancy_low, expectancy_high)
+                    probability_low, probability_high, expectancy, expectancy_low, expectancy_high, signals)
                 VALUES (@EngineVersion, @Days, @Setup, @Type, @Interval, @Side, @Category, @Cases, @Targets, @Stops, @Expired, @Probability,
-                    @ProbabilityLow, @ProbabilityHigh, @Expectancy, @ExpectancyLow, @ExpectancyHigh)
+                    @ProbabilityLow, @ProbabilityHigh, @Expectancy, @ExpectancyLow, @ExpectancyHigh, @Signals)
                 """,
                 buckets.Select(bucket => Row(engineVersion, bucket)),
                 transaction,
@@ -70,7 +74,8 @@ internal sealed class IdeaBucketRepository(NpgsqlDataSource dataSource) : IIdeaB
             ProbabilityHigh = statistics.ProbabilityHigh,
             Expectancy = statistics.Expectancy,
             ExpectancyLow = statistics.ExpectancyLow,
-            ExpectancyHigh = statistics.ExpectancyHigh
+            ExpectancyHigh = statistics.ExpectancyHigh,
+            Signals = statistics.Signals
         };
     }
 
@@ -86,6 +91,6 @@ internal sealed class IdeaBucketRepository(NpgsqlDataSource dataSource) : IIdeaB
             new IdeaBucketKey(setup, type, interval, side, category),
             row.Days,
             new BucketStatistics(row.Cases, row.Targets, row.Stops, row.Expired, row.Probability, row.ProbabilityLow, row.ProbabilityHigh, row.Expectancy,
-                row.ExpectancyLow, row.ExpectancyHigh));
+                row.ExpectancyLow, row.ExpectancyHigh, row.Signals));
     }
 }

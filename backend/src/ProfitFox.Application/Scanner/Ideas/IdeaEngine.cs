@@ -10,9 +10,10 @@ namespace ProfitFox.Application.Scanner.Ideas;
 /// <summary>
 ///     The engine of ideas (decision 3): the live minute cycle and the replay of history feed it the closed minutes of a pair one by one,
 ///     without gaps, so it never sees a minute ahead. Each minute it steps the open ideas, grows the series, reads the setups of every interval
-///     and makes the ideas of the setups that fire, one open idea per key. Not thread-safe: one caller at a time.
+///     and makes the ideas of the setups that fire, one open idea per key, by the exit rules in force. In a replay (decision 4) it keeps no ideas:
+///     every setup that fires gives the signals of its types, whatever is open. Not thread-safe: one caller at a time.
 /// </summary>
-public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
+public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion, bool replay = false)
 {
     private readonly Dictionary<Instrument, Pair> _pairs = [];
     private IdeaExitRules _exitRules = new IdeaExitRules([]);
@@ -134,6 +135,7 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
 
         var setups = new List<PairSetup>();
         var created = new List<Idea>();
+        var signals = new List<IdeaSignal>();
 
         if (detect)
         {
@@ -146,12 +148,15 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
                 // A pair without its price step yet holds its setups and makes no ideas: their levels would not go on the step.
                 if (fired.Count > 0 && inputs.Tick is { } tick)
                 {
-                    created.AddRange(fired.SelectMany(signal => Ideas(pair, interval, signal, minute, basis!.Atr, basis.Zones, inputs.Spread, tick, end)));
+                    foreach (SetupSignal signal in fired)
+                    {
+                        Make(pair, interval, signal, minute, basis!.Atr, basis.Zones, inputs.Spread, tick, end, created, signals);
+                    }
                 }
             }
         }
 
-        return new IdeaStep(setups, created, changed);
+        return new IdeaStep(setups, created, changed, signals);
     }
 
     /// <summary>Reads the setups of every interval on the minute that ends at <paramref name="end" />: the ones that hold and the ones that fire.</summary>
@@ -198,10 +203,20 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
         return changed;
     }
 
-    private List<Idea> Ideas(Pair pair, Interval interval, SetupSignal signal, IdeaCandle minute, decimal atr, IReadOnlyList<Zone> zones, decimal? spread, decimal tick, DateTimeOffset end)
+    private void Make(
+        Pair pair,
+        Interval interval,
+        SetupSignal signal,
+        IdeaCandle minute,
+        decimal atr,
+        IReadOnlyList<Zone> zones,
+        decimal? spread,
+        decimal tick,
+        DateTimeOffset end,
+        List<Idea> ideas,
+        List<IdeaSignal> signals)
     {
         var context = new IdeaContext(pair.Instrument.Category, minute.Close, signal.WindowLow, signal.WindowHigh, atr, zones, spread, rules.StopBuffer, tick, signal.Zone);
-        var ideas = new List<Idea>();
 
         foreach (IdeaSide side in signal.Sides)
         {
@@ -211,7 +226,15 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
 
                 IdeaExitRule rule = _exitRules.Of(type, interval);
 
-                if (pair.Open.Any(idea => idea.Key == key) || IdeaRules.Plan(type, side, context, rule.TargetR) is not { } plan)
+                // A signal of a target in R keeps no target: its path holds every level of the ladder.
+                if (replay && IdeaRules.Plan(type, side, context, rule.TargetR) is { } fired)
+                {
+                    signals.Add(new IdeaSignal(pair.Instrument, signal.Setup, SignalPath.Fired(fired, interval, end, tick), signal.Move, signal.VolumeRatio, engineVersion));
+
+                    continue;
+                }
+
+                if (replay || pair.Open.Any(idea => idea.Key == key) || IdeaRules.Plan(type, side, context, rule.TargetR) is not { } plan)
                 {
                     continue;
                 }
@@ -221,8 +244,6 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
                 ideas.Add(idea);
             }
         }
-
-        return ideas;
     }
 
     private static int Minutes(Interval interval)

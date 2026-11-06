@@ -11,7 +11,7 @@ namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Idea
 
 internal static class IdeaDbConverter
 {
-    internal static IdeaDb FromDomain(Idea idea, decimal result = 0m)
+    internal static IdeaDb FromDomain(Idea idea)
     {
         IdeaTrack track = idea.Track;
 
@@ -39,8 +39,7 @@ internal static class IdeaDbConverter
             Tick = track.Tick,
             LifeCandles = track.LifeCandles,
             TargetR = track.TargetR,
-            EntryCandles = track.EntryCandles,
-            Result = result
+            EntryCandles = track.EntryCandles
         };
     }
 

@@ -35,4 +35,6 @@ internal sealed class IdeaBucketDb
     public decimal? ExpectancyLow { get; init; }
 
     public decimal? ExpectancyHigh { get; init; }
+
+    public int? Signals { get; init; }
 }

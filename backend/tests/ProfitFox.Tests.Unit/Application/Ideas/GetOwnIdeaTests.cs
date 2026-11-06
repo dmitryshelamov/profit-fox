@@ -5,6 +5,7 @@ using NSubstitute;
 using ProfitFox.Application.Backtests;
 using ProfitFox.Application.Ideas.Queries.GetOwnIdea;
 using ProfitFox.Application.Scanner.Ideas;
+using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
@@ -25,6 +26,7 @@ public class GetOwnIdeaTests
     private static readonly Instrument Sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
 
     private ICandleRepository _candles = null!;
+    private IIdeaExitRuleRepository _rules = null!;
     private GetOwnIdeaQueryHandler _handler = null!;
 
     [SetUp]
@@ -33,6 +35,8 @@ public class GetOwnIdeaTests
         IMarketSnapshotRepository snapshots = Substitute.For<IMarketSnapshotRepository>();
         IScannerPairRepository pairs = Substitute.For<IScannerPairRepository>();
         _candles = Substitute.For<ICandleRepository>();
+        _rules = Substitute.For<IIdeaExitRuleRepository>();
+        _rules.GetAllAsync(Arg.Any<CancellationToken>()).Returns([]);
         snapshots.GetAsync(Sol, Arg.Any<CancellationToken>())
             .Returns(MarketSnapshotRowGenerator.Generate("SOLUSDT", metrics: MarketSnapshotRowGenerator.NoMetrics with { Price = 100m }));
         pairs.GetAsync(Sol, Arg.Any<CancellationToken>()).Returns(new ScannerPair(Sol, true, TickSize: 0.01m));
@@ -46,7 +50,7 @@ public class GetOwnIdeaTests
                 ["linear"] = new FeeRateSettings { Limit = 0.02m, Market = 0.055m }
             }
         };
-        _handler = new GetOwnIdeaQueryHandler(snapshots, pairs, _candles, new IdeasSettings(), backtests);
+        _handler = new GetOwnIdeaQueryHandler(snapshots, pairs, _candles, _rules, new IdeasSettings(), backtests);
     }
 
     // Scenario "Своя идея": the own idea tells the reward to risk and the break-even after the fees of its category, below the 2 of the prices
@@ -60,5 +64,16 @@ public class GetOwnIdeaTests
         result.Shares.ShouldBe(IdeaMoney.PerUsdt(result.Plan, new FeeRates(0.02m, 0.055m)));
         result.Shares!.NetRiskReward.ShouldBeLessThan(2m);
         result.Shares.BreakEven!.Value.ShouldBeGreaterThan(1m / 3m);
+    }
+
+    // tune-idea-rules: the target of the own idea is the one of the exit rule applied to its type × interval.
+    [Test]
+    public async Task The_own_idea_takes_the_target_of_the_exit_rule()
+    {
+        _rules.GetAllAsync(Arg.Any<CancellationToken>()).Returns([new IdeaExitRule(IdeaType.BeyondExtreme, Interval.OneHour, 24, 3m, null, Noon)]);
+
+        GetOwnIdeaResult result = await _handler.Handle(new GetOwnIdeaQuery("linear", "SOLUSDT", "beyond_extreme", "60", "long"), CancellationToken.None);
+
+        result.Plan!.RiskReward.ShouldBe(3m);
     }
 }

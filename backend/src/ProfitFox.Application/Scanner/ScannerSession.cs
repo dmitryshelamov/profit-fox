@@ -30,6 +30,7 @@ public sealed class ScannerSession(
     ScannerMinuteCycle minute,
     LiveIdeas ideas,
     IdeasReplay replay,
+    IdeaStatistics statistics,
     ScannerMarket market,
     IScannerJournal journal,
     TimeProvider time)
@@ -222,7 +223,7 @@ public sealed class ScannerSession(
 
                 if (time.GetUtcNow() >= bucketsAt)
                 {
-                    await replay.RecomputeBucketsAsync(cancellationToken);
+                    await statistics.RecomputeAsync(cancellationToken);
                     bucketsAt = time.GetUtcNow() + BucketsRefresh;
                 }
 

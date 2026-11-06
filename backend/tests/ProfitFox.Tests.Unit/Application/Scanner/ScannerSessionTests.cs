@@ -13,6 +13,7 @@ using ProfitFox.Application.Scanner.Ideas;
 using ProfitFox.Application.Scanner.Minute;
 using ProfitFox.Application.Scanner.Universe;
 using ProfitFox.Application.Workers;
+using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
@@ -38,7 +39,7 @@ public class ScannerSessionTests
     private IMarketSnapshotRepository _snapshots = null!;
     private IScannerJournal _journal = null!;
     private IIdeaRepository _ideaStore = null!;
-    private IIdeaCaseRepository _ideaCases = null!;
+    private IIdeaSignalRepository _ideaSignals = null!;
     private IIdeaReplayRepository _cursors = null!;
     private IAsyncDisposable _subscription = null!;
     private FakeTimeProvider _time = null!;
@@ -68,7 +69,9 @@ public class ScannerSessionTests
         _snapshots.ReplaceSetupsAsync(Arg.Any<Guid>(), Arg.Any<IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>>>(), Arg.Any<CancellationToken>()).Returns(true);
         _journal = Substitute.For<IScannerJournal>();
         _ideaStore = Substitute.For<IIdeaRepository>();
-        _ideaCases = Substitute.For<IIdeaCaseRepository>();
+        _ideaSignals = Substitute.For<IIdeaSignalRepository>();
+        _ideaSignals.StreamAsync(Arg.Any<int>(), Arg.Any<DateTimeOffset>(), Arg.Any<(IdeaType, Interval)?>(), Arg.Any<CancellationToken>())
+            .Returns(_ => AsyncEnumerable.Empty<IdeaSignal>());
         _cursors = Substitute.For<IIdeaReplayRepository>();
         _cursors.GetAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new Dictionary<Instrument, IdeaReplayCursor>());
         _time = new FakeTimeProvider(Start);
@@ -200,17 +203,17 @@ public class ScannerSessionTests
     public async Task Lane_of_ideas_clears_other_versions_and_logs_its_failure()
     {
         var failure = new InvalidOperationException("replay");
-        _ideaCases.DeleteOtherVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Task.FromException(failure), Task.CompletedTask);
+        _ideaSignals.DeleteOtherVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Task.FromException(failure), Task.CompletedTask);
         using var cancellation = new CancellationTokenSource();
         Task session = Session().RunAsync(cancellation.Token);
 
         await WaitAsync(() => _journal.ReceivedCalls().Any(call => Equals(call.GetArguments()[0], "ideas")));
-        await WaitAsync(() => _ideaCases.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaCaseRepository.DeleteOtherVersionsAsync)) == 2, advance: true);
-        await WaitAsync(() => _ideaCases.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaCaseRepository.CountAsync)), advance: true);
+        await WaitAsync(() => _ideaSignals.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaSignalRepository.DeleteOtherVersionsAsync)) == 2, advance: true);
+        await WaitAsync(() => _ideaSignals.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaSignalRepository.StreamAsync)), advance: true);
 
         _journal.Received(1).Failed("ideas", failure);
-        int counts = _ideaCases.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaCaseRepository.CountAsync));
-        await WaitAsync(() => _ideaCases.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaCaseRepository.CountAsync)) > counts, advance: true);
+        int counts = _ideaSignals.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaSignalRepository.StreamAsync));
+        await WaitAsync(() => _ideaSignals.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaSignalRepository.StreamAsync)) > counts, advance: true);
         await cancellation.CancelAsync();
         await Should.ThrowAsync<OperationCanceledException>(session);
     }
@@ -244,11 +247,19 @@ public class ScannerSessionTests
         Task session = Session().RunAsync(cancellation.Token);
 
         await WaitAsync(() => _ideaStore.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaRepository.DeleteClosedBeforeAsync)) == 2, advance: true);
-        await WaitAsync(() => _ideaCases.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaCaseRepository.CountAsync)), advance: true);
+        await WaitAsync(() => _ideaSignals.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaSignalRepository.StreamAsync)), advance: true);
 
         _journal.Received(1).Failed("ideas", failure);
         await cancellation.CancelAsync();
         await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
+    private static IIdeaExitRuleRepository ExitRules()
+    {
+        IIdeaExitRuleRepository rules = Substitute.For<IIdeaExitRuleRepository>();
+        rules.GetAllAsync(Arg.Any<CancellationToken>()).Returns([]);
+
+        return rules;
     }
 
     private ScannerSession Session()
@@ -282,17 +293,22 @@ public class ScannerSessionTests
             ideas,
             new IdeasReplay(
                 _candles,
-                _ideaCases,
+                _ideaSignals,
                 _cursors,
                 Substitute.For<IIdeaVolatilityRepository>(),
-                Substitute.For<IIdeaBucketRepository>(),
-                new IdeaCalibration(_ideaCases, Substitute.For<IIdeaCalibrationRepository>(), new IdeasEngineVersion(IdeasEngineVersion.Current)),
                 market,
                 new IdeasSettings(),
-                new BacktestSettings(),
                 settings,
                 new IdeasEngineVersion(IdeasEngineVersion.Current),
                 pace,
+                _time),
+            new IdeaStatistics(
+                _ideaSignals,
+                ExitRules(),
+                Substitute.For<IIdeaBucketRepository>(),
+                Substitute.For<IIdeaCalibrationRepository>(),
+                new BacktestSettings(),
+                new IdeasEngineVersion(IdeasEngineVersion.Current),
                 _time),
             market,
             _journal,
