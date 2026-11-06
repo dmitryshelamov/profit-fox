@@ -18,6 +18,7 @@ using ProfitFox.Domain.ValueObjects.IdeaAutos;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.ExchangeAccounts;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaAutos;
+using ProfitFox.Infrastructure.Persistence.Postgres.Transactions;
 using ProfitFox.Tests.Integration.Infrastructure;
 using ProfitFox.Tests.Integration.Persistence;
 using ProfitFox.Tests.Shared.Fixtures.Ideas;
@@ -104,7 +105,7 @@ public class ScannerAutosTests
         var account = new ExchangeAccount(Guid.NewGuid(), "Main", "key", 100, new HashSet<MarketCategory> { MarketCategory.Linear }, Start);
         await new ExchangeAccountRepository(_database).AddAsync(account, new EncryptedSecret([1], Encoding.UTF8.GetBytes("cipher"), [2]), CancellationToken.None);
         var conditions = new IdeaAutoConditions([IdeaSetup.Impulse], [IdeaType.BeyondExtreme], [Interval.FifteenMinutes], null, null, null, 0.5m, 0);
-        var repository = new IdeaAutoRepository(_database);
+        var repository = new IdeaAutoRepository(_database, new PostgresTransactionAccessor());
         IdeaAuto auto = await repository.CreateAsync(IdeaAutoGenerator.Generate(account.Id, "Импульс лонг", amount: 50m, conditions: conditions), Start, CancellationToken.None);
         await repository.SetModeAsync(auto.Id, IdeaAutoMode.Paper, CancellationToken.None);
 

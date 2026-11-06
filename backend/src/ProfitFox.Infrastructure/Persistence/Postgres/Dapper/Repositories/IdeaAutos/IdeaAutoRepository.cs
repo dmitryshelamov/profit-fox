@@ -9,10 +9,11 @@ using ProfitFox.Domain.Repositories;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaAutos.Contracts;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaAutos.Converters;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaAutos.Queries;
+using ProfitFox.Infrastructure.Persistence.Postgres.Transactions;
 
 namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaAutos;
 
-internal sealed class IdeaAutoRepository(NpgsqlDataSource dataSource) : IIdeaAutoRepository
+internal sealed class IdeaAutoRepository(NpgsqlDataSource dataSource, PostgresTransactionAccessor accessor) : IIdeaAutoRepository
 {
     public async Task<IReadOnlyList<IdeaAuto>> GetAllAsync(CancellationToken cancellationToken)
     {
@@ -39,6 +40,14 @@ internal sealed class IdeaAutoRepository(NpgsqlDataSource dataSource) : IIdeaAut
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
         IdeaAutoDb? row = await connection.QuerySingleOrDefaultAsync<IdeaAutoDb>(IdeaAutoRepositoryQueries.Get(id, cancellationToken));
+
+        return row is null ? null : IdeaAutoDbConverter.ToDomain(row);
+    }
+
+    public async Task<IdeaAuto?> LockAsync(Guid id, CancellationToken cancellationToken)
+    {
+        PostgresTransaction current = accessor.Current;
+        IdeaAutoDb? row = await current.Connection.QuerySingleOrDefaultAsync<IdeaAutoDb>(IdeaAutoRepositoryQueries.Lock(id, current.Transaction, cancellationToken));
 
         return row is null ? null : IdeaAutoDbConverter.ToDomain(row);
     }

@@ -81,6 +81,7 @@ public class RunNextAutoEntryTests
         _entries.GetNextAsync(Arg.Any<CancellationToken>()).Returns(_entry);
         _entries.LockAsync(_entry.Id, Arg.Any<CancellationToken>()).Returns(_entry);
         _autos.GetAsync(_auto.Id, Arg.Any<CancellationToken>()).Returns(_auto);
+        _autos.LockAsync(_auto.Id, Arg.Any<CancellationToken>()).Returns(_auto);
         _autos.GetEveryAsync(Arg.Any<CancellationToken>()).Returns(new Dictionary<Guid, IdeaAuto> { [_auto.Id] = _auto });
         _ideas.GetAsync(_idea.Id, Arg.Any<CancellationToken>()).Returns(_idea);
         _paper.GetOpenAsync(Arg.Any<CancellationToken>()).Returns(new List<PaperIdeaTrade>());
@@ -220,6 +221,48 @@ public class RunNextAutoEntryTests
         await _refusals.Received(1).AddAsync(Arg.Is<IdeaAutoRefusal>(refusal => refusal!.Reasons.Single() == IdeaTradeRefusal.AutoOff), Arg.Any<CancellationToken>());
     }
 
+    // Review P2: the owner switches the auto off or deletes it while the exchange is asked; the lock of the auto in the unit of work sees it.
+    [Test]
+    public async Task Auto_switched_off_or_deleted_while_the_exchange_was_asked_is_refused_as_off()
+    {
+        _autos.LockAsync(_auto.Id, Arg.Any<CancellationToken>()).Returns(_auto with { Mode = IdeaAutoMode.Off }, _auto with { DeletedAt = Now });
+
+        await Run();
+        await Run();
+
+        await _trades.DidNotReceiveWithAnyArgs().CreateAsync(default!, default!, default, default);
+        await _refusals.Received(2).AddAsync(Arg.Is<IdeaAutoRefusal>(refusal => refusal!.Reasons.Single() == IdeaTradeRefusal.AutoOff), Arg.Any<CancellationToken>());
+        await _entries.Received(2).DeleteAsync(_entry.Id, Arg.Any<CancellationToken>());
+    }
+
+    // Review P2: the pair is held by account: the request enters on its own account, whatever the account of the auto is by now.
+    [Test]
+    public async Task Pair_is_held_by_a_trade_on_the_account_of_the_request_not_of_the_auto_now()
+    {
+        var other = Guid.NewGuid();
+        _autos.GetAsync(_auto.Id, Arg.Any<CancellationToken>()).Returns(_auto with { AccountId = other });
+        _autos.LockAsync(_auto.Id, Arg.Any<CancellationToken>()).Returns(_auto with { AccountId = other });
+        _trades.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([Manual(AccountId)]);
+
+        await Run();
+
+        await _trades.DidNotReceiveWithAnyArgs().CreateAsync(default!, default!, default, default);
+        await _refusals.Received(1).AddAsync(Arg.Is<IdeaAutoRefusal>(refusal => refusal!.Reasons.Single() == IdeaTradeRefusal.PairTaken), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Trade_on_the_account_the_auto_has_now_does_not_hold_the_pair_of_the_request()
+    {
+        var other = Guid.NewGuid();
+        _autos.GetAsync(_auto.Id, Arg.Any<CancellationToken>()).Returns(_auto with { AccountId = other });
+        _autos.LockAsync(_auto.Id, Arg.Any<CancellationToken>()).Returns(_auto with { AccountId = other });
+        _trades.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([Manual(other)]);
+
+        await Run();
+
+        await _trades.Received(1).CreateAsync(Arg.Is<IdeaTrade>(trade => trade!.AccountId == AccountId), Arg.Any<IdeaTradeOrder>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+    }
+
     [Test]
     public async Task No_request_is_no_work()
     {
@@ -286,6 +329,12 @@ public class RunNextAutoEntryTests
     private Task<bool> Run()
     {
         return _handler.Handle(new RunNextAutoEntryCommand(), CancellationToken.None);
+    }
+
+    // An open manual trade of the pair of the idea on the account.
+    private IdeaTrade Manual(Guid account)
+    {
+        return IdeaTrade.Create(Guid.NewGuid(), _idea, account, 100m, new IdeaTradeSize(1m, 100m, 1m, 2m, 2m), Now.AddHours(-1)).EntryGrown(new LegTotals(1m, 100m, 0m), Now.AddHours(-1));
     }
 
     private static IdeaTrade Closed(decimal result, DateTimeOffset at)

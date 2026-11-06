@@ -18,6 +18,12 @@ public interface IIdeaAutoRepository
     /// <summary>An auto by its id, a deleted one too; none for an id there is not.</summary>
     Task<IdeaAuto?> GetAsync(Guid id, CancellationToken cancellationToken);
 
+    /// <summary>
+    ///     Reads an auto in the unit of work and keeps its row from a change of the mode and from a delete until the unit commits; none for an id
+    ///     there is not.
+    /// </summary>
+    Task<IdeaAuto?> LockAsync(Guid id, CancellationToken cancellationToken);
+
     /// <summary>Adds the auto at the end of the list; returns it with its place.</summary>
     Task<IdeaAuto> CreateAsync(IdeaAuto auto, DateTimeOffset now, CancellationToken cancellationToken);
 

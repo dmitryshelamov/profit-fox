@@ -59,7 +59,7 @@ public class IdeaAutoMinuteStorageTests
         var account = new ExchangeAccount(Guid.NewGuid(), "Main", "key", 100, new HashSet<MarketCategory> { MarketCategory.Linear }, Fired);
         await new ExchangeAccountRepository(_dataSource).AddAsync(account, new EncryptedSecret([1], Encoding.UTF8.GetBytes("cipher"), [2]), CancellationToken.None);
         _account = account.Id;
-        _auto = await new IdeaAutoRepository(_dataSource).CreateAsync(IdeaAutoGenerator.Generate(_account, mode: IdeaAutoMode.Paper), Fired, CancellationToken.None);
+        _auto = await new IdeaAutoRepository(_dataSource, new PostgresTransactionAccessor()).CreateAsync(IdeaAutoGenerator.Generate(_account, mode: IdeaAutoMode.Paper), Fired, CancellationToken.None);
         Assert.That(await new ScannerStateRepository(_dataSource).ClaimAsync(Owner, Fired, Fired.AddMinutes(5), CancellationToken.None));
     }
 

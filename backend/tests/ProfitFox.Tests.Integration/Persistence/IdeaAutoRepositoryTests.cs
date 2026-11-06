@@ -11,6 +11,7 @@ using ProfitFox.Domain.ValueObjects.ExchangeAccounts;
 using ProfitFox.Domain.ValueObjects.IdeaAutos;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.ExchangeAccounts;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaAutos;
+using ProfitFox.Infrastructure.Persistence.Postgres.Transactions;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.IdeaAutos;
 
 using Shouldly;
@@ -29,7 +30,7 @@ public class IdeaAutoRepositoryTests
     public async Task SetUp()
     {
         _dataSource = await MarketDataDatabase.CreateAsync();
-        _repository = new IdeaAutoRepository(_dataSource);
+        _repository = new IdeaAutoRepository(_dataSource, new PostgresTransactionAccessor());
         var account = new ExchangeAccount(Guid.NewGuid(), "Main", "key", 100, new HashSet<MarketCategory> { MarketCategory.Linear }, Now);
         await new ExchangeAccountRepository(_dataSource).AddAsync(account, new EncryptedSecret([1], Encoding.UTF8.GetBytes("cipher"), [2]), CancellationToken.None);
         _account = account.Id;
@@ -126,6 +127,37 @@ public class IdeaAutoRepositoryTests
         IReadOnlyDictionary<Guid, IdeaAuto> every = await _repository.GetEveryAsync(CancellationToken.None);
         every.Keys.ShouldBe([first.Id, again.Id], ignoreOrder: true);
         every[first.Id].DeletedAt.ShouldBe(Now);
+    }
+
+    // Review P2: an entry reads the auto under a share lock; a change of the mode waits for the entry to commit.
+    [Test]
+    public async Task Change_of_the_mode_waits_for_the_entry_that_locked_the_auto()
+    {
+        var accessor = new PostgresTransactionAccessor();
+        var locking = new IdeaAutoRepository(_dataSource, accessor);
+        IdeaAuto auto = await _repository.CreateAsync(IdeaAutoGenerator.Generate(_account, "А", mode: IdeaAutoMode.Live), Now, CancellationToken.None);
+        await _repository.SetModeAsync(auto.Id, IdeaAutoMode.Live, CancellationToken.None);
+        var release = new TaskCompletionSource();
+        Task<IdeaAuto?> locked = new PostgresTransactionExecutor(_dataSource, accessor).ExecuteAsync(
+            async token =>
+            {
+                IdeaAuto? read = await locking.LockAsync(auto.Id, token);
+                await release.Task;
+
+                return read;
+            },
+            CancellationToken.None);
+        await Task.Delay(200);
+
+        Task<bool> change = _repository.SetModeAsync(auto.Id, IdeaAutoMode.Off, CancellationToken.None);
+        await Task.Delay(300);
+
+        change.IsCompleted.ShouldBeFalse();
+        release.SetResult();
+        (await locked)!.Mode.ShouldBe(IdeaAutoMode.Live);
+        (await change).ShouldBeTrue();
+        (await _repository.GetAsync(auto.Id, CancellationToken.None))!.Mode.ShouldBe(IdeaAutoMode.Off);
+        (await new PostgresTransactionExecutor(_dataSource, accessor).ExecuteAsync(token => locking.LockAsync(Guid.NewGuid(), token), CancellationToken.None)).ShouldBeNull();
     }
 
     [Test]

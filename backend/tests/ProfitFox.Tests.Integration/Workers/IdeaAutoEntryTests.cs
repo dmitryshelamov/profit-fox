@@ -9,6 +9,7 @@ using ProfitFox.Domain.Entities.IdeaAutos.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaAutos;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaTrades;
+using ProfitFox.Infrastructure.Persistence.Postgres.Transactions;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.IdeaAutos;
 
 using Shouldly;
@@ -87,7 +88,7 @@ public class IdeaAutoEntryTests
 
     private async Task<IdeaAuto> SaveAutoAsync(string name, decimal amount)
     {
-        var repository = new IdeaAutoRepository(_database);
+        var repository = new IdeaAutoRepository(_database, new PostgresTransactionAccessor());
         IdeaAuto auto = await repository.CreateAsync(IdeaAutoGenerator.Generate(_scenario.Account, name, amount: amount), DateTimeOffset.UtcNow, CancellationToken.None);
         await repository.SetModeAsync(auto.Id, IdeaAutoMode.Live, CancellationToken.None);
 

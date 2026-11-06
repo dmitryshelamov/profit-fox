@@ -42,7 +42,7 @@ public class IdeaAutoRefusalRepositoryTests
         _repository = new IdeaAutoRefusalRepository(_dataSource, accessor);
         var account = new ExchangeAccount(Guid.NewGuid(), "Main", "key", 100, new HashSet<MarketCategory> { MarketCategory.Linear }, Now);
         await new ExchangeAccountRepository(_dataSource).AddAsync(account, new EncryptedSecret([1], Encoding.UTF8.GetBytes("cipher"), [2]), CancellationToken.None);
-        var autos = new IdeaAutoRepository(_dataSource);
+        var autos = new IdeaAutoRepository(_dataSource, new PostgresTransactionAccessor());
         _first = await autos.CreateAsync(IdeaAutoGenerator.Generate(account.Id, "Импульс лонг"), Now, CancellationToken.None);
         _second = await autos.CreateAsync(IdeaAutoGenerator.Generate(account.Id, "Пробои 5м"), Now, CancellationToken.None);
     }

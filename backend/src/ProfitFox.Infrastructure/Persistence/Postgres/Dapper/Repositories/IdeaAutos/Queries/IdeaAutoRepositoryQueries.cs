@@ -31,6 +31,12 @@ internal static class IdeaAutoRepositoryQueries
         return new CommandDefinition($"SELECT {Columns} FROM idea_autos WHERE id = @Id", new { Id = id }, cancellationToken: cancellationToken);
     }
 
+    // A share lock: a change of the mode and a delete, which update the row, wait for the entry that reads it.
+    public static CommandDefinition Lock(Guid id, System.Data.IDbTransaction transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition($"SELECT {Columns} FROM idea_autos WHERE id = @Id FOR SHARE", new { Id = id }, transaction, cancellationToken: cancellationToken);
+    }
+
     // The new auto stands after the last one that is not deleted.
     public static CommandDefinition Create(IdeaAutoDb auto, DateTimeOffset now, CancellationToken cancellationToken)
     {

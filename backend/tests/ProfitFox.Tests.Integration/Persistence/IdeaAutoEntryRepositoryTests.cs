@@ -49,7 +49,7 @@ public class IdeaAutoEntryRepositoryTests
         var account = new ExchangeAccount(Guid.NewGuid(), "Main", "key", 100, new HashSet<MarketCategory> { MarketCategory.Linear }, Minute);
         await new ExchangeAccountRepository(_dataSource).AddAsync(account, new EncryptedSecret([1], Encoding.UTF8.GetBytes("cipher"), [2]), CancellationToken.None);
         _account = account.Id;
-        _auto = await new IdeaAutoRepository(_dataSource).CreateAsync(IdeaAutoGenerator.Generate(_account, mode: IdeaAutoMode.Live), Minute, CancellationToken.None);
+        _auto = await new IdeaAutoRepository(_dataSource, new PostgresTransactionAccessor()).CreateAsync(IdeaAutoGenerator.Generate(_account, mode: IdeaAutoMode.Live), Minute, CancellationToken.None);
         Assert.That(await new ScannerStateRepository(_dataSource).ClaimAsync(Owner, Minute, Minute.AddHours(1), CancellationToken.None));
     }
 

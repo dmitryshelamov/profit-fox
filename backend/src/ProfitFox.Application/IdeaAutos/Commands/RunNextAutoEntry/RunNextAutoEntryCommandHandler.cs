@@ -79,12 +79,12 @@ public sealed class RunNextAutoEntryCommandHandler(
             return false;
         }
 
-        await executor.ExecuteAsync(async token => await EnterAsync(entry, auto, idea, preparation, token), cancellationToken);
+        await executor.ExecuteAsync(async token => await EnterAsync(entry, idea, preparation, token), cancellationToken);
 
         return true;
     }
 
-    private async Task<int> EnterAsync(IdeaAutoEntry entry, IdeaAuto auto, Idea idea, EntryPreparation preparation, CancellationToken cancellationToken)
+    private async Task<int> EnterAsync(IdeaAutoEntry entry, Idea idea, EntryPreparation preparation, CancellationToken cancellationToken)
     {
         // The money and the open trades of the account are checked for one entry or start at a time, as for a manual entry.
         await live.LockAccountAsync(entry.AccountId, cancellationToken);
@@ -96,8 +96,16 @@ public sealed class RunNextAutoEntryCommandHandler(
         }
 
         DateTimeOffset now = time.GetUtcNow();
+
+        // The owner may have switched the auto off or deleted it while the exchange was asked; its row stays as read until the commit.
+        if (await autos.LockAsync(entry.AutoId, cancellationToken) is not { DeletedAt: null, Mode: IdeaAutoMode.Live } locked)
+        {
+            return await WriteRefusalAsync(entry, idea, [new AutoRefusal(IdeaTradeRefusal.AutoOff)], now, cancellationToken);
+        }
+
+        // The entry goes on the account of the request, so the pair is held by the trades of that account, whatever the account of the auto is by now.
         var autoEntry = new AutoEntry(
-            auto,
+            locked with { AccountId = entry.AccountId },
             entry.MinRiskReward,
             DailyLossReader.Of(await trades.GetAllAsync(cancellationToken), preparation.Settings.DailyLossLimit, now),
             await paper.GetOpenAsync(cancellationToken),
@@ -109,7 +117,7 @@ public sealed class RunNextAutoEntryCommandHandler(
             return await WriteRefusalAsync(entry, idea, calculation.Refusals, now, cancellationToken);
         }
 
-        IdeaTrade trade = IdeaTrade.Create(Guid.NewGuid(), idea, entry.AccountId, preparation.Price, calculation.Size, now, calculation.Promise, auto.Id) with { LastOrderNumber = 1 };
+        IdeaTrade trade = IdeaTrade.Create(Guid.NewGuid(), idea, entry.AccountId, preparation.Price, calculation.Size, now, calculation.Promise, entry.AutoId) with { LastOrderNumber = 1 };
         await trades.CreateAsync(trade, IdeaTradeOrder.NewEntryOf(trade, now), now, cancellationToken);
         await entries.DeleteAsync(entry.Id, cancellationToken);
 
