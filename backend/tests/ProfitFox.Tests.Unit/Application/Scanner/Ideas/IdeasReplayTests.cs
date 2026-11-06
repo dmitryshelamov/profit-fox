@@ -229,7 +229,7 @@ public class IdeasReplayTests
 
         await Replay().StepAsync(CancellationToken.None);
 
-        decimal expected = Volatility.Percentile(Volatility.Ratios(IdeaCandles.FromMinutes(Interval.FiveMinutes, _minutes, March1, March1.AddDays(2))))!.Value;
+        decimal expected = Volatility.Percentile(Volatility.Ratios(IdeaCandles.FromMinutes(Interval.FiveMinutes, _minutes, March1, March1.AddDays(2))), 0.9m)!.Value;
         await _volatility.Received(1).SaveAsync(
             Arg.Is<IReadOnlyCollection<IdeaVolatility>>(saved => saved!.Single(item => item.Interval == Interval.FiveMinutes).Percentile == expected
                 && saved!.Any(item => item.Interval == Interval.FifteenMinutes) && !saved!.Any(item => item.Interval == Interval.OneHour)),

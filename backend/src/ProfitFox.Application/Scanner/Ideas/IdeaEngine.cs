@@ -197,7 +197,7 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
         var context = new IdeaContext(pair.Instrument.Category, minute.Close, signal.WindowLow, signal.WindowHigh, atr, zones, spread, rules.StopBuffer, tick);
         var ideas = new List<Idea>();
 
-        foreach (IdeaSide side in Sides(signal.Setup))
+        foreach (IdeaSide side in signal.Sides)
         {
             foreach (IdeaType type in Types)
             {
@@ -215,16 +215,6 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion)
         }
 
         return ideas;
-    }
-
-    private static IdeaSide[] Sides(IdeaSetup setup)
-    {
-        return setup switch
-        {
-            IdeaSetup.Impulse or IdeaSetup.EarlyImpulse => [IdeaSide.Long],
-            IdeaSetup.Drop or IdeaSetup.EarlyDrop => [IdeaSide.Short],
-            _ => [IdeaSide.Long, IdeaSide.Short]
-        };
     }
 
     private static int Minutes(Interval interval)

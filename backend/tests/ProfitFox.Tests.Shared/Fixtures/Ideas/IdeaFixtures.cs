@@ -14,6 +14,12 @@ public static class IdeaFixtures
         return Candles("atr");
     }
 
+    /// <summary>120 hourly candles from 2024-03-01T00:00:00Z, a random walk from 100.00 that closes at most 1.60 from the close before.</summary>
+    public static IReadOnlyList<IdeaCandle> Rsi()
+    {
+        return Candles("rsi");
+    }
+
     /// <summary>
     ///     The minutes of 2024-03-01 from 10:00 to 12:00 that had trades, from 50.00: none at 10:20–10:24 (a whole 5 minute candle),
     ///     11:00–11:02 (the start of an hour) and 11:58–11:59; the price stays through each gap, the minutes 10:25 and 11:03 open 0.90 above

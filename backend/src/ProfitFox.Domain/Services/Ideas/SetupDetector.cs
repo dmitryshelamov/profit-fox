@@ -39,27 +39,27 @@ public static class SetupDetector
 
         if (rise)
         {
-            signals.Add(impulse.Signal(IdeaSetup.Impulse));
+            signals.Add(impulse.Signal(IdeaSetup.Impulse, IdeaSide.Long));
         }
 
         if (fall)
         {
-            signals.Add(impulse.Signal(IdeaSetup.Drop));
+            signals.Add(impulse.Signal(IdeaSetup.Drop, IdeaSide.Short));
         }
 
         if (!rise && last.Move >= thresholds.EarlyMove && last.Volume >= thresholds.EarlyVolume)
         {
-            signals.Add(last.Signal(IdeaSetup.EarlyImpulse));
+            signals.Add(last.Signal(IdeaSetup.EarlyImpulse, IdeaSide.Long));
         }
 
         if (!fall && -last.Move >= thresholds.EarlyMove && last.Volume >= thresholds.EarlyVolume)
         {
-            signals.Add(last.Signal(IdeaSetup.EarlyDrop));
+            signals.Add(last.Signal(IdeaSetup.EarlyDrop, IdeaSide.Short));
         }
 
         if (atr / minutes[^1].Close > volatilityPercentile)
         {
-            signals.Add(last.Signal(IdeaSetup.HighVolatility));
+            signals.Add(last.Signal(IdeaSetup.HighVolatility, null));
         }
 
         return new SetupReading(atr, signals);
@@ -93,9 +93,9 @@ public static class SetupDetector
     /// <summary>The move of a window in ATR, signed, and its volume a candle in medians.</summary>
     private sealed record Window(decimal Move, decimal Volume, decimal Low, decimal High)
     {
-        public SetupSignal Signal(IdeaSetup setup)
+        public SetupSignal Signal(IdeaSetup setup, IdeaSide? side)
         {
-            return new SetupSignal(setup, Math.Abs(Move), Volume, Low, High);
+            return new SetupSignal(setup, side, Math.Abs(Move), Volume, Low, High);
         }
     }
 }

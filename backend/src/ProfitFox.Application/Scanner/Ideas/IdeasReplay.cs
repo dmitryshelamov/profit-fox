@@ -197,7 +197,7 @@ public sealed class IdeasReplay(
 
         foreach ((Interval interval, Ratios series) in ratios)
         {
-            if (Volatility.Percentile(series.Between(day - PercentileWindow, day)) is { } percentile)
+            if (Volatility.Percentile(series.Between(day - PercentileWindow, day), 0.9m) is { } percentile)
             {
                 percentiles[interval] = percentile;
             }
