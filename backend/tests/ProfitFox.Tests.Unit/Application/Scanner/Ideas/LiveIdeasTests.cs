@@ -2,6 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 
 using NSubstitute;
 
+using ProfitFox.Application.Backtests;
 using ProfitFox.Application.Scanner;
 using ProfitFox.Application.Scanner.Ideas;
 using ProfitFox.Domain.Entities.Ideas;
@@ -12,6 +13,7 @@ using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.ValueObjects.Ideas;
+using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Tests.Shared.Fixtures.Ideas;
@@ -24,6 +26,7 @@ namespace ProfitFox.Tests.Unit.Application.Scanner.Ideas;
 /// <summary>The live ideas of the scanner on the impulse set of <see cref="IdeaFixtures.Setup" />, fed minute by minute as the stream closes them.</summary>
 public class LiveIdeasTests
 {
+    private static readonly BacktestSettings Fees = new BacktestSettings { DefaultFees = new Dictionary<string, FeeRateSettings> { ["spot"] = new FeeRateSettings { Limit = 0.1m, Market = 0.1m }, ["linear"] = new FeeRateSettings { Limit = 0.02m, Market = 0.055m } } };
     private static readonly Instrument Wif = new Instrument(MarketCategory.Linear, "WIFUSDT");
     private static readonly DateTimeOffset Start = DateTimeOffset.Parse("2024-02-29T23:30:00Z");
     private static readonly DateTimeOffset Four = DateTimeOffset.Parse("2024-03-01T04:00:00Z");
@@ -52,9 +55,9 @@ public class LiveIdeasTests
         candles.GetAggregatedAsync(Wif, Arg.Any<Interval>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns(call => IdeaCandles.FromMinutes(call.ArgAt<Interval>(1), minutes, Start, call.ArgAt<DateTimeOffset>(3)));
         candles.GetAggregatedAsync(Sol, Arg.Any<Interval>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns([]);
-        _ideas.SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<CancellationToken>())
+        _ideas.SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<ClosedIdea>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.ArgAt<IReadOnlyCollection<Idea>>(0).ToList());
-        _live = new LiveIdeas(_ideas, _volatility, candles, _market, new IdeasSettings(), _time);
+        _live = new LiveIdeas(_ideas, _volatility, candles, _market, new IdeasSettings(), Fees, _time);
     }
 
     // Requirement "Буфер стопа": three spreads of the ticker, 3 × 20, are wider than k × ATR; the stop 99.375 − 60 goes on the cent below.
@@ -113,6 +116,73 @@ public class LiveIdeasTests
         created.ShouldContain(idea => idea.Setup == IdeaSetup.Squeeze && idea.Interval == Interval.FifteenMinutes && idea.Track.Plan.Type == IdeaType.StopEntry);
     }
 
+    // Requirement "Исход идеи на сделке", scenario "Идея дошла до цели": the idea that closed goes to storage with its status, time and result in R
+    // after the fees of its category; entry 100, target 104, stop 98 give 2 R less the taker fees, 1.9439.
+    [Test]
+    public async Task Idea_that_reached_its_target_is_written_with_its_result_in_r()
+    {
+        Idea active = Active();
+        _ideas.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([active]);
+        KeepSol(Flat(Four.AddDays(-1), Four, high: minute => minute == Four.AddMinutes(-30) ? 105m : null));
+        await _live.ReadWarmUpsAsync(CancellationToken.None);
+
+        await _live.RunAsync(Four, CancellationToken.None);
+
+        await _ideas.Received(1).SaveAsync(
+            Arg.Any<IReadOnlyCollection<Idea>>(),
+            Arg.Any<IReadOnlyCollection<Idea>>(),
+            Arg.Is<IReadOnlyCollection<ClosedIdea>>(closed => closed!.Single().IdeaId == active.Id
+                && closed!.Single().Outcome == new TradedIdeaOutcome(IdeaStatus.Target, Four.AddMinutes(-30), 1.9439m)),
+            Arg.Any<CancellationToken>());
+    }
+
+    // Scenario "Откат не вошёл": a pullback that never entered expires with the pair and has no result.
+    [Test]
+    public async Task Pullback_that_expired_without_an_entry_is_written_without_a_result()
+    {
+        Idea waiting = IdeaGenerator.Generate(Four.AddMinutes(-30), IdeaStatus.AwaitingEntry, Sol, type: IdeaType.Pullback);
+        _ideas.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([waiting]);
+        _market.Keep([new ScannerPair(Sol, false, CoveredUntil: Four)]);
+
+        await _live.RunAsync(Four, CancellationToken.None);
+
+        await _ideas.Received(1).SaveAsync(
+            Arg.Any<IReadOnlyCollection<Idea>>(),
+            Arg.Any<IReadOnlyCollection<Idea>>(),
+            Arg.Is<IReadOnlyCollection<ClosedIdea>>(closed => closed!.Single().IdeaId == waiting.Id && closed!.Single().Outcome == new TradedIdeaOutcome(IdeaStatus.Expired, Four, null)),
+            Arg.Any<CancellationToken>());
+    }
+
+    // Scenario "Сделка до выкатки": the ideas that closed while their trades had no outcome yet are written on them once, at the start.
+    [Test]
+    public async Task Catch_up_writes_the_outcomes_of_the_closed_ideas_of_trades_without_one()
+    {
+        Idea generated = IdeaGenerator.Generate(Four.AddHours(-5), IdeaStatus.Target, Sol, statusAt: Four.AddHours(-3));
+        Idea target = generated with { Track = generated.Track with { Plan = new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 100m, 98m, 104m), ExitPrice = 104m } };
+        _ideas.GetClosedOfTradesWithoutOutcomeAsync(Arg.Any<CancellationToken>()).Returns([target]);
+
+        await _live.CatchUpTradeOutcomesAsync(CancellationToken.None);
+
+        await _ideas.Received(1).SaveAsync(
+            Arg.Is<IReadOnlyCollection<Idea>>(created => created!.Count == 0),
+            Arg.Is<IReadOnlyCollection<Idea>>(changed => changed!.Count == 0),
+            Arg.Is<IReadOnlyCollection<ClosedIdea>>(closed => closed!.Single().IdeaId == target.Id
+                && closed!.Single().Outcome == new TradedIdeaOutcome(IdeaStatus.Target, Four.AddHours(-3), 1.9439m)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Catch_up_writes_nothing_when_no_trade_waits_for_an_outcome()
+    {
+        await _live.CatchUpTradeOutcomesAsync(CancellationToken.None);
+
+        await _ideas.DidNotReceive().SaveAsync(
+            Arg.Any<IReadOnlyCollection<Idea>>(),
+            Arg.Any<IReadOnlyCollection<Idea>>(),
+            Arg.Any<IReadOnlyCollection<ClosedIdea>>(),
+            Arg.Any<CancellationToken>());
+    }
+
     // Fix after review: an idea open across a restart moves through the minutes in memory since its last change: the stop reached during the
     // downtime is a stop, though the target came later.
     [Test]
@@ -128,7 +198,7 @@ public class LiveIdeasTests
         await _ideas.Received(1).SaveAsync(
             Arg.Any<IReadOnlyCollection<Idea>>(),
             Arg.Is<IReadOnlyCollection<Idea>>(ideas => ideas!.Any(idea => idea.Id == active.Id && idea.Track.Status == IdeaStatus.Stop && idea.Track.StatusAt == Four.AddMinutes(-30))),
-            Arg.Any<CancellationToken>());
+            Arg.Any<IReadOnlyCollection<ClosedIdea>>(), Arg.Any<CancellationToken>());
     }
 
     // Fix after review: a failed write leaves storage as it was; the live ideas start over from it, so the next minute stores the stop.
@@ -140,7 +210,7 @@ public class LiveIdeasTests
         KeepSol(Flat(Four.AddDays(-1), Four));
         await _live.ReadWarmUpsAsync(CancellationToken.None);
         await _live.RunAsync(Four, CancellationToken.None);
-        _ideas.SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<CancellationToken>())
+        _ideas.SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<ClosedIdea>>(), Arg.Any<CancellationToken>())
             .Returns(_ => throw new InvalidOperationException("database down"), call => call.ArgAt<IReadOnlyCollection<Idea>>(0).ToList());
         _market.Closed(Sol, Candle(new IdeaCandle(Four, 100m, 100m, 97m, 99m, 1m)));
         _market.Closed(Wif, Candle(IdeaFixtures.Setup("impulse").Single(minute => minute.OpenTime == Four)));
@@ -154,7 +224,7 @@ public class LiveIdeasTests
         await _ideas.Received(2).SaveAsync(
             Arg.Any<IReadOnlyCollection<Idea>>(),
             Arg.Is<IReadOnlyCollection<Idea>>(ideas => ideas!.Any(idea => idea.Id == active.Id && idea.Track.Status == IdeaStatus.Stop && idea.Track.StatusAt == Four)),
-            Arg.Any<CancellationToken>());
+            Arg.Any<IReadOnlyCollection<ClosedIdea>>(), Arg.Any<CancellationToken>());
         await _ideas.Received(2).GetOpenAsync(Arg.Any<CancellationToken>());
     }
 
@@ -165,7 +235,7 @@ public class LiveIdeasTests
         KeepSol(Flat(Four.AddDays(-1), Four));
         await _live.ReadWarmUpsAsync(CancellationToken.None);
         await _live.RunAsync(Four, CancellationToken.None);
-        _ideas.SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<CancellationToken>())
+        _ideas.SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<ClosedIdea>>(), Arg.Any<CancellationToken>())
             .Returns(_ => throw new InvalidOperationException("database down"), call => call.ArgAt<IReadOnlyCollection<Idea>>(0).ToList());
         _market.Closed(Sol, Candle(new IdeaCandle(Four, 100m, 100m, 100m, 100m, 1m)));
         await Should.ThrowAsync<InvalidOperationException>(() => _live.RunAsync(Four.AddMinutes(1), CancellationToken.None));
@@ -224,7 +294,7 @@ public class LiveIdeasTests
     public async Task Window_of_a_setup_longer_than_a_day_warms_up_with_stored_minutes()
     {
         var settings = new IdeasSettings { ByInterval = new Dictionary<string, ThresholdOverride> { ["240"] = new ThresholdOverride { Candles = 7 } } };
-        var live = new LiveIdeas(_ideas, _volatility, _candles, _market, settings, _time);
+        var live = new LiveIdeas(_ideas, _volatility, _candles, _market, settings, Fees, _time);
         _candles.GetAsync(Wif, Interval.OneMinute, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
 
         await live.ReadWarmUpsAsync(CancellationToken.None);
@@ -248,7 +318,7 @@ public class LiveIdeasTests
                 return (IReadOnlyList<IdeaCandle>)[];
             });
         Task reading = _live.ReadWarmUpsAsync(CancellationToken.None);
-        _ideas.SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<CancellationToken>())
+        _ideas.SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<ClosedIdea>>(), Arg.Any<CancellationToken>())
             .Returns(_ => throw new InvalidOperationException("database down"), call => call.ArgAt<IReadOnlyCollection<Idea>>(0).ToList());
         await Should.ThrowAsync<InvalidOperationException>(() => _live.RunAsync(Four, CancellationToken.None));
         gate.SetResult();
@@ -281,11 +351,11 @@ public class LiveIdeasTests
         await _ideas.Received(1).SaveAsync(
             Arg.Any<IReadOnlyCollection<Idea>>(),
             Arg.Is<IReadOnlyCollection<Idea>>(ideas => ideas!.Any(idea => idea.Id == active.Id && idea.Track.Status == IdeaStatus.Expired && idea.Track.ExitPrice == 100m)),
-            Arg.Any<CancellationToken>());
+            Arg.Any<IReadOnlyCollection<ClosedIdea>>(), Arg.Any<CancellationToken>());
         await _ideas.Received(1).SaveAsync(
             Arg.Any<IReadOnlyCollection<Idea>>(),
             Arg.Is<IReadOnlyCollection<Idea>>(ideas => ideas!.Any(idea => idea.Id == ofDelisted.Id && idea.Track.Status == IdeaStatus.Expired && idea.Track.ExitPrice == null)),
-            Arg.Any<CancellationToken>());
+            Arg.Any<IReadOnlyCollection<ClosedIdea>>(), Arg.Any<CancellationToken>());
     }
 
     // Fix after review: the ideas of a pair out of trading that was never warmed up first move through the minutes in memory, then expire
@@ -307,7 +377,7 @@ public class LiveIdeasTests
             Arg.Any<IReadOnlyCollection<Idea>>(),
             Arg.Is<IReadOnlyCollection<Idea>>(ideas => ideas!.Any(idea => idea.Id == stopped.Id && idea.Track.Status == IdeaStatus.Stop && idea.Track.StatusAt == Four.AddMinutes(-30))
                 && ideas!.Any(idea => idea.Id == expired.Id && idea.Track.Status == IdeaStatus.Expired && idea.Track.ExitPrice == 101m)),
-            Arg.Any<CancellationToken>());
+            Arg.Any<IReadOnlyCollection<ClosedIdea>>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -322,7 +392,7 @@ public class LiveIdeasTests
         await _ideas.Received(1).SaveAsync(
             Arg.Any<IReadOnlyCollection<Idea>>(),
             Arg.Is<IReadOnlyCollection<Idea>>(ideas => ideas!.Single().Track.Status == IdeaStatus.Expired && ideas!.Single().Track.ExitPrice == null),
-            Arg.Any<CancellationToken>());
+            Arg.Any<IReadOnlyCollection<ClosedIdea>>(), Arg.Any<CancellationToken>());
     }
 
     // Fix after review: an idea storage refused (another open idea of its key is there) leaves the engine; the pair warms up again from storage.
@@ -362,7 +432,7 @@ public class LiveIdeasTests
     private async Task<IReadOnlyList<Idea>> RunAsync(DateTimeOffset until, bool refuse = false)
     {
         var created = new List<Idea>();
-        _ideas.SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<CancellationToken>()).Returns(call =>
+        _ideas.SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<ClosedIdea>>(), Arg.Any<CancellationToken>()).Returns(call =>
         {
             created.AddRange(call.ArgAt<IReadOnlyCollection<Idea>>(0));
 

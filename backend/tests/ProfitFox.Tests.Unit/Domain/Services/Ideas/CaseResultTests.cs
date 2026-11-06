@@ -54,6 +54,15 @@ public class CaseResultTests
         CaseResult.R(track, Fees).ShouldBeNull();
     }
 
+    // An idea of a pair that left trading expires with no close known: it entered, but has no exit to count.
+    [Test]
+    public void Idea_that_entered_and_expired_without_an_exit_price_has_no_result()
+    {
+        IdeaTrack track = Closed(IdeaType.TwoR, IdeaSide.Long, 100m, 98m, 104m, IdeaStatus.Expired, 101m) with { ExitPrice = null };
+
+        CaseResult.R(track, Fees).ShouldBeNull();
+    }
+
     private static IdeaTrack Closed(IdeaType type, IdeaSide side, decimal entry, decimal stop, decimal target, IdeaStatus status, decimal exit)
     {
         return new IdeaTrack(new IdeaPlan(type, side, entry, stop, target), Fired, 5, status, Fired.AddMinutes(30), Fired, exit);

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 
+using ProfitFox.Application.Backtests;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.Market;
 using ProfitFox.Application.Scanner;
@@ -17,6 +18,7 @@ using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.Ideas;
+using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.Ideas;
@@ -28,6 +30,7 @@ namespace ProfitFox.Tests.Unit.Application.Scanner;
 /// <summary>Requirements "Тикеры раз в минуту", "Снимок рынка", "Состояние сканера" and "Сетапы и идеи в минутном цикле".</summary>
 public class ScannerMinuteCycleTests
 {
+    private static readonly BacktestSettings Fees = new BacktestSettings { DefaultFees = new Dictionary<string, FeeRateSettings> { ["spot"] = new FeeRateSettings { Limit = 0.1m, Market = 0.1m }, ["linear"] = new FeeRateSettings { Limit = 0.02m, Market = 0.055m } } };
     private static readonly DateTimeOffset Minute = DateTimeOffset.Parse("2024-03-10T12:05:00Z", CultureInfo.InvariantCulture);
     private static readonly Instrument Sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
     private static readonly Instrument Btc = new Instrument(MarketCategory.Spot, "BTCUSDT");
@@ -65,7 +68,7 @@ public class ScannerMinuteCycleTests
         _market.Keep([new ScannerPair(Sol, true, CoveredUntil: Minute, OpenInterestCoveredUntil: Minute), new ScannerPair(Btc, true, CoveredUntil: Minute.AddMinutes(-2))]);
         _market.TakeChanged();
         _pace = new ScannerPace();
-        _ideas = new LiveIdeas(_ideaStore, Substitute.For<IIdeaVolatilityRepository>(), Substitute.For<ICandleRepository>(), _market, new IdeasSettings(), _time);
+        _ideas = new LiveIdeas(_ideaStore, Substitute.For<IIdeaVolatilityRepository>(), Substitute.For<ICandleRepository>(), _market, new IdeasSettings(), Fees, _time);
         _cycle = new ScannerMinuteCycle(
             _feed,
             _openInterest,
@@ -208,7 +211,7 @@ public class ScannerMinuteCycleTests
         await RunMinuteAsync();
 
         await _snapshots.Received(1).ReplaceSetupsAsync(_identity.Id, Arg.Is<IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>>>(setups => setups!.Count == 0), Arg.Any<CancellationToken>());
-        await _ideaStore.DidNotReceive().SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Is<IReadOnlyCollection<Idea>>(ideas => ideas!.Count > 0), Arg.Any<CancellationToken>());
+        await _ideaStore.DidNotReceive().SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Is<IReadOnlyCollection<Idea>>(ideas => ideas!.Count > 0), Arg.Any<IReadOnlyCollection<ClosedIdea>>(), Arg.Any<CancellationToken>());
 
         _market.Loaded(Btc, Minute.AddMinutes(-2), Minute.AddMinutes(1), Flat(Minute.AddMinutes(-2), Minute.AddMinutes(1), 102m));
         await RunMinuteAsync();
@@ -216,7 +219,7 @@ public class ScannerMinuteCycleTests
         await _ideaStore.Received(1).SaveAsync(
             Arg.Any<IReadOnlyCollection<Idea>>(),
             Arg.Is<IReadOnlyCollection<Idea>>(ideas => ideas!.Single().Id == open.Id && ideas!.Single().Track.EnteredAt == Minute.AddMinutes(-2)),
-            Arg.Any<CancellationToken>());
+            Arg.Any<IReadOnlyCollection<ClosedIdea>>(), Arg.Any<CancellationToken>());
         await _snapshots.Received(1).ReplaceSetupsAsync(_identity.Id, Arg.Is<IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>>>(setups => setups!.ContainsKey(Btc)), Arg.Any<CancellationToken>());
     }
 

@@ -201,6 +201,16 @@ public sealed class ScannerSession(
         DateTimeOffset bucketsAt = time.GetUtcNow();
         DateTimeOffset closedAt = time.GetUtcNow();
 
+        try
+        {
+            await ideas.CatchUpTradeOutcomesAsync(cancellationToken);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            // The outcomes of the minutes to come are written with the ideas, so the snapshot and the ideas go on without them.
+            journal.Failed("trade-outcomes", exception);
+        }
+
         while (!cancellationToken.IsCancellationRequested)
         {
             try
