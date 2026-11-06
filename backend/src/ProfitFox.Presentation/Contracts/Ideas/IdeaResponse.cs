@@ -9,7 +9,8 @@ namespace ProfitFox.Presentation.Contracts.Ideas;
 
 /// <summary>
 ///     A trade idea with its levels and where it stands, and the statistics of its bucket over 90 days (<see cref="Bucket" />) and over the last
-///     30 (<see cref="Recent" />), none while the bucket has no case. <see cref="Baseline" /> is the bucket's, or 1 / (1 + R:R) of the idea.
+///     30 (<see cref="Recent" />), none while the bucket has no case. <see cref="BreakEven" /> is the share of targets the idea breaks even at after the fees if it
+///     never expires, none when the target does not cover them.
 ///     <see cref="ProfitPerUsdt" />, <see cref="LossPerUsdt" /> and <see cref="RiskPerUsdt" /> are its money on 1 USDT of the amount of a deal,
 ///     after the fees. <see cref="RiskReward" /> is the ratio of the prices, <see cref="NetRiskReward" /> the profit over the loss after the fees. <see cref="Tick" /> is the price step of the pair, none for an idea made before it was kept. Numbers are decimal strings; <see cref="Move" /> in ATR, <see cref="VolumeRatio" /> in medians of volume.
 /// </summary>
@@ -37,7 +38,7 @@ public sealed record IdeaResponse(
     string? ExitPrice,
     string Move,
     string VolumeRatio,
-    string Baseline,
+    string? BreakEven,
     BucketStatisticsResponse? Bucket,
     BucketStatisticsResponse? Recent)
 {
@@ -70,7 +71,7 @@ public sealed record IdeaResponse(
             track.ExitPrice?.ToString(CultureInfo.InvariantCulture),
             Text(idea.Move),
             Text(idea.VolumeRatio),
-            Text(view.Baseline),
+            view.Shares.BreakEven?.ToString(CultureInfo.InvariantCulture),
             BucketStatisticsResponse.Of(view.Bucket),
             BucketStatisticsResponse.Of(view.Recent));
     }

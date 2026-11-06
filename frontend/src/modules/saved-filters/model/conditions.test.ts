@@ -94,12 +94,12 @@ describe('conditionText', () => {
     expect(conditionText(condition('category', '=', 'linear'))).toBe('Категория = linear');
   });
 
-  it('writes a range and «выше базовой»', () => {
+  it('writes a range and «надёжно > 0»', () => {
     expect(conditionText(condition('change5m', 'between', '1', '3'))).toBe(
       'Изменение 5м между 1 и 3 %',
     );
-    expect(conditionText(condition('probability', 'above_baseline', null))).toBe(
-      'Вероятность выше базовой',
+    expect(conditionText(condition('expectancy', 'reliably_positive', null))).toBe(
+      'Ожидание надёжно > 0',
     );
   });
 });
@@ -111,7 +111,7 @@ describe('readyConditions', () => {
         condition('change1h', '>', '3'),
         condition('change5m', '>', ''),
         condition('change15m', 'between', '1', ''),
-        condition('probability', 'above_baseline', null),
+        condition('expectancy', 'reliably_positive', null),
         condition('spread', '<', 'abc'),
         condition('side', '=', 'short'),
         condition('side', '=', null),
@@ -120,7 +120,7 @@ describe('readyConditions', () => {
 
     expect(readyConditions(filter.conditions).map((item) => item.field)).toEqual([
       'change1h',
-      'probability',
+      'expectancy',
       'side',
     ]);
   });

@@ -72,6 +72,6 @@ public sealed class GetOwnIdeaQueryHandler(
 
         IdeaPlan? plan = IdeaRules.Plan(type, side, context);
 
-        return new GetOwnIdeaResult(plan, false, errors, tick, plan is null ? null : IdeaMoney.PerUsdt(plan, backtests.Policy().DefaultFees[category]).NetRiskReward);
+        return new GetOwnIdeaResult(plan, false, errors, tick, plan is null ? null : IdeaMoney.PerUsdt(plan, backtests.Policy().DefaultFees[category]));
     }
 }

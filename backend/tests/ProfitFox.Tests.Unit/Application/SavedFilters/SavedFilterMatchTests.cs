@@ -104,7 +104,7 @@ public class SavedFilterMatchTests
         FilterCondition[] conditions =
         [
             Compare(FilterField.Probability, FilterOperator.Greater, 0.9m),
-            Compare(FilterField.Probability, FilterOperator.AboveBaseline, null),
+            Compare(FilterField.Expectancy, FilterOperator.ReliablyPositive, null),
             Compare(FilterField.Expectancy, FilterOperator.Greater, 5m),
             Compare(FilterField.RiskReward, FilterOperator.Greater, 5m),
             Is(FilterField.IdeaSide, "short"),
@@ -191,15 +191,16 @@ public class SavedFilterMatchTests
         Passes(idea, Compare(FilterField.Probability, FilterOperator.Greater, 0m)).ShouldBeFalse();
     }
 
+    // Scenario "Надёжно выше нуля": only the badge ▲ passes, not ≈ nor a bucket of too little data.
     [Test]
-    public void Above_the_baseline_holds_when_the_whole_interval_of_the_probability_is_above_it()
+    public void Reliably_positive_holds_when_the_badge_of_the_bucket_is_up()
     {
-        FilterCondition above = Compare(FilterField.Probability, FilterOperator.AboveBaseline, null);
+        FilterCondition reliably = Compare(FilterField.Expectancy, FilterOperator.ReliablyPositive, null);
 
-        Passes(View(IdeaViewGenerator.Bucket(0.3m, 0.46m)), above).ShouldBeTrue();
-        Passes(View(IdeaViewGenerator.Bucket(0.3m, 0.33m)), above).ShouldBeFalse();
-        Passes(View(IdeaViewGenerator.Bucket(0.3m, 0.9m, cases: 29)), above).ShouldBeFalse();
-        Passes(View(null), above).ShouldBeFalse();
+        Passes(View(IdeaViewGenerator.Bucket(0.12m, 0.46m, expectancyLow: 0.002m, expectancyHigh: 0.238m)), reliably).ShouldBeTrue();
+        Passes(View(IdeaViewGenerator.Bucket(0.05m, 0.46m, expectancyLow: -0.068m, expectancyHigh: 0.168m)), reliably).ShouldBeFalse();
+        Passes(View(IdeaViewGenerator.Bucket(0.3m, 0.9m, cases: 29)), reliably).ShouldBeFalse();
+        Passes(View(null), reliably).ShouldBeFalse();
     }
 
     // Scenario "Идея пары без строки снимка".

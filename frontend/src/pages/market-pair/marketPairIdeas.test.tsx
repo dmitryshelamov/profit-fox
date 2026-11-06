@@ -444,7 +444,7 @@ describe('ideas on the pair page', () => {
             target: '175',
             riskReward: '1.9',
             netRiskReward: '1.56',
-            baseline: '0.345',
+            breakEven: '0.3517',
             tick: null,
           }),
       }),
@@ -482,7 +482,7 @@ describe('ideas on the pair page', () => {
             target: '175',
             riskReward: '1.9',
             netRiskReward: '1.56',
-            baseline: '0.345',
+            breakEven: '0.3517',
             tick: null,
           }),
       }),
@@ -514,7 +514,7 @@ describe('ideas on the pair page', () => {
     const blockOf = () => within(screen.getByRole('region', { name: 'Своя идея' }));
     const ready = () => screen.findByRole('region', { name: 'Своя идея' });
 
-    it('shows the levels of an own idea, its baseline and the note, and draws them on the chart', async () => {
+    it('shows the levels of an own idea, its break-even and the note, and draws them on the chart', async () => {
       const requests = fakeApi(
         routes('linear', {
           'POST /api/market/linear/SOLUSDT/own-idea': () =>
@@ -525,7 +525,7 @@ describe('ideas on the pair page', () => {
               target: '175',
               riskReward: '1.9',
               netRiskReward: '1.56',
-              baseline: '0.345',
+              breakEven: '0.3517',
               tick: null,
             }),
         }),
@@ -537,14 +537,41 @@ describe('ideas on the pair page', () => {
       // Scenario "Своя идея": the R:R after the fees in the chip, the price ratio under it.
       expect(blockOf().getByText('1.56')).toHaveClass('text-ok');
       expect(blockOf().getByText('без ком. 1.90')).toBeInTheDocument();
-      expect(blockOf().getByText('35 %')).toBeInTheDocument();
-      expect(blockOf().getByText('без сетапа: только базовая линия')).toBeInTheDocument();
+      // Scenario "Безубыток своей идеи": rounded up.
+      expect(blockOf().getByText('нужно ≥ 36 % целей')).toBeInTheDocument();
+      expect(
+        blockOf().getByText('без сетапа, при условии, что идея не истекает'),
+      ).toBeInTheDocument();
       await waitFor(() => expect(linesOnChart()).toEqual(['Вход 168.42', 'Стоп 165', 'Цель 175']));
       expect(await requested(requests, '/api/market/linear/SOLUSDT/own-idea')[0]!.json()).toEqual({
         type: 'levels',
         interval: '15',
         side: 'long',
       });
+    });
+
+    // Scenario "Цель не окупает комиссии".
+    it('says the target of an own idea does not cover the fees', async () => {
+      fakeApi(
+        routes('linear', {
+          'POST /api/market/linear/SOLUSDT/own-idea': () =>
+            json({
+              made: true,
+              entry: '168.42',
+              stop: '168.3',
+              target: '168.6',
+              riskReward: '1.5',
+              netRiskReward: '-0.2',
+              breakEven: null,
+              tick: null,
+            }),
+        }),
+      );
+      renderApp('/market/linear/SOLUSDT');
+      await ready();
+
+      expect(await blockOf().findByText('не окупает комиссии')).toBeInTheDocument();
+      expect(blockOf().queryByText(/при условии/)).not.toBeInTheDocument();
     });
 
     it('shows the levels of an own idea by the price step of the pair', async () => {
@@ -558,7 +585,7 @@ describe('ideas on the pair page', () => {
               target: '175.5',
               riskReward: '1.9',
               netRiskReward: '1.56',
-              baseline: '0.345',
+              breakEven: '0.3517',
               tick: '0.01',
             }),
         }),

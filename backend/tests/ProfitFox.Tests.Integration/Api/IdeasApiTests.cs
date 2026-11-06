@@ -68,8 +68,8 @@ public class IdeasApiTests
         await new IdeaBucketRepository(_database).ReplaceAsync(
             IdeasEngineVersion.Current,
             [
-                new IdeaBucket(key, 90, BucketStatisticsCalculator.Compute(180, 200, 20, 2m, 40m)),
-                new IdeaBucket(key, 30, BucketStatisticsCalculator.Compute(6, 5, 1, 2m, 2.4m))
+                new IdeaBucket(key, 90, BucketStatisticsCalculator.Compute(180, 200, 20, 40m, 400m)),
+                new IdeaBucket(key, 30, BucketStatisticsCalculator.Compute(6, 5, 1, 2.4m, 20m))
             ],
             CancellationToken.None);
 
@@ -84,32 +84,40 @@ public class IdeasApiTests
         (idea.GetProperty("status").GetString(), idea.GetProperty("move").GetString(), idea.GetProperty("volumeRatio").GetString()).ShouldBe(("active", "3.5", "2.25"));
         idea.GetProperty("tick").GetString().ShouldBe("0.01");
         ShouldHaveMoney(idea);
+        // Scenario "Корзина в ответе": the share of targets among all 400 cases; the mean +0.1 R, s ≈ 0.996 R, so the interval is above zero.
         JsonElement bucket = idea.GetProperty("bucket");
-        (bucket.GetProperty("cases").GetInt32(), bucket.GetProperty("expired").GetInt32(), bucket.GetProperty("enoughData").GetBoolean()).ShouldBe((400, 20, true));
-        decimal.Parse(bucket.GetProperty("probability").GetString()!, CultureInfo.InvariantCulture).ShouldBe(0.4737m, 0.0001m);
-        decimal.Parse(bucket.GetProperty("probabilityLow").GetString()!, CultureInfo.InvariantCulture).ShouldBe(0.4240m, 0.0001m);
+        (bucket.GetProperty("cases").GetInt32(), bucket.GetProperty("targets").GetInt32(), bucket.GetProperty("stops").GetInt32(), bucket.GetProperty("expired").GetInt32())
+            .ShouldBe((400, 180, 200, 20));
+        (bucket.GetProperty("probability").GetString(), bucket.GetProperty("enoughData").GetBoolean()).ShouldBe(("0.45", true));
+        decimal.Parse(bucket.GetProperty("probabilityLow").GetString()!, CultureInfo.InvariantCulture).ShouldBe(0.4019m, 0.0001m);
+        decimal.Parse(bucket.GetProperty("probabilityHigh").GetString()!, CultureInfo.InvariantCulture).ShouldBe(0.4990m, 0.0001m);
         bucket.GetProperty("expectancy").GetString().ShouldBe("0.1");
+        decimal.Parse(bucket.GetProperty("expectancyLow").GetString()!, CultureInfo.InvariantCulture).ShouldBe(0.0024m, 0.0001m);
+        decimal.Parse(bucket.GetProperty("expectancyHigh").GetString()!, CultureInfo.InvariantCulture).ShouldBe(0.1976m, 0.0001m);
+        bucket.GetProperty("badge").GetString().ShouldBe("up");
         JsonElement recent = idea.GetProperty("recent");
         (recent.GetProperty("cases").GetInt32(), recent.GetProperty("enoughData").GetBoolean(), recent.GetProperty("probability").ValueKind).ShouldBe((12, false, JsonValueKind.Null));
+        (recent.GetProperty("expectancyLow").ValueKind, recent.GetProperty("badge").ValueKind).ShouldBe((JsonValueKind.Null, JsonValueKind.Null));
     }
 
-    // An idea of a bucket without cases has only its own baseline; the list goes by expectancy.
+    // An idea of a bucket without cases has only its own break-even; the list goes by expectancy.
     [Test]
-    public async Task Ideas_without_a_bucket_have_their_own_baseline_and_come_last()
+    public async Task Ideas_without_a_bucket_have_their_own_break_even_and_come_last()
     {
         Idea withBucket = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol);
         Idea without = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-5), instrument: Sol, type: IdeaType.BeyondExtreme);
         await new IdeaRepository(_database).SaveAsync([without, withBucket], [], CancellationToken.None);
         await new IdeaBucketRepository(_database).ReplaceAsync(
             IdeasEngineVersion.Current,
-            [new IdeaBucket(new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear), 90, BucketStatisticsCalculator.Compute(10, 30, 0, 2m, -10m))],
+            [new IdeaBucket(new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear), 90, BucketStatisticsCalculator.Compute(10, 30, 0, -10m, 70m))],
             CancellationToken.None);
 
         JsonElement[] ideas = [.. (await ItemsAsync("/api/ideas")).EnumerateArray()];
 
         ideas.Select(idea => idea.GetProperty("id").GetGuid()).ShouldBe([withBucket.Id, without.Id]);
         ideas[1].GetProperty("tick").ValueKind.ShouldBe(JsonValueKind.Null);
-        (ideas[1].GetProperty("bucket").ValueKind, ideas[1].GetProperty("baseline").GetString()).ShouldBe((JsonValueKind.Null, (1m / 3m).ToString(CultureInfo.InvariantCulture)));
+        ideas[1].GetProperty("bucket").ValueKind.ShouldBe(JsonValueKind.Null);
+        decimal.Parse(ideas[1].GetProperty("breakEven").GetString()!, CultureInfo.InvariantCulture).ShouldBe(0.0486929m / (0.0940857m + 0.0486929m), 0.000001m);
         (await ItemsAsync("/api/ideas?nonNegativeExpectancy=true")).GetArrayLength().ShouldBe(0);
     }
 
@@ -119,7 +127,7 @@ public class IdeasApiTests
         Idea idea = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol, tick: 0.5m);
         await new IdeaRepository(_database).SaveAsync([idea], [], CancellationToken.None);
         var key = new IdeaBucketKey(IdeaSetup.Drop, IdeaType.Pullback, Interval.OneHour, IdeaSide.Short, MarketCategory.Spot);
-        await new IdeaBucketRepository(_database).ReplaceAsync(IdeasEngineVersion.Current, [new IdeaBucket(key, 30, BucketStatisticsCalculator.Compute(6, 5, 1, 3m, 2.4m))], CancellationToken.None);
+        await new IdeaBucketRepository(_database).ReplaceAsync(IdeasEngineVersion.Current, [new IdeaBucket(key, 30, BucketStatisticsCalculator.Compute(6, 5, 1, 2.4m, 20m))], CancellationToken.None);
 
         JsonElement read = await GetAsync($"/api/ideas/{idea.Id}");
         (read.GetProperty("symbol").GetString(), read.GetProperty("tick").GetString()).ShouldBe(("SOLUSDT", "0.5"));
@@ -128,7 +136,70 @@ public class IdeasApiTests
         JsonElement bucket = (await GetAsync("/api/ideas/buckets")).EnumerateArray().Single();
         (bucket.GetProperty("setup").GetString(), bucket.GetProperty("type").GetString(), bucket.GetProperty("interval").GetString(), bucket.GetProperty("side").GetString())
             .ShouldBe(("drop", "pullback", "60", "short"));
-        (bucket.GetProperty("category").GetString(), bucket.GetProperty("days").GetInt32(), bucket.GetProperty("statistics").GetProperty("baseline").GetString()).ShouldBe(("spot", 30, "0.25"));
+        (bucket.GetProperty("category").GetString(), bucket.GetProperty("days").GetInt32(), bucket.GetProperty("statistics").GetProperty("targets").GetInt32()).ShouldBe(("spot", 30, 6));
+    }
+
+    // Scenario "Калибровка за 30 дней по linear": the report of the window and the category, numbers as decimal strings.
+    [Test]
+    public async Task Calibration_is_read_by_window_and_category()
+    {
+        DateTimeOffset computedAt = SnapshotAt.AddMinutes(-3);
+        BucketStatistics thirty = BucketStatisticsCalculator.Compute(6, 21, 3, 6.75m, 25.3125m);
+        var linear = new CalibrationReport(
+            computedAt,
+            30,
+            MarketCategory.Linear,
+            30,
+            4,
+            0.207m,
+            0.219m,
+            [new CalibrationRow(0.2m, 0.3m, null, 0.25m, thirty)],
+            [new CalibrationRow(0.2m, 0.4m, null, 0.3m, thirty)],
+            [new CalibrationRow(null, null, IdeaBadge.Flat, 0.3m, thirty)],
+            new CalibrationRow(null, null, null, 0.3m, thirty));
+        await new IdeaCalibrationRepository(_database).ReplaceAsync(
+            IdeasEngineVersion.Current,
+            [linear, linear with { Days = 90, Checked = 1, Total = null }, linear with { Days = 90, Category = null, Checked = 2 }],
+            CancellationToken.None);
+
+        JsonElement report = await GetAsync("/api/ideas/calibration?days=30&category=linear");
+
+        (report.GetProperty("computedAt").GetDateTimeOffset(), report.GetProperty("days").GetInt32(), report.GetProperty("category").GetString()).ShouldBe((computedAt, 30, "linear"));
+        (report.GetProperty("checked").GetInt32(), report.GetProperty("unchecked").GetInt32()).ShouldBe((30, 4));
+        (report.GetProperty("brier").GetString(), report.GetProperty("baseBrier").GetString()).ShouldBe(("0.207", "0.219"));
+        JsonElement row = report.GetProperty("probabilities").EnumerateArray().Single();
+        (row.GetProperty("from").GetString(), row.GetProperty("to").GetString(), row.GetProperty("promised").GetString(), row.GetProperty("cases").GetInt32()).ShouldBe(("0.2", "0.3", "0.25", 30));
+        (row.GetProperty("targetShare").GetString(), row.GetProperty("stopShare").GetString(), row.GetProperty("expiredShare").GetString()).ShouldBe(("0.2", "0.7", "0.1"));
+        (row.GetProperty("probabilityLow").GetString(), row.GetProperty("probabilityHigh").GetString()).ShouldBe((Text(thirty.ProbabilityLow!.Value), Text(thirty.ProbabilityHigh!.Value)));
+        (row.GetProperty("expectancy").GetString(), row.GetProperty("expectancyLow").GetString()).ShouldBe(("0.225", Text(thirty.ExpectancyLow!.Value)));
+        report.GetProperty("expectancies")[0].GetProperty("to").GetString().ShouldBe("0.4");
+        (report.GetProperty("badges")[0].GetProperty("badge").GetString(), report.GetProperty("badges")[0].GetProperty("from").ValueKind).ShouldBe(("flat", JsonValueKind.Null));
+        report.GetProperty("total").GetProperty("cases").GetInt32().ShouldBe(30);
+        (await GetAsync("/api/ideas/calibration")).GetProperty("checked").GetInt32().ShouldBe(2);
+        JsonElement withoutTotal = await GetAsync("/api/ideas/calibration?days=90&category=linear");
+        (withoutTotal.GetProperty("checked").GetInt32(), withoutTotal.GetProperty("total").ValueKind).ShouldBe((1, JsonValueKind.Null));
+    }
+
+    // Scenario "Ещё не посчитана".
+    [Test]
+    public async Task Calibration_before_the_first_one_is_empty()
+    {
+        JsonElement report = await GetAsync("/api/ideas/calibration?category=spot");
+
+        (report.GetProperty("computedAt").ValueKind, report.GetProperty("days").GetInt32(), report.GetProperty("category").GetString()).ShouldBe((JsonValueKind.Null, 90, "spot"));
+        (report.GetProperty("checked").GetInt32(), report.GetProperty("unchecked").GetInt32(), report.GetProperty("brier").ValueKind).ShouldBe((0, 0, JsonValueKind.Null));
+        (report.GetProperty("probabilities").GetArrayLength(), report.GetProperty("badges").GetArrayLength(), report.GetProperty("total").ValueKind).ShouldBe((0, 0, JsonValueKind.Null));
+    }
+
+    // Scenario "Другое окно".
+    [TestCase("days=60", "days")]
+    [TestCase("category=inverse", "category")]
+    public async Task Calibration_of_another_window_or_category_is_refused(string query, string key)
+    {
+        HttpResponseMessage response = await _client.GetAsync($"/api/ideas/calibration?{query}");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("errors").TryGetProperty(key, out _).ShouldBeTrue();
     }
 
     [TestCase("setup=drop", "drop")]
@@ -212,8 +283,8 @@ public class IdeasApiTests
         await new IdeaBucketRepository(_database).ReplaceAsync(
             IdeasEngineVersion.Current,
             [
-                new IdeaBucket(key, 90, BucketStatisticsCalculator.Compute(180, 200, 20, 2m, 100m)),
-                new IdeaBucket(key with { Category = MarketCategory.Spot }, 90, BucketStatisticsCalculator.Compute(180, 200, 20, 2m, 100m))
+                new IdeaBucket(key, 90, BucketStatisticsCalculator.Compute(180, 200, 20, 100m, 1000m)),
+                new IdeaBucket(key with { Category = MarketCategory.Spot }, 90, BucketStatisticsCalculator.Compute(180, 200, 20, 100m, 1000m))
             ],
             CancellationToken.None);
         HttpResponseMessage created = await _client.PostAsJsonAsync(
@@ -283,7 +354,8 @@ public class IdeasApiTests
         (await GetAsync("/api/market/linear/SOLUSDT")).GetProperty("setups").GetProperty("15").GetArrayLength().ShouldBe(2);
     }
 
-    // Scenario "Своя идея short": the stop above the nearest resistance, 105.0–105.2, with k × ATR, the target at 2R, the baseline 1 / 3.
+    // Scenario "Своя идея short": the stop above the nearest resistance, 105.0–105.2, with k × ATR, the target at 2R, the break-even after the
+    // fees above the 1 / 3 of 2R without them.
     [Test]
     public async Task Own_idea_is_measured_from_the_price_now_by_the_rules_of_its_type()
     {
@@ -300,10 +372,13 @@ public class IdeasApiTests
         idea.GetProperty("made").GetBoolean().ShouldBeTrue();
         (idea.GetProperty("entry").GetString(), idea.GetProperty("stop").GetString(), idea.GetProperty("target").GetString())
             .ShouldBe(("100.5", Text(stop), Text(100.5m - (2m * (stop - 100.5m)))));
-        (idea.GetProperty("riskReward").GetString(), idea.GetProperty("baseline").GetString()).ShouldBe(("2", Text(1m / 3m)));
-        // Scenario "Своя идея": the R:R after the fees of linear, a market entry.
+        idea.GetProperty("riskReward").GetString().ShouldBe("2");
+        // Scenario "Своя идея": the R:R and the break-even after the fees of linear, a market entry.
         decimal target = 100.5m - (2m * (stop - 100.5m));
-        idea.GetProperty("netRiskReward").GetString().ShouldBe(Text(IdeaMoney.PerUsdt(new IdeaPlan(IdeaType.TwoR, IdeaSide.Short, 100.5m, stop, target), new FeeRates(0.02m, 0.055m)).NetRiskReward));
+        IdeaShares shares = IdeaMoney.PerUsdt(new IdeaPlan(IdeaType.TwoR, IdeaSide.Short, 100.5m, stop, target), new FeeRates(0.02m, 0.055m));
+        idea.GetProperty("netRiskReward").GetString().ShouldBe(Text(shares.NetRiskReward));
+        idea.GetProperty("breakEven").GetString().ShouldBe(Text(shares.BreakEven!.Value));
+        shares.BreakEven.Value.ShouldBeGreaterThan(1m / 3m);
         idea.GetProperty("tick").GetString().ShouldBe("0.01");
     }
 

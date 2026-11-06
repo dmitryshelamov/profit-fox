@@ -1,6 +1,6 @@
 namespace ProfitFox.Domain.Entities.SavedFilters.Enums;
 
-/// <summary>How a condition compares its field: <c>&gt;</c>, <c>≥</c>, <c>&lt;</c>, <c>≤</c>, <c>=</c>, «между», or «выше базовой» for a flag.</summary>
+/// <summary>How a condition compares its field: <c>&gt;</c>, <c>≥</c>, <c>&lt;</c>, <c>≤</c>, <c>=</c>, «между», or «надёжно > 0» for the badge of a bucket.</summary>
 public enum FilterOperator
 {
     Greater,
@@ -9,5 +9,5 @@ public enum FilterOperator
     LessOrEqual,
     Equal,
     Between,
-    AboveBaseline
+    ReliablyPositive
 }

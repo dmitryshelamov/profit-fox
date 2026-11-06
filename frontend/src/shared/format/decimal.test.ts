@@ -1,4 +1,10 @@
-import { compareDecimals, multiplyDecimals, shiftDecimal } from './decimal';
+import {
+  compareDecimals,
+  divideDecimals,
+  multiplyDecimals,
+  shiftDecimal,
+  subtractDecimals,
+} from './decimal';
 
 describe('compareDecimals', () => {
   it.each([
@@ -40,5 +46,23 @@ describe('shiftDecimal', () => {
     ['-3.5', -2, '-0.035'],
   ])('moves the point of %s by %i places into %s', (value, places, expected) => {
     expect(shiftDecimal(value, places)).toBe(expected);
+  });
+});
+
+describe('subtractDecimals', () => {
+  it('subtracts exactly across scales and signs', () => {
+    expect(subtractDecimals('0.51', '0.64')).toBe('-0.13');
+    expect(subtractDecimals('0.3', '0.1')).toBe('0.2');
+    expect(subtractDecimals('0.57', '-0.4500')).toBe('1.02');
+    expect(subtractDecimals('5', '5.000')).toBe('0');
+  });
+});
+
+describe('divideDecimals', () => {
+  it('divides to the digits asked for, half away from zero', () => {
+    expect(divideDecimals('1.2', '21.9', 3)).toBe('0.055');
+    expect(divideDecimals('2', '3', 2)).toBe('0.67');
+    expect(divideDecimals('-1', '8', 2)).toBe('-0.13');
+    expect(divideDecimals('0.5', '0.25', 1)).toBe('2');
   });
 });

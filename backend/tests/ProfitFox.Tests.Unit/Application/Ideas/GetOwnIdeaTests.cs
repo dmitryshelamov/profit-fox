@@ -49,14 +49,16 @@ public class GetOwnIdeaTests
         _handler = new GetOwnIdeaQueryHandler(snapshots, pairs, _candles, new IdeasSettings(), backtests);
     }
 
-    // Scenario "Своя идея": the own idea tells the reward to risk after the fees of its category, below the 2 of the prices.
+    // Scenario "Своя идея": the own idea tells the reward to risk and the break-even after the fees of its category, below the 2 of the prices
+    // and above the 33 % of 2R without fees.
     [Test]
     public async Task The_own_idea_tells_its_reward_to_risk_after_the_fees()
     {
         GetOwnIdeaResult result = await _handler.Handle(new GetOwnIdeaQuery("linear", "SOLUSDT", "beyond_extreme", "60", "long"), CancellationToken.None);
 
         result.Plan!.RiskReward.ShouldBe(2m);
-        result.NetRiskReward.ShouldBe(IdeaMoney.PerUsdt(result.Plan, new FeeRates(0.02m, 0.055m)).NetRiskReward);
-        result.NetRiskReward!.Value.ShouldBeLessThan(2m);
+        result.Shares.ShouldBe(IdeaMoney.PerUsdt(result.Plan, new FeeRates(0.02m, 0.055m)));
+        result.Shares!.NetRiskReward.ShouldBeLessThan(2m);
+        result.Shares.BreakEven!.Value.ShouldBeGreaterThan(1m / 3m);
     }
 }

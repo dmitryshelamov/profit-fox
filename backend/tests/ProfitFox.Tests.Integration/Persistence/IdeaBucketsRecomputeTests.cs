@@ -18,7 +18,7 @@ using Shouldly;
 
 namespace ProfitFox.Tests.Integration.Persistence;
 
-/// <summary>Task 5.2: the scanner recomputes the buckets from every stored case of the version, over 90 and the last 30 days.</summary>
+/// <summary>Task 5.2: the scanner recomputes the buckets from every stored case of the version, over 90 and the last 30 days, with their outcomes and the interval of the expectancy.</summary>
 public class IdeaBucketsRecomputeTests
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2024-06-01T00:00:00Z");
@@ -53,6 +53,7 @@ public class IdeaBucketsRecomputeTests
             new IdeaReplayRepository(_dataSource),
             new IdeaVolatilityRepository(_dataSource),
             buckets,
+            new IdeaCalibration(cases, new IdeaCalibrationRepository(_dataSource), new IdeasEngineVersion(IdeasEngineVersion.Current)),
             new ScannerMarket(),
             new IdeasSettings(),
             new BacktestSettings(),
@@ -64,12 +65,16 @@ public class IdeaBucketsRecomputeTests
         await replay.RecomputeBucketsAsync(CancellationToken.None);
 
         var key = new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear);
-        (await buckets.GetAsync(IdeasEngineVersion.Current, CancellationToken.None)).ShouldBe(
+        IReadOnlyList<IdeaBucket> read = await buckets.GetAsync(IdeasEngineVersion.Current, CancellationToken.None);
+        read.ShouldBe(
         [
-            new IdeaBucket(key, 90, BucketStatisticsCalculator.Compute(19, 22, 0, 2m, (19 * 2m) - 22m)),
-            new IdeaBucket(key, 30, BucketStatisticsCalculator.Compute(11, 10, 0, 2m, (11 * 2m) - 10m))
+            new IdeaBucket(key, 90, BucketStatisticsCalculator.Compute(19, 22, 0, (19 * 2m) - 22m, (19 * 4m) + 22m)),
+            new IdeaBucket(key, 30, BucketStatisticsCalculator.Compute(11, 10, 0, (11 * 2m) - 10m, (11 * 4m) + 10m))
         ],
             ignoreOrder: true);
+        BucketStatistics full = read.Single(bucket => bucket.Days == 90).Statistics;
+        (full.Targets, full.Stops, full.Badge).ShouldBe((19, 22, IdeaBadge.Flat));
+        (full.ExpectancyLow!.Value < 0m, full.ExpectancyHigh!.Value > 0m).ShouldBe((true, true));
     }
 
     private static IdeaCase Case(DateTimeOffset firedAt, IdeaStatus status)
