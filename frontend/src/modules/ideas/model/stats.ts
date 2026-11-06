@@ -47,7 +47,10 @@ export function percentUp(share: string): string {
   return String(/[1-9]/.test(fraction) ? BigInt(whole) + 1n : BigInt(whole));
 }
 
-/** The shares of targets, stops and expired cases of a bucket in whole percent, for the hint of its probability; none without a case. */
+/**
+ * The shares of targets, stops and expired cases of a bucket in whole percent, for the hint of its probability, and of a bucket of
+ * «Откат» or «Стоп-вход» the share of its signals that entered and the expectancy per signal; none without a case.
+ */
 export function outcomeShares(bucket: Bucket | null): string | null {
   if (bucket === null) {
     return null;
@@ -56,7 +59,11 @@ export function outcomeShares(bucket: Bucket | null): string | null {
   const percent = (count: string | number) =>
     Math.round((Number(count) * 100) / Number(bucket.cases));
 
-  return `Цель ${percent(bucket.targets)} % · Стоп ${percent(bucket.stops)} % · Истекла ${percent(bucket.expired)} %`;
+  const shares = `Цель ${percent(bucket.targets)} % · Стоп ${percent(bucket.stops)} % · Истекла ${percent(bucket.expired)} %`;
+
+  return bucket.signalExpectancy === null
+    ? shares
+    : `${shares} · входов ${roundDecimal(shiftDecimal(bucket.entryShare!, 2), 0)} % · на сигнал ${showDecimal(bucket.signalExpectancy, 2, true)} R`;
 }
 
 /** The expectancy of the bucket in R with a sign, or a dash for a bucket without a case. */

@@ -111,13 +111,17 @@ describe('ideas screen', () => {
     ).toHaveLength(3);
   });
 
-  it('links to the calibration of the ideas', async () => {
+  it('links to the calibration and to the exit rules of the ideas', async () => {
     open();
     renderApp('/ideas');
 
     expect(await screen.findByRole('link', { name: 'Калибровка' })).toHaveAttribute(
       'href',
       '/ideas/calibration',
+    );
+    expect(screen.getByRole('link', { name: 'Срок жизни и цель' })).toHaveAttribute(
+      'href',
+      '/ideas/exit-rules',
     );
   });
 

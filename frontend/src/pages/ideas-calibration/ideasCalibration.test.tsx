@@ -27,6 +27,10 @@ describe('calibration screen', () => {
     expect(
       within(screen.getByRole('navigation', { name: 'Путь' })).getByRole('link', { name: 'Идеи' }),
     ).toHaveAttribute('href', '/ideas');
+    expect(screen.getByRole('link', { name: 'Срок жизни и цель' })).toHaveAttribute(
+      'href',
+      '/ideas/exit-rules',
+    );
     expect(
       await screen.findByText(
         'Проверено 2 412 кейсов · без статистики корзины 318 · посчитано 06.11 00:50 UTC',

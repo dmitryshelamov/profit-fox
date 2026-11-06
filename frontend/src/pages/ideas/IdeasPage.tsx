@@ -196,6 +196,9 @@ export function IdeasPage({ page }: { page: number }) {
         <Link to="/ideas/calibration" className="text-sm text-run hover:underline">
           Калибровка
         </Link>
+        <Link to="/ideas/exit-rules" className="text-sm text-run hover:underline">
+          Срок жизни и цель
+        </Link>
         {ideas.data && (
           <p className="ml-auto text-sm text-muted">{ideasText(Number(ideas.data.total))}</p>
         )}
