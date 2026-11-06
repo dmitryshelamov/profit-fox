@@ -287,6 +287,13 @@ public sealed class LiveTradingScenario : IAsyncDisposable
         await new IdeaBucketRepository(database).ReplaceAsync(IdeasEngineVersion.Current, [new IdeaBucket(key, 90, statistics)], CancellationToken.None);
     }
 
+    /// <summary>Writes how the idea ended on the trades made of it, as the scanner does when the idea closes.</summary>
+    public async Task WriteIdeaOutcomeAsync(Guid idea, TradedIdeaOutcome outcome)
+    {
+        await using var database = Npgsql.NpgsqlDataSource.Create(Factory.ConnectionString);
+        await new IdeaRepository(database).SaveAsync([], [], [new ClosedIdea(idea, outcome)], CancellationToken.None);
+    }
+
     /// <summary>The last price of the ticker of the pair on Bybit.</summary>
     public void SetPrice(string price, Instrument? instrument = null)
     {

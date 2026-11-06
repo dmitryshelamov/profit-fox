@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using ProfitFox.Application.IdeaTrades.Commands.CancelIdeaTrade;
 using ProfitFox.Application.IdeaTrades.Commands.CloseIdeaTrade;
 using ProfitFox.Application.IdeaTrades.Commands.CreateIdeaTrade;
-using ProfitFox.Application.IdeaTrades.Queries.GetIdeaTrades;
+using ProfitFox.Application.IdeaTrades.Queries.GetIdeaJournal;
 using ProfitFox.Presentation.Contracts.IdeaTrades;
 using ProfitFox.Presentation.Contracts.Strategies;
 
@@ -16,12 +16,22 @@ namespace ProfitFox.Presentation.Controllers;
 [Route("api/idea-trades")]
 public sealed class IdeaTradesController(ISender sender) : ControllerBase
 {
-    /// <summary>Every trade, the newest first.</summary>
+    /// <summary>
+    ///     The journal: the open trades with what they are worth at the last price, a page of the closed ones, the newest closed first, and the totals of
+    ///     all the closed ones of the filter.
+    /// </summary>
     [HttpGet]
-    [ProducesResponseType<IReadOnlyList<IdeaTradeResponse>>(StatusCodes.Status200OK)]
-    public async Task<IActionResult> List(CancellationToken cancellationToken)
+    [ProducesResponseType<IdeaJournalResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Journal([FromQuery] IdeaJournalQueryParameters parameters, CancellationToken cancellationToken)
     {
-        return Ok((await sender.Send(new GetIdeaTradesQuery(), cancellationToken)).Select(IdeaTradeResponse.Of).ToList());
+        GetIdeaJournalResult result = await sender.Send(
+            new GetIdeaJournalQuery(parameters.Setup, parameters.Symbol, parameters.Side, parameters.Badge, parameters.Days, parameters.Page, parameters.PageSize),
+            cancellationToken);
+
+        return result.Journal is null
+            ? ValidationProblem(new ValidationProblemDetails(result.Errors.ToDictionary(error => error.Key, error => new[] { error.Value })))
+            : Ok(IdeaJournalResponse.Of(result.Journal));
     }
 
     /// <summary>

@@ -12,6 +12,10 @@ namespace ProfitFox.Presentation.Contracts.IdeaTrades;
 ///     A trade by an idea: the pair, the setup, the interval, the type and the side of its idea as codes, the account, the levels and the size it
 ///     was entered with, its status and the time of it, the reason of an «Ошибка» and the result of a closed trade in money and in R (none before).
 ///     Numbers are decimal strings; <see cref="FilledPrice" /> is the average price the entry was filled at, none before any fill.
+///     <c>openedAt</c> is the first fill of the entry and <c>secondsToOutcome</c> the time from it to the close of a closed trade;
+///     <c>promise</c> is what the idea promised at the entry and <c>ideaOutcome</c> how the idea ended, none for a trade made before
+///     the journal or while the idea is open. An open trade has the last price of its pair and what it is worth at it, none while it waits for
+///     its entry or when the exchange gave no price.
 /// </summary>
 public sealed record IdeaTradeResponse(
     Guid Id,
@@ -36,9 +40,16 @@ public sealed record IdeaTradeResponse(
     DateTimeOffset CreatedAt,
     string? Reason,
     string? Result,
-    string? ResultR)
+    string? ResultR,
+    DateTimeOffset? OpenedAt,
+    long? SecondsToOutcome,
+    IdeaPromiseResponse? Promise,
+    IdeaOutcomeResponse? IdeaOutcome,
+    string? LastPrice,
+    string? CurrentResult,
+    string? CurrentResultR)
 {
-    public static IdeaTradeResponse Of(IdeaTradeView view)
+    public static IdeaTradeResponse Of(IdeaJournalTrade view)
     {
         IdeaTrade trade = view.Trade;
 
@@ -65,10 +76,17 @@ public sealed record IdeaTradeResponse(
             trade.CreatedAt,
             trade.Reason,
             trade.Result is { } result ? Text(result) : null,
-            trade.ResultR is { } resultR ? Text(resultR) : null);
+            trade.ResultR is { } resultR ? Text(resultR) : null,
+            trade.OpenedAt,
+            trade.IsOpen ? null : trade.TimeToOutcome is { } time ? (long)time.TotalSeconds : null,
+            IdeaPromiseResponse.Of(trade.Promise),
+            IdeaOutcomeResponse.Of(trade.IdeaOutcome),
+            view.LastPrice is { } price ? Text(price) : null,
+            view.CurrentResult is { } current ? Text(current) : null,
+            view.CurrentResultR is { } currentR ? Text(currentR) : null);
     }
 
-    private static string Text(decimal value)
+    internal static string Text(decimal value)
     {
         return value.ToString(CultureInfo.InvariantCulture);
     }
