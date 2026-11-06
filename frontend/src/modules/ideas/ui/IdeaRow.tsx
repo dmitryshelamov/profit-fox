@@ -14,7 +14,7 @@ import {
   StatusText,
 } from './IdeaCells';
 
-export const cell = 'px-3 py-3';
+export const cell = 'px-2 py-3';
 const number = `${cell} text-right font-mono whitespace-nowrap`;
 
 export interface IdeaColumn {

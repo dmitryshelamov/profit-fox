@@ -39,63 +39,65 @@ export function IdeasTable({
   const navigate = useNavigate();
 
   return (
-    <table className="w-full border-separate border-spacing-y-1 text-sm">
-      <thead className="bg-panel text-left text-[11px] tracking-wide text-faint uppercase">
-        <tr>
-          {headers.map(({ column, label, right }) => (
-            <th
-              key={column}
-              scope="col"
-              aria-sort={
-                sort.column !== column
-                  ? 'none'
-                  : sort.direction === 'asc'
-                    ? 'ascending'
-                    : 'descending'
-              }
-              className={`${cell} ${right ? 'text-right' : ''}`}
-            >
-              <button
-                type="button"
-                onClick={() => onSort(column)}
-                className="tracking-wide uppercase hover:text-text"
+    <div className="overflow-x-auto">
+      <table className="w-full border-separate border-spacing-y-1 text-sm">
+        <thead className="bg-panel text-left text-[11px] tracking-wide text-faint uppercase">
+          <tr>
+            {headers.map(({ column, label, right }) => (
+              <th
+                key={column}
+                scope="col"
+                aria-sort={
+                  sort.column !== column
+                    ? 'none'
+                    : sort.direction === 'asc'
+                      ? 'ascending'
+                      : 'descending'
+                }
+                className={`${cell} ${right ? 'text-right' : ''}`}
               >
-                {label}
-                {sort.column === column && (sort.direction === 'asc' ? ' ↑' : ' ↓')}
-              </button>
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {ideas.map((idea) => (
-          <tr
-            key={idea.id}
-            onClick={() =>
-              void navigate({
-                to: '/market/$category/$symbol',
-                params: { category: idea.category, symbol: idea.symbol },
-                search: { idea: idea.id },
-              })
-            }
-            className="cursor-pointer bg-panel hover:bg-panel-2"
-          >
-            <td className={firedCell}>{formatMoment(idea.firedAt)}</td>
-            <td className={`${cell} whitespace-nowrap`}>
-              <CategoryBadge category={idea.category} />{' '}
-              <Link
-                to="/market/$category/$symbol"
-                params={{ category: idea.category, symbol: idea.symbol }}
-                search={{ idea: idea.id }}
-                className="ml-1.5 font-semibold hover:underline"
-              >
-                {idea.symbol}
-              </Link>
-            </td>
-            <IdeaRowCells idea={idea} amount={amount} />
+                <button
+                  type="button"
+                  onClick={() => onSort(column)}
+                  className="tracking-wide uppercase hover:text-text"
+                >
+                  {label}
+                  {sort.column === column && (sort.direction === 'asc' ? ' ↑' : ' ↓')}
+                </button>
+              </th>
+            ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {ideas.map((idea) => (
+            <tr
+              key={idea.id}
+              onClick={() =>
+                void navigate({
+                  to: '/market/$category/$symbol',
+                  params: { category: idea.category, symbol: idea.symbol },
+                  search: { idea: idea.id },
+                })
+              }
+              className="cursor-pointer bg-panel hover:bg-panel-2"
+            >
+              <td className={firedCell}>{formatMoment(idea.firedAt)}</td>
+              <td className={`${cell} whitespace-nowrap`}>
+                <CategoryBadge category={idea.category} />{' '}
+                <Link
+                  to="/market/$category/$symbol"
+                  params={{ category: idea.category, symbol: idea.symbol }}
+                  search={{ idea: idea.id }}
+                  className="ml-1.5 font-semibold hover:underline"
+                >
+                  {idea.symbol}
+                </Link>
+              </td>
+              <IdeaRowCells idea={idea} amount={amount} />
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

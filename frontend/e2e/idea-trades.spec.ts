@@ -27,6 +27,9 @@ interface StubOrder {
 
 let accountId = '';
 
+/** A result in profit, in money and in R; a part keeps a no-break space so it does not wrap inside. */
+const inProfit = /\+\d+\.\d{2}\sUSDT · \+\d+\.\d{2}\sR/;
+
 async function stubOrders(request: APIRequestContext): Promise<StubOrder[]> {
   return (await (await request.get(`${stub}/control/orders`)).json()) as StubOrder[];
 }
@@ -176,7 +179,7 @@ test('an entry by an idea places the entry with its stop and target on linear, a
 
   // The price above the entry: the trade in work shows what it is worth now, by the last price of the exchange.
   await request.get(`${stub}/control/price?symbol=ETHUSDT&price=3100`);
-  await expect(workRow(page)).toContainText(/\+\d+\.\d{2} USDT · \+\d+\.\d{2} R/, {
+  await expect(workRow(page)).toContainText(inProfit, {
     timeout: 45_000,
   });
 
@@ -184,7 +187,7 @@ test('an entry by an idea places the entry with its stop and target on linear, a
 
   // The closed trade leaves the group «В работе» for the table of the closed ones, with its result, and the totals count it.
   await expect(closedRow(page)).toContainText('Закрыта по цели', { timeout: 45_000 });
-  await expect(closedRow(page)).toContainText(/\+\d+\.\d{2} USDT · \+\d+\.\d{2} R/);
+  await expect(closedRow(page)).toContainText(inProfit);
   await expect(page.getByRole('table', { name: 'Сделки в работе' })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Итоги' })).toContainText(/по цели [1-9]\d* \(/);
 });
@@ -261,7 +264,7 @@ test('«Закрыть по рынку» sells what the trade holds first and ta
 
   await expect(closedRow(page)).toContainText('Закрыта вручную', { timeout: 45_000 });
   await expect.poll(children, { timeout: 45_000 }).toEqual(['Cancelled', 'Cancelled']);
-  await expect(closedRow(page)).toContainText(/\+\d+\.\d{2} USDT/);
+  await expect(closedRow(page)).toContainText(inProfit);
 });
 
 test('a bot of the opposite direction on the symbol is a reason the entry is refused', async ({
