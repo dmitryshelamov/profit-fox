@@ -47,6 +47,8 @@ export function loadIdeasChoice(): IdeasChoice {
       side: oneOf(filters.side, ['', 'long', 'short'], noIdeaFilters.side),
       category: oneOf(filters.category, ['', 'linear', 'spot'], noIdeaFilters.category),
       nonNegativeExpectancy: filters.nonNegativeExpectancy === true,
+      activeOnly: filters.activeOnly === true,
+      hideStocks: filters.hideStocks === true,
     },
     savedFilterId: typeof stored.savedFilterId === 'string' ? stored.savedFilterId : null,
     sort: sortOf(sort),

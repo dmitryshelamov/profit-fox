@@ -1720,6 +1720,10 @@ export interface paths {
                     Category?: string;
                     /** @description Only ideas whose bucket expects at least 0 R. */
                     NonNegativeExpectancy?: boolean;
+                    /** @description Only ideas awaiting entry and active ones: none that reached the target, the stop or expired. */
+                    ActiveOnly?: boolean;
+                    /** @description No ideas of non-crypto pairs: stocks (spot xStocks too), ETFs, commodities and forex. */
+                    HideStocks?: boolean;
                     /** @description The id of a saved filter the ideas must meet. */
                     SavedFilter?: string;
                     /** @description The column of the list to order by (`firedAt`, `symbol`, `setup`, `interval`, `type`, `side`, `entry`, `stop`, `target`, `riskReward`, `probability`, `expectancy`, `profit` or `status`). */
