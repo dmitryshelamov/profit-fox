@@ -13,6 +13,8 @@ public static class IdeaQueries
     public const string InvalidInterval = "Interval must be 5, 15, 60 or 240.";
     public const string NoShortOnSpot = "Spot has no short ideas.";
 
+    public const string NoOwnStopEntry = "A stop entry comes only with a setup: without one it has no range.";
+
     /// <summary>How long an idea that closed stays in the lists.</summary>
     public static readonly TimeSpan ClosedShown = TimeSpan.FromHours(24);
 

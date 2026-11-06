@@ -33,6 +33,10 @@ public sealed class GetOwnIdeaQueryHandler(
         {
             errors["type"] = IdeaQueries.InvalidType;
         }
+        else if (type == IdeaType.StopEntry)
+        {
+            errors["type"] = IdeaQueries.NoOwnStopEntry;
+        }
 
         if (!IdeaQueries.TryParseInterval(request.Interval, out Interval interval))
         {

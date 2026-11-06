@@ -1,3 +1,5 @@
+using Dapper;
+
 using Npgsql;
 
 using ProfitFox.Domain.Entities.Ideas;
@@ -175,13 +177,25 @@ public class IdeaCaseRepositoryTests
     public async Task Percentiles_of_volatility_are_replaced_per_pair_and_interval()
     {
         var volatility = new IdeaVolatilityRepository(_dataSource);
-        await volatility.SaveAsync([new IdeaVolatility(IdeaGenerator.Wif, Interval.OneHour, 0.01m, null), new IdeaVolatility(IdeaGenerator.Wif, Interval.FiveMinutes, 0.002m, null)], CancellationToken.None);
+        await volatility.SaveAsync([new IdeaVolatility(IdeaGenerator.Wif, Interval.OneHour, 0.01m, 0.002m), new IdeaVolatility(IdeaGenerator.Wif, Interval.FiveMinutes, 0.002m, 0.0004m)], CancellationToken.None);
 
-        await volatility.SaveAsync([new IdeaVolatility(IdeaGenerator.Wif, Interval.OneHour, 0.0125m, null)], CancellationToken.None);
+        await volatility.SaveAsync([new IdeaVolatility(IdeaGenerator.Wif, Interval.OneHour, 0.0125m, 0.0025m)], CancellationToken.None);
 
         (await volatility.GetAllAsync(CancellationToken.None)).ShouldBe(
-            [new IdeaVolatility(IdeaGenerator.Wif, Interval.OneHour, 0.0125m, null), new IdeaVolatility(IdeaGenerator.Wif, Interval.FiveMinutes, 0.002m, null)],
+            [new IdeaVolatility(IdeaGenerator.Wif, Interval.OneHour, 0.0125m, 0.0025m), new IdeaVolatility(IdeaGenerator.Wif, Interval.FiveMinutes, 0.002m, 0.0004m)],
             ignoreOrder: true);
+    }
+
+    // Migration plan, step 1: a row stored before the 10th percentile was kept reads without it, so the pair has no squeeze until a replay.
+    [Test]
+    public async Task Row_without_the_tenth_percentile_reads_without_it()
+    {
+        await using (NpgsqlConnection connection = await _dataSource.OpenConnectionAsync())
+        {
+            await connection.ExecuteAsync("""INSERT INTO idea_volatility (category, symbol, "interval", percentile) VALUES ('linear', 'WIFUSDT', '60', 0.01)""");
+        }
+
+        (await new IdeaVolatilityRepository(_dataSource).GetAllAsync(CancellationToken.None)).ShouldBe([new IdeaVolatility(IdeaGenerator.Wif, Interval.OneHour, 0.01m, null)]);
     }
 
     private static IdeaBucketKey Key(IdeaSetup setup)

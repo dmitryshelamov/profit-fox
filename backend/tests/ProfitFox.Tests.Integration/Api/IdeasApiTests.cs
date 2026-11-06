@@ -283,6 +283,45 @@ public class IdeasApiTests
         (await GetAsync("/api/market/linear/SOLUSDT")).GetProperty("setups").GetProperty("15").GetArrayLength().ShouldBe(2);
     }
 
+    // Scenario "Фильтр по новому сетапу и типу": the list keeps only the stop entries of a squeeze; the market tells the candle setups of the
+    // pair, counts them for the chips and keeps the pairs with a breakout on the hour.
+    [Test]
+    public async Task Ideas_and_market_take_the_codes_of_the_candle_setups()
+    {
+        Idea squeeze = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-10), instrument: Sol, setup: IdeaSetup.Squeeze, type: IdeaType.StopEntry, interval: Interval.OneHour);
+        Idea impulse = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol);
+        await new IdeaRepository(_database).SaveAsync([squeeze, impulse], [], CancellationToken.None);
+        await SnapshotAsync(Sol, 100.5m);
+        await SnapshotAsync(Eth, 3000m);
+        await new MarketSnapshotRepository(_database).ReplaceSetupsAsync(
+            _holder,
+            new Dictionary<Instrument, IReadOnlyList<PairSetup>> { [Sol] = [new PairSetup(Interval.OneHour, IdeaSetup.Squeeze), new PairSetup(Interval.OneHour, IdeaSetup.Breakout)] },
+            CancellationToken.None);
+
+        JsonElement idea = (await ItemsAsync("/api/ideas?setup=squeeze&type=stop_entry")).EnumerateArray().Single();
+        JsonElement market = await GetAsync("/api/market?setup=breakout&interval=60");
+
+        (idea.GetProperty("id").GetGuid(), idea.GetProperty("setup").GetString(), idea.GetProperty("type").GetString()).ShouldBe((squeeze.Id, "squeeze", "stop_entry"));
+        JsonElement row = market.GetProperty("items").EnumerateArray().Single();
+        row.GetProperty("symbol").GetString().ShouldBe("SOLUSDT");
+        row.GetProperty("setups").GetProperty("60").EnumerateArray().Select(setup => setup.GetString()).ShouldBe(["squeeze", "breakout"], ignoreOrder: true);
+        (market.GetProperty("setups").GetProperty("breakout").GetInt32(), market.GetProperty("setups").GetProperty("quiet_volume").GetInt32()).ShouldBe((1, 0));
+    }
+
+    // Scenario "Своя идея «Стоп-вход»": without a setup a stop entry has no range.
+    [Test]
+    public async Task Own_stop_entry_is_a_validation_error()
+    {
+        await MinutesAsync();
+        await SnapshotAsync(Sol, 100.5m);
+
+        HttpResponseMessage response = await _client.PostAsJsonAsync("/api/market/linear/SOLUSDT/own-idea", new { type = "stop_entry", interval = "60", side = "long" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("errors").GetProperty("type")[0].GetString()
+            .ShouldBe("A stop entry comes only with a setup: without one it has no range.");
+    }
+
     // Scenario "Своя идея short": the stop above the nearest resistance, 105.0–105.2, with k × ATR, the target at 2R, the baseline 1 / 3.
     [Test]
     public async Task Own_idea_is_measured_from_the_price_now_by_the_rules_of_its_type()

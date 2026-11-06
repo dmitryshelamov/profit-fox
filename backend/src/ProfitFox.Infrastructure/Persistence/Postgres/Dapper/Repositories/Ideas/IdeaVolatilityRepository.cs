@@ -16,7 +16,7 @@ internal sealed class IdeaVolatilityRepository(NpgsqlDataSource dataSource) : II
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
         IEnumerable<Row> rows = await connection.QueryAsync<Row>(
-            new CommandDefinition("""SELECT category, symbol, "interval", percentile FROM idea_volatility""", cancellationToken: cancellationToken));
+            new CommandDefinition("""SELECT category, symbol, "interval", percentile, low_percentile AS Low FROM idea_volatility""", cancellationToken: cancellationToken));
 
         return
         [
@@ -25,7 +25,7 @@ internal sealed class IdeaVolatilityRepository(NpgsqlDataSource dataSource) : II
                 MarketDataCodes.TryParseCategory(row.Category, out MarketCategory category);
                 MarketDataCodes.TryParseInterval(row.Interval, out Interval interval);
 
-                return new IdeaVolatility(new Instrument(category, row.Symbol), interval, row.Percentile, null);
+                return new IdeaVolatility(new Instrument(category, row.Symbol), interval, row.Percentile, row.Low);
             })
         ];
     }
@@ -36,15 +36,16 @@ internal sealed class IdeaVolatilityRepository(NpgsqlDataSource dataSource) : II
         await connection.ExecuteAsync(
             new CommandDefinition(
                 """
-                INSERT INTO idea_volatility (category, symbol, "interval", percentile) VALUES (@Category, @Symbol, @Interval, @Percentile)
-                ON CONFLICT (category, symbol, "interval") DO UPDATE SET percentile = EXCLUDED.percentile
+                INSERT INTO idea_volatility (category, symbol, "interval", percentile, low_percentile) VALUES (@Category, @Symbol, @Interval, @Percentile, @Low)
+                ON CONFLICT (category, symbol, "interval") DO UPDATE SET percentile = EXCLUDED.percentile, low_percentile = EXCLUDED.low_percentile
                 """,
                 percentiles.Select(item => new Row
                 {
                     Category = item.Instrument.Category.ToCode(),
                     Symbol = item.Instrument.Symbol,
                     Interval = item.Interval.ToCode(),
-                    Percentile = item.Percentile
+                    Percentile = item.Percentile,
+                    Low = item.Low
                 }),
                 cancellationToken: cancellationToken));
     }
@@ -58,5 +59,7 @@ internal sealed class IdeaVolatilityRepository(NpgsqlDataSource dataSource) : II
         public required string Interval { get; init; }
 
         public decimal Percentile { get; init; }
+
+        public decimal? Low { get; init; }
     }
 }
