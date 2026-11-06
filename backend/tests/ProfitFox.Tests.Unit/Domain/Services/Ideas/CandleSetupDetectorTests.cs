@@ -289,6 +289,15 @@ public class CandleSetupDetectorTests
         return Input(Candle(99.8m, 101.2m, 99.6m, 100m, 1), 0.4m, []) with { Closed = [.. wide, .. narrow], LowPercentile = percentile };
     }
 
+    // The closed candles had no trades: no median to measure the volume by, so no setup needs volume, as with the setups of a move.
+    [Test]
+    public void Without_a_median_the_volume_is_none()
+    {
+        CandleSetupInput input = Input(Candle(100m, 100.9m, 99.3m, 100.4m, 4), 2m, []) with { Median = 0m };
+
+        CandleSetupDetector.Detect(input, Thresholds).ShouldNotContain(signal => signal.Setup == IdeaSetup.QuietVolume);
+    }
+
     private static SetupSignal? Signal(IdeaSetup setup, CandleSetupInput input, SetupThresholds? thresholds = null)
     {
         return CandleSetupDetector.Detect(input, thresholds ?? Thresholds).SingleOrDefault(signal => signal.Setup == setup);
