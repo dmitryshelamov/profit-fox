@@ -1,5 +1,8 @@
 import pg from 'pg';
 
+/** The version of the rules of ideas the scanner runs (`IdeasEngineVersion.Current`): the screens read only its calibration. */
+const engineVersion = 4;
+
 /** A client of the disposable database of the run, whose name playwright.config.ts gave to every worker. */
 async function connect(): Promise<pg.Client> {
   const server = new URL(
@@ -26,7 +29,7 @@ export async function seedIdeas(count: number): Promise<void> {
                           status, status_at, entered_at, exit_price, move, volume_ratio, engine_version)
        SELECT gen_random_uuid(), 'linear', 'E2E' || lpad(n::text, 3, '0') || 'USDT', 'drop', 'levels', '60', 'long',
               now() - make_interval(mins => n), 100, 99, 110 + n, 10 + n,
-              'target', now() - interval '1 minute', now() - make_interval(mins => n), 110 + n, 3, 2, 3
+              'target', now() - interval '1 minute', now() - make_interval(mins => n), 110 + n, 3, 2, ${engineVersion}
        FROM generate_series(1, $1::int) AS n`,
       [count],
     );
@@ -35,7 +38,7 @@ export async function seedIdeas(count: number): Promise<void> {
                           status, status_at, entered_at, exit_price, move, volume_ratio, engine_version)
        SELECT gen_random_uuid(), category, 'BTCUSDT', 'drop', 'levels', '60', 'long',
               now() - interval '5 hours', 100, 99, 100 + reward, reward,
-              'target', now() - interval '1 minute', now() - interval '5 hours', 100 + reward, 3, 2, 3
+              'target', now() - interval '1 minute', now() - interval '5 hours', 100 + reward, 3, 2, ${engineVersion}
        FROM (VALUES ('linear', 200), ('spot', 200), ('linear', 5)) AS marker (category, reward)`,
     );
   } finally {
@@ -135,7 +138,7 @@ export async function seedCalibration(): Promise<void> {
 
   try {
     await client.query(
-      `INSERT INTO idea_calibration (engine_version, days, category, computed_at, report) VALUES (3, 90, 'all', now(), $1::jsonb)
+      `INSERT INTO idea_calibration (engine_version, days, category, computed_at, report) VALUES (${engineVersion}, 90, 'all', now(), $1::jsonb)
        ON CONFLICT (engine_version, days, category) DO UPDATE SET computed_at = EXCLUDED.computed_at, report = EXCLUDED.report`,
       [JSON.stringify(report)],
     );
