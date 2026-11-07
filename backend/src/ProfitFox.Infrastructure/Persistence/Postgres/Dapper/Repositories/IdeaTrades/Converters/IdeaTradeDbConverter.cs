@@ -66,6 +66,7 @@ internal static class IdeaTradeDbConverter
             NetRiskReward = trade.Promise?.NetRiskReward,
             OpenedAt = trade.OpenedAt,
             AutoId = trade.AutoId,
+            Leverage = trade.Leverage,
             SteppedUntil = steppedUntil
         };
     }
@@ -110,7 +111,8 @@ internal static class IdeaTradeDbConverter
                 : null,
             trade.OpenedAt,
             trade.IdeaStatus is { } ideaStatus ? new TradedIdeaOutcome(IdeaCodes.ParseStatus(ideaStatus), trade.IdeaStatusAt!.Value, trade.IdeaResult) : null,
-            trade.AutoId);
+            trade.AutoId,
+            trade.Leverage);
     }
 
     internal static IdeaTradeOrderDb FromDomain(IdeaTradeOrder order)
@@ -222,7 +224,7 @@ internal static class IdeaTradeDbConverter
 
     internal static IdeaTradingSettings ToDomain(IdeaTradingSettingsDb settings)
     {
-        return new IdeaTradingSettings(settings.AccountId, settings.Amount, settings.MaxAmount, settings.MaxOpenTrades, settings.MaxTotalRisk, settings.MinRiskReward, settings.DailyLossLimit, settings.MaxSameDirection, settings.AutosBudget);
+        return new IdeaTradingSettings(settings.AccountId, settings.Amount, settings.MaxAmount, settings.MaxOpenTrades, settings.MaxTotalRisk, settings.MinRiskReward, settings.DailyLossLimit, settings.MaxSameDirection, settings.AutosBudget, settings.Leverage);
     }
 
     private static InvalidOperationException Unknown(string what, string code)

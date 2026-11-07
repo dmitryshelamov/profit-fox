@@ -32,7 +32,7 @@
 
 ## 3. Хранение
 
-- [ ] 3.1 Миграция FluentMigrator: `leverage int NOT NULL DEFAULT 1` в настройках торговли идеями и в сделках по идеям;
+- [x] 3.1 Миграция FluentMigrator: `leverage int NOT NULL DEFAULT 1` в настройках торговли идеями и в сделках по идеям;
   конвертеры и запросы Dapper. Готово, когда тест миграции (старые строки получают `1`) и `IdeaTradingSettingsRepositoryTests`,
   `IdeaTradeRepositoryTests` с плечом зелёные.
 
