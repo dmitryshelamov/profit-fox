@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { fakeApi, json, problem } from '@/test/fakeApi';
@@ -55,6 +55,48 @@ describe('form of an auto', () => {
       }),
     ).toBeChecked();
     expect(screen.getByText(/родившиеся после «Сохранить»/)).toBeInTheDocument();
+    for (const feature of ['Падение пары за сутки', 'Падение BTC за 4 часа', 'Высокий funding']) {
+      expect(
+        within(screen.getByRole('radiogroup', { name: feature })).getByRole('radio', {
+          name: 'любой',
+        }),
+      ).toBeChecked();
+    }
+  });
+
+  // Scenario "Переключатель признака": the condition is saved, and the form of the saved auto shows it.
+  it('saves the condition of a feature and shows it when the auto is opened', async () => {
+    const requests = fakeApi(
+      routes({
+        'PUT /api/idea-autos/auto-1': noContent,
+        'GET /api/idea-autos/auto-2': () =>
+          json(autoOf({ id: 'auto-2', name: 'Лонг после падения', dayDrop: 'with' })),
+      }),
+    );
+    const { history } = renderApp('/idea-trades/autos/auto-1');
+    const user = userEvent.setup();
+    await waitFor(() => expect(screen.getByLabelText('Название')).toHaveValue('Импульс лонг'));
+
+    await user.click(
+      within(screen.getByRole('radiogroup', { name: 'Падение пары за сутки' })).getByRole('radio', {
+        name: 'только с',
+      }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => expect(history.location.pathname).toBe('/idea-trades/autos'));
+    const put = requests.find((request) => request.method === 'PUT')!;
+    expect(await put.text()).toContain('"dayDrop":"with","btcDrop":"any","highFunding":"any"');
+
+    await act(() => history.push('/idea-trades/autos/auto-2'));
+    await waitFor(() =>
+      expect(screen.getByLabelText('Название')).toHaveValue('Лонг после падения'),
+    );
+    expect(
+      within(screen.getByRole('radiogroup', { name: 'Падение пары за сутки' })).getByRole('radio', {
+        name: 'только с',
+      }),
+    ).toBeChecked();
   });
 
   // Requirement "Стоп-вход в форме".
@@ -124,7 +166,7 @@ describe('form of an auto', () => {
     const post = requests.find((request) => request.method === 'POST')!;
 
     expect(await post.text()).toBe(
-      `{"name":"Мой автомат","accountId":"${exchangeAccount.id}","amount":300,"budget":null,"setups":["impulse"],"types":["pullback"],"intervals":["15","60"],"side":"short","category":"spot","badge":"flat","minRiskReward":1.5,"minCases":0}`,
+      `{"name":"Мой автомат","accountId":"${exchangeAccount.id}","amount":300,"budget":null,"setups":["impulse"],"types":["pullback"],"intervals":["15","60"],"side":"short","category":"spot","badge":"flat","minRiskReward":1.5,"minCases":0,"dayDrop":"any","btcDrop":"any","highFunding":"any"}`,
     );
     expect(
       requests.some((request) => request.method === 'PUT' && request.url.endsWith('/auto-9/mode')),

@@ -24,7 +24,8 @@ internal static class CalibrationReportDbConverter
             Owns = [.. report.Owns.Select(own => new CalibrationOwnRowDb { FewOwnCases = own.FewOwnCases, Row = FromDomain(own.Row), Brier = own.Brier })],
             Comparison = report.Comparison is not { } comparison ? null : FromDomain(comparison),
             Intervals = [.. report.Intervals.Select(FromDomain)],
-            Types = [.. report.Types.Select(FromDomain)]
+            Types = [.. report.Types.Select(FromDomain)],
+            Features = [.. report.Features.Select(FromDomain)]
         };
     }
 
@@ -47,7 +48,8 @@ internal static class CalibrationReportDbConverter
             Owns = [.. row.Owns.Select(own => new CalibrationOwnRow(own.FewOwnCases, ToDomain(own.Row), own.Brier))],
             Comparison = row.Comparison is not { } comparison ? null : ToDomain(comparison),
             Intervals = [.. row.Intervals.Select(ToDomain)],
-            Types = [.. row.Types.Select(ToDomain)]
+            Types = [.. row.Types.Select(ToDomain)],
+            Features = [.. row.Features.Select(ToDomain)]
         };
     }
 
@@ -59,7 +61,9 @@ internal static class CalibrationReportDbConverter
             Type = slice.Type?.ToCode(),
             Total = FromDomain(slice.Total),
             Up = slice.Up is null ? null : FromDomain(slice.Up),
-            Comparison = FromDomain(slice.Comparison)
+            Comparison = FromDomain(slice.Comparison),
+            Feature = slice.Feature?.ToCode(),
+            Present = slice.Present
         };
     }
 
@@ -70,7 +74,14 @@ internal static class CalibrationReportDbConverter
             TypeOf(slice.Type),
             ToDomain(slice.Total),
             slice.Up is null ? null : ToDomain(slice.Up),
-            ToDomain(slice.Comparison));
+            ToDomain(slice.Comparison),
+            FeatureOf(slice.Feature),
+            slice.Present);
+    }
+
+    private static IdeaFeature? FeatureOf(string? code)
+    {
+        return code is null ? null : IdeaCodes.TryParseFeature(code, out IdeaFeature feature) ? feature : throw Unknown("feature", code);
     }
 
     private static Interval? IntervalOf(string? code)

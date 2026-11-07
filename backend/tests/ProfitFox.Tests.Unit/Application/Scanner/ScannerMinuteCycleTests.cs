@@ -69,7 +69,7 @@ public class ScannerMinuteCycleTests
         _market.Keep([new ScannerPair(Sol, true, CoveredUntil: Minute, OpenInterestCoveredUntil: Minute), new ScannerPair(Btc, true, CoveredUntil: Minute.AddMinutes(-2))]);
         _market.TakeChanged();
         _pace = new ScannerPace();
-        _ideas = new LiveIdeas(_ideaStore, Substitute.For<IIdeaVolatilityRepository>(), Substitute.For<ICandleRepository>(), ExitRules(), new IdeaRecomputes(), _market, new IdeasSettings(), Fees, NoAutos.Create(_market, Fees, _time), _time);
+        _ideas = new LiveIdeas(_ideaStore, Substitute.For<IIdeaVolatilityRepository>(), Substitute.For<ICandleRepository>(), Substitute.For<IFundingRateRepository>(), ExitRules(), new IdeaRecomputes(), _market, new IdeasSettings(), Fees, NoAutos.Create(_market, Fees, _time), _time);
         _cycle = new ScannerMinuteCycle(
             _feed,
             _openInterest,

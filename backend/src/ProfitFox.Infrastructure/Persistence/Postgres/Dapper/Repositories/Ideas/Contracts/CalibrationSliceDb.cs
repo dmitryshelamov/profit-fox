@@ -1,6 +1,9 @@
 namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas.Contracts;
 
-/// <summary>A row of a breakdown of a stored report of calibration: the code of its interval or of its type, the other none.</summary>
+/// <summary>
+///     A row of a breakdown of a stored report of calibration: the code of its interval, of its type or of its feature with whether the cases have
+///     it, the others none.
+/// </summary>
 internal sealed class CalibrationSliceDb
 {
     public string? Interval { get; init; }
@@ -12,4 +15,8 @@ internal sealed class CalibrationSliceDb
     public CalibrationRowDb? Up { get; init; }
 
     public required CalibrationComparisonDb Comparison { get; init; }
+
+    public string? Feature { get; init; }
+
+    public bool? Present { get; init; }
 }

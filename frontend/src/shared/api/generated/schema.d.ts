@@ -4841,9 +4841,10 @@ export interface components {
             expectancyHigh: null | string;
         };
         /**
-         * @description A row of a breakdown of the calibration: the code of its string? CalibrationSliceResponse.Interval (`5`, `15`, `60`, `240`) or of its
-         *     string? CalibrationSliceResponse.Type, the other none; the row of all its checked cases, the row of those promised ▲, none without one, and the old model
-         *     against the new one on the cases of the row both check.
+         * @description A row of a breakdown of the calibration: the code of its string? CalibrationSliceResponse.Interval (`5`, `15`, `60`, `240`), of its
+         *     string? CalibrationSliceResponse.Type or of its string? CalibrationSliceResponse.Feature (`day_drop`, `btc_drop`, `high_funding`) with whether its cases have it
+         *     (bool? CalibrationSliceResponse.Present), the others none; the row of all its checked cases, the row of those promised ▲, none without one, and the old
+         *     model against the new one on the cases of the row both check.
          */
         CalibrationSliceResponse: {
             interval: null | string;
@@ -4851,6 +4852,8 @@ export interface components {
             total: components["schemas"]["CalibrationRowResponse"];
             up: null | components["schemas"]["CalibrationRowResponse"];
             comparison: components["schemas"]["CalibrationComparisonResponse"];
+            feature: null | string;
+            present: null | boolean;
         };
         /** @description Prices and volumes as decimal strings: JSON numbers lose precision in JavaScript clients. */
         CandleResponse: {
@@ -5042,7 +5045,8 @@ export interface components {
         /**
          * @description An auto to save: its name, account, amount and budget in USDT (none for no budget; not below the amount), and its conditions: the codes of the setups, types and intervals marked (the types never hold
          *     `stop_entry`), the side (`long` or `short`, none is both), the market (`linear` or `spot`, none is both), the lowest badge
-         *     (`up`, `flat` or `down`, none is any), the lowest reward to the risk after the fees and the least number of cases of the bucket.
+         *     (`up`, `flat` or `down`, none is any), the lowest reward to the risk after the fees, the least number of cases of the bucket and the
+         *     condition by each feature of the idea (`any`, `with` or `without`, none is `any`).
          */
         IdeaAutoBody: {
             name: string;
@@ -5065,6 +5069,12 @@ export interface components {
             minRiskReward?: number | string;
             /** Format: int32 */
             minCases?: number | string;
+            /** @description The drop of the pair over a day: `any`, `with` or `without`. */
+            dayDrop?: null | string;
+            /** @description The drop of BTC over 4 hours: `any`, `with` or `without`. */
+            btcDrop?: null | string;
+            /** @description The high funding of the pair: `any`, `with` or `without`. */
+            highFunding?: null | string;
         };
         /**
          * @description An auto of the list with its totals: the paper trades that closed (their number, their mean result and their sum in R), the real trades that closed
@@ -5125,8 +5135,8 @@ export interface components {
             total: number | string;
         };
         /**
-         * @description An auto with its account, its budget (none for no budget) and its conditions as codes, its place in the list (from 0) and its mode (`off`,
-         *     `paper` or `live`).
+         * @description An auto with its account, its budget (none for no budget) and its conditions as codes, the ones by the features `any`, `with` or
+         *     `without`, its place in the list (from 0) and its mode (`off`, `paper` or `live`).
          *     Numbers are decimal strings.
          */
         IdeaAutoResponse: {
@@ -5150,6 +5160,9 @@ export interface components {
             /** Format: int32 */
             position: number | string;
             budget: null | string;
+            dayDrop: string;
+            btcDrop: string;
+            highFunding: string;
         };
         /** @description A bucket setup × type × interval × side × category with its statistics over the last int IdeaBucketResponse.Days days (90 or 30). */
         IdeaBucketResponse: {
@@ -5167,8 +5180,8 @@ export interface components {
          *     was computed (none before the first time, with zeros and empty tables), the checked cases and the ones whose bucket had fewer than 30
          *     cases, the Brier score of the buckets and of the share of targets of the category, the rows by promised probability, by promised
          *     expectancy and by badge, the CalibrationRowResponse? IdeaCalibrationResponse.Total of all checked cases, the rows by own data and the comparison of the old model with the
-         *     new one (none before the first calibration) and the breakdowns by interval and by type, all in a string IdeaCalibrationResponse.Scope, `all` or
-         *     `fresh`. Numbers are decimal strings.
+         *     new one (none before the first calibration) and the breakdowns by interval, by type and by feature (empty in a report computed before
+         *     it), all in a string IdeaCalibrationResponse.Scope, `all` or `fresh`. Numbers are decimal strings.
          */
         IdeaCalibrationResponse: {
             /** Format: date-time */
@@ -5191,6 +5204,7 @@ export interface components {
             comparison: null | components["schemas"]["CalibrationComparisonResponse"];
             intervals: components["schemas"]["CalibrationSliceResponse"][];
             types: components["schemas"]["CalibrationSliceResponse"][];
+            features: components["schemas"]["CalibrationSliceResponse"][];
         };
         /** @description The trades whose idea has a result in R: how many, the mean result of their ideas and the mean result of the trades, in R. */
         IdeaComparisonResponse: {
@@ -5328,6 +5342,8 @@ export interface components {
          *     never expires, none when the target does not cover them.
          *     string IdeaResponse.ProfitPerUsdt, string IdeaResponse.LossPerUsdt and string IdeaResponse.RiskPerUsdt are its money on 1 USDT of the amount of a deal,
          *     after the fees. string IdeaResponse.RiskReward is the ratio of the prices, string IdeaResponse.NetRiskReward the profit over the loss after the fees. string? IdeaResponse.Tick is the price step of the pair, none for an idea made before it was kept. Numbers are decimal strings; string IdeaResponse.Move in ATR, string IdeaResponse.VolumeRatio in medians of volume.
+         *     IReadOnlyList&lt;string&gt; IdeaResponse.Features are the codes of the features of the market the idea fired with (`day_drop`, `btc_drop`,
+         *     `high_funding`), none of them for an idea without.
          */
         IdeaResponse: {
             /** Format: uuid */
@@ -5360,6 +5376,7 @@ export interface components {
             breakEven: null | string;
             bucket: null | components["schemas"]["BucketStatisticsResponse"];
             recent: null | components["schemas"]["BucketStatisticsResponse"];
+            features: string[];
         };
         /** @description A page of ideas: its number from 1 (the last page when the one asked for is past the end), its size and the count of all the ideas that meet the filters. */
         IdeasPageResponse: {
@@ -5388,7 +5405,8 @@ export interface components {
          *     `promise` is what the idea promised at the entry and `ideaOutcome` how the idea ended, none for a trade made before
          *     the journal or while the idea is open. An open trade has the last price of its pair and what it is worth at it, none while it waits for
          *     its entry or when the exchange gave no price. `origin` tells who took the trade, `manual`, `auto` or `paper`, with the id and the name
-         *     of the auto, the name of a deleted one too.
+         *     of the auto, the name of a deleted one too. `features` are the codes of the features of the market its idea fired with
+         *     (`day_drop`, `btc_drop`, `high_funding`), copied when the trade was made.
          */
         IdeaTradeResponse: {
             /** Format: uuid */
@@ -5432,6 +5450,7 @@ export interface components {
             /** Format: uuid */
             autoId: null | string;
             autoName: null | string;
+            features: string[];
         };
         /** @description A page of trades: its number from 1 (the last page when the one asked for is past the end), its size and the count of all the closed trades of the filter. */
         IdeaTradesPageResponse: {

@@ -349,6 +349,7 @@ export const ideaOf = (overrides: Partial<Schemas['IdeaResponse']> = {}) =>
       fewOwnCases: false,
     },
     recent: null,
+    features: [],
     ...overrides,
   }) satisfies Schemas['IdeaResponse'];
 
@@ -502,6 +503,7 @@ export const tradeOf = (overrides: Partial<Schemas['IdeaTradeResponse']> = {}) =
     origin: 'manual',
     autoId: null,
     autoName: null,
+    features: [],
     ...overrides,
   }) satisfies Schemas['IdeaTradeResponse'];
 
@@ -716,6 +718,8 @@ export const calibrationOf = (overrides: Partial<Schemas['IdeaCalibrationRespons
       {
         interval: '60',
         type: null,
+        feature: null,
+        present: null,
         total: calibrationRowOf({
           from: null,
           to: null,
@@ -760,6 +764,8 @@ export const calibrationOf = (overrides: Partial<Schemas['IdeaCalibrationRespons
       {
         interval: null,
         type: 'pullback',
+        feature: null,
+        present: null,
         total: calibrationRowOf({
           from: null,
           to: null,
@@ -804,6 +810,7 @@ export const calibrationOf = (overrides: Partial<Schemas['IdeaCalibrationRespons
         },
       },
     ],
+    features: [],
     ...overrides,
   }) satisfies Schemas['IdeaCalibrationResponse'];
 
@@ -977,6 +984,9 @@ export const autoOf = (overrides: Partial<Schemas['IdeaAutoResponse']> = {}) =>
     minCases: 100,
     position: 0,
     budget: null,
+    dayDrop: 'any',
+    btcDrop: 'any',
+    highFunding: 'any',
     ...overrides,
   }) satisfies Schemas['IdeaAutoResponse'];
 

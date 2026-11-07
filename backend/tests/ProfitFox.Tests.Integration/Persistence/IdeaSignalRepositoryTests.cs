@@ -51,6 +51,26 @@ public class IdeaSignalRepositoryTests
             .ShouldBe([.. new[] { levels, waiting, target }.Select(IdeaSignalGenerator.Shape)]);
     }
 
+    // Task 4.2 of add-market-idea-features: a signal is read with the numbers of the market it fired with and so with their level; one without
+    // them reads without features.
+    [Test]
+    public async Task Signals_are_read_back_with_their_numbers_of_the_market()
+    {
+        IdeaSignal marked = IdeaSignalGenerator.Generate(Now) with { PairChange = -0.0712345m, BtcChange = -0.0123m, Funding = 0.0006m };
+        IdeaSignal plain = IdeaSignalGenerator.Generate(Now.AddMinutes(5));
+
+        await _signals.UpsertAsync([marked, plain], CancellationToken.None);
+
+        IReadOnlyList<IdeaSignal> read = await _signals.GetAsync(IdeaGenerator.Wif, IdeasEngineVersion.Current, CancellationToken.None);
+        read.Select(signal => (signal.PairChange, signal.BtcChange, signal.Funding, signal.Features)).ShouldBe(
+        [
+            (-0.0712345m, -0.0123m, 0.0006m, new IdeaFeatures(true, true, true)),
+            (null, null, null, default)
+        ]);
+        (await _signals.StreamAsync(IdeasEngineVersion.Current, Now.AddMinutes(-1), null, CancellationToken.None).ToArrayAsync()).Select(IdeaSignalGenerator.Shape)
+            .ShouldBe([.. new[] { marked, plain }.Select(IdeaSignalGenerator.Shape)]);
+    }
+
     // Decision 4: a path written as far as it went is written again as it goes on, under its key.
     [Test]
     public async Task Signal_written_again_takes_the_path_it_has_gone_on_to()
@@ -164,7 +184,7 @@ public class IdeaSignalRepositoryTests
         var replay = new IdeaReplayRepository(_dataSource);
         var sol = new Instrument(MarketCategory.Spot, "SOLUSDT");
         IdeaSignal generated = IdeaSignalGenerator.Generate(Now, engineVersion: 1);
-        IdeaSignal open = generated with { Path = generated.Path with { Tick = 0.0001m, TrackedUntil = Now.AddHours(1) } };
+        IdeaSignal open = generated with { Path = generated.Path with { Tick = 0.0001m, TrackedUntil = Now.AddHours(1) }, PairChange = -0.06m, Funding = 0.0005m };
         await replay.SetAsync(IdeaGenerator.Wif, 1, new IdeaReplayCursor(Now, [open]), CancellationToken.None);
         await replay.SetAsync(IdeaGenerator.Wif, 1, new IdeaReplayCursor(Now.AddDays(1), [open]), CancellationToken.None);
         await replay.SetAsync(sol, 2, new IdeaReplayCursor(Now, []), CancellationToken.None);

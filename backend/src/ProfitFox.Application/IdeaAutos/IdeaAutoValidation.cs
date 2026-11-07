@@ -2,6 +2,7 @@ using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ideas;
 using ProfitFox.Application.MarketData;
 using ProfitFox.Application.Scanner.Ideas;
+using ProfitFox.Domain.Entities.IdeaAutos.Enums;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
@@ -78,12 +79,16 @@ public static class IdeaAutoValidation
             errors["minCases"] = "The least number of cases must not be negative.";
         }
 
+        FeatureCondition dayDrop = Feature(input.DayDrop, "dayDrop", errors);
+        FeatureCondition btcDrop = Feature(input.BtcDrop, "btcDrop", errors);
+        FeatureCondition highFunding = Feature(input.HighFunding, "highFunding", errors);
+
         if (errors.Count > 0)
         {
             throw new ValidationFailedException(errors);
         }
 
-        return new IdeaAutoConditions(setups, types, intervals, side, category, badge, input.MinRiskReward, input.MinCases);
+        return new IdeaAutoConditions(setups, types, intervals, side, category, badge, input.MinRiskReward, input.MinCases, dayDrop, btcDrop, highFunding);
     }
 
     private static List<T> Codes<T>(IReadOnlyList<string> codes, string field, TryParse<T> parse, string message, Dictionary<string, string> errors)
@@ -129,6 +134,12 @@ public static class IdeaAutoValidation
         errors[field] = $"Unknown {field}.";
 
         return null;
+    }
+
+    // A condition by a feature left out is «любой» (decision 8 of add-market-idea-features).
+    private static FeatureCondition Feature(string? code, string field, Dictionary<string, string> errors)
+    {
+        return Optional<FeatureCondition>(code, field, IdeaAutoCodes.TryParseFeatureCondition, errors) ?? FeatureCondition.Any;
     }
 
     // The ideas come on 5 minutes, 15 minutes, 1 hour and 4 hours only.

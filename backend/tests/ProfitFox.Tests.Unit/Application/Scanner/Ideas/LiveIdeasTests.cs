@@ -48,6 +48,7 @@ public class LiveIdeasTests
     private FakeTimeProvider _time = null!;
     private ICandleRepository _candles = null!;
     private IIdeaExitRuleRepository _rules = null!;
+    private IFundingRateRepository _funding = null!;
     private IdeaRecomputes _recomputes = null!;
     private LiveIdeas _live = null!;
 
@@ -72,7 +73,9 @@ public class LiveIdeasTests
         _rules = Substitute.For<IIdeaExitRuleRepository>();
         _rules.GetAllAsync(Arg.Any<CancellationToken>()).Returns([]);
         _recomputes = new IdeaRecomputes();
-        _live = new LiveIdeas(_ideas, _volatility, candles, _rules, _recomputes, _market, new IdeasSettings(), Fees, NoAutos.Create(_market, Fees, _time), _time);
+        _funding = Substitute.For<IFundingRateRepository>();
+        _funding.GetAsync(Arg.Any<Instrument>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
+        _live = new LiveIdeas(_ideas, _volatility, candles, _funding, _rules, _recomputes, _market, new IdeasSettings(), Fees, NoAutos.Create(_market, Fees, _time), _time);
     }
 
     // Task 6.2: the rules are read every minute; a new one makes the ideas from then on and sends its type × interval to the recompute, once.
@@ -100,6 +103,104 @@ public class LiveIdeasTests
         IReadOnlyList<Idea> created = await RunAsync(Four.AddMinutes(70));
 
         created.Single(idea => idea.Setup == IdeaSetup.Impulse && idea.Interval == Interval.FifteenMinutes && idea.Track.Plan.Type == IdeaType.BeyondExtreme).Track.Plan.Stop.ShouldBe(39.37m);
+    }
+
+    // Task 3.1: the settlement the top-up put into memory goes into the inputs of the ideas of its pair.
+    [Test]
+    public async Task Funding_in_memory_goes_into_the_ideas_of_its_pair()
+    {
+        _market.FundingLoaded(Wif, [new FundingRatePoint(Four.AddHours(-4), 0.0006m)]);
+
+        IReadOnlyList<Idea> created = await RunAsync(Four.AddMinutes(70));
+
+        created.ShouldNotBeEmpty();
+        created.ShouldAllBe(idea => idea.Funding == 0.0006m && idea.Features.HighFunding);
+        await _funding.DidNotReceive().GetAsync(Arg.Any<Instrument>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    // Requirement "Уровень признаков": a settlement after the minute an idea fires, topped up before the minute ran, is not seen by it.
+    [Test]
+    public async Task Funding_settled_after_the_minute_is_not_seen_by_its_ideas()
+    {
+        _market.FundingLoaded(Wif, [new FundingRatePoint(Four.AddHours(2), 0.0006m)]);
+
+        IReadOnlyList<Idea> created = await RunAsync(Four.AddMinutes(70));
+
+        created.ShouldNotBeEmpty();
+        created.ShouldAllBe(idea => idea.Funding == null);
+    }
+
+    // Decision 4: memory starts empty, so the warm-up reads the last settlement of the 7 days before from storage.
+    [Test]
+    public async Task Warm_up_reads_the_last_funding_from_storage_while_memory_has_none()
+    {
+        _funding.GetAsync(Wif, Four.AddDays(-7), Four, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([new FundingRatePoint(Four.AddHours(-12), 0.0001m), new FundingRatePoint(Four.AddHours(-4), 0.0007m)]);
+
+        IReadOnlyList<Idea> created = await RunAsync(Four.AddMinutes(70));
+
+        created.ShouldAllBe(idea => idea.Funding == 0.0007m);
+        _market.FundingOf(Wif).ShouldBe(new FundingRatePoint(Four.AddHours(-4), 0.0007m));
+    }
+
+    // Scenario "BTC у spot-идеи" live: BTC closed at 98 700 on the minute an idea fires and at 100 000 240 minutes before.
+    [Test]
+    public async Task Ideas_take_the_change_of_btc_over_240_minutes_from_memory()
+    {
+        KeepBtc(Four.AddDays(-1), time => time < Four.AddMinutes(-170) ? 100_000m : 98_700m);
+
+        IReadOnlyList<Idea> created = await RunAsync(Four.AddMinutes(70));
+
+        created.ShouldNotBeEmpty();
+        created.ShouldAllBe(idea => idea.BtcChange == -0.013m && idea.Features.BtcDrop);
+    }
+
+    // Scenario "Нет минуты BTC": memory holds BTC only from 170 minutes before 04:00, so the minute 240 before an idea of the next 70 minutes is unknown.
+    [Test]
+    public async Task Without_the_minute_of_btc_240_minutes_before_the_change_is_unknown()
+    {
+        KeepBtc(Four.AddMinutes(-170), _ => 90_000m);
+
+        IReadOnlyList<Idea> created = await RunAsync(Four.AddMinutes(70));
+
+        created.ShouldNotBeEmpty();
+        created.ShouldAllBe(idea => idea.BtcChange == null && !idea.Features.BtcDrop);
+    }
+
+    // Scenario "Funding у spot": a spot pair reads no settlement and has no funding, but the same change of BTC.
+    [Test]
+    public async Task Spot_pair_has_no_funding_and_the_change_of_btc()
+    {
+        var spot = new Instrument(MarketCategory.Spot, "WIFUSDT");
+        IReadOnlyList<IdeaCandle> minutes = IdeaFixtures.Setup("impulse");
+        _market.Keep([new ScannerPair(spot, true, CoveredUntil: Four, TickSize: 0.01m)]);
+        _market.Loaded(spot, Start, Four, minutes.Where(minute => minute.OpenTime < Four).Select(Candle));
+        _candles.GetAggregatedAsync(spot, Arg.Any<Interval>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(call => IdeaCandles.FromMinutes(call.ArgAt<Interval>(1), minutes, Start, call.ArgAt<DateTimeOffset>(3)));
+        _funding.GetAsync(Arg.Any<Instrument>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([new FundingRatePoint(Four.AddHours(-4), 0.0007m)]);
+        KeepBtc(Four.AddDays(-1), time => time < Four.AddMinutes(-170) ? 100_000m : 98_700m);
+        var created = new List<Idea>();
+        _ideas.SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<ClosedIdea>>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            created.AddRange(call.ArgAt<IReadOnlyCollection<Idea>>(0));
+
+            return call.ArgAt<IReadOnlyCollection<Idea>>(0).ToList();
+        });
+        await _live.ReadWarmUpsAsync(CancellationToken.None);
+        await _live.RunAsync(Four, CancellationToken.None);
+
+        foreach (IdeaCandle minute in minutes.Where(minute => minute.OpenTime >= Four && minute.OpenTime < Four.AddMinutes(70)))
+        {
+            _market.Closed(Wif, Candle(minute));
+            _market.Closed(spot, Candle(minute));
+            await _live.RunAsync(minute.OpenTime.AddMinutes(1), CancellationToken.None);
+        }
+
+        Idea[] ofSpot = [.. created.Where(idea => idea.Instrument == spot)];
+        ofSpot.ShouldNotBeEmpty();
+        ofSpot.ShouldAllBe(idea => idea.Funding == null && idea.BtcChange == -0.013m);
+        await _funding.DidNotReceive().GetAsync(spot, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
     // Review of tune-idea-rules: the whole recompute of the session may have read the rules before one was applied; the first read sends
@@ -240,7 +341,7 @@ public class LiveIdeasTests
         _ideas.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([outliving]);
         KeepSol(Flat(Four.AddDays(-1), Four));
         PaperIdeaTrade paper = PaperOf(outliving) with { SteppedUntil = Four.AddMinutes(-10) };
-        _live = new LiveIdeas(_ideas, _volatility, _candles, _rules, _recomputes, _market, new IdeasSettings(), Fees, NoAutos.Create(_market, Fees, _time, open: [paper]), _time);
+        _live = new LiveIdeas(_ideas, _volatility, _candles, _funding, _rules, _recomputes, _market, new IdeasSettings(), Fees, NoAutos.Create(_market, Fees, _time, open: [paper]), _time);
         await _live.ReadWarmUpsAsync(CancellationToken.None);
 
         await _live.RunAsync(Four, CancellationToken.None);
@@ -364,7 +465,7 @@ public class LiveIdeasTests
     public async Task Window_of_a_setup_longer_than_a_day_warms_up_with_stored_minutes()
     {
         var settings = new IdeasSettings { ByInterval = new Dictionary<string, ThresholdOverride> { ["240"] = new ThresholdOverride { Candles = 7 } } };
-        var live = new LiveIdeas(_ideas, _volatility, _candles, _rules, _recomputes, _market, settings, Fees, NoAutos.Create(_market, Fees, _time), _time);
+        var live = new LiveIdeas(_ideas, _volatility, _candles, _funding, _rules, _recomputes, _market, settings, Fees, NoAutos.Create(_market, Fees, _time), _time);
         _candles.GetAsync(Wif, Interval.OneMinute, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
 
         await live.ReadWarmUpsAsync(CancellationToken.None);
@@ -556,7 +657,7 @@ public class LiveIdeasTests
         buckets.GetAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
         _market.Update(Wif, pair => pair with { QuantityStep = 0.01m, MinQuantity = 0.01m, MinAmount = 5m });
         var live = new LiveAutos(autos, paper, trades, settings, buckets, _candles, Substitute.For<IIdeaAutoEntryRepository>(), Substitute.For<IIdeaAutoRefusalRepository>(), new IdeasEngineVersion(IdeasEngineVersion.Current), _market, Fees, _identity, _time);
-        _live = new LiveIdeas(_ideas, _volatility, _candles, _rules, _recomputes, _market, new IdeasSettings(), Fees, live, _time);
+        _live = new LiveIdeas(_ideas, _volatility, _candles, _funding, _rules, _recomputes, _market, new IdeasSettings(), Fees, live, _time);
 
         return auto;
     }
@@ -601,6 +702,23 @@ public class LiveIdeasTests
         Idea generated = IdeaGenerator.Generate(Four.AddHours(-3), IdeaStatus.Active, Sol, statusAt: Four.AddHours(-2));
 
         return generated with { Track = generated.Track with { Plan = new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 100m, 98m, 104m), EnteredAt = Four.AddHours(-2) } };
+    }
+
+    // linear / BTCUSDT out of the list, its minutes in memory from the given time to 04:00 and 70 minutes after.
+    private void KeepBtc(DateTimeOffset from, Func<DateTimeOffset, decimal> close)
+    {
+        var btc = new Instrument(MarketCategory.Linear, "BTCUSDT");
+        DateTimeOffset to = Four.AddMinutes(70);
+        _market.Keep([new ScannerPair(btc, false, CoveredUntil: to)]);
+        var minutes = new List<Candle>();
+
+        for (DateTimeOffset time = from; time < to; time = time.AddMinutes(1))
+        {
+            decimal price = close(time);
+            minutes.Add(Candle(new IdeaCandle(time, price, price, price, price, 1m)));
+        }
+
+        _market.Loaded(btc, from, to, minutes);
     }
 
     private void KeepSol(IEnumerable<Candle> minutes)

@@ -124,6 +124,6 @@ public sealed class IdeaAutosController(ISender sender) : ControllerBase
 
     private static IdeaAutoInput Input(IdeaAutoBody body)
     {
-        return new IdeaAutoInput(body.Name, body.AccountId, body.Amount, body.Setups, body.Types, body.Intervals, body.Side, body.Category, body.Badge, body.MinRiskReward, body.MinCases, body.Budget);
+        return new IdeaAutoInput(body.Name, body.AccountId, body.Amount, body.Setups, body.Types, body.Intervals, body.Side, body.Category, body.Badge, body.MinRiskReward, body.MinCases, body.Budget, body.DayDrop, body.BtcDrop, body.HighFunding);
     }
 }

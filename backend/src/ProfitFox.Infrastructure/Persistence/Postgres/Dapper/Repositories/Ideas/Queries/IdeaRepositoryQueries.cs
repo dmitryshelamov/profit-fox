@@ -13,7 +13,7 @@ internal static class IdeaRepositoryQueries
     internal const string Columns = """
                                     category, symbol, setup, type, "interval", side, fired_at AS "FiredAt", entry, stop, target, risk_reward AS "RiskReward",
                                     status, status_at AS "StatusAt", entered_at AS "EnteredAt", exit_price AS "ExitPrice", move, volume_ratio AS "VolumeRatio",
-                                    engine_version AS "EngineVersion"
+                                    engine_version AS "EngineVersion", pair_change AS "PairChange", btc_change AS "BtcChange", funding
                                     """;
 
     // The columns of a live idea beside the ones a case shares: the price step and the exit rule it fired under.
@@ -22,9 +22,11 @@ internal static class IdeaRepositoryQueries
     // A second open idea of a key conflicts with the partial unique index and is left out; RETURNING names the ones added.
     private const string InsertSql = """
                                      INSERT INTO ideas (id, category, symbol, setup, type, "interval", side, fired_at, entry, stop, target, risk_reward, status,
-                                         status_at, entered_at, exit_price, move, volume_ratio, engine_version, tick, life_candles, target_r, entry_candles)
+                                         status_at, entered_at, exit_price, move, volume_ratio, engine_version, tick, life_candles, target_r, entry_candles, pair_change,
+                                         btc_change, funding)
                                      VALUES (@Id, @Category, @Symbol, @Setup, @Type, @Interval, @Side, @FiredAt, @Entry, @Stop, @Target, @RiskReward, @Status,
-                                         @StatusAt, @EnteredAt, @ExitPrice, @Move, @VolumeRatio, @EngineVersion, @Tick, @LifeCandles, @TargetR, @EntryCandles)
+                                         @StatusAt, @EnteredAt, @ExitPrice, @Move, @VolumeRatio, @EngineVersion, @Tick, @LifeCandles, @TargetR, @EntryCandles, @PairChange,
+                                         @BtcChange, @Funding)
                                      ON CONFLICT (category, symbol, setup, type, "interval", side) WHERE status IN ('awaiting_entry', 'active') DO NOTHING
                                      RETURNING id
                                      """;
