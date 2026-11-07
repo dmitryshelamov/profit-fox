@@ -49,7 +49,11 @@ public sealed class IdeaStatistics(
         var rules = new IdeaExitRules(used);
         await calibrations.ReplaceAsync(
             version.Number,
-            CalibrationCalculator.Compute(result.Outcomes, now, (type, interval) => rules.Of(type, interval).AppliedAt is { } applied && applied > started ? applied : started),
+            CalibrationCalculator.Compute(
+                result.Outcomes,
+                now,
+                (type, interval) => rules.Of(type, interval).AppliedAt is { } applied && applied > started ? applied : started,
+                (type, interval) => rules.Of(type, interval).Holding),
             cancellationToken);
 
         return [.. (await exitRules.GetAllAsync(cancellationToken)).Except(used).Select(rule => (rule.Type, rule.Interval))];

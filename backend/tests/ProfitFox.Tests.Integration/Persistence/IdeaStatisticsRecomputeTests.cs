@@ -22,6 +22,8 @@ namespace ProfitFox.Tests.Integration.Persistence;
 public class IdeaStatisticsRecomputeTests
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2024-06-01T00:00:00Z");
+    // The holding of «Цель 2R» on 15 minutes by default, 24 candles: the cases of 6 hours UTC from midnight are one group.
+    private static readonly TimeSpan SixHours = TimeSpan.FromHours(6);
 
     private NpgsqlDataSource _dataSource = null!;
 
@@ -66,6 +68,28 @@ public class IdeaStatisticsRecomputeTests
         (await new IdeaCalibrationRepository(_dataSource).GetAsync(IdeasEngineVersion.Current, 30, null, CalibrationScope.All, CancellationToken.None))!.Checked.ShouldBe(21);
     }
 
+    // Decision 3 of cluster-idea-cases-by-holding: the calibration groups by the holding of the rules of the pass. 30 cases 60 days ago give
+    // the model; 16 blocks of 6 hours 20 days ago have two cases each, at the first and the fourth hour, a +2 R target in every other block.
+    // The 32 cases of the last 30 days are 16 groups of 2: +0.5 R with −0.3255…+1.3255 R by t₁₅, not −0.028…+1.028 R of 32 hours.
+    [Test]
+    public async Task Calibration_groups_the_cases_by_the_holding_of_the_rules()
+    {
+        (DateTimeOffset FiredAt, IdeaStatus Status)[] cases =
+        [
+            .. Enumerable.Range(0, 30).Select(index => (Now.AddDays(-60).AddHours(index), index % 3 == 0 ? IdeaStatus.Target : IdeaStatus.Stop)),
+            .. Enumerable.Range(0, 16).SelectMany(block => new[] { 1, 4 }.Select(hour => (Now.AddDays(-20).AddHours((12 * block) + hour), block % 2 == 0 ? IdeaStatus.Target : IdeaStatus.Stop)))
+        ];
+        await new IdeaSignalRepository(_dataSource).UpsertAsync([.. cases.Select(item => IdeaSignalGenerator.Generate(item.FiredAt, item.Status))], CancellationToken.None);
+
+        await Statistics().RecomputeAsync(CancellationToken.None);
+
+        BucketStatistics total = (await new IdeaCalibrationRepository(_dataSource).GetAsync(IdeasEngineVersion.Current, 30, null, CalibrationScope.All, CancellationToken.None))!
+            .Total!.Outcome;
+        (total.Cases, total.Expectancy).ShouldBe((32, 0.5m));
+        total.ExpectancyLow!.Value.ShouldBe(-0.3255m, 0.0001m);
+        total.ExpectancyHigh!.Value.ShouldBe(1.3255m, 0.0001m);
+    }
+
     // Scenario "Смена срока без прогона": a lifetime of one candle closes the targets of 30 minutes as expired at the close of 100.
     [Test]
     public async Task Applied_rule_changes_the_outcomes_without_a_replay()
@@ -84,8 +108,8 @@ public class IdeaStatisticsRecomputeTests
     {
         var key = new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear);
         var buckets = new Dictionary<IdeaBucketKey, ClusteredSums>();
-        var parent = new ClusteredSums();
-        var category = new ClusteredSums();
+        var parent = new ClusteredSums(SixHours);
+        var category = new ClusteredSums(SixHours);
 
         foreach ((DateTimeOffset firedAt, IdeaStatus status, IdeaSetup setup) in cases.Where(item => item.FiredAt >= Now.AddDays(-days)))
         {
@@ -94,7 +118,7 @@ public class IdeaStatisticsRecomputeTests
 
             if (!buckets.TryGetValue(bucket, out ClusteredSums? sums))
             {
-                sums = new ClusteredSums();
+                sums = new ClusteredSums(SixHours);
                 buckets[bucket] = sums;
             }
 
