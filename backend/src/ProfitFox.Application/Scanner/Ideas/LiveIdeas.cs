@@ -185,6 +185,8 @@ public sealed class LiveIdeas(
             }
         }
 
+        created = WithBurstPairs(created);
+
         // Ideas made this minute enter only on the next one, so none of them moved yet.
         IReadOnlyList<Idea> added;
         AutoMinute? autoMinute;
@@ -213,6 +215,18 @@ public sealed class LiveIdeas(
         }
 
         return setups;
+    }
+
+    /// <summary>
+    ///     The ideas of the minute with the count of the distinct pairs that made an idea of their side on their interval in it, their own pair among
+    ///     them (decision 2 of add-burst-and-auto-limits), before the autos take them and storage writes them.
+    /// </summary>
+    private static List<Idea> WithBurstPairs(List<Idea> created)
+    {
+        Dictionary<(IdeaSide, Interval), int> pairs = created.GroupBy(idea => (idea.Track.Plan.Side, idea.Interval))
+            .ToDictionary(group => group.Key, group => group.Select(idea => idea.Instrument).Distinct().Count());
+
+        return [.. created.Select(idea => idea with { BurstPairs = pairs[(idea.Track.Plan.Side, idea.Interval)] })];
     }
 
     /// <summary>How the ideas that closed on this minute ended, to be written on their trades.</summary>

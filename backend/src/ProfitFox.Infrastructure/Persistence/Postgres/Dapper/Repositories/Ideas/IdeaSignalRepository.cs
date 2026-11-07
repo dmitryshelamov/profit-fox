@@ -116,6 +116,29 @@ internal sealed class IdeaSignalRepository(NpgsqlDataSource dataSource) : IIdeaS
         }
     }
 
+    // Decision 2 of add-burst-and-auto-limits: one grouping over the signals the statistics read, tens of seconds on prod, so past the default 30 s.
+    private static readonly int CountTimeoutSeconds = (int)TimeSpan.FromMinutes(10).TotalSeconds;
+
+    public async Task<IReadOnlyDictionary<(DateTimeOffset FiredAt, IdeaSide Side, Interval Interval), int>> CountPairsByMinuteAsync(
+        int engineVersion,
+        DateTimeOffset from,
+        CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        IEnumerable<PairCountDb> rows = await connection.QueryAsync<PairCountDb>(new CommandDefinition(
+            """
+            SELECT fired_at AS FiredAt, side AS Side, "interval" AS Interval, count(DISTINCT (category, symbol))::integer AS Pairs
+            FROM idea_cases
+            WHERE engine_version = @Version AND fired_at >= @From
+            GROUP BY fired_at, side, "interval"
+            """,
+            new { Version = engineVersion, From = from },
+            commandTimeout: CountTimeoutSeconds,
+            cancellationToken: cancellationToken));
+
+        return rows.ToDictionary(SignalDbConverter.MinuteOf, row => row.Pairs);
+    }
+
     public async Task<IReadOnlyList<IdeaSignal>> GetAsync(Instrument instrument, int engineVersion, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);

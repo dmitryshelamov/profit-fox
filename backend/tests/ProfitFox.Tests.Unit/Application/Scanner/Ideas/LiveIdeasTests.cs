@@ -203,6 +203,28 @@ public class LiveIdeasTests
         await _funding.DidNotReceive().GetAsync(spot, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
+    // Requirement "Признак всплеска", scenario "Всплеск на часе" on 15 min (decision 2 of add-burst-and-auto-limits): 25 pairs fire the same
+    // ideas of 15 min in the same minutes, so every idea counts 25 distinct pairs of its side on its interval, the threshold of a burst on 15 min.
+    [Test]
+    public async Task Ideas_of_a_minute_count_the_distinct_pairs_of_their_side_on_their_interval()
+    {
+        IReadOnlyList<Idea> created = await RunPairsAsync(25);
+
+        created.Select(idea => idea.Instrument).Distinct().Count().ShouldBe(25);
+        created.ShouldAllBe(idea => idea.Interval == Interval.FifteenMinutes && idea.BurstPairs == 25 && idea.Features.Burst);
+    }
+
+    // Scenarios "Без всплеска" and "Один сетап по многим типам": the ideas of one pair, of several types on an interval, count one pair, and
+    // their own pair counts only on the side and interval of each idea.
+    [Test]
+    public async Task Types_of_one_pair_do_not_multiply_the_count_of_pairs()
+    {
+        IReadOnlyList<Idea> created = await RunAsync(Four.AddMinutes(70));
+
+        created.GroupBy(idea => (idea.Track.FiredAt, idea.Track.Plan.Side, idea.Interval)).ShouldContain(group => group.Count() > 1);
+        created.ShouldAllBe(idea => idea.BurstPairs == 1 && !idea.Features.Burst);
+    }
+
     // Review of tune-idea-rules: the whole recompute of the session may have read the rules before one was applied; the first read sends
     // the rules applied since the session started to the recompute, not the ones before.
     [Test]
@@ -753,6 +775,43 @@ public class LiveIdeasTests
         foreach (IdeaCandle minute in IdeaFixtures.Setup("impulse").Where(minute => minute.OpenTime >= Four && minute.OpenTime < until))
         {
             _market.Closed(Wif, Candle(minute));
+            await _live.RunAsync(minute.OpenTime.AddMinutes(1), CancellationToken.None);
+        }
+
+        return created;
+    }
+
+    // The ideas of the impulse set fed to WIFUSDT and to count − 1 other linear pairs with the same minutes, minute by minute.
+    private async Task<IReadOnlyList<Idea>> RunPairsAsync(int count)
+    {
+        IReadOnlyList<IdeaCandle> minutes = IdeaFixtures.Setup("impulse");
+        Instrument[] others = [.. Enumerable.Range(1, count - 1).Select(index => new Instrument(MarketCategory.Linear, $"P{index}USDT"))];
+
+        foreach (Instrument other in others)
+        {
+            _market.Keep([new ScannerPair(other, true, CoveredUntil: Four, TickSize: 0.01m)]);
+            _market.Loaded(other, Start, Four, minutes.Where(minute => minute.OpenTime < Four).Select(Candle));
+            _candles.GetAggregatedAsync(other, Arg.Any<Interval>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+                .Returns(call => IdeaCandles.FromMinutes(call.ArgAt<Interval>(1), minutes, Start, call.ArgAt<DateTimeOffset>(3)));
+        }
+
+        var created = new List<Idea>();
+        _ideas.SaveAsync(Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<Idea>>(), Arg.Any<IReadOnlyCollection<ClosedIdea>>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            created.AddRange(call.ArgAt<IReadOnlyCollection<Idea>>(0));
+
+            return call.ArgAt<IReadOnlyCollection<Idea>>(0).ToList();
+        });
+        await _live.ReadWarmUpsAsync(CancellationToken.None);
+        await _live.RunAsync(Four, CancellationToken.None);
+
+        foreach (IdeaCandle minute in minutes.Where(minute => minute.OpenTime >= Four && minute.OpenTime < Four.AddMinutes(70)))
+        {
+            foreach (Instrument instrument in others.Prepend(Wif))
+            {
+                _market.Closed(instrument, Candle(minute));
+            }
+
             await _live.RunAsync(minute.OpenTime.AddMinutes(1), CancellationToken.None);
         }
 

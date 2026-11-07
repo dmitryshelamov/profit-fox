@@ -24,13 +24,18 @@ public static class IdeaOutcomes
     /// <param name="fees"></param>
     /// <param name="now"></param>
     /// <param name="cancellationToken"></param>    /// <param name="roots">The roots of the categories by the days of the window, of the last whole pass; none takes those of this pass.</param>
+    /// <param name="burstOf">
+    ///     The count of the distinct pairs of the side and interval of a signal in its minute, which gives the burst of its case (decision 2 of
+    ///     add-burst-and-auto-limits); none counts none.
+    /// </param>
     public static async Task<IdeaOutcomesResult> WalkAsync(
         IAsyncEnumerable<IdeaSignal> signals,
         IdeaExitRules rules,
         Func<MarketCategory, FeeRates> fees,
         DateTimeOffset now,
         CancellationToken cancellationToken,
-        IReadOnlyDictionary<int, IReadOnlyDictionary<MarketCategory, BucketModel.Root>>? roots = null)
+        IReadOnlyDictionary<int, IReadOnlyDictionary<MarketCategory, BucketModel.Root>>? roots = null,
+        Func<IdeaSignal, int?>? burstOf = null)
     {
         var sums = new Sums();
         var outcomes = new List<IdeaOutcome>();
@@ -40,14 +45,14 @@ public static class IdeaOutcomes
         {
             if (key.Count > 0 && key[0].Key != signal.Key)
             {
-                Walk(key, rules, fees, now, sums, outcomes);
+                Walk(key, rules, fees, now, sums, outcomes, burstOf);
                 key.Clear();
             }
 
             key.Add(signal);
         }
 
-        Walk(key, rules, fees, now, sums, outcomes);
+        Walk(key, rules, fees, now, sums, outcomes, burstOf);
         SumCategories(outcomes, rules, now, sums);
 
         Dictionary<int, IReadOnlyDictionary<MarketCategory, BucketModel.Root>> used = Days.ToDictionary(
@@ -71,7 +76,8 @@ public static class IdeaOutcomes
         Func<MarketCategory, FeeRates> fees,
         DateTimeOffset now,
         Sums sums,
-        List<IdeaOutcome> outcomes)
+        List<IdeaOutcome> outcomes,
+        Func<IdeaSignal, int?>? burstOf)
     {
         if (key.Count == 0)
         {
@@ -93,7 +99,7 @@ public static class IdeaOutcomes
             if (result is { } r)
             {
                 IdeaSignal signal = signals[path];
-                outcomes.Add(new IdeaOutcome(bucket, path.FiredAt, outcome.StatusAt, outcome.Status, r, signal.FeaturesWith(null)));
+                outcomes.Add(new IdeaOutcome(bucket, path.FiredAt, outcome.StatusAt, outcome.Status, r, signal.FeaturesWith(burstOf?.Invoke(signal))));
             }
 
             foreach (int days in Days.Where(days => path.FiredAt >= now.AddDays(-days)))

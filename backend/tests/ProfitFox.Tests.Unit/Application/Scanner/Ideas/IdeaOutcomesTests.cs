@@ -186,6 +186,25 @@ public class IdeaOutcomesTests
         result.Roots[90][MarketCategory.Linear].Category.Expectancy.Variance.ShouldBe(0.122887, 0.000001);
     }
 
+    // Scenario "Прогон пополняет минуту" (decision 2 of add-burst-and-auto-limits): a signal keeps no count of the pairs of its minute; the pass
+    // gives its case the count of its minute, 6 pairs on 1 h no burst, 9 a burst.
+    [Test]
+    public async Task Pass_gives_a_case_the_burst_of_the_count_of_its_minute()
+    {
+        IdeaSignal six = Signal(Wif, IdeaType.TwoR, 0, OnDay(0, Interval.OneHour, 10, true));
+        IdeaSignal nine = Signal(Wif, IdeaType.TwoR, 0, OnDay(1, Interval.OneHour, 10, false));
+
+        IdeaOutcomesResult result = await IdeaOutcomes.WalkAsync(
+            new[] { six, nine }.ToAsyncEnumerable(),
+            new IdeaExitRules([]),
+            _ => NoFees,
+            Now,
+            CancellationToken.None,
+            burstOf: signal => signal == six ? 6 : 9);
+
+        result.Outcomes.Select(outcome => (outcome.FiredAt, outcome.Features.Burst)).ShouldBe([(six.Path.FiredAt, false), (nine.Path.FiredAt, true)]);
+    }
+
     // A signal of the interval fired at the hour of the day 80 − 4 · day days ago, the last of a block of 4 days: a +2 R target or a −1 R stop.
     private static SignalPath OnDay(int day, Interval interval, int hour, bool target)
     {
