@@ -63,7 +63,7 @@
 
 ## 7. Документация и проверки
 
-- [ ] 7.1 `docs/conventions.md`: `IdeaFeatures` с всплеском, `AutoMinutePlan`, лимиты автомата, новые причины отказов.
+- [x] 7.1 `docs/conventions.md`: `IdeaFeatures` с всплеском, `AutoMinutePlan`, лимиты автомата, новые причины отказов.
 - [ ] 7.2 `dotnet build`, `dotnet test`, `dotnet format --verify-no-changes`; фронт: `npm run lint`, `format:check`,
   `typecheck`, `test`, `build`.
 - [ ] 7.3 Локально на dev против e2e-стаба: автомат с лимитом 1 в минуту при пампе одной пары берёт одну идею, в журнале
