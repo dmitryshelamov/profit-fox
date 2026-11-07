@@ -199,6 +199,31 @@ export function exitRulePreviewQuery(candidate: ExitRuleCandidate) {
   });
 }
 
+/**
+ * How the candidate and the best rule of its grid chosen on the days 90 to 30 ago do on the last 30 days, and the overfitting of the grid; asked
+ * apart from the preview, which does not wait for it. The old answer stays while a new one loads.
+ */
+export function exitRuleOutOfSampleQuery(candidate: ExitRuleCandidate) {
+  return queryOptions({
+    queryKey: ['ideas', 'exit-rules', 'out-of-sample', candidate],
+    queryFn: async () =>
+      unwrap(
+        await api.GET('/api/ideas/exit-rules/out-of-sample', {
+          params: {
+            query: {
+              type: candidate.type,
+              interval: candidate.interval,
+              life: candidate.life,
+              target: candidate.target ?? undefined,
+              window: candidate.window ?? undefined,
+            },
+          },
+        }),
+      ),
+    placeholderData: keepPreviousData,
+  });
+}
+
 async function applyExitRule(candidate: ExitRuleCandidate) {
   return unwrap(
     await api.PUT('/api/ideas/exit-rules/{type}/{interval}', {

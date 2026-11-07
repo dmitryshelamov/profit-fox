@@ -2019,6 +2019,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ideas/exit-rules/out-of-sample": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How the candidate and the best rule of its grid chosen on the days 90 to 30 ago do on the last 30 days, and the probability of overfitting
+         *     of the grid; the parameters as the preview takes them.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    type?: string;
+                    interval?: string;
+                    life?: number | string;
+                    target?: number | string;
+                    window?: number | string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ExitRuleOutOfSampleResponse"];
+                        "application/json": components["schemas"]["ExitRuleOutOfSampleResponse"];
+                        "text/json": components["schemas"]["ExitRuleOutOfSampleResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ideas/exit-rules/{type}/{interval}": {
         parameters: {
             query?: never;
@@ -4865,6 +4923,14 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
+        /** @description The best rule of the grid on the selection: its lifetime in candles, its target in R (none for «Уровни») and its numbers. */
+        ExitRuleBestResponse: {
+            /** Format: int32 */
+            life: number | string;
+            target: null | string;
+            selection: null | components["schemas"]["BucketStatisticsResponse"];
+            check: null | components["schemas"]["BucketStatisticsResponse"];
+        };
         /** @description The candles of the grid of an interval, up to 7 days. */
         ExitRuleGridResponse: {
             interval: string;
@@ -4882,6 +4948,28 @@ export interface components {
             r: string;
             reached: string;
             breakEven: string;
+        };
+        /**
+         * @description The out-of-sample check of a candidate exit rule: the bounds of the selection and the check, the rules of the grid, the clustered numbers
+         *     of the candidate and of the best rule of the selection on both parts (none without an entry), and the probability of overfitting of the
+         *     grid with its splits. Numbers are decimal strings.
+         */
+        ExitRuleOutOfSampleResponse: {
+            /** Format: date-time */
+            selectionFrom: string;
+            /** Format: date-time */
+            checkFrom: string;
+            /** Format: date-time */
+            to: string;
+            /** Format: int32 */
+            rules: number | string;
+            candidate: components["schemas"]["ExitRulePartsResponse"];
+            best: null | components["schemas"]["ExitRuleBestResponse"];
+            overfitting: null | components["schemas"]["OverfittingResponse"];
+        };
+        ExitRulePartsResponse: {
+            selection: null | components["schemas"]["BucketStatisticsResponse"];
+            check: null | components["schemas"]["BucketStatisticsResponse"];
         };
         /**
          * @description The preview of a candidate exit rule: the statistics by the rule now and by the candidate over 90 and 30 days (none without an entry), the
@@ -5540,6 +5628,14 @@ export interface components {
             /** @description `filled` or `active` at the end of the period. */
             status: string;
             fills: components["schemas"]["FillResponse"][];
+        };
+        /** @description Of the splits that counted, the overfit ones and their share. */
+        OverfittingResponse: {
+            /** Format: int32 */
+            splits: number | string;
+            /** Format: int32 */
+            overfit: number | string;
+            probability: string;
         };
         /** @description The type, interval and side of an own idea: codes as in the ideas. */
         OwnIdeaBody: {

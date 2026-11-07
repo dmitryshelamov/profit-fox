@@ -1,4 +1,10 @@
-import { candlesOfHours, durationText, overfitWarning, sameRule } from './exitRules';
+import {
+  candlesOfHours,
+  durationText,
+  overfittingText,
+  overfitWarning,
+  sameRule,
+} from './exitRules';
 
 const grid15 = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 672];
 
@@ -80,5 +86,31 @@ describe('sameRule', () => {
     expect(
       sameRule({ life: 24, target: null, window: null }, { life: 24, target: null, window: null }),
     ).toBe(true);
+  });
+});
+
+describe('overfittingText', () => {
+  // Scenario "Проверка на экране": 13 of 20 splits, at 50 % or more a warning.
+  it('tells the share of the splits with a warning from a half on', () => {
+    expect(overfittingText({ splits: 20, overfit: 13, probability: '0.65' })).toEqual({
+      text: 'Вероятность подгонки сетки: 65 % (13 из 20 разбиений)',
+      warning:
+        'лучшее на одной половине дней правило сетки чаще не лучше середины на другой — выбор по ней ненадёжен',
+    });
+    expect(overfittingText({ splits: 18, overfit: 9, probability: '0.5' }).warning).not.toBeNull();
+  });
+
+  it('has no warning under a half', () => {
+    expect(
+      overfittingText({ splits: 18, overfit: 4, probability: '0.2222222222222222222222222222' }),
+    ).toEqual({ text: 'Вероятность подгонки сетки: 22 % (4 из 18 разбиений)', warning: null });
+  });
+
+  // Scenario "Нет лучшего правила".
+  it('says there is too little data without a split', () => {
+    expect(overfittingText(null)).toEqual({
+      text: 'Вероятность подгонки сетки: мало данных для разбиений',
+      warning: null,
+    });
   });
 });

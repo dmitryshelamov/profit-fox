@@ -40,7 +40,7 @@ enforces a rule, the check is the source of truth.
   +0.5 … +5 R and zone, and its closes at the grid), `IdeaSignal` (a signal with its pair, setup and path), `IdeaBucketKey`, `IdeaBucket`, `BucketStatistics`
   (the numbers of the model with the own ones of the bucket beside, the weight of the parent and «мало своих данных»; with the signals, the share of entries and the expectancy per signal of «Откат» and «Стоп-вход»), `IdeaVolatility`, `IdeaShares` (with the break-even), `PairSetup`,
   `IdeaOutcome` (how a case ended, as the calibration reads it), `CalibrationReport` (with its scope, the rows by own data and the comparison of the models), `CalibrationRow`, `CalibrationOwnRow` (a row by own data with its Brier score), `CalibrationModel` and `CalibrationComparison` (the old model against the new one), `IdeaExitRule` (the lifetime, the target in R and the
-  entry window of a type × interval, and which values it can take) and `IdeaExitRules` (the rules in force, the default for a type × interval never applied).
+  entry window of a type × interval, and which values it can take) and `IdeaExitRules` (the rules in force, the default for a type × interval never applied), `BlockSums` (the entries of an exit rule in a block of days and their total R) and `Overfitting` (the splits of CSCV that counted and the overfit ones).
   `Services/Ideas` holds the pure functions: `Atr` (Wilder, 14), `Rsi` (Wilder, 14, over exactly 100 candles), `IdeaCandles` (candles of an interval from minutes, a minute without
   trades flat at the close before it), `SetupDetector` (the setups of a move), `CandleSetupDetector` (the candle setups), `SetupTypes`
   (the types of ideas of each setup), `ZoneFinder`, `IdeaRules`, `IdeaTracker`, `CaseResult`,
@@ -49,8 +49,11 @@ enforces a rule, the check is the source of truth.
   case can be added to and removed from, and the own numbers with the clustering), `BucketModel` (the numbers of a bucket shrunk to its parent
   «тип × ТФ × сторона × категория» and the parent to its category by DerSimonian–Laird; `Estimate`, `Level`, `Spreads`, `Root`, `ParentModel`,
   `Parent`), `CalibrationCalculator` (the walk-forward check of the buckets by the model on cases they had not seen, one walk in the order of time), `IdeaMoney`, `Volatility`, `IdeasEngineVersion`, `ExitRuleGrid` (the lifetimes and windows of an
-  interval up to 7 days, a time up to the grid), `SignalPathTracker` (steps a path by a minute, by the touches of `IdeaTracker`) and `ExitOutcomes`
-  (the outcome of a path by a rule as an `IdeaTrack`, and the signals of a key that count as one open idea at a time).
+  interval up to 7 days, a time up to the grid), `SignalPathTracker` (steps a path by a minute, by the touches of `IdeaTracker`) `ExitOutcomes`
+  (the outcome of a path by a rule as an `IdeaTrack`, and the signals of a key that count as one open idea at a time), `ExitRuleGridPass` (the grid of
+  rules of the out-of-sample check, lifetimes × targets at the window of the candidate, and the entries and total R of every rule of it in 6 blocks of
+  15 days in one step a signal, the keys in 8 fixed parts added up in order) and `OverfittingProbability` (the best rule over some blocks and the
+  probability of overfitting of the grid by CSCV, 20 splits of the 6 blocks).
 - `IdeaTrades` is the area of trades by ideas (one entry with a stop and a target the exchange stands): `Entities/IdeaTrades` holds `IdeaTrade`
   (its levels, size, status, the totals the exchange counted of its entry and exits, its result in money and in R, what it is worth at a price (`ResultAt`), the time it opened (`OpenedAt`, the first fill of the entry), the promise of its idea at the entry and how its idea ended), `IdeaTradeOrder` (an entry or
   the market close of the owner, saved before it goes to the exchange, like `LiveOrder`), `IdeaTradeChild` (the stop or the target the exchange made, by
@@ -153,9 +156,9 @@ enforces a rule, the check is the source of truth.
 - `Ideas` holds `IdeaCodes` (codes of setups, types, sides, statuses), `IdeaView` (an idea with its buckets), `IdeaLevels` (what the API
   measures a pair by: price, spread, ATR, zones, window), `IdeaOrder` (the order of the ideas of «Идеи» by a column; setup, type, side and
   status go in the order of their enums, which is the order of the lists on the screen, not of the Russian names) and the queries of the ideas
-  API (`GetIdeas`, `GetIdea`, `GetIdeaBuckets`, `GetIdeaCalibration`, `GetPairIdeas`, `GetZones`, `GetOwnIdea`, `GetExitRules`, `GetExitRulePreview`) and
+  API (`GetIdeas`, `GetIdea`, `GetIdeaBuckets`, `GetIdeaCalibration`, `GetPairIdeas`, `GetZones`, `GetOwnIdea`, `GetExitRules`, `GetExitRulePreview`, `GetExitRuleOutOfSample`) and
   the command `ApplyExitRule`, with `ExitRuleRequests` (a rule asked for by codes, checked against the grid) and `ExitRulePreviews` (the preview of a
-  candidate rule: «было → станет» over 90 and 30 days, the expectancy at every lifetime of the grid and the curve of MFE, `ExitRulePreview`). `SavedFilters` holds `SavedFilterFields`, the one
+  candidate rule: «было → станет» over 90 and 30 days, the expectancy at every lifetime of the grid and the curve of MFE, `ExitRulePreview`) and `ExitRuleOutOfSamples` (the out-of-sample check of a candidate: the selection 90 to 30 days ago and the check over the last 30 days of the candidate and of the best rule of the grid, clustered, and the probability of overfitting, `ExitRuleOutOfSample`). `SavedFilters` holds `SavedFilterFields`, the one
   catalog of fields with their units and operators, `SavedFilterJson`, the codec of conditions for the API and the stored `jsonb`,
   `SavedFilterRules`, which checks a filter by the catalog (`ParseConditions` checks the conditions alone, as `FitSavedFilter` needs),
   `SavedFilterMatch`, the one place where a filter is applied to a pair (`Pair`, which skips the conditions on idea fields) and to an idea

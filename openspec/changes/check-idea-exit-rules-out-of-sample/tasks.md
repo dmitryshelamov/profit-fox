@@ -33,18 +33,18 @@
 
 ## 4. Экран
 
-- [ ] 4.1 Схема API (`npm run generate:api` или правка `schema.d.ts`), запрос `exitRuleOutOfSampleQuery`. Проверка:
+- [x] 4.1 Схема API (`npm run generate:api` или правка `schema.d.ts`), запрос `exitRuleOutOfSampleQuery`. Проверка:
   `npm run typecheck`.
-- [ ] 4.2 `overfittingText`: строка PBO и предупреждение от 50 %, «мало данных для разбиений» без PBO. Проверка:
+- [x] 4.2 `overfittingText`: строка PBO и предупреждение от 50 %, «мало данных для разбиений» без PBO. Проверка:
   тесты модели.
-- [ ] 4.3 Блок «Проверка вне выборки» на экране. Проверка: тесты экрана — сценарии «Проверка на экране», «Нет лучшего
+- [x] 4.3 Блок «Проверка вне выборки» на экране. Проверка: тесты экрана — сценарии «Проверка на экране», «Нет лучшего
   правила» и «Проверка считается…».
 
 ## 5. Документы и проверки
 
-- [ ] 5.1 `docs/conventions.md` — новые типы; `CONTEXT.md` — термины «Проверка вне выборки» и «Вероятность подгонки».
+- [x] 5.1 `docs/conventions.md` — новые типы; `CONTEXT.md` — термины «Проверка вне выборки» и «Вероятность подгонки».
   Проверка: определения совпадают со спекой.
-- [ ] 5.2 `dotnet build`, `dotnet test`, `dotnet format --verify-no-changes`, во `frontend/` lint, format:check,
+- [x] 5.2 `dotnet build`, `dotnet test`, `dotnet format --verify-no-changes`, во `frontend/` lint, format:check,
   typecheck, test, build; попытка `npm run test:e2e`. Проверка: все проходят, результаты — в отчёте.
 
 ## Workflow follow-up

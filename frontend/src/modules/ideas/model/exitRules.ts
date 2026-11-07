@@ -1,5 +1,6 @@
 import { isDecimalText } from '@/shared/api/jsonNumber';
-import { compareDecimals, subtractDecimals } from '@/shared/format/decimal';
+import { compareDecimals, shiftDecimal, subtractDecimals } from '@/shared/format/decimal';
+import { roundDecimal } from '@/shared/format/format';
 
 import { candlesText } from './labels';
 
@@ -83,4 +84,28 @@ export function sameRule(left: RuleValues, right: RuleValues): boolean {
       ? left.target === right.target
       : compareDecimals(left.target, right.target) === 0)
   );
+}
+
+interface OverfittingValue {
+  readonly splits: number | string;
+  readonly overfit: number | string;
+  readonly probability: string;
+}
+
+/** The line of the probability of overfitting of the grid, and the warning from 50 % on. */
+export function overfittingText(overfitting: OverfittingValue | null): {
+  text: string;
+  warning: string | null;
+} {
+  if (overfitting === null) {
+    return { text: 'Вероятность подгонки сетки: мало данных для разбиений', warning: null };
+  }
+
+  return {
+    text: `Вероятность подгонки сетки: ${roundDecimal(shiftDecimal(overfitting.probability, 2), 0)} % (${overfitting.overfit} из ${overfitting.splits} разбиений)`,
+    warning:
+      compareDecimals(overfitting.probability, '0.5') >= 0
+        ? 'лучшее на одной половине дней правило сетки чаще не лучше середины на другой — выбор по ней ненадёжен'
+        : null,
+  };
 }
