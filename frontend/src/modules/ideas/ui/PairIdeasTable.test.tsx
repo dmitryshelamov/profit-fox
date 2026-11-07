@@ -23,6 +23,31 @@ const rowsOf = () =>
     .map((row) => row.textContent);
 
 describe('the table of the ideas of a pair', () => {
+  // Requirement "Чипы признаков в строке идеи": the chips stand after the setup, an idea without features has none.
+  it('shows the chips of the features of an idea after its setup', () => {
+    render(
+      <PairIdeasTable
+        open={[
+          { ...pullback, features: ['day_drop', 'btc_drop'] },
+          { ...levels, features: [] },
+        ]}
+        expired={[]}
+        amount="10"
+        selectedId={undefined}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    const [marked, plain] = screen.getAllByRole('row').slice(1);
+    const setup = within(marked!).getAllByRole('cell')[1]!;
+    expect(within(setup).getByText('↓ пара')).toHaveAttribute(
+      'title',
+      'пара упала за сутки на 5 % и больше',
+    );
+    expect(within(setup).getByText('↓ BTC')).toBeInTheDocument();
+    expect(within(plain!).queryByText(/↓|↑/)).not.toBeInTheDocument();
+  });
+
   // Scenario "Колонки строки".
   it('has the columns of the ideas but the instrument', () => {
     render(

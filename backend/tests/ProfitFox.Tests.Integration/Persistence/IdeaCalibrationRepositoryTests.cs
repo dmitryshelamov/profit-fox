@@ -155,15 +155,43 @@ public class IdeaCalibrationRepositoryTests
         read.Total.ShouldBe(report.Total);
     }
 
+    // Task 7.2 of add-market-idea-features: the breakdown by feature reads back whole, and a report stored before it reads with an empty one.
+    [Test]
+    public async Task Breakdown_by_feature_reads_back_and_a_report_before_it_has_none()
+    {
+        var calibrations = new IdeaCalibrationRepository(_dataSource);
+        BucketStatistics single = BucketStatisticsCalculator.Compute(0, 1, 0, -1m, 1m);
+        var comparison = new CalibrationComparison(new CalibrationModel(0, null, null), new CalibrationModel(0, null, null));
+        CalibrationSlice[] features =
+        [
+            new CalibrationSlice(null, null, new CalibrationRow(null, null, null, 0.1m, single), null, comparison, IdeaFeature.DayDrop, true),
+            new CalibrationSlice(null, null, new CalibrationRow(null, null, null, -0.2m, single), new CalibrationRow(null, null, IdeaBadge.Up, 0.3m, single), comparison, IdeaFeature.HighFunding, false)
+        ];
+        var report = new CalibrationReport(Now, 90, null, 1, 0, 1m, 1m, [], [], [], null) { Features = features, Types = [features[0] with { Type = IdeaType.TwoR, Feature = null, Present = null }] };
+        await calibrations.ReplaceAsync(1, [report], CancellationToken.None);
+
+        CalibrationReport read = (await calibrations.GetAsync(1, 90, null, CalibrationScope.All, CancellationToken.None))!;
+        read.Features.Select(slice => (slice.Feature, slice.Present, slice.Interval, slice.Type, slice.Total, slice.Up)).ShouldBe(features.Select(slice => (slice.Feature, slice.Present, slice.Interval, slice.Type, slice.Total, slice.Up)));
+        await using (NpgsqlCommand strip = _dataSource.CreateCommand("UPDATE idea_calibration SET report = report - 'Features'"))
+        {
+            await strip.ExecuteNonQueryAsync();
+        }
+
+        CalibrationReport before = (await calibrations.GetAsync(1, 90, null, CalibrationScope.All, CancellationToken.None))!;
+        before.Features.ShouldBeEmpty();
+        before.Types.Count.ShouldBe(1);
+    }
+
     // A code of a breakdown that this version does not know is a broken report, not a row of another interval or type.
     [TestCase("Intervals", "{\"Interval\": \"7\"}")]
     [TestCase("Types", "{\"Type\": \"fishing\"}")]
+    [TestCase("Features", "{\"Feature\": \"moon_phase\"}")]
     public async Task Report_with_an_unknown_code_of_a_breakdown_is_refused(string breakdown, string code)
     {
         var calibrations = new IdeaCalibrationRepository(_dataSource);
         BucketStatistics single = BucketStatisticsCalculator.Compute(0, 1, 0, -1m, 1m);
         var slice = new CalibrationSlice(Interval.FiveMinutes, IdeaType.TwoR, new CalibrationRow(null, null, null, 0.1m, single), null, new CalibrationComparison(new CalibrationModel(0, null, null), new CalibrationModel(0, null, null)));
-        await calibrations.ReplaceAsync(1, [new CalibrationReport(Now, 90, null, 1, 0, 1m, 1m, [], [], [], null) { Intervals = [slice], Types = [slice] }], CancellationToken.None);
+        await calibrations.ReplaceAsync(1, [new CalibrationReport(Now, 90, null, 1, 0, 1m, 1m, [], [], [], null) { Intervals = [slice], Types = [slice], Features = [slice with { Feature = IdeaFeature.BtcDrop, Present = true }] }], CancellationToken.None);
         await using (NpgsqlCommand corrupt = _dataSource.CreateCommand($"UPDATE idea_calibration SET report = jsonb_set(report, '{{{breakdown},0}}', report #> '{{{breakdown},0}}' || '{code}'::jsonb)"))
         {
             await corrupt.ExecuteNonQueryAsync();
@@ -182,6 +210,7 @@ public class IdeaCalibrationRepositoryTests
         read.Owns.ShouldBe(expected.Owns);
         read.Intervals.ShouldBe(expected.Intervals);
         read.Types.ShouldBe(expected.Types);
+        read.Features.ShouldBe(expected.Features);
         (read with
         {
             Probabilities = expected.Probabilities,
@@ -189,7 +218,8 @@ public class IdeaCalibrationRepositoryTests
             Badges = expected.Badges,
             Owns = expected.Owns,
             Intervals = expected.Intervals,
-            Types = expected.Types
+            Types = expected.Types,
+            Features = expected.Features
         }).ShouldBe(expected);
     }
 }

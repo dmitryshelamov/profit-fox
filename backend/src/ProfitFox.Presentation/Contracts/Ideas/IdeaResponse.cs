@@ -13,6 +13,8 @@ namespace ProfitFox.Presentation.Contracts.Ideas;
 ///     never expires, none when the target does not cover them.
 ///     <see cref="ProfitPerUsdt" />, <see cref="LossPerUsdt" /> and <see cref="RiskPerUsdt" /> are its money on 1 USDT of the amount of a deal,
 ///     after the fees. <see cref="RiskReward" /> is the ratio of the prices, <see cref="NetRiskReward" /> the profit over the loss after the fees. <see cref="Tick" /> is the price step of the pair, none for an idea made before it was kept. Numbers are decimal strings; <see cref="Move" /> in ATR, <see cref="VolumeRatio" /> in medians of volume.
+///     <see cref="Features" /> are the codes of the features of the market the idea fired with (<c>day_drop</c>, <c>btc_drop</c>,
+///     <c>high_funding</c>), none of them for an idea without.
 /// </summary>
 public sealed record IdeaResponse(
     Guid Id,
@@ -40,7 +42,8 @@ public sealed record IdeaResponse(
     string VolumeRatio,
     string? BreakEven,
     BucketStatisticsResponse? Bucket,
-    BucketStatisticsResponse? Recent)
+    BucketStatisticsResponse? Recent,
+    IReadOnlyList<string> Features)
 {
     public static IdeaResponse Of(IdeaView view)
     {
@@ -73,7 +76,8 @@ public sealed record IdeaResponse(
             Text(idea.VolumeRatio),
             view.Shares.BreakEven?.ToString(CultureInfo.InvariantCulture),
             BucketStatisticsResponse.Of(view.Bucket),
-            BucketStatisticsResponse.Of(view.Recent));
+            BucketStatisticsResponse.Of(view.Recent),
+            IdeaCodes.Codes(idea.Features));
     }
 
     private static string Text(decimal value)

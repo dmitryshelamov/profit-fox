@@ -100,6 +100,24 @@ public class IdeasApiTests
         (recent.GetProperty("expectancyLow").ValueKind, recent.GetProperty("badge").ValueKind).ShouldBe((JsonValueKind.Null, JsonValueKind.Null));
     }
 
+    // Scenario "Идея с признаками": the idea fired after a drop of its pair by 7 % over a day with a funding of 0.0001; the list, the ideas of
+    // the pair and the idea give the same features.
+    [Test]
+    public async Task Idea_gives_the_features_it_fired_with()
+    {
+        Idea idea = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol) with { PairChange = -0.07m, Funding = 0.0001m };
+        await new IdeaRepository(_database).SaveAsync([idea], [], CancellationToken.None);
+
+        JsonElement listed = (await ItemsAsync("/api/ideas")).EnumerateArray().Single();
+        JsonElement ofPair = (await GetAsync("/api/market/linear/SOLUSDT/ideas")).EnumerateArray().Single();
+        JsonElement single = await GetAsync($"/api/ideas/{idea.Id}");
+
+        foreach (JsonElement read in new[] { listed, ofPair, single })
+        {
+            read.GetProperty("features").EnumerateArray().Select(feature => feature.GetString()).ShouldBe(["day_drop"]);
+        }
+    }
+
     // Scenario "Корзина модели в ответе" and decision 7 of honest-idea-intervals: the numbers of the model with the own ones beside; a bucket of
     // few own cases has enough data by its parent. The list goes by the expectancy of the model: −0.10 R of the impulse before −0.20 R of the
     // drop, whose own +0.50 R would come first.
@@ -291,6 +309,11 @@ public class IdeasApiTests
             [
                 new CalibrationSlice(null, IdeaType.TwoR, new CalibrationRow(null, null, null, 0.1m, thirty), null, empty),
                 new CalibrationSlice(null, IdeaType.Pullback, new CalibrationRow(null, null, null, 0.1m, thirty), null, empty)
+            ],
+            Features =
+            [
+                new CalibrationSlice(null, null, new CalibrationRow(null, null, null, -0.2m, thirty), null, empty, IdeaFeature.DayDrop, true),
+                new CalibrationSlice(null, null, new CalibrationRow(null, null, null, 0.05m, thirty), null, empty, IdeaFeature.DayDrop, false)
             ]
         };
         await new IdeaCalibrationRepository(_database).ReplaceAsync(IdeasEngineVersion.Current, [report], CancellationToken.None);
@@ -306,6 +329,11 @@ public class IdeasApiTests
         (comparison.GetProperty("old").GetProperty("up").GetProperty("promised").GetString(), comparison.GetProperty("new").GetProperty("brier").GetString()).ShouldBe(("0.145", "0.207"));
         read.GetProperty("types").EnumerateArray().Select(slice => (slice.GetProperty("type").GetString(), slice.GetProperty("interval").ValueKind))
             .ShouldBe([("target_2r", JsonValueKind.Null), ("pullback", JsonValueKind.Null)]);
+        // Scenario "Разбивка в ответе": each row of the breakdown by feature has its feature, whether its cases have it, and the numbers of a row.
+        read.GetProperty("features").EnumerateArray()
+            .Select(slice => (slice.GetProperty("feature").GetString(), slice.GetProperty("present").GetBoolean(), slice.GetProperty("total").GetProperty("promised").GetString(), slice.GetProperty("total").GetProperty("cases").GetInt32()))
+            .ShouldBe([("day_drop", true, "-0.2", 30), ("day_drop", false, "0.05", 30)]);
+        intervals[0].GetProperty("feature").ValueKind.ShouldBe(JsonValueKind.Null);
     }
 
     // Scenario "Ещё не посчитана".
@@ -318,7 +346,7 @@ public class IdeasApiTests
         (report.GetProperty("checked").GetInt32(), report.GetProperty("unchecked").GetInt32(), report.GetProperty("brier").ValueKind).ShouldBe((0, 0, JsonValueKind.Null));
         (report.GetProperty("probabilities").GetArrayLength(), report.GetProperty("badges").GetArrayLength(), report.GetProperty("total").ValueKind).ShouldBe((0, 0, JsonValueKind.Null));
         (report.GetProperty("scope").GetString(), report.GetProperty("owns").GetArrayLength(), report.GetProperty("comparison").ValueKind).ShouldBe(("all", 0, JsonValueKind.Null));
-        (report.GetProperty("intervals").GetArrayLength(), report.GetProperty("types").GetArrayLength()).ShouldBe((0, 0));
+        (report.GetProperty("intervals").GetArrayLength(), report.GetProperty("types").GetArrayLength(), report.GetProperty("features").GetArrayLength()).ShouldBe((0, 0, 0));
     }
 
     // Scenarios "Другое окно" and "Другой режим".

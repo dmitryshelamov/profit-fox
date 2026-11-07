@@ -24,6 +24,9 @@ const response = {
   minCases: 100,
   position: 0,
   budget: '120.5',
+  dayDrop: 'with',
+  btcDrop: 'any',
+  highFunding: 'without',
 };
 
 describe('form of an auto', () => {
@@ -43,6 +46,9 @@ describe('form of an auto', () => {
         badge: '',
         minRiskReward: '1.5',
         minCases: '0',
+        dayDrop: 'any',
+        btcDrop: 'any',
+        highFunding: 'any',
       },
     );
   });
@@ -68,6 +74,9 @@ describe('form of an auto', () => {
       badge: 'up',
       minRiskReward: '1.5',
       minCases: '100',
+      dayDrop: 'with',
+      btcDrop: 'any',
+      highFunding: 'without',
     });
   });
 
@@ -83,6 +92,9 @@ describe('form of an auto', () => {
       side: 'long',
       category: null,
       badge: null,
+      dayDrop: 'with',
+      btcDrop: 'any',
+      highFunding: 'without',
     });
     expect(body).not.toHaveProperty('mode');
     const { serializeJson } = await import('@/shared/api/jsonNumber');
@@ -125,6 +137,7 @@ describe('form of an auto', () => {
       'сумма',
       'бюджет',
     ]);
+    expect(changedFields(initial, { ...initial, highFunding: 'any' })).toEqual(['высокий funding']);
   });
 
   it('does not count the same chips ticked in another order as a change', () => {

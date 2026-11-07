@@ -4,6 +4,7 @@ using ProfitFox.Domain.Entities.IdeaTrades.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Services.Ideas;
+using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
@@ -48,6 +49,9 @@ public sealed record IdeaTrade(
 {
     /// <summary>The close at the expiry of the idea: only a paper trade has it, a real trade's is always none.</summary>
     public LegTotals Expiry { get; init; } = LegTotals.None;
+
+    /// <summary>The features of the market its idea fired with, copied when the trade was made; a trade before them has none.</summary>
+    public IdeaFeatures Features { get; init; }
 
     public bool IsOpen => Status is IdeaTradeStatus.AwaitingEntry or IdeaTradeStatus.Open;
 
@@ -126,7 +130,8 @@ public sealed record IdeaTrade(
             0,
             now,
             promise,
-            AutoId: autoId);
+            AutoId: autoId)
+        { Features = idea.Features };
     }
 
     /// <summary>A pullback that has not entered by its deadline gives its entry up.</summary>

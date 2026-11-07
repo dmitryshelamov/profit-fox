@@ -28,6 +28,7 @@ public sealed class LiveIdeas(
     IIdeaRepository ideas,
     IIdeaVolatilityRepository volatility,
     ICandleRepository candles,
+    IFundingRateRepository funding,
     IIdeaExitRuleRepository exitRules,
     IdeaRecomputes recomputes,
     ScannerMarket market,
@@ -39,8 +40,14 @@ public sealed class LiveIdeas(
     private static readonly TimeSpan PercentilesRefresh = TimeSpan.FromHours(1);
     private static readonly TimeSpan Day = TimeSpan.FromDays(1);
     private static readonly TimeSpan ClosedKept = TimeSpan.FromDays(7);
+    private static readonly TimeSpan FundingKept = TimeSpan.FromDays(7);
+    private static readonly TimeSpan BtcSpan = TimeSpan.FromMinutes(240);
+    private static readonly Instrument Btc = new Instrument(MarketCategory.Linear, "BTCUSDT");
 
     private readonly IReadOnlyDictionary<MarketCategory, FeeRates> _fees = backtests.Policy().DefaultFees;
+    // A settlement every hour at the most: the 7 days hold at most this many.
+    private const int FundingRead = 7 * 24;
+
     private readonly IdeaEngine _engine = new IdeaEngine(settings.Rules(), IdeasEngineVersion.Current);
     private readonly ConcurrentQueue<Warming> _warming = new ConcurrentQueue<Warming>();
     // The generation a pair was read in; a start over begins a new one, and the warm-ups of an older generation are dropped.
@@ -84,6 +91,13 @@ public sealed class LiveIdeas(
                 DateTimeOffset until = pair.CoveredUntil!.Value;
                 stored = [.. (await candles.GetAsync(pair.Instrument, Interval.OneMinute, until.AddMinutes(-_engine.Window), until, _engine.Window, cancellationToken))
                     .Select(candle => new IdeaCandle(candle.OpenTime, candle.Open.Value, candle.High.Value, candle.Low.Value, candle.Close.Value, candle.Turnover.Value))];
+            }
+
+            // Memory starts without funding, and the top-up reads only what is past its coverage: the last settlement comes from storage.
+            if (pair.Instrument.Category == MarketCategory.Linear && market.FundingOf(pair.Instrument) is null)
+            {
+                DateTimeOffset now = time.GetUtcNow();
+                market.FundingLoaded(pair.Instrument, await funding.GetAsync(pair.Instrument, now - FundingKept, now, FundingRead, cancellationToken));
             }
 
             _read[pair.Instrument] = generation;
@@ -136,6 +150,7 @@ public sealed class LiveIdeas(
         var created = new List<Idea>();
         var changed = new List<Idea>();
         var births = new Dictionary<Instrument, IdeaCandle>();
+        decimal? btcChange = BtcChange(end);
 
         while (_warming.TryDequeue(out Warming? warming))
         {
@@ -152,7 +167,7 @@ public sealed class LiveIdeas(
             DateTimeOffset until = pair.CoveredUntil!.Value < end ? pair.CoveredUntil.Value : end;
             bool complete = !pair.IsBehind(end);
             IdeaCandle last = _fed[pair.Instrument];
-            IdeaInputs inputs = Inputs(pair.Instrument);
+            IdeaInputs inputs = Inputs(pair.Instrument, end, btcChange);
 
             foreach (IdeaCandle minute in IdeaCandles.Minutes(Known(pair.Instrument), last.OpenTime.AddMinutes(1), until, last.Close))
             {
@@ -213,7 +228,7 @@ public sealed class LiveIdeas(
         IdeaCandle[] known = [.. warming.Stored.Where(minute => minute.OpenTime < memory[0].OpenTime), .. memory];
         ScannerPair pair = market.Find(warming.Instrument)!;
         IReadOnlyList<IdeaCandle> minutes = IdeaCandles.Minutes(known, known[0].OpenTime, pair.CoveredUntil!.Value, known[0].Open);
-        IReadOnlyList<Idea> moved = _engine.Warm(warming.Instrument, warming.Closed, minutes, _open!.GetValueOrDefault(warming.Instrument) ?? [], Inputs(pair.Instrument));
+        IReadOnlyList<Idea> moved = _engine.Warm(warming.Instrument, warming.Closed, minutes, _open!.GetValueOrDefault(warming.Instrument) ?? [], Inputs(pair.Instrument, pair.CoveredUntil.Value, null));
         _fed[warming.Instrument] = minutes[^1];
 
         return moved;
@@ -247,14 +262,35 @@ public sealed class LiveIdeas(
         return expired;
     }
 
-    private IdeaInputs Inputs(Instrument instrument)
+    /// <summary>
+    ///     The inputs of a pair for the minute that ends at <paramref name="end" />: the funding settlement in memory if it was settled by then,
+    ///     the change of BTC of the minute (decision 4 of add-market-idea-features).
+    /// </summary>
+    private IdeaInputs Inputs(Instrument instrument, DateTimeOffset end, decimal? btcChange)
     {
         MarketTicker? ticker = market.TickerOf(instrument);
+        FundingRatePoint? rate = market.FundingOf(instrument);
 
         return new IdeaInputs(
             ticker is { Bid: { } bid, Ask: { } ask } ? ask - bid : null,
             _percentiles.GetValueOrDefault(instrument) ?? [],
-            market.Find(instrument)?.TickSize);
+            market.Find(instrument)?.TickSize,
+            btcChange,
+            rate is not null && rate.Time < end ? rate.Rate : null);
+    }
+
+    /// <summary>The change of the close of BTC on the minute that ends at <paramref name="end" /> over 240 minutes; unknown without either minute.</summary>
+    private decimal? BtcChange(DateTimeOffset end)
+    {
+        if (market.Find(Btc) is null)
+        {
+            return null;
+        }
+
+        var closes = market.Minutes(Btc).ToDictionary(minute => minute.OpenTime, minute => minute.Close);
+        DateTimeOffset last = end.AddMinutes(-1);
+
+        return closes.TryGetValue(last, out decimal now) && closes.TryGetValue(last - BtcSpan, out decimal before) ? now / before - 1m : null;
     }
 
     /// <summary>Drops the state of every pair: storage is read again and the pairs warm up again from it.</summary>

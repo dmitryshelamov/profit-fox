@@ -13,6 +13,7 @@ import {
   SideText,
   StatusText,
 } from './IdeaCells';
+import { IdeaFeatureChips } from './IdeaFeatureChips';
 
 export const cell = 'px-2 py-3';
 const number = `${cell} text-right font-mono whitespace-nowrap`;
@@ -51,7 +52,10 @@ export function IdeaRowCells({ idea, amount }: { idea: Idea; amount: string }) {
 
   return (
     <>
-      <td className={cell}>{setupLabel(idea.setup)}</td>
+      <td className={cell}>
+        {setupLabel(idea.setup)}
+        <IdeaFeatureChips features={idea.features} />
+      </td>
       <td className={`${cell} whitespace-nowrap`}>{intervalLabel(idea.interval)}</td>
       <td className={`${cell} whitespace-nowrap`}>{typeLabel(idea.type)}</td>
       <td className={cell}>

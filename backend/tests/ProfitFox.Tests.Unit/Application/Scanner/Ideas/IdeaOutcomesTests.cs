@@ -48,20 +48,20 @@ public class IdeaOutcomesTests
         ], ignoreOrder: true);
     }
 
-    // Requirement "Признаки идей": each case has the features of its own signal; the repeat while the idea was open counts for nothing.
+    // Requirement "Уровень признаков": each case has the features of its own signal; the repeat while the idea was open counts for nothing.
     [Test]
     public async Task Case_has_the_features_of_its_signal()
     {
         IdeaSignal[] signals =
         [
-            Signal(Wif, IdeaType.TwoR, -40, Path() with { StopAfter = 10 }) with { Move = 4.5m },
-            Signal(Wif, IdeaType.TwoR, -10, Path() with { LadderAfter = Ladder(30) }) with { VolumeRatio = 4m },
-            Signal(Wif, IdeaType.TwoR, -10, Path() with { FiredAt = Now.AddDays(-10).AddMinutes(10) }) with { Move = 9m, VolumeRatio = 9m }
+            Signal(Wif, IdeaType.TwoR, -40, Path() with { StopAfter = 10 }) with { PairChange = -0.06m, Funding = 0.0007m },
+            Signal(Wif, IdeaType.TwoR, -10, Path() with { LadderAfter = Ladder(30) }) with { BtcChange = -0.01m },
+            Signal(Wif, IdeaType.TwoR, -10, Path() with { FiredAt = Now.AddDays(-10).AddMinutes(10) }) with { PairChange = -0.5m, BtcChange = -0.5m, Funding = 0.01m }
         ];
 
         IdeaOutcomesResult result = await IdeaOutcomes.WalkAsync(signals.ToAsyncEnumerable(), new IdeaExitRules([]), _ => NoFees, Now, CancellationToken.None);
 
-        result.Outcomes.Select(outcome => outcome.Features).ShouldBe([new IdeaFeatures(true, false), new IdeaFeatures(false, true)]);
+        result.Outcomes.Select(outcome => outcome.Features).ShouldBe([new IdeaFeatures(true, false, true), new IdeaFeatures(false, true, false)]);
     }
 
     // The rule in force decides: with a window of one candle the pullback that filled after 30 minutes did not enter, and its bucket has no case.

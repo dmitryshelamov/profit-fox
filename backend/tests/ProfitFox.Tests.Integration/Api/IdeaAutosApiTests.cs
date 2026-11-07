@@ -66,6 +66,21 @@ public class IdeaAutosApiTests
         (Number(auto.GetProperty("minRiskReward")), auto.GetProperty("minCases").GetInt32()).ShouldBe((1.35m, 100));
     }
 
+    // Scenarios "Условие признака в теле" and "Неизвестное значение": the condition of a feature is read back by its code, one left out is
+    // «любой», and an unknown one is a 400 on its own field.
+    [Test]
+    public async Task Conditions_by_features_are_read_back_and_an_unknown_one_is_a_400()
+    {
+        HttpResponseMessage created = await _scenario.Client.PostAsJsonAsync(Url, new { name = "С funding", accountId = _scenario.Account, amount = 100m, setups = new[] { "impulse" }, types = new[] { "target_2r" }, intervals = new[] { "15" }, minRiskReward = 1.2m, minCases = 0, highFunding = "with", dayDrop = "without" });
+        created.StatusCode.ShouldBe(HttpStatusCode.Created);
+        Guid id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        JsonElement auto = await GetAsync(id);
+
+        (auto.GetProperty("dayDrop").GetString(), auto.GetProperty("btcDrop").GetString(), auto.GetProperty("highFunding").GetString()).ShouldBe(("without", "any", "with"));
+        await RefusedOnAsync(new { name = "А", accountId = _scenario.Account, amount = 100m, setups = new[] { "impulse" }, types = new[] { "target_2r" }, intervals = new[] { "15" }, minRiskReward = 1.2m, minCases = 0, btcDrop = "sometimes" }, "btcDrop");
+    }
+
     // A code marked twice is one condition.
     [Test]
     public async Task Code_marked_twice_is_kept_once()
@@ -205,7 +220,7 @@ public class IdeaAutosApiTests
     public async Task Deleted_auto_leaves_the_list_its_name_is_free_again_and_its_trade_keeps_its_name()
     {
         Guid id = await CreateAsync("Пробои 5м");
-        await InsertPaperTradeAsync(id, "open", closedAt: null, resultR: null);
+        await InsertPaperTradeAsync(id, "open", closedAt: null, resultR: null, dayDrop: true);
 
         (await _scenario.Client.DeleteAsync($"{Url}/{id}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
 
@@ -214,6 +229,8 @@ public class IdeaAutosApiTests
         (await _scenario.Client.PostAsJsonAsync(Url, Body("Пробои 5м"))).StatusCode.ShouldBe(HttpStatusCode.Created);
         JsonElement trade = (await JournalAsync()).GetProperty("open").EnumerateArray().Single();
         (trade.GetProperty("origin").GetString(), trade.GetProperty("autoName").GetString(), trade.GetProperty("autoId").GetGuid()).ShouldBe(("paper", "Пробои 5м", id));
+        // Task 6.2 of add-market-idea-features: a paper trade gives the features of its idea.
+        trade.GetProperty("features").EnumerateArray().Select(feature => feature.GetString()).ShouldBe(["day_drop"]);
     }
 
     // Scenario "Учебный автомат": 3 closed paper trades with +1.5, +2.0 and −0.5 R, no real ones, two refusals today.
@@ -490,7 +507,7 @@ public class IdeaAutosApiTests
         errors.EnumerateObject().Select(error => error.Name).ShouldContain(field);
     }
 
-    private async Task InsertPaperTradeAsync(Guid auto, string status, DateTimeOffset? closedAt, decimal? resultR)
+    private async Task InsertPaperTradeAsync(Guid auto, string status, DateTimeOffset? closedAt, decimal? resultR, bool dayDrop = false)
     {
         // One unit of risk is 1 USDT: the entry of 100 for 1 coin with the stop at 99 pays R as the money of the exit.
         decimal exit = resultR is { } r ? 100m + r : 0m;
@@ -503,9 +520,9 @@ public class IdeaAutosApiTests
             """
             INSERT INTO idea_paper_trades (id, idea_id, auto_id, account_id, category, symbol, setup, interval, type, side, entry_price, stop, target, quantity, amount, risk, status, status_at,
                 entry_quantity, entry_value, entry_fee, take_profit_quantity, take_profit_value, take_profit_fee, stop_loss_quantity, stop_loss_value, stop_loss_fee,
-                expiry_quantity, expiry_value, expiry_fee, created_at, opened_at, stepped_until)
+                expiry_quantity, expiry_value, expiry_fee, created_at, opened_at, stepped_until, day_drop)
             VALUES (gen_random_uuid(), gen_random_uuid(), @auto, @account, 'linear', 'BTCUSDT', 'impulse', '15', 'target_2r', 'long', 100, 99, 102, 1, 100, 1, @status, @at,
-                1, 100, 0, @tpq, @tpv, 0, @slq, @slv, 0, @exq, @exv, 0, @created, @created, @at)
+                1, 100, 0, @tpq, @tpv, 0, @slq, @slv, 0, @exq, @exv, 0, @created, @created, @at, @dayDrop)
             """,
             new
             {
@@ -519,7 +536,8 @@ public class IdeaAutosApiTests
                 slq = stop ? 1m : 0m,
                 slv = stop ? exit : 0m,
                 exq = expiry ? 1m : 0m,
-                exv = expiry ? exit : 0m
+                exv = expiry ? exit : 0m,
+                dayDrop
             });
     }
 

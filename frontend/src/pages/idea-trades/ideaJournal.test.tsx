@@ -255,6 +255,45 @@ describe('screen «Сделки»', () => {
     expect(screen.getByText('Вход не ушёл вовремя.')).toBeInTheDocument();
   });
 
+  // Requirement "Чипы признаков в строках сделок", scenarios "Учебная сделка с признаком" and "Сделка без признаков".
+  it('shows the chips of the features after the setup and the type of a trade, and none without features', async () => {
+    fakeApi(
+      routes(() =>
+        journalOf(
+          [paperTrade({ autoName: 'Лонг после падения', features: ['day_drop'] }), autoTrade()],
+          [
+            tradeOf({
+              id: 'm1',
+              status: 'closed_at_stop',
+              result: '-1',
+              resultR: '-1',
+              features: ['high_funding'],
+            }),
+          ],
+        ),
+      ),
+    );
+    renderApp('/idea-trades');
+
+    const rows = within(await screen.findByRole('table', { name: 'Сделки в работе' })).getAllByRole(
+      'row',
+    );
+    const paper = rows.find((row) => row.dataset.origin === 'paper')!;
+    const auto = rows.find((row) => row.dataset.origin === 'auto')!;
+    // The time, who took it and the pair stand before the setup.
+    const setup = within(paper).getAllByRole('cell')[3]!;
+
+    expect(within(setup).getByText('↓ пара')).toHaveAttribute(
+      'title',
+      'пара упала за сутки на 5 % и больше',
+    );
+    expect(within(auto).queryByText(/↓|↑/)).not.toBeInTheDocument();
+    const closed = within(screen.getByRole('table', { name: 'Закрытые сделки' })).getAllByRole(
+      'row',
+    )[1]!;
+    expect(within(closed).getByText('↑ funding')).toBeInTheDocument();
+  });
+
   // Requirement "Итоги на экране «Сделки»".
   it('shows the totals of the closed trades', async () => {
     fakeApi(

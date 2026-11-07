@@ -33,4 +33,7 @@ internal sealed class CalibrationReportDb
 
     /// <summary>The breakdown by type; none in a report stored before calibrate-ideas-by-timeframe.</summary>
     public List<CalibrationSliceDb> Types { get; init; } = [];
+
+    /// <summary>The breakdown by feature; none in a report stored before add-market-idea-features.</summary>
+    public List<CalibrationSliceDb> Features { get; init; } = [];
 }

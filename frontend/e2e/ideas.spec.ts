@@ -373,6 +373,9 @@ test('ideas come a page at a time: the page is in the address and survives Back,
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toContainText('BTCUSDT');
   await expect(rows.first()).toContainText('linear');
+  // The idea of BTCUSDT fired after a drop of the pair over a day and with a high funding (see `seedIdeas`).
+  await expect(rows.first().getByText('↓ пара')).toBeVisible();
+  await expect(rows.first().getByText('↑ funding')).toBeVisible();
 
   await page.goto('/market');
   await expect(page.getByRole('button', { name: 'Линейные от 150' })).toHaveAttribute(
@@ -443,7 +446,7 @@ test('the link «Калибровка» of the ideas opens the calibration with 
       .getByRole('row', { name: /мало своих данных/ }),
   ).toContainText('0.212');
 
-  // The breakdowns by timeframe and by type, each with its comparison of the models.
+  // The breakdowns by timeframe, by type and by feature, each with its comparison of the models.
   await expect(
     page.getByRole('table', { name: 'По ТФ', exact: true }).getByRole('row', { name: /1 ч/ }),
   ).toContainText('640');
@@ -455,6 +458,11 @@ test('the link «Калибровка» of the ideas opens the calibration with 
       .getByRole('table', { name: 'По ТФ: старая модель → новая', exact: true })
       .getByRole('row', { name: /1 ч Старая/ }),
   ).toContainText('0.231');
+  await expect(
+    page
+      .getByRole('table', { name: 'По признакам', exact: true })
+      .getByRole('row', { name: /падение пары за сутки · есть/ }),
+  ).toContainText('-0.20 R');
 
   // The report after the rules changed has 120 checked cases of the 640; the scope goes to the address.
   await page.getByRole('button', { name: 'После изменения правил' }).click();

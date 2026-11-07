@@ -93,6 +93,14 @@ public static class CalibrationCalculator
                 .. checkedCases.GroupBy(promise => promise.Case.Key.Type)
                     .OrderBy(cases => cases.Key)
                     .Select(cases => Slice(null, cases.Key, [.. cases], block))
+            ],
+            Features =
+            [
+                .. Enum.GetValues<IdeaFeature>()
+                    .SelectMany(feature => new[] { true, false }.Select(present => (feature, present)))
+                    .Select(row => (row.feature, row.present, Cases: checkedCases.Where(promise => promise.Case.Features.Has(row.feature) == row.present).ToArray()))
+                    .Where(row => row.Cases.Length > 0)
+                    .Select(row => Slice(null, null, row.Cases, block) with { Feature = row.feature, Present = row.present })
             ]
         };
     }

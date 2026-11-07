@@ -1,4 +1,4 @@
-import { counted, typeLabel } from '@/modules/ideas';
+import { counted, featureLabel, typeLabel } from '@/modules/ideas';
 import { setupLabel } from '@/modules/market';
 import { intervalLabel } from '@/modules/market-data';
 
@@ -48,6 +48,13 @@ export const sideChoices = [
   { value: '', label: 'Обе' },
 ] as const;
 
+/** The condition of an auto by a feature of the idea. */
+export const featureChoices = [
+  { value: 'any', label: 'любой' },
+  { value: 'with', label: 'только с' },
+  { value: 'without', label: 'только без' },
+] as const;
+
 export const categoryChoices = [
   { value: 'linear', label: 'Линейный' },
   { value: 'spot', label: 'Спот' },
@@ -63,12 +70,23 @@ interface Conditions {
   readonly badge: string | null;
   readonly minRiskReward: string;
   readonly minCases: number | string;
+  readonly dayDrop: string;
+  readonly btcDrop: string;
+  readonly highFunding: string;
 }
+
+const featureConditions = [
+  ['dayDrop', 'day_drop'],
+  ['btcDrop', 'btc_drop'],
+  ['highFunding', 'high_funding'],
+] as const;
+
+const featureWords: Record<string, string> = { with: 'с', without: 'без' };
 
 const sides: Record<string, string> = { long: 'Лонг', short: 'Шорт' };
 const categories: Record<string, string> = { linear: 'Линейный', spot: 'Спот' };
 
-/** The conditions of an auto in two lines: the setups and the types it takes, and the rest. */
+/** The conditions of an auto in two lines: the setups and the types it takes, and the rest with the features that are not «любой». */
 export function conditionLines(auto: Conditions): { what: string; where: string } {
   return {
     what: `${auto.setups.map(setupLabel).join(', ')} · ${auto.types.map(typeLabel).join(', ')}`,
@@ -79,6 +97,9 @@ export function conditionLines(auto: Conditions): { what: string; where: string 
       badgeLabel(auto.badge),
       `R:R ≥ ${auto.minRiskReward}`,
       `N ≥ ${auto.minCases}`,
+      ...featureConditions
+        .filter(([key]) => auto[key] in featureWords)
+        .map(([key, code]) => `${featureWords[auto[key]]} ${featureLabel(code)}`),
     ].join(' · '),
   };
 }

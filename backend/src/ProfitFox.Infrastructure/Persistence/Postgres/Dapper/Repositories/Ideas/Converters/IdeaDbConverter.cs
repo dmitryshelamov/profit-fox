@@ -37,6 +37,9 @@ internal static class IdeaDbConverter
             ExitPrice = track.ExitPrice,
             Move = idea.Move,
             VolumeRatio = idea.VolumeRatio,
+            PairChange = idea.PairChange,
+            BtcChange = idea.BtcChange,
+            Funding = idea.Funding,
             EngineVersion = idea.EngineVersion,
             Tick = track.Tick,
             LifeCandles = track.LifeCandles,
@@ -68,6 +71,6 @@ internal static class IdeaDbConverter
             row.ExitPrice,
             row.Tick);
 
-        return new Idea(row.Id, new Instrument(category, row.Symbol), setup, interval, track, row.Move, row.VolumeRatio, row.EngineVersion);
+        return new Idea(row.Id, new Instrument(category, row.Symbol), setup, interval, track, row.Move, row.VolumeRatio, row.EngineVersion, row.PairChange, row.BtcChange, row.Funding);
     }
 }

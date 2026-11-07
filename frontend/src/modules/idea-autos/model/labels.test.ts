@@ -16,6 +16,9 @@ const auto = {
   badge: 'up',
   minRiskReward: '1.5',
   minCases: 100,
+  dayDrop: 'any',
+  btcDrop: 'any',
+  highFunding: 'any',
 };
 
 describe('labels of autos', () => {
@@ -50,6 +53,16 @@ describe('labels of autos', () => {
     expect(
       conditionLines({ ...auto, side: null, category: null, badge: null, intervals: ['5'] }).where,
     ).toBe('5 мин · обе стороны · оба рынка · любой значок · R:R ≥ 1.5 · N ≥ 100');
+  });
+
+  // Scenario "Условие признака в строке": only the features not «любой» are named.
+  it('names the conditions of the features that are not any', () => {
+    expect(conditionLines({ ...auto, dayDrop: 'with' }).where).toBe(
+      '15 мин, 1 ч · Лонг · Линейный · ▲ · R:R ≥ 1.5 · N ≥ 100 · с ↓ пара',
+    );
+    expect(conditionLines({ ...auto, btcDrop: 'with', highFunding: 'without' }).where).toBe(
+      '15 мин, 1 ч · Лонг · Линейный · ▲ · R:R ≥ 1.5 · N ≥ 100 · с ↓ BTC · без ↑ funding',
+    );
   });
 
   it('names the reasons of a refusal and shows a code it does not know as it is', () => {

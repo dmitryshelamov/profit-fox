@@ -210,7 +210,9 @@ public sealed class ScannerBackfill(
 
     private async Task LoadFundingAsync(Instrument instrument, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken)
     {
-        await funding.UpsertAsync(instrument, await feed.GetFundingHistoryAsync(instrument.Symbol, from, to, cancellationToken), cancellationToken);
+        IReadOnlyList<FundingRatePoint> points = await feed.GetFundingHistoryAsync(instrument.Symbol, from, to, cancellationToken);
+        await funding.UpsertAsync(instrument, points, cancellationToken);
+        market.FundingLoaded(instrument, points);
     }
 
     private Task ProgressAsync(CancellationToken cancellationToken)

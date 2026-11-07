@@ -1,4 +1,4 @@
-import { sideLabel, typeLabel } from '@/modules/ideas';
+import { IdeaFeatureChips, sideLabel, typeLabel } from '@/modules/ideas';
 import { CategoryBadge, setupLabel } from '@/modules/market';
 import { intervalLabel } from '@/modules/market-data';
 import type { Schemas } from '@/shared/api/client';
@@ -32,7 +32,7 @@ export function Heads({ names, right }: { names: readonly string[]; right: reado
   );
 }
 
-/** The pair of a trade with its market, then its setup with the interval, its type and its side. */
+/** The pair of a trade with its market, then its setup with the interval, its type and the chips of its features, and its side. */
 export function InstrumentCells({ trade }: { trade: IdeaTrade }) {
   return (
     <>
@@ -43,6 +43,7 @@ export function InstrumentCells({ trade }: { trade: IdeaTrade }) {
       <td className={cell}>
         {setupLabel(trade.setup)} · {intervalLabel(trade.interval)}
         <span className="block text-xs whitespace-nowrap text-muted">{typeLabel(trade.type)}</span>
+        <IdeaFeatureChips features={trade.features} />
       </td>
       <td className={cell}>{sideLabel(trade.side)}</td>
     </>

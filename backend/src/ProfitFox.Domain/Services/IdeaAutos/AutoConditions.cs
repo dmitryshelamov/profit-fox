@@ -1,3 +1,4 @@
+using ProfitFox.Domain.Entities.IdeaAutos.Enums;
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.ValueObjects.IdeaAutos;
@@ -19,7 +20,20 @@ public static class AutoConditions
                && (conditions.Side is null || conditions.Side == idea.Track.Plan.Side)
                && (conditions.Category is null || conditions.Category == idea.Instrument.Category)
                && (bucket?.Cases ?? 0) >= conditions.MinCases
-               && BadgeFits(bucket?.Badge, conditions.Badge);
+               && BadgeFits(bucket?.Badge, conditions.Badge)
+               && FeatureFits(idea.Features.DayDrop, conditions.DayDrop)
+               && FeatureFits(idea.Features.BtcDrop, conditions.BtcDrop)
+               && FeatureFits(idea.Features.HighFunding, conditions.HighFunding);
+    }
+
+    private static bool FeatureFits(bool present, FeatureCondition condition)
+    {
+        return condition switch
+        {
+            FeatureCondition.With => present,
+            FeatureCondition.Without => !present,
+            _ => true
+        };
     }
 
     // ▲ > ≈ > ▼ > none: «любой» takes all of them, ▼ every badge there is.

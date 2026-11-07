@@ -39,6 +39,12 @@ internal sealed class IdeaDb
 
     public decimal VolumeRatio { get; init; }
 
+    public decimal? PairChange { get; init; }
+
+    public decimal? BtcChange { get; init; }
+
+    public decimal? Funding { get; init; }
+
     public int EngineVersion { get; init; }
 
     public decimal? Tick { get; init; }

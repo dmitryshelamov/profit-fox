@@ -93,7 +93,7 @@ public static class IdeaOutcomes
             if (result is { } r)
             {
                 IdeaSignal signal = signals[path];
-                outcomes.Add(new IdeaOutcome(bucket, path.FiredAt, outcome.StatusAt, outcome.Status, r, IdeaFeatures.Of(signal.Move, signal.VolumeRatio)));
+                outcomes.Add(new IdeaOutcome(bucket, path.FiredAt, outcome.StatusAt, outcome.Status, r, signal.Features));
             }
 
             foreach (int days in Days.Where(days => path.FiredAt >= now.AddDays(-days)))
