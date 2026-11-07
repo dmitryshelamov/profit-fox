@@ -79,11 +79,12 @@ public class IdeaOrderTests
         IdeaSetup[] order =
         [
             IdeaSetup.Impulse, IdeaSetup.EarlyImpulse, IdeaSetup.Drop, IdeaSetup.EarlyDrop, IdeaSetup.HighVolatility, IdeaSetup.Breakout, IdeaSetup.FalseBreakout,
-            IdeaSetup.Squeeze, IdeaSetup.Exhaustion, IdeaSetup.RsiExtreme, IdeaSetup.NewExtreme, IdeaSetup.QuietVolume
+            IdeaSetup.Squeeze, IdeaSetup.Exhaustion, IdeaSetup.RsiExtreme, IdeaSetup.NewExtreme, IdeaSetup.QuietVolume,
+            IdeaSetup.Accumulation
         ];
         IdeaView[] views = [.. order.Reverse().Select((setup, index) => View(((char)('a' + index)).ToString(), Setup(setup)))];
 
-        Names(IdeaOrder.Sort(views, IdeaSortColumn.Setup, OrderDirection.Ascending)).ShouldBe("lkjihgfedcba");
+        Names(IdeaOrder.Sort(views, IdeaSortColumn.Setup, OrderDirection.Ascending)).ShouldBe("mlkjihgfedcba");
     }
 
     // Scenario "Сортировка по типу": «Стоп-вход» after «Откат».

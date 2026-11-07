@@ -54,7 +54,14 @@ public static class CandleSetupDetector
         if (input.Atr / last.Close < input.LowPercentile)
         {
             IdeaCandle[] range = [.. input.Closed.TakeLast(thresholds.SqueezeCandles), last];
-            signals.Add(Signal(IdeaSetup.Squeeze, null, input, volume) with { WindowLow = range.Min(candle => candle.Low), WindowHigh = range.Max(candle => candle.High) });
+            SetupSignal squeeze = Signal(IdeaSetup.Squeeze, null, input, volume) with { WindowLow = range.Min(candle => candle.Low), WindowHigh = range.Max(candle => candle.High) };
+            signals.Add(squeeze);
+
+            // «Накопление / распределение»: the squeeze with the side its volume leans to while the price stays in place.
+            if (Bias(input, thresholds) is { } bias)
+            {
+                signals.Add(squeeze with { Setup = IdeaSetup.Accumulation, Side = bias });
+            }
         }
 
         // «Истощение»: an impulse or a drop with a climax of volume and a wick against it of w bodies; against the move, in its window.
@@ -115,6 +122,42 @@ public static class CandleSetupDetector
         }
 
         return signals;
+    }
+
+    /// <summary>
+    ///     The side of an accumulation (decisions 2–4): over the Nс closed candles of the squeeze the volume of those that closed above the close
+    ///     before them is Kн times the volume of those that closed below, and the last closed candle is not Pн ATR above the first of the window;
+    ///     long. Mirrored, short. Equal closes go to neither side; the first candle of the window is compared with the closed one before it, so
+    ///     it takes Nс + 1 closed candles.
+    /// </summary>
+    private static IdeaSide? Bias(CandleSetupInput input, SetupThresholds thresholds)
+    {
+        if (input.Closed.Count <= thresholds.SqueezeCandles)
+        {
+            return null;
+        }
+
+        IdeaCandle[] window = [.. input.Closed.TakeLast(thresholds.SqueezeCandles + 1)];
+        decimal rising = 0m;
+        decimal falling = 0m;
+
+        for (int index = 1; index < window.Length; index++)
+        {
+            if (window[index].Close > window[index - 1].Close)
+            {
+                rising += window[index].Volume;
+            }
+            else if (window[index].Close < window[index - 1].Close)
+            {
+                falling += window[index].Volume;
+            }
+        }
+
+        decimal flat = thresholds.FlatMove * input.Atr;
+
+        return rising > 0 && rising >= thresholds.BiasRatio * falling && window[^1].Close <= window[1].Close + flat ? IdeaSide.Long
+            : falling > 0 && falling >= thresholds.BiasRatio * rising && window[^1].Close >= window[1].Close - flat ? IdeaSide.Short
+            : null;
     }
 
     private static SetupSignal Signal(IdeaSetup setup, IdeaSide? side, CandleSetupInput input, decimal volume, Zone? zone = null)

@@ -367,7 +367,7 @@ enforces a rule, the check is the source of truth.
     "Thresholds": {
       "Candles": 6, "Move": 3.0, "Volume": 2.0, "EarlyMove": 1.5, "EarlyVolume": 3.0,
       "BreakoutMargin": 0.1, "BreakoutVolume": 1.5, "SweepMargin": 0.2, "SqueezeCandles": 20, "ClimaxVolume": 4.0, "Wick": 1.0,
-      "QuietVolume": 3.0, "QuietBody": 0.3, "Overbought": 70, "Oversold": 30
+      "QuietVolume": 3.0, "QuietBody": 0.3, "BiasRatio": 1.5, "FlatMove": 0.5, "Overbought": 70, "Oversold": 30
     },
     "ByInterval": { "240": { "Move": 2.5 } },
     "StopBuffer": 1.5,

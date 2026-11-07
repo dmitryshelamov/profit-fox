@@ -556,7 +556,7 @@ public class IdeasApiTests
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         JsonElement errors = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("errors");
         errors.GetProperty("setup")[0].GetString().ShouldBe(
-            "Setup must be impulse, early_impulse, drop, early_drop, high_volatility, breakout, false_breakout, squeeze, exhaustion, rsi_extreme, new_extreme or quiet_volume.");
+            "Setup must be impulse, early_impulse, drop, early_drop, high_volatility, breakout, false_breakout, squeeze, exhaustion, rsi_extreme, new_extreme, quiet_volume or accumulation.");
         errors.GetProperty("type")[0].GetString().ShouldBe("Type must be levels, target_2r, beyond_extreme, pullback or stop_entry.");
     }
 

@@ -7,7 +7,9 @@ namespace ProfitFox.Domain.ValueObjects.Ideas;
 ///     beyond a zone with <see cref="BreakoutVolume" /> (Vп) medians; a false breakout sweeps <see cref="SweepMargin" /> (e) ATR beyond it; a
 ///     squeeze ranges over the last <see cref="SqueezeCandles" /> (Nс) closed candles; an exhaustion has <see cref="ClimaxVolume" /> (Xк)
 ///     medians and a wick of <see cref="Wick" /> (w) bodies; a quiet volume has <see cref="QuietVolume" /> (Xт) medians and a body under
-///     <see cref="QuietBody" /> (Bт) ATR; RSI leaves the zones beyond <see cref="Overbought" /> and <see cref="Oversold" />.
+///     <see cref="QuietBody" /> (Bт) ATR; an accumulation is a squeeze whose rising candles have <see cref="BiasRatio" /> (Kн) times the volume of
+///     the falling ones, the price not gone their way by more than <see cref="FlatMove" /> (Pн) ATR; RSI leaves the zones beyond
+///     <see cref="Overbought" /> and <see cref="Oversold" />.
 /// </summary>
 public sealed record SetupThresholds(
     int Candles,
@@ -23,5 +25,7 @@ public sealed record SetupThresholds(
     decimal Wick,
     decimal QuietVolume,
     decimal QuietBody,
+    decimal BiasRatio,
+    decimal FlatMove,
     decimal Overbought,
     decimal Oversold);

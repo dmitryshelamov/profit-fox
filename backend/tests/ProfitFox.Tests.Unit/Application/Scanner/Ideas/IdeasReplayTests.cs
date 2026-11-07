@@ -254,7 +254,8 @@ public class IdeasReplayTests
     // Fix after review and task 5.3: the signals do not depend on how the days fall into turns. Four days of waves replayed in one turn and day by day,
     // each day by a replay of its own over the stored cursor; the third day starts without trades and opens 2 % up. The waves start 4 hours
     // before the history, so an idea of 15 minutes fired late on the second day closes on the third. Every third stretch of 211 minutes, the
-    // steepest, trades three times the volume, so the candle setups have breakouts beside squeezes and RSI back from its zones.
+    // steepest, trades three times the volume, so the candle setups have breakouts beside squeezes and RSI back from its zones, and squeezes
+    // with their volume on one side are accumulations or distributions.
     [Test]
     public async Task Replay_in_one_turn_and_day_by_day_gives_the_same_signals()
     {
@@ -279,7 +280,7 @@ public class IdeasReplayTests
         }
 
         whole.ShouldNotBeEmpty();
-        new[] { IdeaSetup.Breakout, IdeaSetup.Squeeze, IdeaSetup.RsiExtreme }.ShouldAllBe(setup => _written.Values.Any(signal => signal.Setup == setup));
+        new[] { IdeaSetup.Breakout, IdeaSetup.Squeeze, IdeaSetup.RsiExtreme, IdeaSetup.Accumulation }.ShouldAllBe(setup => _written.Values.Any(signal => signal.Setup == setup));
         Shape(_written.Values).ShouldBe(whole);
         Shape(_stored[Wif].Open).ShouldBe(Shape(openAtTheEnd));
         _written.Values.ShouldContain(signal => !signal.Path.IsOpen && signal.Path.FiredAt < Interval.OneDay.CandleOpen(signal.Path.TrackedUntil.AddTicks(-1)), "A path open across a cursor");
