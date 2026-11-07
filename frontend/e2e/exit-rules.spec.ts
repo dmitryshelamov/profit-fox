@@ -24,6 +24,10 @@ test('the lifetime of «Откат» on 15 minutes is previewed and applied', as
     .getByRole('cell');
   await expect(expectancy.nth(0)).toHaveText('▲ +0.21 R');
   await expect(expectancy.nth(1)).toHaveText('▲ +1.96 R');
+  // The out-of-sample check: 10 of the 40 seeded signals are older than 30 days, too few for a best rule of the selection.
+  await expect(page.getByRole('table', { name: 'Проверка вне выборки' })).toContainText(
+    'на подборе нет правила с 30 входами',
+  );
 
   await page.getByRole('button', { name: 'Применить' }).click();
   await expect(page.getByText('срок 48 свечей · цель 2R · окно входа 4 свечи')).toBeVisible();

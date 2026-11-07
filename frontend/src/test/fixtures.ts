@@ -904,6 +904,56 @@ export const exitPreviewOf = (overrides: Partial<Schemas['ExitRulePreviewRespons
     ...overrides,
   }) satisfies Schemas['ExitRulePreviewResponse'];
 
+/**
+ * An out-of-sample check of «Откат» 15 minutes 24 · 2R · 4: the candidate +0.05 → −0.03 R, the best of the selection 96 · 3R +0.12 R on 60
+ * entries → −0.01 R on 12, the overfitting 13 of 20 splits.
+ */
+export const exitOutOfSampleOf = (
+  overrides: Partial<Schemas['ExitRuleOutOfSampleResponse']> = {},
+) =>
+  ({
+    selectionFrom: '2026-08-08T12:00:00Z',
+    checkFrom: '2026-10-07T12:00:00Z',
+    to: '2026-10-30T11:59:00Z',
+    rules: 171,
+    candidate: {
+      selectionTo: '2026-10-07T05:59:00Z',
+      selection: exitBucketOf({
+        cases: 60,
+        expectancy: '0.05',
+        expectancyLow: '-0.02',
+        expectancyHigh: '0.12',
+      }),
+      check: exitBucketOf({
+        cases: 40,
+        expectancy: '-0.03',
+        expectancyLow: '-0.1',
+        expectancyHigh: '0.04',
+      }),
+    },
+    best: {
+      life: 96,
+      target: '3',
+      selectionTo: '2026-10-06T11:59:00Z',
+      selection: exitBucketOf({
+        cases: 60,
+        expectancy: '0.12',
+        expectancyLow: '0.02',
+        expectancyHigh: '0.22',
+        badge: 'up',
+      }),
+      check: exitBucketOf({
+        cases: 12,
+        expectancy: '-0.01',
+        expectancyLow: null,
+        expectancyHigh: null,
+        badge: null,
+      }),
+    },
+    overfitting: { splits: 20, overfit: 13, probability: '0.65' },
+    ...overrides,
+  }) satisfies Schemas['ExitRuleOutOfSampleResponse'];
+
 /** An auto of the list as the API gives it: «Импульс лонг» with money on the account of the tests; a test sets what it needs. */
 export const autoOf = (overrides: Partial<Schemas['IdeaAutoResponse']> = {}) =>
   ({
