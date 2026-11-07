@@ -43,5 +43,6 @@
 
 - [x] 5.1 e2e: ожидание баннера дневного стопа без « UTC»; `timezoneId` остаётся `UTC`.
 - [x] 5.2 Пройти diff: каждая ветка новых форматтеров требуется тестом.
-- [ ] 5.3 Frontend lint, format check, typecheck, test, build; build, test, `dotnet format --verify-no-changes`
-  бэкенда; e2e по возможности.
+- [x] 5.3 Frontend lint, format check, typecheck, test, build; build, test, `dotnet format --verify-no-changes`
+  бэкенда; e2e по возможности. Фронтенд — локально; бэкенд и e2e — CI пулл-реквеста (`build-and-test`, `check`,
+  `playwright` зелёные).
