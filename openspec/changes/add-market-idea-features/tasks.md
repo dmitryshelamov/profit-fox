@@ -35,8 +35,8 @@
 
 ## 4. Хранение
 
-- [ ] 4.1 Миграция `202611080004` (Migration Plan, шаг 1); интеграционный тест миграции видит колонки с умолчаниями.
-- [ ] 4.2 `IdeaSignalRepository` (COPY и чтение), `IdeaRepository`: `pair_change`, `btc_change`, `funding`.
+- [x] 4.1 Миграция `202611080004` (Migration Plan, шаг 1); интеграционный тест миграции видит колонки с умолчаниями.
+- [x] 4.2 `IdeaSignalRepository` (COPY и чтение), `IdeaRepository`: `pair_change`, `btc_change`, `funding`.
   Интеграционные тесты: сигнал и идея читаются с теми же числами и уровнем; строка без чисел (`NULL`) читается без
   признаков.
 
