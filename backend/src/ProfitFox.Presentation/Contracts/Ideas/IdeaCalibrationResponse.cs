@@ -11,7 +11,8 @@ namespace ProfitFox.Presentation.Contracts.Ideas;
 ///     was computed (none before the first time, with zeros and empty tables), the checked cases and the ones whose bucket had fewer than 30
 ///     cases, the Brier score of the buckets and of the share of targets of the category, the rows by promised probability, by promised
 ///     expectancy and by badge, the <see cref="Total" /> of all checked cases, the rows by own data and the comparison of the old model with the
-///     new one (none before the first calibration), all in a <see cref="Scope" />, <c>all</c> or <c>fresh</c>. Numbers are decimal strings.
+///     new one (none before the first calibration) and the breakdowns by interval and by type, all in a <see cref="Scope" />, <c>all</c> or
+///     <c>fresh</c>. Numbers are decimal strings.
 /// </summary>
 public sealed record IdeaCalibrationResponse(
     DateTimeOffset? ComputedAt,
@@ -27,7 +28,9 @@ public sealed record IdeaCalibrationResponse(
     CalibrationRowResponse? Total,
     string Scope,
     IReadOnlyList<CalibrationOwnRowResponse> Owns,
-    CalibrationComparisonResponse? Comparison)
+    CalibrationComparisonResponse? Comparison,
+    IReadOnlyList<CalibrationSliceResponse> Intervals,
+    IReadOnlyList<CalibrationSliceResponse> Types)
 {
     public static IdeaCalibrationResponse Of(GetIdeaCalibrationResult result)
     {
@@ -35,7 +38,7 @@ public sealed record IdeaCalibrationResponse(
         string scope = result.Scope.ToCode();
 
         return result.Report is not { } report
-            ? new IdeaCalibrationResponse(null, result.Days, category, 0, 0, null, null, [], [], [], null, scope, [], null)
+            ? new IdeaCalibrationResponse(null, result.Days, category, 0, 0, null, null, [], [], [], null, scope, [], null, [], [])
             : new IdeaCalibrationResponse(
                 report.ComputedAt,
                 result.Days,
@@ -50,7 +53,9 @@ public sealed record IdeaCalibrationResponse(
                 report.Total is null ? null : CalibrationRowResponse.Of(report.Total),
                 scope,
                 [.. report.Owns.Select(CalibrationOwnRowResponse.Of)],
-                report.Comparison is null ? null : CalibrationComparisonResponse.Of(report.Comparison));
+                report.Comparison is null ? null : CalibrationComparisonResponse.Of(report.Comparison),
+                [.. report.Intervals.Select(CalibrationSliceResponse.Of)],
+                [.. report.Types.Select(CalibrationSliceResponse.Of)]);
     }
 
     private static string? Text(decimal? value)

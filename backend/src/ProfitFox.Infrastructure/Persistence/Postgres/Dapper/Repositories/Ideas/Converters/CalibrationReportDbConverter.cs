@@ -1,4 +1,5 @@
 using ProfitFox.Application.Ideas;
+using ProfitFox.Application.MarketData;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.ValueObjects.Ideas;
@@ -21,15 +22,9 @@ internal static class CalibrationReportDbConverter
             Badges = [.. report.Badges.Select(FromDomain)],
             Total = report.Total is null ? null : FromDomain(report.Total),
             Owns = [.. report.Owns.Select(own => new CalibrationOwnRowDb { FewOwnCases = own.FewOwnCases, Row = FromDomain(own.Row), Brier = own.Brier })],
-            Comparison = report.Comparison is not { } comparison ? null : new CalibrationComparisonDb
-            {
-                Old = FromDomain(comparison.Old),
-                New = FromDomain(comparison.New),
-                Features = comparison.Features is null ? null : FromDomain(comparison.Features),
-                Difference = comparison.Difference is not { } difference
-                    ? null
-                    : new CalibrationDifferenceDb { Mean = difference.Mean, Low = difference.Low, High = difference.High }
-            }
+            Comparison = report.Comparison is not { } comparison ? null : FromDomain(comparison),
+            Intervals = [.. report.Intervals.Select(FromDomain)],
+            Types = [.. report.Types.Select(FromDomain)]
         };
     }
 
@@ -50,12 +45,69 @@ internal static class CalibrationReportDbConverter
         {
             Scope = scope,
             Owns = [.. row.Owns.Select(own => new CalibrationOwnRow(own.FewOwnCases, ToDomain(own.Row), own.Brier))],
-            Comparison = row.Comparison is not { } comparison ? null : new CalibrationComparison(
-                    ToDomain(comparison.Old),
-                    ToDomain(comparison.New),
-                    comparison.Features is null ? null : ToDomain(comparison.Features),
-                    comparison.Difference is not { } difference ? null : new CalibrationDifference(difference.Mean, difference.Low, difference.High))
+            Comparison = row.Comparison is not { } comparison ? null : ToDomain(comparison),
+            Intervals = [.. row.Intervals.Select(ToDomain)],
+            Types = [.. row.Types.Select(ToDomain)]
         };
+    }
+
+    private static CalibrationSliceDb FromDomain(CalibrationSlice slice)
+    {
+        return new CalibrationSliceDb
+        {
+            Interval = slice.Interval?.ToCode(),
+            Type = slice.Type?.ToCode(),
+            Total = FromDomain(slice.Total),
+            Up = slice.Up is null ? null : FromDomain(slice.Up),
+            Comparison = FromDomain(slice.Comparison)
+        };
+    }
+
+    private static CalibrationSlice ToDomain(CalibrationSliceDb slice)
+    {
+        return new CalibrationSlice(
+            IntervalOf(slice.Interval),
+            TypeOf(slice.Type),
+            ToDomain(slice.Total),
+            slice.Up is null ? null : ToDomain(slice.Up),
+            ToDomain(slice.Comparison));
+    }
+
+    private static Interval? IntervalOf(string? code)
+    {
+        return code is null ? null : MarketDataCodes.TryParseInterval(code, out Interval interval) ? interval : throw Unknown("interval", code);
+    }
+
+    private static IdeaType? TypeOf(string? code)
+    {
+        return code is null ? null : IdeaCodes.TryParseType(code, out IdeaType type) ? type : throw Unknown("type", code);
+    }
+
+    private static InvalidOperationException Unknown(string what, string code)
+    {
+        return new InvalidOperationException($"Unknown {what} code '{code}' in storage.");
+    }
+
+    private static CalibrationComparisonDb FromDomain(CalibrationComparison comparison)
+    {
+        return new CalibrationComparisonDb
+        {
+            Old = FromDomain(comparison.Old),
+            New = FromDomain(comparison.New),
+            Features = comparison.Features is null ? null : FromDomain(comparison.Features),
+            Difference = comparison.Difference is not { } difference
+                ? null
+                : new CalibrationDifferenceDb { Mean = difference.Mean, Low = difference.Low, High = difference.High }
+        };
+    }
+
+    private static CalibrationComparison ToDomain(CalibrationComparisonDb comparison)
+    {
+        return new CalibrationComparison(
+            ToDomain(comparison.Old),
+            ToDomain(comparison.New),
+            comparison.Features is null ? null : ToDomain(comparison.Features),
+            comparison.Difference is not { } difference ? null : new CalibrationDifference(difference.Mean, difference.Low, difference.High));
     }
 
     private static CalibrationModelDb FromDomain(CalibrationModel model)

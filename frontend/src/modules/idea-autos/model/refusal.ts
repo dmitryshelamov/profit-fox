@@ -61,7 +61,10 @@ export function refusalDetailText(refusal: {
     case 'too_many_same_direction':
       return against('открыто', detail);
     case 'total_risk_exceeded':
-      return against('риск', detail);
+      return against('убыток по стопам', detail);
+    case 'budget_taken':
+    case 'autos_budget_taken':
+      return `занято ${roundDecimal(detail.actual!, 2)} из ${detail.limit} USDT`;
     case 'amount_above_max':
       return against('сумма', detail);
     case 'pair_taken':

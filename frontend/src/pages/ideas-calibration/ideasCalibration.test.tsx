@@ -250,6 +250,120 @@ describe('calibration screen', () => {
     ).toEqual(['Новая', '1\u00a0800', '0.204', '0', '—', '—', '—']);
   });
 
+  // Requirement "Таблицы по ТФ и типам на экране «Калибровка»", scenario "Таблица по ТФ".
+  it('lists the cases and the ideas ▲ of each timeframe', async () => {
+    open();
+    renderApp('/ideas/calibration');
+
+    const table = await screen.findByRole('table', { name: 'По ТФ' });
+
+    expect(
+      within(within(table).getByRole('row', { name: /1 ч/ }))
+        .getAllByRole('cell')
+        .map((cell) => cell.textContent),
+    ).toEqual([
+      '1 ч',
+      '4\u00a0000',
+      '+0.02 R',
+      '-0.05 R',
+      '-0.09…-0.01 R',
+      '900',
+      '+0.15 R',
+      '-0.10 R',
+      '-0.18…-0.02 R',
+    ]);
+  });
+
+  it('shows dashes for a type without ▲ and without an interval', async () => {
+    open();
+    renderApp('/ideas/calibration');
+
+    const table = await screen.findByRole('table', { name: 'По типам' });
+
+    expect(
+      within(within(table).getByRole('row', { name: /Откат/ }))
+        .getAllByRole('cell')
+        .map((cell) => cell.textContent),
+    ).toEqual(['Откат', '500', '+0.01 R', '+0.02 R', '—', '0', '—', '—', '—']);
+  });
+
+  // Scenario "Сравнение по типам".
+  it('compares the old model with the new one in each row of a breakdown', async () => {
+    open();
+    renderApp('/ideas/calibration');
+
+    const types = await screen.findByRole('table', { name: 'По типам: старая модель → новая' });
+    const cells = (table: HTMLElement, name: RegExp) =>
+      within(within(table).getByRole('row', { name }))
+        .getAllByRole('cell')
+        .map((cell) => cell.textContent);
+
+    expect(cells(types, /Откат Старая/)).toEqual([
+      'Откат',
+      'Старая',
+      '200',
+      '0.240',
+      '120',
+      '+0.10 R',
+      '-0.08 R',
+      '-0.16…0.00 R',
+      '—',
+    ]);
+    expect(cells(types, /Откат Новая/)).toEqual([
+      'Откат',
+      'Новая',
+      '200',
+      '0.220',
+      '40',
+      '+0.04 R',
+      '+0.01 R',
+      '-0.10…+0.12 R',
+      '—',
+    ]);
+    expect(within(types).queryByRole('row', { name: /С признаками/ })).not.toBeInTheDocument();
+    const intervals = screen.getByRole('table', { name: 'По ТФ: старая модель → новая' });
+    expect(cells(intervals, /1 ч Новая/)).toEqual([
+      '1 ч',
+      'Новая',
+      '1\u00a0500',
+      '0.210',
+      '0',
+      '—',
+      '—',
+      '—',
+      '—',
+    ]);
+    // Decision 4 of add-idea-features: the slice compares the model with features too, with its difference of the Brier score.
+    expect(cells(intervals, /1 ч С признаками/)).toEqual([
+      '1 ч',
+      'С признаками',
+      '1\u00a0500',
+      '0.205',
+      '0',
+      '—',
+      '—',
+      '—',
+      '-0.005, интервал 95 % -0.011…+0.002',
+    ]);
+  });
+
+  // Scenario "Итог без разбивок".
+  it('shows no breakdown in a report stored before them', async () => {
+    open(calibrationOf({ intervals: [], types: [] }));
+    renderApp('/ideas/calibration');
+
+    await screen.findByRole('table', { name: 'Значки' });
+
+    for (const name of [
+      'По ТФ',
+      'По типам',
+      'По ТФ: старая модель → новая',
+      'По типам: старая модель → новая',
+    ]) {
+      expect(screen.queryByRole('table', { name })).not.toBeInTheDocument();
+    }
+  });
+
   it('shows no comparison in a report without one', async () => {
     open(calibrationOf({ comparison: null }));
     renderApp('/ideas/calibration');

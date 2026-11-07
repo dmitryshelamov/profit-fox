@@ -9,7 +9,7 @@ import { Dialog } from '@/shared/ui/Dialog';
 import { useDeleteAuto, useSetAutoMode, useSetAutosOrder } from '../api';
 import { conditionLines, modeCaption, modes } from '../model/labels';
 import { moveBefore } from '../model/order';
-import { paperText, realText } from '../model/totals';
+import { budgetText, paperText, realText } from '../model/totals';
 
 type Item = Schemas['IdeaAutoItemResponse'];
 
@@ -20,6 +20,7 @@ const heads = [
   'Условия',
   'Аккаунт',
   'Сумма',
+  'Бюджет',
   'Режим',
   'Учебные',
   'С деньгами',
@@ -203,6 +204,9 @@ export function AutosTable({ items }: { items: readonly Item[] }) {
                   <td className={`${cell} whitespace-nowrap text-text`}>{auto.accountName}</td>
                   <td className={`${cell} text-right font-mono whitespace-nowrap text-text`}>
                     {auto.amount} USDT
+                  </td>
+                  <td className={`${cell} font-mono whitespace-nowrap text-text`}>
+                    {budgetText(item)}
                   </td>
                   <td className={cell}>
                     <ModeSwitch item={item} />

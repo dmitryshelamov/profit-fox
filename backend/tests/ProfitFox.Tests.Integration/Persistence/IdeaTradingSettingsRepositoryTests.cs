@@ -66,4 +66,17 @@ public class IdeaTradingSettingsRepositoryTests
         await _repository.SaveAsync(guarded with { DailyLossLimit = null, MaxSameDirection = null }, CancellationToken.None);
         (await _repository.GetAsync(CancellationToken.None)).ShouldBe(IdeaTradingSettings.Default);
     }
+
+    // The budget of all the autos is saved with the rest, and an empty one is saved empty.
+    [Test]
+    public async Task Budget_of_the_autos_is_saved_and_can_be_switched_off()
+    {
+        IdeaTradingSettings budgeted = IdeaTradingSettings.Default with { AutosBudget = 200.5m };
+
+        await _repository.SaveAsync(budgeted, CancellationToken.None);
+        (await _repository.GetAsync(CancellationToken.None)).ShouldBe(budgeted);
+
+        await _repository.SaveAsync(IdeaTradingSettings.Default, CancellationToken.None);
+        (await _repository.GetAsync(CancellationToken.None)).ShouldBe(IdeaTradingSettings.Default);
+    }
 }

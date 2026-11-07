@@ -30,6 +30,27 @@ public class IdeaExitRulesTests
         new IdeaExitRules([]).Of(IdeaType.Levels, Interval.OneHour).ShouldBe(new IdeaExitRule(IdeaType.Levels, Interval.OneHour, 24, null, null, null));
     }
 
+    // Decision 1 of cluster-idea-cases-by-holding: an idea of «Цель 2R» on 4 h with 24 candles may hold for 4 days.
+    [Test]
+    public void Holding_is_the_lifetime_in_candles_of_the_interval()
+    {
+        new IdeaExitRule(IdeaType.TwoR, Interval.FourHours, 24, 2m, null, null).Holding.ShouldBe(TimeSpan.FromHours(96));
+    }
+
+    // Scenario "Окно входа удлиняет блок": a pullback waits up to its window for the entry and then lives its lifetime.
+    [Test]
+    public void Holding_of_a_type_with_an_entry_window_adds_the_window()
+    {
+        new IdeaExitRule(IdeaType.Pullback, Interval.OneHour, 24, 2m, 4, null).Holding.ShouldBe(TimeSpan.FromHours(28));
+    }
+
+    // Scenario "Не короче часа": 6 candles of 5 minutes are half an hour, the holding is never shorter than the hour.
+    [Test]
+    public void Holding_is_at_least_an_hour()
+    {
+        new IdeaExitRule(IdeaType.TwoR, Interval.FiveMinutes, 6, 2m, null, null).Holding.ShouldBe(TimeSpan.FromHours(1));
+    }
+
     [Test]
     public void Applied_rule_replaces_the_default_of_its_type_and_interval()
     {

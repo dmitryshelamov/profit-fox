@@ -8,7 +8,9 @@ import {
   casesText,
   differenceView,
   rangeLabel,
+  typeLabel,
 } from '@/modules/ideas';
+import { intervalLabel } from '@/modules/market-data';
 import type { Schemas } from '@/shared/api/client';
 import { shiftDecimal } from '@/shared/format/decimal';
 import { formatMoment, groupDigits, roundDecimal, showDecimal } from '@/shared/format/format';
@@ -17,6 +19,7 @@ type Report = Schemas['IdeaCalibrationResponse'];
 type Row = Schemas['CalibrationRowResponse'];
 type Own = Schemas['CalibrationOwnRowResponse'];
 type Comparison = Schemas['CalibrationComparisonResponse'];
+type Slice = Schemas['CalibrationSliceResponse'];
 type Scope = 'all' | 'fresh';
 
 const cell = 'px-3 py-2';
@@ -179,6 +182,18 @@ function ReportView({ report }: { report: Report }) {
       <ExpectancyTable rows={report.expectancies} />
       <BadgeTable rows={report.badges} checked={Number(report.checked)} />
       <OwnTable rows={report.owns} />
+      <SliceTables
+        label="По ТФ"
+        heading="ТФ"
+        slices={report.intervals}
+        name={(slice) => intervalLabel(slice.interval!)}
+      />
+      <SliceTables
+        label="По типам"
+        heading="Тип"
+        slices={report.types}
+        name={(slice) => typeLabel(slice.type!)}
+      />
       <ul className="space-y-1 text-xs text-faint">
         <li>
           Обещали: числа модели корзины по кейсам, закрытым до срабатывания кейса и сработавшим не
@@ -206,7 +221,11 @@ function ReportView({ report }: { report: Report }) {
           Разница серая, когда обещанное внутри интервала 95 %, жёлтая за ним, красная дальше двух
           его полуширин.
         </li>
-        <li>Интервалы считают кейсы, сработавшие в один час, одной группой.</li>
+        <li>
+          Интервалы считают одной группой кейсы, сработавшие в одном блоке UTC длиной срока
+          удержания: окно входа и срок жизни правила выхода, не меньше часа; где ТФ смешаны — самый
+          длинный.
+        </li>
       </ul>
     </>
   );
@@ -358,54 +377,154 @@ function BadgeTable({ rows, checked }: { rows: readonly Row[]; checked: number }
   );
 }
 
-function ComparisonTable({ comparison }: { comparison: Comparison }) {
-  const models = [
+function models(comparison: Comparison) {
+  return [
     { label: 'Старая', model: comparison.old },
     { label: 'Новая', model: comparison.new },
     ...(comparison.features === null
       ? []
       : [{ label: 'С признаками', model: comparison.features }]),
   ];
+}
 
+/**
+ * The Brier score of the model with features less that of the new one with its interval: the features help only where the
+ * whole interval is below 0.
+ */
+function differenceText(difference: NonNullable<Comparison['difference']>): string {
+  const interval =
+    difference.low === null || difference.high === null
+      ? '— меньше 30 кейсов'
+      : `${showDecimal(difference.low, 3, true)}…${showDecimal(difference.high, 3, true)}`;
+
+  return `${showDecimal(difference.mean, 3, true)}, интервал 95 % ${interval}`;
+}
+
+type Model = Comparison['old'];
+
+/** The cells of a model of a comparison after its name: cases, the Brier score and its ideas ▲. */
+function ModelCells({ model }: { model: Model }) {
+  return (
+    <>
+      <td className={number}>{groupDigits(String(model.cases))}</td>
+      <td className={number}>{model.brier === null ? '—' : roundDecimal(model.brier, 3)}</td>
+      <UpCells up={model.up} />
+    </>
+  );
+}
+
+/** The cells of the ideas ▲ of a row: cases, promised, got and its interval; zero and dashes without one. */
+function UpCells({ up }: { up: Row | null }) {
+  return (
+    <>
+      <td className={number}>{groupDigits(String(up?.cases ?? 0))}</td>
+      <td className={number}>{up === null ? '—' : inR(up.promised)}</td>
+      <td className={number}>{up === null ? '—' : inR(up.expectancy)}</td>
+      <td className={number}>
+        {up === null ? '—' : resultInterval(up.expectancyLow, up.expectancyHigh)}
+      </td>
+    </>
+  );
+}
+
+/** A breakdown of the calibration by timeframe or by type and its comparison of the models; nothing without a row. */
+function SliceTables({
+  label,
+  heading,
+  slices,
+  name,
+}: {
+  label: string;
+  heading: string;
+  slices: readonly Slice[];
+  name: (slice: Slice) => string;
+}) {
+  if (slices.length === 0) {
+    return null;
+  }
+
+  return (
+    <>
+      <Table
+        label={label}
+        headers={[
+          heading,
+          'Кейсов',
+          'Обещали',
+          'Получили',
+          'Интервал 95 %',
+          'С ▲',
+          '▲ обещали',
+          '▲ получили',
+          '▲ интервал 95 %',
+        ]}
+      >
+        {slices.map((slice) => (
+          <tr key={name(slice)}>
+            <td className={cell}>{name(slice)}</td>
+            <td className={number}>{groupDigits(String(slice.total.cases))}</td>
+            <td className={number}>{inR(slice.total.promised)}</td>
+            <td className={number}>{inR(slice.total.expectancy)}</td>
+            <td className={number}>
+              {resultInterval(slice.total.expectancyLow, slice.total.expectancyHigh)}
+            </td>
+            <UpCells up={slice.up} />
+          </tr>
+        ))}
+      </Table>
+      <Table
+        label={`${label}: старая модель → новая`}
+        headers={[
+          heading,
+          'Модель',
+          'Случаев',
+          'Брайер',
+          'С ▲',
+          'Обещали',
+          'Получили',
+          'Интервал 95 %',
+          'Разница Брайера',
+        ]}
+      >
+        {slices.flatMap((slice) =>
+          models(slice.comparison).map(({ label: model, model: numbers }) => (
+            <tr key={`${name(slice)} ${model}`}>
+              <td className={cell}>{name(slice)}</td>
+              <td className={cell}>{model}</td>
+              <ModelCells model={numbers} />
+              <td className={number}>
+                {model === 'С признаками' && slice.comparison.difference !== null
+                  ? differenceText(slice.comparison.difference)
+                  : '—'}
+              </td>
+            </tr>
+          )),
+        )}
+      </Table>
+    </>
+  );
+}
+
+function ComparisonTable({ comparison }: { comparison: Comparison }) {
   return (
     <>
       <Table
         label="Старая модель → новая"
         headers={['Модель', 'Случаев', 'Брайер', 'С ▲', 'Обещали', 'Получили', 'Интервал 95 %']}
       >
-        {models.map(({ label, model }) => (
+        {models(comparison).map(({ label, model }) => (
           <tr key={label}>
             <td className={cell}>{label}</td>
-            <td className={number}>{groupDigits(String(model.cases))}</td>
-            <td className={number}>{model.brier === null ? '—' : roundDecimal(model.brier, 3)}</td>
-            <td className={number}>{groupDigits(String(model.up?.cases ?? 0))}</td>
-            <td className={number}>{model.up === null ? '—' : inR(model.up.promised)}</td>
-            <td className={number}>{model.up === null ? '—' : inR(model.up.expectancy)}</td>
-            <td className={number}>
-              {model.up === null
-                ? '—'
-                : resultInterval(model.up.expectancyLow, model.up.expectancyHigh)}
-            </td>
+            <ModelCells model={model} />
           </tr>
         ))}
       </Table>
-      {comparison.difference !== null && <Difference difference={comparison.difference} />}
+      {comparison.difference !== null && (
+        <p aria-label="Разница Брайера" className="text-sm text-muted">
+          С признаками − новая, Брайер: {differenceText(comparison.difference)}
+        </p>
+      )}
     </>
-  );
-}
-
-// The Brier score of the model with features less that of the new one: the features help only where the whole interval is below 0.
-function Difference({ difference }: { difference: NonNullable<Comparison['difference']> }) {
-  const interval =
-    difference.low === null || difference.high === null
-      ? '— меньше 30 кейсов'
-      : `${showDecimal(difference.low, 3, true)}…${showDecimal(difference.high, 3, true)}`;
-
-  return (
-    <p aria-label="Разница Брайера" className="text-sm text-muted">
-      С признаками − новая, Брайер: {showDecimal(difference.mean, 3, true)}, интервал 95 %{' '}
-      {interval}
-    </p>
   );
 }
 

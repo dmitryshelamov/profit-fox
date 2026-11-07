@@ -4782,6 +4782,18 @@ export interface components {
             expectancyLow: null | string;
             expectancyHigh: null | string;
         };
+        /**
+         * @description A row of a breakdown of the calibration: the code of its string? CalibrationSliceResponse.Interval (`5`, `15`, `60`, `240`) or of its
+         *     string? CalibrationSliceResponse.Type, the other none; the row of all its checked cases, the row of those promised ▲, none without one, and the old model
+         *     against the new one on the cases of the row both check.
+         */
+        CalibrationSliceResponse: {
+            interval: null | string;
+            type: null | string;
+            total: components["schemas"]["CalibrationRowResponse"];
+            up: null | components["schemas"]["CalibrationRowResponse"];
+            comparison: components["schemas"]["CalibrationComparisonResponse"];
+        };
         /** @description Prices and volumes as decimal strings: JSON numbers lose precision in JavaScript clients. */
         CandleResponse: {
             /** Format: date-time */
@@ -4931,7 +4943,7 @@ export interface components {
             to: string;
         };
         /**
-         * @description An auto to save: its name, account and amount in USDT, and its conditions: the codes of the setups, types and intervals marked (the types never hold
+         * @description An auto to save: its name, account, amount and budget in USDT (none for no budget; not below the amount), and its conditions: the codes of the setups, types and intervals marked (the types never hold
          *     `stop_entry`), the side (`long` or `short`, none is both), the market (`linear` or `spot`, none is both), the lowest badge
          *     (`up`, `flat` or `down`, none is any), the lowest reward to the risk after the fees and the least number of cases of the bucket.
          */
@@ -4941,6 +4953,11 @@ export interface components {
             accountId?: string;
             /** Format: double */
             amount?: number | string;
+            /**
+             * Format: double
+             * @description The cap of the sum of the amounts of the open trades of the auto, real and paper; none for no budget.
+             */
+            budget?: null | number | string;
             setups: string[];
             types: string[];
             intervals: string[];
@@ -4954,7 +4971,8 @@ export interface components {
         };
         /**
          * @description An auto of the list with its totals: the paper trades that closed (their number, their mean result and their sum in R), the real trades that closed
-         *     (their number and their sum in USDT after the fees) and the refusals since 00:00 UTC. Numbers are decimal strings.
+         *     (their number and their sum in USDT after the fees), the refusals since 00:00 UTC and what the open trades take of the budget of the auto
+         *     (`budgetUsed`, with a budget or without). Numbers are decimal strings.
          */
         IdeaAutoItemResponse: {
             auto: components["schemas"]["IdeaAutoResponse"];
@@ -4967,6 +4985,7 @@ export interface components {
             realResult: string;
             /** Format: int32 */
             refusalsToday: number | string;
+            budgetUsed: string;
         };
         /** @description The mode of an auto: `off`, `paper` or `live`. */
         IdeaAutoModeBody: {
@@ -5009,7 +5028,8 @@ export interface components {
             total: number | string;
         };
         /**
-         * @description An auto with its account and its conditions as codes, its place in the list (from 0) and its mode (`off`, `paper` or `live`).
+         * @description An auto with its account, its budget (none for no budget) and its conditions as codes, its place in the list (from 0) and its mode (`off`,
+         *     `paper` or `live`).
          *     Numbers are decimal strings.
          */
         IdeaAutoResponse: {
@@ -5032,6 +5052,7 @@ export interface components {
             minCases: number | string;
             /** Format: int32 */
             position: number | string;
+            budget: null | string;
         };
         /** @description A bucket setup × type × interval × side × category with its statistics over the last int IdeaBucketResponse.Days days (90 or 30). */
         IdeaBucketResponse: {
@@ -5049,7 +5070,8 @@ export interface components {
          *     was computed (none before the first time, with zeros and empty tables), the checked cases and the ones whose bucket had fewer than 30
          *     cases, the Brier score of the buckets and of the share of targets of the category, the rows by promised probability, by promised
          *     expectancy and by badge, the CalibrationRowResponse? IdeaCalibrationResponse.Total of all checked cases, the rows by own data and the comparison of the old model with the
-         *     new one (none before the first calibration), all in a string IdeaCalibrationResponse.Scope, `all` or `fresh`. Numbers are decimal strings.
+         *     new one (none before the first calibration) and the breakdowns by interval and by type, all in a string IdeaCalibrationResponse.Scope, `all` or
+         *     `fresh`. Numbers are decimal strings.
          */
         IdeaCalibrationResponse: {
             /** Format: date-time */
@@ -5070,6 +5092,8 @@ export interface components {
             scope: string;
             owns: components["schemas"]["CalibrationOwnRowResponse"][];
             comparison: null | components["schemas"]["CalibrationComparisonResponse"];
+            intervals: components["schemas"]["CalibrationSliceResponse"][];
+            types: components["schemas"]["CalibrationSliceResponse"][];
         };
         /** @description The trades whose idea has a result in R: how many, the mean result of their ideas and the mean result of the trades, in R. */
         IdeaComparisonResponse: {
@@ -5120,7 +5144,8 @@ export interface components {
         /**
          * @description The guards over the real trades: the open trades against their limit and the risk of them against theirs, the sum of the day since 00:00 UTC
          *     against the daily stop (with the time it was reached and the time the autos enter again, once it holds), and the open longs and shorts against the
-         *     limit of one side. A guard that is off has no limit. Numbers are decimal strings.
+         *     limit of one side, and what the open real trades of the autos take of the budget of all the autos. A guard that is off has no limit. Numbers are
+         *     decimal strings.
          */
         IdeaGuardsResponse: {
             /** Format: int32 */
@@ -5141,6 +5166,8 @@ export interface components {
             openShorts: number | string;
             /** Format: int32 */
             maxSameDirection: null | number | string;
+            autosBudgetUsed: string;
+            autosBudget: null | string;
         };
         /** @description The journal: the open trades, the newest first, a page of the closed ones by the time they closed, the totals of all the closed real ones of the filter and those of the paper ones. */
         IdeaJournalResponse: {
@@ -5341,6 +5368,11 @@ export interface components {
              * @description The most open real trades of one side that the autos with money stand; none switches the guard off.
              */
             maxSameDirection?: null | number | string;
+            /**
+             * Format: double
+             * @description The most the open real trades of all the autos may hold in USDT; none switches the guard off.
+             */
+            autosBudget?: null | number | string;
         };
         /** @description The settings of trading by ideas; numbers are decimal strings, the account is none until the owner chose one. */
         IdeaTradingSettingsResponse: {
@@ -5355,6 +5387,7 @@ export interface components {
             dailyLossLimit: null | string;
             /** Format: int32 */
             maxSameDirection: null | number | string;
+            autosBudget: null | string;
         };
         InstrumentResponse: {
             category: string;

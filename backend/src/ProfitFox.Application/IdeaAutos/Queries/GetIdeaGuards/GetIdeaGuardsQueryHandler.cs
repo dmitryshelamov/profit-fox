@@ -3,6 +3,7 @@ using MediatR;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.Services.IdeaAutos;
 
 namespace ProfitFox.Application.IdeaAutos.Queries.GetIdeaGuards;
 
@@ -22,6 +23,8 @@ public sealed class GetIdeaGuardsQueryHandler(IIdeaTradingSettingsRepository set
             DailyLossReader.Of(all, saved.DailyLossLimit, time.GetUtcNow()),
             open.Count(trade => trade.Side == IdeaSide.Long),
             open.Count(trade => trade.Side == IdeaSide.Short),
-            saved.MaxSameDirection);
+            saved.MaxSameDirection,
+            AutoBudget.AutosUsed(open),
+            saved.AutosBudget);
     }
 }

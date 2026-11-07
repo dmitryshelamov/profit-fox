@@ -4,8 +4,13 @@ describe('reasons an entry is refused', () => {
   it('says each reason in words', () => {
     expect(reasonText('price_beyond_target')).toBe('Цена уже за целью идеи');
     expect(reasonText('price_beyond_stop')).toBe('Цена уже за стопом идеи');
-    expect(reasonText('risk_reward_too_low')).toBe('R:R после комиссий ниже минимального');
-    expect(reasonText('amount_above_max')).toBe('Сумма больше предела на сделку');
+    expect(reasonText('risk_reward_too_low')).toBe(
+      'Прибыль к убытку ниже настройки «Прибыль к убытку не меньше»',
+    );
+    expect(reasonText('amount_above_max')).toBe('Сумма больше, чем «Максимум на одну сделку»');
+    expect(reasonText('total_risk_exceeded')).toBe(
+      'Если сработают все стопы, убыток будет больше «Максимального убытка»',
+    );
     expect(reasonText('opposite_side_open')).toBe(
       'На символе открыта противоположная сторона: запущенный бот или другая сделка по идее',
     );

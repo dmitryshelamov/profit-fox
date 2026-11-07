@@ -50,6 +50,11 @@ public static class IdeaAutoValidation
             errors["amount"] = "The amount must not be above the largest amount of a trade.";
         }
 
+        if (input.Budget < input.Amount)
+        {
+            errors["budget"] = "The budget must not be below the amount of a trade.";
+        }
+
         IReadOnlyList<IdeaSetup> setups = Codes<IdeaSetup>(input.Setups, "setups", IdeaCodes.TryParseSetup, "There must be a setup, and each must be a known one.", errors);
         IReadOnlyList<IdeaType> types = Codes<IdeaType>(input.Types, "types", IdeaCodes.TryParseType, "There must be a type, and each must be a known one.", errors);
         IReadOnlyList<Interval> intervals = Codes<Interval>(input.Intervals, "intervals", TryParseInterval, "There must be an interval of 5 minutes, 15 minutes, 1 hour or 4 hours.", errors);

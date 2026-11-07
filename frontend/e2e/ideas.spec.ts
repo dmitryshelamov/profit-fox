@@ -420,25 +420,40 @@ test('the link «Калибровка» of the ideas opens the calibration with 
   await expect(page.getByRole('region', { name: 'Оценка Брайера' })).toContainText(
     'лучше на 5.5 %',
   );
-  const probabilities = page.getByRole('table', { name: 'Вероятность' });
+  const probabilities = page.getByRole('table', { name: 'Вероятность', exact: true });
   await expect(probabilities.getByRole('row', { name: /30–40 %/ })).toContainText('640');
-  await expect(page.getByRole('table', { name: 'Ожидание' })).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Ожидание', exact: true })).toBeVisible();
   await expect(
-    page.getByRole('table', { name: 'Значки' }).getByRole('row', { name: /▲/ }),
+    page.getByRole('table', { name: 'Значки', exact: true }).getByRole('row', { name: /▲/ }),
   ).toBeVisible();
   await expect(
-    page.getByRole('table', { name: 'Старая модель → новая' }).getByRole('row', { name: /Старая/ }),
+    page
+      .getByRole('table', { name: 'Старая модель → новая', exact: true })
+      .getByRole('row', { name: /Старая/ }),
   ).toContainText('0.231');
   await expect(
     page
-      .getByRole('table', { name: 'Старая модель → новая' })
+      .getByRole('table', { name: 'Старая модель → новая', exact: true })
       .getByRole('row', { name: /С признаками/ }),
   ).toContainText('0.201');
   await expect(
     page
-      .getByRole('table', { name: 'По своим данным' })
+      .getByRole('table', { name: 'По своим данным', exact: true })
       .getByRole('row', { name: /мало своих данных/ }),
   ).toContainText('0.212');
+
+  // The breakdowns by timeframe and by type, each with its comparison of the models.
+  await expect(
+    page.getByRole('table', { name: 'По ТФ', exact: true }).getByRole('row', { name: /1 ч/ }),
+  ).toContainText('640');
+  await expect(
+    page.getByRole('table', { name: 'По типам', exact: true }).getByRole('row', { name: /Откат/ }),
+  ).toContainText('640');
+  await expect(
+    page
+      .getByRole('table', { name: 'По ТФ: старая модель → новая', exact: true })
+      .getByRole('row', { name: /1 ч Старая/ }),
+  ).toContainText('0.231');
 
   // The report after the rules changed has 120 checked cases of the 640; the scope goes to the address.
   await page.getByRole('button', { name: 'После изменения правил' }).click();

@@ -62,7 +62,9 @@ public static class IdeaTradeCodes
         [IdeaTradeRefusal.Late] = "late",
         [IdeaTradeRefusal.AutoOff] = "auto_off",
         [IdeaTradeRefusal.RulesUnknown] = "rules_unknown",
-        [IdeaTradeRefusal.EntryError] = "entry_error"
+        [IdeaTradeRefusal.EntryError] = "entry_error",
+        [IdeaTradeRefusal.BudgetTaken] = "budget_taken",
+        [IdeaTradeRefusal.AutosBudgetTaken] = "autos_budget_taken"
     };
 
     public static bool TryParseStatus(string code, out IdeaTradeStatus status)

@@ -118,6 +118,19 @@ public class PaperEntryTests
         Check(books: Books(real: [manual], paper: [other])).Refusals.ShouldBeEmpty();
     }
 
+    // Scenario "Учебный упёрся в свой бюджет": its open paper trades on other pairs take 90 of 100, and the amount is 30.
+    [Test]
+    public void Budget_of_the_auto_taken_by_its_open_trades_is_named_with_what_is_taken()
+    {
+        IdeaAuto auto = Make("Пробои 5м", 30m) with { Budget = 100m };
+        AutoBooks books = Books(paper: [Elsewhere(auto, 50m), Elsewhere(auto, 40m)]);
+
+        PaperEntryCheck check = Check(auto, books: books);
+
+        check.Refusals.ShouldBe([new AutoRefusal(IdeaTradeRefusal.BudgetTaken, RefusalDetail.Numbers(90m, 100m))]);
+        Check(auto with { Budget = 120m }, books: books).Refusals.ShouldBeEmpty();
+    }
+
     private static PaperEntryCheck Check(
         IdeaAuto? auto = null,
         IdeaType type = IdeaType.TwoR,
@@ -146,6 +159,16 @@ public class PaperEntryTests
         var conditions = new IdeaAutoConditions([IdeaSetup.Impulse], [IdeaType.TwoR], [Interval.FifteenMinutes], null, null, null, 1.2m, 0);
 
         return IdeaAuto.Create(Guid.NewGuid(), name, Account, amount, conditions, 0) with { Mode = IdeaAutoMode.Paper };
+    }
+
+    // An open paper trade of the auto on a pair of its own.
+    private static PaperIdeaTrade Elsewhere(IdeaAuto auto, decimal amount)
+    {
+        var instrument = new Instrument(MarketCategory.Linear, $"A{Guid.NewGuid():N}USDT");
+        var size = new IdeaTradeSize(1m, amount, 1m, 2m, 2m);
+        var trade = IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(Fired.AddMinutes(-5), instrument: instrument), Account, amount, size, Fired, autoId: auto.Id);
+
+        return new PaperIdeaTrade(trade, auto.Id, Fired);
     }
 
     private static PaperIdeaTrade Held(IdeaAuto? auto, DateTimeOffset at)

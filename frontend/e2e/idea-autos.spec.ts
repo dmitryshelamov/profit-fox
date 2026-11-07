@@ -6,6 +6,7 @@ import {
   seedAutoEntries,
   seedClosedTrade,
   seedOpenIdea,
+  seedOpenPaperTrade,
 } from './seed';
 
 // Acceptance of the autos with money against the real API and a trading Worker on the Bybit stub. The scanner needs a quarter of an hour
@@ -39,7 +40,11 @@ async function tradeOrders(request: APIRequestContext): Promise<StubOrder[]> {
   return orders.filter((order) => order.symbol === 'ETHUSDT' && order.orderLinkId.startsWith('i'));
 }
 
-async function settings(request: APIRequestContext, dailyLossLimit: number | null = null) {
+async function settings(
+  request: APIRequestContext,
+  dailyLossLimit: number | null = null,
+  autosBudget: number | null = null,
+) {
   const saved = await request.put('/api/idea-trading/settings', {
     data: {
       accountId,
@@ -50,17 +55,21 @@ async function settings(request: APIRequestContext, dailyLossLimit: number | nul
       minRiskReward: 1.5,
       dailyLossLimit,
       maxSameDirection: null,
+      autosBudget,
     },
   });
   expect(saved.status()).toBe(204);
 }
 
-/** Creates an auto «С деньгами» by the form: the account of the test, 30 USDT, «Импульс» «Цель 2R» on 15 minutes. */
-async function createByForm(page: Page, name: string) {
+/** Creates an auto «С деньгами» by the form: the account of the test, 30 USDT, «Импульс» «Цель 2R» on 15 minutes, with a budget when one is given. */
+async function createByForm(page: Page, name: string, budget?: string) {
   await page.goto('/idea-trades/autos/new');
   await page.getByLabel('Название').fill(name);
   await page.getByLabel('Аккаунт').selectOption(accountId);
   await page.getByLabel('Сумма на сделку, USDT').fill('30');
+  if (budget !== undefined) {
+    await page.getByLabel('Бюджет автомата, USDT').fill(budget);
+  }
   await page
     .getByRole('group', { name: 'Сетапы' })
     .getByRole('button', { name: 'Импульс', exact: true })
@@ -247,5 +256,51 @@ test('two autos with money made by the form take an idea in the order of the lis
     'Дневной стоп сработал — автоматы не входят до 00:00 UTC',
   );
   expect((await tradeOrders(request)).length).toBe(known + 1);
+  expect(errors).toEqual([]);
+});
+
+test('an auto with a budget shows what its open trades take of it and is refused once it is taken; the budget of all the autos stands in the line of the guards', async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await removeAutos();
+  await settings(request, null, 500);
+  await request.get(`${stub}/control/price?symbol=ETHUSDT&price=3000`);
+  const name = 'E2E бюджет';
+
+  // A budget of 50 with an amount of 30: an open paper trade of 30 on a pair the scanner does not keep leaves 20, less than the next entry.
+  await createByForm(page, name, '50');
+  const [item] = await autos(request);
+  await seedOpenPaperTrade(item!.auto.id, accountId, 'ADAUSDT', 30);
+  await page.reload();
+  await expect(
+    page.getByRole('table', { name: 'Автоматы' }).locator(`[data-auto="${name}"]`),
+  ).toContainText('занято 30.00 из 50 USDT');
+  await expect(page.getByRole('region', { name: 'Защиты' })).toContainText(
+    'бюджет автоматов 0.00 из 500 USDT',
+  );
+
+  // The idea is born and the auto asks for it: the trading Worker refuses it by the budget of the auto and places nothing.
+  const known = (await tradeOrders(request)).length;
+  const idea = await seedOpenIdea({
+    symbol: 'ETHUSDT',
+    type: 'target_2r',
+    side: 'long',
+    entry: 3000,
+    stop: 2950,
+    target: 3100,
+    firedMinutesAgo: 1,
+  });
+  await seedAutoEntries([
+    { ideaId: idea, autoId: item!.auto.id, accountId, amount: 30, minRiskReward: 1.5, rank: 0 },
+  ]);
+
+  await page.goto('/idea-trades');
+  await expect(refusalRow(page, name)).toContainText('Бюджет автомата занят', { timeout: 30_000 });
+  await expect(refusalRow(page, name)).toContainText('занято 30.00 из 50 USDT');
+  expect((await tradeOrders(request)).length).toBe(known);
   expect(errors).toEqual([]);
 });

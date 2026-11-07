@@ -10,7 +10,8 @@ using ProfitFox.Domain.ValueObjects.IdeaAutos;
 namespace ProfitFox.Presentation.Contracts.IdeaAutos;
 
 /// <summary>
-///     An auto with its account and its conditions as codes, its place in the list (from 0) and its mode (<c>off</c>, <c>paper</c> or <c>live</c>).
+///     An auto with its account, its budget (none for no budget) and its conditions as codes, its place in the list (from 0) and its mode (<c>off</c>,
+///     <c>paper</c> or <c>live</c>).
 ///     Numbers are decimal strings.
 /// </summary>
 public sealed record IdeaAutoResponse(
@@ -28,7 +29,8 @@ public sealed record IdeaAutoResponse(
     string? Badge,
     [property: Required] string MinRiskReward,
     int MinCases,
-    int Position)
+    int Position,
+    string? Budget)
 {
     public static IdeaAutoResponse Of(IdeaAutoSummary summary)
     {
@@ -50,7 +52,8 @@ public sealed record IdeaAutoResponse(
             conditions.Badge?.ToCode(),
             Text(conditions.MinRiskReward),
             conditions.MinCases,
-            auto.Position);
+            auto.Position,
+            auto.Budget is { } budget ? Text(budget) : null);
     }
 
     internal static string Text(decimal value)

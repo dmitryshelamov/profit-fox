@@ -222,7 +222,7 @@ internal static class IdeaTradeDbConverter
 
     internal static IdeaTradingSettings ToDomain(IdeaTradingSettingsDb settings)
     {
-        return new IdeaTradingSettings(settings.AccountId, settings.Amount, settings.MaxAmount, settings.MaxOpenTrades, settings.MaxTotalRisk, settings.MinRiskReward, settings.DailyLossLimit, settings.MaxSameDirection);
+        return new IdeaTradingSettings(settings.AccountId, settings.Amount, settings.MaxAmount, settings.MaxOpenTrades, settings.MaxTotalRisk, settings.MinRiskReward, settings.DailyLossLimit, settings.MaxSameDirection, settings.AutosBudget);
     }
 
     private static InvalidOperationException Unknown(string what, string code)
