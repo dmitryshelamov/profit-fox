@@ -39,6 +39,7 @@ public sealed class ScannerSession(
     ScannerMarket market,
     ILiquidationRepository liquidations,
     IStreamBreakRepository breaks,
+    ScannerMetrics metrics,
     IScannerJournal journal,
     TimeProvider time)
 {
@@ -163,7 +164,7 @@ public sealed class ScannerSession(
 
             try
             {
-                await liquidations.AddAsync(batch, cancellationToken);
+                metrics.Liquidated(await liquidations.AddAsync(batch, cancellationToken));
             }
             catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
             {

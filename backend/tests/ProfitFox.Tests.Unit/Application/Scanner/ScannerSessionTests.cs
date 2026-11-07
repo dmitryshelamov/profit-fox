@@ -1,5 +1,7 @@
 using System.Globalization;
 
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Microsoft.Extensions.Time.Testing;
 
 using NSubstitute;
@@ -57,6 +59,7 @@ public class ScannerSessionTests
     private Action<DateTimeOffset> _lost = null!;
     private Action<DateTimeOffset> _restored = null!;
     private Action<Action<Instrument, LiquidationEvent>>? _onLiquidationSubscribe;
+    private ServiceProvider _meters = null!;
     private FakeTimeProvider _time = null!;
     private Action<Instrument, Candle> _closed = null!;
     private IReadOnlyList<ScannerPair> _stored = [];
@@ -79,6 +82,7 @@ public class ScannerSessionTests
 
                 return _subscription;
             });
+        _meters = new ServiceCollection().AddMetrics().BuildServiceProvider();
         _liquidations = Substitute.For<ILiquidationRepository>();
         _liquidations.AddAsync(Arg.Any<IReadOnlyCollection<(Instrument, LiquidationEvent)>>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<LiquidationSide, int>());
@@ -127,6 +131,7 @@ public class ScannerSessionTests
     {
         await _subscription.DisposeAsync();
         await _liquidationSubscription.DisposeAsync();
+        await _meters.DisposeAsync();
     }
 
     // Requirement "Начало версии правил": the session writes the start of its version of the rules when it takes the lease; storage keeps the first.
@@ -608,6 +613,29 @@ public class ScannerSessionTests
         (await Should.ThrowAsync<Exception>(session)).ShouldBeAssignableTo<OperationCanceledException>();
     }
 
+    // Scenario "Повтор не считается": only the rows storage added are counted.
+    [Test]
+    public async Task Liquidation_storage_already_had_is_not_counted()
+    {
+        LinearListed("SOLUSDT");
+        using var collector = new MetricCollector<long>(_meters.GetRequiredService<System.Diagnostics.Metrics.IMeterFactory>(), "ProfitFox.Scanner", "profitfox.scanner.liquidations");
+        _liquidations.AddAsync(Arg.Any<IReadOnlyCollection<(Instrument, LiquidationEvent)>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<LiquidationSide, int> { [LiquidationSide.Long] = 1 });
+        _onLiquidationSubscribe = liquidated =>
+        {
+            liquidated(Sol, Liquidation(Start.AddSeconds(-2)));
+            liquidated(Sol, Liquidation(Start.AddSeconds(-1)));
+        };
+        using var lease = new CancellationTokenSource();
+        Task session = Session().RunAsync(lease.Token);
+
+        await WaitAsync(() => collector.GetMeasurementSnapshot().Count > 0);
+
+        collector.GetMeasurementSnapshot().Select(measurement => ((string)measurement.Tags["side"]!, measurement.Value)).ShouldBe([("long", 1L)]);
+        await lease.CancelAsync();
+        (await Should.ThrowAsync<Exception>(session)).ShouldBeAssignableTo<OperationCanceledException>();
+    }
+
     // Spot pairs have no liquidations.
     [Test]
     public async Task Only_linear_pairs_are_subscribed_for_liquidations()
@@ -868,6 +896,7 @@ public class ScannerSessionTests
             market,
             _liquidations,
             _breaks,
+            new ScannerMetrics(_meters.GetRequiredService<System.Diagnostics.Metrics.IMeterFactory>()),
             _journal,
             _time);
     }

@@ -198,6 +198,9 @@ enforces a rule, the check is the source of truth.
   to other hosts pass uncounted. It hands the `X-Bapi-Limit` headers to `Exchanges/Bybit/BybitLimitHeadroom`, a singleton whose
   gauges `profitfox.bybit.rest.limit` and `profitfox.bybit.rest.limit_remaining` give the last limit of an endpoint and its
   lowest remainder since the previous collection, which takes it; so the meter has one reader, the exporter.
+- The metrics of the scanner live where they are counted, on the meter `ProfitFox.Scanner`: `Application/Scanner/ScannerMetrics`, a
+  singleton whose counter `profitfox.scanner.liquidations` grows by the rows of liquidations storage added, by `side` (`long`, `short`);
+  an event storage already had is not counted. `MetricsRegistrar` lists both meters.
 - A new HTTP client to Bybit is made only through `IHttpClientFactory` (`AddHttpClient`), or its requests are missing from the
   metrics.
 - `Exchanges/<Vendor>` holds adapters over vendor SDKs, including the mapping of domain values to SDK types

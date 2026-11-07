@@ -41,7 +41,7 @@
 
 ## 5. Метрика
 
-- [ ] 5.1 `ScannerMetrics` с `Counter<long> profitfox.scanner.liquidations` и меткой `side`, рост на число вставленных
+- [x] 5.1 `ScannerMetrics` с `Counter<long> profitfox.scanner.liquidations` и меткой `side`, рост на число вставленных
   строк каждой стороны (решение 5); `MetricsRegistrar` добавляет `ProfitFox.Scanner`. Unit-тест с `MeterListener`:
   сценарии «Пачка событий записана» и «Повтор не считается».
 
