@@ -175,8 +175,14 @@ public sealed class LiveTradingScenario : IAsyncDisposable
         return (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
     }
 
+    /// <summary>
+    ///     A request of the owner, a moment after what came before it. The clock stands still between the steps of a test, and a
+    ///     Worker hands a bot on to its session only when the row was written at another time than the one it handed on: a request
+    ///     at the instant of the last write of the session would never reach the session by a poll.
+    /// </summary>
     public async Task ActAsync(Guid bot, string action)
     {
+        Factory.Time.Advance(TimeSpan.FromMilliseconds(1));
         HttpResponseMessage response = await Client.PostAsync($"/api/bots/{bot}/{action}", null);
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());
     }
@@ -380,6 +386,32 @@ public sealed class LiveTradingScenario : IAsyncDisposable
     public Task WaitAsync(Func<bool> condition, string what)
     {
         return WaitAsync(() => Task.FromResult(condition()), what);
+    }
+
+    /// <summary>
+    ///     As <see cref="WaitAsync(Func{bool}, string)" />, but the clock moves no further than <paramref name="within" />: past it
+    ///     only real time passes, for the work the Workers have already started.
+    /// </summary>
+    public async Task WaitAsync(Func<bool> condition, string what, TimeSpan within)
+    {
+        DateTimeOffset until = Factory.Time.GetUtcNow() + within;
+
+        for (var attempt = 0; attempt < 400; attempt++)
+        {
+            if (condition())
+            {
+                return;
+            }
+
+            if (Factory.Time.GetUtcNow() < until)
+            {
+                Factory.Time.Advance(TimeSpan.FromSeconds(1));
+            }
+
+            await Task.Delay(25);
+        }
+
+        throw new TimeoutException($"Waited in vain for {what} within {within} of the clock.");
     }
 
     public async ValueTask DisposeAsync()
