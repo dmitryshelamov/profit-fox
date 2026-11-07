@@ -70,7 +70,7 @@ public class IdeaStatisticsRecomputeTests
 
     // Decision 3 of cluster-idea-cases-by-holding: the calibration groups by the holding of the rules of the pass. 30 cases 60 days ago give
     // the model; 16 blocks of 6 hours 20 days ago have two cases each, at the first and the fourth hour, a +2 R target in every other block.
-    // The 32 cases of the last 30 days are 16 groups of 2: +0.5 R with −0.2591…+1.2591 R, not −0.028…+1.028 R of 32 hours.
+    // The 32 cases of the last 30 days are 16 groups of 2: +0.5 R with −0.3255…+1.3255 R by t₁₅, not −0.028…+1.028 R of 32 hours.
     [Test]
     public async Task Calibration_groups_the_cases_by_the_holding_of_the_rules()
     {
@@ -86,8 +86,8 @@ public class IdeaStatisticsRecomputeTests
         BucketStatistics total = (await new IdeaCalibrationRepository(_dataSource).GetAsync(IdeasEngineVersion.Current, 30, null, CalibrationScope.All, CancellationToken.None))!
             .Total!.Outcome;
         (total.Cases, total.Expectancy).ShouldBe((32, 0.5m));
-        total.ExpectancyLow!.Value.ShouldBe(-0.2591m, 0.0001m);
-        total.ExpectancyHigh!.Value.ShouldBe(1.2591m, 0.0001m);
+        total.ExpectancyLow!.Value.ShouldBe(-0.3255m, 0.0001m);
+        total.ExpectancyHigh!.Value.ShouldBe(1.3255m, 0.0001m);
     }
 
     // Scenario "Смена срока без прогона": a lifetime of one candle closes the targets of 30 minutes as expired at the close of 100.

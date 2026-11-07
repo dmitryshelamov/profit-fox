@@ -223,11 +223,11 @@ public class CalibrationCalculatorTests
 
     // Decision 2 of cluster-idea-cases-by-holding, scenario "Строка 4 ч по блокам срока": «Цель 2R» on 4 h holds 4 days, on 1 h a day. On
     // 8 blocks of 4 days, two 1 h cases at 10:00 and 14:00 of the third day of the block and two 4 h cases at 10:00 and 14:00 of the fourth end
-    // alike, a +2 R target in every other block. The row takes the longest holding of its cases, so the 32 cases are 8 groups of 4: +0.5 R with
-    // −0.6112…+1.6112 R and a share of 50 % as of 7 cases, 20.24…79.76 %; by the hour they would be −0.028…+1.028 R, and by a day, the holding
-    // of the case fired first, 16 groups of 2.
+    // alike, a +2 R target in every other block. The rows take the longest holding of the cases of the report, so the 32 cases are 8 groups of
+    // 4: +0.5 R with −0.8406…+1.8406 R by t₇ and a share of 50 % as of 4.8 cases, 16.68…83.32 %; by the hour they would be −0.028…+1.028 R,
+    // and by a day, the holding of the case fired first, 16 groups of 2.
     [Test]
-    public void Row_groups_its_cases_by_the_longest_holding_among_them()
+    public void Total_groups_its_cases_by_the_longest_holding_of_the_report()
     {
         IdeaBucketKey fourHours = Linear with { Interval = Interval.FourHours };
         IdeaOutcome[] outcomes =
@@ -243,10 +243,59 @@ public class CalibrationCalculatorTests
 
         total.Cases.ShouldBe(32);
         total.Expectancy.ShouldBe(0.5m);
-        total.ExpectancyLow!.Value.ShouldBe(-0.6112m, 0.0001m);
-        total.ExpectancyHigh!.Value.ShouldBe(1.6112m, 0.0001m);
-        total.ProbabilityLow!.Value.ShouldBe(0.2024m, 0.0001m);
-        total.ProbabilityHigh!.Value.ShouldBe(0.7976m, 0.0001m);
+        total.ExpectancyLow!.Value.ShouldBe(-0.8406m, 0.0001m);
+        total.ExpectancyHigh!.Value.ShouldBe(1.8406m, 0.0001m);
+        total.ProbabilityLow!.Value.ShouldBe(0.1668m, 0.0001m);
+        total.ProbabilityHigh!.Value.ShouldBe(0.8332m, 0.0001m);
+    }
+
+    // Review of cluster-idea-cases-by-holding, scenario "Строка 4 ч по блокам срока": every row of a report groups by one block, the longest
+    // holding among the cases of the report, so its rows compare. The ▲ row has only 1 h cases, two at 10:00 and 14:00 of the third day of 8
+    // blocks of 4 days and two of the fourth, alike in a block; one 4 h case of ≈ is in the report too. The ▲ row is 8 groups of 4 by 4 days:
+    // +0.5 R with −0.8406…+1.8406 R, not 16 groups of 2 by its own day.
+    [Test]
+    public void Rows_of_a_report_group_by_the_longest_holding_of_the_report()
+    {
+        IdeaBucketKey fourHours = Linear with { Interval = Interval.FourHours };
+        IdeaOutcome[] outcomes =
+        [
+            .. Enumerable.Range(0, 50).Select(index => Closed(Linear, Now.AddDays(-88 + index), index < 45 ? IdeaStatus.Target : IdeaStatus.Stop, index < 45 ? 2m : -1m)),
+            .. Enumerable.Range(0, 30).Select(index => Closed(fourHours, Now.AddDays(-88 + index), index < 10 ? IdeaStatus.Target : IdeaStatus.Stop, index < 10 ? 2m : -1m)),
+            .. Enumerable.Range(0, 8).SelectMany(block => new[] { 10, 14, 24 + 10, 24 + 14 }
+                .Select(hour => new IdeaOutcome(Linear, Now.AddDays(-29 + (4 * block)).AddHours(hour), Now, block % 2 == 0 ? IdeaStatus.Target : IdeaStatus.Stop,
+                    block % 2 == 0 ? 2m : -1m))),
+            new IdeaOutcome(fourHours, Now.AddDays(-2), Now, IdeaStatus.Stop, -1m)
+        ];
+
+        CalibrationReport report = Report(outcomes, 30, null, holding: ByInterval);
+
+        report.Badges.Select(row => (row.Badge, row.Outcome.Cases)).ShouldBe([(IdeaBadge.Up, 32), (IdeaBadge.Flat, 1)]);
+        BucketStatistics up = report.Badges[0].Outcome;
+        up.ExpectancyLow!.Value.ShouldBe(-0.8406m, 0.0001m);
+        up.ExpectancyHigh!.Value.ShouldBe(1.8406m, 0.0001m);
+    }
+
+    // Review of cluster-idea-cases-by-holding: the window of a parent groups its cases by the holding of its rule. On 4 h, «Цель 2R» and «За
+    // экстремум» each have «Импульс» at 10:00 and «Пролив» at 14:00 of 20 days 3 days apart, alike in a day: +2 R on every third day for «Цель
+    // 2R», on two days of three for «За экстремум». The buckets have fewer than 30 cases, so the case of «Импульс» «Цель 2R» checked later is
+    // promised the parent shrunk to the category: +0.1325 R by 4 days, +0.1030 R if the parent went by the hour.
+    [Test]
+    public void Window_of_a_parent_groups_its_cases_by_its_holding()
+    {
+        IdeaBucketKey twoR = Linear with { Interval = Interval.FourHours };
+        IdeaBucketKey beyond = twoR with { Type = IdeaType.BeyondExtreme };
+        IdeaOutcome[] outcomes =
+        [
+            .. Enumerable.Range(0, 20).SelectMany(day => new[]
+                {
+                    (twoR, 10, day % 3 == 0), (twoR with { Setup = IdeaSetup.Drop }, 14, day % 3 == 0), (beyond, 10, day % 3 != 2),
+                    (beyond with { Setup = IdeaSetup.Drop }, 14, day % 3 != 2)
+                }
+                .Select(item => Closed(item.Item1, Now.AddDays(-89 + (3 * day)).AddHours(item.Item2), item.Item3 ? IdeaStatus.Target : IdeaStatus.Stop, item.Item3 ? 2m : -1m))),
+            new IdeaOutcome(twoR, Now.AddDays(-1), Now, IdeaStatus.Target, 2m)
+        ];
+
+        Report(outcomes, 30, null, holding: ByInterval).Total!.Promised.ShouldBe(0.1325m, 0.0001m);
     }
 
     // Decision 2 of cluster-idea-cases-by-holding: the window of a category groups its cases by the longest holding among them. Two parents,

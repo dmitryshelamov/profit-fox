@@ -81,6 +81,7 @@ public static class IdeaOutcomes
         IdeaBucketKey bucket = first.Bucket;
         FeeRates rates = fees(bucket.Category);
         IdeaExitRule rule = rules.Of(bucket.Type, bucket.Interval);
+        TimeSpan holding = rule.Holding;
 
         foreach ((SignalPath path, IdeaTrack outcome) in ExitOutcomes.Counted(key.Select(signal => signal.Path), rule))
         {
@@ -93,7 +94,7 @@ public static class IdeaOutcomes
 
             foreach (int days in Days.Where(days => path.FiredAt >= now.AddDays(-days)))
             {
-                sums.Add(bucket, days, rule.Holding, path.FiredAt, outcome.Status, result);
+                sums.Add(bucket, days, holding, path.FiredAt, outcome.Status, result);
             }
         }
     }

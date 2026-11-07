@@ -102,52 +102,80 @@ public class IdeaOutcomesTests
 
     // Decision 1 of cluster-idea-cases-by-holding: «Цель 2R» on 4 h holds 24 candles, 4 days. WIF and ETH fire at 10:00 and 14:00 of the
     // same day every 4 days, 20 days, with equal results: a +2 R target on every third day, a −1 R stop on the others. The 40 cases are 20
-    // groups of two, not 40 hours: +0.05 R with −0.5934…+0.6934 R and a share of 35 % over 19 effective cases, 17.80…57.25 %.
+    // groups of two, not 40 hours: +0.05 R with −0.6371…+0.7371 R by t₁₉ and a share of 35 % over 16.7 effective cases,
+    // 16.97…58.65 %.
     [Test]
     public async Task Pass_groups_the_cases_of_a_bucket_by_the_holding_of_its_rule()
     {
         var eth = new Instrument(MarketCategory.Linear, "ETHUSDT");
         IdeaSignal[] signals =
         [
-            .. Enumerable.Range(0, 20).Select(day => Signal(Wif, IdeaType.TwoR, 0, OnDay(day, Interval.FourHours, 10))),
-            .. Enumerable.Range(0, 20).Select(day => Signal(eth, IdeaType.TwoR, 0, OnDay(day, Interval.FourHours, 14)))
+            .. Enumerable.Range(0, 20).Select(day => Signal(Wif, IdeaType.TwoR, 0, OnDay(day, Interval.FourHours, 10, day % 3 == 0))),
+            .. Enumerable.Range(0, 20).Select(day => Signal(eth, IdeaType.TwoR, 0, OnDay(day, Interval.FourHours, 14, day % 3 == 0)))
         ];
 
         IdeaOutcomesResult result = await IdeaOutcomes.WalkAsync(signals.ToAsyncEnumerable(), new IdeaExitRules([]), _ => NoFees, Now, CancellationToken.None);
 
         BucketStatistics own = result.Buckets.Single(bucket => bucket.Days == 90).Statistics;
         own.OwnExpectancy.ShouldBe(0.05m);
-        own.OwnExpectancyLow!.Value.ShouldBe(-0.5934m, 0.0001m);
-        own.OwnExpectancyHigh!.Value.ShouldBe(0.6934m, 0.0001m);
-        own.OwnProbabilityLow!.Value.ShouldBe(0.1780m, 0.0001m);
-        own.OwnProbabilityHigh!.Value.ShouldBe(0.5725m, 0.0001m);
+        own.OwnExpectancyLow!.Value.ShouldBe(-0.6371m, 0.0001m);
+        own.OwnExpectancyHigh!.Value.ShouldBe(0.7371m, 0.0001m);
+        own.OwnProbabilityLow!.Value.ShouldBe(0.1697m, 0.0001m);
+        own.OwnProbabilityHigh!.Value.ShouldBe(0.5865m, 0.0001m);
+    }
+
+    // Review of cluster-idea-cases-by-holding: a parent groups its cases by the holding of its rule too. On 4 h, «Цель 2R» and «За экстремум»
+    // each have «Импульс» at 10:00 and «Пролив» at 14:00 of 20 days 4 days apart, alike in a day: +2 R on every third day for «Цель 2R», on two
+    // days of three for «За экстремум». The buckets have 20 cases each, fewer than 30, so their numbers are those of the parent shrunk to the
+    // category; by 4 days the parent «Цель 2R» is 20 groups of 2, and «Импульс» gets +0.1660 R with −0.4538…+0.7858 R and 38.87 %, where
+    // the parent by the hour would give +0.1030 R.
+    [Test]
+    public async Task Pass_groups_the_cases_of_a_parent_by_the_holding_of_its_rule()
+    {
+        IdeaSignal[] signals =
+        [
+            .. Enumerable.Range(0, 20).Select(day => Signal(Wif, IdeaSetup.Impulse, 0, OnDay(day, Interval.FourHours, 10, day % 3 == 0))),
+            .. Enumerable.Range(0, 20).Select(day => Signal(Wif, IdeaSetup.Drop, 0, OnDay(day, Interval.FourHours, 14, day % 3 == 0))),
+            .. Enumerable.Range(0, 20).Select(day => Signal(Wif, IdeaType.BeyondExtreme, 0, OnDay(day, Interval.FourHours, 10, day % 3 != 2))),
+            .. Enumerable.Range(0, 20).Select(day => Signal(Wif, IdeaType.BeyondExtreme, 0, OnDay(day, Interval.FourHours, 14, day % 3 != 2)) with { Setup = IdeaSetup.Drop })
+        ];
+
+        IdeaOutcomesResult result = await IdeaOutcomes.WalkAsync(signals.ToAsyncEnumerable(), new IdeaExitRules([]), _ => NoFees, Now, CancellationToken.None);
+
+        BucketStatistics impulse = result.Buckets
+            .Single(bucket => bucket.Days == 90 && bucket.Key is { Type: IdeaType.TwoR, Setup: IdeaSetup.Impulse })
+            .Statistics;
+        impulse.Probability!.Value.ShouldBe(0.3887m, 0.0001m);
+        impulse.Expectancy.ShouldBe(0.1660m, 0.0001m);
+        impulse.ExpectancyLow!.Value.ShouldBe(-0.4538m, 0.0001m);
+        impulse.ExpectancyHigh!.Value.ShouldBe(0.7858m, 0.0001m);
     }
 
     // Decision 2 of cluster-idea-cases-by-holding, scenario "Категория со смешанными ТФ": WIF on 4 h at 10:00 of the last day of a block of
     // 4 days and ETH on 1 h at 14:00 of the day before are one group of their category, by the longest holding of its cases: the variance of
-    // the mean of the category is 20 / 19 · (7 · 3.9² + 13 · 2.1²) / 40², not s² / n = 0.0525 of 40 independent hours or days.
+    // the mean of the category is 20 / 19 · (7 · 3.9² + 13 · 2.1²) / 40² · (t₁₉ / 1.96)², not s² / n = 0.0525 of 40 independent hours
+    // or days.
     [Test]
     public async Task Pass_groups_the_cases_of_a_category_by_the_longest_holding_of_its_cases()
     {
         var eth = new Instrument(MarketCategory.Linear, "ETHUSDT");
         IdeaSignal[] signals =
         [
-            .. Enumerable.Range(0, 20).Select(day => Signal(Wif, IdeaType.TwoR, 0, OnDay(day, Interval.FourHours, 10))),
-            .. Enumerable.Range(0, 20).Select(day => Signal(eth, IdeaType.TwoR, 0, OnDay(day, Interval.OneHour, 14 - 24)))
+            .. Enumerable.Range(0, 20).Select(day => Signal(Wif, IdeaType.TwoR, 0, OnDay(day, Interval.FourHours, 10, day % 3 == 0))),
+            .. Enumerable.Range(0, 20).Select(day => Signal(eth, IdeaType.TwoR, 0, OnDay(day, Interval.OneHour, 14 - 24, day % 3 == 0)))
         ];
 
         IdeaOutcomesResult result = await IdeaOutcomes.WalkAsync(signals.ToAsyncEnumerable(), new IdeaExitRules([]), _ => NoFees, Now, CancellationToken.None);
 
-        result.Roots[90][MarketCategory.Linear].Category.Expectancy.Variance.ShouldBe(0.107763, 0.000001);
+        result.Roots[90][MarketCategory.Linear].Category.Expectancy.Variance.ShouldBe(0.122887, 0.000001);
     }
 
-    // A signal of the interval fired at the hour of the day 80 − 4 · day days ago, the last of a block of 4 days: a +2 R target on every third
-    // day, a −1 R stop on the others.
-    private static SignalPath OnDay(int day, Interval interval, int hour)
+    // A signal of the interval fired at the hour of the day 80 − 4 · day days ago, the last of a block of 4 days: a +2 R target or a −1 R stop.
+    private static SignalPath OnDay(int day, Interval interval, int hour, bool target)
     {
         SignalPath path = Path() with { Interval = interval, FiredAt = Now.AddDays(-80 + (4 * day)).AddHours(hour) };
 
-        return day % 3 == 0 ? path with { LadderAfter = Ladder(30) } : path with { StopAfter = 10 };
+        return target ? path with { LadderAfter = Ladder(30) } : path with { StopAfter = 10 };
     }
 
     // The model of the signals fired in the last days, without fees: a target is +2 R, a stop −1 R.

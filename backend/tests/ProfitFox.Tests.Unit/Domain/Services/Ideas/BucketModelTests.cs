@@ -176,13 +176,13 @@ public class BucketModelTests
 
         IReadOnlyDictionary<IdeaBucketKey, BucketStatistics> model = BucketModel.Build(buckets, parents, BucketModel.Roots(parents, new Dictionary<MarketCategory, ClusteredSums> { [MarketCategory.Linear] = category }));
 
-        model[Impulse].Probability!.Value.ShouldBe(0.6465m, 0.0001m);
+        model[Impulse].Probability!.Value.ShouldBe(0.6457m, 0.0001m);
         model[Impulse].Probability!.Value.ShouldBeInRange(91m / 180m, 40m / 60m);
         // The mean +1 R of the long parent pulled to +0.517 R of the category.
-        model[Impulse].Expectancy.ShouldBe(0.9394m, 0.0001m);
+        model[Impulse].Expectancy.ShouldBe(0.9370m, 0.0001m);
         model[shortImpulse].Probability!.Value.ShouldBe(0.0170m, 0.0001m);
         model[shortImpulse].ProbabilityLow.ShouldBe(0m);
-        model[shortImpulse].ProbabilityHigh!.Value.ShouldBe(0.0497m, 0.0001m);
+        model[shortImpulse].ProbabilityHigh!.Value.ShouldBe(0.0504m, 0.0001m);
     }
 
     // The mirror of the short bucket: 59 targets of 60 next to 10, the interval stops at 1.

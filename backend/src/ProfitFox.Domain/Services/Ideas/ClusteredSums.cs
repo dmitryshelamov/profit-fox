@@ -7,13 +7,21 @@ namespace ProfitFox.Domain.Services.Ideas;
 ///     The sums of a group of cases by the blocks UTC they fired in (decision 1 of honest-idea-intervals): the counts of the outcomes, ΣR and ΣR²,
 ///     and over the blocks with a case, the groups, G of them, each with n_g cases, the total S_g of their results and T_g of their targets:
 ///     Σn_g², Σn_g·S_g, ΣS_g², Σn_g·T_g and ΣT_g². A case added and then removed gives the sums back, so a window of cases can slide. The blocks
-///     follow one another from the Unix epoch, each as long as the holding of the cases (decision 1 of cluster-idea-cases-by-holding).
+///     follow one another from the Unix epoch, each as long as the holding of the cases (decision 1 of cluster-idea-cases-by-holding); few of
+///     them widen the variances by the Student quantile of G − 1 degrees of freedom (decision 6 of it).
 /// </summary>
 /// <param name="block">The length of a block.</param>
 public sealed class ClusteredSums(TimeSpan block)
 {
     // The 97.5th percentile of the standard normal distribution: a 95 % interval.
     private const double Z = 1.96;
+
+    // The same percentile to the precision of the expansion of the Student quantile.
+    private const double ExactZ = 1.959963984540054;
+
+    // The 97.5th percentiles of the Student distribution of 1 to 9 degrees of freedom, where the expansion is off by more than 10⁻⁵.
+    private static readonly double[] StudentQuantiles =
+        [12.706204736174694, 4.302652729749462, 3.1824463052837078, 2.7764451051977934, 2.5705818356363146, 2.4469118511449786, 2.364624251592784, 2.306004135204166, 2.262157162798205];
 
     private readonly Dictionary<long, Group> _groups = [];
 
@@ -48,8 +56,9 @@ public sealed class ClusteredSums(TimeSpan block)
     public long SquaredTargets { get; private set; }
 
     /// <summary>
-    ///     The variance of the mean result: V_r = G / (G − 1) · (ΣS_g² − 2m·Σn_g·S_g + m²·Σn_g²) / n² over the blocks, never below s² / n of
-    ///     independent cases; s², as of one case, with fewer than two blocks.
+    ///     The variance of the mean result: V_r = G / (G − 1) · (ΣS_g² − 2m·Σn_g·S_g + m²·Σn_g²) / n² over the blocks, times (t(G − 1) / 1.96)²
+    ///     of the Student quantile of G − 1 degrees of freedom, never below s² / n of independent cases; s², as of one case, with fewer than two
+    ///     blocks.
     /// </summary>
     public double ExpectancyVariance => Variance((double)SampleVariance(), SquaredResults, CountsByResults, TotalR);
 
@@ -153,8 +162,29 @@ public sealed class ClusteredSums(TimeSpan block)
         decimal mean = total / Cases;
         decimal spread = squaredSums - (2 * mean * countsBySums) + (mean * mean * SquaredCounts);
         double clustered = (double)Groups / (Groups - 1) * (double)spread / ((double)Cases * Cases);
+        // Few groups give a loose estimate: the interval of ±1.96 √V is to be as wide as ± t(G − 1) of the clustered variance (review of
+        // cluster-idea-cases-by-holding), so the variance grows by (t / 1.96)².
+        double student = StudentQuantile(Groups - 1) / Z;
 
-        return Math.Max(clustered, caseVariance / Cases);
+        return Math.Max(clustered * student * student, caseVariance / Cases);
+    }
+
+    // The 97.5th percentile of the Student distribution: the table up to 9 degrees of freedom, the Cornish–Fisher expansion from 10.
+    private static double StudentQuantile(int degrees)
+    {
+        if (degrees < 10)
+        {
+            return StudentQuantiles[degrees - 1];
+        }
+
+        double z = ExactZ;
+        double v = degrees;
+
+        return z
+               + ((Math.Pow(z, 3) + z) / (4 * v))
+               + (((5 * Math.Pow(z, 5)) + (16 * Math.Pow(z, 3)) + (3 * z)) / (96 * v * v))
+               + (((3 * Math.Pow(z, 7)) + (19 * Math.Pow(z, 5)) + (17 * Math.Pow(z, 3)) - (15 * z)) / (384 * Math.Pow(v, 3)))
+               + (((79 * Math.Pow(z, 9)) + (776 * Math.Pow(z, 7)) + (1482 * Math.Pow(z, 5)) - (1920 * Math.Pow(z, 3)) - (945 * z)) / (92160 * Math.Pow(v, 4)));
     }
 
     private readonly record struct Group(int Cases, decimal Results, int Targets);
