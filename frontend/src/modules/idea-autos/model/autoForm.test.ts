@@ -27,6 +27,9 @@ const response = {
   dayDrop: 'with',
   btcDrop: 'any',
   highFunding: 'without',
+  burst: 'without',
+  maxPerMinutePerSide: 2,
+  maxOpenPerSide: null,
 };
 
 describe('form of an auto', () => {
@@ -49,6 +52,9 @@ describe('form of an auto', () => {
         dayDrop: 'any',
         btcDrop: 'any',
         highFunding: 'any',
+        burst: 'any',
+        maxPerMinutePerSide: '',
+        maxOpenPerSide: '',
       },
     );
   });
@@ -77,6 +83,9 @@ describe('form of an auto', () => {
       dayDrop: 'with',
       btcDrop: 'any',
       highFunding: 'without',
+      burst: 'without',
+      maxPerMinutePerSide: '2',
+      maxOpenPerSide: '',
     });
   });
 
@@ -95,11 +104,30 @@ describe('form of an auto', () => {
       dayDrop: 'with',
       btcDrop: 'any',
       highFunding: 'without',
+      burst: 'without',
+      maxOpenPerSide: null,
     });
     expect(body).not.toHaveProperty('mode');
     const { serializeJson } = await import('@/shared/api/jsonNumber');
     expect(serializeJson(body)).toContain('"amount":300.50');
     expect(serializeJson(body)).toContain('"minCases":100');
+    expect(serializeJson(body)).toContain('"maxPerMinutePerSide":2');
+  });
+
+  // Requirement "Форма автомата": an empty limit is no limit, a limit goes as a number, and text that is no number as it is.
+  it('sends an empty limit as none and a limit as a number', async () => {
+    const { serializeJson } = await import('@/shared/api/jsonNumber');
+    const body = bodyOfForm({
+      ...formOfAuto(response),
+      maxPerMinutePerSide: '',
+      maxOpenPerSide: '5',
+    });
+
+    expect(body.maxPerMinutePerSide).toBeNull();
+    expect(serializeJson(body)).toContain('"maxOpenPerSide":5');
+    expect(bodyOfForm({ ...formOfAuto(response), maxOpenPerSide: 'abc' }).maxOpenPerSide).toBe(
+      'abc',
+    );
   });
 
   it('has no budget in a form of an auto without one', () => {
@@ -138,6 +166,14 @@ describe('form of an auto', () => {
       'бюджет',
     ]);
     expect(changedFields(initial, { ...initial, highFunding: 'any' })).toEqual(['высокий funding']);
+    expect(
+      changedFields(initial, {
+        ...initial,
+        burst: 'any',
+        maxPerMinutePerSide: '3',
+        maxOpenPerSide: '5',
+      }),
+    ).toEqual(['всплеск', 'новых сделок стороны за минуту', 'открытых сделок стороны']);
   });
 
   it('does not count the same chips ticked in another order as a change', () => {
@@ -155,11 +191,13 @@ describe('form of an auto', () => {
     const laid = autoFieldErrors({
       amount: ['Too much.'],
       budget: ['Too little.'],
+      maxOpenPerSide: ['At least 1.'],
       other: ['Oops.'],
     });
 
     expect(laid.fields.amount).toEqual(['Too much.']);
     expect(laid.fields.budget).toEqual(['Too little.']);
+    expect(laid.fields.maxOpenPerSide).toEqual(['At least 1.']);
     expect(laid.form).toEqual(['Oops.']);
   });
 });

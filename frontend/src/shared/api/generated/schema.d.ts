@@ -5046,7 +5046,8 @@ export interface components {
          * @description An auto to save: its name, account, amount and budget in USDT (none for no budget; not below the amount), and its conditions: the codes of the setups, types and intervals marked (the types never hold
          *     `stop_entry`), the side (`long` or `short`, none is both), the market (`linear` or `spot`, none is both), the lowest badge
          *     (`up`, `flat` or `down`, none is any), the lowest reward to the risk after the fees, the least number of cases of the bucket and the
-         *     condition by each feature of the idea (`any`, `with` or `without`, none is `any`).
+         *     condition by each feature of the idea (`any`, `with` or `without`, none is `any`); and its limits, each an integer from 1 or none
+         *     for no limit.
          */
         IdeaAutoBody: {
             name: string;
@@ -5075,6 +5076,18 @@ export interface components {
             btcDrop?: null | string;
             /** @description The high funding of the pair: `any`, `with` or `without`. */
             highFunding?: null | string;
+            /** @description The burst of the minute of the idea: `any`, `with` or `without`. */
+            burst?: null | string;
+            /**
+             * Format: int32
+             * @description The most new trades of a side the auto takes in a minute; none for no limit.
+             */
+            maxPerMinutePerSide?: null | number | string;
+            /**
+             * Format: int32
+             * @description The most open trades of a side of the auto, real and paper; none for no limit.
+             */
+            maxOpenPerSide?: null | number | string;
         };
         /**
          * @description An auto of the list with its totals: the paper trades that closed (their number, their mean result and their sum in R), the real trades that closed
@@ -5136,7 +5149,7 @@ export interface components {
         };
         /**
          * @description An auto with its account, its budget (none for no budget) and its conditions as codes, the ones by the features `any`, `with` or
-         *     `without`, its place in the list (from 0) and its mode (`off`, `paper` or `live`).
+         *     `without`, its place in the list (from 0), its mode (`off`, `paper` or `live`) and its two limits, none for no limit.
          *     Numbers are decimal strings.
          */
         IdeaAutoResponse: {
@@ -5163,6 +5176,11 @@ export interface components {
             dayDrop: string;
             btcDrop: string;
             highFunding: string;
+            burst: string;
+            /** Format: int32 */
+            maxPerMinutePerSide: null | number | string;
+            /** Format: int32 */
+            maxOpenPerSide: null | number | string;
         };
         /** @description A bucket setup × type × interval × side × category with its statistics over the last int IdeaBucketResponse.Days days (90 or 30). */
         IdeaBucketResponse: {

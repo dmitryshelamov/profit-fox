@@ -6,6 +6,8 @@ describe('the features of ideas', () => {
     expect(featureName('btc_drop')).toBe('падение BTC за 4 часа');
     expect(featureName('high_funding')).toBe('высокий funding');
     expect(featureLabel('high_funding')).toBe('↑ funding');
+    expect(featureName('burst')).toBe('всплеск');
+    expect(featureLabel('burst')).toBe('⚡ всплеск');
     expect(featureName('moon')).toBe('moon');
     expect(featureLabel('moon')).toBe('moon');
   });

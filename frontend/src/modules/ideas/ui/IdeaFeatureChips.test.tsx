@@ -24,6 +24,20 @@ describe('the chips of the features of an idea', () => {
     expect(screen.getByText('↑ funding')).toHaveAttribute('title', 'funding 0,05 % и больше');
   });
 
+  // Scenario "Чип всплеска".
+  it('names a burst by the other pairs of its side and interval', () => {
+    render(<IdeaFeatureChips features={['burst', 'day_drop']} />);
+
+    expect(screen.getAllByText(/↓|⚡/).map((chip) => chip.textContent)).toEqual([
+      '↓ пара',
+      '⚡ всплеск',
+    ]);
+    expect(screen.getByText('⚡ всплеск')).toHaveAttribute(
+      'title',
+      'сработала вместе с другими парами той же стороны на том же ТФ',
+    );
+  });
+
   // Scenario "Без признаков".
   it('shows nothing for an idea without features', () => {
     const { container } = render(<IdeaFeatureChips features={[]} />);

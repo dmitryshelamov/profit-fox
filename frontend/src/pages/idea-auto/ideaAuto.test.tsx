@@ -55,13 +55,67 @@ describe('form of an auto', () => {
       }),
     ).toBeChecked();
     expect(screen.getByText(/родившиеся после «Сохранить»/)).toBeInTheDocument();
-    for (const feature of ['Падение пары за сутки', 'Падение BTC за 4 часа', 'Высокий funding']) {
+    for (const feature of [
+      'Падение пары за сутки',
+      'Падение BTC за 4 часа',
+      'Высокий funding',
+      'Всплеск',
+    ]) {
       expect(
         within(screen.getByRole('radiogroup', { name: feature })).getByRole('radio', {
           name: 'любой',
         }),
       ).toBeChecked();
     }
+  });
+
+  // Requirement "Форма автомата": the limits of a new auto are empty, each with its example.
+  it('opens a new auto without limits', async () => {
+    fakeApi(routes());
+    renderApp('/idea-trades/autos/new');
+
+    const limits = within(await screen.findByRole('region', { name: 'Лимиты' }));
+    const perMinute = limits.getByLabelText('Новых сделок одной стороны за минуту');
+    const open = limits.getByLabelText('Открытых сделок одной стороны');
+
+    expect([perMinute, open].map((field) => (field as HTMLInputElement).value)).toEqual(['', '']);
+    expect([perMinute, open].map((field) => field.getAttribute('placeholder'))).toEqual([
+      'например 2',
+      'например 5',
+    ]);
+  });
+
+  // Scenario "Лимиты в форме": a limit of 2 a minute and none of the open trades are saved, and the form of the saved auto shows them.
+  it('saves the limits and shows them when the auto is opened', async () => {
+    const requests = fakeApi(
+      routes({
+        'PUT /api/idea-autos/auto-1': noContent,
+        'GET /api/idea-autos/auto-2': () =>
+          json(
+            autoOf({ id: 'auto-2', name: 'С лимитом', maxPerMinutePerSide: 2, burst: 'without' }),
+          ),
+      }),
+    );
+    const { history } = renderApp('/idea-trades/autos/auto-1');
+    const user = userEvent.setup();
+    await waitFor(() => expect(screen.getByLabelText('Название')).toHaveValue('Импульс лонг'));
+
+    await user.type(screen.getByLabelText('Новых сделок одной стороны за минуту'), '2');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => expect(history.location.pathname).toBe('/idea-trades/autos'));
+    const put = requests.find((request) => request.method === 'PUT')!;
+    expect(await put.text()).toContain('"maxPerMinutePerSide":2,"maxOpenPerSide":null');
+
+    await act(() => history.push('/idea-trades/autos/auto-2'));
+    await waitFor(() => expect(screen.getByLabelText('Название')).toHaveValue('С лимитом'));
+    expect(screen.getByLabelText('Новых сделок одной стороны за минуту')).toHaveValue('2');
+    expect(screen.getByLabelText('Открытых сделок одной стороны')).toHaveValue('');
+    expect(
+      within(screen.getByRole('radiogroup', { name: 'Всплеск' })).getByRole('radio', {
+        name: 'только без',
+      }),
+    ).toBeChecked();
   });
 
   // Scenario "Переключатель признака": the condition is saved, and the form of the saved auto shows it.
@@ -166,7 +220,7 @@ describe('form of an auto', () => {
     const post = requests.find((request) => request.method === 'POST')!;
 
     expect(await post.text()).toBe(
-      `{"name":"Мой автомат","accountId":"${exchangeAccount.id}","amount":300,"budget":null,"setups":["impulse"],"types":["pullback"],"intervals":["15","60"],"side":"short","category":"spot","badge":"flat","minRiskReward":1.5,"minCases":0,"dayDrop":"any","btcDrop":"any","highFunding":"any"}`,
+      `{"name":"Мой автомат","accountId":"${exchangeAccount.id}","amount":300,"budget":null,"setups":["impulse"],"types":["pullback"],"intervals":["15","60"],"side":"short","category":"spot","badge":"flat","minRiskReward":1.5,"minCases":0,"dayDrop":"any","btcDrop":"any","highFunding":"any","burst":"any","maxPerMinutePerSide":null,"maxOpenPerSide":null}`,
     );
     expect(
       requests.some((request) => request.method === 'PUT' && request.url.endsWith('/auto-9/mode')),

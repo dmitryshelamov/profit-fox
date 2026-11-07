@@ -401,11 +401,23 @@ describe('calibration screen', () => {
     ).toBeInTheDocument();
     const tables = screen.getAllByRole('table').map((item) => item.getAttribute('aria-label'));
     expect(tables.indexOf('По признакам')).toBeGreaterThan(tables.indexOf('По типам'));
-    expect(
-      screen.getByText(
-        /падение пары за сутки от 5 %, падение BTC за 4 часа от 1 % и funding от 0,05 %/,
-      ),
-    ).toBeInTheDocument();
+  });
+
+  // Requirement "Таблица «По признакам» на экране «Калибровка»" (task 6.4 of add-burst-and-auto-limits): the explanation of the model with
+  // features names the four features and their bounds, the burst by its threshold on each timeframe.
+  it('explains the model with features by its four features and the threshold of the burst on each timeframe', async () => {
+    open();
+    renderApp('/ideas/calibration');
+
+    const explanation = (await screen.findByText(/^С признаками:/)).textContent!.replace(
+      /\s+/g,
+      ' ',
+    );
+
+    expect(explanation).toContain(
+      'падение пары за сутки от 5 %, падение BTC за 4 часа от 1 %, funding от 0,05 % и всплеск',
+    );
+    expect(explanation).toContain('5 мин — от 60 пар, 15 мин — от 25, 1 ч — от 8, 4 ч — от 4');
   });
 
   // Scenario "Итог без разбивки по признакам".

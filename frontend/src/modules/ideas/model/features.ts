@@ -26,6 +26,12 @@ export const ideaFeatures: readonly IdeaFeatureLabel[] = [
     name: 'высокий funding',
     hint: 'funding 0,05 % и больше',
   },
+  {
+    code: 'burst',
+    chip: '⚡ всплеск',
+    name: 'всплеск',
+    hint: 'сработала вместе с другими парами той же стороны на том же ТФ',
+  },
 ];
 
 const byCode = (code: string) => ideaFeatures.find((feature) => feature.code === code);
