@@ -1,5 +1,7 @@
 using System.Text;
 
+using Dapper;
+
 using Npgsql;
 
 using ProfitFox.Application.Scanner;
@@ -153,6 +155,20 @@ public class IdeaAutoMinuteStorageTests
 
         stepped.Trade.Status.ShouldBe(IdeaTradeStatus.ClosedAtExpiry);
         (await _paper.GetAllAsync(CancellationToken.None)).Single().ShouldBe(stepped);
+    }
+
+    // Scenario "Признаки на сделке": a paper trade keeps the features of its idea after the clean-up deleted the idea.
+    [Test]
+    public async Task Paper_trade_keeps_the_features_of_its_idea_after_the_idea_is_deleted()
+    {
+        Idea idea = IdeaGenerator.Generate(Fired) with { PairChange = -0.07m, Funding = 0.0001m };
+        await _ideas.SaveAsync([idea], [], [], new AutoMinute(Owner, [Paper(idea)], [], [], []), CancellationToken.None);
+        await using (NpgsqlConnection connection = await _dataSource.OpenConnectionAsync())
+        {
+            await connection.ExecuteAsync("DELETE FROM ideas WHERE id = @Id", new { idea.Id });
+        }
+
+        (await _paper.GetAllAsync(CancellationToken.None)).Single().Trade.Features.ShouldBe(new IdeaFeatures(true, false, false));
     }
 
     // Scenario "Идея дошла до цели" for a paper trade: the outcome of the idea is written on it once, like on a real trade.

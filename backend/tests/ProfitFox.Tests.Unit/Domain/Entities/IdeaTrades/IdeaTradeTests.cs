@@ -3,6 +3,7 @@ using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.Entities.IdeaTrades.Enums;
 using ProfitFox.Domain.Exceptions;
+using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.Ideas;
 
@@ -32,6 +33,15 @@ public class IdeaTradeTests
     }
 
     // Scenario "Вход на ▲": the promise of the idea at the entry stays on the trade as it was given.
+    // Decision 9 of add-market-idea-features: a trade copies the features of its idea when it is made.
+    [Test]
+    public void New_trade_copies_the_features_of_its_idea()
+    {
+        Idea idea = IdeaGenerator.Generate(Fired) with { PairChange = -0.08m, Funding = 0.0001m };
+
+        IdeaTrade.Create(Guid.NewGuid(), idea, Account, 106m, Size(), Now).Features.ShouldBe(new IdeaFeatures(true, false, false));
+    }
+
     [Test]
     public void New_trade_carries_the_promise_it_is_given()
     {

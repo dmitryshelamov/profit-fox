@@ -8,6 +8,7 @@ using ProfitFox.Application.IdeaAutos.Commands.CreateIdeaAuto;
 using ProfitFox.Application.IdeaAutos.Commands.SaveIdeaAuto;
 using ProfitFox.Domain.Entities.ExchangeAccounts;
 using ProfitFox.Domain.Entities.IdeaAutos;
+using ProfitFox.Domain.Entities.IdeaAutos.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
@@ -77,6 +78,28 @@ public class IdeaAutoSaveTests
         await Should.ThrowAsync<ValidationFailedException>(() => handler.Handle(new SaveIdeaAutoCommand(saved.Id, Input(amount: 50m, budget: 49m)), CancellationToken.None));
 
         await _autos.Received(1).SaveAsync(Arg.Is<IdeaAuto>(auto => auto.Budget == 80m), Arg.Any<CancellationToken>());
+    }
+
+    // Scenario "Условие признака в теле": the codes of the conditions by a feature; one left out is «любой».
+    [Test]
+    public async Task Conditions_by_features_are_saved_by_their_codes()
+    {
+        await CreateAsync(Input(amount: 50m, budget: null) with { DayDrop = "with", HighFunding = "without" });
+
+        await _autos.Received(1).CreateAsync(
+            Arg.Is<IdeaAuto>(auto => auto.Conditions.DayDrop == FeatureCondition.With && auto.Conditions.BtcDrop == FeatureCondition.Any
+                                     && auto.Conditions.HighFunding == FeatureCondition.Without),
+            Arg.Any<DateTimeOffset>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    // Scenario "Неизвестное значение": the error goes by the name of the field.
+    [Test]
+    public async Task Unknown_condition_by_a_feature_is_an_error_of_its_field()
+    {
+        ValidationFailedException exception = await Should.ThrowAsync<ValidationFailedException>(() => CreateAsync(Input(amount: 50m, budget: null) with { BtcDrop = "sometimes" }));
+
+        exception.Errors.Keys.ShouldBe(["btcDrop"]);
     }
 
     private Task<Guid> CreateAsync(IdeaAutoInput input)

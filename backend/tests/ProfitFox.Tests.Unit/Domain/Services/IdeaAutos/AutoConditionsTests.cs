@@ -1,3 +1,4 @@
+using ProfitFox.Domain.Entities.IdeaAutos.Enums;
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
@@ -118,6 +119,42 @@ public class AutoConditionsTests
     public void Any_badge_fits_the_idea_without_a_badge()
     {
         Match(Idea(), Bucket(null), Everything).ShouldBeTrue();
+        Match(Idea(), null, Everything).ShouldBeTrue();
+    }
+
+    // Scenario "Только после падения пары": an idea without a day drop does not fit, one with it does.
+    [Test]
+    public void Only_with_a_feature_takes_the_ideas_that_have_it()
+    {
+        IdeaAutoConditions dropped = Everything with { DayDrop = FeatureCondition.With };
+
+        Match(Idea(), null, dropped).ShouldBeFalse();
+        Match(Idea() with { PairChange = -0.07m }, null, dropped).ShouldBeTrue();
+    }
+
+    // Scenario "Только без высокого funding": an idea with a high funding does not fit, one without it does.
+    [Test]
+    public void Only_without_a_feature_takes_the_ideas_that_do_not_have_it()
+    {
+        IdeaAutoConditions calm = Everything with { HighFunding = FeatureCondition.Without };
+
+        Match(Idea() with { Funding = 0.0006m }, null, calm).ShouldBeFalse();
+        Match(Idea() with { Funding = 0.0001m }, null, calm).ShouldBeTrue();
+    }
+
+    // The drop of BTC is checked by its own condition.
+    [Test]
+    public void Drop_of_btc_is_checked_by_its_condition()
+    {
+        Match(Idea(), null, Everything with { BtcDrop = FeatureCondition.With }).ShouldBeFalse();
+        Match(Idea() with { BtcChange = -0.02m }, null, Everything with { BtcDrop = FeatureCondition.Without }).ShouldBeFalse();
+    }
+
+    // Scenario "Признак любой": with all three «любой» the features do not matter.
+    [Test]
+    public void Any_feature_takes_ideas_with_and_without_it()
+    {
+        Match(Idea() with { PairChange = -0.07m, BtcChange = -0.02m, Funding = 0.0006m }, null, Everything).ShouldBeTrue();
         Match(Idea(), null, Everything).ShouldBeTrue();
     }
 

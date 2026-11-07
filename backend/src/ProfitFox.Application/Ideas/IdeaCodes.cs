@@ -1,4 +1,5 @@
 using ProfitFox.Domain.Entities.Ideas.Enums;
+using ProfitFox.Domain.ValueObjects.Ideas;
 
 namespace ProfitFox.Application.Ideas;
 
@@ -8,7 +9,8 @@ namespace ProfitFox.Application.Ideas;
 ///     <c>accumulation</c>), idea types
 ///     (<c>levels</c>, <c>target_2r</c>, <c>beyond_extreme</c>, <c>pullback</c>, <c>stop_entry</c>), sides (<c>long</c>, <c>short</c>) and statuses
 ///     (<c>awaiting_entry</c>, <c>active</c>, <c>target</c>, <c>stop</c>, <c>expired</c>) in the API and in stored rows, and badges of buckets
-///     (<c>up</c>, <c>flat</c>, <c>down</c>) and scopes of calibration (<c>all</c>, <c>fresh</c>) in the API.
+///     (<c>up</c>, <c>flat</c>, <c>down</c>), scopes of calibration (<c>all</c>, <c>fresh</c>) and features of the market (<c>day_drop</c>,
+///     <c>btc_drop</c>, <c>high_funding</c>) in the API.
 /// </summary>
 public static class IdeaCodes
 {
@@ -51,6 +53,13 @@ public static class IdeaCodes
         ["target"] = IdeaStatus.Target,
         ["stop"] = IdeaStatus.Stop,
         ["expired"] = IdeaStatus.Expired
+    };
+
+    private static readonly Dictionary<string, IdeaFeature> FeaturesByCode = new Dictionary<string, IdeaFeature>
+    {
+        ["day_drop"] = IdeaFeature.DayDrop,
+        ["btc_drop"] = IdeaFeature.BtcDrop,
+        ["high_funding"] = IdeaFeature.HighFunding
     };
 
     private static readonly Dictionary<string, CalibrationScope> ScopesByCode = new Dictionary<string, CalibrationScope>
@@ -129,5 +138,21 @@ public static class IdeaCodes
     public static string ToCode(this IdeaStatus status)
     {
         return StatusesByCode.Single(pair => pair.Value == status).Key;
+    }
+
+    public static string ToCode(this IdeaFeature feature)
+    {
+        return FeaturesByCode.Single(pair => pair.Value == feature).Key;
+    }
+
+    public static IdeaFeature ParseFeature(string code)
+    {
+        return FeaturesByCode[code];
+    }
+
+    /// <summary>The codes of the features a level has, in the order of the enum.</summary>
+    public static IReadOnlyList<string> Codes(IdeaFeatures features)
+    {
+        return [.. FeaturesByCode.Where(pair => features.Has(pair.Value)).Select(pair => pair.Key)];
     }
 }

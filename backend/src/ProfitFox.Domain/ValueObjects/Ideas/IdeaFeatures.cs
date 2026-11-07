@@ -1,3 +1,5 @@
+using ProfitFox.Domain.Entities.Ideas.Enums;
+
 namespace ProfitFox.Domain.ValueObjects.Ideas;
 
 /// <summary>
@@ -19,5 +21,15 @@ public readonly record struct IdeaFeatures(bool DayDrop, bool BtcDrop, bool High
     public static IdeaFeatures Of(decimal? pairChange, decimal? btcChange, decimal? funding)
     {
         return new IdeaFeatures(pairChange <= DayDropUpTo, btcChange <= BtcDropUpTo, funding >= HighFundingFrom);
+    }
+
+    public bool Has(IdeaFeature feature)
+    {
+        return feature switch
+        {
+            IdeaFeature.DayDrop => DayDrop,
+            IdeaFeature.BtcDrop => BtcDrop,
+            _ => HighFunding
+        };
     }
 }

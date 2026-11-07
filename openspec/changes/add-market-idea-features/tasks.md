@@ -42,19 +42,19 @@
 
 ## 5. Автоматы
 
-- [ ] 5.1 `FeatureCondition { Any, With, Without }`, три поля `IdeaAutoConditions`, `AutoConditions.Match` (решение 8).
+- [x] 5.1 `FeatureCondition { Any, With, Without }`, три поля `IdeaAutoConditions`, `AutoConditions.Match` (решение 8).
   Тесты сценариев «Только после падения пары», «Только без высокого funding», «Признак любой».
-- [ ] 5.2 `IdeaAutoRepository`: три колонки `text`; интеграционный тест читает `with` / `without` / `any` после записи, старая
+- [x] 5.2 `IdeaAutoRepository`: три колонки `text`; интеграционный тест читает `with` / `without` / `any` после записи, старая
   строка — `any`.
-- [ ] 5.3 `IdeaAutoBody` / `IdeaAutoResponse`: коды `any` / `with` / `without`, отсутствие — `any`, чужое — 400 с именем
+- [x] 5.3 `IdeaAutoBody` / `IdeaAutoResponse`: коды `any` / `with` / `without`, отсутствие — `any`, чужое — 400 с именем
   поля (сценарии «Условие признака в теле», «Неизвестное значение»); тесты API.
 
 ## 6. Сделки и журнал
 
-- [ ] 6.1 `IdeaTrade.Features` копируется в `IdeaTrade.Create` (решение 9); `IdeaTradeRepository` и
+- [x] 6.1 `IdeaTrade.Features` копируется в `IdeaTrade.Create` (решение 9); `IdeaTradeRepository` и
   `PaperIdeaTradeRepository` хранят три флага. Тесты: сценарий «Признаки на сделке» (идея удалена — признаки на сделке
   остались), «Сделка до признаков» (старая строка — все «нет»).
-- [ ] 6.2 Ответы сделок и журнала (`IdeaTradeResponse`, журнал) отдают `features`; тест API видит флаги у реальной и
+- [x] 6.2 Ответы сделок и журнала (`IdeaTradeResponse`, журнал) отдают `features`; тест API видит флаги у реальной и
   учебной сделки.
 
 ## 7. Калибровка по признакам

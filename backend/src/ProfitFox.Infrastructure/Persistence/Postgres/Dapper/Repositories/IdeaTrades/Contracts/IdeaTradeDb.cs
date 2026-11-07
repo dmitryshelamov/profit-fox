@@ -77,6 +77,12 @@ internal sealed class IdeaTradeDb
     /// <summary>Of a paper trade only.</summary>
     public decimal ExpiryFee { get; init; }
 
+    public bool DayDrop { get; init; }
+
+    public bool BtcDrop { get; init; }
+
+    public bool HighFunding { get; init; }
+
     public int LastOrderNumber { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }

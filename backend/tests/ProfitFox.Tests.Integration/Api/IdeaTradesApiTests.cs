@@ -284,6 +284,7 @@ public class IdeaTradesApiTests
 
         // A trade made now promises its break-even and reward to risk, though its idea has no bucket.
         item.GetProperty("promise").GetProperty("badge").ValueKind.ShouldBe(JsonValueKind.Null);
+        item.GetProperty("features").GetArrayLength().ShouldBe(0);
 
         JsonElement closed = journal.GetProperty("closed");
         (closed.GetProperty("items").GetArrayLength(), closed.GetProperty("page").GetInt32(), closed.GetProperty("pageSize").GetInt32(), closed.GetProperty("total").GetInt32()).ShouldBe((0, 1, 50, 0));
@@ -345,6 +346,19 @@ public class IdeaTradesApiTests
         promise.GetProperty("netRiskReward").GetString().ShouldNotBeNull();
         JsonElement outcome = item.GetProperty("ideaOutcome");
         (outcome.GetProperty("status").GetString(), outcome.GetProperty("result").GetString()).ShouldBe(("target", "1.84"));
+    }
+
+    // Task 6.2 of add-market-idea-features: a real trade gives the features its idea fired with.
+    [Test]
+    public async Task Journal_gives_the_features_of_the_idea_of_a_trade()
+    {
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m, funding: 0.0006m);
+        _scenario.SetPrice("100");
+        await CreateAsync(idea);
+
+        JsonElement item = (await JournalAsync()).GetProperty("open")[0];
+
+        item.GetProperty("features").EnumerateArray().Select(feature => feature.GetString()).ShouldBe(["high_funding"]);
     }
 
     // Scenario "Открытая в плюсе": the last price of the exchange gives the current result of an open trade.

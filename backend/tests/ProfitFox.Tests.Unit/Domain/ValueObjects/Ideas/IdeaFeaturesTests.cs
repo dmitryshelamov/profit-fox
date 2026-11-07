@@ -1,3 +1,4 @@
+using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.ValueObjects.Ideas;
 
 using Shouldly;
@@ -51,5 +52,14 @@ public class IdeaFeaturesTests
     {
         // Scenario "Funding у spot": a spot pair has no rate.
         IdeaFeatures.Of(-0.2m, -0.2m, null).ShouldBe(new IdeaFeatures(true, true, false));
+    }
+
+    // Decision 1: the enum names a feature of the level in the breakdown, the conditions of the autos and the codes of the API.
+    [Test]
+    public void Level_tells_whether_it_has_a_feature_by_its_name()
+    {
+        var level = new IdeaFeatures(true, false, true);
+
+        (level.Has(IdeaFeature.DayDrop), level.Has(IdeaFeature.BtcDrop), level.Has(IdeaFeature.HighFunding)).ShouldBe((true, false, true));
     }
 }
