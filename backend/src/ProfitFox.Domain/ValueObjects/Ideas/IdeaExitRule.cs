@@ -13,6 +13,21 @@ public sealed record IdeaExitRule(IdeaType Type, Interval Interval, int LifeCand
     private const decimal TargetStep = 0.5m;
     private const decimal LowestTarget = 1m;
     private const decimal HighestTarget = 5m;
+    private static readonly TimeSpan ShortestHolding = TimeSpan.FromHours(1);
+
+    /// <summary>
+    ///     How long the outcome of an idea of the rule may last from its firing (decision 1 of cluster-idea-cases-by-holding): its entry window
+    ///     and lifetime in candles of the interval, never shorter than an hour, as one move of the market lasts.
+    /// </summary>
+    public TimeSpan Holding
+    {
+        get
+        {
+            TimeSpan holding = (LifeCandles + (EntryCandles ?? 0)) * (Interval.CandleEnd(DateTimeOffset.UnixEpoch) - DateTimeOffset.UnixEpoch);
+
+            return holding < ShortestHolding ? ShortestHolding : holding;
+        }
+    }
 
     /// <summary>Whether the target of the type is in R; the one of «Уровни» is the next zone.</summary>
     public static bool HasTarget(IdeaType type)

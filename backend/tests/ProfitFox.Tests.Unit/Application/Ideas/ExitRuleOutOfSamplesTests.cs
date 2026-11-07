@@ -47,18 +47,33 @@ public class ExitRuleOutOfSamplesTests
         check.Best!.Rule.ShouldBe(Candidate with { LifeCandles = 96, TargetR = 3m });
         check.Best.Parts.ShouldBe(new ExitRuleParts(
             Now.AddDays(-31).AddMinutes(-1),
-            Statistics(Selection().Select((firedAt, index) => (firedAt, index % 2 == 0 ? IdeaStatus.Stop : IdeaStatus.Target, index % 2 == 0 ? -1m : 3m))),
-            Statistics(Check().Select((firedAt, index) => (firedAt, index < 30 ? IdeaStatus.Stop : IdeaStatus.Expired, index < 30 ? -1m : 0.5m)))));
+            Statistics(Selection().Select((firedAt, index) => (firedAt, index % 2 == 0 ? IdeaStatus.Stop : IdeaStatus.Target, index % 2 == 0 ? -1m : 3m)), TimeSpan.FromHours(24)),
+            Statistics(Check().Select((firedAt, index) => (firedAt, index < 30 ? IdeaStatus.Stop : IdeaStatus.Expired, index < 30 ? -1m : 0.5m)), TimeSpan.FromHours(24))));
         check.Best.Parts.Selection!.Expectancy.ShouldBe(1m);
         check.Best.Parts.Check!.Expectancy.ShouldBe(-0.625m);
         check.Candidate.ShouldBe(new ExitRuleParts(
             Now.AddDays(-30).AddHours(-6).AddMinutes(-1),
-            Statistics(Selection().Select(firedAt => (firedAt, IdeaStatus.Expired, 0m))),
-            Statistics(Check().Select((firedAt, index) => (firedAt, IdeaStatus.Expired, index < 30 ? 0m : 0.5m)))));
+            Statistics(Selection().Select(firedAt => (firedAt, IdeaStatus.Expired, 0m)), TimeSpan.FromHours(6)),
+            Statistics(Check().Select((firedAt, index) => (firedAt, IdeaStatus.Expired, index < 30 ? 0m : 0.5m)), TimeSpan.FromHours(6))));
         check.Overfitting.ShouldBe(OverfittingProbability.Of(ExitRuleGridPass.Sums(
             [.. signals.Select(signal => (new FeeRates(0m, 0m), (IReadOnlyList<SignalPath>)[signal.Path]))], ExitRuleGridPass.Rules(Candidate), check.Window,
             CancellationToken.None)));
         check.Overfitting.ShouldNotBeNull();
+    }
+
+    // Scenario "Интервал по удержанию правила": the cases of a part group in blocks of the holding of its own rule, 24 h for 96 · 3 R, so the
+    // two check signals of a UTC day are one group, 20 groups of 2. Counted apart from the code with the Student quantile of 19 degrees of
+    // freedom: −0.625 R in −0.93688…−0.31312, ▼; by the hour, 40 groups, it would be −0.83537…−0.41463. The sums expand the quantile to 10⁻⁵,
+    // so the bounds agree to 10⁻⁶.
+    [Test]
+    public void Parts_group_their_cases_by_the_holding_of_their_rule()
+    {
+        ExitRuleOutOfSample check = ExitRuleOutOfSamples.Compute(Signals(), Candidate, _ => new FeeRates(0m, 0m), Now, CancellationToken.None);
+
+        BucketStatistics part = check.Best!.Parts.Check!;
+        ((double)part.ExpectancyLow!.Value).ShouldBe(-0.936881284470168, 1e-6);
+        ((double)part.ExpectancyHigh!.Value).ShouldBe(-0.313118715529832, 1e-6);
+        part.Badge.ShouldBe(IdeaBadge.Down);
     }
 
     // Scenario "Мало входов на подборе": 10 signals of the selection and none of the check.
@@ -97,7 +112,7 @@ public class ExitRuleOutOfSamplesTests
         // A limit entry at 100 pays the maker fee, the exit at 101 the taker fee, over the risk of 2.
         decimal linear = (1m - ((0.02m * 100m) + (0.05m * 101m)) / 100m) / 2m;
         decimal spot = (1m - ((0.1m * 100m) + (0.2m * 101m)) / 100m) / 2m;
-        check.Candidate.Selection.ShouldBe(Statistics([(firedAt, IdeaStatus.Expired, linear), (firedAt.AddDays(1), IdeaStatus.Expired, spot)]));
+        check.Candidate.Selection.ShouldBe(Statistics([(firedAt, IdeaStatus.Expired, linear), (firedAt.AddDays(1), IdeaStatus.Expired, spot)], TimeSpan.FromHours(7)));
     }
 
     // Finding 4 of the review: a request cancelled before the check ends it.
@@ -110,9 +125,9 @@ public class ExitRuleOutOfSamplesTests
         Should.Throw<OperationCanceledException>(() => ExitRuleOutOfSamples.Compute(Signals(), Candidate, _ => new FeeRates(0m, 0m), Now, cancel.Token));
     }
 
-    private static BucketStatistics Statistics(IEnumerable<(DateTimeOffset FiredAt, IdeaStatus Status, decimal Result)> cases)
+    private static BucketStatistics Statistics(IEnumerable<(DateTimeOffset FiredAt, IdeaStatus Status, decimal Result)> cases, TimeSpan block)
     {
-        var sums = new ClusteredSums();
+        var sums = new ClusteredSums(block);
 
         foreach ((DateTimeOffset firedAt, IdeaStatus status, decimal result) in cases)
         {

@@ -8,7 +8,8 @@ namespace ProfitFox.Application.Ideas;
 /// <summary>
 ///     The out-of-sample check of a candidate exit rule from the signals of its type × interval over 90 days, all setups, pairs and categories
 ///     together (decisions 1–10 of check-idea-exit-rules-out-of-sample): the grid in one pass for the best rule of the selection and the
-///     probability of overfitting, and the numbers of the candidate and of that best rule by their own passes, clustered by the hour they fired.
+///     probability of overfitting, and the numbers of the candidate and of that best rule by their own passes, clustered
+///     by the blocks of the holding of their own rule.
 /// </summary>
 public static class ExitRuleOutOfSamples
 {
@@ -41,8 +42,8 @@ public static class ExitRuleOutOfSamples
     private static ExitRuleParts Parts((FeeRates Fees, IReadOnlyList<SignalPath> Paths)[] keys, IdeaExitRule rule, OutOfSampleWindow window)
     {
         TimeSpan horizon = OutOfSampleWindow.Horizon(rule);
-        var selection = new ClusteredSums();
-        var check = new ClusteredSums();
+        var selection = new ClusteredSums(rule.Holding);
+        var check = new ClusteredSums(rule.Holding);
 
         foreach ((FeeRates rates, IReadOnlyList<SignalPath> paths) in keys)
         {
