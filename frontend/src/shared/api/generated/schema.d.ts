@@ -5274,9 +5274,9 @@ export interface components {
             paperTotals: components["schemas"]["IdeaJournalTotalsResponse"];
         };
         /**
-         * @description The totals of the closed trades of a filter: those closed at the target, at the stop and manually, and apart from them the cancelled and
-         *     the failed. The money, the fees, the mean result in R with its 95 % interval (none for one trade, nor the mean for none) and the mean time
-         *     to the outcome are over the first three. Numbers are decimal strings.
+         * @description The totals of the closed trades of a filter: those closed at the target, at the stop, manually and at expiry, and
+         *     apart from them the cancelled and the failed. The money, the fees, the mean result in R with its 95 % interval (none for one trade, nor the
+         *     mean for none) and the mean time to the outcome are over the first four. Numbers are decimal strings.
          */
         IdeaJournalTotalsResponse: {
             /** Format: int32 */
@@ -5285,6 +5285,8 @@ export interface components {
             stops: number | string;
             /** Format: int32 */
             manual: number | string;
+            /** Format: int32 */
+            expired: number | string;
             /** Format: int32 */
             cancelled: number | string;
             /** Format: int32 */

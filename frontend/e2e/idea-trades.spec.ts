@@ -1,7 +1,13 @@
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test';
 
 import { createStrategy, reference } from './api';
-import { removeOpenIdeas, seedOpenIdea } from './seed';
+import {
+  expiredPaperSymbol,
+  removeOpenIdeas,
+  removePaperTradeClosedAtExpiry,
+  seedOpenIdea,
+  seedPaperTradeClosedAtExpiry,
+} from './seed';
 
 // Acceptance of the journal of the trades by ideas against the real API and a trading Worker on the Bybit stub: the owner enters by an idea on the page of
 // its pair, the Worker places the entry with its stop and target, and the stub fills it and fires the price. Nothing reaches the exchange.
@@ -267,6 +273,35 @@ test('«Закрыть по рынку» sells what the trade holds first and ta
   await expect(closedRow(page)).toContainText('Закрыта вручную', { timeout: 45_000 });
   await expect.poll(children, { timeout: 45_000 }).toEqual(['Cancelled', 'Cancelled']);
   await expect(closedRow(page)).toContainText(inProfit);
+});
+
+// Requirements "Статус «Закрыта по сроку» в таблице" and "Итоги на экране «Сделки»": the paper trade its idea outlived is in the table of the
+// closed ones with its status, result and time to the outcome, and the totals of the paper trades count it at expiry.
+test('a paper trade closed at the expiry of its idea is in the table with its status and in the totals of the paper trades', async ({
+  page,
+}) => {
+  await seedPaperTradeClosedAtExpiry(accountId);
+
+  try {
+    await page.goto('/idea-trades');
+    await page
+      .getByRole('radiogroup', { name: 'Кто взял' })
+      .getByRole('radio', { name: 'Учебные' })
+      .click();
+
+    const row = page
+      .getByRole('table', { name: 'Закрытые сделки' })
+      .getByRole('row')
+      .filter({ hasText: expiredPaperSymbol });
+    await expect(row).toContainText('Закрыта по сроку');
+    await expect(row).toContainText(/-0\.21\sUSDT · -0\.21\sR/);
+    await expect(row).toContainText('2 ч');
+    await expect(page.getByRole('region', { name: 'Итоги учебных сделок' })).toContainText(
+      /по сроку [1-9]\d* \(/,
+    );
+  } finally {
+    await removePaperTradeClosedAtExpiry();
+  }
 });
 
 test('a bot of the opposite direction on the symbol is a reason the entry is refused', async ({

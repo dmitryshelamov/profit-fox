@@ -264,6 +264,7 @@ describe('screen «Сделки»', () => {
             targets: 1,
             stops: 1,
             manual: 1,
+            expired: 1,
             cancelled: 2,
             result: '0.9',
             fees: '0.12',
@@ -282,7 +283,9 @@ describe('screen «Сделки»', () => {
     const totals = await screen.findByRole('region', { name: 'Итоги' });
 
     expect(
-      within(totals).getByText('по цели 1 (33 %) · по стопу 1 (33 %) · вручную 1 (33 %)'),
+      within(totals).getByText(
+        'по цели 1 (25 %) · по стопу 1 (25 %) · вручную 1 (25 %) · по сроку 1 (25 %)',
+      ),
     ).toBeInTheDocument();
     expect(within(totals).getByText('+0.90 USDT · комиссии 0.12 USDT')).toBeInTheDocument();
     expect(within(totals).getByText('+0.30 R (95 %: -1.34 … +1.94)')).toBeInTheDocument();

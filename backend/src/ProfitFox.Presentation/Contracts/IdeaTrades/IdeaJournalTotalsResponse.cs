@@ -5,7 +5,7 @@ using ProfitFox.Domain.ValueObjects.IdeaTrades;
 namespace ProfitFox.Presentation.Contracts.IdeaTrades;
 
 /// <summary>
-///     The totals of the closed trades of a filter: those closed at the target, at the stop, manually and at expiry (<see cref="Expired" />), and
+///     The totals of the closed trades of a filter: those closed at the target, at the stop, manually and at expiry, and
 ///     apart from them the cancelled and the failed. The money, the fees, the mean result in R with its 95 % interval (none for one trade, nor the
 ///     mean for none) and the mean time to the outcome are over the first four. Numbers are decimal strings.
 /// </summary>

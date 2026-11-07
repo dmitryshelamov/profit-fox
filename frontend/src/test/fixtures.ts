@@ -511,6 +511,7 @@ export const journalTotals = (overrides: Partial<Schemas['IdeaJournalTotalsRespo
     targets: 0,
     stops: 0,
     manual: 0,
+    expired: 0,
     cancelled: 0,
     failed: 0,
     result: '0',

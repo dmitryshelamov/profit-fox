@@ -20,13 +20,13 @@
 - [x] 3.1 Миграция `AddPaperTradeExpiryMigration` (колонки `expiry_*`, `idea_exit_price` в обеих таблицах, новый `CK_idea_paper_trades_status`, дозапись цены из `ideas`); интеграционный тест: исход без цены до миграции получает `exit_price` идеи
 - [x] 3.2 `IdeaTradeDb`, конвертеры и запросы (`PaperTradeQueries` Columns/Insert/Update, `WriteOutcomes` обеих таблиц, `IdeaTradeRepositoryQueries`) читают и пишут `expiry_*` и `idea_exit_price`; `IdeaTradeCodes` знает `closed_at_expiry`; интеграционные тесты репозиториев: учебная сделка «по сроку» и исход с ценой читаются обратно такими же
 - [x] 3.3 `IdeaJournalTotalsResponse.expired`; интеграционный тест `GET /api/idea-trades`: закрытая по сроку учебная сделка приходит с `closed_at_expiry`, результатом и временем до исхода, итоги учебных считают «по сроку»
-- [ ] 3.4 `dotnet build`, `dotnet test`, `dotnet format --verify-no-changes` зелёные
+- [x] 3.4 `dotnet build`, `dotnet test`, `dotnet format --verify-no-changes` зелёные
 
 ## 4. Frontend
 
-- [ ] 4.1 `npm run generate:api` при запущенном API: `schema.d.ts` с `expired` в итогах; `statusLabel` «Закрыта по сроку»; тест `status.test.ts` красный → зелёный
-- [ ] 4.2 Строка итогов «по цели · по стопу · вручную · по сроку» с долями от четырёх; `journal.test.ts` и фикстуры (`expired`) красный → зелёный
-- [ ] 4.3 e2e `idea-trades.spec.ts`: закрытая по сроку учебная сделка в таблице с подписью и в итогах; `npm run lint`, `format:check`, `typecheck`, `test`, `build` зелёные
+- [x] 4.1 `npm run generate:api` при запущенном API: `schema.d.ts` с `expired` в итогах; `statusLabel` «Закрыта по сроку»; тест `status.test.ts` красный → зелёный
+- [x] 4.2 Строка итогов «по цели · по стопу · вручную · по сроку» с долями от четырёх; `journal.test.ts` и фикстуры (`expired`) красный → зелёный
+- [x] 4.3 e2e `idea-trades.spec.ts`: закрытая по сроку учебная сделка в таблице с подписью и в итогах; `npm run lint`, `format:check`, `typecheck`, `test`, `build` зелёные
 
 ## Workflow follow-up
 
