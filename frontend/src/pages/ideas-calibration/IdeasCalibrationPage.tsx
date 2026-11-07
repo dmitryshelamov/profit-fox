@@ -205,6 +205,11 @@ function ReportView({ report }: { report: Report }) {
           кейсов; сравнение — на кейсах, которые проверяют обе модели.
         </li>
         <li>
+          С признаками: подкорзины корзины по сильному движению (от 4 ATR) и высокому объёму (от 4
+          медиан), подтянутые к модели корзины. Разница Брайера — на тех же кейсах; признаки стоит
+          брать в корзины, только если весь её интервал ниже 0.
+        </li>
+        <li>
           После изменения правил: только кейсы, сработавшие после применения правила выхода своего
           типа × ТФ и после начала текущей версии правил идей.
         </li>
@@ -376,7 +381,23 @@ function models(comparison: Comparison) {
   return [
     { label: 'Старая', model: comparison.old },
     { label: 'Новая', model: comparison.new },
+    ...(comparison.features === null
+      ? []
+      : [{ label: 'С признаками', model: comparison.features }]),
   ];
+}
+
+/**
+ * The Brier score of the model with features less that of the new one with its interval: the features help only where the
+ * whole interval is below 0.
+ */
+function differenceText(difference: NonNullable<Comparison['difference']>): string {
+  const interval =
+    difference.low === null || difference.high === null
+      ? '— меньше 30 кейсов'
+      : `${showDecimal(difference.low, 3, true)}…${showDecimal(difference.high, 3, true)}`;
+
+  return `${showDecimal(difference.mean, 3, true)}, интервал 95 % ${interval}`;
 }
 
 type Model = Comparison['old'];
@@ -462,6 +483,7 @@ function SliceTables({
           'Обещали',
           'Получили',
           'Интервал 95 %',
+          'Разница Брайера',
         ]}
       >
         {slices.flatMap((slice) =>
@@ -470,6 +492,11 @@ function SliceTables({
               <td className={cell}>{name(slice)}</td>
               <td className={cell}>{model}</td>
               <ModelCells model={numbers} />
+              <td className={number}>
+                {model === 'С признаками' && slice.comparison.difference !== null
+                  ? differenceText(slice.comparison.difference)
+                  : '—'}
+              </td>
             </tr>
           )),
         )}
@@ -480,17 +507,24 @@ function SliceTables({
 
 function ComparisonTable({ comparison }: { comparison: Comparison }) {
   return (
-    <Table
-      label="Старая модель → новая"
-      headers={['Модель', 'Случаев', 'Брайер', 'С ▲', 'Обещали', 'Получили', 'Интервал 95 %']}
-    >
-      {models(comparison).map(({ label, model }) => (
-        <tr key={label}>
-          <td className={cell}>{label}</td>
-          <ModelCells model={model} />
-        </tr>
-      ))}
-    </Table>
+    <>
+      <Table
+        label="Старая модель → новая"
+        headers={['Модель', 'Случаев', 'Брайер', 'С ▲', 'Обещали', 'Получили', 'Интервал 95 %']}
+      >
+        {models(comparison).map(({ label, model }) => (
+          <tr key={label}>
+            <td className={cell}>{label}</td>
+            <ModelCells model={model} />
+          </tr>
+        ))}
+      </Table>
+      {comparison.difference !== null && (
+        <p aria-label="Разница Брайера" className="text-sm text-muted">
+          С признаками − новая, Брайер: {differenceText(comparison.difference)}
+        </p>
+      )}
+    </>
   );
 }
 

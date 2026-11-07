@@ -152,7 +152,7 @@ describe('calibration screen', () => {
     expect(asked(requests)).toEqual(['Days=90&Scope=fresh']);
   });
 
-  // Scenario "Старая модель против новой".
+  // Scenarios "Старая модель против новой" and "Модель с признаками".
   it('compares the old model with the new one, a row each', async () => {
     open();
     renderApp('/ideas/calibration');
@@ -181,6 +181,55 @@ describe('calibration screen', () => {
       '+0.03 R',
       '-0.04…+0.10 R',
     ]);
+    expect(cells(/С признаками/)).toEqual([
+      'С признаками',
+      '1\u00a0800',
+      '0.201',
+      '240',
+      '+0.04 R',
+      '+0.05 R',
+      '-0.02…+0.12 R',
+    ]);
+  });
+
+  // Scenario "Разница Брайера".
+  it('shows the Brier score of the model with features less that of the new one with its interval', async () => {
+    open();
+    renderApp('/ideas/calibration');
+
+    expect(await screen.findByLabelText('Разница Брайера')).toHaveTextContent(
+      'С признаками − новая, Брайер: -0.006, интервал 95 % -0.012…+0.001',
+    );
+  });
+
+  it('shows the difference without an interval under 30 cases', async () => {
+    const report = calibrationOf();
+    open(
+      calibrationOf({
+        comparison: { ...report.comparison!, difference: { mean: '0.01', low: null, high: null } },
+      }),
+    );
+    renderApp('/ideas/calibration');
+
+    expect(await screen.findByLabelText('Разница Брайера')).toHaveTextContent(
+      'С признаками − новая, Брайер: +0.010, интервал 95 % — меньше 30 кейсов',
+    );
+  });
+
+  // Scenario "Отчёт без модели с признаками".
+  it('shows the old and the new model only in a report without the model with features', async () => {
+    const report = calibrationOf();
+    open(
+      calibrationOf({ comparison: { ...report.comparison!, features: null, difference: null } }),
+    );
+    renderApp('/ideas/calibration');
+
+    const table = await screen.findByRole('table', { name: 'Старая модель → новая' });
+
+    expect(screen.queryByLabelText('Разница Брайера')).not.toBeInTheDocument();
+
+    expect(within(table).getByRole('row', { name: /Новая/ })).toBeInTheDocument();
+    expect(within(table).queryByRole('row', { name: /С признаками/ })).not.toBeInTheDocument();
   });
 
   it('shows dashes for a model without ▲ and no comparison without one', async () => {
@@ -258,6 +307,7 @@ describe('calibration screen', () => {
       '+0.10 R',
       '-0.08 R',
       '-0.16…0.00 R',
+      '—',
     ]);
     expect(cells(types, /Откат Новая/)).toEqual([
       'Откат',
@@ -268,7 +318,9 @@ describe('calibration screen', () => {
       '+0.04 R',
       '+0.01 R',
       '-0.10…+0.12 R',
+      '—',
     ]);
+    expect(within(types).queryByRole('row', { name: /С признаками/ })).not.toBeInTheDocument();
     const intervals = screen.getByRole('table', { name: 'По ТФ: старая модель → новая' });
     expect(cells(intervals, /1 ч Новая/)).toEqual([
       '1 ч',
@@ -279,6 +331,19 @@ describe('calibration screen', () => {
       '—',
       '—',
       '—',
+      '—',
+    ]);
+    // Decision 4 of add-idea-features: the slice compares the model with features too, with its difference of the Brier score.
+    expect(cells(intervals, /1 ч С признаками/)).toEqual([
+      '1 ч',
+      'С признаками',
+      '1\u00a0500',
+      '0.205',
+      '0',
+      '—',
+      '—',
+      '—',
+      '-0.005, интервал 95 % -0.011…+0.002',
     ]);
   });
 

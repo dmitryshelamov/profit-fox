@@ -434,6 +434,11 @@ test('the link «Калибровка» of the ideas opens the calibration with 
   ).toContainText('0.231');
   await expect(
     page
+      .getByRole('table', { name: 'Старая модель → новая', exact: true })
+      .getByRole('row', { name: /С признаками/ }),
+  ).toContainText('0.201');
+  await expect(
+    page
       .getByRole('table', { name: 'По своим данным', exact: true })
       .getByRole('row', { name: /мало своих данных/ }),
   ).toContainText('0.212');

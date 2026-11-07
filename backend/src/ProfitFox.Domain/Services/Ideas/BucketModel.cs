@@ -74,11 +74,16 @@ public static class BucketModel
             return null;
         }
 
-        var own = Level.Of(sums, root.Category);
+        return Shrunk(Level.Of(sums, root.Category), root.Category, root.Spreads);
+    }
 
-        return new ParentModel(
-            own,
-            new Level(own.Cases, Shrink(own.Share, root.Category.Share, root.Spreads.Share).Model, Shrink(own.Expectancy, root.Category.Expectancy, root.Spreads.Expectancy).Model));
+    /// <summary>
+    ///     A bucket as the parent of its feature sub-buckets (decision 2 of add-idea-features): its own numbers and those of its model, shrunk to
+    ///     the model of its <paramref name="parent" /> by the spread between the buckets of the parent.
+    /// </summary>
+    public static ParentModel Bucket(ClusteredSums sums, ParentModel parent, Spreads spreads)
+    {
+        return Shrunk(Level.Of(sums, parent.Own), parent.Model, spreads);
     }
 
     /// <summary>The spread between the members of a <paramref name="level" />, of those of 30 cases and more.</summary>
@@ -107,17 +112,48 @@ public static class BucketModel
     /// </summary>
     public static double Spread(IReadOnlyList<Estimate> members)
     {
-        if (members.Count < 2)
+        return PooledSpread([members]);
+    }
+
+    /// <summary>
+    ///     τ² of members in groups that share it, by DerSimonian–Laird pooled over the groups (decision 3 of add-idea-features): each group around its
+    ///     own weighted mean, τ² = max(0, (ΣQ − Σ(k − 1)) / Σ(Σw − Σw² / Σw)) over the groups of two members and more; 0 without one.
+    /// </summary>
+    public static double PooledSpread(IReadOnlyList<IReadOnlyList<Estimate>> groups)
+    {
+        double q = 0;
+        double freedom = 0;
+        double scale = 0;
+
+        foreach (IReadOnlyList<Estimate> members in groups.Where(group => group.Count >= 2))
         {
-            return 0;
+            double[] weights = [.. members.Select(member => 1 / member.Variance)];
+            double total = weights.Sum();
+            double mean = members.Select((member, index) => weights[index] * (double)member.Mean).Sum() / total;
+            q += members.Select((member, index) => weights[index] * Math.Pow((double)member.Mean - mean, 2)).Sum();
+            freedom += members.Count - 1;
+            scale += total - (weights.Sum(weight => weight * weight) / total);
         }
 
-        double[] weights = [.. members.Select(member => 1 / member.Variance)];
-        double total = weights.Sum();
-        double mean = members.Select((member, index) => weights[index] * (double)member.Mean).Sum() / total;
-        double q = members.Select((member, index) => weights[index] * Math.Pow((double)member.Mean - mean, 2)).Sum();
+        return freedom == 0 ? 0 : Math.Max(0, (q - freedom) / scale);
+    }
 
-        return Math.Max(0, (q - (members.Count - 1)) / (total - (weights.Sum(weight => weight * weight) / total)));
+    /// <summary>
+    ///     The spread between the feature levels of the buckets of a <paramref name="parent" />, one for all of them (decision 3 of
+    ///     add-idea-features): the levels of 30 cases and more of each bucket around their bucket, its own numbers taking the place of the level
+    ///     above.
+    /// </summary>
+    public static Spreads FeatureSpreads(IEnumerable<(ClusteredSums Bucket, IEnumerable<ClusteredSums> Levels)> buckets, ParentModel parent)
+    {
+        // A bucket without a case has no numbers of its own to be the level above, and no level to add.
+        Level[][] groups =
+        [
+            .. buckets.Where(bucket => bucket.Bucket.Cases > 0)
+                .Select(bucket => (Level: Level.Of(bucket.Bucket, parent.Own), bucket.Levels))
+                .Select(bucket => bucket.Levels.Where(level => level.Cases >= BucketStatisticsCalculator.MinimumCases).Select(level => Level.Of(level, bucket.Level)).ToArray())
+        ];
+
+        return new Spreads(PooledSpread([.. groups.Select(group => group.Select(level => level.Share).ToArray())]), PooledSpread([.. groups.Select(group => group.Select(level => level.Expectancy).ToArray())]));
     }
 
     /// <summary>
@@ -147,6 +183,12 @@ public static class BucketModel
             ParentWeight = (decimal)parentWeight,
             FewOwnCases = sums.Cases < BucketStatisticsCalculator.MinimumCases
         };
+    }
+
+    // The own numbers of a level and its model: both numbers shrunk to those of the level above.
+    private static ParentModel Shrunk(Level own, Level above, Spreads spreads)
+    {
+        return new ParentModel(own, new Level(own.Cases, Shrink(own.Share, above.Share, spreads.Share).Model, Shrink(own.Expectancy, above.Expectancy, spreads.Expectancy).Model));
     }
 
     // The counts of the bucket with the numbers of the model, the interval of the share within [0, 1].

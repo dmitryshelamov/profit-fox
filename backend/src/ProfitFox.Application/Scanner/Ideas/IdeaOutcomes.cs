@@ -10,8 +10,9 @@ namespace ProfitFox.Application.Scanner.Ideas;
 ///     The outcomes of the signals by the exit rules in force (decision 7): one pass over the signals in the order of their key and firing, which
 ///     holds the signals of one key at a time. The signals of a key count as one open idea at a time (<see cref="ExitOutcomes.Counted" />); the
 ///     cases fired in the last 90 and 30 days go into the clustered sums of their bucket, of its parent and of its category by the block of their
-///     firing (decision 4 of honest-idea-intervals, decisions 1 and 2 of cluster-idea-cases-by-holding), and every case gives its outcome to the
-///     calibration. After the pass the buckets get the numbers of <see cref="BucketModel" />; the parents and the categories are not written.
+///     firing (decision 4 of honest-idea-intervals, decisions 1 and 2 of cluster-idea-cases-by-holding), and every case gives its outcome and the
+///     features of its signal to the calibration. After the pass the buckets get the numbers of <see cref="BucketModel" />; the parents and the
+///     categories are not written.
 /// </summary>
 public static class IdeaOutcomes
 {
@@ -82,6 +83,8 @@ public static class IdeaOutcomes
         FeeRates rates = fees(bucket.Category);
         IdeaExitRule rule = rules.Of(bucket.Type, bucket.Interval);
         TimeSpan holding = rule.Holding;
+        // The paths counted are those of the signals, which give the features of their cases.
+        var signals = key.ToDictionary<IdeaSignal, SignalPath>(signal => signal.Path, ReferenceEqualityComparer.Instance);
 
         foreach ((SignalPath path, IdeaTrack outcome) in ExitOutcomes.Counted(key.Select(signal => signal.Path), rule))
         {
@@ -89,7 +92,8 @@ public static class IdeaOutcomes
 
             if (result is { } r)
             {
-                outcomes.Add(new IdeaOutcome(bucket, path.FiredAt, outcome.StatusAt, outcome.Status, r));
+                IdeaSignal signal = signals[path];
+                outcomes.Add(new IdeaOutcome(bucket, path.FiredAt, outcome.StatusAt, outcome.Status, r, IdeaFeatures.Of(signal.Move, signal.VolumeRatio)));
             }
 
             foreach (int days in Days.Where(days => path.FiredAt >= now.AddDays(-days)))

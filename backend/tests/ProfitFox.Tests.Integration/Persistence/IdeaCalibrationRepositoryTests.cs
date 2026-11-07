@@ -46,16 +46,23 @@ public class IdeaCalibrationRepositoryTests
             [new CalibrationRow(null, 0.2m, null, 5m / 30m, single), new CalibrationRow(0.2m, 0.3m, null, 0.2m, thirty)],
             [new CalibrationRow(0.4m, null, null, 0.45m, thirty)],
             [new CalibrationRow(null, null, IdeaBadge.Flat, 0.2m, thirty)],
-            new CalibrationRow(null, null, null, 0.18m, thirty));
+            new CalibrationRow(null, null, null, 0.18m, thirty))
+        {
+            // A report of the comparison without the model with features, as stored before add-idea-features.
+            Comparison = new CalibrationComparison(new CalibrationModel(31, 0.22m, null), new CalibrationModel(31, 0.207m, null))
+        };
         var all = new CalibrationReport(Now, 90, null, 0, 2, null, null, [], [], [], null);
-        // Decision 6 of honest-idea-intervals: the report after the rules changed, with the table by own data and the comparison of the models.
+        // Decision 6 of honest-idea-intervals: the report after the rules changed, with the table by own data and the comparison of the models,
+        // the model with features among them (decision 4 of add-idea-features).
         CalibrationReport fresh = linear with
         {
             Scope = CalibrationScope.Fresh,
             Owns = [new CalibrationOwnRow(false, new CalibrationRow(null, null, null, 0.2m, thirty), 0.21m), new CalibrationOwnRow(true, new CalibrationRow(null, null, null, -0.5m, single), 1m)],
             Comparison = new CalibrationComparison(
                 new CalibrationModel(31, 0.22m, new CalibrationRow(null, null, IdeaBadge.Up, 0.145m, thirty)),
-                new CalibrationModel(31, 0.207m, null)),
+                new CalibrationModel(31, 0.207m, null),
+                new CalibrationModel(31, 0.201m, new CalibrationRow(null, null, IdeaBadge.Up, 0.12m, thirty)),
+                new CalibrationDifference(-0.006m, -0.012m, 0.001m)),
             // Requirement "Калибровка по ТФ и типам": the breakdowns by interval and by type.
             Intervals =
             [
@@ -79,6 +86,49 @@ public class IdeaCalibrationRepositoryTests
         (await calibrations.GetAsync(2, 90, null, CalibrationScope.Fresh, CancellationToken.None)).ShouldBeNull();
         (await calibrations.GetAsync(2, 90, MarketCategory.Spot, CalibrationScope.All, CancellationToken.None)).ShouldBeNull();
         (await calibrations.GetAsync(1, 30, null, CalibrationScope.All, CancellationToken.None)).ShouldBeNull();
+    }
+
+    // Decision 5 of add-idea-features: the difference of the Brier score is stored with its decimals as strings, as the rest of the report, and
+    // reads back from them.
+    [Test]
+    public async Task Difference_of_the_brier_score_is_stored_as_strings()
+    {
+        var calibrations = new IdeaCalibrationRepository(_dataSource);
+        var difference = new CalibrationDifference(-0.003m, -0.009m, 0.002m);
+        var report = new CalibrationReport(Now, 90, null, 0, 0, null, null, [], [], [], null)
+        {
+            Comparison = new CalibrationComparison(new CalibrationModel(0, null, null), new CalibrationModel(0, null, null), new CalibrationModel(0, null, null), difference)
+        };
+        await calibrations.ReplaceAsync(1, [report], CancellationToken.None);
+
+        await using (NpgsqlCommand types = _dataSource.CreateCommand(
+                         "SELECT jsonb_typeof(report #> '{Comparison,Difference,Mean}') || jsonb_typeof(report #> '{Comparison,Difference,Low}') || jsonb_typeof(report #> '{Comparison,Difference,High}') FROM idea_calibration"))
+        {
+            (await types.ExecuteScalarAsync()).ShouldBe("stringstringstring");
+        }
+
+        (await calibrations.GetAsync(1, 90, null, CalibrationScope.All, CancellationToken.None))!.Comparison!.Difference.ShouldBe(difference);
+    }
+
+    // Decision 4 of add-idea-features: a report stored before it has neither the model with features nor the difference in its comparison.
+    [Test]
+    public async Task Report_stored_before_the_model_with_features_reads_without_it()
+    {
+        const string report = """
+                              {"Checked": 0, "Unchecked": 0, "Brier": null, "BaseBrier": null, "Probabilities": [], "Expectancies": [], "Badges": [],
+                               "Total": null, "Owns": [], "Comparison": {"Old": {"Cases": 0, "Brier": null, "Up": null}, "New": {"Cases": 0, "Brier": null, "Up": null}}}
+                              """;
+        await using (NpgsqlCommand insert = _dataSource.CreateCommand(
+                         "INSERT INTO idea_calibration (engine_version, days, category, scope, computed_at, report) VALUES (2, 90, 'all', 'all', @Now, @Report::jsonb)"))
+        {
+            insert.Parameters.AddWithValue("Now", Now);
+            insert.Parameters.AddWithValue("Report", report);
+            await insert.ExecuteNonQueryAsync();
+        }
+
+        CalibrationReport? read = await new IdeaCalibrationRepository(_dataSource).GetAsync(2, 90, null, CalibrationScope.All, CancellationToken.None);
+
+        read!.Comparison.ShouldBe(new CalibrationComparison(new CalibrationModel(0, null, null), new CalibrationModel(0, null, null)));
     }
 
     // Scenario "Итог, сохранённый до разбивок": a report stored without the breakdowns reads with empty ones.

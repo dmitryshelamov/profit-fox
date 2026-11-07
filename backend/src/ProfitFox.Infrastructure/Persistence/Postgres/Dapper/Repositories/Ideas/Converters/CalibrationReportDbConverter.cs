@@ -90,12 +90,24 @@ internal static class CalibrationReportDbConverter
 
     private static CalibrationComparisonDb FromDomain(CalibrationComparison comparison)
     {
-        return new CalibrationComparisonDb { Old = FromDomain(comparison.Old), New = FromDomain(comparison.New) };
+        return new CalibrationComparisonDb
+        {
+            Old = FromDomain(comparison.Old),
+            New = FromDomain(comparison.New),
+            Features = comparison.Features is null ? null : FromDomain(comparison.Features),
+            Difference = comparison.Difference is not { } difference
+                ? null
+                : new CalibrationDifferenceDb { Mean = difference.Mean, Low = difference.Low, High = difference.High }
+        };
     }
 
     private static CalibrationComparison ToDomain(CalibrationComparisonDb comparison)
     {
-        return new CalibrationComparison(ToDomain(comparison.Old), ToDomain(comparison.New));
+        return new CalibrationComparison(
+            ToDomain(comparison.Old),
+            ToDomain(comparison.New),
+            comparison.Features is null ? null : ToDomain(comparison.Features),
+            comparison.Difference is not { } difference ? null : new CalibrationDifference(difference.Mean, difference.Low, difference.High));
     }
 
     private static CalibrationModelDb FromDomain(CalibrationModel model)
