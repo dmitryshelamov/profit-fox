@@ -18,6 +18,7 @@ export const setupChoices = [
   { value: 'rsi_extreme', label: 'Перекупленность / перепроданность' },
   { value: 'new_extreme', label: 'Новый максимум / минимум' },
   { value: 'quiet_volume', label: 'Объём без движения' },
+  { value: 'accumulation', label: 'Накопление / распределение' },
 ] as const;
 
 /** The intervals the setups are read on. */

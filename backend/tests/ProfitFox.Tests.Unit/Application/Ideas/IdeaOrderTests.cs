@@ -96,6 +96,15 @@ public class IdeaOrderTests
         Names(IdeaOrder.Sort(views, IdeaSortColumn.Type, OrderDirection.Ascending)).ShouldBe("cba");
     }
 
+    // Scenario "Сортировка по сетапу": «Накопление / распределение» after «Объём без движения».
+    [Test]
+    public void Accumulation_goes_after_the_quiet_volume()
+    {
+        IdeaView[] views = [View("a", Setup(IdeaSetup.Accumulation)), View("b", Setup(IdeaSetup.QuietVolume)), View("c", Setup(IdeaSetup.NewExtreme))];
+
+        Names(IdeaOrder.Sort(views, IdeaSortColumn.Setup, OrderDirection.Ascending)).ShouldBe("cba");
+    }
+
     [Test]
     public void Symbols_are_compared_ordinally()
     {
