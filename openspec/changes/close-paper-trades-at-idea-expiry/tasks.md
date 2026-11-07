@@ -17,9 +17,9 @@
 
 ## 3. Хранилище и API
 
-- [ ] 3.1 Миграция `AddPaperTradeExpiryMigration` (колонки `expiry_*`, `idea_exit_price` в обеих таблицах, новый `CK_idea_paper_trades_status`, дозапись цены из `ideas`); интеграционный тест: исход без цены до миграции получает `exit_price` идеи
-- [ ] 3.2 `IdeaTradeDb`, конвертеры и запросы (`PaperTradeQueries` Columns/Insert/Update, `WriteOutcomes` обеих таблиц, `IdeaTradeRepositoryQueries`) читают и пишут `expiry_*` и `idea_exit_price`; `IdeaTradeCodes` знает `closed_at_expiry`; интеграционные тесты репозиториев: учебная сделка «по сроку» и исход с ценой читаются обратно такими же
-- [ ] 3.3 `IdeaJournalTotalsResponse.expired`; интеграционный тест `GET /api/idea-trades`: закрытая по сроку учебная сделка приходит с `closed_at_expiry`, результатом и временем до исхода, итоги учебных считают «по сроку»
+- [x] 3.1 Миграция `AddPaperTradeExpiryMigration` (колонки `expiry_*`, `idea_exit_price` в обеих таблицах, новый `CK_idea_paper_trades_status`, дозапись цены из `ideas`); интеграционный тест: исход без цены до миграции получает `exit_price` идеи
+- [x] 3.2 `IdeaTradeDb`, конвертеры и запросы (`PaperTradeQueries` Columns/Insert/Update, `WriteOutcomes` обеих таблиц, `IdeaTradeRepositoryQueries`) читают и пишут `expiry_*` и `idea_exit_price`; `IdeaTradeCodes` знает `closed_at_expiry`; интеграционные тесты репозиториев: учебная сделка «по сроку» и исход с ценой читаются обратно такими же
+- [x] 3.3 `IdeaJournalTotalsResponse.expired`; интеграционный тест `GET /api/idea-trades`: закрытая по сроку учебная сделка приходит с `closed_at_expiry`, результатом и временем до исхода, итоги учебных считают «по сроку»
 - [ ] 3.4 `dotnet build`, `dotnet test`, `dotnet format --verify-no-changes` зелёные
 
 ## 4. Frontend

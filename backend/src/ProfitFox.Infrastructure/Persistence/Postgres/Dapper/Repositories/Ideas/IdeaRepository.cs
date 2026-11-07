@@ -66,7 +66,9 @@ internal sealed class IdeaRepository(NpgsqlDataSource dataSource) : IIdeaReposit
         await connection.ExecuteAsync(IdeaRepositoryQueries.Update(changed.Select(idea => IdeaDbConverter.FromDomain(idea)), transaction, cancellationToken));
         await connection.ExecuteAsync(IdeaRepositoryQueries.WriteTradeOutcomes(outcomes, transaction, cancellationToken));
         await connection.ExecuteAsync(PaperTradeQueries.WriteOutcomes(
-            outcomes.Select(closed => (object)new { closed.IdeaId, Status = closed.Outcome.Status.ToCode(), closed.Outcome.StatusAt, closed.Outcome.Result }), transaction, cancellationToken));
+            outcomes.Select(closed => (object)new { closed.IdeaId, Status = closed.Outcome.Status.ToCode(), closed.Outcome.StatusAt, closed.Outcome.Result, closed.Outcome.ExitPrice }),
+            transaction,
+            cancellationToken));
         var added = new List<Idea>();
 
         foreach (Idea idea in created)
