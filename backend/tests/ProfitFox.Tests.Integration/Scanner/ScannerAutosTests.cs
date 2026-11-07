@@ -20,7 +20,6 @@ using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Exchange
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaAutos;
 using ProfitFox.Infrastructure.Persistence.Postgres.Transactions;
 using ProfitFox.Tests.Integration.Infrastructure;
-using ProfitFox.Tests.Integration.Persistence;
 using ProfitFox.Tests.Shared.Fixtures.Ideas;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.IdeaAutos;
 
@@ -48,7 +47,7 @@ public class ScannerAutosTests
     [SetUp]
     public async Task SetUp()
     {
-        _connectionString = await MarketDataDatabase.CreateConnectionStringAsync();
+        _connectionString = IntegrationEnvironment.ConnectionString;
         _database = NpgsqlDataSource.Create(_connectionString);
         _time = new FakeTimeProvider(Start);
     }

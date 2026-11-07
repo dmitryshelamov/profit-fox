@@ -26,7 +26,7 @@ public class ServiceLoggingTests
 
         try
         {
-            await using (var factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { Environment = "Production" })
+            await using (var factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { Environment = "Production" })
             {
                 using HttpClient client = factory.CreateClient();
                 await client.GetAsync("/no-such-route");
@@ -55,7 +55,7 @@ public class ServiceLoggingTests
         ILogEventSink sink = Substitute.For<ILogEventSink>();
 
         // Disposing the factory waits for the request pipeline, so the request event is written before the assertions.
-        await using (var factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { LogSink = sink })
+        await using (var factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { LogSink = sink })
         {
             using HttpClient client = factory.CreateClient();
             HttpResponseMessage response = await client.GetAsync(
@@ -80,7 +80,7 @@ public class ServiceLoggingTests
     {
         ILogEventSink sink = Substitute.For<ILogEventSink>();
 
-        await using (var factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { LogSink = sink })
+        await using (var factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { LogSink = sink })
         {
             factory.CreateClient().Dispose();
         }
@@ -119,7 +119,7 @@ public class ServiceLoggingTests
 
         try
         {
-            await using var factory = new FailingBuildFactory(await IntegrationEnvironment.CreateDatabaseAsync());
+            await using var factory = new FailingBuildFactory(IntegrationEnvironment.ConnectionString);
             Should.Throw<Exception>(() => factory.CreateClient());
         }
         finally

@@ -20,7 +20,7 @@ public class StrategyValidationApiTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = await ProfitFoxFactory.CreateAsync();
+        _factory = ProfitFoxFactory.Create();
         _factory.Bybit.Instruments.UnionWith([("spot", "BTCUSDT")]);
         _client = _factory.CreateClient();
     }

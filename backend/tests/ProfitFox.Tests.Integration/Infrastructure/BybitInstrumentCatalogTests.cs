@@ -20,7 +20,7 @@ public class BybitInstrumentCatalogTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        _factory = ProfitFoxFactory.Create(workers: 0);
         _factory.Bybit.Instruments.UnionWith(
             [("spot", "ETHUSDT"), ("spot", "BTCUSDT"), ("linear", "SOLUSDT"), ("linear", "BTCUSDT"), ("linear", "ETHUSDT"), ("linear", "XRPUSDT"), ("linear", "ADAUSDT")]);
         _factory.Bybit.Coins[("spot", "ETHUSDT")] = ("ETH", "USDT");

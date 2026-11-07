@@ -444,6 +444,10 @@ enforces a rule, the check is the source of truth.
 ## Tests
 
 - `Tests.Unit` mirrors the `src` folders. `Tests.Integration` covers the database and HTTP with Testcontainers.
+  `IntegrationEnvironment` starts one container with one test database, migrated once (`IntegrationEnvironment.ConnectionString`,
+  `MarketDataDatabase.Open()`); `ResetDatabaseAttribute` empties its tables before every test and writes back the rows the
+  migrations write. A test of a migration takes an empty database of its own (`CreateEmptyDatabaseAsync`); a test that makes a
+  table of its own drops it.
   `ProfitFoxFactory` runs the service in the `Testing` environment: test-only settings go to
   `ProfitFox.Presentation/appsettings.Testing.json`, the connection string comes from the container. Next to the API it
   starts `Workers` instances of `WorkerHost` (one by default, none to keep work `Pending`) on the same database, fake

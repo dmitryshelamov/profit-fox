@@ -36,7 +36,7 @@ public class IdeaAutoRefusalRepositoryTests
     [SetUp]
     public async Task SetUp()
     {
-        _dataSource = await MarketDataDatabase.CreateAsync();
+        _dataSource = MarketDataDatabase.Open();
         var accessor = new PostgresTransactionAccessor();
         _executor = new PostgresTransactionExecutor(_dataSource, accessor);
         _repository = new IdeaAutoRefusalRepository(_dataSource, accessor);

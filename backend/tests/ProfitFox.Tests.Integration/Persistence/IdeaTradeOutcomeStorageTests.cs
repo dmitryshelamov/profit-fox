@@ -36,7 +36,7 @@ public class IdeaTradeOutcomeStorageTests
     [SetUp]
     public async Task SetUp()
     {
-        _dataSource = await MarketDataDatabase.CreateAsync();
+        _dataSource = MarketDataDatabase.Open();
         var accessor = new PostgresTransactionAccessor();
         _executor = new PostgresTransactionExecutor(_dataSource, accessor);
         _trades = new IdeaTradeRepository(_dataSource, accessor);

@@ -47,7 +47,7 @@ public class WorkerLeasesMigrationTests
     [SetUp]
     public async Task SetUp()
     {
-        _connectionString = await IntegrationEnvironment.CreateDatabaseAsync();
+        _connectionString = await IntegrationEnvironment.CreateEmptyDatabaseAsync();
         IConfigurationRoot configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:MarketData"] = _connectionString })
             .Build();

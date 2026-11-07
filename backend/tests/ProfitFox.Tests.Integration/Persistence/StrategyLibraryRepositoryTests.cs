@@ -32,7 +32,7 @@ public class StrategyLibraryRepositoryTests
     [SetUp]
     public async Task SetUp()
     {
-        _dataSource = await MarketDataDatabase.CreateAsync();
+        _dataSource = MarketDataDatabase.Open();
         _repository = new StrategyLibraryRepository(_dataSource);
     }
 

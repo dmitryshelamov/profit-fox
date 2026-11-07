@@ -27,7 +27,7 @@ public class LiveBotPositionsApiTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { Workers = 0 };
+        _factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { Workers = 0 };
         _factory.Bybit.Instruments.Add(("spot", "BTCUSDT"));
         _client = _factory.CreateClient();
     }

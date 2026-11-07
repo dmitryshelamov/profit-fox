@@ -13,7 +13,7 @@ public class StreamsRegistrationTests
     [Test]
     public async Task Api_and_worker_resolve_both_stream_ports_to_one_singleton()
     {
-        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync(workers: 1);
+        await using var factory = ProfitFoxFactory.Create(workers: 1);
         factory.CreateClient().Dispose();
 
         IServiceProvider[] hosts = [factory.Services, factory.WorkerHosts[0].Services];

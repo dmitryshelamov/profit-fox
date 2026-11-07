@@ -28,7 +28,7 @@ public class BotCandlesApiTests
     public async Task SetUp()
     {
         // The clock reads 2024-03-10T12:30Z, so the last closed hour is 11:00.
-        _factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { Workers = 0 };
+        _factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { Workers = 0 };
         _factory.Bybit.Instruments.Add(("spot", "BTCUSDT"));
         _client = _factory.CreateClient();
         _bot = await CreateBotAsync();
@@ -121,7 +121,7 @@ public class BotCandlesApiTests
     [Test]
     public async Task A_running_import_and_chart_requests_of_the_same_period_leave_one_candle_per_hour()
     {
-        await using var factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { Workers = 1 };
+        await using var factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { Workers = 1 };
         factory.Bybit.Instruments.Add(("spot", "BTCUSDT"));
         factory.Bybit.Klines.AddRange(_factory.Bybit.Klines);
         using HttpClient client = factory.CreateClient();

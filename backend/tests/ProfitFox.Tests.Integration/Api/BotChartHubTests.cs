@@ -28,7 +28,7 @@ public class BotChartHubTests
     public async Task SetUp()
     {
         _server = await FakeBybitSocketServer.StartAsync();
-        _factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { Workers = 0, BybitSocketAddress = _server.Address };
+        _factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { Workers = 0, BybitSocketAddress = _server.Address };
         _client = _factory.CreateClient();
     }
 

@@ -111,7 +111,7 @@ public class TradingSettingsTests
 
     private static async Task<IHost> WorkerAsync(string environment, bool trading, IReadOnlyDictionary<string, string?>? settings = null)
     {
-        await using Npgsql.NpgsqlDataSource database = await MarketDataDatabase.CreateAsync();
+        await using Npgsql.NpgsqlDataSource database = MarketDataDatabase.Open();
         HostApplicationBuilder builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
         {
             EnvironmentName = environment,

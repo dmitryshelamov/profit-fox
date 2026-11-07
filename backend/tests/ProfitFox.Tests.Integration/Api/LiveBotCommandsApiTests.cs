@@ -35,7 +35,7 @@ public class LiveBotCommandsApiTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { Workers = 0 };
+        _factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { Workers = 0 };
         _factory.Bybit.Instruments.UnionWith([("spot", "BTCUSDT"), ("linear", "BTCUSDT")]);
         _factory.Bybit.Coins[("spot", "BTCUSDT")] = ("BTC", "USDT");
         _factory.Bybit.Coins[("linear", "BTCUSDT")] = ("BTC", "USDT");

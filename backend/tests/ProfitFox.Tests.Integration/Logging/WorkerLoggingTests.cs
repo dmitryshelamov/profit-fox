@@ -61,7 +61,7 @@ public class WorkerLoggingTests
     [Test]
     public async Task Failure_of_a_chunk_is_logged_with_its_backtest_and_the_worker_goes_on()
     {
-        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        await using var factory = ProfitFoxFactory.Create(workers: 0);
         using HttpClient client = factory.CreateClient();
         var scenario = new BacktestScenario(factory, client);
         await scenario.CreateBotAsync("ladder");

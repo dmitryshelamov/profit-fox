@@ -14,7 +14,7 @@ public class SmokeTests
     [Test]
     public async Task App_starts_against_a_fresh_timescale_database()
     {
-        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync();
+        await using var factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateEmptyDatabaseAsync());
         using HttpClient client = factory.CreateClient();
 
         HttpResponseMessage response = await client.GetAsync("/no-such-route");
@@ -26,7 +26,7 @@ public class SmokeTests
     [Test]
     public async Task App_under_test_runs_in_the_testing_environment()
     {
-        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync();
+        await using var factory = ProfitFoxFactory.Create();
 
         factory.Services.GetRequiredService<IHostEnvironment>().EnvironmentName.ShouldBe("Testing");
     }

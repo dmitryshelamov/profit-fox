@@ -27,7 +27,7 @@ public class AddIdeaAutoBudgetsMigrationTests
     [SetUp]
     public async Task SetUp()
     {
-        string connectionString = await IntegrationEnvironment.CreateDatabaseAsync();
+        string connectionString = await IntegrationEnvironment.CreateEmptyDatabaseAsync();
         IConfigurationRoot configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:MarketData"] = connectionString })
             .Build();
