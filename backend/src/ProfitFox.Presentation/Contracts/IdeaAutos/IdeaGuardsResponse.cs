@@ -7,7 +7,8 @@ namespace ProfitFox.Presentation.Contracts.IdeaAutos;
 /// <summary>
 ///     The guards over the real trades: the open trades against their limit and the risk of them against theirs, the sum of the day since 00:00 UTC
 ///     against the daily stop (with the time it was reached and the time the autos enter again, once it holds), and the open longs and shorts against the
-///     limit of one side. A guard that is off has no limit. Numbers are decimal strings.
+///     limit of one side, and what the open real trades of the autos take of the budget of all the autos. A guard that is off has no limit. Numbers are
+///     decimal strings.
 /// </summary>
 public sealed record IdeaGuardsResponse(
     int OpenTrades,
@@ -20,7 +21,9 @@ public sealed record IdeaGuardsResponse(
     DateTimeOffset? ResumesAt,
     int OpenLongs,
     int OpenShorts,
-    int? MaxSameDirection)
+    int? MaxSameDirection,
+    [property: Required] string AutosBudgetUsed,
+    string? AutosBudget)
 {
     public static IdeaGuardsResponse Of(IdeaGuardsState state)
     {
@@ -35,7 +38,9 @@ public sealed record IdeaGuardsResponse(
             state.DailyLoss.ResumesAt,
             state.OpenLongs,
             state.OpenShorts,
-            state.MaxSameDirection);
+            state.MaxSameDirection,
+            Text(state.AutosBudgetUsed),
+            state.AutosBudget is { } budget ? Text(budget) : null);
     }
 
     internal static string Text(decimal value)

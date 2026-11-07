@@ -142,6 +142,8 @@ export interface SettingsInput {
   readonly dailyLossLimit: string;
   /** The most open trades of one side that the autos with money stand; an empty text switches the guard off. */
   readonly maxSameDirection: string;
+  /** The most the open real trades of all the autos may hold; an empty text switches the guard off. */
+  readonly autosBudget: string;
 }
 
 /** A number the form holds as text; text that is no number goes out as it is, so the API names the field. */
@@ -159,6 +161,7 @@ export async function saveSettings(input: SettingsInput): Promise<void> {
         minRiskReward: field(input.minRiskReward),
         dailyLossLimit: input.dailyLossLimit === '' ? null : field(input.dailyLossLimit),
         maxSameDirection: input.maxSameDirection === '' ? null : field(input.maxSameDirection),
+        autosBudget: input.autosBudget === '' ? null : field(input.autosBudget),
       },
     }),
   );

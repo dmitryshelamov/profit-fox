@@ -88,9 +88,9 @@ const reasons: Record<string, string> = {
   price_beyond_stop: 'Цена уже за стопом',
   price_beyond_target: 'Цена уже за целью',
   risk_reward_too_low: 'R:R ниже минимума',
-  amount_above_max: 'Сумма выше предела',
+  amount_above_max: 'Больше максимума на одну сделку',
   too_many_open_trades: 'Не больше открытых сделок',
-  total_risk_exceeded: 'Не больше общего риска',
+  total_risk_exceeded: 'Максимальный убыток по стопам',
   opposite_side_open: 'Открыта противоположная сторона',
   not_enough_money: 'Не хватает денег',
   quantity_below_minimum: 'Объём ниже минимума биржи',
@@ -106,6 +106,8 @@ const reasons: Record<string, string> = {
   auto_off: 'Автомат выключен',
   rules_unknown: 'Правила биржи неизвестны',
   entry_error: 'Ошибка подготовки входа',
+  budget_taken: 'Бюджет автомата занят',
+  autos_budget_taken: 'Бюджет автоматов занят',
 };
 
 /** What stopped an auto, in words; a code the interface does not know is shown as it is. */

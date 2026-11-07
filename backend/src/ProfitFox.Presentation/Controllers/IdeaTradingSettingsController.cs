@@ -32,7 +32,7 @@ public sealed class IdeaTradingSettingsController(ISender sender) : ControllerBa
     {
         try
         {
-            await sender.Send(new SaveIdeaTradingSettingsCommand(new IdeaTradingSettings(body.AccountId, body.Amount, body.MaxAmount, body.MaxOpenTrades, body.MaxTotalRisk, body.MinRiskReward, body.DailyLossLimit, body.MaxSameDirection)), cancellationToken);
+            await sender.Send(new SaveIdeaTradingSettingsCommand(new IdeaTradingSettings(body.AccountId, body.Amount, body.MaxAmount, body.MaxOpenTrades, body.MaxTotalRisk, body.MinRiskReward, body.DailyLossLimit, body.MaxSameDirection, body.AutosBudget)), cancellationToken);
 
             return NoContent();
         }

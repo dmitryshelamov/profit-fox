@@ -55,7 +55,19 @@ public class IdeaCalibrationRepositoryTests
             Owns = [new CalibrationOwnRow(false, new CalibrationRow(null, null, null, 0.2m, thirty), 0.21m), new CalibrationOwnRow(true, new CalibrationRow(null, null, null, -0.5m, single), 1m)],
             Comparison = new CalibrationComparison(
                 new CalibrationModel(31, 0.22m, new CalibrationRow(null, null, IdeaBadge.Up, 0.145m, thirty)),
-                new CalibrationModel(31, 0.207m, null))
+                new CalibrationModel(31, 0.207m, null)),
+            // Requirement "Калибровка по ТФ и типам": the breakdowns by interval and by type.
+            Intervals =
+            [
+                new CalibrationSlice(Interval.FiveMinutes, null, new CalibrationRow(null, null, null, -0.5m, single), null, new CalibrationComparison(new CalibrationModel(0, null, null), new CalibrationModel(0, null, null))),
+                new CalibrationSlice(
+                    Interval.OneHour,
+                    null,
+                    new CalibrationRow(null, null, null, 0.2m, thirty),
+                    new CalibrationRow(null, null, IdeaBadge.Up, 0.15m, thirty),
+                    new CalibrationComparison(new CalibrationModel(30, 0.22m, new CalibrationRow(null, null, IdeaBadge.Up, 0.145m, thirty)), new CalibrationModel(30, 0.2m, null)))
+            ],
+            Types = [new CalibrationSlice(null, IdeaType.Pullback, new CalibrationRow(null, null, null, 0.2m, thirty), null, new CalibrationComparison(new CalibrationModel(1, 1m, null), new CalibrationModel(1, 0.5m, null)))]
         };
         await calibrations.ReplaceAsync(1, [all with { Days = 30 }], CancellationToken.None);
 
@@ -69,6 +81,47 @@ public class IdeaCalibrationRepositoryTests
         (await calibrations.GetAsync(1, 30, null, CalibrationScope.All, CancellationToken.None)).ShouldBeNull();
     }
 
+    // Scenario "Итог, сохранённый до разбивок": a report stored without the breakdowns reads with empty ones.
+    [Test]
+    public async Task Report_stored_before_the_breakdowns_reads_with_empty_ones()
+    {
+        var calibrations = new IdeaCalibrationRepository(_dataSource);
+        BucketStatistics single = BucketStatisticsCalculator.Compute(0, 1, 0, -1m, 1m);
+        var report = new CalibrationReport(Now, 90, null, 1, 0, 1m, 1m, [], [], [], new CalibrationRow(null, null, null, 0.1m, single))
+        {
+            Types = [new CalibrationSlice(null, IdeaType.TwoR, new CalibrationRow(null, null, null, 0.1m, single), null, new CalibrationComparison(new CalibrationModel(0, null, null), new CalibrationModel(0, null, null)))]
+        };
+        await calibrations.ReplaceAsync(1, [report], CancellationToken.None);
+        await using (NpgsqlCommand strip = _dataSource.CreateCommand("UPDATE idea_calibration SET report = report - 'Intervals' - 'Types'"))
+        {
+            await strip.ExecuteNonQueryAsync();
+        }
+
+        CalibrationReport? read = await calibrations.GetAsync(1, 90, null, CalibrationScope.All, CancellationToken.None);
+
+        read.ShouldNotBeNull();
+        read.Intervals.ShouldBeEmpty();
+        read.Types.ShouldBeEmpty();
+        read.Total.ShouldBe(report.Total);
+    }
+
+    // A code of a breakdown that this version does not know is a broken report, not a row of another interval or type.
+    [TestCase("Intervals", "{\"Interval\": \"7\"}")]
+    [TestCase("Types", "{\"Type\": \"fishing\"}")]
+    public async Task Report_with_an_unknown_code_of_a_breakdown_is_refused(string breakdown, string code)
+    {
+        var calibrations = new IdeaCalibrationRepository(_dataSource);
+        BucketStatistics single = BucketStatisticsCalculator.Compute(0, 1, 0, -1m, 1m);
+        var slice = new CalibrationSlice(Interval.FiveMinutes, IdeaType.TwoR, new CalibrationRow(null, null, null, 0.1m, single), null, new CalibrationComparison(new CalibrationModel(0, null, null), new CalibrationModel(0, null, null)));
+        await calibrations.ReplaceAsync(1, [new CalibrationReport(Now, 90, null, 1, 0, 1m, 1m, [], [], [], null) { Intervals = [slice], Types = [slice] }], CancellationToken.None);
+        await using (NpgsqlCommand corrupt = _dataSource.CreateCommand($"UPDATE idea_calibration SET report = jsonb_set(report, '{{{breakdown},0}}', report #> '{{{breakdown},0}}' || '{code}'::jsonb)"))
+        {
+            await corrupt.ExecuteNonQueryAsync();
+        }
+
+        await Should.ThrowAsync<InvalidOperationException>(() => calibrations.GetAsync(1, 90, null, CalibrationScope.All, CancellationToken.None));
+    }
+
     // A record compares its lists by reference: the lists are compared by their rows, the rest as it is.
     private static void ShouldMatch(CalibrationReport? read, CalibrationReport expected)
     {
@@ -77,6 +130,16 @@ public class IdeaCalibrationRepositoryTests
         read.Expectancies.ShouldBe(expected.Expectancies);
         read.Badges.ShouldBe(expected.Badges);
         read.Owns.ShouldBe(expected.Owns);
-        (read with { Probabilities = expected.Probabilities, Expectancies = expected.Expectancies, Badges = expected.Badges, Owns = expected.Owns }).ShouldBe(expected);
+        read.Intervals.ShouldBe(expected.Intervals);
+        read.Types.ShouldBe(expected.Types);
+        (read with
+        {
+            Probabilities = expected.Probabilities,
+            Expectancies = expected.Expectancies,
+            Badges = expected.Badges,
+            Owns = expected.Owns,
+            Intervals = expected.Intervals,
+            Types = expected.Types
+        }).ShouldBe(expected);
     }
 }

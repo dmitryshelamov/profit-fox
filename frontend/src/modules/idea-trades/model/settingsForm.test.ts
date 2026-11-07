@@ -12,6 +12,7 @@ describe('settings form', () => {
         minRiskReward: '1.5',
         dailyLossLimit: '30',
         maxSameDirection: 5,
+        autosBudget: '200',
       }),
     ).toEqual({
       accountId: '',
@@ -22,6 +23,7 @@ describe('settings form', () => {
       minRiskReward: '1.5',
       dailyLossLimit: '30',
       maxSameDirection: '5',
+      autosBudget: '200',
     });
   });
 
@@ -35,9 +37,11 @@ describe('settings form', () => {
       minRiskReward: '1.5',
       dailyLossLimit: null,
       maxSameDirection: null,
+      autosBudget: null,
     });
 
     expect(form.dailyLossLimit).toBe('');
+    expect(form.autosBudget).toBe('');
     expect(form.maxSameDirection).toBe('');
   });
 

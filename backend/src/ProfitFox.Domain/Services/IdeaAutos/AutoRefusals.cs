@@ -9,8 +9,8 @@ namespace ProfitFox.Domain.Services.IdeaAutos;
 
 /// <summary>
 ///     What stops an auto taking an idea that fits its conditions, beyond the checks of the entry itself (<c>IdeaTradeRefusals</c> for the
-///     real ones, <see cref="PaperEntry" /> for the paper ones): the pair held by a trade, the daily stop and the open trades of one side. It only
-///     names the reasons, with what the first one is about.
+///     real ones, <see cref="PaperEntry" /> for the paper ones): the pair held by a trade, the budget of the auto and of all the autos, the daily stop
+///     and the open trades of one side. It only names the reasons, with what the first one is about.
 /// </summary>
 public static class AutoRefusals
 {
@@ -55,14 +55,48 @@ public static class AutoRefusals
         return held.Trade is null ? null : Taken(new PairHolder(PairHolderKind.SameAuto, auto.Name, false, held.Paper, null, Since(held.Trade)));
     }
 
-    /// <returns>The reasons of an auto with money in a fixed order: the pair, the daily stop, the open trades of the side.</returns>
-    public static IReadOnlyList<AutoRefusal> Check(IdeaAuto auto, Instrument instrument, IdeaSide side, AutoBooks books, DailyLossState dailyLoss, int? maxSameDirection)
+    /// <summary>
+    ///     The open trades of the auto with the <paramref name="amount" /> of the entry would be above its budget: named with what they take and the
+    ///     budget. None for an auto without a budget.
+    /// </summary>
+    public static AutoRefusal? BudgetTaken(IdeaAuto auto, decimal amount, AutoBooks books)
+    {
+        decimal used = AutoBudget.Used(auto.Id, books);
+
+        return used + amount > auto.Budget ? new AutoRefusal(IdeaTradeRefusal.BudgetTaken, RefusalDetail.Numbers(used, auto.Budget.Value)) : null;
+    }
+
+    /// <param name="auto"></param>
+    /// <param name="instrument"></param>
+    /// <param name="side"></param>
+    /// <param name="amount">The amount the entry asks for.</param>
+    /// <param name="books"></param>
+    /// <param name="dailyLoss"></param>
+    /// <param name="maxSameDirection"></param>
+    /// <param name="autosBudget">The budget of all the autos, none while it is off.</param>
+    /// <returns>
+    ///     The reasons of an auto with money in a fixed order: the pair, the budget of the auto, the budget of all the autos, the daily stop, the open
+    ///     trades of the side.
+    /// </returns>
+    public static IReadOnlyList<AutoRefusal> Check(IdeaAuto auto, Instrument instrument, IdeaSide side, decimal amount, AutoBooks books, DailyLossState dailyLoss, int? maxSameDirection, decimal? autosBudget)
     {
         var reasons = new List<AutoRefusal>();
 
         if (PairTaken(auto, instrument, books) is { } taken)
         {
             reasons.Add(taken);
+        }
+
+        if (BudgetTaken(auto, amount, books) is { } budget)
+        {
+            reasons.Add(budget);
+        }
+
+        decimal autosUsed = AutoBudget.AutosUsed(books.OpenReal);
+
+        if (autosUsed + amount > autosBudget)
+        {
+            reasons.Add(new AutoRefusal(IdeaTradeRefusal.AutosBudgetTaken, RefusalDetail.Numbers(autosUsed, autosBudget.Value)));
         }
 
         if (dailyLoss.Holds)

@@ -7,6 +7,8 @@ using Npgsql;
 using ProfitFox.Domain.Entities.IdeaAutos;
 using ProfitFox.Domain.Entities.IdeaAutos.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
+using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaAutos;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaTrades;
 using ProfitFox.Infrastructure.Persistence.Postgres.Transactions;
@@ -16,7 +18,10 @@ using Shouldly;
 
 namespace ProfitFox.Tests.Integration.Workers;
 
-/// <summary>The requests of the autos with money in trading Workers on the fake exchange: the upper auto enters, the lower finds the pair taken, and Workers work one request at a time.</summary>
+/// <summary>
+///     The requests of the autos with money in trading Workers on the fake exchange: the upper auto enters, the lower finds the pair taken, Workers work one
+///     request at a time, and two requests do not go over a budget together.
+/// </summary>
 public class IdeaAutoEntryTests
 {
     private LiveTradingScenario _scenario = null!;
@@ -86,10 +91,74 @@ public class IdeaAutoEntryTests
         detail.ShouldContain("\"Limit\": 100");
     }
 
-    private async Task<IdeaAuto> SaveAutoAsync(string name, decimal amount)
+    // Scenario "Две заявки с деньгами": the budget of 150 holds one trade of 100 (0.952380 at 105 is 99.9999), so of the two requests of one minute on two pairs,
+    // with two Workers, one enters and the other is refused by the budget with what the first took.
+    [Test]
+    public async Task Two_requests_of_one_auto_do_not_go_over_its_budget_together()
+    {
+        Instrument eth = AddPair("ETHUSDT");
+        Guid btcIdea = await _scenario.SaveIdeaAsync(105m, 100m, 115m);
+        Guid ethIdea = await _scenario.SaveIdeaAsync(105m, 100m, 115m, instrument: eth);
+        IdeaAuto auto = await SaveAutoAsync("Импульс лонг", 100m, budget: 150m);
+        await SaveEntryAsync(btcIdea, auto, rank: 0);
+        await SaveEntryAsync(ethIdea, auto, rank: 0);
+        _scenario.StartWorker(inspectKeys: true);
+        _scenario.StartWorker(inspectKeys: true);
+
+        await _scenario.WaitAsync(async () => await CountAsync("SELECT count(*) FROM idea_auto_entries") == 0, "the requests worked");
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the entry of the first request");
+
+        IdeaTrade trade = (await TradesAsync()).Single();
+        trade.AutoId.ShouldBe(auto.Id);
+        (string reasons, string detail) = await RefusalAsync(auto);
+        reasons.ShouldBe("budget_taken");
+        trade.Amount.ShouldBe(99.9999m);
+        detail.ShouldContain("\"Actual\": 99.9999");
+        detail.ShouldContain("\"Limit\": 150");
+    }
+
+    // Scenario "Бюджет автоматов занят": the budget of all the autos of 150 holds one trade of 100, so the second auto is refused by it.
+    [Test]
+    public async Task Requests_of_two_autos_do_not_go_over_the_budget_of_all_the_autos_together()
+    {
+        await new IdeaTradingSettingsRepository(_database).SaveAsync(IdeaTradingSettings.Default with { MaxTotalRisk = 100m, MaxOpenTrades = 10, AutosBudget = 150m }, CancellationToken.None);
+        Instrument eth = AddPair("ETHUSDT");
+        Guid btcIdea = await _scenario.SaveIdeaAsync(105m, 100m, 115m);
+        Guid ethIdea = await _scenario.SaveIdeaAsync(105m, 100m, 115m, instrument: eth);
+        IdeaAuto upper = await SaveAutoAsync("Импульс лонг", 100m);
+        IdeaAuto lower = await SaveAutoAsync("Пробои 5м", 100m);
+        await SaveEntryAsync(btcIdea, upper, rank: 0);
+        await SaveEntryAsync(ethIdea, lower, rank: 1);
+        _scenario.StartWorker(inspectKeys: true);
+
+        await _scenario.WaitAsync(async () => await CountAsync("SELECT count(*) FROM idea_auto_entries") == 0, "the requests worked");
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the entry of the upper auto");
+
+        IdeaTrade trade = (await TradesAsync()).Single();
+        trade.AutoId.ShouldBe(upper.Id);
+        (string reasons, string detail) = await RefusalAsync(lower);
+        reasons.ShouldBe("autos_budget_taken");
+        trade.Amount.ShouldBe(99.9999m);
+        detail.ShouldContain("\"Actual\": 99.9999");
+        detail.ShouldContain("\"Limit\": 150");
+    }
+
+    // A second linear pair on the fake Bybit, priced like the first.
+    private Instrument AddPair(string symbol)
+    {
+        _scenario.Factory.Bybit.Instruments.Add(("linear", symbol));
+        _scenario.Factory.Bybit.Coins[("linear", symbol)] = (symbol[..^4], "USDT");
+        _scenario.Factory.Bybit.Rules[("linear", symbol)] = ("0.01", "0.000001", "0.000001", "1");
+        var instrument = new Instrument(MarketCategory.Linear, symbol);
+        _scenario.SetPrice("105", instrument);
+
+        return instrument;
+    }
+
+    private async Task<IdeaAuto> SaveAutoAsync(string name, decimal amount, decimal? budget = null)
     {
         var repository = new IdeaAutoRepository(_database, new PostgresTransactionAccessor());
-        IdeaAuto auto = await repository.CreateAsync(IdeaAutoGenerator.Generate(_scenario.Account, name, amount: amount), DateTimeOffset.UtcNow, CancellationToken.None);
+        IdeaAuto auto = await repository.CreateAsync(IdeaAutoGenerator.Generate(_scenario.Account, name, amount: amount) with { Budget = budget }, DateTimeOffset.UtcNow, CancellationToken.None);
         await repository.SetModeAsync(auto.Id, IdeaAutoMode.Live, CancellationToken.None);
 
         return auto with { Mode = IdeaAutoMode.Live };

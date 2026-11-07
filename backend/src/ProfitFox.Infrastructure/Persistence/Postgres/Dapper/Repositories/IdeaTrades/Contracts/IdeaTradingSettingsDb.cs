@@ -17,4 +17,6 @@ internal sealed class IdeaTradingSettingsDb
     public decimal? DailyLossLimit { get; init; }
 
     public int? MaxSameDirection { get; init; }
+
+    public decimal? AutosBudget { get; init; }
 }

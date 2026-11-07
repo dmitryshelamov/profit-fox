@@ -32,7 +32,8 @@ describe('form of an auto', () => {
     expect(await screen.findByRole('heading', { name: 'Новый автомат' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText('Аккаунт')).toHaveValue(exchangeAccount.id));
     expect(screen.getByLabelText('Сумма на сделку, USDT')).toHaveValue('300');
-    expect(screen.getByText('не больше 500 USDT')).toBeInTheDocument();
+    expect(screen.getByText('максимум на одну сделку — 500 USDT')).toBeInTheDocument();
+    expect(screen.getByLabelText('Бюджет автомата, USDT')).toHaveValue('');
     expect(screen.getByLabelText('Минимальный R:R')).toHaveValue('1.5');
     expect(screen.getByLabelText('Название')).toHaveValue('');
     for (const group of ['Сетапы', 'Типы идей', 'ТФ']) {
@@ -123,7 +124,7 @@ describe('form of an auto', () => {
     const post = requests.find((request) => request.method === 'POST')!;
 
     expect(await post.text()).toBe(
-      `{"name":"Мой автомат","accountId":"${exchangeAccount.id}","amount":300,"setups":["impulse"],"types":["pullback"],"intervals":["15","60"],"side":"short","category":"spot","badge":"flat","minRiskReward":1.5,"minCases":0}`,
+      `{"name":"Мой автомат","accountId":"${exchangeAccount.id}","amount":300,"budget":null,"setups":["impulse"],"types":["pullback"],"intervals":["15","60"],"side":"short","category":"spot","badge":"flat","minRiskReward":1.5,"minCases":0}`,
     );
     expect(
       requests.some((request) => request.method === 'PUT' && request.url.endsWith('/auto-9/mode')),
@@ -166,6 +167,35 @@ describe('form of an auto', () => {
     ).toBeInTheDocument();
     expect(amount).toHaveAttribute('aria-invalid', 'true');
     expect(history.location.pathname).toBe('/idea-trades/autos/auto-1');
+  });
+
+  // Scenario "Ошибка бюджета".
+  it('opens a saved auto with its budget and shows the error of the budget at its field', async () => {
+    const requests = fakeApi(
+      routes({
+        'GET /api/idea-autos/auto-1': () => json({ ...saved, budget: '600' }),
+        'PUT /api/idea-autos/auto-1': () =>
+          problem(400, 'invalid', {
+            errors: { budget: ['The budget must not be below the amount of a trade.'] },
+          }),
+      }),
+    );
+    renderApp('/idea-trades/autos/auto-1');
+    const user = userEvent.setup();
+    const budget = await screen.findByLabelText('Бюджет автомата, USDT');
+    await waitFor(() => expect(budget).toHaveValue('600'));
+
+    await user.clear(budget);
+    await user.type(budget, '40');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    expect(
+      await screen.findByText('The budget must not be below the amount of a trade.'),
+    ).toBeInTheDocument();
+    expect(budget).toHaveAttribute('aria-invalid', 'true');
+    expect(await requests.find((request) => request.method === 'PUT')!.text()).toContain(
+      '"amount":300,"budget":40,',
+    );
   });
 
   it('says so when the auto cannot be saved for no reason of a field', async () => {
