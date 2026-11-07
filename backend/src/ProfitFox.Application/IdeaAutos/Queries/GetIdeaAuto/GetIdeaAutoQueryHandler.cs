@@ -13,6 +13,6 @@ public sealed class GetIdeaAutoQueryHandler(IIdeaAutoRepository autos, IExchange
             return null;
         }
 
-        return new IdeaAutoSummary(auto, (await accounts.GetAsync(auto.AccountId, cancellationToken))!.Name, 0, null, 0m, 0, 0m, 0);
+        return new IdeaAutoSummary(auto, (await accounts.GetAsync(auto.AccountId, cancellationToken))!.Name, 0, null, 0m, 0, 0m, 0, 0m);
     }
 }

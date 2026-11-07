@@ -53,12 +53,24 @@ describe('detail of a refusal', () => {
       refusalDetailText(
         refusal(['total_risk_exceeded'], { actual: '41.2', limit: '40', holder: null }),
       ),
-    ).toBe('риск 41.2 при пределе 40');
+    ).toBe('убыток по стопам 41.2 при пределе 40');
     expect(
       refusalDetailText(
         refusal(['amount_above_max'], { actual: '600', limit: '500', holder: null }),
       ),
     ).toBe('сумма 600 при пределе 500');
+  });
+
+  // Scenario "Отказы по бюджетам".
+  it('names what the open trades take of a budget', () => {
+    expect(
+      refusalDetailText(refusal(['budget_taken'], { actual: '80', limit: '100', holder: null })),
+    ).toBe('занято 80.00 из 100 USDT');
+    expect(
+      refusalDetailText(
+        refusal(['autos_budget_taken'], { actual: '179.995', limit: '200', holder: null }),
+      ),
+    ).toBe('занято 180.00 из 200 USDT');
   });
 
   it('says whose trade holds the pair', () => {

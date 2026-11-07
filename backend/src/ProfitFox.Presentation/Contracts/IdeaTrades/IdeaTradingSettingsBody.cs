@@ -20,4 +20,7 @@ public sealed class IdeaTradingSettingsBody
 
     /// <summary>The most open real trades of one side that the autos with money stand; none switches the guard off.</summary>
     public int? MaxSameDirection { get; init; }
+
+    /// <summary>The most the open real trades of all the autos may hold in USDT; none switches the guard off.</summary>
+    public decimal? AutosBudget { get; init; }
 }

@@ -14,7 +14,10 @@ using Shouldly;
 
 namespace ProfitFox.Tests.Unit.Domain.Services.IdeaAutos;
 
-/// <summary>Requirements "Одна сделка по паре у автомата", "Одна сделка с деньгами по паре аккаунта" and "Не больше сделок в одну сторону", and the daily stop.</summary>
+/// <summary>
+///     Requirements "Одна сделка по паре у автомата", "Одна сделка с деньгами по паре аккаунта", "Не больше сделок в одну сторону", "Бюджет автомата" and
+///     "Бюджет всех автоматов", and the daily stop.
+/// </summary>
 public class AutoRefusalsTests
 {
     private static readonly DateTimeOffset Day = new(2026, 11, 7, 0, 0, 0, TimeSpan.Zero);
@@ -154,7 +157,7 @@ public class AutoRefusalsTests
     {
         IReadOnlyList<IdeaTrade> longs = [.. Enumerable.Range(0, 5).Select(i => Real(i % 2 == 0 ? Impulse : null, new Instrument(MarketCategory.Linear, $"A{i}USDT"), i < 3 ? Bybit : Other, Day.AddHours(1)))];
 
-        IReadOnlyList<AutoRefusal> refusals = AutoRefusals.Check(Impulse, Eth, IdeaSide.Long, Books(real: longs), Calm, 5);
+        IReadOnlyList<AutoRefusal> refusals = AutoRefusals.Check(Impulse, Eth, IdeaSide.Long, 300m, Books(real: longs), Calm, 5, null);
 
         refusals.ShouldBe([new AutoRefusal(IdeaTradeRefusal.TooManySameDirection, RefusalDetail.Numbers(5m, 5m))]);
     }
@@ -165,7 +168,7 @@ public class AutoRefusalsTests
     {
         IReadOnlyList<IdeaTrade> longs = [.. Enumerable.Range(0, 5).Select(i => Real(null, new Instrument(MarketCategory.Linear, $"A{i}USDT"), Bybit, Day.AddHours(1)))];
 
-        AutoRefusals.Check(Impulse, Eth, IdeaSide.Short, Books(real: longs), Calm, 5).ShouldBeEmpty();
+        AutoRefusals.Check(Impulse, Eth, IdeaSide.Short, 300m, Books(real: longs), Calm, 5, null).ShouldBeEmpty();
     }
 
     [Test]
@@ -173,8 +176,8 @@ public class AutoRefusalsTests
     {
         IReadOnlyList<IdeaTrade> longs = [.. Enumerable.Range(0, 4).Select(i => Real(null, new Instrument(MarketCategory.Linear, $"A{i}USDT"), Bybit, Day.AddHours(1)))];
 
-        AutoRefusals.Check(Impulse, Eth, IdeaSide.Long, Books(real: longs), Calm, 5).ShouldBeEmpty();
-        AutoRefusals.Check(Impulse, Eth, IdeaSide.Long, Books(real: [.. longs, .. longs]), Calm, null).ShouldBeEmpty();
+        AutoRefusals.Check(Impulse, Eth, IdeaSide.Long, 300m, Books(real: longs), Calm, 5, null).ShouldBeEmpty();
+        AutoRefusals.Check(Impulse, Eth, IdeaSide.Long, 300m, Books(real: [.. longs, .. longs]), Calm, null, null).ShouldBeEmpty();
     }
 
     [Test]
@@ -182,7 +185,7 @@ public class AutoRefusalsTests
     {
         IReadOnlyList<PaperIdeaTrade> paper = [.. Enumerable.Range(0, 5).Select(i => Paper(Breakouts, new Instrument(MarketCategory.Linear, $"A{i}USDT"), Day.AddHours(1)))];
 
-        AutoRefusals.Check(Impulse, Eth, IdeaSide.Long, Books(paper: paper), Calm, 5).ShouldBeEmpty();
+        AutoRefusals.Check(Impulse, Eth, IdeaSide.Long, 300m, Books(paper: paper), Calm, 5, null).ShouldBeEmpty();
     }
 
     // Scenario "Автомат при стопе".
@@ -191,24 +194,105 @@ public class AutoRefusalsTests
     {
         var stopped = new DailyLossState(-30.15m, 30m, Day.AddHours(15).AddMinutes(12), Day.AddDays(1));
 
-        AutoRefusals.Check(Impulse, Eth, IdeaSide.Long, Books(), stopped, null).ShouldBe([new AutoRefusal(IdeaTradeRefusal.DailyStop, RefusalDetail.Numbers(-30.15m, 30m))]);
+        AutoRefusals.Check(Impulse, Eth, IdeaSide.Long, 300m, Books(), stopped, null, null).ShouldBe([new AutoRefusal(IdeaTradeRefusal.DailyStop, RefusalDetail.Numbers(-30.15m, 30m))]);
+    }
+
+
+    // Scenario "Бюджет занят": a paper trade of 50 and a real one of 30 are open, the amount is 30 and the budget 100.
+    [Test]
+    public void Budget_of_the_auto_taken_by_its_open_trades_is_named_with_what_is_taken()
+    {
+        IdeaAuto auto = Impulse with { Budget = 100m };
+        AutoBooks books = Books(real: [Real(Impulse, Sui, Other, Day.AddHours(1), amount: 30m)], paper: [Paper(Impulse, Eth, Day.AddHours(2), amount: 50m)]);
+
+        AutoRefusals.BudgetTaken(auto, 30m, books).ShouldBe(new AutoRefusal(IdeaTradeRefusal.BudgetTaken, RefusalDetail.Numbers(80m, 100m)));
+    }
+
+    // Scenario "Ровно в бюджет".
+    [Test]
+    public void Entry_that_fills_the_budget_exactly_goes()
+    {
+        IdeaAuto auto = Impulse with { Budget = 100m };
+
+        AutoRefusals.BudgetTaken(auto, 30m, Books(real: [Real(Impulse, Sui, Bybit, Day.AddHours(1), amount: 70m)])).ShouldBeNull();
+    }
+
+    // Scenario "Автомат без бюджета".
+    [Test]
+    public void Auto_without_a_budget_is_never_refused_by_it()
+    {
+        AutoRefusals.BudgetTaken(Impulse, 30m, Books(real: [Real(Impulse, Sui, Bybit, Day.AddHours(1), amount: 1000m)])).ShouldBeNull();
+    }
+
+    [Test]
+    public void Budget_of_the_auto_is_checked_with_the_amount_of_the_entry()
+    {
+        IdeaAuto auto = Impulse with { Budget = 100m };
+        AutoBooks books = Books(real: [Real(Impulse, Sui, Bybit, Day.AddHours(1), amount: 70m)]);
+
+        AutoRefusals.Check(auto, Eth, IdeaSide.Long, 31m, books, Calm, null, null).ShouldBe([new AutoRefusal(IdeaTradeRefusal.BudgetTaken, RefusalDetail.Numbers(70m, 100m))]);
+        AutoRefusals.Check(auto, Eth, IdeaSide.Long, 30m, books, Calm, null, null).ShouldBeEmpty();
+    }
+
+    // Scenario "Бюджет автоматов занят": real trades of the autos of 100 and 80 are open, the budget of the autos is 200 and the amount 30.
+    [Test]
+    public void Budget_of_the_autos_taken_by_their_open_real_trades_is_named_with_what_is_taken()
+    {
+        AutoBooks books = Books(real: [Real(Falls, Sui, Bybit, Day.AddHours(1), amount: 100m), Real(Gone, Sui, Other, Day.AddHours(1), amount: 80m)]);
+
+        AutoRefusals.Check(Impulse, Eth, IdeaSide.Long, 30m, books, Calm, null, 200m)
+            .ShouldBe([new AutoRefusal(IdeaTradeRefusal.AutosBudgetTaken, RefusalDetail.Numbers(180m, 200m))]);
+        AutoRefusals.Check(Impulse, Eth, IdeaSide.Long, 20m, books, Calm, null, 200m).ShouldBeEmpty();
+    }
+
+    // Scenario "Ручные не считаются".
+    [Test]
+    public void Manual_trades_take_nothing_of_the_budget_of_the_autos()
+    {
+        AutoBooks books = Books(real: [Real(null, Sui, Bybit, Day.AddHours(1), amount: 300m)]);
+
+        AutoRefusals.Check(Impulse, Eth, IdeaSide.Long, 30m, books, Calm, null, 200m).ShouldBeEmpty();
+    }
+
+    // Scenario "Учебные не занимают бюджет автоматов".
+    [Test]
+    public void Paper_trades_take_nothing_of_the_budget_of_the_autos()
+    {
+        AutoBooks books = Books(paper: [Paper(Falls, Sui, Day.AddHours(1), amount: 500m)]);
+
+        AutoRefusals.Check(Impulse, Eth, IdeaSide.Long, 30m, books, Calm, null, 200m).ShouldBeEmpty();
+    }
+
+    [Test]
+    public void Budget_of_the_autos_that_is_off_stops_nothing()
+    {
+        AutoBooks books = Books(real: [Real(Falls, Sui, Bybit, Day.AddHours(1), amount: 1000m)]);
+
+        AutoRefusals.Check(Impulse, Eth, IdeaSide.Long, 30m, books, Calm, null, null).ShouldBeEmpty();
     }
 
     [Test]
     public void Reasons_come_in_a_fixed_order()
     {
         var stopped = new DailyLossState(-30.15m, 30m, Day.AddHours(15), Day.AddDays(1));
-        IReadOnlyList<IdeaTrade> held = [Real(null, Eth, Bybit, Day.AddHours(1)), Real(null, Sui, Bybit, Day.AddHours(1))];
+        IReadOnlyList<IdeaTrade> held = [Real(null, Eth, Bybit, Day.AddHours(1)), Real(Impulse, Sui, Bybit, Day.AddHours(1))];
 
-        IReadOnlyList<AutoRefusal> refusals = AutoRefusals.Check(Impulse, Eth, IdeaSide.Long, Books(real: held), stopped, 2);
+        IReadOnlyList<AutoRefusal> refusals = AutoRefusals.Check(Impulse with { Budget = 300m }, Eth, IdeaSide.Long, 300m, Books(real: held), stopped, 2, 300m);
 
-        refusals.Select(refusal => refusal.Reason).ShouldBe([IdeaTradeRefusal.PairTaken, IdeaTradeRefusal.DailyStop, IdeaTradeRefusal.TooManySameDirection]);
+        refusals.Select(refusal => refusal.Reason).ShouldBe(
+        [
+            IdeaTradeRefusal.PairTaken,
+            IdeaTradeRefusal.BudgetTaken,
+            IdeaTradeRefusal.AutosBudgetTaken,
+            IdeaTradeRefusal.DailyStop,
+            IdeaTradeRefusal.TooManySameDirection
+        ]);
     }
 
     [Test]
     public void Idea_that_breaks_nothing_has_no_reason()
     {
-        AutoRefusals.Check(Impulse, Eth, IdeaSide.Long, Books(), Calm, 5).ShouldBeEmpty();
+        AutoRefusals.Check(Impulse, Eth, IdeaSide.Long, 300m, Books(), Calm, 5, null).ShouldBeEmpty();
     }
 
     private static AutoBooks Books(IReadOnlyCollection<IdeaTrade>? real = null, IReadOnlyCollection<PaperIdeaTrade>? paper = null, string? accountName = null)
@@ -226,17 +310,17 @@ public class AutoRefusalsTests
     }
 
     // A real trade open since the time, or one that waits for its entry.
-    private static IdeaTrade Real(IdeaAuto? auto, Instrument instrument, Guid account, DateTimeOffset at, bool open = true)
+    private static IdeaTrade Real(IdeaAuto? auto, Instrument instrument, Guid account, DateTimeOffset at, bool open = true, decimal amount = 50m)
     {
-        var size = new IdeaTradeSize(0.47m, 50m, 0.2m, 0.368m, 1.84m);
+        var size = new IdeaTradeSize(0.47m, amount, 0.2m, 0.368m, 1.84m);
         var trade = IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(at, instrument: instrument), account, 106m, size, at, autoId: auto?.Id);
 
         return open ? trade.EntryGrown(new LegTotals(0.47m, 49.82m, 0.02m), at) : trade;
     }
 
-    private static PaperIdeaTrade Paper(IdeaAuto auto, Instrument instrument, DateTimeOffset since)
+    private static PaperIdeaTrade Paper(IdeaAuto auto, Instrument instrument, DateTimeOffset since, decimal amount = 50m)
     {
-        IdeaTrade trade = Real(auto, instrument, auto.AccountId, since);
+        IdeaTrade trade = Real(auto, instrument, auto.AccountId, since, amount: amount);
 
         return new PaperIdeaTrade(trade, auto.Id, since);
     }

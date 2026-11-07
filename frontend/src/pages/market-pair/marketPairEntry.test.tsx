@@ -123,7 +123,9 @@ describe('entry by an idea from the pair page', () => {
     const { dialog } = await openEntry();
 
     expect(
-      await within(dialog).findByText('R:R после комиссий ниже минимального'),
+      await within(dialog).findByText(
+        'Прибыль к убытку ниже настройки «Прибыль к убытку не меньше»',
+      ),
     ).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Войти' })).toBeDisabled();
   });
@@ -157,7 +159,9 @@ describe('entry by an idea from the pair page', () => {
 
     const { dialog } = await openEntry();
 
-    expect(await within(dialog).findByText('Сумма больше предела на сделку')).toBeInTheDocument();
+    expect(
+      await within(dialog).findByText('Сумма больше, чем «Максимум на одну сделку»'),
+    ).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Войти' })).toBeDisabled();
   });
 

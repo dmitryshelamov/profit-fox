@@ -31,4 +31,6 @@ internal sealed class IdeaAutoDb
     public int Position { get; init; }
 
     public DateTimeOffset? DeletedAt { get; init; }
+
+    public decimal? Budget { get; init; }
 }

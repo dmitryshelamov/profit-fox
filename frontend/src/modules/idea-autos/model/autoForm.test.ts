@@ -23,6 +23,7 @@ const response = {
   minRiskReward: '1.5',
   minCases: 100,
   position: 0,
+  budget: '120.5',
 };
 
 describe('form of an auto', () => {
@@ -32,6 +33,7 @@ describe('form of an auto', () => {
         name: '',
         accountId: 'account-1',
         amount: '300',
+        budget: '',
         mode: 'off',
         setups: [],
         types: [],
@@ -56,6 +58,7 @@ describe('form of an auto', () => {
       name: 'Импульс лонг',
       accountId: 'account-1',
       amount: '300',
+      budget: '120.5',
       mode: 'live',
       setups: ['impulse'],
       types: ['pullback'],
@@ -87,6 +90,20 @@ describe('form of an auto', () => {
     expect(serializeJson(body)).toContain('"minCases":100');
   });
 
+  it('has no budget in a form of an auto without one', () => {
+    expect(formOfAuto({ ...response, budget: null }).budget).toBe('');
+  });
+
+  it('sends an empty budget as none and a budget with its digits', async () => {
+    const { serializeJson } = await import('@/shared/api/jsonNumber');
+
+    expect(bodyOfForm({ ...formOfAuto(response), budget: '' }).budget).toBeNull();
+    expect(serializeJson(bodyOfForm({ ...formOfAuto(response), budget: '150.50' }))).toContain(
+      '"budget":150.50',
+    );
+    expect(bodyOfForm({ ...formOfAuto(response), budget: 'abc' }).budget).toBe('abc');
+  });
+
   it('sends a number that is not one as it is, so the API names the field', () => {
     const body = bodyOfForm({ ...formOfAuto(response), amount: 'abc' });
 
@@ -104,6 +121,10 @@ describe('form of an auto', () => {
       'название',
       'режим',
     ]);
+    expect(changedFields(initial, { ...initial, budget: '', amount: '200' })).toEqual([
+      'сумма',
+      'бюджет',
+    ]);
   });
 
   it('does not count the same chips ticked in another order as a change', () => {
@@ -118,9 +139,14 @@ describe('form of an auto', () => {
   });
 
   it('lays the errors of the API out by the field of the form', () => {
-    const laid = autoFieldErrors({ amount: ['Too much.'], other: ['Oops.'] });
+    const laid = autoFieldErrors({
+      amount: ['Too much.'],
+      budget: ['Too little.'],
+      other: ['Oops.'],
+    });
 
     expect(laid.fields.amount).toEqual(['Too much.']);
+    expect(laid.fields.budget).toEqual(['Too little.']);
     expect(laid.form).toEqual(['Oops.']);
   });
 });

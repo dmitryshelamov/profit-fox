@@ -192,6 +192,24 @@ public class LiveAutosTests
         (refusal.IdeaId, refusal.Reasons.Single(), refusal.Detail!.Holder!.Kind, refusal.Detail.Holder.Paper).ShouldBe((second.Id, IdeaTradeRefusal.PairTaken, PairHolderKind.SameAuto, true));
     }
 
+    // Scenario "Две учебные идеи в одной минуте": the budget of 50 holds one trade of 30, so the idea of the other pair sees the first trade.
+    [Test]
+    public async Task Second_idea_of_the_minute_sees_the_paper_trade_of_the_first_in_the_budget()
+    {
+        Enable(Auto("Пробои 5м", IdeaAutoMode.Paper, amount: 30m) with { Budget = 50m });
+        var op = new Instrument(MarketCategory.Linear, "OPUSDT");
+        _market.Keep([new ScannerPair(Wif, true, CoveredUntil: End, TickSize: 0.01m, QuantityStep: 0.01m, MinQuantity: 0.01m, MinAmount: 5m), new ScannerPair(op, true, CoveredUntil: End, TickSize: 0.01m, QuantityStep: 0.01m, MinQuantity: 0.01m, MinAmount: 5m)]);
+        Idea first = Born();
+        Idea second = Born() with { Instrument = op };
+        var birth = new IdeaCandle(Fired, 99.9m, 100.2m, 99.8m, 100m, 1m);
+
+        AutoMinute minute = (await _live.RunAsync(End, [first, second], new Dictionary<Instrument, IdeaCandle> { [Wif] = birth, [op] = birth }, CancellationToken.None))!;
+
+        minute.Opened.Single().Trade.IdeaId.ShouldBe(first.Id);
+        IdeaAutoRefusal refusal = minute.Refusals.ShouldHaveSingleItem();
+        (refusal.IdeaId, refusal.Reasons.Single(), refusal.Detail).ShouldBe((second.Id, IdeaTradeRefusal.BudgetTaken, RefusalDetail.Numbers(30m, 50m)));
+    }
+
     [Test]
     public async Task Paper_trade_kept_from_the_minutes_before_holds_the_pair()
     {
