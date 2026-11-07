@@ -3,6 +3,7 @@ using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.Entities.IdeaTrades.Enums;
+using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
@@ -13,7 +14,8 @@ namespace ProfitFox.Domain.Services.IdeaAutos;
 ///     The fill of a paper trade by the closed minutes of its pair. A pullback waits for a minute that touches its limit before the deadline of
 ///     its entry and enters at the limit; the other types enter at the close of the minute the idea was born in. An open trade leaves at the stop or
 ///     at the target of the first minute that touches one, at the stop when a minute touches both, and has no lifetime. In the minute of the entry
-///     of a pullback only the stop counts. The entry pays the maker fee at a limit and the taker fee otherwise, the exit the taker fee.
+///     of a pullback only the stop counts. The entry pays the maker fee at a limit and the taker fee otherwise, the exit the taker fee; every fill
+///     but the limit of a pullback is worse by the slippage, as <see cref="CaseResult" /> counts the cases.
 /// </summary>
 public static class PaperFill
 {
@@ -39,7 +41,7 @@ public static class PaperFill
 
         if (idea.Track.Plan.Type != IdeaType.Pullback)
         {
-            trade = trade.EntryGrown(Leg(size.Quantity, price, fees.MarketPercent), now);
+            trade = trade.EntryGrown(Leg(size.Quantity, CaseResult.EntryFill(idea.Track.Plan.Type, idea.Track.Plan.Side, price, fees), fees.MarketPercent), now);
         }
 
         return new PaperIdeaTrade(trade, autoId, now);
@@ -88,7 +90,7 @@ public static class PaperFill
 
     private static IdeaTrade Leave(IdeaTrade trade, IdeaTradeLeg leg, decimal price, IdeaCandle minute, FeeRates fees)
     {
-        return trade.ExitGrown(leg, Leg(trade.HeldQuantity, price, fees.MarketPercent), minute.OpenTime);
+        return trade.ExitGrown(leg, Leg(trade.HeldQuantity, CaseResult.ExitFill(trade.Side, price, fees), fees.MarketPercent), minute.OpenTime);
     }
 
     private static bool StopTouched(IdeaTrade trade, IdeaCandle minute)

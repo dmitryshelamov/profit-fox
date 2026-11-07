@@ -52,7 +52,7 @@ public class IdeaTradesApiTests
 
         IdeaTrade trade = await _scenario.TradeAsync(id);
         (trade.Status, trade.AccountId, trade.EntryPrice, trade.Stop, trade.Target, trade.Quantity, trade.Amount).ShouldBe((IdeaTradeStatus.AwaitingEntry, _scenario.Account, 100m, 98m, 104m, 0.47m, 47.00m));
-        trade.Risk.ShouldBe(0.991183m, 0.000001m);
+        trade.Risk.ShouldBe(1.037713m, 0.000001m);
         trade.LastOrderNumber.ShouldBe(1);
         IdeaTradeOrder entry = (await _scenario.TradeOrdersAsync(id)).Single();
         (entry.Number, entry.Role, entry.Side, entry.Type, entry.TimeInForce, entry.Price, entry.Quantity, entry.Protection, entry.ReduceOnly, entry.Status)
@@ -61,7 +61,7 @@ public class IdeaTradesApiTests
     }
 
     // Requirement "Обещание на входе", scenario "Вход на ▲": the promise is the statistics of the bucket as «Идеи» shows them, with the break-even and the
-    // reward to risk after the fees from the price the trade entered at (101, not the 100 of the idea).
+    // reward to risk after the fees and the slippage from the price the trade entered at (101, not the 100 of the idea).
     [Test]
     public async Task Entry_on_an_up_badge_keeps_the_promise_of_the_bucket_and_a_recount_of_the_bucket_does_not_change_it()
     {
@@ -71,7 +71,7 @@ public class IdeaTradesApiTests
 
         Guid id = await CreateAsync(idea);
 
-        IdeaShares shares = IdeaMoney.PerUsdt(new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 101m, 96m, 112m), new FeeRates(0.02m, 0.055m));
+        IdeaShares shares = IdeaMoney.PerUsdt(new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 101m, 96m, 112m), new FeeRates(0.02m, 0.055m, 0.05m));
         var promise = new IdeaPromise(IdeaBadge.Up, 0.31m, 0.14m, 412, shares.BreakEven, shares.NetRiskReward);
         (await _scenario.TradeAsync(id)).Promise.ShouldBe(promise);
         await _scenario.SaveBucketAsync(new BucketStatistics(450, 140, 290, 20, 0.31m, 0.27m, 0.36m, 0.01m, -0.05m, 0.07m));

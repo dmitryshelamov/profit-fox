@@ -96,7 +96,8 @@ public class ScannerAutosTests
         await sockets.PushAsync("kline.1.SOLUSDT", [Kline(new IdeaCandle(Born.AddMinutes(1), birth.Close, target + 10m, birth.Close, birth.Close, 300m))]);
         await WaitAsync(async () => await ScalarAsync<string>("SELECT status FROM idea_paper_trades") == "closed_at_target");
 
-        (await ScalarAsync<decimal>("SELECT take_profit_value FROM idea_paper_trades")).ShouldBe(quantity * target);
+        // The long sells at the target less the slippage of linear in the settings, 0.05 %.
+        (await ScalarAsync<decimal>("SELECT take_profit_value FROM idea_paper_trades")).ShouldBe(quantity * target * 0.9995m);
         (await ScalarAsync<DateTime>("SELECT status_at FROM idea_paper_trades")).ShouldBe(Born.AddMinutes(1).UtcDateTime);
     }
 

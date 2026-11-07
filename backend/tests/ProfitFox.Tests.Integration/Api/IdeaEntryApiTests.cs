@@ -44,7 +44,8 @@ public class IdeaEntryApiTests
         await _scenario.DisposeAsync();
     }
 
-    // Scenario "Объём по сумме": 47.3 / 100 = 0.473 rounds down to 0.47; the loss on 1 USDT is 0.021089, the profit 0.038878.
+    // Scenario "Объём по сумме": 47.3 / 100 = 0.473 rounds down to 0.47; with the slippage of linear the loss on 1 USDT is 0.0220790055,
+    // the profit 0.037858011.
     [Test]
     public async Task Volume_comes_from_the_amount_and_the_current_price()
     {
@@ -56,11 +57,11 @@ public class IdeaEntryApiTests
         entry.GetProperty("entryPrice").GetString().ShouldBe("100");
         entry.GetProperty("quantity").GetString().ShouldBe("0.47");
         entry.GetProperty("amount").GetString().ShouldBe("47.00");
-        decimal.Parse(entry.GetProperty("risk").GetString()!, System.Globalization.CultureInfo.InvariantCulture).ShouldBe(0.991183m, 0.000001m);
-        Math.Round(decimal.Parse(entry.GetProperty("riskReward").GetString()!, System.Globalization.CultureInfo.InvariantCulture), 2).ShouldBe(1.84m);
+        decimal.Parse(entry.GetProperty("risk").GetString()!, System.Globalization.CultureInfo.InvariantCulture).ShouldBe(1.037713m, 0.000001m);
+        Math.Round(decimal.Parse(entry.GetProperty("riskReward").GetString()!, System.Globalization.CultureInfo.InvariantCulture), 2).ShouldBe(1.71m);
         entry.GetProperty("riskRewardWithoutFees").GetString().ShouldBe("2");
         entry.GetProperty("freeMoney").GetString().ShouldBe("10000");
-        decimal.Parse(entry.GetProperty("profit").GetString()!, System.Globalization.CultureInfo.InvariantCulture).ShouldBe(1.827266m, 0.000001m);
+        decimal.Parse(entry.GetProperty("profit").GetString()!, System.Globalization.CultureInfo.InvariantCulture).ShouldBe(1.779327m, 0.000001m);
         entry.GetProperty("reasons").GetArrayLength().ShouldBe(0);
         _scenario.Exchange.Sent.ShouldBeEmpty();
     }
