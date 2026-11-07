@@ -1,6 +1,7 @@
 export {
   calibrationQuery,
   type ExitRuleCandidate,
+  exitRuleOutOfSampleQuery,
   exitRulePreviewQuery,
   exitRulesQuery,
   type IdeaFilters,
@@ -16,7 +17,13 @@ export {
 export { loadAmount, saveAmount } from './model/amountStorage';
 export { brierView, differenceView, rangeLabel } from './model/calibration';
 export { loadIdeasChoice, saveIdeasChoice } from './model/choice';
-export { candlesOfHours, durationText, overfitWarning, sameRule } from './model/exitRules';
+export {
+  candlesOfHours,
+  durationText,
+  overfittingText,
+  overfitWarning,
+  sameRule,
+} from './model/exitRules';
 export {
   candlesText,
   casesText,

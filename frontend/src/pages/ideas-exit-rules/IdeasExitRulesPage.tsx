@@ -6,13 +6,16 @@ import {
   badgeSymbol,
   candlesOfHours,
   candlesText,
+  counted,
   durationText,
   type ExitRuleCandidate,
+  exitRuleOutOfSampleQuery,
   exitRulePreviewQuery,
   exitRulesQuery,
   ideaTypes,
   LifeChart,
   MfeChart,
+  overfittingText,
   overfitWarning,
   sameRule,
   typeLabel,
@@ -26,6 +29,7 @@ import { useDebounced } from '@/shared/hooks/useDebounced';
 type Rule = Schemas['IdeaExitRuleResponse'];
 type Bucket = Schemas['BucketStatisticsResponse'];
 type Window = Schemas['ExitRuleWindowResponse'];
+type OutOfSample = Schemas['ExitRuleOutOfSampleResponse'];
 
 const intervals = [
   { value: '5', label: '5 мин' },
@@ -144,6 +148,7 @@ function RuleEditor({ rule, grid }: { rule: Rule; grid: readonly number[] }) {
   const [candidate, setCandidate] = useState(current);
   const asked = useDebounced(candidate, 300);
   const preview = useQuery(exitRulePreviewQuery(asked));
+  const check = useQuery(exitRuleOutOfSampleQuery(asked));
   const apply = useApplyExitRule();
   const same = sameRule(candidate, current);
   const label = `«${typeLabel(rule.type)}» ${intervals.find((item) => item.value === rule.interval)?.label ?? rule.interval}`;
@@ -263,6 +268,13 @@ function RuleEditor({ rule, grid }: { rule: Rule; grid: readonly number[] }) {
               )}
             </div>
           </div>
+          {check.isError ? (
+            <p role="alert">Не удалось проверить кандидата вне выборки.</p>
+          ) : check.data ? (
+            <OutOfSampleBlock check={check.data} candidate={asked} />
+          ) : (
+            <p className="text-sm text-muted">Проверка считается…</p>
+          )}
           <div className="grid gap-4 lg:grid-cols-2">
             <section className="space-y-2 rounded-xl border border-line bg-panel px-5 py-4">
               <h2 className="text-sm font-semibold">Ожидание от срока жизни</h2>
@@ -473,6 +485,100 @@ function WindowTable({
           ))}
         </tbody>
       </table>
+    </section>
+  );
+}
+
+/** The expectancy per entry of a part with its badge, its interval or «мало данных» under 30 entries, and the entries. */
+function partText(bucket: Bucket | null): string {
+  if (!bucket) {
+    return 'нет входов';
+  }
+
+  return [
+    `${bucket.badge === null ? '' : `${badgeSymbol(bucket.badge)} `}${inR(bucket.expectancy)}`,
+    bucket.expectancyLow === null || bucket.expectancyHigh === null
+      ? 'мало данных'
+      : `от ${showDecimal(bucket.expectancyLow, 2, true)} до ${showDecimal(bucket.expectancyHigh, 2, true)}`,
+    counted(Number(bucket.cases), 'вход', 'входа', 'входов'),
+  ].join(' · ');
+}
+
+/**
+ * «Проверка вне выборки»: the candidate and the best rule of the grid on the days 90 to 30 ago it was chosen on, both on the last 30 days, and
+ * the probability of overfitting of the grid.
+ */
+function OutOfSampleBlock({
+  check,
+  candidate,
+}: {
+  check: OutOfSample;
+  candidate: ExitRuleCandidate;
+}) {
+  const overfitting = overfittingText(check.overfitting);
+
+  return (
+    <section className="space-y-2">
+      <header className="flex flex-wrap items-baseline gap-x-3">
+        <h2 className="font-semibold">Проверка вне выборки</h2>
+        <p className="text-xs text-faint">
+          лучшее правило ищется только на подборе и проверяется на днях, которых при выборе не
+          видели · сетка — {counted(Number(check.rules), 'правило', 'правила', 'правил')} (сроки ×
+          цели при окне входа кандидата) · ожидание на вход с интервалом по блокам удержания своего
+          правила (срок и окно входа, не меньше часа)
+        </p>
+      </header>
+      <table aria-label="Проверка вне выборки" className="w-full text-sm">
+        <thead className="bg-panel text-left text-[11px] tracking-wide text-faint uppercase">
+          <tr>
+            <th scope="col" className={cell} />
+            <th scope="col" className={`${cell} text-right`}>
+              подбор: с {formatMoment(check.selectionFrom)}
+            </th>
+            <th scope="col" className={`${cell} text-right`}>
+              проверка: {formatMoment(check.checkFrom)} – {formatMoment(check.to)}
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line">
+          <tr>
+            <th scope="row" className={`${cell} text-left font-normal text-muted`}>
+              кандидат · {ruleShort(candidate)} · подбор до{' '}
+              {formatMoment(check.candidate.selectionTo)}
+            </th>
+            <td className={number}>{partText(check.candidate.selection)}</td>
+            <td className={number}>{partText(check.candidate.check)}</td>
+          </tr>
+          {check.best ? (
+            <tr>
+              <th scope="row" className={`${cell} text-left font-normal text-muted`}>
+                лучшее на подборе ·{' '}
+                {ruleShort({
+                  ...candidate,
+                  life: Number(check.best.life),
+                  target: check.best.target,
+                })}{' '}
+                · подбор до {formatMoment(check.best.selectionTo)}
+              </th>
+              <td className={number}>{partText(check.best.selection)}</td>
+              <td className={number}>{partText(check.best.check)}</td>
+            </tr>
+          ) : (
+            <tr>
+              <td colSpan={3} className={`${cell} text-muted`}>
+                на подборе нет правила с 30 входами
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+      <p className="text-sm">{overfitting.text}</p>
+      <p className="text-xs text-faint">
+        90 дней делятся на 6 блоков по 15 дней; в каждом из 20 разбиений пополам лучшее правило
+        одной половины ищет своё место на другой. Окно входа не перебирается, так что это нижняя
+        оценка.
+      </p>
+      {overfitting.warning && <p className="text-sm text-warn">{overfitting.warning}</p>}
     </section>
   );
 }
