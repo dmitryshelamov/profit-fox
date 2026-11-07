@@ -22,12 +22,12 @@
 
 ## 2. Порты и Bybit
 
-- [ ] 2.1 `IExchangeLedger.GetLeverageAsync` и `BybitLedger`: поле `leverage` строки символа из `/v5/position/list`.
+- [x] 2.1 `IExchangeLedger.GetLeverageAsync` и `BybitLedger`: поле `leverage` строки символа из `/v5/position/list`.
   Готово, когда тест `BybitLedgerTests` на ответ с `leverage: "10"` при нулевой позиции зелёный.
-- [ ] 2.2 `IOrderGateway.SetLeverageAsync` и `BybitOrderGateway`: `/v5/position/set-leverage` с равными `buyLeverage` и
+- [x] 2.2 `IOrderGateway.SetLeverageAsync` и `BybitOrderGateway`: `/v5/position/set-leverage` с равными `buyLeverage` и
   `sellLeverage`; код `0` и `110043` → `Accepted`, отказ → `Rejected` с сообщением, сбой из `BybitCodes` или молчание →
   `Unavailable`. Готово, когда тесты `BybitOrderGatewayTests` на тело запроса и на четыре исхода зелёные.
-- [ ] 2.3 Обновить фейки портов в тестах (`Tests.Unit`, `Tests.Integration`), чтобы они знали плечо символа и запоминали
+- [x] 2.3 Обновить фейки портов в тестах (`Tests.Unit`, `Tests.Integration`), чтобы они знали плечо символа и запоминали
   установку. Готово, когда `dotnet build` решения зелёный.
 
 ## 3. Хранение
