@@ -216,8 +216,8 @@ enforces a rule, the check is the source of truth.
   through. The end of every pause goes to `scanner_state` and only ever moves later, in memory and in the row, so a limit after a ban
   never shortens it. `Exchanges/Bybit/BybitPublicDataClient`
   implements `IMarketDataFeed` through it; `Exchanges/Bybit/BybitMarketStreams` implements `IMarketStreams` on a socket client of its
-  own, apart from `BybitStreams`, and the liquidations (`allLiquidation`, the side of the order turned into the side of the position:
-  `Sell` → `Long`) on another, so a break of one stream does not touch the other.
+  own, apart from `BybitStreams`, and the liquidations (`allLiquidation`; Bybit's side is the side of the liquidated position:
+  `Buy` → `Long`, `Sell` → `Short`) on another, so a break of one stream does not touch the other.
 - `Exchanges/Bybit/BybitAccountClient` implements `IExchangeKeyInspector`: a typed `HttpClient` that builds a Bybit client
   with the key for one call and drops it, one attempt per call. `Security/AesGcmSecretProtector` encrypts secrets with the
   master key (AES-256-GCM, the account id as associated data).

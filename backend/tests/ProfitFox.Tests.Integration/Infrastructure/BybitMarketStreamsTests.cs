@@ -113,17 +113,18 @@ public class BybitMarketStreamsTests
         _server.Connections("/v5/public/spot").ShouldBe(0);
     }
 
-    // Scenarios "Ликвидация пришла" and "Сторона позиции": the side is that of the liquidated position, not of the order.
-    [TestCase("Sell", LiquidationSide.Long)]
-    [TestCase("Buy", LiquidationSide.Short)]
-    public async Task Liquidation_comes_with_its_instrument_time_and_the_side_of_the_position(string orderSide, LiquidationSide side)
+    // Scenarios "Ликвидация пришла" and "Сторона позиции": Bybit's S is the side of the liquidated position, "a Buy update means that a
+    // long position has been liquidated".
+    [TestCase("Buy", LiquidationSide.Long)]
+    [TestCase("Sell", LiquidationSide.Short)]
+    public async Task Liquidation_comes_with_its_instrument_time_and_the_side_of_the_position(string positionSide, LiquidationSide side)
     {
         var at = DateTimeOffset.Parse("2026-11-08T12:04:07.350Z", CultureInfo.InvariantCulture);
         var liquidations = new BlockingCollection<(Instrument, LiquidationEvent)>();
         await using IAsyncDisposable subscription = await _streams.SubscribeLiquidationsAsync(
             [Sol], (instrument, liquidation) => liquidations.Add((instrument, liquidation)), _ => { }, _ => { }, CancellationToken.None);
 
-        await _server.PushAsync("allLiquidation.SOLUSDT", [FakeBybitSocketServer.Liquidation("SOLUSDT", orderSide, 150.2m, 12.5m, at)]);
+        await _server.PushAsync("allLiquidation.SOLUSDT", [FakeBybitSocketServer.Liquidation("SOLUSDT", positionSide, 150.2m, 12.5m, at)]);
 
         liquidations.TryTake(out (Instrument Instrument, LiquidationEvent Event) liquidated, TimeSpan.FromSeconds(10)).ShouldBeTrue();
         liquidated.ShouldBe((Sol, new LiquidationEvent(at, side, 150.2m, 12.5m)));

@@ -42,7 +42,10 @@
 
 `LiquidationEvent(DateTimeOffset Time, LiquidationSide Side, decimal Price, decimal Quantity)` в `ValueObjects/Market`,
 `LiquidationSide { Long, Short }` в `Entities/Market/Enums` с кодами `long` / `short` в хранилище. Сторона — ликвидированная
-позиция, а не сторона ордера: `Sell` → `Long`, `Buy` → `Short`. Так хранится то, что нужно анализу (кого вынесло), и
+позиция, а не сторона ордера: `Sell` → `Long`, `Buy` → `Short`. **Поправка 2026-11-07 после выкатки v37** (fix
+`fix/liquidation-side`): по документации Bybit `S` в `allLiquidation` — уже сторона ликвидированной позиции («a Buy update
+means that a long position has been liquidated»), так что верно `Buy` → `Long`, `Sell` → `Short`; первые ~80 строк прода
+были записаны наоборот, миграция `202611080006` развернула их. Так хранится то, что нужно анализу (кого вынесло), и
 читателю не нужно помнить соглашение Bybit. Время — `UpdateTime` события в миллисекундах, как даёт биржа. Цена и объём
 — `decimal`.
 
