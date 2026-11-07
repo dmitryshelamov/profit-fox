@@ -243,7 +243,10 @@ enforces a rule, the check is the source of truth.
 - `Repositories/IdeaAutos` holds `idea_autos` (the auto, the unique name among those not deleted, the account a restricting foreign key), `idea_paper_trades` (the columns of a trade but the lease, the orders and the manual leg, and `stepped_until`; no foreign key to the idea or the account), `idea_auto_entries` (the requests, unique by idea and auto, taken in the order of `minute, rank, fired, id`) and `idea_auto_refusals` (unique by idea and auto, kept 7 days); `IdeaAutoEntryRepository.TryLockEntriesAsync` is the session advisory lock `idea-autos:entries` on a connection of its own. `IdeaRepository.SaveAsync` with an `AutoMinute` locks the lease of the stream first, then writes the ideas, the outcomes (on the paper trades too) and what the autos did with the ideas storage took. `idea_trades.auto_id` has no foreign key; `idea_autos.budget` is the budget of an auto, `idea_trading_settings` holds the three guards (`autos_budget` the budget of all the autos).
 - `Repositories/Market` holds `scanner_state` (one row: the lease of the stream, the snapshot time, the progress of history,
   the end of the REST pause), `scanner_pairs`, `open_interest` (a hypertable), `funding_rates` and `market_snapshot`, which the
-  holder replaces in one transaction that locks the row of the state with its lease.
+  holder replaces in one transaction that locks the row of the state with its lease. `liquidations` is a hypertable of daily
+  chunks, unique by the whole event (`INSERT … ON CONFLICT DO NOTHING`, the rows inserted counted by side), compressed by
+  `category, symbol` after 7 days by a policy of TimescaleDB and never deleted, the first compression in the project;
+  `stream_breaks` holds the breaks of a stream by its name and the time it was lost.
 - `Repositories/Ideas` holds `ideas` (one open idea per key kept by a partial unique index; the ideas made and moved on a minute are
   written in one transaction), `idea_cases` (a hypertable of the signals with their paths, `IdeaSignalRepository`: a batch goes in by binary copy and onto
   its key, fired time and version, a path written again goes on; read one by one in the order of key and firing; the outcome columns of version 4 stay

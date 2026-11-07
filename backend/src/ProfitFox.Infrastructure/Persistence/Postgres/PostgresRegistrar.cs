@@ -40,6 +40,8 @@ internal static class PostgresRegistrar
         services.AddScoped<IScannerPairRepository, ScannerPairRepository>();
         services.AddScoped<IOpenInterestRepository, OpenInterestRepository>();
         services.AddScoped<IFundingRateRepository, FundingRateRepository>();
+        services.AddScoped<ILiquidationRepository, LiquidationRepository>();
+        services.AddScoped<IStreamBreakRepository, StreamBreakRepository>();
         services.AddScoped<IMarketSnapshotRepository, MarketSnapshotRepository>();
         services.AddScoped<IIdeaRepository, IdeaRepository>();
         services.AddScoped<IIdeaAutoRepository, IdeaAutoRepository>();

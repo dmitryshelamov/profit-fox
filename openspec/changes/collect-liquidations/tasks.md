@@ -12,13 +12,13 @@
 
 ## 2. Хранение
 
-- [ ] 2.1 Миграция `202611080005`: `liquidations` как hypertable по дню с уникальным индексом события, сжатием по
+- [x] 2.1 Миграция `202611080005`: `liquidations` как hypertable по дню с уникальным индексом события, сжатием по
   `category, symbol` и политикой 7 дней; `stream_breaks` (решения 3, 4). Интеграционный тест миграции видит hypertable,
   индекс и политику в `timescaledb_information.jobs`.
-- [ ] 2.2 `LiquidationRepository`: пачечный `INSERT … ON CONFLICT DO NOTHING` с числом вставленных по сторонам, `GetAsync`
+- [x] 2.2 `LiquidationRepository`: пачечный `INSERT … ON CONFLICT DO NOTHING` с числом вставленных по сторонам, `GetAsync`
   oldest first, `LastTimeAsync`. Интеграционные тесты: сценарии «Ликвидация пришла» (поля читаются теми же), «Повтор
   события» (одна строка, вставлено 0), событие старше 7 дней читается после `compress_chunk` куска.
-- [ ] 2.3 `StreamBreakRepository.AddAsync`; интеграционный тест читает записанный разрыв.
+- [x] 2.3 `StreamBreakRepository.AddAsync`; интеграционный тест читает записанный разрыв.
 
 ## 3. Поток Bybit
 
