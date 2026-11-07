@@ -96,8 +96,8 @@ while the snapshot comes late, and starts again from scratch when `IdeasEngineVe
 rules raises it, the version test in `ProfitFox.Tests.Unit` fails until it does.
 
 The `Ideas` section of the scanner's `appsettings.json` sets the thresholds of the setups (`Thresholds`, common to all pairs,
-`ByInterval` for values of one interval), the stop buffer k and the rules of the zones; `Backtests:DefaultFees` sets the fees the
-cases are counted with. The live ideas and the replay run by the same thresholds, so a bucket counts every case of the current
+`ByInterval` for values of one interval), the stop buffer k and the rules of the zones; `Backtests:DefaultFees` sets the fees and the
+slippage the cases are counted with. The live ideas and the replay run by the same thresholds, so a bucket counts every case of the current
 version. The starting thresholds are provisional: to try others, put them into `Ideas:Thresholds`, raise
 `IdeasEngineVersion.Current`, deploy and wait for the replay of the new version (about a day on production), then compare its
 buckets with the version before. Every case keeps the move and the volume it fired with, for analysis.

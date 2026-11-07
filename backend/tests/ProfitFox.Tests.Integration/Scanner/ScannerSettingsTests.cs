@@ -37,6 +37,29 @@ public class ScannerSettingsTests
         Ideas(ScannerHost.ContentRoot()).ShouldContainKey("Ideas:StopBuffer");
     }
 
+    // Requirement "Проскальзывание идей": a service that lost the slippage of a category would count the ideas without it, so it does not start.
+    [Test]
+    public async Task Scanner_without_the_slippage_of_a_category_does_not_start()
+    {
+        using IHost scanner = Scanner(ScannerHost.ContentRoot(), new Dictionary<string, string?> { ["Backtests:DefaultFees:spot:Slippage"] = "" });
+
+        OptionsValidationException exception = await Should.ThrowAsync<OptionsValidationException>(() => scanner.StartAsync());
+
+        exception.Message.ShouldContain("Backtests:DefaultFees:spot:Slippage");
+    }
+
+    // Decision 2 of add-idea-slippage: the API, the scanner and the Worker count the ideas by the same fees and slippage.
+    [Test]
+    public void Api_scanner_and_worker_hold_the_same_fees_and_slippage()
+    {
+        string root = Path.GetDirectoryName(ScannerHost.ContentRoot())!;
+
+        Fees(Path.Combine(root, "ProfitFox.Presentation")).ShouldBe(Fees(ScannerHost.ContentRoot()));
+        Fees(Path.Combine(root, "ProfitFox.Worker")).ShouldBe(Fees(ScannerHost.ContentRoot()));
+        Fees(ScannerHost.ContentRoot()).ShouldContainKeyAndValue("Backtests:DefaultFees:linear:Slippage", "0.05");
+        Fees(ScannerHost.ContentRoot()).ShouldContainKeyAndValue("Backtests:DefaultFees:spot:Slippage", "0.1");
+    }
+
     // Decision 9: the settings file carries the provisional thresholds of the candle setups.
     [Test]
     public void Scanner_settings_carry_the_thresholds_of_the_candle_setups()
@@ -47,6 +70,13 @@ public class ScannerSettingsTests
 
         settings.Thresholds.ShouldBeEquivalentTo(new ThresholdSettings());
         Ideas(ScannerHost.ContentRoot()).ShouldContainKey("Ideas:Thresholds:BreakoutMargin");
+    }
+
+    private static Dictionary<string, string?> Fees(string folder)
+    {
+        IConfigurationRoot configuration = new ConfigurationBuilder().AddJsonFile(Path.Combine(folder, "appsettings.json")).Build();
+
+        return configuration.GetSection("Backtests:DefaultFees").AsEnumerable().Where(entry => entry.Value is not null).ToDictionary(entry => entry.Key, entry => entry.Value);
     }
 
     private static Dictionary<string, string?> Ideas(string folder)
