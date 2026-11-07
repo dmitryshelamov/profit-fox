@@ -32,10 +32,21 @@ export function realText(item: Pick<Item, 'realClosed' | 'realResult'>) {
   };
 }
 
+/** What the open trades of an auto take of its budget: «занято X из Y USDT», or «без бюджета». */
+export function budgetText(item: {
+  readonly budgetUsed: string;
+  readonly auto: { readonly budget: string | null };
+}): string {
+  return item.auto.budget === null
+    ? 'без бюджета'
+    : `занято ${roundDecimal(item.budgetUsed, 2)} из ${item.auto.budget} USDT`;
+}
+
 /** The state of the guards for a line: each with its name and its value; a guard that is off says so. */
 export function guardParts(guards: Guards): readonly { name: string; value: string }[] {
   const day = roundDecimal(guards.daySum, 2);
   const sides = `в лонг ${guards.openLongs} · в шорт ${guards.openShorts}`;
+  const autos = roundDecimal(guards.autosBudgetUsed, 2);
 
   return [
     { name: 'открыто', value: `${guards.openTrades} из ${guards.maxOpenTrades}` },
@@ -50,6 +61,13 @@ export function guardParts(guards: Guards): readonly { name: string; value: stri
     {
       name: sides,
       value: guards.maxSameDirection === null ? 'выкл' : `из ${guards.maxSameDirection}`,
+    },
+    {
+      name: 'бюджет автоматов',
+      value:
+        guards.autosBudget === null
+          ? `${autos} USDT · выкл`
+          : `${autos} из ${guards.autosBudget} USDT`,
     },
   ];
 }

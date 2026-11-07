@@ -241,7 +241,7 @@ export function AutoForm({
   id: string | null;
   /** The values the form opens with: those of the saved auto, or the defaults of a new one. */
   initial: AutoFormValues;
-  /** «Не больше суммы на сделку» of the settings: the hint under the amount. */
+  /** «Максимум на одну сделку» of the settings: the hint under the amount. */
   maxAmount: string | undefined;
   onSaved: () => void;
   onCancel: () => void;
@@ -266,7 +266,7 @@ export function AutoForm({
         className="space-y-3 rounded-xl border border-line bg-panel px-4 py-4"
       >
         <h2 className="font-semibold">Основное</h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <TextField
             label="Название"
             value={form.name}
@@ -283,7 +283,17 @@ export function AutoForm({
             value={form.amount}
             onChange={(amount) => set({ amount })}
             errors={fieldErrors.amount}
-            hint={maxAmount === undefined ? undefined : `не больше ${maxAmount} USDT`}
+            hint={
+              maxAmount === undefined ? undefined : `максимум на одну сделку — ${maxAmount} USDT`
+            }
+            mono
+          />
+          <TextField
+            label="Бюджет автомата, USDT"
+            value={form.budget}
+            onChange={(budget) => set({ budget })}
+            errors={fieldErrors.budget}
+            hint="пусто — без бюджета; сумма открытых сделок автомата, учебных и реальных"
             mono
           />
           <div className="space-y-1 text-sm">
@@ -367,7 +377,7 @@ export function AutoForm({
             value={form.minRiskReward}
             onChange={(minRiskReward) => set({ minRiskReward })}
             errors={fieldErrors.minRiskReward}
-            hint="после комиссий, у идеи на момент её рождения"
+            hint="прибыль к убытку после комиссий, у идеи на момент её рождения; для этого автомата вместо «Прибыль к убытку не меньше»"
             mono
             narrow
           />

@@ -7,6 +7,7 @@ import { Button } from '@/shared/ui/Button';
 
 import { type SettingsInput, tradingSettingsQuery, useSaveSettings } from '../api';
 import {
+  autosBudgetStateText,
   dayShare,
   dayStateText,
   openStateText,
@@ -134,28 +135,32 @@ function SettingsForm({
       <h3 className="pt-2 text-[11px] tracking-wide text-faint uppercase">Сделка</h3>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Field
-          label="Сумма на сделку, USDT"
+          label="Сумма сделки по умолчанию, USDT"
           value={form.amount}
           errors={errors.fields.amount}
           onChange={(amount) => set({ amount })}
         >
-          <span className={hint}>для ручного входа; новый автомат берёт её как начальную</span>
+          <span className={hint}>подставляется в окно входа и в новый автомат</span>
         </Field>
         <Field
-          label="Не больше суммы на сделку, USDT"
+          label="Максимум на одну сделку, USDT"
           value={form.maxAmount}
           errors={errors.fields.maxAmount}
           onChange={(maxAmount) => set({ maxAmount })}
         >
-          <span className={hint}>потолок для ручных входов и для суммы автомата</span>
+          <span className={hint}>
+            больше вписать нельзя — защита от опечатки; и для ручных входов, и для автоматов
+          </span>
         </Field>
         <Field
-          label="Минимальный R:R после комиссий"
+          label="Прибыль к убытку не меньше"
           value={form.minRiskReward}
           errors={errors.fields.minRiskReward}
           onChange={(minRiskReward) => set({ minRiskReward })}
         >
-          <span className={hint}>для ручных входов; у автомата — свой минимум</span>
+          <span className={hint}>
+            1.5 — цель должна дать в полтора раза больше, чем заберёт стоп; для ручных входов
+          </span>
         </Field>
       </div>
       <h3 className="pt-2 text-[11px] tracking-wide text-faint uppercase">
@@ -171,7 +176,7 @@ function SettingsForm({
           {guards && <span className={hint}>{openStateText(guards)}</span>}
         </Field>
         <Field
-          label="Не больше общего риска, USDT"
+          label="Максимальный убыток, если сработают все стопы, USDT"
           value={form.maxTotalRisk}
           errors={errors.fields.maxTotalRisk}
           onChange={(maxTotalRisk) => set({ maxTotalRisk })}
@@ -186,7 +191,7 @@ function SettingsForm({
             новое
           </span>
         </h3>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Field
             label="Дневной стоп по убытку, USDT"
             value={form.dailyLossLimit}
@@ -209,6 +214,18 @@ function SettingsForm({
             {guards && <span className={hint}>{sidesStateText(guards)}</span>}
             <span className={hint}>
               Ручные входы не останавливает. Пустое поле — защита выключена.
+            </span>
+          </Field>
+          <Field
+            label="Бюджет всех автоматов, USDT"
+            value={form.autosBudget}
+            errors={errors.fields.autosBudget}
+            onChange={(autosBudget) => set({ autosBudget })}
+          >
+            {guards && <span className={hint}>{autosBudgetStateText(guards)}</span>}
+            <span className={hint}>
+              Сумма открытых реальных сделок всех автоматов. Ручные и учебные сделки не считаются и
+              не останавливаются. Пустое поле — защита выключена.
             </span>
           </Field>
         </div>

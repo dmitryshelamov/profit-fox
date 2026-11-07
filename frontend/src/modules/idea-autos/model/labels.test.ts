@@ -61,6 +61,10 @@ describe('labels of autos', () => {
     expect(reasonLabel('auto_off')).toBe('Автомат выключен');
     expect(reasonLabel('risk_reward_too_low')).toBe('R:R ниже минимума');
     expect(reasonLabel('entry_error')).toBe('Ошибка подготовки входа');
+    expect(reasonLabel('budget_taken')).toBe('Бюджет автомата занят');
+    expect(reasonLabel('autos_budget_taken')).toBe('Бюджет автоматов занят');
+    expect(reasonLabel('amount_above_max')).toBe('Больше максимума на одну сделку');
+    expect(reasonLabel('total_risk_exceeded')).toBe('Максимальный убыток по стопам');
     expect(reasonLabel('something_new')).toBe('something_new');
   });
 });

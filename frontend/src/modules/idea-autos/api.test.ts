@@ -68,7 +68,7 @@ describe('requests of autos', () => {
 
     expect(id).toBe('auto-1');
     expect(await requests[0]!.text()).toBe(
-      '{"name":"Импульс лонг","accountId":"account-1","amount":300,"setups":["impulse"],"types":["pullback"],"intervals":["15"],"side":null,"category":null,"badge":null,"minRiskReward":1.5,"minCases":0}',
+      '{"name":"Импульс лонг","accountId":"account-1","amount":300,"budget":null,"setups":["impulse"],"types":["pullback"],"intervals":["15"],"side":null,"category":null,"badge":null,"minRiskReward":1.5,"minCases":0}',
     );
     expect(await requests[1]!.text()).toBe('{"mode":"live"}');
   });

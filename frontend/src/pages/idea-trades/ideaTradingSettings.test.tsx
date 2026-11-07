@@ -16,6 +16,7 @@ function routes(journal: () => object, extra: Record<string, () => Response> = {
 }
 
 describe('settings of trading by ideas', () => {
+  // Scenario "Подписи настроек".
   it('shows the settings and the accounts to choose from', async () => {
     fakeApi(routes(() => journalOf()));
     renderApp('/idea-trades/settings');
@@ -23,12 +24,27 @@ describe('settings of trading by ideas', () => {
     const panel = await screen.findByRole('region', { name: 'Настройки' });
 
     await waitFor(() =>
-      expect(within(panel).getByLabelText('Сумма на сделку, USDT')).toHaveValue('20'),
+      expect(within(panel).getByLabelText('Сумма сделки по умолчанию, USDT')).toHaveValue('20'),
     );
-    expect(within(panel).getByLabelText('Не больше суммы на сделку, USDT')).toHaveValue('200');
+    expect(within(panel).getByLabelText('Максимум на одну сделку, USDT')).toHaveValue('200');
     expect(within(panel).getByLabelText('Не больше открытых сделок')).toHaveValue('5');
-    expect(within(panel).getByLabelText('Не больше общего риска, USDT')).toHaveValue('5');
-    expect(within(panel).getByLabelText('Минимальный R:R после комиссий')).toHaveValue('1.5');
+    expect(
+      within(panel).getByLabelText('Максимальный убыток, если сработают все стопы, USDT'),
+    ).toHaveValue('5');
+    expect(within(panel).getByLabelText('Прибыль к убытку не меньше')).toHaveValue('1.5');
+    expect(
+      within(panel).getByText('подставляется в окно входа и в новый автомат'),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByText(
+        'больше вписать нельзя — защита от опечатки; и для ручных входов, и для автоматов',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByText(
+        '1.5 — цель должна дать в полтора раза больше, чем заберёт стоп; для ручных входов',
+      ),
+    ).toBeInTheDocument();
     await waitFor(() =>
       expect(within(panel).getByLabelText('Аккаунт по умолчанию')).toHaveValue(exchangeAccount.id),
     );
@@ -53,7 +69,7 @@ describe('settings of trading by ideas', () => {
 
     await waitFor(() => expect(requests.some((request) => request.method === 'PUT')).toBe(true));
     expect(await requests.find((request) => request.method === 'PUT')!.text()).toBe(
-      `{"accountId":"${exchangeAccount.id}","amount":20,"maxAmount":200,"maxOpenTrades":3,"maxTotalRisk":5,"minRiskReward":1.5,"dailyLossLimit":null,"maxSameDirection":null}`,
+      `{"accountId":"${exchangeAccount.id}","amount":20,"maxAmount":200,"maxOpenTrades":3,"maxTotalRisk":5,"minRiskReward":1.5,"dailyLossLimit":null,"maxSameDirection":null,"autosBudget":null}`,
     );
     expect(await screen.findByText('Настройки сохранены')).toBeInTheDocument();
   });
@@ -67,7 +83,7 @@ describe('settings of trading by ideas', () => {
     renderApp('/idea-trades/settings');
     const user = userEvent.setup();
     const panel = await screen.findByRole('region', { name: 'Настройки' });
-    await within(panel).findByLabelText('Сумма на сделку, USDT');
+    await within(panel).findByLabelText('Сумма сделки по умолчанию, USDT');
 
     await user.click(within(panel).getByRole('button', { name: 'Сохранить' }));
 
@@ -92,7 +108,7 @@ describe('settings of trading by ideas', () => {
     renderApp('/idea-trades/settings');
     const user = userEvent.setup();
     const panel = await screen.findByRole('region', { name: 'Настройки' });
-    const amount = await within(panel).findByLabelText('Сумма на сделку, USDT');
+    const amount = await within(panel).findByLabelText('Сумма сделки по умолчанию, USDT');
     await waitFor(() => expect(amount).toHaveValue('20'));
 
     await user.clear(amount);
@@ -136,8 +152,50 @@ describe('guards of the autos on the settings screen', () => {
       within(block).getByText('открытых реальных: в лонг 2 · в шорт 1 из 5'),
     ).toBeInTheDocument();
     expect(await screen.findByText('сейчас открыто 3 из 8')).toBeInTheDocument();
-    expect(screen.getByText('сейчас 10.22 из 40 USDT до стопов')).toBeInTheDocument();
+    expect(screen.getByText('сейчас 10.22 из 40 USDT')).toBeInTheDocument();
     expect(block.querySelector('[style*="width"]')).toHaveStyle({ width: '63.5%' });
+  });
+
+  // Scenario "Состояние бюджета автоматов".
+  it('shows what the trades of the autos take of their budget under its field and saves it', async () => {
+    const requests = fakeApi(
+      routes(() => [], {
+        'GET /api/idea-trading/settings': () => json({ ...tradingSettings, autosBudget: '200' }),
+        'PUT /api/idea-trading/settings': () => new Response(null, { status: 204 }),
+      }),
+    );
+    renderApp('/idea-trades/settings');
+    const user = userEvent.setup();
+    const block = await screen.findByRole('region', { name: 'Защиты автоматов' });
+    const budget = within(block).getByLabelText('Бюджет всех автоматов, USDT');
+    await waitFor(() => expect(budget).toHaveValue('200'));
+
+    expect(await within(block).findByText('сейчас 180.00 из 200 USDT')).toBeInTheDocument();
+    await user.clear(budget);
+    await user.type(budget, '250.5');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => expect(requests.some((request) => request.method === 'PUT')).toBe(true));
+    expect(await requests.find((request) => request.method === 'PUT')!.text()).toContain(
+      '"autosBudget":250.5}',
+    );
+  });
+
+  // Scenario "Бюджет автоматов выключен".
+  it('says the budget of the autos is off while its field is empty', async () => {
+    fakeApi(
+      routes(() => [], {
+        'GET /api/idea-trading/guards': () => json(guardsOf({ autosBudget: null })),
+      }),
+    );
+    renderApp('/idea-trades/settings');
+
+    const block = await screen.findByRole('region', { name: 'Защиты автоматов' });
+
+    expect(
+      await within(block).findByText('сейчас 180.00 USDT · защита выключена'),
+    ).toBeInTheDocument();
+    expect(within(block).getByLabelText('Бюджет всех автоматов, USDT')).toHaveValue('');
   });
 
   it('shows that a guard that is off is off, with the field empty', async () => {
@@ -180,7 +238,7 @@ describe('guards of the autos on the settings screen', () => {
 
     await waitFor(() => expect(requests.some((request) => request.method === 'PUT')).toBe(true));
     expect(await requests.find((request) => request.method === 'PUT')!.text()).toContain(
-      '"dailyLossLimit":null,"maxSameDirection":4}',
+      '"dailyLossLimit":null,"maxSameDirection":4,"autosBudget":null}',
     );
   });
 

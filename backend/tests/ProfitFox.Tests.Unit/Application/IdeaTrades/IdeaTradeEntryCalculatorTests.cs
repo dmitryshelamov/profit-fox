@@ -125,34 +125,62 @@ public class IdeaTradeEntryCalculatorTests
         auto.Reasons.ShouldBe([IdeaTradeRefusal.RiskRewardTooLow, IdeaTradeRefusal.PairTaken]);
     }
 
+    // Decision 1: the entry takes the budget with the amount it asks for (300.5), not the one of its volume rounded down to the step (300).
+    [Test]
+    public async Task Budget_of_the_auto_is_checked_with_the_amount_the_request_asks_for()
+    {
+        AutoEntry entry = Entry(minRiskReward: 1.2m, budget: 350.2m);
+        _trades.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([Held(Instrument("SOL"), entry.Auto.Id)]);
+
+        EntryCalculation auto = await _calculator.EvaluateAsync(Preparation(amount: 300.5m), entry, CancellationToken.None);
+
+        auto.Size.Amount.ShouldBe(300m);
+        auto.Reasons.ShouldBe([IdeaTradeRefusal.BudgetTaken]);
+        auto.Detail.ShouldBe(RefusalDetail.Numbers(50m, 350.2m));
+    }
+
+    [Test]
+    public async Task Budget_of_all_the_autos_of_the_settings_is_named_for_an_auto_only()
+    {
+        AutoEntry entry = Entry(minRiskReward: 1.2m);
+        _trades.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([Held(Instrument("SOL"), entry.Auto.Id)]);
+
+        EntryCalculation manual = await _calculator.EvaluateAsync(Preparation(minRiskReward: 1.2m, autosBudget: 340m), null, CancellationToken.None);
+        EntryCalculation auto = await _calculator.EvaluateAsync(Preparation(autosBudget: 340m), entry, CancellationToken.None);
+
+        manual.Reasons.ShouldBeEmpty();
+        auto.Reasons.ShouldBe([IdeaTradeRefusal.AutosBudgetTaken]);
+        auto.Detail.ShouldBe(RefusalDetail.Numbers(50m, 340m));
+    }
+
     private static Instrument Instrument(string coin = "ETH")
     {
         return new Instrument(MarketCategory.Linear, $"{coin}USDT");
     }
 
     // The reward to risk after the fees is 1.32 with a stop at 98 and a target at 102.9 from 100.
-    private static EntryPreparation Preparation(decimal minRiskReward = 1.5m, int? maxSameDirection = null)
+    private static EntryPreparation Preparation(decimal minRiskReward = 1.5m, int? maxSameDirection = null, decimal amount = 300m, decimal? autosBudget = null)
     {
         Idea generated = IdeaGenerator.Generate(Now, instrument: Instrument());
         Idea idea = generated with { Track = generated.Track with { Plan = new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 100m, 98m, 102.9m) } };
-        IdeaTradingSettings settings = IdeaTradingSettings.Default with { MinRiskReward = minRiskReward, MaxSameDirection = maxSameDirection, MaxOpenTrades = 10, MaxTotalRisk = 100m, MaxAmount = 500m };
+        IdeaTradingSettings settings = IdeaTradingSettings.Default with { MinRiskReward = minRiskReward, MaxSameDirection = maxSameDirection, MaxOpenTrades = 10, MaxTotalRisk = 100m, MaxAmount = 500m, AutosBudget = autosBudget };
 
-        return new EntryPreparation(idea, settings, null, null, AccountAccess.Ready, 100m, 100m, Rules, Fees, 300m, "USDT", "ETH", []);
+        return new EntryPreparation(idea, settings, null, null, AccountAccess.Ready, 100m, 100m, Rules, Fees, amount, "USDT", "ETH", []);
     }
 
-    private static AutoEntry Entry(decimal minRiskReward)
+    private static AutoEntry Entry(decimal minRiskReward, decimal? budget = null)
     {
         var conditions = new IdeaAutoConditions([IdeaSetup.Impulse], [IdeaType.TwoR], [Interval.FifteenMinutes], null, null, null, minRiskReward, 0);
-        IdeaAuto auto = IdeaAuto.Create(Guid.NewGuid(), "Импульс лонг", Account, 300m, conditions, 0) with { Mode = IdeaAutoMode.Live };
+        IdeaAuto auto = IdeaAuto.Create(Guid.NewGuid(), "Импульс лонг", Account, 300m, conditions, 0) with { Mode = IdeaAutoMode.Live, Budget = budget };
 
         return new AutoEntry(auto, minRiskReward, new DailyLossState(-19.05m, 30m, null, null), [], new Dictionary<Guid, IdeaAuto> { [auto.Id] = auto });
     }
 
-    // An open manual trade of the account.
-    private static IdeaTrade Held(Instrument? instrument = null)
+    // An open trade of the account of 50 USDT, manual or of an auto.
+    private static IdeaTrade Held(Instrument? instrument = null, Guid? autoId = null)
     {
         var size = new IdeaTradeSize(0.47m, 50m, 0.2m, 0.368m, 1.84m);
-        var trade = IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(Now, instrument: instrument ?? Instrument()), Account, 106m, size, Now);
+        var trade = IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(Now, instrument: instrument ?? Instrument()), Account, 106m, size, Now, autoId: autoId);
 
         return trade.EntryGrown(new LegTotals(0.47m, 49.82m, 0.02m), Now);
     }

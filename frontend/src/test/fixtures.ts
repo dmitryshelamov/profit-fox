@@ -554,6 +554,7 @@ export const tradingSettings = {
   minRiskReward: '1.5',
   dailyLossLimit: null,
   maxSameDirection: null,
+  autosBudget: null,
 } satisfies Schemas['IdeaTradingSettingsResponse'];
 
 /** The entry of an idea as the API calculates it: no reason. */
@@ -814,10 +815,11 @@ export const autoOf = (overrides: Partial<Schemas['IdeaAutoResponse']> = {}) =>
     minRiskReward: '1.5',
     minCases: 100,
     position: 0,
+    budget: null,
     ...overrides,
   }) satisfies Schemas['IdeaAutoResponse'];
 
-/** An auto of the list with its totals: nothing closed, no refusals. */
+/** An auto of the list with its totals: nothing closed, no refusals, nothing open. */
 export const autoItemOf = (
   auto: Schemas['IdeaAutoResponse'] = autoOf(),
   overrides: Partial<Omit<Schemas['IdeaAutoItemResponse'], 'auto'>> = {},
@@ -830,10 +832,11 @@ export const autoItemOf = (
     realClosed: 0,
     realResult: '0',
     refusalsToday: 0,
+    budgetUsed: '0',
     ...overrides,
   }) satisfies Schemas['IdeaAutoItemResponse'];
 
-/** The guards of the money with room to spare and none of them off; a test sets what it needs. */
+/** The guards of the money with room to spare and none of them off; a test sets what it needs. The trades of the autos take 180 of 200. */
 export const guardsOf = (overrides: Partial<Schemas['IdeaGuardsResponse']> = {}) =>
   ({
     openTrades: 3,
@@ -847,6 +850,8 @@ export const guardsOf = (overrides: Partial<Schemas['IdeaGuardsResponse']> = {})
     openLongs: 2,
     openShorts: 1,
     maxSameDirection: 5,
+    autosBudgetUsed: '180',
+    autosBudget: '200',
     ...overrides,
   }) satisfies Schemas['IdeaGuardsResponse'];
 
