@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.Metrics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -8,6 +9,8 @@ using Microsoft.Extensions.DependencyInjection;
 using OpenTelemetry.Metrics;
 
 using ProfitFox.Application.Ports.ExchangeAccounts;
+using ProfitFox.Application.Scanner;
+using ProfitFox.Domain.Entities.Market.Enums;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
 
 using Shouldly;
@@ -46,6 +49,18 @@ public class MetricsExportTests
 
         (await receiver.WaitAsync(body => Has(body, "profitfox.bybit.rest.requests") && Has(body, "worker"), TimeSpan.FromSeconds(2))).ShouldBeTrue();
         receiver.ContentTypes.ShouldAllBe(type => type == "application/x-protobuf");
+    }
+
+    // Requirement "Счётчик ликвидаций": the meter of the scanner is pushed with the others.
+    [Test]
+    public async Task Service_pushes_the_liquidations_of_the_scanner()
+    {
+        using var receiver = new OtlpReceiver();
+        await using WorkerHost worker = StartWorker(receiver.Endpoint);
+
+        new ScannerMetrics(worker.Services.GetRequiredService<IMeterFactory>()).Liquidated(new Dictionary<LiquidationSide, int> { [LiquidationSide.Long] = 1 });
+
+        (await receiver.WaitAsync(body => Has(body, "profitfox.scanner.liquidations"), TimeSpan.FromSeconds(2))).ShouldBeTrue();
     }
 
     // Scenario "Адрес не задан": no setting, or an empty one.

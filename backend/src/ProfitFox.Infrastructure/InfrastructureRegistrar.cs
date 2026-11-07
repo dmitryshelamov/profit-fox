@@ -132,6 +132,7 @@ public static class InfrastructureRegistrar
         services.AddScoped<IdeasReplay>();
         services.AddScoped<ScannerMinuteCycle>();
         services.AddScoped<ScannerSession>();
+        services.AddSingleton<ScannerMetrics>();
         services.AddHostedService<ScannerBackgroundService>();
     }
 

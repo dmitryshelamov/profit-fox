@@ -1,5 +1,7 @@
 using System.Globalization;
 
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Microsoft.Extensions.Time.Testing;
 
 using NSubstitute;
@@ -16,6 +18,7 @@ using ProfitFox.Application.Workers;
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.Market;
+using ProfitFox.Domain.Entities.Market.Enums;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
@@ -34,6 +37,7 @@ public class ScannerSessionTests
 {
     private static readonly DateTimeOffset Start = DateTimeOffset.Parse("2024-03-10T12:00:30Z", CultureInfo.InvariantCulture);
     private static readonly Instrument Btc = new Instrument(MarketCategory.Spot, "BTCUSDT");
+    private static readonly Instrument Sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
 
     private IMarketDataFeed _feed = null!;
     private ICandleRepository _candles = null!;
@@ -48,6 +52,14 @@ public class ScannerSessionTests
     private IIdeaExitRuleRepository _exitRules = null!;
     private IIdeaEngineVersionRepository _versions = null!;
     private IAsyncDisposable _subscription = null!;
+    private ILiquidationRepository _liquidations = null!;
+    private IStreamBreakRepository _breaks = null!;
+    private IAsyncDisposable _liquidationSubscription = null!;
+    private Action<Instrument, LiquidationEvent> _liquidated = null!;
+    private Action<DateTimeOffset> _lost = null!;
+    private Action<DateTimeOffset> _restored = null!;
+    private Action<Action<Instrument, LiquidationEvent>>? _onLiquidationSubscribe;
+    private ServiceProvider _meters = null!;
     private FakeTimeProvider _time = null!;
     private Action<Instrument, Candle> _closed = null!;
     private IReadOnlyList<ScannerPair> _stored = [];
@@ -70,6 +82,28 @@ public class ScannerSessionTests
 
                 return _subscription;
             });
+        _meters = new ServiceCollection().AddMetrics().BuildServiceProvider();
+        _liquidations = Substitute.For<ILiquidationRepository>();
+        _liquidations.AddAsync(Arg.Any<IReadOnlyCollection<(Instrument, LiquidationEvent)>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<LiquidationSide, int>());
+        _breaks = Substitute.For<IStreamBreakRepository>();
+        _liquidationSubscription = Substitute.For<IAsyncDisposable>();
+        _onLiquidationSubscribe = null;
+        _streams.SubscribeLiquidationsAsync(
+                Arg.Any<IReadOnlyList<Instrument>>(),
+                Arg.Any<Action<Instrument, LiquidationEvent>>(),
+                Arg.Any<Action<DateTimeOffset>>(),
+                Arg.Any<Action<DateTimeOffset>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                _liquidated = call.ArgAt<Action<Instrument, LiquidationEvent>>(1);
+                _lost = call.ArgAt<Action<DateTimeOffset>>(2);
+                _restored = call.ArgAt<Action<DateTimeOffset>>(3);
+                _onLiquidationSubscribe?.Invoke(_liquidated);
+
+                return _liquidationSubscription;
+            });
         _snapshots = Substitute.For<IMarketSnapshotRepository>();
         _snapshots.ReplaceAsync(Arg.Any<Guid>(), Arg.Any<IReadOnlyCollection<MarketSnapshotRow>>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(true);
         _snapshots.ReplaceSetupsAsync(Arg.Any<Guid>(), Arg.Any<IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>>>(), Arg.Any<CancellationToken>()).Returns(true);
@@ -88,6 +122,7 @@ public class ScannerSessionTests
         _cursors.GetAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new Dictionary<Instrument, IdeaReplayCursor>());
         _time = new FakeTimeProvider(Start);
         _closed = null!;
+        _liquidated = null!;
         _stored = [];
     }
 
@@ -95,6 +130,8 @@ public class ScannerSessionTests
     public async Task TearDown()
     {
         await _subscription.DisposeAsync();
+        await _liquidationSubscription.DisposeAsync();
+        await _meters.DisposeAsync();
     }
 
     // Requirement "Начало версии правил": the session writes the start of its version of the rules when it takes the lease; storage keeps the first.
@@ -221,6 +258,7 @@ public class ScannerSessionTests
 
         await Should.ThrowAsync<ScannerLeaseLostException>(session);
         await _subscription.Received(1).DisposeAsync();
+        await _liquidationSubscription.Received(1).DisposeAsync();
         _subscription.ClearReceivedCalls();
     }
 
@@ -551,6 +589,250 @@ public class ScannerSessionTests
         yield break;
     }
 
+    // Requirement "Поток ликвидаций": the events of the stream go to storage in one batch per wake-up, like the candles.
+    [Test]
+    public async Task Liquidations_from_the_stream_go_to_storage_in_one_batch()
+    {
+        LinearListed("SOLUSDT");
+        LiquidationEvent first = Liquidation(Start.AddSeconds(-2));
+        LiquidationEvent second = Liquidation(Start.AddSeconds(-1));
+        // Both come while the session subscribes, so the lane of liquidations finds them together.
+        _onLiquidationSubscribe = liquidated =>
+        {
+            liquidated(Sol, first);
+            liquidated(Sol, second);
+        };
+        using var lease = new CancellationTokenSource();
+        Task session = Session().RunAsync(lease.Token);
+
+        await WaitAsync(() => _liquidations.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(ILiquidationRepository.AddAsync)));
+
+        var batch = (IReadOnlyCollection<(Instrument, LiquidationEvent)>)_liquidations.ReceivedCalls().Single(call => call.GetMethodInfo().Name == nameof(ILiquidationRepository.AddAsync)).GetArguments()[0]!;
+        batch.ShouldBe([(Sol, first), (Sol, second)]);
+        await lease.CancelAsync();
+        (await Should.ThrowAsync<Exception>(session)).ShouldBeAssignableTo<OperationCanceledException>();
+    }
+
+    // Scenario "Повтор не считается": only the rows storage added are counted.
+    [Test]
+    public async Task Liquidation_storage_already_had_is_not_counted()
+    {
+        LinearListed("SOLUSDT");
+        using var collector = new MetricCollector<long>(_meters.GetRequiredService<System.Diagnostics.Metrics.IMeterFactory>(), "ProfitFox.Scanner", "profitfox.scanner.liquidations");
+        _liquidations.AddAsync(Arg.Any<IReadOnlyCollection<(Instrument, LiquidationEvent)>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<LiquidationSide, int> { [LiquidationSide.Long] = 1 });
+        _onLiquidationSubscribe = liquidated =>
+        {
+            liquidated(Sol, Liquidation(Start.AddSeconds(-2)));
+            liquidated(Sol, Liquidation(Start.AddSeconds(-1)));
+        };
+        using var lease = new CancellationTokenSource();
+        Task session = Session().RunAsync(lease.Token);
+
+        await WaitAsync(() => collector.GetMeasurementSnapshot().Count > 0);
+
+        collector.GetMeasurementSnapshot().Select(measurement => ((string)measurement.Tags["side"]!, measurement.Value)).ShouldBe([("long", 1L)]);
+        await lease.CancelAsync();
+        (await Should.ThrowAsync<Exception>(session)).ShouldBeAssignableTo<OperationCanceledException>();
+    }
+
+    // Spot pairs have no liquidations.
+    [Test]
+    public async Task Only_linear_pairs_are_subscribed_for_liquidations()
+    {
+        LinearListed("SOLUSDT");
+        using var lease = new CancellationTokenSource();
+        Task session = Session().RunAsync(lease.Token);
+
+        await WaitAsync(() => _liquidated is not null);
+
+        await _streams.Received(1).SubscribeLiquidationsAsync(
+            Arg.Is<IReadOnlyList<Instrument>>(instruments => instruments.SequenceEqual(new[] { Sol })),
+            Arg.Any<Action<Instrument, LiquidationEvent>>(),
+            Arg.Any<Action<DateTimeOffset>>(),
+            Arg.Any<Action<DateTimeOffset>>(),
+            Arg.Any<CancellationToken>());
+        await lease.CancelAsync();
+        (await Should.ThrowAsync<Exception>(session)).ShouldBeAssignableTo<OperationCanceledException>();
+    }
+
+    // Scenario "Новая пара в списке": the liquidations follow the list as the candles do; the time between the old subscription and the new one
+    // is a break, since the events of it are missed.
+    [Test]
+    public async Task New_pair_in_the_list_is_subscribed_for_liquidations_too()
+    {
+        var newPair = new Instrument(MarketCategory.Linear, "NEWUSDT");
+        _feed.ListInstrumentsAsync(MarketCategory.Linear, Arg.Any<CancellationToken>()).Returns(
+            [Listed("SOLUSDT")],
+            [Listed("SOLUSDT"), Listed("NEWUSDT")]);
+        using var lease = new CancellationTokenSource();
+        Task session = Session(TimeSpan.FromMinutes(1)).RunAsync(lease.Token);
+
+        await WaitAsync(() => LiquidationSubscriptions().Any(instruments => instruments.Contains(newPair)), advance: true);
+        await WaitAsync(() => _breaks.ReceivedCalls().Any());
+
+        LiquidationSubscriptions()[^1].ShouldBe([Sol, newPair], ignoreOrder: true);
+        await _liquidationSubscription.Received(1).DisposeAsync();
+        var written = (StreamBreak)_breaks.ReceivedCalls().Single().GetArguments()[0]!;
+        written.Stream.ShouldBe("liquidations");
+        written.LostAt.ShouldBeLessThanOrEqualTo(written.RestoredAt);
+        await lease.CancelAsync();
+        (await Should.ThrowAsync<Exception>(session)).ShouldBeAssignableTo<OperationCanceledException>();
+    }
+
+    // Both subscriptions go together: a refused subscription of liquidations after a change of the list takes its candles off, and the REST lane
+    // makes both again.
+    [Test]
+    public async Task Refused_subscription_of_liquidations_takes_the_candles_off_and_is_made_again()
+    {
+        IAsyncDisposable refusedCandles = Substitute.For<IAsyncDisposable>();
+        var candleCalls = 0;
+        _streams.SubscribeMinuteCandlesAsync(Arg.Any<IReadOnlyList<Instrument>>(), Arg.Any<Action<Instrument, Candle>>(), Arg.Any<Action>(), Arg.Any<CancellationToken>())
+            .Returns(_ => ++candleCalls == 2 ? refusedCandles : _subscription);
+        var liquidationCalls = 0;
+        _streams.SubscribeLiquidationsAsync(
+                Arg.Any<IReadOnlyList<Instrument>>(),
+                Arg.Any<Action<Instrument, LiquidationEvent>>(),
+                Arg.Any<Action<DateTimeOffset>>(),
+                Arg.Any<Action<DateTimeOffset>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ => ++liquidationCalls == 2
+                ? Task.FromException<IAsyncDisposable>(new ExchangeUnavailableException("refused"))
+                : Task.FromResult(_liquidationSubscription));
+        _feed.ListInstrumentsAsync(MarketCategory.Spot, Arg.Any<CancellationToken>()).Returns(
+            [new ListedInstrument(MarketCategory.Spot, "BTCUSDT", "BTC", "USDT", true)],
+            [new ListedInstrument(MarketCategory.Spot, "BTCUSDT", "BTC", "USDT", true), new ListedInstrument(MarketCategory.Spot, "ETHUSDT", "ETH", "USDT", true)]);
+        using var lease = new CancellationTokenSource();
+        Task session = Session(TimeSpan.FromMinutes(1)).RunAsync(lease.Token);
+
+        await WaitAsync(() => liquidationCalls >= 3, advance: true);
+
+        candleCalls.ShouldBe(3);
+        await refusedCandles.Received(1).DisposeAsync();
+        await lease.CancelAsync();
+        (await Should.ThrowAsync<Exception>(session)).ShouldBeAssignableTo<OperationCanceledException>();
+    }
+
+    // Decision 2: the batch cannot be loaded again, so a failed write is logged and its time is a break.
+    [Test]
+    public async Task Failed_write_of_liquidations_is_logged_and_its_events_are_a_break()
+    {
+        LinearListed("SOLUSDT");
+        var failure = new InvalidOperationException("storage down");
+        _liquidations.AddAsync(Arg.Any<IReadOnlyCollection<(Instrument, LiquidationEvent)>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<IReadOnlyDictionary<LiquidationSide, int>>(failure));
+        _onLiquidationSubscribe = liquidated =>
+        {
+            liquidated(Sol, Liquidation(Start.AddSeconds(-5)));
+            liquidated(Sol, Liquidation(Start.AddSeconds(-1)));
+        };
+        using var lease = new CancellationTokenSource();
+        Task session = Session().RunAsync(lease.Token);
+
+        await WaitAsync(() => _breaks.ReceivedCalls().Any());
+
+        _journal.Received(1).Failed("liquidations", failure);
+        await _breaks.Received(1).AddAsync(new StreamBreak("liquidations", Start.AddSeconds(-5), Start.AddSeconds(-1)), Arg.Any<CancellationToken>());
+        await lease.CancelAsync();
+        (await Should.ThrowAsync<Exception>(session)).ShouldBeAssignableTo<OperationCanceledException>();
+    }
+
+    // Scenario "Соединение восстановилось".
+    [Test]
+    public async Task Break_of_the_liquidation_stream_is_written_when_it_is_back()
+    {
+        LinearListed("SOLUSDT");
+        using var lease = new CancellationTokenSource();
+        Task session = Session().RunAsync(lease.Token);
+        await WaitAsync(() => _liquidated is not null);
+
+        _lost(DateTimeOffset.Parse("2024-03-10T03:10:05Z", CultureInfo.InvariantCulture));
+        _restored(DateTimeOffset.Parse("2024-03-10T03:10:41Z", CultureInfo.InvariantCulture));
+        await WaitAsync(() => _breaks.ReceivedCalls().Any());
+
+        await _breaks.Received(1).AddAsync(
+            new StreamBreak("liquidations", DateTimeOffset.Parse("2024-03-10T03:10:05Z", CultureInfo.InvariantCulture), DateTimeOffset.Parse("2024-03-10T03:10:41Z", CultureInfo.InvariantCulture)),
+            Arg.Any<CancellationToken>());
+        await lease.CancelAsync();
+        (await Should.ThrowAsync<Exception>(session)).ShouldBeAssignableTo<OperationCanceledException>();
+    }
+
+    // Scenario "Сканер сменил держателя": the break of the stream runs from its last stored event to the subscription of the new holder.
+    [Test]
+    public async Task New_holder_writes_a_break_from_the_last_stored_event_to_its_subscription()
+    {
+        LinearListed("SOLUSDT");
+        _liquidations.LastTimeAsync(Arg.Any<CancellationToken>()).Returns(Start.AddMinutes(-7));
+        using var lease = new CancellationTokenSource();
+        Task session = Session().RunAsync(lease.Token);
+
+        await WaitAsync(() => _breaks.ReceivedCalls().Any());
+
+        await _breaks.Received(1).AddAsync(new StreamBreak("liquidations", Start.AddMinutes(-7), Start), Arg.Any<CancellationToken>());
+        await lease.CancelAsync();
+        (await Should.ThrowAsync<Exception>(session)).ShouldBeAssignableTo<OperationCanceledException>();
+    }
+
+    // The first subscription ever has no stream before it to break.
+    [Test]
+    public async Task First_holder_without_stored_events_writes_no_break()
+    {
+        LinearListed("SOLUSDT");
+        using var lease = new CancellationTokenSource();
+        Task session = Session().RunAsync(lease.Token);
+
+        await WaitAsync(() => _liquidated is not null);
+        await Task.Delay(200);
+
+        _breaks.ReceivedCalls().ShouldBeEmpty();
+        await lease.CancelAsync();
+        (await Should.ThrowAsync<Exception>(session)).ShouldBeAssignableTo<OperationCanceledException>();
+    }
+
+    [Test]
+    public async Task Failed_write_of_a_break_is_logged_and_the_next_break_goes_on()
+    {
+        LinearListed("SOLUSDT");
+        var failure = new InvalidOperationException("storage down");
+        _breaks.AddAsync(Arg.Any<StreamBreak>(), Arg.Any<CancellationToken>()).Returns(Task.FromException(failure), Task.CompletedTask);
+        using var lease = new CancellationTokenSource();
+        Task session = Session().RunAsync(lease.Token);
+        await WaitAsync(() => _liquidated is not null);
+
+        _lost(Start.AddMinutes(-3));
+        _restored(Start.AddMinutes(-2));
+        await WaitAsync(() => _journal.ReceivedCalls().Any(call => Equals(call.GetArguments()[0], "stream-breaks")));
+        _lost(Start.AddMinutes(-1));
+        _restored(Start);
+        await WaitAsync(() => _breaks.ReceivedCalls().Count() == 2);
+
+        _journal.Received(1).Failed("stream-breaks", failure);
+        await lease.CancelAsync();
+        (await Should.ThrowAsync<Exception>(session)).ShouldBeAssignableTo<OperationCanceledException>();
+    }
+
+    private void LinearListed(params string[] symbols)
+    {
+        _feed.ListInstrumentsAsync(MarketCategory.Linear, Arg.Any<CancellationToken>()).Returns([.. symbols.Select(Listed)]);
+    }
+
+    private static ListedInstrument Listed(string symbol)
+    {
+        return new ListedInstrument(MarketCategory.Linear, symbol, symbol[..^4], "USDT", true, true);
+    }
+
+    private static LiquidationEvent Liquidation(DateTimeOffset at)
+    {
+        return new LiquidationEvent(at, LiquidationSide.Long, 150.2m, 12.5m);
+    }
+
+    private List<IReadOnlyList<Instrument>> LiquidationSubscriptions()
+    {
+        return [.. _streams.ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == nameof(IMarketStreams.SubscribeLiquidationsAsync))
+            .Select(call => (IReadOnlyList<Instrument>)call.GetArguments()[0]!)];
+    }
+
     private static IIdeaExitRuleRepository ExitRules()
     {
         IIdeaExitRuleRepository rules = Substitute.For<IIdeaExitRuleRepository>();
@@ -613,6 +895,9 @@ public class ScannerSessionTests
                 _time),
             recomputes,
             market,
+            _liquidations,
+            _breaks,
+            new ScannerMetrics(_meters.GetRequiredService<System.Diagnostics.Metrics.IMeterFactory>()),
             _journal,
             _time);
     }

@@ -26,7 +26,7 @@ internal static class MetricsRegistrar
         services.AddOpenTelemetry()
             .ConfigureResource(resource => resource.AddService(serviceName))
             .WithMetrics(metrics => metrics
-                .AddMeter("ProfitFox.Bybit")
+                .AddMeter("ProfitFox.Bybit", "ProfitFox.Scanner")
                 .AddOtlpExporter((exporter, reader) =>
                 {
                     exporter.Endpoint = new Uri(settings.OtlpEndpoint);
