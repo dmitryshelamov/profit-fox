@@ -291,6 +291,11 @@ public class IdeasApiTests
             [
                 new CalibrationSlice(null, IdeaType.TwoR, new CalibrationRow(null, null, null, 0.1m, thirty), null, empty),
                 new CalibrationSlice(null, IdeaType.Pullback, new CalibrationRow(null, null, null, 0.1m, thirty), null, empty)
+            ],
+            Features =
+            [
+                new CalibrationSlice(null, null, new CalibrationRow(null, null, null, -0.2m, thirty), null, empty, IdeaFeature.DayDrop, true),
+                new CalibrationSlice(null, null, new CalibrationRow(null, null, null, 0.05m, thirty), null, empty, IdeaFeature.DayDrop, false)
             ]
         };
         await new IdeaCalibrationRepository(_database).ReplaceAsync(IdeasEngineVersion.Current, [report], CancellationToken.None);
@@ -306,6 +311,11 @@ public class IdeasApiTests
         (comparison.GetProperty("old").GetProperty("up").GetProperty("promised").GetString(), comparison.GetProperty("new").GetProperty("brier").GetString()).ShouldBe(("0.145", "0.207"));
         read.GetProperty("types").EnumerateArray().Select(slice => (slice.GetProperty("type").GetString(), slice.GetProperty("interval").ValueKind))
             .ShouldBe([("target_2r", JsonValueKind.Null), ("pullback", JsonValueKind.Null)]);
+        // Scenario "Разбивка в ответе": each row of the breakdown by feature has its feature, whether its cases have it, and the numbers of a row.
+        read.GetProperty("features").EnumerateArray()
+            .Select(slice => (slice.GetProperty("feature").GetString(), slice.GetProperty("present").GetBoolean(), slice.GetProperty("total").GetProperty("promised").GetString(), slice.GetProperty("total").GetProperty("cases").GetInt32()))
+            .ShouldBe([("day_drop", true, "-0.2", 30), ("day_drop", false, "0.05", 30)]);
+        intervals[0].GetProperty("feature").ValueKind.ShouldBe(JsonValueKind.Null);
     }
 
     // Scenario "Ещё не посчитана".
@@ -318,7 +328,7 @@ public class IdeasApiTests
         (report.GetProperty("checked").GetInt32(), report.GetProperty("unchecked").GetInt32(), report.GetProperty("brier").ValueKind).ShouldBe((0, 0, JsonValueKind.Null));
         (report.GetProperty("probabilities").GetArrayLength(), report.GetProperty("badges").GetArrayLength(), report.GetProperty("total").ValueKind).ShouldBe((0, 0, JsonValueKind.Null));
         (report.GetProperty("scope").GetString(), report.GetProperty("owns").GetArrayLength(), report.GetProperty("comparison").ValueKind).ShouldBe(("all", 0, JsonValueKind.Null));
-        (report.GetProperty("intervals").GetArrayLength(), report.GetProperty("types").GetArrayLength()).ShouldBe((0, 0));
+        (report.GetProperty("intervals").GetArrayLength(), report.GetProperty("types").GetArrayLength(), report.GetProperty("features").GetArrayLength()).ShouldBe((0, 0, 0));
     }
 
     // Scenarios "Другое окно" and "Другой режим".

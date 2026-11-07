@@ -59,9 +59,9 @@
 
 ## 7. Калибровка по признакам
 
-- [ ] 7.1 `CalibrationSlice.Feature` / `Present`, `CalibrationReport.Features` до шести срезов (решение 7). Тесты
+- [x] 7.1 `CalibrationSlice.Feature` / `Present`, `CalibrationReport.Features` до шести срезов (решение 7). Тесты
   сценариев «Строки признака» и «Признака нет ни у кого» на эталоне калибровки.
-- [ ] 7.2 `CalibrationReportDb.Features` необязательное; интеграционный тест читает отчёт без раздела с пустым
+- [x] 7.2 `CalibrationReportDb.Features` необязательное; интеграционный тест читает отчёт без раздела с пустым
   списком и отчёт с разделом целиком. `IdeaCalibrationResponse.Features`; тест API (сценарий «Разбивка в ответе»).
 
 ## 8. API идей

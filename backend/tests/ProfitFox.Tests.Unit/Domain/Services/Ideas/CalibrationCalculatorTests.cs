@@ -595,6 +595,29 @@ public class CalibrationCalculatorTests
         slices[0].Up.ShouldBeNull();
     }
 
+    // Requirement "Калибровка по признакам", scenarios "Строки признака" and "Признака нет ни у кого": the checked cases of 1 h have a day drop,
+    // those of 5 min none, and no case has a drop of BTC or a high funding. Each feature has a row of the cases with it and one of those
+    // without, only rows with cases, and a row has the numbers of a row by interval on the same cases.
+    [Test]
+    public void Breakdown_by_feature_has_a_row_with_and_without_each_feature_of_the_checked_cases()
+    {
+        CalibrationReport report = Report([.. Strong(Linear), .. Weak(FiveMinutes), .. Dropped(Checked(Linear, Now.AddDays(-5))), .. Checked(FiveMinutes, Now.AddDays(-4))], 30, null);
+
+        CalibrationSlice[] slices = [.. report.Features];
+        slices.Select(slice => (slice.Feature, slice.Present, slice.Interval, slice.Type, slice.Total.Outcome.Cases)).ShouldBe(
+        [
+            (IdeaFeature.DayDrop, true, null, null, 30),
+            (IdeaFeature.DayDrop, false, null, null, 30),
+            (IdeaFeature.BtcDrop, false, null, null, 60),
+            (IdeaFeature.HighFunding, false, null, null, 60)
+        ]);
+        CalibrationSlice hour = report.Intervals.Single(slice => slice.Interval == Interval.OneHour);
+        CalibrationSlice five = report.Intervals.Single(slice => slice.Interval == Interval.FiveMinutes);
+        (slices[0].Total, slices[0].Up, slices[0].Comparison).ShouldBe((hour.Total, hour.Up, hour.Comparison));
+        (slices[1].Total, slices[1].Up, slices[1].Comparison).ShouldBe((five.Total, five.Up, five.Comparison));
+        slices[2].Total.Outcome.ShouldBe(report.Total!.Outcome);
+    }
+
     // Scenario "Сравнение моделей в строке": the case of a bucket of 1 h with no case of its own is checked by the new model only, so the
     // comparison of 1 h is on the 30 cases of the strong bucket; the old model promises them its own 30 targets and 10 stops.
     [Test]

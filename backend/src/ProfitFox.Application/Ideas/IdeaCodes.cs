@@ -145,9 +145,9 @@ public static class IdeaCodes
         return FeaturesByCode.Single(pair => pair.Value == feature).Key;
     }
 
-    public static IdeaFeature ParseFeature(string code)
+    public static bool TryParseFeature(string code, out IdeaFeature feature)
     {
-        return FeaturesByCode[code];
+        return FeaturesByCode.TryGetValue(code, out feature);
     }
 
     /// <summary>The codes of the features a level has, in the order of the enum.</summary>
