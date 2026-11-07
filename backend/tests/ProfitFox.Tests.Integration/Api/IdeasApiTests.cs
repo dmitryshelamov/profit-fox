@@ -100,6 +100,24 @@ public class IdeasApiTests
         (recent.GetProperty("expectancyLow").ValueKind, recent.GetProperty("badge").ValueKind).ShouldBe((JsonValueKind.Null, JsonValueKind.Null));
     }
 
+    // Scenario "Идея с признаками": the idea fired after a drop of its pair by 7 % over a day with a funding of 0.0001; the list, the ideas of
+    // the pair and the idea give the same features.
+    [Test]
+    public async Task Idea_gives_the_features_it_fired_with()
+    {
+        Idea idea = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol) with { PairChange = -0.07m, Funding = 0.0001m };
+        await new IdeaRepository(_database).SaveAsync([idea], [], CancellationToken.None);
+
+        JsonElement listed = (await ItemsAsync("/api/ideas")).EnumerateArray().Single();
+        JsonElement ofPair = (await GetAsync("/api/market/linear/SOLUSDT/ideas")).EnumerateArray().Single();
+        JsonElement single = await GetAsync($"/api/ideas/{idea.Id}");
+
+        foreach (JsonElement read in new[] { listed, ofPair, single })
+        {
+            read.GetProperty("features").EnumerateArray().Select(feature => feature.GetString()).ShouldBe(["day_drop"]);
+        }
+    }
+
     // Scenario "Корзина модели в ответе" and decision 7 of honest-idea-intervals: the numbers of the model with the own ones beside; a bucket of
     // few own cases has enough data by its parent. The list goes by the expectancy of the model: −0.10 R of the impulse before −0.20 R of the
     // drop, whose own +0.50 R would come first.
