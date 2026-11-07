@@ -4,14 +4,15 @@ using ProfitFox.Domain.Entities.IdeaTrades.Enums;
 namespace ProfitFox.Domain.ValueObjects.IdeaTrades;
 
 /// <summary>
-///     The totals of the closed trades of a journal: the trades closed at the target, at the stop and manually, and apart from them the cancelled
-///     and the failed, which have no result. The money, the fees, the mean result in R with its 95 % interval (none for one trade) and the mean
-///     time to the outcome are over the first three; so are the two comparisons.
+///     The totals of the closed trades of a journal: the trades closed at the target, at the stop, manually and at expiry, and apart from them the
+///     cancelled and the failed, which have no result. The money, the fees, the mean result in R with its 95 % interval (none for one trade) and
+///     the mean time to the outcome are over the first four; so are the two comparisons.
 /// </summary>
 public sealed record IdeaJournalTotals(
     int Targets,
     int Stops,
     int Manual,
+    int Expired,
     int Cancelled,
     int Failed,
     decimal Result,
@@ -28,7 +29,7 @@ public sealed record IdeaJournalTotals(
 
     public static IdeaJournalTotals Compute(IReadOnlyCollection<IdeaTrade> closed)
     {
-        IReadOnlyList<IdeaTrade> settled = [.. closed.Where(trade => trade.Status is IdeaTradeStatus.ClosedAtTarget or IdeaTradeStatus.ClosedAtStop or IdeaTradeStatus.ClosedManually)];
+        IReadOnlyList<IdeaTrade> settled = [.. closed.Where(trade => trade.Status is IdeaTradeStatus.ClosedAtTarget or IdeaTradeStatus.ClosedAtStop or IdeaTradeStatus.ClosedManually or IdeaTradeStatus.ClosedAtExpiry)];
         IReadOnlyList<decimal> results = [.. settled.Select(trade => trade.ResultR!.Value)];
         // A trade an older Worker opened during the rollout has no open time, so it has no time to its outcome either.
         IReadOnlyList<TimeSpan> times = [.. settled.Select(trade => trade.TimeToOutcome).OfType<TimeSpan>()];
@@ -40,6 +41,7 @@ public sealed record IdeaJournalTotals(
             Count(closed, IdeaTradeStatus.ClosedAtTarget),
             Count(closed, IdeaTradeStatus.ClosedAtStop),
             Count(closed, IdeaTradeStatus.ClosedManually),
+            Count(closed, IdeaTradeStatus.ClosedAtExpiry),
             Count(closed, IdeaTradeStatus.Cancelled),
             Count(closed, IdeaTradeStatus.Failed),
             settled.Sum(trade => trade.Result!.Value),

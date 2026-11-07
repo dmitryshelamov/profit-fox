@@ -31,6 +31,7 @@ const totals = (overrides: Partial<Totals> = {}): Totals => ({
   targets: 1,
   stops: 1,
   manual: 1,
+  expired: 0,
   cancelled: 0,
   failed: 0,
   result: '0.9',
@@ -112,17 +113,23 @@ describe('outcome of the idea of a trade', () => {
 
 describe('totals of the journal', () => {
   // Scenario "Итоги".
-  it('shows the counts of the outcomes with their shares', () => {
-    expect(outcomeCountsText(totals())).toBe(
-      'по цели 1 (33 %) · по стопу 1 (33 %) · вручную 1 (33 %)',
+  it('shows the counts of the outcomes with their shares of the four', () => {
+    expect(outcomeCountsText(totals({ expired: 1 }))).toBe(
+      'по цели 1 (25 %) · по стопу 1 (25 %) · вручную 1 (25 %) · по сроку 1 (25 %)',
     );
     expect(outcomeCountsText(totals({ targets: 3, stops: 1, manual: 0 }))).toBe(
-      'по цели 3 (75 %) · по стопу 1 (25 %) · вручную 0 (0 %)',
+      'по цели 3 (75 %) · по стопу 1 (25 %) · вручную 0 (0 %) · по сроку 0 (0 %)',
     );
   });
 
   it('shows a dash when nothing is closed', () => {
     expect(outcomeCountsText(totals({ targets: 0, stops: 0, manual: 0 }))).toBe('—');
+  });
+
+  it('counts the trades closed at expiry alone', () => {
+    expect(outcomeCountsText(totals({ targets: 0, stops: 0, manual: 0, expired: 2 }))).toBe(
+      'по цели 0 (0 %) · по стопу 0 (0 %) · вручную 0 (0 %) · по сроку 2 (100 %)',
+    );
   });
 
   it('names the cancelled and the failed apart, and nothing when there are none', () => {
@@ -159,10 +166,13 @@ describe('totals of the journal', () => {
 });
 
 describe('count of the closed trades', () => {
-  it('counts the trades closed at the target, at the stop and manually, with the word that goes with the count', () => {
+  it('counts the trades closed at the target, at the stop, manually and at expiry, with the word that goes with the count', () => {
     expect(closedCountText(totals({ targets: 1, stops: 0, manual: 0 }))).toBe('1 сделка');
     expect(closedCountText(totals({ targets: 2, stops: 1, manual: 0 }))).toBe('3 сделки');
     expect(closedCountText(totals({ targets: 3, stops: 2, manual: 1 }))).toBe('6 сделок');
     expect(closedCountText(totals({ targets: 0, stops: 0, manual: 0 }))).toBe('0 сделок');
+    expect(closedCountText(totals({ targets: 1, stops: 0, manual: 0, expired: 1 }))).toBe(
+      '2 сделки',
+    );
   });
 });

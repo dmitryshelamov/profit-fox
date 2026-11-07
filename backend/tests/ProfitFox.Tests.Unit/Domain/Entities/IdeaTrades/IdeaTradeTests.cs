@@ -171,6 +171,17 @@ public class IdeaTradeTests
         Entered().ExitGrown(IdeaTradeLeg.Manual, new LegTotals(0.47m, 11.0000m, 0.0060m), Now.AddMinutes(5)).Status.ShouldBe(IdeaTradeStatus.ClosedManually);
     }
 
+    // Requirement "Закрытие учебной сделки по сроку идеи": the expiry leg sold 0.47 at 23.83 with the fee 0.0062.
+    [Test]
+    public void Exit_by_the_expiry_leg_closes_the_trade_at_expiry_with_the_result()
+    {
+        IdeaTrade trade = Entered().ExitGrown(IdeaTradeLeg.Expiry, new LegTotals(0.47m, 11.2001m, 0.0062m), Now.AddMinutes(5));
+
+        (trade.Status, trade.StatusAt, trade.Expiry, trade.HeldQuantity).ShouldBe((IdeaTradeStatus.ClosedAtExpiry, Now.AddMinutes(5), new LegTotals(0.47m, 11.2001m, 0.0062m), 0m));
+        trade.Result.ShouldBe(11.2001m - 11.0356m - 0.0061m - 0.0062m);
+        trade.Fees.ShouldBe(0.0061m + 0.0062m);
+    }
+
     [Test]
     public void Exit_of_a_part_leaves_the_trade_open_with_the_rest()
     {

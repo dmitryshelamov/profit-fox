@@ -18,6 +18,9 @@ public enum IdeaTradeStatus
     /// <summary>«Закрыта вручную»: by the market close of the owner.</summary>
     ClosedManually,
 
+    /// <summary>«Закрыта по сроку»: a paper trade its idea outlived, closed at the exit price of the idea.</summary>
+    ClosedAtExpiry,
+
     /// <summary>«Отменена»: the entry ended with no fill.</summary>
     Cancelled,
 

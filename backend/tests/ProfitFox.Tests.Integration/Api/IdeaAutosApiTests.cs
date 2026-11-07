@@ -365,6 +365,24 @@ public class IdeaAutosApiTests
         (Number(guards.GetProperty("autosBudgetUsed")), guards.GetProperty("autosBudget").ValueKind).ShouldBe((0m, JsonValueKind.Null));
     }
 
+    // Scenarios "Закрытая по сроку" and "Закрытые по сроку в итогах учебных": the paper trade its idea outlived is closed at expiry with its result
+    // and its time to the outcome, three hours from its open, and the totals of the paper trades count it at expiry.
+    [Test]
+    public async Task Paper_trade_closed_at_expiry_is_in_the_journal_with_its_result_and_in_the_totals_of_the_paper_trades()
+    {
+        Guid auto = await CreateAsync("Импульс лонг");
+        await InsertPaperTradeAsync(auto, "closed_at_expiry", Now.AddHours(-1), -0.21m);
+        await InsertPaperTradeAsync(auto, "closed_at_target", Now.AddHours(-2), 1.5m);
+
+        JsonElement journal = await JournalAsync("origin=paper");
+
+        JsonElement item = journal.GetProperty("closed").GetProperty("items")[0];
+        (item.GetProperty("status").GetString(), item.GetProperty("result").GetString(), item.GetProperty("resultR").GetString()).ShouldBe(("closed_at_expiry", "-0.21", "-0.21"));
+        item.GetProperty("secondsToOutcome").GetInt64().ShouldBe(3 * 3600);
+        JsonElement totals = journal.GetProperty("paperTotals");
+        (totals.GetProperty("targets").GetInt32(), totals.GetProperty("expired").GetInt32(), totals.GetProperty("result").GetString()).ShouldBe((1, 1, "1.29"));
+    }
+
     // The journal of the autos: who took the trade, the auto, the paper trades in both groups, the totals of the paper ones.
     [Test]
     public async Task Journal_carries_who_took_each_trade_and_filters_by_it_and_by_the_auto()
@@ -478,14 +496,16 @@ public class IdeaAutosApiTests
         decimal exit = resultR is { } r ? 100m + r : 0m;
         bool target = status == "closed_at_target";
         bool stop = status == "closed_at_stop";
+        bool expiry = status == "closed_at_expiry";
         await using var database = NpgsqlDataSource.Create(_scenario.Factory.ConnectionString);
         await using NpgsqlConnection connection = await database.OpenConnectionAsync();
         await connection.ExecuteAsync(
             """
             INSERT INTO idea_paper_trades (id, idea_id, auto_id, account_id, category, symbol, setup, interval, type, side, entry_price, stop, target, quantity, amount, risk, status, status_at,
-                entry_quantity, entry_value, entry_fee, take_profit_quantity, take_profit_value, take_profit_fee, stop_loss_quantity, stop_loss_value, stop_loss_fee, created_at, opened_at, stepped_until)
+                entry_quantity, entry_value, entry_fee, take_profit_quantity, take_profit_value, take_profit_fee, stop_loss_quantity, stop_loss_value, stop_loss_fee,
+                expiry_quantity, expiry_value, expiry_fee, created_at, opened_at, stepped_until)
             VALUES (gen_random_uuid(), gen_random_uuid(), @auto, @account, 'linear', 'BTCUSDT', 'impulse', '15', 'target_2r', 'long', 100, 99, 102, 1, 100, 1, @status, @at,
-                1, 100, 0, @tpq, @tpv, 0, @slq, @slv, 0, @created, @created, @at)
+                1, 100, 0, @tpq, @tpv, 0, @slq, @slv, 0, @exq, @exv, 0, @created, @created, @at)
             """,
             new
             {
@@ -497,7 +517,9 @@ public class IdeaAutosApiTests
                 tpq = target ? 1m : 0m,
                 tpv = target ? exit : 0m,
                 slq = stop ? 1m : 0m,
-                slv = stop ? exit : 0m
+                slv = stop ? exit : 0m,
+                exq = expiry ? 1m : 0m,
+                exv = expiry ? exit : 0m
             });
     }
 

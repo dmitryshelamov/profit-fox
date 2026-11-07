@@ -300,6 +300,53 @@ export async function seedOpenPaperTrade(
   }
 }
 
+/** The symbol of the paper trade `seedPaperTradeClosedAtExpiry` writes: no other test trades it. */
+export const expiredPaperSymbol = 'LTCUSDT';
+
+const expiredPaperAuto = 'По сроку e2e';
+
+/**
+ * A paper trade of a pair no other test trades that its idea outlived, of an auto that is off: it opened 3 hours ago, 1 coin at 100 with a
+ * risk of 1 USDT, and closed at expiry an hour ago at 99.79 without fees, −0.21 USDT and −0.21 R, as the scanner writes it.
+ */
+export async function seedPaperTradeClosedAtExpiry(accountId: string): Promise<void> {
+  const client = await connect();
+
+  try {
+    const auto = await client.query<{ id: string }>(
+      `INSERT INTO idea_autos (id, name, account_id, amount, mode, setups, types, intervals, min_risk_reward, min_cases, position, created_at)
+       VALUES (gen_random_uuid(), $1, $2, 100, 'off', ARRAY['impulse'], ARRAY['target_2r'], ARRAY['15'], 1.2, 0, 1000, now())
+       RETURNING id`,
+      [expiredPaperAuto, accountId],
+    );
+    await client.query(
+      `INSERT INTO idea_paper_trades (id, idea_id, auto_id, account_id, category, symbol, setup, interval, type, side, entry_price, stop, target,
+                                      quantity, amount, risk, status, status_at, entry_quantity, entry_value, entry_fee, take_profit_quantity,
+                                      take_profit_value, take_profit_fee, stop_loss_quantity, stop_loss_value, stop_loss_fee, expiry_quantity,
+                                      expiry_value, expiry_fee, created_at, opened_at, stepped_until, idea_status, idea_status_at, idea_result,
+                                      idea_exit_price)
+       VALUES (gen_random_uuid(), gen_random_uuid(), $3, $1, 'linear', $2, 'impulse', '15', 'target_2r', 'long', 100, 99, 102,
+               1, 100, 1, 'closed_at_expiry', now() - interval '1 hour', 1, 100, 0, 0, 0, 0, 0, 0, 0, 1, 99.79, 0,
+               now() - interval '3 hours', now() - interval '3 hours', now() - interval '1 hour', 'expired', now() - interval '1 hour', -0.2, 99.79)`,
+      [accountId, expiredPaperSymbol, auto.rows[0]!.id],
+    );
+  } finally {
+    await client.end();
+  }
+}
+
+/** Removes the paper trade `seedPaperTradeClosedAtExpiry` made and its auto. */
+export async function removePaperTradeClosedAtExpiry(): Promise<void> {
+  const client = await connect();
+
+  try {
+    await client.query('DELETE FROM idea_paper_trades WHERE symbol = $1', [expiredPaperSymbol]);
+    await client.query('DELETE FROM idea_autos WHERE name = $1', [expiredPaperAuto]);
+  } finally {
+    await client.end();
+  }
+}
+
 /** The symbol of the real trades `seedClosedTrade` writes: no other test trades it, so they leave the rows of the others alone. */
 export const closedTradeSymbol = 'XRPUSDT';
 

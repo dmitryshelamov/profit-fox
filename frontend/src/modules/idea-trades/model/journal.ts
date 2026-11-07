@@ -77,22 +77,23 @@ export function ideaOutcomeText(outcome: Outcome | null): string {
 
 const share = (count: number, all: number) => `${count} (${Math.round((count * 100) / all)} %)`;
 
-/** The trades closed at the target, at the stop and manually, each with its share of the three; a dash when there are none. */
+/** The trades closed at the target, at the stop, manually and at expiry, each with its share of the four; a dash when there are none. */
 export function outcomeCountsText(totals: Totals): string {
   const targets = Number(totals.targets);
   const stops = Number(totals.stops);
   const manual = Number(totals.manual);
-  const all = targets + stops + manual;
+  const expired = Number(totals.expired);
+  const all = targets + stops + manual + expired;
 
   return all === 0
     ? dash
-    : `по цели ${share(targets, all)} · по стопу ${share(stops, all)} · вручную ${share(manual, all)}`;
+    : `по цели ${share(targets, all)} · по стопу ${share(stops, all)} · вручную ${share(manual, all)} · по сроку ${share(expired, all)}`;
 }
 
-/** How many trades closed at the target, at the stop and manually, with the word that goes with the count. */
+/** How many trades closed at the target, at the stop, manually and at expiry, with the word that goes with the count. */
 export function closedCountText(totals: Totals): string {
   return counted(
-    Number(totals.targets) + Number(totals.stops) + Number(totals.manual),
+    Number(totals.targets) + Number(totals.stops) + Number(totals.manual) + Number(totals.expired),
     'сделка',
     'сделки',
     'сделок',

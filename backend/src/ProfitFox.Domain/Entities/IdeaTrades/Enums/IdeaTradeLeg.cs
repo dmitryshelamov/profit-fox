@@ -7,5 +7,8 @@ public enum IdeaTradeLeg
     StopLoss,
 
     /// <summary>The market close the owner asked for.</summary>
-    Manual
+    Manual,
+
+    /// <summary>The close of a paper trade at the exit price of its idea when the idea expires.</summary>
+    Expiry
 }

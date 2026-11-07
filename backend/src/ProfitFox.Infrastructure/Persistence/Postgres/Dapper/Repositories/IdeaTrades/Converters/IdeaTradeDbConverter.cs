@@ -56,6 +56,9 @@ internal static class IdeaTradeDbConverter
             ManualQuantity = trade.Manual.Quantity,
             ManualValue = trade.Manual.Value,
             ManualFee = trade.Manual.Fee,
+            ExpiryQuantity = trade.Expiry.Quantity,
+            ExpiryValue = trade.Expiry.Value,
+            ExpiryFee = trade.Expiry.Fee,
             LastOrderNumber = trade.LastOrderNumber,
             CreatedAt = trade.CreatedAt,
             PromisedBadge = trade.Promise?.Badge?.ToCode(),
@@ -70,6 +73,7 @@ internal static class IdeaTradeDbConverter
         };
     }
 
+    /// <summary>A real trade reads no columns of the expiry, so its leg of the expiry is always none.</summary>
     internal static IdeaTrade ToDomain(IdeaTradeDb trade)
     {
         return new IdeaTrade(
@@ -109,8 +113,9 @@ internal static class IdeaTradeDbConverter
                     netRiskReward)
                 : null,
             trade.OpenedAt,
-            trade.IdeaStatus is { } ideaStatus ? new TradedIdeaOutcome(IdeaCodes.ParseStatus(ideaStatus), trade.IdeaStatusAt!.Value, trade.IdeaResult) : null,
-            trade.AutoId);
+            trade.IdeaStatus is { } ideaStatus ? new TradedIdeaOutcome(IdeaCodes.ParseStatus(ideaStatus), trade.IdeaStatusAt!.Value, trade.IdeaResult, trade.IdeaExitPrice) : null,
+            trade.AutoId)
+        { Expiry = new LegTotals(trade.ExpiryQuantity, trade.ExpiryValue, trade.ExpiryFee) };
     }
 
     internal static IdeaTradeOrderDb FromDomain(IdeaTradeOrder order)

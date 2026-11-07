@@ -136,6 +136,25 @@ public class IdeaAutoMinuteStorageTests
         (await _paper.GetOpenAsync(CancellationToken.None)).ShouldBeEmpty();
     }
 
+    // Requirement "Закрытие учебной сделки по сроку идеи": the idea expires at the end of the minute 13:41 at 101, the trade closes at expiry in the
+    // same write, and reads back as it was written, with its leg of the expiry and the outcome with the exit price.
+    [Test]
+    public async Task Paper_trade_closed_at_expiry_reads_back_with_its_leg_and_the_exit_price_of_its_idea()
+    {
+        Idea idea = IdeaGenerator.Generate(Fired);
+        PaperIdeaTrade paper = Paper(idea);
+        await _ideas.SaveAsync([idea], [], [], new AutoMinute(Owner, [paper], [], [], []), CancellationToken.None);
+        Idea expired = idea with { Track = idea.Track with { Status = IdeaStatus.Expired, StatusAt = Fired.AddMinutes(2), EnteredAt = Fired, ExitPrice = 101m } };
+        var outcome = new TradedIdeaOutcome(IdeaStatus.Expired, Fired.AddMinutes(2), 0.4m, 101m);
+        var minute = new IdeaCandle(Fired.AddMinutes(1), 100m, 101m, 99.5m, 101m, 10m);
+        PaperIdeaTrade stepped = PaperFill.Step(paper with { Trade = paper.Trade with { IdeaOutcome = outcome } }, minute, Fees);
+
+        await _ideas.SaveAsync([], [expired], [new ClosedIdea(idea.Id, outcome)], new AutoMinute(Owner, [], [stepped], [], []), CancellationToken.None);
+
+        stepped.Trade.Status.ShouldBe(IdeaTradeStatus.ClosedAtExpiry);
+        (await _paper.GetAllAsync(CancellationToken.None)).Single().ShouldBe(stepped);
+    }
+
     // Scenario "Идея дошла до цели" for a paper trade: the outcome of the idea is written on it once, like on a real trade.
     [Test]
     public async Task Outcome_of_the_idea_reaches_the_paper_trade_once_and_the_catch_up_finds_it()
@@ -143,7 +162,7 @@ public class IdeaAutoMinuteStorageTests
         Idea idea = IdeaGenerator.Generate(Fired);
         await _ideas.SaveAsync([idea], [], [], new AutoMinute(Owner, [Paper(idea)], [], [], []), CancellationToken.None);
         Idea closed = idea with { Track = idea.Track with { Status = IdeaStatus.Target, StatusAt = Fired.AddHours(2), EnteredAt = Fired, ExitPrice = 115m } };
-        var outcome = new TradedIdeaOutcome(IdeaStatus.Target, Fired.AddHours(2), 2m);
+        var outcome = new TradedIdeaOutcome(IdeaStatus.Target, Fired.AddHours(2), 2m, 115m);
 
         (await _ideas.GetClosedOfTradesWithoutOutcomeAsync(CancellationToken.None)).ShouldBeEmpty();
         await _ideas.SaveAsync([], [closed], [new ClosedIdea(idea.Id, outcome)], CancellationToken.None);

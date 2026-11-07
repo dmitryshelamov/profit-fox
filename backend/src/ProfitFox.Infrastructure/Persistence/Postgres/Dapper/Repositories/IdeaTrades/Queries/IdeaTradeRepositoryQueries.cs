@@ -19,7 +19,8 @@ internal static class IdeaTradeRepositoryQueries
                                         last_order_number AS "LastOrderNumber", created_at AS "CreatedAt", lease_epoch AS "LeaseEpoch",
                                         promised_badge AS "PromisedBadge", promised_probability AS "PromisedProbability", promised_expectancy AS "PromisedExpectancy",
                                         promised_cases AS "PromisedCases", break_even AS "BreakEven", net_risk_reward AS "NetRiskReward",
-                                        idea_status AS "IdeaStatus", idea_status_at AS "IdeaStatusAt", idea_result AS "IdeaResult", opened_at AS "OpenedAt", auto_id AS "AutoId"
+                                        idea_status AS "IdeaStatus", idea_status_at AS "IdeaStatusAt", idea_result AS "IdeaResult", idea_exit_price AS "IdeaExitPrice",
+                                        opened_at AS "OpenedAt", auto_id AS "AutoId"
                                         """;
 
     private const string OrderColumns = """

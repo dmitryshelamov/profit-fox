@@ -9,6 +9,7 @@ describe('status of a trade by an idea', () => {
         'closed_at_target',
         'closed_at_stop',
         'closed_manually',
+        'closed_at_expiry',
         'cancelled',
         'failed',
       ].map(statusLabel),
@@ -18,6 +19,7 @@ describe('status of a trade by an idea', () => {
       'Закрыта по цели',
       'Закрыта по стопу',
       'Закрыта вручную',
+      'Закрыта по сроку',
       'Отменена',
       'Ошибка',
     ]);
