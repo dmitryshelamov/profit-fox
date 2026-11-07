@@ -16,7 +16,7 @@ public class InstrumentsApiTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        _factory = ProfitFoxFactory.Create(workers: 0);
         _factory.Bybit.Instruments.UnionWith(
             [("spot", "BTCUSDT"), ("spot", "ETHBTC"), ("spot", "ETHUSDT"), ("spot", "STETHUSDT"), ("spot", "SOLUSDT"), ("linear", "BTCUSDT")]);
         _factory.Bybit.Coins[("spot", "BTCUSDT")] = ("BTC", "USDT");

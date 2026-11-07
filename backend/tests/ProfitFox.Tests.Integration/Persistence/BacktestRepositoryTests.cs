@@ -33,7 +33,7 @@ public class BacktestRepositoryTests
     [SetUp]
     public async Task SetUp()
     {
-        _dataSource = await MarketDataDatabase.CreateAsync();
+        _dataSource = MarketDataDatabase.Open();
         _repository = new BacktestRepository(_dataSource);
         _library = new StrategyLibraryRepository(_dataSource);
         var library = new StrategyLibrary(0, [], []);

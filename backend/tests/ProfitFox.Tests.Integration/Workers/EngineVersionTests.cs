@@ -29,7 +29,7 @@ public class EngineVersionTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        _factory = ProfitFoxFactory.Create(workers: 0);
         _client = _factory.CreateClient();
         _scenario = new BacktestScenario(_factory, _client);
         await _scenario.CreateBotAsync("ladder");

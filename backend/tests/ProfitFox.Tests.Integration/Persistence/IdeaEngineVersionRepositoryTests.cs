@@ -16,7 +16,7 @@ public class IdeaEngineVersionRepositoryTests
     [SetUp]
     public async Task SetUp()
     {
-        _dataSource = await MarketDataDatabase.CreateAsync();
+        _dataSource = MarketDataDatabase.Open();
     }
 
     [TearDown]

@@ -131,7 +131,7 @@ public class ScannerSettingsTests
 
     private static async Task<IHost> ScannerAsync(IReadOnlyDictionary<string, string?> settings)
     {
-        await using Npgsql.NpgsqlDataSource database = await MarketDataDatabase.CreateAsync();
+        await using Npgsql.NpgsqlDataSource database = MarketDataDatabase.Open();
         HostApplicationBuilder builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
         {
             EnvironmentName = "Production",

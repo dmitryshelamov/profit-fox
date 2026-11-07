@@ -25,7 +25,7 @@ public class MetricsExportTests
     public async Task SetUp()
     {
         // The API migrates the database the Worker runs on.
-        _factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        _factory = ProfitFoxFactory.Create(workers: 0);
         _factory.CreateClient().Dispose();
     }
 

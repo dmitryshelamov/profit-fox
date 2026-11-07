@@ -17,7 +17,7 @@ public class BybitInstrumentRulesTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = await ProfitFoxFactory.CreateAsync();
+        _factory = ProfitFoxFactory.Create();
         _factory.Bybit.Instruments.UnionWith([("spot", "BTCUSDT"), ("linear", "BTCUSDT")]);
         _factory.Bybit.Rules[("spot", "BTCUSDT")] = ("0.01", "0.000001", "0.000048", "1");
         _factory.Bybit.Rules[("linear", "BTCUSDT")] = ("0.10", "0.001", "0.001", "5");

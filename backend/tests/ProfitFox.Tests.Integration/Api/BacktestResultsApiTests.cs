@@ -27,7 +27,7 @@ public class BacktestResultsApiTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = await ProfitFoxFactory.CreateAsync();
+        _factory = ProfitFoxFactory.Create();
         _client = _factory.CreateClient();
         _scenario = new BacktestScenario(_factory, _client);
         await _scenario.CreateBotAsync("ladder");

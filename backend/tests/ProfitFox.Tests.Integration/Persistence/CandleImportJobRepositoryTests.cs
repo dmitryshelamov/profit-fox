@@ -19,7 +19,7 @@ public class CandleImportJobRepositoryTests
     [SetUp]
     public async Task SetUp()
     {
-        _dataSource = await MarketDataDatabase.CreateAsync();
+        _dataSource = MarketDataDatabase.Open();
         _store = new CandleImportJobRepository(_dataSource);
     }
 

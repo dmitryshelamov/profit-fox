@@ -24,7 +24,7 @@ public class CandleImportsApiTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = await ProfitFoxFactory.CreateAsync();
+        _factory = ProfitFoxFactory.Create();
         _factory.Bybit.Instruments.Add(("linear", "BTCUSDT"));
         _client = _factory.CreateClient();
     }
@@ -40,7 +40,7 @@ public class CandleImportsApiTests
     [Test]
     public async Task Valid_request_is_accepted_as_a_pending_job()
     {
-        await using var factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { Workers = 0 };
+        await using var factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { Workers = 0 };
         factory.Bybit.Instruments.Add(("linear", "BTCUSDT"));
         using HttpClient client = factory.CreateClient();
 
@@ -161,7 +161,7 @@ public class CandleImportsApiTests
     [Test]
     public async Task Failed_job_retry_is_accepted_as_a_pending_job()
     {
-        await using var factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { Workers = 0 };
+        await using var factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { Workers = 0 };
         using HttpClient client = factory.CreateClient();
         CandleImportJob failed = await AddJobAsync(
             factory,

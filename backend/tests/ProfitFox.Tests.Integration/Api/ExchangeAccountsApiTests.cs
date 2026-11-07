@@ -41,7 +41,7 @@ public class ExchangeAccountsApiTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { Workers = 0 };
+        _factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { Workers = 0 };
         _factory.KeyInspector.InspectAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(TradingKey);
         _client = _factory.CreateClient();
     }
@@ -271,7 +271,7 @@ public class ExchangeAccountsApiTests
                 logs.Add(call.Arg<LogEvent>()!);
             }
         });
-        var factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { Workers = 0, LogSink = sink, FakeKeyInspector = false, VerboseLogs = true };
+        var factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { Workers = 0, LogSink = sink, FakeKeyInspector = false, VerboseLogs = true };
 
         await using (factory)
         {

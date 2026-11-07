@@ -24,7 +24,7 @@ public class BacktestParallelTests
     [Test]
     public async Task Running_backtest_saves_the_calculated_combinations_of_all_and_the_speed_in_candles_a_second()
     {
-        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        await using var factory = ProfitFoxFactory.Create(workers: 0);
         using HttpClient client = factory.CreateClient();
         var scenario = new BacktestScenario(factory, client);
         await scenario.CreateBotAsync("ladder");
@@ -62,7 +62,7 @@ public class BacktestParallelTests
 
     private static async Task<IReadOnlyList<BacktestResult>> RunAsync(int threads)
     {
-        await using var factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { BacktestThreads = threads };
+        await using var factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { BacktestThreads = threads };
         using HttpClient client = factory.CreateClient();
         var scenario = new BacktestScenario(factory, client);
         await scenario.CreateBotAsync("ladder");

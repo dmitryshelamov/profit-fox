@@ -11,7 +11,7 @@ public class MigrationTests
     [Test]
     public async Task Candles_table_is_a_hypertable()
     {
-        await using NpgsqlDataSource dataSource = await MarketDataDatabase.CreateAsync();
+        await using NpgsqlDataSource dataSource = MarketDataDatabase.Open();
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
 
         IEnumerable<string> hypertables = await connection.QueryAsync<string>("SELECT hypertable_name FROM timescaledb_information.hypertables");
@@ -23,7 +23,7 @@ public class MigrationTests
     [Test]
     public async Task Import_jobs_count_lost_leases_from_zero()
     {
-        await using NpgsqlDataSource dataSource = await MarketDataDatabase.CreateAsync();
+        await using NpgsqlDataSource dataSource = MarketDataDatabase.Open();
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
 
         (string DataType, string IsNullable, string Default) column = await connection.QuerySingleAsync<(string, string, string)>(
@@ -39,7 +39,7 @@ public class MigrationTests
     [Test]
     public async Task Strategy_library_starts_at_revision_zero_without_graphs()
     {
-        await using NpgsqlDataSource dataSource = await MarketDataDatabase.CreateAsync();
+        await using NpgsqlDataSource dataSource = MarketDataDatabase.Open();
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
 
         (await connection.QueryAsync<long>("SELECT revision FROM strategy_library")).ShouldBe([0L]);
@@ -51,7 +51,7 @@ public class MigrationTests
     [Test]
     public async Task Ideas_have_their_tables_and_snapshot_rows_have_no_setups_yet()
     {
-        await using NpgsqlDataSource dataSource = await MarketDataDatabase.CreateAsync();
+        await using NpgsqlDataSource dataSource = MarketDataDatabase.Open();
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
 
         IEnumerable<string> tables = await connection.QueryAsync<string>(
@@ -71,7 +71,7 @@ public class MigrationTests
     [Test]
     public async Task Buckets_have_their_outcomes_and_the_interval_of_the_expectancy_without_a_baseline()
     {
-        await using NpgsqlDataSource dataSource = await MarketDataDatabase.CreateAsync();
+        await using NpgsqlDataSource dataSource = MarketDataDatabase.Open();
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
 
         IEnumerable<(string Name, string DataType, string IsNullable)> columns = await connection.QueryAsync<(string, string, string)>(
@@ -96,7 +96,7 @@ public class MigrationTests
     [Test]
     public async Task Buckets_keep_their_own_numbers_calibration_has_a_scope_and_versions_have_a_start()
     {
-        await using NpgsqlDataSource dataSource = await MarketDataDatabase.CreateAsync();
+        await using NpgsqlDataSource dataSource = MarketDataDatabase.Open();
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
 
         IEnumerable<(string Table, string Name, string DataType, string IsNullable, string? Default)> columns =

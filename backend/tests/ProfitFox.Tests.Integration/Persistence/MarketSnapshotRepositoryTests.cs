@@ -33,7 +33,7 @@ public class MarketSnapshotRepositoryTests
     [SetUp]
     public async Task SetUp()
     {
-        _dataSource = await MarketDataDatabase.CreateAsync();
+        _dataSource = MarketDataDatabase.Open();
         _store = new MarketSnapshotRepository(_dataSource);
         _state = new ScannerStateRepository(_dataSource);
         _holder = Guid.NewGuid();

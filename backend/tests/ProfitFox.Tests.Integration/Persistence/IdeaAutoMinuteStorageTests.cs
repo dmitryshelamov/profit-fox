@@ -49,7 +49,7 @@ public class IdeaAutoMinuteStorageTests
     [SetUp]
     public async Task SetUp()
     {
-        _dataSource = await MarketDataDatabase.CreateAsync();
+        _dataSource = MarketDataDatabase.Open();
         var accessor = new PostgresTransactionAccessor();
         _executor = new PostgresTransactionExecutor(_dataSource, accessor);
         _ideas = new IdeaRepository(_dataSource);

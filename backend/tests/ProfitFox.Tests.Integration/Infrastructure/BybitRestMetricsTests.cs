@@ -24,7 +24,7 @@ public class BybitRestMetricsTests
         listener.Start();
         Task serving = ServeInstrumentsAsync(listener);
 
-        await using var factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync())
+        await using var factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString)
         {
             Workers = 0,
             FakeBybit = false,
