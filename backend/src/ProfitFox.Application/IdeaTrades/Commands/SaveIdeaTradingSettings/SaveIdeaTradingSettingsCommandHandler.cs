@@ -8,7 +8,7 @@ namespace ProfitFox.Application.IdeaTrades.Commands.SaveIdeaTradingSettings;
 
 public sealed class SaveIdeaTradingSettingsCommandHandler(IIdeaTradingSettingsRepository repository, IExchangeAccountRepository accounts) : IRequestHandler<SaveIdeaTradingSettingsCommand>
 {
-    /// <exception cref="ValidationFailedException">An unknown account, an amount, a largest amount or a total risk not above zero, fewer than one trade, a negative reward to the risk, a daily stop not above zero, fewer than one trade of a side, or a budget of all the autos not above zero.</exception>
+    /// <exception cref="ValidationFailedException">An unknown account, an amount, a largest amount or a total risk not above zero, fewer than one trade, a negative reward to the risk, a daily stop not above zero, fewer than one trade of a side, a budget of all the autos not above zero, or a leverage below one.</exception>
     public async Task Handle(SaveIdeaTradingSettingsCommand request, CancellationToken cancellationToken)
     {
         IdeaTradingSettings settings = request.Settings;
@@ -57,6 +57,12 @@ public sealed class SaveIdeaTradingSettingsCommandHandler(IIdeaTradingSettingsRe
         if (settings.AutosBudget <= 0m)
         {
             errors["autosBudget"] = "The budget of all the autos must be above zero.";
+        }
+
+        // No upper bound: Bybit tells the largest leverage of a symbol when it refuses to set it (decision 4).
+        if (settings.Leverage < 1)
+        {
+            errors["leverage"] = "The leverage must be at least one.";
         }
 
         if (errors.Count > 0)

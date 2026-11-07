@@ -38,19 +38,19 @@
 
 ## 4. Приложение
 
-- [ ] 4.1 `IdeaTradeEntryCalculator.EvaluateAsync`: на `linear` с ключом читает плечо, позицию и открытые ордера символа,
+- [x] 4.1 `IdeaTradeEntryCalculator.EvaluateAsync`: на `linear` с ключом читает плечо, позицию и открытые ордера символа,
   передаёт их в `IdeaTradeAccount`; `EntryCalculation` несёт `Leverage` и `Margin`. Готово, когда юнит-тесты калькулятора
   на «Залог при плече», «Плечо на споте» и на причину `LeverageDiffers` с фейком зелёные.
-- [ ] 4.2 `CreateIdeaTradeCommandHandler`: под блокировкой после проверок, если плечо символа не равно настройке, вызывает
+- [x] 4.2 `CreateIdeaTradeCommandHandler`: под блокировкой после проверок, если плечо символа не равно настройке, вызывает
   `SetLeverageAsync`; `Rejected` → `IdeaTradeRefusedException([LeverageNotSet])` без сделки и с сообщением Bybit в логе;
   `Unavailable` → `ExchangeUnavailableException`; сделка запоминает плечо. Готово, когда тесты на «Символ с плечом 10×»,
   «Плечо уже нужное» (Bybit не вызван), «Bybit отказал» и «Вход на споте» зелёные.
-- [ ] 4.3 `RunNextAutoEntryCommandHandler.EnterAsync`: то же для автомата с деньгами; `Rejected` пишет отказ
+- [x] 4.3 `RunNextAutoEntryCommandHandler.EnterAsync`: то же для автомата с деньгами; `Rejected` пишет отказ
   `LeverageNotSet`, `Unavailable` оставляет запрос на следующий проход, как молчание биржи в `PrepareAsync`. Готово, когда
   тесты `RunNextAutoEntryTests` на установку плеча, отказ и молчание зелёные.
-- [ ] 4.4 Автомат «Без денег» передаёт плечо настроек в `PaperEntry.Check`. Готово, когда тест учебного входа на `linear`
+- [x] 4.4 Автомат «Без денег» передаёт плечо настроек в `PaperEntry.Check`. Готово, когда тест учебного входа на `linear`
   со стопом 12 % при 5× пишет отказ.
-- [ ] 4.5 `SaveIdeaTradingSettings`: плечо меньше 1 → 400 по `leverage`. Готово, когда тест валидации зелёный.
+- [x] 4.5 `SaveIdeaTradingSettings`: плечо меньше 1 → 400 по `leverage`. Готово, когда тест валидации зелёный.
 
 ## 5. API
 

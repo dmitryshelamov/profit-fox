@@ -1,8 +1,10 @@
 using MediatR;
 
 using ProfitFox.Application.Exceptions;
+using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Application.Transactions;
 using ProfitFox.Domain.Entities.IdeaTrades;
+using ProfitFox.Domain.Entities.IdeaTrades.Enums;
 using ProfitFox.Domain.Repositories;
 
 namespace ProfitFox.Application.IdeaTrades.Commands.CreateIdeaTrade;
@@ -12,11 +14,13 @@ public sealed class CreateIdeaTradeCommandHandler(
     IIdeaTradeRepository trades,
     ILiveBotRepository live,
     ITransactionExecutor executor,
+    IOrderGateway gateway,
+    ILiveTradingJournal journal,
     TimeProvider time) : IRequestHandler<CreateIdeaTradeCommand, Guid>
 {
     /// <exception cref="NotFoundException">There is no such idea.</exception>
     /// <exception cref="ValidationFailedException">An unknown account, or an amount not above zero.</exception>
-    /// <exception cref="IdeaTradeRefusedException">The checks, made again under the lock of the account, stop the entry.</exception>
+    /// <exception cref="IdeaTradeRefusedException">The checks, made again under the lock of the account, stop the entry, or the exchange did not set the leverage.</exception>
     /// <exception cref="ExchangeException">The exchange did not answer.</exception>
     public async Task<Guid> Handle(CreateIdeaTradeCommand request, CancellationToken cancellationToken)
     {
@@ -43,8 +47,24 @@ public sealed class CreateIdeaTradeCommandHandler(
                     throw new IdeaTradeRefusedException(calculation.Reasons);
                 }
 
+                OrderOutcomeKind leverage = await EntryLeverage.SetAsync(calculation, gateway, journal, token);
+
+                if (leverage == OrderOutcomeKind.Transient)
+                {
+                    throw new ExchangeUnavailableException("Bybit did not answer to the leverage of the symbol.");
+                }
+
+                if (leverage == OrderOutcomeKind.Permanent)
+                {
+                    throw new IdeaTradeRefusedException([IdeaTradeRefusal.LeverageNotSet]);
+                }
+
                 DateTimeOffset now = time.GetUtcNow();
-                IdeaTrade trade = IdeaTrade.Create(Guid.NewGuid(), preparation.Idea, preparation.Account.Id, preparation.Price, calculation.Size, now, calculation.Promise) with { LastOrderNumber = 1 };
+                IdeaTrade trade = IdeaTrade.Create(Guid.NewGuid(), preparation.Idea, preparation.Account.Id, preparation.Price, calculation.Size, now, calculation.Promise, leverage: calculation.Leverage)
+                                  with
+                {
+                    LastOrderNumber = 1
+                };
                 await trades.CreateAsync(trade, IdeaTradeOrder.NewEntryOf(trade, now), now, token);
 
                 return trade.Id;

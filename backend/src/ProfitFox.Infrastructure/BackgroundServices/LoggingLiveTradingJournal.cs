@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 
 using ProfitFox.Application.Ports.LiveTrading;
+using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Infrastructure.BackgroundServices;
 
@@ -30,5 +31,10 @@ internal sealed class LoggingLiveTradingJournal(ILogger<LoggingLiveTradingJourna
     public void Failed(Guid botId, string reason)
     {
         logger.LogWarning("Live bot {BotId} stops: {Reason}", botId, reason);
+    }
+
+    public void LeverageRefused(Guid accountId, Instrument instrument, int leverage, string reason)
+    {
+        logger.LogWarning("Bybit did not set the leverage {Leverage} on {Category} {Symbol} of account {AccountId}: {Reason}", leverage, instrument.Category, instrument.Symbol, accountId, reason);
     }
 }

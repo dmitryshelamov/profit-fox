@@ -166,6 +166,23 @@ public class LiveAutosTests
         minute.Opened.ShouldBeEmpty();
     }
 
+    // Scenario "Учебный со стопом дальше ликвидации": the leverage of the settings is the one the stop of a paper entry is checked against.
+    [Test]
+    public async Task Paper_entry_with_the_stop_too_far_for_the_leverage_of_the_settings_is_refused()
+    {
+        _settings.GetAsync(Arg.Any<CancellationToken>()).Returns(IdeaTradingSettings.Default with { MaxAmount = 500m, Leverage = 5 });
+        Enable(Auto("Пробои 5м", IdeaAutoMode.Paper, amount: 50m));
+        Idea born = Born();
+        Idea idea = born with { Track = born.Track with { Plan = new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 100m, 88m, 130m) } };
+
+        AutoMinute minute = (await RunAsync([idea]))!;
+
+        IdeaAutoRefusal refusal = minute.Refusals.ShouldHaveSingleItem();
+        refusal.Reasons.ShouldBe([IdeaTradeRefusal.StopTooFarForLeverage]);
+        refusal.Detail.ShouldBe(RefusalDetail.Numbers(12m, 10m));
+        minute.Opened.ShouldBeEmpty();
+    }
+
     [Test]
     public async Task Pair_whose_rules_are_not_known_yet_is_refused_for_the_rules()
     {
