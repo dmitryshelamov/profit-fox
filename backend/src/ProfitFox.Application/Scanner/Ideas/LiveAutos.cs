@@ -157,7 +157,7 @@ public sealed class LiveAutos(
                 ScannerPair pair = market.Find(idea.Instrument)!;
                 FeeRates fees = _fees[idea.Instrument.Category];
                 var books = new AutoBooks(openReal, [.. working.Values.Where(trade => trade.Trade.IsOpen)], every);
-                PaperEntryCheck check = PaperEntry.Check(auto, idea, birth, RulesOf(pair), fees, tradingSettings.MaxAmount, books);
+                PaperEntryCheck check = PaperEntry.Check(auto, idea, birth, RulesOf(pair), fees, tradingSettings.MaxAmount, tradingSettings.Leverage, books);
 
                 if (check.Refusals.Count > 0)
                 {

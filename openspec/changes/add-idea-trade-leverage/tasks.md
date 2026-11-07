@@ -4,21 +4,21 @@
 
 ## 1. Домен
 
-- [ ] 1.1 `IdeaTradingSettings.Leverage` (`int`, по умолчанию `1`) и `IdeaTrade.Leverage`; `IdeaTrade.Create` берёт
+- [x] 1.1 `IdeaTradingSettings.Leverage` (`int`, по умолчанию `1`) и `IdeaTrade.Leverage`; `IdeaTrade.Create` берёт
   плечо, на `spot` всегда `1`. Готово, когда юнит-тесты на настройки по умолчанию и на плечо сделки `linear`/`spot`
   зелёные.
-- [ ] 1.2 `IdeaTradeRefusal.StopTooFarForLeverage`: правило `|entry − stop| / entry ≥ 1 / (2L)` только на `linear` в
+- [x] 1.2 `IdeaTradeRefusal.StopTooFarForLeverage`: правило `|entry − stop| / entry ≥ 1 / (2L)` только на `linear` в
   `IdeaTradeRefusals.Check`, `DetailOf` с долей стопа и пределом в процентах. Готово, когда юнит-тесты на сценарии «Стоп
   дальше ликвидации» (100/88 при 5× → 12 % и 10 %), «Стоп при плече 1×» (short 100/140) и на `spot` без причины зелёные.
-- [ ] 1.3 `IdeaTradeRefusal.LeverageDiffers`: `IdeaTradeAccount` несёт плечо символа и занятость символа; причина только
+- [x] 1.3 `IdeaTradeRefusal.LeverageDiffers`: `IdeaTradeAccount` несёт плечо символа и занятость символа; причина только
   на `linear`, когда символ занят и плечо другое; `DetailOf` с плечом символа и настройкой. Готово, когда юнит-тесты на
   «Чужая позиция с другим плечом», «Открытый ордер с другим плечом» и «Пустой символ с другим плечом» зелёные.
-- [ ] 1.4 Залог в проверке денег: в `StartFunds.Enough` идёт `size.Amount / leverage`, ждущие сделки дают
+- [x] 1.4 Залог в проверке денег: в `StartFunds.Enough` идёт `size.Amount / leverage`, ждущие сделки дают
   `Amount / Leverage`. Готово, когда юнит-тесты на «Денег хватает на залог» (100 при 5×, 30 свободных) и «Ждущая сделка
   занимает свой залог» (20 + 25 > 40) зелёные.
-- [ ] 1.5 `PaperEntry.Check` получает плечо настроек и отказывает с `StopTooFarForLeverage` на `linear`. Готово, когда
+- [x] 1.5 `PaperEntry.Check` получает плечо настроек и отказывает с `StopTooFarForLeverage` на `linear`. Готово, когда
   юнит-тесты на «Учебный со стопом дальше ликвидации» и «Учебный на споте при плече» зелёные.
-- [ ] 1.6 `IdeaTradeRefusal.LeverageNotSet` без чисел. Готово, когда тест текстов причин в `DetailOf` (без чисел) зелёный.
+- [x] 1.6 `IdeaTradeRefusal.LeverageNotSet` без чисел. Готово, когда тест текстов причин в `DetailOf` (без чисел) зелёный.
 
 ## 2. Порты и Bybit
 

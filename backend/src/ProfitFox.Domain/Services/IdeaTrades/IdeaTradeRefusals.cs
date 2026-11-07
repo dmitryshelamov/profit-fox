@@ -60,12 +60,23 @@ public static class IdeaTradeRefusals
             reasons.Add(IdeaTradeRefusal.StopEntryNotSupported);
         }
 
+        if (entry.Category == MarketCategory.Linear && StopTooFar(entry.Price, entry.Plan.Stop, entry.Leverage))
+        {
+            reasons.Add(IdeaTradeRefusal.StopTooFarForLeverage);
+        }
+
         if (entry.Category == MarketCategory.Linear && account.SymbolDirections.Any(other => other != direction))
         {
             reasons.Add(IdeaTradeRefusal.OppositeSideOpen);
         }
 
-        if (!StartFunds.Enough(account.FreeMoney, entry.Size.Amount, account.Bots, account.PendingEntries))
+        // The leverage of a symbol the account already holds or waits on is never changed: it is set only on an empty one.
+        if (account.Symbol is { } symbol && (symbol.Position != 0m || symbol.OpenOrders > 0) && symbol.Leverage != entry.Leverage)
+        {
+            reasons.Add(IdeaTradeRefusal.LeverageDiffers);
+        }
+
+        if (!StartFunds.Enough(account.FreeMoney, entry.Size.Amount / entry.Leverage, account.Bots, account.PendingEntries))
         {
             reasons.Add(IdeaTradeRefusal.NotEnoughMoney);
         }
@@ -109,7 +120,34 @@ public static class IdeaTradeRefusals
             IdeaTradeRefusal.AmountAboveMax => RefusalDetail.Numbers(entry.Asked, limits.MaxAmount),
             IdeaTradeRefusal.TooManyOpenTrades => RefusalDetail.Numbers(open.Count, limits.MaxOpenTrades),
             IdeaTradeRefusal.TotalRiskExceeded => RefusalDetail.Numbers(open.Risk + entry.Size.Risk, limits.MaxTotalRisk),
+            IdeaTradeRefusal.LeverageDiffers => RefusalDetail.Numbers(account.Symbol!.Leverage, entry.Leverage),
+            IdeaTradeRefusal.StopTooFarForLeverage => StopDetail(entry.Price, entry.Plan.Stop, entry.Leverage),
             _ => null
         };
+    }
+
+    /// <summary>Whether the stop is at least half the way to the liquidation at the leverage: <c>|price − stop| / price ≥ 1 / (2 × leverage)</c>.</summary>
+    public static bool StopTooFar(decimal price, decimal stop, int leverage)
+    {
+        (decimal share, decimal limit) = StopForLeverage(price, stop, leverage);
+
+        return share >= limit;
+    }
+
+    /// <summary>
+    ///     How far the stop is from the price of the entry and how far the leverage lets it be, both in percent of the price. The limit is half the
+    ///     way to the liquidation, <c>1 / (2 × leverage)</c>: the rest is room for the maintenance margin, the fees and the slippage of the stop.
+    /// </summary>
+    private static (decimal Share, decimal Limit) StopForLeverage(decimal price, decimal stop, int leverage)
+    {
+        return (Math.Abs(price - stop) / price * 100m, 100m / (2m * leverage));
+    }
+
+    /// <summary>The share of the stop and its limit at the leverage, as the reason <see cref="IdeaTradeRefusal.StopTooFarForLeverage" /> tells them.</summary>
+    public static RefusalDetail StopDetail(decimal price, decimal stop, int leverage)
+    {
+        (decimal share, decimal limit) = StopForLeverage(price, stop, leverage);
+
+        return RefusalDetail.Numbers(share, limit);
     }
 }

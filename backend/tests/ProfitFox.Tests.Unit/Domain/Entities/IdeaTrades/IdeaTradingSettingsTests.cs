@@ -12,4 +12,11 @@ public class IdeaTradingSettingsTests
     {
         (IdeaTradingSettings.Default.DailyLossLimit, IdeaTradingSettings.Default.MaxSameDirection).ShouldBe((null, null));
     }
+
+    // Requirement "Настройки торговли идеями": a trade on linear enters at 1× until the owner sets another leverage.
+    [Test]
+    public void Default_settings_have_the_leverage_of_one()
+    {
+        IdeaTradingSettings.Default.Leverage.ShouldBe(1);
+    }
 }

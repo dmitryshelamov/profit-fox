@@ -2,8 +2,10 @@ using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.Entities.IdeaTrades.Enums;
+using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.Ideas;
 
 using Shouldly;
@@ -51,6 +53,31 @@ public class IdeaTradeTests
 
         IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(Fired), Account, 106m, Size(), Now, autoId: auto).AutoId.ShouldBe(auto);
         New().AutoId.ShouldBeNull();
+    }
+
+    // Scenario "Символ с плечом 10×": the trade keeps the leverage it entered with.
+    [Test]
+    public void New_trade_on_linear_keeps_the_leverage_it_is_given()
+    {
+        Idea idea = IdeaGenerator.Generate(Fired, instrument: new Instrument(MarketCategory.Linear, "DKNGUSDT"));
+
+        IdeaTrade.Create(Guid.NewGuid(), idea, Account, 106m, Size(), Now, leverage: 5).Leverage.ShouldBe(5);
+    }
+
+    // Scenario "Вход на споте": the spot has no leverage, whatever the settings say.
+    [Test]
+    public void New_trade_on_the_spot_keeps_the_leverage_of_one()
+    {
+        Idea idea = IdeaGenerator.Generate(Fired, instrument: new Instrument(MarketCategory.Spot, "DKNGUSDT"));
+
+        IdeaTrade.Create(Guid.NewGuid(), idea, Account, 106m, Size(), Now, leverage: 5).Leverage.ShouldBe(1);
+    }
+
+    // Scenario "Ждущая сделка занимает свой залог": a trade of 100 USDT at 4× takes 25 of the money of the account.
+    [Test]
+    public void Margin_is_the_amount_over_the_leverage_of_the_trade()
+    {
+        (New() with { Amount = 100m, Leverage = 4 }).Margin.ShouldBe(25m);
     }
 
     // Decision 8: a pullback waits the 4 candles of its window from the moment it fired; the others enter at once.

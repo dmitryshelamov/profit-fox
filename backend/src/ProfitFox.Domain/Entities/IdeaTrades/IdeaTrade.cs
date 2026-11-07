@@ -11,7 +11,7 @@ namespace ProfitFox.Domain.Entities.IdeaTrades;
 
 /// <summary>
 ///     A trade by an idea: one entry with a stop and a target that stand on the exchange, the levels and the size it was entered with, and
-///     what the exchange counted of its orders. <see cref="AutoId" /> is the auto that took the trade, none for a manual one. <see cref="Entry" /> and the exits hold the quantity, value and fee of their orders;
+///     what the exchange counted of its orders. <see cref="AutoId" /> is the auto that took the trade, none for a manual one; <see cref="Leverage" /> the leverage it entered with. <see cref="Entry" /> and the exits hold the quantity, value and fee of their orders;
 ///     <see cref="CancelRequested" /> and <see cref="CloseRequested" /> ask a Worker to cancel the entry or to close the position.
 /// </summary>
 public sealed record IdeaTrade(
@@ -44,7 +44,8 @@ public sealed record IdeaTrade(
     IdeaPromise? Promise = null,
     DateTimeOffset? OpenedAt = null,
     TradedIdeaOutcome? IdeaOutcome = null,
-    Guid? AutoId = null)
+    Guid? AutoId = null,
+    int Leverage = 1)
 {
     public bool IsOpen => Status is IdeaTradeStatus.AwaitingEntry or IdeaTradeStatus.Open;
 
@@ -55,6 +56,9 @@ public sealed record IdeaTrade(
     public decimal? Result => Status is IdeaTradeStatus.ClosedAtTarget or IdeaTradeStatus.ClosedAtStop or IdeaTradeStatus.ClosedManually
         ? (Side == IdeaSide.Long ? Exited.Value - Entry.Value : Entry.Value - Exited.Value) - Entry.Fee - Exited.Fee
         : null;
+
+    /// <summary>The money of the account the trade takes on the exchange: its amount at its leverage.</summary>
+    public decimal Margin => Amount / Leverage;
 
     /// <summary>The fees of the entry and of the exits.</summary>
     public decimal Fees => Entry.Fee + Exited.Fee;
@@ -93,7 +97,7 @@ public sealed record IdeaTrade(
         TakeProfit.Value + StopLoss.Value + Manual.Value,
         TakeProfit.Fee + StopLoss.Fee + Manual.Fee);
 
-    public static IdeaTrade Create(Guid id, Idea idea, Guid accountId, decimal entryPrice, IdeaTradeSize size, DateTimeOffset now, IdeaPromise? promise = null, Guid? autoId = null)
+    public static IdeaTrade Create(Guid id, Idea idea, Guid accountId, decimal entryPrice, IdeaTradeSize size, DateTimeOffset now, IdeaPromise? promise = null, Guid? autoId = null, int leverage = 1)
     {
         return new IdeaTrade(
             id,
@@ -123,7 +127,8 @@ public sealed record IdeaTrade(
             0,
             now,
             promise,
-            AutoId: autoId);
+            AutoId: autoId,
+            Leverage: idea.Instrument.Category == MarketCategory.Spot ? 1 : leverage);
     }
 
     /// <summary>A pullback that has not entered by its deadline gives its entry up.</summary>

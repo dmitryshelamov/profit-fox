@@ -176,6 +176,22 @@ public class IdeaTradeRefusalsTests
         Refuse(account: Account(free: 847m, bots: [new BotFunds(1000m, 300m)], pending: [100m]), amount: 47m).ShouldBeEmpty();
     }
 
+    // Scenario "Денег хватает на залог": 100 USDT at 5× takes 20 of the free money.
+    [Test]
+    public void Free_money_is_counted_against_the_margin_of_the_entry()
+    {
+        Refuse(account: Account(free: 30m), amount: 100m, asked: 100m, leverage: 5).ShouldBeEmpty();
+        Refuse(account: Account(free: 19m), amount: 100m, asked: 100m, leverage: 5).ShouldBe([IdeaTradeRefusal.NotEnoughMoney]);
+    }
+
+    // Scenario "Ждущая сделка занимает свой залог": 20 of this entry and 25 of the trade that waits are more than 40.
+    [Test]
+    public void Margin_of_a_trade_that_waits_is_counted_with_the_margin_of_the_entry()
+    {
+        Refuse(account: Account(free: 40m, pending: [25m]), amount: 100m, asked: 100m, leverage: 5).ShouldBe([IdeaTradeRefusal.NotEnoughMoney]);
+        Refuse(account: Account(free: 45m, pending: [25m]), amount: 100m, asked: 100m, leverage: 5).ShouldBeEmpty();
+    }
+
     [Test]
     public void Quantity_below_the_minimum_is_named()
     {
@@ -196,6 +212,67 @@ public class IdeaTradeRefusalsTests
         Refuse(account: Account(access: access)).ShouldBe([expected]);
     }
 
+    // Scenario "Стоп дальше ликвидации": the stop is 12 % away, and 5× allows less than 1 / (2 × 5) = 10 %.
+    [Test]
+    public void Stop_beyond_half_the_way_to_the_liquidation_is_named()
+    {
+        var plan = new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 100m, 88m, 130m);
+
+        Refuse(plan: plan, price: 100m, leverage: 5).ShouldBe([IdeaTradeRefusal.StopTooFarForLeverage]);
+    }
+
+    [Test]
+    public void Stop_exactly_at_half_the_way_to_the_liquidation_is_named()
+    {
+        var plan = new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 100m, 90m, 130m);
+
+        Refuse(plan: plan, price: 100m, leverage: 5).ShouldBe([IdeaTradeRefusal.StopTooFarForLeverage]);
+    }
+
+    // Scenario "Стоп при плече 1×": 40 % is less than 50 %.
+    [Test]
+    public void Stop_within_half_the_way_to_the_liquidation_is_no_reason()
+    {
+        var plan = new IdeaPlan(IdeaType.TwoR, IdeaSide.Short, 100m, 140m, 80m);
+
+        Refuse(plan: plan, price: 100m, leverage: 1).ShouldBeEmpty();
+    }
+
+    [Test]
+    public void Stop_far_from_the_entry_does_not_matter_on_the_spot()
+    {
+        var plan = new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 100m, 40m, 130m);
+
+        Refuse(category: MarketCategory.Spot, plan: plan, price: 100m).ShouldBeEmpty();
+    }
+
+    // Scenario "Чужая позиция с другим плечом": the leverage of a position that is not ours never changes.
+    [Test]
+    public void Position_on_the_symbol_with_another_leverage_is_named()
+    {
+        Refuse(account: Account(symbol: new LinearSymbol(1m, 0.5m, 0)), leverage: 5).ShouldBe([IdeaTradeRefusal.LeverageDiffers]);
+    }
+
+    // Scenario "Открытый ордер с другим плечом": the order would fill at the new leverage with a stop nobody checked against it.
+    [Test]
+    public void Open_order_on_the_symbol_with_another_leverage_is_named()
+    {
+        Refuse(account: Account(symbol: new LinearSymbol(1m, 0m, 1)), leverage: 5).ShouldBe([IdeaTradeRefusal.LeverageDiffers]);
+    }
+
+    // Scenario "Пустой символ с другим плечом": the entry sets the leverage.
+    [Test]
+    public void Empty_symbol_with_another_leverage_is_no_reason()
+    {
+        Refuse(account: Account(symbol: new LinearSymbol(10m, 0m, 0)), leverage: 1).ShouldBeEmpty();
+    }
+
+    [Test]
+    public void Position_on_the_symbol_with_the_same_leverage_is_no_reason()
+    {
+        Refuse(account: Account(symbol: new LinearSymbol(5m, -0.5m, 2)), leverage: 5).ShouldBeEmpty();
+    }
+
     // Scenarios "R:R ниже минимума" and "Не хватает денег" of the autos: the numbers the first reason is about.
     [Test]
     public void Reasons_with_numbers_tell_them()
@@ -213,12 +290,33 @@ public class IdeaTradeRefusalsTests
         Detail(IdeaTradeRefusal.TotalRiskExceeded).ShouldBe(RefusalDetail.Numbers(5.5m, 5m));
     }
 
+    // Scenario "Стоп слишком далеко": the share of the stop and its limit in percent.
+    [Test]
+    public void Stop_too_far_for_the_leverage_tells_the_share_of_the_stop_and_its_limit_in_percent()
+    {
+        var plan = new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 100m, 88m, 130m);
+        var entry = new IdeaTradeEntry(MarketCategory.Linear, IdeaStatus.Active, plan, 100m, 100m, 47m, new IdeaTradeSize(0.47m, 47m, 5.7m, 14m, 2.4m), Rules, 5);
+
+        IdeaTradeRefusals.DetailOf(IdeaTradeRefusal.StopTooFarForLeverage, entry, Limits, new OpenIdeaTrades(0, 0m), Account()).ShouldBe(RefusalDetail.Numbers(12m, 10m));
+    }
+
+    // «На символе открыта позиция с плечом 1×»: the leverage of the symbol and the one of the settings.
+    [Test]
+    public void Leverage_that_differs_tells_the_leverage_of_the_symbol_and_of_the_entry()
+    {
+        var entry = new IdeaTradeEntry(MarketCategory.Linear, IdeaStatus.Active, Long, 23.5m, 23.5m, 47m, new IdeaTradeSize(2m, 47m, 1m, 1.84m, 1.84m), Rules, 5);
+        IdeaTradeAccount account = Account(symbol: new LinearSymbol(1m, 0.5m, 0));
+
+        IdeaTradeRefusals.DetailOf(IdeaTradeRefusal.LeverageDiffers, entry, Limits, new OpenIdeaTrades(0, 0m), account).ShouldBe(RefusalDetail.Numbers(1m, 5m));
+    }
+
     [Test]
     public void Reasons_without_numbers_tell_nothing()
     {
         var entry = new IdeaTradeEntry(MarketCategory.Linear, IdeaStatus.Active, Long, 23.5m, 23.5m, 300m, new IdeaTradeSize(2m, 47m, 1m, 1.08m, 1.08m), Rules);
 
         IdeaTradeRefusals.DetailOf(IdeaTradeRefusal.HedgeMode, entry, Limits, new OpenIdeaTrades(0, 0m), Account()).ShouldBeNull();
+        IdeaTradeRefusals.DetailOf(IdeaTradeRefusal.LeverageNotSet, entry, Limits, new OpenIdeaTrades(0, 0m), Account()).ShouldBeNull();
     }
 
     private static IReadOnlyList<IdeaTradeRefusal> Refuse(
@@ -233,9 +331,10 @@ public class IdeaTradeRefusalsTests
         decimal risk = 1m,
         decimal riskReward = 1.84m,
         OpenIdeaTrades? open = null,
-        IdeaTradeAccount? account = null)
+        IdeaTradeAccount? account = null,
+        int leverage = 1)
     {
-        var entry = new IdeaTradeEntry(category, status, plan ?? Long, price, current ?? price, asked, new IdeaTradeSize(quantity, amount, risk, risk * riskReward, riskReward), Rules);
+        var entry = new IdeaTradeEntry(category, status, plan ?? Long, price, current ?? price, asked, new IdeaTradeSize(quantity, amount, risk, risk * riskReward, riskReward), Rules, leverage);
 
         return IdeaTradeRefusals.Check(entry, Limits, open ?? new OpenIdeaTrades(0, 0m), account ?? Account());
     }
@@ -245,8 +344,9 @@ public class IdeaTradeRefusalsTests
         decimal free = 1000m,
         IReadOnlyCollection<BotFunds>? bots = null,
         IReadOnlyCollection<decimal>? pending = null,
-        IReadOnlyCollection<StrategyDirection>? directions = null)
+        IReadOnlyCollection<StrategyDirection>? directions = null,
+        LinearSymbol? symbol = null)
     {
-        return new IdeaTradeAccount(access, free, bots ?? [], pending ?? [], directions ?? []);
+        return new IdeaTradeAccount(access, free, bots ?? [], pending ?? [], directions ?? [], symbol);
     }
 }

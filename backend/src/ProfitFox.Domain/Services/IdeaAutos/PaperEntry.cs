@@ -2,6 +2,7 @@ using ProfitFox.Domain.Entities.IdeaAutos;
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades.Enums;
+using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Services.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.IdeaAutos;
@@ -14,7 +15,7 @@ namespace ProfitFox.Domain.Services.IdeaAutos;
 /// <summary>
 ///     The checks of a paper entry, which depend on the idea and the amount only: the price beyond the stop or the target, the reward to risk
 ///     below the minimum of the auto, the amount above the largest, the volume or amount below the minimums of the instrument, rules not known yet,
-///     the pair held by the auto itself and the budget of the auto taken by its open trades, which hold the paper trades opened earlier in the minute. The money of the account, its key, hedge mode, the opposite side, the guards and the budget of all the autos are no part of it.
+///     the stop too far for the leverage of the settings on <c>linear</c>, the pair held by the auto itself and the budget of the auto taken by its open trades, which hold the paper trades opened earlier in the minute. The money of the account, its key, hedge mode, the opposite side, the guards and the budget of all the autos are no part of it.
 /// </summary>
 public static class PaperEntry
 {
@@ -24,14 +25,16 @@ public static class PaperEntry
     /// <param name="rules">The rules of the instrument, none while they are unknown.</param>
     /// <param name="fees"></param>
     /// <param name="maxAmount">«Не больше суммы на сделку» of the settings.</param>
+    /// <param name="leverage">«Плечо на фьючерсах» of the settings: only the stop is checked against it, the exchange is never asked.</param>
     /// <param name="books"></param>
-    public static PaperEntryCheck Check(IdeaAuto auto, Idea idea, IdeaCandle birth, InstrumentRules? rules, FeeRates fees, decimal maxAmount, AutoBooks books)
+    public static PaperEntryCheck Check(IdeaAuto auto, Idea idea, IdeaCandle birth, InstrumentRules? rules, FeeRates fees, decimal maxAmount, int leverage, AutoBooks books)
     {
         IdeaPlan plan = idea.Track.Plan;
         var refusals = new List<AutoRefusal>();
         bool isLong = plan.Side == IdeaSide.Long;
         decimal current = birth.Close;
-        IdeaTradeSize? size = rules is null ? null : IdeaTradeSizing.Calculate(plan with { Entry = PaperFill.EntryPrice(idea, birth) }, fees, auto.Amount, rules);
+        decimal entry = PaperFill.EntryPrice(idea, birth);
+        IdeaTradeSize? size = rules is null ? null : IdeaTradeSizing.Calculate(plan with { Entry = entry }, fees, auto.Amount, rules);
 
         if (isLong ? current <= plan.Stop : current >= plan.Stop)
         {
@@ -68,6 +71,11 @@ public static class PaperEntry
             {
                 refusals.Add(new AutoRefusal(IdeaTradeRefusal.AmountBelowMinimum));
             }
+        }
+
+        if (idea.Instrument.Category == MarketCategory.Linear && IdeaTradeRefusals.StopTooFar(entry, plan.Stop, leverage))
+        {
+            refusals.Add(new AutoRefusal(IdeaTradeRefusal.StopTooFarForLeverage, IdeaTradeRefusals.StopDetail(entry, plan.Stop, leverage)));
         }
 
         if (AutoRefusals.OwnPair(auto, idea.Instrument, books) is { } held)
