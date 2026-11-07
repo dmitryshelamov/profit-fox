@@ -14,7 +14,14 @@ import {
   changedFields,
   changedText,
 } from '../model/autoForm';
-import { badgeChoices, badgeHint, categoryChoices, modes, sideChoices } from '../model/labels';
+import {
+  badgeChoices,
+  badgeHint,
+  categoryChoices,
+  featureChoices,
+  modes,
+  sideChoices,
+} from '../model/labels';
 
 const control = 'h-9 w-full rounded-lg border border-line bg-app px-2 text-sm';
 const chip = 'rounded-full border px-3 py-1.5 text-sm';
@@ -28,6 +35,13 @@ const intervalChoices = [
 
 /** The type no auto takes: its entry waits for the price to leave a range. */
 const neverTaken = 'stop_entry';
+
+/** The conditions of the features of the market of an idea, in the order of the features. */
+const featureFields = [
+  { key: 'dayDrop', label: 'Падение пары за сутки' },
+  { key: 'btcDrop', label: 'Падение BTC за 4 часа' },
+  { key: 'highFunding', label: 'Высокий funding' },
+] as const;
 
 function Errors({ messages }: { messages: readonly string[] | undefined }) {
   return messages?.map((message) => (
@@ -371,6 +385,17 @@ export function AutoForm({
             errors={fieldErrors.badge}
           />
         </Row>
+        {featureFields.map(({ key, label }) => (
+          <Row key={key} label={label}>
+            <Switch
+              label={label}
+              options={featureChoices}
+              value={form[key]}
+              onChange={(value) => set({ [key]: value })}
+              errors={fieldErrors[key]}
+            />
+          </Row>
+        ))}
         <div className="grid gap-4 sm:grid-cols-2">
           <TextField
             label="Минимальный R:R"

@@ -18,10 +18,13 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion, bool replay
     private readonly Dictionary<Instrument, Pair> _pairs = [];
     private IdeaExitRules _exitRules = new IdeaExitRules([]);
 
-    // The longest window of a setup: the last N candles of the longest interval.
-    private readonly int _window = rules.Thresholds.Max(entry => entry.Value.Candles * Minutes(entry.Key));
+    // The minutes of a day before the last one, which the change of a pair over a day is measured against (decision 2 of add-market-idea-features).
+    private const int Day = 1440;
 
-    /// <summary>The minutes of the longest window of a setup, which a warm-up needs behind it.</summary>
+    // The longest window of a setup, the last N candles of the longest interval, and at least the last minute and the day before it.
+    private readonly int _window = Math.Max(rules.Thresholds.Max(entry => entry.Value.Candles * Minutes(entry.Key)), Day + 1);
+
+    /// <summary>The minutes of the longest window of a setup and of the change of a day, which a warm-up needs behind it.</summary>
     public int Window => _window;
 
     /// <summary>
@@ -150,7 +153,7 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion, bool replay
                 {
                     foreach (SetupSignal signal in fired)
                     {
-                        Make(pair, interval, signal, minute, basis!.Atr, basis.Zones, inputs.Spread, tick, end, created, signals);
+                        Make(pair, interval, signal, minute, basis!.Atr, basis.Zones, inputs, tick, end, created, signals);
                     }
                 }
             }
@@ -210,13 +213,15 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion, bool replay
         IdeaCandle minute,
         decimal atr,
         IReadOnlyList<Zone> zones,
-        decimal? spread,
+        IdeaInputs inputs,
         decimal tick,
         DateTimeOffset end,
         List<Idea> ideas,
         List<IdeaSignal> signals)
     {
-        var context = new IdeaContext(pair.Instrument.Category, minute.Close, signal.WindowLow, signal.WindowHigh, atr, zones, spread, rules.StopBuffer, tick, signal.Zone);
+        var context = new IdeaContext(pair.Instrument.Category, minute.Close, signal.WindowLow, signal.WindowHigh, atr, zones, inputs.Spread, rules.StopBuffer, tick, signal.Zone);
+        // The minutes go without gaps, so the one a day before the last is found by its place; without it the change is not known.
+        decimal? pairChange = pair.Minutes.Count > Day ? minute.Close / pair.Minutes[^(Day + 1)].Close - 1m : null;
 
         foreach (IdeaSide side in signal.Sides)
         {
@@ -229,7 +234,7 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion, bool replay
                 // A signal of a target in R keeps no target: its path holds every level of the ladder.
                 if (replay && IdeaRules.Plan(type, side, context, rule.TargetR) is { } fired)
                 {
-                    signals.Add(new IdeaSignal(pair.Instrument, signal.Setup, SignalPath.Fired(fired, interval, end, tick), signal.Move, signal.VolumeRatio, engineVersion));
+                    signals.Add(new IdeaSignal(pair.Instrument, signal.Setup, SignalPath.Fired(fired, interval, end, tick), signal.Move, signal.VolumeRatio, engineVersion, pairChange, inputs.BtcChange, inputs.Funding));
 
                     continue;
                 }
@@ -239,7 +244,7 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion, bool replay
                     continue;
                 }
 
-                var idea = new Idea(Guid.NewGuid(), pair.Instrument, signal.Setup, interval, IdeaTrack.Fired(plan, end, Minutes(interval), rule, tick), signal.Move, signal.VolumeRatio, engineVersion);
+                var idea = new Idea(Guid.NewGuid(), pair.Instrument, signal.Setup, interval, IdeaTrack.Fired(plan, end, Minutes(interval), rule, tick), signal.Move, signal.VolumeRatio, engineVersion, pairChange, inputs.BtcChange, inputs.Funding);
                 pair.Open.Add(idea);
                 ideas.Add(idea);
             }

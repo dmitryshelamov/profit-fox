@@ -29,6 +29,9 @@ internal static class SignalDbConverter
             Target = path.Target,
             Move = signal.Move,
             VolumeRatio = signal.VolumeRatio,
+            PairChange = signal.PairChange,
+            BtcChange = signal.BtcChange,
+            Funding = signal.Funding,
             Tick = path.Tick,
             EntryAfter = path.EntryAfter,
             StopBeforeEntryAfter = path.StopBeforeEntryAfter,
@@ -64,6 +67,6 @@ internal static class SignalDbConverter
             row.Closes,
             row.TrackedUntil);
 
-        return new IdeaSignal(new Instrument(category, row.Symbol), setup, path, row.Move, row.VolumeRatio, row.EngineVersion);
+        return new IdeaSignal(new Instrument(category, row.Symbol), setup, path, row.Move, row.VolumeRatio, row.EngineVersion, row.PairChange, row.BtcChange, row.Funding);
     }
 }

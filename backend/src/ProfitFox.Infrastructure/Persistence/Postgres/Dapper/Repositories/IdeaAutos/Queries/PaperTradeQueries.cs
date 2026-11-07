@@ -23,7 +23,7 @@ internal static class PaperTradeQueries
                                    promised_badge AS "PromisedBadge", promised_probability AS "PromisedProbability", promised_expectancy AS "PromisedExpectancy",
                                    promised_cases AS "PromisedCases", break_even AS "BreakEven", net_risk_reward AS "NetRiskReward",
                                    idea_status AS "IdeaStatus", idea_status_at AS "IdeaStatusAt", idea_result AS "IdeaResult", idea_exit_price AS "IdeaExitPrice", opened_at AS "OpenedAt",
-                                   stepped_until AS "SteppedUntil"
+                                   stepped_until AS "SteppedUntil", day_drop AS "DayDrop", btc_drop AS "BtcDrop", high_funding AS "HighFunding"
                                    """;
 
     public static CommandDefinition GetOpen(CancellationToken cancellationToken)
@@ -44,12 +44,12 @@ internal static class PaperTradeQueries
                 id, idea_id, auto_id, account_id, category, symbol, setup, interval, type, side, entry_price, stop, target, quantity, amount, risk, entry_deadline,
                 status, status_at, entry_quantity, entry_value, entry_fee, take_profit_quantity, take_profit_value, take_profit_fee,
                 stop_loss_quantity, stop_loss_value, stop_loss_fee, created_at, opened_at,
-                promised_badge, promised_probability, promised_expectancy, promised_cases, break_even, net_risk_reward, stepped_until)
+                promised_badge, promised_probability, promised_expectancy, promised_cases, break_even, net_risk_reward, stepped_until, day_drop, btc_drop, high_funding)
             VALUES (
                 @Id, @IdeaId, @AutoId, @AccountId, @Category, @Symbol, @Setup, @Interval, @Type, @Side, @EntryPrice, @Stop, @Target, @Quantity, @Amount, @Risk, @EntryDeadline,
                 @Status, @StatusAt, @EntryQuantity, @EntryValue, @EntryFee, @TakeProfitQuantity, @TakeProfitValue, @TakeProfitFee,
                 @StopLossQuantity, @StopLossValue, @StopLossFee, @CreatedAt, @OpenedAt,
-                @PromisedBadge, @PromisedProbability, @PromisedExpectancy, @PromisedCases, @BreakEven, @NetRiskReward, @SteppedUntil)
+                @PromisedBadge, @PromisedProbability, @PromisedExpectancy, @PromisedCases, @BreakEven, @NetRiskReward, @SteppedUntil, @DayDrop, @BtcDrop, @HighFunding)
             """,
             trades,
             transaction,

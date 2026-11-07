@@ -26,7 +26,8 @@ internal sealed class IdeaSignalRepository(NpgsqlDataSource dataSource) : IIdeaS
 {
     private const string Columns = """
                                    category, symbol, setup, type, "interval", side, fired_at, engine_version, entry, stop, target, move, volume_ratio, tick,
-                                   entry_after, stop_before_entry_after, stop_after, ladder_after, target_after, closes, tracked_until
+                                   entry_after, stop_before_entry_after, stop_after, ladder_after, target_after, closes, tracked_until, pair_change, btc_change,
+                                   funding
                                    """;
 
     public async Task UpsertAsync(IReadOnlyCollection<IdeaSignal> signals, CancellationToken cancellationToken)
@@ -69,6 +70,9 @@ internal sealed class IdeaSignalRepository(NpgsqlDataSource dataSource) : IIdeaS
                 await WriteAsync(importer, row.TargetAfter, NpgsqlDbType.Integer, cancellationToken);
                 await importer.WriteAsync(row.Closes, NpgsqlDbType.Array | NpgsqlDbType.Numeric, cancellationToken);
                 await importer.WriteAsync(row.TrackedUntil, NpgsqlDbType.TimestampTz, cancellationToken);
+                await WriteAsync(importer, row.PairChange, NpgsqlDbType.Numeric, cancellationToken);
+                await WriteAsync(importer, row.BtcChange, NpgsqlDbType.Numeric, cancellationToken);
+                await WriteAsync(importer, row.Funding, NpgsqlDbType.Numeric, cancellationToken);
             }
 
             await importer.CompleteAsync(cancellationToken);
@@ -194,7 +198,10 @@ internal sealed class IdeaSignalRepository(NpgsqlDataSource dataSource) : IIdeaS
             LadderAfter = reader.GetFieldValue<int?[]>(17),
             TargetAfter = reader.IsDBNull(18) ? null : reader.GetInt32(18),
             Closes = reader.GetFieldValue<decimal[]>(19),
-            TrackedUntil = reader.GetFieldValue<DateTimeOffset>(20)
+            TrackedUntil = reader.GetFieldValue<DateTimeOffset>(20),
+            PairChange = reader.IsDBNull(21) ? null : reader.GetDecimal(21),
+            BtcChange = reader.IsDBNull(22) ? null : reader.GetDecimal(22),
+            Funding = reader.IsDBNull(23) ? null : reader.GetDecimal(23)
         };
     }
 }

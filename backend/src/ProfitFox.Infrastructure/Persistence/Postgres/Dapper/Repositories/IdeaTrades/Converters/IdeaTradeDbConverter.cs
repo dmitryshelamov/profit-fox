@@ -9,6 +9,7 @@ using ProfitFox.Domain.Entities.IdeaTrades.Enums;
 using ProfitFox.Domain.Entities.LiveTrading.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
+using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaTrades.Contracts;
@@ -59,6 +60,9 @@ internal static class IdeaTradeDbConverter
             ExpiryQuantity = trade.Expiry.Quantity,
             ExpiryValue = trade.Expiry.Value,
             ExpiryFee = trade.Expiry.Fee,
+            DayDrop = trade.Features.DayDrop,
+            BtcDrop = trade.Features.BtcDrop,
+            HighFunding = trade.Features.HighFunding,
             LastOrderNumber = trade.LastOrderNumber,
             CreatedAt = trade.CreatedAt,
             PromisedBadge = trade.Promise?.Badge?.ToCode(),
@@ -115,7 +119,10 @@ internal static class IdeaTradeDbConverter
             trade.OpenedAt,
             trade.IdeaStatus is { } ideaStatus ? new TradedIdeaOutcome(IdeaCodes.ParseStatus(ideaStatus), trade.IdeaStatusAt!.Value, trade.IdeaResult, trade.IdeaExitPrice) : null,
             trade.AutoId)
-        { Expiry = new LegTotals(trade.ExpiryQuantity, trade.ExpiryValue, trade.ExpiryFee) };
+        {
+            Expiry = new LegTotals(trade.ExpiryQuantity, trade.ExpiryValue, trade.ExpiryFee),
+            Features = new IdeaFeatures(trade.DayDrop, trade.BtcDrop, trade.HighFunding)
+        };
     }
 
     internal static IdeaTradeOrderDb FromDomain(IdeaTradeOrder order)

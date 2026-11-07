@@ -40,6 +40,9 @@ internal static class IdeaAutoDbConverter
             Badge = conditions.Badge?.ToCode(),
             MinRiskReward = conditions.MinRiskReward,
             MinCases = conditions.MinCases,
+            DayDrop = conditions.DayDrop.ToCode(),
+            BtcDrop = conditions.BtcDrop.ToCode(),
+            HighFunding = conditions.HighFunding.ToCode(),
             Position = auto.Position,
             DeletedAt = auto.DeletedAt,
             Budget = auto.Budget
@@ -56,7 +59,10 @@ internal static class IdeaAutoDbConverter
             row.Category is { } category ? (MarketDataCodes.TryParseCategory(category, out MarketCategory market) ? market : throw Unknown("category", category)) : null,
             row.Badge is { } badge ? IdeaCodes.ParseBadge(badge) : null,
             row.MinRiskReward,
-            row.MinCases);
+            row.MinCases,
+            ParseFeatureCondition(row.DayDrop),
+            ParseFeatureCondition(row.BtcDrop),
+            ParseFeatureCondition(row.HighFunding));
 
         return new IdeaAuto(
             row.Id,
@@ -127,6 +133,11 @@ internal static class IdeaAutoDbConverter
             IdeaCodes.TryParseSide(row.Side, out IdeaSide side) ? side : throw Unknown("side", row.Side),
             [.. row.Reasons.Select(code => IdeaTradeCodes.TryParseRefusal(code, out IdeaTradeRefusal reason) ? reason : throw Unknown("reason", code))],
             row.Detail is null ? null : JsonSerializer.Deserialize<RefusalDetail>(row.Detail, DetailOptions));
+    }
+
+    private static FeatureCondition ParseFeatureCondition(string code)
+    {
+        return IdeaAutoCodes.TryParseFeatureCondition(code, out FeatureCondition condition) ? condition : throw Unknown("feature condition", code);
     }
 
     private static InvalidOperationException Unknown(string what, string code)

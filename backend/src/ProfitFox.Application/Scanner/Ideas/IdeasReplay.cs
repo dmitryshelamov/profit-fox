@@ -4,6 +4,7 @@ using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.ValueObjects.Ideas;
+using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Application.Scanner.Ideas;
@@ -23,6 +24,7 @@ public sealed class IdeasReplay(
     IIdeaSignalRepository signals,
     IIdeaReplayRepository cursors,
     IIdeaVolatilityRepository volatility,
+    IFundingRateRepository funding,
     ScannerMarket market,
     IdeasSettings settings,
     ScannerSettings scanner,
@@ -33,6 +35,12 @@ public sealed class IdeasReplay(
     private static readonly TimeSpan Day = TimeSpan.FromDays(1);
     private static readonly TimeSpan PercentileWindow = TimeSpan.FromDays(90);
     private static readonly TimeSpan PaceWait = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan BtcSpan = TimeSpan.FromMinutes(240);
+    private static readonly TimeSpan FundingBefore = TimeSpan.FromDays(7);
+    private static readonly Instrument Btc = new Instrument(MarketCategory.Linear, "BTCUSDT");
+
+    // A settlement every hour at the most over the 8 days of funding a day reads.
+    private const int FundingRead = 8 * 24;
 
     private Dictionary<Instrument, IdeaReplayCursor>? _cursors;
 
@@ -107,6 +115,7 @@ public sealed class IdeasReplay(
 
             var inputs = new IdeaInputs(null, Percentiles(ratios, day), turn.Pair.TickSize);
             IReadOnlyList<IdeaCandle> known = Minutes(await candles.GetAsync(instrument, Interval.OneMinute, day, day + Day, 1440, cancellationToken));
+            Market dayMarket = await MarketAsync(instrument, day, cancellationToken);
 
             // Before the first trade of a pair there is nothing to replay; after it every minute of the day is fed, the ones without trades flat.
             IReadOnlyList<IdeaCandle> minutes = IdeaCandles.Minutes(known, day, day + Day, last?.Close);
@@ -117,7 +126,7 @@ public sealed class IdeasReplay(
                 {
                     // A signal goes on from the minute after it fired.
                     Advance(open, ended, minute);
-                    open.AddRange(engine.Step(instrument, minute, inputs, true).Signals);
+                    open.AddRange(engine.Step(instrument, minute, dayMarket.Inputs(inputs, minute.OpenTime), true).Signals);
                 }
 
                 foreach ((Interval interval, Ratios series) in ratios)
@@ -177,6 +186,21 @@ public sealed class IdeasReplay(
         engine.Warm(instrument, closed, minutes, [], new IdeaInputs(null, Percentiles(ratios, from - Day), turn.Pair.TickSize));
 
         return (ratios, minutes.Count > 0 ? minutes[^1] : null);
+    }
+
+    /// <summary>
+    ///     The market of a day the features of its signals are measured by (decision 5 of add-market-idea-features): the closes of the minutes of
+    ///     <c>linear</c> / <c>BTCUSDT</c> from 240 minutes before the day to its end, and the funding settlements of a linear pair from 7 days
+    ///     before it, an interval of funding being 8 hours at the most.
+    /// </summary>
+    private async Task<Market> MarketAsync(Instrument instrument, DateTimeOffset day, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<Candle> btc = await candles.GetAsync(Btc, Interval.OneMinute, day - BtcSpan, day + Day, (int)(BtcSpan + Day).TotalMinutes, cancellationToken);
+        IReadOnlyList<FundingRatePoint> rates = instrument.Category == MarketCategory.Linear
+            ? await funding.GetAsync(instrument, day - FundingBefore, day + Day, FundingRead, cancellationToken)
+            : [];
+
+        return new Market(btc.ToDictionary(candle => candle.OpenTime, candle => candle.Close.Value), rates);
     }
 
     // Steps the open paths by the minute; the ones that end move to the ended.
@@ -243,6 +267,27 @@ public sealed class IdeasReplay(
     private sealed record Turn(ScannerPair Pair, DateTimeOffset Start, DateTimeOffset Until, IdeaReplayCursor? Cursor, bool StartsOver)
     {
         public DateTimeOffset From => Cursor?.ReplayedUntil ?? Start;
+    }
+
+    /// <summary>The closes of BTC and the funding settlements of a day, oldest first, which the minutes of the day step through in order.</summary>
+    private sealed class Market(Dictionary<DateTimeOffset, decimal> btc, IReadOnlyList<FundingRatePoint> rates)
+    {
+        private int _settled;
+
+        /// <summary>The inputs of the minute that opens at <paramref name="minute" />: what was known by its end and nothing after.</summary>
+        public IdeaInputs Inputs(IdeaInputs day, DateTimeOffset minute)
+        {
+            DateTimeOffset end = minute.AddMinutes(1);
+
+            while (_settled < rates.Count && rates[_settled].Time < end)
+            {
+                _settled++;
+            }
+
+            decimal? change = btc.TryGetValue(minute, out decimal now) && btc.TryGetValue(minute - BtcSpan, out decimal before) ? now / before - 1m : null;
+
+            return day with { BtcChange = change, Funding = _settled > 0 ? rates[_settled - 1].Rate : null };
+        }
     }
 
     /// <summary>The closed candles of an interval and the ratio of volatility after each, for one turn: 91 days and the days it replays.</summary>

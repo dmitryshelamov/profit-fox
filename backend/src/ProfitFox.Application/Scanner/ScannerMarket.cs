@@ -8,7 +8,7 @@ namespace ProfitFox.Application.Scanner;
 
 /// <summary>
 ///     What the scanner holds in memory (decision 9): the pairs with their coverage, and of each the minutes of the last day, the points of
-///     open interest of the last day and the last ticker. The stream, the loads and the minute cycle change it from their own threads, so
+///     open interest of the last day, the last ticker and the last funding settlement (decision 4 of add-market-idea-features). The stream, the loads and the minute cycle change it from their own threads, so
 ///     every member takes one lock; none of them waits on anything.
 /// </summary>
 public sealed class ScannerMarket
@@ -191,6 +191,30 @@ public sealed class ScannerMarket
         }
     }
 
+    /// <summary>Settlements of funding of a pair, from the exchange or from storage: memory keeps the last one.</summary>
+    public void FundingLoaded(Instrument instrument, IEnumerable<FundingRatePoint> points)
+    {
+        lock (_lock)
+        {
+            Book book = _books[instrument];
+            FundingRatePoint? last = points.MaxBy(point => point.Time);
+
+            // A read of storage that comes after a top-up does not take its newer settlement back.
+            if (last is not null && !(book.Funding?.Time >= last.Time))
+            {
+                book.Funding = last;
+            }
+        }
+    }
+
+    public FundingRatePoint? FundingOf(Instrument instrument)
+    {
+        lock (_lock)
+        {
+            return _books[instrument].Funding;
+        }
+    }
+
     /// <summary>Changes the record of a pair, such as once its history is loaded.</summary>
     public void Update(Instrument instrument, Func<ScannerPair, ScannerPair> change)
     {
@@ -307,5 +331,7 @@ public sealed class ScannerMarket
         public SortedDictionary<DateTimeOffset, OpenInterestPoint> OpenInterest { get; } = [];
 
         public MarketTicker? Ticker { get; set; }
+
+        public FundingRatePoint? Funding { get; set; }
     }
 }
