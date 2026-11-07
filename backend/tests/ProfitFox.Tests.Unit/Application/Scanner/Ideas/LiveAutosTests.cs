@@ -192,7 +192,8 @@ public class LiveAutosTests
         (refusal.IdeaId, refusal.Reasons.Single(), refusal.Detail!.Holder!.Kind, refusal.Detail.Holder.Paper).ShouldBe((second.Id, IdeaTradeRefusal.PairTaken, PairHolderKind.SameAuto, true));
     }
 
-    // Scenario "Две учебные идеи в одной минуте": the budget of 50 holds one trade of 30, so the idea of the other pair sees the first trade.
+    // Scenario "Две учебные идеи в одной минуте": the budget of 50 holds one trade of 30, so the idea of the other pair sees the first trade. Owner,
+    // 2026-11-07: an auto whose budget is taken does not touch the ideas at all, so the second idea leaves no trade and no refusal.
     [Test]
     public async Task Second_idea_of_the_minute_sees_the_paper_trade_of_the_first_in_the_budget()
     {
@@ -206,8 +207,24 @@ public class LiveAutosTests
         AutoMinute minute = (await _live.RunAsync(End, [first, second], new Dictionary<Instrument, IdeaCandle> { [Wif] = birth, [op] = birth }, CancellationToken.None))!;
 
         minute.Opened.Single().Trade.IdeaId.ShouldBe(first.Id);
-        IdeaAutoRefusal refusal = minute.Refusals.ShouldHaveSingleItem();
-        (refusal.IdeaId, refusal.Reasons.Single(), refusal.Detail).ShouldBe((second.Id, IdeaTradeRefusal.BudgetTaken, RefusalDetail.Numbers(30m, 50m)));
+        minute.Refusals.ShouldBeEmpty();
+    }
+
+    // Owner, 2026-11-07: a live auto whose budget, the budget of all the autos or «Не больше открытых сделок» is taken writes no request and no
+    // refusal; the Worker still checks them all under its locks.
+    [TestCase(300, null, 5)]
+    [TestCase(null, 300, 5)]
+    [TestCase(null, null, 1)]
+    public async Task Live_auto_that_is_full_leaves_the_idea_alone(int? budget, int? autosBudget, int maxOpenTrades)
+    {
+        IdeaAuto auto = Enable(Auto("Импульс лонг", IdeaAutoMode.Live, amount: 20m) with { Budget = budget });
+        var size = new IdeaTradeSize(0.2m, 20m, 1m, 2m, 2m);
+        _trades.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([IdeaTrade.Create(Guid.NewGuid(), Born() with { Instrument = new Instrument(MarketCategory.Linear, "OPUSDT") }, Account, 100m, size, Fired, autoId: auto.Id) with { Amount = 290m }]);
+        _settings.GetAsync(Arg.Any<CancellationToken>()).Returns(IdeaTradingSettings.Default with { MaxAmount = 500m, AutosBudget = autosBudget, MaxOpenTrades = maxOpenTrades });
+
+        AutoMinute? minute = await RunAsync([Born()]);
+
+        minute.ShouldBeNull();
     }
 
     [Test]
