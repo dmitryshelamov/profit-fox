@@ -126,8 +126,10 @@ public class IdeaExitRulesApiTests
     }
 
     // Scenario "Ответ проверки" of check-idea-exit-rules-out-of-sample: 40 signals of their own pairs take +2 R at 30 minutes on the selection,
-    // 40 stop on the check. The best of the selection is the shortest lifetime that takes it, 2 candles at 2 R. The blocks of 15 days hold 10,
-    // 10, 11, 9, 20 and 20 entries, so the halves {0, 1, 3} and {2, 4, 5} have 29 and the 18 other splits count.
+    // 40 stop on the check, 32 of them before the end of the window 7 days and a minute before now. The best of the selection is the shortest
+    // lifetime that takes it, 2 candles at 2 R. Counted apart from the code: the rules at 2 R from 2 candles on are twins, the others too, so
+    // two rules take part; the blocks hold 9, 10, 9, 10, 14 and 20 entries, 12 splits have 30 in both halves, and in none of them the best of
+    // the first half is the worse on the second.
     [Test]
     public async Task Out_of_sample_check_has_the_candidate_the_best_rule_of_the_grid_and_the_overfitting()
     {
@@ -144,17 +146,18 @@ public class IdeaExitRulesApiTests
 
         check.GetProperty("rules").GetInt32().ShouldBe(171);
         (check.GetProperty("selectionFrom").GetDateTimeOffset(), check.GetProperty("checkFrom").GetDateTimeOffset(), check.GetProperty("to").GetDateTimeOffset())
-            .ShouldBe((Now.AddDays(-90), Now.AddDays(-30), Now));
+            .ShouldBe((Now.AddDays(-90), Now.AddDays(-30), Now.AddDays(-7).AddMinutes(-1)));
         JsonElement candidate = check.GetProperty("candidate");
-        (candidate.GetProperty("selection").GetProperty("cases").GetInt32(), candidate.GetProperty("check").GetProperty("stops").GetInt32()).ShouldBe((40, 40));
+        candidate.GetProperty("selectionTo").GetDateTimeOffset().ShouldBe(Now.AddDays(-30).AddHours(-6).AddMinutes(-1));
+        (candidate.GetProperty("selection").GetProperty("cases").GetInt32(), candidate.GetProperty("check").GetProperty("stops").GetInt32()).ShouldBe((40, 32));
         JsonElement best = check.GetProperty("best");
         (best.GetProperty("life").GetInt32(), best.GetProperty("target").GetString()).ShouldBe((2, "2"));
+        best.GetProperty("selectionTo").GetDateTimeOffset().ShouldBe(Now.AddDays(-30).AddMinutes(-31));
         best.GetProperty("selection").GetProperty("targets").GetInt32().ShouldBe(40);
         best.GetProperty("check").GetProperty("expectancy").GetString().ShouldStartWith("-1");
         JsonElement overfitting = check.GetProperty("overfitting");
-        overfitting.GetProperty("splits").GetInt32().ShouldBe(18);
-        decimal.Parse(overfitting.GetProperty("probability").GetString()!, CultureInfo.InvariantCulture)
-            .ShouldBe(overfitting.GetProperty("overfit").GetInt32() / 18m);
+        (overfitting.GetProperty("splits").GetInt32(), overfitting.GetProperty("overfit").GetInt32(), overfitting.GetProperty("probability").GetString())
+            .ShouldBe((12, 0, "0"));
     }
 
     // Scenario "Окно у «Цели 2R» в проверке".

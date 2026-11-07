@@ -26,6 +26,6 @@ public sealed class GetExitRuleOutOfSampleQueryHandler(
         IdeaSignal[] read = await signals.StreamAsync(version.Number, now - Read, (candidate.Type, candidate.Interval), cancellationToken).ToArrayAsync(cancellationToken);
         IReadOnlyDictionary<MarketCategory, FeeRates> fees = backtests.Policy().DefaultFees;
 
-        return ExitRuleOutOfSamples.Compute(read, candidate, category => fees[category], now);
+        return ExitRuleOutOfSamples.Compute(read, candidate, category => fees[category], now, cancellationToken);
     }
 }

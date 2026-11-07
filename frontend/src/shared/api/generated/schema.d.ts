@@ -4923,11 +4923,16 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
-        /** @description The best rule of the grid on the selection: its lifetime in candles, its target in R (none for «Уровни») and its numbers. */
+        /**
+         * @description The best rule of the grid on the selection: its lifetime in candles, its target in R (none for «Уровни») and its numbers, the selection up
+         *     to the horizon of the rule before the check.
+         */
         ExitRuleBestResponse: {
             /** Format: int32 */
             life: number | string;
             target: null | string;
+            /** Format: date-time */
+            selectionTo: string;
             selection: null | components["schemas"]["BucketStatisticsResponse"];
             check: null | components["schemas"]["BucketStatisticsResponse"];
         };
@@ -4950,7 +4955,8 @@ export interface components {
             breakEven: string;
         };
         /**
-         * @description The out-of-sample check of a candidate exit rule: the bounds of the selection and the check, the rules of the grid, the clustered numbers
+         * @description The out-of-sample check of a candidate exit rule: the bounds of the selection and the check, which end at the horizon of the longest rule of
+         *     the grid before now, the rules of the grid, the clustered numbers
          *     of the candidate and of the best rule of the selection on both parts (none without an entry), and the probability of overfitting of the
          *     grid with its splits. Numbers are decimal strings.
          */
@@ -4967,7 +4973,10 @@ export interface components {
             best: null | components["schemas"]["ExitRuleBestResponse"];
             overfitting: null | components["schemas"]["OverfittingResponse"];
         };
+        /** @description The numbers of a rule on the selection, which ends the horizon of the rule before the check, and on the check. */
         ExitRulePartsResponse: {
+            /** Format: date-time */
+            selectionTo: string;
             selection: null | components["schemas"]["BucketStatisticsResponse"];
             check: null | components["schemas"]["BucketStatisticsResponse"];
         };

@@ -3,44 +3,43 @@ using ProfitFox.Domain.ValueObjects.Ideas;
 namespace ProfitFox.Domain.Services.Ideas;
 
 /// <summary>
-///     The best rule of a grid over some blocks, and the probability of backtest overfitting of the grid by combinatorially symmetric cross
-///     validation (Bailey, Borwein, López de Prado, Zhu; decision 5 of check-idea-exit-rules-out-of-sample). A rule takes part in a half with
-///     30 entries or more in it, as a bucket has enough data; no randomness.
+///     The best rule of a grid on the selection, and the probability of backtest overfitting of the grid by combinatorially symmetric cross
+///     validation (Bailey, Borwein, López de Prado, Zhu; decisions 5, 9 and 10 of check-idea-exit-rules-out-of-sample). A rule takes part with
+///     30 entries or more, as a bucket has enough data; no randomness.
 /// </summary>
 public static class OverfittingProbability
 {
-    /// <summary>
-    ///     The rule with the highest expectancy per entry over <paramref name="blocks" /> among those with 30 entries or more there, the first in
-    ///     the order of the grid on a tie; none without one.
-    /// </summary>
-    public static int? Best(IReadOnlyList<BlockSums[]> rules, IReadOnlyList<int> blocks)
+    /// <summary>The rule with the highest expectancy per entry among those with 30 entries or more, the first in the order of the grid on a tie; none without one.</summary>
+    public static int? Best(IReadOnlyList<BlockSums> sums)
     {
-        return Best(Taking(rules, blocks));
+        return Best([.. sums.Select(Expectancy)]);
     }
 
     /// <summary>
-    ///     Each of the 20 ways to take 3 of the 6 blocks as the first half and the other 3 as the second: the rules with 30 entries in both halves
-    ///     take part, and the best of the first half gets the place r = 1 + the rules strictly worse on the second. The split is an overfit when
-    ///     r / (k + 1) ≤ 1/2 of its k rules; one with fewer than two rules does not count. None without a split that counts.
+    ///     Each of the 20 ways to take 3 of the 6 blocks as the first half and the other 3 as the second. Rules with the same sums in every block
+    ///     are one rule, the first of them. The first half leaves out the tail of a block that a block of the second half follows, so none of its
+    ///     signals closes in the second; the second half counts whole. The rules with 30 entries in both halves take part, and the best of the
+    ///     first half gets the place r = 1 + the rules strictly worse on the second. The split is an overfit when r / (k + 1) ≤ 1/2 of its k
+    ///     rules; one with fewer than two rules does not count. None without a split that counts.
     /// </summary>
-    public static Overfitting? Of(IReadOnlyList<BlockSums[]> rules)
+    public static Overfitting? Of(IReadOnlyList<RuleSums> rules)
     {
+        RuleSums[] distinct = [.. rules.DistinctBy(Whole)];
         int splits = 0;
         int overfit = 0;
 
         foreach (int[] first in Halves())
         {
-            int[] second = [.. Enumerable.Range(0, ExitRuleGridPass.Blocks).Except(first)];
-            decimal?[] ins = Taking(rules, first);
-            decimal?[] outs = Taking(rules, second);
-            int[] taking = [.. Enumerable.Range(0, rules.Count).Where(rule => ins[rule] is not null && outs[rule] is not null)];
+            decimal?[] ins = [.. distinct.Select(rule => Expectancy(First(rule, first)))];
+            decimal?[] outs = [.. distinct.Select(rule => Expectancy(Second(rule, first)))];
+            int[] taking = [.. Enumerable.Range(0, distinct.Length).Where(rule => ins[rule] is not null && outs[rule] is not null)];
 
             if (taking.Length < 2)
             {
                 continue;
             }
 
-            int best = Best([.. Enumerable.Range(0, rules.Count).Select(rule => taking.Contains(rule) ? ins[rule] : null)])!.Value;
+            int best = Best([.. Enumerable.Range(0, distinct.Length).Select(rule => taking.Contains(rule) ? ins[rule] : null)])!.Value;
             int place = 1 + taking.Count(rule => outs[rule] < outs[best]);
             splits++;
 
@@ -68,18 +67,52 @@ public static class OverfittingProbability
         return best;
     }
 
-    // The expectancy per entry of each rule over the blocks; none under 30 entries.
-    private static decimal?[] Taking(IReadOnlyList<BlockSums[]> rules, IReadOnlyList<int> blocks)
+    // The sums of every block, body and tail together, compared by value: twins have the same.
+    private static (BlockSums, BlockSums, BlockSums, BlockSums, BlockSums, BlockSums) Whole(RuleSums rule)
     {
-        return
-        [
-            .. rules.Select(rule =>
-            {
-                int entries = blocks.Sum(block => rule[block].Entries);
+        BlockSums Of(int block) => Add(rule.Bodies[block], rule.Tails[block]);
 
-                return entries < BucketStatisticsCalculator.MinimumCases ? (decimal?)null : blocks.Sum(block => rule[block].TotalR) / entries;
-            })
-        ];
+        return (Of(0), Of(1), Of(2), Of(3), Of(4), Of(5));
+    }
+
+    private static BlockSums First(RuleSums rule, int[] half)
+    {
+        BlockSums sums = default;
+
+        foreach (int block in half)
+        {
+            sums = Add(sums, rule.Bodies[block]);
+
+            if (block == ExitRuleGridPass.Blocks - 1 || half.Contains(block + 1))
+            {
+                sums = Add(sums, rule.Tails[block]);
+            }
+        }
+
+        return sums;
+    }
+
+    private static BlockSums Second(RuleSums rule, int[] first)
+    {
+        BlockSums sums = default;
+
+        foreach (int block in Enumerable.Range(0, ExitRuleGridPass.Blocks).Except(first))
+        {
+            sums = Add(Add(sums, rule.Bodies[block]), rule.Tails[block]);
+        }
+
+        return sums;
+    }
+
+    private static BlockSums Add(BlockSums left, BlockSums right)
+    {
+        return new BlockSums(left.Entries + right.Entries, left.TotalR + right.TotalR);
+    }
+
+    // The expectancy per entry; none under 30 entries.
+    private static decimal? Expectancy(BlockSums sums)
+    {
+        return sums.Entries < BucketStatisticsCalculator.MinimumCases ? null : sums.TotalR / sums.Entries;
     }
 
     // The sets of 3 of the 6 blocks in lexicographic order.

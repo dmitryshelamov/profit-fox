@@ -18,6 +18,7 @@ public class ExitRuleGridPassTests
     private static readonly IdeaExitRules Defaults = new IdeaExitRules([]);
     private static readonly DateTimeOffset From = DateTimeOffset.Parse("2024-03-01T00:00:00Z");
     private static readonly FeeRates Fees = new FeeRates(0.02m, 0.055m);
+    private static readonly OutOfSampleWindow Window = new OutOfSampleWindow(From, From.AddDays(60), From.AddDays(90));
 
     // Scenario "Сетка «Отката» на 4 ч": 11 lifetimes × 9 targets, every one with the window of the candidate, the lifetimes first.
     [Test]
@@ -45,27 +46,39 @@ public class ExitRuleGridPassTests
         ExitRuleGrid.Of(Interval.FifteenMinutes).Count.ShouldBe(19);
     }
 
-    // A reference set by hand, «Цель 2R» without fees, two rules: 1 · 2 R and 48 · 2 R.
+    // A reference set by hand, «Цель 2R» without fees, two rules: 1 · 2 R (horizon 16 minutes) and 48 · 2 R (12 h 1 min), the window 90 days
+    // from 2024-03-01 with the check from day 60, so the blocks are 15 days.
     //   A, day 1 (block 0): +2 R at 40 minutes. By one candle it expires at the close 100.5, +0.25 R; by 48 it takes +2 R.
     //   B, the same key 1 h later (block 0), after A closed by either rule: the stop at 30 minutes, so one candle expires it at +0.25 R, 48 stop
     //   it at −1 R.
     //   C, day 20 (block 1): the stop at 5 minutes, −1 R by both.
-    //   D, day 89 (block 5), another key: the path known for 20 minutes only. One candle decides it, +0.25 R; 48 candles do not.
+    //   E, another key, 2 h before the check (block 3): the stop at 5 minutes, −1 R. Within the horizon of 48 candles before the end of block 3
+    //   and before the check: in the tail of the block and out of the selection; by one candle in the body and in the selection.
+    //   D, day 89 (block 5, the check), another key: the path known for 20 minutes only. One candle decides it, +0.25 R; 48 candles do not.
     [Test]
-    public void Sums_are_the_entries_and_their_total_r_of_each_block()
+    public void Sums_are_the_entries_and_their_total_r_of_each_block_its_tail_and_each_part()
     {
         IdeaExitRule shortest = Defaults.Of(IdeaType.TwoR, Interval.FifteenMinutes) with { LifeCandles = 1 };
         IdeaExitRule longer = shortest with { LifeCandles = 48 };
         (FeeRates, IReadOnlyList<SignalPath>)[] keys =
         [
             (new FeeRates(0m, 0m), [Market(From.AddDays(1), ladder: [(3, 40)]), Market(From.AddDays(1).AddHours(1), stop: 30), Market(From.AddDays(20), stop: 5)]),
-            (new FeeRates(0m, 0m), [Market(From.AddDays(89), trackedFor: 20)])
+            (new FeeRates(0m, 0m), [Market(From.AddDays(89), trackedFor: 20)]),
+            (new FeeRates(0m, 0m), [Market(From.AddDays(60).AddHours(-2), stop: 5)])
         ];
 
-        BlockSums[][] sums = ExitRuleGridPass.Sums(keys, [shortest, longer], From);
+        RuleSums[] sums = ExitRuleGridPass.Sums(keys, [shortest, longer], Window, CancellationToken.None);
 
-        sums[0].ShouldBe([new BlockSums(2, 0.5m), new BlockSums(1, -1m), default, default, default, new BlockSums(1, 0.25m)]);
-        sums[1].ShouldBe([new BlockSums(2, 1m), new BlockSums(1, -1m), default, default, default, default]);
+        Shape(sums[0]).ShouldBe(Shape(new RuleSums(
+            [new BlockSums(2, 0.5m), new BlockSums(1, -1m), default, new BlockSums(1, -1m), default, new BlockSums(1, 0.25m)],
+            new BlockSums[6],
+            new BlockSums(4, -1.5m),
+            new BlockSums(1, 0.25m))));
+        Shape(sums[1]).ShouldBe(Shape(new RuleSums(
+            [new BlockSums(2, 1m), new BlockSums(1, -1m), default, default, default, default],
+            [default, default, default, new BlockSums(1, -1m), default, default],
+            new BlockSums(3, 0m),
+            default)));
     }
 
     // Decision 4: the keys go to 8 parts by their number, key k to part k mod 8, and the parts add up in their order. Decimal sums round, so
@@ -81,11 +94,24 @@ public class ExitRuleGridPassTests
             .. Enumerable.Range(0, 9).Select(key => (new FeeRates(0m, 0m), (IReadOnlyList<SignalPath>)(key switch { 0 or 8 => [third], 1 => [ten], _ => [] })))
         ];
 
-        BlockSums[][] sums = ExitRuleGridPass.Sums(keys, [rule], From);
+        RuleSums[] sums = ExitRuleGridPass.Sums(keys, [rule], Window, CancellationToken.None);
 
         decimal parts = (1m / 3 + (1m / 3)) + 10m;
-        sums[0][0].ShouldBe(new BlockSums(3, parts));
+        sums[0].Bodies[0].ShouldBe(new BlockSums(3, parts));
+        sums[0].Selection.ShouldBe(new BlockSums(3, parts));
         (1m / 3 + 10m + (1m / 3)).ShouldNotBe(parts);
+    }
+
+    // Finding 4 of the review: a cancelled request stops the pass at the next key, not at the end of a part of the keys.
+    [Test]
+    public void Sums_stop_at_the_next_key_once_cancelled()
+    {
+        using var cancel = new CancellationTokenSource();
+        var keys = new CancellingKeys(1000, cancel);
+
+        Should.Throw<OperationCanceledException>(() =>
+            ExitRuleGridPass.Sums(keys, [Defaults.Of(IdeaType.TwoR, Interval.FifteenMinutes)], Window, cancel.Token));
+        keys.Read.ShouldBeLessThan(100);
     }
 
     // Decision 4: every rule of the grid sums what the outcomes of its own pass and their results sum, on a set with every branch.
@@ -94,11 +120,11 @@ public class ExitRuleGridPassTests
     {
         IReadOnlyList<IdeaExitRule> rules = ExitRuleGridPass.Rules(candidate);
 
-        BlockSums[][] sums = ExitRuleGridPass.Sums(keys, rules, From);
+        RuleSums[] sums = ExitRuleGridPass.Sums(keys, rules, Window, CancellationToken.None);
 
         for (int index = 0; index < rules.Count; index++)
         {
-            sums[index].ShouldBe(Expected(keys, rules[index]), $"{rules[index]}");
+            Shape(sums[index]).ShouldBe(Shape(Expected(keys, rules[index])), $"{rules[index]}");
         }
     }
 
@@ -123,7 +149,14 @@ public class ExitRuleGridPassTests
                 Market(From.AddDays(85), trackedFor: 180, closes: Rising()),
                 Market(From.AddDays(86), ladder: [(0, 5), (1, 8)], stop: 9)
             ]),
-            (new FeeRates(0.1m, 0.1m), [Market(From.AddDays(30), ladder: [(0, 100), (1, 2000)], closes: Rising()), Market(From.AddDays(61), stop: 50)])
+            (new FeeRates(0.1m, 0.1m), [Market(From.AddDays(30), ladder: [(0, 100), (1, 2000)], closes: Rising()), Market(From.AddDays(61), stop: 50)]),
+            // Near the edges: within the horizon of the longer rules before the check, in the tail of block 4, after the end of the window.
+            (Fees,
+            [
+                Market(From.AddDays(59.5), ladder: [(1, 300)], stop: 5000, closes: Rising()),
+                Market(From.AddDays(74.8), ladder: [(3, 60)], stop: 90, closes: Rising()),
+                Market(From.AddDays(90.2), stop: 2)
+            ])
         });
 
         IdeaExitRule stopEntry = Defaults.Of(IdeaType.StopEntry, Interval.FifteenMinutes);
@@ -156,23 +189,49 @@ public class ExitRuleGridPassTests
         });
     }
 
-    private static BlockSums[] Expected((FeeRates, IReadOnlyList<SignalPath>)[] keys, IdeaExitRule rule)
+    private static RuleSums Expected((FeeRates, IReadOnlyList<SignalPath>)[] keys, IdeaExitRule rule)
     {
-        var expected = new BlockSums[ExitRuleGridPass.Blocks];
+        var expected = new RuleSums(new BlockSums[6], new BlockSums[6], default, default);
+        TimeSpan horizon = OutOfSampleWindow.Horizon(rule);
 
         foreach ((FeeRates fees, IReadOnlyList<SignalPath> paths) in keys)
         {
             foreach ((SignalPath path, IdeaTrack outcome) in ExitOutcomes.Counted(paths, rule))
             {
-                if (CaseResult.R(outcome, fees) is { } result)
+                if (CaseResult.R(outcome, fees) is not { } result)
                 {
-                    int block = (int)((path.FiredAt - From) / TimeSpan.FromDays(15));
-                    expected[block] = new BlockSums(expected[block].Entries + 1, expected[block].TotalR + result);
+                    continue;
                 }
+
+                if (Window.BlockOf(horizon, path.FiredAt) is ({ } block, { } tail))
+                {
+                    BlockSums[] blocks = tail ? expected.Tails : expected.Bodies;
+                    blocks[block] = Add(blocks[block], result);
+                }
+
+                expected = Window.PartOf(horizon, path.FiredAt) switch
+                {
+                    OutOfSamplePart.Selection => expected with { Selection = Add(expected.Selection, result) },
+                    OutOfSamplePart.Check => expected with { Check = Add(expected.Check, result) },
+                    _ => expected
+                };
             }
         }
 
         return expected;
+    }
+
+    private static BlockSums Add(BlockSums sums, decimal result)
+    {
+        return new BlockSums(sums.Entries + 1, sums.TotalR + result);
+    }
+
+    // The sums as text, the totals by value: 0.50 and 0.5 are the same.
+    private static string Shape(RuleSums sums)
+    {
+        static string Of(BlockSums block) => FormattableString.Invariant($"{block.Entries}:{block.TotalR:0.############################}");
+
+        return $"{string.Join(' ', sums.Bodies.Select(Of))} | {string.Join(' ', sums.Tails.Select(Of))} | {Of(sums.Selection)} | {Of(sums.Check)}";
     }
 
     // The closes of the grid from 100.1 up by 0.37: every lifetime expires at its own price.
@@ -204,5 +263,36 @@ public class ExitRuleGridPassTests
             Closes = closes ?? [.. ExitRuleGrid.Of(Interval.FifteenMinutes).Select(_ => 100.5m)],
             TrackedUntil = firedAt.AddMinutes(trackedFor)
         };
+    }
+
+    // Keys that cancel the request when the first of them is read, and count how many are read.
+    private sealed class CancellingKeys(int count, CancellationTokenSource cancel) : IReadOnlyList<(FeeRates Fees, IReadOnlyList<SignalPath> Paths)>
+    {
+        private int _read;
+
+        public int Read => _read;
+
+        public int Count => count;
+
+        public (FeeRates Fees, IReadOnlyList<SignalPath> Paths) this[int index]
+        {
+            get
+            {
+                Interlocked.Increment(ref _read);
+                cancel.Cancel();
+
+                return (new FeeRates(0m, 0m), []);
+            }
+        }
+
+        public IEnumerator<(FeeRates Fees, IReadOnlyList<SignalPath> Paths)> GetEnumerator()
+        {
+            throw new NotSupportedException();
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
     }
 }

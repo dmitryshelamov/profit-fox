@@ -807,9 +807,10 @@ export const exitOutOfSampleOf = (
   ({
     selectionFrom: '2026-08-08T12:00:00Z',
     checkFrom: '2026-10-07T12:00:00Z',
-    to: '2026-11-06T12:00:00Z',
+    to: '2026-10-30T11:59:00Z',
     rules: 171,
     candidate: {
+      selectionTo: '2026-10-07T05:59:00Z',
       selection: exitBucketOf({
         cases: 60,
         expectancy: '0.05',
@@ -826,6 +827,7 @@ export const exitOutOfSampleOf = (
     best: {
       life: 96,
       target: '3',
+      selectionTo: '2026-10-06T11:59:00Z',
       selection: exitBucketOf({
         cases: 60,
         expectancy: '0.12',

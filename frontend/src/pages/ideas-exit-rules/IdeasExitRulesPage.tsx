@@ -268,11 +268,12 @@ function RuleEditor({ rule, grid }: { rule: Rule; grid: readonly number[] }) {
               )}
             </div>
           </div>
-          {check.isError && <p role="alert">Не удалось проверить кандидата вне выборки.</p>}
-          {check.data ? (
+          {check.isError ? (
+            <p role="alert">Не удалось проверить кандидата вне выборки.</p>
+          ) : check.data ? (
             <OutOfSampleBlock check={check.data} candidate={asked} />
           ) : (
-            check.isPending && <p className="text-sm text-muted">Проверка считается…</p>
+            <p className="text-sm text-muted">Проверка считается…</p>
           )}
           <div className="grid gap-4 lg:grid-cols-2">
             <section className="space-y-2 rounded-xl border border-line bg-panel px-5 py-4">
@@ -531,17 +532,18 @@ function OutOfSampleBlock({
           <tr>
             <th scope="col" className={cell} />
             <th scope="col" className={`${cell} text-right`}>
-              подбор: 90–30 дней назад
+              подбор: с {formatMoment(check.selectionFrom)}
             </th>
             <th scope="col" className={`${cell} text-right`}>
-              проверка: последние 30 дней
+              проверка: {formatMoment(check.checkFrom)} – {formatMoment(check.to)}
             </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-line">
           <tr>
             <th scope="row" className={`${cell} text-left font-normal text-muted`}>
-              кандидат · {ruleShort(candidate)}
+              кандидат · {ruleShort(candidate)} · подбор до{' '}
+              {formatMoment(check.candidate.selectionTo)}
             </th>
             <td className={number}>{partText(check.candidate.selection)}</td>
             <td className={number}>{partText(check.candidate.check)}</td>
@@ -554,7 +556,8 @@ function OutOfSampleBlock({
                   ...candidate,
                   life: Number(check.best.life),
                   target: check.best.target,
-                })}
+                })}{' '}
+                · подбор до {formatMoment(check.best.selectionTo)}
               </th>
               <td className={number}>{partText(check.best.selection)}</td>
               <td className={number}>{partText(check.best.check)}</td>

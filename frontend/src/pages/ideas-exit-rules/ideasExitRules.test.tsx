@@ -18,7 +18,7 @@ const checks = (requests: Request[]) =>
 function open(
   rules = exitRulesOf(),
   preview = exitPreviewOf(),
-  check: () => Response | Promise<Response> = () => json(exitOutOfSampleOf()),
+  check: (request: Request) => Response | Promise<Response> = () => json(exitOutOfSampleOf()),
 ) {
   return fakeApi({
     'GET /api/ideas/exit-rules': () => json(rules),
@@ -235,13 +235,16 @@ describe('screen of the exit rules', () => {
       within(table)
         .getAllByRole('columnheader')
         .map((header) => header.textContent),
-    ).toEqual(['', 'подбор: 90–30 дней назад', 'проверка: последние 30 дней']);
+    ).toEqual(['', 'подбор: с 08.08 12:00', 'проверка: 07.10 12:00 – 30.10 11:59']);
+    expect(within(table).getByRole('row', { name: /кандидат/ })).toHaveTextContent(
+      'кандидат · 24 · 2R · 4 · подбор до 07.10 05:59',
+    );
     expect(cells(table, /кандидат/)).toEqual([
       '≈ +0.05 R · от -0.02 до +0.12 · 60 входов',
       '≈ -0.03 R · от -0.10 до +0.04 · 40 входов',
     ]);
     expect(within(table).getByRole('row', { name: /лучшее на подборе/ })).toHaveTextContent(
-      'лучшее на подборе · 96 · 3R · 4',
+      'лучшее на подборе · 96 · 3R · 4 · подбор до 06.10 11:59',
     );
     expect(cells(table, /лучшее на подборе/)).toEqual([
       '▲ +0.12 R · от +0.02 до +0.22 · 60 входов',
@@ -264,7 +267,7 @@ describe('screen of the exit rules', () => {
     open(exitRulesOf(), exitPreviewOf(), () =>
       json(
         exitOutOfSampleOf({
-          candidate: { selection: null, check: null },
+          candidate: { selectionTo: '2026-10-07T05:59:00Z', selection: null, check: null },
           best: null,
           overfitting: null,
         }),
@@ -299,5 +302,53 @@ describe('screen of the exit rules', () => {
       'Не удалось проверить кандидата вне выборки.',
     );
     expect(screen.getByRole('table', { name: 'Все 90 дней' })).toBeInTheDocument();
+  });
+
+  // Finding 4 of the review: a check asked for a candidate the owner moved past is cancelled.
+  it('cancels the check of a candidate the owner moved past', async () => {
+    const signals: AbortSignal[] = [];
+    open(exitRulesOf(), exitPreviewOf(), (request) => {
+      signals.push(request.signal);
+
+      return new Promise<Response>(() => {});
+    });
+    renderApp('/ideas/exit-rules');
+
+    await waitFor(() => expect(signals).toHaveLength(1));
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', { name: 'Срок жизни, свечей' }),
+      '48',
+    );
+
+    await waitFor(() => expect(signals).toHaveLength(2));
+    expect(signals.map((signal) => signal.aborted)).toEqual([true, false]);
+  });
+
+  // Finding 5 of the review: the numbers of the candidate before never stand under the new one, nor beside a failure.
+  it('hides the check of the candidate before while the new one is counted or failed', async () => {
+    let answer: () => Response | Promise<Response> = () => json(exitOutOfSampleOf());
+    open(exitRulesOf(), exitPreviewOf(), () => answer());
+    renderApp('/ideas/exit-rules');
+
+    await screen.findByRole('table', { name: 'Проверка вне выборки' });
+    answer = () => new Promise<Response>(() => {});
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', { name: 'Срок жизни, свечей' }),
+      '48',
+    );
+
+    expect(await screen.findByText('Проверка считается…')).toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'Проверка вне выборки' })).not.toBeInTheDocument();
+
+    answer = () => problem(400, 'life');
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', { name: 'Срок жизни, свечей' }),
+      '96',
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Не удалось проверить кандидата вне выборки.',
+    );
+    expect(screen.queryByRole('table', { name: 'Проверка вне выборки' })).not.toBeInTheDocument();
   });
 });

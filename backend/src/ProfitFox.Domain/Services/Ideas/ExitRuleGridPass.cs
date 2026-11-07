@@ -7,12 +7,11 @@ namespace ProfitFox.Domain.Services.Ideas;
 /// <summary>The grid of exit rules the out-of-sample check of a candidate goes through (decision 3 of check-idea-exit-rules-out-of-sample).</summary>
 public static class ExitRuleGridPass
 {
-    /// <summary>The blocks of 15 days the 90 days of the check are cut into.</summary>
+    /// <summary>The equal blocks the window of the check is cut into.</summary>
     public const int Blocks = 6;
 
     private const int Parts = 8;
 
-    private static readonly TimeSpan BlockLength = TimeSpan.FromDays(15);
     private static readonly decimal[] Targets = [.. SignalPath.Ladder.Where(r => r >= 1m)];
 
     /// <summary>
@@ -31,56 +30,62 @@ public static class ExitRuleGridPass
     }
 
     /// <summary>
-    ///     The entries of every rule and the total of their results in R in each block of 15 days from <paramref name="from" />, by the time
-    ///     their signals fired. One step a signal for all the rules: each rule keeps when its last counted signal closed and whether a path
-    ///     left an outcome undecided, as <see cref="ExitOutcomes.Counted" /> does; the decision is in minutes of the path, as
-    ///     <see cref="ExitOutcomes.Of" /> takes it, and a result is <see cref="CaseResult.R" /> of that outcome, once a signal for each target,
-    ///     the stop and each lifetime that expires it.
+    ///     The entries of every rule and the total of their results in R in each block of the window, in its body and its tail, and on the
+    ///     selection and the check, by the time their signals fired (<see cref="OutOfSampleWindow" />). One step a signal for all the rules: each
+    ///     rule keeps when its last counted signal closed and whether a path left an outcome undecided, as <see cref="ExitOutcomes.Counted" />
+    ///     does; the decision is in minutes of the path, as <see cref="ExitOutcomes.Of" /> takes it, and a result is <see cref="CaseResult.R" />
+    ///     of that outcome, once a signal for each target, the stop and each lifetime that expires it.
     /// </summary>
-    /// <param name="keys">The signals of each key in the order of firing, with the fees of its category; none fired before <paramref name="from" />.</param>
+    /// <param name="keys">The signals of each key in the order of firing, with the fees of its category.</param>
     /// <param name="rules">Rules of one type × interval.</param>
-    /// <param name="from">The start of the first block.</param>
-    public static BlockSums[][] Sums(IReadOnlyList<(FeeRates Fees, IReadOnlyList<SignalPath> Paths)> keys, IReadOnlyList<IdeaExitRule> rules, DateTimeOffset from)
+    /// <param name="window">The window of the check.</param>
+    /// <param name="cancellationToken">Stops the pass at the next key.</param>
+    public static RuleSums[] Sums(
+        IReadOnlyList<(FeeRates Fees, IReadOnlyList<SignalPath> Paths)> keys,
+        IReadOnlyList<IdeaExitRule> rules,
+        OutOfSampleWindow window,
+        CancellationToken cancellationToken)
     {
         Minutes[] minutes = [.. rules.Select(Minutes.Of)];
-        var parts = new BlockSums[Parts][][];
+        TimeSpan[] horizons = [.. rules.Select(OutOfSampleWindow.Horizon)];
+        var parts = new Totals[Parts][];
 
         // Key k goes to part k mod 8 and the parts add up in their order, so the sums do not depend on the cores or their scheduling.
-        Parallel.For(0, Parts, part =>
+        Parallel.For(0, Parts, new ParallelOptions { CancellationToken = cancellationToken }, part =>
         {
-            BlockSums[][] sums = Empty(rules.Count);
+            Totals[] totals = [.. rules.Select(_ => new Totals())];
 
             for (int key = part; key < keys.Count; key += Parts)
             {
-                Walk(keys[key].Paths, keys[key].Fees, rules, minutes, from, sums);
+                cancellationToken.ThrowIfCancellationRequested();
+                (FeeRates fees, IReadOnlyList<SignalPath> paths) = keys[key];
+                Walk(paths, fees, rules, minutes, horizons, window, totals);
             }
 
-            parts[part] = sums;
+            parts[part] = totals;
         });
 
-        BlockSums[][] total = Empty(rules.Count);
+        Totals[] sums = [.. rules.Select(_ => new Totals())];
 
-        foreach (BlockSums[][] part in parts)
+        foreach (Totals[] part in parts)
         {
             for (int rule = 0; rule < rules.Count; rule++)
             {
-                for (int block = 0; block < Blocks; block++)
-                {
-                    BlockSums before = total[rule][block];
-                    total[rule][block] = new BlockSums(before.Entries + part[rule][block].Entries, before.TotalR + part[rule][block].TotalR);
-                }
+                sums[rule].Add(part[rule]);
             }
         }
 
-        return total;
+        return [.. sums.Select(totals => totals.Sums())];
     }
 
-    private static BlockSums[][] Empty(int rules)
-    {
-        return [.. Enumerable.Range(0, rules).Select(_ => new BlockSums[Blocks])];
-    }
-
-    private static void Walk(IReadOnlyList<SignalPath> paths, FeeRates fees, IReadOnlyList<IdeaExitRule> rules, Minutes[] minutes, DateTimeOffset from, BlockSums[][] sums)
+    private static void Walk(
+        IReadOnlyList<SignalPath> paths,
+        FeeRates fees,
+        IReadOnlyList<IdeaExitRule> rules,
+        Minutes[] minutes,
+        TimeSpan[] horizons,
+        OutOfSampleWindow window,
+        Totals[] totals)
     {
         var free = new DateTimeOffset[rules.Count];
         var undecided = new bool[rules.Count];
@@ -89,7 +94,6 @@ public static class ExitRuleGridPass
         foreach (SignalPath path in paths)
         {
             Array.Clear(results);
-            int block = (int)((path.FiredAt - from) / BlockLength);
 
             for (int rule = 0; rule < rules.Count; rule++)
             {
@@ -109,10 +113,59 @@ public static class ExitRuleGridPass
                 if (close.Slot is { } slot)
                 {
                     decimal result = results[slot] ??= CaseResult.R(ExitOutcomes.Of(path, rules[rule])!, fees)!.Value;
-                    BlockSums before = sums[rule][block];
-                    sums[rule][block] = new BlockSums(before.Entries + 1, before.TotalR + result);
+                    totals[rule].Add(window, horizons[rule], path.FiredAt, new BlockSums(1, result));
                 }
             }
+        }
+    }
+
+    private static BlockSums Add(BlockSums total, BlockSums part)
+    {
+        return new BlockSums(total.Entries + part.Entries, total.TotalR + part.TotalR);
+    }
+
+    // The sums of a rule while the pass goes, changed in place.
+    private sealed class Totals
+    {
+        private readonly BlockSums[] _bodies = new BlockSums[Blocks];
+        private readonly BlockSums[] _tails = new BlockSums[Blocks];
+        private BlockSums _selection;
+        private BlockSums _check;
+
+        public void Add(OutOfSampleWindow window, TimeSpan horizon, DateTimeOffset firedAt, BlockSums entry)
+        {
+            if (window.BlockOf(horizon, firedAt) is ({ } block, { } tail))
+            {
+                BlockSums[] blocks = tail ? _tails : _bodies;
+                blocks[block] = ExitRuleGridPass.Add(blocks[block], entry);
+            }
+
+            switch (window.PartOf(horizon, firedAt))
+            {
+                case OutOfSamplePart.Selection:
+                    _selection = ExitRuleGridPass.Add(_selection, entry);
+                    break;
+                case OutOfSamplePart.Check:
+                    _check = ExitRuleGridPass.Add(_check, entry);
+                    break;
+            }
+        }
+
+        public void Add(Totals part)
+        {
+            for (int block = 0; block < Blocks; block++)
+            {
+                _bodies[block] = ExitRuleGridPass.Add(_bodies[block], part._bodies[block]);
+                _tails[block] = ExitRuleGridPass.Add(_tails[block], part._tails[block]);
+            }
+
+            _selection = ExitRuleGridPass.Add(_selection, part._selection);
+            _check = ExitRuleGridPass.Add(_check, part._check);
+        }
+
+        public RuleSums Sums()
+        {
+            return new RuleSums([.. _bodies], [.. _tails], _selection, _check);
         }
     }
 

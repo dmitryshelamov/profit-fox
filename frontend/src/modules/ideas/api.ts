@@ -200,13 +200,13 @@ export function exitRulePreviewQuery(candidate: ExitRuleCandidate) {
 }
 
 /**
- * How the candidate and the best rule of its grid chosen on the days 90 to 30 ago do on the last 30 days, and the overfitting of the grid; asked
- * apart from the preview, which does not wait for it. The old answer stays while a new one loads.
+ * How the candidate and the best rule of its grid chosen on the selection do on the check, and the overfitting of the grid; asked apart from
+ * the preview, which does not wait for it. A check of a candidate the owner moved past is cancelled, and nothing of it stays on the screen.
  */
 export function exitRuleOutOfSampleQuery(candidate: ExitRuleCandidate) {
   return queryOptions({
     queryKey: ['ideas', 'exit-rules', 'out-of-sample', candidate],
-    queryFn: async () =>
+    queryFn: async ({ signal }) =>
       unwrap(
         await api.GET('/api/ideas/exit-rules/out-of-sample', {
           params: {
@@ -218,9 +218,9 @@ export function exitRuleOutOfSampleQuery(candidate: ExitRuleCandidate) {
               window: candidate.window ?? undefined,
             },
           },
+          signal,
         }),
       ),
-    placeholderData: keepPreviousData,
   });
 }
 

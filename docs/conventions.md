@@ -40,7 +40,7 @@ enforces a rule, the check is the source of truth.
   +0.5 … +5 R and zone, and its closes at the grid), `IdeaSignal` (a signal with its pair, setup and path), `IdeaBucketKey`, `IdeaBucket`, `BucketStatistics`
   (the numbers of the model with the own ones of the bucket beside, the weight of the parent and «мало своих данных»; with the signals, the share of entries and the expectancy per signal of «Откат» and «Стоп-вход»), `IdeaVolatility`, `IdeaShares` (with the break-even), `PairSetup`,
   `IdeaOutcome` (how a case ended, as the calibration reads it), `CalibrationReport` (with its scope, the rows by own data and the comparison of the models), `CalibrationRow`, `CalibrationOwnRow` (a row by own data with its Brier score), `CalibrationModel` and `CalibrationComparison` (the old model against the new one), `IdeaExitRule` (the lifetime, the target in R and the
-  entry window of a type × interval, and which values it can take) and `IdeaExitRules` (the rules in force, the default for a type × interval never applied), `BlockSums` (the entries of an exit rule in a block of days and their total R) and `Overfitting` (the splits of CSCV that counted and the overfit ones).
+  entry window of a type × interval, and which values it can take) and `IdeaExitRules` (the rules in force, the default for a type × interval never applied), `BlockSums` (the entries of an exit rule in a block of days and their total R), `RuleSums` (those of a rule of the grid in the bodies and the tails of the blocks and on the selection and the check), `OutOfSampleWindow` (the window of the out-of-sample check: the selection, the check and its end the horizon of the longest rule of the grid before now, the horizon of a rule, and the part and the block of a signal; `OutOfSamplePart`) and `Overfitting` (the splits of CSCV that counted and the overfit ones).
   `Services/Ideas` holds the pure functions: `Atr` (Wilder, 14), `Rsi` (Wilder, 14, over exactly 100 candles), `IdeaCandles` (candles of an interval from minutes, a minute without
   trades flat at the close before it), `SetupDetector` (the setups of a move), `CandleSetupDetector` (the candle setups), `SetupTypes`
   (the types of ideas of each setup), `ZoneFinder`, `IdeaRules`, `IdeaTracker`, `CaseResult`,
@@ -49,11 +49,12 @@ enforces a rule, the check is the source of truth.
   case can be added to and removed from, and the own numbers with the clustering), `BucketModel` (the numbers of a bucket shrunk to its parent
   «тип × ТФ × сторона × категория» and the parent to its category by DerSimonian–Laird; `Estimate`, `Level`, `Spreads`, `Root`, `ParentModel`,
   `Parent`), `CalibrationCalculator` (the walk-forward check of the buckets by the model on cases they had not seen, one walk in the order of time), `IdeaMoney`, `Volatility`, `IdeasEngineVersion`, `ExitRuleGrid` (the lifetimes and windows of an
-  interval up to 7 days, a time up to the grid), `SignalPathTracker` (steps a path by a minute, by the touches of `IdeaTracker`) `ExitOutcomes`
+  interval up to 7 days, a time up to the grid), `SignalPathTracker` (steps a path by a minute, by the touches of `IdeaTracker`), `ExitOutcomes`
   (the outcome of a path by a rule as an `IdeaTrack`, and the signals of a key that count as one open idea at a time), `ExitRuleGridPass` (the grid of
-  rules of the out-of-sample check, lifetimes × targets at the window of the candidate, and the entries and total R of every rule of it in 6 blocks of
-  15 days in one step a signal, the keys in 8 fixed parts added up in order) and `OverfittingProbability` (the best rule over some blocks and the
-  probability of overfitting of the grid by CSCV, 20 splits of the 6 blocks).
+  rules of the out-of-sample check, lifetimes × targets at the window of the candidate, and the entries and total R of every rule of it in the
+  bodies and the tails of 6 blocks and on the selection and the check, in one step a signal, the keys in 8 fixed parts added up in order, stopped
+  at the next key when cancelled) and `OverfittingProbability` (the best rule on the selection and the probability of overfitting of the grid by
+  CSCV, 20 splits of the 6 blocks, twins as one rule, the tail of a block before a block of the other half left out).
 - `IdeaTrades` is the area of trades by ideas (one entry with a stop and a target the exchange stands): `Entities/IdeaTrades` holds `IdeaTrade`
   (its levels, size, status, the totals the exchange counted of its entry and exits, its result in money and in R, what it is worth at a price (`ResultAt`), the time it opened (`OpenedAt`, the first fill of the entry), the promise of its idea at the entry and how its idea ended), `IdeaTradeOrder` (an entry or
   the market close of the owner, saved before it goes to the exchange, like `LiveOrder`), `IdeaTradeChild` (the stop or the target the exchange made, by
