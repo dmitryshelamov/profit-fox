@@ -5,7 +5,7 @@
 
 ## 1. Домен
 
-- [ ] 1.1 `LiquidationSide { Long, Short }` (`Entities/Market/Enums`) с кодами `long` / `short`, `LiquidationEvent(Time, Side,
+- [x] 1.1 `LiquidationSide { Long, Short }` (`Entities/Market/Enums`) с кодами `long` / `short`, `LiquidationEvent(Time, Side,
   Price, Quantity)` и `StreamBreak(Stream, LostAt, RestoredAt)` (`ValueObjects/Market`), `ILiquidationRepository`
   (`AddAsync` → число вставленных по сторонам, `GetAsync`, `LastTimeAsync`) и `IStreamBreakRepository.AddAsync`
   (решения 1, 3, 4). Тест кодов стороны зелёный, `docs/conventions.md` описывает новые типы.

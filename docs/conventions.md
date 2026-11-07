@@ -30,8 +30,12 @@ enforces a rule, the check is the source of truth.
   keeps none), `StrategyTemplate` (name, description and definition without a layout) and `BuiltInTemplates.All`, in the order the owner sees them. Their graphs
   are written in code with `GraphSketch` from `BuiltIns`, like the built-in nodes; the reference strategies EMA Short, Ladder and DCA are the same graphs as their test fixtures.
 - `Market` is the area of the scanner: `Entities/Market` holds `ScannerPair` (the bounds of coverage, with the rules that move
-  them, and `TradFi`, which `ScannerUniverse.Merge` refreshes from every read of the list) and `ScannerState`; `ValueObjects/Market` holds `MarketMinute`, `OpenInterestPoint`, `FundingRatePoint`, `MarketTicker`,
-  `PairMetrics` and `MarketSnapshotRow`; `Services/Market/MarketMetrics` is the pure function of the metrics of a pair.
+  them, and `TradFi`, which `ScannerUniverse.Merge` refreshes from every read of the list) and `ScannerState`; `Entities/Market/Enums` holds
+  `LiquidationSide` (the side of the liquidated position, not of the liquidation order: `long`, `short` in `Application/Market/MarketCodes`);
+  `ValueObjects/Market` holds `MarketMinute`, `OpenInterestPoint`, `FundingRatePoint`, `MarketTicker`,
+  `PairMetrics`, `MarketSnapshotRow`, `LiquidationEvent` (time, side, price, volume of a liquidation as the stream gives it) and
+  `StreamBreak` (a stream, when it was lost and when it was back); `ILiquidationRepository` stores the events and
+  `IStreamBreakRepository` the breaks of a stream whose missed events cannot be loaded again; `Services/Market/MarketMetrics` is the pure function of the metrics of a pair.
 - `Ideas` is the area of trade ideas: `Entities/Ideas` holds `Idea` (a live idea, one open per `IdeaKey`) and the enums `IdeaSetup`,
   `IdeaType`, `IdeaSide`, `IdeaStatus`, `IdeaBadge` (▲ ≈ ▼ of a bucket by the interval of its expectancy), `CalibrationScope` (all cases or those after the rules changed); `ValueObjects/Ideas` holds `IdeaCandle` (a minute or a candle of an interval, its volume the
   turnover), `MinuteAggregate`, `SetupThresholds`, `SetupSignal`, `SetupReading`, `SetupBase` (what the setups of an interval are measured against
