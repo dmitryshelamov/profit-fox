@@ -365,8 +365,8 @@ describe('screen «Автоматы»', () => {
 
     const banner = await screen.findByRole('status', { name: 'Дневной стоп' });
 
-    expect(banner).toHaveTextContent('Дневной стоп сработал — автоматы не входят до 00:00 UTC');
-    expect(banner).toHaveTextContent('Сегодня -30.15 из 30 USDT · сработал в 15:12 UTC');
+    expect(banner).toHaveTextContent('Дневной стоп сработал — автоматы не входят до 03:00');
+    expect(banner).toHaveTextContent('Сегодня -30.15 из 30 USDT · сработал в 18:12 ·');
     expect(banner).toHaveTextContent('ручные входы и открытые сделки работают как обычно');
   });
 

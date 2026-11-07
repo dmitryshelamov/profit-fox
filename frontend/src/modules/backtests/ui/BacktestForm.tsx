@@ -6,7 +6,7 @@ import { type ParameterDef, parameterMeta } from '@/modules/bots';
 import { ApiError, type Schemas } from '@/shared/api/client';
 import { isDecimalText } from '@/shared/api/jsonNumber';
 import type { FieldErrors } from '@/shared/api/problems';
-import { groupDigits } from '@/shared/format/format';
+import { formatFullMoment, groupDigits } from '@/shared/format/format';
 import { Button } from '@/shared/ui/Button';
 
 import { createBacktest } from '../api';
@@ -39,11 +39,32 @@ const simulationFields = [
 
 type SimulationKey = (typeof simulationFields)[number]['key'];
 
-/** `2026-10-03 12:00`: a moment of the form, in UTC. */
-const momentText = (date: Date) => date.toISOString().slice(0, 16).replace('T', ' ');
+/** `2026-10-03 15:00`: a moment of the form, in the local zone of the browser. */
+const momentText = (date: Date) => formatFullMoment(date.toISOString());
 
-/** The text of a period field as the API takes it; text that is no moment is rejected by the server on its field. */
-const isoOf = (text: string) => `${text.trim().replace(' ', 'T')}:00Z`;
+const localMoment = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/;
+
+/**
+ * The text of a period field as the API takes it: a local moment turned into UTC. Text that is no moment goes as typed
+ * and is rejected by the server on its field.
+ */
+function isoOf(text: string): string {
+  const parts = localMoment.exec(text.trim());
+
+  if (parts === null) {
+    return text.trim();
+  }
+
+  const [year, month, day, hours, minutes] = parts.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+
+  return new Date(year, month - 1, day, hours, minutes).toISOString();
+}
 
 interface Bot {
   readonly interval: string;
@@ -173,7 +194,7 @@ export function BacktestForm({
     >
       <section className="space-y-3 rounded-xl border border-line bg-panel p-5">
         <div className="flex items-baseline gap-4">
-          <h2 className={heading}>Период, UTC</h2>
+          <h2 className={heading}>Период</h2>
           <span className="text-xs text-faint">
             По умолчанию — 30 дней до последней закрытой свечи
           </span>

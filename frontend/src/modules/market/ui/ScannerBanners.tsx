@@ -1,9 +1,9 @@
 import { useId } from 'react';
 
 import type { Schemas } from '@/shared/api/client';
-import { groupDigits } from '@/shared/format/format';
+import { formatClock, groupDigits } from '@/shared/format/format';
 
-import { ageText, isStale, utcClock } from '../model/snapshotAge';
+import { ageText, isStale } from '../model/snapshotAge';
 
 const tones = {
   run: { panel: 'border-run/40 bg-run/10', title: 'text-run', dot: 'bg-run', bar: 'bg-run' },
@@ -83,7 +83,7 @@ export function ScannerBanners({
       {restPausedUntil !== null ? (
         <Panel
           tone="warn"
-          title={`Bybit ограничил запросы — догрузка истории на паузе до ${utcClock(restPausedUntil)}`}
+          title={`Bybit ограничил запросы — догрузка истории на паузе до ${formatClock(restPausedUntil)}`}
           text="Живые данные обновляются как обычно: свечи, OI, фандинг и спред. Догрузка продолжится сама, ничего делать не нужно."
           progress={loading ? { loaded, total, suffix: ', пауза' } : undefined}
         />
@@ -101,7 +101,7 @@ export function ScannerBanners({
         <Panel
           tone="err"
           title={`Данные устарели: последнее обновление ${ageText(snapshotAt, now)}, сканер не отвечает`}
-          text={`Значения ниже — на ${utcClock(snapshotAt)} и не меняются. Страница проверяет снова каждые 15 с; когда сканер ответит, баннер исчезнет сам.`}
+          text={`Значения ниже — на ${formatClock(snapshotAt)} и не меняются. Страница проверяет снова каждые 15 с; когда сканер ответит, баннер исчезнет сам.`}
         />
       )}
     </>

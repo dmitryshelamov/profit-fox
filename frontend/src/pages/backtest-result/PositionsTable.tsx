@@ -1,7 +1,7 @@
 import { Fragment, useState } from 'react';
 
 import type { Schemas } from '@/shared/api/client';
-import { formatUtc, groupDigits, showDecimal, signed } from '@/shared/format/format';
+import { formatFullMoment, groupDigits, showDecimal, signed } from '@/shared/format/format';
 
 const head = 'px-4 py-3 text-left text-[11px] font-semibold tracking-wide text-faint uppercase';
 const cell = 'px-4 py-2.5 font-mono whitespace-nowrap';
@@ -34,7 +34,7 @@ function OrderRows({ orders }: { orders: readonly Schemas['OrderResponse'][] }) 
       </tr>
       {order.fills.map((fill, index) => (
         <tr key={index} className="bg-panel-2 text-faint">
-          <td className={`${inner} pl-8`}>{formatUtc(fill.at)}</td>
+          <td className={`${inner} pl-8`}>{formatFullMoment(fill.at)}</td>
           <td className={inner}>{groupDigits(fill.price)}</td>
           <td className={inner}>{fill.quantity}</td>
           <td className={inner}>
@@ -96,10 +96,10 @@ export function PositionsTable({
                     )}
                   </td>
                   <td className={cell}>
-                    {position.openedAt === null ? MISSING : formatUtc(position.openedAt)}
+                    {position.openedAt === null ? MISSING : formatFullMoment(position.openedAt)}
                   </td>
                   <td className={cell}>
-                    {position.closedAt === null ? MISSING : formatUtc(position.closedAt)}
+                    {position.closedAt === null ? MISSING : formatFullMoment(position.closedAt)}
                   </td>
                   <td className={cell}>
                     {position.entryPrice === null ? MISSING : groupDigits(position.entryPrice)}

@@ -80,7 +80,7 @@ describe('backtest page', () => {
     expect(await screen.findByRole('heading', { name: 'Бэктест' })).toBeInTheDocument();
     expect(
       await screen.findByText(
-        'EMA v7 · linear · BTCUSDT · 1 ч · 2024-01-01 – 2024-07-01 UTC · 9 комбинаций · движок v3',
+        'EMA v7 · linear · BTCUSDT · 1 ч · 2024-01-01 – 2024-07-01 · 9 комбинаций · движок v3',
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'BTC EMA час' })).toBeInTheDocument();
@@ -219,7 +219,11 @@ describe('backtest page', () => {
     );
     renderApp(`/backtests/${backtestId}`);
 
-    expect(await screen.findByText(/Первая свеча — 2024-02-01 00:00/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        /Первая свеча — 2024-02-01 03:00, позже начала периода \(2024-01-01 03:00\)/,
+      ),
+    ).toBeInTheDocument();
   });
 
   it('lists the gaps between candles and says nothing when the candles are whole', async () => {
@@ -234,7 +238,7 @@ describe('backtest page', () => {
     renderApp(`/backtests/${backtestId}`);
 
     expect(
-      await screen.findByText(/Пропуски в свечах: 2024-01-05 03:00 – 2024-01-05 07:00/),
+      await screen.findByText(/Пропуски в свечах: 2024-01-05 06:00 – 2024-01-05 10:00/),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Первая свеча/)).not.toBeInTheDocument();
   });

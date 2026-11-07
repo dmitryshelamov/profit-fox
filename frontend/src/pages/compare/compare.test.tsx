@@ -141,9 +141,9 @@ describe('compare page', () => {
     renderApp(address());
 
     const first = await screen.findByRole('columnheader', { name: /BTC EMA час/ });
-    expect(first).toHaveTextContent('#4 · 02.11 14:05');
+    expect(first).toHaveTextContent('#4 · 02.11 17:05');
     const second = await screen.findByRole('columnheader', { name: /ETH Ladder/ });
-    expect(second).toHaveTextContent('#212 · 30.10 18:30');
+    expect(second).toHaveTextContent('#212 · 30.10 21:30');
     const row = (await screen.findByText('Доходность')).closest('tr')!;
     expect(
       within(row)

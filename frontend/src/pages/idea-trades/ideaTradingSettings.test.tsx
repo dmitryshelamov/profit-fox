@@ -140,6 +140,18 @@ describe('guards of the autos on the settings screen', () => {
     expect(within(block).getByLabelText('Не больше сделок в одну сторону')).toHaveValue('5');
   });
 
+  // Requirement "Время в местном часовом поясе", scenario "Граница суток UTC".
+  it('tells the day of the daily stop from the local time the UTC day starts at', async () => {
+    fakeApi(routes(() => [], guarded));
+    renderApp('/idea-trades/settings');
+
+    const block = await screen.findByRole('region', { name: 'Защиты автоматов' });
+
+    expect(block).toHaveTextContent('С 03:00 — закрытые сегодня реальные сделки');
+    expect(block).toHaveTextContent('автоматы не входят до следующих 03:00.');
+    expect(block).not.toHaveTextContent('UTC');
+  });
+
   // Scenario "Состояние дневного стопа".
   it('shows the state of every guard under its field, with a bar for the day', async () => {
     fakeApi(routes(() => [], guarded));
@@ -284,8 +296,8 @@ describe('guards of the autos on the settings screen', () => {
 
     const banner = await screen.findByRole('status', { name: 'Дневной стоп' });
 
-    expect(banner).toHaveTextContent('Сегодня -30.15 из 30 USDT · сработал в 15:12 UTC');
-    expect(await screen.findByText('автоматы снова входят с 08.11 00:00 UTC')).toBeInTheDocument();
+    expect(banner).toHaveTextContent('Сегодня -30.15 из 30 USDT · сработал в 18:12 ·');
+    expect(await screen.findByText('автоматы снова входят с 08.11 03:00')).toBeInTheDocument();
   });
 
   it('shows no banner while the stop has not held', async () => {

@@ -80,7 +80,7 @@ describe('screen «Сделки»', () => {
 
     expect(within(row).getByText('SOLUSDT')).toBeInTheDocument();
     expect(within(row).getByText('Открыта')).toBeInTheDocument();
-    expect(within(row).getByText('05.11 10:00')).toBeInTheDocument();
+    expect(within(row).getByText('05.11 13:00')).toBeInTheDocument();
     expect(within(row).getByText('2 ч 15 мин')).toBeInTheDocument();
     expect(within(row).getByText('+0.21 USDT · +0.21 R')).toBeInTheDocument();
     expect(within(row).getByText('▲ +0.14 R · N 412')).toHaveAttribute(
@@ -196,7 +196,7 @@ describe('screen «Сделки»', () => {
     const table = await screen.findByRole('table', { name: 'Закрытые сделки' });
     const row = within(table).getAllByRole('row')[1]!;
 
-    expect(within(row).getByText('05.11 13:30')).toBeInTheDocument();
+    expect(within(row).getByText('05.11 16:30')).toBeInTheDocument();
     expect(within(row).getByText('Закрыта по стопу')).toBeInTheDocument();
     expect(within(row).getByText('-1.05 USDT · -1.06 R')).toBeInTheDocument();
     expect(within(row).getByText('3 ч 30 мин')).toBeInTheDocument();
@@ -766,7 +766,7 @@ describe('block «Отказы автоматов»', () => {
     const table = await screen.findByRole('table', { name: 'Отказы автоматов' });
     const rows = within(table).getAllByRole('row');
 
-    expect(within(rows[1]!).getByText('09:30')).toBeInTheDocument();
+    expect(within(rows[1]!).getByText('12:30')).toBeInTheDocument();
     expect(within(rows[1]!).getByText('Падения шорт')).toBeInTheDocument();
     expect(within(rows[1]!).getByText('с деньгами')).toBeInTheDocument();
     expect(within(rows[1]!).getByText('Падение · 1 ч · Цель 2R · Шорт')).toBeInTheDocument();
@@ -779,7 +779,7 @@ describe('block «Отказы автоматов»', () => {
     expect(within(rows[2]!).getByText('свободно 212.40 из 300 USDT')).toBeInTheDocument();
     expect(within(rows[3]!).getByText('без денег')).toBeInTheDocument();
     expect(within(rows[3]!).getByText('Не успел войти')).toBeInTheDocument();
-    expect(screen.getByText(/сегодня 3 · с 00:00 UTC/)).toBeInTheDocument();
+    expect(screen.getByText(/сегодня 3 · с 03:00 ·/)).toBeInTheDocument();
   });
 
   // Scenario "Отказов нет".
@@ -806,7 +806,7 @@ describe('block «Отказы автоматов»', () => {
     await waitFor(() =>
       expect(requests.some((request) => request.url.includes('period=7d'))).toBe(true),
     );
-    expect(await screen.findByText('07.11 09:30')).toBeInTheDocument();
+    expect(await screen.findByText('07.11 12:30')).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: '7 дней' })).toBeChecked();
   });
 
@@ -856,7 +856,7 @@ describe('banner of the daily stop on «Сделки»', () => {
 
     const banner = await screen.findByRole('status', { name: 'Дневной стоп' });
 
-    expect(banner).toHaveTextContent('Сегодня -30.15 из 30 USDT · сработал в 15:12 UTC');
+    expect(banner).toHaveTextContent('Сегодня -30.15 из 30 USDT · сработал в 18:12 ·');
   });
 
   // Scenario "Стоп не сработал".

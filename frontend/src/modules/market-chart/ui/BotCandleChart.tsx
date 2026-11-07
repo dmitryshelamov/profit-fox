@@ -34,6 +34,7 @@ import {
 import { type OrderInput, orderLines } from '../model/orderLines';
 import { type FillInput, tradeMarkers } from '../model/tradeMarkers';
 import { type VolumeBar, volumeBars } from '../model/volumeBars';
+import { localTime } from './chartTime';
 import { token, withAlpha } from './tokens';
 import { ZoneBandsPrimitive } from './ZoneBandsPrimitive';
 
@@ -85,10 +86,10 @@ function formingStyle(bar: Bar) {
 }
 
 /**
- * Closed candles in UTC with their volume on a hidden scale under them, the bot's fills as arrows whose tips stand on
- * the price, and its active limit orders as dashed lines. The current candle follows the closed ones, see-through, and is
- * drawn with `update`. Scrolling near the oldest loaded candle calls `onReachStart`; candles added before it keep the view
- * where it was. The figure describes what is drawn, as the canvas gives no text.
+ * Closed candles, their time told in the local zone, with their volume on a hidden scale under them, the bot's fills as
+ * arrows whose tips stand on the price, and its active limit orders as dashed lines. The current candle follows the
+ * closed ones, see-through, and is drawn with `update`. Scrolling near the oldest loaded candle calls `onReachStart`;
+ * candles added before it keep the view where it was. The figure describes what is drawn, as the canvas gives no text.
  */
 export function BotCandleChart({
   history,
@@ -177,7 +178,7 @@ export function BotCandleChart({
         vertLines: { color: token('--color-line', '#2c313b') },
         horzLines: { color: token('--color-line', '#2c313b') },
       },
-      timeScale: { timeVisible: true, secondsVisible: false },
+      ...localTime,
     });
     // The price scale fits the candles; the levels of an idea (entry, stop, target) may lie far outside them.
     const autoscale = (base: () => AutoscaleInfo | null) => withLevels(base(), levelPrices.current);

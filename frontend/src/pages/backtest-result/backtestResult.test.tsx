@@ -242,17 +242,17 @@ describe('result details page', () => {
     );
     open();
 
-    const closed = (await screen.findByText('2024-01-05 14:00')).closest('tr')!;
-    expect(within(closed).getByText('2024-01-11 09:00')).toBeInTheDocument();
+    const closed = (await screen.findByText('2024-01-05 17:00')).closest('tr')!;
+    expect(within(closed).getByText('2024-01-11 12:00')).toBeInTheDocument();
     expect(within(closed).getByText('+38.49')).toBeInTheDocument();
-    const opened = screen.getByText('2024-06-21 16:00').closest('tr')!;
+    const opened = screen.getByText('2024-06-21 19:00').closest('tr')!;
     const cells = within(opened)
       .getAllByRole('cell')
       .map((cell) => cell.textContent);
     expect(cells.slice(0, 7)).toEqual([
       '2',
       'открыта',
-      '2024-06-21 16:00',
+      '2024-06-21 19:00',
       '—',
       '47\u00a0010',
       '—',
@@ -313,7 +313,7 @@ describe('result details page', () => {
     ).toEqual(['average', 'Покупка', 'limit', '42\u00a0000', '0.022', 'исполнен']);
     expect(within(table).getByText('entry')).toBeInTheDocument();
     expect(within(table).getByText('take')).toBeInTheDocument();
-    expect(within(table).getByText('2024-01-07 10:00')).toBeInTheDocument();
+    expect(within(table).getByText('2024-01-07 13:00')).toBeInTheDocument();
     expect(within(table).getAllByText('0.5 quote')).toHaveLength(3);
     const byAmount = within(table).getByText('dca').closest('tr')!;
     expect(within(byAmount).getAllByRole('cell').slice(4)).toEqual([
@@ -445,10 +445,10 @@ describe('result details page', () => {
 
     const pnl = async (opened: string) =>
       within((await screen.findByText(opened)).closest('tr')!).getAllByRole('cell')[6]!;
-    expect(await pnl('2024-01-01 00:00')).toHaveClass('text-ok');
-    expect(await pnl('2024-01-02 00:00')).toHaveClass('text-err');
-    expect(await pnl('2024-01-03 00:00')).not.toHaveClass('text-ok', 'text-err');
-    expect(await pnl('2024-01-04 00:00')).not.toHaveClass('text-ok', 'text-err');
+    expect(await pnl('2024-01-01 03:00')).toHaveClass('text-ok');
+    expect(await pnl('2024-01-02 03:00')).toHaveClass('text-err');
+    expect(await pnl('2024-01-03 03:00')).not.toHaveClass('text-ok', 'text-err');
+    expect(await pnl('2024-01-04 03:00')).not.toHaveClass('text-ok', 'text-err');
   });
 
   it('keeps the marks on the chart when the page is drawn again without new fills', async () => {

@@ -302,7 +302,7 @@ describe('market screen', () => {
     renderApp('/market');
 
     const banner = await screen.findByRole('status', {
-      name: 'Bybit ограничил запросы — догрузка истории на паузе до 14:32 UTC',
+      name: 'Bybit ограничил запросы — догрузка истории на паузе до 17:32',
     });
     expect(
       within(banner).getByText('История: 640 из 1 104 инструментов, пауза'),
@@ -322,9 +322,7 @@ describe('market screen', () => {
     const banner = await screen.findByRole('status', {
       name: 'Данные устарели: последнее обновление 7 мин назад, сканер не отвечает',
     });
-    expect(
-      within(banner).getByText(/Значения ниже — на 11:53 UTC и не меняются/),
-    ).toBeInTheDocument();
+    expect(within(banner).getByText(/Значения ниже — на 14:53 и не меняются/)).toBeInTheDocument();
     expect(screen.getByRole('table')).toHaveClass('opacity-50');
     expect(screen.getByText('Обновлено 7 мин назад')).toHaveClass('text-err');
   });

@@ -14,9 +14,10 @@ import { useEffect, useRef } from 'react';
 
 import { drawable, type FillMarker, type PricePoint } from '../model/pricePoint';
 import { seriesMarkers } from '../model/seriesMarkers';
+import { localTime } from './chartTime';
 import { token } from './tokens';
 
-/** Price candles on the right scale, account equity on the left, fills marked on the candles; time is UTC. */
+/** Price candles on the right scale, account equity on the left, fills marked on the candles; time in the local zone. */
 export function PriceEquityChart({
   points,
   markers,
@@ -53,7 +54,7 @@ export function PriceEquityChart({
         horzLines: { color: token('--color-line', '#2c313b') },
       },
       leftPriceScale: { visible: true },
-      timeScale: { timeVisible: true, secondsVisible: false },
+      ...localTime,
     });
     const candles = api.addSeries(CandlestickSeries, {
       upColor: up,

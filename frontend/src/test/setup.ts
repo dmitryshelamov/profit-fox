@@ -78,6 +78,7 @@ vi.mock('lightweight-charts', () => {
     HistogramSeries: 'Histogram',
     LineSeries: 'Line',
     ColorType: { Solid: 'solid' },
+    TickMarkType: { Year: 0, Month: 1, DayOfMonth: 2, Time: 3, TimeWithSeconds: 4 },
     createChart: vi.fn(() => ({
       addSeries: vi.fn(series),
       removeSeries: vi.fn(),

@@ -100,7 +100,7 @@ describe('ideas screen', () => {
         .getAllByRole('link')
         .map((link) => link.textContent),
     ).toEqual(['WIFUSDT', 'SOLUSDT', 'DOGEUSDT']);
-    expect(within(row).getByText('04.11 11:45')).toBeInTheDocument();
+    expect(within(row).getByText('04.11 14:45')).toBeInTheDocument();
     expect(within(row).getByText('Импульс')).toBeInTheDocument();
     expect(within(row).getByText('15 мин')).toBeInTheDocument();
     expect(within(row).getByText('Откат')).toBeInTheDocument();

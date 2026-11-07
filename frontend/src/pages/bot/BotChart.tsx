@@ -11,7 +11,7 @@ import {
 import { BotCandleChart, liveCandles } from '@/modules/market-chart';
 import { intervalLabel } from '@/modules/market-data';
 import type { Schemas } from '@/shared/api/client';
-import { formatUtc } from '@/shared/format/format';
+import { formatFullMoment } from '@/shared/format/format';
 
 type Position = Schemas['LivePositionResponse'];
 
@@ -81,7 +81,7 @@ export function BotChart({
           aria-label="Последняя свеча"
           className="flex flex-wrap gap-x-4 font-mono text-xs text-muted"
         >
-          <span>{formatUtc(last.openTime)}</span>
+          <span>{formatFullMoment(last.openTime)}</span>
           <span>O {last.open}</span>
           <span>H {last.high}</span>
           <span>L {last.low}</span>
