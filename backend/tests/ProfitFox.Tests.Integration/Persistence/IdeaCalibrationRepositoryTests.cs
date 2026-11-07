@@ -88,6 +88,28 @@ public class IdeaCalibrationRepositoryTests
         (await calibrations.GetAsync(1, 30, null, CalibrationScope.All, CancellationToken.None)).ShouldBeNull();
     }
 
+    // Decision 5 of add-idea-features: the difference of the Brier score is stored with its decimals as strings, as the rest of the report, and
+    // reads back from them.
+    [Test]
+    public async Task Difference_of_the_brier_score_is_stored_as_strings()
+    {
+        var calibrations = new IdeaCalibrationRepository(_dataSource);
+        var difference = new CalibrationDifference(-0.003m, -0.009m, 0.002m);
+        var report = new CalibrationReport(Now, 90, null, 0, 0, null, null, [], [], [], null)
+        {
+            Comparison = new CalibrationComparison(new CalibrationModel(0, null, null), new CalibrationModel(0, null, null), new CalibrationModel(0, null, null), difference)
+        };
+        await calibrations.ReplaceAsync(1, [report], CancellationToken.None);
+
+        await using (NpgsqlCommand types = _dataSource.CreateCommand(
+                         "SELECT jsonb_typeof(report #> '{Comparison,Difference,Mean}') || jsonb_typeof(report #> '{Comparison,Difference,Low}') || jsonb_typeof(report #> '{Comparison,Difference,High}') FROM idea_calibration"))
+        {
+            (await types.ExecuteScalarAsync()).ShouldBe("stringstringstring");
+        }
+
+        (await calibrations.GetAsync(1, 90, null, CalibrationScope.All, CancellationToken.None))!.Comparison!.Difference.ShouldBe(difference);
+    }
+
     // Decision 4 of add-idea-features: a report stored before it has neither the model with features nor the difference in its comparison.
     [Test]
     public async Task Report_stored_before_the_model_with_features_reads_without_it()
