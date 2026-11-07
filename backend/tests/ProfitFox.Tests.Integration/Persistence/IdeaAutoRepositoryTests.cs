@@ -81,6 +81,19 @@ public class IdeaAutoRepositoryTests
         (await _repository.SaveAsync(IdeaAutoGenerator.Generate(_account), CancellationToken.None)).ShouldBeFalse();
     }
 
+    // A condition by a feature that this version does not know is a broken row, not «любой».
+    [Test]
+    public async Task Auto_with_an_unknown_condition_by_a_feature_is_refused()
+    {
+        IdeaAuto created = await _repository.CreateAsync(IdeaAutoGenerator.Generate(_account, "А"), Now, CancellationToken.None);
+        await using (NpgsqlCommand corrupt = _dataSource.CreateCommand($"UPDATE idea_autos SET btc_drop = 'sometimes' WHERE id = '{created.Id}'"))
+        {
+            await corrupt.ExecuteNonQueryAsync();
+        }
+
+        await Should.ThrowAsync<InvalidOperationException>(() => _repository.GetAsync(created.Id, CancellationToken.None));
+    }
+
     // Scenario "Перестановка": «А», «Б», «В» become «В», «А», «Б».
     [Test]
     public async Task Reorder_gives_the_autos_the_places_of_their_ids()

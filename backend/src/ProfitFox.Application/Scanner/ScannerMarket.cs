@@ -196,15 +196,13 @@ public sealed class ScannerMarket
     {
         lock (_lock)
         {
-            if (_books.TryGetValue(instrument, out Book? book))
-            {
-                FundingRatePoint? last = points.MaxBy(point => point.Time);
+            Book book = _books[instrument];
+            FundingRatePoint? last = points.MaxBy(point => point.Time);
 
-                // A read of storage that comes after a top-up does not take its newer settlement back.
-                if (last is not null && !(book.Funding?.Time >= last.Time))
-                {
-                    book.Funding = last;
-                }
+            // A read of storage that comes after a top-up does not take its newer settlement back.
+            if (last is not null && !(book.Funding?.Time >= last.Time))
+            {
+                book.Funding = last;
             }
         }
     }
@@ -213,7 +211,7 @@ public sealed class ScannerMarket
     {
         lock (_lock)
         {
-            return _books.GetValueOrDefault(instrument)?.Funding;
+            return _books[instrument].Funding;
         }
     }
 
