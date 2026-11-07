@@ -7,5 +7,6 @@ public sealed class FeeRateSettings
 
     public decimal Market { get; init; }
 
-    public decimal Slippage { get; init; }
+    /// <summary>None when the key is missing: the services refuse to start without it (<see cref="BacktestSettings.HasIdeaSlippage" />).</summary>
+    public decimal? Slippage { get; init; }
 }

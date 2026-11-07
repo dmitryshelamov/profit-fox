@@ -145,6 +145,17 @@ public static class InfrastructureRegistrar
             .ValidateOnStart();
     }
 
+    // A service without the slippage would count the ideas, the buckets or the size of a trade without it while the others count with it.
+    private static void RequireIdeaSlippage(IConfiguration configuration, IServiceCollection services)
+    {
+        services.AddOptions<BacktestSettings>()
+            .Bind(configuration.GetSection("Backtests"))
+            .Validate(
+                settings => settings.HasIdeaSlippage(),
+                "Backtests:DefaultFees:spot:Slippage and Backtests:DefaultFees:linear:Slippage must be set, in percent and not below zero: the ideas count the slippage by them.")
+            .ValidateOnStart();
+    }
+
     private static void ConfigureCommon(IConfiguration configuration, IServiceCollection services)
     {
         MediatrRegistrar.Configure(services);
@@ -182,6 +193,7 @@ public static class InfrastructureRegistrar
             provider.GetRequiredService<IServiceScopeFactory>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddSingleton(configuration.GetSection("Backtests").Get<BacktestSettings>() ?? new BacktestSettings());
+        RequireIdeaSlippage(configuration, services);
         services.AddSingleton(configuration.GetSection("Ideas").Get<IdeasSettings>() ?? new IdeasSettings());
         services.AddSingleton(new EngineVersion(EngineVersion.Current));
         services.AddSingleton(new IdeasEngineVersion(IdeasEngineVersion.Current));

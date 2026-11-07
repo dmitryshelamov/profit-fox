@@ -28,6 +28,12 @@ public sealed class BacktestSettings
 
                     return category;
                 },
-                fees => new FeeRates(fees.Value.Limit, fees.Value.Market, fees.Value.Slippage)));
+                fees => new FeeRates(fees.Value.Limit, fees.Value.Market, fees.Value.Slippage ?? 0m)));
+    }
+
+    /// <summary>Whether both categories have the slippage of the ideas set, not below zero.</summary>
+    public bool HasIdeaSlippage()
+    {
+        return new[] { "spot", "linear" }.All(category => DefaultFees.TryGetValue(category, out FeeRateSettings? fees) && fees.Slippage >= 0m);
     }
 }
