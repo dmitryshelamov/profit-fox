@@ -144,6 +144,16 @@ public sealed class LiveAutos(
                     continue;
                 }
 
+                openReal ??= await trades.GetOpenAsync(cancellationToken);
+                every ??= await autos.GetEveryAsync(cancellationToken);
+                var books = new AutoBooks(openReal, [.. working.Values.Where(trade => trade.Trade.IsOpen)], every);
+
+                // An auto that cannot hold one more trade leaves the idea alone: no trade, no request, no refusal.
+                if (AutoBudget.IsFull(auto, books, tradingSettings))
+                {
+                    continue;
+                }
+
                 if (auto.Mode == IdeaAutoMode.Live)
                 {
                     entries.Add(new IdeaAutoEntry(Guid.NewGuid(), idea.Id, auto.Id, auto.AccountId, auto.Amount, auto.Conditions.MinRiskReward, auto.Position, fired, end, now));
@@ -151,12 +161,9 @@ public sealed class LiveAutos(
                     continue;
                 }
 
-                openReal ??= await trades.GetOpenAsync(cancellationToken);
-                every ??= await autos.GetEveryAsync(cancellationToken);
                 IdeaCandle birth = births[idea.Instrument];
                 ScannerPair pair = market.Find(idea.Instrument)!;
                 FeeRates fees = _fees[idea.Instrument.Category];
-                var books = new AutoBooks(openReal, [.. working.Values.Where(trade => trade.Trade.IsOpen)], every);
                 PaperEntryCheck check = PaperEntry.Check(auto, idea, birth, RulesOf(pair), fees, tradingSettings.MaxAmount, books);
 
                 if (check.Refusals.Count > 0)
