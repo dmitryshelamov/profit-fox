@@ -192,18 +192,8 @@ public class LiveTradingTests
         await _scenario.WaitAsync(async () => (await _scenario.OrdersAsync(bot)).SingleOrDefault()?.Status == LiveOrderStatus.Active, "the start order on the exchange");
 
         await _scenario.ActAsync(bot, "stop");
-        _scenario.Factory.Time.Advance(TimeSpan.FromSeconds(1));
-        await Task.Delay(50);
-        _scenario.Factory.Time.Advance(TimeSpan.FromSeconds(1));
 
-        DateTime until = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-
-        while (!_scenario.Exchange.Cancels.Contains(LiveTradingScenario.ClientId(bot, 1)) && DateTime.UtcNow < until)
-        {
-            await Task.Delay(50);
-        }
-
-        _scenario.Exchange.Cancels.ShouldContain(LiveTradingScenario.ClientId(bot, 1));
+        await _scenario.WaitAsync(() => _scenario.Exchange.Cancels.Contains(LiveTradingScenario.ClientId(bot, 1)), "the cancel within two polls", within: TimeSpan.FromSeconds(2));
     }
 
     // Scenario "Worker упал": a Worker gone without giving its bots up holds them until the lease ends, then the next one goes on.
