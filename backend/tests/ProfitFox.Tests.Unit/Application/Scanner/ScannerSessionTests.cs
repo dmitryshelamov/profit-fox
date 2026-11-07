@@ -299,6 +299,26 @@ public class ScannerSessionTests
     }
 
     // Scenario "Час без применений": the whole recompute starts the session and comes again an hour later, not before.
+    // Deploy of v31: while the cases of version 5 were cleared, the recompute of version 6 read the whole table for cases it had none of yet (its
+    // history is replayed after the clean-up) and outran the timeout every minute. The statistics wait for the clean-up, as the history does.
+    [Test]
+    public async Task Statistics_wait_for_the_clean_up_of_other_versions()
+    {
+        var cleaned = new TaskCompletionSource<int>();
+        _ideaSignals.DeleteOtherVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(_ => cleaned.Task);
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session().RunAsync(cancellation.Token);
+
+        await WaitAsync(() => _ideaSignals.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaSignalRepository.DeleteOtherVersionsAsync)));
+        await Task.Delay(200);
+        Recomputes(null).ShouldBe(0);
+        cleaned.SetResult(0);
+        await WaitAsync(() => Recomputes(null) == 1);
+
+        await cancellation.CancelAsync();
+        await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
     [Test]
     public async Task Statistics_are_recomputed_once_an_hour()
     {

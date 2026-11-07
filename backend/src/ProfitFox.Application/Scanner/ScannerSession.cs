@@ -227,6 +227,13 @@ public sealed class ScannerSession(
         }
     }
 
+    // The cases of this version are replayed after the clean-up, so before it ends there are none to count: on prod the query read the whole table
+    // of the other versions for none and outran the timeout every minute.
+    private async Task CleanedAsync(CancellationToken cancellationToken)
+    {
+        await _cleaned.Task.WaitAsync(cancellationToken);
+    }
+
     private async Task IdeasAsync(CancellationToken cancellationToken)
     {
         DateTimeOffset closedAt = time.GetUtcNow();
@@ -301,6 +308,8 @@ public sealed class ScannerSession(
     // pass ran go there again after it, for it wrote their buckets by the rules before.
     private async Task WholeStatisticsAsync(CancellationToken cancellationToken)
     {
+        await CleanedAsync(cancellationToken);
+
         while (!cancellationToken.IsCancellationRequested)
         {
             try
@@ -322,6 +331,8 @@ public sealed class ScannerSession(
 
     private async Task RuleStatisticsAsync(CancellationToken cancellationToken)
     {
+        await CleanedAsync(cancellationToken);
+
         while (!cancellationToken.IsCancellationRequested)
         {
             try
