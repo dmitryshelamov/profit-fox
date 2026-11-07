@@ -26,3 +26,14 @@
 - [x] 4.1 `CONTEXT.md` («Случай», «Проскальзывание идей») и `docs/conventions.md` (`FeeRates`).
 - [x] 4.2 Build, test, `dotnet format --verify-no-changes`; frontend lint, format check, typecheck, test, build; e2e по
   возможности.
+
+## 5. Ревью
+
+- [x] 5.1 Без ставки `spot` или `linear` (или со ставкой меньше нуля) API, сканер и Worker не запускаются
+  (`BacktestSettings.HasIdeaSlippage`, `ValidateOnStart`). Проверка: тест настроек и тест сканера без ставки `spot`.
+- [x] 5.2 Тест, что `Backtests:DefaultFees` одинаковы в `appsettings.json` трёх сервисов.
+- [x] 5.3 `PaperFill` исполняет по `CaseResult.EntryFill` / `ExitFill`. Проверка: long до цели (1.89290055 USDT) и до
+  стопа (−1 R), short до цели (1.89710055), «Откат» (1.9354143).
+- [x] 5.4 README: «the fees and the slippage».
+- [x] 5.5 Проверка свободных денег остаётся по цене входа — обоснование в design.md, решение 6.
+
