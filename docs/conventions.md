@@ -15,7 +15,7 @@ enforces a rule, the check is the source of truth.
   `AggregateRoot`. A bot is part of the `StrategyLibrary` aggregate: it must stay valid against the latest version of its
   strategy.
 - `ValueObjects/<Area>` holds value objects (`Instrument`, `Price`, `Volume`, `InstrumentRules`, `StrategySnapshot`,
-  `ParameterSpec`, `SimulationSettings`).
+  `ParameterSpec`, `SimulationSettings`, `FeeRates` — the fee rates of a category and the slippage the ideas count on fills that do not rest on the book).
 - `Repositories` holds storage ports, named `I<Name>Repository` (`IStrategyLibraryRepository` for strategies, nodes,
   versions and bots; `IBacktestRepository`; `IIdeaEngineVersionRepository` for the start of a version of the rules of ideas). `Events` holds domain events.
 - `Services/<Area>` holds domain logic that has no state of its own in the database, split into folders by purpose
