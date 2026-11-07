@@ -3,7 +3,7 @@
 // exchange. A test closes candles (`/control/candle`), sends a forming one (`/control/forming`), fills orders and drops the streams through the `/control/*` routes. Signatures are not checked: the key alone picks the
 // answer (`e2e-valid-<uid>`, `e2e-withdraw`, anything else is rejected). An entry of the linear market with a stop and a target (Partial mode) makes the two orders Bybit makes for it,
 // with their parent and a stop order type; `/control/price` sets the last price of a symbol and fires them; the position of a symbol follows the fills; an IOC limit that cannot fill at once
-// is cancelled; a reduce-only order needs a position to reduce. The scanner also reads tickers, open interest and
+// is cancelled; a reduce-only order needs a position to reduce. A symbol of the linear market has a leverage, 10 until `/v5/position/set-leverage` sets it, which the list of positions gives. The scanner also reads tickers, open interest and
 // funding history here, and subscribes minute candles in batches. `/control/pump` starts a steep, loud rise of one symbol from the next minute, which the scanner's setups read as an impulse. Response shapes follow the integration tests' FakeBybitHandler.
 // Usage: node e2e/bybit-stub.ts <port>
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -259,24 +259,49 @@ function tickers(url: URL) {
   });
 }
 
-/** The open position of a symbol of the linear market, one-way: none when it is flat. */
+/** The position of a symbol of the linear market, one-way, with the leverage of the symbol: a flat one is a row with no side and a size of zero, as Bybit lists it. */
 function positionList(url: URL) {
-  const symbol = url.searchParams.get('symbol');
-  const list = [...positions.entries()]
-    .filter(([name, size]) => (symbol ? name === symbol : true) && Math.abs(size) > 1e-12)
-    .map(([name, size]) => ({
-      symbol: name,
-      side: size > 0 ? 'Buy' : 'Sell',
-      size: String(Number(Math.abs(size).toPrecision(12))),
-      positionIdx: 0,
-      avgPrice: '0',
-      positionValue: '0',
-      leverage: '1',
-      tradeMode: 0,
-      positionStatus: 'Normal',
-    }));
+  const symbol = url.searchParams.get('symbol') ?? '';
+  const size = positions.get(symbol) ?? 0;
+  const open = Math.abs(size) > 1e-12;
 
-  return ok({ category: 'linear', list, nextPageCursor: '' });
+  return ok({
+    category: 'linear',
+    list: [
+      {
+        symbol,
+        side: open ? (size > 0 ? 'Buy' : 'Sell') : '',
+        size: String(Number(Math.abs(size).toPrecision(12))),
+        positionIdx: 0,
+        avgPrice: '0',
+        positionValue: '0',
+        leverage: leverages.get(symbol) ?? defaultLeverage,
+        tradeMode: 0,
+        positionStatus: 'Normal',
+      },
+    ],
+    nextPageCursor: '',
+  });
+}
+
+/** Sets the leverage of a symbol, one for the buy and the sell; the leverage it has already is «leverage not modified», 110043. */
+function setLeverage(request: Record<string, unknown>) {
+  const symbol = String(request.symbol);
+  const leverage = String(request.buyLeverage);
+
+  if ((leverages.get(symbol) ?? defaultLeverage) === leverage) {
+    return {
+      retCode: 110043,
+      retMsg: 'leverage not modified',
+      result: {},
+      retExtInfo: {},
+      time: Date.now(),
+    };
+  }
+
+  leverages.set(symbol, leverage);
+
+  return ok({});
 }
 
 /** Times every `step` from the listing inside the inclusive [startTime, endTime], newest first. */
@@ -423,6 +448,9 @@ const children = new Map<string, StubOrder>();
 const lastPrices = new Map<string, number>();
 /** The position of a symbol of the linear market, a short below zero. */
 const positions = new Map<string, number>();
+/** The leverage of a symbol of the linear market; 10 until it is set, as Bybit gives an untouched symbol. */
+const leverages = new Map<string, string>();
+const defaultLeverage = '10';
 /** The executions of an order, by its client id or, for a stop or a target, by its order id. */
 const executions = new Map<string, object[]>();
 let execs = 0;
@@ -904,6 +932,8 @@ const server = createServer((request, response) => {
         nextPageCursor: '',
       }),
     );
+  } else if (url.pathname === '/v5/position/set-leverage') {
+    void body(request).then((parsed) => send(response, setLeverage(parsed)));
   } else if (url.pathname === '/v5/order/create' || url.pathname === '/v5/order/cancel') {
     void body(request).then((parsed) =>
       send(response, url.pathname.endsWith('create') ? createOrder(parsed) : cancelOrder(parsed)),
