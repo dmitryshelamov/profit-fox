@@ -144,7 +144,10 @@ internal sealed class IdeaSignalRepository(NpgsqlDataSource dataSource) : IIdeaS
             cancellationToken: cancellationToken));
     }
 
-    // One statement over every case of an old version outran the command timeout on prod (24 M cases), so an hour of them goes at a time.
+    // One statement over every case of an old version outran the command timeout on prod (24 M cases), so an hour of them goes at a time. Even
+    // an hour outran the default 30 s on prod after v29; the clean-up runs in a lane of its own, so a step may take minutes.
+    private static readonly int CleanUpTimeoutSeconds = (int)TimeSpan.FromMinutes(10).TotalSeconds;
+
     public async Task<int> DeleteOtherVersionsAsync(int engineVersion, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
@@ -156,6 +159,7 @@ internal sealed class IdeaSignalRepository(NpgsqlDataSource dataSource) : IIdeaS
             WHERE engine_version <> @Version AND fired_at >= first.at AND fired_at < first.at + interval '1 hour'
             """,
             new { Version = engineVersion },
+            commandTimeout: CleanUpTimeoutSeconds,
             cancellationToken: cancellationToken));
     }
 

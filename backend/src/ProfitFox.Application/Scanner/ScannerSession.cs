@@ -16,9 +16,9 @@ using ProfitFox.Domain.ValueObjects.MarketData;
 namespace ProfitFox.Application.Scanner;
 
 /// <summary>
-///     The scanner while it holds the stream: the list of pairs, the stream of minute candles, the loads, the minute cycle and the ideas. Six
+///     The scanner while it holds the stream: the list of pairs, the stream of minute candles, the loads, the minute cycle and the ideas. Seven
 ///     lanes run side by side: the stream's candles go to storage in batches; the REST lane catches up the pairs that lag behind, reads the list
-///     again, tops up funding and loads history, one piece at a time; the minute cycle computes the snapshot and the live ideas; the lane of
+///     again, tops up funding and loads history, one piece at a time; the minute cycle computes the snapshot and the live ideas; one lane clears the signals of other versions of the rules; the lane of
 ///     ideas reads the warm-ups of the live ideas, replays history from storage only and removes the ideas closed more than a week ago once an
 ///     hour; one lane of statistics recomputes the buckets and the calibration once an hour, another the buckets of a type × interval whose exit
 ///     rule changed (requirement "Пересчёт корзин"). A failed step is logged and tried again; only the end of the lease stops the session.
@@ -46,6 +46,7 @@ public sealed class ScannerSession(
     private readonly Channel<(Instrument, Candle)> _closed = Channel.CreateUnbounded<(Instrument, Candle)>();
     private readonly Lock _lock = new Lock();
     private readonly HashSet<Instrument> _catchUp = [];
+    private readonly TaskCompletionSource _cleaned = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
     private TaskCompletionSource _work = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
     private IAsyncDisposable? _subscription;
 
@@ -72,7 +73,8 @@ public sealed class ScannerSession(
         try
         {
             await SubscribeAsync(session.Token);
-            Task[] lanes = [WriteCandlesAsync(session.Token), RestAsync(session.Token), MinutesAsync(session.Token), IdeasAsync(session.Token), WholeStatisticsAsync(session.Token),
+            Task[] lanes = [WriteCandlesAsync(session.Token), RestAsync(session.Token), MinutesAsync(session.Token), CleanUpAsync(session.Token), IdeasAsync(session.Token),
+                WholeStatisticsAsync(session.Token),
                 RuleStatisticsAsync(session.Token)];
             Task first = await Task.WhenAny(lanes);
 
@@ -201,9 +203,32 @@ public sealed class ScannerSession(
         }
     }
 
+    // The signals of other versions of the rules go a step at a time in a lane of their own: a step that fails or takes long keeps neither the
+    // warm-ups of the live ideas nor the closed ideas waiting, only the history, which is replayed once no signal of another version is left.
+    private async Task CleanUpAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                if (!await replay.CleanUpAsync(cancellationToken))
+                {
+                    _cleaned.TrySetResult();
+
+                    // A lane that ends ends the session, so this one waits for the end of the lease.
+                    await Task.Delay(Timeout.Infinite, cancellationToken);
+                }
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                journal.Failed("ideas-cleanup", exception);
+                await Task.Delay(Retry, time, cancellationToken);
+            }
+        }
+    }
+
     private async Task IdeasAsync(CancellationToken cancellationToken)
     {
-        bool cleaned = false;
         DateTimeOffset closedAt = time.GetUtcNow();
 
         try
@@ -220,12 +245,6 @@ public sealed class ScannerSession(
         {
             try
             {
-                // A step of the clean-up at a time, so the warm-ups of the live ideas go between them.
-                if (!cleaned)
-                {
-                    cleaned = !await replay.CleanUpAsync(cancellationToken);
-                }
-
                 if (time.GetUtcNow() >= closedAt)
                 {
                     await ideas.RemoveClosedAsync(cancellationToken);
@@ -236,7 +255,18 @@ public sealed class ScannerSession(
                 // The warm-ups of the live ideas go before the history.
                 bool warmed = await ideas.ReadWarmUpsAsync(cancellationToken);
 
-                if (!warmed && cleaned && !await replay.StepAsync(cancellationToken))
+                if (warmed)
+                {
+                    continue;
+                }
+
+                if (!_cleaned.Task.IsCompleted)
+                {
+                    // No history to replay before the clean-up ends: the next warm-ups come within a minute, the history once it ends.
+                    await Task.WhenAny(Task.Delay(TimeSpan.FromMinutes(1), time, cancellationToken), _cleaned.Task);
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+                else if (!await replay.StepAsync(cancellationToken))
                 {
                     await Task.Delay(TimeSpan.FromMinutes(1), time, cancellationToken);
                 }
