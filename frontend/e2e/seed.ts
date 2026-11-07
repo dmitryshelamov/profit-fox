@@ -151,6 +151,7 @@ export async function seedCalibration(): Promise<void> {
       },
       New: { Cases: 600, Brier: '0.204', Up: null },
       Features: { Cases: 600, Brier: '0.201', Up: null },
+      Difference: { Mean: '-0.003', Low: '-0.009', High: '0.002' },
     },
   };
 

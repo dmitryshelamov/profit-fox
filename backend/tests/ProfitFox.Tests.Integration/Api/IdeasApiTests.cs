@@ -240,7 +240,8 @@ public class IdeasApiTests
             Comparison = new CalibrationComparison(
                 new CalibrationModel(30, 0.22m, new CalibrationRow(null, null, IdeaBadge.Up, 0.145m, thirty)),
                 new CalibrationModel(30, 0.207m, null),
-                new CalibrationModel(30, 0.201m, new CalibrationRow(null, null, IdeaBadge.Up, 0.12m, thirty)))
+                new CalibrationModel(30, 0.201m, new CalibrationRow(null, null, IdeaBadge.Up, 0.12m, thirty)),
+                new CalibrationDifference(-0.006m, -0.012m, null))
         };
         // Scenario "Отчёт без модели с признаками": a report computed before add-idea-features.
         CalibrationReport before = all with { Days = 30, Comparison = new CalibrationComparison(new CalibrationModel(30, 0.22m, null), new CalibrationModel(30, 0.207m, null)) };
@@ -259,9 +260,13 @@ public class IdeasApiTests
         JsonElement features = comparison.GetProperty("features");
         (features.GetProperty("cases").GetInt32(), features.GetProperty("brier").GetString(), features.GetProperty("up").GetProperty("promised").GetString())
             .ShouldBe((30, "0.201", "0.12"));
+        JsonElement difference = comparison.GetProperty("difference");
+        (difference.GetProperty("mean").GetString(), difference.GetProperty("low").GetString(), difference.GetProperty("high").ValueKind)
+            .ShouldBe(("-0.006", "-0.012", JsonValueKind.Null));
         JsonElement whole = await GetAsync("/api/ideas/calibration?scope=all");
         (whole.GetProperty("scope").GetString(), whole.GetProperty("checked").GetInt32(), whole.GetProperty("comparison").ValueKind).ShouldBe(("all", 30, JsonValueKind.Null));
-        (await GetAsync("/api/ideas/calibration?days=30")).GetProperty("comparison").GetProperty("features").ValueKind.ShouldBe(JsonValueKind.Null);
+        JsonElement before30 = (await GetAsync("/api/ideas/calibration?days=30")).GetProperty("comparison");
+        (before30.GetProperty("features").ValueKind, before30.GetProperty("difference").ValueKind).ShouldBe((JsonValueKind.Null, JsonValueKind.Null));
     }
 
     // Scenario "Ещё не посчитана".

@@ -61,7 +61,8 @@ public class IdeaCalibrationRepositoryTests
             Comparison = new CalibrationComparison(
                 new CalibrationModel(31, 0.22m, new CalibrationRow(null, null, IdeaBadge.Up, 0.145m, thirty)),
                 new CalibrationModel(31, 0.207m, null),
-                new CalibrationModel(31, 0.201m, new CalibrationRow(null, null, IdeaBadge.Up, 0.12m, thirty)))
+                new CalibrationModel(31, 0.201m, new CalibrationRow(null, null, IdeaBadge.Up, 0.12m, thirty)),
+                new CalibrationDifference(-0.006m, -0.012m, 0.001m))
         };
         await calibrations.ReplaceAsync(1, [all with { Days = 30 }], CancellationToken.None);
 
@@ -73,6 +74,27 @@ public class IdeaCalibrationRepositoryTests
         (await calibrations.GetAsync(2, 90, null, CalibrationScope.Fresh, CancellationToken.None)).ShouldBeNull();
         (await calibrations.GetAsync(2, 90, MarketCategory.Spot, CalibrationScope.All, CancellationToken.None)).ShouldBeNull();
         (await calibrations.GetAsync(1, 30, null, CalibrationScope.All, CancellationToken.None)).ShouldBeNull();
+    }
+
+    // Decision 4 of add-idea-features: a report stored before it has neither the model with features nor the difference in its comparison.
+    [Test]
+    public async Task Report_stored_before_the_model_with_features_reads_without_it()
+    {
+        const string report = """
+                              {"Checked": 0, "Unchecked": 0, "Brier": null, "BaseBrier": null, "Probabilities": [], "Expectancies": [], "Badges": [],
+                               "Total": null, "Owns": [], "Comparison": {"Old": {"Cases": 0, "Brier": null, "Up": null}, "New": {"Cases": 0, "Brier": null, "Up": null}}}
+                              """;
+        await using (NpgsqlCommand insert = _dataSource.CreateCommand(
+                         "INSERT INTO idea_calibration (engine_version, days, category, scope, computed_at, report) VALUES (2, 90, 'all', 'all', @Now, @Report::jsonb)"))
+        {
+            insert.Parameters.AddWithValue("Now", Now);
+            insert.Parameters.AddWithValue("Report", report);
+            await insert.ExecuteNonQueryAsync();
+        }
+
+        CalibrationReport? read = await new IdeaCalibrationRepository(_dataSource).GetAsync(2, 90, null, CalibrationScope.All, CancellationToken.None);
+
+        read!.Comparison.ShouldBe(new CalibrationComparison(new CalibrationModel(0, null, null), new CalibrationModel(0, null, null)));
     }
 
     // A record compares its lists by reference: the lists are compared by their rows, the rest as it is.

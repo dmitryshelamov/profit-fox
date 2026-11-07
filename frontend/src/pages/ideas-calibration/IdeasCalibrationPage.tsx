@@ -190,6 +190,11 @@ function ReportView({ report }: { report: Report }) {
           кейсов; сравнение — на кейсах, которые проверяют обе модели.
         </li>
         <li>
+          С признаками: подкорзины корзины по сильному движению (от 4 ATR) и высокому объёму (от 4
+          медиан), подтянутые к модели корзины. Разница Брайера — на тех же кейсах; признаки стоит
+          брать в корзины, только если весь её интервал ниже 0.
+        </li>
+        <li>
           После изменения правил: только кейсы, сработавшие после применения правила выхода своего
           типа × ТФ и после начала текущей версии правил идей.
         </li>
@@ -363,26 +368,44 @@ function ComparisonTable({ comparison }: { comparison: Comparison }) {
   ];
 
   return (
-    <Table
-      label="Старая модель → новая"
-      headers={['Модель', 'Случаев', 'Брайер', 'С ▲', 'Обещали', 'Получили', 'Интервал 95 %']}
-    >
-      {models.map(({ label, model }) => (
-        <tr key={label}>
-          <td className={cell}>{label}</td>
-          <td className={number}>{groupDigits(String(model.cases))}</td>
-          <td className={number}>{model.brier === null ? '—' : roundDecimal(model.brier, 3)}</td>
-          <td className={number}>{groupDigits(String(model.up?.cases ?? 0))}</td>
-          <td className={number}>{model.up === null ? '—' : inR(model.up.promised)}</td>
-          <td className={number}>{model.up === null ? '—' : inR(model.up.expectancy)}</td>
-          <td className={number}>
-            {model.up === null
-              ? '—'
-              : resultInterval(model.up.expectancyLow, model.up.expectancyHigh)}
-          </td>
-        </tr>
-      ))}
-    </Table>
+    <>
+      <Table
+        label="Старая модель → новая"
+        headers={['Модель', 'Случаев', 'Брайер', 'С ▲', 'Обещали', 'Получили', 'Интервал 95 %']}
+      >
+        {models.map(({ label, model }) => (
+          <tr key={label}>
+            <td className={cell}>{label}</td>
+            <td className={number}>{groupDigits(String(model.cases))}</td>
+            <td className={number}>{model.brier === null ? '—' : roundDecimal(model.brier, 3)}</td>
+            <td className={number}>{groupDigits(String(model.up?.cases ?? 0))}</td>
+            <td className={number}>{model.up === null ? '—' : inR(model.up.promised)}</td>
+            <td className={number}>{model.up === null ? '—' : inR(model.up.expectancy)}</td>
+            <td className={number}>
+              {model.up === null
+                ? '—'
+                : resultInterval(model.up.expectancyLow, model.up.expectancyHigh)}
+            </td>
+          </tr>
+        ))}
+      </Table>
+      {comparison.difference !== null && <Difference difference={comparison.difference} />}
+    </>
+  );
+}
+
+// The Brier score of the model with features less that of the new one: the features help only where the whole interval is below 0.
+function Difference({ difference }: { difference: NonNullable<Comparison['difference']> }) {
+  const interval =
+    difference.low === null || difference.high === null
+      ? '— меньше 30 кейсов'
+      : `${showDecimal(difference.low, 3, true)}…${showDecimal(difference.high, 3, true)}`;
+
+  return (
+    <p aria-label="Разница Брайера" className="text-sm text-muted">
+      С признаками − новая, Брайер: {showDecimal(difference.mean, 3, true)}, интервал 95 %{' '}
+      {interval}
+    </p>
   );
 }
 

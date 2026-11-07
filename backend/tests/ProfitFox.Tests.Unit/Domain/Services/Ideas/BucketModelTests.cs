@@ -62,6 +62,43 @@ public class BucketModelTests
         BucketModel.Spread([new BucketModel.Estimate(0m, 0.1), new BucketModel.Estimate(0.1m, 0.1)]).ShouldBe(0);
     }
 
+    // Decision 3 of add-idea-features, DerSimonian–Laird pooled over groups around the weighted mean of each: the groups of means 0 and 1 and of
+    // 0 and 0.2, variance 0.1, give Q = 5 + 0.2 over 2 degrees of freedom and Σw − Σw² / Σw = 10 + 10: τ² = (5.2 − 2) / 20; groups of one
+    // member and of none add nothing.
+    [Test]
+    public void Spread_pooled_over_groups_is_estimated_from_how_the_members_differ_within_each()
+    {
+        BucketModel.PooledSpread(
+        [
+            [new BucketModel.Estimate(0m, 0.1), new BucketModel.Estimate(1m, 0.1)],
+            [new BucketModel.Estimate(0m, 0.1), new BucketModel.Estimate(0.2m, 0.1)],
+            [new BucketModel.Estimate(5m, 0.1)],
+            []
+        ]).ShouldBe(0.16, 0.000001);
+    }
+
+    // Decision 3 of add-idea-features: one bucket of a parent, 30 +2 R targets and 30 −1 R stops sharing their hours, the two in each hour
+    // making the clustered variance no wider than that of independent cases: 0.25 / 60 of the share and s² / 60 = 135 / 59 / 60 of the mean.
+    // Its two levels have no spread of their own and take that of the bucket over their 30 cases each, twice as much: τ² = 59 / 120 of the share
+    // and (59 − 1) / 13.11 = 4.4237 of the mean; a level of fewer than 30 cases and a bucket without a case add nothing.
+    [Test]
+    public void Spread_of_the_features_is_that_of_the_levels_around_their_bucket_over_the_buckets_of_a_parent()
+    {
+        ClusteredSums targets = Equal(30, IdeaStatus.Target, 2m);
+        ClusteredSums stops = Equal(30, IdeaStatus.Stop, -1m);
+        ClusteredSums bucket = Equal(30, IdeaStatus.Target, 2m);
+
+        foreach (int hour in Enumerable.Range(0, 30))
+        {
+            bucket.Add(Hour.AddHours(hour), IdeaStatus.Stop, -1m);
+        }
+
+        BucketModel.Spreads spreads = BucketModel.FeatureSpreads([(bucket, [targets, stops, Equal(5, IdeaStatus.Expired, 0m)]), (new ClusteredSums(), [])], new BucketModel.ParentModel(NineThousand, NineThousand));
+
+        spreads.Share.ShouldBe(59.0 / 120, 0.00001);
+        spreads.Expectancy.ShouldBe(4.42373, 0.00001);
+    }
+
     [Test]
     public void One_bucket_has_no_spread()
     {

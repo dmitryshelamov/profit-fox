@@ -192,13 +192,41 @@ describe('calibration screen', () => {
     ]);
   });
 
+  // Scenario "Разница Брайера".
+  it('shows the Brier score of the model with features less that of the new one with its interval', async () => {
+    open();
+    renderApp('/ideas/calibration');
+
+    expect(await screen.findByLabelText('Разница Брайера')).toHaveTextContent(
+      'С признаками − новая, Брайер: -0.006, интервал 95 % -0.012…+0.001',
+    );
+  });
+
+  it('shows the difference without an interval under 30 cases', async () => {
+    const report = calibrationOf();
+    open(
+      calibrationOf({
+        comparison: { ...report.comparison!, difference: { mean: '0.01', low: null, high: null } },
+      }),
+    );
+    renderApp('/ideas/calibration');
+
+    expect(await screen.findByLabelText('Разница Брайера')).toHaveTextContent(
+      'С признаками − новая, Брайер: +0.010, интервал 95 % — меньше 30 кейсов',
+    );
+  });
+
   // Scenario "Отчёт без модели с признаками".
   it('shows the old and the new model only in a report without the model with features', async () => {
     const report = calibrationOf();
-    open(calibrationOf({ comparison: { ...report.comparison!, features: null } }));
+    open(
+      calibrationOf({ comparison: { ...report.comparison!, features: null, difference: null } }),
+    );
     renderApp('/ideas/calibration');
 
     const table = await screen.findByRole('table', { name: 'Старая модель → новая' });
+
+    expect(screen.queryByLabelText('Разница Брайера')).not.toBeInTheDocument();
 
     expect(within(table).getByRole('row', { name: /Новая/ })).toBeInTheDocument();
     expect(within(table).queryByRole('row', { name: /С признаками/ })).not.toBeInTheDocument();

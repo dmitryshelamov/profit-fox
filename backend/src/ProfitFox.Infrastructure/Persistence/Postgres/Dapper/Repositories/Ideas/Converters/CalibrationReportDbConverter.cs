@@ -25,7 +25,10 @@ internal static class CalibrationReportDbConverter
             {
                 Old = FromDomain(comparison.Old),
                 New = FromDomain(comparison.New),
-                Features = comparison.Features is null ? null : FromDomain(comparison.Features)
+                Features = comparison.Features is null ? null : FromDomain(comparison.Features),
+                Difference = comparison.Difference is not { } difference
+                    ? null
+                    : new CalibrationDifferenceDb { Mean = difference.Mean, Low = difference.Low, High = difference.High }
             }
         };
     }
@@ -47,7 +50,11 @@ internal static class CalibrationReportDbConverter
         {
             Scope = scope,
             Owns = [.. row.Owns.Select(own => new CalibrationOwnRow(own.FewOwnCases, ToDomain(own.Row), own.Brier))],
-            Comparison = row.Comparison is not { } comparison ? null : new CalibrationComparison(ToDomain(comparison.Old), ToDomain(comparison.New), comparison.Features is null ? null : ToDomain(comparison.Features))
+            Comparison = row.Comparison is not { } comparison ? null : new CalibrationComparison(
+                    ToDomain(comparison.Old),
+                    ToDomain(comparison.New),
+                    comparison.Features is null ? null : ToDomain(comparison.Features),
+                    comparison.Difference is not { } difference ? null : new CalibrationDifference(difference.Mean, difference.Low, difference.High))
         };
     }
 

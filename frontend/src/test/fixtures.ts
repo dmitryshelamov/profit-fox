@@ -705,6 +705,7 @@ export const calibrationOf = (overrides: Partial<Schemas['IdeaCalibrationRespons
           expectancyHigh: '0.12',
         }),
       },
+      difference: { mean: '-0.006', low: '-0.012', high: '0.001' },
     },
     ...overrides,
   }) satisfies Schemas['IdeaCalibrationResponse'];
