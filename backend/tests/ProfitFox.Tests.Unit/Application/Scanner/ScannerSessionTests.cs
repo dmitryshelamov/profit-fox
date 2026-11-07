@@ -199,7 +199,8 @@ public class ScannerSessionTests
             [new ListedInstrument(MarketCategory.Spot, "BTCUSDT", "BTC", "USDT", true)],
             [new ListedInstrument(MarketCategory.Spot, "BTCUSDT", "BTC", "USDT", true), new ListedInstrument(MarketCategory.Spot, "ETHUSDT", "ETH", "USDT", true)]);
         using var lease = new CancellationTokenSource();
-        Task session = Session().RunAsync(lease.Token);
+        // The list is read again each minute, so the clock does not have to pass an hour before the next subscription.
+        Task session = Session(TimeSpan.FromMinutes(1)).RunAsync(lease.Token);
 
         await WaitAsync(() => calls >= 3, advance: true);
         await lease.CancelAsync();
@@ -519,10 +520,11 @@ public class ScannerSessionTests
         return rules;
     }
 
-    private ScannerSession Session()
+    /// <param name="universeRefresh">How often the session reads the list of pairs again; without it, the default hour.</param>
+    private ScannerSession Session(TimeSpan? universeRefresh = null)
     {
         var market = new ScannerMarket();
-        var settings = new ScannerSettings { HistoryDays = 1 };
+        var settings = new ScannerSettings { HistoryDays = 1, UniverseRefresh = universeRefresh ?? new ScannerSettings().UniverseRefresh };
         var pace = new ScannerPace();
         var recomputes = new IdeaRecomputes();
         var ideas = new LiveIdeas(_ideaStore, Substitute.For<IIdeaVolatilityRepository>(), _candles, _exitRules, recomputes, market, new IdeasSettings(), new BacktestSettings(), NoAutos.Create(market, new BacktestSettings(), _time, _entries, _refusals), _time);
