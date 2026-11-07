@@ -137,7 +137,7 @@ enforces a rule, the check is the source of truth.
   `Universe/ScannerUniverse` (the list of pairs), `Backfill/ScannerBackfill` (the last day, the gaps, the history, funding),
   `Minute/ScannerMinuteCycle` (tickers, the point of open interest, the snapshot) and `ScannerSession`, which runs them while the
   scanner holds the stream. `Ports/Market` holds `IMarketDataFeed` (REST of public data, through the scanner's own rate limit),
-  `IMarketStreams` (minute candles in batches) and `IScannerJournal`. `Market/Queries` holds the queries of the market API
+  `IMarketStreams` (minute candles in batches; the liquidations of linear pairs, with the times a connection was lost and back) and `IScannerJournal`. `Market/Queries` holds the queries of the market API
   (`GetMarket`, `GetMarketPair`, `GetMarketCandles`, `GetMarketSeries`); `Market/MarketOrder` is the order of the rows of «Рынок»
   (a column and a direction, rows without a value last, equal values by category code and symbol, ordinally); `MarketData/ChartCandles` is the period of a chart the
   bot and the pair share. `Paging` holds `PageRequest` (the number from 1 and the size 50, 100 or 200 a client asked for, with the field errors
@@ -209,7 +209,8 @@ enforces a rule, the check is the source of truth.
   through. The end of every pause goes to `scanner_state` and only ever moves later, in memory and in the row, so a limit after a ban
   never shortens it. `Exchanges/Bybit/BybitPublicDataClient`
   implements `IMarketDataFeed` through it; `Exchanges/Bybit/BybitMarketStreams` implements `IMarketStreams` on a socket client of its
-  own, apart from `BybitStreams`.
+  own, apart from `BybitStreams`, and the liquidations (`allLiquidation`, the side of the order turned into the side of the position:
+  `Sell` → `Long`) on another, so a break of one stream does not touch the other.
 - `Exchanges/Bybit/BybitAccountClient` implements `IExchangeKeyInspector`: a typed `HttpClient` that builds a Bybit client
   with the key for one call and drops it, one attempt per call. `Security/AesGcmSecretProtector` encrypts secrets with the
   master key (AES-256-GCM, the account id as associated data).

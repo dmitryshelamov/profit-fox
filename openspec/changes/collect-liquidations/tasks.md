@@ -22,7 +22,7 @@
 
 ## 3. Поток Bybit
 
-- [ ] 3.1 `IMarketStreams.SubscribeLiquidationsAsync` (решение 2) и `BybitMarketStreams`: второй сокет-клиент, пачки по 10,
+- [x] 3.1 `IMarketStreams.SubscribeLiquidationsAsync` (решение 2) и `BybitMarketStreams`: второй сокет-клиент, пачки по 10,
   `allLiquidation`, `Sell` → `Long`, `Buy` → `Short`, `UpdateTime` → время события, `lost` / `restored` из событий
   подписки. Интеграционные тесты на `FakeBybitSocketServer`: сценарии «Ликвидация пришла» и «Сторона позиции» по
   пушу топика `allLiquidation.SOLUSDT`; 25 пар дают 3 запроса подписки; отказ биржи — `ExchangeUnavailableException`;
