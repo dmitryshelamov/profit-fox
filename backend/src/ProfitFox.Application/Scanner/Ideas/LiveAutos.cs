@@ -5,6 +5,7 @@ using ProfitFox.Domain.Entities.IdeaAutos;
 using ProfitFox.Domain.Entities.IdeaAutos.Enums;
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.IdeaTrades;
+using ProfitFox.Domain.Entities.IdeaTrades.Enums;
 using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
@@ -153,13 +154,18 @@ public sealed class LiveAutos(
         IReadOnlyDictionary<Guid, IdeaAuto>? every = null;
         DateTimeOffset now = time.GetUtcNow();
 
+        IReadOnlyList<int> order = AutoMinutePlan.Order([.. views.Select(view => (view.Bucket, view.Shares))]);
+
         foreach (IdeaAuto auto in enabled.OrderBy(auto => auto.Position))
         {
-            for (int fired = 0; fired < born.Count; fired++)
-            {
-                Idea idea = born[fired];
+            AutoMinutePlan? plan = null;
 
-                if (!AutoConditions.Match(idea, views[fired].Bucket, auto.Conditions))
+            // Decision 3 of add-burst-and-auto-limits: the ideas go by the order of their promise, and a request carries its place in it.
+            for (int fired = 0; fired < order.Count; fired++)
+            {
+                Idea idea = born[order[fired]];
+
+                if (!AutoConditions.Match(idea, views[order[fired]].Bucket, auto.Conditions))
                 {
                     continue;
                 }
@@ -174,9 +180,17 @@ public sealed class LiveAutos(
                     continue;
                 }
 
+                plan ??= new AutoMinutePlan(auto, books);
+
+                if (!plan.Allows(idea))
+                {
+                    continue;
+                }
+
                 if (auto.Mode == IdeaAutoMode.Live)
                 {
                     entries.Add(new IdeaAutoEntry(Guid.NewGuid(), idea.Id, auto.Id, auto.AccountId, auto.Amount, auto.Conditions.MinRiskReward, auto.Position, fired, end, now));
+                    plan.Took(idea);
 
                     continue;
                 }
@@ -188,19 +202,7 @@ public sealed class LiveAutos(
 
                 if (check.Refusals.Count > 0)
                 {
-                    refusals.Add(new IdeaAutoRefusal(
-                        Guid.NewGuid(),
-                        idea.Id,
-                        auto.Id,
-                        IdeaAutoMode.Paper,
-                        now,
-                        idea.Instrument,
-                        idea.Setup,
-                        idea.Interval,
-                        idea.Track.Plan.Type,
-                        idea.Track.Plan.Side,
-                        [.. check.Refusals.Select(refusal => refusal.Reason)],
-                        check.Refusals[0].Detail));
+                    refusals.Add(Refusal(auto, idea, now, [.. check.Refusals.Select(refusal => refusal.Reason)], check.Refusals[0].Detail));
 
                     continue;
                 }
@@ -208,8 +210,29 @@ public sealed class LiveAutos(
                 PaperIdeaTrade trade = PaperFill.Open(Guid.NewGuid(), idea, auto.Id, auto.AccountId, check.Size!, PromiseOf(idea, birth, bucketList), birth, fees);
                 working[trade.Trade.Id] = trade;
                 opened.Add(trade);
+                plan.Took(idea);
             }
+
+            // Decision 4: the ideas a limit skipped are one refusal of the auto, the side and the minute, on the first of them.
+            refusals.AddRange(plan?.Skips.Select(skip => Refusal(auto, skip.First, now, [skip.Reason], RefusalDetail.Numbers(skip.Skipped, skip.Limit))) ?? []);
         }
+    }
+
+    private static IdeaAutoRefusal Refusal(IdeaAuto auto, Idea idea, DateTimeOffset now, IReadOnlyList<IdeaTradeRefusal> reasons, RefusalDetail? detail)
+    {
+        return new IdeaAutoRefusal(
+            Guid.NewGuid(),
+            idea.Id,
+            auto.Id,
+            auto.Mode,
+            now,
+            idea.Instrument,
+            idea.Setup,
+            idea.Interval,
+            idea.Track.Plan.Type,
+            idea.Track.Plan.Side,
+            reasons,
+            detail);
     }
 
     // What the idea promises at the price the paper trade enters at: the statistics of its bucket as the list of ideas shows them, and the money from that price.
