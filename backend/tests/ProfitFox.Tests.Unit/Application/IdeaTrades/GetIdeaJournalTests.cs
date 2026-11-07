@@ -193,7 +193,7 @@ public class GetIdeaJournalTests
     {
         IdeaTrade open = Opened(Noon.AddHours(-1), Eth);
         Trades([open]);
-        _history.GetLastPriceAsync(Eth, Arg.Any<CancellationToken>()).Returns(23.90m);
+        Prices(("ETHUSDT", 23.90m));
 
         GetIdeaJournalResult result = await _handler.Handle(Everything, CancellationToken.None);
 
@@ -202,33 +202,53 @@ public class GetIdeaJournalTests
         (item.LastPrice, item.CurrentResult, item.CurrentResultR).ShouldBe((23.90m, expected, expected / 0.2m));
     }
 
-    // One request for the price of a symbol, however many trades are open on it; a trade that waits for its entry has no result and asks for nothing.
+    // One request for the prices of a category, however many trades are open on a pair; a trade that waits for its entry has no result and asks for nothing.
     [Test]
-    public async Task Last_price_is_asked_once_for_a_symbol_and_not_for_a_trade_that_waits()
+    public async Task Last_prices_are_asked_once_and_not_for_a_trade_that_waits()
     {
-        Trades([Opened(Noon.AddHours(-1), Eth), Opened(Noon.AddHours(-2), Eth), Waiting(Noon.AddHours(-3), instrument: Btc)]);
-        _history.GetLastPriceAsync(Eth, Arg.Any<CancellationToken>()).Returns(23.90m);
+        Trades([Opened(Noon.AddHours(-1), Eth), Opened(Noon.AddHours(-2), Eth), Waiting(Noon.AddHours(-3), instrument: new Instrument(MarketCategory.Spot, "BTCUSDT"))]);
+        Prices(("ETHUSDT", 23.90m));
 
         GetIdeaJournalResult result = await _handler.Handle(Everything, CancellationToken.None);
 
-        await _history.Received(1).GetLastPriceAsync(Eth, Arg.Any<CancellationToken>());
-        await _history.DidNotReceive().GetLastPriceAsync(Btc, Arg.Any<CancellationToken>());
+        await _history.Received(1).GetLastPricesAsync(MarketCategory.Linear, Arg.Any<CancellationToken>());
+        await _history.DidNotReceive().GetLastPricesAsync(MarketCategory.Spot, Arg.Any<CancellationToken>());
         result.Journal!.Open.Select(item => item.CurrentResult is not null).ShouldBe([true, true, false]);
     }
 
-    // Scenario "Bybit не ответил": the journal answers without an error, the trade has no current result.
+    // 100 open paper trades on prod took the journal 23 s, a request of the price after another: the prices of a category come in one request.
     [Test]
-    public async Task Exchange_that_gives_no_price_leaves_the_trade_without_a_current_result()
+    public async Task Last_prices_are_asked_once_for_a_category_however_many_pairs_are_open()
     {
         Trades([Opened(Noon.AddHours(-1), Eth), Opened(Noon.AddHours(-2), Btc)]);
-        _history.GetLastPriceAsync(Eth, Arg.Any<CancellationToken>()).Returns<decimal>(_ => throw new ExchangeUnavailableException("no ticker"));
-        _history.GetLastPriceAsync(Btc, Arg.Any<CancellationToken>()).Returns(23.90m);
+        _history.GetLastPricesAsync(MarketCategory.Linear, Arg.Any<CancellationToken>()).Returns(new Dictionary<string, decimal> { ["ETHUSDT"] = 23.90m, ["BTCUSDT"] = 24m });
 
         GetIdeaJournalResult result = await _handler.Handle(Everything, CancellationToken.None);
 
-        IdeaJournalTrade failed = result.Journal!.Open[0];
-        (failed.LastPrice, failed.CurrentResult, failed.CurrentResultR).ShouldBe((null, null, null));
-        result.Journal.Open[1].CurrentResult.ShouldNotBeNull();
+        await _history.Received(1).GetLastPricesAsync(MarketCategory.Linear, Arg.Any<CancellationToken>());
+        await _history.DidNotReceiveWithAnyArgs().GetLastPriceAsync(default!, default);
+        result.Journal!.Open.Select(item => item.LastPrice).ShouldBe([23.90m, 24m]);
+    }
+
+    // Scenario "Bybit не ответил": the journal answers without an error; the trades of the category that got no price have no current result,
+    // nor does a pair the tickers do not name.
+    [Test]
+    public async Task Exchange_that_gives_no_price_leaves_the_trade_without_a_current_result()
+    {
+        var sol = new Instrument(MarketCategory.Spot, "SOLUSDT");
+        Trades([Opened(Noon.AddHours(-1), Eth), Opened(Noon.AddHours(-2), Btc), Opened(Noon.AddHours(-3), sol)]);
+        _history.GetLastPricesAsync(MarketCategory.Spot, Arg.Any<CancellationToken>()).Returns<IReadOnlyDictionary<string, decimal>>(_ => throw new ExchangeUnavailableException("down"));
+        Prices(("BTCUSDT", 23.90m));
+
+        GetIdeaJournalResult result = await _handler.Handle(Everything, CancellationToken.None);
+
+        result.Journal!.Open.Select(item => item.CurrentResult is not null).ShouldBe([false, true, false]);
+        (result.Journal.Open[0].LastPrice, result.Journal.Open[0].CurrentResultR).ShouldBe((null, null));
+    }
+
+    private void Prices(params (string Symbol, decimal Price)[] linear)
+    {
+        _history.GetLastPricesAsync(MarketCategory.Linear, Arg.Any<CancellationToken>()).Returns(linear.ToDictionary(item => item.Symbol, item => item.Price));
     }
 
     private IdeaTrade Opened(DateTimeOffset createdAt, Instrument instrument)
@@ -335,7 +355,7 @@ public class GetIdeaJournalTests
     {
         IdeaTrade paperOpen = Opened(Noon.AddHours(-1), Eth) with { AutoId = Gone.Id };
         Paper([paperOpen]);
-        _history.GetLastPriceAsync(Eth, Arg.Any<CancellationToken>()).Returns(24m);
+        Prices(("ETHUSDT", 24m));
 
         IdeaJournalTrade view = (await _handler.Handle(Everything, CancellationToken.None)).Journal!.Open.Single();
 
