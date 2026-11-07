@@ -125,7 +125,7 @@ internal sealed class BybitMarketStreams(ILoggerFactory loggers, BybitSettings s
             loggers);
     }
 
-    // The side of the order of a liquidation is the opposite of the position it closed: a Sell closed a long.
+    // Bybit gives the side of the liquidated position: "when you receive a Buy update, this means that a long position has been liquidated".
     private static void Liquidations(BybitLiquidationUpdate[] updates, Action<Instrument, LiquidationEvent> liquidated)
     {
         foreach (BybitLiquidationUpdate update in updates)
@@ -134,7 +134,7 @@ internal sealed class BybitMarketStreams(ILoggerFactory loggers, BybitSettings s
                 new Instrument(MarketCategory.Linear, update.Symbol),
                 new LiquidationEvent(
                     new DateTimeOffset(DateTime.SpecifyKind(update.UpdateTime, DateTimeKind.Utc)),
-                    update.Side == OrderSide.Sell ? LiquidationSide.Long : LiquidationSide.Short,
+                    update.Side == OrderSide.Buy ? LiquidationSide.Long : LiquidationSide.Short,
                     update.Price,
                     update.Quantity));
         }
