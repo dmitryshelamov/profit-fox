@@ -102,6 +102,24 @@ public class BucketModelTests
         (statistics.FewOwnCases, statistics.Badge).ShouldBe((true, IdeaBadge.Flat));
     }
 
+    // Scenario "Корзина как родитель подкорзин" of add-idea-features: the bucket of "12 своих случаев" is the parent of its feature sub-buckets
+    // with the numbers of its model. Scenario "Тонкий уровень остаётся с корзиной": a sub-bucket of the same 12 cases, among sub-buckets that do
+    // not differ beyond chance, has the numbers of that model; "Подкорзины различаются" is the test above, the bucket taking the sub-bucket's place.
+    [Test]
+    public void Bucket_is_the_parent_of_its_feature_sub_buckets_with_the_numbers_of_its_model()
+    {
+        BucketModel.ParentModel bucket = BucketModel.Bucket(Equal(12, IdeaStatus.Target, 0.5m), new BucketModel.ParentModel(NineThousand, NineThousand), new BucketModel.Spreads(0, Tau));
+
+        bucket.Own.Cases.ShouldBe(12);
+        (bucket.Model.Cases, bucket.Model.Share.Mean).ShouldBe((12, 0.4m));
+        bucket.Model.Expectancy.Mean.ShouldBe(-0.146m, Precision);
+        bucket.Model.Expectancy.Low.ShouldBe(-0.336m, Precision);
+        bucket.Model.Expectancy.High.ShouldBe(0.044m, Precision);
+        BucketStatistics level = BucketModel.Statistics(Equal(12, IdeaStatus.Target, 0.5m), bucket, default);
+        (level.Expectancy, level.ExpectancyLow, level.ExpectancyHigh).ShouldBe((bucket.Model.Expectancy.Mean, bucket.Model.Expectancy.Low, bucket.Model.Expectancy.High));
+        (level.Probability, level.ParentWeight).ShouldBe((0.4m, 1m));
+    }
+
     // A share of 0 and equal results have no spread of their own: the bucket takes the spread of its parent over its 30 cases, 0.24 / 30 and
     // 1.44 / 30, and is not taken for certain.
     [Test]

@@ -108,7 +108,7 @@ export async function removeOpenIdeas(symbol: string): Promise<void> {
 
 /**
  * The reports of the calibration over 90 days of all categories among all cases and after the rules changed (120 checked), as the
- * scanner stores them (decimals as strings), with the table by own data and the comparison of the models, so the screen has
+ * scanner stores them (decimals as strings), with the table by own data and the comparison of the three models, so the screen has
  * tables before the scanner has history enough to check a case. The scanner replaces the reports whole when it recomputes the
  * buckets, once an hour: a test reads the screen right after this.
  */
@@ -150,6 +150,7 @@ export async function seedCalibration(): Promise<void> {
         Up: row({ From: null, To: null, Badge: 'up', Promised: '0.145' }),
       },
       New: { Cases: 600, Brier: '0.204', Up: null },
+      Features: { Cases: 600, Brier: '0.201', Up: null },
     },
   };
 

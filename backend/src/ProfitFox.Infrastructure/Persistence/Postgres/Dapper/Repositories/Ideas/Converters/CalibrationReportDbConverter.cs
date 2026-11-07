@@ -21,7 +21,12 @@ internal static class CalibrationReportDbConverter
             Badges = [.. report.Badges.Select(FromDomain)],
             Total = report.Total is null ? null : FromDomain(report.Total),
             Owns = [.. report.Owns.Select(own => new CalibrationOwnRowDb { FewOwnCases = own.FewOwnCases, Row = FromDomain(own.Row), Brier = own.Brier })],
-            Comparison = report.Comparison is not { } comparison ? null : new CalibrationComparisonDb { Old = FromDomain(comparison.Old), New = FromDomain(comparison.New) }
+            Comparison = report.Comparison is not { } comparison ? null : new CalibrationComparisonDb
+            {
+                Old = FromDomain(comparison.Old),
+                New = FromDomain(comparison.New),
+                Features = comparison.Features is null ? null : FromDomain(comparison.Features)
+            }
         };
     }
 
@@ -42,7 +47,7 @@ internal static class CalibrationReportDbConverter
         {
             Scope = scope,
             Owns = [.. row.Owns.Select(own => new CalibrationOwnRow(own.FewOwnCases, ToDomain(own.Row), own.Brier))],
-            Comparison = row.Comparison is not { } comparison ? null : new CalibrationComparison(ToDomain(comparison.Old), ToDomain(comparison.New))
+            Comparison = row.Comparison is not { } comparison ? null : new CalibrationComparison(ToDomain(comparison.Old), ToDomain(comparison.New), comparison.Features is null ? null : ToDomain(comparison.Features))
         };
     }
 

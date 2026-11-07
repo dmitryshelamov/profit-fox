@@ -4721,10 +4721,14 @@ export interface components {
             parentWeight: null | string;
             fewOwnCases: boolean;
         };
-        /** @description The old model, the own numbers of a bucket from 30 own cases without clustering or shrinking, against the new one, on the cases both check. */
+        /**
+         * @description The old model, the own numbers of a bucket from 30 own cases without clustering or shrinking, against the new one and the model with
+         *     features, on the cases all three check; a report computed before the model with features has none of it.
+         */
         CalibrationComparisonResponse: {
             old: components["schemas"]["CalibrationModelResponse"];
             new: components["schemas"]["CalibrationModelResponse"];
+            features: null | components["schemas"]["CalibrationModelResponse"];
         };
         /** @description How a model did: the cases compared, the Brier score of their promised probability, and the row of those it promised ▲, none without one. */
         CalibrationModelResponse: {

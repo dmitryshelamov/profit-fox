@@ -74,11 +74,16 @@ public static class BucketModel
             return null;
         }
 
-        var own = Level.Of(sums, root.Category);
+        return Shrunk(Level.Of(sums, root.Category), root.Category, root.Spreads);
+    }
 
-        return new ParentModel(
-            own,
-            new Level(own.Cases, Shrink(own.Share, root.Category.Share, root.Spreads.Share).Model, Shrink(own.Expectancy, root.Category.Expectancy, root.Spreads.Expectancy).Model));
+    /// <summary>
+    ///     A bucket as the parent of its feature sub-buckets (decision 2 of add-idea-features): its own numbers and those of its model, shrunk to
+    ///     the model of its <paramref name="parent" /> by the spread between the buckets of the parent.
+    /// </summary>
+    public static ParentModel Bucket(ClusteredSums sums, ParentModel parent, Spreads spreads)
+    {
+        return Shrunk(Level.Of(sums, parent.Own), parent.Model, spreads);
     }
 
     /// <summary>The spread between the members of a <paramref name="level" />, of those of 30 cases and more.</summary>
@@ -147,6 +152,12 @@ public static class BucketModel
             ParentWeight = (decimal)parentWeight,
             FewOwnCases = sums.Cases < BucketStatisticsCalculator.MinimumCases
         };
+    }
+
+    // The own numbers of a level and its model: both numbers shrunk to those of the level above.
+    private static ParentModel Shrunk(Level own, Level above, Spreads spreads)
+    {
+        return new ParentModel(own, new Level(own.Cases, Shrink(own.Share, above.Share, spreads.Share).Model, Shrink(own.Expectancy, above.Expectancy, spreads.Expectancy).Model));
     }
 
     // The counts of the bucket with the numbers of the model, the interval of the share within [0, 1].

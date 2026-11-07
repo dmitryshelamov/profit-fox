@@ -81,7 +81,7 @@ public static class CalibrationCalculator
                 Row(null, null, IdeaBadge.Up, [.. compared.Where(item => promise(item).Badge == IdeaBadge.Up)], item => promise(item).Expectancy));
         }
 
-        return new CalibrationComparison(Model(promise => promise.Old!), Model(promise => promise.Bucket!));
+        return new CalibrationComparison(Model(promise => promise.Old!), Model(promise => promise.Bucket!), Model(promise => promise.Features!));
     }
 
     // Half-open ranges: a promise on a bound goes to the row that starts at it.
@@ -140,9 +140,10 @@ public static class CalibrationCalculator
 
     /// <summary>
     ///     A case and what it was promised: the model of its bucket, none without a model of its parent, the share of its category, and the old
-    ///     model, the own window of its bucket by <see cref="BucketStatisticsCalculator" />, none under 30 own cases.
+    ///     model, the own window of its bucket by <see cref="BucketStatisticsCalculator" />, none under 30 own cases, and the model with features,
+    ///     the sub-bucket of the level of its features shrunk to the model of its bucket, only for the cases of the comparison.
     /// </summary>
-    private sealed record Promise(IdeaOutcome Case, BucketStatistics? Bucket, decimal? BaseShare, BucketStatistics? Old);
+    private sealed record Promise(IdeaOutcome Case, BucketStatistics? Bucket, decimal? BaseShare, BucketStatistics? Old, BucketStatistics? Features = null);
 
     /// <summary>
     ///     The walk over the cases: the windows of the buckets, the parents and the categories by number, which cases join by their close and leave
@@ -152,13 +153,18 @@ public static class CalibrationCalculator
     {
         private readonly IReadOnlyList<IdeaOutcome> _outcomes;
         private readonly int[] _bucketOf;
+        private readonly int[] _levelOf;
+        private readonly int[] _bucketOfLevel;
         private readonly int[] _parentOf;
         private readonly int[] _categoryOf;
+        private readonly ClusteredSums[] _levels;
         private readonly ClusteredSums[] _buckets;
         private readonly ClusteredSums[] _parents;
         private readonly ClusteredSums[] _categories;
+        private readonly int[][] _levelsOfBucket;
         private readonly int[][] _bucketsOfParent;
         private readonly int[][] _parentsOfCategory;
+        private readonly BucketModel.Spreads[] _bucketSpreads;
         private readonly BucketModel.Spreads[] _parentSpreads;
         private readonly BucketModel.Spreads[] _categorySpreads;
         private readonly bool[] _inside;
@@ -172,13 +178,24 @@ public static class CalibrationCalculator
         {
             _outcomes = outcomes;
             _bucketOf = Numbers(outcomes.Select(outcome => outcome.Key), out IdeaBucketKey[] buckets);
+            _levelOf = Numbers(outcomes.Select(outcome => (outcome.Key, outcome.Features)), out (IdeaBucketKey, IdeaFeatures)[] levels);
+            _bucketOfLevel = new int[levels.Length];
+
+            for (int index = 0; index < outcomes.Count; index++)
+            {
+                _bucketOfLevel[_levelOf[index]] = _bucketOf[index];
+            }
+
             _parentOf = Numbers(buckets.Select(BucketModel.Parent.Of), out BucketModel.Parent[] parents);
             _categoryOf = Numbers(parents.Select(parent => parent.Category), out _);
+            _levels = [.. levels.Select(_ => new ClusteredSums())];
             _buckets = [.. buckets.Select(_ => new ClusteredSums())];
             _parents = [.. parents.Select(_ => new ClusteredSums())];
             _categories = [.. _categoryOf.Distinct().Select(_ => new ClusteredSums())];
+            _levelsOfBucket = [.. Enumerable.Range(0, buckets.Length).Select(bucket => Enumerable.Range(0, levels.Length).Where(level => _bucketOfLevel[level] == bucket).ToArray())];
             _bucketsOfParent = [.. Enumerable.Range(0, parents.Length).Select(parent => Enumerable.Range(0, buckets.Length).Where(bucket => _parentOf[bucket] == parent).ToArray())];
             _parentsOfCategory = [.. Enumerable.Range(0, _categories.Length).Select(category => Enumerable.Range(0, parents.Length).Where(parent => _categoryOf[parent] == category).ToArray())];
+            _bucketSpreads = new BucketModel.Spreads[buckets.Length];
             _parentSpreads = new BucketModel.Spreads[parents.Length];
             _categorySpreads = new BucketModel.Spreads[_categories.Length];
             _inside = new bool[outcomes.Count];
@@ -241,7 +258,7 @@ public static class CalibrationCalculator
             int bucket = _bucketOf[index];
             int parent = _parentOf[bucket];
 
-            foreach (ClusteredSums sums in new[] { _buckets[bucket], _parents[parent], _categories[_categoryOf[parent]] })
+            foreach (ClusteredSums sums in new[] { _levels[_levelOf[index]], _buckets[bucket], _parents[parent], _categories[_categoryOf[parent]] })
             {
                 if (sign > 0)
                 {
@@ -254,7 +271,8 @@ public static class CalibrationCalculator
             }
         }
 
-        // The spreads between the parents of each category and between the buckets of each parent, by the windows of the moment.
+        // The spreads between the parents of each category, between the buckets of each parent and between the levels of each bucket of 30 cases and
+        // more, the only buckets the model with features checks a case of, by the windows of the moment.
         private void Spread()
         {
             for (int category = 0; category < _categories.Length; category++)
@@ -266,6 +284,13 @@ public static class CalibrationCalculator
                 {
                     BucketModel.ParentModel? model = BucketModel.Model(_parents[parent], level is null ? null : new BucketModel.Root(level, _categorySpreads[category]));
                     _parentSpreads[parent] = model is null ? default : BucketModel.Between(_bucketsOfParent[parent].Select(bucket => _buckets[bucket]), model.Own);
+
+                    foreach (int bucket in _bucketsOfParent[parent])
+                    {
+                        _bucketSpreads[bucket] = model is null || _buckets[bucket].Cases < BucketStatisticsCalculator.MinimumCases
+                            ? default
+                            : BucketModel.Between(_levelsOfBucket[bucket].Select(level => _levels[level]), BucketModel.Bucket(_buckets[bucket], model, _parentSpreads[parent]).Own);
+                    }
                 }
             }
         }
@@ -283,9 +308,16 @@ public static class CalibrationCalculator
                 ? null
                 : BucketStatisticsCalculator.Compute(own.Targets, own.Stops, own.Expired, own.TotalR, own.TotalSquaredR);
 
-            return model is null
-                ? new Promise(_outcomes[index], null, null, old)
-                : new Promise(_outcomes[index], BucketModel.Statistics(own, model, _parentSpreads[parent]), level!.Share.Mean, old);
+            if (model is null)
+            {
+                return new Promise(_outcomes[index], null, null, old);
+            }
+
+            BucketStatistics? features = old is null
+                ? null
+                : BucketModel.Statistics(_levels[_levelOf[index]], BucketModel.Bucket(own, model, _parentSpreads[parent]), _bucketSpreads[bucket]);
+
+            return new Promise(_outcomes[index], BucketModel.Statistics(own, model, _parentSpreads[parent]), level!.Share.Mean, old, features);
         }
 
         // The number of each item among the distinct ones, in the order they first come.

@@ -46,16 +46,22 @@ public class IdeaCalibrationRepositoryTests
             [new CalibrationRow(null, 0.2m, null, 5m / 30m, single), new CalibrationRow(0.2m, 0.3m, null, 0.2m, thirty)],
             [new CalibrationRow(0.4m, null, null, 0.45m, thirty)],
             [new CalibrationRow(null, null, IdeaBadge.Flat, 0.2m, thirty)],
-            new CalibrationRow(null, null, null, 0.18m, thirty));
+            new CalibrationRow(null, null, null, 0.18m, thirty))
+        {
+            // A report of the comparison without the model with features, as stored before add-idea-features.
+            Comparison = new CalibrationComparison(new CalibrationModel(31, 0.22m, null), new CalibrationModel(31, 0.207m, null))
+        };
         var all = new CalibrationReport(Now, 90, null, 0, 2, null, null, [], [], [], null);
-        // Decision 6 of honest-idea-intervals: the report after the rules changed, with the table by own data and the comparison of the models.
+        // Decision 6 of honest-idea-intervals: the report after the rules changed, with the table by own data and the comparison of the models,
+        // the model with features among them (decision 4 of add-idea-features).
         CalibrationReport fresh = linear with
         {
             Scope = CalibrationScope.Fresh,
             Owns = [new CalibrationOwnRow(false, new CalibrationRow(null, null, null, 0.2m, thirty), 0.21m), new CalibrationOwnRow(true, new CalibrationRow(null, null, null, -0.5m, single), 1m)],
             Comparison = new CalibrationComparison(
                 new CalibrationModel(31, 0.22m, new CalibrationRow(null, null, IdeaBadge.Up, 0.145m, thirty)),
-                new CalibrationModel(31, 0.207m, null))
+                new CalibrationModel(31, 0.207m, null),
+                new CalibrationModel(31, 0.201m, new CalibrationRow(null, null, IdeaBadge.Up, 0.12m, thirty)))
         };
         await calibrations.ReplaceAsync(1, [all with { Days = 30 }], CancellationToken.None);
 

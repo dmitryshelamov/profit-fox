@@ -4,12 +4,18 @@ using ProfitFox.Domain.ValueObjects.Ideas;
 
 namespace ProfitFox.Presentation.Contracts.Ideas;
 
-/// <summary>The old model, the own numbers of a bucket from 30 own cases without clustering or shrinking, against the new one, on the cases both check.</summary>
-public sealed record CalibrationComparisonResponse(CalibrationModelResponse Old, CalibrationModelResponse New)
+/// <summary>
+///     The old model, the own numbers of a bucket from 30 own cases without clustering or shrinking, against the new one and the model with
+///     features, on the cases all three check; a report computed before the model with features has none of it.
+/// </summary>
+public sealed record CalibrationComparisonResponse(CalibrationModelResponse Old, CalibrationModelResponse New, CalibrationModelResponse? Features)
 {
     public static CalibrationComparisonResponse Of(CalibrationComparison comparison)
     {
-        return new CalibrationComparisonResponse(CalibrationModelResponse.Of(comparison.Old), CalibrationModelResponse.Of(comparison.New));
+        return new CalibrationComparisonResponse(
+            CalibrationModelResponse.Of(comparison.Old),
+            CalibrationModelResponse.Of(comparison.New),
+            comparison.Features is null ? null : CalibrationModelResponse.Of(comparison.Features));
     }
 }
 

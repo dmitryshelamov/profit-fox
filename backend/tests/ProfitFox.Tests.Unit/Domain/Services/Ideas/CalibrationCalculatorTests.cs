@@ -348,12 +348,55 @@ public class CalibrationCalculatorTests
             model.Badge == IdeaBadge.Up ? new CalibrationRow(null, null, IdeaBadge.Up, model.Expectancy, outcome) : null));
     }
 
+    // Requirement "Сравнение старой и новой модели" of add-idea-features: the bucket splits by its features into a sub-bucket of strong moves, 30
+    // targets of 40, and one of ordinary moves, 8 of 40, next to a bucket of 20 targets and 180 stops. The model with features promises the 30
+    // checked cases of strong moves the model of their sub-bucket shrunk to the model of the bucket, the bucket to that of the parent.
+    [Test]
+    public void Comparison_shows_the_model_with_features_on_the_same_cases()
+    {
+        IdeaOutcome[] strong = [.. Strong(Enumerable.Range(0, 40).Select(index => Closed(Linear, Now.AddDays(-60).AddHours(index), index < 30 ? IdeaStatus.Target : IdeaStatus.Stop, index < 30 ? 2m : -1m)))];
+        IdeaOutcome[] ordinary = [.. Enumerable.Range(0, 40).Select(index => Closed(Linear, Now.AddDays(-58).AddHours(index), index < 8 ? IdeaStatus.Target : IdeaStatus.Stop, index < 8 ? 2m : -1m))];
+        IdeaOutcome[] drop = [.. Enumerable.Range(0, 200).Select(index => Closed(OtherLinear, Now.AddDays(-55).AddHours(index), index < 20 ? IdeaStatus.Target : IdeaStatus.Stop, index < 20 ? 2m : -1m))];
+        IdeaOutcome[] checkedCases =
+        [
+            .. Strong(Enumerable.Range(0, 30).Select(index => new IdeaOutcome(Linear, Now.AddDays(-29).AddHours(index * 20), Now, index % 2 == 0 ? IdeaStatus.Target : IdeaStatus.Stop, index % 2 == 0 ? 2m : -1m)))
+        ];
+
+        CalibrationReport report = Report([.. strong, .. ordinary, .. drop, .. checkedCases], 30, null);
+
+        BucketStatistics features = Features(strong, ordinary, drop);
+        BucketStatistics outcome = Sums(checkedCases).Statistics();
+        report.Comparison.ShouldNotBeNull();
+        features.Probability.ShouldNotBe(report.Probabilities.Single().Promised);
+        features.Badge.ShouldBe(IdeaBadge.Up);
+        report.Comparison.Features.ShouldBe(new CalibrationModel(
+            30,
+            Brier(checkedCases, features.Probability!.Value),
+            new CalibrationRow(null, null, IdeaBadge.Up, checkedCases.Average(_ => features.Expectancy), outcome)));
+    }
+
+    // Scenario "Закрытый позже случай не подсказывает подкорзине": B of strong moves fired before A of strong moves and closed after A fired; both
+    // are promised the model of the history alone.
+    [Test]
+    public void Case_closed_after_the_checked_one_fired_is_not_in_the_window_of_its_sub_bucket()
+    {
+        IdeaOutcome[] strong = [.. Strong(Enumerable.Range(0, 40).Select(index => Closed(Linear, Now.AddDays(-60).AddHours(index), index < 30 ? IdeaStatus.Target : IdeaStatus.Stop, index < 30 ? 2m : -1m)))];
+        IdeaOutcome[] ordinary = [.. Enumerable.Range(0, 40).Select(index => Closed(Linear, Now.AddDays(-58).AddHours(index), index < 8 ? IdeaStatus.Target : IdeaStatus.Stop, index < 8 ? 2m : -1m))];
+        IdeaOutcome[] drop = [.. Enumerable.Range(0, 200).Select(index => Closed(OtherLinear, Now.AddDays(-55).AddHours(index), index < 20 ? IdeaStatus.Target : IdeaStatus.Stop, index < 20 ? 2m : -1m))];
+        var b = new IdeaOutcome(Linear, Now.AddDays(-3), Now.AddDays(-1), IdeaStatus.Stop, -1m, new IdeaFeatures(true, false));
+        IdeaOutcome a = Closed(Linear, Now.AddDays(-2), IdeaStatus.Target, 2m) with { Features = new IdeaFeatures(true, false) };
+
+        CalibrationReport report = Report([.. strong, .. ordinary, .. drop, b, a], 30, null);
+
+        report.Comparison!.Features!.Brier.ShouldBe(Brier([b, a], Features(strong, ordinary, drop).Probability!.Value));
+    }
+
     [Test]
     public void Comparison_without_a_case_both_check_is_empty()
     {
         CalibrationReport report = Report([], 30, null);
 
-        report.Comparison.ShouldBe(new CalibrationComparison(new CalibrationModel(0, null, null), new CalibrationModel(0, null, null)));
+        report.Comparison.ShouldBe(new CalibrationComparison(new CalibrationModel(0, null, null), new CalibrationModel(0, null, null), new CalibrationModel(0, null, null)));
     }
 
     [Test]
@@ -390,6 +433,25 @@ public class CalibrationCalculatorTests
     private static decimal Brier(IEnumerable<IdeaOutcome> outcomes, decimal promised)
     {
         return outcomes.Average(outcome => (promised - (outcome.Status == IdeaStatus.Target ? 1m : 0m)) * (promised - (outcome.Status == IdeaStatus.Target ? 1m : 0m)));
+    }
+
+    // The cases with a strong move and an ordinary volume.
+    private static IEnumerable<IdeaOutcome> Strong(IEnumerable<IdeaOutcome> outcomes)
+    {
+        return outcomes.Select(outcome => outcome with { Features = new IdeaFeatures(true, false) });
+    }
+
+    // The model with features of a case of strong moves of the bucket of Linear, with OtherLinear in the same parent, the only one of its category.
+    private static BucketStatistics Features(IdeaOutcome[] strong, IdeaOutcome[] ordinary, IdeaOutcome[] drop)
+    {
+        ClusteredSums impulse = Sums([.. strong, .. ordinary]);
+        ClusteredSums parent = Sums([.. strong, .. ordinary, .. drop]);
+        Dictionary<BucketModel.Parent, ClusteredSums> parents = new() { [BucketModel.Parent.Of(Linear)] = parent };
+        BucketModel.Root root = BucketModel.Roots(parents, new Dictionary<MarketCategory, ClusteredSums> { [MarketCategory.Linear] = parent })[MarketCategory.Linear];
+        BucketModel.ParentModel model = BucketModel.Model(parent, root)!;
+        BucketModel.ParentModel bucket = BucketModel.Bucket(impulse, model, BucketModel.Between([impulse, Sums(drop)], model.Own));
+
+        return BucketModel.Statistics(Sums(strong), bucket, BucketModel.Between([Sums(strong), Sums(ordinary)], bucket.Own));
     }
 
     private static ClusteredSums Sums(IEnumerable<IdeaOutcome> outcomes)

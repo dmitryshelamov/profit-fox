@@ -357,6 +357,9 @@ function ComparisonTable({ comparison }: { comparison: Comparison }) {
   const models = [
     { label: 'Старая', model: comparison.old },
     { label: 'Новая', model: comparison.new },
+    ...(comparison.features === null
+      ? []
+      : [{ label: 'С признаками', model: comparison.features }]),
   ];
 
   return (

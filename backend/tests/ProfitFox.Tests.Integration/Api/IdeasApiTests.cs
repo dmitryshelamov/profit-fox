@@ -239,9 +239,12 @@ public class IdeasApiTests
             Owns = [new CalibrationOwnRow(true, new CalibrationRow(null, null, null, 0.05m, thirty), 0.21m)],
             Comparison = new CalibrationComparison(
                 new CalibrationModel(30, 0.22m, new CalibrationRow(null, null, IdeaBadge.Up, 0.145m, thirty)),
-                new CalibrationModel(30, 0.207m, null))
+                new CalibrationModel(30, 0.207m, null),
+                new CalibrationModel(30, 0.201m, new CalibrationRow(null, null, IdeaBadge.Up, 0.12m, thirty)))
         };
-        await new IdeaCalibrationRepository(_database).ReplaceAsync(IdeasEngineVersion.Current, [all, fresh], CancellationToken.None);
+        // Scenario "Отчёт без модели с признаками": a report computed before add-idea-features.
+        CalibrationReport before = all with { Days = 30, Comparison = new CalibrationComparison(new CalibrationModel(30, 0.22m, null), new CalibrationModel(30, 0.207m, null)) };
+        await new IdeaCalibrationRepository(_database).ReplaceAsync(IdeasEngineVersion.Current, [all, fresh, before], CancellationToken.None);
 
         JsonElement report = await GetAsync("/api/ideas/calibration?scope=fresh");
 
@@ -253,8 +256,12 @@ public class IdeasApiTests
         (comparison.GetProperty("old").GetProperty("cases").GetInt32(), comparison.GetProperty("old").GetProperty("brier").GetString()).ShouldBe((30, "0.22"));
         (comparison.GetProperty("old").GetProperty("up").GetProperty("promised").GetString(), comparison.GetProperty("new").GetProperty("up").ValueKind)
             .ShouldBe(("0.145", JsonValueKind.Null));
+        JsonElement features = comparison.GetProperty("features");
+        (features.GetProperty("cases").GetInt32(), features.GetProperty("brier").GetString(), features.GetProperty("up").GetProperty("promised").GetString())
+            .ShouldBe((30, "0.201", "0.12"));
         JsonElement whole = await GetAsync("/api/ideas/calibration?scope=all");
         (whole.GetProperty("scope").GetString(), whole.GetProperty("checked").GetInt32(), whole.GetProperty("comparison").ValueKind).ShouldBe(("all", 30, JsonValueKind.Null));
+        (await GetAsync("/api/ideas/calibration?days=30")).GetProperty("comparison").GetProperty("features").ValueKind.ShouldBe(JsonValueKind.Null);
     }
 
     // Scenario "Ещё не посчитана".

@@ -691,6 +691,20 @@ export const calibrationOf = (overrides: Partial<Schemas['IdeaCalibrationRespons
           expectancyHigh: '0.1',
         }),
       },
+      features: {
+        cases: 1800,
+        brier: '0.201',
+        up: calibrationRowOf({
+          from: null,
+          to: null,
+          badge: 'up',
+          promised: '0.04',
+          cases: 240,
+          expectancy: '0.05',
+          expectancyLow: '-0.02',
+          expectancyHigh: '0.12',
+        }),
+      },
     },
     ...overrides,
   }) satisfies Schemas['IdeaCalibrationResponse'];

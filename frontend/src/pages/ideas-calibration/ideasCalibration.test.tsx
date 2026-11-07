@@ -152,7 +152,7 @@ describe('calibration screen', () => {
     expect(asked(requests)).toEqual(['Days=90&Scope=fresh']);
   });
 
-  // Scenario "Старая модель против новой".
+  // Scenarios "Старая модель против новой" and "Модель с признаками".
   it('compares the old model with the new one, a row each', async () => {
     open();
     renderApp('/ideas/calibration');
@@ -181,6 +181,27 @@ describe('calibration screen', () => {
       '+0.03 R',
       '-0.04…+0.10 R',
     ]);
+    expect(cells(/С признаками/)).toEqual([
+      'С признаками',
+      '1\u00a0800',
+      '0.201',
+      '240',
+      '+0.04 R',
+      '+0.05 R',
+      '-0.02…+0.12 R',
+    ]);
+  });
+
+  // Scenario "Отчёт без модели с признаками".
+  it('shows the old and the new model only in a report without the model with features', async () => {
+    const report = calibrationOf();
+    open(calibrationOf({ comparison: { ...report.comparison!, features: null } }));
+    renderApp('/ideas/calibration');
+
+    const table = await screen.findByRole('table', { name: 'Старая модель → новая' });
+
+    expect(within(table).getByRole('row', { name: /Новая/ })).toBeInTheDocument();
+    expect(within(table).queryByRole('row', { name: /С признаками/ })).not.toBeInTheDocument();
   });
 
   it('shows dashes for a model without ▲ and no comparison without one', async () => {
