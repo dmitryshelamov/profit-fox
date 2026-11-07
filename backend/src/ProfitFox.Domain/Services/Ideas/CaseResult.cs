@@ -20,24 +20,24 @@ public static class CaseResult
         }
 
         IdeaPlan plan = track.Plan;
-        decimal entry = EntryFill(plan, fees);
-        decimal exit = ExitFill(plan, track.ExitPrice.Value, fees);
+        decimal entry = EntryFill(plan.Type, plan.Side, plan.Entry, fees);
+        decimal exit = ExitFill(plan.Side, track.ExitPrice.Value, fees);
         decimal risk = Math.Abs(plan.Entry - plan.Stop);
         decimal paid = ((EntryFeePercent(plan, fees) * entry) + (fees.MarketPercent * exit)) / 100m;
 
-        return ((Side(plan) * (exit - entry)) - paid) / risk;
+        return ((Side(plan.Side) * (exit - entry)) - paid) / risk;
     }
 
-    /// <summary>The price the entry fills at: a pullback at its limit, any other entry worse than the plan by the slippage.</summary>
-    public static decimal EntryFill(IdeaPlan plan, FeeRates fees)
+    /// <summary>The price an entry at <paramref name="price" /> fills at: a pullback at its limit, any other entry worse by the slippage.</summary>
+    public static decimal EntryFill(IdeaType type, IdeaSide side, decimal price, FeeRates fees)
     {
-        return plan.Type == IdeaType.Pullback ? plan.Entry : plan.Entry * (1m + Slippage(plan, fees));
+        return type == IdeaType.Pullback ? price : price * (1m + Slippage(side, fees));
     }
 
     /// <summary>The price an exit at <paramref name="price" /> fills at, worse by the slippage: every exit goes to the market.</summary>
-    public static decimal ExitFill(IdeaPlan plan, decimal price, FeeRates fees)
+    public static decimal ExitFill(IdeaSide side, decimal price, FeeRates fees)
     {
-        return price * (1m - Slippage(plan, fees));
+        return price * (1m - Slippage(side, fees));
     }
 
     /// <summary>The fee of the entry in percent: the maker fee of the limit of a pullback, the taker fee of any other.</summary>
@@ -47,14 +47,14 @@ public static class CaseResult
     }
 
     /// <summary>+1 for long, −1 for short.</summary>
-    public static decimal Side(IdeaPlan plan)
+    public static decimal Side(IdeaSide side)
     {
-        return plan.Side == IdeaSide.Long ? 1m : -1m;
+        return side == IdeaSide.Long ? 1m : -1m;
     }
 
     // A buy fills higher and a sell lower by the slippage: the long buys its entry and sells its exit, the short the other way round.
-    private static decimal Slippage(IdeaPlan plan, FeeRates fees)
+    private static decimal Slippage(IdeaSide side, FeeRates fees)
     {
-        return Side(plan) * fees.SlippagePercent / 100m;
+        return Side(side) * fees.SlippagePercent / 100m;
     }
 }

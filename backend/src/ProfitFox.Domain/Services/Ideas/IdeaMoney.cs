@@ -12,10 +12,10 @@ public static class IdeaMoney
 {
     public static IdeaShares PerUsdt(IdeaPlan plan, FeeRates fees)
     {
-        decimal side = CaseResult.Side(plan);
-        decimal entry = CaseResult.EntryFill(plan, fees);
-        decimal target = CaseResult.ExitFill(plan, plan.Target, fees);
-        decimal stop = CaseResult.ExitFill(plan, plan.Stop, fees);
+        decimal side = CaseResult.Side(plan.Side);
+        decimal entry = CaseResult.EntryFill(plan.Type, plan.Side, plan.Entry, fees);
+        decimal target = CaseResult.ExitFill(plan.Side, plan.Target, fees);
+        decimal stop = CaseResult.ExitFill(plan.Side, plan.Stop, fees);
         decimal entryFee = CaseResult.EntryFeePercent(plan, fees) * entry / 100m;
         decimal profit = (side * (target - entry)) - entryFee - (fees.MarketPercent * target / 100m);
         decimal risk = Math.Abs(plan.Entry - plan.Stop);

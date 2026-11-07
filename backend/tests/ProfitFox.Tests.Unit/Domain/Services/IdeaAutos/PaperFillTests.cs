@@ -24,6 +24,7 @@ namespace ProfitFox.Tests.Unit.Domain.Services.IdeaAutos;
 public class PaperFillTests
 {
     private static readonly FeeRates Fees = new FeeRates(0.02m, 0.055m);
+    private static readonly FeeRates Slipping = new FeeRates(0.02m, 0.055m, 0.05m);
     private static readonly InstrumentRules Rules = new InstrumentRules(0.01m, 0.01m, 0.01m, 5m);
     private static readonly DateTimeOffset Fired = new(2026, 11, 7, 13, 40, 0, TimeSpan.Zero);
     private static readonly Guid Auto = Guid.Parse("33333333-3333-4333-8333-333333333333");
@@ -203,27 +204,68 @@ public class PaperFillTests
         (trade.Status, trade.StatusAt, trade.Result, trade.OpenedAt).ShouldBe((IdeaTradeStatus.Cancelled, Fired.AddMinutes(5), null, null));
     }
 
-    private static PaperIdeaTrade Run(string fixture, IdeaType type = IdeaType.TwoR, IdeaSide side = IdeaSide.Long, int? until = null, int? entryCandles = null)
+    // Requirement "Проскальзывание идей": the paper trade fills as the cases count, the entry buys 0.5 at 100.05 and the target sells at
+    // 103.948, so it earns what the case does, 51.974 − 50.025 − 0.02751375 − 0.0285857; its risk 0.5 × 100 × 0.0220790055 holds the slippage too.
+    [Test]
+    public void Market_trade_fills_its_entry_and_its_target_worse_by_the_slippage()
     {
-        PaperIdeaTrade paper = Open(fixture, out IReadOnlyList<IdeaCandle> minutes, type, side, entryCandles: entryCandles);
+        IdeaTrade trade = Run("paper-to-target", fees: Slipping).Trade;
+
+        trade.Entry.ShouldBe(new LegTotals(0.5m, 50.025m, 0.02751375m));
+        trade.TakeProfit.ShouldBe(new LegTotals(0.5m, 51.974m, 0.0285857m));
+        trade.Result.ShouldBe(1.89290055m);
+        trade.Risk.ShouldBe(1.103950275m);
+    }
+
+    // The stop sells at 97.951: 48.9755 − 50.025 − 0.02751375 − 0.026936525 is the whole risk, −1 R.
+    [Test]
+    public void Market_trade_at_the_stop_loses_its_risk_with_the_slippage()
+    {
+        IdeaTrade trade = Run("paper-to-stop", fees: Slipping).Trade;
+
+        trade.StopLoss.ShouldBe(new LegTotals(0.5m, 48.9755m, 0.026936525m));
+        (trade.Result, trade.ResultR).ShouldBe((-1.103950275m, -1m));
+    }
+
+    // The short sells its entry at 99.95 and buys its target back at 96.048: 49.975 − 48.024 − 0.02748625 − 0.0264132.
+    [Test]
+    public void Short_trade_sells_lower_and_buys_higher_by_the_slippage()
+    {
+        IdeaTrade trade = Run("paper-short-to-target", side: IdeaSide.Short, fees: Slipping).Trade;
+
+        (trade.Entry.Value, trade.TakeProfit.Value, trade.Result).ShouldBe((49.975m, 48.024m, 1.89710055m));
+    }
+
+    // The limit of a pullback rests on the book and fills at 100; its target still sells at 103.948: 51.974 − 50 − 0.01 − 0.0285857.
+    [Test]
+    public void Pullback_enters_at_its_limit_without_the_slippage_and_exits_with_it()
+    {
+        IdeaTrade trade = Run("paper-pullback-touch", IdeaType.Pullback, fees: Slipping).Trade;
+
+        (trade.Entry, trade.Result).ShouldBe((new LegTotals(0.5m, 50m, 0.01m), 1.9354143m));
+    }
+
+    private static PaperIdeaTrade Run(string fixture, IdeaType type = IdeaType.TwoR, IdeaSide side = IdeaSide.Long, int? until = null, int? entryCandles = null, FeeRates? fees = null)
+    {
+        PaperIdeaTrade paper = Open(fixture, out IReadOnlyList<IdeaCandle> minutes, type, side, entryCandles: entryCandles, fees: fees);
 
         foreach (IdeaCandle minute in minutes.Skip(1).Take(until ?? minutes.Count))
         {
-            paper = PaperFill.Step(paper, minute, Fees);
+            paper = PaperFill.Step(paper, minute, fees ?? Fees);
         }
 
         return paper;
     }
 
-    private static PaperIdeaTrade Open(string fixture, out IReadOnlyList<IdeaCandle> minutes, IdeaType type = IdeaType.TwoR, IdeaSide side = IdeaSide.Long, IdeaPromise? promise = null, int? entryCandles = null)
+    private static PaperIdeaTrade Open(string fixture, out IReadOnlyList<IdeaCandle> minutes, IdeaType type = IdeaType.TwoR, IdeaSide side = IdeaSide.Long, IdeaPromise? promise = null, int? entryCandles = null, FeeRates? fees = null)
     {
         minutes = IdeaAutoFixtures.Minutes(fixture);
         Idea generated = IdeaGenerator.Generate(Fired, type: type, side: side);
         IdeaPlan plan = side == IdeaSide.Long ? new IdeaPlan(type, side, 100m, 98m, 104m) : new IdeaPlan(type, side, 100m, 102m, 96m);
         Idea idea = generated with { Track = generated.Track with { Plan = plan, CandleMinutes = 5, EntryCandles = entryCandles ?? generated.Track.EntryCandles } };
         decimal price = PaperFill.EntryPrice(idea, minutes[0]);
-        IdeaTradeSize size = IdeaTradeSizing.Calculate(plan with { Entry = price }, Fees, 50m, Rules);
+        IdeaTradeSize size = IdeaTradeSizing.Calculate(plan with { Entry = price }, fees ?? Fees, 50m, Rules);
 
-        return PaperFill.Open(Guid.NewGuid(), idea, Auto, Account, size, promise, minutes[0], Fees);
+        return PaperFill.Open(Guid.NewGuid(), idea, Auto, Account, size, promise, minutes[0], fees ?? Fees);
     }
 }
