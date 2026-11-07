@@ -162,6 +162,17 @@ function SettingsForm({
             1.5 — цель должна дать в полтора раза больше, чем заберёт стоп; для ручных входов
           </span>
         </Field>
+        <Field
+          label="Плечо на фьючерсах"
+          value={form.leverage}
+          errors={errors.fields.leverage}
+          onChange={(leverage) => set({ leverage })}
+        >
+          <span className={hint}>
+            ставится на символ перед входом; сумма сделки — это размер позиции, плечо уменьшает
+            только залог; на споте не действует
+          </span>
+        </Field>
       </div>
       <h3 className="pt-2 text-[11px] tracking-wide text-faint uppercase">
         Защиты денег — все реальные сделки, ручные и автоматов
@@ -250,7 +261,7 @@ function SettingsForm({
   );
 }
 
-/** The settings of trading by ideas, saved on the server: the account by default, the amount, the limits, the guards of the autos and the lowest R:R. The state of the guards, when it is given, stands under their fields. */
+/** The settings of trading by ideas, saved on the server: the account by default, the amount, the limits, the guards of the autos, the lowest R:R and the leverage on futures. The state of the guards, when it is given, stands under their fields. */
 export function SettingsPanel({ guards }: { guards?: Schemas['IdeaGuardsResponse'] | undefined }) {
   const settings = useQuery(tradingSettingsQuery());
 

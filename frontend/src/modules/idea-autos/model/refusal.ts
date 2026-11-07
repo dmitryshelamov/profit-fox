@@ -1,5 +1,5 @@
 import type { Schemas } from '@/shared/api/client';
-import { roundDecimal } from '@/shared/format/format';
+import { roundDecimal, roundTenth } from '@/shared/format/format';
 
 type Holder = Schemas['PairHolderResponse'];
 
@@ -69,6 +69,10 @@ export function refusalDetailText(refusal: {
       return against('сумма', detail);
     case 'pair_taken':
       return holderText(detail.holder!);
+    case 'stop_too_far_for_leverage':
+      return `${roundTenth(detail.actual!)} % при пределе ${roundTenth(detail.limit!)} %`;
+    case 'leverage_differs':
+      return `плечо символа ${detail.actual}× при настройке ${detail.limit}×`;
     default:
       return '—';
   }

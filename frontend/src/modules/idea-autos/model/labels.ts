@@ -108,6 +108,9 @@ const reasons: Record<string, string> = {
   entry_error: 'Ошибка подготовки входа',
   budget_taken: 'Бюджет автомата занят',
   autos_budget_taken: 'Бюджет автоматов занят',
+  stop_too_far_for_leverage: 'Стоп дальше, чем позволяет плечо',
+  leverage_differs: 'На символе позиция с другим плечом',
+  leverage_not_set: 'Bybit не дал поставить плечо',
 };
 
 /** What stopped an auto, in words; a code the interface does not know is shown as it is. */

@@ -45,9 +45,62 @@ describe('settings of trading by ideas', () => {
         '1.5 — цель должна дать в полтора раза больше, чем заберёт стоп; для ручных входов',
       ),
     ).toBeInTheDocument();
+    expect(within(panel).getByLabelText('Плечо на фьючерсах')).toHaveValue('1');
+    expect(
+      within(panel).getByText(
+        'ставится на символ перед входом; сумма сделки — это размер позиции, плечо уменьшает только залог; на споте не действует',
+      ),
+    ).toBeInTheDocument();
     await waitFor(() =>
       expect(within(panel).getByLabelText('Аккаунт по умолчанию')).toHaveValue(exchangeAccount.id),
     );
+  });
+
+  // Scenario "Сохранение плеча".
+  it('saves the leverage as typed', async () => {
+    const requests = fakeApi(
+      routes(() => [], {
+        'PUT /api/idea-trading/settings': () => new Response(null, { status: 204 }),
+      }),
+    );
+    renderApp('/idea-trades/settings');
+    const user = userEvent.setup();
+    const panel = await screen.findByRole('region', { name: 'Настройки' });
+    const leverage = await within(panel).findByLabelText('Плечо на фьючерсах');
+    await waitFor(() => expect(leverage).toHaveValue('1'));
+
+    await user.clear(leverage);
+    await user.type(leverage, '3');
+    await user.click(within(panel).getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => expect(requests.some((request) => request.method === 'PUT')).toBe(true));
+    expect(await requests.find((request) => request.method === 'PUT')!.text()).toContain(
+      '"leverage":3}',
+    );
+  });
+
+  // Scenario "Плечо ноль": the error stands at its field.
+  it('shows an error of the leverage at its field', async () => {
+    fakeApi(
+      routes(() => [], {
+        'PUT /api/idea-trading/settings': () =>
+          problem(400, 'invalid', { errors: { leverage: ['The leverage must be at least one.'] } }),
+      }),
+    );
+    renderApp('/idea-trades/settings');
+    const user = userEvent.setup();
+    const panel = await screen.findByRole('region', { name: 'Настройки' });
+    const leverage = await within(panel).findByLabelText('Плечо на фьючерсах');
+    await waitFor(() => expect(leverage).toHaveValue('1'));
+
+    await user.clear(leverage);
+    await user.type(leverage, '0');
+    await user.click(within(panel).getByRole('button', { name: 'Сохранить' }));
+
+    expect(
+      await within(panel).findByText('The leverage must be at least one.'),
+    ).toBeInTheDocument();
+    expect(leverage).toHaveAttribute('aria-invalid', 'true');
   });
 
   // Scenario "Сохранение лимита".
@@ -69,7 +122,7 @@ describe('settings of trading by ideas', () => {
 
     await waitFor(() => expect(requests.some((request) => request.method === 'PUT')).toBe(true));
     expect(await requests.find((request) => request.method === 'PUT')!.text()).toBe(
-      `{"accountId":"${exchangeAccount.id}","amount":20,"maxAmount":200,"maxOpenTrades":3,"maxTotalRisk":5,"minRiskReward":1.5,"dailyLossLimit":null,"maxSameDirection":null,"autosBudget":null}`,
+      `{"accountId":"${exchangeAccount.id}","amount":20,"maxAmount":200,"maxOpenTrades":3,"maxTotalRisk":5,"minRiskReward":1.5,"dailyLossLimit":null,"maxSameDirection":null,"autosBudget":null,"leverage":1}`,
     );
     expect(await screen.findByText('Настройки сохранены')).toBeInTheDocument();
   });
@@ -177,7 +230,7 @@ describe('guards of the autos on the settings screen', () => {
 
     await waitFor(() => expect(requests.some((request) => request.method === 'PUT')).toBe(true));
     expect(await requests.find((request) => request.method === 'PUT')!.text()).toContain(
-      '"autosBudget":250.5}',
+      '"autosBudget":250.5,"leverage":1}',
     );
   });
 
@@ -238,7 +291,7 @@ describe('guards of the autos on the settings screen', () => {
 
     await waitFor(() => expect(requests.some((request) => request.method === 'PUT')).toBe(true));
     expect(await requests.find((request) => request.method === 'PUT')!.text()).toContain(
-      '"dailyLossLimit":null,"maxSameDirection":4,"autosBudget":null}',
+      '"dailyLossLimit":null,"maxSameDirection":4,"autosBudget":null,"leverage":1}',
     );
   });
 

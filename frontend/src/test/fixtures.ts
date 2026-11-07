@@ -574,6 +574,7 @@ export const entryOf = (overrides: Partial<Schemas['IdeaEntryResponse']> = {}) =
     reasons: [],
     leverage: 1,
     margin: '79.15',
+    details: {},
     ...overrides,
   }) satisfies Schemas['IdeaEntryResponse'];
 

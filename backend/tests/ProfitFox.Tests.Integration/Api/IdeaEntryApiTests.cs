@@ -105,7 +105,12 @@ public class IdeaEntryApiTests
         Guid idea = await SaveIdeaAsync(100m, 88m, 130m);
         SetPrice("100");
 
-        Reasons(await EntryAsync(idea, amount: "47.3")).ShouldBe(["stop_too_far_for_leverage"]);
+        JsonElement entry = await EntryAsync(idea, amount: "47.3");
+
+        Reasons(entry).ShouldBe(["stop_too_far_for_leverage"]);
+        JsonElement detail = entry.GetProperty("details").GetProperty("stop_too_far_for_leverage");
+        decimal.Parse(detail.GetProperty("actual").GetString()!, System.Globalization.CultureInfo.InvariantCulture).ShouldBe(12m);
+        decimal.Parse(detail.GetProperty("limit").GetString()!, System.Globalization.CultureInfo.InvariantCulture).ShouldBe(10m);
     }
 
     // Scenario "Чужая позиция с другим плечом" through the API: the code of the reason, and the leverage is not changed.
@@ -118,7 +123,11 @@ public class IdeaEntryApiTests
         Guid idea = await SaveIdeaAsync(100m, 98m, 104m);
         SetPrice("100");
 
-        Reasons(await EntryAsync(idea, amount: "47.3")).ShouldBe(["leverage_differs"]);
+        JsonElement entry = await EntryAsync(idea, amount: "47.3");
+
+        Reasons(entry).ShouldBe(["leverage_differs"]);
+        JsonElement detail = entry.GetProperty("details").GetProperty("leverage_differs");
+        (detail.GetProperty("actual").GetString(), detail.GetProperty("limit").GetString()).ShouldBe(("1", "5"));
         await _scenario.Factory.Orders.DidNotReceiveWithAnyArgs().SetLeverageAsync(default!, default!, default, default);
     }
 

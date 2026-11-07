@@ -2,13 +2,15 @@ using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 
 using ProfitFox.Application.IdeaTrades;
+using ProfitFox.Presentation.Contracts.IdeaAutos;
 
 namespace ProfitFox.Presentation.Contracts.IdeaTrades;
 
 /// <summary>
 ///     The entry of an idea as it would be made now. Numbers are decimal strings: the price, the quantity, the amount, the loss at the stop and the profit at the target it
 ///     really takes at that quantity after the fees, the reward to the risk after the fees and without them, the free money of the account (none without a key), the leverage (one on the spot)
-///     and the margin, the amount at the leverage. <see cref="Reasons" /> are the codes of what stops the entry.
+///     and the margin, the amount at the leverage. <see cref="Reasons" /> are the codes of what stops the entry, <see cref="Details" /> the numbers of
+///     each by its code, none for a reason without.
 /// </summary>
 public sealed record IdeaEntryResponse(
     Guid? AccountId,
@@ -23,7 +25,8 @@ public sealed record IdeaEntryResponse(
     [property: Required] string Quote,
     [property: Required] IReadOnlyList<string> Reasons,
     int Leverage,
-    [property: Required] string Margin)
+    [property: Required] string Margin,
+    [property: Required] IReadOnlyDictionary<string, RefusalDetailResponse?> Details)
 {
     public static IdeaEntryResponse Of(EntryCalculation entry)
     {
@@ -40,7 +43,8 @@ public sealed record IdeaEntryResponse(
             entry.Preparation.Quote,
             [.. entry.Reasons.Select(IdeaTradeCodes.ToCode)],
             entry.Leverage,
-            Text(entry.Margin));
+            Text(entry.Margin),
+            entry.Refusals.ToDictionary(refusal => refusal.Reason.ToCode(), refusal => RefusalDetailResponse.Of(refusal.Detail)));
     }
 
     private static string Text(decimal value)

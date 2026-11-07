@@ -73,6 +73,30 @@ describe('detail of a refusal', () => {
     ).toBe('занято 180.00 из 200 USDT');
   });
 
+  // Scenario "Учебный со стопом дальше ликвидации": «Стоп дальше, чем позволяет плечо: 12 % при пределе 10 %».
+  it('names the share of the stop and its limit at the leverage, to a tenth', () => {
+    expect(
+      refusalDetailText(
+        refusal(['stop_too_far_for_leverage'], { actual: '12.00', limit: '10', holder: null }),
+      ),
+    ).toBe('12 % при пределе 10 %');
+    expect(
+      refusalDetailText(
+        refusal(['stop_too_far_for_leverage'], {
+          actual: '20.00',
+          limit: '16.666666666666666666666666667',
+          holder: null,
+        }),
+      ),
+    ).toBe('20 % при пределе 16.7 %');
+  });
+
+  it('names the leverage of the symbol and of the settings', () => {
+    expect(
+      refusalDetailText(refusal(['leverage_differs'], { actual: '1', limit: '5', holder: null })),
+    ).toBe('плечо символа 1× при настройке 5×');
+  });
+
   it('says whose trade holds the pair', () => {
     expect(refusalDetailText(withHolder({}))).toBe(
       'на Bybit · ideas её взял «Импульс лонг» — он выше в списке',
