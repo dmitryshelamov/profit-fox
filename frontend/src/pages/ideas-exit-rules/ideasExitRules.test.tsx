@@ -1,8 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { fakeApi, json } from '@/test/fakeApi';
-import { exitPreviewOf, exitRuleOf, exitRulesOf } from '@/test/fixtures';
+import { fakeApi, json, problem } from '@/test/fakeApi';
+import { exitOutOfSampleOf, exitPreviewOf, exitRuleOf, exitRulesOf } from '@/test/fixtures';
 import { renderApp } from '@/test/renderApp';
 
 const previews = (requests: Request[]) =>
@@ -10,12 +10,27 @@ const previews = (requests: Request[]) =>
     .filter((request) => new URL(request.url).pathname === '/api/ideas/exit-rules/preview')
     .map((request) => new URL(request.url).searchParams.toString());
 
-function open(rules = exitRulesOf(), preview = exitPreviewOf()) {
+const checks = (requests: Request[]) =>
+  requests
+    .filter((request) => new URL(request.url).pathname === '/api/ideas/exit-rules/out-of-sample')
+    .map((request) => new URL(request.url).searchParams.toString());
+
+function open(
+  rules = exitRulesOf(),
+  preview = exitPreviewOf(),
+  check: (request: Request) => Response | Promise<Response> = () => json(exitOutOfSampleOf()),
+) {
   return fakeApi({
     'GET /api/ideas/exit-rules': () => json(rules),
     'GET /api/ideas/exit-rules/preview': () => json(preview),
+    'GET /api/ideas/exit-rules/out-of-sample': check,
   });
 }
+
+const cells = (table: HTMLElement, row: RegExp) =>
+  within(within(table).getByRole('row', { name: row }))
+    .getAllByRole('cell')
+    .map((cell) => cell.textContent);
 
 describe('screen of the exit rules', () => {
   afterEach(() => {
@@ -206,5 +221,134 @@ describe('screen of the exit rules', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Сбросить' }));
 
     expect(life).toHaveValue('24');
+  });
+
+  // Scenario "Проверка на экране" of check-idea-exit-rules-out-of-sample: the candidate and the best rule of the selection on both parts,
+  // asked for the candidate as the preview is, and the overfitting with its warning.
+  it('checks the candidate and the best rule of the grid on the days they were not chosen on', async () => {
+    const requests = open();
+    renderApp('/ideas/exit-rules');
+
+    const table = await screen.findByRole('table', { name: 'Проверка вне выборки' });
+
+    expect(
+      within(table)
+        .getAllByRole('columnheader')
+        .map((header) => header.textContent),
+    ).toEqual(['', 'подбор: с 08.08 12:00', 'проверка: 07.10 12:00 – 30.10 11:59']);
+    expect(within(table).getByRole('row', { name: /кандидат/ })).toHaveTextContent(
+      'кандидат · 24 · 2R · 4 · подбор до 07.10 05:59',
+    );
+    expect(cells(table, /кандидат/)).toEqual([
+      '≈ +0.05 R · от -0.02 до +0.12 · 60 входов',
+      '≈ -0.03 R · от -0.10 до +0.04 · 40 входов',
+    ]);
+    expect(within(table).getByRole('row', { name: /лучшее на подборе/ })).toHaveTextContent(
+      'лучшее на подборе · 96 · 3R · 4 · подбор до 06.10 11:59',
+    );
+    expect(cells(table, /лучшее на подборе/)).toEqual([
+      '▲ +0.12 R · от +0.02 до +0.22 · 60 входов',
+      '-0.01 R · мало данных · 12 входов',
+    ]);
+    expect(screen.getByText(/сетка — 171 правило/)).toBeInTheDocument();
+    expect(
+      screen.getByText('Вероятность подгонки сетки: 65 % (13 из 20 разбиений)'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'лучшее на одной половине дней правило сетки чаще не лучше середины на другой — выбор по ней ненадёжен',
+      ),
+    ).toBeInTheDocument();
+    expect(checks(requests)).toContain('type=pullback&interval=15&life=24&target=2&window=4');
+  });
+
+  // Scenario "Нет лучшего правила".
+  it('says when the selection has no rule of 30 entries and the splits too little data', async () => {
+    open(exitRulesOf(), exitPreviewOf(), () =>
+      json(
+        exitOutOfSampleOf({
+          candidate: { selectionTo: '2026-10-07T05:59:00Z', selection: null, check: null },
+          best: null,
+          overfitting: null,
+        }),
+      ),
+    );
+    renderApp('/ideas/exit-rules');
+
+    const table = await screen.findByRole('table', { name: 'Проверка вне выборки' });
+
+    expect(cells(table, /кандидат/)).toEqual(['нет входов', 'нет входов']);
+    expect(within(table).getByText('на подборе нет правила с 30 входами')).toBeInTheDocument();
+    expect(
+      screen.getByText('Вероятность подгонки сетки: мало данных для разбиений'),
+    ).toBeInTheDocument();
+  });
+
+  // The check comes apart from the preview: while it is counted the rest of the screen is there.
+  it('shows the preview while the check is counted', async () => {
+    open(exitRulesOf(), exitPreviewOf(), () => new Promise<Response>(() => {}));
+    renderApp('/ideas/exit-rules');
+
+    expect(await screen.findByRole('table', { name: 'Все 90 дней' })).toBeInTheDocument();
+    expect(screen.getByText('Проверка считается…')).toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'Проверка вне выборки' })).not.toBeInTheDocument();
+  });
+
+  it('says when the check failed and keeps the preview', async () => {
+    open(exitRulesOf(), exitPreviewOf(), () => problem(400, 'window'));
+    renderApp('/ideas/exit-rules');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Не удалось проверить кандидата вне выборки.',
+    );
+    expect(screen.getByRole('table', { name: 'Все 90 дней' })).toBeInTheDocument();
+  });
+
+  // Finding 4 of the review: a check asked for a candidate the owner moved past is cancelled.
+  it('cancels the check of a candidate the owner moved past', async () => {
+    const signals: AbortSignal[] = [];
+    open(exitRulesOf(), exitPreviewOf(), (request) => {
+      signals.push(request.signal);
+
+      return new Promise<Response>(() => {});
+    });
+    renderApp('/ideas/exit-rules');
+
+    await waitFor(() => expect(signals).toHaveLength(1));
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', { name: 'Срок жизни, свечей' }),
+      '48',
+    );
+
+    await waitFor(() => expect(signals).toHaveLength(2));
+    expect(signals.map((signal) => signal.aborted)).toEqual([true, false]);
+  });
+
+  // Finding 5 of the review: the numbers of the candidate before never stand under the new one, nor beside a failure.
+  it('hides the check of the candidate before while the new one is counted or failed', async () => {
+    let answer: () => Response | Promise<Response> = () => json(exitOutOfSampleOf());
+    open(exitRulesOf(), exitPreviewOf(), () => answer());
+    renderApp('/ideas/exit-rules');
+
+    await screen.findByRole('table', { name: 'Проверка вне выборки' });
+    answer = () => new Promise<Response>(() => {});
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', { name: 'Срок жизни, свечей' }),
+      '48',
+    );
+
+    expect(await screen.findByText('Проверка считается…')).toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'Проверка вне выборки' })).not.toBeInTheDocument();
+
+    answer = () => problem(400, 'life');
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', { name: 'Срок жизни, свечей' }),
+      '96',
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Не удалось проверить кандидата вне выборки.',
+    );
+    expect(screen.queryByRole('table', { name: 'Проверка вне выборки' })).not.toBeInTheDocument();
   });
 });

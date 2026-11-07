@@ -70,7 +70,7 @@ public class ApiDocumentationTests
         using var document = JsonDocument.Parse(await _client.GetStringAsync("/openapi/v1.json"));
         JsonElement paths = document.RootElement.GetProperty("paths");
 
-        string[] expected = ["/api/ideas/exit-rules", "/api/ideas/exit-rules/preview", "/api/ideas/exit-rules/{type}/{interval}"];
+        string[] expected = ["/api/ideas/exit-rules", "/api/ideas/exit-rules/preview", "/api/ideas/exit-rules/out-of-sample", "/api/ideas/exit-rules/{type}/{interval}"];
         expected.Except(paths.EnumerateObject().Select(path => path.Name)).ShouldBeEmpty();
         paths.GetProperty("/api/ideas/exit-rules/{type}/{interval}").TryGetProperty("put", out _).ShouldBeTrue();
     }
