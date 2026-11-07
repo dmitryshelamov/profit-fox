@@ -1,4 +1,4 @@
-import { guardParts, paperText, realText } from './totals';
+import { budgetText, guardParts, paperText, realText } from './totals';
 
 const item = (overrides: object) => ({
   paperClosed: 61,
@@ -26,6 +26,15 @@ describe('totals of an auto', () => {
     });
   });
 
+  // Scenario "Бюджет в списке".
+  it('shows what the open trades take of the budget, or that there is none', () => {
+    expect(budgetText({ budgetUsed: '79.9', auto: { budget: '100' } })).toBe(
+      'занято 79.90 из 100 USDT',
+    );
+    expect(budgetText({ budgetUsed: '0', auto: { budget: '50' } })).toBe('занято 0.00 из 50 USDT');
+    expect(budgetText({ budgetUsed: '30', auto: { budget: null } })).toBe('без бюджета');
+  });
+
   it('shows the real trades with their sum in USDT, or that there were none', () => {
     expect(realText(item({ realClosed: 11, realResult: '9.4' }))).toEqual({
       main: '11 сделок',
@@ -51,6 +60,8 @@ const guards = {
   openLongs: 2,
   openShorts: 1,
   maxSameDirection: 5,
+  autosBudgetUsed: '180',
+  autosBudget: '200',
 };
 
 describe('line of the guards', () => {
@@ -60,13 +71,20 @@ describe('line of the guards', () => {
       'риск 10.22 из 40 USDT',
       'сегодня -19.05 из 30 USDT',
       'в лонг 2 · в шорт 1 из 5',
+      'бюджет автоматов 180.00 из 200 USDT',
     ]);
   });
 
   it('says that a guard that is off is off', () => {
-    const parts = guardParts({ ...guards, dailyLossLimit: null, maxSameDirection: null });
+    const parts = guardParts({
+      ...guards,
+      dailyLossLimit: null,
+      maxSameDirection: null,
+      autosBudget: null,
+    });
 
     expect(parts[2]).toMatchObject({ name: 'сегодня', value: '-19.05 USDT · выкл' });
     expect(parts[3]).toMatchObject({ name: 'в лонг 2 · в шорт 1', value: 'выкл' });
+    expect(parts[4]).toMatchObject({ name: 'бюджет автоматов', value: '180.00 USDT · выкл' });
   });
 });

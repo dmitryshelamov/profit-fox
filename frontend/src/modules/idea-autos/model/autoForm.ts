@@ -7,6 +7,8 @@ export interface AutoFormValues {
   readonly name: string;
   readonly accountId: string;
   readonly amount: string;
+  /** The budget of the auto; an empty text is no budget. */
+  readonly budget: string;
   readonly mode: string;
   readonly setups: readonly string[];
   readonly types: readonly string[];
@@ -23,6 +25,7 @@ const fields: ReadonlySet<string> = new Set([
   'name',
   'accountId',
   'amount',
+  'budget',
   'setups',
   'types',
   'intervals',
@@ -33,7 +36,7 @@ const fields: ReadonlySet<string> = new Set([
   'minCases',
 ]);
 
-/** A new auto: the account, the amount and the lowest R:R of the settings of trading by ideas, no conditions, off. */
+/** A new auto: the account, the amount and the lowest R:R of the settings of trading by ideas, no budget, no conditions, off. */
 export function formOfDefaults(settings: {
   accountId: string | null;
   amount: string;
@@ -43,6 +46,7 @@ export function formOfDefaults(settings: {
     name: '',
     accountId: settings.accountId ?? '',
     amount: settings.amount,
+    budget: '',
     mode: 'off',
     setups: [],
     types: [],
@@ -60,6 +64,7 @@ export function formOfAuto(auto: Schemas['IdeaAutoResponse']): AutoFormValues {
     name: auto.name,
     accountId: auto.accountId,
     amount: auto.amount,
+    budget: auto.budget ?? '',
     mode: auto.mode,
     setups: auto.setups,
     types: auto.types,
@@ -76,12 +81,13 @@ export function formOfAuto(auto: Schemas['IdeaAutoResponse']): AutoFormValues {
 const numberOf = (text: string) =>
   isDecimalText(text) ? (jsonNumberOf(text) as unknown as number) : text;
 
-/** The body of a save: an empty choice is none; the mode is not in it, it has a request of its own. */
+/** The body of a save: an empty choice or budget is none; the mode is not in it, it has a request of its own. */
 export function bodyOfForm(form: AutoFormValues): Schemas['IdeaAutoBody'] {
   return {
     name: form.name,
     accountId: form.accountId,
     amount: numberOf(form.amount),
+    budget: form.budget === '' ? null : numberOf(form.budget),
     setups: [...form.setups],
     types: [...form.types],
     intervals: [...form.intervals],
@@ -97,6 +103,7 @@ const names: readonly (readonly [keyof AutoFormValues, string])[] = [
   ['name', 'название'],
   ['accountId', 'аккаунт'],
   ['amount', 'сумма'],
+  ['budget', 'бюджет'],
   ['mode', 'режим'],
   ['setups', 'сетапы'],
   ['types', 'типы идей'],

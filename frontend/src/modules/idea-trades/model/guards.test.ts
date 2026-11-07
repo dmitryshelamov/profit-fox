@@ -1,6 +1,7 @@
 import type { Schemas } from '@/shared/api/client';
 
 import {
+  autosBudgetStateText,
   dayShare,
   dayStateText,
   openStateText,
@@ -21,13 +22,15 @@ const guards = (overrides: Partial<Schemas['IdeaGuardsResponse']> = {}) => ({
   openLongs: 2,
   openShorts: 1,
   maxSameDirection: 5,
+  autosBudgetUsed: '180',
+  autosBudget: '200',
   ...overrides,
 });
 
 describe('state of the guards under the settings', () => {
   it('says how many trades are open and how much risk stands', () => {
     expect(openStateText(guards())).toBe('сейчас открыто 3 из 8');
-    expect(riskStateText(guards())).toBe('сейчас 10.22 из 40 USDT до стопов');
+    expect(riskStateText(guards())).toBe('сейчас 10.22 из 40 USDT');
   });
 
   // Scenario "Состояние дневного стопа".
@@ -43,6 +46,14 @@ describe('state of the guards under the settings', () => {
     expect(dayShare(guards({ daySum: '-45' }))).toBe(1);
     expect(dayShare(guards({ daySum: '5' }))).toBe(0);
     expect(dayShare(guards({ dailyLossLimit: null }))).toBeNull();
+  });
+
+  // Scenarios "Состояние бюджета автоматов" and "Бюджет автоматов выключен".
+  it('says what the real trades of the autos take of their budget', () => {
+    expect(autosBudgetStateText(guards())).toBe('сейчас 180.00 из 200 USDT');
+    expect(autosBudgetStateText(guards({ autosBudget: null }))).toBe(
+      'сейчас 180.00 USDT · защита выключена',
+    );
   });
 
   it('says how many real trades are open on each side against the limit', () => {

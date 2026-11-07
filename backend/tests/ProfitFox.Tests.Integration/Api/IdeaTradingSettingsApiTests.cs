@@ -97,9 +97,10 @@ public class IdeaTradingSettingsApiTests
         decimal maxTotalRisk = 5m,
         decimal minRiskReward = 1.5m,
         decimal? dailyLossLimit = null,
-        int? maxSameDirection = null)
+        int? maxSameDirection = null,
+        decimal? autosBudget = null)
     {
-        return new { accountId, amount, maxAmount, maxOpenTrades, maxTotalRisk, minRiskReward, dailyLossLimit, maxSameDirection };
+        return new { accountId, amount, maxAmount, maxOpenTrades, maxTotalRisk, minRiskReward, dailyLossLimit, maxSameDirection, autosBudget };
     }
 
     private async Task<JsonElement> ReadAsync()
@@ -118,6 +119,18 @@ public class IdeaTradingSettingsApiTests
 
         settings.GetProperty("dailyLossLimit").ValueKind.ShouldBe(JsonValueKind.Null);
         settings.GetProperty("maxSameDirection").ValueKind.ShouldBe(JsonValueKind.Null);
+        settings.GetProperty("autosBudget").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    // The budget of all the autos is saved, read back and switched off by an empty value.
+    [Test]
+    public async Task Budget_of_the_autos_is_saved_and_an_empty_value_switches_it_off()
+    {
+        (await _scenario.Client.PutAsJsonAsync(Url, Body(autosBudget: 200m))).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await ReadAsync()).GetProperty("autosBudget").GetString().ShouldBe("200");
+
+        (await _scenario.Client.PutAsJsonAsync(Url, Body())).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await ReadAsync()).GetProperty("autosBudget").ValueKind.ShouldBe(JsonValueKind.Null);
     }
 
     // Scenarios "Выключить защиту" and the save: an empty value switches the guard off.
@@ -141,6 +154,7 @@ public class IdeaTradingSettingsApiTests
         await ShouldBeRefusedOnAsync(await _scenario.Client.PutAsJsonAsync(Url, Body(dailyLossLimit: 0m)), "dailyLossLimit");
         await ShouldBeRefusedOnAsync(await _scenario.Client.PutAsJsonAsync(Url, Body(dailyLossLimit: -5m)), "dailyLossLimit");
         await ShouldBeRefusedOnAsync(await _scenario.Client.PutAsJsonAsync(Url, Body(maxSameDirection: 0)), "maxSameDirection");
+        await ShouldBeRefusedOnAsync(await _scenario.Client.PutAsJsonAsync(Url, Body(autosBudget: 0m)), "autosBudget");
         (await ReadAsync()).GetProperty("dailyLossLimit").ValueKind.ShouldBe(JsonValueKind.Null);
     }
 

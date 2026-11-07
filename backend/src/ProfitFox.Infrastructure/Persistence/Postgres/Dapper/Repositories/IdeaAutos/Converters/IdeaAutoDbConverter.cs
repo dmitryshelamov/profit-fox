@@ -41,7 +41,8 @@ internal static class IdeaAutoDbConverter
             MinRiskReward = conditions.MinRiskReward,
             MinCases = conditions.MinCases,
             Position = auto.Position,
-            DeletedAt = auto.DeletedAt
+            DeletedAt = auto.DeletedAt,
+            Budget = auto.Budget
         };
     }
 
@@ -65,7 +66,8 @@ internal static class IdeaAutoDbConverter
             IdeaAutoCodes.TryParseMode(row.Mode, out IdeaAutoMode mode) ? mode : throw Unknown("mode", row.Mode),
             conditions,
             row.Position,
-            row.DeletedAt);
+            row.DeletedAt,
+            row.Budget);
     }
 
     internal static IdeaAutoEntryDb FromDomain(IdeaAutoEntry entry)

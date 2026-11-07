@@ -554,6 +554,7 @@ export const tradingSettings = {
   minRiskReward: '1.5',
   dailyLossLimit: null,
   maxSameDirection: null,
+  autosBudget: null,
 } satisfies Schemas['IdeaTradingSettingsResponse'];
 
 /** The entry of an idea as the API calculates it: no reason. */
@@ -692,6 +693,94 @@ export const calibrationOf = (overrides: Partial<Schemas['IdeaCalibrationRespons
         }),
       },
     },
+    intervals: [
+      {
+        interval: '60',
+        type: null,
+        total: calibrationRowOf({
+          from: null,
+          to: null,
+          promised: '0.02',
+          cases: 4000,
+          expectancy: '-0.05',
+          expectancyLow: '-0.09',
+          expectancyHigh: '-0.01',
+        }),
+        up: calibrationRowOf({
+          from: null,
+          to: null,
+          badge: 'up',
+          promised: '0.15',
+          cases: 900,
+          expectancy: '-0.1',
+          expectancyLow: '-0.18',
+          expectancyHigh: '-0.02',
+        }),
+        comparison: {
+          old: {
+            cases: 1500,
+            brier: '0.233',
+            up: calibrationRowOf({
+              from: null,
+              to: null,
+              badge: 'up',
+              promised: '0.16',
+              cases: 1000,
+              expectancy: '-0.12',
+              expectancyLow: '-0.2',
+              expectancyHigh: '-0.04',
+            }),
+          },
+          new: { cases: 1500, brier: '0.21', up: null },
+        },
+      },
+    ],
+    types: [
+      {
+        interval: null,
+        type: 'pullback',
+        total: calibrationRowOf({
+          from: null,
+          to: null,
+          promised: '0.01',
+          cases: 500,
+          expectancy: '0.02',
+          expectancyLow: null,
+          expectancyHigh: null,
+        }),
+        up: null,
+        comparison: {
+          old: {
+            cases: 200,
+            brier: '0.24',
+            up: calibrationRowOf({
+              from: null,
+              to: null,
+              badge: 'up',
+              promised: '0.1',
+              cases: 120,
+              expectancy: '-0.08',
+              expectancyLow: '-0.16',
+              expectancyHigh: '0',
+            }),
+          },
+          new: {
+            cases: 200,
+            brier: '0.22',
+            up: calibrationRowOf({
+              from: null,
+              to: null,
+              badge: 'up',
+              promised: '0.04',
+              cases: 40,
+              expectancy: '0.01',
+              expectancyLow: '-0.1',
+              expectancyHigh: '0.12',
+            }),
+          },
+        },
+      },
+    ],
     ...overrides,
   }) satisfies Schemas['IdeaCalibrationResponse'];
 
@@ -814,10 +903,11 @@ export const autoOf = (overrides: Partial<Schemas['IdeaAutoResponse']> = {}) =>
     minRiskReward: '1.5',
     minCases: 100,
     position: 0,
+    budget: null,
     ...overrides,
   }) satisfies Schemas['IdeaAutoResponse'];
 
-/** An auto of the list with its totals: nothing closed, no refusals. */
+/** An auto of the list with its totals: nothing closed, no refusals, nothing open. */
 export const autoItemOf = (
   auto: Schemas['IdeaAutoResponse'] = autoOf(),
   overrides: Partial<Omit<Schemas['IdeaAutoItemResponse'], 'auto'>> = {},
@@ -830,10 +920,11 @@ export const autoItemOf = (
     realClosed: 0,
     realResult: '0',
     refusalsToday: 0,
+    budgetUsed: '0',
     ...overrides,
   }) satisfies Schemas['IdeaAutoItemResponse'];
 
-/** The guards of the money with room to spare and none of them off; a test sets what it needs. */
+/** The guards of the money with room to spare and none of them off; a test sets what it needs. The trades of the autos take 180 of 200. */
 export const guardsOf = (overrides: Partial<Schemas['IdeaGuardsResponse']> = {}) =>
   ({
     openTrades: 3,
@@ -847,6 +938,8 @@ export const guardsOf = (overrides: Partial<Schemas['IdeaGuardsResponse']> = {})
     openLongs: 2,
     openShorts: 1,
     maxSameDirection: 5,
+    autosBudgetUsed: '180',
+    autosBudget: '200',
     ...overrides,
   }) satisfies Schemas['IdeaGuardsResponse'];
 

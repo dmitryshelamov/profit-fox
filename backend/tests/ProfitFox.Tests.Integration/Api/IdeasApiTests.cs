@@ -257,6 +257,45 @@ public class IdeasApiTests
         (whole.GetProperty("scope").GetString(), whole.GetProperty("checked").GetInt32(), whole.GetProperty("comparison").ValueKind).ShouldBe(("all", 30, JsonValueKind.Null));
     }
 
+    // Scenario "Разбивки в ответе": the breakdowns by interval and by type with the codes, the rows and the comparison of each row.
+    [Test]
+    public async Task Calibration_has_the_breakdowns_by_interval_and_by_type()
+    {
+        BucketStatistics thirty = BucketStatisticsCalculator.Compute(6, 21, 3, 6.75m, 25.3125m);
+        var empty = new CalibrationComparison(new CalibrationModel(0, null, null), new CalibrationModel(0, null, null));
+        CalibrationReport report = new CalibrationReport(SnapshotAt.AddMinutes(-3), 90, null, 60, 0, 0.2m, 0.21m, [], [], [], new CalibrationRow(null, null, null, 0.1m, thirty)) with
+        {
+            Intervals =
+            [
+                new CalibrationSlice(Interval.FiveMinutes, null, new CalibrationRow(null, null, null, -0.05m, thirty), null, empty),
+                new CalibrationSlice(
+                    Interval.OneHour,
+                    null,
+                    new CalibrationRow(null, null, null, 0.02m, thirty),
+                    new CalibrationRow(null, null, IdeaBadge.Up, 0.15m, thirty),
+                    new CalibrationComparison(new CalibrationModel(30, 0.22m, new CalibrationRow(null, null, IdeaBadge.Up, 0.145m, thirty)), new CalibrationModel(30, 0.207m, null)))
+            ],
+            Types =
+            [
+                new CalibrationSlice(null, IdeaType.TwoR, new CalibrationRow(null, null, null, 0.1m, thirty), null, empty),
+                new CalibrationSlice(null, IdeaType.Pullback, new CalibrationRow(null, null, null, 0.1m, thirty), null, empty)
+            ]
+        };
+        await new IdeaCalibrationRepository(_database).ReplaceAsync(IdeasEngineVersion.Current, [report], CancellationToken.None);
+
+        JsonElement read = await GetAsync("/api/ideas/calibration");
+
+        JsonElement[] intervals = [.. read.GetProperty("intervals").EnumerateArray()];
+        intervals.Select(slice => (slice.GetProperty("interval").GetString(), slice.GetProperty("type").ValueKind)).ShouldBe([("5", JsonValueKind.Null), ("60", JsonValueKind.Null)]);
+        (intervals[0].GetProperty("total").GetProperty("promised").GetString(), intervals[0].GetProperty("up").ValueKind).ShouldBe(("-0.05", JsonValueKind.Null));
+        (intervals[1].GetProperty("total").GetProperty("cases").GetInt32(), intervals[1].GetProperty("up").GetProperty("promised").GetString(), intervals[1].GetProperty("up").GetProperty("badge").GetString())
+            .ShouldBe((30, "0.15", "up"));
+        JsonElement comparison = intervals[1].GetProperty("comparison");
+        (comparison.GetProperty("old").GetProperty("up").GetProperty("promised").GetString(), comparison.GetProperty("new").GetProperty("brier").GetString()).ShouldBe(("0.145", "0.207"));
+        read.GetProperty("types").EnumerateArray().Select(slice => (slice.GetProperty("type").GetString(), slice.GetProperty("interval").ValueKind))
+            .ShouldBe([("target_2r", JsonValueKind.Null), ("pullback", JsonValueKind.Null)]);
+    }
+
     // Scenario "Ещё не посчитана".
     [Test]
     public async Task Calibration_before_the_first_one_is_empty()
@@ -267,6 +306,7 @@ public class IdeasApiTests
         (report.GetProperty("checked").GetInt32(), report.GetProperty("unchecked").GetInt32(), report.GetProperty("brier").ValueKind).ShouldBe((0, 0, JsonValueKind.Null));
         (report.GetProperty("probabilities").GetArrayLength(), report.GetProperty("badges").GetArrayLength(), report.GetProperty("total").ValueKind).ShouldBe((0, 0, JsonValueKind.Null));
         (report.GetProperty("scope").GetString(), report.GetProperty("owns").GetArrayLength(), report.GetProperty("comparison").ValueKind).ShouldBe(("all", 0, JsonValueKind.Null));
+        (report.GetProperty("intervals").GetArrayLength(), report.GetProperty("types").GetArrayLength()).ShouldBe((0, 0));
     }
 
     // Scenarios "Другое окно" and "Другой режим".

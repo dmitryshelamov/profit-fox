@@ -121,6 +121,24 @@ public class IdeaAutosApiTests
         (await ListAsync()).Count.ShouldBe(1);
     }
 
+    // Scenarios "Автомат без бюджета" and "Бюджет меньше суммы": none until saved, read back once saved, and below the amount a 400 on the budget.
+    [Test]
+    public async Task Budget_is_none_until_saved_and_one_below_the_amount_is_a_400_on_the_budget()
+    {
+        Guid id = await CreateAsync("Пробои 5м", amount: 50m);
+        (await GetAsync(id)).GetProperty("budget").ValueKind.ShouldBe(JsonValueKind.Null);
+
+        (await _scenario.Client.PutAsJsonAsync($"{Url}/{id}", Body("Пробои 5м", amount: 50m, budget: 120.5m))).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        Number((await GetAsync(id)).GetProperty("budget")).ShouldBe(120.5m);
+        await RefusedOnAsync(Body("Пробои 5м", amount: 50m, budget: 40m), "budget", id);
+        await RefusedOnAsync(Body("А", amount: 50m, budget: 49.99m), "budget");
+        Number((await GetAsync(id)).GetProperty("budget")).ShouldBe(120.5m);
+        HttpResponseMessage created = await _scenario.Client.PostAsJsonAsync(Url, Body("Б", amount: 50m, budget: 50m));
+        Guid other = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        Number((await GetAsync(other)).GetProperty("budget")).ShouldBe(50m);
+    }
+
     // Scenario "Стоп-вход в типах".
     [Test]
     public async Task Stop_entry_among_the_types_is_a_400_on_the_types()
@@ -217,6 +235,21 @@ public class IdeaAutosApiTests
         (item.GetProperty("realClosed").GetInt32(), Number(item.GetProperty("realResult")), item.GetProperty("refusalsToday").GetInt32()).ShouldBe((0, 0m, 2));
     }
 
+    // Scenario "Занятый бюджет": the open paper trade (100) and the open real trade (0.47 at 105 = 49.35) of the auto take its budget, the closed one does not.
+    [Test]
+    public async Task List_gives_what_the_open_trades_of_each_auto_take_of_its_budget()
+    {
+        Guid id = await CreateAsync("Пробои 5м");
+        await CreateAsync("Импульс лонг");
+        await InsertPaperTradeAsync(id, "open", null, null);
+        await InsertPaperTradeAsync(id, "closed_at_stop", Now.AddHours(-1), -1m);
+        await _scenario.CreateTradeAsync(autoId: id);
+
+        List<JsonElement> list = await ListAsync();
+
+        list.Select(item => Number(item.GetProperty("budgetUsed"))).ShouldBe([149.35m, 0m]);
+    }
+
     // Scenario "Сегодня по автомату": the newest first, one auto, since 00:00 UTC.
     [Test]
     public async Task Refusals_come_from_the_newest_for_one_auto_since_the_start_of_the_day()
@@ -306,6 +339,22 @@ public class IdeaAutosApiTests
         (guards.GetProperty("triggeredAt").GetDateTimeOffset(), guards.GetProperty("resumesAt").GetDateTimeOffset()).ShouldBe((reached, new DateTimeOffset(2024, 3, 11, 0, 0, 0, TimeSpan.Zero)));
     }
 
+    // Scenario "Занятый бюджет автоматов": the real trades of the autos take the budget of the autos, a manual one and a paper one do not.
+    [Test]
+    public async Task Guards_tell_what_the_open_real_trades_of_the_autos_take_of_their_budget()
+    {
+        await _scenario.Client.PutAsJsonAsync("/api/idea-trading/settings", new { accountId = (Guid?)null, amount = 20m, maxAmount = 200m, maxOpenTrades = 8, maxTotalRisk = 40m, minRiskReward = 1.5m, autosBudget = 200m });
+        Guid auto = await CreateAsync("Пробои 5м");
+        await _scenario.CreateTradeAsync(autoId: auto);
+        await _scenario.CreateTradeAsync(autoId: Guid.NewGuid());
+        await _scenario.CreateTradeAsync();
+        await InsertPaperTradeAsync(auto, "open", null, null);
+
+        JsonElement guards = JsonDocument.Parse(await _scenario.Client.GetStringAsync("/api/idea-trading/guards")).RootElement;
+
+        (Number(guards.GetProperty("autosBudgetUsed")), Number(guards.GetProperty("autosBudget"))).ShouldBe((98.70m, 200m));
+    }
+
     [Test]
     public async Task Guards_that_are_off_have_no_limit_and_a_day_without_trades_has_no_trigger()
     {
@@ -313,6 +362,7 @@ public class IdeaAutosApiTests
 
         (Number(guards.GetProperty("daySum")), guards.GetProperty("dailyLossLimit").ValueKind, guards.GetProperty("triggeredAt").ValueKind, guards.GetProperty("maxSameDirection").ValueKind)
             .ShouldBe((0m, JsonValueKind.Null, JsonValueKind.Null, JsonValueKind.Null));
+        (Number(guards.GetProperty("autosBudgetUsed")), guards.GetProperty("autosBudget").ValueKind).ShouldBe((0m, JsonValueKind.Null));
     }
 
     // The journal of the autos: who took the trade, the auto, the paper trades in both groups, the totals of the paper ones.
@@ -359,7 +409,8 @@ public class IdeaAutosApiTests
         string? category = null,
         string? badge = null,
         decimal minRiskReward = 1.2m,
-        int minCases = 0)
+        int minCases = 0,
+        decimal? budget = null)
     {
         return new
         {
@@ -373,7 +424,8 @@ public class IdeaAutosApiTests
             category,
             badge,
             minRiskReward,
-            minCases
+            minCases,
+            budget
         };
     }
 

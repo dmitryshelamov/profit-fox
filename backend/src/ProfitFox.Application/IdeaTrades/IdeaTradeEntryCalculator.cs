@@ -112,7 +112,7 @@ public sealed class IdeaTradeEntryCalculator(
         if (auto is not null)
         {
             var books = new AutoBooks(open, auto.OpenPaper, auto.Autos, preparation.Account?.Name);
-            refusals.AddRange(AutoRefusals.Check(auto.Auto, idea.Instrument, plan.Side, books, auto.DailyLoss, preparation.Settings.MaxSameDirection));
+            refusals.AddRange(AutoRefusals.Check(auto.Auto, idea.Instrument, plan.Side, preparation.Amount, books, auto.DailyLoss, preparation.Settings.MaxSameDirection, preparation.Settings.AutosBudget));
         }
 
         return new EntryCalculation(preparation, plan, size, free, refusals, PromiseOf(idea with { Track = idea.Track with { Plan = plan } }, preparation));
