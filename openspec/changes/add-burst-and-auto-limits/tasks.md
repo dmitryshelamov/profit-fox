@@ -25,15 +25,15 @@
 
 ## 3. Хранение
 
-- [ ] 3.1 Миграция `202611080007` (решение 5): `ideas.burst_pairs`, `idea_autos.burst`, `max_per_minute_per_side`,
+- [x] 3.1 Миграция `202611080007` (решение 5): `ideas.burst_pairs`, `idea_autos.burst`, `max_per_minute_per_side`,
   `max_open_per_side`, `idea_trades.burst`, `idea_paper_trades.burst`. Интеграционный тест миграции видит колонки и
   умолчания; старая строка автомата читается с `any` и без лимитов (сценарий «Автомат до лимитов»).
-- [ ] 3.2 `IdeaRepository` пишет и читает `burst_pairs`; `IdeaAutoRepository` — три новые колонки; репозитории сделок —
+- [x] 3.2 `IdeaRepository` пишет и читает `burst_pairs`; `IdeaAutoRepository` — три новые колонки; репозитории сделок —
   флаг. Интеграционные тесты чтения записанного; `NULL` → нет всплеска.
 
 ## 4. Автоматы: порядок и лимиты
 
-- [ ] 4.1 `IdeaAuto.MaxPerMinutePerSide` / `MaxOpenPerSide`, `IdeaAutoConditions.Burst`, `AutoConditions.Match` по нему
+- [x] 4.1 `IdeaAuto.MaxPerMinutePerSide` / `MaxOpenPerSide`, `IdeaAutoConditions.Burst`, `AutoConditions.Match` по нему
   (сценарий «Только без всплеска»); `IdeaTradeRefusal.MinuteLimit` / `SideLimit` с кодами `minute_limit` / `side_limit`.
 - [ ] 4.2 `Services/IdeaAutos/AutoMinutePlan` (решение 3): порядок по матожиданию, затем чистому R:R, без корзины
   последними; взять / пропустить с причиной по двум лимитам, счётчики минуты и открытых стороны. Тесты сценариев

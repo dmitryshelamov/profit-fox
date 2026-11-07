@@ -128,12 +128,12 @@ public class IdeaTradeRepositoryTests
     [Test]
     public async Task Trade_is_read_with_the_features_of_its_idea()
     {
-        IdeaTrade marked = await CreateAsync(Now, idea: IdeaGenerator.Generate(Now) with { BtcChange = -0.02m, Funding = 0.0009m });
+        IdeaTrade marked = await CreateAsync(Now, idea: IdeaGenerator.Generate(Now) with { BtcChange = -0.02m, Funding = 0.0009m, BurstPairs = 25 });
         IdeaTrade plain = await CreateAsync(Now.AddMinutes(1));
 
         await SaveAsync(marked.EntryGrown(new LegTotals(0.47m, 49.82m, 0.02m), Now.AddMinutes(1)) with { Features = default });
 
-        (await _repository.GetAsync(marked.Id, CancellationToken.None))!.Features.ShouldBe(new IdeaFeatures(false, true, true));
+        (await _repository.GetAsync(marked.Id, CancellationToken.None))!.Features.ShouldBe(new IdeaFeatures(false, true, true, true));
         (await _repository.GetAsync(plain.Id, CancellationToken.None))!.Features.ShouldBe(default);
     }
 

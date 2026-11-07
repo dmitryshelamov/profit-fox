@@ -16,17 +16,17 @@ internal static class IdeaRepositoryQueries
                                     engine_version AS "EngineVersion", pair_change AS "PairChange", btc_change AS "BtcChange", funding
                                     """;
 
-    // The columns of a live idea beside the ones a case shares: the price step and the exit rule it fired under.
-    private const string OwnColumns = """tick, life_candles AS "LifeCandles", target_r AS "TargetR", entry_candles AS "EntryCandles" """;
+    // The columns of a live idea beside the ones a case shares: the price step, the exit rule it fired under and the count of the pairs of its minute.
+    private const string OwnColumns = """tick, life_candles AS "LifeCandles", target_r AS "TargetR", entry_candles AS "EntryCandles", burst_pairs AS "BurstPairs" """;
 
     // A second open idea of a key conflicts with the partial unique index and is left out; RETURNING names the ones added.
     private const string InsertSql = """
                                      INSERT INTO ideas (id, category, symbol, setup, type, "interval", side, fired_at, entry, stop, target, risk_reward, status,
                                          status_at, entered_at, exit_price, move, volume_ratio, engine_version, tick, life_candles, target_r, entry_candles, pair_change,
-                                         btc_change, funding)
+                                         btc_change, funding, burst_pairs)
                                      VALUES (@Id, @Category, @Symbol, @Setup, @Type, @Interval, @Side, @FiredAt, @Entry, @Stop, @Target, @RiskReward, @Status,
                                          @StatusAt, @EnteredAt, @ExitPrice, @Move, @VolumeRatio, @EngineVersion, @Tick, @LifeCandles, @TargetR, @EntryCandles, @PairChange,
-                                         @BtcChange, @Funding)
+                                         @BtcChange, @Funding, @BurstPairs)
                                      ON CONFLICT (category, symbol, setup, type, "interval", side) WHERE status IN ('awaiting_entry', 'active') DO NOTHING
                                      RETURNING id
                                      """;

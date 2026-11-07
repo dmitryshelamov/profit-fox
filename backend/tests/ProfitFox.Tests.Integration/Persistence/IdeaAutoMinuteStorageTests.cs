@@ -161,14 +161,14 @@ public class IdeaAutoMinuteStorageTests
     [Test]
     public async Task Paper_trade_keeps_the_features_of_its_idea_after_the_idea_is_deleted()
     {
-        Idea idea = IdeaGenerator.Generate(Fired) with { PairChange = -0.07m, Funding = 0.0001m };
+        Idea idea = IdeaGenerator.Generate(Fired) with { PairChange = -0.07m, Funding = 0.0001m, BurstPairs = 25 };
         await _ideas.SaveAsync([idea], [], [], new AutoMinute(Owner, [Paper(idea)], [], [], []), CancellationToken.None);
         await using (NpgsqlConnection connection = await _dataSource.OpenConnectionAsync())
         {
             await connection.ExecuteAsync("DELETE FROM ideas WHERE id = @Id", new { idea.Id });
         }
 
-        (await _paper.GetAllAsync(CancellationToken.None)).Single().Trade.Features.ShouldBe(new IdeaFeatures(true, false, false));
+        (await _paper.GetAllAsync(CancellationToken.None)).Single().Trade.Features.ShouldBe(new IdeaFeatures(true, false, false, true));
     }
 
     // Scenario "Идея дошла до цели" for a paper trade: the outcome of the idea is written on it once, like on a real trade.

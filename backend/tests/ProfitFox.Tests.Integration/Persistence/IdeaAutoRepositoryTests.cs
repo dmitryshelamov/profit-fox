@@ -58,8 +58,9 @@ public class IdeaAutoRepositoryTests
             1.35m,
             100,
             FeatureCondition.With,
-            FeatureCondition.Without);
-        IdeaAuto auto = IdeaAutoGenerator.Generate(_account, "Импульс лонг", conditions: conditions);
+            FeatureCondition.Without,
+            Burst: FeatureCondition.With);
+        IdeaAuto auto = IdeaAutoGenerator.Generate(_account, "Импульс лонг", conditions: conditions) with { MaxPerMinutePerSide = 2, MaxOpenPerSide = 5 };
 
         IdeaAuto created = await _repository.CreateAsync(auto, Now, CancellationToken.None);
 
@@ -73,11 +74,11 @@ public class IdeaAutoRepositoryTests
     public async Task Save_writes_the_name_the_account_the_amount_and_the_conditions_but_not_the_mode_or_the_place()
     {
         IdeaAuto created = await _repository.CreateAsync(IdeaAutoGenerator.Generate(_account, "А", mode: IdeaAutoMode.Paper), Now, CancellationToken.None);
-        IdeaAutoConditions conditions = created.Conditions with { Side = IdeaSide.Long, MinCases = 50, Types = [IdeaType.Pullback], HighFunding = FeatureCondition.With };
+        IdeaAutoConditions conditions = created.Conditions with { Side = IdeaSide.Long, MinCases = 50, Types = [IdeaType.Pullback], HighFunding = FeatureCondition.With, Burst = FeatureCondition.Without };
 
-        (await _repository.SaveAsync(created with { Name = "Б", Amount = 150m, Conditions = conditions, Mode = IdeaAutoMode.Live, Position = 9 }, CancellationToken.None)).ShouldBeTrue();
+        (await _repository.SaveAsync(created with { Name = "Б", Amount = 150m, Conditions = conditions, Mode = IdeaAutoMode.Live, Position = 9, MaxOpenPerSide = 3 }, CancellationToken.None)).ShouldBeTrue();
 
-        Shape((await _repository.GetAsync(created.Id, CancellationToken.None))!).ShouldBe(Shape(created with { Name = "Б", Amount = 150m, Conditions = conditions }));
+        Shape((await _repository.GetAsync(created.Id, CancellationToken.None))!).ShouldBe(Shape(created with { Name = "Б", Amount = 150m, Conditions = conditions, MaxOpenPerSide = 3 }));
         (await _repository.SaveAsync(IdeaAutoGenerator.Generate(_account), CancellationToken.None)).ShouldBeFalse();
     }
 
@@ -194,6 +195,6 @@ public class IdeaAutoRepositoryTests
 
         return (auto.Id, auto.Name, auto.AccountId, auto.Amount, auto.Mode, auto.Position, auto.DeletedAt, string.Join(',', conditions.Setups), string.Join(',', conditions.Types),
             string.Join(',', conditions.Intervals), conditions.Side, conditions.Category, conditions.Badge, conditions.MinRiskReward, conditions.MinCases,
-            (conditions.DayDrop, conditions.BtcDrop, conditions.HighFunding));
+            (conditions.DayDrop, conditions.BtcDrop, conditions.HighFunding, conditions.Burst), (auto.MaxPerMinutePerSide, auto.MaxOpenPerSide));
     }
 }

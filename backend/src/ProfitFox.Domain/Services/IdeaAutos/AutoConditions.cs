@@ -23,7 +23,8 @@ public static class AutoConditions
                && BadgeFits(bucket?.Badge, conditions.Badge)
                && FeatureFits(idea.Features.DayDrop, conditions.DayDrop)
                && FeatureFits(idea.Features.BtcDrop, conditions.BtcDrop)
-               && FeatureFits(idea.Features.HighFunding, conditions.HighFunding);
+               && FeatureFits(idea.Features.HighFunding, conditions.HighFunding)
+               && FeatureFits(idea.Features.Burst, conditions.Burst);
     }
 
     private static bool FeatureFits(bool present, FeatureCondition condition)

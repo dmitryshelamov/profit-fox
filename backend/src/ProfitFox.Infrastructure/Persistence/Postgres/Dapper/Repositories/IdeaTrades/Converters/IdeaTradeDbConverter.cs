@@ -63,6 +63,7 @@ internal static class IdeaTradeDbConverter
             DayDrop = trade.Features.DayDrop,
             BtcDrop = trade.Features.BtcDrop,
             HighFunding = trade.Features.HighFunding,
+            Burst = trade.Features.Burst,
             LastOrderNumber = trade.LastOrderNumber,
             CreatedAt = trade.CreatedAt,
             PromisedBadge = trade.Promise?.Badge?.ToCode(),
@@ -121,7 +122,7 @@ internal static class IdeaTradeDbConverter
             trade.AutoId)
         {
             Expiry = new LegTotals(trade.ExpiryQuantity, trade.ExpiryValue, trade.ExpiryFee),
-            Features = new IdeaFeatures(trade.DayDrop, trade.BtcDrop, trade.HighFunding)
+            Features = new IdeaFeatures(trade.DayDrop, trade.BtcDrop, trade.HighFunding, trade.Burst)
         };
     }
 

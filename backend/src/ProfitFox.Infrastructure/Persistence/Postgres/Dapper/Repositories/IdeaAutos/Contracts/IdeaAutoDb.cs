@@ -34,9 +34,15 @@ internal sealed class IdeaAutoDb
 
     public required string HighFunding { get; init; }
 
+    public required string Burst { get; init; }
+
     public int Position { get; init; }
 
     public DateTimeOffset? DeletedAt { get; init; }
 
     public decimal? Budget { get; init; }
+
+    public int? MaxPerMinutePerSide { get; init; }
+
+    public int? MaxOpenPerSide { get; init; }
 }

@@ -45,6 +45,8 @@ internal sealed class IdeaDb
 
     public decimal? Funding { get; init; }
 
+    public int? BurstPairs { get; init; }
+
     public int EngineVersion { get; init; }
 
     public decimal? Tick { get; init; }
