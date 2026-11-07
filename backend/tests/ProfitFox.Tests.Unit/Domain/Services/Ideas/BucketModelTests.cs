@@ -176,13 +176,13 @@ public class BucketModelTests
 
         IReadOnlyDictionary<IdeaBucketKey, BucketStatistics> model = BucketModel.Build(buckets, parents, BucketModel.Roots(parents, new Dictionary<MarketCategory, ClusteredSums> { [MarketCategory.Linear] = category }));
 
-        model[Impulse].Probability!.Value.ShouldBe(0.6465m, 0.0001m);
+        model[Impulse].Probability!.Value.ShouldBe(0.6457m, 0.0001m);
         model[Impulse].Probability!.Value.ShouldBeInRange(91m / 180m, 40m / 60m);
         // The mean +1 R of the long parent pulled to +0.517 R of the category.
-        model[Impulse].Expectancy.ShouldBe(0.9394m, 0.0001m);
+        model[Impulse].Expectancy.ShouldBe(0.9370m, 0.0001m);
         model[shortImpulse].Probability!.Value.ShouldBe(0.0170m, 0.0001m);
         model[shortImpulse].ProbabilityLow.ShouldBe(0m);
-        model[shortImpulse].ProbabilityHigh!.Value.ShouldBe(0.0497m, 0.0001m);
+        model[shortImpulse].ProbabilityHigh!.Value.ShouldBe(0.0504m, 0.0001m);
     }
 
     // The mirror of the short bucket: 59 targets of 60 next to 10, the interval stops at 1.
@@ -208,7 +208,7 @@ public class BucketModelTests
     [Test]
     public void Bucket_without_a_case_of_its_own_has_the_numbers_of_its_parent()
     {
-        BucketStatistics statistics = BucketModel.Statistics(new ClusteredSums(), new BucketModel.ParentModel(NineThousand, NineThousand), new BucketModel.Spreads(Tau, Tau));
+        BucketStatistics statistics = BucketModel.Statistics(new ClusteredSums(TimeSpan.FromHours(1)), new BucketModel.ParentModel(NineThousand, NineThousand), new BucketModel.Spreads(Tau, Tau));
 
         (statistics.Cases, statistics.Probability, statistics.Expectancy, statistics.ExpectancyLow, statistics.ExpectancyHigh)
             .ShouldBe((0, 0.4m, -0.2m, Parent.Low, Parent.High));
@@ -230,7 +230,7 @@ public class BucketModelTests
         // 15 cases of the first outcome, then 15 stops.
         ClusteredSums Mixed()
         {
-            var sums = new ClusteredSums();
+            var sums = new ClusteredSums(TimeSpan.FromHours(1));
 
             for (int index = 0; index < 30; index++)
             {
@@ -254,7 +254,7 @@ public class BucketModelTests
     // 30 cases each in its own hour from each of the given ones: a third are +2 R targets, the rest −1 R stops.
     private static ClusteredSums Cases(params int[] fromHours)
     {
-        var sums = new ClusteredSums();
+        var sums = new ClusteredSums(TimeSpan.FromHours(1));
 
         foreach (int fromHour in fromHours)
         {
@@ -270,7 +270,7 @@ public class BucketModelTests
     // Cases of the same outcome and result, each in its own hour, and after them as many of the next as asked for, stops of −1 R.
     private static ClusteredSums Equal(int count, IdeaStatus status, decimal result, int stops = 0)
     {
-        var sums = new ClusteredSums();
+        var sums = new ClusteredSums(TimeSpan.FromHours(1));
 
         for (int index = 0; index < count; index++)
         {
@@ -299,7 +299,7 @@ public class BucketModelTests
     // 60 cases each in its own hour from the given one into the sums, the first ones +2 R targets, the rest −1 R stops.
     private static ClusteredSums Targets(int fromHour, int targets, ClusteredSums? sums = null)
     {
-        sums ??= new ClusteredSums();
+        sums ??= new ClusteredSums(TimeSpan.FromHours(1));
 
         for (int index = 0; index < 60; index++)
         {

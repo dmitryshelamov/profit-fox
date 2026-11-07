@@ -12,12 +12,13 @@ public class ClusteredSumsTests
     private const decimal Precision = 0.0001m;
 
     private static readonly DateTimeOffset Hour = DateTimeOffset.Parse("2024-06-01T10:00:00Z");
+    private static readonly TimeSpan OneHour = TimeSpan.FromHours(1);
 
     // Two cases of one hour are one group of two: n_g² = 4, n_g·S_g = 2 · 1, S_g² = 1, n_g·T_g = 2, T_g² = 1.
     [Test]
     public void Cases_of_one_hour_are_one_group()
     {
-        var sums = new ClusteredSums();
+        var sums = new ClusteredSums(OneHour);
 
         sums.Add(Hour, IdeaStatus.Target, 2m);
         sums.Add(Hour.AddMinutes(59), IdeaStatus.Stop, -1m);
@@ -29,7 +30,7 @@ public class ClusteredSumsTests
     [Test]
     public void Cases_of_two_hours_are_two_groups()
     {
-        var sums = new ClusteredSums();
+        var sums = new ClusteredSums(OneHour);
 
         sums.Add(Hour, IdeaStatus.Target, 2m);
         sums.Add(Hour.AddHours(1), IdeaStatus.Stop, -1m);
@@ -37,10 +38,51 @@ public class ClusteredSumsTests
         Totals(sums).ShouldBe((2, 1, 1, 0, 1m, 5m, 2, 2L, 1m, 5m, 1L, 1L));
     }
 
+    // Scenario "Окно входа удлиняет блок": blocks of 28 hours run from the Unix epoch, so one of them is 31 May 04:00 to 1 June 08:00 UTC.
+    [Test]
+    public void Cases_of_one_block_of_the_holding_are_one_group()
+    {
+        var sums = new ClusteredSums(TimeSpan.FromHours(28));
+
+        sums.Add(DateTimeOffset.Parse("2024-05-31T04:00:00Z"), IdeaStatus.Target, 2m);
+        sums.Add(DateTimeOffset.Parse("2024-06-01T07:59:00Z"), IdeaStatus.Stop, -1m);
+        int oneBlock = sums.Groups;
+        sums.Add(DateTimeOffset.Parse("2024-06-01T08:00:00Z"), IdeaStatus.Stop, -1m);
+
+        (oneBlock, sums.Groups).ShouldBe((1, 2));
+    }
+
+    // Scenarios "Одно движение рынка" and "Доля при одном движении" on 4 h: 20 blocks of 4 days from 29 May 2024, each with 20 cases in
+    // different hours and equal results, 8 blocks of +2 R targets and 12 of −1 R stops. By the hour they would be 400 independent cases,
+    // +0.056…+0.344 R; by the holding they are 20 bets, −0.5057…+0.9057 R by t₁₉.
+    [Test]
+    public void Cases_of_one_block_that_moved_as_one_widen_the_intervals()
+    {
+        var sums = new ClusteredSums(TimeSpan.FromDays(4));
+        var start = DateTimeOffset.Parse("2024-05-29T00:00:00Z");
+
+        for (int block = 0; block < 20; block++)
+        {
+            for (int hour = 0; hour < 20; hour++)
+            {
+                sums.Add(start.AddDays(4 * block).AddHours(hour * 4.5), block < 8 ? IdeaStatus.Target : IdeaStatus.Stop, block < 8 ? 2m : -1m);
+            }
+        }
+
+        BucketStatistics statistics = sums.Statistics();
+
+        statistics.Expectancy.ShouldBe(0.2m);
+        statistics.ExpectancyLow!.Value.ShouldBe(-0.5057m, Precision);
+        statistics.ExpectancyHigh!.Value.ShouldBe(0.9057m, Precision);
+        statistics.Probability.ShouldBe(0.4m);
+        statistics.ProbabilityLow!.Value.ShouldBe(0.2059m, Precision);
+        statistics.ProbabilityHigh!.Value.ShouldBe(0.6316m, Precision);
+    }
+
     [Test]
     public void Removing_a_case_gives_back_the_sums_before_it_was_added()
     {
-        var sums = new ClusteredSums();
+        var sums = new ClusteredSums(OneHour);
         sums.Add(Hour, IdeaStatus.Target, 2m);
         sums.Add(Hour.AddHours(1), IdeaStatus.Expired, 0.3m);
         (int, int, int, int, decimal, decimal, int, long, decimal, decimal, long, long) before = Totals(sums);
@@ -54,11 +96,12 @@ public class ClusteredSumsTests
     }
 
     // Scenarios "Одно движение рынка" and "Доля при одном движении": 20 hours of 20 equal cases, 8 of them +2 R targets, 12 −1 R stops. The
-    // groups are 20 cases that moved as one, so the interval is that of 20 results, not of 400; the share is as wide as of 19 independent cases.
+    // groups are 20 cases that moved as one, so the interval is that of 20 results by t₁₉ = 2.093, not of 400; the share is as wide as of 16.7
+    // independent cases.
     [Test]
     public void Cases_of_one_hour_that_moved_as_one_widen_the_intervals()
     {
-        var sums = new ClusteredSums();
+        var sums = new ClusteredSums(OneHour);
 
         for (int hour = 0; hour < 20; hour++)
         {
@@ -71,18 +114,44 @@ public class ClusteredSumsTests
         BucketStatistics statistics = sums.Statistics();
 
         statistics.Expectancy.ShouldBe(0.2m);
-        statistics.ExpectancyLow!.Value.ShouldBe(-0.4608m, Precision);
-        statistics.ExpectancyHigh!.Value.ShouldBe(0.8608m, Precision);
+        statistics.ExpectancyLow!.Value.ShouldBe(-0.5057m, Precision);
+        statistics.ExpectancyHigh!.Value.ShouldBe(0.9057m, Precision);
         statistics.Probability.ShouldBe(0.4m);
-        statistics.ProbabilityLow!.Value.ShouldBe(0.2152m, Precision);
-        statistics.ProbabilityHigh!.Value.ShouldBe(0.6184m, Precision);
+        statistics.ProbabilityLow!.Value.ShouldBe(0.2059m, Precision);
+        statistics.ProbabilityHigh!.Value.ShouldBe(0.6316m, Precision);
     }
 
-    // Scenario "Ожидание надёжно выше нуля": 400 cases each in its own hour, half +1.3185 R and half −1.0785 R, the mean +0.12 R and s 1.2 R.
+    // Review of cluster-idea-cases-by-holding: few groups estimate the variance loosely, so the interval takes the Student quantile of G − 1
+    // degrees of freedom, t₄ = 2.7764 for 5 blocks, not 1.96. 5 blocks of 4 days with 6 equal cases each, 2 of +2 R targets and 3 of −1 R
+    // stops: +0.2 R with −1.8403…+2.2403 R, not −1.2403…+1.6403 R; the share of 40 % as of 1.99 cases, 6.29…86.88 %.
+    [Test]
+    public void Few_groups_widen_the_intervals_by_the_student_quantile()
+    {
+        var sums = new ClusteredSums(TimeSpan.FromDays(4));
+        var start = DateTimeOffset.Parse("2024-05-29T00:00:00Z");
+
+        for (int block = 0; block < 5; block++)
+        {
+            for (int index = 0; index < 6; index++)
+            {
+                sums.Add(start.AddDays(4 * block).AddHours(index), block < 2 ? IdeaStatus.Target : IdeaStatus.Stop, block < 2 ? 2m : -1m);
+            }
+        }
+
+        BucketStatistics statistics = sums.Statistics();
+
+        statistics.ExpectancyLow!.Value.ShouldBe(-1.8403m, Precision);
+        statistics.ExpectancyHigh!.Value.ShouldBe(2.2403m, Precision);
+        statistics.ProbabilityLow!.Value.ShouldBe(0.0629m, Precision);
+        statistics.ProbabilityHigh!.Value.ShouldBe(0.8688m, Precision);
+    }
+
+    // Scenario "Ожидание надёжно выше нуля": 400 cases each in its own hour, half +1.3185 R and half −1.0785 R, the mean +0.12 R and s 1.2 R;
+    // 400 groups widen it by t₃₉₉ = 1.966 only.
     [Test]
     public void Cases_each_in_its_own_hour_have_the_interval_of_independent_cases()
     {
-        var sums = new ClusteredSums();
+        var sums = new ClusteredSums(OneHour);
 
         for (int index = 0; index < 400; index++)
         {
@@ -92,8 +161,8 @@ public class ClusteredSumsTests
         BucketStatistics statistics = sums.Statistics();
 
         statistics.Expectancy.ShouldBe(0.12m);
-        statistics.ExpectancyLow!.Value.ShouldBe(0.0024m, Precision);
-        statistics.ExpectancyHigh!.Value.ShouldBe(0.2376m, Precision);
+        statistics.ExpectancyLow!.Value.ShouldBe(0.0020m, Precision);
+        statistics.ExpectancyHigh!.Value.ShouldBe(0.2380m, Precision);
     }
 
     // Scenario "Скученность не сужает": every hour has a +2 R target and a −1 R stop, so the hours do not differ at all; the intervals are
@@ -101,7 +170,7 @@ public class ClusteredSumsTests
     [Test]
     public void Hours_that_differ_less_than_independent_cases_keep_the_independent_intervals()
     {
-        var sums = new ClusteredSums();
+        var sums = new ClusteredSums(OneHour);
 
         for (int hour = 0; hour < 30; hour++)
         {
@@ -122,7 +191,7 @@ public class ClusteredSumsTests
     [Test]
     public void Cases_all_of_one_hour_have_the_intervals_of_one_case()
     {
-        var sums = new ClusteredSums();
+        var sums = new ClusteredSums(OneHour);
 
         for (int index = 0; index < 30; index++)
         {
@@ -141,7 +210,7 @@ public class ClusteredSumsTests
     [Test]
     public void Cases_without_a_target_have_the_independent_interval_of_the_share()
     {
-        var sums = new ClusteredSums();
+        var sums = new ClusteredSums(OneHour);
 
         for (int index = 0; index < 30; index++)
         {
@@ -159,7 +228,7 @@ public class ClusteredSumsTests
     [Test]
     public void Fewer_than_30_cases_have_their_counts_and_mean_only()
     {
-        var sums = new ClusteredSums();
+        var sums = new ClusteredSums(OneHour);
 
         for (int index = 0; index < 12; index++)
         {
