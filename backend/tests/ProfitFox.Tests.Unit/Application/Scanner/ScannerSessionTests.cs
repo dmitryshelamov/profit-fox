@@ -595,6 +595,7 @@ public class ScannerSessionTests
                 _ideaSignals,
                 _cursors,
                 Substitute.For<IIdeaVolatilityRepository>(),
+                Substitute.For<IFundingRateRepository>(),
                 market,
                 new IdeasSettings(),
                 settings,

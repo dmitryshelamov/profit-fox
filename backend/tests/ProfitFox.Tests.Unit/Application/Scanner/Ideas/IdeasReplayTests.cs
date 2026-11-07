@@ -12,6 +12,7 @@ using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.ValueObjects.Ideas;
+using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Tests.Shared.Fixtures.Ideas;
 
@@ -27,6 +28,7 @@ namespace ProfitFox.Tests.Unit.Application.Scanner.Ideas;
 public class IdeasReplayTests
 {
     private static readonly Instrument Wif = new Instrument(MarketCategory.Linear, "WIFUSDT");
+    private static readonly Instrument Btc = new Instrument(MarketCategory.Linear, "BTCUSDT");
     private static readonly DateTimeOffset March1 = DateTimeOffset.Parse("2024-03-01T00:00:00Z");
     private const decimal Tick = 0.01m;
     private static readonly IdeaExitRules Defaults = new IdeaExitRules([]);
@@ -36,6 +38,7 @@ public class IdeasReplayTests
     private IIdeaSignalRepository _signals = null!;
     private IIdeaReplayRepository _cursors = null!;
     private IIdeaVolatilityRepository _volatility = null!;
+    private IFundingRateRepository _funding = null!;
     private ScannerMarket _market = null!;
     private ScannerPace _pace = null!;
     private FakeTimeProvider _time = null!;
@@ -44,6 +47,7 @@ public class IdeasReplayTests
     private List<IReadOnlyCollection<IdeaSignal>> _writes = null!;
     private Dictionary<Instrument, IdeaReplayCursor> _stored = null!;
     private IReadOnlyList<IdeaCandle> _minutes = null!;
+    private IReadOnlyList<IdeaCandle> _btc = null!;
 
     [SetUp]
     public void SetUp()
@@ -52,12 +56,15 @@ public class IdeasReplayTests
         _signals = Substitute.For<IIdeaSignalRepository>();
         _cursors = Substitute.For<IIdeaReplayRepository>();
         _volatility = Substitute.For<IIdeaVolatilityRepository>();
+        _funding = Substitute.For<IFundingRateRepository>();
+        _funding.GetAsync(Arg.Any<Instrument>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
         _market = new ScannerMarket();
         _pace = new ScannerPace();
         _time = new FakeTimeProvider(March1.AddDays(1).AddMinutes(5));
         _written = [];
         _writes = [];
         _minutes = IdeaFixtures.Setup("impulse");
+        _btc = [];
         _stored = [];
         _cursors.GetAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(_ => new Dictionary<Instrument, IdeaReplayCursor>(_stored));
         _cursors.SetAsync(Arg.Any<Instrument>(), Arg.Any<int>(), Arg.Any<IdeaReplayCursor>(), Arg.Any<CancellationToken>()).Returns(call =>
@@ -82,6 +89,10 @@ public class IdeasReplayTests
             (IReadOnlyList<Candle>)[.. _minutes.Where(minute => minute.OpenTime >= call.ArgAt<DateTimeOffset>(2) && minute.OpenTime < call.ArgAt<DateTimeOffset>(3)).Select(Candle)]);
         _candles.GetAggregatedAsync(Wif, Arg.Any<Interval>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(call =>
             IdeaCandles.FromMinutes(call.ArgAt<Interval>(1), _minutes, call.ArgAt<DateTimeOffset>(2), call.ArgAt<DateTimeOffset>(3)));
+        _candles.GetAsync(Btc, Interval.OneMinute, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(call =>
+            (IReadOnlyList<Candle>)[.. _btc.Where(minute => minute.OpenTime >= call.ArgAt<DateTimeOffset>(2) && minute.OpenTime < call.ArgAt<DateTimeOffset>(3)).Select(Candle)]);
+        _candles.GetAggregatedAsync(Btc, Arg.Any<Interval>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(call =>
+            IdeaCandles.FromMinutes(call.ArgAt<Interval>(1), _btc, call.ArgAt<DateTimeOffset>(2), call.ArgAt<DateTimeOffset>(3)));
         Keep(March1.AddDays(1));
     }
 
@@ -314,6 +325,73 @@ public class IdeasReplayTests
         await _candles.Received(1).GetAsync(Wif, Interval.OneMinute, March1.AddDays(1), March1.AddDays(3), 2880, Arg.Any<CancellationToken>());
     }
 
+    // Scenario "Признаки в прогоне": a settlement 5 minutes after the minute the first signal fired on is not seen by it; the one before is.
+    [Test]
+    public async Task Signal_takes_the_funding_settled_up_to_its_minute()
+    {
+        await Replay().StepAsync(CancellationToken.None);
+        DateTimeOffset first = _written.Values.Min(signal => signal.Path.FiredAt);
+        var later = new FundingRatePoint(first.AddMinutes(4), 0.0001m);
+        _funding.GetAsync(Wif, March1.AddDays(-7), March1.AddDays(1), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([new FundingRatePoint(March1.AddHours(-4), 0.0007m), later]);
+        _written.Clear();
+        _stored.Clear();
+
+        await Replay().StepAsync(CancellationToken.None);
+
+        _written.Values.Where(signal => signal.Path.FiredAt == first).ShouldAllBe(signal => signal.Funding == 0.0007m && signal.Features.HighFunding);
+        _written.Values.ShouldAllBe(signal => signal.Funding == (signal.Path.FiredAt > later.Time ? 0.0001m : 0.0007m));
+        _written.Values.ShouldContain(signal => signal.Funding == 0.0001m);
+    }
+
+    // Scenario "BTC у spot-идеи" on the replay: BTC at 100 000 before March 1 and 98 700 from it; a spot pair reads no funding.
+    [Test]
+    public async Task Spot_signal_takes_the_change_of_btc_of_its_minute_and_no_funding()
+    {
+        var spot = new Instrument(MarketCategory.Spot, "WIFUSDT");
+        _btc = [.. Enumerable.Range(0, 2 * 1440).Select(index => March1.AddDays(-1).AddMinutes(index)).Select(time => Flat(time, time < March1 ? 100_000m : 98_700m))];
+        _candles.GetAsync(spot, Interval.OneMinute, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(call =>
+            (IReadOnlyList<Candle>)[.. _minutes.Where(minute => minute.OpenTime >= call.ArgAt<DateTimeOffset>(2) && minute.OpenTime < call.ArgAt<DateTimeOffset>(3)).Select(Candle)]);
+        _candles.GetAggregatedAsync(spot, Arg.Any<Interval>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(call =>
+            IdeaCandles.FromMinutes(call.ArgAt<Interval>(1), _minutes, call.ArgAt<DateTimeOffset>(2), call.ArgAt<DateTimeOffset>(3)));
+        _market.Keep([new ScannerPair(Wif, false), new ScannerPair(spot, true, HistoryFrom: March1, CoveredUntil: March1.AddDays(1), TickSize: Tick)]);
+
+        await Replay().StepAsync(CancellationToken.None);
+
+        IdeaSignal[] signals = [.. _written.Values];
+        signals.ShouldNotBeEmpty();
+        signals.ShouldAllBe(signal => signal.Instrument == spot && signal.Funding == null);
+        signals.ShouldAllBe(signal => signal.BtcChange == (signal.Path.FiredAt.AddMinutes(-241) < March1 ? -0.013m : 0m));
+        signals.ShouldContain(signal => signal.Features.BtcDrop);
+        await _funding.DidNotReceive().GetAsync(Arg.Any<Instrument>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    // linear / BTCUSDT measures the change of BTC by its own minutes; without the minute 240 before, the change is unknown.
+    [Test]
+    public async Task Btc_signal_takes_the_change_of_its_own_minutes()
+    {
+        _btc = _minutes;
+        _market.Keep([new ScannerPair(Wif, false), new ScannerPair(Btc, true, HistoryFrom: March1, CoveredUntil: March1.AddDays(1), TickSize: Tick)]);
+        var closes = _minutes.ToDictionary(minute => minute.OpenTime, minute => minute.Close);
+
+        await Replay().StepAsync(CancellationToken.None);
+
+        IdeaSignal[] signals = [.. _written.Values];
+        signals.ShouldNotBeEmpty();
+        signals.ShouldAllBe(signal => signal.BtcChange == Change(closes, signal.Path.FiredAt.AddMinutes(-1)));
+        signals.ShouldContain(signal => signal.BtcChange != null);
+    }
+
+    private static decimal? Change(Dictionary<DateTimeOffset, decimal> closes, DateTimeOffset minute)
+    {
+        return closes.TryGetValue(minute, out decimal now) && closes.TryGetValue(minute.AddMinutes(-240), out decimal before) ? now / before - 1m : null;
+    }
+
+    private static IdeaCandle Flat(DateTimeOffset time, decimal price)
+    {
+        return new IdeaCandle(time, price, price, price, price, 1m);
+    }
+
     private static IdeaReplayCursor Until(DateTimeOffset replayedUntil)
     {
         return Arg.Is<IdeaReplayCursor>(cursor => cursor!.ReplayedUntil == replayedUntil);
@@ -331,6 +409,7 @@ public class IdeasReplayTests
             _signals,
             _cursors,
             _volatility,
+            _funding,
             _market,
             settings ?? Settings,
             new ScannerSettings(),
