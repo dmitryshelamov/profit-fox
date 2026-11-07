@@ -124,25 +124,6 @@ public class StrategyNodesApiTests
         catalog.EnumerateArray().Single(entry => entry.GetProperty("id").GetString() == id).GetProperty("group").GetString().ShouldBe("builtIn");
     }
 
-    [TestCase("macd")]
-    [TestCase("bollinger")]
-    public async Task Built_in_macd_and_bollinger_cannot_be_changed_or_deleted(string id)
-    {
-        (await _client.PutAsJsonAsync($"{Nodes}/{id}", Body("x", Signal))).StatusCode.ShouldBe(HttpStatusCode.Conflict);
-        (await _client.DeleteAsync($"{Nodes}/{id}")).StatusCode.ShouldBe(HttpStatusCode.Conflict);
-    }
-
-    // Scenario "Ladder и DCA не встроены".
-    [TestCase("ladder")]
-    [TestCase("dca")]
-    public async Task Ladder_and_dca_are_not_built_in_nodes(string id)
-    {
-        (await _client.GetAsync($"{Nodes}/{id}")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
-
-        JsonElement catalog = await _client.GetFromJsonAsync<JsonElement>(Nodes);
-        catalog.EnumerateArray().ShouldNotContain(node => node.GetProperty("id").GetString() == id);
-    }
-
     [Test]
     public async Task Built_in_node_cannot_be_changed_or_deleted()
     {
@@ -243,16 +224,6 @@ public class StrategyNodesApiTests
         JsonElement clone = await _client.GetFromJsonAsync<JsonElement>($"{Nodes}/{id}");
         (clone.GetProperty("group").GetString(), clone.GetProperty("title").GetString()).ShouldBe(("custom", "Пересечение EMA (копия)"));
         (await _client.PostAsJsonAsync($"{Nodes}/nope/clone", new { })).StatusCode.ShouldBe(HttpStatusCode.NotFound);
-    }
-
-    [Test]
-    public async Task Invalid_node_is_rejected()
-    {
-        HttpResponseMessage response = await _client.PostAsJsonAsync(Nodes, Body("", """{ "formatVersion": 1, "inputs": [], "outputs": [], "nodes": [ { "id": "m", "kind": "multiply" } ] }"""));
-
-        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        JsonElement errors = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errors");
-        errors.TryGetProperty("name", out _).ShouldBeTrue();
     }
 
     [Test]

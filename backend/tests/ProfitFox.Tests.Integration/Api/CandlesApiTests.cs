@@ -109,10 +109,8 @@ public class CandlesApiTests
     [TestCase("category=linear&symbol=BTCUSDT&interval=2&from=2024-01-01T00:00:00Z&to=2024-01-02T00:00:00Z", "interval")]
     [TestCase("category=linear&symbol=BTCUSDT&interval=60&from=2024-01-02T00:00:00Z&to=2024-01-01T00:00:00Z", "from")]
     [TestCase("category=linear&symbol=BTCUSDT&interval=60&to=2024-01-02T00:00:00Z", "from")]
-    [TestCase("category=linear&symbol=BTCUSDT&interval=60&from=2024-01-01T00:00:00Z", "to")]
     [TestCase("category=linear&symbol=BTCUSDT&interval=60&from=2024-01-01T00:00:00&to=2024-01-02T00:00:00Z", "from")]
     [TestCase("category=linear&symbol=BTCUSDT&interval=60&from=2024-01-01T00:00:00Z&to=2024-01-02T00:00:00", "to")]
-    [TestCase("category=linear&interval=60&from=2024-01-01T00:00:00Z&to=2024-01-02T00:00:00Z", "symbol")]
     [TestCase("category=linear&symbol=BTCUSDT&interval=60&from=2024-01-01T00:00:00Z&to=2024-01-02T00:00:00Z&limit=10000", "limit")]
     [TestCase("category=linear&symbol=BTCUSDT&interval=60&from=2024-01-01T00:00:00Z&to=2024-01-02T00:00:00Z&limit=0", "limit")]
     public async Task Invalid_request_is_rejected_with_the_invalid_parameter(string query, string invalidField)

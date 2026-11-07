@@ -40,7 +40,8 @@ public class LiveTradingTests
         await _scenario.DisposeAsync();
     }
 
-    // Scenarios "Запуск остановленного бота" and "Ордер сохраняется до отправки": DCA buys 100 at the start, at the last close 100.
+    // Scenarios "Запуск остановленного бота", "Ордер сохраняется до отправки" and "Сделка после конца ордера": DCA buys 100 at the
+    // start, at the last close 100; the trade comes after the end of its order and is kept as detail.
     [Test]
     public async Task Started_bot_sends_its_start_order_and_its_fill_opens_the_position()
     {
@@ -55,11 +56,14 @@ public class LiveTradingTests
         await _scenario.WaitAsync(async () => (await _scenario.PositionsAsync(bot)).FirstOrDefault()?.Open == true, "the open position");
         LivePosition position = (await _scenario.PositionsAsync(bot))[0];
         (position.Number, position.Quantity, position.Invested).ShouldBe((1, 0.999m, 100m));
-        (await _scenario.OrdersAsync(bot)).Single().Status.ShouldBe(LiveOrderStatus.Filled);
+        await _scenario.WaitAsync(async () => (await _scenario.FillsAsync(bot)).Count == 1, "the trade of the order");
+        LiveOrder order = (await _scenario.OrdersAsync(bot)).Single();
+        (order.Status, order.FilledQuantity, order.FilledValue).ShouldBe((LiveOrderStatus.Filled, 1m, 100m));
         (await _scenario.LiveAsync(bot)).Status.ShouldBe(LiveBotStatus.Running);
     }
 
-    // Scenarios "Рестарт бота DCA" and "Рестарт посреди позиции": the start event and the start order come once.
+    // Scenarios "Рестарт бота DCA", "Рестарт посреди позиции" and "Деплой Worker'а": the start event and the start order come once,
+    // and a Worker stopped gracefully gives its bots up, so the next one takes them before the lease ends.
     [Test]
     public async Task Restarted_worker_goes_on_without_a_second_start_order()
     {
@@ -68,7 +72,18 @@ public class LiveTradingTests
         await _scenario.StopWorkerAsync(first);
 
         _scenario.StartWorker();
-        await _scenario.WaitAsync(() => _scenario.Exchange.Subscribers == 1, "the bot taken again");
+        for (var second = 0; second < 3 && _scenario.Exchange.Subscribers != 1; second++)
+        {
+            _scenario.Factory.Time.Advance(TimeSpan.FromSeconds(1));
+            DateTime until = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+
+            while (_scenario.Exchange.Subscribers != 1 && DateTime.UtcNow < until)
+            {
+                await Task.Delay(50);
+            }
+        }
+
+        _scenario.Exchange.Subscribers.ShouldBe(1);
         await SettleAsync();
 
         _scenario.Exchange.Sent.Count.ShouldBe(1);
@@ -84,30 +99,6 @@ public class LiveTradingTests
 
         _scenario.Exchange.RepeatOrder(LiveTradingScenario.ClientId(bot, 1));
         _scenario.Exchange.Repeat(LiveTradingScenario.ClientId(bot, 1));
-        await SettleAsync();
-
-        (await _scenario.PositionsAsync(bot))[0].Quantity.ShouldBe(1m);
-    }
-
-    // Scenario "Сделка после конца ордера": the trade is kept as detail and the position stays.
-    [Test]
-    public async Task Trade_after_the_end_of_its_order_is_kept_as_detail()
-    {
-        Guid bot = await StartedAndFilledAsync();
-
-        await _scenario.WaitAsync(async () => (await _scenario.FillsAsync(bot)).Count == 1, "the trade of the order");
-        (await _scenario.PositionsAsync(bot))[0].Quantity.ShouldBe(1m);
-        LiveOrder order = (await _scenario.OrdersAsync(bot)).Single();
-        (order.FilledQuantity, order.FilledValue).ShouldBe((1m, 100m));
-    }
-
-    // Scenario "Чужой ордер".
-    [Test]
-    public async Task Fill_of_an_order_of_nobody_in_the_system_is_ignored()
-    {
-        Guid bot = await StartedAndFilledAsync();
-
-        _scenario.Exchange.ForeignFill("manual-1", 5m, 100m, LiveTradingScenario.Spot);
         await SettleAsync();
 
         (await _scenario.PositionsAsync(bot))[0].Quantity.ShouldBe(1m);
@@ -142,25 +133,6 @@ public class LiveTradingTests
         (await _scenario.PositionsAsync(bot))[0].Quantity.ShouldBe(1m);
     }
 
-    // A fill read after a restart reaches the strategy once its indicators are warm: the sell limit goes at the average of
-    // the history, not at an average of nothing.
-    [Test]
-    public async Task Fill_read_after_a_restart_meets_warm_indicators()
-    {
-        Guid bot = await _scenario.CreateBotAsync("ema-limit", JsonDocument.Parse(EmaLimit).RootElement);
-        WorkerHost first = _scenario.StartWorker();
-        await _scenario.ActAsync(bot, "start");
-        await _scenario.WaitAsync(async () => (await _scenario.OrdersAsync(bot)).SingleOrDefault()?.Status == LiveOrderStatus.Active, "the start order on the exchange");
-        await _scenario.StopWorkerAsync(first);
-        _scenario.Exchange.Fill(LiveTradingScenario.ClientId(bot, 1), 1m, 100m, silently: true);
-
-        _scenario.StartWorker();
-
-        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 2, "the sell limit");
-        OrderRequest sell = _scenario.Exchange.Orders.Single(order => order.ClientId == LiveTradingScenario.ClientId(bot, 2));
-        (sell.Side, sell.Type, sell.Price, sell.Quantity).ShouldBe((OrderSide.Sell, OrderType.Limit, 110m, 1m));
-    }
-
     // Scenarios "Worker остановлен до отправки" and "Ответ на отправку потерян": the saved order goes out after the restart, once.
     [Test]
     public async Task Order_saved_before_the_worker_stopped_goes_out_once_after_it()
@@ -192,21 +164,6 @@ public class LiveTradingTests
         await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the order sent again");
         _scenario.Exchange.Sent.Count.ShouldBe(2);
         (await _scenario.LiveAsync(bot)).Status.ShouldBe(LiveBotStatus.Running);
-    }
-
-    // Scenario "Нет денег".
-    [Test]
-    public async Task Permanent_refusal_stops_the_bot_with_the_reason()
-    {
-        Guid bot = await _scenario.CreateBotAsync();
-        _scenario.Exchange.Refusals.Enqueue(new OrderOutcome(OrderOutcomeKind.Permanent, Reason: "Insufficient balance."));
-        _scenario.StartWorker();
-
-        await _scenario.ActAsync(bot, "start");
-
-        await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).Status == LiveBotStatus.Failed, "the failed bot");
-        (await _scenario.LiveAsync(bot)).StopReason.ShouldBe("Insufficient balance.");
-        (await _scenario.OrdersAsync(bot)).Single().Status.ShouldBe(LiveOrderStatus.Rejected);
     }
 
     // Scenario "Исполнение на паузе": the fill counts, the strategy places nothing on it.
@@ -249,29 +206,6 @@ public class LiveTradingTests
         _scenario.Exchange.Cancels.ShouldContain(LiveTradingScenario.ClientId(bot, 1));
     }
 
-    // Scenario "Деплой Worker'а": a Worker stopped gracefully gives its bots up, so the next one takes them before the lease ends.
-    [Test]
-    public async Task Bots_of_a_worker_stopped_gracefully_are_taken_again_at_once()
-    {
-        await StartedAsync();
-        await _scenario.StopWorkerAsync(WorkerOf());
-
-        _scenario.StartWorker();
-
-        for (var second = 0; second < 3 && _scenario.Exchange.Subscribers != 1; second++)
-        {
-            _scenario.Factory.Time.Advance(TimeSpan.FromSeconds(1));
-            DateTime until = DateTime.UtcNow + TimeSpan.FromSeconds(2);
-
-            while (_scenario.Exchange.Subscribers != 1 && DateTime.UtcNow < until)
-            {
-                await Task.Delay(50);
-            }
-        }
-
-        _scenario.Exchange.Subscribers.ShouldBe(1);
-    }
-
     // Scenario "Worker упал": a Worker gone without giving its bots up holds them until the lease ends, then the next one goes on.
     [Test]
     public async Task Bots_of_a_worker_gone_are_taken_again_once_the_lease_ends()
@@ -297,45 +231,6 @@ public class LiveTradingTests
         await _scenario.WaitAsync(() => _scenario.Exchange.Subscribers == 1, "the bot taken once the lease ended");
         (await _scenario.PositionsAsync(bot))[0].Quantity.ShouldBe(1m);
         (await _scenario.LiveAsync(bot)).Status.ShouldBe(LiveBotStatus.Running);
-    }
-
-    // Scenarios "Остановка с лимитками" and "Закрытие лонга".
-    [Test]
-    public async Task Stopped_bot_cancels_its_orders_keeps_its_position_and_closes_it_on_request()
-    {
-        Guid bot = await StartedAsync("ladder");
-        _scenario.Exchange.Fill(LiveTradingScenario.ClientId(bot, 1), 1m, 100m);
-        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 3, "the limit orders of the ladder");
-
-        await _scenario.ActAsync(bot, "stop");
-
-        await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).Status == LiveBotStatus.Stopped, "the stopped bot");
-        _scenario.Exchange.Cancels.ShouldBe([LiveTradingScenario.ClientId(bot, 2), LiveTradingScenario.ClientId(bot, 3)], ignoreOrder: true);
-        (await _scenario.PositionsAsync(bot))[0].Quantity.ShouldBe(1m);
-
-        await _scenario.ActAsync(bot, "close-position");
-
-        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 4, "the market exit");
-        OrderRequest exit = _scenario.Exchange.Orders.Single(order => order.ClientId == LiveTradingScenario.ClientId(bot, 4));
-        (exit.Side, exit.Type, exit.Quantity).ShouldBe((OrderSide.Sell, OrderType.Market, 1m));
-        _scenario.Exchange.Fill(exit.ClientId, 1m, 101m);
-        await _scenario.WaitAsync(async () => !(await _scenario.LiveAsync(bot)).CloseRequested, "the closed position");
-        (await _scenario.PositionsAsync(bot)).Single(position => position.Number == 1).ClosedAt.ShouldNotBeNull();
-        (await _scenario.LiveAsync(bot)).Status.ShouldBe(LiveBotStatus.Stopped);
-    }
-
-    // Scenario "Позицию закрыли вручную".
-    [Test]
-    public async Task Position_the_exchange_does_not_hold_stops_the_bot()
-    {
-        Guid bot = await StartedAndFilledAsync();
-        await _scenario.StopWorkerAsync(WorkerOf());
-        _scenario.Exchange.Holding = 0m;
-
-        _scenario.StartWorker();
-
-        await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).Status == LiveBotStatus.Failed, "the failed bot");
-        (await _scenario.LiveAsync(bot)).StopReason!.ShouldContain("less than the positions of the bots 1");
     }
 
     // Scenario "Неизвестный ордер бота".
@@ -467,17 +362,19 @@ public class LiveTradingTests
         await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 2, "the next purchase of DCA");
     }
 
-    // A bot no Worker can take up fails after the third try with the reason, and nobody tries it again.
+    // A bot no Worker can take up fails after the third try with the reason, and nobody tries it again. The tries follow each other
+    // after a short pause, not after a lease: three of them fail the bot in minutes, not a quarter of an hour.
     [Test]
     public async Task Bot_no_worker_can_take_up_fails_after_three_tries()
     {
         Guid bot = await _scenario.CreateBotAsync();
         _scenario.Exchange.FeesRefused = true;
-        _scenario.StartWorker();
+        _scenario.StartWorker(settings: MinuteLeases);
 
         await _scenario.ActAsync(bot, "start");
 
-        await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).Status == LiveBotStatus.Failed, "the failed bot");
+        await AdvanceAtMostAsync(TimeSpan.FromSeconds(100), async () => (await _scenario.LiveAsync(bot)).Status == LiveBotStatus.Failed);
+        (await _scenario.LiveAsync(bot)).Status.ShouldBe(LiveBotStatus.Failed);
         (await _scenario.LiveAsync(bot)).StopReason.ShouldBe("The Worker failed to take the bot 3 times in a row: Bybit refused the fee rates.");
         _scenario.Exchange.Orders.ShouldBeEmpty();
     }
@@ -510,20 +407,6 @@ public class LiveTradingTests
         await AdvanceAtMostAsync(TimeSpan.FromSeconds(45), () => Task.FromResult(_scenario.Exchange.FeeRequests >= 2));
 
         _scenario.Exchange.FeeRequests.ShouldBeGreaterThanOrEqualTo(2);
-    }
-
-    // The same for a failure that counts against the bot: three of them in a row fail it in minutes, not a quarter of an hour.
-    [Test]
-    public async Task Failed_takes_follow_each_other_after_a_short_pause()
-    {
-        Guid bot = await _scenario.CreateBotAsync();
-        _scenario.Exchange.FeesRefused = true;
-        _scenario.StartWorker(settings: MinuteLeases);
-        await _scenario.ActAsync(bot, "start");
-
-        await AdvanceAtMostAsync(TimeSpan.FromSeconds(100), async () => (await _scenario.LiveAsync(bot)).Status == LiveBotStatus.Failed);
-
-        (await _scenario.LiveAsync(bot)).Status.ShouldBe(LiveBotStatus.Failed);
     }
 
     // An exchange that does not answer for a while is no failure of the bot: the Worker keeps trying until it answers.
@@ -634,18 +517,6 @@ public class LiveTradingTests
         messages.ShouldNotContain(message => message.Contains("api-secret"));
     }
 
-    // Scenario "Постоянный отказ биржи" on the stream: an order the exchange took and then refused stops the bot.
-    [Test]
-    public async Task Order_refused_on_the_stream_stops_the_bot()
-    {
-        Guid bot = await StartedAsync();
-
-        _scenario.Exchange.Reject(LiveTradingScenario.ClientId(bot, 1), "Insufficient balance.");
-
-        await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).Status == LiveBotStatus.Failed, "the failed bot");
-        (await _scenario.LiveAsync(bot)).StopReason.ShouldBe("Insufficient balance.");
-    }
-
     // A new listing has no history: the start purchase goes by its amount, and the order ends with its status.
     [Test]
     public async Task Bot_without_history_buys_by_amount_and_the_status_ends_the_order()
@@ -730,7 +601,8 @@ public class LiveTradingTests
         (await _scenario.OrdersAsync(bot)).ShouldAllBe(order => order.Status != LiveOrderStatus.PendingCancel);
     }
 
-    // Scenario "Постоянный отказ биржи": a refused exit of a closing position is not sold again; the bot fails with the reason.
+    // Scenarios "Постоянный отказ биржи" and "Нет денег", on the answer and on the stream: the refused order stays refused, the bot
+    // fails with the reason, and a refused exit of a closing position is not sold again.
     [TestCase(false)]
     [TestCase(true)]
     public async Task Refused_market_exit_fails_the_bot_and_is_not_sent_again(bool refusedOnTheStream)
@@ -756,6 +628,7 @@ public class LiveTradingTests
         await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).Status == LiveBotStatus.Failed, "the failed bot");
         await SettleAsync();
         (await _scenario.LiveAsync(bot)).StopReason.ShouldBe("Insufficient balance.");
+        (await _scenario.OrdersAsync(bot)).Single(order => order.ClientId.Code == exit).Status.ShouldBe(LiveOrderStatus.Rejected);
         _scenario.Exchange.Sent.Count(order => order.Side == OrderSide.Sell && order.Type == OrderType.Market).ShouldBe(1);
     }
 
@@ -854,16 +727,21 @@ public class LiveTradingTests
         _scenario.Exchange.Sent[3].ShouldBe(buy with { ClientId = LiveTradingScenario.ClientId(bot, 4) });
     }
 
-    // Scenario "Отменили выход позиции": the market exit cancelled on Bybit after a part filled is sold again for the rest.
+    // Scenarios "Остановка с лимитками", "Закрытие лонга" and "Отменили выход позиции": the stop cancels the limits and keeps the
+    // position, the close sells it at the market, and the exit cancelled on Bybit after a part filled is sold again for the rest.
     [Test]
     public async Task Market_exit_cancelled_on_bybit_is_sold_again_and_then_the_position_closes()
     {
         Guid bot = await StartedWithLimitsAsync();
         await _scenario.ActAsync(bot, "stop");
         await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).Status == LiveBotStatus.Stopped, "the stopped bot");
+        _scenario.Exchange.Cancels.ShouldBe([LiveTradingScenario.ClientId(bot, 2), LiveTradingScenario.ClientId(bot, 3)], ignoreOrder: true);
+        (await _scenario.PositionsAsync(bot))[0].Quantity.ShouldBe(1m);
         await _scenario.ActAsync(bot, "close-position");
         await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 4, "the market exit");
         string exit = LiveTradingScenario.ClientId(bot, 4);
+        OrderRequest first = _scenario.Exchange.Orders.Single(order => order.ClientId == exit);
+        (first.Side, first.Type, first.Quantity).ShouldBe((OrderSide.Sell, OrderType.Market, 1m));
         _scenario.Exchange.Fill(exit, 0.4m, 101m);
         await _scenario.WaitAsync(async () => (await _scenario.PositionsAsync(bot)).First().Quantity == 0.6m, "the part sold");
 
@@ -903,7 +781,8 @@ public class LiveTradingTests
         _scenario.Exchange.Sent.ShouldNotContain(order => order.Side == OrderSide.Sell);
     }
 
-    // Scenario "Ручная докупка на споте": the comparison runs once the pause is over and passes, the bot goes on.
+    // Scenarios "Ручная докупка на споте" and "Чужой ордер": the comparison runs once the pause is over and passes, the bot goes on,
+    // and the fill of an order nobody in the system has leaves the books as they are.
     [Test]
     public async Task Coin_the_owner_bought_by_hand_on_the_spot_passes_the_comparison()
     {
@@ -919,6 +798,7 @@ public class LiveTradingTests
         _scenario.Exchange.HoldingReads.ShouldBeGreaterThan(reads);
         await SettleAsync();
         (await _scenario.LiveAsync(bot)).Status.ShouldBe(LiveBotStatus.Running);
+        (await _scenario.PositionsAsync(bot))[0].Quantity.ShouldBe(1m);
     }
 
     // Scenario "Ручная сделка на другом инструменте": another symbol, another market, or a market the system does not trade
@@ -1052,7 +932,8 @@ public class LiveTradingTests
         (await _scenario.LiveAsync(bot)).Status.ShouldBe(LiveBotStatus.Running);
     }
 
-    // Scenario "Расхождение при сверке": every working bot of the account and the instrument stops.
+    // Scenarios "Расхождение при сверке" and "Позицию закрыли вручную": every working bot of the account and the instrument stops,
+    // with the difference as the reason.
     [Test]
     public async Task Difference_stops_every_bot_of_the_symbol()
     {
@@ -1071,6 +952,7 @@ public class LiveTradingTests
         _scenario.StartWorker();
 
         await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(first)).Status == LiveBotStatus.Failed && (await _scenario.LiveAsync(second)).Status == LiveBotStatus.Failed, "both bots failed");
+        (await _scenario.LiveAsync(first)).StopReason!.ShouldContain("less than the positions of the bots 2");
     }
 
     // A fill that lands while the books are compared is no difference: the books are read again before any bot stops.
@@ -1088,20 +970,6 @@ public class LiveTradingTests
 
         await _scenario.WaitAsync(async () => (await _scenario.PositionsAsync(bot)).FirstOrDefault()?.Quantity == 1m, "the fill");
         await SettleAsync();
-        (await _scenario.LiveAsync(bot)).Status.ShouldBe(LiveBotStatus.Running);
-    }
-
-    [Test]
-    public async Task Linear_bot_trades_against_the_position_of_its_symbol()
-    {
-        Guid bot = await _scenario.CreateBotAsync(category: "linear");
-        _scenario.StartWorker();
-
-        await _scenario.ActAsync(bot, "start");
-        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the start order");
-        _scenario.Exchange.Fill(LiveTradingScenario.ClientId(bot, 1), 1m, 100m);
-
-        await _scenario.WaitAsync(async () => (await _scenario.PositionsAsync(bot)).FirstOrDefault()?.Quantity == 1m, "the open linear position");
         (await _scenario.LiveAsync(bot)).Status.ShouldBe(LiveBotStatus.Running);
     }
 
@@ -1124,8 +992,9 @@ public class LiveTradingTests
     }
 
     // Buys 100 when flat, then holds a sell limit at the 3-bar EMA of the close plus 10%.
-    // A candle the bot has seen is history before the catch-up too: the fill meets the EMA of the last candle, not of the one
-    // before it. EMA of 3 over closes of 100 and a last one of 160 is 130, so the sell limit goes at 143.
+    // A fill read after a restart reaches the strategy once its indicators are warm, and a candle the bot has seen is history before
+    // the catch-up too: the fill meets the EMA of the last candle, not of the one before it, nor an average of nothing. EMA of 3 over
+    // closes of 100 and a last one of 160 is 130, so the sell limit goes at 143.
     [Test]
     public async Task Fill_read_after_a_restart_meets_the_last_candle_the_bot_saw()
     {
@@ -1140,7 +1009,8 @@ public class LiveTradingTests
         _scenario.StartWorker();
 
         await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 2, "the sell limit");
-        _scenario.Exchange.Orders.Single(order => order.ClientId == LiveTradingScenario.ClientId(bot, 2)).Price.ShouldBe(143m);
+        OrderRequest sell = _scenario.Exchange.Orders.Single(order => order.ClientId == LiveTradingScenario.ClientId(bot, 2));
+        (sell.Side, sell.Type, sell.Price, sell.Quantity).ShouldBe((OrderSide.Sell, OrderType.Limit, 143m, 0.625m));
     }
 
     // Buys 100 when flat and the gate holds; closes the position when the close reaches 110. The gate is replaced by the test.

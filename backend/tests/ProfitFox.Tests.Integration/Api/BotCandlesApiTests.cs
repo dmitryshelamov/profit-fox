@@ -99,9 +99,8 @@ public class BotCandlesApiTests
         ((long)(await command.ExecuteScalarAsync())!).ShouldBe(0);
     }
 
-    // Scenario "Период длиннее 1000 свечей" and "Неизвестный интервал".
+    // Scenario "Период длиннее 1000 свечей"; "Неизвестный интервал" is in GetBotCandlesTests.
     [TestCase("interval=1&from=2024-03-08T12:00:00Z&to=2024-03-10T12:00:00Z", "from")]
-    [TestCase("interval=2&from=2024-03-10T08:00:00Z&to=2024-03-10T12:00:00Z", "interval")]
     public async Task Invalid_request_is_rejected_by_parameter_without_calling_bybit(string query, string parameter)
     {
         HttpResponseMessage response = await _client.GetAsync($"/api/bots/{_bot}/candles?{query}");

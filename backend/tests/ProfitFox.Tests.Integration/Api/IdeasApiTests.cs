@@ -424,13 +424,10 @@ public class IdeasApiTests
         page.GetProperty("items")[0].GetProperty("id").GetGuid().ShouldBe(ideas[^1].Id);
     }
 
-    // Scenario "Неизвестный размер страницы".
+    // Scenario "Неизвестный размер страницы", and an interval the ideas do not keep. The other wrong parameters are in GetIdeasTests.
     [TestCase("pageSize=75", "pageSize")]
-    [TestCase("page=0", "page")]
-    [TestCase("sort=move", "sort")]
-    [TestCase("direction=up", "direction")]
-    [TestCase("savedFilter=00000000-0000-0000-0000-000000000001", "savedFilter")]
-    public async Task A_wrong_order_or_page_is_a_validation_error_by_the_parameter(string query, string key)
+    [TestCase("interval=30", "interval")]
+    public async Task A_wrong_parameter_is_a_validation_error_by_the_parameter(string query, string key)
     {
         HttpResponseMessage response = await _client.GetAsync($"/api/ideas?{query}");
 
@@ -473,19 +470,6 @@ public class IdeasApiTests
 
         page.GetProperty("items").EnumerateArray().Select(idea => idea.GetProperty("id").GetGuid()).ShouldBe([rich.Id]);
         page.GetProperty("total").GetInt32().ShouldBe(1);
-    }
-
-    [TestCase("setup=rocket", "setup")]
-    [TestCase("interval=30", "interval")]
-    [TestCase("type=scalp", "type")]
-    [TestCase("side=up", "side")]
-    [TestCase("category=inverse", "category")]
-    public async Task Unknown_filter_is_a_validation_error(string query, string key)
-    {
-        HttpResponseMessage response = await _client.GetAsync($"/api/ideas?{query}");
-
-        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("errors").TryGetProperty(key, out _).ShouldBeTrue();
     }
 
     [Test]
