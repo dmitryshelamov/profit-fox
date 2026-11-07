@@ -14,6 +14,11 @@ using Shouldly;
 namespace ProfitFox.Tests.Integration.Infrastructure;
 
 /// <summary>The Bybit streams adapter against the streams of Bybit v5 on a local port.</summary>
+// After a reconnect CryptoExchange.Net closes a socket no sooner than 5 seconds after it reconnected, so every test that drops
+// the connection waits that long as it leaves. Each test has a server and an adapter of its own and no database, so they run
+// side by side.
+[Parallelizable(ParallelScope.Children)]
+[FixtureLifeCycle(LifeCycle.InstancePerTestCase)]
 public class BybitStreamsTests
 {
     private static readonly DateTimeOffset Open = DateTimeOffset.Parse("2024-03-10T12:00:00Z");
