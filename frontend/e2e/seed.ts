@@ -21,7 +21,8 @@ async function connect(): Promise<pg.Client> {
 /**
  * Closed ideas of a day's list, which the scanner never touches, so a list is long enough to have pages. `count` ideas of
  * pairs the market does not have, `E2E001USDT` the newest; the risk to reward of the n-th is 10 + n, so the oldest has the
- * highest. Then three of a pair the market has: a risk to reward of 200 on linear and on spot, and of 5 on linear.
+ * highest. Then three of a pair the market has: a risk to reward of 200 on linear and on spot, and of 5 on linear; the first of them
+ * fired after a drop of the pair over a day and with a high funding.
  */
 export async function seedIdeas(count: number): Promise<void> {
   const client = await connect();
@@ -38,11 +39,13 @@ export async function seedIdeas(count: number): Promise<void> {
     );
     await client.query(
       `INSERT INTO ideas (id, category, symbol, setup, type, "interval", side, fired_at, entry, stop, target, risk_reward,
-                          status, status_at, entered_at, exit_price, move, volume_ratio, engine_version)
+                          status, status_at, entered_at, exit_price, move, volume_ratio, engine_version, pair_change, btc_change, funding)
        SELECT gen_random_uuid(), category, 'BTCUSDT', 'drop', 'levels', '60', 'long',
               now() - interval '5 hours', 100, 99, 100 + reward, reward,
-              'target', now() - interval '1 minute', now() - interval '5 hours', 100 + reward, 3, 2, ${engineVersion}
-       FROM (VALUES ('linear', 200), ('spot', 200), ('linear', 5)) AS marker (category, reward)`,
+              'target', now() - interval '1 minute', now() - interval '5 hours', 100 + reward, 3, 2, ${engineVersion},
+              pair_change, btc_change, funding
+       FROM (VALUES ('linear', 200, -0.07, -0.004, 0.0006), ('spot', 200, NULL, -0.004, NULL), ('linear', 5, -0.01, -0.004, 0.0001))
+            AS marker (category, reward, pair_change, btc_change, funding)`,
     );
   } finally {
     await client.end();
@@ -109,7 +112,7 @@ export async function removeOpenIdeas(symbol: string): Promise<void> {
 /**
  * The reports of the calibration over 90 days of all categories among all cases and after the rules changed (120 checked), as the
  * scanner stores them (decimals as strings), with the table by own data, the comparison of the three models and the breakdowns by
- * timeframe and by type, so the screen has
+ * timeframe, by type and by feature, so the screen has
  * tables before the scanner has history enough to check a case. The scanner replaces the reports whole when it recomputes the
  * buckets, once an hour: a test reads the screen right after this.
  */
@@ -178,6 +181,20 @@ export async function seedCalibration(): Promise<void> {
         },
       },
     ],
+    Features: [
+      {
+        Interval: null,
+        Type: null,
+        Feature: 'day_drop',
+        Present: true,
+        Total: row({ From: null, To: null, Promised: '-0.2', Expectancy: '-0.05' }),
+        Up: null,
+        Comparison: {
+          Old: { Cases: 600, Brier: '0.231', Up: null },
+          New: { Cases: 600, Brier: '0.204', Up: null },
+        },
+      },
+    ],
   };
 
   try {
@@ -210,11 +227,11 @@ export async function seedSignals(): Promise<void> {
     await client.query(
       `INSERT INTO idea_cases (category, symbol, setup, type, "interval", side, fired_at, engine_version, entry, stop, target, move,
                                volume_ratio, tick, entry_after, stop_before_entry_after, stop_after, ladder_after, target_after, closes,
-                               tracked_until)
+                               tracked_until, pair_change, btc_change, funding)
        SELECT 'linear', 'E2E001USDT', 'impulse', 'pullback', '15', 'long', date_trunc('minute', now()) - make_interval(days => n),
               ${engineVersion}, 100, 98, NULL, 3, 2, 0.01, 10, NULL, 900,
               ARRAY[100, 200, 350, 500, NULL, NULL, NULL, NULL, NULL, NULL]::integer[], NULL, array_fill(100.5::numeric, ARRAY[19]),
-              date_trunc('minute', now()) - make_interval(days => n) + interval '14 days'
+              date_trunc('minute', now()) - make_interval(days => n) + interval '14 days', -0.01, -0.002, 0.0001
        FROM generate_series(1, 40) AS n
        ON CONFLICT DO NOTHING`,
     );

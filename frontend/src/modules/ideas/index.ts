@@ -24,6 +24,7 @@ export {
   overfitWarning,
   sameRule,
 } from './model/exitRules';
+export { featureLabel, featureName, ideaFeatures } from './model/features';
 export {
   candlesText,
   casesText,
@@ -40,6 +41,7 @@ export { type IdeaSort, type IdeaSortColumn } from './model/sort';
 export { badgeSymbol, breakEvenText, moneyOutcome, probabilityView } from './model/stats';
 export { LifeChart, MfeChart } from './ui/ExitRuleCharts';
 export { type Idea } from './ui/IdeaCells';
+export { IdeaFeatureChips } from './ui/IdeaFeatureChips';
 export { IdeasTable } from './ui/IdeasTable';
 export { OwnIdeaBlock, useOwnIdea } from './ui/OwnIdeaBlock';
 export { PairIdeasList } from './ui/PairIdeasList';

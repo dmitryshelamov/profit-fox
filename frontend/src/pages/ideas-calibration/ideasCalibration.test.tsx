@@ -347,6 +347,78 @@ describe('calibration screen', () => {
     ]);
   });
 
+  // Requirement "Таблица «По признакам» на экране «Калибровка»", scenario "Таблица по признакам".
+  it('lists the cases with and without each feature after the types, with the comparison under it', async () => {
+    const report = calibrationOf();
+    const [interval] = report.intervals;
+    open(
+      calibrationOf({
+        features: [
+          {
+            ...interval!,
+            interval: null,
+            feature: 'day_drop',
+            present: true,
+            total: calibrationRowOf({
+              from: null,
+              to: null,
+              promised: '-0.2',
+              cases: 3000,
+              expectancy: '-0.05',
+              expectancyLow: '-0.11',
+              expectancyHigh: '0.01',
+            }),
+            up: null,
+          },
+          { ...interval!, interval: null, feature: 'day_drop', present: false },
+        ],
+      }),
+    );
+    renderApp('/ideas/calibration');
+
+    const table = await screen.findByRole('table', { name: 'По признакам' });
+
+    expect(
+      within(within(table).getByRole('row', { name: /· есть/ }))
+        .getAllByRole('cell')
+        .map((cell) => cell.textContent),
+    ).toEqual([
+      'падение пары за сутки · есть',
+      '3 000',
+      '-0.20 R',
+      '-0.05 R',
+      '-0.11…+0.01 R',
+      '0',
+      '—',
+      '—',
+      '—',
+    ]);
+    expect(
+      within(table).getByRole('row', { name: /падение пары за сутки · нет/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('table', { name: 'По признакам: старая модель → новая' }),
+    ).toBeInTheDocument();
+    const tables = screen.getAllByRole('table').map((item) => item.getAttribute('aria-label'));
+    expect(tables.indexOf('По признакам')).toBeGreaterThan(tables.indexOf('По типам'));
+    expect(
+      screen.getByText(
+        /падение пары за сутки от 5 %, падение BTC за 4 часа от 1 % и funding от 0,05 %/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  // Scenario "Итог без разбивки по признакам".
+  it('shows the tables by timeframe and type without the one by feature in a report stored before it', async () => {
+    open(calibrationOf({ features: [] }));
+    renderApp('/ideas/calibration');
+
+    await screen.findByRole('table', { name: 'По ТФ' });
+
+    expect(screen.getByRole('table', { name: 'По типам' })).toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'По признакам' })).not.toBeInTheDocument();
+  });
+
   // Scenario "Итог без разбивок".
   it('shows no breakdown in a report stored before them', async () => {
     open(calibrationOf({ intervals: [], types: [] }));
