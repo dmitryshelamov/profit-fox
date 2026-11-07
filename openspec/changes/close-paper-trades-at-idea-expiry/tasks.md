@@ -2,11 +2,11 @@
 
 ## 1. Домен: исход с ценой и закрытие по сроку
 
-- [ ] 1.1 `TradedIdeaOutcome` получает `ExitPrice`; `TradedIdeaOutcome.Of` берёт `track.ExitPrice`: тест в `IdeaOutcomesTests`/`TradedIdeaOutcomeTests` красный → зелёный
-- [ ] 1.2 `IdeaTradeStatus.ClosedAtExpiry`, `IdeaTradeLeg.Expiry`, нога `Expiry` у `IdeaTrade` (`Exited`, `Settled`, `Result`): тест `IdeaTradeTests` «выход ногой Expiry закрывает сделку по сроку с результатом» красный → зелёный
-- [ ] 1.3 `PaperFill.Expire`: открытая сделка с исходом «Истекла» с ценой закрывается по `ExitFill` с комиссией taker и временем `StatusAt`; сценарий «Идея истекла» спеки (0.5 по 100, выход 101.00 → 100.9495) в `PaperFillTests` красный → зелёный
-- [ ] 1.4 `PaperFill.Step`: стоп и цель в минуте истечения главнее; сделка, оставшаяся открытой при `StatusAt <= OpenTime + 1 мин`, закрывается по сроку; истечение позади курсора закрывает до минуты; исход без цены и «Ждёт входа» не трогаются — по тесту на каждый сценарий спеки «Закрытие по сроку» и «после перерыва», тест `Trade_has_no_lifetime…` заменяется
-- [ ] 1.5 `IdeaJournalTotals`: `Expired` и `ClosedAtExpiry` в `settled`; сценарий «Закрытые по сроку в итогах учебных» в `IdeaJournalTotalsTests` красный → зелёный
+- [x] 1.1 `TradedIdeaOutcome` получает `ExitPrice`; `TradedIdeaOutcome.Of` берёт `track.ExitPrice`: тест в `IdeaOutcomesTests`/`TradedIdeaOutcomeTests` красный → зелёный
+- [x] 1.2 `IdeaTradeStatus.ClosedAtExpiry`, `IdeaTradeLeg.Expiry`, нога `Expiry` у `IdeaTrade` (`Exited`, `Settled`, `Result`): тест `IdeaTradeTests` «выход ногой Expiry закрывает сделку по сроку с результатом» красный → зелёный
+- [x] 1.3 `PaperFill.Expire`: открытая сделка с исходом «Истекла» с ценой закрывается по `ExitFill` с комиссией taker и временем `StatusAt`; сценарий «Идея истекла» спеки (0.5 по 100, выход 101.00 → 100.9495) в `PaperFillTests` красный → зелёный
+- [x] 1.4 `PaperFill.Step`: стоп и цель в минуте истечения главнее; сделка, оставшаяся открытой при `StatusAt <= OpenTime + 1 мин`, закрывается по сроку; истечение позади курсора закрывает до минуты; исход без цены и «Ждёт входа» не трогаются — по тесту на каждый сценарий спеки «Закрытие по сроку» и «после перерыва», тест `Trade_has_no_lifetime…` заменяется
+- [x] 1.5 `IdeaJournalTotals`: `Expired` и `ClosedAtExpiry` в `settled`; сценарий «Закрытые по сроку в итогах учебных» в `IdeaJournalTotalsTests` красный → зелёный
 
 ## 2. Сканер: исходы минуты на сделках в памяти
 

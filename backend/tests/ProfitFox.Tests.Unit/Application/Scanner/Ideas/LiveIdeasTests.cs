@@ -159,8 +159,8 @@ public class LiveIdeasTests
         created.ShouldContain(idea => idea.Setup == IdeaSetup.Squeeze && idea.Interval == Interval.FifteenMinutes && idea.Track.Plan.Type == IdeaType.StopEntry);
     }
 
-    // Requirement "Исход идеи на сделке", scenario "Идея дошла до цели": the idea that closed goes to storage with its status, time and result in R
-    // after the fees of its category; entry 100, target 104, stop 98 give 2 R less the taker fees, 1.9439.
+    // Requirement "Исход идеи на сделке", scenario "Идея дошла до цели": the idea that closed goes to storage with its status, time, result in R
+    // after the fees of its category and the price of the target; entry 100, target 104, stop 98 give 2 R less the taker fees, 1.9439.
     [Test]
     public async Task Idea_that_reached_its_target_is_written_with_its_result_in_r()
     {
@@ -175,7 +175,7 @@ public class LiveIdeasTests
             Arg.Any<IReadOnlyCollection<Idea>>(),
             Arg.Any<IReadOnlyCollection<Idea>>(),
             Arg.Is<IReadOnlyCollection<ClosedIdea>>(closed => closed!.Single().IdeaId == active.Id
-                && closed!.Single().Outcome == new TradedIdeaOutcome(IdeaStatus.Target, Four.AddMinutes(-30), 1.9439m)),
+                && closed!.Single().Outcome == new TradedIdeaOutcome(IdeaStatus.Target, Four.AddMinutes(-30), 1.9439m, 104m)),
             Arg.Any<CancellationToken>());
     }
 
@@ -210,7 +210,7 @@ public class LiveIdeasTests
             Arg.Is<IReadOnlyCollection<Idea>>(created => created!.Count == 0),
             Arg.Is<IReadOnlyCollection<Idea>>(changed => changed!.Count == 0),
             Arg.Is<IReadOnlyCollection<ClosedIdea>>(closed => closed!.Single().IdeaId == target.Id
-                && closed!.Single().Outcome == new TradedIdeaOutcome(IdeaStatus.Target, Four.AddHours(-3), 1.9439m)),
+                && closed!.Single().Outcome == new TradedIdeaOutcome(IdeaStatus.Target, Four.AddHours(-3), 1.9439m, 104m)),
             Arg.Any<CancellationToken>());
     }
 

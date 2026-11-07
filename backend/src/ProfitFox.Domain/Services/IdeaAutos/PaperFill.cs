@@ -13,9 +13,10 @@ namespace ProfitFox.Domain.Services.IdeaAutos;
 /// <summary>
 ///     The fill of a paper trade by the closed minutes of its pair. A pullback waits for a minute that touches its limit before the deadline of
 ///     its entry and enters at the limit; the other types enter at the close of the minute the idea was born in. An open trade leaves at the stop or
-///     at the target of the first minute that touches one, at the stop when a minute touches both, and has no lifetime. In the minute of the entry
-///     of a pullback only the stop counts. The entry pays the maker fee at a limit and the taker fee otherwise, the exit the taker fee; every fill
-///     but the limit of a pullback is worse by the slippage, as <see cref="CaseResult" /> counts the cases.
+///     at the target of the first minute that touches one, at the stop when a minute touches both, and at the exit price of its idea when the idea
+///     expires before it reaches either. In the minute of the entry of a pullback only the stop counts. The entry pays the maker fee at a limit
+///     and the taker fee otherwise, the exit the taker fee; every fill but the limit of a pullback is worse by the slippage, as
+///     <see cref="CaseResult" /> counts the cases.
 /// </summary>
 public static class PaperFill
 {
@@ -47,7 +48,11 @@ public static class PaperFill
         return new PaperIdeaTrade(trade, autoId, now);
     }
 
-    /// <summary>Steps the trade by a closed minute of its pair; a minute it has stepped already, and a trade that is done, change nothing.</summary>
+    /// <summary>
+    ///     Steps the trade by a closed minute of its pair; a minute it has stepped already, and a trade that is done, change nothing. An open trade
+    ///     whose idea expired by the end of the minute and did not leave at its levels in it closes at expiry; one whose idea expired behind its
+    ///     cursor closes at expiry before the minute.
+    /// </summary>
     public static PaperIdeaTrade Step(PaperIdeaTrade paper, IdeaCandle minute, FeeRates fees)
     {
         if (minute.OpenTime < paper.SteppedUntil || !paper.Trade.IsOpen)
@@ -55,9 +60,26 @@ public static class PaperFill
             return paper;
         }
 
-        IdeaTrade stepped = paper.Trade.Status == IdeaTradeStatus.AwaitingEntry ? Enter(paper.Trade, minute, fees) : Exit(paper.Trade, minute, fees);
+        PaperIdeaTrade current = ExpireDue(paper, fees);
+        IdeaTrade stepped = current.Trade.Status == IdeaTradeStatus.AwaitingEntry ? Enter(current.Trade, minute, fees) : Exit(current.Trade, minute, fees);
 
-        return paper with { Trade = stepped, SteppedUntil = minute.OpenTime.AddMinutes(1) };
+        return ExpireDue(current with { Trade = stepped, SteppedUntil = minute.OpenTime.AddMinutes(1) }, fees);
+    }
+
+    /// <summary>Closes the trade at the exit price of its expired idea, as the idea exited: worse by the slippage, with the taker fee, at the time the idea expired.</summary>
+    public static PaperIdeaTrade Expire(PaperIdeaTrade paper, FeeRates fees)
+    {
+        if (paper.Trade.IdeaOutcome is not { Status: IdeaStatus.Expired, ExitPrice: { } price } outcome)
+        {
+            return paper;
+        }
+
+        return paper with { Trade = Leave(paper.Trade, IdeaTradeLeg.Expiry, price, outcome.StatusAt, fees) };
+    }
+
+    private static PaperIdeaTrade ExpireDue(PaperIdeaTrade paper, FeeRates fees)
+    {
+        return paper.Trade.IdeaOutcome?.StatusAt <= paper.SteppedUntil ? Expire(paper, fees) : paper;
     }
 
     private static IdeaTrade Enter(IdeaTrade trade, IdeaCandle minute, FeeRates fees)
@@ -75,22 +97,22 @@ public static class PaperFill
         IdeaTrade entered = trade.EntryGrown(Leg(trade.Quantity, trade.EntryPrice, fees.LimitPercent), minute.OpenTime);
 
         // Within the minute of the fill the target may have come before it: only the stop counts.
-        return StopTouched(entered, minute) ? Leave(entered, IdeaTradeLeg.StopLoss, entered.Stop, minute, fees) : entered;
+        return StopTouched(entered, minute) ? Leave(entered, IdeaTradeLeg.StopLoss, entered.Stop, minute.OpenTime, fees) : entered;
     }
 
     private static IdeaTrade Exit(IdeaTrade trade, IdeaCandle minute, FeeRates fees)
     {
         if (StopTouched(trade, minute))
         {
-            return Leave(trade, IdeaTradeLeg.StopLoss, trade.Stop, minute, fees);
+            return Leave(trade, IdeaTradeLeg.StopLoss, trade.Stop, minute.OpenTime, fees);
         }
 
-        return Ahead(trade) * (Best(trade, minute) - trade.Target) >= 0 ? Leave(trade, IdeaTradeLeg.TakeProfit, trade.Target, minute, fees) : trade;
+        return Ahead(trade) * (Best(trade, minute) - trade.Target) >= 0 ? Leave(trade, IdeaTradeLeg.TakeProfit, trade.Target, minute.OpenTime, fees) : trade;
     }
 
-    private static IdeaTrade Leave(IdeaTrade trade, IdeaTradeLeg leg, decimal price, IdeaCandle minute, FeeRates fees)
+    private static IdeaTrade Leave(IdeaTrade trade, IdeaTradeLeg leg, decimal price, DateTimeOffset at, FeeRates fees)
     {
-        return trade.ExitGrown(leg, Leg(trade.HeldQuantity, CaseResult.ExitFill(trade.Side, price, fees), fees.MarketPercent), minute.OpenTime);
+        return trade.ExitGrown(leg, Leg(trade.HeldQuantity, CaseResult.ExitFill(trade.Side, price, fees), fees.MarketPercent), at);
     }
 
     private static bool StopTouched(IdeaTrade trade, IdeaCandle minute)

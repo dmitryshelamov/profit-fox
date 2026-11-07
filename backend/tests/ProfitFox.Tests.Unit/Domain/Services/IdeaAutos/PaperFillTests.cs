@@ -105,13 +105,95 @@ public class PaperFillTests
         (trade.Status, trade.Result).ShouldBe((IdeaTradeStatus.ClosedAtTarget, 1.9461m));
     }
 
-    // Scenario "Идея истекла, сделка нет": the lifetime of the idea passed (24 candles of 5 minutes) and the trade does not know it.
+    // Scenario "Идея истекла, сделка нет": the idea expired at the end of the minute 13:41 at its close, 100.5, and the minute touched neither level.
     [Test]
-    public void Trade_has_no_lifetime_and_stays_open_between_its_levels()
+    public void Trade_its_idea_outlived_closes_at_expiry_in_the_minute_the_idea_expired()
     {
-        PaperIdeaTrade paper = Run("paper-quiet");
+        PaperIdeaTrade paper = Outlived(Open("paper-quiet", out IReadOnlyList<IdeaCandle> minutes), Fired.AddMinutes(2), 100.5m);
 
-        (paper.Trade.Status, paper.SteppedUntil).ShouldBe((IdeaTradeStatus.Open, new DateTimeOffset(2026, 11, 7, 16, 1, 0, TimeSpan.Zero)));
+        paper = Walk(paper, minutes.Skip(1));
+
+        (paper.Trade.Status, paper.Trade.StatusAt, paper.Trade.Expiry).ShouldBe((IdeaTradeStatus.ClosedAtExpiry, Fired.AddMinutes(2), new LegTotals(0.5m, 50.25m, 0.0276375m)));
+    }
+
+    // Scenario "Стоп до истечения, пока сканер лежал": the minutes of the break go by the candles, and the stop at 13:42 comes before the expiry at 14:00.
+    [Test]
+    public void Stop_before_the_expiry_of_the_idea_closes_the_trade_at_the_stop()
+    {
+        PaperIdeaTrade paper = Outlived(Open("paper-to-stop", out IReadOnlyList<IdeaCandle> minutes), new DateTimeOffset(2026, 11, 7, 14, 0, 0, TimeSpan.Zero), 101m);
+
+        paper = Walk(paper, minutes.Skip(1));
+
+        (paper.Trade.Status, paper.Trade.StatusAt).ShouldBe((IdeaTradeStatus.ClosedAtStop, Fired.AddMinutes(2)));
+    }
+
+    // Requirement "Закрытие учебной сделки по сроку идеи": an idea that expired without an exit price does not close the trade, it goes by its own rules.
+    [Test]
+    public void Expiry_of_the_idea_without_an_exit_price_leaves_the_trade_open()
+    {
+        PaperIdeaTrade paper = Outlived(Open("paper-quiet", out IReadOnlyList<IdeaCandle> minutes), Fired.AddMinutes(2), null);
+
+        paper = Walk(paper, minutes.Skip(1).Take(1));
+
+        paper.Trade.Status.ShouldBe(IdeaTradeStatus.Open);
+    }
+
+    // Only «Истекла» closes the trade by the expiry: an idea at its target leaves the trade to its own levels.
+    [Test]
+    public void Idea_that_reached_its_target_does_not_close_the_trade_at_expiry()
+    {
+        PaperIdeaTrade open = Open("paper-quiet", out IReadOnlyList<IdeaCandle> minutes);
+        PaperIdeaTrade paper = open with { Trade = open.Trade with { IdeaOutcome = new TradedIdeaOutcome(IdeaStatus.Target, Fired.AddMinutes(2), 1.9m, 104m) } };
+
+        paper = Walk(paper, minutes.Skip(1).Take(1));
+
+        paper.Trade.Status.ShouldBe(IdeaTradeStatus.Open);
+    }
+
+    // Scenario "Истечение, пока сканер лежал": the expiry at 13:42 is behind the cursor when the outcome comes, so it closes the trade before the
+    // next minute, which touches the stop, at the exit price of the idea and with its time.
+    [Test]
+    public void Expiry_behind_the_cursor_closes_the_trade_before_the_minute()
+    {
+        PaperIdeaTrade stepped = Walk(Open("paper-quiet", out IReadOnlyList<IdeaCandle> minutes), minutes.Skip(1).Take(1));
+        var touchesBoth = new IdeaCandle(Fired.AddMinutes(10), 100m, 104.1m, 97.9m, 100m, 1m);
+
+        PaperIdeaTrade paper = PaperFill.Step(Outlived(stepped, Fired.AddMinutes(2), 101m), touchesBoth, Slipping);
+
+        (paper.Trade.Status, paper.Trade.StatusAt, paper.Trade.Expiry.Value).ShouldBe((IdeaTradeStatus.ClosedAtExpiry, Fired.AddMinutes(2), 50.47475m));
+    }
+
+    // Scenario "Стоп в последнюю минуту жизни идеи": the idea expires at the end of the minute 13:42, which touched the stop.
+    [Test]
+    public void Stop_in_the_last_minute_of_the_idea_closes_the_trade_at_the_stop_and_not_at_expiry()
+    {
+        PaperIdeaTrade paper = Outlived(Open("paper-to-stop", out IReadOnlyList<IdeaCandle> minutes), Fired.AddMinutes(3), 98m);
+
+        paper = Walk(paper, minutes.Skip(1));
+
+        (paper.Trade.Status, paper.Trade.StatusAt, paper.Trade.Expiry).ShouldBe((IdeaTradeStatus.ClosedAtStop, Fired.AddMinutes(2), LegTotals.None));
+    }
+
+    // Scenario "Идея истекла без входа": the pullback that never reached its limit is cancelled by its own deadline.
+    [Test]
+    public void Pullback_whose_idea_expired_without_an_entry_is_cancelled_by_its_deadline()
+    {
+        PaperIdeaTrade paper = Outlived(Open("paper-pullback-missed", out IReadOnlyList<IdeaCandle> minutes, IdeaType.Pullback, entryCandles: 1), Fired.AddMinutes(5), null);
+
+        paper = Walk(paper, minutes.Skip(1));
+
+        (paper.Trade.Status, paper.Trade.StatusAt).ShouldBe((IdeaTradeStatus.Cancelled, Fired.AddMinutes(5)));
+    }
+
+    // Scenario "Сделка ждёт входа, идея вошла и истекла": only an open trade closes at expiry.
+    [Test]
+    public void Trade_that_waits_for_its_entry_does_not_close_at_expiry()
+    {
+        PaperIdeaTrade paper = Outlived(Open("paper-pullback-touch", out IReadOnlyList<IdeaCandle> minutes, IdeaType.Pullback), Fired.AddMinutes(2), 100.5m);
+
+        paper = Walk(paper, minutes.Skip(1).Take(1));
+
+        (paper.Trade.Status, paper.Trade.Expiry).ShouldBe((IdeaTradeStatus.AwaitingEntry, LegTotals.None));
     }
 
     [Test]
@@ -245,11 +327,35 @@ public class PaperFillTests
         (trade.Entry, trade.Result).ShouldBe((new LegTotals(0.5m, 50m, 0.01m), 1.9354143m));
     }
 
+    // Scenario "Идея истекла": the idea expired at 14:00 at the close of 101.00, the exit sells 0.5 at 100.9495 with the taker fee 0.0277611125:
+    // 50.47475 − 50.025 − 0.02751375 − 0.0277611125, and in R over the risk of 1.103950275 as an exit at the target at this price would be.
+    [Test]
+    public void Expiry_of_the_idea_closes_an_open_trade_at_the_exit_price_of_the_idea_with_the_slippage_and_the_taker_fee()
+    {
+        PaperIdeaTrade paper = Outlived(Open("paper-quiet", out _, fees: Slipping), new DateTimeOffset(2026, 11, 7, 14, 0, 0, TimeSpan.Zero), 101m);
+
+        IdeaTrade trade = PaperFill.Expire(paper, Slipping).Trade;
+
+        (trade.Status, trade.StatusAt).ShouldBe((IdeaTradeStatus.ClosedAtExpiry, new DateTimeOffset(2026, 11, 7, 14, 0, 0, TimeSpan.Zero)));
+        trade.Expiry.ShouldBe(new LegTotals(0.5m, 50.47475m, 0.0277611125m));
+        (trade.Result, trade.ResultR).ShouldBe((0.3944751375m, 0.3944751375m / 1.103950275m));
+    }
+
+    private static PaperIdeaTrade Outlived(PaperIdeaTrade paper, DateTimeOffset expiredAt, decimal? exitPrice)
+    {
+        return paper with { Trade = paper.Trade with { IdeaOutcome = new TradedIdeaOutcome(IdeaStatus.Expired, expiredAt, 0.1m, exitPrice) } };
+    }
+
     private static PaperIdeaTrade Run(string fixture, IdeaType type = IdeaType.TwoR, IdeaSide side = IdeaSide.Long, int? until = null, int? entryCandles = null, FeeRates? fees = null)
     {
         PaperIdeaTrade paper = Open(fixture, out IReadOnlyList<IdeaCandle> minutes, type, side, entryCandles: entryCandles, fees: fees);
 
-        foreach (IdeaCandle minute in minutes.Skip(1).Take(until ?? minutes.Count))
+        return Walk(paper, minutes.Skip(1).Take(until ?? minutes.Count), fees);
+    }
+
+    private static PaperIdeaTrade Walk(PaperIdeaTrade paper, IEnumerable<IdeaCandle> minutes, FeeRates? fees = null)
+    {
+        foreach (IdeaCandle minute in minutes)
         {
             paper = PaperFill.Step(paper, minute, fees ?? Fees);
         }
