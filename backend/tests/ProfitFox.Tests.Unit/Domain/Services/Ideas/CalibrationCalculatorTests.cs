@@ -468,9 +468,9 @@ public class CalibrationCalculatorTests
             model.Badge == IdeaBadge.Up ? new CalibrationRow(null, null, IdeaBadge.Up, model.Expectancy, outcome) : null));
     }
 
-    // Requirement "Сравнение старой и новой модели" of add-idea-features: the bucket splits by its features into a sub-bucket of strong moves, 30
-    // targets of 40, and one of ordinary moves, 8 of 40, next to a bucket of 20 targets and 180 stops. The model with features promises the 30
-    // checked cases of strong moves the model of their sub-bucket shrunk to the model of the bucket, the bucket to that of the parent; the numbers
+    // Requirement "Сравнение старой и новой модели" of add-idea-features: the bucket splits by its features into a sub-bucket of day drops, 30
+    // targets of 40, and one without a feature, 8 of 40, next to a bucket of 20 targets and 180 stops. The model with features promises the 30
+    // checked cases of day drops the model of their sub-bucket shrunk to the model of the bucket, the bucket to that of the parent; the numbers
     // were computed apart from the code, each case its own block of an hour and the variances widened by the Student quantile of G − 1 degrees of
     // freedom: the probability 0.740303 against 0.462840 of the new model, the expectancy +1.2209 R from +0.807 R, ▲.
     [Test]
@@ -478,7 +478,7 @@ public class CalibrationCalculatorTests
     {
         IdeaOutcome[] checkedCases =
         [
-            .. Strong(Enumerable.Range(0, 30).Select(index => new IdeaOutcome(Linear, Now.AddDays(-29).AddHours(index * 20), Now, index % 2 == 0 ? IdeaStatus.Target : IdeaStatus.Stop, index % 2 == 0 ? 2m : -1m)))
+            .. Dropped(Enumerable.Range(0, 30).Select(index => new IdeaOutcome(Linear, Now.AddDays(-29).AddHours(index * 20), Now, index % 2 == 0 ? IdeaStatus.Target : IdeaStatus.Stop, index % 2 == 0 ? 2m : -1m)))
         ];
 
         CalibrationReport report = Report([.. SplitHistory(Now.AddDays(-60)), .. checkedCases], 30, null);
@@ -501,21 +501,21 @@ public class CalibrationCalculatorTests
         (slice.Features, slice.Difference).ShouldBe((features, difference));
     }
 
-    // Decision 3 of add-idea-features: the spread between the levels is one for the parent. OtherLinear splits too, half of its cases of strong
-    // moves, with no difference between its levels: the spread pooled over both buckets is smaller than that of Linear alone, and the checked
+    // Decision 3 of add-idea-features: the spread between the levels is one for the parent. OtherLinear splits too, by a high funding on half of
+    // its cases, with no difference between its levels: the spread pooled over both buckets is smaller than that of Linear alone, and the checked
     // cases are promised less than 0.740303.
     [Test]
     public void Spread_between_the_levels_is_pooled_over_the_buckets_of_the_parent()
     {
-        IdeaOutcome[] history = [.. SplitHistory(Now.AddDays(-60)).Select(outcome => outcome.Key == OtherLinear && outcome.FiredAt.Hour % 2 == 0 ? outcome with { Features = new IdeaFeatures(true, false) } : outcome)];
+        IdeaOutcome[] history = [.. SplitHistory(Now.AddDays(-60)).Select(outcome => outcome.Key == OtherLinear && outcome.FiredAt.Hour % 2 == 0 ? outcome with { Features = new IdeaFeatures(false, false, true) } : outcome)];
         IdeaOutcome[] checkedCases =
         [
-            .. Strong(Enumerable.Range(0, 30).Select(index => new IdeaOutcome(Linear, Now.AddDays(-29).AddHours(index * 20), Now, index % 2 == 0 ? IdeaStatus.Target : IdeaStatus.Stop, index % 2 == 0 ? 2m : -1m)))
+            .. Dropped(Enumerable.Range(0, 30).Select(index => new IdeaOutcome(Linear, Now.AddDays(-29).AddHours(index * 20), Now, index % 2 == 0 ? IdeaStatus.Target : IdeaStatus.Stop, index % 2 == 0 ? 2m : -1m)))
         ];
 
         CalibrationReport report = Report([.. history, .. checkedCases], 30, null);
 
-        ClusteredSums Of(IdeaBucketKey key, bool strong) => Sums(history.Where(outcome => outcome.Key == key && outcome.Features.StrongMove == strong));
+        ClusteredSums Of(IdeaBucketKey key, bool flagged) => Sums(history.Where(outcome => outcome.Key == key && (key == Linear ? outcome.Features.DayDrop : outcome.Features.HighFunding) == flagged));
         ClusteredSums impulse = Sums(history.Where(outcome => outcome.Key == Linear));
         ClusteredSums drop = Sums(history.Where(outcome => outcome.Key == OtherLinear));
         ClusteredSums parent = Sums(history);
@@ -527,27 +527,27 @@ public class CalibrationCalculatorTests
         report.Comparison!.Features!.Brier.ShouldBe(Brier(checkedCases, promised));
     }
 
-    // Scenario "Закрытый позже случай не подсказывает подкорзине": B of strong moves fired before A of strong moves and closed after A fired; both
+    // Scenario "Закрытый позже случай не подсказывает подкорзине": B of day drops fired before A of day drops and closed after A fired; both
     // are promised the model of the history alone, 0.740303.
     [Test]
     public void Case_closed_after_the_checked_one_fired_is_not_in_the_window_of_its_sub_bucket()
     {
-        var b = new IdeaOutcome(Linear, Now.AddDays(-3), Now.AddDays(-1), IdeaStatus.Stop, -1m, new IdeaFeatures(true, false));
-        IdeaOutcome a = Closed(Linear, Now.AddDays(-2), IdeaStatus.Target, 2m) with { Features = new IdeaFeatures(true, false) };
+        var b = new IdeaOutcome(Linear, Now.AddDays(-3), Now.AddDays(-1), IdeaStatus.Stop, -1m, new IdeaFeatures(true, false, false));
+        IdeaOutcome a = Closed(Linear, Now.AddDays(-2), IdeaStatus.Target, 2m) with { Features = new IdeaFeatures(true, false, false) };
 
         CalibrationReport report = Report([.. SplitHistory(Now.AddDays(-60)), b, a], 30, null);
 
         report.Comparison!.Features!.Brier!.Value.ShouldBe(Brier([b, a], 0.740303m), 0.000001m);
     }
 
-    // Scenario "Случай уходит из окна подкорзины": the 40 cases of strong moves fired 100 days before the check, 90 days before it at the latest,
+    // Scenario "Случай уходит из окна подкорзины": the 40 cases of day drops fired 100 days before the check, 90 days before it at the latest,
     // have left the window of their sub-bucket; without them the bucket has one level of 30 cases and more and no spread between its levels, and
     // the model with features promises what the new model does.
     [Test]
     public void Cases_leave_the_window_of_their_sub_bucket()
     {
-        IdeaOutcome[] history = [.. SplitHistory(Now.AddDays(-100)).Where(outcome => outcome.Features.StrongMove), .. SplitHistory(Now.AddDays(-60)).Where(outcome => !outcome.Features.StrongMove)];
-        IdeaOutcome[] checkedCases = [.. Strong(Enumerable.Range(0, 4).Select(index => Closed(Linear, Now.AddDays(-2).AddHours(index), index % 2 == 0 ? IdeaStatus.Target : IdeaStatus.Stop, index % 2 == 0 ? 2m : -1m)))];
+        IdeaOutcome[] history = [.. SplitHistory(Now.AddDays(-100)).Where(outcome => outcome.Features.DayDrop), .. SplitHistory(Now.AddDays(-60)).Where(outcome => !outcome.Features.DayDrop)];
+        IdeaOutcome[] checkedCases = [.. Dropped(Enumerable.Range(0, 4).Select(index => Closed(Linear, Now.AddDays(-2).AddHours(index), index % 2 == 0 ? IdeaStatus.Target : IdeaStatus.Stop, index % 2 == 0 ? 2m : -1m)))];
 
         CalibrationReport report = Report([.. history, .. checkedCases], 30, null);
 
@@ -740,20 +740,20 @@ public class CalibrationCalculatorTests
         return outcomes.Average(outcome => (promised - (outcome.Status == IdeaStatus.Target ? 1m : 0m)) * (promised - (outcome.Status == IdeaStatus.Target ? 1m : 0m)));
     }
 
-    // The cases with a strong move and an ordinary volume.
-    private static IEnumerable<IdeaOutcome> Strong(IEnumerable<IdeaOutcome> outcomes)
+    // The cases with a day drop of the pair and no other feature.
+    private static IEnumerable<IdeaOutcome> Dropped(IEnumerable<IdeaOutcome> outcomes)
     {
-        return outcomes.Select(outcome => outcome with { Features = new IdeaFeatures(true, false) });
+        return outcomes.Select(outcome => outcome with { Features = new IdeaFeatures(true, false, false) });
     }
 
-    // The bucket of Linear split by its features from the given moment, an hour apart: 40 cases of strong moves, the first 30 +2 R targets, the
-    // rest −1 R stops, then 40 of ordinary moves two days later with 8 targets; and 200 cases of OtherLinear in the same parent five days later
+    // The bucket of Linear split by its features from the given moment, an hour apart: 40 cases of day drops, the first 30 +2 R targets, the
+    // rest −1 R stops, then 40 without a feature two days later with 8 targets; and 200 cases of OtherLinear in the same parent five days later
     // with 20 targets.
     private static IEnumerable<IdeaOutcome> SplitHistory(DateTimeOffset from)
     {
         return
         [
-            .. Strong(Enumerable.Range(0, 40).Select(index => Closed(Linear, from.AddHours(index), index < 30 ? IdeaStatus.Target : IdeaStatus.Stop, index < 30 ? 2m : -1m))),
+            .. Dropped(Enumerable.Range(0, 40).Select(index => Closed(Linear, from.AddHours(index), index < 30 ? IdeaStatus.Target : IdeaStatus.Stop, index < 30 ? 2m : -1m))),
             .. Enumerable.Range(0, 40).Select(index => Closed(Linear, from.AddDays(2).AddHours(index), index < 8 ? IdeaStatus.Target : IdeaStatus.Stop, index < 8 ? 2m : -1m)),
             .. Enumerable.Range(0, 200).Select(index => Closed(OtherLinear, from.AddDays(5).AddHours(index), index < 20 ? IdeaStatus.Target : IdeaStatus.Stop, index < 20 ? 2m : -1m))
         ];

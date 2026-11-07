@@ -113,7 +113,9 @@ public class IdeasReplayTests
         open.ShouldAllBe(signal => signal.Path.TrackedUntil == March1.AddDays(1));
         open.Select(signal => _written[(signal.Key, signal.Path.FiredAt)].Path.TrackedUntil).ShouldAllBe(until => until > March1.AddDays(1));
         _writes.Skip(2).SelectMany(batch => batch).ShouldNotContain(signal => ended.Any(before => before.Key == signal.Key && before.Path.FiredAt == signal.Path.FiredAt));
-        await _candles.Received(2).GetAsync(Wif, Interval.OneMinute, March1, March1.AddDays(1), 1440, Arg.Any<CancellationToken>());
+        // The next turn warms up on the two days before its cursor: the window of the change of a day is a minute longer than a day.
+        await _candles.Received(1).GetAsync(Wif, Interval.OneMinute, March1, March1.AddDays(1), 1440, Arg.Any<CancellationToken>());
+        await _candles.Received(1).GetAsync(Wif, Interval.OneMinute, March1.AddDays(-1), March1.AddDays(1), 2880, Arg.Any<CancellationToken>());
         await _cursors.Received(1).SetAsync(Wif, IdeasEngineVersion.Current, Until(March1.AddDays(1)), Arg.Any<CancellationToken>());
         await _cursors.Received(1).SetAsync(Wif, IdeasEngineVersion.Current, Until(March1.AddDays(2)), Arg.Any<CancellationToken>());
         (await replay.StepAsync(CancellationToken.None)).ShouldBeFalse();

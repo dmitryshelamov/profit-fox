@@ -5,21 +5,21 @@
 
 ## 1. Домен: признаки рынка
 
-- [ ] 1.1 `IdeaFeatures(DayDrop, BtcDrop, HighFunding)` и `IdeaFeatures.Of(pairChange, btcChange, funding)` (решение 1):
+- [x] 1.1 `IdeaFeatures(DayDrop, BtcDrop, HighFunding)` и `IdeaFeatures.Of(pairChange, btcChange, funding)` (решение 1):
   тесты сценариев «Падение пары ровно на границе», «Падение пары меньше границы», «Нет минуты BTC» (`null` → нет),
   «Funding» и «Funding у spot» (`null` → нет) зелёные; старые тесты `IdeaFeaturesTests` удалены.
-- [ ] 1.2 `IdeaFeature` (`Entities/Ideas/Enums`) с кодами `day_drop`, `btc_drop`, `high_funding`; `IdeaSignal` и `Idea`
+- [x] 1.2 `IdeaFeature` (`Entities/Ideas/Enums`) с кодами `day_drop`, `btc_drop`, `high_funding`; `IdeaSignal` и `Idea`
   несут `PairChange`, `BtcChange`, `Funding` (`decimal?`) и `Features` из них (решение 3). Готово, когда тест видит
   уровень идеи по её числам и сборка зелёная.
-- [ ] 1.3 `IdeasEngineVersion.Current = 7` (решение 6); эталонный тест версии зелёный, `frontend/e2e/seed.ts` с версией 7.
+- [x] 1.3 `IdeasEngineVersion.Current = 7` (решение 6); эталонный тест версии зелёный, `frontend/e2e/seed.ts` с версией 7.
 
 ## 2. Движок: расчёт признаков
 
-- [ ] 2.1 `IdeaInputs.BtcChange` и `IdeaInputs.Funding` (решение 2); `IdeaEngine` с окном `max(окно сетапов, 1 441)` и
+- [x] 2.1 `IdeaInputs.BtcChange` и `IdeaInputs.Funding` (решение 2); `IdeaEngine` с окном `max(окно сетапов, 1 441)` и
   расчётом изменения пары по первой минуте окна. Тесты движка: сигнал после 1 441 минуты с падением 5 % получает
   «падение пары за сутки», с 1 440 минутами — нет («Нет истории»); `BtcChange −0.01` даёт «падение BTC», `Funding 0.0005`
   — «высокий funding»; живая идея получает тот же уровень, что сигнал прогона на тех же минутах.
-- [ ] 2.2 `IdeaOutcomes` передаёт `signal.Features` в `IdeaOutcome` (тест прохода видит новый уровень); `CalibrationCalculator`
+- [x] 2.2 `IdeaOutcomes` передаёт `signal.Features` в `IdeaOutcome` (тест прохода видит новый уровень); `CalibrationCalculator`
   работает на восьми уровнях — тесты подкорзин переписаны на `DayDrop` / `HighFunding` вместо `StrongMove` /
   `HighVolume`, эталонные числа прежние.
 

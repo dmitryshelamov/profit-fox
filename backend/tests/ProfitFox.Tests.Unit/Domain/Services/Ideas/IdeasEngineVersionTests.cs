@@ -45,8 +45,8 @@ public class IdeasEngineVersionTests
 
     /// <summary>
     ///     SHA-256 of every signal with its path, one JSON line each in a fixed order, of the four setup sets and the two breakout sets on linear
-    ///     and spot with the default rules and with a stop buffer of 1, with a spread and both percentiles of volatility, the paths stepped a day
-    ///     past the end of each set.
+    ///     and spot with the default rules and with a stop buffer of 1, with a spread, both percentiles of volatility, a drop of BTC and a funding
+    ///     rate on linear, the paths stepped a day past the end of each set.
     /// </summary>
     private static string Fingerprint()
     {
@@ -69,7 +69,12 @@ public class IdeasEngineVersionTests
             interval => interval,
             interval => IdeaCandles.FromMinutes(interval, minutes, Start, interval.CandleOpen(Three)) as IReadOnlyList<IdeaCandle>);
         engine.Warm(instrument, closed, [.. minutes.Where(minute => minute.OpenTime < Three)], [], IdeaInputs.None);
-        var inputs = new IdeaInputs(0.01m, rules.Thresholds.Keys.ToDictionary(interval => interval, _ => new VolatilityPercentiles(0.0186m, 0.0186m)), 0.01m);
+        var inputs = new IdeaInputs(
+            0.01m,
+            rules.Thresholds.Keys.ToDictionary(interval => interval, _ => new VolatilityPercentiles(0.0186m, 0.0186m)),
+            0.01m,
+            -0.012m,
+            instrument.Category == MarketCategory.Linear ? 0.0006m : null);
         decimal close = minutes[^1].Close;
         IEnumerable<IdeaCandle> flat = Enumerable.Range(0, 1440).Select(index => new IdeaCandle(minutes[^1].OpenTime.AddMinutes(1 + index), close, close, close, close, 0m));
         var signals = new List<IdeaSignal>();
@@ -80,6 +85,6 @@ public class IdeasEngineVersionTests
             signals.AddRange(engine.Step(instrument, minute, inputs, true).Signals);
         }
 
-        return signals.Select(signal => JsonSerializer.Serialize(new { signal.Setup, signal.Path, signal.Move, signal.VolumeRatio }));
+        return signals.Select(signal => JsonSerializer.Serialize(new { signal.Setup, signal.Path, signal.Move, signal.VolumeRatio, signal.PairChange, signal.BtcChange, signal.Funding }));
     }
 }
