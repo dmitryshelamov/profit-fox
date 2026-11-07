@@ -378,7 +378,7 @@ public class IdeaEngineTests
         Idea idea = Run(minutes, Wif, Three, inputs).SelectMany(step => step.Created).First();
 
         (signal.PairChange, signal.BtcChange, signal.Funding).ShouldBe((idea.PairChange, idea.BtcChange, idea.Funding));
-        signal.Features.ShouldBe(new IdeaFeatures(true, true, false));
+        signal.FeaturesWith(null).ShouldBe(new IdeaFeatures(true, true, false));
     }
 
     // The impulse set after flat minutes at 120, so that the pair holds the given number of minutes up to the minute the impulse fires on.

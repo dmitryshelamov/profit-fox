@@ -59,7 +59,8 @@ public static class IdeaCodes
     {
         ["day_drop"] = IdeaFeature.DayDrop,
         ["btc_drop"] = IdeaFeature.BtcDrop,
-        ["high_funding"] = IdeaFeature.HighFunding
+        ["high_funding"] = IdeaFeature.HighFunding,
+        ["burst"] = IdeaFeature.Burst
     };
 
     private static readonly Dictionary<string, CalibrationScope> ScopesByCode = new Dictionary<string, CalibrationScope>

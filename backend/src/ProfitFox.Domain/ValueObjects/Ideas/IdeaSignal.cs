@@ -20,7 +20,14 @@ public sealed record IdeaSignal(
     decimal? BtcChange = null,
     decimal? Funding = null)
 {
-    public IdeaFeatures Features => IdeaFeatures.Of(PairChange, BtcChange, Funding);
+    /// <summary>
+    ///     Its features with the count of the distinct pairs of its side on its interval in its minute, which a signal does not keep: the pass of
+    ///     the statistics counts it from the signals (decision 2 of add-burst-and-auto-limits).
+    /// </summary>
+    public IdeaFeatures FeaturesWith(int? burstPairs)
+    {
+        return IdeaFeatures.Of(PairChange, BtcChange, Funding, burstPairs, Path.Interval);
+    }
 
     public IdeaKey Key => new IdeaKey(Instrument, Setup, Path.Type, Path.Interval, Path.Side);
 

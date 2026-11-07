@@ -62,7 +62,7 @@ public class IdeaSignalRepositoryTests
         await _signals.UpsertAsync([marked, plain], CancellationToken.None);
 
         IReadOnlyList<IdeaSignal> read = await _signals.GetAsync(IdeaGenerator.Wif, IdeasEngineVersion.Current, CancellationToken.None);
-        read.Select(signal => (signal.PairChange, signal.BtcChange, signal.Funding, signal.Features)).ShouldBe(
+        read.Select(signal => (signal.PairChange, signal.BtcChange, signal.Funding, signal.FeaturesWith(null))).ShouldBe(
         [
             (-0.0712345m, -0.0123m, 0.0006m, new IdeaFeatures(true, true, true)),
             (null, null, null, default)

@@ -501,6 +501,39 @@ public class CalibrationCalculatorTests
         (slice.Features, slice.Difference).ShouldBe((features, difference));
     }
 
+    // Scenario "Уровень со всплеском" (decision 1 of add-burst-and-auto-limits): a level with only a burst is apart from the level without
+    // features, so the sub-buckets of the history above split by a burst instead of a day drop promise the same numbers.
+    [Test]
+    public void Level_with_only_a_burst_is_a_sub_bucket_apart_from_that_without_features()
+    {
+        static IdeaOutcome Burst(IdeaOutcome outcome) => outcome.Features.DayDrop ? outcome with { Features = new IdeaFeatures(false, false, false, true) } : outcome;
+        IdeaOutcome[] checkedCases =
+        [
+            .. Dropped(Enumerable.Range(0, 30).Select(index => new IdeaOutcome(Linear, Now.AddDays(-29).AddHours(index * 20), Now, index % 2 == 0 ? IdeaStatus.Target : IdeaStatus.Stop, index % 2 == 0 ? 2m : -1m)))
+                .Select(Burst)
+        ];
+
+        CalibrationReport report = Report([.. SplitHistory(Now.AddDays(-60)).Select(Burst), .. checkedCases], 30, null);
+
+        report.Comparison!.Features!.Brier!.Value.ShouldBe(0.3077456m, 0.0000001m);
+        report.Comparison.Features.Up!.Promised.ShouldBe(1.2209m, 0.0001m);
+    }
+
+    // Scenario "Строка всплеска": the checked cases of 1 h fired in a burst, those of 5 min did not; the rows «всплеск · есть / нет» come after
+    // the other features, with the numbers of the rows by interval on the same cases.
+    [Test]
+    public void Breakdown_by_feature_has_the_rows_of_a_burst()
+    {
+        IdeaOutcome[] bursts = [.. Checked(Linear, Now.AddDays(-5)).Select(outcome => outcome with { Features = new IdeaFeatures(false, false, false, true) })];
+
+        CalibrationReport report = Report([.. Strong(Linear), .. Weak(FiveMinutes), .. bursts, .. Checked(FiveMinutes, Now.AddDays(-4))], 30, null);
+
+        CalibrationSlice[] slices = [.. report.Features.Where(slice => slice.Feature == IdeaFeature.Burst)];
+        slices.Select(slice => (slice.Present, slice.Total.Outcome.Cases)).ShouldBe([(true, 30), (false, 30)]);
+        CalibrationSlice hour = report.Intervals.Single(slice => slice.Interval == Interval.OneHour);
+        (slices[0].Total, slices[0].Up, slices[0].Comparison).ShouldBe((hour.Total, hour.Up, hour.Comparison));
+    }
+
     // Decision 3 of add-idea-features: the spread between the levels is one for the parent. OtherLinear splits too, by a high funding on half of
     // its cases, with no difference between its levels: the spread pooled over both buckets is smaller than that of Linear alone, and the checked
     // cases are promised less than 0.740303.
@@ -609,7 +642,8 @@ public class CalibrationCalculatorTests
             (IdeaFeature.DayDrop, true, null, null, 30),
             (IdeaFeature.DayDrop, false, null, null, 30),
             (IdeaFeature.BtcDrop, false, null, null, 60),
-            (IdeaFeature.HighFunding, false, null, null, 60)
+            (IdeaFeature.HighFunding, false, null, null, 60),
+            (IdeaFeature.Burst, false, null, null, 60)
         ]);
         CalibrationSlice hour = report.Intervals.Single(slice => slice.Interval == Interval.OneHour);
         CalibrationSlice five = report.Intervals.Single(slice => slice.Interval == Interval.FiveMinutes);

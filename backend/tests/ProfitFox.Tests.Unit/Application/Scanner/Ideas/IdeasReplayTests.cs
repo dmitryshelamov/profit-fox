@@ -339,7 +339,7 @@ public class IdeasReplayTests
 
         await Replay().StepAsync(CancellationToken.None);
 
-        _written.Values.Where(signal => signal.Path.FiredAt == first).ShouldAllBe(signal => signal.Funding == 0.0007m && signal.Features.HighFunding);
+        _written.Values.Where(signal => signal.Path.FiredAt == first).ShouldAllBe(signal => signal.Funding == 0.0007m && signal.FeaturesWith(null).HighFunding);
         _written.Values.ShouldAllBe(signal => signal.Funding == (signal.Path.FiredAt > later.Time ? 0.0001m : 0.0007m));
         _written.Values.ShouldContain(signal => signal.Funding == 0.0001m);
     }
@@ -362,7 +362,7 @@ public class IdeasReplayTests
         signals.ShouldNotBeEmpty();
         signals.ShouldAllBe(signal => signal.Instrument == spot && signal.Funding == null);
         signals.ShouldAllBe(signal => signal.BtcChange == (signal.Path.FiredAt.AddMinutes(-241) < March1 ? -0.013m : 0m));
-        signals.ShouldContain(signal => signal.Features.BtcDrop);
+        signals.ShouldContain(signal => signal.FeaturesWith(null).BtcDrop);
         await _funding.DidNotReceive().GetAsync(Arg.Any<Instrument>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 

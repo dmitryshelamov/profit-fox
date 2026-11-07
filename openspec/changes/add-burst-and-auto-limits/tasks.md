@@ -5,11 +5,11 @@
 
 ## 1. Домен: признак всплеска
 
-- [ ] 1.1 `IdeaFeatures.Burst`, `IdeaFeatures.BurstThreshold(Interval)` (5m 60, 15m 25, 1h 8, 4h 4) и `Of(…, int? burstPairs,
+- [x] 1.1 `IdeaFeatures.Burst`, `IdeaFeatures.BurstThreshold(Interval)` (5m 60, 15m 25, 1h 8, 4h 4) и `Of(…, int? burstPairs,
   Interval)` (решение 1); `IdeaFeature.Burst` с кодом `burst` в `IdeaCodes`. Тесты: порог каждого ТФ ровно на границе и
   на единицу ниже, `null` → нет; `Has(Burst)`; уровень со всплеском отличается от уровня без признаков (сценарий «Уровень
   со всплеском»); эталонные числа тестов подкорзин калибровки прежние.
-- [ ] 1.2 `Idea.BurstPairs` (`int?`) и `Idea.Features` с ним; `IdeaTrade.Features` копирует четвёртый флаг. Тесты сущностей.
+- [x] 1.2 `Idea.BurstPairs` (`int?`) и `Idea.Features` с ним; `IdeaTrade.Features` копирует четвёртый флаг. Тесты сущностей.
 
 ## 2. Живые идеи и статистика
 
