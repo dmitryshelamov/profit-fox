@@ -555,6 +555,7 @@ export const tradingSettings = {
   dailyLossLimit: null,
   maxSameDirection: null,
   autosBudget: null,
+  leverage: 1,
 } satisfies Schemas['IdeaTradingSettingsResponse'];
 
 /** The entry of an idea as the API calculates it: no reason. */
@@ -571,6 +572,8 @@ export const entryOf = (overrides: Partial<Schemas['IdeaEntryResponse']> = {}) =
     freeMoney: '1000',
     quote: 'USDT',
     reasons: [],
+    leverage: 1,
+    margin: '79.15',
     ...overrides,
   }) satisfies Schemas['IdeaEntryResponse'];
 

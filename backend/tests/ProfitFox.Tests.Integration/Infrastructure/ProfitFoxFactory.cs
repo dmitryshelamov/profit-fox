@@ -36,6 +36,9 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
     /// <summary>Answers the app's reads of what an account holds on the exchange.</summary>
     public IExchangeLedger Ledger { get; } = Substitute.For<IExchangeLedger>();
 
+    /// <summary>Answers what the API sends to the exchange: the leverage of a symbol before an entry, which it takes unless a test says otherwise. The API places no order.</summary>
+    public IOrderGateway Orders { get; } = Accepting();
+
     /// <summary>
     ///     Whether <see cref="KeyInspector" /> answers the calls with an account key. Without it the app's own Bybit client sends them
     ///     through its HTTP pipeline to <see cref="Bybit" />.
@@ -131,6 +134,7 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
         {
             services.AddSingleton<TimeProvider>(Time);
             services.AddSingleton(Ledger);
+            services.AddSingleton(Orders);
             if (FakeKeyInspector)
             {
                 services.AddSingleton(KeyInspector);
@@ -201,6 +205,14 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
 
         await base.DisposeAsync();
         GC.SuppressFinalize(this);
+    }
+
+    private static IOrderGateway Accepting()
+    {
+        IOrderGateway orders = Substitute.For<IOrderGateway>();
+        orders.SetLeverageAsync(Arg.Any<ExchangeKey>(), Arg.Any<Domain.ValueObjects.MarketData.Instrument>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new OrderOutcome(OrderOutcomeKind.Accepted));
+
+        return orders;
     }
 
     /// <summary>Lets the HTTP client factory rotate and dispose its handler without disposing the shared fake.</summary>

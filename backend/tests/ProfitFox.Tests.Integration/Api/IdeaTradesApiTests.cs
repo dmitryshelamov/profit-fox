@@ -4,6 +4,8 @@ using System.Text.Json;
 
 using Npgsql;
 
+using NSubstitute;
+
 using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
@@ -187,6 +189,37 @@ public class IdeaTradesApiTests
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
         JsonElement problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
         problem.GetProperty("reasons").EnumerateArray().Select(reason => reason.GetString()).ShouldContain("price_beyond_target");
+        (await NothingSavedAsync()).ShouldBeTrue();
+    }
+
+    // Scenario "Символ с плечом 10×": the API sets the leverage of the settings on the empty symbol, and the trade keeps it.
+    [Test]
+    public async Task Entry_on_linear_sets_the_leverage_of_an_empty_symbol_and_the_trade_keeps_it()
+    {
+        _scenario.Factory.Ledger.GetLeverageAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, Arg.Any<CancellationToken>()).Returns(10m);
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m);
+        _scenario.SetPrice("100");
+
+        Guid id = await CreateAsync(idea);
+
+        await _scenario.Factory.Orders.Received(1).SetLeverageAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, 1, Arg.Any<CancellationToken>());
+        (await _scenario.TradeAsync(id)).Leverage.ShouldBe(1);
+    }
+
+    // Scenario "Bybit отказал": a 409 with the reason, and no trade.
+    [Test]
+    public async Task Entry_whose_leverage_bybit_refuses_is_refused_with_the_reason_and_saves_nothing()
+    {
+        _scenario.Factory.Ledger.GetLeverageAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, Arg.Any<CancellationToken>()).Returns(10m);
+        _scenario.Factory.Orders.SetLeverageAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, 1, Arg.Any<CancellationToken>())
+            .Returns(new OrderOutcome(OrderOutcomeKind.Permanent, Reason: "leverage invalid"));
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m);
+        _scenario.SetPrice("100");
+
+        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, amount = 47.3m });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("reasons").EnumerateArray().Select(reason => reason.GetString()).ShouldBe(["leverage_not_set"]);
         (await NothingSavedAsync()).ShouldBeTrue();
     }
 

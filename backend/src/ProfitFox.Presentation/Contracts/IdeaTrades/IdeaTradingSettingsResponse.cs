@@ -15,7 +15,8 @@ public sealed record IdeaTradingSettingsResponse(
     [property: Required] string MinRiskReward,
     string? DailyLossLimit,
     int? MaxSameDirection,
-    string? AutosBudget)
+    string? AutosBudget,
+    int Leverage)
 {
     public static IdeaTradingSettingsResponse Of(IdeaTradingSettings settings)
     {
@@ -28,6 +29,7 @@ public sealed record IdeaTradingSettingsResponse(
             settings.MinRiskReward.ToString(CultureInfo.InvariantCulture),
             settings.DailyLossLimit?.ToString(CultureInfo.InvariantCulture),
             settings.MaxSameDirection,
-            settings.AutosBudget?.ToString(CultureInfo.InvariantCulture));
+            settings.AutosBudget?.ToString(CultureInfo.InvariantCulture),
+            settings.Leverage);
     }
 }

@@ -5201,8 +5201,8 @@ export interface components {
         };
         /**
          * @description The entry of an idea as it would be made now. Numbers are decimal strings: the price, the quantity, the amount, the loss at the stop and the profit at the target it
-         *     really takes at that quantity after the fees, the reward to the risk after the fees and without them, the free money of the account (none without a key). IReadOnlyList&lt;string&gt; IdeaEntryResponse.Reasons are
-         *     the codes of what stops the entry.
+         *     really takes at that quantity after the fees, the reward to the risk after the fees and without them, the free money of the account (none without a key), the leverage (one on the spot)
+         *     and the margin, the amount at the leverage. IReadOnlyList&lt;string&gt; IdeaEntryResponse.Reasons are the codes of what stops the entry.
          */
         IdeaEntryResponse: {
             /** Format: uuid */
@@ -5217,6 +5217,9 @@ export interface components {
             freeMoney: null | string;
             quote: string;
             reasons: string[];
+            /** Format: int32 */
+            leverage: number | string;
+            margin: string;
         };
         /**
          * @description The exit rule of a type × interval: the lifetime in candles, the target in R as a decimal string of a type with one, the entry window in
@@ -5441,7 +5444,7 @@ export interface components {
             /** Format: int32 */
             total: number | string;
         };
-        /** @description The settings of trading by ideas: the account to enter on, the amount and the largest amount of a trade in USDT, the most open trades and their total risk, the lowest reward to the risk after the fees. */
+        /** @description The settings of trading by ideas: the account to enter on, the amount and the largest amount of a trade in USDT, the most open trades and their total risk, the lowest reward to the risk after the fees, the leverage on futures. */
         IdeaTradingSettingsBody: {
             /** Format: uuid */
             accountId?: null | string;
@@ -5470,6 +5473,12 @@ export interface components {
              * @description The most the open real trades of all the autos may hold in USDT; none switches the guard off.
              */
             autosBudget?: null | number | string;
+            /**
+             * Format: double
+             * @description The leverage a trade on `linear` enters at, a whole number from one; one when it is not sent. A number, so that one that is not whole is an
+             *     error of this field and not of the body.
+             */
+            leverage?: number | string;
         };
         /** @description The settings of trading by ideas; numbers are decimal strings, the account is none until the owner chose one. */
         IdeaTradingSettingsResponse: {
@@ -5485,6 +5494,8 @@ export interface components {
             /** Format: int32 */
             maxSameDirection: null | number | string;
             autosBudget: null | string;
+            /** Format: int32 */
+            leverage: number | string;
         };
         InstrumentResponse: {
             category: string;

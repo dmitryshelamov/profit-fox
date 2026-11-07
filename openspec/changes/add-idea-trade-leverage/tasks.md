@@ -54,13 +54,13 @@
 
 ## 5. API
 
-- [ ] 5.1 Тело и ответ настроек с `leverage`; ответ `GET /api/ideas/{id}/entry` с `leverage` и `margin`; коды причин
+- [x] 5.1 Тело и ответ настроек с `leverage`; ответ `GET /api/ideas/{id}/entry` с `leverage` и `margin`; коды причин
   `stopTooFarForLeverage`, `leverageDiffers`, `leverageNotSet`. Готово, когда интеграционные тесты API настроек (по
   умолчанию `1`, `0` и `2.5` → 400 по полю), `IdeaEntryApiTests` (плечо и залог) и `IdeaTradesApiTests` (409 с
   `leverageNotSet`) зелёные.
-- [ ] 5.2 Интеграционный тест Worker'а (`IdeaTradingTests`): вход на `linear` после установки плеча ставит ордер как
+- [x] 5.2 Интеграционный тест Worker'а (`IdeaTradingTests`): вход на `linear` после установки плеча ставит ордер как
   раньше. Готово, когда тест зелёный.
-- [ ] 5.3 Сгенерировать заново `frontend/src/shared/api/schema.d.ts`. Готово, когда в схеме есть `leverage`, `margin` и
+- [x] 5.3 Сгенерировать заново `frontend/src/shared/api/schema.d.ts`. Готово, когда в схеме есть `leverage`, `margin` и
   новые коды.
 
 ## 6. Фронтенд
