@@ -68,6 +68,19 @@ public class ScannerMarketTests
         market.Find(Sol).ShouldBe(copy with { CoveredUntil = End, Listed = false, TickSize = 0.01m, TradFi = true });
     }
 
+    // Fix: a pair known before the rules were stored kept none in memory, so paper autos refused its ideas as «Правила биржи неизвестны»
+    // and the minute cycle saved the empty rules over the ones the list had just stored.
+    [Test]
+    public void Known_pair_takes_the_step_of_volume_and_the_minimums_the_list_tells()
+    {
+        var market = new ScannerMarket();
+        market.Keep([new ScannerPair(Sol, true)]);
+
+        market.KeepListed([new ScannerPair(Sol, true, QuantityStep: 0.1m, MinQuantity: 0.1m, MinAmount: 5m)]);
+
+        market.Find(Sol).ShouldBe(new ScannerPair(Sol, true, QuantityStep: 0.1m, MinQuantity: 0.1m, MinAmount: 5m));
+    }
+
     [Test]
     public void New_pair_of_the_list_is_added_and_every_pair_the_list_changed_is_saved()
     {

@@ -43,7 +43,7 @@ public sealed class ScannerMarket
 
     /// <summary>
     ///     The pairs the list of the exchange changed, from a copy taken before its requests: a new pair is added, a known one takes what the
-    ///     list tells (listed, the step of price, non-crypto) and keeps the coverage memory holds, which the stream may have moved meanwhile.
+    ///     list tells (listed, the step of price, non-crypto, the step of volume and the minimums) and keeps the coverage memory holds, which the stream may have moved meanwhile.
     /// </summary>
     public void KeepListed(IEnumerable<ScannerPair> pairs)
     {
@@ -53,7 +53,15 @@ public sealed class ScannerMarket
             {
                 if (_books.TryGetValue(pair.Instrument, out Book? book))
                 {
-                    book.Pair = book.Pair with { Listed = pair.Listed, TickSize = pair.TickSize, TradFi = pair.TradFi };
+                    book.Pair = book.Pair with
+                    {
+                        Listed = pair.Listed,
+                        TickSize = pair.TickSize,
+                        TradFi = pair.TradFi,
+                        QuantityStep = pair.QuantityStep,
+                        MinQuantity = pair.MinQuantity,
+                        MinAmount = pair.MinAmount
+                    };
                 }
                 else
                 {
