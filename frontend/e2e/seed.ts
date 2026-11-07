@@ -4,7 +4,7 @@ import pg from 'pg';
  * The version of the rules of ideas the scanner runs (`IdeasEngineVersion.Current`): the screens read only its calibration and
  * signals.
  */
-const engineVersion = 5;
+const engineVersion = 6;
 
 /** A client of the disposable database of the run, whose name playwright.config.ts gave to every worker. */
 async function connect(): Promise<pg.Client> {

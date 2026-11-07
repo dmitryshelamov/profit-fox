@@ -11,5 +11,5 @@ public sealed record IdeasEngineVersion(int Number)
     ///     Raised with every change that changes the signals; the reference test of the version fails until it is. The rows of
     ///     <c>frontend/e2e/seed.ts</c> carry the version too: raise it there with this one.
     /// </summary>
-    public const int Current = 5;
+    public const int Current = 6;
 }

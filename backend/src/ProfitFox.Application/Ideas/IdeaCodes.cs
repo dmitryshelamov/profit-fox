@@ -4,7 +4,8 @@ namespace ProfitFox.Application.Ideas;
 
 /// <summary>
 ///     Codes of setups (<c>impulse</c>, <c>early_impulse</c>, <c>drop</c>, <c>early_drop</c>, <c>high_volatility</c>, <c>breakout</c>,
-///     <c>false_breakout</c>, <c>squeeze</c>, <c>exhaustion</c>, <c>rsi_extreme</c>, <c>new_extreme</c>, <c>quiet_volume</c>), idea types
+///     <c>false_breakout</c>, <c>squeeze</c>, <c>exhaustion</c>, <c>rsi_extreme</c>, <c>new_extreme</c>, <c>quiet_volume</c>,
+///     <c>accumulation</c>), idea types
 ///     (<c>levels</c>, <c>target_2r</c>, <c>beyond_extreme</c>, <c>pullback</c>, <c>stop_entry</c>), sides (<c>long</c>, <c>short</c>) and statuses
 ///     (<c>awaiting_entry</c>, <c>active</c>, <c>target</c>, <c>stop</c>, <c>expired</c>) in the API and in stored rows, and badges of buckets
 ///     (<c>up</c>, <c>flat</c>, <c>down</c>) and scopes of calibration (<c>all</c>, <c>fresh</c>) in the API.
@@ -24,7 +25,8 @@ public static class IdeaCodes
         ["exhaustion"] = IdeaSetup.Exhaustion,
         ["rsi_extreme"] = IdeaSetup.RsiExtreme,
         ["new_extreme"] = IdeaSetup.NewExtreme,
-        ["quiet_volume"] = IdeaSetup.QuietVolume
+        ["quiet_volume"] = IdeaSetup.QuietVolume,
+        ["accumulation"] = IdeaSetup.Accumulation
     };
 
     private static readonly Dictionary<string, IdeaType> TypesByCode = new Dictionary<string, IdeaType>

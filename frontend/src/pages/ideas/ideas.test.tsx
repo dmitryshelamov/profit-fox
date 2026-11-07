@@ -340,6 +340,25 @@ describe('ideas screen', () => {
     expect(within(row).getByText('Стоп-вход')).toBeInTheDocument();
   });
 
+  // Scenario "Накопление": the stop entry long of an accumulation, found by its setup.
+  it('asks the API for the ideas of an accumulation and names the setup in the row', async () => {
+    const accumulation = ideaOf({
+      id: 'apt-1',
+      symbol: 'APTUSDT',
+      setup: 'accumulation',
+      type: 'stop_entry',
+    });
+    const requests = open({ 'GET /api/ideas': () => json(ideasPage([accumulation])) });
+    renderApp('/ideas');
+    const row = await rowOf('APTUSDT');
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Сетап' }), 'accumulation');
+
+    await waitFor(() => expect(lastIdeasQuery(requests)).toMatchObject({ Setup: 'accumulation' }));
+    expect(within(row).getByText('Накопление / распределение')).toBeInTheDocument();
+    expect(within(row).getByText('Стоп-вход')).toBeInTheDocument();
+  });
+
   const symbolsInTable = () =>
     within(screen.getByRole('table'))
       .getAllByRole('link')

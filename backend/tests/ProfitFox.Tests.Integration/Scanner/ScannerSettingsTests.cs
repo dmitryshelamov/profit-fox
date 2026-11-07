@@ -70,6 +70,8 @@ public class ScannerSettingsTests
 
         settings.Thresholds.ShouldBeEquivalentTo(new ThresholdSettings());
         Ideas(ScannerHost.ContentRoot()).ShouldContainKey("Ideas:Thresholds:BreakoutMargin");
+        Ideas(ScannerHost.ContentRoot()).ShouldContainKeyAndValue("Ideas:Thresholds:BiasRatio", "1.5");
+        Ideas(ScannerHost.ContentRoot()).ShouldContainKeyAndValue("Ideas:Thresholds:FlatMove", "0.5");
     }
 
     private static Dictionary<string, string?> Fees(string folder)

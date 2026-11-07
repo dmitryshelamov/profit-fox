@@ -276,6 +276,7 @@ export const marketSnapshot = (
           'rsi_extreme',
           'new_extreme',
           'quiet_volume',
+          'accumulation',
         ].map((setup) => [setup, rows.filter((row) => row.setups['15']?.includes(setup)).length]),
       ),
     },
@@ -415,6 +416,7 @@ export const filterFields = [
       'rsi_extreme',
       'new_extreme',
       'quiet_volume',
+      'accumulation',
     ],
   },
   {
@@ -435,6 +437,7 @@ export const filterFields = [
       'rsi_extreme',
       'new_extreme',
       'quiet_volume',
+      'accumulation',
     ],
   },
   {
