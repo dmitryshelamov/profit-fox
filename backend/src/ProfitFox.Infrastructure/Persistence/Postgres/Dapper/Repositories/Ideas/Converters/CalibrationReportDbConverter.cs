@@ -73,29 +73,19 @@ internal static class CalibrationReportDbConverter
             ToDomain(slice.Comparison));
     }
 
-    // The codes were written by this converter.
     private static Interval? IntervalOf(string? code)
     {
-        if (code is null)
-        {
-            return null;
-        }
-
-        MarketDataCodes.TryParseInterval(code, out Interval interval);
-
-        return interval;
+        return code is null ? null : MarketDataCodes.TryParseInterval(code, out Interval interval) ? interval : throw Unknown("interval", code);
     }
 
     private static IdeaType? TypeOf(string? code)
     {
-        if (code is null)
-        {
-            return null;
-        }
+        return code is null ? null : IdeaCodes.TryParseType(code, out IdeaType type) ? type : throw Unknown("type", code);
+    }
 
-        IdeaCodes.TryParseType(code, out IdeaType type);
-
-        return type;
+    private static InvalidOperationException Unknown(string what, string code)
+    {
+        return new InvalidOperationException($"Unknown {what} code '{code}' in storage.");
     }
 
     private static CalibrationComparisonDb FromDomain(CalibrationComparison comparison)

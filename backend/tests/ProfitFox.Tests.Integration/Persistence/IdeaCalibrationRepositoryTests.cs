@@ -105,6 +105,23 @@ public class IdeaCalibrationRepositoryTests
         read.Total.ShouldBe(report.Total);
     }
 
+    // A code of a breakdown that this version does not know is a broken report, not a row of another interval or type.
+    [TestCase("Intervals", "{\"Interval\": \"7\"}")]
+    [TestCase("Types", "{\"Type\": \"fishing\"}")]
+    public async Task Report_with_an_unknown_code_of_a_breakdown_is_refused(string breakdown, string code)
+    {
+        var calibrations = new IdeaCalibrationRepository(_dataSource);
+        BucketStatistics single = BucketStatisticsCalculator.Compute(0, 1, 0, -1m, 1m);
+        var slice = new CalibrationSlice(Interval.FiveMinutes, IdeaType.TwoR, new CalibrationRow(null, null, null, 0.1m, single), null, new CalibrationComparison(new CalibrationModel(0, null, null), new CalibrationModel(0, null, null)));
+        await calibrations.ReplaceAsync(1, [new CalibrationReport(Now, 90, null, 1, 0, 1m, 1m, [], [], [], null) { Intervals = [slice], Types = [slice] }], CancellationToken.None);
+        await using (NpgsqlCommand corrupt = _dataSource.CreateCommand($"UPDATE idea_calibration SET report = jsonb_set(report, '{{{breakdown},0}}', report #> '{{{breakdown},0}}' || '{code}'::jsonb)"))
+        {
+            await corrupt.ExecuteNonQueryAsync();
+        }
+
+        await Should.ThrowAsync<InvalidOperationException>(() => calibrations.GetAsync(1, 90, null, CalibrationScope.All, CancellationToken.None));
+    }
+
     // A record compares its lists by reference: the lists are compared by their rows, the rest as it is.
     private static void ShouldMatch(CalibrationReport? read, CalibrationReport expected)
     {

@@ -370,27 +370,25 @@ public class CalibrationCalculatorTests
     }
 
     // Requirement "Калибровка по ТФ и типам", scenarios "▲ проваливается на 1 ч", "Строка без ▲" and "Порядок строк": the 1 h bucket has 30
-    // targets and 10 stops, the 5 min one 5 targets and 35 stops; their 10 checked cases each, half targets and half stops, are all promised ▲
-    // on 1 h and none on 5 min. The 1 h cases fire first, the row of 5 min still comes first.
+    // targets and 10 stops (+1.25 R, V 67.5 / 39 / 40), the 5 min one 5 targets and 35 stops (−0.625 R, V 39.375 / 39 / 40), each case in an
+    // hour of its own; one parent each, so each bucket is promised its parent shrunk to the category (+0.3125 R, V 177.1875 / 79 / 80) by
+    // τ² 0.4005 between the two: +1.2270408 R, ▲, and −0.6114691 R. Their 30 checked cases each, alternately +2 R and −1 R, one an hour, got
+    // +0.5 R ± 1.96·√(67.5 / 29 / 30). The 1 h cases fire first, the row of 5 min still comes first.
     [Test]
     public void Breakdown_by_interval_has_a_row_of_each_checked_interval()
     {
         CalibrationReport report = Report([.. Strong(Linear), .. Weak(FiveMinutes), .. Checked(Linear, Now.AddDays(-5)), .. Checked(FiveMinutes, Now.AddDays(-4))], 30, null);
 
         CalibrationSlice[] slices = [.. report.Intervals];
-        slices.Select(slice => slice.Interval).ShouldBe([Interval.FiveMinutes, Interval.OneHour]);
-        slices.ShouldAllBe(slice => slice.Type == null);
-        CalibrationRow up = report.Badges.Single(row => row.Badge == IdeaBadge.Up);
-        up.Outcome.ShouldBe(Sums(Checked(Linear, Now.AddDays(-5))).Statistics());
-        slices[1].Total.ShouldBe(new CalibrationRow(null, null, null, up.Promised, up.Outcome));
-        slices[1].Up.ShouldBe(up);
-        slices[0].Total.Outcome.ShouldBe(Sums(Checked(FiveMinutes, Now.AddDays(-4))).Statistics());
-        slices[0].Total.Promised.ShouldBeLessThan(0m);
+        slices.Select(slice => (slice.Interval, slice.Type)).ShouldBe([(Interval.FiveMinutes, (IdeaType?)null), (Interval.OneHour, null)]);
+        ShouldBeAlternate(slices[1].Total, null, 1.2270408163m);
+        ShouldBeAlternate(slices[1].Up!, IdeaBadge.Up, 1.2270408163m);
+        ShouldBeAlternate(slices[0].Total, null, -0.6114690722m);
         slices[0].Up.ShouldBeNull();
     }
 
     // Scenario "Сравнение моделей в строке": the case of a bucket of 1 h with no case of its own is checked by the new model only, so the
-    // comparison of 1 h is on the 10 cases of the strong bucket; the old model promises them its own 30 targets and 10 stops.
+    // comparison of 1 h is on the 30 cases of the strong bucket; the old model promises them its own 30 targets and 10 stops.
     [Test]
     public void Breakdown_row_compares_the_models_on_the_cases_of_the_row_both_check()
     {
@@ -402,9 +400,9 @@ public class CalibrationCalculatorTests
         CalibrationSlice hour = report.Intervals.Single(slice => slice.Interval == Interval.OneHour);
         BucketStatistics old = BucketStatisticsCalculator.Compute(30, 10, 0, 50m, 130m);
         BucketStatistics outcome = Sums(checkedCases).Statistics();
-        hour.Total.Outcome.Cases.ShouldBe(11);
-        hour.Comparison.Old.ShouldBe(new CalibrationModel(10, Brier(checkedCases, old.Probability!.Value), new CalibrationRow(null, null, IdeaBadge.Up, old.Expectancy, outcome)));
-        (hour.Comparison.New.Cases, hour.Comparison.New.Up!.Outcome).ShouldBe((10, outcome));
+        hour.Total.Outcome.Cases.ShouldBe(31);
+        hour.Comparison.Old.ShouldBe(new CalibrationModel(30, Brier(checkedCases, old.Probability!.Value), new CalibrationRow(null, null, IdeaBadge.Up, old.Expectancy, outcome)));
+        (hour.Comparison.New.Cases, hour.Comparison.New.Up!.Outcome).ShouldBe((30, outcome));
     }
 
     // Requirement "Калибровка по ТФ и типам", scenario "Порядок строк": «Откат» of 1 h fires first, the row of «Цель 2R» still comes first.
@@ -424,6 +422,20 @@ public class CalibrationCalculatorTests
         report.Intervals.Single().Total.Outcome.ShouldBe(Sums([.. strong, .. weak]).Statistics());
     }
 
+    // Scenario "Тип без проверенных случаев": a case of «За экстремумом» fired in the window, but its parent has no history: it is not checked
+    // and makes no row of either breakdown.
+    [Test]
+    public void Unchecked_case_makes_no_row_of_a_breakdown()
+    {
+        IdeaBucketKey noHistory = Linear with { Type = IdeaType.BeyondExtreme, Interval = Interval.FourHours };
+
+        CalibrationReport report = Report([.. Strong(Linear), .. Checked(Linear, Now.AddDays(-5)), new IdeaOutcome(noHistory, Now.AddDays(-1), Now, IdeaStatus.Target, 2m)], 30, null);
+
+        (report.Checked, report.Unchecked).ShouldBe((30, 1));
+        report.Intervals.Select(slice => slice.Interval).ShouldBe([Interval.OneHour]);
+        report.Types.Select(slice => slice.Type).ShouldBe([IdeaType.TwoR]);
+    }
+
     // Scenario "Разбивки в режиме после изменения правил": the rules of 1 h changed after its cases fired, so the breakdown of the scope has 5 min only.
     [Test]
     public void Breakdown_is_of_the_checked_cases_of_its_report()
@@ -433,7 +445,7 @@ public class CalibrationCalculatorTests
         CalibrationReport fresh = CalibrationCalculator.Compute(outcomes, Now, (_, interval) => interval == Interval.OneHour ? Now : DateTimeOffset.MinValue)
             .Single(report => report is { Days: 30, Category: MarketCategory.Linear, Scope: CalibrationScope.Fresh });
 
-        fresh.Intervals.Select(slice => (slice.Interval, slice.Total.Outcome.Cases)).ShouldBe([(Interval.FiveMinutes, 10)]);
+        fresh.Intervals.Select(slice => (slice.Interval, slice.Total.Outcome.Cases)).ShouldBe([(Interval.FiveMinutes, 30)]);
     }
 
     private static CalibrationReport Report(IReadOnlyList<IdeaOutcome> outcomes, int days, MarketCategory? category, CalibrationScope scope = CalibrationScope.All)
@@ -467,10 +479,20 @@ public class CalibrationCalculatorTests
         return Enumerable.Range(0, 40).Select(index => Closed(key, Now.AddDays(-58).AddHours(index), index < 5 ? IdeaStatus.Target : IdeaStatus.Stop, index < 5 ? 2m : -1m));
     }
 
-    /// <summary>10 cases of a bucket an hour apart from <paramref name="from" />, closed now, alternately +2 R targets and −1 R stops.</summary>
+    /// <summary>30 cases of a bucket an hour apart from <paramref name="from" />, closed now, alternately +2 R targets and −1 R stops.</summary>
     private static IdeaOutcome[] Checked(IdeaBucketKey key, DateTimeOffset from)
     {
-        return [.. Enumerable.Range(0, 10).Select(index => new IdeaOutcome(key, from.AddHours(index), Now, index % 2 == 0 ? IdeaStatus.Target : IdeaStatus.Stop, index % 2 == 0 ? 2m : -1m))];
+        return [.. Enumerable.Range(0, 30).Select(index => new IdeaOutcome(key, from.AddHours(index), Now, index % 2 == 0 ? IdeaStatus.Target : IdeaStatus.Stop, index % 2 == 0 ? 2m : -1m))];
+    }
+
+    /// <summary>A row of the 30 cases of <see cref="Checked" />: 15 targets and 15 stops, +0.5 R ± 0.5459443 R, promised <paramref name="promised" />.</summary>
+    private static void ShouldBeAlternate(CalibrationRow row, IdeaBadge? badge, decimal promised)
+    {
+        (row.From, row.To, row.Badge).ShouldBe((null, null, badge));
+        row.Promised.ShouldBe(promised, 0.0000000001m);
+        (row.Outcome.Cases, row.Outcome.Targets, row.Outcome.Stops, row.Outcome.Expired, row.Outcome.Expectancy).ShouldBe((30, 15, 15, 0, 0.5m));
+        row.Outcome.ExpectancyLow!.Value.ShouldBe(-0.0459442942m, 0.0000000001m);
+        row.Outcome.ExpectancyHigh!.Value.ShouldBe(1.0459442942m, 0.0000000001m);
     }
 
     private static decimal Brier(IEnumerable<IdeaOutcome> outcomes, decimal promised)
