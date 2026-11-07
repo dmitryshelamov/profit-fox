@@ -22,8 +22,10 @@ test('the lifetime of «Откат» on 15 minutes is previewed and applied', as
     .getByRole('table', { name: 'Все 90 дней' })
     .getByRole('row', { name: /Ожидание на вход/ })
     .getByRole('cell');
-  await expect(expectancy.nth(0)).toHaveText('▲ +0.21 R');
-  await expect(expectancy.nth(1)).toHaveText('▲ +1.96 R');
+  // After the maker fee of the limit entry at 100 and the taker fee and the slippage of linear (0.05 %) on the exit: the close 100.5
+  // sells at 100.44975, (0.44975 − 0.02 − 0.0552474) / 2; the target 104 sells at 103.948, (3.948 − 0.02 − 0.0571714) / 2.
+  await expect(expectancy.nth(0)).toHaveText('▲ +0.19 R');
+  await expect(expectancy.nth(1)).toHaveText('▲ +1.94 R');
 
   await page.getByRole('button', { name: 'Применить' }).click();
   await expect(page.getByText('срок 48 свечей · цель 2R · окно входа 4 свечи')).toBeVisible();

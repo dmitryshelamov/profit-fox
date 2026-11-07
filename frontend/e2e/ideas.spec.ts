@@ -334,11 +334,12 @@ test('ideas come a page at a time: the page is in the address and survives Back,
   await expect(riskReward).toHaveAttribute('aria-sort', 'descending');
   await expect(page).toHaveURL(/\/ideas$/);
   await expect(range(1, 50)).toBeVisible();
-  await expect.poll(async () => (await riskRewards())[0]).toBe(180.07);
+  await expect.poll(async () => (await riskRewards())[0]).toBe(165.09);
   const first = await riskRewards();
   expect(first).toEqual([...first].sort((a, b) => b - a));
-  // The risk to reward after the fees of the stub: 200 and 130 of the prices come to 180.07 and 166.47 (BTCUSDT) and 117.01.
-  expect(first.slice(0, 3)).toEqual([180.07, 166.47, 117.01]);
+  // The risk to reward after the fees and the slippage of the settings: 200 and 130 of the prices come to 165.09 (linear) and
+  // 142.49 (spot) of BTCUSDT and 107.24.
+  expect(first.slice(0, 3)).toEqual([165.09, 142.49, 107.24]);
   await page.getByRole('button', { name: 'Следующая страница' }).click();
   await expect(range(51, 100)).toBeVisible();
   const second = await riskRewards();
@@ -383,9 +384,9 @@ test('ideas come a page at a time: the page is in the address and survives Back,
   await expect(rows).toHaveCount(3);
   await expect(rows.filter({ hasText: 'spot' })).toHaveCount(0);
 
-  // The counter of the editor is what the server counts for the conditions typed.
+  // The counter of the editor is what the server counts for the conditions typed: above 140 are both ideas of BTCUSDT.
   const fit = await request.post('/api/saved-filters/fit', {
-    data: { conditions: [{ field: 'riskReward', operator: '>', value: '150', to: null }] },
+    data: { conditions: [{ field: 'riskReward', operator: '>', value: '140', to: null }] },
   });
   const { pairs, ideas } = (await fit.json()) as { pairs: number; ideas: number };
   expect(ideas).toBeGreaterThanOrEqual(2);
@@ -394,7 +395,7 @@ test('ideas come a page at a time: the page is in the address and survives Back,
   await editor.getByRole('button', { name: '+ Условие' }).click();
   await editor.getByRole('button', { name: 'Поле' }).click();
   await editor.getByRole('menuitemradio', { name: 'R:R' }).click();
-  await editor.getByRole('textbox', { name: 'Значение' }).fill('150');
+  await editor.getByRole('textbox', { name: 'Значение' }).fill('140');
   await expect(
     editor.getByText(new RegExp(`^Подходит: ${pairs} \\S+ · ${ideas} \\S+$`)),
   ).toBeVisible();
