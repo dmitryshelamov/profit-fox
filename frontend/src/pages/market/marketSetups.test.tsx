@@ -45,6 +45,7 @@ function serverMarket(all: ReturnType<typeof pair>[]) {
         'rsi_extreme',
         'new_extreme',
         'quiet_volume',
+        'accumulation',
       ].map((setup) => [setup, left.filter((row) => has(row, setup)).length]),
     );
 
@@ -114,6 +115,31 @@ describe('market setups', () => {
     expect(within(row).getByText('Сжатие')).toBeInTheDocument();
   });
 
+  // Scenario "Накопления на четырёх часах": an accumulation and a distribution are one chip, long and short together.
+  it('asks for the pairs with an accumulation on 4 hours when its chip is chosen on 4 hours', async () => {
+    const ton = pair('TONUSDT', { '240': ['squeeze', 'accumulation'] });
+    const apt = pair('APTUSDT', { '240': ['accumulation'] });
+    const requests = fakeApi({ 'GET /api/market': serverMarket([wif, sol, ton, apt]) });
+    renderApp('/market');
+    await screen.findByRole('table');
+
+    await userEvent.click(
+      within(screen.getByRole('group', { name: 'ТФ сетапа' })).getByRole('button', { name: '4 ч' }),
+    );
+    await userEvent.click(
+      await chips().findByRole('button', { name: 'Накопление / распределение 2' }),
+    );
+
+    await waitFor(() =>
+      expect(lastRead(requests)).toMatchObject({ Setup: 'accumulation', Interval: '240' }),
+    );
+    await waitFor(() =>
+      expect(symbolsIn(screen.getByRole('table')).sort()).toEqual(['APTUSDT', 'TONUSDT']),
+    );
+    const row = screen.getByRole('link', { name: 'TONUSDT' }).closest('tr')!;
+    expect(within(row).getByText('Накопление / распределение')).toBeInTheDocument();
+  });
+
   it('shows the chips with the number of pairs of each setup and the setups of a pair as badges', async () => {
     fakeApi({ 'GET /api/market': () => json(marketSnapshot([wif, sol, doge, eth])) });
     renderApp('/market');
@@ -138,6 +164,7 @@ describe('market setups', () => {
       'Перекупленность / перепроданность 0',
       'Новый максимум / минимум 0',
       'Объём без движения 0',
+      'Накопление / распределение 0',
     ]);
     // Scenario "Два сетапа у пары".
     expect(within(row).getByText('Импульс')).toBeInTheDocument();

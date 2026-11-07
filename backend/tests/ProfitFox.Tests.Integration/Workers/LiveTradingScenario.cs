@@ -65,7 +65,7 @@ public sealed class LiveTradingScenario : IAsyncDisposable
     /// <param name="bybitSocketAddress">The streams of Bybit the API's chart hub connects to; without it the API's streams use the live Bybit.</param>
     public static async Task<LiveTradingScenario> CreateAsync(string? bybitSocketAddress = null)
     {
-        var factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { Workers = 0, BybitSocketAddress = bybitSocketAddress };
+        var factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { Workers = 0, BybitSocketAddress = bybitSocketAddress };
         foreach (string category in new[] { "spot", "linear" })
         {
             factory.Bybit.Instruments.Add((category, "BTCUSDT"));

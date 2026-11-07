@@ -37,7 +37,7 @@ public class SavedFilterRulesTests
     [Test]
     public void Catalog_offers_every_setup_and_type()
     {
-        string[] setups = ["impulse", "early_impulse", "drop", "early_drop", "high_volatility", "breakout", "false_breakout", "squeeze", "exhaustion", "rsi_extreme", "new_extreme", "quiet_volume"];
+        string[] setups = ["impulse", "early_impulse", "drop", "early_drop", "high_volatility", "breakout", "false_breakout", "squeeze", "exhaustion", "rsi_extreme", "new_extreme", "quiet_volume", "accumulation"];
 
         SavedFilterFields.All.Single(field => field.Code == "setup").Choices.ShouldBe(setups);
         SavedFilterFields.All.Single(field => field.Code == "ideaSetup").Choices.ShouldBe(setups);

@@ -29,6 +29,10 @@ public sealed class ThresholdOverride
 
     public decimal? QuietBody { get; init; }
 
+    public decimal? BiasRatio { get; init; }
+
+    public decimal? FlatMove { get; init; }
+
     public decimal? Overbought { get; init; }
 
     public decimal? Oversold { get; init; }

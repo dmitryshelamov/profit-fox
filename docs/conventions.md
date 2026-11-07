@@ -367,7 +367,7 @@ enforces a rule, the check is the source of truth.
     "Thresholds": {
       "Candles": 6, "Move": 3.0, "Volume": 2.0, "EarlyMove": 1.5, "EarlyVolume": 3.0,
       "BreakoutMargin": 0.1, "BreakoutVolume": 1.5, "SweepMargin": 0.2, "SqueezeCandles": 20, "ClimaxVolume": 4.0, "Wick": 1.0,
-      "QuietVolume": 3.0, "QuietBody": 0.3, "Overbought": 70, "Oversold": 30
+      "QuietVolume": 3.0, "QuietBody": 0.3, "BiasRatio": 1.5, "FlatMove": 0.5, "Overbought": 70, "Oversold": 30
     },
     "ByInterval": { "240": { "Move": 2.5 } },
     "StopBuffer": 1.5,
@@ -444,6 +444,10 @@ enforces a rule, the check is the source of truth.
 ## Tests
 
 - `Tests.Unit` mirrors the `src` folders. `Tests.Integration` covers the database and HTTP with Testcontainers.
+  `IntegrationEnvironment` starts one container with one test database, migrated once (`IntegrationEnvironment.ConnectionString`,
+  `MarketDataDatabase.Open()`); `ResetDatabaseAttribute` empties its tables before every test and writes back the rows the
+  migrations write. A test of a migration takes an empty database of its own (`CreateEmptyDatabaseAsync`); a test that makes a
+  table of its own drops it.
   `ProfitFoxFactory` runs the service in the `Testing` environment: test-only settings go to
   `ProfitFox.Presentation/appsettings.Testing.json`, the connection string comes from the container. Next to the API it
   starts `Workers` instances of `WorkerHost` (one by default, none to keep work `Pending`) on the same database, fake

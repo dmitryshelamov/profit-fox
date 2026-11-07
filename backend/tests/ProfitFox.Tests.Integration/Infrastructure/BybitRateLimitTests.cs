@@ -19,7 +19,7 @@ public class BybitRateLimitTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        _factory = ProfitFoxFactory.Create(workers: 0);
         _factory.CreateClient().Dispose();
     }
 

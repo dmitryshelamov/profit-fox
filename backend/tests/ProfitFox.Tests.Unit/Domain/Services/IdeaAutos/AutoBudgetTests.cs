@@ -68,6 +68,37 @@ public class AutoBudgetTests
         AutoBudget.AutosUsed(Real).ShouldBe(204.98m);
     }
 
+    // Owner, 2026-11-07: an auto that cannot hold one more trade does not touch the ideas. «Импульс лонг» takes 100.00 of its budget with an
+    // amount of 30, so 129.99 is full and 130 is not.
+    [TestCase(129.99, true)]
+    [TestCase(130.00, false)]
+    public void Auto_is_full_when_its_open_trades_and_one_more_amount_are_above_its_budget(double budget, bool full)
+    {
+        AutoBudget.IsFull(Impulse with { Budget = (decimal)budget }, Books(), Settings()).ShouldBe(full);
+    }
+
+    // With money the shared limits fill it too: the open real trades of the autos take 204.98 of their budget, and 5 real trades are open.
+    [TestCase(234.97, 6, true)]
+    [TestCase(234.98, 6, false)]
+    [TestCase(null, 5, true)]
+    [TestCase(null, 6, false)]
+    public void Live_auto_is_full_by_the_budget_of_the_autos_and_the_open_trades(double? autosBudget, int maxOpenTrades, bool full)
+    {
+        AutoBudget.IsFull(Impulse, Books(), Settings() with { AutosBudget = (decimal?)autosBudget, MaxOpenTrades = maxOpenTrades }).ShouldBe(full);
+    }
+
+    // The shared limits count real money only: a paper auto is full by its own budget alone.
+    [Test]
+    public void Paper_auto_is_not_full_by_the_shared_limits()
+    {
+        AutoBudget.IsFull(Impulse with { Mode = IdeaAutoMode.Paper }, Books(), Settings() with { AutosBudget = 1m, MaxOpenTrades = 1 }).ShouldBeFalse();
+    }
+
+    private static IdeaTradingSettings Settings()
+    {
+        return IdeaTradingSettings.Default with { MaxOpenTrades = 100 };
+    }
+
     private static AutoBooks Books()
     {
         return new AutoBooks(Real, Paper, new[] { Impulse, Falls, Gone }.ToDictionary(auto => auto.Id));

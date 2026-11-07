@@ -26,7 +26,7 @@ public class IdeaRepositoryTests
     [SetUp]
     public async Task SetUp()
     {
-        _dataSource = await MarketDataDatabase.CreateAsync();
+        _dataSource = MarketDataDatabase.Open();
         _store = new IdeaRepository(_dataSource);
     }
 

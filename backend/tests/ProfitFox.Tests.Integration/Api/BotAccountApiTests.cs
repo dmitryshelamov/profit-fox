@@ -25,7 +25,7 @@ public class BotAccountApiTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { Workers = 0 };
+        _factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { Workers = 0 };
         _factory.Bybit.Instruments.UnionWith([("spot", "BTCUSDT"), ("linear", "BTCUSDT")]);
         _client = _factory.CreateClient();
         HttpResponseMessage strategy = await _client.PostAsJsonAsync("/api/strategies", new { name = "EMA", definition = StrategyFixtures.Element("ema") });

@@ -22,7 +22,7 @@ public class MarketCandlesApiTests
     public async Task SetUp()
     {
         // The clock reads 2024-03-10T12:30Z, so the last closed hour is 11:00.
-        _factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        _factory = ProfitFoxFactory.Create(workers: 0);
         _client = _factory.CreateClient();
         var start = DateTimeOffset.Parse("2024-02-29T12:00:00Z", CultureInfo.InvariantCulture);
 

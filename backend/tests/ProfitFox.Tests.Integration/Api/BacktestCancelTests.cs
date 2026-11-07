@@ -32,7 +32,7 @@ public class BacktestCancelTests
     public async Task SetUp()
     {
         // The tests take the place of the Worker.
-        _factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        _factory = ProfitFoxFactory.Create(workers: 0);
         _client = _factory.CreateClient();
         _scenario = new BacktestScenario(_factory, _client);
         await _scenario.CreateBotAsync("ladder");

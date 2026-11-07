@@ -24,7 +24,7 @@ public class BotListApiTests
     public async Task SetUp()
     {
         // No Worker: the tests seed backtests in the status they read, and a Worker would finish a seeded Running one.
-        _factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        _factory = ProfitFoxFactory.Create(workers: 0);
         _client = _factory.CreateClient();
         _scenario = new BacktestScenario(_factory, _client);
         await _scenario.CreateBotAsync("ema", new { fast = 10 });

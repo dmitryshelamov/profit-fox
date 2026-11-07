@@ -26,7 +26,7 @@ public class BybitAddressTests
         var requests = new List<string>();
         Task serving = ServeAsync(listener, requests);
 
-        await using var factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync())
+        await using var factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString)
         {
             Workers = 0,
             FakeBybit = false,
@@ -48,7 +48,7 @@ public class BybitAddressTests
     [Test]
     public async Task Without_the_setting_the_environment_is_live()
     {
-        await using var factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { Workers = 0, FakeBybit = false };
+        await using var factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { Workers = 0, FakeBybit = false };
         factory.CreateClient().Dispose();
 
         BybitRestOptions options = factory.Services.GetRequiredService<IOptions<BybitRestOptions>>().Value;
@@ -59,7 +59,7 @@ public class BybitAddressTests
     [Test]
     public async Task Empty_setting_means_the_environment_is_live()
     {
-        await using var factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { Workers = 0, FakeBybit = false, BybitRestAddress = "" };
+        await using var factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { Workers = 0, FakeBybit = false, BybitRestAddress = "" };
         factory.CreateClient().Dispose();
 
         BybitRestOptions options = factory.Services.GetRequiredService<IOptions<BybitRestOptions>>().Value;

@@ -25,12 +25,15 @@ public class IdeaEngineTests
     private static readonly DateTimeOffset Six = DateTimeOffset.Parse("2024-03-01T06:00:00Z");
 
     private static readonly IdeaRuleSet Rules = new IdeaRuleSet(
-        new Dictionary<Interval, SetupThresholds> { [Interval.FifteenMinutes] = new SetupThresholds(6, 3m, 2m, 1.5m, 3m, 0.1m, 1.5m, 0.2m, 20, 4m, 1m, 3m, 0.3m, 70m, 30m) },
+        new Dictionary<Interval, SetupThresholds> { [Interval.FifteenMinutes] = new SetupThresholds(6, 3m, 2m, 1.5m, 3m, 0.1m, 1.5m, 0.2m, 20, 4m, 1m, 3m, 0.3m, 1.5m, 0.5m, 70m, 30m) },
         1.5m,
         ZoneRules.Default);
 
     // The price step of the pair: a cent on prices about 100.
     private static readonly IdeaInputs Ticked = new IdeaInputs(null, new Dictionary<Interval, VolatilityPercentiles>(), 0.01m);
+
+    // ATR / price 2 / 100 below the 10th percentile 5 % of the 15 minute candles: a squeeze.
+    private static readonly IdeaInputs Squeezed = new IdeaInputs(null, new Dictionary<Interval, VolatilityPercentiles> { [Interval.FifteenMinutes] = new VolatilityPercentiles(0.05m, null) }, 0.01m);
 
     [Test]
     public void Impulse_that_fires_makes_its_ideas_of_every_type_its_levels_allow()
@@ -73,6 +76,28 @@ public class IdeaEngineTests
 
         steps[0].Created.Where(idea => idea.Setup == IdeaSetup.Squeeze).Select(idea => (idea.Track.Plan.Type, idea.Track.Plan.Side, idea.Track.Plan.Entry))
             .ShouldBe([(IdeaType.StopEntry, IdeaSide.Long, 101.81m), (IdeaType.StopEntry, IdeaSide.Short, 98.99m)]);
+    }
+
+    // Scenario "Сжатие и накопление вместе": in the squeeze of the breakout set the candle from 04:00 closes 0.2 up with twice the volume of the
+    // one from 04:15 that falls back to 100; the pair has both setups, each with its own ideas.
+    [Test]
+    public void Squeeze_and_accumulation_hold_together_with_ideas_of_each()
+    {
+        IReadOnlyList<IdeaStep> steps = Run(Accumulated(), Wif, Six, Squeezed);
+
+        steps[0].Setups.ShouldBe([new PairSetup(Interval.FifteenMinutes, IdeaSetup.Squeeze), new PairSetup(Interval.FifteenMinutes, IdeaSetup.Accumulation)], ignoreOrder: true);
+        steps[0].Created.Count(idea => idea.Setup == IdeaSetup.Squeeze).ShouldBe(2);
+        steps[0].Created.Count(idea => idea.Setup == IdeaSetup.Accumulation).ShouldBe(1);
+    }
+
+    // Scenario "Накопление": only «Стоп-вход» long, a step above the range of the squeeze, 101.8; no idea short.
+    [Test]
+    public void Accumulation_gives_only_a_stop_entry_long_beyond_the_range_of_the_squeeze()
+    {
+        IReadOnlyList<IdeaStep> steps = Run(Accumulated(), Wif, Six, Squeezed);
+
+        steps[0].Created.Where(idea => idea.Setup == IdeaSetup.Accumulation).Select(idea => (idea.Track.Plan.Type, idea.Track.Plan.Side, idea.Track.Plan.Entry))
+            .ShouldBe([(IdeaType.StopEntry, IdeaSide.Long, 101.81m)]);
     }
 
     // Scenario "Два сетапа на одном движении": with an impulse of 1.2 ATR and 1 median the climb to 103.1 is an impulse and a breakout.
@@ -329,6 +354,20 @@ public class IdeaEngineTests
         [
             .. IdeaFixtures.Setup("impulse").Select(minute => minute.OpenTime == one ? minute with { Low = 98.0m }
                 : minute.OpenTime == one.AddHours(1) ? minute with { Low = 98.2m } : minute)
+        ];
+    }
+
+    // The breakout set with the candle from 04:00 at 200 of volume a minute and its last minute closing at 100.2: 3000 of volume on a rising
+    // candle against 1500 on the falling one from 04:15, the price back at 100.
+    private static IReadOnlyList<IdeaCandle> Accumulated()
+    {
+        var rise = DateTimeOffset.Parse("2024-03-01T04:00:00Z");
+
+        return
+        [
+            .. IdeaFixtures.Breakout().Select(minute => minute.OpenTime == rise.AddMinutes(14) ? minute with { Close = 100.2m, Volume = 200m }
+                : minute.OpenTime >= rise && minute.OpenTime < rise.AddMinutes(14) ? minute with { Volume = 200m }
+                : minute)
         ];
     }
 

@@ -30,6 +30,12 @@ public interface IMarketHistoryClient
     /// <summary>The last price of the pair from its ticker, in a single attempt: a person waits for it. Throws <see cref="ExchangeUnavailableException" /> when the exchange does not answer or has no ticker for the pair.</summary>
     Task<decimal> GetLastPriceAsync(Instrument instrument, CancellationToken cancellationToken);
 
+    /// <summary>
+    ///     The last prices of every pair of the category by symbol, from one request of all its tickers, in a single attempt: a person waits for
+    ///     them. Throws <see cref="ExchangeUnavailableException" /> when the exchange does not answer.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, decimal>> GetLastPricesAsync(MarketCategory category, CancellationToken cancellationToken);
+
     /// <summary>Whether the exchange lists the symbol in the category; throws <see cref="ExchangeException" /> when the exchange cannot answer.</summary>
     Task<bool> InstrumentExistsAsync(Instrument instrument, CancellationToken cancellationToken);
 }

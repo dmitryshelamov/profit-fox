@@ -1299,6 +1299,8 @@ public class LiveTradingTests
     public async Task Forming_candle_of_a_running_bot_with_an_open_chart_reaches_neither_the_strategy_nor_storage()
     {
         await _scenario.DisposeAsync();
+        // The scenario of the set-up left its account in the database; the new one makes its own.
+        IntegrationEnvironment.ResetDatabase();
         await using FakeBybitSocketServer server = await FakeBybitSocketServer.StartAsync();
         _scenario = await LiveTradingScenario.CreateAsync(server.Address);
         Guid bot = await _scenario.CreateBotAsync();

@@ -85,9 +85,10 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
     /// <summary>Receives every event the app's logger writes.</summary>
     public ILogEventSink? LogSink { get; init; }
 
-    public static async Task<ProfitFoxFactory> CreateAsync(int workers = 1)
+    /// <summary>A factory on the test database, which is emptied before every test.</summary>
+    public static ProfitFoxFactory Create(int workers = 1)
     {
-        return new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { Workers = workers };
+        return new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { Workers = workers };
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

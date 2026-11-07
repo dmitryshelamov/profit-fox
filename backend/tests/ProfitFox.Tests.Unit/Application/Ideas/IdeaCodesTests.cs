@@ -20,6 +20,7 @@ public class IdeaCodesTests
     [TestCase(IdeaSetup.RsiExtreme, "rsi_extreme")]
     [TestCase(IdeaSetup.NewExtreme, "new_extreme")]
     [TestCase(IdeaSetup.QuietVolume, "quiet_volume")]
+    [TestCase(IdeaSetup.Accumulation, "accumulation")]
     public void Setup_code_goes_there_and_back(IdeaSetup setup, string code)
     {
         setup.ToCode().ShouldBe(code);

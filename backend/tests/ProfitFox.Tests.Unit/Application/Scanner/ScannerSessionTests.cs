@@ -234,11 +234,30 @@ public class ScannerSessionTests
         using var cancellation = new CancellationTokenSource();
         Task session = Session().RunAsync(cancellation.Token);
 
-        await WaitAsync(() => _journal.ReceivedCalls().Any(call => Equals(call.GetArguments()[0], "ideas")));
+        await WaitAsync(() => _journal.ReceivedCalls().Any(call => Equals(call.GetArguments()[0], "ideas-cleanup")));
         await WaitAsync(() => _ideaSignals.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaSignalRepository.DeleteOtherVersionsAsync)) == 2, advance: true);
         await WaitAsync(() => _cursors.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaReplayRepository.GetAsync)), advance: true);
 
-        _journal.Received(1).Failed("ideas", failure);
+        _journal.Received(1).Failed("ideas-cleanup", failure);
+        await cancellation.CancelAsync();
+        await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
+    // Deploy of v29: every step of the clean-up outran the command timeout, and while it failed the lane of ideas read no warm-ups, so prod made no
+    // live idea for hours. The clean-up has a lane of its own: a failure of it is logged apart and the rest of the lane of ideas goes on.
+    [Test]
+    public async Task Failed_clean_up_of_other_versions_does_not_stop_the_lane_of_ideas()
+    {
+        var failure = new InvalidOperationException("timeout");
+        _ideaSignals.DeleteOtherVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Task.FromException<int>(failure));
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session().RunAsync(cancellation.Token);
+
+        await WaitAsync(() => _ideaStore.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaRepository.DeleteClosedBeforeAsync)), advance: true);
+
+        _journal.Received().Failed("ideas-cleanup", failure);
+        _journal.DidNotReceive().Failed("ideas", Arg.Any<Exception>());
+        await _cursors.DidNotReceive().GetAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
         await cancellation.CancelAsync();
         await Should.ThrowAsync<OperationCanceledException>(session);
     }

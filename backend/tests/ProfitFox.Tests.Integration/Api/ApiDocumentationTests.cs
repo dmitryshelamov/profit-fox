@@ -15,7 +15,7 @@ public class ApiDocumentationTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { Environment = "Production" };
+        _factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { Environment = "Production" };
         _client = _factory.CreateClient();
     }
 

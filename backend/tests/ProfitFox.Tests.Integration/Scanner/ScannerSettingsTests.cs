@@ -70,6 +70,8 @@ public class ScannerSettingsTests
 
         settings.Thresholds.ShouldBeEquivalentTo(new ThresholdSettings());
         Ideas(ScannerHost.ContentRoot()).ShouldContainKey("Ideas:Thresholds:BreakoutMargin");
+        Ideas(ScannerHost.ContentRoot()).ShouldContainKeyAndValue("Ideas:Thresholds:BiasRatio", "1.5");
+        Ideas(ScannerHost.ContentRoot()).ShouldContainKeyAndValue("Ideas:Thresholds:FlatMove", "0.5");
     }
 
     private static Dictionary<string, string?> Fees(string folder)
@@ -129,7 +131,7 @@ public class ScannerSettingsTests
 
     private static async Task<IHost> ScannerAsync(IReadOnlyDictionary<string, string?> settings)
     {
-        await using Npgsql.NpgsqlDataSource database = await MarketDataDatabase.CreateAsync();
+        await using Npgsql.NpgsqlDataSource database = MarketDataDatabase.Open();
         HostApplicationBuilder builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
         {
             EnvironmentName = "Production",

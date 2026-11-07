@@ -8,14 +8,14 @@ namespace ProfitFox.Tests.Unit.Domain.Services.Ideas;
 
 /// <summary>
 ///     Requirements of the candle setups on the scenarios of the spec, with the thresholds d = 0.1, Vп = 1.5, e = 0.2, Nс = 20, Xк = 4, w = 1,
-///     Xт = 3, Bт = 0.3 and RSI 70 / 30. The median volume of a candle is 1000; the last candle is the window of the last minutes of the
+///     Xт = 3, Bт = 0.3, Kн = 1.5, Pн = 0.5 and RSI 70 / 30. The median volume of a candle is 1000; the last candle is the window of the last minutes of the
 ///     interval's length.
 /// </summary>
 public class CandleSetupDetectorTests
 {
     private const decimal Median = 1000m;
 
-    private static readonly SetupThresholds Thresholds = new SetupThresholds(6, 3m, 2m, 1.5m, 3m, 0.1m, 1.5m, 0.2m, 20, 4m, 1m, 3m, 0.3m, 70m, 30m);
+    private static readonly SetupThresholds Thresholds = new SetupThresholds(6, 3m, 2m, 1.5m, 3m, 0.1m, 1.5m, 0.2m, 20, 4m, 1m, 3m, 0.3m, 1.5m, 0.5m, 70m, 30m);
     private static readonly DateTimeOffset At = DateTimeOffset.Parse("2024-03-01T10:00:00Z");
     private static readonly Zone Resistance = new Zone(100.0m, 100.6m, 2);
 
@@ -129,6 +129,122 @@ public class CandleSetupDetectorTests
     public void Squeeze_needs_atr_to_price_below_the_tenth_percentile(decimal? percentile)
     {
         Signal(IdeaSetup.Squeeze, Quiet(percentile)).ShouldBeNull();
+    }
+
+    // Scenario "Скрытое накопление": a squeeze at ATR 2, Kн = 1.5, Pн = 0.5; over the 20 closed candles of the window the rising ones have 300 of
+    // volume and the falling one 150, the flat ones are not counted; the first candle of the window closed at 100.0, the last closed one at
+    // 100.6. The signal is the squeeze's, long.
+    [Test]
+    public void Accumulation_is_a_squeeze_with_the_volume_on_the_rising_candles_and_the_price_in_place()
+    {
+        CandleSetupInput input = Squeezed((1, 100.3m, 150m), (2, 100.1m, 150m), (19, 100.6m, 150m));
+
+        Signal(IdeaSetup.Accumulation, input).ShouldBe(Signal(IdeaSetup.Squeeze, input)! with { Setup = IdeaSetup.Accumulation, Side = IdeaSide.Long });
+    }
+
+    // Scenario "Движение уже началось": the last closed candle at 101.5 is above 100.0 + 0.5 × 2.
+    [Test]
+    public void Accumulation_after_the_price_went_up_is_none_and_the_squeeze_stays()
+    {
+        CandleSetupInput input = Squeezed((1, 100.3m, 150m), (2, 100.1m, 150m), (19, 101.5m, 150m));
+
+        Signal(IdeaSetup.Accumulation, input).ShouldBeNull();
+        Signal(IdeaSetup.Squeeze, input).ShouldNotBeNull();
+    }
+
+    // Scenario "Перевеса мало": 200 of volume on the rising candles against 150 on the falling one.
+    [Test]
+    public void Accumulation_with_too_little_bias_is_none()
+    {
+        Signal(IdeaSetup.Accumulation, Squeezed((1, 100.3m, 50m), (2, 100.1m, 150m), (19, 100.6m, 150m))).ShouldBeNull();
+    }
+
+    // 300 of volume on the rising candles is exactly 1.5 × 200 on the falling one; the last close 101.0 is exactly 100.0 + 0.5 × 2.
+    [Test]
+    public void Accumulation_holds_at_exactly_its_bias_and_its_flat_move()
+    {
+        Signal(IdeaSetup.Accumulation, Squeezed((1, 100.3m, 150m), (2, 100.1m, 200m), (19, 100.6m, 150m)))!.Side.ShouldBe(IdeaSide.Long);
+        Signal(IdeaSetup.Accumulation, Squeezed((1, 100.3m, 150m), (2, 100.1m, 150m), (19, 101.0m, 150m)))!.Side.ShouldBe(IdeaSide.Long);
+    }
+
+    [Test]
+    public void Bias_and_flat_move_of_the_accumulation_come_from_the_thresholds()
+    {
+        CandleSetupInput input = Squeezed((1, 100.3m, 150m), (2, 100.1m, 150m), (19, 100.6m, 150m));
+
+        Signal(IdeaSetup.Accumulation, input, Thresholds with { BiasRatio = 2.5m }).ShouldBeNull();
+        Signal(IdeaSetup.Accumulation, input, Thresholds with { FlatMove = 0.2m }).ShouldBeNull();
+    }
+
+    // Scenario "Распределение": 300 of volume on the falling candles against 150 on the rising one, the last closed candle at 99.4 is not below
+    // 100.0 − 0.5 × 2.
+    [Test]
+    public void Distribution_is_a_squeeze_with_the_volume_on_the_falling_candles_and_gives_short()
+    {
+        CandleSetupInput input = Squeezed((1, 99.7m, 150m), (2, 99.9m, 150m), (19, 99.4m, 150m));
+
+        Signal(IdeaSetup.Accumulation, input).ShouldBe(Signal(IdeaSetup.Squeeze, input)! with { Setup = IdeaSetup.Accumulation, Side = IdeaSide.Short });
+    }
+
+    // The last closed candle at 98.5 is below 100.0 − 0.5 × 2.
+    [Test]
+    public void Distribution_after_the_price_went_down_is_none()
+    {
+        Signal(IdeaSetup.Accumulation, Squeezed((1, 99.7m, 150m), (2, 99.9m, 150m), (19, 98.5m, 150m))).ShouldBeNull();
+    }
+
+    // 300 of volume on the falling candles is exactly 1.5 × 200 on the rising one; the last close 99.0 is exactly 100.0 − 0.5 × 2.
+    [Test]
+    public void Distribution_holds_at_exactly_its_bias_and_its_flat_move()
+    {
+        Signal(IdeaSetup.Accumulation, Squeezed((1, 99.7m, 150m), (2, 99.9m, 200m), (19, 99.4m, 150m)))!.Side.ShouldBe(IdeaSide.Short);
+        Signal(IdeaSetup.Accumulation, Squeezed((1, 99.7m, 150m), (2, 99.9m, 150m), (19, 99.0m, 150m)))!.Side.ShouldBe(IdeaSide.Short);
+    }
+
+    // Scenario "Без падающих свечей": every candle of the window closed 0.04 above the one before it, from 100.04 to 100.8, within 100.04 + 0.5 × 2.
+    [Test]
+    public void Accumulation_without_falling_candles_holds()
+    {
+        CandleSetupInput input = Squeezed([.. Enumerable.Range(0, 20).Select(index => (index, 100.04m + 0.04m * index, 15m))]);
+
+        Signal(IdeaSetup.Accumulation, input)!.Side.ShouldBe(IdeaSide.Long);
+    }
+
+    // Scenario "Ровно Nс закрытых свечей": without the candle before the window the first one has no close to be compared with.
+    [Test]
+    public void Accumulation_with_exactly_the_closed_candles_of_the_squeeze_is_none()
+    {
+        CandleSetupInput input = Squeezed((1, 100.3m, 150m), (2, 100.1m, 150m), (19, 100.6m, 150m));
+        input = input with { Closed = [.. input.Closed.Skip(1)] };
+
+        Signal(IdeaSetup.Squeeze, input).ShouldNotBeNull();
+        Signal(IdeaSetup.Accumulation, input).ShouldBeNull();
+    }
+
+    // Scenario "Тихий рынок без перевеса": 150 of volume on the rising candle and on the falling one; the flat ones go to neither.
+    [Test]
+    public void Accumulation_with_equal_volumes_is_none()
+    {
+        CandleSetupInput input = Squeezed((1, 100.3m, 150m), (2, 100.1m, 150m));
+
+        Signal(IdeaSetup.Squeeze, input).ShouldNotBeNull();
+        Signal(IdeaSetup.Accumulation, input).ShouldBeNull();
+    }
+
+    // Decision 3: a window of flat candles has no volume on either side, so no bias either way.
+    [Test]
+    public void Accumulation_without_rising_or_falling_candles_is_none()
+    {
+        CandleSetupDetector.Detect(Squeezed(), Thresholds).ShouldNotContain(signal => signal.Setup == IdeaSetup.Accumulation);
+    }
+
+    // ATR / price 2 / 100.6 is above the 10th percentile 1.9 %: neither a squeeze nor an accumulation.
+    [Test]
+    public void Percentile_not_below_gives_neither_a_squeeze_nor_an_accumulation()
+    {
+        CandleSetupInput input = Squeezed((1, 100.3m, 150m), (2, 100.1m, 150m), (19, 100.6m, 150m)) with { LowPercentile = 0.019m };
+
+        CandleSetupDetector.Detect(input, Thresholds).ShouldNotContain(signal => signal.Setup == IdeaSetup.Squeeze || signal.Setup == IdeaSetup.Accumulation);
     }
 
     // Scenario "Климакс с тенью": an impulse, 5 medians of volume, a body of 0.8 and an upper wick of 1.1. The window is the impulse's.
@@ -287,6 +403,26 @@ public class CandleSetupDetectorTests
         IdeaCandle[] narrow = [.. Enumerable.Range(0, 20).Select(index => Candle(100m, index == 3 ? 100.8m : 100.5m, index == 7 ? 99.2m : 99.5m, 100m, 1))];
 
         return Input(Candle(99.8m, 101.2m, 99.6m, 100m, 1), 0.4m, []) with { Closed = [.. wide, .. narrow], LowPercentile = percentile };
+    }
+
+    // A squeeze at ATR 2 and the 10th percentile 3 %: a closed candle at 100.0 before the window, then the 20 closed candles of the window, each
+    // flat at the close before it with 40 of volume unless its index is given with a close and a volume; the last candle stays at the last close.
+    private static CandleSetupInput Squeezed(params (int Index, decimal Close, decimal Volume)[] given)
+    {
+        var closed = new List<IdeaCandle> { new IdeaCandle(At, 100.0m, 100.2m, 99.8m, 100.0m, 40m) };
+
+        for (int index = 0; index < 20; index++)
+        {
+            decimal before = closed[^1].Close;
+            int at = Array.FindIndex(given, candle => candle.Index == index);
+            decimal close = at >= 0 ? given[at].Close : before;
+            decimal volume = at >= 0 ? given[at].Volume : 40m;
+            closed.Add(new IdeaCandle(At, before, Math.Max(before, close) + 0.2m, Math.Min(before, close) - 0.2m, close, volume));
+        }
+
+        decimal last = closed[^1].Close;
+
+        return new CandleSetupInput(closed, new IdeaCandle(At, last, last + 0.2m, last - 0.2m, last, Median), 2m, Median, [], null, 0.03m, []);
     }
 
     // The closed candles had no trades: no median to measure the volume by, so no setup needs volume, as with the setups of a move.

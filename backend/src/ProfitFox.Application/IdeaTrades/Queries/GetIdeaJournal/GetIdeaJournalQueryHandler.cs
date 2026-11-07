@@ -9,6 +9,7 @@ using ProfitFox.Domain.Entities.IdeaAutos;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.Entities.IdeaTrades.Enums;
+using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.MarketData;
@@ -123,16 +124,26 @@ public sealed class GetIdeaJournalQueryHandler(
         return new IdeaJournalTrade(trade, accountName, Origin: paper ? IdeaTradeOrigin.Paper : trade.AutoId is null ? IdeaTradeOrigin.Manual : IdeaTradeOrigin.Auto, AutoName: trade.AutoId is { } id ? everyAuto[id].Name : null);
     }
 
-    // One request for each symbol of a trade that holds something; an exchange that does not answer leaves the symbol without a price.
+    // One request of all the tickers for each category of a trade that holds something, however many pairs are open: a request a pair took
+    // 23 s for 100 open paper trades. An exchange that does not answer leaves the pairs of the category without a price.
     private async Task<IReadOnlyDictionary<Instrument, decimal>> PricesAsync(IEnumerable<IdeaTrade> opened, CancellationToken cancellationToken)
     {
         var prices = new Dictionary<Instrument, decimal>();
 
-        foreach (Instrument instrument in opened.Where(trade => trade.Status == IdeaTradeStatus.Open).Select(trade => trade.Instrument).Distinct())
+        foreach (IGrouping<MarketCategory, Instrument> category in opened.Where(trade => trade.Status == IdeaTradeStatus.Open).Select(trade => trade.Instrument).Distinct()
+                     .GroupBy(instrument => instrument.Category))
         {
             try
             {
-                prices[instrument] = await history.GetLastPriceAsync(instrument, cancellationToken);
+                IReadOnlyDictionary<string, decimal> last = await history.GetLastPricesAsync(category.Key, cancellationToken);
+
+                foreach (Instrument instrument in category)
+                {
+                    if (last.TryGetValue(instrument.Symbol, out decimal price))
+                    {
+                        prices[instrument] = price;
+                    }
+                }
             }
             catch (ExchangeException)
             {

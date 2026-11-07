@@ -19,7 +19,7 @@ public class WorkerAvailabilityTests
     [Test]
     public async Task Backtest_created_without_a_worker_stays_pending_until_a_worker_starts()
     {
-        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        await using var factory = ProfitFoxFactory.Create(workers: 0);
         using HttpClient client = factory.CreateClient();
         var scenario = new BacktestScenario(factory, client);
         await scenario.CreateBotAsync("ladder");
@@ -43,7 +43,7 @@ public class WorkerAvailabilityTests
     [Test]
     public async Task Import_job_created_without_a_worker_stays_pending_until_a_worker_starts()
     {
-        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        await using var factory = ProfitFoxFactory.Create(workers: 0);
         factory.Bybit.Instruments.Add(("linear", "BTCUSDT"));
         using HttpClient client = factory.CreateClient();
         HttpResponseMessage created = await client.PostAsJsonAsync(

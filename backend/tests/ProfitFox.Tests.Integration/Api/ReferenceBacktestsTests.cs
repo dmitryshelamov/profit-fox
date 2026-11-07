@@ -26,7 +26,7 @@ public class ReferenceBacktestsTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = await ProfitFoxFactory.CreateAsync();
+        _factory = ProfitFoxFactory.Create();
         _factory.Bybit.Instruments.Add(("linear", "BTCUSDT"));
         _factory.Bybit.Rules[("linear", "BTCUSDT")] = ("0.01", "0.001", "0.001", "1");
         _factory.Bybit.Klines.AddRange(CandleFixtures.Hourly());

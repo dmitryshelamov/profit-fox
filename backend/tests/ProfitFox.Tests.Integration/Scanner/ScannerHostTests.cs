@@ -7,7 +7,6 @@ using Microsoft.Extensions.Time.Testing;
 using Npgsql;
 
 using ProfitFox.Tests.Integration.Infrastructure;
-using ProfitFox.Tests.Integration.Persistence;
 
 using Shouldly;
 
@@ -27,7 +26,7 @@ public class ScannerHostTests
     [SetUp]
     public async Task SetUp()
     {
-        _connectionString = await MarketDataDatabase.CreateConnectionStringAsync();
+        _connectionString = IntegrationEnvironment.ConnectionString;
         _database = NpgsqlDataSource.Create(_connectionString);
         _time = new FakeTimeProvider(Start);
     }

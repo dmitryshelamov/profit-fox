@@ -30,7 +30,7 @@ public class MarketApiTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        _factory = ProfitFoxFactory.Create(workers: 0);
         _client = _factory.CreateClient();
         _database = NpgsqlDataSource.Create(_factory.ConnectionString);
     }

@@ -16,7 +16,7 @@ public static class SetupTypes
     {
         return setup switch
         {
-            IdeaSetup.Squeeze or IdeaSetup.QuietVolume => Range,
+            IdeaSetup.Squeeze or IdeaSetup.QuietVolume or IdeaSetup.Accumulation => Range,
             IdeaSetup.Exhaustion or IdeaSetup.RsiExtreme => Against,
             _ => Move
         };

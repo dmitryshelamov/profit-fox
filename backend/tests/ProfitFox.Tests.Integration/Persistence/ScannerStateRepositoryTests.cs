@@ -18,7 +18,7 @@ public class ScannerStateRepositoryTests
     [SetUp]
     public async Task SetUp()
     {
-        _dataSource = await MarketDataDatabase.CreateAsync();
+        _dataSource = MarketDataDatabase.Open();
         _store = new ScannerStateRepository(_dataSource);
     }
 

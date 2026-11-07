@@ -19,7 +19,7 @@ public class BybitCandleOnceTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = await ProfitFoxFactory.CreateAsync();
+        _factory = ProfitFoxFactory.Create();
         _factory.CreateClient().Dispose();
     }
 
@@ -82,6 +82,21 @@ public class BybitCandleOnceTests
 
         price.ShouldBe(43000.25m);
         _factory.Bybit.TickerRequests.ShouldBe([category == MarketCategory.Spot ? "spot" : "linear"]);
+    }
+
+    // The journal of idea trades: the last prices of all the open pairs of a category come from one request of its tickers, not one per pair.
+    [TestCase(MarketCategory.Spot)]
+    [TestCase(MarketCategory.Linear)]
+    public async Task Last_prices_of_a_category_are_read_from_one_request_of_its_tickers(MarketCategory category)
+    {
+        string code = category == MarketCategory.Spot ? "spot" : "linear";
+        _factory.Bybit.Tickers[(code, "ETHUSDT")] = ("2500.5", "2500.4", "2500.6", "1", "0.0001");
+        _factory.Bybit.Tickers[(code, "BTCUSDT")] = ("43000.25", "43000", "43000.5", "1", "0.0001");
+
+        IReadOnlyDictionary<string, decimal> prices = await Client().GetLastPricesAsync(category, CancellationToken.None);
+
+        (prices["ETHUSDT"], prices["BTCUSDT"]).ShouldBe((2500.5m, 43000.25m));
+        _factory.Bybit.TickerRequests.ShouldBe([code]);
     }
 
     [Test]

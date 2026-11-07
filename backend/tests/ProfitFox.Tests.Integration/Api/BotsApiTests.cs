@@ -22,7 +22,7 @@ public class BotsApiTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = await ProfitFoxFactory.CreateAsync();
+        _factory = ProfitFoxFactory.Create();
         _factory.Bybit.Instruments.UnionWith([("spot", "BTCUSDT"), ("spot", "ETHUSDT"), ("linear", "BTCUSDT")]);
         _client = _factory.CreateClient();
         _ema = await CreateStrategyAsync("EMA", StrategyFixtures.Element("ema"));
