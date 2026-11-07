@@ -74,13 +74,9 @@ public class InstrumentsApiTests
         found.Length.ShouldBe(2);
     }
 
-    // Scenarios "Лимит вне границ", "Неподдерживаемая категория" and the empty query.
+    // Scenario "Лимит вне границ" and a missing query; the other wrong parameters are in SearchInstrumentsTests.
     [TestCase("category=spot&query=btc&limit=500", "limit")]
-    [TestCase("category=spot&query=btc&limit=0", "limit")]
-    [TestCase("category=option&query=btc", "category")]
-    [TestCase("category=spot&query=", "query")]
     [TestCase("category=spot", "query")]
-    [TestCase("query=btc", "category")]
     public async Task Invalid_request_is_rejected_with_the_invalid_parameter(string query, string invalidField)
     {
         HttpResponseMessage response = await _client.GetAsync($"/api/market-data/instruments?{query}");

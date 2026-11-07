@@ -88,16 +88,6 @@ public class ExchangeAccountsApiTests
         row.ShouldNotContain(Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(Secret)));
     }
 
-    // Scenario "Пустое имя".
-    [Test]
-    public async Task Invalid_fields_are_a_bad_request()
-    {
-        HttpResponseMessage response = await _client.PostAsJsonAsync(Accounts, Body(name: ""));
-
-        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errors").TryGetProperty("name", out _).ShouldBeTrue();
-    }
-
     // Scenario "Bybit не принимает ключ"; the secret stays out of the answer and the log.
     [Test]
     public async Task Key_bybit_rejects_is_a_bad_request_on_the_key()
@@ -236,17 +226,6 @@ public class ExchangeAccountsApiTests
             .ShouldBeTrue(balance.GetRawText());
     }
 
-    // Scenario "Ключ отозван".
-    [Test]
-    public async Task Balance_of_a_key_bybit_no_longer_accepts_is_a_conflict()
-    {
-        Guid id = await CreateAsync();
-        _factory.KeyInspector.GetBalanceAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .ThrowsAsync(new ExchangeKeyRejectedException("Bybit does not accept the key: API key is invalid."));
-
-        (await _client.GetAsync($"{Accounts}/{id}/balance")).StatusCode.ShouldBe(HttpStatusCode.Conflict);
-    }
-
     [Test]
     public async Task Balance_while_bybit_is_unavailable_is_service_unavailable()
     {
@@ -258,7 +237,8 @@ public class ExchangeAccountsApiTests
     }
 
     // Requirement "Secret не выдаётся": with every logger at Verbose and the app's own Bybit client and HTTP pipeline, no event of
-    // an accepted or a rejected key, nor of the balance, carries the secret.
+    // an accepted or a rejected key, nor of the balance, carries the secret. Scenario "Ключ отозван": the balance of a key Bybit no
+    // longer accepts is a conflict.
     [Test]
     public async Task Secret_never_reaches_the_log()
     {

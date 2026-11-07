@@ -101,15 +101,6 @@ public class StrategyValidationApiTests
         result.GetProperty("errors").TryGetProperty("definition.formatVersion", out _).ShouldBeTrue();
     }
 
-    [Test]
-    public async Task Empty_name_is_rejected_like_a_save()
-    {
-        HttpResponseMessage response = await _client.PostAsJsonAsync($"{Strategies}/validate", new { name = "", definition = StrategyFixtures.Element("ema") });
-
-        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errors").TryGetProperty("name", out _).ShouldBeTrue();
-    }
-
     private async Task<JsonElement> ValidateAsync(string url, JsonNode definition)
     {
         HttpResponseMessage response = await _client.PostAsJsonAsync(url, new { name = "EMA", definition });

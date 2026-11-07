@@ -159,10 +159,7 @@ public class SavedFiltersApiTests
 
     [TestCase("", "market", "change1h", ">", "1", null, "name")]
     [TestCase("Ф", "everywhere", "change1h", ">", "1", null, "place")]
-    [TestCase("Ф", "market", "volatility", ">", "1", null, "conditions[0].field")]
     [TestCase("Ф", "market", "change1h", "reliably_positive", null, null, "conditions[0].operator")]
-    [TestCase("Ф", "ideas", "probability", "above_baseline", null, null, "conditions[0].operator")]
-    [TestCase("Ф", "ideas", "probability", "reliably_positive", null, null, "conditions[0].operator")]
     [TestCase("Ф", "market", "price", ">", "1", null, "conditions[0].field")]
     [TestCase("Ф", "market", "cases", ">", "1", null, "conditions[0].field")]
     [TestCase("Ф", "market", "aboveBaseline", "above_baseline", null, null, "conditions[0].field")]

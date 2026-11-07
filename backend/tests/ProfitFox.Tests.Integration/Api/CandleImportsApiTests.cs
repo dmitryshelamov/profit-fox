@@ -85,13 +85,8 @@ public class CandleImportsApiTests
         job.GetProperty("from").GetDateTimeOffset().ShouldBe(DateTimeOffset.Parse("2024-01-01T00:00:00Z"));
     }
 
-    // Scenarios "Неподдерживаемая категория", "Неподдерживаемый интервал", "Пустой период", "Неизвестный символ",
-    // "Время без смещения" and a missing start.
-    [TestCase("inverse", "BTCUSDT", "60", "2024-01-01T00:00:00Z", "category")]
-    [TestCase("linear", "BTCUSDT", "2", "2024-01-01T00:00:00Z", "interval")]
-    [TestCase("linear", "BTCUSDT", "60", "2024-02-01T00:00:00Z", "from")]
+    // Scenarios "Неизвестный символ" and "Время без смещения" through the API; the other wrong parameters are in CreateCandleImportTests.
     [TestCase("spot", "NOSUCHUSDT", "60", "2024-01-01T00:00:00Z", "symbol")]
-    [TestCase("linear", "BTCUSDT", "60", null, "from")]
     [TestCase("linear", "BTCUSDT", "60", "2024-01-01T00:00:00", "from")]
     public async Task Invalid_request_is_rejected_with_the_invalid_parameter(string category, string symbol, string interval, string? from, string invalidField)
     {
@@ -103,7 +98,6 @@ public class CandleImportsApiTests
     }
 
     // Scenario "Пропущен обязательный параметр": Bybit is down, so only validation can answer 400.
-    [TestCase("")]
     [TestCase(" ")]
     public async Task Empty_symbol_is_rejected_before_asking_bybit(string symbol)
     {
