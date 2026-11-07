@@ -283,10 +283,11 @@ public sealed class LiveTradingScenario : IAsyncDisposable
         IdeaStatus status = IdeaStatus.AwaitingEntry,
         Instrument? instrument = null,
         IdeaSide side = IdeaSide.Long,
-        decimal? funding = null)
+        decimal? funding = null,
+        int? burstPairs = null)
     {
         Idea idea = IdeaGenerator.Generate(Factory.Time.GetUtcNow().AddMinutes(-5), status: status, instrument: instrument ?? Linear, type: type, side: side);
-        idea = idea with { Track = idea.Track with { Plan = new IdeaPlan(type, side, entry, stop, target) }, Funding = funding };
+        idea = idea with { Track = idea.Track with { Plan = new IdeaPlan(type, side, entry, stop, target) }, Funding = funding, BurstPairs = burstPairs };
         await using var database = Npgsql.NpgsqlDataSource.Create(Factory.ConnectionString);
         await new IdeaRepository(database).SaveAsync([idea], [], CancellationToken.None);
 

@@ -15,6 +15,17 @@ public sealed class SaveIdeaAutoCommandHandler(IIdeaAutoRepository autos, IExcha
     {
         IdeaAuto auto = await autos.GetAsync(request.Id, cancellationToken) is { DeletedAt: null } found ? found : throw new NotFoundException($"There is no auto {request.Id}.");
         IdeaAutoConditions conditions = await IdeaAutoValidation.ParseAsync(request.Input, auto.Id, autos, accounts, settings, cancellationToken);
-        await autos.SaveAsync(auto with { Name = request.Input.Name.Trim(), AccountId = request.Input.AccountId, Amount = request.Input.Amount, Budget = request.Input.Budget, Conditions = conditions }, cancellationToken);
+        await autos.SaveAsync(
+            auto with
+            {
+                Name = request.Input.Name.Trim(),
+                AccountId = request.Input.AccountId,
+                Amount = request.Input.Amount,
+                Budget = request.Input.Budget,
+                Conditions = conditions,
+                MaxPerMinutePerSide = request.Input.MaxPerMinutePerSide,
+                MaxOpenPerSide = request.Input.MaxOpenPerSide
+            },
+            cancellationToken);
     }
 }

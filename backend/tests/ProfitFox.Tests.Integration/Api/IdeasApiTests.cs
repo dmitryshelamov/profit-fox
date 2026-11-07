@@ -118,6 +118,24 @@ public class IdeasApiTests
         }
     }
 
+    // Scenario "Идея со всплеском" (task 5.1 of add-burst-and-auto-limits): the idea of 15 min fired in a minute of 25 pairs of its side on its
+    // interval; the list, the ideas of the pair and the idea give the burst among the features.
+    [Test]
+    public async Task Idea_gives_the_burst_it_fired_in()
+    {
+        Idea idea = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol) with { Funding = 0.0006m, BurstPairs = 25 };
+        await new IdeaRepository(_database).SaveAsync([idea], [], CancellationToken.None);
+
+        JsonElement listed = (await ItemsAsync("/api/ideas")).EnumerateArray().Single();
+        JsonElement ofPair = (await GetAsync("/api/market/linear/SOLUSDT/ideas")).EnumerateArray().Single();
+        JsonElement single = await GetAsync($"/api/ideas/{idea.Id}");
+
+        foreach (JsonElement read in new[] { listed, ofPair, single })
+        {
+            read.GetProperty("features").EnumerateArray().Select(feature => feature.GetString()).ShouldBe(["high_funding", "burst"]);
+        }
+    }
+
     // Scenario "Корзина модели в ответе" and decision 7 of honest-idea-intervals: the numbers of the model with the own ones beside; a bucket of
     // few own cases has enough data by its parent. The list goes by the expectancy of the model: −0.10 R of the impulse before −0.20 R of the
     // drop, whose own +0.50 R would come first.

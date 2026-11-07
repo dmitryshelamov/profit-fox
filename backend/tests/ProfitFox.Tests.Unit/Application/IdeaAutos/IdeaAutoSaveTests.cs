@@ -102,6 +102,42 @@ public class IdeaAutoSaveTests
         exception.Errors.Keys.ShouldBe(["btcDrop"]);
     }
 
+    // Scenario "Условие всплеска в теле" (task 4.4 of add-burst-and-auto-limits).
+    [Test]
+    public async Task Condition_by_the_burst_is_saved_by_its_code()
+    {
+        await CreateAsync(Input(amount: 50m, budget: null) with { Burst = "without" });
+
+        await _autos.Received(1).CreateAsync(Arg.Is<IdeaAuto>(auto => auto.Conditions.Burst == FeatureCondition.Without), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+    }
+
+    // Scenario "Лимиты в теле": a limit of 2 a minute and none of the open trades, on a create and on a save.
+    [Test]
+    public async Task Limits_are_saved_with_the_auto()
+    {
+        IdeaAuto saved = IdeaAutoGenerator.Generate(Account, amount: 50m) with { MaxPerMinutePerSide = 4 };
+        _autos.GetAsync(saved.Id, Arg.Any<CancellationToken>()).Returns(saved);
+
+        await CreateAsync(Input(amount: 50m, budget: null) with { MaxPerMinutePerSide = 2 });
+        await new SaveIdeaAutoCommandHandler(_autos, _accounts, _settings).Handle(new SaveIdeaAutoCommand(saved.Id, Input(amount: 50m, budget: null) with { MaxOpenPerSide = 5 }), CancellationToken.None);
+
+        await _autos.Received(1).CreateAsync(Arg.Is<IdeaAuto>(auto => auto.MaxPerMinutePerSide == 2 && auto.MaxOpenPerSide == null), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+        await _autos.Received(1).SaveAsync(Arg.Is<IdeaAuto>(auto => auto.MaxPerMinutePerSide == null && auto.MaxOpenPerSide == 5), Arg.Any<CancellationToken>());
+    }
+
+    // Scenarios "Лимит ноль" and "Ноль в лимите": a limit below 1 is an error of its field; 1 is a limit.
+    [TestCase(0, null, "maxPerMinutePerSide")]
+    [TestCase(null, 0, "maxOpenPerSide")]
+    [TestCase(-1, -2, "maxPerMinutePerSide,maxOpenPerSide")]
+    public async Task Limit_below_one_is_an_error_of_its_field(int? perMinute, int? open, string fields)
+    {
+        ValidationFailedException exception = await Should.ThrowAsync<ValidationFailedException>(() =>
+            CreateAsync(Input(amount: 50m, budget: null) with { MaxPerMinutePerSide = perMinute, MaxOpenPerSide = open }));
+
+        exception.Errors.Keys.ShouldBe(fields.Split(','), ignoreOrder: true);
+        await CreateAsync(Input(amount: 50m, budget: null) with { MaxPerMinutePerSide = 1, MaxOpenPerSide = 1 });
+    }
+
     private Task<Guid> CreateAsync(IdeaAutoInput input)
     {
         return new CreateIdeaAutoCommandHandler(_autos, _accounts, _settings, new FakeTimeProvider()).Handle(new CreateIdeaAutoCommand(input), CancellationToken.None);
