@@ -24,5 +24,5 @@
 ## 4. Документы и проверка
 
 - [x] 4.1 `CONTEXT.md` («Случай», «Проскальзывание идей») и `docs/conventions.md` (`FeeRates`).
-- [ ] 4.2 Build, test, `dotnet format --verify-no-changes`; frontend lint, format check, typecheck, test, build; e2e по
+- [x] 4.2 Build, test, `dotnet format --verify-no-changes`; frontend lint, format check, typecheck, test, build; e2e по
   возможности.
