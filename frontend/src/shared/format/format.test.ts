@@ -1,12 +1,14 @@
 import {
   combinationsWord,
+  formatClock,
   formatDay,
+  formatFullMoment,
   formatMoment,
-  formatUtc,
   groupDigits,
   roundDecimal,
   showDecimal,
   signed,
+  utcDayStart,
 } from './format';
 
 describe('groupDigits', () => {
@@ -28,18 +30,26 @@ describe('groupDigits', () => {
 });
 
 describe('dates', () => {
-  it('shows a moment in UTC as day.month hours:minutes', () => {
-    expect(formatMoment('2026-11-02T14:05:00Z')).toBe('02.11 14:05');
+  it('shows a moment in the local zone as day.month hours:minutes', () => {
+    expect(formatMoment('2026-11-02T14:05:00Z')).toBe('02.11 17:05');
   });
 
-  it('shows a day in UTC as day.month.year', () => {
-    expect(formatDay('2024-01-01T00:00:00Z')).toBe('01.01.2024');
+  it('shows a day in the local zone as day.month.year', () => {
+    expect(formatDay('2026-11-02T22:00:00Z')).toBe('03.11.2026');
+  });
+
+  it('shows the time of day in the local zone as hours:minutes', () => {
+    expect(formatClock('2026-11-07T14:32:00Z')).toBe('17:32');
+  });
+
+  it('takes the start of the UTC day, not of the local one', () => {
+    expect(utcDayStart(Date.parse('2026-11-07T22:30:00Z'))).toBe('2026-11-07T00:00:00.000Z');
   });
 });
 
 describe('numbers and moments for tables', () => {
-  it('shows a moment in UTC as year-month-day hours:minutes', () => {
-    expect(formatUtc('2024-02-01T00:00:00Z')).toBe('2024-02-01 00:00');
+  it('shows a moment in the local zone as year-month-day hours:minutes', () => {
+    expect(formatFullMoment('2024-02-01T00:00:00Z')).toBe('2024-02-01 03:00');
   });
 
   it.each([

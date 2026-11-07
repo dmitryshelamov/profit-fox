@@ -4,12 +4,12 @@ import { useState } from 'react';
 import { sideLabel, typeLabel } from '@/modules/ideas';
 import { setupLabel } from '@/modules/market';
 import { intervalLabel } from '@/modules/market-data';
-import { formatMoment } from '@/shared/format/format';
+import { formatClock, formatMoment, utcDayStart } from '@/shared/format/format';
 import { Pager } from '@/shared/ui/Pager';
 
 import { refusalsQuery } from '../api';
 import { reasonLabel, refusalModeLabel } from '../model/labels';
-import { refusalDetailText, timeOf } from '../model/refusal';
+import { refusalDetailText } from '../model/refusal';
 
 const periods = [
   { value: 'today', label: 'Сегодня' },
@@ -35,7 +35,8 @@ export function RefusalsBlock({ autoId }: { autoId: string }) {
         </h2>
         <span className="text-xs text-faint">
           {period === 'today' ? 'сегодня' : 'за 7 дней'}
-          {data && ` ${data.total}`} · {period === 'today' ? 'с 00:00 UTC · ' : ''}новые сверху ·
+          {data && ` ${data.total}`} ·{' '}
+          {period === 'today' ? `с ${formatClock(utcDayStart(Date.now()))} · ` : ''}новые сверху ·
           идеи, которые автомат увидел и не взял
         </span>
         <div
@@ -89,7 +90,7 @@ export function RefusalsBlock({ autoId }: { autoId: string }) {
                       className={`${cell} font-mono whitespace-nowrap text-muted`}
                       title={formatMoment(refusal.at)}
                     >
-                      {period === 'today' ? timeOf(refusal.at) : formatMoment(refusal.at)}
+                      {period === 'today' ? formatClock(refusal.at) : formatMoment(refusal.at)}
                     </td>
                     <td className={`${cell} font-semibold`}>{refusal.autoName}</td>
                     <td className={`${cell} whitespace-nowrap`}>

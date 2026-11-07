@@ -66,7 +66,7 @@ describe('screen of the exit rules', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Цель 2R' }));
     await userEvent.click(screen.getByRole('button', { name: '1 ч' }));
     expect(await screen.findByText('срок 48 свечей · цель 2R')).toBeInTheDocument();
-    expect(screen.getByText(/применено 06\.11 10:15 UTC/)).toBeInTheDocument();
+    expect(screen.getByText(/применено 06\.11 13:15$/)).toBeInTheDocument();
   });
 
   // Scenario "Уровни без цели".
@@ -211,7 +211,7 @@ describe('screen of the exit rules', () => {
     expect(
       await screen.findByText('срок 48 свечей · цель 2R · окно входа 4 свечи'),
     ).toBeInTheDocument();
-    expect(screen.getByText(/применено 06\.11 12:00 UTC/)).toBeInTheDocument();
+    expect(screen.getByText(/применено 06\.11 15:00$/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Применить' })).toBeDisabled();
     const put = requests.find((request) => request.method === 'PUT')!;
     expect(await put.json()).toEqual({ life: 48, target: 2, window: 4 });
@@ -240,16 +240,16 @@ describe('screen of the exit rules', () => {
       within(table)
         .getAllByRole('columnheader')
         .map((header) => header.textContent),
-    ).toEqual(['', 'подбор: с 08.08 12:00', 'проверка: 07.10 12:00 – 30.10 11:59']);
+    ).toEqual(['', 'подбор: с 08.08 15:00', 'проверка: 07.10 15:00 – 30.10 14:59']);
     expect(within(table).getByRole('row', { name: /кандидат/ })).toHaveTextContent(
-      'кандидат · 24 · 2R · 4 · подбор до 07.10 05:59',
+      'кандидат · 24 · 2R · 4 · подбор до 07.10 08:59',
     );
     expect(cells(table, /кандидат/)).toEqual([
       '≈ +0.05 R · от -0.02 до +0.12 · 60 входов',
       '≈ -0.03 R · от -0.10 до +0.04 · 40 входов',
     ]);
     expect(within(table).getByRole('row', { name: /лучшее на подборе/ })).toHaveTextContent(
-      'лучшее на подборе · 96 · 3R · 4 · подбор до 06.10 11:59',
+      'лучшее на подборе · 96 · 3R · 4 · подбор до 06.10 14:59',
     );
     expect(cells(table, /лучшее на подборе/)).toEqual([
       '▲ +0.12 R · от +0.02 до +0.22 · 60 входов',

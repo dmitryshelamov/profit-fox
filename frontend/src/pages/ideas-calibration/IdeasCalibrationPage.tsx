@@ -162,7 +162,7 @@ function ReportView({ report }: { report: Report }) {
     );
   }
 
-  const counters = `Проверено ${casesText(Number(report.checked))} · без статистики корзины ${groupDigits(String(report.unchecked))} · посчитано ${formatMoment(report.computedAt)} UTC`;
+  const counters = `Проверено ${casesText(Number(report.checked))} · без статистики корзины ${groupDigits(String(report.unchecked))} · посчитано ${formatMoment(report.computedAt)}`;
 
   if (report.total === null) {
     return (

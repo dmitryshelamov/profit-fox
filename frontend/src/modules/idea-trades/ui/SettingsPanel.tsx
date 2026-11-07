@@ -3,6 +3,7 @@ import { type ReactNode, useId, useState } from 'react';
 
 import { accountsQuery } from '@/modules/exchange-accounts';
 import { ApiError, type Schemas } from '@/shared/api/client';
+import { formatClock, utcDayStart } from '@/shared/format/format';
 import { Button } from '@/shared/ui/Button';
 
 import { type SettingsInput, tradingSettingsQuery, useSaveSettings } from '../api';
@@ -95,6 +96,8 @@ function SettingsForm({
   guards: Schemas['IdeaGuardsResponse'] | undefined;
 }) {
   const [form, setForm] = useState(initial);
+  // The server counts the day of the stop from 00:00 UTC; the owner reads it in the local time.
+  const dayStart = formatClock(utcDayStart(Date.now()));
   const accounts = useQuery(accountsQuery);
   const save = useSaveSettings();
   const errors = settingsFieldErrors(
@@ -200,8 +203,8 @@ function SettingsForm({
           >
             {guards && <DayBar guards={guards} />}
             <span className={hint}>
-              С 00:00 UTC — закрытые сегодня реальные сделки, ручные и автоматов; при убытке выше
-              предела автоматы не входят до следующих суток UTC. Ручные входы и открытые сделки он
+              С {dayStart} — закрытые сегодня реальные сделки, ручные и автоматов; при убытке выше
+              предела автоматы не входят до следующих {dayStart}. Ручные входы и открытые сделки он
               не трогает. Пустое поле — защита выключена.
             </span>
           </Field>

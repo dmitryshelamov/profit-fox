@@ -160,10 +160,7 @@ function RuleEditor({ rule, grid }: { rule: Rule; grid: readonly number[] }) {
         {ruleText(current)}
         <span className="text-faint">
           {' '}
-          ·{' '}
-          {rule.appliedAt === null
-            ? 'по умолчанию'
-            : `применено ${formatMoment(rule.appliedAt)} UTC`}
+          · {rule.appliedAt === null ? 'по умолчанию' : `применено ${formatMoment(rule.appliedAt)}`}
         </span>
       </p>
       <div className="grid gap-4 rounded-xl border border-line bg-panel px-5 py-4 md:grid-cols-3">

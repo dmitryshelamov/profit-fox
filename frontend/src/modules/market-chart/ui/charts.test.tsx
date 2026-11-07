@@ -1,5 +1,6 @@
 import { render } from '@testing-library/react';
-import { createChart, createSeriesMarkers } from 'lightweight-charts';
+import { createChart, createSeriesMarkers, TickMarkType } from 'lightweight-charts';
+import type { ReactElement } from 'react';
 
 import type { BarInput, LiveCandle } from '../model/liveCandles';
 import type { OrderInput } from '../model/orderLines';
@@ -593,5 +594,48 @@ describe('open interest and funding charts', () => {
     );
 
     expect(lastSeries().setData).toHaveBeenLastCalledWith([{ time: t0, value: 5 }]);
+  });
+});
+
+// Requirement "Время в местном часовом поясе": every chart labels its axis and crosshair in the local zone (Moscow).
+describe('time of the charts', () => {
+  const at = Date.parse('2024-01-05T14:00:00Z') / 1000;
+  const charts: [string, ReactElement][] = [
+    ['price and equity', <PriceEquityChart points={points} markers={[]} label="c" />],
+    ['equity comparison', <EquityComparisonChart lines={[]} label="c" />],
+    [
+      'bot candles',
+      <BotCandleChart
+        history={[]}
+        live={[]}
+        fills={[]}
+        orders={[]}
+        interval="60"
+        label="c"
+        onReachStart={() => undefined}
+      />,
+    ],
+    ['open interest', <OpenInterestChart points={[]} label="c" formatValue={String} />],
+    ['funding', <FundingChart points={[]} label="c" />],
+  ];
+
+  it.each(charts)('labels the time of the %s chart in the local zone', (_, chart) => {
+    render(chart);
+
+    const options = vi.mocked(createChart).mock.calls.at(-1)![1] as {
+      localization: { timeFormatter: (time: number) => string };
+      timeScale: { tickMarkFormatter: (time: number, type: TickMarkType) => string };
+    };
+    expect(options.localization.timeFormatter(at)).toBe('2024-01-05 17:00');
+    expect(options.timeScale.tickMarkFormatter(at, TickMarkType.Time)).toBe('17:00');
+  });
+
+  it('keeps the price formatter of the open interest chart', () => {
+    render(<OpenInterestChart points={[]} label="c" formatValue={() => 'v'} />);
+
+    const options = vi.mocked(createChart).mock.calls.at(-1)![1] as {
+      localization: { priceFormatter: (value: number) => string };
+    };
+    expect(options.localization.priceFormatter(1)).toBe('v');
   });
 });

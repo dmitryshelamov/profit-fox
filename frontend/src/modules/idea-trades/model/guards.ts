@@ -50,5 +50,5 @@ export const sidesStateText = (guards: Guards) =>
 export function resumeText(guards: Guards): string | null {
   return guards.triggeredAt === null || guards.resumesAt === null
     ? null
-    : `автоматы снова входят с ${formatMoment(guards.resumesAt)} UTC`;
+    : `автоматы снова входят с ${formatMoment(guards.resumesAt)}`;
 }

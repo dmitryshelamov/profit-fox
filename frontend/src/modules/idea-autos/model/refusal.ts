@@ -1,20 +1,11 @@
 import type { Schemas } from '@/shared/api/client';
-import { roundDecimal } from '@/shared/format/format';
+import { formatClock, roundDecimal } from '@/shared/format/format';
 
 type Holder = Schemas['PairHolderResponse'];
 
-const two = (value: number) => String(value).padStart(2, '0');
-
-/** `13:05`: a time of day in UTC. */
-export function timeOf(iso: string): string {
-  const date = new Date(iso);
-
-  return `${two(date.getUTCHours())}:${two(date.getUTCMinutes())}`;
-}
-
 /** Whose trade holds the pair, and since when. */
 function holderText(holder: Holder): string {
-  const since = timeOf(holder.since);
+  const since = formatClock(holder.since);
   const account = holder.accountName ?? '';
 
   if (holder.kind === 'same_auto') {

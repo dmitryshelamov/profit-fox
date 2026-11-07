@@ -58,14 +58,14 @@ describe('new backtest form', () => {
     vi.unstubAllGlobals();
   });
 
-  // Scenario "Период по умолчанию".
+  // Scenarios "Период по умолчанию" and "Период в местном времени": the UTC boundary shown in Moscow time.
   it('offers the 30 days up to the last closed candle of the bot interval', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true, now: new Date('2026-11-02T12:30:00Z') });
     fakeApi(routes());
     renderApp(`/bots/${botId}/backtests/new`);
 
-    expect(await screen.findByLabelText('Начало периода')).toHaveValue('2026-10-03 12:00');
-    expect(screen.getByLabelText('Конец периода')).toHaveValue('2026-11-02 12:00');
+    expect(await screen.findByLabelText('Начало периода')).toHaveValue('2026-10-03 15:00');
+    expect(screen.getByLabelText('Конец периода')).toHaveValue('2026-11-02 15:00');
     expect(await screen.findByText(/последняя версия стратегии v7/)).toBeInTheDocument();
   });
 
@@ -75,12 +75,12 @@ describe('new backtest form', () => {
     renderApp(`/bots/${botId}/backtests/new`);
 
     await userEvent.click(await screen.findByRole('button', { name: '90 дней' }));
-    expect(screen.getByLabelText('Начало периода')).toHaveValue('2026-08-04 12:00');
+    expect(screen.getByLabelText('Начало периода')).toHaveValue('2026-08-04 15:00');
     await userEvent.click(screen.getByRole('button', { name: '1 год' }));
-    expect(screen.getByLabelText('Начало периода')).toHaveValue('2025-11-02 12:00');
-    expect(screen.getByLabelText('Конец периода')).toHaveValue('2026-11-02 12:00');
+    expect(screen.getByLabelText('Начало периода')).toHaveValue('2025-11-02 15:00');
+    expect(screen.getByLabelText('Конец периода')).toHaveValue('2026-11-02 15:00');
     await userEvent.click(screen.getByRole('button', { name: '30 дней' }));
-    expect(screen.getByLabelText('Начало периода')).toHaveValue('2026-10-03 12:00');
+    expect(screen.getByLabelText('Начало периода')).toHaveValue('2026-10-03 15:00');
   });
 
   // Scenario "Диапазон параметра".
@@ -145,8 +145,8 @@ describe('new backtest form', () => {
 
     await waitFor(() => expect(history.location.pathname).toBe(`/backtests/${createdId}`));
     expect(await submitted(requests)).toEqual({
-      from: '2026-10-03T12:00:00Z',
-      to: '2026-11-02T12:00:00Z',
+      from: '2026-10-03T12:00:00.000Z',
+      to: '2026-11-02T12:00:00.000Z',
       parameters: { fast: 12 },
     });
   });
@@ -355,6 +355,42 @@ describe('new backtest form', () => {
 
     expect(await screen.findByText('Не меньше 2')).toBeInTheDocument();
     expect(screen.getByLabelText('fast min')).toHaveClass('border-err');
+  });
+
+  it('sends a local moment typed in the period as UTC', async () => {
+    const requests = fakeApi(
+      routes({
+        [`POST /api/bots/${botId}/backtests`]: created,
+        [`GET /api/backtests/${createdId}`]: () => problem(404, 'later'),
+      }),
+    );
+    renderApp(`/bots/${botId}/backtests/new`);
+
+    await setField('Начало периода', '2025-02-03 00:00');
+    await setField('Конец периода', '2025-02-13 03:00');
+    await userEvent.click(screen.getByRole('button', { name: 'Запустить' }));
+
+    expect(await submitted(requests)).toMatchObject({
+      from: '2025-02-02T21:00:00.000Z',
+      to: '2025-02-13T00:00:00.000Z',
+    });
+  });
+
+  it('sends text that is no moment as typed, and the server rejects it at its field', async () => {
+    const requests = fakeApi(
+      routes({
+        [`POST /api/bots/${botId}/backtests`]: () =>
+          problem(400, 'x', { errors: { from: ['Не момент времени.'] } }),
+      }),
+    );
+    renderApp(`/bots/${botId}/backtests/new`);
+
+    await setField('Начало периода', ' вчера ');
+    await userEvent.click(screen.getByRole('button', { name: 'Запустить' }));
+
+    expect(await screen.findByText('Не момент времени.')).toBeInTheDocument();
+    expect(await submitted(requests)).toMatchObject({ from: 'вчера' });
+    expect(screen.getByLabelText('Начало периода')).toHaveClass('border-err');
   });
 
   it('shows the error of the period at the period', async () => {
