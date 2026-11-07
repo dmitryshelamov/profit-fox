@@ -11,13 +11,15 @@ using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Application.Scanner;
 
 /// <summary>
-///     The scanner while it holds the stream: the list of pairs, the stream of minute candles, the loads, the minute cycle and the ideas. Seven
-///     lanes run side by side: the stream's candles go to storage in batches; the REST lane catches up the pairs that lag behind, reads the list
+///     The scanner while it holds the stream: the list of pairs, the streams of minute candles and of liquidations, the loads, the minute cycle
+///     and the ideas. Nine lanes run side by side: the stream's candles go to storage in batches; the liquidations of linear pairs go to storage
+///     in batches, and the breaks of their stream to a table of their own, since the missed events cannot be loaded again; the REST lane catches up the pairs that lag behind, reads the list
 ///     again, tops up funding and loads history, one piece at a time; the minute cycle computes the snapshot and the live ideas; one lane clears the signals of other versions of the rules; the lane of
 ///     ideas reads the warm-ups of the live ideas, replays history from storage only and removes the ideas closed more than a week ago once an
 ///     hour; one lane of statistics recomputes the buckets and the calibration once an hour, another the buckets of a type × interval whose exit
@@ -35,6 +37,8 @@ public sealed class ScannerSession(
     IdeaStatistics statistics,
     IdeaRecomputes recomputes,
     ScannerMarket market,
+    ILiquidationRepository liquidations,
+    IStreamBreakRepository breaks,
     IScannerJournal journal,
     TimeProvider time)
 {
@@ -43,12 +47,20 @@ public sealed class ScannerSession(
     private static readonly TimeSpan StatisticsRefresh = TimeSpan.FromHours(1);
     private static readonly TimeSpan ClosedRemoval = TimeSpan.FromHours(1);
 
+    private const string LiquidationStream = "liquidations";
+
     private readonly Channel<(Instrument, Candle)> _closed = Channel.CreateUnbounded<(Instrument, Candle)>();
+    private readonly Channel<(Instrument, LiquidationEvent)> _liquidations = Channel.CreateUnbounded<(Instrument, LiquidationEvent)>();
+    private readonly Channel<StreamBreak> _breaks = Channel.CreateUnbounded<StreamBreak>();
     private readonly Lock _lock = new Lock();
     private readonly HashSet<Instrument> _catchUp = [];
     private readonly TaskCompletionSource _cleaned = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
     private TaskCompletionSource _work = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
     private IAsyncDisposable? _subscription;
+
+    // The start of a break of the liquidation stream not yet written: the last stored event when the session starts, the loss of a connection,
+    // or the moment the subscription was taken off to be made again.
+    private DateTimeOffset? _liquidationsLostAt;
 
     /// <summary>Runs until <paramref name="cancellationToken" /> ends the lease; the stream is taken off then.</summary>
     /// <exception cref="ScannerLeaseLostException">Another scanner took the stream.</exception>
@@ -70,10 +82,13 @@ public sealed class ScannerSession(
 
         using var session = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
+        // Scenario "Сканер сменил держателя": the stream of the previous holder ended somewhere after its last stored event.
+        _liquidationsLostAt = await liquidations.LastTimeAsync(cancellationToken);
+
         try
         {
             await SubscribeAsync(session.Token);
-            Task[] lanes = [WriteCandlesAsync(session.Token), RestAsync(session.Token), MinutesAsync(session.Token), CleanUpAsync(session.Token), IdeasAsync(session.Token),
+            Task[] lanes = [WriteCandlesAsync(session.Token), WriteLiquidationsAsync(session.Token), WriteBreaksAsync(session.Token), RestAsync(session.Token), MinutesAsync(session.Token), CleanUpAsync(session.Token), IdeasAsync(session.Token),
                 WholeStatisticsAsync(session.Token),
                 RuleStatisticsAsync(session.Token)];
             Task first = await Task.WhenAny(lanes);
@@ -99,16 +114,107 @@ public sealed class ScannerSession(
     {
         if (_subscription is not null)
         {
-            // Closed once: a subscription that then fails leaves none, and the REST lane makes it again.
+            // Closed once: a subscription that then fails leaves none, and the REST lane makes it again. The liquidations until the next
+            // subscription are missed.
+            LiquidationsLost(time.GetUtcNow());
             await _subscription.DisposeAsync();
             _subscription = null;
         }
 
-        _subscription = await streams.SubscribeMinuteCandlesAsync(
+        IAsyncDisposable candleSubscription = await streams.SubscribeMinuteCandlesAsync(
             [.. market.Listed().Select(pair => pair.Instrument)],
             (instrument, candle) => _closed.Writer.TryWrite((instrument, candle)),
             () => CatchUp(market.Listed().Select(pair => pair.Instrument)),
             cancellationToken);
+        IAsyncDisposable liquidationSubscription;
+
+        try
+        {
+            liquidationSubscription = await streams.SubscribeLiquidationsAsync(
+                [.. market.Listed().Select(pair => pair.Instrument).Where(instrument => instrument.Category == MarketCategory.Linear)],
+                (instrument, liquidation) => _liquidations.Writer.TryWrite((instrument, liquidation)),
+                LiquidationsLost,
+                LiquidationsRestored,
+                cancellationToken);
+        }
+        catch
+        {
+            // Both go together, so the REST lane makes both again.
+            await candleSubscription.DisposeAsync();
+
+            throw;
+        }
+
+        _subscription = new Subscriptions(candleSubscription, liquidationSubscription);
+        LiquidationsRestored(time.GetUtcNow());
+    }
+
+    /// <summary>The liquidations go to storage in one batch per wake-up; a batch that failed is a break, as nothing can load it again.</summary>
+    private async Task WriteLiquidationsAsync(CancellationToken cancellationToken)
+    {
+        while (await _liquidations.Reader.WaitToReadAsync(cancellationToken))
+        {
+            var batch = new List<(Instrument Instrument, LiquidationEvent Event)>();
+
+            while (_liquidations.Reader.TryRead(out (Instrument, LiquidationEvent) item))
+            {
+                batch.Add(item);
+            }
+
+            try
+            {
+                await liquidations.AddAsync(batch, cancellationToken);
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                journal.Failed(LiquidationStream, exception);
+                _breaks.Writer.TryWrite(new StreamBreak(LiquidationStream, batch.Min(item => item.Event.Time), batch.Max(item => item.Event.Time)));
+            }
+        }
+    }
+
+    private async Task WriteBreaksAsync(CancellationToken cancellationToken)
+    {
+        while (await _breaks.Reader.WaitToReadAsync(cancellationToken))
+        {
+            while (_breaks.Reader.TryRead(out StreamBreak? streamBreak))
+            {
+                try
+                {
+                    await breaks.AddAsync(streamBreak, cancellationToken);
+                }
+                catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+                {
+                    journal.Failed("stream-breaks", exception);
+                }
+            }
+        }
+    }
+
+    /// <summary>A break starts at the first loss not yet written.</summary>
+    private void LiquidationsLost(DateTimeOffset at)
+    {
+        lock (_lock)
+        {
+            _liquidationsLostAt ??= at;
+        }
+    }
+
+    /// <summary>The stream is back: the break since the loss, if any, goes to storage.</summary>
+    private void LiquidationsRestored(DateTimeOffset at)
+    {
+        DateTimeOffset? lostAt;
+
+        lock (_lock)
+        {
+            lostAt = _liquidationsLostAt;
+            _liquidationsLostAt = null;
+        }
+
+        if (lostAt is not null)
+        {
+            _breaks.Writer.TryWrite(new StreamBreak(LiquidationStream, lostAt.Value, at));
+        }
     }
 
     /// <summary>The closed minutes go to storage in one batch per wake-up, then move the coverage.</summary>
@@ -385,6 +491,16 @@ public sealed class ScannerSession(
             _catchUp.Clear();
 
             return taken;
+        }
+    }
+
+    /// <summary>The candles and the liquidations of the list of pairs, taken off together.</summary>
+    private sealed class Subscriptions(IAsyncDisposable candles, IAsyncDisposable liquidations) : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync()
+        {
+            await candles.DisposeAsync();
+            await liquidations.DisposeAsync();
         }
     }
 }

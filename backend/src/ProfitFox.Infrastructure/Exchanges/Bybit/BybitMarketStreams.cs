@@ -82,6 +82,7 @@ internal sealed class BybitMarketStreams(ILoggerFactory loggers, BybitSettings s
     {
         BybitSocketClient client = Client();
         var stream = new Stream(client);
+        var breaks = new Breaks(lost, restored, time);
 
         try
         {
@@ -98,8 +99,8 @@ internal sealed class BybitMarketStreams(ILoggerFactory loggers, BybitSettings s
                     throw new ExchangeUnavailableException($"Bybit refused the stream: {result.Error!.Message}");
                 }
 
-                result.Data.ConnectionLost += () => lost(time.GetUtcNow());
-                result.Data.ConnectionRestored += _ => restored(time.GetUtcNow());
+                result.Data.ConnectionLost += breaks.Lost;
+                result.Data.ConnectionRestored += _ => breaks.Restored();
             }
         }
         catch
@@ -153,6 +154,28 @@ internal sealed class BybitMarketStreams(ILoggerFactory loggers, BybitSettings s
                     new Price(kline.ClosePrice),
                     new Volume(kline.Volume),
                     new Volume(kline.Turnover)));
+        }
+    }
+
+    /// <summary>One break of the stream for the breaks of its subscriptions: lost with the first lost, back when the last is back.</summary>
+    private sealed class Breaks(Action<DateTimeOffset> lost, Action<DateTimeOffset> restored, TimeProvider time)
+    {
+        private int _down;
+
+        public void Lost()
+        {
+            if (Interlocked.Increment(ref _down) == 1)
+            {
+                lost(time.GetUtcNow());
+            }
+        }
+
+        public void Restored()
+        {
+            if (Interlocked.Decrement(ref _down) == 0)
+            {
+                restored(time.GetUtcNow());
+            }
         }
     }
 

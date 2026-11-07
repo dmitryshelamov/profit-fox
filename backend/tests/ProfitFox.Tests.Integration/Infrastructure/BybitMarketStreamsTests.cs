@@ -164,4 +164,21 @@ public class BybitMarketStreamsTests
         first.ShouldBe(("lost", Now));
         second.ShouldBe(("restored", Now));
     }
+
+    // A connection carries several subscriptions, and each tells its own break; the stream tells one break: lost with the first, back with the last.
+    [Test]
+    public async Task Break_of_several_subscriptions_is_told_once()
+    {
+        Instrument[] linear = [.. Enumerable.Range(0, 25).Select(i => new Instrument(MarketCategory.Linear, $"C{i:000}USDT"))];
+        var lost = 0;
+        var restored = new SemaphoreSlim(0);
+        await using IAsyncDisposable subscription = await _streams.SubscribeLiquidationsAsync(
+            linear, (_, _) => { }, _ => Interlocked.Increment(ref lost), _ => restored.Release(), CancellationToken.None);
+
+        await _server.DropAsync();
+
+        (await restored.WaitAsync(TimeSpan.FromSeconds(30))).ShouldBeTrue();
+        (await restored.WaitAsync(TimeSpan.FromSeconds(2))).ShouldBeFalse();
+        lost.ShouldBe(1);
+    }
 }

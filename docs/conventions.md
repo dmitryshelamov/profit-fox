@@ -136,7 +136,10 @@ enforces a rule, the check is the source of truth.
 - `Scanner` holds the scanner: `ScannerSettings`, `ScannerMarket` (memory of the last day of every pair, the snapshot from it),
   `Universe/ScannerUniverse` (the list of pairs), `Backfill/ScannerBackfill` (the last day, the gaps, the history, funding),
   `Minute/ScannerMinuteCycle` (tickers, the point of open interest, the snapshot) and `ScannerSession`, which runs them while the
-  scanner holds the stream. `Ports/Market` holds `IMarketDataFeed` (REST of public data, through the scanner's own rate limit),
+  scanner holds the stream. The session subscribes the liquidations of the linear pairs with the candles and takes both off together; a lane
+  writes them in batches, and every break of their stream goes to `stream_breaks` as `liquidations`: a lost connection until it is back, a
+  batch that failed to be written, the time between taking a subscription off and making it again, and, when the session starts, the time
+  from the last stored event (none without one). `Ports/Market` holds `IMarketDataFeed` (REST of public data, through the scanner's own rate limit),
   `IMarketStreams` (minute candles in batches; the liquidations of linear pairs, with the times a connection was lost and back) and `IScannerJournal`. `Market/Queries` holds the queries of the market API
   (`GetMarket`, `GetMarketPair`, `GetMarketCandles`, `GetMarketSeries`); `Market/MarketOrder` is the order of the rows of «Рынок»
   (a column and a direction, rows without a value last, equal values by category code and symbol, ordinally); `MarketData/ChartCandles` is the period of a chart the
