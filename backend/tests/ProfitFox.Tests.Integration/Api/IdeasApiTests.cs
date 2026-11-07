@@ -163,7 +163,7 @@ public class IdeasApiTests
         ideas.Select(idea => idea.GetProperty("id").GetGuid()).ShouldBe([withBucket.Id, without.Id]);
         ideas[1].GetProperty("tick").ValueKind.ShouldBe(JsonValueKind.Null);
         ideas[1].GetProperty("bucket").ValueKind.ShouldBe(JsonValueKind.Null);
-        decimal.Parse(ideas[1].GetProperty("breakEven").GetString()!, CultureInfo.InvariantCulture).ShouldBe(0.0486929m / (0.0940857m + 0.0486929m), 0.000001m);
+        decimal.Parse(ideas[1].GetProperty("breakEven").GetString()!, CultureInfo.InvariantCulture).ShouldBe(0.0496691m / (0.0930381m + 0.0496691m), 0.000001m);
         (await ItemsAsync("/api/ideas?nonNegativeExpectancy=true")).GetArrayLength().ShouldBe(0);
     }
 
@@ -541,9 +541,9 @@ public class IdeasApiTests
         (idea.GetProperty("entry").GetString(), idea.GetProperty("stop").GetString(), idea.GetProperty("target").GetString())
             .ShouldBe(("100.5", Text(stop), Text(100.5m - (2m * (stop - 100.5m)))));
         idea.GetProperty("riskReward").GetString().ShouldBe("2");
-        // Scenario "Своя идея": the R:R and the break-even after the fees of linear, a market entry.
+        // Scenario "Своя идея": the R:R and the break-even after the fees and the slippage of linear, a market entry.
         decimal target = 100.5m - (2m * (stop - 100.5m));
-        IdeaShares shares = IdeaMoney.PerUsdt(new IdeaPlan(IdeaType.TwoR, IdeaSide.Short, 100.5m, stop, target), new FeeRates(0.02m, 0.055m));
+        IdeaShares shares = IdeaMoney.PerUsdt(new IdeaPlan(IdeaType.TwoR, IdeaSide.Short, 100.5m, stop, target), new FeeRates(0.02m, 0.055m, 0.05m));
         idea.GetProperty("netRiskReward").GetString().ShouldBe(Text(shares.NetRiskReward));
         idea.GetProperty("breakEven").GetString().ShouldBe(Text(shares.BreakEven!.Value));
         shares.BreakEven.Value.ShouldBeGreaterThan(1m / 3m);
@@ -679,17 +679,18 @@ public class IdeasApiTests
         return new Candle(time, new Price(open), new Price(high), new Price(low), new Price(close), new Volume(1m), new Volume(100m));
     }
 
-    // Scenario "Деньги на 1 USDT суммы" for the idea of the generator on linear (entry 105, stop 100, target 115, taker 0.055 %):
-    // (10 − 0.05775 − 0.06325) / 105, (5 + 0.05775 + 0.055) / 105, 5 / 105, and the first over the second.
+    // Scenario "Деньги на 1 USDT суммы" for the idea of the generator on linear (entry 105, stop 100, target 115, taker 0.055 %, slippage
+    // 0.05 %): the entry buys at 105.0525, the target sells at 114.9425 and the stop at 99.95, the fees on those prices:
+    // (9.89 − 0.0577789 − 0.0632184) / 105, (5.1025 + 0.0577789 + 0.0549725) / 105, 5 / 105, and the first over the second.
     private static void ShouldHaveMoney(JsonElement idea)
     {
         decimal Share(string name) => decimal.Parse(idea.GetProperty(name).GetString()!, CultureInfo.InvariantCulture);
 
-        Share("profitPerUsdt").ShouldBe(0.0940857m, 0.0000001m);
-        Share("lossPerUsdt").ShouldBe(0.0486929m, 0.0000001m);
+        Share("profitPerUsdt").ShouldBe(0.0930381m, 0.0000001m);
+        Share("lossPerUsdt").ShouldBe(0.0496691m, 0.0000001m);
         Share("riskPerUsdt").ShouldBe(0.0476190m, 0.0000001m);
         // Scenario "R:R идеи после комиссий": the profit over the loss, not the 2 of the prices.
-        Share("netRiskReward").ShouldBe(1.9322m, 0.0001m);
+        Share("netRiskReward").ShouldBe(1.8732m, 0.0001m);
     }
 
     private static string Text(decimal value)

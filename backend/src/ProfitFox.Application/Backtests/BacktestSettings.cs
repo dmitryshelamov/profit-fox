@@ -12,7 +12,7 @@ public sealed class BacktestSettings
     /// <summary>Threads one backtest computes combinations on; without it, every core but one, at least one.</summary>
     public int? MaxParallelism { get; init; }
 
-    /// <summary>Base fee rates of the exchange in percent by market category code (<c>spot</c>, <c>linear</c>).</summary>
+    /// <summary>Base fee rates of the exchange and the slippage of the ideas in percent by market category code (<c>spot</c>, <c>linear</c>).</summary>
     public Dictionary<string, FeeRateSettings> DefaultFees { get; init; } = [];
 
     public int Threads => MaxParallelism ?? Math.Max(Environment.ProcessorCount - 1, 1);
@@ -28,6 +28,6 @@ public sealed class BacktestSettings
 
                     return category;
                 },
-                fees => new FeeRates(fees.Value.Limit, fees.Value.Market)));
+                fees => new FeeRates(fees.Value.Limit, fees.Value.Market, fees.Value.Slippage)));
     }
 }

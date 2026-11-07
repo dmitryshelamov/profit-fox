@@ -153,6 +153,15 @@ public class BacktestCreationTests
         bot.Balance.ShouldBe(1000m);
     }
 
+    // Requirement "Проскальзывание идей", scenario "Бэктест не берёт ставку идей".
+    [Test]
+    public void Backtest_without_a_slippage_does_not_take_the_slippage_of_the_ideas()
+    {
+        var policy = new BacktestPolicy(10000, new Dictionary<MarketCategory, FeeRates> { [MarketCategory.Linear] = new FeeRates(0.02m, 0.055m, 0.05m) });
+
+        Backtest.Create(Id, Ema(MarketCategory.Linear), Version(), From, To, NoSpecs, NoOverrides, policy, Rules, Engine, Now).Simulation.SlippagePercent.ShouldBe(0m);
+    }
+
     [Test]
     public void Negative_rates_and_a_balance_that_is_not_positive_are_rejected()
     {
