@@ -142,10 +142,15 @@ describe('ideas screen', () => {
       screen.getByText(/Вероятность и ожидание — числа модели: доля «Цель» и средний итог корзины/),
     ).toBeInTheDocument();
     expect(
+      screen.getByText(/безубыток идеи после комиссий и проскальзывания\./),
+    ).toBeInTheDocument();
+    expect(
       screen.getByText(/интервал ожидания модели выше нуля, содержит ноль или ниже нуля/),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/на сумму на идею: при цели и при стопе, после комиссий/),
+      screen.getByText(
+        'Прибыль / убыток на сумму на идею: при цели и при стопе, после комиссий и проскальзывания (на всех исполнениях, кроме лимитного входа «Отката»).',
+      ),
     ).toBeInTheDocument();
   });
 

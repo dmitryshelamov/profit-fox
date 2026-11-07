@@ -127,7 +127,12 @@ describe('screen of the exit rules', () => {
     ).toEqual(['', 'было · 24 · 2R · 4', 'станет · 48 · 2.5R · 4']);
     expect(screen.getByRole('heading', { name: 'Было → станет' })).toBeInTheDocument();
     expect(
-      screen.getByText('по прошлым сигналам «Откат» 15 мин всех сетапов и пар · после комиссий'),
+      screen.getByText(
+        'по прошлым сигналам «Откат» 15 мин всех сетапов и пар · после комиссий и проскальзывания',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('- - нужно, чтобы цель x R окупилась после комиссий и проскальзывания'),
     ).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: 'Ожидание от срока жизни' }).nextElementSibling,

@@ -239,7 +239,7 @@ function RuleEditor({ rule, grid }: { rule: Rule; grid: readonly number[] }) {
           <header className="flex flex-wrap items-baseline gap-x-3">
             <h2 className="font-semibold">Было → станет</h2>
             <p className="text-xs text-faint">
-              по прошлым сигналам {label} всех сетапов и пар · после комиссий
+              по прошлым сигналам {label} всех сетапов и пар · после комиссий и проскальзывания
             </p>
           </header>
           <div className="grid gap-4 lg:grid-cols-2">
@@ -303,7 +303,7 @@ function RuleEditor({ rule, grid }: { rule: Rule; grid: readonly number[] }) {
               />
               <p className="flex flex-wrap gap-x-4 text-xs text-muted">
                 <span className="text-series-1">— дошли до +x R</span>
-                <span>- - нужно, чтобы цель x R окупилась после комиссий</span>
+                <span>- - нужно, чтобы цель x R окупилась после комиссий и проскальзывания</span>
               </p>
             </section>
           </div>
