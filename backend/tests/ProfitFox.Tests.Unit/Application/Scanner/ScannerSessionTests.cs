@@ -566,7 +566,7 @@ public class ScannerSessionTests
         var settings = new ScannerSettings { HistoryDays = 1, UniverseRefresh = universeRefresh ?? new ScannerSettings().UniverseRefresh };
         var pace = new ScannerPace();
         var recomputes = new IdeaRecomputes();
-        var ideas = new LiveIdeas(_ideaStore, Substitute.For<IIdeaVolatilityRepository>(), _candles, _exitRules, recomputes, market, new IdeasSettings(), new BacktestSettings(), NoAutos.Create(market, new BacktestSettings(), _time, _entries, _refusals), _time);
+        var ideas = new LiveIdeas(_ideaStore, Substitute.For<IIdeaVolatilityRepository>(), _candles, Substitute.For<IFundingRateRepository>(), _exitRules, recomputes, market, new IdeasSettings(), new BacktestSettings(), NoAutos.Create(market, new BacktestSettings(), _time, _entries, _refusals), _time);
         IScannerPairRepository pairs = Substitute.For<IScannerPairRepository>();
         pairs.GetAllAsync(Arg.Any<CancellationToken>()).Returns(_stored);
         IScannerStateRepository state = Substitute.For<IScannerStateRepository>();

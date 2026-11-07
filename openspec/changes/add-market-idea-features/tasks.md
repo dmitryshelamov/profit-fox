@@ -25,7 +25,7 @@
 
 ## 3. Живые идеи и прогон
 
-- [ ] 3.1 `ScannerMarket.FundingLoaded` / `FundingOf` (решение 4), `ScannerBackfill.LoadFundingAsync` кормит память;
+- [x] 3.1 `ScannerMarket.FundingLoaded` / `FundingOf` (решение 4), `ScannerBackfill.LoadFundingAsync` кормит память;
   `LiveIdeas` при прогреве пары читает последнюю ставку за 7 дней из `IFundingRateRepository`, когда в памяти её нет, и
   раз в минуту считает изменение BTC по `market.Minutes`. Тесты: ставка из докачки попадает во входы идей пары; без
   минут BTC за 240 минут вход `null`; spot-пара получает `Funding null` и то же изменение BTC.

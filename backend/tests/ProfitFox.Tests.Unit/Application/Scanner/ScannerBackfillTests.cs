@@ -216,6 +216,19 @@ public class ScannerBackfillTests
         _market.Find(Sol)!.FundingCoveredUntil.ShouldBe(End);
     }
 
+    // Decision 4 of add-market-idea-features: a settlement topped up goes into memory at once, the last one of the pair.
+    [Test]
+    public async Task Funding_topped_up_goes_into_memory()
+    {
+        _market.Keep([new ScannerPair(Sol, true, End.AddDays(-90), End, End, End.AddHours(-8))]);
+        _feed.GetFundingHistoryAsync("SOLUSDT", Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns([new FundingRatePoint(End.AddHours(-8), 0.0001m), new FundingRatePoint(End, 0.0006m)]);
+
+        await Backfill(new ScannerSettings()).TopUpFundingAsync(CancellationToken.None);
+
+        _market.FundingOf(Sol).ShouldBe(new FundingRatePoint(End, 0.0006m));
+    }
+
     private async Task RunAsync(ScannerSettings settings)
     {
         ScannerBackfill backfill = Backfill(settings);
