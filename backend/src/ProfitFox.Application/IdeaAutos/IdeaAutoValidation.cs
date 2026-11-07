@@ -82,13 +82,24 @@ public static class IdeaAutoValidation
         FeatureCondition dayDrop = Feature(input.DayDrop, "dayDrop", errors);
         FeatureCondition btcDrop = Feature(input.BtcDrop, "btcDrop", errors);
         FeatureCondition highFunding = Feature(input.HighFunding, "highFunding", errors);
+        FeatureCondition burst = Feature(input.Burst, "burst", errors);
+
+        if (input.MaxPerMinutePerSide < 1)
+        {
+            errors["maxPerMinutePerSide"] = "The limit of the new trades of a side a minute must be at least 1.";
+        }
+
+        if (input.MaxOpenPerSide < 1)
+        {
+            errors["maxOpenPerSide"] = "The limit of the open trades of a side must be at least 1.";
+        }
 
         if (errors.Count > 0)
         {
             throw new ValidationFailedException(errors);
         }
 
-        return new IdeaAutoConditions(setups, types, intervals, side, category, badge, input.MinRiskReward, input.MinCases, dayDrop, btcDrop, highFunding);
+        return new IdeaAutoConditions(setups, types, intervals, side, category, badge, input.MinRiskReward, input.MinCases, dayDrop, btcDrop, highFunding, burst);
     }
 
     private static List<T> Codes<T>(IReadOnlyList<string> codes, string field, TryParse<T> parse, string message, Dictionary<string, string> errors)

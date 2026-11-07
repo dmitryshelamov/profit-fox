@@ -150,6 +150,18 @@ public class AutoConditionsTests
         Match(Idea() with { BtcChange = -0.02m }, null, Everything with { BtcDrop = FeatureCondition.Without }).ShouldBeFalse();
     }
 
+    // Scenario "Только без всплеска": longs on 1 h by 9 pairs in the minute are a burst, so an auto «только без» takes none of them, one «только
+    // с» takes them, and neither takes an idea of the other.
+    [Test]
+    public void Burst_is_checked_by_its_condition()
+    {
+        Idea burst = Idea(Interval.OneHour) with { BurstPairs = 9 };
+        Idea calm = Idea(Interval.OneHour) with { BurstPairs = 7 };
+
+        (Match(burst, null, Everything with { Burst = FeatureCondition.Without }), Match(calm, null, Everything with { Burst = FeatureCondition.Without })).ShouldBe((false, true));
+        (Match(burst, null, Everything with { Burst = FeatureCondition.With }), Match(calm, null, Everything with { Burst = FeatureCondition.With })).ShouldBe((true, false));
+    }
+
     // Scenario "Признак любой": with all three «любой» the features do not matter.
     [Test]
     public void Any_feature_takes_ideas_with_and_without_it()

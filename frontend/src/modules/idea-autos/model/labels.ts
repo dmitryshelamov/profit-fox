@@ -73,12 +73,16 @@ interface Conditions {
   readonly dayDrop: string;
   readonly btcDrop: string;
   readonly highFunding: string;
+  readonly burst: string;
+  readonly maxPerMinutePerSide: number | string | null;
+  readonly maxOpenPerSide: number | string | null;
 }
 
 const featureConditions = [
   ['dayDrop', 'day_drop'],
   ['btcDrop', 'btc_drop'],
   ['highFunding', 'high_funding'],
+  ['burst', 'burst'],
 ] as const;
 
 const featureWords: Record<string, string> = { with: 'с', without: 'без' };
@@ -86,7 +90,10 @@ const featureWords: Record<string, string> = { with: 'с', without: 'без' };
 const sides: Record<string, string> = { long: 'Лонг', short: 'Шорт' };
 const categories: Record<string, string> = { linear: 'Линейный', spot: 'Спот' };
 
-/** The conditions of an auto in two lines: the setups and the types it takes, and the rest with the features that are not «любой». */
+/**
+ * The conditions of an auto in two lines: the setups and the types it takes, and the rest with the features that are not «любой» and the
+ * limits that are set.
+ */
 export function conditionLines(auto: Conditions): { what: string; where: string } {
   return {
     what: `${auto.setups.map(setupLabel).join(', ')} · ${auto.types.map(typeLabel).join(', ')}`,
@@ -100,6 +107,10 @@ export function conditionLines(auto: Conditions): { what: string; where: string 
       ...featureConditions
         .filter(([key]) => auto[key] in featureWords)
         .map(([key, code]) => `${featureWords[auto[key]]} ${featureLabel(code)}`),
+      ...(auto.maxPerMinutePerSide === null
+        ? []
+        : [`≤ ${auto.maxPerMinutePerSide}/мин на сторону`]),
+      ...(auto.maxOpenPerSide === null ? [] : [`≤ ${auto.maxOpenPerSide} на сторону`]),
     ].join(' · '),
   };
 }
@@ -129,6 +140,8 @@ const reasons: Record<string, string> = {
   entry_error: 'Ошибка подготовки входа',
   budget_taken: 'Бюджет автомата занят',
   autos_budget_taken: 'Бюджет автоматов занят',
+  minute_limit: 'Лимит за минуту',
+  side_limit: 'Лимит на сторону',
 };
 
 /** What stopped an auto, in words; a code the interface does not know is shown as it is. */

@@ -37,9 +37,9 @@ public class IdeaTradeTests
     [Test]
     public void New_trade_copies_the_features_of_its_idea()
     {
-        Idea idea = IdeaGenerator.Generate(Fired) with { PairChange = -0.08m, Funding = 0.0001m };
+        Idea idea = IdeaGenerator.Generate(Fired) with { PairChange = -0.08m, Funding = 0.0001m, BurstPairs = 30 };
 
-        IdeaTrade.Create(Guid.NewGuid(), idea, Account, 106m, Size(), Now).Features.ShouldBe(new IdeaFeatures(true, false, false));
+        IdeaTrade.Create(Guid.NewGuid(), idea, Account, 106m, Size(), Now).Features.ShouldBe(new IdeaFeatures(true, false, false, true));
     }
 
     [Test]

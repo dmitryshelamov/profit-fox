@@ -5,5 +5,6 @@ public enum IdeaFeature
 {
     DayDrop,
     BtcDrop,
-    HighFunding
+    HighFunding,
+    Burst
 }

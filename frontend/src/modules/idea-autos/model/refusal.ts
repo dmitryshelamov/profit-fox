@@ -60,6 +60,9 @@ export function refusalDetailText(refusal: {
       return against('сумма', detail);
     case 'pair_taken':
       return holderText(detail.holder!);
+    case 'minute_limit':
+    case 'side_limit':
+      return `пропущено ${detail.actual} при лимите ${detail.limit}`;
     default:
       return '—';
   }

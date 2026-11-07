@@ -352,13 +352,14 @@ public class IdeaTradesApiTests
     [Test]
     public async Task Journal_gives_the_features_of_the_idea_of_a_trade()
     {
-        Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m, funding: 0.0006m);
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m, funding: 0.0006m, burstPairs: 25);
         _scenario.SetPrice("100");
         await CreateAsync(idea);
 
         JsonElement item = (await JournalAsync()).GetProperty("open")[0];
 
-        item.GetProperty("features").EnumerateArray().Select(feature => feature.GetString()).ShouldBe(["high_funding"]);
+        // Scenario "Сделка со всплеском" of add-burst-and-auto-limits: the burst its idea fired in, too.
+        item.GetProperty("features").EnumerateArray().Select(feature => feature.GetString()).ShouldBe(["high_funding", "burst"]);
     }
 
     // Scenario "Открытая в плюсе": the last price of the exchange gives the current result of an open trade.

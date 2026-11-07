@@ -210,6 +210,74 @@ public class LiveAutosTests
         minute.Refusals.ShouldBeEmpty();
     }
 
+    // Scenario "Лучшая идея первой" (decision 3 of add-burst-and-auto-limits): the budget of 50 holds one trade of 30; the idea of 1 h promised
+    // +0.05 R is born after the one of 15 min promised −0.10 R and still takes the trade, and the other is left alone.
+    [Test]
+    public async Task Idea_of_the_highest_expectancy_of_the_minute_is_taken_first()
+    {
+        Enable(Auto("Пробои 5м", IdeaAutoMode.Paper, amount: 30m) with { Budget = 50m });
+        Instrument[] pairs = Pairs(2);
+        Idea worse = Born() with { Instrument = pairs[0] };
+        Idea better = Born(interval: Interval.OneHour) with { Instrument = pairs[1] };
+        _buckets.GetAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([Bucket(worse, -0.10m), Bucket(better, 0.05m)]);
+
+        AutoMinute minute = (await RunPairsAsync([worse, better], pairs))!;
+
+        minute.Opened.Single().Trade.IdeaId.ShouldBe(better.Id);
+        minute.Refusals.ShouldBeEmpty();
+    }
+
+    // Requirement "Порядок идей минуты": the requests of an auto with money are numbered in the order of the plan, which a Worker takes them in.
+    [Test]
+    public async Task Requests_of_a_live_auto_are_numbered_in_the_order_of_the_plan()
+    {
+        Enable(Auto("Импульс лонг", IdeaAutoMode.Live, amount: 30m));
+        Idea worse = Born();
+        Idea better = Born(interval: Interval.OneHour) with { Instrument = new Instrument(MarketCategory.Linear, "OPUSDT") };
+        _buckets.GetAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([Bucket(worse, -0.10m), Bucket(better, 0.05m)]);
+
+        AutoMinute minute = (await RunAsync([worse, better]))!;
+
+        minute.Entries.Select(entry => (entry.IdeaId, entry.Fired)).ShouldBe([(better.Id, 0), (worse.Id, 1)]);
+    }
+
+    // Scenario "Тридцать лонгов" for a paper auto: a limit of 2 a minute opens the two first longs, and the other 28 are one refusal «Лимит за
+    // минуту» of the first skipped, «пропущено 28 при лимите 2».
+    [Test]
+    public async Task Minute_limit_opens_as_many_paper_trades_of_a_side_and_writes_one_refusal()
+    {
+        IdeaAuto auto = Enable(Auto("Пробои 5м", IdeaAutoMode.Paper, amount: 30m) with { MaxPerMinutePerSide = 2 });
+        Instrument[] pairs = Pairs(30);
+        Idea[] longs = [.. pairs.Select(pair => Born() with { Instrument = pair })];
+
+        AutoMinute minute = (await RunPairsAsync(longs, pairs))!;
+
+        minute.Opened.Select(trade => trade.Trade.IdeaId).ShouldBe([longs[0].Id, longs[1].Id]);
+        IdeaAutoRefusal refusal = minute.Refusals.ShouldHaveSingleItem();
+        (refusal.IdeaId, refusal.AutoId, refusal.Mode, refusal.At, refusal.Instrument, refusal.Side).ShouldBe((longs[2].Id, auto.Id, IdeaAutoMode.Paper, End, pairs[2], IdeaSide.Long));
+        (refusal.Reasons.Single(), refusal.Detail).ShouldBe((IdeaTradeRefusal.MinuteLimit, RefusalDetail.Numbers(28m, 2m)));
+    }
+
+    // Scenario "Четвёртый лонг": three paper longs of the auto are open, its limit; the short of the minute is taken, its two longs are one
+    // refusal «Лимит на сторону», «пропущено 2 при лимите 3». A live auto writes the same refusal in its mode instead of the requests.
+    [TestCase(IdeaAutoMode.Paper)]
+    [TestCase(IdeaAutoMode.Live)]
+    public async Task Open_limit_skips_the_ideas_of_the_full_side(IdeaAutoMode mode)
+    {
+        IdeaAuto auto = Enable(Auto("Пробои 5м", mode, amount: 30m) with { MaxOpenPerSide = 3 });
+        Instrument[] pairs = Pairs(6);
+        PaperIdeaTrade[] held = [.. pairs.Take(3).Select(pair => Opened(auto, pair))];
+        _paper.GetOpenAsync(Arg.Any<CancellationToken>()).Returns(held);
+        Idea[] longs = [Born() with { Instrument = pairs[3] }, Born() with { Instrument = pairs[4] }];
+        Idea shortIdea = Short() with { Instrument = pairs[5] };
+
+        AutoMinute minute = (await RunPairsAsync([longs[0], shortIdea, longs[1]], pairs))!;
+
+        (mode == IdeaAutoMode.Paper ? minute.Opened.Select(trade => trade.Trade.IdeaId) : minute.Entries.Select(entry => entry.IdeaId)).ShouldBe([shortIdea.Id]);
+        IdeaAutoRefusal refusal = minute.Refusals.ShouldHaveSingleItem();
+        (refusal.IdeaId, refusal.Mode, refusal.Reasons.Single(), refusal.Detail).ShouldBe((longs[0].Id, mode, IdeaTradeRefusal.SideLimit, RefusalDetail.Numbers(2m, 3m)));
+    }
+
     // Owner, 2026-11-07: a live auto whose budget, the budget of all the autos or «Не больше открытых сделок» is taken writes no request and no
     // refusal; the Worker still checks them all under its locks.
     [TestCase(300, null, 5)]
@@ -491,10 +559,43 @@ public class LiveAutosTests
         return generated with { Track = generated.Track with { Plan = new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 100m, 98m, 104m) } };
     }
 
-    // The paper trade an auto opened in the minute of 13:40, to be read from storage.
-    private static PaperIdeaTrade Opened(IdeaAuto auto)
+    // A short born at 13:40: entry 100, stop 102 and target 96.
+    private static Idea Short()
     {
-        Idea idea = Born();
+        Idea generated = IdeaGenerator.Generate(Fired, side: IdeaSide.Short);
+
+        return generated with { Track = generated.Track with { Plan = new IdeaPlan(IdeaType.TwoR, IdeaSide.Short, 100m, 102m, 96m) } };
+    }
+
+    // Linear pairs the market keeps with the rules of WIFUSDT.
+    private Instrument[] Pairs(int count)
+    {
+        Instrument[] pairs = [.. Enumerable.Range(0, count).Select(index => new Instrument(MarketCategory.Linear, $"P{index}USDT"))];
+        _market.Keep([.. pairs.Select(pair => new ScannerPair(pair, true, CoveredUntil: End, TickSize: 0.01m, QuantityStep: 0.01m, MinQuantity: 0.01m, MinAmount: 5m))]);
+
+        return pairs;
+    }
+
+    // The bucket of the idea over 90 days with its expectancy.
+    private static IdeaBucket Bucket(Idea idea, decimal expectancy)
+    {
+        var key = new IdeaBucketKey(idea.Setup, idea.Track.Plan.Type, idea.Interval, idea.Track.Plan.Side, idea.Instrument.Category);
+
+        return new IdeaBucket(key, 90, new BucketStatistics(100, 40, 60, 0, 0.4m, null, null, expectancy, null, null));
+    }
+
+    // The minute of the ideas of the pairs, each born in the minute of 13:40 that closed at 100.
+    private Task<AutoMinute?> RunPairsAsync(IReadOnlyList<Idea> born, IEnumerable<Instrument> pairs)
+    {
+        var birth = new IdeaCandle(Fired, 99.9m, 100.2m, 99.8m, 100m, 1m);
+
+        return _live.RunAsync(End, born, pairs.ToDictionary(pair => pair, _ => birth), [], CancellationToken.None);
+    }
+
+    // The paper trade an auto opened in the minute of 13:40, to be read from storage.
+    private static PaperIdeaTrade Opened(IdeaAuto auto, Instrument? instrument = null)
+    {
+        Idea idea = Born() with { Instrument = instrument ?? Wif };
         var birth = new IdeaCandle(Fired, 99.9m, 100.2m, 99.8m, 100m, 1m);
         IdeaTradeSize size = ProfitFox.Domain.Services.IdeaTrades.IdeaTradeSizing.Calculate(idea.Track.Plan, new FeeRates(0.02m, 0.055m), auto.Amount, new InstrumentRules(0.01m, 0.01m, 0.01m, 5m));
 

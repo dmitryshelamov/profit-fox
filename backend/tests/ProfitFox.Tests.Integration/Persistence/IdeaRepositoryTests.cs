@@ -40,7 +40,7 @@ public class IdeaRepositoryTests
     public async Task Ideas_are_read_back_exactly()
     {
         Idea generated = IdeaGenerator.Generate(Now, IdeaStatus.Active);
-        Idea idea = generated with { Move = 3.123456789m, Track = generated.Track with { Tick = 0.0001m }, PairChange = -0.0712345m, BtcChange = -0.0123m, Funding = 0.0006m };
+        Idea idea = generated with { Move = 3.123456789m, Track = generated.Track with { Tick = 0.0001m }, PairChange = -0.0712345m, BtcChange = -0.0123m, Funding = 0.0006m, BurstPairs = 31 };
 
         (await _store.SaveAsync([idea], [], CancellationToken.None)).ShouldBe([idea]);
 
@@ -83,7 +83,8 @@ public class IdeaRepositoryTests
         IdeaTrack track = old.Track;
 
         // Task 4.2 of add-market-idea-features: an idea before the numbers of the market has no features.
-        (old.PairChange, old.BtcChange, old.Funding, old.Features).ShouldBe((null, null, null, default));
+        // Task 3.2 of add-burst-and-auto-limits: one before the count of the pairs of its minute has none and no burst.
+        (old.PairChange, old.BtcChange, old.Funding, old.BurstPairs, old.Features).ShouldBe((null, null, null, null, default));
         (track.LifeCandles, track.TargetR, track.EntryCandles).ShouldBe((24, (decimal?)2m, (int?)4));
         IdeaTracker.Step(track, new IdeaCandle(Now.AddHours(1), 105m, 105m, 105m, 105m, 1m)).Status.ShouldBe(IdeaStatus.Expired);
     }

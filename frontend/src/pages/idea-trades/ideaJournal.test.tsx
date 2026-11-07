@@ -267,7 +267,7 @@ describe('screen «Сделки»', () => {
               status: 'closed_at_stop',
               result: '-1',
               resultR: '-1',
-              features: ['high_funding'],
+              features: ['high_funding', 'burst'],
             }),
           ],
         ),
@@ -292,6 +292,11 @@ describe('screen «Сделки»', () => {
       'row',
     )[1]!;
     expect(within(closed).getByText('↑ funding')).toBeInTheDocument();
+    // Scenario "Сделка со всплеском".
+    expect(within(closed).getByText('⚡ всплеск')).toHaveAttribute(
+      'title',
+      'сработала вместе с другими парами той же стороны на том же ТФ',
+    );
   });
 
   // Requirement "Итоги на экране «Сделки»".

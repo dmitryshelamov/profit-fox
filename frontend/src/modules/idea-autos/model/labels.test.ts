@@ -19,6 +19,9 @@ const auto = {
   dayDrop: 'any',
   btcDrop: 'any',
   highFunding: 'any',
+  burst: 'any',
+  maxPerMinutePerSide: null,
+  maxOpenPerSide: null,
 };
 
 describe('labels of autos', () => {
@@ -65,6 +68,16 @@ describe('labels of autos', () => {
     );
   });
 
+  // Scenarios "Условие признака в строке" for the burst and "Лимиты в строке".
+  it('names the condition of the burst and the limits that are set', () => {
+    expect(conditionLines({ ...auto, burst: 'without', maxPerMinutePerSide: 2 }).where).toBe(
+      '15 мин, 1 ч · Лонг · Линейный · ▲ · R:R ≥ 1.5 · N ≥ 100 · без ⚡ всплеск · ≤ 2/мин на сторону',
+    );
+    expect(conditionLines({ ...auto, burst: 'with', maxOpenPerSide: 5 }).where).toBe(
+      '15 мин, 1 ч · Лонг · Линейный · ▲ · R:R ≥ 1.5 · N ≥ 100 · с ⚡ всплеск · ≤ 5 на сторону',
+    );
+  });
+
   it('names the reasons of a refusal and shows a code it does not know as it is', () => {
     expect(reasonLabel('pair_taken')).toBe('Уже есть сделка по паре');
     expect(reasonLabel('not_enough_money')).toBe('Не хватает денег');
@@ -78,6 +91,8 @@ describe('labels of autos', () => {
     expect(reasonLabel('autos_budget_taken')).toBe('Бюджет автоматов занят');
     expect(reasonLabel('amount_above_max')).toBe('Больше максимума на одну сделку');
     expect(reasonLabel('total_risk_exceeded')).toBe('Максимальный убыток по стопам');
+    expect(reasonLabel('minute_limit')).toBe('Лимит за минуту');
+    expect(reasonLabel('side_limit')).toBe('Лимит на сторону');
     expect(reasonLabel('something_new')).toBe('something_new');
   });
 });

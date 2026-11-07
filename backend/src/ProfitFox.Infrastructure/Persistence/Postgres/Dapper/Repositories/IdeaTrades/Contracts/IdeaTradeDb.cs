@@ -83,6 +83,8 @@ internal sealed class IdeaTradeDb
 
     public bool HighFunding { get; init; }
 
+    public bool Burst { get; init; }
+
     public int LastOrderNumber { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }

@@ -987,6 +987,9 @@ export const autoOf = (overrides: Partial<Schemas['IdeaAutoResponse']> = {}) =>
     dayDrop: 'any',
     btcDrop: 'any',
     highFunding: 'any',
+    burst: 'any',
+    maxPerMinutePerSide: null,
+    maxOpenPerSide: null,
     ...overrides,
   }) satisfies Schemas['IdeaAutoResponse'];
 

@@ -43,9 +43,12 @@ internal static class IdeaAutoDbConverter
             DayDrop = conditions.DayDrop.ToCode(),
             BtcDrop = conditions.BtcDrop.ToCode(),
             HighFunding = conditions.HighFunding.ToCode(),
+            Burst = conditions.Burst.ToCode(),
             Position = auto.Position,
             DeletedAt = auto.DeletedAt,
-            Budget = auto.Budget
+            Budget = auto.Budget,
+            MaxPerMinutePerSide = auto.MaxPerMinutePerSide,
+            MaxOpenPerSide = auto.MaxOpenPerSide
         };
     }
 
@@ -62,7 +65,8 @@ internal static class IdeaAutoDbConverter
             row.MinCases,
             ParseFeatureCondition(row.DayDrop),
             ParseFeatureCondition(row.BtcDrop),
-            ParseFeatureCondition(row.HighFunding));
+            ParseFeatureCondition(row.HighFunding),
+            ParseFeatureCondition(row.Burst));
 
         return new IdeaAuto(
             row.Id,
@@ -73,7 +77,9 @@ internal static class IdeaAutoDbConverter
             conditions,
             row.Position,
             row.DeletedAt,
-            row.Budget);
+            row.Budget,
+            row.MaxPerMinutePerSide,
+            row.MaxOpenPerSide);
     }
 
     internal static IdeaAutoEntryDb FromDomain(IdeaAutoEntry entry)

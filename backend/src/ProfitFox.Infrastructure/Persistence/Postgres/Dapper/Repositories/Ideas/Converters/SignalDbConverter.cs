@@ -43,6 +43,14 @@ internal static class SignalDbConverter
         };
     }
 
+    internal static (DateTimeOffset FiredAt, IdeaSide Side, Interval Interval) MinuteOf(PairCountDb row)
+    {
+        IdeaCodes.TryParseSide(row.Side, out IdeaSide side);
+        MarketDataCodes.TryParseInterval(row.Interval, out Interval interval);
+
+        return (row.FiredAt, side, interval);
+    }
+
     internal static IdeaSignal ToDomain(SignalDb row)
     {
         MarketDataCodes.TryParseCategory(row.Category, out MarketCategory category);

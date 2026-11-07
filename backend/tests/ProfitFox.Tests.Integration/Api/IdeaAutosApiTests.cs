@@ -81,6 +81,25 @@ public class IdeaAutosApiTests
         await RefusedOnAsync(new { name = "А", accountId = _scenario.Account, amount = 100m, setups = new[] { "impulse" }, types = new[] { "target_2r" }, intervals = new[] { "15" }, minRiskReward = 1.2m, minCases = 0, btcDrop = "sometimes" }, "btcDrop");
     }
 
+    // Scenarios "Условие всплеска в теле", "Лимиты в теле" and "Ноль в лимите" (task 4.4 of add-burst-and-auto-limits): the burst and the limits
+    // are read back, none of them given is «любой» and no limit, and a limit of 0 or not an integer is a 400 on its own field.
+    [Test]
+    public async Task Burst_and_limits_are_read_back_and_a_zero_limit_is_a_400()
+    {
+        HttpResponseMessage created = await _scenario.Client.PostAsJsonAsync(Url, new { name = "Без всплеска", accountId = _scenario.Account, amount = 100m, setups = new[] { "impulse" }, types = new[] { "target_2r" }, intervals = new[] { "15" }, minRiskReward = 1.2m, minCases = 0, burst = "without", maxPerMinutePerSide = 2, maxOpenPerSide = (int?)null });
+        created.StatusCode.ShouldBe(HttpStatusCode.Created);
+        Guid id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        Guid plain = await CreateAsync("Обычный");
+
+        JsonElement auto = await GetAsync(id);
+        JsonElement other = await GetAsync(plain);
+
+        (auto.GetProperty("burst").GetString(), auto.GetProperty("maxPerMinutePerSide").GetInt32(), auto.GetProperty("maxOpenPerSide").ValueKind).ShouldBe(("without", 2, JsonValueKind.Null));
+        (other.GetProperty("burst").GetString(), other.GetProperty("maxPerMinutePerSide").ValueKind, other.GetProperty("maxOpenPerSide").ValueKind).ShouldBe(("any", JsonValueKind.Null, JsonValueKind.Null));
+        await RefusedOnAsync(new { name = "А", accountId = _scenario.Account, amount = 100m, setups = new[] { "impulse" }, types = new[] { "target_2r" }, intervals = new[] { "15" }, minRiskReward = 1.2m, minCases = 0, maxOpenPerSide = 0 }, "maxOpenPerSide");
+        await RefusedOnAsync(new { name = "А", accountId = _scenario.Account, amount = 100m, setups = new[] { "impulse" }, types = new[] { "target_2r" }, intervals = new[] { "15" }, minRiskReward = 1.2m, minCases = 0, maxPerMinutePerSide = 1.5m }, "$.maxPerMinutePerSide");
+    }
+
     // A code marked twice is one condition.
     [Test]
     public async Task Code_marked_twice_is_kept_once()
