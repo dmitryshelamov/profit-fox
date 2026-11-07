@@ -204,7 +204,7 @@ public class LiveAutosTests
         Idea second = Born() with { Instrument = op };
         var birth = new IdeaCandle(Fired, 99.9m, 100.2m, 99.8m, 100m, 1m);
 
-        AutoMinute minute = (await _live.RunAsync(End, [first, second], new Dictionary<Instrument, IdeaCandle> { [Wif] = birth, [op] = birth }, CancellationToken.None))!;
+        AutoMinute minute = (await _live.RunAsync(End, [first, second], new Dictionary<Instrument, IdeaCandle> { [Wif] = birth, [op] = birth }, [], CancellationToken.None))!;
 
         minute.Opened.Single().Trade.IdeaId.ShouldBe(first.Id);
         minute.Refusals.ShouldBeEmpty();
@@ -365,6 +365,80 @@ public class LiveAutosTests
         minute.Stepped.ShouldHaveSingleItem().Trade.Status.ShouldBe(IdeaTradeStatus.ClosedAtTarget);
     }
 
+    // Scenario "Исход записан до шага": the idea expires at the end of the minute 13:41 at its close, 100.5, and the trade closes at expiry in this
+    // minute, not on the next one.
+    [Test]
+    public async Task Trade_whose_idea_expired_in_the_minute_closes_at_expiry_in_this_minute()
+    {
+        PaperIdeaTrade open = Opened(Auto("Пробои 5м", IdeaAutoMode.Paper, amount: 50m));
+        _paper.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([open]);
+        Load("paper-to-target", through: 2);
+
+        AutoMinute minute = (await RunAsync([], End.AddMinutes(1), [Expired(open, Fired.AddMinutes(2), 100.5m)]))!;
+
+        PaperIdeaTrade stepped = minute.Stepped.ShouldHaveSingleItem();
+        (stepped.Trade.Status, stepped.Trade.StatusAt, stepped.Trade.Expiry.Value).ShouldBe((IdeaTradeStatus.ClosedAtExpiry, Fired.AddMinutes(2), 50.25m));
+    }
+
+    [Test]
+    public async Task Outcome_of_an_idea_goes_only_on_the_trades_of_that_idea()
+    {
+        PaperIdeaTrade outlived = Opened(Auto("Пробои 5м", IdeaAutoMode.Paper, amount: 50m));
+        PaperIdeaTrade other = Opened(Auto("Импульс", IdeaAutoMode.Paper, amount: 50m));
+        _paper.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([outlived, other]);
+        Load("paper-to-target", through: 2);
+
+        AutoMinute minute = (await RunAsync([], End.AddMinutes(1), [Expired(outlived, Fired.AddMinutes(2), 100.5m)]))!;
+
+        minute.Stepped.Select(paper => (paper.Trade.Id, paper.Trade.Status)).ShouldBe([(outlived.Trade.Id, IdeaTradeStatus.ClosedAtExpiry), (other.Trade.Id, IdeaTradeStatus.Open)], ignoreOrder: true);
+    }
+
+    // Scenario "Пара снята с торгов": the pair left the list with its coverage at 13:41, and the scanner closed its idea at the end of the minute
+    // 13:42 at the last close; the trade closes at expiry at this price in the same minute, with no minute to step.
+    [Test]
+    public async Task Trade_of_a_pair_out_of_trading_closes_at_expiry_at_the_last_close_of_its_idea()
+    {
+        PaperIdeaTrade open = Opened(Auto("Пробои 5м", IdeaAutoMode.Paper, amount: 50m));
+        _paper.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([open]);
+        _market.Keep([new ScannerPair(Wif, false, CoveredUntil: End)]);
+
+        AutoMinute minute = (await RunAsync([], End.AddMinutes(1), [Expired(open, End.AddMinutes(1), 101m)]))!;
+
+        PaperIdeaTrade closed = minute.Stepped.ShouldHaveSingleItem();
+        (closed.Trade.Status, closed.Trade.StatusAt, closed.Trade.Expiry.Value).ShouldBe((IdeaTradeStatus.ClosedAtExpiry, End.AddMinutes(1), 50.5m));
+    }
+
+    // A pair the market does not know at all, as after a start once the list no longer has it.
+    [Test]
+    public async Task Trade_of_a_pair_the_market_does_not_know_closes_at_expiry()
+    {
+        PaperIdeaTrade opened = Opened(Auto("Пробои 5м", IdeaAutoMode.Paper, amount: 50m));
+        PaperIdeaTrade open = opened with { Trade = opened.Trade with { Instrument = new Instrument(MarketCategory.Linear, "OPUSDT") } };
+        _paper.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([open]);
+
+        AutoMinute minute = (await RunAsync([], End.AddMinutes(1), [Expired(open, End.AddMinutes(1), 101m)]))!;
+
+        minute.Stepped.ShouldHaveSingleItem().Trade.Status.ShouldBe(IdeaTradeStatus.ClosedAtExpiry);
+    }
+
+    // Scenario "Исход записан до выкатки" and the start over: storage gives the trade with the outcome its idea got at 13:41, behind the cursor
+    // of the trade; it closes at expiry at that time and price before the minutes, though the minute of 13:42 touches the stop.
+    [Test]
+    public async Task Start_over_closes_at_expiry_the_trade_whose_outcome_storage_holds_before_its_minutes()
+    {
+        PaperIdeaTrade open = Opened(Auto("Пробои 5м", IdeaAutoMode.Paper, amount: 50m));
+        PaperIdeaTrade stored = open with { Trade = open.Trade with { IdeaOutcome = Expired(open, End, 100.5m).Outcome } };
+        _paper.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([open], [stored]);
+        await RunAsync([]);
+        _live.StartOver();
+        Load("paper-to-stop", through: 3);
+
+        AutoMinute minute = (await RunAsync([], End.AddMinutes(2)))!;
+
+        PaperIdeaTrade closed = minute.Stepped.ShouldHaveSingleItem();
+        (closed.Trade.Status, closed.Trade.StatusAt, closed.Trade.Expiry.Value).ShouldBe((IdeaTradeStatus.ClosedAtExpiry, End, 50.25m));
+    }
+
     [Test]
     public async Task Pair_that_is_not_covered_yet_is_not_stepped()
     {
@@ -427,11 +501,16 @@ public class LiveAutosTests
         return PaperFill.Open(Guid.NewGuid(), idea, auto.Id, auto.AccountId, size, null, birth, new FeeRates(0.02m, 0.055m));
     }
 
-    private Task<AutoMinute?> RunAsync(IReadOnlyList<Idea> born, DateTimeOffset? end = null)
+    private static ClosedIdea Expired(PaperIdeaTrade paper, DateTimeOffset at, decimal? exitPrice)
+    {
+        return new ClosedIdea(paper.Trade.IdeaId, new TradedIdeaOutcome(IdeaStatus.Expired, at, 0.1m, exitPrice));
+    }
+
+    private Task<AutoMinute?> RunAsync(IReadOnlyList<Idea> born, DateTimeOffset? end = null, IReadOnlyCollection<ClosedIdea>? outcomes = null)
     {
         var births = new Dictionary<Instrument, IdeaCandle> { [Wif] = new IdeaCandle(Fired, 99.9m, 100.2m, 99.8m, 100m, 1m) };
 
-        return _live.RunAsync(end ?? End, born, births, CancellationToken.None);
+        return _live.RunAsync(end ?? End, born, births, outcomes ?? [], CancellationToken.None);
     }
 
     private async Task RunAndCommitAsync(IReadOnlyList<Idea> born)

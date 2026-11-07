@@ -177,10 +177,12 @@ public sealed class LiveIdeas(
         try
         {
             // What the autos do goes in the transaction of the ideas, under the lease of the stream; without anything to write the ideas go alone.
-            autoMinute = await autos.RunAsync(end, created, births, cancellationToken);
+            // The outcomes go on the paper trades before they are stepped: a trade closes at expiry in the minute its idea expired.
+            List<ClosedIdea> outcomes = Outcomes(changed);
+            autoMinute = await autos.RunAsync(end, created, births, outcomes, cancellationToken);
             added = autoMinute is null
-                ? await ideas.SaveAsync(created, changed, Outcomes(changed), cancellationToken)
-                : await ideas.SaveAsync(created, changed, Outcomes(changed), autoMinute, cancellationToken);
+                ? await ideas.SaveAsync(created, changed, outcomes, cancellationToken)
+                : await ideas.SaveAsync(created, changed, outcomes, autoMinute, cancellationToken);
         }
         catch
         {

@@ -11,11 +11,15 @@ using ProfitFox.Domain.Entities.IdeaAutos.Enums;
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
+using ProfitFox.Domain.Entities.IdeaTrades.Enums;
 using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.Services.IdeaAutos;
 using ProfitFox.Domain.Services.Ideas;
+using ProfitFox.Domain.Services.IdeaTrades;
+using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.IdeaAutos;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
@@ -223,6 +227,29 @@ public class LiveIdeasTests
             Arg.Any<IReadOnlyCollection<Idea>>(),
             Arg.Any<IReadOnlyCollection<Idea>>(),
             Arg.Any<IReadOnlyCollection<ClosedIdea>>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    // Requirement "Исход идеи у учебной сделки", scenario "Исход записан до шага": the idea entered at 22:00 lives 24 candles of 15 minutes and
+    // expires at 04:00 at the close of 100; its paper trade, stepped to 03:50, closes at expiry at 04:00 in the same minute.
+    [Test]
+    public async Task Paper_trade_closes_at_expiry_in_the_minute_its_idea_expires()
+    {
+        Idea generated = IdeaGenerator.Generate(Four.AddHours(-7), IdeaStatus.Active, Sol, statusAt: Four.AddHours(-6));
+        Idea outliving = generated with { Track = generated.Track with { Plan = new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 100m, 98m, 104m), EnteredAt = Four.AddHours(-6) } };
+        _ideas.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([outliving]);
+        KeepSol(Flat(Four.AddDays(-1), Four));
+        PaperIdeaTrade paper = PaperOf(outliving) with { SteppedUntil = Four.AddMinutes(-10) };
+        _live = new LiveIdeas(_ideas, _volatility, _candles, _rules, _recomputes, _market, new IdeasSettings(), Fees, NoAutos.Create(_market, Fees, _time, open: [paper]), _time);
+        await _live.ReadWarmUpsAsync(CancellationToken.None);
+
+        await _live.RunAsync(Four, CancellationToken.None);
+
+        await _ideas.Received(1).SaveAsync(
+            Arg.Any<IReadOnlyCollection<Idea>>(),
+            Arg.Any<IReadOnlyCollection<Idea>>(),
+            Arg.Is<IReadOnlyCollection<ClosedIdea>>(closed => closed!.Single().IdeaId == outliving.Id),
+            Arg.Is<AutoMinute>(minute => minute!.Stepped.Single().Trade.Status == IdeaTradeStatus.ClosedAtExpiry && minute.Stepped.Single().Trade.StatusAt == Four),
             Arg.Any<CancellationToken>());
     }
 
@@ -557,6 +584,16 @@ public class LiveIdeasTests
         }
 
         return (created, last!);
+    }
+
+    // A paper trade of the idea of 0.5 at 100, opened in the minute before the idea entered.
+    private static PaperIdeaTrade PaperOf(Idea idea)
+    {
+        var fees = new FeeRates(0.02m, 0.055m);
+        var birth = new IdeaCandle(idea.Track.EnteredAt!.Value.AddMinutes(-1), 100m, 100m, 100m, 100m, 1m);
+        IdeaTradeSize size = IdeaTradeSizing.Calculate(idea.Track.Plan, fees, 50m, new InstrumentRules(0.01m, 0.01m, 0.01m, 5m));
+
+        return PaperFill.Open(Guid.NewGuid(), idea, Guid.NewGuid(), Guid.NewGuid(), size, null, birth, fees);
     }
 
     private static Idea Active()
