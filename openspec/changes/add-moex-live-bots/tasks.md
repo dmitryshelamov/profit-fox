@@ -82,13 +82,13 @@ T-Invest. Решения — в design.md, требования — в `specs/`.
 
 ## 7. Леджер T-Invest
 
-- [ ] 7.1 `TInvestLedger.GetFreeAsync` (рубли минус заблокированные из `GetPositions`), `IsHedgeModeAsync` → `false`,
+- [x] 7.1 `TInvestLedger.GetFreeAsync` (рубли минус заблокированные из `GetPositions`), `IsHedgeModeAsync` → `false`,
   `GetHoldingAsync` (`balance + blocked` по `uid`), `GetOpenOrdersAsync` (`GetOrders` по `uid`, `ClientId` через таблицу, чужая
   → `""`). Unit-тесты на моке.
-- [ ] 7.2 `FindOrderAsync` (строка → `GetOrderState` по `request_id`, `NOT_FOUND` → `null`, без строки → `null` без вызова),
+- [x] 7.2 `FindOrderAsync` (строка → `GetOrderState` по `request_id`, `NOT_FOUND` → `null`, без строки → `null` без вызова),
   `FindOrderByExchangeIdAsync`, `GetFillsAsync` / `GetOrderFillsAsync` из `stages`, `GetOrdersOfParentAsync` → пусто.
   Unit-тесты.
-- [ ] 7.3 `GetFeesAsync` через `GetLastPrices` + `GetOrderPrice` (лоты на ≥ 100 000 ₽): `FeeSchedule(rate, rate, Moex)`; ни одного
+- [x] 7.3 `GetFeesAsync` через `GetLastPrices` + `GetOrderPrice` (лоты на ≥ 100 000 ₽): `FeeSchedule(rate, rate, Moex)`; ни одного
   `PostOrder` в записи мока. Unit-тест с `deal_commission 50` на `100 000` → `0.0005`.
 
 ## 8. Стримы T-Invest
