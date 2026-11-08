@@ -9,13 +9,19 @@ using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.SavedFilters;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Application.Market.Queries.GetMarket;
 
-public sealed class GetMarketQueryHandler(IMarketSnapshotRepository snapshots, IScannerStateRepository state, ISavedFilterRepository filters, TimeProvider time)
+public sealed class GetMarketQueryHandler(
+    IMarketSnapshotRepository snapshots,
+    IScannerStateRepository state,
+    ISavedFilterRepository filters,
+    IIdeaReplayRepository cursors,
+    TimeProvider time)
     : IRequestHandler<GetMarketQuery, GetMarketResult>
 {
     // The scanner follows Bybit only: moex gets no chip until the ideas of MOEX come (design of add-moex-market, decision 11).
@@ -77,6 +83,8 @@ public sealed class GetMarketQueryHandler(IMarketSnapshotRepository snapshots, I
             return new GetMarketResult(scanner, null, new Dictionary<Instrument, IReadOnlyList<PairSetup>>(), null, errors);
         }
 
+        // The progress of the replay of the version of the rules this build runs.
+        scanner = scanner with { Replay = await cursors.ProgressAsync(IdeasEngineVersion.Current, cancellationToken) };
         IReadOnlyList<MarketSnapshotRow> rows = await snapshots.GetAllAsync(cancellationToken);
         IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>> setups = await snapshots.GetSetupsAsync(cancellationToken);
         MarketSnapshotRow[] left =

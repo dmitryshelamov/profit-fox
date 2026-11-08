@@ -52,11 +52,11 @@
 
 ## 4. Прогресс прогона
 
-- [ ] 4.1 `IdeaReplayProgress(Done, Total, Slowest, EngineVersion)` в домене; `IIdeaReplayRepository.ProgressAsync(version)`
+- [x] 4.1 `IdeaReplayProgress(Done, Total, Slowest, EngineVersion)` в домене; `IIdeaReplayRepository.ProgressAsync(version)`
   одним запросом по `scanner_pairs` и `idea_replay` (решение 4). Интеграционный тест на Testcontainers: пара с курсором на
   дне покрытия — готова, с отстающим — нет и даёт `slowest`, без курсора — не готова, пара без `tick_size` не в `total`;
   пустая база — `0 из 0` без дня (сценарии «Прогон идёт», «Прогон догнал все пары», «Прогон ещё не начинался»).
-- [ ] 4.2 `ScannerState.Replay`, `GetMarketQueryHandler` читает прогресс с `IdeasEngineVersion.Current`;
+- [x] 4.2 `ScannerState.Replay`, `GetMarketQueryHandler` читает прогресс с `IdeasEngineVersion.Current`;
   `MarketResponse.Replay` (`done`, `total`, `slowest`, `engineVersion`), OpenAPI и `npm run generate` типов (сценарий «Ход
   прогона в ответе»). Тесты: обработчик отдаёт прогресс; тест контракта ответа.
 - [ ] 4.3 `ScannerBanners`: баннер «Прогон идей: N из M инструментов» тона `run` с версией правил и местной датой

@@ -52,11 +52,39 @@ internal sealed class IdeaReplayRepository(NpgsqlDataSource dataSource) : IIdeaR
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task<IdeaReplayProgress> ProgressAsync(int engineVersion, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        Progress row = await connection.QuerySingleAsync<Progress>(
+            new CommandDefinition(
+                """
+                SELECT count(*) FILTER (WHERE r.replayed_until >= date_trunc('day', p.covered_until, 'UTC'))::int AS "Done",
+                       count(*)::int AS "Total",
+                       min(r.replayed_until) FILTER (WHERE r.replayed_until < date_trunc('day', p.covered_until, 'UTC')) AS "Slowest"
+                FROM scanner_pairs p
+                LEFT JOIN idea_replay r ON r.category = p.category AND r.symbol = p.symbol AND r.engine_version = @Version
+                WHERE p.listed AND p.history_from IS NOT NULL AND p.covered_until IS NOT NULL AND p.tick_size IS NOT NULL
+                """,
+                new { Version = engineVersion },
+                cancellationToken: cancellationToken));
+
+        return new IdeaReplayProgress(row.Done, row.Total, row.Slowest, engineVersion);
+    }
+
     public async Task DeleteOtherVersionsAsync(int engineVersion, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await connection.ExecuteAsync(
             new CommandDefinition("DELETE FROM idea_replay WHERE engine_version <> @Version", new { Version = engineVersion }, cancellationToken: cancellationToken));
+    }
+
+    private sealed class Progress
+    {
+        public int Done { get; init; }
+
+        public int Total { get; init; }
+
+        public DateTimeOffset? Slowest { get; init; }
     }
 
     private sealed class Cursor

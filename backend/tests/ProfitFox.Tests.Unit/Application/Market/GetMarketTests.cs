@@ -11,6 +11,7 @@ using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.SavedFilters;
 using ProfitFox.Domain.Entities.SavedFilters.Enums;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
@@ -31,6 +32,7 @@ public class GetMarketTests
     private IMarketSnapshotRepository _snapshots = null!;
     private IScannerStateRepository _state = null!;
     private ISavedFilterRepository _filters = null!;
+    private IIdeaReplayRepository _cursors = null!;
     private GetMarketQueryHandler _handler = null!;
     private IReadOnlyList<MarketSnapshotRow> _rows = [];
 
@@ -43,7 +45,22 @@ public class GetMarketTests
         _state.GetAsync(Arg.Any<CancellationToken>()).Returns(new ScannerState(Noon, 1104, 1104, null));
         _snapshots.GetAllAsync(Arg.Any<CancellationToken>()).Returns([]);
         _snapshots.GetSetupsAsync(Arg.Any<CancellationToken>()).Returns(new Dictionary<Instrument, IReadOnlyList<PairSetup>>());
-        _handler = new GetMarketQueryHandler(_snapshots, _state, _filters, new FakeTimeProvider(Noon));
+        _cursors = Substitute.For<IIdeaReplayRepository>();
+        _cursors.ProgressAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new IdeaReplayProgress(0, 0, null, IdeasEngineVersion.Current));
+        _handler = new GetMarketQueryHandler(_snapshots, _state, _filters, _cursors, new FakeTimeProvider(Noon));
+    }
+
+    // Scenario "Ход прогона в ответе" (decision 4 of speed-up-ideas-replay): the state carries the progress of the replay of the version of the rules
+    // this build runs.
+    [Test]
+    public async Task State_carries_the_progress_of_the_replay_of_the_current_version()
+    {
+        var progress = new IdeaReplayProgress(507, 1211, DateTimeOffset.Parse("2026-08-15T00:00:00Z", CultureInfo.InvariantCulture), IdeasEngineVersion.Current);
+        _cursors.ProgressAsync(IdeasEngineVersion.Current, Arg.Any<CancellationToken>()).Returns(progress);
+
+        GetMarketResult result = await _handler.Handle(Everything, CancellationToken.None);
+
+        result.State.Replay.ShouldBe(progress);
     }
 
     // Scenario "Снимок есть": the first rows by the change in 1 hour, the count of all the pairs and the state.
