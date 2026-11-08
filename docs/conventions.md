@@ -414,9 +414,9 @@ enforces a rule, the check is the source of truth.
 
 - The `ExchangeAccounts` section (`ExchangeAccountSettings`): `MasterKey`, 32 bytes in base64, encrypts the secrets of
   exchange accounts. Only `appsettings.Development.json` and `appsettings.Testing.json` of the API carry a key; any other
-  environment sets `ExchangeAccounts__MasterKey`, or the API does not start. A Worker requires it only with
-  `Trading:Enabled`, as it decrypts keys only to trade; its `appsettings.Development.json` and `appsettings.Testing.json`
-  carry the same keys as the API's.
+  environment sets `ExchangeAccounts__MasterKey`, or the API does not start. Every Worker requires it too: a trading one
+  decrypts the keys of the bots, and any one decrypts the token of T-Invest for an import of `moex`; its
+  `appsettings.Development.json` and `appsettings.Testing.json` carry the same keys as the API's. The scanner gets none.
 - The `Trading` section of the Worker (`TradingSettings`): `Enabled`, `false` by default. Only a trading Worker takes live
   bots (`LiveTradingBackgroundService`); a Worker on another machine that only runs backtests leaves it off. A local run
   never sends real orders: in Development a trading Worker does not start unless both `Bybit:RestAddress` and

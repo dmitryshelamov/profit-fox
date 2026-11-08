@@ -58,7 +58,7 @@ public static class InfrastructureRegistrar
         services.AddSingleton<FormingCandleFeeds>();
     }
 
-    /// <summary>The services of a Worker: the lanes that take candle imports and backtest work from the database.</summary>
+    /// <summary>The services of a Worker: the lanes that take candle imports and backtest work from the database; it requires the master key.</summary>
     /// <exception cref="InvalidOperationException">
     ///     A lease of work or of a bot would expire before the Worker renews it, or a Worker in Development would trade on the
     ///     live Bybit.
@@ -90,10 +90,11 @@ public static class InfrastructureRegistrar
                 "A Worker in Development trades only against a stub of Bybit: set Bybit__RestAddress and Bybit__SocketAddress, or Trading__Enabled=false.");
         }
 
-        // The API and a trading Worker decrypt secrets; a Worker that only runs backtests never needs the key (decision 12).
+        // Every Worker decrypts secrets: a trading one the keys of the bots, any one the token of T-Invest for an import of moex (decision 12).
+        RequireMasterKey(configuration, services);
+
         if (trading.Enabled)
         {
-            RequireMasterKey(configuration, services);
             services.AddHostedService<LiveTradingBackgroundService>();
             services.AddHostedService<IdeaAutoEntryBackgroundService>();
         }

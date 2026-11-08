@@ -258,6 +258,12 @@ T-Invest.
 колонка `category` без CHECK — проверить в задаче миграции). Настройки: секция `TInvest` во всех трёх хостах (`Endpoint`,
 `Limits`, `Certificates`), `Backtests:DefaultFees:moex`. Секретов в настройках нет: токен — в базе.
 
+**Поправка после ревью (мастер-ключ у всех Worker).** Worker без `Trading:Enabled` не требовал мастер-ключ, но импорт `moex`
+расшифровывает токен аккаунта T-Invest (`TInvestTokenSource` → `ISecretProtector.Decrypt`), и такой Worker падал с
+`ArgumentNullException` из `AesGcmSecretProtector`. Теперь `ConfigureWorker` требует мастер-ключ у любого Worker (как у API):
+проще и честнее, раз импорт его использует. Сканер по-прежнему без ключа. Дельта спеки `background-workers` обновляет
+требование «Настройки торговли».
+
 ### 13. Тесты
 
 - Unit: лимитер (окно, пауза по трейлеру, разные токены), окна `GetCandles` и обход от конца, перевод значений и лотов,
