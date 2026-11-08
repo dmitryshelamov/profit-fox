@@ -30,6 +30,7 @@ public class OutboundHttpGuardTests
         RpcException exception = await Should.ThrowAsync<RpcException>(async () =>
             await client.GetAccountsAsync(new GetAccountsRequest(), deadline: DateTime.UtcNow.AddSeconds(10)));
 
-        exception.StatusCode.ShouldBe(StatusCode.Unavailable);
+        // The dead proxy refuses the connection: Unavailable on one HTTP stack, Internal on another; never an answer, never the deadline.
+        exception.StatusCode.ShouldBeOneOf(StatusCode.Unavailable, StatusCode.Internal);
     }
 }
