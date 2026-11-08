@@ -128,7 +128,7 @@ T-Invest. Решения — в design.md, требования — в `specs/`.
 - [x] 10.2 Сценарий «исполнение с поздней комиссией»: `FILL` с комиссией `0`, через 10 с `1.25` → позиция с комиссией `1.25`.
 - [x] 10.3 Сценарий сверки: активная заявка бота, которой биржа не знает (`NOT_FOUND`), после `restored` → бот «ошибка» с
   причиной, называющей заявку.
-- [ ] 10.4 `dotnet build`, `dotnet test`, `dotnet format --verify-no-changes`; фронтенд без изменений кода — `npm run lint`,
+- [x] 10.4 `dotnet build`, `dotnet test`, `dotnet format --verify-no-changes`; фронтенд без изменений кода — `npm run lint`,
   `format:check`, `typecheck`, `test`, `build` зелёные.
 
 ## 11. Владелец

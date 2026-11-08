@@ -105,7 +105,7 @@ public class StartBotMoexTests
     {
         await Handler(enabled: true).Handle(new StartBotCommand(_bot.Id), CancellationToken.None);
 
-        await _live.Received(1).SaveAsync(Arg.Is<LiveBot>(bot => bot.Status == LiveBotStatus.Running), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+        await _live.Received(1).SaveAsync(Arg.Is<LiveBot>(bot => bot!.Status == LiveBotStatus.Running), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
         await _ledger.Received(1).GetFreeAsync(new ExchangeKey(AccountNumber, Token, Exchange.TInvest), "RUB", Arg.Any<CancellationToken>());
         _inspector.ReceivedCalls().ShouldBeEmpty();
         await _ledger.DidNotReceiveWithAnyArgs().IsHedgeModeAsync(default!, default!, default);

@@ -292,6 +292,41 @@ Singleton `TInvestStreams : IExchangeStreams, IFormingCandleStreams` по обр
 - **Кэш расписания — до конца суток UTC**, а не московских: время в системе только UTC; расписание запрашивается с «сейчас» на
   7 дней вперёд, так что дата в прошлом (`30003`) не запрашивается, а отказ всё равно даёт «расписания нет» (минута).
 
+## Итоги внедрения
+
+Группы 1–10 `tasks.md` выполнены в ветке `feat/add-moex-live-bots` (12 коммитов поверх предложения e628b5e), группа 11
+(чек-лист на реальном счёте и ручная проверка в dev) оставлена владельцу; `TInvest:Trading` по умолчанию выключен.
+
+Что сделано:
+
+- Домен и порты: `ExchangeKey.Exchange`, `OrderOutcome.RetryAfter`, `LiveOrder.Deferred` / `IdeaTradeOrder.Deferred` с паузой биржи,
+  ключ T-Invest из номера счёта и токена (`LiveRequests.KeyAsync`).
+- Запуск бота `moex`: выключатель `TInvest:Trading` → `MoexTradingSettings`, проверка счёта через `IBrokerAccountReader`, рубли
+  через маршрутизатор леджера; конфликт «not supported yet» удалён.
+- `Exchanges/Routing`: маршрутизаторы четырёх портов торговли — единственные регистрации, реализации Bybit и T-Invest keyed по
+  `Exchange`; `FormingCandleFeeds` без `NoData` для T-Invest.
+- `Exchanges/TInvest`: `moex_orders` (`AddMoexOrdersMigration`, `TInvestOrderIds`), `TInvestOrderStates`, `TInvestTradingStatuses`
+  (статус, коридор, расписание, конец торгового дня), `TInvestOrderGateway` (лоты, `DAY`, таблица отказов по коду),
+  `TInvestLedger`, `TInvestStreams` (стрим заявок на аккаунт, два стрима свечей на процесс, перечтение состояния, поздняя
+  комиссия, переподключение, тишина, конец дня, метрики `ok` / `error` / `lost`); `MockTInvestApi` отвечает на серверные и
+  дуплексные стримы.
+- Сессия бота передаёт `RetryAfter` в отсрочку заявки; сценарии Worker'а на `FakeTInvest` поверх `MockTInvestApi`: «бот через
+  ночь», «поздняя комиссия», «заявка бота неизвестна бирже».
+- `docs/conventions.md`: запуск на MOEX, маршрутизация портов торговли, `FormingCandleFeeds`, адаптер T-Invest и мок со стримами.
+
+Отклонения — в разделе «Отклонения при внедрении» выше: задачи 3.2–3.3 сделаны после группы 8; коды отказов в
+`TInvestRefusedException`; «уже в конечном состоянии» при отмене — по чтению состояния; `30057` без известного состояния —
+временный отказ; `restored` конца дня — от серии закрытых свечей; кэш расписания до конца суток UTC; найденная сценарием 10.3
+ошибка сверки (соседи бота `moex` искались среди ботов спота) исправлена; тексты сессии бота и журнала без имени Bybit.
+`ResilienceRegistrationTests` уже проверяли keyed-исполнители по бирже и не менялись; регистрация маршрутизаторов проверяется
+переписанным `StreamsRegistrationTests`.
+
+Проверки (последний прогон на HEAD): `dotnet build` — 0 ошибок, 21 предупреждение о nullability в тестах, которые были и до change; `dotnet format --verify-no-changes` — без
+изменений; `dotnet test` — Unit 2691, Integration 934, все зелёные (до change: 2535 и 920); фронтенд без изменений
+кода — `npm ci`, `lint`, `format:check`, `typecheck`, `test` (1422 теста), `build` зелёные на Node 24. Ни один тест и ни один
+запуск не обращался к реальному T-Invest или Bybit: T-Invest — `MockTInvestApi` за `ITInvestCallInvokers`, Bybit — фейки тестовых
+хостов; `.env.prod*`, `docker-compose.prod.yml` и продакшен не затрагивались.
+
 ## Risks / Trade-offs
 
 - [Единицы `GetPositions.securities.balance` — лоты, а не акции] → пункт чек-листа; маппинг в `TInvestLedger` в одном месте.
