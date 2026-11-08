@@ -321,6 +321,41 @@ public class ExchangeAccountsApiTests
         }
     }
 
+    // After the review: the token of a listing of accounts, accepted or rejected, stays out of the log as the token of a creation does.
+    [Test]
+    public async Task Token_of_a_listing_of_accounts_never_reaches_the_log()
+    {
+        const string rejected = "t.wrong-token-that-never-leaves";
+        var logs = new List<LogEvent>();
+        ILogEventSink sink = Substitute.For<ILogEventSink>();
+        sink.When(log => log.Emit(Arg.Any<LogEvent>())).Do(call =>
+        {
+            lock (logs)
+            {
+                logs.Add(call.Arg<LogEvent>()!);
+            }
+        });
+        var factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { Workers = 0, LogSink = sink, VerboseLogs = true };
+        factory.BrokerAccounts.ListAccountsAsync(Token, Arg.Any<CancellationToken>()).Returns([Brokerage]);
+        factory.BrokerAccounts.ListAccountsAsync(rejected, Arg.Any<CancellationToken>()).ThrowsAsync(new ExchangeKeyRejectedException("T-Invest does not accept the token."));
+
+        await using (factory)
+        {
+            using HttpClient client = factory.CreateClient();
+
+            (await client.PostAsJsonAsync($"{Accounts}/tinvest/accounts", new { token = Token })).StatusCode.ShouldBe(HttpStatusCode.OK);
+            (await client.PostAsJsonAsync($"{Accounts}/tinvest/accounts", new { token = rejected })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        }
+
+        lock (logs)
+        {
+            logs.ShouldContain(log => log.Level == LogEventLevel.Verbose || log.Level == LogEventLevel.Debug);
+            logs.ShouldContain(log => log.RenderMessage(null).Contains($"{Accounts}/tinvest/accounts"));
+            logs.ShouldAllBe(log => !Rendered(log).Contains(Token));
+            logs.ShouldAllBe(log => !Rendered(log).Contains(rejected));
+        }
+    }
+
     // Scenario "Доступ отозван между выбором и сохранением".
     [Test]
     public async Task TInvest_account_the_token_cannot_fully_open_is_a_bad_request_on_the_account()
