@@ -162,9 +162,9 @@
   `KeyAsync`. Unit-тесты.
 - [ ] 8.10 Портфель T-Invest: каждая валютная позиция отдельной строкой, стоимость в рублях, итог из `TotalAmountPortfolio`.
   Unit-тест с RUB и USD.
-- [ ] 8.11 Лимитер: `Limits` > 0 в `TInvestSettings.Problem()`; ключ словарей — SHA-256-отпечаток токена (решение 7);
+- [x] 8.11 Лимитер: `Limits` > 0 в `TInvestSettings.Problem()`; ключ словарей — SHA-256-отпечаток токена (решение 7);
   `Waiting_request_is_cancelled_with_its_token` ждёт `Should.ThrowAsync`. Unit-тесты.
-- [ ] 8.12 `TInvestTokenSource`: кэш — ссылочный `sealed record` через `Volatile.Read`/`Volatile.Write`.
+- [x] 8.12 `TInvestTokenSource`: кэш — ссылочный `sealed record` через `Volatile.Read`/`Volatile.Write`.
 - [ ] 8.13 Пиннинг: второй элемент цепочки — закреплённый Sub CA, `DisableCertificateDownloads`, OID serverAuth в
   `ApplicationPolicy`. Unit-тест: сервер другого Sub CA под тем же корнем отклоняется.
 - [ ] 8.14 Фронтенд `AccountForm`: переключатель биржи и токен заблокированы на время запросов, устаревший ответ игнорируется,

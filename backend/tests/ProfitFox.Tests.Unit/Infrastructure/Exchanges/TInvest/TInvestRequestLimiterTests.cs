@@ -104,14 +104,14 @@ public class TInvestRequestLimiterTests
     }
 
     [Test]
-    public void Waiting_request_is_cancelled_with_its_token()
+    public async Task Waiting_request_is_cancelled_with_its_token()
     {
         _limiter.Pause("t.one", TInvestMethodGroup.MarketData, Start + TimeSpan.FromSeconds(30));
         using var cancel = new CancellationTokenSource();
 
         Task held = _limiter.AcquireAsync("t.one", TInvestMethodGroup.MarketData, cancel.Token);
-        cancel.Cancel();
+        await cancel.CancelAsync();
 
-        Should.ThrowAsync<OperationCanceledException>(() => held);
+        await Should.ThrowAsync<OperationCanceledException>(() => held);
     }
 }

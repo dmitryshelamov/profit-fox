@@ -248,8 +248,8 @@ enforces a rule, the check is the source of truth.
   `WithRetriesAsync` the ladder of `ExchangeResilienceExecutor`; `RESOURCE_EXHAUSTED` pauses the group of the token until `x-ratelimit-reset`
   and is `ExchangeRateLimitedException`, `NOT_FOUND` is `TInvestNotFoundException`, a refusal carries the error code of the status detail and
   never the text of the broker; a call cancelled by its own token is an `OperationCanceledException`, neither counted nor translated, and the
-  channel throws it itself with `ThrowOperationCanceledOnCancellation`), `TInvestRequestLimiter` (a sliding window of a minute per token and `TInvestMethodGroup`, `TInvestMethods`
-  names the group of a service), `TInvestValues` (`Quotation` and `MoneyValue` ↔ `decimal` as `units + nano / 1e9`, timestamps in UTC),
+  channel throws it itself with `ThrowOperationCanceledOnCancellation`), `TInvestRequestLimiter` (a sliding window of a minute per token, kept by its SHA-256 fingerprint, and `TInvestMethodGroup`,
+  `TInvestMethods` names the group of a service; every limit of the settings is above zero, or the registrar refuses them), `TInvestValues` (`Quotation` and `MoneyValue` ↔ `decimal` as `units + nano / 1e9`, timestamps in UTC),
   `TInvestCodes` (the `CandleInterval` of an `Interval` and the longest window of one request of candles: 1 and 3 min a day, 5 min a week,
   15 and 30 min three weeks, the hours 90 days), `TInvestTokenSource` (the token of the oldest T-Invest account of storage, kept 5 minutes;
   without an account `ExchangeUnavailableException` and no request), `TInvestShares` (a ticker resolved into a share of TQBR with `ShareBy`,

@@ -21,14 +21,16 @@ internal sealed class TInvestTokenSource(IServiceScopeFactory scopes, ISecretPro
     public static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(5);
 
     private readonly SemaphoreSlim _gate = new SemaphoreSlim(1, 1);
-    private (DateTimeOffset Expires, string Token)? _cached;
+
+    // A reference, read and written whole outside the gate: a struct could be seen half-written.
+    private Cached? _cached;
 
     /// <exception cref="ExchangeUnavailableException">There is no T-Invest account.</exception>
     public async Task<string> GetAsync(CancellationToken cancellationToken)
     {
         DateTimeOffset now = time.GetUtcNow();
 
-        if (_cached is { } fresh && now < fresh.Expires)
+        if (Volatile.Read(ref _cached) is { } fresh && now < fresh.Expires)
         {
             return fresh.Token;
         }
@@ -37,13 +39,13 @@ internal sealed class TInvestTokenSource(IServiceScopeFactory scopes, ISecretPro
 
         try
         {
-            if (_cached is { } refreshed && now < refreshed.Expires)
+            if (Volatile.Read(ref _cached) is { } refreshed && now < refreshed.Expires)
             {
                 return refreshed.Token;
             }
 
             string token = await ReadAsync(cancellationToken);
-            _cached = (now + Lifetime, token);
+            Volatile.Write(ref _cached, new Cached(now + Lifetime, token));
 
             return token;
         }
@@ -67,4 +69,6 @@ internal sealed class TInvestTokenSource(IServiceScopeFactory scopes, ISecretPro
 
         return protector.Decrypt(account.Id, secret);
     }
+
+    private sealed record Cached(DateTimeOffset Expires, string Token);
 }

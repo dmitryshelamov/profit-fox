@@ -29,12 +29,20 @@ internal sealed record TInvestSettings
 
     public TInvestCertificateSettings Certificates { get; init; } = new TInvestCertificateSettings();
 
-    /// <summary>Why the settings are wrong, or <c>null</c>: the endpoint goes only to the official host, or to a test host under <c>.invalid</c>.</summary>
+    /// <summary>
+    ///     Why the settings are wrong, or <c>null</c>: the endpoint goes only to the official host, or to a test host under <c>.invalid</c>,
+    ///     and every limit is above zero.
+    /// </summary>
     public string? Problem()
     {
         if (!Uri.TryCreate(Endpoint, UriKind.Absolute, out Uri? endpoint) || endpoint.Scheme != Uri.UriSchemeHttps)
         {
             return $"TInvest:Endpoint must be an https address, not '{Endpoint}'.";
+        }
+
+        if (Limits.FirstOrDefault(limit => limit.Value <= 0) is { Key: { } group })
+        {
+            return $"TInvest:Limits:{group} must be above zero.";
         }
 
         return endpoint.Host == OfficialHost || endpoint.Host.EndsWith(".invalid", StringComparison.Ordinal)

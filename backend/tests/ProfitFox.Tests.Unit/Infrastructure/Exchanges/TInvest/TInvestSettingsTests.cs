@@ -36,6 +36,14 @@ public class TInvestSettingsTests
         new TInvestSettings { Endpoint = endpoint }.Problem().ShouldNotBeNull();
     }
 
+    // After the review: a limit of zero or below would stop every request of the group for good, and the limiter would fail on an empty window.
+    [TestCase(0)]
+    [TestCase(-1)]
+    public void Limit_not_above_zero_fails(int limit)
+    {
+        new TInvestSettings { Limits = new Dictionary<string, int> { ["MarketData"] = limit } }.Problem().ShouldNotBeNull().ShouldContain("TInvest:Limits:MarketData");
+    }
+
     [Test]
     public void Limits_have_the_budget_of_each_group_of_methods()
     {
