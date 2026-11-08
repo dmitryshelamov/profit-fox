@@ -41,8 +41,8 @@ public static class SetupDetector
     {
         decimal atr = basis.Atr;
         decimal median = basis.Median;
-        Window impulse = Measure(minutes.TakeLast(thresholds.Candles * candleMinutes), thresholds.Candles, atr, median);
-        Window last = Measure(minutes.TakeLast(candleMinutes), 1, atr, median);
+        Window impulse = Measure(minutes, Math.Min(minutes.Count, thresholds.Candles * candleMinutes), thresholds.Candles, atr, median);
+        Window last = Measure(minutes, Math.Min(minutes.Count, candleMinutes), 1, atr, median);
         var signals = new List<SetupSignal>();
         bool rise = impulse.Move >= thresholds.Move && impulse.Volume >= thresholds.Volume;
         bool fall = -impulse.Move >= thresholds.Move && impulse.Volume >= thresholds.Volume;
@@ -72,8 +72,7 @@ public static class SetupDetector
             signals.Add(last.Signal(IdeaSetup.HighVolatility, null));
         }
 
-        IdeaCandle[] window = [.. minutes.TakeLast(candleMinutes)];
-        var candle = new IdeaCandle(window[0].OpenTime, window[0].Open, last.High, last.Low, window[^1].Close, window.Sum(minute => minute.Volume));
+        var candle = new IdeaCandle(last.First.OpenTime, last.First.Open, last.High, last.Low, minutes[^1].Close, last.Sum);
         var input = new CandleSetupInput(basis.Closed, candle, atr, median, basis.Zones, basis.Rsi, percentiles.Low, [.. signals]);
 
         return new SetupReading(atr, [.. signals, .. CandleSetupDetector.Detect(input, thresholds)]);
@@ -92,20 +91,41 @@ public static class SetupDetector
         return (volumes[(volumes.Length / 2) - 1] + volumes[volumes.Length / 2]) / 2;
     }
 
-    private static Window Measure(IEnumerable<IdeaCandle> minutes, int candles, decimal atr, decimal median)
+    /// <summary>
+    ///     The window of the last <paramref name="count" /> minutes, read in place: the replay reads it every minute of history, so it copies
+    ///     nothing and takes the sum, the low and the high in one pass, in the order of the minutes (decision 1 of speed-up-ideas-replay).
+    /// </summary>
+    private static Window Measure(IReadOnlyList<IdeaCandle> minutes, int count, int candles, decimal atr, decimal median)
     {
-        IdeaCandle[] window = [.. minutes];
-        decimal volume = window.Sum(minute => minute.Volume) / candles;
+        int first = minutes.Count - count;
+        IdeaCandle open = minutes[first];
+        decimal sum = open.Volume;
+        decimal low = open.Low;
+        decimal high = open.High;
 
-        return new Window(
-            (window[^1].Close - window[0].Open) / atr,
-            median > 0 ? volume / median : 0m,
-            window.Min(minute => minute.Low),
-            window.Max(minute => minute.High));
+        for (int index = first + 1; index < minutes.Count; index++)
+        {
+            IdeaCandle minute = minutes[index];
+            sum += minute.Volume;
+
+            if (minute.Low < low)
+            {
+                low = minute.Low;
+            }
+
+            if (minute.High > high)
+            {
+                high = minute.High;
+            }
+        }
+
+        decimal volume = sum / candles;
+
+        return new Window((minutes[^1].Close - open.Open) / atr, median > 0 ? volume / median : 0m, low, high, open, sum);
     }
 
-    /// <summary>The move of a window in ATR, signed, and its volume a candle in medians.</summary>
-    private sealed record Window(decimal Move, decimal Volume, decimal Low, decimal High)
+    /// <summary>The move of a window in ATR, signed, and its volume a candle in medians; its first minute and the sum of its volumes.</summary>
+    private sealed record Window(decimal Move, decimal Volume, decimal Low, decimal High, IdeaCandle First, decimal Sum)
     {
         public SetupSignal Signal(IdeaSetup setup, IdeaSide? side)
         {
