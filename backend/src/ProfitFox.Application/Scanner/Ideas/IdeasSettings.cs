@@ -29,6 +29,12 @@ public sealed class IdeasSettings
     /// <summary>The touches a zone needs.</summary>
     public int ZoneStrength { get; init; } = 2;
 
+    /// <summary>
+    ///     How many turns of the replay of history run at once, each on a pair of its own (decision 2 of speed-up-ideas-replay); prod lowers it
+    ///     with <c>Ideas__ReplayTurns</c> if the minute cycle or the trading Worker suffer.
+    /// </summary>
+    public int ReplayTurns { get; init; } = 2;
+
     /// <summary>The rules of the ideas, live and in the replay of history alike.</summary>
     public IdeaRuleSet Rules()
     {

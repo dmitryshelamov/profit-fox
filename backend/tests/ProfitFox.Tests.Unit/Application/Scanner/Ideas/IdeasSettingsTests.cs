@@ -71,6 +71,13 @@ public class IdeasSettingsTests
         new IdeasSettings().Rules().Thresholds[Interval.OneHour].ShouldBe(new SetupThresholds(6, 3m, 2m, 1.5m, 3m, 0.1m, 1.5m, 0.2m, 20, 4m, 1m, 3m, 0.3m, 1.5m, 0.5m, 70m, 30m));
     }
 
+    // Decision 2 of speed-up-ideas-replay: two turns of the replay at once by default.
+    [Test]
+    public void Replay_runs_two_turns_at_once_by_default()
+    {
+        new IdeasSettings().ReplayTurns.ShouldBe(2);
+    }
+
     // Scenario "Свой порог на ТФ": d = 0.1, and 0.2 for 5 minutes.
     [Test]
     public void Breakout_margin_of_an_interval_of_its_own()

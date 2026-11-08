@@ -104,7 +104,9 @@ public class IdeasReplayProfileTests
             new FakeTimeProvider(End));
 
         var whole = Stopwatch.StartNew();
-        (await replay.StepAsync(CancellationToken.None)).ShouldBeTrue();
+        Task? turn = await replay.StartAsync(CancellationToken.None);
+        turn.ShouldNotBeNull();
+        await turn;
         whole.Stop();
 
         replayed.ShouldNotBeNull();

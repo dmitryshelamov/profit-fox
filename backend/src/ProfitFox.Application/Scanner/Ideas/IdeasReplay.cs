@@ -47,6 +47,9 @@ public sealed class IdeasReplay(
     // A settlement every hour at the most over the 8 days of funding a day reads.
     private const int FundingRead = 8 * 24;
 
+    // The cursors and the pairs the turns run, which the turns share (decision 2 of speed-up-ideas-replay).
+    private readonly Lock _lock = new Lock();
+    private readonly HashSet<Instrument> _running = [];
     private Dictionary<Instrument, IdeaReplayCursor>? _cursors;
 
     /// <summary>
@@ -65,36 +68,81 @@ public sealed class IdeasReplay(
         return false;
     }
 
-    /// <summary>Replays the turn of the pair furthest behind; <c>false</c> when every pair is replayed up to its coverage.</summary>
-    public async Task<bool> StepAsync(CancellationToken cancellationToken)
+    /// <summary>
+    ///     Starts the turn of the pair furthest behind among those no turn runs, while fewer than <see cref="IdeasSettings.ReplayTurns" /> run
+    ///     (decision 2 of speed-up-ideas-replay); the turn runs on the thread pool and its pair goes to another turn only once it ends. None when
+    ///     as many turns run or every other pair is replayed up to its coverage.
+    /// </summary>
+    public async Task<Task?> StartAsync(CancellationToken cancellationToken)
     {
-        _cursors ??= new Dictionary<Instrument, IdeaReplayCursor>(await cursors.GetAsync(version.Number, cancellationToken));
+        if (_cursors is null)
+        {
+            IReadOnlyDictionary<Instrument, IdeaReplayCursor> stored = await cursors.GetAsync(version.Number, cancellationToken);
+
+            lock (_lock)
+            {
+                _cursors ??= new Dictionary<Instrument, IdeaReplayCursor>(stored);
+            }
+        }
+
+        Turn? next;
+
+        lock (_lock)
+        {
+            if (_running.Count >= settings.ReplayTurns)
+            {
+                return null;
+            }
+
+            next = Next();
+
+            if (next is null)
+            {
+                return null;
+            }
+
+            _running.Add(next.Pair.Instrument);
+        }
+
+        return Task.Run(() => RunAsync(next, cancellationToken), CancellationToken.None);
+    }
+
+    // The turn of the pair furthest behind among those no turn runs; called under the lock.
+    private Turn? Next()
+    {
         DateTimeOffset now = time.GetUtcNow();
         DateTimeOffset historyStart = Ceiling(now.AddDays(-scanner.HistoryDays));
-        Turn? next = market.Listed()
+
+        return market.Listed()
             // A pair waits for its price step too: a day replayed without ideas would never be replayed again.
-            .Where(pair => pair is { HistoryFrom: not null, CoveredUntil: not null, TickSize: not null })
+            .Where(pair => pair is { HistoryFrom: not null, CoveredUntil: not null, TickSize: not null } && !_running.Contains(pair.Instrument))
             .Select(pair =>
             {
                 DateTimeOffset start = Max(historyStart, Ceiling(pair.HistoryFrom!.Value));
 
                 // A cursor older than the history window starts the pair over: the days after it may hold no minutes any more.
-                IdeaReplayCursor? stored = _cursors.GetValueOrDefault(pair.Instrument);
+                IdeaReplayCursor? stored = _cursors!.GetValueOrDefault(pair.Instrument);
                 IdeaReplayCursor? cursor = stored?.ReplayedUntil >= start ? stored : null;
 
                 return new Turn(pair, start, Floor(pair.CoveredUntil!.Value), cursor, stored is not null && cursor is null);
             })
             .Where(turn => turn.From < turn.Until)
             .MinBy(turn => turn.Cursor?.ReplayedUntil ?? DateTimeOffset.MinValue);
+    }
 
-        if (next is null)
+    private async Task RunAsync(Turn turn, CancellationToken cancellationToken)
+    {
+        try
         {
-            return false;
+            await ReplayAsync(turn, cancellationToken);
         }
-
-        await ReplayAsync(next, cancellationToken);
-
-        return true;
+        finally
+        {
+            lock (_lock)
+            {
+                _running.Remove(turn.Pair.Instrument);
+            }
+        }
     }
 
     private async Task ReplayAsync(Turn turn, CancellationToken cancellationToken)
@@ -161,7 +209,11 @@ public sealed class IdeasReplay(
             timings.Writes.Start();
             await cursors.SetAsync(instrument, version.Number, cursor, cancellationToken);
             timings.Writes.Stop();
-            _cursors![instrument] = cursor;
+
+            lock (_lock)
+            {
+                _cursors![instrument] = cursor;
+            }
         }
 
         timings.Writes.Start();

@@ -380,7 +380,11 @@ public sealed class ScannerSession(
                     await Task.WhenAny(Task.Delay(TimeSpan.FromMinutes(1), time, cancellationToken), _cleaned.Task);
                     cancellationToken.ThrowIfCancellationRequested();
                 }
-                else if (!await replay.StepAsync(cancellationToken))
+                else if (await replay.StartAsync(cancellationToken) is { } turn)
+                {
+                    await turn;
+                }
+                else
                 {
                     await Task.Delay(TimeSpan.FromMinutes(1), time, cancellationToken);
                 }

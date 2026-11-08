@@ -50,6 +50,8 @@ public class IdeasReplayTests
     private Dictionary<Instrument, IdeaReplayCursor> _stored = null!;
     private IReadOnlyList<IdeaCandle> _minutes = null!;
     private IReadOnlyList<IdeaCandle> _btc = null!;
+    // The warm-up of a turn of a pair waits for its gate, so a test holds a turn while it starts the others.
+    private Dictionary<Instrument, TaskCompletionSource> _gates = null!;
 
     [SetUp]
     public void SetUp()
@@ -68,6 +70,7 @@ public class IdeasReplayTests
         _writes = [];
         _minutes = IdeaFixtures.Setup("impulse");
         _btc = [];
+        _gates = [];
         _stored = [];
         _cursors.GetAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(_ => new Dictionary<Instrument, IdeaReplayCursor>(_stored));
         _cursors.SetAsync(Arg.Any<Instrument>(), Arg.Any<int>(), Arg.Any<IdeaReplayCursor>(), Arg.Any<CancellationToken>()).Returns(call =>
@@ -88,10 +91,7 @@ public class IdeasReplayTests
 
             return Task.CompletedTask;
         });
-        _candles.GetAsync(Wif, Interval.OneMinute, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(call =>
-            (IReadOnlyList<Candle>)[.. _minutes.Where(minute => minute.OpenTime >= call.ArgAt<DateTimeOffset>(2) && minute.OpenTime < call.ArgAt<DateTimeOffset>(3)).Select(Candle)]);
-        _candles.GetAggregatedAsync(Wif, Arg.Any<Interval>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(call =>
-            IdeaCandles.FromMinutes(call.ArgAt<Interval>(1), _minutes, call.ArgAt<DateTimeOffset>(2), call.ArgAt<DateTimeOffset>(3)));
+        Serve(Wif, () => _minutes);
         _candles.GetAsync(Btc, Interval.OneMinute, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(call =>
             (IReadOnlyList<Candle>)[.. _btc.Where(minute => minute.OpenTime >= call.ArgAt<DateTimeOffset>(2) && minute.OpenTime < call.ArgAt<DateTimeOffset>(3)).Select(Candle)]);
         _candles.GetAggregatedAsync(Btc, Arg.Any<Interval>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(call =>
@@ -103,7 +103,7 @@ public class IdeasReplayTests
     [Test]
     public async Task Replay_of_a_day_closes_the_signals_that_count_as_the_live_engine_closes_its_ideas()
     {
-        (await Replay().StepAsync(CancellationToken.None)).ShouldBeTrue();
+        (await Step(Replay())).ShouldBeTrue();
 
         _written.ShouldNotBeEmpty();
         Outcomes(_written.Values).ShouldBe(Shape(Live()));
@@ -115,13 +115,13 @@ public class IdeasReplayTests
     public async Task Next_turn_goes_on_with_the_paths_open_at_the_cursor()
     {
         IdeasReplay replay = Replay();
-        await replay.StepAsync(CancellationToken.None);
+        await Step(replay);
         IdeaSignal[] open = [.. _stored[Wif].Open];
         IdeaSignal[] ended = [.. _written.Values.Where(signal => !signal.Path.IsOpen)];
         Keep(March1.AddDays(2));
         _time.Advance(TimeSpan.FromDays(1));
 
-        (await replay.StepAsync(CancellationToken.None)).ShouldBeTrue();
+        (await Step(replay)).ShouldBeTrue();
 
         open.ShouldNotBeEmpty();
         open.ShouldAllBe(signal => signal.Path.TrackedUntil == March1.AddDays(1));
@@ -132,7 +132,7 @@ public class IdeasReplayTests
         await _candles.Received(1).GetAsync(Wif, Interval.OneMinute, March1.AddDays(-1), March1.AddDays(1), 2880, Arg.Any<CancellationToken>());
         await _cursors.Received(1).SetAsync(Wif, IdeasEngineVersion.Current, Until(March1.AddDays(1)), Arg.Any<CancellationToken>());
         await _cursors.Received(1).SetAsync(Wif, IdeasEngineVersion.Current, Until(March1.AddDays(2)), Arg.Any<CancellationToken>());
-        (await replay.StepAsync(CancellationToken.None)).ShouldBeFalse();
+        (await Step(replay)).ShouldBeFalse();
     }
 
     // History may start before the first trade: the days before it pass, and the turn still moves the cursor over them.
@@ -142,11 +142,11 @@ public class IdeasReplayTests
         _market.Keep([new ScannerPair(Wif, true, HistoryFrom: March1.AddDays(-3), CoveredUntil: March1.AddDays(1), TickSize: Tick)]);
         IdeasReplay replay = Replay();
 
-        (await replay.StepAsync(CancellationToken.None)).ShouldBeTrue();
+        (await Step(replay)).ShouldBeTrue();
 
         Outcomes(_written.Values).ShouldBe(Shape(Live()));
         await _cursors.Received(1).SetAsync(Wif, IdeasEngineVersion.Current, Until(March1.AddDays(-2)), Arg.Any<CancellationToken>());
-        (await replay.StepAsync(CancellationToken.None)).ShouldBeFalse();
+        (await Step(replay)).ShouldBeFalse();
     }
 
     // Pairs take turns: the one furthest behind goes first, a pair never replayed before all others.
@@ -157,7 +157,7 @@ public class IdeasReplayTests
         _stored[Wif] = new IdeaReplayCursor(March1, []);
         _market.Keep([new ScannerPair(sol, true, HistoryFrom: March1, CoveredUntil: March1.AddDays(1), TickSize: Tick)]);
 
-        await Replay().StepAsync(CancellationToken.None);
+        await Step(Replay());
 
         await _cursors.Received(1).SetAsync(sol, IdeasEngineVersion.Current, Until(March1.AddDays(1)), Arg.Any<CancellationToken>());
         await _cursors.DidNotReceive().SetAsync(Wif, Arg.Any<int>(), Arg.Any<IdeaReplayCursor>(), Arg.Any<CancellationToken>());
@@ -171,7 +171,7 @@ public class IdeasReplayTests
         var stale = new IdeaSignal(Wif, IdeaSetup.Impulse, SignalPath.Fired(new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 100m, 98m, 104m), Interval.OneHour, March1.AddDays(-40), Tick), 3m, 2m, IdeasEngineVersion.Current);
         _stored[Wif] = new IdeaReplayCursor(March1.AddDays(-30), [stale]);
 
-        await Replay().StepAsync(CancellationToken.None);
+        await Step(Replay());
 
         Outcomes(_written.Values).ShouldBe(Shape(Live()));
         await _candles.DidNotReceive().GetAsync(Wif, Interval.OneMinute, March1.AddDays(-30), March1.AddDays(-29), 1440, Arg.Any<CancellationToken>());
@@ -186,11 +186,11 @@ public class IdeasReplayTests
     [Test]
     public async Task Pair_going_on_from_its_cursor_keeps_its_signals()
     {
-        await Replay().StepAsync(CancellationToken.None);
+        await Step(Replay());
         Keep(March1.AddDays(2));
         _time.Advance(TimeSpan.FromDays(1));
 
-        await Replay().StepAsync(CancellationToken.None);
+        await Step(Replay());
 
         await _signals.DidNotReceiveWithAnyArgs().DeleteAsync(default!, default, default);
     }
@@ -201,7 +201,7 @@ public class IdeasReplayTests
     {
         _market.Keep([new ScannerPair(Wif, true, CoveredUntil: March1.AddDays(1), TickSize: Tick)]);
 
-        (await Replay().StepAsync(CancellationToken.None)).ShouldBeFalse();
+        (await Step(Replay())).ShouldBeFalse();
     }
 
     // A pair whose price step the list of instruments has not told yet waits for it: a day replayed without ideas would never be replayed again.
@@ -210,7 +210,7 @@ public class IdeasReplayTests
     {
         _market.Keep([new ScannerPair(Wif, true, HistoryFrom: March1, CoveredUntil: March1.AddDays(1))]);
 
-        (await Replay().StepAsync(CancellationToken.None)).ShouldBeFalse();
+        (await Step(Replay())).ShouldBeFalse();
     }
 
     // Decision 1: the replay waits between days while the minute cycle is late.
@@ -218,7 +218,7 @@ public class IdeasReplayTests
     public async Task Replay_waits_while_the_minute_cycle_is_late()
     {
         _pace.Snapshot(_time.GetUtcNow(), _time.GetUtcNow().AddSeconds(3));
-        Task<bool> step = Replay().StepAsync(CancellationToken.None);
+        Task<bool> step = Step(Replay());
         await Task.Delay(50);
 
         await _candles.DidNotReceive().GetAsync(Wif, Interval.OneMinute, March1, March1.AddDays(1), 1440, Arg.Any<CancellationToken>());
@@ -237,7 +237,7 @@ public class IdeasReplayTests
         Keep(March1.AddDays(2));
         _time.Advance(TimeSpan.FromDays(1));
 
-        await Replay().StepAsync(CancellationToken.None);
+        await Step(Replay());
 
         _journal.Received(1).Replayed(Wif, 2, Arg.Is<TimeSpan>(engine => engine >= TimeSpan.Zero), Arg.Is<TimeSpan>(reads => reads >= TimeSpan.Zero), Arg.Is<TimeSpan>(writes => writes >= TimeSpan.Zero));
     }
@@ -252,12 +252,75 @@ public class IdeasReplayTests
         var waiting = new IdeaSignal(Wif, IdeaSetup.Impulse, SignalPath.Fired(plan, Interval.FifteenMinutes, March1.AddDays(-7).AddMinutes(-1), Tick) with { TrackedUntil = March1 }, 3m, 2m, IdeasEngineVersion.Current);
         _stored[Wif] = new IdeaReplayCursor(March1, [waiting]);
 
-        await Replay().StepAsync(CancellationToken.None);
+        await Step(Replay());
 
         IdeaSignal ended = _written[(waiting.Key, waiting.Path.FiredAt)];
         (ended.Path.IsOpen, ended.Path.EntryAfter, ended.Path.TrackedUntil).ShouldBe((false, null, March1.AddDays(1)));
         _writes[0].ShouldContain(ended);
         _stored[Wif].Open.ShouldNotContain(signal => signal.Path.FiredAt == waiting.Path.FiredAt);
+    }
+
+    // Scenario "Два хода одновременно" (decision 2 of speed-up-ideas-replay): with two turns the pairs furthest behind go at once, SOLUSDT never
+    // replayed before WIFUSDT a day behind; PEPEUSDT, the least behind, waits while two turns run.
+    [Test]
+    public async Task Two_turns_take_the_two_pairs_furthest_behind_at_once()
+    {
+        var sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
+        var pepe = new Instrument(MarketCategory.Linear, "PEPEUSDT");
+        Serve(sol, () => _minutes);
+        Serve(pepe, () => _minutes);
+        _gates[Wif] = new TaskCompletionSource();
+        _gates[sol] = new TaskCompletionSource();
+        _stored[Wif] = new IdeaReplayCursor(March1.AddDays(-1), []);
+        _stored[pepe] = new IdeaReplayCursor(March1, []);
+        _market.Keep([.. new[] { Wif, sol, pepe }.Select(pair => new ScannerPair(pair, true, HistoryFrom: March1.AddDays(-2), CoveredUntil: March1.AddDays(1), TickSize: Tick))]);
+        IdeasReplay replay = Replay();
+
+        Task first = (await replay.StartAsync(CancellationToken.None))!;
+        await WaitAsync(() => Started(sol));
+        Started(Wif).ShouldBeFalse();
+        Task second = (await replay.StartAsync(CancellationToken.None))!;
+        await WaitAsync(() => Started(Wif));
+
+        (await replay.StartAsync(CancellationToken.None)).ShouldBeNull();
+        Started(pepe).ShouldBeFalse();
+        _gates[Wif].SetResult();
+        _gates[sol].SetResult();
+        await Task.WhenAll(first, second);
+        _stored[sol].ReplayedUntil.ShouldBe(March1.AddDays(1));
+        _stored[Wif].ReplayedUntil.ShouldBe(March1.AddDays(1));
+    }
+
+    // A pair a turn runs is not given to another turn, however many may run.
+    [Test]
+    public async Task Pair_a_turn_runs_is_not_given_to_a_second_turn()
+    {
+        _gates[Wif] = new TaskCompletionSource();
+        IdeasReplay replay = Replay(settings: new IdeasSettings { ReplayTurns = 3 });
+
+        Task turn = (await replay.StartAsync(CancellationToken.None))!;
+
+        (await replay.StartAsync(CancellationToken.None)).ShouldBeNull();
+        _gates[Wif].SetResult();
+        await turn;
+        _written.ShouldNotBeEmpty();
+    }
+
+    // Once its turn ends, a pair behind its coverage again takes the next turn; one replayed up to its coverage does not.
+    [Test]
+    public async Task Pair_takes_a_turn_again_after_its_turn_ends_while_it_is_behind()
+    {
+        IdeasReplay replay = Replay();
+        await (await replay.StartAsync(CancellationToken.None))!;
+        (await replay.StartAsync(CancellationToken.None)).ShouldBeNull();
+        Keep(March1.AddDays(2));
+        _time.Advance(TimeSpan.FromDays(1));
+
+        Task? next = await replay.StartAsync(CancellationToken.None);
+
+        next.ShouldNotBeNull();
+        await next;
+        _stored[Wif].ReplayedUntil.ShouldBe(March1.AddDays(2));
     }
 
     // Scenario "Повторный прогон после смены правил": the signals and cursors of other versions go, so a new version replays from the start.
@@ -286,7 +349,7 @@ public class IdeasReplayTests
         Keep(March1.AddDays(2));
         _time.Advance(TimeSpan.FromDays(1));
 
-        await Replay().StepAsync(CancellationToken.None);
+        await Step(Replay());
 
         IReadOnlyList<decimal> ratios = Volatility.Ratios(IdeaCandles.FromMinutes(Interval.FiveMinutes, _minutes, March1, March1.AddDays(2)));
         decimal expected = Volatility.Percentile(ratios, 0.9m)!.Value;
@@ -314,7 +377,7 @@ public class IdeasReplayTests
         _volatility.GetAllAsync(Arg.Any<CancellationToken>()).Returns([]);
         _time.Advance(TimeSpan.FromDays(3));
         Keep(end);
-        await Replay().StepAsync(CancellationToken.None);
+        await Step(Replay());
         string[] whole = [.. Shape(_written.Values)];
         IReadOnlyList<IdeaSignal> openAtTheEnd = _stored[Wif].Open;
         _written.Clear();
@@ -323,7 +386,7 @@ public class IdeasReplayTests
         for (DateTimeOffset until = March1.AddDays(1); until <= end; until = until.AddDays(1))
         {
             Keep(until);
-            await Replay().StepAsync(CancellationToken.None);
+            await Step(Replay());
         }
 
         whole.ShouldNotBeEmpty();
@@ -343,7 +406,7 @@ public class IdeasReplayTests
         _minutes = Waves(March1.AddDays(-2), end);
         _time.Advance(TimeSpan.FromDays(3));
         Keep(end);
-        await Replay(settings: settings).StepAsync(CancellationToken.None);
+        await Step(Replay(settings: settings));
         string[] whole = [.. Shape(_written.Values)];
         _written.Clear();
         _stored.Clear();
@@ -352,7 +415,7 @@ public class IdeasReplayTests
         for (DateTimeOffset until = March1.AddDays(1); until <= end; until = until.AddDays(1))
         {
             Keep(until);
-            await Replay(settings: settings).StepAsync(CancellationToken.None);
+            await Step(Replay(settings: settings));
         }
 
         Shape(_written.Values).ShouldBe(whole);
@@ -363,7 +426,7 @@ public class IdeasReplayTests
     [Test]
     public async Task Signal_takes_the_funding_settled_up_to_its_minute()
     {
-        await Replay().StepAsync(CancellationToken.None);
+        await Step(Replay());
         DateTimeOffset first = _written.Values.Min(signal => signal.Path.FiredAt);
         var later = new FundingRatePoint(first.AddMinutes(4), 0.0001m);
         _funding.GetAsync(Wif, March1.AddDays(-7), March1.AddDays(1), Arg.Any<int>(), Arg.Any<CancellationToken>())
@@ -371,7 +434,7 @@ public class IdeasReplayTests
         _written.Clear();
         _stored.Clear();
 
-        await Replay().StepAsync(CancellationToken.None);
+        await Step(Replay());
 
         _written.Values.Where(signal => signal.Path.FiredAt == first).ShouldAllBe(signal => signal.Funding == 0.0007m && signal.FeaturesWith(null).HighFunding);
         _written.Values.ShouldAllBe(signal => signal.Funding == (signal.Path.FiredAt > later.Time ? 0.0001m : 0.0007m));
@@ -390,7 +453,7 @@ public class IdeasReplayTests
             IdeaCandles.FromMinutes(call.ArgAt<Interval>(1), _minutes, call.ArgAt<DateTimeOffset>(2), call.ArgAt<DateTimeOffset>(3)));
         _market.Keep([new ScannerPair(Wif, false), new ScannerPair(spot, true, HistoryFrom: March1, CoveredUntil: March1.AddDays(1), TickSize: Tick)]);
 
-        await Replay().StepAsync(CancellationToken.None);
+        await Step(Replay());
 
         IdeaSignal[] signals = [.. _written.Values];
         signals.ShouldNotBeEmpty();
@@ -408,7 +471,7 @@ public class IdeasReplayTests
         _market.Keep([new ScannerPair(Wif, false), new ScannerPair(Btc, true, HistoryFrom: March1, CoveredUntil: March1.AddDays(1), TickSize: Tick)]);
         var closes = _minutes.ToDictionary(minute => minute.OpenTime, minute => minute.Close);
 
-        await Replay().StepAsync(CancellationToken.None);
+        await Step(Replay());
 
         IdeaSignal[] signals = [.. _written.Values];
         signals.ShouldNotBeEmpty();
@@ -424,6 +487,58 @@ public class IdeasReplayTests
     private static IdeaCandle Flat(DateTimeOffset time, decimal price)
     {
         return new IdeaCandle(time, price, price, price, price, 1m);
+    }
+
+    // A turn from its start to its end; false when none starts.
+    private static async Task<bool> Step(IdeasReplay replay)
+    {
+        Task? turn = await replay.StartAsync(CancellationToken.None);
+
+        if (turn is null)
+        {
+            return false;
+        }
+
+        await turn;
+
+        return true;
+    }
+
+    // The stored minutes of a pair and its candles of the intervals, which the warm-up of a turn reads after its gate, if it has one.
+    private void Serve(Instrument instrument, Func<IReadOnlyList<IdeaCandle>> minutes)
+    {
+        _candles.GetAsync(instrument, Interval.OneMinute, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(call =>
+            (IReadOnlyList<Candle>)[.. minutes().Where(minute => minute.OpenTime >= call.ArgAt<DateTimeOffset>(2) && minute.OpenTime < call.ArgAt<DateTimeOffset>(3)).Select(Candle)]);
+        _candles.GetAggregatedAsync(instrument, Arg.Any<Interval>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(async call =>
+        {
+            if (_gates.TryGetValue(instrument, out TaskCompletionSource? gate))
+            {
+                await gate.Task;
+            }
+
+            return IdeaCandles.FromMinutes(call.ArgAt<Interval>(1), minutes(), call.ArgAt<DateTimeOffset>(2), call.ArgAt<DateTimeOffset>(3));
+        });
+    }
+
+    // Whether a turn of the pair has started: its warm-up asked for its candles.
+    private bool Started(Instrument instrument)
+    {
+        return _candles.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(ICandleRepository.GetAggregatedAsync) && Equals(call.GetArguments()[0], instrument));
+    }
+
+    private static async Task WaitAsync(Func<bool> condition)
+    {
+        DateTime until = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+
+        while (!condition())
+        {
+            if (DateTime.UtcNow > until)
+            {
+                throw new TimeoutException("The condition did not hold in time.");
+            }
+
+            await Task.Delay(10);
+        }
     }
 
     private static IdeaReplayCursor Until(DateTimeOffset replayedUntil)
