@@ -186,6 +186,11 @@ Unit- и интеграционные тесты идут на in-process мок
   гейджи `profitfox.tinvest.limit` / `profitfox.tinvest.limit_remaining` {`group`} из заголовков `x-ratelimit-limit` /
   `x-ratelimit-remaining`; `MetricsRegistrar` добавляет meter.
 
+**Поправка после ревью (отмена вызова).** Канал создавался без `ThrowOperationCanceledOnCancellation`, и отмена токена во время
+вызова приходила как `RpcException` со статусом `Cancelled`, который `Translate` превращал в `ExchangeException` и считал в метриках
+как `error`. Теперь канал бросает `OperationCanceledException` сам, а `TInvestCall` для `Cancelled` при отменённом токене
+пробрасывает `OperationCanceledException` без учёта в метриках.
+
 **Поправка после ревью (circuit breaker на биржу).** Один экземпляр `ExchangeResilienceExecutor` на обе биржи делил и circuit
 breaker (10 запросов, 50 % отказов, пауза 15 с): недоступный T-Invest (шесть отказов одной лестницы ретраев импорта) открывал
 цепь для Bybit, и в торгующем Worker падали `GetLastPriceAsync` автоматов и прогрев истории. Теперь executor регистрируется keyed

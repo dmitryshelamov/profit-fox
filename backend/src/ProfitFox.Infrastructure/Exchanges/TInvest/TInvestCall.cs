@@ -100,6 +100,11 @@ internal sealed class TInvestCall(
 
             return response;
         }
+        catch (RpcException exception) when (exception.StatusCode == StatusCode.Cancelled && cancellationToken.IsCancellationRequested)
+        {
+            // The caller gave up, not the exchange: neither counted nor translated.
+            throw new OperationCanceledException(exception.Message, exception, cancellationToken);
+        }
         catch (RpcException exception)
         {
             metrics.Count(group, method.Name, exception.StatusCode == StatusCode.ResourceExhausted ? "rate_limited" : "error");

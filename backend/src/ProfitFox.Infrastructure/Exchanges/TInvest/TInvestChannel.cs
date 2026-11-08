@@ -30,7 +30,8 @@ internal sealed class TInvestChannel : ITInvestCallInvokers, IDisposable
                     errors)
             }
         };
-        _channel = GrpcChannel.ForAddress(settings.Endpoint, new GrpcChannelOptions { HttpHandler = handler });
+        // A call cancelled by its token is an OperationCanceledException, as everywhere else, not an RpcException of the exchange.
+        _channel = GrpcChannel.ForAddress(settings.Endpoint, new GrpcChannelOptions { HttpHandler = handler, ThrowOperationCanceledOnCancellation = true });
         Invoker = _channel.CreateCallInvoker();
     }
 

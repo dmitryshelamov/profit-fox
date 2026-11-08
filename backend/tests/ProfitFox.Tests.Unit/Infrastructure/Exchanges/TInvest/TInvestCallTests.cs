@@ -171,6 +171,25 @@ public class TInvestCallTests
         exception.Message.ShouldBe("T-Invest refused the request (FailedPrecondition).");
     }
 
+    // After the review: a call cancelled by its own token is no failure of the exchange; it is not counted and not translated.
+    [Test]
+    public async Task Cancelled_call_is_an_operation_cancelled_and_not_counted()
+    {
+        using var cancellation = new CancellationTokenSource();
+        _api.On<GetAccountsRequest, GetAccountsResponse>(
+            "GetAccounts",
+            _ =>
+            {
+                cancellation.Cancel();
+
+                throw new RpcException(new Status(StatusCode.Cancelled, "Call canceled by the client."));
+            });
+
+        await Should.ThrowAsync<OperationCanceledException>(() => _call.OnceAsync("t.token", invoker => new UsersService.UsersServiceClient(invoker).GetAccountsAsync(new GetAccountsRequest()), cancellation.Token));
+
+        _requests.GetMeasurementSnapshot().ShouldBeEmpty();
+    }
+
     [Test]
     public async Task Not_found_is_told_apart()
     {

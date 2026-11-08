@@ -153,7 +153,7 @@
   Bybit без изменений. Unit-тесты обоих обработчиков; чек-лист 7.2 дополнен пунктами про `is_complete` и выравнивание 120/240.
 - [x] 8.4 Свой `ExchangeResilienceExecutor` на биржу (keyed по `Exchange`): открытая цепь T-Invest не трогает вызовы Bybit. Unit-тест.
 - [x] 8.5 Живая свеча бота на `moex`: `FormingCandleFeeds` отдаёт `NoData` без подписки на Bybit для инструмента T-Invest. Unit-тесты.
-- [ ] 8.6 Отмена gRPC-вызова: `ThrowOperationCanceledOnCancellation` в канале, `Cancelled` при отменённом токене —
+- [x] 8.6 Отмена gRPC-вызова: `ThrowOperationCanceledOnCancellation` в канале, `Cancelled` при отменённом токене —
   `OperationCanceledException` без учёта в метриках. Unit-тест на моке.
 - [ ] 8.7 Фронтенд: `chartIntervals(own, category)` и `shownInterval(asked, own, category)` через `intervalsOf(category)`; у бота
   `moex` нет `D`. Тесты `chartIntervals.test.ts` и страницы бота.
