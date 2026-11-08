@@ -604,7 +604,8 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
   `exchange-accounts` (queries, `AccountForm` with the switch of the exchange: Bybit takes a key and a secret, T-Invest a token and
   one of the accounts «Показать счета» lists through `listBrokerAccounts`, an account with a `problem` cannot be chosen and shows why
   (`model/brokerAccounts`: the labels of the type, status and problem); a refusal of the server clears the secret, the token and the
-  accounts; `exchangeName`, `EnvironmentBadge`, `BalanceTable` with the currency of the answer, server problems of an
+  accounts, a changed token drops the accounts read with the old one, and while the accounts are read or the account is saved the
+  switch of the exchange and the token are locked, so a late answer finds the form as it was; `exchangeName`, `EnvironmentBadge`, `BalanceTable` with the currency of the answer, server problems of an
   account; the balance query is disabled and runs only on the page's action), `comparison` (the set of results on `useSyncExternalStore` over `sessionStorage`, the bar in
   `AppShell`, the mark checkbox), `market-chart` (`PriceEquityChart` and `EquityComparisonChart` on
   `lightweight-charts`, fill markers, candles per point; for the bot chart `BotCandleChart` with volume, fill arrows,
@@ -632,8 +633,10 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
   without float math. `bots` also holds the bot chart's data: `useBotCandles` (pages going back, a minute-by-minute tail,
   start over when too far behind), `useFormingCandle` over `realtime/followFormingCandle` (the SignalR hub
   `/api/hubs/bot-chart`, which is not in OpenAPI: its message types are written by hand in `model/formingCandle.ts`,
-  with the reducer and the channel text) and `chartIntervals` (the interval switcher; the `?interval=` of the bot route
-  is read there, the bot's own interval never goes to the address). The router writes text search values as they are, so
+  with the reducer and the channel text) and `chartIntervals` (the interval switcher, `chartIntervals(own, category)` and
+  `shownInterval(asked, own, category)` over `intervalsOf(category)`, so a bot on `moex` is offered no `D`; the `?interval=` of the bot route
+  is read there, the bot's own interval never goes to the address). Texts about an exchange that does not answer name «биржа», not Bybit,
+  since the data of a share come from T-Invest. The router writes text search values as they are, so
   `?interval=5` is not quoted. `shared/format` shows decimal strings with thousands
   spacing without float math, and UTC dates. Decimal strings become numbers only in `market-chart/model`, for drawing.
 - «+ Новая стратегия» opens `pages/strategies/NewStrategyDialog`: an empty canvas or one of the built-in templates (`strategyTemplatesQuery`, the cards show name,

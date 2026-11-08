@@ -20,7 +20,7 @@ describe('broker accounts', () => {
 
   // Scenario "Недоступный счёт": the row of an account that cannot be added shows why.
   it.each([
-    ['not_open', 'закрыт'],
+    ['not_open', 'не открыт'],
     ['not_full_access', 'нет полного доступа'],
     ['unsupported_type', 'не брокерский счёт и не ИИС'],
   ])('explains the problem %s as %s', (code, label) => {

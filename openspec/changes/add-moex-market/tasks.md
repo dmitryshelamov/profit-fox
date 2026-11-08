@@ -155,7 +155,7 @@
 - [x] 8.5 Живая свеча бота на `moex`: `FormingCandleFeeds` отдаёт `NoData` без подписки на Bybit для инструмента T-Invest. Unit-тесты.
 - [x] 8.6 Отмена gRPC-вызова: `ThrowOperationCanceledOnCancellation` в канале, `Cancelled` при отменённом токене —
   `OperationCanceledException` без учёта в метриках. Unit-тест на моке.
-- [ ] 8.7 Фронтенд: `chartIntervals(own, category)` и `shownInterval(asked, own, category)` через `intervalsOf(category)`; у бота
+- [x] 8.7 Фронтенд: `chartIntervals(own, category)` и `shownInterval(asked, own, category)` через `intervalsOf(category)`; у бота
   `moex` нет `D`. Тесты `chartIntervals.test.ts` и страницы бота.
 - [x] 8.8 Мастер-ключ обязателен у всех Worker (решение 12, поправка): импорт `moex` расшифровывает токен. Тест регистрации.
 - [x] 8.9 Аккаунт не Bybit отклоняется в настройках торговли по идеям, в автомате и в `IdeaTradeEntryCalculator.AccessAsync` до
@@ -167,8 +167,8 @@
 - [x] 8.12 `TInvestTokenSource`: кэш — ссылочный `sealed record` через `Volatile.Read`/`Volatile.Write`.
 - [x] 8.13 Пиннинг: второй элемент цепочки — закреплённый Sub CA, `DisableCertificateDownloads`, OID serverAuth в
   `ApplicationPolicy`. Unit-тест: сервер другого Sub CA под тем же корнем отклоняется.
-- [ ] 8.14 Фронтенд `AccountForm`: переключатель биржи и токен заблокированы на время запросов, устаревший ответ игнорируется,
-  смена токена сбрасывает счета; `not_open` — «не открыт»; «Ключ / счёт» в списке; «биржа не отвечает» в графике и форме
+- [x] 8.14 Фронтенд `AccountForm`: переключатель биржи, токен и «Показать счета» заблокированы на время запросов (устаревший
+  ответ так не может прийти в изменённую форму; счётчик запросов не вводился — см. design.md), смена токена сбрасывает счета; `not_open` — «не открыт»; «Ключ / счёт» в списке; «биржа не отвечает» в графике и форме
   бэктеста. Тесты формы и страниц.
 - [x] 8.15 Интеграционные тесты журнала: токен не попадает в лог при `POST /api/exchange-accounts/tinvest/accounts`, принятом и
   отклонённом.

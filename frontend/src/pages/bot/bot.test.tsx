@@ -400,6 +400,24 @@ describe('chart on the bot page', () => {
     );
   });
 
+  // After the review: a bot on moex has no daily candles; the chart offers the intervals of its category and opens the bot's own for
+  // an interval the category does not have.
+  it('offers the intervals of the category of the bot and opens its own for one the category has not', async () => {
+    const { requests } = open(`/bots/${botId}?interval=D`, {
+      [`GET /api/bots/${botId}`]: () => json({ ...botDetails, category: 'moex', symbol: 'SBER' }),
+    });
+
+    const group = await screen.findByRole('group', { name: 'Интервал' });
+
+    expect(
+      within(group)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['1 мин', '5 мин', '15 мин', '1 ч · бот', '4 ч']);
+    await lastCandle();
+    expect(new URL(candleRequests(requests)[0]!.url).searchParams.get('Interval')).toBe('60');
+  });
+
   // Scenarios "Цена меняется" and "Состояние канала текущей свечи".
   it('shows the current candle as not closed and the state of the channel', async () => {
     open();
@@ -562,7 +580,7 @@ describe('chart on the bot page', () => {
       [`GET /api/bots/${botId}/positions`]: () => json([position([order()])]),
     });
 
-    expect(await screen.findByText('История недоступна: Bybit не отвечает')).toBeInTheDocument();
+    expect(await screen.findByText('История недоступна: биржа не отвечает')).toBeInTheDocument();
     expect(screen.getByText('Остановлен')).toBeInTheDocument();
     expect(await screen.findByRole('region', { name: 'Текущая позиция' })).toBeInTheDocument();
     expect(await lastCandle()).toHaveTextContent('102');

@@ -2,7 +2,7 @@
 const types: Record<string, string> = { brokerage: 'Брокерский', iis: 'ИИС', other: 'Другой' };
 const statuses: Record<string, string> = { open: 'открыт', new: 'новый', closed: 'закрыт' };
 const problems: Record<string, string> = {
-  not_open: 'закрыт',
+  not_open: 'не открыт',
   not_full_access: 'нет полного доступа',
   unsupported_type: 'не брокерский счёт и не ИИС',
 };

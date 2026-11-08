@@ -40,7 +40,7 @@ export function AccountsPage() {
             <tr>
               <th className={cell}>Биржа</th>
               <th className={cell}>Название</th>
-              <th className={cell}>API key / счёт</th>
+              <th className={cell}>Ключ / счёт</th>
               <th className={cell}>UID</th>
               <th className={cell}>Торгует</th>
               <th className={cell} />

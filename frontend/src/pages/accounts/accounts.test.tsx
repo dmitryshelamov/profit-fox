@@ -35,6 +35,7 @@ describe('account list', () => {
     expect(within(row).getByText('24617703')).toBeInTheDocument();
     expect(within(row).getByText('spot, linear')).toBeInTheDocument();
     expect(within(row).queryByText('Testnet')).not.toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Ключ / счёт' })).toBeInTheDocument();
   });
 
   // Scenario "Аккаунт T-Invest в списке".

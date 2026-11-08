@@ -403,7 +403,7 @@ export function BacktestForm({
       )}
       <div className="flex items-center justify-between gap-4">
         <p className="text-xs text-faint">
-          Правила инструмента запрашиваются у биржи при запуске; если Bybit не отвечает, бэктест не
+          Правила инструмента запрашиваются у биржи при запуске; если биржа не отвечает, бэктест не
           создаётся.
         </p>
         <div className="flex gap-2.5">

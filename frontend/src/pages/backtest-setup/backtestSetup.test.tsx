@@ -453,6 +453,16 @@ describe('new backtest form', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Не удалось загрузить бота.');
   });
 
+  // After the review: the hint names no exchange, since the rules of a share come from T-Invest.
+  it('says that the rules come from the exchange of the instrument', async () => {
+    fakeApi(routes());
+    renderApp(`/bots/${botId}/backtests/new`);
+
+    expect(
+      await screen.findByText(/если биржа не отвечает, бэктест не создаётся/),
+    ).toBeInTheDocument();
+  });
+
   // Scenario "Биржа недоступна".
   it('says the exchange is unavailable above the buttons and creates nothing', async () => {
     fakeApi(

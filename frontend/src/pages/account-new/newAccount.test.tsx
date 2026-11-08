@@ -85,7 +85,7 @@ describe('new account', () => {
     const iis = screen.getByRole('radio', { name: /2000000002/ });
     expect(iis).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Добавить аккаунт' })).toBeDisabled();
-    expect(screen.getByText('закрыт')).toBeInTheDocument();
+    expect(screen.getByText('не открыт')).toBeInTheDocument();
     expect(screen.getByText('Брокерский счёт')).toBeInTheDocument();
     const asked = requests.find((request) => request.url.endsWith('/tinvest/accounts'))!;
     expect(await asked.json()).toEqual({ token: 't.token-value' });
@@ -103,6 +103,65 @@ describe('new account', () => {
       token: 't.token-value',
       accountId: '2000000001',
     });
+  });
+
+  // After the review: a late answer of a listing must not reach a form that moved on, so nothing can move it on while the answer is awaited.
+  it('locks the exchange and the token while the accounts are read', async () => {
+    let answer!: (value: Response) => void;
+    fakeApi({
+      [brokerAccountsUrl]: () =>
+        new Promise<Response>((resolve) => {
+          answer = resolve;
+        }),
+    });
+    renderApp('/accounts/new');
+
+    await fillTInvest();
+
+    expect(screen.getByRole('button', { name: 'Bybit' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'T-Invest' })).toBeDisabled();
+    expect(screen.getByLabelText('Токен')).toBeDisabled();
+    answer(json(brokerAccounts));
+    expect(await screen.findByRole('radio', { name: /2000000001/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Bybit' })).toBeEnabled();
+    expect(screen.getByLabelText('Токен')).toBeEnabled();
+  });
+
+  it('locks the exchange and the token while the account is saved', async () => {
+    let answer!: (value: Response) => void;
+    fakeApi({
+      [brokerAccountsUrl]: () => json(brokerAccounts),
+      'POST /api/exchange-accounts': () =>
+        new Promise<Response>((resolve) => {
+          answer = resolve;
+        }),
+    });
+    renderApp('/accounts/new');
+    await fillTInvest();
+    await userEvent.click(await screen.findByRole('radio', { name: /2000000001/ }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Добавить аккаунт' }));
+
+    expect(screen.getByRole('button', { name: 'Bybit' })).toBeDisabled();
+    expect(screen.getByLabelText('Токен')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Показать счета' })).toBeDisabled();
+    answer(problem(400, 'x', { errors: { accountId: ['The account is closed.'] } }));
+    expect(await screen.findByText('The account is closed.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Bybit' })).toBeEnabled();
+  });
+
+  // The accounts were read with the old token: a changed token has none until it is read again.
+  it('drops the accounts and the chosen one when the token changes', async () => {
+    fakeApi({ [brokerAccountsUrl]: () => json(brokerAccounts) });
+    renderApp('/accounts/new');
+    await fillTInvest();
+    await userEvent.click(await screen.findByRole('radio', { name: /2000000001/ }));
+    expect(screen.getByRole('button', { name: 'Добавить аккаунт' })).toBeEnabled();
+
+    await userEvent.type(screen.getByLabelText('Токен'), '2');
+
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Добавить аккаунт' })).toBeDisabled();
   });
 
   it('says when the token opens no account', async () => {

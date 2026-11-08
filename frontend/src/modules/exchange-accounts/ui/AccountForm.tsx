@@ -24,7 +24,8 @@ const labelText = 'text-[13px] text-muted';
 
 /**
  * The form of a new account: Bybit takes a key and a secret, T-Invest a token and one of the accounts it opens. The secret and
- * the token are never kept after a refusal, and the accounts read with a token go with it.
+ * the token are never kept after a refusal, and the accounts read with a token go with it: a changed token drops them, and while
+ * the accounts are read or the account is saved the exchange and the token are locked, so a late answer finds the form as it was.
  */
 export function AccountForm() {
   const navigate = useNavigate();
@@ -39,6 +40,7 @@ export function AccountForm() {
   const [errors, setErrors] = useState<FieldErrors>({ fields: {}, form: [] });
   const [saving, setSaving] = useState(false);
   const [listing, setListing] = useState(false);
+  const busy = listing || saving;
   const fieldError = (key: string) => errors.fields[key]?.join(' ');
 
   function fail(error: unknown) {
@@ -118,6 +120,7 @@ export function AccountForm() {
               key={item.value}
               type="button"
               aria-pressed={exchange === item.value}
+              disabled={busy}
               className={`h-7 rounded text-sm ${exchange === item.value ? 'bg-panel-2 font-bold' : 'text-muted'}`}
               onClick={() => switchExchange(item.value)}
             >
@@ -188,9 +191,14 @@ export function AccountForm() {
                 autoComplete="off"
                 className={`${input} font-mono ${border('token')}`}
                 value={token}
-                onChange={(event) => setToken(event.target.value)}
+                disabled={busy}
+                onChange={(event) => {
+                  setToken(event.target.value);
+                  setAccounts(undefined);
+                  setAccountId('');
+                }}
               />
-              <Button type="button" onClick={() => void showAccounts()} disabled={listing}>
+              <Button type="button" onClick={() => void showAccounts()} disabled={busy}>
                 {listing ? 'Читаем…' : 'Показать счета'}
               </Button>
             </div>
