@@ -44,12 +44,17 @@ public sealed class IdeasReplay(
     private static readonly TimeSpan FundingBefore = TimeSpan.FromDays(7);
     private static readonly Instrument Btc = new Instrument(MarketCategory.Linear, "BTCUSDT");
 
-    // A settlement every hour at the most over the 8 days of funding a day reads.
-    private const int FundingRead = 8 * 24;
+    // A settlement every hour at the most, over the days of a turn, the 7 days before its first one and a day to spare.
+    private const int FundingPerDay = 24;
+    private const int FundingSpareDays = 8;
+
+    // The days of closes of BTC the turns share, the oldest going first (decision 3 of speed-up-ideas-replay).
+    private const int BtcDays = 16;
 
     // The cursors and the pairs the turns run, which the turns share (decision 2 of speed-up-ideas-replay).
     private readonly Lock _lock = new Lock();
     private readonly HashSet<Instrument> _running = [];
+    private readonly Dictionary<DateTimeOffset, Task<Dictionary<DateTimeOffset, decimal>>> _btc = [];
     private Dictionary<Instrument, IdeaReplayCursor>? _cursors;
 
     /// <summary>
@@ -162,6 +167,9 @@ public sealed class IdeasReplay(
         List<IdeaSignal> open = [.. turn.Cursor?.Open ?? []];
         var ended = new List<IdeaSignal>();
         int days = 0;
+        timings.Reads.Start();
+        IReadOnlyList<FundingRatePoint> rates = await FundingAsync(instrument, turn, cancellationToken);
+        timings.Reads.Stop();
 
         for (DateTimeOffset day = turn.From; day < turn.Until; day += Day)
         {
@@ -174,7 +182,7 @@ public sealed class IdeasReplay(
             var inputs = new IdeaInputs(null, Percentiles(ratios, day), turn.Pair.TickSize);
             timings.Reads.Start();
             IReadOnlyList<IdeaCandle> known = Minutes(await candles.GetAsync(instrument, Interval.OneMinute, day, day + Day, 1440, cancellationToken));
-            Market dayMarket = await MarketAsync(instrument, day, cancellationToken);
+            var dayMarket = new Market(await BtcAsync(day, cancellationToken), [.. rates.Where(rate => rate.Time >= day - FundingBefore && rate.Time < day + Day)]);
             timings.Reads.Stop();
 
             // Before the first trade of a pair there is nothing to replay; after it every minute of the day is fed, the ones without trades flat.
@@ -269,18 +277,65 @@ public sealed class IdeasReplay(
     }
 
     /// <summary>
-    ///     The market of a day the features of its signals are measured by (decision 5 of add-market-idea-features): the closes of the minutes of
-    ///     <c>linear</c> / <c>BTCUSDT</c> from 240 minutes before the day to its end, and the funding settlements of a linear pair from 7 days
-    ///     before it, an interval of funding being 8 hours at the most.
+    ///     The closes of the minutes of <c>linear</c> / <c>BTCUSDT</c> from 240 minutes before a day to its end, which the features of the signals
+    ///     of the day are measured by (decision 5 of add-market-idea-features): read once for every turn over the day, the last 16 days kept
+    ///     (decision 3 of speed-up-ideas-replay). A read that failed is not kept, so the next turn reads it again.
     /// </summary>
-    private async Task<Market> MarketAsync(Instrument instrument, DateTimeOffset day, CancellationToken cancellationToken)
+    private async Task<Dictionary<DateTimeOffset, decimal>> BtcAsync(DateTimeOffset day, CancellationToken cancellationToken)
+    {
+        Task<Dictionary<DateTimeOffset, decimal>>? read;
+
+        lock (_lock)
+        {
+            if (!_btc.TryGetValue(day, out read))
+            {
+                read = ReadBtcAsync(day, cancellationToken);
+                _btc[day] = read;
+
+                if (_btc.Count > BtcDays)
+                {
+                    _btc.Remove(_btc.Keys.Min());
+                }
+            }
+        }
+
+        try
+        {
+            return await read;
+        }
+        catch
+        {
+            lock (_lock)
+            {
+                if (_btc.GetValueOrDefault(day) == read)
+                {
+                    _btc.Remove(day);
+                }
+            }
+
+            throw;
+        }
+    }
+
+    private async Task<Dictionary<DateTimeOffset, decimal>> ReadBtcAsync(DateTimeOffset day, CancellationToken cancellationToken)
     {
         IReadOnlyList<Candle> btc = await candles.GetAsync(Btc, Interval.OneMinute, day - BtcSpan, day + Day, (int)(BtcSpan + Day).TotalMinutes, cancellationToken);
-        IReadOnlyList<FundingRatePoint> rates = instrument.Category == MarketCategory.Linear
-            ? await funding.GetAsync(instrument, day - FundingBefore, day + Day, FundingRead, cancellationToken)
-            : [];
 
-        return new Market(btc.ToDictionary(candle => candle.OpenTime, candle => candle.Close.Value), rates);
+        return btc.ToDictionary(candle => candle.OpenTime, candle => candle.Close.Value);
+    }
+
+    /// <summary>
+    ///     The funding settlements of a linear pair over the days of a turn and the 7 days before its first one, read once a turn (decision 3 of
+    ///     speed-up-ideas-replay); a day takes those of the 7 days before it, as a read of its own gave, an interval of funding being 8 hours at
+    ///     the most. None on spot.
+    /// </summary>
+    private async Task<IReadOnlyList<FundingRatePoint>> FundingAsync(Instrument instrument, Turn turn, CancellationToken cancellationToken)
+    {
+        int days = (int)((turn.Until - turn.From) / Day);
+
+        return instrument.Category == MarketCategory.Linear
+            ? await funding.GetAsync(instrument, turn.From - FundingBefore, turn.Until, FundingPerDay * (days + FundingSpareDays), cancellationToken)
+            : [];
     }
 
     // Steps the open paths by the minute, lazily (decision 1 of speed-up-ideas-replay): a path the minute did not touch stays as it is, tracked

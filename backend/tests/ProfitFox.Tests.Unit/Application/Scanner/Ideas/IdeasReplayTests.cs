@@ -353,6 +353,98 @@ public class IdeasReplayTests
         _stored[sol].ReplayedUntil.ShouldBe(March1.AddDays(1));
     }
 
+    // Decision 3 of speed-up-ideas-replay: the closes of BTC of a day are read once for every turn over that day.
+    [Test]
+    public async Task Turns_over_one_day_read_the_closes_of_btc_once()
+    {
+        var sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
+        Serve(sol, () => _minutes);
+        _market.Keep([.. new[] { Wif, sol }.Select(pair => new ScannerPair(pair, true, HistoryFrom: March1, CoveredUntil: March1.AddDays(1), TickSize: Tick))]);
+        IdeasReplay replay = Replay();
+
+        (await Step(replay)).ShouldBeTrue();
+        (await Step(replay)).ShouldBeTrue();
+
+        _stored.Keys.ShouldBe([Wif, sol], ignoreOrder: true);
+        await _candles.Received(1).GetAsync(Btc, Interval.OneMinute, March1.AddMinutes(-240), March1.AddDays(1), 1680, Arg.Any<CancellationToken>());
+    }
+
+    // A read of BTC that failed is not kept: the turn fails, and the next turn over the day reads it again.
+    [Test]
+    public async Task Failed_read_of_btc_is_read_again_by_the_next_turn()
+    {
+        var failure = new InvalidOperationException("storage down");
+        _candles.GetAsync(Btc, Interval.OneMinute, March1.AddMinutes(-240), March1.AddDays(1), 1680, Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<IReadOnlyList<Candle>>(failure), Task.FromResult<IReadOnlyList<Candle>>([]));
+        IdeasReplay replay = Replay();
+
+        (await Should.ThrowAsync<InvalidOperationException>(Step(replay))).ShouldBe(failure);
+        (await Step(replay)).ShouldBeTrue();
+
+        _written.ShouldNotBeEmpty();
+        await _candles.Received(2).GetAsync(Btc, Interval.OneMinute, March1.AddMinutes(-240), March1.AddDays(1), 1680, Arg.Any<CancellationToken>());
+    }
+
+    // The closes of at most 16 days are kept, the oldest going first: a second turn over 17 days reads the first day again and the last not.
+    [Test]
+    public async Task Closes_of_btc_of_at_most_sixteen_days_are_kept()
+    {
+        var sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
+        Serve(sol, () => _minutes);
+        _market.Keep([.. new[] { Wif, sol }.Select(pair => new ScannerPair(pair, true, HistoryFrom: March1, CoveredUntil: March1.AddDays(17), TickSize: Tick))]);
+        _time.Advance(TimeSpan.FromDays(17));
+        IdeasReplay replay = Replay();
+
+        await Step(replay);
+        await Step(replay);
+
+        await _candles.Received(2).GetAsync(Btc, Interval.OneMinute, March1.AddMinutes(-240), March1.AddDays(1), 1680, Arg.Any<CancellationToken>());
+        await _candles.Received(1).GetAsync(Btc, Interval.OneMinute, March1.AddDays(16).AddMinutes(-240), March1.AddDays(17), 1680, Arg.Any<CancellationToken>());
+    }
+
+    // Decision 3: the funding of a pair is read once a turn, over its days and the 7 days before the first, a settlement an hour at the most.
+    [Test]
+    public async Task Turn_of_five_days_reads_the_funding_once()
+    {
+        Keep(March1.AddDays(5));
+        _time.Advance(TimeSpan.FromDays(4));
+
+        await Step(Replay());
+
+        await _funding.Received(1).GetAsync(Arg.Any<Instrument>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+        await _funding.Received(1).GetAsync(Wif, March1.AddDays(-7), March1.AddDays(5), 24 * 13, Arg.Any<CancellationToken>());
+    }
+
+    // The features of the signals are those of a read a day: the closes of BTC of each day, and of the funding read once only the settlements a
+    // read of the day would give, from 7 days before it, so a settlement 6.5 days before the first day is seen on the first day and not after.
+    [Test]
+    public async Task Features_of_a_turn_are_those_of_a_read_a_day()
+    {
+        DateTimeOffset end = March1.AddDays(4);
+        _minutes = Waves(March1.AddHours(-4), end);
+        _btc = [.. Waves(March1.AddHours(-5), end).Select(minute => minute with { Close = minute.Close * 400m })];
+        FundingRatePoint[] settlements = [new FundingRatePoint(March1.AddDays(-6.5), 0.0009m), new FundingRatePoint(March1.AddDays(2.5), 0.0001m)];
+        _funding.GetAsync(Wif, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(call =>
+            (IReadOnlyList<FundingRatePoint>)[.. settlements.Where(point => point.Time >= call.ArgAt<DateTimeOffset>(1) && point.Time < call.ArgAt<DateTimeOffset>(2)).Take(call.ArgAt<int>(3))]);
+        _time.Advance(TimeSpan.FromDays(3));
+        Keep(end);
+        await Step(Replay());
+        string[] whole = [.. Shape(_written.Values)];
+        _written.Clear();
+        _stored.Clear();
+
+        for (DateTimeOffset until = March1.AddDays(1); until <= end; until = until.AddDays(1))
+        {
+            Keep(until);
+            await Step(Replay());
+        }
+
+        _written.Values.ShouldContain(signal => signal.Funding == 0.0009m && signal.Path.FiredAt < March1.AddDays(1));
+        _written.Values.ShouldContain(signal => signal.Funding == null && signal.Path.FiredAt >= March1.AddDays(1));
+        _written.Values.ShouldContain(signal => signal.BtcChange != null && signal.BtcChange != 0m);
+        Shape(_written.Values).ShouldBe(whole);
+    }
+
     // Scenario "Повторный прогон после смены правил": the signals and cursors of other versions go, so a new version replays from the start.
     // Prod held 24 M cases of version 4, more than one statement deletes within the command timeout, so a step removes an hour of them, and
     // the cursors go once no signal is left.
