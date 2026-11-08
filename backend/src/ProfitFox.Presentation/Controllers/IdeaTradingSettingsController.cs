@@ -33,7 +33,7 @@ public sealed class IdeaTradingSettingsController(ISender sender) : ControllerBa
     {
         try
         {
-            if (body.Leverage != decimal.Truncate(body.Leverage))
+            if (body.Leverage != decimal.Truncate(body.Leverage) || body.Leverage is > int.MaxValue or < int.MinValue)
             {
                 throw new ValidationFailedException(new Dictionary<string, string> { ["leverage"] = "The leverage must be a whole number." });
             }
