@@ -10,6 +10,7 @@ using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Infrastructure.Exchanges.Routing;
 
 using Shouldly;
 
@@ -115,6 +116,24 @@ public class CreateCandleImportTests
         await _handler.Handle(new CreateCandleImportCommand("moex", "sber", "60", "2024-01-01T00:00:00Z", "2024-02-01T00:00:00Z"), CancellationToken.None);
 
         (AddedJob().Instrument, AddedJob().Interval).ShouldBe((new Instrument(MarketCategory.Moex, "SBER"), Interval.OneHour));
+    }
+
+    // Scenarios "Акция не TQBR" and "Акция MOEX": the symbol of moex is checked at T-Invest, never at Bybit.
+    [Test]
+    public async Task Symbol_of_moex_is_checked_at_tinvest()
+    {
+        IMarketHistoryClient bybit = Substitute.For<IMarketHistoryClient>();
+        IMarketHistoryClient tinvest = Substitute.For<IMarketHistoryClient>();
+        tinvest.InstrumentExistsAsync(new Instrument(MarketCategory.Moex, "SBER"), Arg.Any<CancellationToken>()).Returns(true);
+        var handler = new CreateCandleImportCommandHandler(new RoutedMarketHistoryClient(bybit, tinvest), _jobs, new FakeTimeProvider(Now));
+
+        await handler.Handle(new CreateCandleImportCommand("moex", "SBER", "60", "2024-01-01T00:00:00Z", "2024-02-01T00:00:00Z"), CancellationToken.None);
+        ValidationFailedException error = await Should.ThrowAsync<ValidationFailedException>(() =>
+            handler.Handle(new CreateCandleImportCommand("moex", "NOPE", "60", "2024-01-01T00:00:00Z", "2024-02-01T00:00:00Z"), CancellationToken.None));
+
+        error.Errors.ShouldBe(new Dictionary<string, string> { ["symbol"] = "T-Invest has no NOPE in moex." });
+        await _jobs.Received(1).AddAsync(Arg.Any<CandleImportJob>(), Arg.Any<CancellationToken>());
+        bybit.ReceivedCalls().ShouldBeEmpty();
     }
 
     // Scenario "Неизвестный символ".

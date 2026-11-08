@@ -4,9 +4,9 @@ namespace ProfitFox.Domain.Entities.Strategies.Enums;
 
 public static class StrategyDirectionExtensions
 {
-    /// <summary>A short position needs a derivative, so a short strategy trades only on <c>linear</c>.</summary>
+    /// <summary>A short position needs a derivative, so a short strategy trades only on <c>linear</c>; the margin of <c>moex</c> is a later change.</summary>
     public static IReadOnlyList<MarketCategory> SupportedCategories(this StrategyDirection direction)
     {
-        return direction == StrategyDirection.Long ? [MarketCategory.Spot, MarketCategory.Linear] : [MarketCategory.Linear];
+        return direction == StrategyDirection.Long ? [MarketCategory.Spot, MarketCategory.Linear, MarketCategory.Moex] : [MarketCategory.Linear];
     }
 }

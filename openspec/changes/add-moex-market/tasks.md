@@ -85,34 +85,34 @@
 
 ## 4. Маршрутизация и покрытие
 
-- [ ] 4.1 `RoutedMarketHistoryClient`, `RoutedInstrumentRulesProvider`, `RoutedInstrumentCatalog` и регистрация в
+- [x] 4.1 `RoutedMarketHistoryClient`, `RoutedInstrumentRulesProvider`, `RoutedInstrumentCatalog` и регистрация в
   `InfrastructureRegistrar` (решение 8). Unit-тесты: `Spot`/`Linear` уходят в Bybit, `Moex` — в T-Invest, для каждого
   метода порта; `CachedInstrumentCatalog` кэширует `Moex` отдельно.
-- [ ] 4.2 `SeriesCoverage(From, Until)` с `Extend(from, to)` и вычитание покрытия из пропусков
+- [x] 4.2 `SeriesCoverage(From, Until)` с `Extend(from, to)` и вычитание покрытия из пропусков
   (`Interval.MissingRanges` → `SeriesCoverage.Uncovered(ranges)`) (решение 4). Unit-тесты: касающийся и пересекающий
   диапазоны расширяют границы, отдельный — нет; пропуск внутри покрытия исчезает, частично снаружи — обрезается.
-- [ ] 4.3 `ISeriesCoverageRepository` и `SeriesCoverageRepository` над `candle_coverage`. Интеграционные тесты: upsert и
+- [x] 4.3 `ISeriesCoverageRepository` и `SeriesCoverageRepository` над `candle_coverage`. Интеграционные тесты: upsert и
   чтение, отсутствующая серия — `null`.
-- [ ] 4.4 `CandleReadThrough` по покрытию: пропуски минус покрытие, граница двигается в одной транзакции с записью свечей до
+- [x] 4.4 `CandleReadThrough` по покрытию: пропуски минус покрытие, граница двигается в одной транзакции с записью свечей до
   `min(to, конец последней закрытой свечи)` (решение 4). Unit-тесты по сценариям «Ночь MOEX не догружается», «Пропуск в
   истории Bybit» (без строки покрытия поведение прежнее), «Граница не заходит в будущее».
-- [ ] 4.5 `RunNextCandleImportCommandHandler` по покрытию (решение 4). Интеграционные тесты на моке по сценариям «Ночь MOEX
+- [x] 4.5 `RunNextCandleImportCommandHandler` по покрытию (решение 4). Интеграционные тесты на моке по сценариям «Ночь MOEX
   внутри покрытия» (вторая задача `Succeeded` без вызовов мока), «Период за границей» (запрошен только хвост); импорт Bybit
   на `FakeBybit` без изменений поведения.
-- [ ] 4.6 Проверка символа импорта и бота у биржи категории (сценарии «Акция не TQBR», «Акция MOEX»). Unit-тесты обработчиков
+- [x] 4.6 Проверка символа импорта и бота у биржи категории (сценарии «Акция не TQBR», «Акция MOEX»). Unit-тесты обработчиков
   с маршрутизатором на моках обеих бирж.
 
 ## 5. Бэктест, бот и запуск
 
-- [ ] 5.1 `BacktestSettings`: `DefaultFees` обязаны содержать `Limit` и `Market` всех категорий (`ValidateOnStart`),
+- [x] 5.1 `BacktestSettings`: `DefaultFees` обязаны содержать `Limit` и `Market` всех категорий (`ValidateOnStart`),
   `moex` в `appsettings` трёх хостов `0.05` / `0.05` / `0.1` (решение 9). Unit-тесты: без `moex` валидация падает с
   понятным текстом; `Policy()` отдаёт ставки `Moex`; `HasIdeaSlippage` по-прежнему про `spot` и `linear`.
-- [ ] 5.2 Бэктест на акциях: интеграционный тест по сценариям «Покупка на сумму в лотах», «Ордер через ночь», «Ставки MOEX
+- [x] 5.2 Бэктест на акциях: интеграционный тест по сценариям «Покупка на сумму в лотах», «Ордер через ночь», «Ставки MOEX
   по умолчанию» на фикстуре свечей `SBER` 60 с ночными дырами (`CandleFixtures`) и правилах лот `10` / шаг `0.01`;
   результат детерминирован.
-- [ ] 5.3 `BotRequests`: шорт на `Moex` отклоняется как на `Spot` (сценарий «Шорт на MOEX»); аккаунт Bybit у бота на `moex`
+- [x] 5.3 `BotRequests`: шорт на `Moex` отклоняется как на `Spot` (сценарий «Шорт на MOEX»); аккаунт Bybit у бота на `moex`
   отклоняется по категориям (сценарий «Аккаунт Bybit у бота на MOEX»). Unit-тесты.
-- [ ] 5.4 `StartBotCommandHandler`: отказ для `TInvest` до обращений к бирже (решение 10). Unit-тест по сценарию «Бот на
+- [x] 5.4 `StartBotCommandHandler`: отказ для `TInvest` до обращений к бирже (решение 10). Unit-тест по сценарию «Бот на
   MOEX»: `ConflictException` с причиной, инспектор ключа не вызван.
 
 ## 6. Фронтенд

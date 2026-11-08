@@ -17,6 +17,7 @@ public class CachedInstrumentCatalogTests
 {
     private static readonly ListedInstrument[] Spot = [new ListedInstrument(MarketCategory.Spot, "BTCUSDT", "BTC", "USDT")];
     private static readonly ListedInstrument[] Linear = [new ListedInstrument(MarketCategory.Linear, "ETHUSDT", "ETH", "USDT")];
+    private static readonly ListedInstrument[] Moex = [new ListedInstrument(MarketCategory.Moex, "SBER", "SBER", "RUB", TradFi: true)];
 
     private IInstrumentCatalog _inner = null!;
     private FakeTimeProvider _time = null!;
@@ -29,6 +30,7 @@ public class CachedInstrumentCatalogTests
         _inner = Substitute.For<IInstrumentCatalog>();
         _inner.ListAsync(MarketCategory.Spot, Arg.Any<CancellationToken>()).Returns(Spot);
         _inner.ListAsync(MarketCategory.Linear, Arg.Any<CancellationToken>()).Returns(Linear);
+        _inner.ListAsync(MarketCategory.Moex, Arg.Any<CancellationToken>()).Returns(Moex);
         _time = new FakeTimeProvider(DateTimeOffset.Parse("2024-03-10T12:30:00Z"));
         _resolved = 0;
         ServiceProvider provider = new ServiceCollection()
@@ -51,6 +53,19 @@ public class CachedInstrumentCatalogTests
         IReadOnlyList<ListedInstrument> second = await _catalog.ListAsync(MarketCategory.Spot, CancellationToken.None);
 
         second.ShouldBe(Spot);
+        await _inner.Received(1).ListAsync(MarketCategory.Spot, Arg.Any<CancellationToken>());
+    }
+
+    // Decision 8: the list of moex is kept apart from the lists of Bybit, on the same terms.
+    [Test]
+    public async Task Moex_is_cached_apart_from_the_categories_of_bybit()
+    {
+        await _catalog.ListAsync(MarketCategory.Spot, CancellationToken.None);
+
+        (await _catalog.ListAsync(MarketCategory.Moex, CancellationToken.None)).ShouldBe(Moex);
+        (await _catalog.ListAsync(MarketCategory.Moex, CancellationToken.None)).ShouldBe(Moex);
+
+        await _inner.Received(1).ListAsync(MarketCategory.Moex, Arg.Any<CancellationToken>());
         await _inner.Received(1).ListAsync(MarketCategory.Spot, Arg.Any<CancellationToken>());
     }
 

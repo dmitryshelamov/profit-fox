@@ -22,4 +22,10 @@ public static class ExchangeCodes
     {
         return Codes[exchange];
     }
+
+    /// <summary>The name of the exchange in a message to the user: <c>Bybit</c>, <c>T-Invest</c>.</summary>
+    public static string DisplayName(this Exchange exchange)
+    {
+        return exchange == Exchange.TInvest ? "T-Invest" : "Bybit";
+    }
 }

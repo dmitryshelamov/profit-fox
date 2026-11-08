@@ -21,6 +21,12 @@ enforces a rule, the check is the source of truth.
   `1`, `3`, `5`, `15`, `30`, `60`, `120`, `240`; the texts of the errors of a category and of an interval are `MarketDataCodes.InvalidCategory`
   and `MarketDataCodes.InvalidInterval(category)`. `ListedInstrument` also carries the `Name` of a company and `ShortEnabled` for a share of MOEX,
   and `InstrumentSearch.Find` matches a query against the name as well.
+- `ValueObjects/MarketData/SeriesCoverage(From, Until)` is the border of the coverage of a series of candles: inside it storage holds
+  every candle the exchange gave, so a candle missing there was not traded. `Extend(from, to)` widens it by a range that touches or
+  overlaps it and leaves a separate range alone; `Uncovered(ranges)` cuts the coverage out of the missing ranges. It is kept only for a
+  market with sessions (`MarketCategoryExtensions.TradesAroundTheClock()` is false for `Moex`); Bybit has no nights and keeps none.
+  `ISeriesCoverageRepository` reads and writes it (`candle_coverage`), and `ICandleRepository.UpsertAsync` with a coverage writes the
+  candles and the border in one transaction.
 - `ValueObjects/<Area>` holds value objects (`Instrument`, `Price`, `Volume`, `InstrumentRules`, `StrategySnapshot`,
   `ParameterSpec`, `SimulationSettings`, `FeeRates` — the fee rates of a category and the slippage the ideas count on fills that do not rest on the book).
 - `Repositories` holds storage ports, named `I<Name>Repository` (`IStrategyLibraryRepository` for strategies, nodes,
@@ -108,6 +114,10 @@ enforces a rule, the check is the source of truth.
 - `MarketData/CandleReadThrough` reads a period of closed candles from storage and fills what is missing with one request
   of `IMarketHistoryClient.GetCandlesOnceAsync` (a single attempt, at most 1000 candles), writing only the missing closed
   candles; an `ExchangeException` gives the stored candles and `Unavailable`. It is not a candle import: no job, no lease.
+  On `moex` only the part outside the `SeriesCoverage` of the series is missing, and the border moves to the end of the part asked
+  for, never past the last closed candle, in the transaction of the candles; `RunNextCandleImportCommandHandler` does the same per
+  range of a job, moving the border once the range is loaded. A symbol is checked at the exchange of its category, and the error names
+  it (`ExchangeCodes.DisplayName`: `Bybit`, `T-Invest`).
   `Bots/Queries/GetBotCandles` aligns and cuts the period of a bot's chart (`from` down to the start of its candle, `to` up
   to the start of the current one, 1000 candles at most) and reads it through.
 - `MarketData/FormingCandles` holds the feeds of the current candle, which only the API uses: `FormingCandleFeeds` (a
@@ -132,7 +142,8 @@ enforces a rule, the check is the source of truth.
 - `Transactions/ITransactionExecutor` runs a unit of work in one transaction: its writes commit together or not at all,
   a unit inside a unit is refused, and `EnsureNoTransaction` guards a call that must not hold a transaction open (the
   exchange).
-- `LiveTrading` holds the commands of live trading (start, pause, resume, stop, close the position, claim and run a bot),
+- `LiveTrading` holds the commands of live trading (start, pause, resume, stop, close the position, claim and run a bot; the start of a
+  bot on `moex` is a conflict «Trading on MOEX is not supported yet» before any call to an exchange, until the live bots of MOEX come),
   `LiveTradingCodes`, and `Runtime/LiveBotSession`: one session keeps one bot for the take of its lease, takes its inputs
   one at a time from a queue, writes every change in one unit of work after checking the lease, and sends orders only
   once they are written; `Runtime/LiveBotReconciler` compares the books of a bot and of the bots that share its
@@ -245,6 +256,9 @@ enforces a rule, the check is the source of truth.
   `profitfox.tinvest.limit` and `profitfox.tinvest.limit_remaining` {`group`} from the headers `x-ratelimit-limit` and `x-ratelimit-remaining`;
   `MetricsRegistrar` lists the meter. No test and no local run calls the real T-Invest: the test hosts put `MockTInvestApi` behind
   `ITInvestCallInvokers`, and `appsettings.Testing.json` points the endpoint at `tinvest.invalid`.
+- `Exchanges/Routing` holds `RoutedMarketHistoryClient`, `RoutedInstrumentRulesProvider` and `RoutedInstrumentCatalog`: the registered
+  read ports, each choosing Bybit or T-Invest by `Category.Exchange()`; the adapters of both exchanges are registered keyed by
+  `Exchange`, and `CachedInstrumentCatalog` stays over the routed catalog, caching the list of `moex` on the same terms.
 - `Exchanges/<Vendor>` holds adapters over vendor SDKs, including the mapping of domain values to SDK types
   (`BybitCodes`). `Exchanges/Retry` holds Polly pipelines. `BybitMarketDataClient` implements `IInstrumentCatalog` (spot in one
   answer, linear by following the cursor; one attempt per request). The registered `IInstrumentCatalog` is
@@ -323,7 +337,9 @@ enforces a rule, the check is the source of truth.
   Application declares a settings record (`BacktestSettings`), Infrastructure binds the section to it in
   `InfrastructureRegistrar`; handlers take the record, never `IConfiguration`.
 - The `Backtests` section: the limit of combinations, the number of threads and the default fee rates in percent by
-  market category.
+  market category. Every category has its `Limit` and `Market` (`BacktestSettings.CategoriesWithoutFees` is empty, or the service
+  does not start); the rates of `moex` (0.05 / 0.05, the tariff «Трейдер») are provisional until the owner reads `GetOrderPrice`,
+  and its `Slippage` is a stand-in until the ideas of MOEX come.
 
   ```json
   "Backtests": {
@@ -331,7 +347,8 @@ enforces a rule, the check is the source of truth.
     "MaxParallelism": null,
     "DefaultFees": {
       "spot": { "Limit": 0.1, "Market": 0.1 },
-      "linear": { "Limit": 0.02, "Market": 0.055 }
+      "linear": { "Limit": 0.02, "Market": 0.055 },
+      "moex": { "Limit": 0.05, "Market": 0.05 }
     }
   }
   ```
@@ -535,7 +552,8 @@ enforces a rule, the check is the source of truth.
   `Generators/Domain/{Entity,ValueObject}/<Area>`, each a static `<Type>Generator.Generate(...)`. `Builders/<Area>` holds
   fluent builders for structures a generator cannot randomize meaningfully (`GraphBuilder` for strategy graphs), and
   `Fixtures/<Area>` holds reference documents as embedded resources (the reference strategies EMA, EMA Short, DCA, Ladder;
-  reference candle sets for backtests in `Fixtures/Backtests`; reference minutes and candles of the ideas and the fingerprints of
+  reference candle sets for backtests in `Fixtures/Backtests`: the hourly set of Bybit and `sber-hourly`, two trading days of a share
+  of MOEX with the night between them empty; reference minutes and candles of the ideas and the fingerprints of
   `IdeasEngineVersion` in `Fixtures/Ideas`).
 - `Fixtures/IdeaAutos` holds the reference minutes of the paper trades (a long enters at 100 with the stop at 98 and the target at 104; the pullback sets wait for a limit at 100) with the answers written out in `PaperFillTests`; `Generators/Domain/Entity/IdeaAutos` makes an auto.
 - Ports are replaced with NSubstitute mocks. Hand-written stubs exist only for transport and the exchange: HTTP

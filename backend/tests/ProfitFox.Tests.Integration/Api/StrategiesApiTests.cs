@@ -31,10 +31,10 @@ public class StrategiesApiTests
         await _factory.DisposeAsync();
     }
 
-    [TestCase("ema", "long", new[] { "spot", "linear" })]
+    [TestCase("ema", "long", new[] { "spot", "linear", "moex" })]
     [TestCase("ema-short", "short", new[] { "linear" })]
-    [TestCase("dca", "long", new[] { "spot", "linear" })]
-    [TestCase("ladder", "long", new[] { "spot", "linear" })]
+    [TestCase("dca", "long", new[] { "spot", "linear", "moex" })]
+    [TestCase("ladder", "long", new[] { "spot", "linear", "moex" })]
     public async Task Reference_strategy_is_created_and_read_back_unchanged(string fixture, string direction, string[] categories)
     {
         HttpResponseMessage created = await Create(fixture, StrategyFixtures.Element(fixture));
@@ -81,7 +81,7 @@ public class StrategiesApiTests
 
         JsonElement item = list.EnumerateArray().ShouldHaveSingleItem();
         (item.GetProperty("name").GetString(), item.GetProperty("direction").GetString()).ShouldBe(("EMA", "long"));
-        item.GetProperty("supportedCategories").EnumerateArray().Select(category => category.GetString()).ShouldBe(["spot", "linear"]);
+        item.GetProperty("supportedCategories").EnumerateArray().Select(category => category.GetString()).ShouldBe(["spot", "linear", "moex"]);
     }
 
     [Test]

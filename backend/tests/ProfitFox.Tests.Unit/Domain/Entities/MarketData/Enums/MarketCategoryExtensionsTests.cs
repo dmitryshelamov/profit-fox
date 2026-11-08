@@ -15,4 +15,13 @@ public class MarketCategoryExtensionsTests
     {
         category.Exchange().ShouldBe(exchange);
     }
+
+    // Decision 4: only a market with sessions keeps the border of its coverage; crypto has no nights.
+    [TestCase(MarketCategory.Spot, true)]
+    [TestCase(MarketCategory.Linear, true)]
+    [TestCase(MarketCategory.Moex, false)]
+    public void Only_moex_has_sessions(MarketCategory category, bool aroundTheClock)
+    {
+        category.TradesAroundTheClock().ShouldBe(aroundTheClock);
+    }
 }

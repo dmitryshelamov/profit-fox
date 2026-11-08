@@ -25,12 +25,14 @@ using ProfitFox.Application.Scanner.Ideas;
 using ProfitFox.Application.Scanner.Minute;
 using ProfitFox.Application.Scanner.Universe;
 using ProfitFox.Application.Workers;
+using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Services.Backtests;
 using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Infrastructure.BackgroundServices;
 using ProfitFox.Infrastructure.Exchanges;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
 using ProfitFox.Infrastructure.Exchanges.Retry;
+using ProfitFox.Infrastructure.Exchanges.Routing;
 using ProfitFox.Infrastructure.Exchanges.TInvest;
 using ProfitFox.Infrastructure.Mediatr;
 using ProfitFox.Infrastructure.Observability;
@@ -147,11 +149,15 @@ public static class InfrastructureRegistrar
             .ValidateOnStart();
     }
 
-    // A service without the slippage would count the ideas, the buckets or the size of a trade without it while the others count with it.
+    // A service without the slippage would count the ideas, the buckets or the size of a trade without it while the others count with it;
+    // a backtest on a category without base rates would have no fees to count with (decision 9).
     private static void RequireIdeaSlippage(IConfiguration configuration, IServiceCollection services)
     {
         services.AddOptions<BacktestSettings>()
             .Bind(configuration.GetSection("Backtests"))
+            .Validate(
+                settings => settings.CategoriesWithoutFees().Count == 0,
+                "Backtests:DefaultFees must have Limit and Market for every market category: spot, linear and moex.")
             .Validate(
                 settings => settings.HasIdeaSlippage(),
                 "Backtests:DefaultFees:spot:Slippage and Backtests:DefaultFees:linear:Slippage must be set, in percent and not below zero: the ideas count the slippage by them.")
@@ -187,11 +193,19 @@ public static class InfrastructureRegistrar
         services.AddSingleton<ILiveTradingJournal, LoggingLiveTradingJournal>();
         services.AddSingleton<ExchangeResilienceExecutor>();
         ConfigureTInvest(configuration, services);
-        services.AddTransient<IMarketHistoryClient, BybitMarketDataClient>();
+
+        // The read ports go to the exchange of the category (decision 8): Bybit for spot and linear, T-Invest for moex.
+        services.AddKeyedTransient<IMarketHistoryClient, BybitMarketDataClient>(Exchange.Bybit);
+        services.AddKeyedTransient<IMarketHistoryClient, TInvestMarketDataClient>(Exchange.TInvest);
+        services.AddTransient<IMarketHistoryClient, RoutedMarketHistoryClient>();
+        services.AddKeyedTransient<IInstrumentRulesProvider, BybitMarketDataClient>(Exchange.Bybit);
+        services.AddKeyedTransient<IInstrumentRulesProvider, TInvestMarketDataClient>(Exchange.TInvest);
+        services.AddTransient<IInstrumentRulesProvider, RoutedInstrumentRulesProvider>();
+        services.AddKeyedTransient<IInstrumentCatalog, BybitMarketDataClient>(Exchange.Bybit);
+        services.AddKeyedTransient<IInstrumentCatalog, TInvestMarketDataClient>(Exchange.TInvest);
+        services.AddKeyedTransient<IInstrumentCatalog, RoutedInstrumentCatalog>(CachedInstrumentCatalog.InnerKey);
         services.AddTransient<CandleReadThrough>();
         services.AddTransient<IdeaTradeEntryCalculator>();
-        services.AddTransient<IInstrumentRulesProvider, BybitMarketDataClient>();
-        services.AddKeyedTransient<IInstrumentCatalog, BybitMarketDataClient>(CachedInstrumentCatalog.InnerKey);
         services.AddSingleton<IInstrumentCatalog>(provider => new CachedInstrumentCatalog(
             provider.GetRequiredService<IServiceScopeFactory>(),
             provider.GetRequiredService<TimeProvider>()));

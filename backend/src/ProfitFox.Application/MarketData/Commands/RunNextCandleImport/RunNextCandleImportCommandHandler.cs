@@ -6,6 +6,7 @@ using ProfitFox.Application.Workers;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Application.MarketData.Commands.RunNextCandleImport;
 
@@ -13,6 +14,7 @@ public sealed class RunNextCandleImportCommandHandler(
     IMarketHistoryClient marketHistory,
     ICandleImportJobRepository jobs,
     ICandleRepository candles,
+    ISeriesCoverageRepository coverage,
     WorkerSettings settings,
     WorkerIdentity worker,
     TimeProvider time) : IRequestHandler<RunNextCandleImportCommand, bool>
@@ -23,7 +25,9 @@ public sealed class RunNextCandleImportCommandHandler(
     /// <summary>
     ///     Loads the closed candles of <c>[From, To)</c> that are not stored yet, page by page; saved pages survive a failure. While the
     ///     exchange is unavailable, the job tries again after each pause; a stored candle starts the pauses and the lost leases over. The
-    ///     job runs while this Worker holds its lease; once the lease is lost, the job stops without another write.
+    ///     job runs while this Worker holds its lease; once the lease is lost, the job stops without another write. On a market with
+    ///     sessions only the part outside the coverage of the series is missing, and once a range is loaded the border of the coverage
+    ///     moves to its end, never past the last closed candle (decision 4).
     /// </summary>
     public async Task<bool> Handle(RunNextCandleImportCommand request, CancellationToken cancellationToken)
     {
@@ -106,8 +110,16 @@ public sealed class RunNextCandleImportCommandHandler(
             async Task ImportMissingAsync()
             {
                 IReadOnlyList<DateTimeOffset> stored = await candles.GetOpenTimesAsync(job.Instrument, job.Interval, job.From, job.To, running.Token);
+                IReadOnlyList<(DateTimeOffset From, DateTimeOffset To)> missing = job.Interval.MissingRanges(stored, job.From, job.To);
+                bool bordered = !job.Instrument.Category.TradesAroundTheClock();
+                SeriesCoverage? covered = bordered && missing.Count > 0 ? await coverage.GetAsync(job.Instrument, job.Interval, running.Token) : null;
 
-                foreach ((DateTimeOffset from, DateTimeOffset to) in job.Interval.MissingRanges(stored, job.From, job.To))
+                if (covered is not null)
+                {
+                    missing = covered.Uncovered(missing);
+                }
+
+                foreach ((DateTimeOffset from, DateTimeOffset to) in missing)
                 {
                     await foreach (IReadOnlyList<Candle> page in marketHistory.GetCandlePagesAsync(job.Instrument, job.Interval, from, to, running.Token))
                     {
@@ -130,6 +142,16 @@ public sealed class RunNextCandleImportCommandHandler(
                             await running.CancelAsync();
                             running.Token.ThrowIfCancellationRequested();
                         }
+                    }
+
+                    // The range is loaded whole: what is not stored inside it was not traded, up to the last closed candle.
+                    DateTimeOffset lastClosed = job.Interval.CandleOpen(now);
+                    DateTimeOffset border = to < lastClosed ? to : lastClosed;
+
+                    if (bordered && border > from)
+                    {
+                        covered = (covered ?? new SeriesCoverage(from, border)).Extend(from, border);
+                        await coverage.UpsertAsync(job.Instrument, job.Interval, covered, running.Token);
                     }
                 }
             }

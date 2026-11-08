@@ -1,6 +1,7 @@
 using System.Text.Json;
 
 using ProfitFox.Application.Exceptions;
+using ProfitFox.Application.ExchangeAccounts;
 using ProfitFox.Application.MarketData;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.Strategies;
@@ -106,7 +107,7 @@ public static class BotRequests
         if (!await marketHistory.InstrumentExistsAsync(instrument, cancellationToken))
         {
             throw new ValidationFailedException(
-                new Dictionary<string, string> { ["symbol"] = $"Bybit has no {instrument.Symbol} in {instrument.Category.ToCode()}." });
+                new Dictionary<string, string> { ["symbol"] = $"{instrument.Category.Exchange().DisplayName()} has no {instrument.Symbol} in {instrument.Category.ToCode()}." });
         }
     }
 

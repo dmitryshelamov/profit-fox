@@ -1,6 +1,7 @@
 using MediatR;
 
 using ProfitFox.Application.Exceptions;
+using ProfitFox.Application.ExchangeAccounts;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
@@ -68,7 +69,7 @@ public sealed class CreateCandleImportCommandHandler(
 
         if (!await marketHistory.InstrumentExistsAsync(instrument, cancellationToken))
         {
-            throw new ValidationFailedException(new Dictionary<string, string> { ["symbol"] = $"Bybit has no {instrument.Symbol} in {request.Category}." });
+            throw new ValidationFailedException(new Dictionary<string, string> { ["symbol"] = $"{category.Exchange().DisplayName()} has no {instrument.Symbol} in {request.Category}." });
         }
 
         var job = new CandleImportJob(

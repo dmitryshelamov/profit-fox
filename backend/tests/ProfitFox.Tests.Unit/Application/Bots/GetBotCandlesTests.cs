@@ -39,7 +39,7 @@ public class GetBotCandlesTests
         _history = Substitute.For<IMarketHistoryClient>();
         _history.GetCandlesOnceAsync(default!, default, default, default, default).ReturnsForAnyArgs(Array.Empty<Candle>());
         var time = new FakeTimeProvider(Now);
-        _handler = new GetBotCandlesQueryHandler(_library, new CandleReadThrough(_candles, _history, time), time);
+        _handler = new GetBotCandlesQueryHandler(_library, new CandleReadThrough(_candles, Substitute.For<ISeriesCoverageRepository>(), _history, time), time);
     }
 
     [Test]
@@ -126,7 +126,7 @@ public class GetBotCandlesTests
     public async Task To_is_cut_before_a_candle_that_closed_less_than_the_close_margin_ago()
     {
         var time = new FakeTimeProvider(DateTimeOffset.Parse("2024-03-10T12:00:03Z"));
-        _handler = new GetBotCandlesQueryHandler(_library, new CandleReadThrough(_candles, _history, time), time);
+        _handler = new GetBotCandlesQueryHandler(_library, new CandleReadThrough(_candles, Substitute.For<ISeriesCoverageRepository>(), _history, time), time);
 
         await HandleAsync(null, "2024-03-10T08:00:00Z", "2024-03-10T13:00:00Z");
 
