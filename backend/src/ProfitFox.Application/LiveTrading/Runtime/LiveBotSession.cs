@@ -732,7 +732,8 @@ internal sealed class LiveBotSession(
 
                     break;
                 case SendStep.Deferred:
-                    LiveOrder deferred = order.Deferred(now);
+                    // The exchange may name how long another attempt is useless, such as until its next session opens.
+                    LiveOrder deferred = order.Deferred(now, outcome.RetryAfter);
                     await WriteOrderAsync(deferred, cancellationToken);
                     _ = LaterAsync(new WakeInput(), deferred.NextAttemptAt!.Value - now, cancellationToken);
 

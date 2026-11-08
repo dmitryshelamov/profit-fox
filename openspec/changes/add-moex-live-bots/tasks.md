@@ -114,9 +114,9 @@ T-Invest. Решения — в design.md, требования — в `specs/`.
 
 ## 9. Сессия и пауза биржи
 
-- [ ] 9.1 `LiveBotSession.SendAsync` передаёт `outcome.RetryAfter` в `Deferred`; будильник `WakeInput` на `NextAttemptAt`.
+- [x] 9.1 `LiveBotSession.SendAsync` передаёт `outcome.RetryAfter` в `Deferred`; будильник `WakeInput` на `NextAttemptAt`.
   Тест на `FakeExchange`: `Transient` с `RetryAfter` 5 ч → следующая попытка не раньше, бот «запущен».
-- [ ] 9.2 Отмена отложенной заявки без `exchange_order_id` закрывается без вызова биржи (существующее поведение) — тест
+- [x] 9.2 Отмена отложенной заявки без `exchange_order_id` закрывается без вызова биржи (существующее поведение) — тест
   для T-Invest-пути через `FakeExchange`: `FindOrderAsync` → `null` → заявка отменена.
 
 ## 10. Интеграция
