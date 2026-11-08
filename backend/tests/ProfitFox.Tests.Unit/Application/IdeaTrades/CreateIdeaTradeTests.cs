@@ -22,6 +22,7 @@ using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.ValueObjects.ExchangeAccounts;
 using ProfitFox.Domain.ValueObjects.Ideas;
+using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.Ideas;
 
@@ -112,6 +113,25 @@ public class CreateIdeaTradeTests
 
         await _gateway.DidNotReceiveWithAnyArgs().SetLeverageAsync(default!, default!, default, default);
         await _trades.Received(1).CreateAsync(Arg.Any<IdeaTrade>(), Arg.Any<IdeaTradeOrder>(), Now, Arg.Any<CancellationToken>());
+    }
+
+    // Scenario "Ждущая сделка на символе с другим плечом": trade A was saved at 1× and its entry has not gone yet, so the exchange shows an empty symbol
+    // at 1×; the setting is 5× now. The second entry on the symbol is refused, and the leverage under the entry of A is not changed.
+    [Test]
+    public async Task Entry_on_a_symbol_a_trade_waits_on_at_another_leverage_is_refused_and_sets_nothing()
+    {
+        Idea first = Idea(Dkng);
+        var waiting = IdeaTrade.Create(Guid.NewGuid(), first, AccountId, 100m, new IdeaTradeSize(0.5m, 50m, 0.1m, 0.5m, 5m), Now.AddSeconds(-5), leverage: 1);
+        _trades.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([waiting]);
+        _ledger.GetLeverageAsync(Key, Dkng, Arg.Any<CancellationToken>()).Returns(1m);
+        Settings(leverage: 5);
+        Idea second = Idea(Dkng);
+
+        IdeaTradeRefusedException refused = await Should.ThrowAsync<IdeaTradeRefusedException>(() => _handler.Handle(new CreateIdeaTradeCommand(second.Id, AccountId, 50m), CancellationToken.None));
+
+        refused.Reasons.ShouldBe([IdeaTradeRefusal.LeverageDiffers]);
+        await _gateway.DidNotReceiveWithAnyArgs().SetLeverageAsync(default!, default!, default, default);
+        await _trades.DidNotReceiveWithAnyArgs().CreateAsync(default!, default!, default, default);
     }
 
     // Scenario "Bybit отказал": above the largest leverage of the symbol; the message of Bybit goes to the log.

@@ -250,27 +250,42 @@ public class IdeaTradeRefusalsTests
     [Test]
     public void Position_on_the_symbol_with_another_leverage_is_named()
     {
-        Refuse(account: Account(symbol: new LinearSymbol(1m, 0.5m, 0)), leverage: 5).ShouldBe([IdeaTradeRefusal.LeverageDiffers]);
+        Refuse(account: Account(symbol: new LinearSymbol(1m, 0.5m, 0, [])), leverage: 5).ShouldBe([IdeaTradeRefusal.LeverageDiffers]);
     }
 
     // Scenario "Открытый ордер с другим плечом": the order would fill at the new leverage with a stop nobody checked against it.
     [Test]
     public void Open_order_on_the_symbol_with_another_leverage_is_named()
     {
-        Refuse(account: Account(symbol: new LinearSymbol(1m, 0m, 1)), leverage: 5).ShouldBe([IdeaTradeRefusal.LeverageDiffers]);
+        Refuse(account: Account(symbol: new LinearSymbol(1m, 0m, 1, [])), leverage: 5).ShouldBe([IdeaTradeRefusal.LeverageDiffers]);
     }
 
     // Scenario "Пустой символ с другим плечом": the entry sets the leverage.
     [Test]
     public void Empty_symbol_with_another_leverage_is_no_reason()
     {
-        Refuse(account: Account(symbol: new LinearSymbol(10m, 0m, 0)), leverage: 1).ShouldBeEmpty();
+        Refuse(account: Account(symbol: new LinearSymbol(10m, 0m, 0, [])), leverage: 1).ShouldBeEmpty();
+    }
+
+    // Scenario "Ждущая сделка на символе с другим плечом": trade A was saved at 1× and sent nothing yet, the exchange shows an empty symbol at 1×,
+    // and the setting is 5× now.
+    [Test]
+    public void Trade_that_waits_on_the_symbol_holds_it_though_the_exchange_shows_nothing()
+    {
+        Refuse(account: Account(symbol: new LinearSymbol(1m, 0m, 0, [1])), leverage: 5).ShouldBe([IdeaTradeRefusal.LeverageDiffers]);
+    }
+
+    // The exchange shows the setting, but a trade on the symbol entered at another leverage it knows.
+    [Test]
+    public void Trade_on_the_symbol_at_another_leverage_is_named_though_the_exchange_shows_the_setting()
+    {
+        Refuse(account: Account(symbol: new LinearSymbol(5m, 0m, 0, [1])), leverage: 5).ShouldBe([IdeaTradeRefusal.LeverageDiffers]);
     }
 
     [Test]
     public void Position_on_the_symbol_with_the_same_leverage_is_no_reason()
     {
-        Refuse(account: Account(symbol: new LinearSymbol(5m, -0.5m, 2)), leverage: 5).ShouldBeEmpty();
+        Refuse(account: Account(symbol: new LinearSymbol(5m, -0.5m, 2, [])), leverage: 5).ShouldBeEmpty();
     }
 
     // Scenarios "R:R ниже минимума" and "Не хватает денег" of the autos: the numbers the first reason is about.
@@ -305,7 +320,17 @@ public class IdeaTradeRefusalsTests
     public void Leverage_that_differs_tells_the_leverage_of_the_symbol_and_of_the_entry()
     {
         var entry = new IdeaTradeEntry(MarketCategory.Linear, IdeaStatus.Active, Long, 23.5m, 23.5m, 47m, new IdeaTradeSize(2m, 47m, 1m, 1.84m, 1.84m), Rules, 5);
-        IdeaTradeAccount account = Account(symbol: new LinearSymbol(1m, 0.5m, 0));
+        IdeaTradeAccount account = Account(symbol: new LinearSymbol(1m, 0.5m, 0, []));
+
+        IdeaTradeRefusals.DetailOf(IdeaTradeRefusal.LeverageDiffers, entry, Limits, new OpenIdeaTrades(0, 0m), account).ShouldBe(RefusalDetail.Numbers(1m, 5m));
+    }
+
+    // The leverage that differs is told: here that of the trade on the symbol, the exchange shows the setting.
+    [Test]
+    public void Leverage_that_differs_tells_the_leverage_of_a_trade_on_the_symbol_when_the_exchange_has_the_setting()
+    {
+        var entry = new IdeaTradeEntry(MarketCategory.Linear, IdeaStatus.Active, Long, 23.5m, 23.5m, 47m, new IdeaTradeSize(2m, 47m, 1m, 1.84m, 1.84m), Rules, 5);
+        IdeaTradeAccount account = Account(symbol: new LinearSymbol(5m, 0m, 0, [null, 1]));
 
         IdeaTradeRefusals.DetailOf(IdeaTradeRefusal.LeverageDiffers, entry, Limits, new OpenIdeaTrades(0, 0m), account).ShouldBe(RefusalDetail.Numbers(1m, 5m));
     }

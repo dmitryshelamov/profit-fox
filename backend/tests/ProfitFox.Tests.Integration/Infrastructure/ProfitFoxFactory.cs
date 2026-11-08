@@ -38,8 +38,8 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
     /// <summary>Answers the app's calls to Bybit with the key of an account; no test reaches the private Bybit API.</summary>
     public IExchangeKeyInspector KeyInspector { get; } = Substitute.For<IExchangeKeyInspector>();
 
-    /// <summary>Answers the app's reads of what an account holds on the exchange.</summary>
-    public IExchangeLedger Ledger { get; } = Substitute.For<IExchangeLedger>();
+    /// <summary>Answers the app's reads of what an account holds on the exchange: a symbol of <c>linear</c> is at 1× unless a test says otherwise.</summary>
+    public IExchangeLedger Ledger { get; } = AtOne();
 
     /// <summary>Answers what the API sends to the exchange: the leverage of a symbol before an entry, which it takes unless a test says otherwise. The API places no order.</summary>
     public IOrderGateway Orders { get; } = Accepting();
@@ -224,6 +224,14 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
 
         await base.DisposeAsync();
         GC.SuppressFinalize(this);
+    }
+
+    private static IExchangeLedger AtOne()
+    {
+        IExchangeLedger ledger = Substitute.For<IExchangeLedger>();
+        ledger.GetLeverageAsync(Arg.Any<ExchangeKey>(), Arg.Any<Domain.ValueObjects.MarketData.Instrument>(), Arg.Any<CancellationToken>()).Returns(1m);
+
+        return ledger;
     }
 
     private static IOrderGateway Accepting()

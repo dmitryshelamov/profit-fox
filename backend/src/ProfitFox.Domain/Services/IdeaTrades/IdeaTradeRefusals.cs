@@ -70,8 +70,9 @@ public static class IdeaTradeRefusals
             reasons.Add(IdeaTradeRefusal.OppositeSideOpen);
         }
 
-        // The leverage of a symbol the account already holds or waits on is never changed: it is set only on an empty one.
-        if (account.Symbol is { } symbol && (symbol.Position != 0m || symbol.OpenOrders > 0) && symbol.Leverage != entry.Leverage)
+        // The leverage of a symbol the account already holds or waits on is never changed: it is set only on an empty one. A trade by an idea that
+        // waits holds the symbol though it may have sent nothing yet, and the leverage it entered with counts as much as the one the exchange shows.
+        if (account.Symbol is { } symbol && symbol.IsHeld && OtherLeverage(symbol, entry.Leverage) is not null)
         {
             reasons.Add(IdeaTradeRefusal.LeverageDiffers);
         }
@@ -120,10 +121,16 @@ public static class IdeaTradeRefusals
             IdeaTradeRefusal.AmountAboveMax => RefusalDetail.Numbers(entry.Asked, limits.MaxAmount),
             IdeaTradeRefusal.TooManyOpenTrades => RefusalDetail.Numbers(open.Count, limits.MaxOpenTrades),
             IdeaTradeRefusal.TotalRiskExceeded => RefusalDetail.Numbers(open.Risk + entry.Size.Risk, limits.MaxTotalRisk),
-            IdeaTradeRefusal.LeverageDiffers => RefusalDetail.Numbers(account.Symbol!.Leverage, entry.Leverage),
+            IdeaTradeRefusal.LeverageDiffers => RefusalDetail.Numbers(OtherLeverage(account.Symbol!, entry.Leverage)!.Value, entry.Leverage),
             IdeaTradeRefusal.StopTooFarForLeverage => StopDetail(entry.Price, entry.Plan.Stop, entry.Leverage),
             _ => null
         };
+    }
+
+    /// <summary>The leverage on the symbol other than that of the entry: the one the exchange shows, else the known one of a trade on it; none when all agree.</summary>
+    private static decimal? OtherLeverage(LinearSymbol symbol, int leverage)
+    {
+        return symbol.Leverage != leverage ? symbol.Leverage : symbol.Trades.FirstOrDefault(trade => trade is { } known && known != leverage);
     }
 
     /// <summary>Whether the stop is at least half the way to the liquidation at the leverage: <c>|price − stop| / price ≥ 1 / (2 × leverage)</c>.</summary>

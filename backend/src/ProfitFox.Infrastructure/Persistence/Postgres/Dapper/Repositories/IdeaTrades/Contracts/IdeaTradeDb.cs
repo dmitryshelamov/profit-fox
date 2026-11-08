@@ -113,7 +113,7 @@ internal sealed class IdeaTradeDb
 
     public Guid? AutoId { get; init; }
 
-    /// <summary>None for a trade made before the leverage, whose leverage is unknown, and for a paper trade, which stores none.</summary>
+    /// <summary>None for a trade made before the leverage, whose leverage is unknown, and for a paper trade, which stores none and is opened at one.</summary>
     public int? Leverage { get; init; }
 
     /// <summary>Of a paper trade only.</summary>

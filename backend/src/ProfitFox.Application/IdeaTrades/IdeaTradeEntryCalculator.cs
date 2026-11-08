@@ -106,7 +106,7 @@ public sealed class IdeaTradeEntryCalculator(
         // The symbol is asked for only when the key may trade it: otherwise its reason is there already.
         if (linear && preparation.Access == AccountAccess.Ready)
         {
-            account = account with { Symbol = await SymbolAsync(preparation.Key!, preparation, cancellationToken) };
+            account = account with { Symbol = await SymbolAsync(preparation.Key!, preparation, open, cancellationToken) };
         }
 
         var limits = new IdeaTradingLimits(auto?.MinRiskReward ?? preparation.Settings.MinRiskReward, preparation.Settings.MaxOpenTrades, preparation.Settings.MaxTotalRisk, preparation.Settings.MaxAmount);
@@ -231,15 +231,17 @@ public sealed class IdeaTradeEntryCalculator(
         return new IdeaTradeAccount(preparation.Access, free ?? decimal.MaxValue, funds, pending, directions);
     }
 
-    /// <summary>The leverage of the symbol of <c>linear</c> and what of the account stands on it.</summary>
-    private async Task<LinearSymbol> SymbolAsync(ExchangeKey key, EntryPreparation preparation, CancellationToken cancellationToken)
+    /// <summary>The leverage of the symbol of <c>linear</c> and what of the account stands on it: on the exchange, and its trades by ideas, sent or not.</summary>
+    private async Task<LinearSymbol> SymbolAsync(ExchangeKey key, EntryPreparation preparation, IReadOnlyList<IdeaTrade> open, CancellationToken cancellationToken)
     {
         Instrument instrument = preparation.Idea.Instrument;
+        Guid? accountId = preparation.Account?.Id;
 
         return new LinearSymbol(
             await ledger.GetLeverageAsync(key, instrument, cancellationToken),
             await ledger.GetHoldingAsync(key, instrument, preparation.BaseCoin, cancellationToken),
-            (await ledger.GetOpenOrdersAsync(key, instrument, cancellationToken)).Count);
+            (await ledger.GetOpenOrdersAsync(key, instrument, cancellationToken)).Count,
+            [.. open.Where(trade => trade.AccountId == accountId && trade.Instrument == instrument).Select(trade => trade.Leverage)]);
     }
 
     private async Task<string?> QuoteAsync(Instrument instrument, CancellationToken cancellationToken)
@@ -271,8 +273,11 @@ public sealed record EntryPreparation(
 /// </summary>
 public sealed record EntryCalculation(EntryPreparation Preparation, IdeaPlan Plan, IdeaTradeSize Size, decimal? FreeMoney, IReadOnlyList<AutoRefusal> Refusals, IdeaPromise Promise, int Leverage, LinearSymbol? Symbol)
 {
-    /// <summary>The leverage the symbol of <c>linear</c> must be set to before the entry, none when it has it already or is not read.</summary>
-    public int? LeverageToSet => Symbol is { } symbol && symbol.Leverage != Leverage ? Leverage : null;
+    /// <summary>
+    ///     The leverage the symbol of <c>linear</c> must be set to before the entry, none when it has it already, is not read, or something of the
+    ///     account stands on it: a position, an order or a trade by an idea that may not have sent its entry yet.
+    /// </summary>
+    public int? LeverageToSet => Symbol is { IsHeld: false } symbol && symbol.Leverage != Leverage ? Leverage : null;
 
     /// <summary>The money of the account the trade takes on the exchange: its amount at its leverage.</summary>
     public decimal Margin => Size.Amount / Leverage;

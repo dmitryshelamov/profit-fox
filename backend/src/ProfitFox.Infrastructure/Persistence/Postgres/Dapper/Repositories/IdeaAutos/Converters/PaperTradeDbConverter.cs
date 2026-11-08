@@ -13,6 +13,7 @@ internal static class PaperTradeDbConverter
 
     internal static PaperIdeaTrade ToDomain(IdeaTradeDb row)
     {
-        return new PaperIdeaTrade(IdeaTradeDbConverter.ToDomain(row), row.AutoId!.Value, row.SteppedUntil!.Value);
+        // A paper trade stores no leverage: it is opened at the leverage of one (PaperFill.Open).
+        return new PaperIdeaTrade(IdeaTradeDbConverter.ToDomain(row) with { Leverage = 1 }, row.AutoId!.Value, row.SteppedUntil!.Value);
     }
 }

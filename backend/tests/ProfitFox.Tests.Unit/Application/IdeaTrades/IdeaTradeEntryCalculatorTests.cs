@@ -229,6 +229,35 @@ public class IdeaTradeEntryCalculatorTests
         entry.Reasons.ShouldBeEmpty();
     }
 
+    // The trades of the account on the symbol that are open or wait count, with the leverage each entered with; those of another symbol or
+    // another account do not.
+    [Test]
+    public async Task Symbol_carries_the_leverages_of_the_trades_of_the_account_on_it()
+    {
+        IdeaTrade unknown = Held() with { Leverage = null };
+        var waiting = IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(Now, instrument: Instrument()), Account, 100m, new IdeaTradeSize(1m, 100m, 2m, 4m, 2m), Now, leverage: 3);
+        IdeaTrade elsewhere = Held(Instrument("SOL"));
+        IdeaTrade otherAccount = Held() with { AccountId = Guid.NewGuid() };
+        _trades.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([unknown, waiting, elsewhere, otherAccount]);
+
+        EntryCalculation entry = await _calculator.EvaluateAsync(Preparation(minRiskReward: 1.2m, keyed: true), null, CancellationToken.None);
+
+        entry.Symbol!.Trades.ShouldBe([null, 3]);
+    }
+
+    // While a trade of the account stands on the symbol its leverage is never set, even when the exchange shows another.
+    [Test]
+    public async Task Leverage_is_not_set_while_a_trade_of_the_account_is_on_the_symbol()
+    {
+        var waiting = IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(Now, instrument: Instrument()), Account, 100m, new IdeaTradeSize(1m, 100m, 2m, 4m, 2m), Now, leverage: 5);
+        _trades.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([waiting]);
+        _ledger.GetLeverageAsync(Key, Instrument(), Arg.Any<CancellationToken>()).Returns(10m);
+
+        EntryCalculation entry = await _calculator.EvaluateAsync(Preparation(minRiskReward: 1.2m, leverage: 5, keyed: true), null, CancellationToken.None);
+
+        entry.LeverageToSet.ShouldBeNull();
+    }
+
     // A key that does not trade linear has its reason already: the symbol is not asked for.
     [Test]
     public async Task Account_that_cannot_trade_the_symbol_is_not_asked_for_its_leverage()
@@ -239,14 +268,15 @@ public class IdeaTradeEntryCalculatorTests
         await _ledger.DidNotReceive().GetLeverageAsync(Arg.Any<ExchangeKey>(), Arg.Any<Instrument>(), Arg.Any<CancellationToken>());
     }
 
-    // Scenario "Ждущая сделка занимает свой залог": 100 USDT at 4× waits and takes 25, the new 100 at 5× takes 20.
+    // Scenario "Ждущая сделка занимает свой залог": 100 USDT at 4× waits on another symbol and takes 25, the new 100 at 5× takes 20.
     [Test]
     public async Task Trade_that_waits_takes_its_own_margin()
     {
-        var waiting = IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(Now, instrument: Instrument()), Account, 100m, new IdeaTradeSize(1m, 100m, 2m, 4m, 2m), Now, leverage: 4);
+        var waiting = IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(Now, instrument: Instrument("SOL")), Account, 100m, new IdeaTradeSize(1m, 100m, 2m, 4m, 2m), Now, leverage: 4);
         _trades.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([waiting]);
+        _catalog.ListAsync(MarketCategory.Linear, Arg.Any<CancellationToken>())
+            .Returns([new ListedInstrument(MarketCategory.Linear, "ETHUSDT", "ETH", "USDT"), new ListedInstrument(MarketCategory.Linear, "SOLUSDT", "SOL", "USDT")]);
         _ledger.GetLeverageAsync(Key, Instrument(), Arg.Any<CancellationToken>()).Returns(5m);
-        _ledger.GetOpenOrdersAsync(Key, Instrument(), Arg.Any<CancellationToken>()).Returns([new ExchangeOrder("c-1", "x-1", ExchangeOrderState.Open, 0m, null)]);
 
         _ledger.GetFreeAsync(Key, "USDT", Arg.Any<CancellationToken>()).Returns(40m);
         (await _calculator.EvaluateAsync(Preparation(minRiskReward: 1.2m, amount: 100m, leverage: 5, keyed: true), null, CancellationToken.None)).Reasons.ShouldBe([IdeaTradeRefusal.NotEnoughMoney]);
