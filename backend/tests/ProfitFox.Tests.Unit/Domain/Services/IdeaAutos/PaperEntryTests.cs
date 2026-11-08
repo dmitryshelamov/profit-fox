@@ -118,19 +118,6 @@ public class PaperEntryTests
         Check(books: Books(real: [manual], paper: [other])).Refusals.ShouldBeEmpty();
     }
 
-    // Scenario "Учебный упёрся в свой бюджет": its open paper trades on other pairs take 90 of 100, and the amount is 30.
-    [Test]
-    public void Budget_of_the_auto_taken_by_its_open_trades_is_named_with_what_is_taken()
-    {
-        IdeaAuto auto = Make("Пробои 5м", 30m) with { Budget = 100m };
-        AutoBooks books = Books(paper: [Elsewhere(auto, 50m), Elsewhere(auto, 40m)]);
-
-        PaperEntryCheck check = Check(auto, books: books);
-
-        check.Refusals.ShouldBe([new AutoRefusal(IdeaTradeRefusal.BudgetTaken, RefusalDetail.Numbers(90m, 100m))]);
-        Check(auto with { Budget = 120m }, books: books).Refusals.ShouldBeEmpty();
-    }
-
     // Scenario "Учебный со стопом дальше ликвидации": 12 % at 5×, where less than 10 % is allowed.
     [Test]
     public void Stop_too_far_for_the_leverage_on_linear_is_named_with_the_share_and_the_limit()

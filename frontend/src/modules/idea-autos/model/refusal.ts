@@ -1,20 +1,11 @@
 import type { Schemas } from '@/shared/api/client';
-import { roundDecimal, roundTenth } from '@/shared/format/format';
+import { formatClock, roundDecimal, roundTenth } from '@/shared/format/format';
 
 type Holder = Schemas['PairHolderResponse'];
 
-const two = (value: number) => String(value).padStart(2, '0');
-
-/** `13:05`: a time of day in UTC. */
-export function timeOf(iso: string): string {
-  const date = new Date(iso);
-
-  return `${two(date.getUTCHours())}:${two(date.getUTCMinutes())}`;
-}
-
 /** Whose trade holds the pair, and since when. */
 function holderText(holder: Holder): string {
-  const since = timeOf(holder.since);
+  const since = formatClock(holder.since);
   const account = holder.accountName ?? '';
 
   if (holder.kind === 'same_auto') {
@@ -73,6 +64,9 @@ export function refusalDetailText(refusal: {
       return `${roundTenth(detail.actual!)} % при пределе ${roundTenth(detail.limit!)} %`;
     case 'leverage_differs':
       return `плечо символа ${detail.actual}× при настройке ${detail.limit}×`;
+    case 'minute_limit':
+    case 'side_limit':
+      return `пропущено ${detail.actual} при лимите ${detail.limit}`;
     default:
       return '—';
   }

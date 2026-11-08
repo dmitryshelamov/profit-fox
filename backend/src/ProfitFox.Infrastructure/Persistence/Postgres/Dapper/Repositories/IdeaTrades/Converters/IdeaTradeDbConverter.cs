@@ -9,6 +9,7 @@ using ProfitFox.Domain.Entities.IdeaTrades.Enums;
 using ProfitFox.Domain.Entities.LiveTrading.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
+using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaTrades.Contracts;
@@ -56,6 +57,13 @@ internal static class IdeaTradeDbConverter
             ManualQuantity = trade.Manual.Quantity,
             ManualValue = trade.Manual.Value,
             ManualFee = trade.Manual.Fee,
+            ExpiryQuantity = trade.Expiry.Quantity,
+            ExpiryValue = trade.Expiry.Value,
+            ExpiryFee = trade.Expiry.Fee,
+            DayDrop = trade.Features.DayDrop,
+            BtcDrop = trade.Features.BtcDrop,
+            HighFunding = trade.Features.HighFunding,
+            Burst = trade.Features.Burst,
             LastOrderNumber = trade.LastOrderNumber,
             CreatedAt = trade.CreatedAt,
             PromisedBadge = trade.Promise?.Badge?.ToCode(),
@@ -71,6 +79,7 @@ internal static class IdeaTradeDbConverter
         };
     }
 
+    /// <summary>A real trade reads no columns of the expiry, so its leg of the expiry is always none.</summary>
     internal static IdeaTrade ToDomain(IdeaTradeDb trade)
     {
         return new IdeaTrade(
@@ -110,9 +119,13 @@ internal static class IdeaTradeDbConverter
                     netRiskReward)
                 : null,
             trade.OpenedAt,
-            trade.IdeaStatus is { } ideaStatus ? new TradedIdeaOutcome(IdeaCodes.ParseStatus(ideaStatus), trade.IdeaStatusAt!.Value, trade.IdeaResult) : null,
+            trade.IdeaStatus is { } ideaStatus ? new TradedIdeaOutcome(IdeaCodes.ParseStatus(ideaStatus), trade.IdeaStatusAt!.Value, trade.IdeaResult, trade.IdeaExitPrice) : null,
             trade.AutoId,
-            trade.Leverage);
+            trade.Leverage)
+        {
+            Expiry = new LegTotals(trade.ExpiryQuantity, trade.ExpiryValue, trade.ExpiryFee),
+            Features = new IdeaFeatures(trade.DayDrop, trade.BtcDrop, trade.HighFunding, trade.Burst)
+        };
     }
 
     internal static IdeaTradeOrderDb FromDomain(IdeaTradeOrder order)

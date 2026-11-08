@@ -20,12 +20,12 @@ internal sealed class LoggingLiveTradingJournal(ILogger<LoggingLiveTradingJourna
 
     public void Sent(Guid botId, string clientId)
     {
-        logger.LogInformation("Bybit took order {ClientId} of live bot {BotId}.", clientId, botId);
+        logger.LogInformation("The exchange took order {ClientId} of live bot {BotId}.", clientId, botId);
     }
 
     public void Refused(Guid botId, string clientId, string reason)
     {
-        logger.LogWarning("Bybit refused order {ClientId} of live bot {BotId}: {Reason}", clientId, botId, reason);
+        logger.LogWarning("The exchange refused order {ClientId} of live bot {BotId}: {Reason}", clientId, botId, reason);
     }
 
     public void Failed(Guid botId, string reason)

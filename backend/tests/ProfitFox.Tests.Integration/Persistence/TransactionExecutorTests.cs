@@ -18,7 +18,7 @@ public class TransactionExecutorTests
     [SetUp]
     public async Task SetUp()
     {
-        _dataSource = await MarketDataDatabase.CreateAsync();
+        _dataSource = MarketDataDatabase.Open();
         await using NpgsqlConnection connection = await _dataSource.OpenConnectionAsync();
         await connection.ExecuteAsync("CREATE TABLE notes (id int NOT NULL)");
         _accessor = new PostgresTransactionAccessor();
@@ -28,6 +28,12 @@ public class TransactionExecutorTests
     [TearDown]
     public async Task TearDown()
     {
+        // The reset before the next test empties only the tables of the migrations.
+        await using (NpgsqlConnection connection = await _dataSource.OpenConnectionAsync())
+        {
+            await connection.ExecuteAsync("DROP TABLE notes");
+        }
+
         await _dataSource.DisposeAsync();
     }
 

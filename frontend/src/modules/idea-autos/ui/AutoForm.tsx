@@ -14,7 +14,14 @@ import {
   changedFields,
   changedText,
 } from '../model/autoForm';
-import { badgeChoices, badgeHint, categoryChoices, modes, sideChoices } from '../model/labels';
+import {
+  badgeChoices,
+  badgeHint,
+  categoryChoices,
+  featureChoices,
+  modes,
+  sideChoices,
+} from '../model/labels';
 
 const control = 'h-9 w-full rounded-lg border border-line bg-app px-2 text-sm';
 const chip = 'rounded-full border px-3 py-1.5 text-sm';
@@ -28,6 +35,14 @@ const intervalChoices = [
 
 /** The type no auto takes: its entry waits for the price to leave a range. */
 const neverTaken = 'stop_entry';
+
+/** The conditions of the features of the market of an idea, in the order of the features. */
+const featureFields = [
+  { key: 'dayDrop', label: 'Падение пары за сутки' },
+  { key: 'btcDrop', label: 'Падение BTC за 4 часа' },
+  { key: 'highFunding', label: 'Высокий funding' },
+  { key: 'burst', label: 'Всплеск' },
+] as const;
 
 function Errors({ messages }: { messages: readonly string[] | undefined }) {
   return messages?.map((message) => (
@@ -195,6 +210,7 @@ function TextField({
   onChange,
   errors,
   hint,
+  placeholder,
   mono = false,
   narrow = false,
 }: {
@@ -203,6 +219,7 @@ function TextField({
   onChange: (value: string) => void;
   errors: readonly string[] | undefined;
   hint?: string | undefined;
+  placeholder?: string;
   mono?: boolean;
   narrow?: boolean;
 }) {
@@ -217,6 +234,7 @@ function TextField({
         id={id}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
         aria-invalid={errors ? true : undefined}
         className={`${control} ${mono ? 'font-mono' : ''} ${narrow ? 'max-w-40' : ''}`}
       />
@@ -371,6 +389,17 @@ export function AutoForm({
             errors={fieldErrors.badge}
           />
         </Row>
+        {featureFields.map(({ key, label }) => (
+          <Row key={key} label={label}>
+            <Switch
+              label={label}
+              options={featureChoices}
+              value={form[key]}
+              onChange={(value) => set({ [key]: value })}
+              errors={fieldErrors[key]}
+            />
+          </Row>
+        ))}
         <div className="grid gap-4 sm:grid-cols-2">
           <TextField
             label="Минимальный R:R"
@@ -387,6 +416,39 @@ export function AutoForm({
             onChange={(minCases) => set({ minCases })}
             errors={fieldErrors.minCases}
             hint="N в корзине калибровки идеи"
+            mono
+            narrow
+          />
+        </div>
+      </section>
+      <section
+        aria-label="Лимиты"
+        className="space-y-3 rounded-xl border border-line bg-panel px-4 py-4"
+      >
+        <h2 className="font-semibold">
+          Лимиты{' '}
+          <span className="text-xs font-normal text-faint">
+            идеи сверх лимита автомат не берёт и пишет один отказ на сторону и минуту
+          </span>
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField
+            label="Новых сделок одной стороны за минуту"
+            value={form.maxPerMinutePerSide}
+            onChange={(maxPerMinutePerSide) => set({ maxPerMinutePerSide })}
+            errors={fieldErrors.maxPerMinutePerSide}
+            hint="пусто — без лимита"
+            placeholder="например 2"
+            mono
+            narrow
+          />
+          <TextField
+            label="Открытых сделок одной стороны"
+            value={form.maxOpenPerSide}
+            onChange={(maxOpenPerSide) => set({ maxOpenPerSide })}
+            errors={fieldErrors.maxOpenPerSide}
+            hint="пусто — без лимита; учебные и реальные сделки автомата"
+            placeholder="например 5"
             mono
             narrow
           />

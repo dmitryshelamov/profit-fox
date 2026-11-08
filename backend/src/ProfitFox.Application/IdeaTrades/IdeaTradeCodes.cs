@@ -5,7 +5,7 @@ namespace ProfitFox.Application.IdeaTrades;
 
 /// <summary>
 ///     Codes of trades by ideas in the API and in stored rows: statuses (<c>awaiting_entry</c>, <c>open</c>, <c>closed_at_target</c>,
-///     <c>closed_at_stop</c>, <c>closed_manually</c>, <c>cancelled</c>, <c>failed</c>), order roles, legs and times in force.
+///     <c>closed_at_stop</c>, <c>closed_manually</c>, <c>closed_at_expiry</c>, <c>cancelled</c>, <c>failed</c>), order roles, legs and times in force.
 /// </summary>
 public static class IdeaTradeCodes
 {
@@ -16,6 +16,7 @@ public static class IdeaTradeCodes
         ["closed_at_target"] = IdeaTradeStatus.ClosedAtTarget,
         ["closed_at_stop"] = IdeaTradeStatus.ClosedAtStop,
         ["closed_manually"] = IdeaTradeStatus.ClosedManually,
+        ["closed_at_expiry"] = IdeaTradeStatus.ClosedAtExpiry,
         ["cancelled"] = IdeaTradeStatus.Cancelled,
         ["failed"] = IdeaTradeStatus.Failed
     };
@@ -67,7 +68,9 @@ public static class IdeaTradeCodes
         [IdeaTradeRefusal.RulesUnknown] = "rules_unknown",
         [IdeaTradeRefusal.EntryError] = "entry_error",
         [IdeaTradeRefusal.BudgetTaken] = "budget_taken",
-        [IdeaTradeRefusal.AutosBudgetTaken] = "autos_budget_taken"
+        [IdeaTradeRefusal.AutosBudgetTaken] = "autos_budget_taken",
+        [IdeaTradeRefusal.MinuteLimit] = "minute_limit",
+        [IdeaTradeRefusal.SideLimit] = "side_limit"
     };
 
     public static bool TryParseStatus(string code, out IdeaTradeStatus status)

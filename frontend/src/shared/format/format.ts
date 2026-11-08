@@ -10,18 +10,34 @@ export function groupDigits(value: string): string {
 
 const two = (value: number) => String(value).padStart(2, '0');
 
-/** `02.11 14:05`: a moment in UTC. */
+/** `02.11 14:05`: a moment in the local zone of the browser. */
 export function formatMoment(iso: string): string {
   const date = new Date(iso);
 
-  return `${two(date.getUTCDate())}.${two(date.getUTCMonth() + 1)} ${two(date.getUTCHours())}:${two(date.getUTCMinutes())}`;
+  return `${two(date.getDate())}.${two(date.getMonth() + 1)} ${two(date.getHours())}:${two(date.getMinutes())}`;
 }
 
-/** `01.01.2024`: a day in UTC. */
+/** `01.01.2024`: a day in the local zone of the browser. */
 export function formatDay(iso: string): string {
   const date = new Date(iso);
 
-  return `${two(date.getUTCDate())}.${two(date.getUTCMonth() + 1)}.${date.getUTCFullYear()}`;
+  return `${two(date.getDate())}.${two(date.getMonth() + 1)}.${date.getFullYear()}`;
+}
+
+/** `14:32`: a time of day in the local zone of the browser. */
+export function formatClock(iso: string): string {
+  const date = new Date(iso);
+
+  return `${two(date.getHours())}:${two(date.getMinutes())}`;
+}
+
+/** The start of the UTC day of `now`: the server counts «today» from it. */
+export function utcDayStart(now: number): string {
+  const date = new Date(now);
+
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  ).toISOString();
 }
 
 /** The form of "комбинация" that goes with the count. */
@@ -44,9 +60,11 @@ export function combinationsWord(count: number | string): string {
   }
 }
 
-/** `2024-02-01 00:00`: a moment in UTC with its year. */
-export function formatUtc(iso: string): string {
-  return new Date(iso).toISOString().slice(0, 16).replace('T', ' ');
+/** `2024-02-01 00:00`: a moment in the local zone of the browser with its year. */
+export function formatFullMoment(iso: string): string {
+  const date = new Date(iso);
+
+  return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())} ${two(date.getHours())}:${two(date.getMinutes())}`;
 }
 
 /** A decimal string with `+` in front when it is above zero; the digits stay as they are. */

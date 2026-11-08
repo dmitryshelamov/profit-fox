@@ -5,7 +5,8 @@ namespace ProfitFox.Application.MarketData.FormingCandles;
 
 /// <summary>
 ///     The feeds of the current candle, one per series however many viewers watch it: the first viewer subscribes the port, the
-///     last to leave takes the subscription off. A connection follows one series at a time. Only the API registers it.
+///     last to leave takes the subscription off. A connection follows one series at a time. Only the API registers it. The port is the
+///     router of the exchange of the category, so a series of MOEX comes from the streams of T-Invest.
 /// </summary>
 public sealed class FormingCandleFeeds(IFormingCandleStreams streams, IFormingCandleBroadcast broadcast, TimeProvider time)
 {

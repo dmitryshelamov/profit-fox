@@ -114,7 +114,7 @@ describe('bot page', () => {
     );
     renderApp(`/bots/${botId}`);
 
-    const row = (await screen.findByText('02.11 14:05')).closest('tr')!;
+    const row = (await screen.findByText('02.11 17:05')).closest('tr')!;
     expect(within(row).getByText('01.01.2024 – 01.07.2024')).toBeInTheDocument();
     expect(within(row).getByText('fast 5…15 / 5')).toBeInTheDocument();
     expect(within(row).getByText('3')).toBeInTheDocument();
@@ -125,7 +125,7 @@ describe('bot page', () => {
     fakeApi(routes(() => [backtestSummary()]));
     renderApp(`/bots/${botId}`);
 
-    const row = (await screen.findByText('02.11 14:05')).closest('tr')!;
+    const row = (await screen.findByText('02.11 17:05')).closest('tr')!;
     expect(within(row).getByText('—')).toBeInTheDocument();
   });
 
@@ -136,7 +136,7 @@ describe('bot page', () => {
     );
     renderApp(`/bots/${botId}`);
 
-    const row = (await screen.findByText('02.11 14:05')).closest('tr')!;
+    const row = (await screen.findByText('02.11 17:05')).closest('tr')!;
     expect(within(row).getByText('Ошибка')).toBeInTheDocument();
     expect(within(row).getByText('Bybit: биржа недоступна')).toBeInTheDocument();
   });
@@ -158,9 +158,9 @@ describe('bot page', () => {
     );
     renderApp(`/bots/${botId}`);
 
-    const changed = (await screen.findByText('02.11 14:05')).closest('tr')!;
+    const changed = (await screen.findByText('02.11 17:05')).closest('tr')!;
     expect(within(changed).getByText('бот изменился')).toBeInTheDocument();
-    const other = screen.getByText('01.11 10:00').closest('tr')!;
+    const other = screen.getByText('01.11 13:00').closest('tr')!;
     expect(within(other).queryByText('бот изменился')).not.toBeInTheDocument();
   });
 
@@ -374,7 +374,7 @@ describe('chart on the bot page', () => {
     const { requests } = open();
 
     const last = await lastCandle();
-    await waitFor(() => expect(last).toHaveTextContent('2026-11-03 10:00'));
+    await waitFor(() => expect(last).toHaveTextContent('2026-11-03 13:00'));
     expect(last).toHaveTextContent('102');
     expect(last).toHaveTextContent('12.5');
     expect(last).not.toHaveTextContent('не закрыта');
@@ -400,6 +400,24 @@ describe('chart on the bot page', () => {
     );
   });
 
+  // After the review: a bot on moex has no daily candles; the chart offers the intervals of its category and opens the bot's own for
+  // an interval the category does not have.
+  it('offers the intervals of the category of the bot and opens its own for one the category has not', async () => {
+    const { requests } = open(`/bots/${botId}?interval=D`, {
+      [`GET /api/bots/${botId}`]: () => json({ ...botDetails, category: 'moex', symbol: 'SBER' }),
+    });
+
+    const group = await screen.findByRole('group', { name: 'Интервал' });
+
+    expect(
+      within(group)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['1 мин', '5 мин', '15 мин', '1 ч · бот', '4 ч']);
+    await lastCandle();
+    expect(new URL(candleRequests(requests)[0]!.url).searchParams.get('Interval')).toBe('60');
+  });
+
   // Scenarios "Цена меняется" and "Состояние канала текущей свечи".
   it('shows the current candle as not closed and the state of the channel', async () => {
     open();
@@ -414,7 +432,7 @@ describe('chart on the bot page', () => {
     );
 
     const last = await lastCandle();
-    expect(last).toHaveTextContent('2026-11-03 11:00');
+    expect(last).toHaveTextContent('2026-11-03 14:00');
     expect(last).toHaveTextContent('103');
     expect(last).toHaveTextContent('3.25');
     expect(last).toHaveTextContent('не закрыта');
@@ -562,7 +580,7 @@ describe('chart on the bot page', () => {
       [`GET /api/bots/${botId}/positions`]: () => json([position([order()])]),
     });
 
-    expect(await screen.findByText('История недоступна: Bybit не отвечает')).toBeInTheDocument();
+    expect(await screen.findByText('История недоступна: биржа не отвечает')).toBeInTheDocument();
     expect(screen.getByText('Остановлен')).toBeInTheDocument();
     expect(await screen.findByRole('region', { name: 'Текущая позиция' })).toBeInTheDocument();
     expect(await lastCandle()).toHaveTextContent('102');

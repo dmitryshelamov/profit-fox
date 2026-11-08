@@ -20,6 +20,8 @@
         <PackageVersion Include="Polly" Version="8.8.0"/>
         <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0"/>
         <PackageVersion Include="Swashbuckle.AspNetCore.SwaggerUI" Version="10.3.1"/>
+        <!-- The generated gRPC clients of T-Invest Invest API; the facade of the SDK is not used. -->
+        <PackageVersion Include="Tinkoff.InvestApi" Version="0.6.25"/>
     </ItemGroup>
 
     <ItemGroup Label="Tests">

@@ -7,6 +7,7 @@ import {
   calibrationQuery,
   casesText,
   differenceView,
+  featureName,
   rangeLabel,
   typeLabel,
 } from '@/modules/ideas';
@@ -162,7 +163,7 @@ function ReportView({ report }: { report: Report }) {
     );
   }
 
-  const counters = `Проверено ${casesText(Number(report.checked))} · без статистики корзины ${groupDigits(String(report.unchecked))} · посчитано ${formatMoment(report.computedAt)} UTC`;
+  const counters = `Проверено ${casesText(Number(report.checked))} · без статистики корзины ${groupDigits(String(report.unchecked))} · посчитано ${formatMoment(report.computedAt)}`;
 
   if (report.total === null) {
     return (
@@ -194,6 +195,12 @@ function ReportView({ report }: { report: Report }) {
         slices={report.types}
         name={(slice) => typeLabel(slice.type!)}
       />
+      <SliceTables
+        label="По признакам"
+        heading="Признак"
+        slices={report.features}
+        name={(slice) => `${featureName(slice.feature!)} · ${slice.present ? 'есть' : 'нет'}`}
+      />
       <ul className="space-y-1 text-xs text-faint">
         <li>
           Обещали: числа модели корзины по кейсам, закрытым до срабатывания кейса и сработавшим не
@@ -205,9 +212,12 @@ function ReportView({ report }: { report: Report }) {
           кейсов; сравнение — на кейсах, которые проверяют обе модели.
         </li>
         <li>
-          С признаками: подкорзины корзины по сильному движению (от 4 ATR) и высокому объёму (от 4
-          медиан), подтянутые к модели корзины. Разница Брайера — на тех же кейсах; признаки стоит
-          брать в корзины, только если весь её интервал ниже 0.
+          С признаками: подкорзины корзины по признакам рынка в минуту срабатывания — падение пары
+          за сутки от 5 %, падение BTC за 4 часа от 1 %, funding от 0,05 % и всплеск: сигналы той же
+          стороны на том же ТФ в ту же минуту у многих разных пар, на 5 мин — от 60 пар, 15 мин — от
+          25, 1 ч — от 8, 4 ч — от 4, — подтянутые к модели корзины. Разница Брайера — на тех же
+          кейсах; признаки стоит брать в корзины, только если весь её интервал ниже 0. «По
+          признакам» в режиме «Все» — только иллюстрация: границы подобраны на тех же 90 днях.
         </li>
         <li>
           После изменения правил: только кейсы, сработавшие после применения правила выхода своего

@@ -26,7 +26,7 @@ public class IdeaRepositoryTests
     [SetUp]
     public async Task SetUp()
     {
-        _dataSource = await MarketDataDatabase.CreateAsync();
+        _dataSource = MarketDataDatabase.Open();
         _store = new IdeaRepository(_dataSource);
     }
 
@@ -40,7 +40,7 @@ public class IdeaRepositoryTests
     public async Task Ideas_are_read_back_exactly()
     {
         Idea generated = IdeaGenerator.Generate(Now, IdeaStatus.Active);
-        Idea idea = generated with { Move = 3.123456789m, Track = generated.Track with { Tick = 0.0001m } };
+        Idea idea = generated with { Move = 3.123456789m, Track = generated.Track with { Tick = 0.0001m }, PairChange = -0.0712345m, BtcChange = -0.0123m, Funding = 0.0006m, BurstPairs = 31 };
 
         (await _store.SaveAsync([idea], [], CancellationToken.None)).ShouldBe([idea]);
 
@@ -79,8 +79,12 @@ public class IdeaRepositoryTests
                 new { Now });
         }
 
-        IdeaTrack track = (await _store.GetOpenAsync(CancellationToken.None)).Single().Track;
+        Idea old = (await _store.GetOpenAsync(CancellationToken.None)).Single();
+        IdeaTrack track = old.Track;
 
+        // Task 4.2 of add-market-idea-features: an idea before the numbers of the market has no features.
+        // Task 3.2 of add-burst-and-auto-limits: one before the count of the pairs of its minute has none and no burst.
+        (old.PairChange, old.BtcChange, old.Funding, old.BurstPairs, old.Features).ShouldBe((null, null, null, null, default));
         (track.LifeCandles, track.TargetR, track.EntryCandles).ShouldBe((24, (decimal?)2m, (int?)4));
         IdeaTracker.Step(track, new IdeaCandle(Now.AddHours(1), 105m, 105m, 105m, 105m, 1m)).Status.ShouldBe(IdeaStatus.Expired);
     }
@@ -139,6 +143,24 @@ public class IdeaRepositoryTests
         await _store.SaveAsync([], [active], CancellationToken.None);
 
         (await _store.GetAsync(idea.Id, CancellationToken.None)).ShouldBe(active);
+    }
+
+    // Task 2.1 of add-idea-time-left: the journal reads the ideas of its open trades by id; one that is no longer stored is left out.
+    [Test]
+    public async Task Ideas_are_read_by_their_ids_without_the_ones_no_longer_stored()
+    {
+        Idea active = IdeaGenerator.Generate(Now, IdeaStatus.Active);
+        Idea expired = IdeaGenerator.Generate(Now.AddHours(-30), IdeaStatus.Expired, setup: IdeaSetup.Drop, statusAt: Now.AddHours(-2));
+        Idea deleted = IdeaGenerator.Generate(Now, setup: IdeaSetup.EarlyDrop);
+        Idea notAsked = IdeaGenerator.Generate(Now, side: IdeaSide.Short);
+        await _store.SaveAsync([active, expired, deleted, notAsked], [], CancellationToken.None);
+
+        await using (NpgsqlConnection connection = await _dataSource.OpenConnectionAsync())
+        {
+            await connection.ExecuteAsync("DELETE FROM ideas WHERE id = @Id", new { deleted.Id });
+        }
+
+        (await _store.GetManyAsync([active.Id, expired.Id, deleted.Id], CancellationToken.None)).ShouldBe([active, expired], ignoreOrder: true);
     }
 
     // The ideas of the API: the open ones and the ones closed in the last day, of one pair or of all.

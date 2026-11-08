@@ -5,6 +5,7 @@ using ProfitFox.Domain.Entities.IdeaAutos;
 using ProfitFox.Domain.Entities.IdeaAutos.Enums;
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.IdeaTrades;
+using ProfitFox.Domain.Entities.IdeaTrades.Enums;
 using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
@@ -24,8 +25,9 @@ namespace ProfitFox.Application.Scanner.Ideas;
 ///     What the autos do in a minute of the scanner (decisions 1, 2, 4, 9, 10 and 11). The autos that are on are read every minute. An idea born in
 ///     the minute is given to each of them in the order of the list: one that fits the conditions becomes, by the mode, a paper trade or a refusal
 ///     (checked here, with the rules of the pair the scanner keeps) or a request for a trading Worker, which does the checks that need the money of
-///     the account. The open paper trades go on by the closed minutes of their pairs from where they stopped, up to the end of the coverage of the
-///     pair, and by the stored minutes when the memory no longer holds them. The open trades live in memory and storage stays the truth:
+///     the account. The open paper trades take the outcomes of the ideas that closed in the minute and go on by the closed minutes of their pairs
+///     from where they stopped, up to the end of the coverage of the pair, and by the stored minutes when the memory no longer holds them; the
+///     trade of a pair out of trading closes at expiry once its idea did. The open trades live in memory and storage stays the truth:
 ///     <see cref="Commit" /> keeps what storage took, and <see cref="StartOver" /> reads them again.
 /// </summary>
 public sealed class LiveAutos(
@@ -52,13 +54,20 @@ public sealed class LiveAutos(
     /// <param name="end">The end of the minute.</param>
     /// <param name="born">The ideas made in the minute, in the order they were made.</param>
     /// <param name="births">The minute of each pair that the ideas were born in.</param>
+    /// <param name="outcomes">How the ideas that closed in the minute ended, put on their paper trades before they are stepped.</param>
     /// <param name="cancellationToken"></param>
     /// <returns>What to write with the ideas of the minute; none when the autos did nothing.</returns>
-    public async Task<AutoMinute?> RunAsync(DateTimeOffset end, IReadOnlyList<Idea> born, IReadOnlyDictionary<Instrument, IdeaCandle> births, CancellationToken cancellationToken)
+    public async Task<AutoMinute?> RunAsync(
+        DateTimeOffset end,
+        IReadOnlyList<Idea> born,
+        IReadOnlyDictionary<Instrument, IdeaCandle> births,
+        IReadOnlyCollection<ClosedIdea> outcomes,
+        CancellationToken cancellationToken)
     {
         _open ??= (await paper.GetOpenAsync(cancellationToken)).ToDictionary(trade => trade.Trade.Id);
         IReadOnlyList<IdeaAuto> enabled = await autos.GetEnabledAsync(cancellationToken);
         var working = new Dictionary<Guid, PaperIdeaTrade>(_open);
+        Learn(working, outcomes);
         List<PaperIdeaTrade> stepped = await StepAsync(working, cancellationToken);
         var opened = new List<PaperIdeaTrade>();
         var entries = new List<IdeaAutoEntry>();
@@ -115,6 +124,18 @@ public sealed class LiveAutos(
         _open = null;
     }
 
+    // The outcome of an idea goes on its paper trades before they are stepped, so a trade closes at expiry in the minute its idea expired.
+    private static void Learn(Dictionary<Guid, PaperIdeaTrade> working, IReadOnlyCollection<ClosedIdea> outcomes)
+    {
+        foreach (ClosedIdea closed in outcomes)
+        {
+            foreach (PaperIdeaTrade paper in working.Values.Where(paper => paper.Trade.IdeaId == closed.IdeaId).ToList())
+            {
+                working[paper.Trade.Id] = paper with { Trade = paper.Trade with { IdeaOutcome = closed.Outcome } };
+            }
+        }
+    }
+
     private async Task TakeAsync(
         DateTimeOffset end,
         IReadOnlyList<IdeaAuto> enabled,
@@ -133,13 +154,35 @@ public sealed class LiveAutos(
         IReadOnlyDictionary<Guid, IdeaAuto>? every = null;
         DateTimeOffset now = time.GetUtcNow();
 
+        IReadOnlyList<int> order = AutoMinutePlan.Order([.. views.Select(view => (view.Bucket, view.Shares))]);
+
         foreach (IdeaAuto auto in enabled.OrderBy(auto => auto.Position))
         {
-            for (int fired = 0; fired < born.Count; fired++)
-            {
-                Idea idea = born[fired];
+            AutoMinutePlan? plan = null;
 
-                if (!AutoConditions.Match(idea, views[fired].Bucket, auto.Conditions))
+            // Decision 3 of add-burst-and-auto-limits: the ideas go by the order of their promise, and a request carries its place in it.
+            for (int fired = 0; fired < order.Count; fired++)
+            {
+                Idea idea = born[order[fired]];
+
+                if (!AutoConditions.Match(idea, views[order[fired]].Bucket, auto.Conditions))
+                {
+                    continue;
+                }
+
+                openReal ??= await trades.GetOpenAsync(cancellationToken);
+                every ??= await autos.GetEveryAsync(cancellationToken);
+                var books = new AutoBooks(openReal, [.. working.Values.Where(trade => trade.Trade.IsOpen)], every);
+
+                // An auto that cannot hold one more trade leaves the idea alone: no trade, no request, no refusal.
+                if (AutoBudget.IsFull(auto, books, tradingSettings))
+                {
+                    continue;
+                }
+
+                plan ??= new AutoMinutePlan(auto, books);
+
+                if (!plan.Allows(idea))
                 {
                     continue;
                 }
@@ -147,33 +190,19 @@ public sealed class LiveAutos(
                 if (auto.Mode == IdeaAutoMode.Live)
                 {
                     entries.Add(new IdeaAutoEntry(Guid.NewGuid(), idea.Id, auto.Id, auto.AccountId, auto.Amount, auto.Conditions.MinRiskReward, auto.Position, fired, end, now));
+                    plan.Took(idea);
 
                     continue;
                 }
 
-                openReal ??= await trades.GetOpenAsync(cancellationToken);
-                every ??= await autos.GetEveryAsync(cancellationToken);
                 IdeaCandle birth = births[idea.Instrument];
                 ScannerPair pair = market.Find(idea.Instrument)!;
                 FeeRates fees = _fees[idea.Instrument.Category];
-                var books = new AutoBooks(openReal, [.. working.Values.Where(trade => trade.Trade.IsOpen)], every);
                 PaperEntryCheck check = PaperEntry.Check(auto, idea, birth, RulesOf(pair), fees, tradingSettings.MaxAmount, tradingSettings.Leverage, books);
 
                 if (check.Refusals.Count > 0)
                 {
-                    refusals.Add(new IdeaAutoRefusal(
-                        Guid.NewGuid(),
-                        idea.Id,
-                        auto.Id,
-                        IdeaAutoMode.Paper,
-                        now,
-                        idea.Instrument,
-                        idea.Setup,
-                        idea.Interval,
-                        idea.Track.Plan.Type,
-                        idea.Track.Plan.Side,
-                        [.. check.Refusals.Select(refusal => refusal.Reason)],
-                        check.Refusals[0].Detail));
+                    refusals.Add(Refusal(auto, idea, now, [.. check.Refusals.Select(refusal => refusal.Reason)], check.Refusals[0].Detail));
 
                     continue;
                 }
@@ -181,8 +210,29 @@ public sealed class LiveAutos(
                 PaperIdeaTrade trade = PaperFill.Open(Guid.NewGuid(), idea, auto.Id, auto.AccountId, check.Size!, PromiseOf(idea, birth, bucketList), birth, fees);
                 working[trade.Trade.Id] = trade;
                 opened.Add(trade);
+                plan.Took(idea);
             }
+
+            // Decision 4: the ideas a limit skipped are one refusal of the auto, the side and the minute, on the first of them.
+            refusals.AddRange(plan?.Skips.Select(skip => Refusal(auto, skip.First, now, [skip.Reason], RefusalDetail.Numbers(skip.Skipped, skip.Limit))) ?? []);
         }
+    }
+
+    private static IdeaAutoRefusal Refusal(IdeaAuto auto, Idea idea, DateTimeOffset now, IReadOnlyList<IdeaTradeRefusal> reasons, RefusalDetail? detail)
+    {
+        return new IdeaAutoRefusal(
+            Guid.NewGuid(),
+            idea.Id,
+            auto.Id,
+            auto.Mode,
+            now,
+            idea.Instrument,
+            idea.Setup,
+            idea.Interval,
+            idea.Track.Plan.Type,
+            idea.Track.Plan.Side,
+            reasons,
+            detail);
     }
 
     // What the idea promises at the price the paper trade enters at: the statistics of its bucket as the list of ideas shows them, and the money from that price.
@@ -206,17 +256,22 @@ public sealed class LiveAutos(
 
         foreach (PaperIdeaTrade open in working.Values.Where(trade => trade.Trade.IsOpen).ToList())
         {
-            if (market.Find(open.Trade.Instrument) is not { CoveredUntil: { } until })
-            {
-                continue;
-            }
-
+            ScannerPair? pair = market.Find(open.Trade.Instrument);
             FeeRates fees = _fees[open.Trade.Instrument.Category];
             PaperIdeaTrade current = open;
 
-            foreach (IdeaCandle minute in await MinutesAsync(open.Trade.Instrument, open.SteppedUntil, until, cancellationToken))
+            if (pair is { CoveredUntil: { } until })
             {
-                current = PaperFill.Step(current, minute, fees);
+                foreach (IdeaCandle minute in await MinutesAsync(open.Trade.Instrument, open.SteppedUntil, until, cancellationToken))
+                {
+                    current = PaperFill.Step(current, minute, fees);
+                }
+            }
+
+            // A pair out of trading has no minutes to come: its trade closes at expiry once the scanner closed its idea at the last close.
+            if (pair is not { Listed: true })
+            {
+                current = PaperFill.Expire(current, fees);
             }
 
             if (current != open)

@@ -3,7 +3,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 
 import { accountsQuery } from '@/modules/exchange-accounts';
-import { instrumentsQuery, intervals } from '@/modules/market-data';
+import { instrumentsQuery, intervalsOf, marketCategories } from '@/modules/market-data';
 import { strategiesQuery, strategyQuery } from '@/modules/strategies';
 import { ApiError, type Schemas } from '@/shared/api/client';
 import { isDecimalText } from '@/shared/api/jsonNumber';
@@ -15,7 +15,6 @@ import { botFieldErrors } from '../model/botProblems';
 import { type ParameterDef, parameterMeta } from '../model/parameterMeta';
 import { parameterValuesOf } from '../model/parameterValues';
 
-const categories = ['spot', 'linear'] as const;
 const input =
   'block h-9 w-full rounded-md border bg-app px-3 text-sm text-text placeholder:text-faint';
 const labelText = 'text-[13px] text-muted';
@@ -55,6 +54,7 @@ export function BotForm({
   const [name, setName] = useState(bot?.name ?? '');
   const [strategyId, setStrategyId] = useState(bot?.strategyId ?? initialStrategyId ?? '');
   const [category, setCategory] = useState(bot?.category ?? 'spot');
+  const intervals = intervalsOf(category);
   const [symbol, setSymbol] = useState(bot?.symbol ?? '');
   const [interval, setInterval] = useState(bot?.interval ?? '60');
   const [balance, setBalance] = useState(bot?.balance ?? '');
@@ -79,6 +79,15 @@ export function BotForm({
   function changeStrategy(id: string) {
     setStrategyId(id);
     setTexts({});
+  }
+
+  /** The intervals follow the category; an interval the new category does not have goes back to an hour. */
+  function changeCategory(value: string) {
+    setCategory(value);
+
+    if (!intervalsOf(value).some((item) => item.value === interval)) {
+      setInterval('60');
+    }
   }
 
   async function save() {
@@ -180,14 +189,14 @@ export function BotForm({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <span className={labelText}>Категория рынка</span>
-              <div className="mt-1 grid grid-cols-2 gap-1 rounded-md border border-line bg-app p-1">
-                {categories.map((item) => (
+              <div className="mt-1 grid grid-cols-3 gap-1 rounded-md border border-line bg-app p-1">
+                {marketCategories.map((item) => (
                   <button
                     key={item}
                     type="button"
                     aria-pressed={category === item}
                     className={`h-7 rounded font-mono text-sm ${category === item ? 'bg-panel-2 font-bold' : 'text-muted'}`}
-                    onClick={() => setCategory(item)}
+                    onClick={() => changeCategory(item)}
                   >
                     {item}
                   </button>

@@ -28,9 +28,10 @@ public class SetupTypesTests
         SetupTypes.Of(setup).ShouldBe([IdeaType.Levels, IdeaType.TwoR, IdeaType.BeyondExtreme]);
     }
 
-    // Scenario "Сжатие": only «Стоп-вход».
+    // Scenarios "Сжатие" and "Накопление": only «Стоп-вход».
     [TestCase(IdeaSetup.Squeeze)]
     [TestCase(IdeaSetup.QuietVolume)]
+    [TestCase(IdeaSetup.Accumulation)]
     public void Setup_of_a_range_gives_only_the_stop_entry(IdeaSetup setup)
     {
         SetupTypes.Of(setup).ShouldBe([IdeaType.StopEntry]);

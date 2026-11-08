@@ -30,7 +30,7 @@ public class MarketApiTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        _factory = ProfitFoxFactory.Create(workers: 0);
         _client = _factory.CreateClient();
         _database = NpgsqlDataSource.Create(_factory.ConnectionString);
     }
@@ -120,20 +120,14 @@ public class MarketApiTests
         (setups.GetProperty("all").GetInt32(), setups.GetProperty("impulse").GetInt32(), setups.GetProperty("drop").GetInt32()).ShouldBe((2, 1, 0));
     }
 
-    [TestCase("pageSize=75", "pageSize")]
-    [TestCase("page=0", "page")]
-    [TestCase("category=inverse", "category")]
-    [TestCase("setup=rocket", "setup")]
-    [TestCase("interval=30", "interval")]
-    [TestCase("sort=volume", "sort")]
-    [TestCase("direction=up", "direction")]
-    [TestCase("savedFilter=00000000-0000-0000-0000-000000000001", "savedFilter")]
-    public async Task A_wrong_filter_order_or_page_is_a_validation_error_by_the_parameter(string query, string key)
+    // An interval the scanner does not keep; the other wrong parameters are in GetMarketTests.
+    [Test]
+    public async Task An_interval_the_scanner_does_not_keep_is_a_validation_error()
     {
-        HttpResponseMessage response = await _client.GetAsync($"/api/market?{query}");
+        HttpResponseMessage response = await _client.GetAsync("/api/market?interval=30");
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("errors").TryGetProperty(key, out _).ShouldBeTrue();
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("errors").TryGetProperty("interval", out _).ShouldBeTrue();
     }
 
     // Scenario "Вторая страница рынка".

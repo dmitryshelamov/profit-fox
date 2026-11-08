@@ -6,6 +6,8 @@
 
     <ItemGroup>
         <PackageReference Include="AutoFixture"/>
+        <!-- The in-process mock of the gRPC clients of T-Invest speaks their request and response types. -->
+        <PackageReference Include="Tinkoff.InvestApi"/>
     </ItemGroup>
 
     <ItemGroup>

@@ -36,4 +36,7 @@ public sealed record CalibrationReport(
 
     /// <summary>The breakdown by type; empty in a report stored before it.</summary>
     public IReadOnlyList<CalibrationSlice> Types { get; init; } = [];
+
+    /// <summary>The breakdown by feature, with and without each; empty in a report stored before it.</summary>
+    public IReadOnlyList<CalibrationSlice> Features { get; init; } = [];
 }

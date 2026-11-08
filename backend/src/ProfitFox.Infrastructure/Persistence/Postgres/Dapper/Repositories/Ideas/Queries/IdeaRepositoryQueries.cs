@@ -13,18 +13,20 @@ internal static class IdeaRepositoryQueries
     internal const string Columns = """
                                     category, symbol, setup, type, "interval", side, fired_at AS "FiredAt", entry, stop, target, risk_reward AS "RiskReward",
                                     status, status_at AS "StatusAt", entered_at AS "EnteredAt", exit_price AS "ExitPrice", move, volume_ratio AS "VolumeRatio",
-                                    engine_version AS "EngineVersion"
+                                    engine_version AS "EngineVersion", pair_change AS "PairChange", btc_change AS "BtcChange", funding
                                     """;
 
-    // The columns of a live idea beside the ones a case shares: the price step and the exit rule it fired under.
-    private const string OwnColumns = """tick, life_candles AS "LifeCandles", target_r AS "TargetR", entry_candles AS "EntryCandles" """;
+    // The columns of a live idea beside the ones a case shares: the price step, the exit rule it fired under and the count of the pairs of its minute.
+    private const string OwnColumns = """tick, life_candles AS "LifeCandles", target_r AS "TargetR", entry_candles AS "EntryCandles", burst_pairs AS "BurstPairs" """;
 
     // A second open idea of a key conflicts with the partial unique index and is left out; RETURNING names the ones added.
     private const string InsertSql = """
                                      INSERT INTO ideas (id, category, symbol, setup, type, "interval", side, fired_at, entry, stop, target, risk_reward, status,
-                                         status_at, entered_at, exit_price, move, volume_ratio, engine_version, tick, life_candles, target_r, entry_candles)
+                                         status_at, entered_at, exit_price, move, volume_ratio, engine_version, tick, life_candles, target_r, entry_candles, pair_change,
+                                         btc_change, funding, burst_pairs)
                                      VALUES (@Id, @Category, @Symbol, @Setup, @Type, @Interval, @Side, @FiredAt, @Entry, @Stop, @Target, @RiskReward, @Status,
-                                         @StatusAt, @EnteredAt, @ExitPrice, @Move, @VolumeRatio, @EngineVersion, @Tick, @LifeCandles, @TargetR, @EntryCandles)
+                                         @StatusAt, @EnteredAt, @ExitPrice, @Move, @VolumeRatio, @EngineVersion, @Tick, @LifeCandles, @TargetR, @EntryCandles, @PairChange,
+                                         @BtcChange, @Funding, @BurstPairs)
                                      ON CONFLICT (category, symbol, setup, type, "interval", side) WHERE status IN ('awaiting_entry', 'active') DO NOTHING
                                      RETURNING id
                                      """;
@@ -46,15 +48,15 @@ internal static class IdeaRepositoryQueries
         return new CommandDefinition(UpdateSql, ideas, transaction, cancellationToken: cancellationToken);
     }
 
-    // The scanner writes three columns of the trade and leaves its updated_at alone: a Worker finds the requests of the owner by it.
+    // The scanner writes the columns of the outcome of the trade and leaves its updated_at alone: a Worker finds the requests of the owner by it.
     internal static CommandDefinition WriteTradeOutcomes(IEnumerable<ClosedIdea> outcomes, IDbTransaction transaction, CancellationToken cancellationToken)
     {
         return new CommandDefinition(
             """
-            UPDATE idea_trades SET idea_status = @Status, idea_status_at = @StatusAt, idea_result = @Result
+            UPDATE idea_trades SET idea_status = @Status, idea_status_at = @StatusAt, idea_result = @Result, idea_exit_price = @ExitPrice
             WHERE idea_id = @IdeaId AND idea_status IS NULL
             """,
-            outcomes.Select(closed => new { closed.IdeaId, Status = closed.Outcome.Status.ToCode(), closed.Outcome.StatusAt, closed.Outcome.Result }),
+            outcomes.Select(closed => new { closed.IdeaId, Status = closed.Outcome.Status.ToCode(), closed.Outcome.StatusAt, closed.Outcome.Result, closed.Outcome.ExitPrice }),
             transaction,
             cancellationToken: cancellationToken);
     }
@@ -92,6 +94,11 @@ internal static class IdeaRepositoryQueries
     internal static CommandDefinition Get(Guid id, CancellationToken cancellationToken)
     {
         return new CommandDefinition($"SELECT id, {Columns}, {OwnColumns} FROM ideas WHERE id = @Id", new { Id = id }, cancellationToken: cancellationToken);
+    }
+
+    internal static CommandDefinition GetMany(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition($"SELECT id, {Columns}, {OwnColumns} FROM ideas WHERE id = ANY(@Ids)", new { Ids = ids.ToArray() }, cancellationToken: cancellationToken);
     }
 
     internal static CommandDefinition DeleteClosedBefore(DateTimeOffset closedBefore, CancellationToken cancellationToken)

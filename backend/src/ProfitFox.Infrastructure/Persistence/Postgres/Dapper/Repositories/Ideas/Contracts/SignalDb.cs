@@ -29,6 +29,12 @@ internal sealed class SignalDb
 
     public decimal VolumeRatio { get; init; }
 
+    public decimal? PairChange { get; init; }
+
+    public decimal? BtcChange { get; init; }
+
+    public decimal? Funding { get; init; }
+
     public decimal Tick { get; init; }
 
     public int? EntryAfter { get; init; }

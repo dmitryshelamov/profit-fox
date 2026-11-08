@@ -1,4 +1,4 @@
-import { counted, typeLabel } from '@/modules/ideas';
+import { counted, featureLabel, typeLabel } from '@/modules/ideas';
 import { setupLabel } from '@/modules/market';
 import { intervalLabel } from '@/modules/market-data';
 
@@ -48,6 +48,13 @@ export const sideChoices = [
   { value: '', label: 'Обе' },
 ] as const;
 
+/** The condition of an auto by a feature of the idea. */
+export const featureChoices = [
+  { value: 'any', label: 'любой' },
+  { value: 'with', label: 'только с' },
+  { value: 'without', label: 'только без' },
+] as const;
+
 export const categoryChoices = [
   { value: 'linear', label: 'Линейный' },
   { value: 'spot', label: 'Спот' },
@@ -63,12 +70,30 @@ interface Conditions {
   readonly badge: string | null;
   readonly minRiskReward: string;
   readonly minCases: number | string;
+  readonly dayDrop: string;
+  readonly btcDrop: string;
+  readonly highFunding: string;
+  readonly burst: string;
+  readonly maxPerMinutePerSide: number | string | null;
+  readonly maxOpenPerSide: number | string | null;
 }
+
+const featureConditions = [
+  ['dayDrop', 'day_drop'],
+  ['btcDrop', 'btc_drop'],
+  ['highFunding', 'high_funding'],
+  ['burst', 'burst'],
+] as const;
+
+const featureWords: Record<string, string> = { with: 'с', without: 'без' };
 
 const sides: Record<string, string> = { long: 'Лонг', short: 'Шорт' };
 const categories: Record<string, string> = { linear: 'Линейный', spot: 'Спот' };
 
-/** The conditions of an auto in two lines: the setups and the types it takes, and the rest. */
+/**
+ * The conditions of an auto in two lines: the setups and the types it takes, and the rest with the features that are not «любой» and the
+ * limits that are set.
+ */
 export function conditionLines(auto: Conditions): { what: string; where: string } {
   return {
     what: `${auto.setups.map(setupLabel).join(', ')} · ${auto.types.map(typeLabel).join(', ')}`,
@@ -79,6 +104,13 @@ export function conditionLines(auto: Conditions): { what: string; where: string 
       badgeLabel(auto.badge),
       `R:R ≥ ${auto.minRiskReward}`,
       `N ≥ ${auto.minCases}`,
+      ...featureConditions
+        .filter(([key]) => auto[key] in featureWords)
+        .map(([key, code]) => `${featureWords[auto[key]]} ${featureLabel(code)}`),
+      ...(auto.maxPerMinutePerSide === null
+        ? []
+        : [`≤ ${auto.maxPerMinutePerSide}/мин на сторону`]),
+      ...(auto.maxOpenPerSide === null ? [] : [`≤ ${auto.maxOpenPerSide} на сторону`]),
     ].join(' · '),
   };
 }
@@ -111,6 +143,8 @@ const reasons: Record<string, string> = {
   stop_too_far_for_leverage: 'Стоп дальше, чем позволяет плечо',
   leverage_differs: 'На символе позиция с другим плечом',
   leverage_not_set: 'Bybit не дал поставить плечо',
+  minute_limit: 'Лимит за минуту',
+  side_limit: 'Лимит на сторону',
 };
 
 /** What stopped an auto, in words; a code the interface does not know is shown as it is. */

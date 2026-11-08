@@ -2,10 +2,13 @@ using System.Collections.Concurrent;
 using System.Globalization;
 
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 
 using ProfitFox.Application.Scanner;
+using ProfitFox.Domain.Entities.Market.Enums;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
 
@@ -13,11 +16,13 @@ using Shouldly;
 
 namespace ProfitFox.Tests.Integration.Infrastructure;
 
-/// <summary>Decision 5: the minute candles of the whole market in batches, against the streams of Bybit v5 on a local port.</summary>
+/// <summary>Decision 5: the minute candles of the whole market in batches, and the liquidations of linear pairs, against the streams of Bybit v5 on a local port.</summary>
 public class BybitMarketStreamsTests
 {
     private static readonly DateTimeOffset Open = DateTimeOffset.Parse("2024-03-10T12:04:00Z", CultureInfo.InvariantCulture);
     private static readonly Instrument Sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
+
+    private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-11-08T03:10:05Z", CultureInfo.InvariantCulture);
 
     private FakeBybitSocketServer _server = null!;
     private BybitMarketStreams _streams = null!;
@@ -26,7 +31,7 @@ public class BybitMarketStreamsTests
     public async Task SetUp()
     {
         _server = await FakeBybitSocketServer.StartAsync();
-        _streams = new BybitMarketStreams(NullLoggerFactory.Instance, new BybitSettings(SocketAddress: _server.Address), new ScannerSettings { TopicsPerConnection = 100 });
+        _streams = new BybitMarketStreams(NullLoggerFactory.Instance, new BybitSettings(SocketAddress: _server.Address), new ScannerSettings { TopicsPerConnection = 100 }, new FakeTimeProvider(Now));
     }
 
     [TearDown]
@@ -106,5 +111,75 @@ public class BybitMarketStreamsTests
         _server.Subscribed("kline.1.SOLUSDT").ShouldBeFalse();
         _server.Connections("/v5/public/linear").ShouldBe(0);
         _server.Connections("/v5/public/spot").ShouldBe(0);
+    }
+
+    // Scenarios "Ликвидация пришла" and "Сторона позиции": Bybit's S is the side of the liquidated position, "a Buy update means that a
+    // long position has been liquidated".
+    [TestCase("Buy", LiquidationSide.Long)]
+    [TestCase("Sell", LiquidationSide.Short)]
+    public async Task Liquidation_comes_with_its_instrument_time_and_the_side_of_the_position(string positionSide, LiquidationSide side)
+    {
+        var at = DateTimeOffset.Parse("2026-11-08T12:04:07.350Z", CultureInfo.InvariantCulture);
+        var liquidations = new BlockingCollection<(Instrument, LiquidationEvent)>();
+        await using IAsyncDisposable subscription = await _streams.SubscribeLiquidationsAsync(
+            [Sol], (instrument, liquidation) => liquidations.Add((instrument, liquidation)), _ => { }, _ => { }, CancellationToken.None);
+
+        await _server.PushAsync("allLiquidation.SOLUSDT", [FakeBybitSocketServer.Liquidation("SOLUSDT", positionSide, 150.2m, 12.5m, at)]);
+
+        liquidations.TryTake(out (Instrument Instrument, LiquidationEvent Event) liquidated, TimeSpan.FromSeconds(10)).ShouldBeTrue();
+        liquidated.ShouldBe((Sol, new LiquidationEvent(at, side, 150.2m, 12.5m)));
+    }
+
+    [Test]
+    public async Task Liquidations_of_25_pairs_go_in_3_subscribe_requests()
+    {
+        Instrument[] linear = [.. Enumerable.Range(0, 25).Select(i => new Instrument(MarketCategory.Linear, $"C{i:000}USDT"))];
+
+        await using IAsyncDisposable subscription = await _streams.SubscribeLiquidationsAsync(linear, (_, _) => { }, _ => { }, _ => { }, CancellationToken.None);
+
+        linear.ShouldAllBe(instrument => _server.Subscribed($"allLiquidation.{instrument.Symbol}"));
+        _server.SubscribeSizes.ShouldBe([10, 10, 5]);
+    }
+
+    [Test]
+    public async Task Refused_liquidation_subscription_means_the_exchange_is_unavailable()
+    {
+        _server.RefusedTopics["allLiquidation.SOLUSDT"] = true;
+
+        await Should.ThrowAsync<ProfitFox.Application.Exceptions.ExchangeUnavailableException>(() =>
+            _streams.SubscribeLiquidationsAsync([Sol], (_, _) => { }, _ => { }, _ => { }, CancellationToken.None));
+    }
+
+    // Requirement "Разрывы потока ликвидаций": both ends of a break are told with the time of the scanner.
+    [Test]
+    public async Task Break_of_the_liquidation_stream_is_told_lost_then_restored()
+    {
+        var events = new BlockingCollection<(string, DateTimeOffset)>();
+        await using IAsyncDisposable subscription = await _streams.SubscribeLiquidationsAsync(
+            [Sol], (_, _) => { }, at => events.Add(("lost", at)), at => events.Add(("restored", at)), CancellationToken.None);
+
+        await _server.DropAsync();
+
+        events.TryTake(out (string, DateTimeOffset) first, TimeSpan.FromSeconds(30)).ShouldBeTrue();
+        events.TryTake(out (string, DateTimeOffset) second, TimeSpan.FromSeconds(30)).ShouldBeTrue();
+        first.ShouldBe(("lost", Now));
+        second.ShouldBe(("restored", Now));
+    }
+
+    // A connection carries several subscriptions, and each tells its own break; the stream tells one break: lost with the first, back with the last.
+    [Test]
+    public async Task Break_of_several_subscriptions_is_told_once()
+    {
+        Instrument[] linear = [.. Enumerable.Range(0, 25).Select(i => new Instrument(MarketCategory.Linear, $"C{i:000}USDT"))];
+        var lost = 0;
+        var restored = new SemaphoreSlim(0);
+        await using IAsyncDisposable subscription = await _streams.SubscribeLiquidationsAsync(
+            linear, (_, _) => { }, _ => Interlocked.Increment(ref lost), _ => restored.Release(), CancellationToken.None);
+
+        await _server.DropAsync();
+
+        (await restored.WaitAsync(TimeSpan.FromSeconds(30))).ShouldBeTrue();
+        (await restored.WaitAsync(TimeSpan.FromSeconds(2))).ShouldBeFalse();
+        lost.ShouldBe(1);
     }
 }

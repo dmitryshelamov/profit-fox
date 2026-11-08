@@ -5,12 +5,14 @@ using Dapper;
 using Npgsql;
 
 using ProfitFox.Domain.Entities.ExchangeAccounts;
+using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.Entities.IdeaTrades.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.ValueObjects.ExchangeAccounts;
+using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.ExchangeAccounts;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaTrades;
@@ -35,7 +37,7 @@ public class IdeaTradeRepositoryTests
     [SetUp]
     public async Task SetUp()
     {
-        _dataSource = await MarketDataDatabase.CreateAsync();
+        _dataSource = MarketDataDatabase.Open();
         var accessor = new PostgresTransactionAccessor();
         _executor = new PostgresTransactionExecutor(_dataSource, accessor);
         _repository = new IdeaTradeRepository(_dataSource, accessor);
@@ -131,6 +133,20 @@ public class IdeaTradeRepositoryTests
 
         IdeaTrade read = (await _repository.GetAsync(trade.Id, CancellationToken.None))!;
         (read.Promise, read.IdeaOutcome, read.OpenedAt).ShouldBe((promise, new TradedIdeaOutcome(IdeaStatus.Target, Now.AddHours(2), 1.84m), Now.AddMinutes(1)));
+    }
+
+    // Decision 9 of add-market-idea-features: a trade is read with the features it copied from its idea, and the save of a Worker keeps them; a
+    // trade of an idea without features has none (scenario "Сделка до признаков").
+    [Test]
+    public async Task Trade_is_read_with_the_features_of_its_idea()
+    {
+        IdeaTrade marked = await CreateAsync(Now, idea: IdeaGenerator.Generate(Now) with { BtcChange = -0.02m, Funding = 0.0009m, BurstPairs = 25 });
+        IdeaTrade plain = await CreateAsync(Now.AddMinutes(1));
+
+        await SaveAsync(marked.EntryGrown(new LegTotals(0.47m, 49.82m, 0.02m), Now.AddMinutes(1)) with { Features = default });
+
+        (await _repository.GetAsync(marked.Id, CancellationToken.None))!.Features.ShouldBe(new IdeaFeatures(false, true, true, true));
+        (await _repository.GetAsync(plain.Id, CancellationToken.None))!.Features.ShouldBe(default);
     }
 
     // A promise with no bucket has the break-even and the reward to risk only; an idea that expired without an entry has an outcome with no result.
@@ -259,9 +275,9 @@ public class IdeaTradeRepositoryTests
         (await _repository.IsChildAsync("bybit-1", CancellationToken.None)).ShouldBeFalse();
     }
 
-    private async Task<IdeaTrade> CreateAsync(DateTimeOffset at, IdeaType type = IdeaType.TwoR, IdeaPromise? promise = null, Guid? autoId = null, int leverage = 1)
+    private async Task<IdeaTrade> CreateAsync(DateTimeOffset at, IdeaType type = IdeaType.TwoR, IdeaPromise? promise = null, Guid? autoId = null, Idea? idea = null, int leverage = 1)
     {
-        var trade = IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(at, type: type), _account, 106m, new IdeaTradeSize(0.47m, 49.82m, 0.2m, 0.368m, 1.84m), at, promise, autoId, leverage);
+        var trade = IdeaTrade.Create(Guid.NewGuid(), idea ?? IdeaGenerator.Generate(at, type: type), _account, 106m, new IdeaTradeSize(0.47m, 49.82m, 0.2m, 0.368m, 1.84m), at, promise, autoId, leverage);
         var entry = IdeaTradeOrder.NewEntry(trade.Id, 1, OrderSide.Buy, OrderType.Market, TimeInForce.GoodTilCancelled, null, 0.47m, new Protection(trade.Target, trade.Stop), at);
         await _executor.ExecuteAsync(
             async token =>

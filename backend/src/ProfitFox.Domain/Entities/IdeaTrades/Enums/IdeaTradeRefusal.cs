@@ -42,5 +42,11 @@ public enum IdeaTradeRefusal
     BudgetTaken,
 
     /// <summary>The open real trades of all the autos with the amount of this entry would be above the budget of all the autos.</summary>
-    AutosBudgetTaken
+    AutosBudgetTaken,
+
+    /// <summary>The auto took as many trades of the side in the minute as its limit allows (decision 3 of add-burst-and-auto-limits).</summary>
+    MinuteLimit,
+
+    /// <summary>The open trades of the side of the auto, real and paper, are as many as its limit allows.</summary>
+    SideLimit
 }

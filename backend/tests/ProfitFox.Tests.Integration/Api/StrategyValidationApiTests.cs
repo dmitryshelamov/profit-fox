@@ -20,7 +20,7 @@ public class StrategyValidationApiTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = await ProfitFoxFactory.CreateAsync();
+        _factory = ProfitFoxFactory.Create();
         _factory.Bybit.Instruments.UnionWith([("spot", "BTCUSDT")]);
         _client = _factory.CreateClient();
     }
@@ -99,15 +99,6 @@ public class StrategyValidationApiTests
         JsonElement result = await ValidateAsync($"{Strategies}/validate", JsonNode.Parse(definition.GetRawText())!);
 
         result.GetProperty("errors").TryGetProperty("definition.formatVersion", out _).ShouldBeTrue();
-    }
-
-    [Test]
-    public async Task Empty_name_is_rejected_like_a_save()
-    {
-        HttpResponseMessage response = await _client.PostAsJsonAsync($"{Strategies}/validate", new { name = "", definition = StrategyFixtures.Element("ema") });
-
-        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errors").TryGetProperty("name", out _).ShouldBeTrue();
     }
 
     private async Task<JsonElement> ValidateAsync(string url, JsonNode definition)

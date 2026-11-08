@@ -55,7 +55,17 @@ internal static class CandleRepositoryQueries
 
     internal static NpgsqlCommand Upsert(NpgsqlDataSource dataSource, IReadOnlyCollection<CandleDb> candles)
     {
-        NpgsqlCommand command = dataSource.CreateCommand(UpsertSql);
+        return WithCandles(dataSource.CreateCommand(UpsertSql), candles);
+    }
+
+    /// <summary>The upsert on an open connection, for a transaction with other writes.</summary>
+    internal static NpgsqlCommand Upsert(NpgsqlConnection connection, IReadOnlyCollection<CandleDb> candles)
+    {
+        return WithCandles(new NpgsqlCommand(UpsertSql, connection), candles);
+    }
+
+    private static NpgsqlCommand WithCandles(NpgsqlCommand command, IReadOnlyCollection<CandleDb> candles)
+    {
         command.Parameters.AddRange(
             new[]
             {

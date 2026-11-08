@@ -67,6 +67,16 @@ public class InstrumentSearchTests
         InstrumentSearch.Find(Spot, "ETH", limit: 2).Select(instrument => instrument.Symbol).ShouldBe(["ETHBTC", "ETHUSDT"]);
     }
 
+    // Scenario "Поиск по названию": a share is found by the name of the company as well.
+    [Test]
+    public void Matches_the_name_of_the_instrument_ignoring_case()
+    {
+        var sber = new ListedInstrument(MarketCategory.Moex, "SBER", "SBER", "RUB", TradFi: true, Name: "Сбер Банк");
+        var gazp = new ListedInstrument(MarketCategory.Moex, "GAZP", "GAZP", "RUB", TradFi: true, Name: "Газпром");
+
+        InstrumentSearch.Find([gazp, sber], "сбер", limit: 20).ShouldBe([sber]);
+    }
+
     private static ListedInstrument Listed(string symbol, string baseCoin, string quoteCoin)
     {
         return new ListedInstrument(MarketCategory.Spot, symbol, baseCoin, quoteCoin);

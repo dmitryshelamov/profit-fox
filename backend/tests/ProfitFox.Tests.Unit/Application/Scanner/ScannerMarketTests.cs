@@ -36,6 +36,19 @@ public class ScannerMarketTests
         rows.Single(row => row.Instrument == Btc).Incomplete.ShouldBeTrue();
     }
 
+    // Decision 4 of add-market-idea-features: memory keeps the last settlement of a pair; an older one read later does not take it back.
+    [Test]
+    public void Memory_keeps_the_last_funding_settlement_of_a_pair()
+    {
+        var market = new ScannerMarket();
+        market.Keep([new ScannerPair(Sol, true)]);
+
+        market.FundingLoaded(Sol, [new FundingRatePoint(End.AddHours(-16), 0.0001m), new FundingRatePoint(End.AddHours(-8), 0.0002m)]);
+        market.FundingLoaded(Sol, [new FundingRatePoint(End.AddHours(-16), 0.0009m)]);
+
+        market.FundingOf(Sol).ShouldBe(new FundingRatePoint(End.AddHours(-8), 0.0002m));
+    }
+
     // Requirement "Живые минутные свечи": the minute that closed moves the coverage and reaches the snapshot.
     [Test]
     public void Closed_minute_right_after_the_coverage_keeps_the_row_complete()

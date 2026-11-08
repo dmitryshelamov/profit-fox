@@ -1,36 +1,12 @@
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-
 using Npgsql;
-
-using ProfitFox.Infrastructure.Persistence.Postgres;
-using ProfitFox.Infrastructure.Persistence.Postgres.FluentMigrator.Extensions;
 
 namespace ProfitFox.Tests.Integration.Persistence;
 
 public static class MarketDataDatabase
 {
-    /// <summary>A fresh database with all migrations applied.</summary>
-    public static async Task<NpgsqlDataSource> CreateAsync()
+    /// <summary>A data source of the test database, migrated and emptied before the test.</summary>
+    public static NpgsqlDataSource Open()
     {
-        return NpgsqlDataSource.Create(await CreateConnectionStringAsync());
-    }
-
-    /// <summary>The connection string, with its password, of a fresh database with all migrations applied, for a host of the test.</summary>
-    public static async Task<string> CreateConnectionStringAsync()
-    {
-        string connectionString = await IntegrationEnvironment.CreateDatabaseAsync();
-        IConfigurationRoot configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:MarketData"] = connectionString })
-            .Build();
-        var services = new ServiceCollection();
-        PostgresRegistrar.Configure(configuration, services);
-
-        await using (ServiceProvider provider = services.BuildServiceProvider())
-        {
-            provider.MigrateToLatestVersion();
-        }
-
-        return connectionString;
+        return NpgsqlDataSource.Create(IntegrationEnvironment.ConnectionString);
     }
 }

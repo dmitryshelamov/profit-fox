@@ -7,7 +7,9 @@ using ProfitFox.Application.IdeaAutos;
 using ProfitFox.Application.IdeaAutos.Commands.CreateIdeaAuto;
 using ProfitFox.Application.IdeaAutos.Commands.SaveIdeaAuto;
 using ProfitFox.Domain.Entities.ExchangeAccounts;
+using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.IdeaAutos;
+using ProfitFox.Domain.Entities.IdeaAutos.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
@@ -36,6 +38,19 @@ public class IdeaAutoSaveTests
         _accounts.GetAsync(Account, Arg.Any<CancellationToken>()).Returns(new ExchangeAccount(Account, "Bybit · ideas", "key", 100, new HashSet<MarketCategory> { MarketCategory.Linear }, DateTimeOffset.UnixEpoch));
         _settings.GetAsync(Arg.Any<CancellationToken>()).Returns(IdeaTradingSettings.Default);
         _autos.CreateAsync(Arg.Any<IdeaAuto>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(call => call.Arg<IdeaAuto>());
+    }
+
+    // After the review: the autos trade through Bybit only; an account of T-Invest is an error of the account, not a null key at the entry.
+    [Test]
+    public async Task TInvest_account_is_an_error_of_the_account()
+    {
+        var tinvest = Guid.NewGuid();
+        _accounts.GetAsync(tinvest, Arg.Any<CancellationToken>())
+            .Returns(new ExchangeAccount(tinvest, "Брокерский", Exchange.TInvest, null, null, "2000000001", new HashSet<MarketCategory> { MarketCategory.Moex }, DateTimeOffset.UnixEpoch));
+
+        ValidationFailedException exception = await Should.ThrowAsync<ValidationFailedException>(() => CreateAsync(Input(amount: 50m, budget: null) with { AccountId = tinvest }));
+
+        exception.Errors.Keys.ShouldBe(["accountId"]);
     }
 
     // Scenario "Бюджет меньше суммы".
@@ -77,6 +92,64 @@ public class IdeaAutoSaveTests
         await Should.ThrowAsync<ValidationFailedException>(() => handler.Handle(new SaveIdeaAutoCommand(saved.Id, Input(amount: 50m, budget: 49m)), CancellationToken.None));
 
         await _autos.Received(1).SaveAsync(Arg.Is<IdeaAuto>(auto => auto.Budget == 80m), Arg.Any<CancellationToken>());
+    }
+
+    // Scenario "Условие признака в теле": the codes of the conditions by a feature; one left out is «любой».
+    [Test]
+    public async Task Conditions_by_features_are_saved_by_their_codes()
+    {
+        await CreateAsync(Input(amount: 50m, budget: null) with { DayDrop = "with", HighFunding = "without" });
+
+        await _autos.Received(1).CreateAsync(
+            Arg.Is<IdeaAuto>(auto => auto.Conditions.DayDrop == FeatureCondition.With && auto.Conditions.BtcDrop == FeatureCondition.Any
+                                     && auto.Conditions.HighFunding == FeatureCondition.Without),
+            Arg.Any<DateTimeOffset>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    // Scenario "Неизвестное значение": the error goes by the name of the field.
+    [Test]
+    public async Task Unknown_condition_by_a_feature_is_an_error_of_its_field()
+    {
+        ValidationFailedException exception = await Should.ThrowAsync<ValidationFailedException>(() => CreateAsync(Input(amount: 50m, budget: null) with { BtcDrop = "sometimes" }));
+
+        exception.Errors.Keys.ShouldBe(["btcDrop"]);
+    }
+
+    // Scenario "Условие всплеска в теле" (task 4.4 of add-burst-and-auto-limits).
+    [Test]
+    public async Task Condition_by_the_burst_is_saved_by_its_code()
+    {
+        await CreateAsync(Input(amount: 50m, budget: null) with { Burst = "without" });
+
+        await _autos.Received(1).CreateAsync(Arg.Is<IdeaAuto>(auto => auto.Conditions.Burst == FeatureCondition.Without), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+    }
+
+    // Scenario "Лимиты в теле": a limit of 2 a minute and none of the open trades, on a create and on a save.
+    [Test]
+    public async Task Limits_are_saved_with_the_auto()
+    {
+        IdeaAuto saved = IdeaAutoGenerator.Generate(Account, amount: 50m) with { MaxPerMinutePerSide = 4 };
+        _autos.GetAsync(saved.Id, Arg.Any<CancellationToken>()).Returns(saved);
+
+        await CreateAsync(Input(amount: 50m, budget: null) with { MaxPerMinutePerSide = 2 });
+        await new SaveIdeaAutoCommandHandler(_autos, _accounts, _settings).Handle(new SaveIdeaAutoCommand(saved.Id, Input(amount: 50m, budget: null) with { MaxOpenPerSide = 5 }), CancellationToken.None);
+
+        await _autos.Received(1).CreateAsync(Arg.Is<IdeaAuto>(auto => auto.MaxPerMinutePerSide == 2 && auto.MaxOpenPerSide == null), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+        await _autos.Received(1).SaveAsync(Arg.Is<IdeaAuto>(auto => auto.MaxPerMinutePerSide == null && auto.MaxOpenPerSide == 5), Arg.Any<CancellationToken>());
+    }
+
+    // Scenarios "Лимит ноль" and "Ноль в лимите": a limit below 1 is an error of its field; 1 is a limit.
+    [TestCase(0, null, "maxPerMinutePerSide")]
+    [TestCase(null, 0, "maxOpenPerSide")]
+    [TestCase(-1, -2, "maxPerMinutePerSide,maxOpenPerSide")]
+    public async Task Limit_below_one_is_an_error_of_its_field(int? perMinute, int? open, string fields)
+    {
+        ValidationFailedException exception = await Should.ThrowAsync<ValidationFailedException>(() =>
+            CreateAsync(Input(amount: 50m, budget: null) with { MaxPerMinutePerSide = perMinute, MaxOpenPerSide = open }));
+
+        exception.Errors.Keys.ShouldBe(fields.Split(','), ignoreOrder: true);
+        await CreateAsync(Input(amount: 50m, budget: null) with { MaxPerMinutePerSide = 1, MaxOpenPerSide = 1 });
     }
 
     private Task<Guid> CreateAsync(IdeaAutoInput input)

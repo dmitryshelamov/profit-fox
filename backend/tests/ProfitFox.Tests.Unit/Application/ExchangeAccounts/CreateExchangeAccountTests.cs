@@ -8,6 +8,7 @@ using ProfitFox.Application.ExchangeAccounts.Commands.CreateExchangeAccount;
 using ProfitFox.Application.Ports.ExchangeAccounts;
 using ProfitFox.Application.Ports.Security;
 using ProfitFox.Domain.Entities.ExchangeAccounts;
+using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.ExchangeAccounts;
@@ -28,8 +29,11 @@ public class CreateExchangeAccountTests
         CanWithdraw: false,
         new HashSet<MarketCategory> { MarketCategory.Spot, MarketCategory.Linear });
 
+    private static readonly BrokerAccount Brokerage = new BrokerAccount("2000000001", "Брокерский счёт", BrokerAccountType.Brokerage, BrokerAccountStatus.Open, BrokerAccountAccess.Full);
+
     private IExchangeAccountRepository _repository = null!;
     private IExchangeKeyInspector _inspector = null!;
+    private IBrokerAccountReader _reader = null!;
     private ISecretProtector _protector = null!;
     private CreateExchangeAccountCommandHandler _handler = null!;
 
@@ -40,9 +44,123 @@ public class CreateExchangeAccountTests
         _repository.AddAsync(Arg.Any<ExchangeAccount>(), Arg.Any<EncryptedSecret>(), Arg.Any<CancellationToken>()).Returns(true);
         _inspector = Substitute.For<IExchangeKeyInspector>();
         _inspector.InspectAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(TradingKey);
+        _reader = Substitute.For<IBrokerAccountReader>();
+        _reader.ListAccountsAsync("t.token", Arg.Any<CancellationToken>()).Returns([Brokerage]);
         _protector = Substitute.For<ISecretProtector>();
         _protector.Encrypt(Arg.Any<Guid>(), Arg.Any<string>()).Returns(Encrypted);
-        _handler = new CreateExchangeAccountCommandHandler(_repository, _inspector, _protector, new FakeTimeProvider(Now));
+        _handler = new CreateExchangeAccountCommandHandler(_repository, _inspector, _reader, _protector, new FakeTimeProvider(Now));
+    }
+
+    // Scenario "Валидный аккаунт T-Invest": the accounts of the token are read again and the token is stored encrypted.
+    [Test]
+    public async Task Valid_tinvest_account_is_saved_with_moex_and_the_encrypted_token()
+    {
+        Guid id = await _handler.Handle(TInvestCommand(), CancellationToken.None);
+
+        _protector.Received(1).Encrypt(id, "t.token");
+        await _repository.Received(1).AddAsync(
+            Arg.Is<ExchangeAccount>(account => account!.Id == id
+                                               && account.Name == "Брокерский"
+                                               && account.Exchange == Exchange.TInvest
+                                               && account.AccountId == "2000000001"
+                                               && account.ApiKey == null
+                                               && account.Categories.SetEquals(new[] { MarketCategory.Moex })
+                                               && account.CreatedAt == Now),
+            Encrypted,
+            Arg.Any<CancellationToken>());
+        await _inspector.DidNotReceiveWithAnyArgs().InspectAsync(default!, default!, default);
+    }
+
+    // Scenario "Доступ отозван между выбором и сохранением".
+    [Test]
+    public async Task TInvest_account_the_token_no_longer_fully_opens_is_an_error_of_the_account()
+    {
+        _reader.ListAccountsAsync("t.token", Arg.Any<CancellationToken>()).Returns([Brokerage with { Access = BrokerAccountAccess.ReadOnly }]);
+
+        ValidationFailedException exception = await Should.ThrowAsync<ValidationFailedException>(() => _handler.Handle(TInvestCommand(), CancellationToken.None));
+
+        exception.Errors.ShouldBe(new Dictionary<string, string> { ["accountId"] = "The token has read-only access to the account." });
+        await _repository.DidNotReceiveWithAnyArgs().AddAsync(default!, default!, default);
+    }
+
+    [TestCase(BrokerAccountStatus.Closed, "The account is not open.")]
+    [TestCase(BrokerAccountStatus.New, "The account is not open.")]
+    public async Task TInvest_account_that_is_not_open_is_an_error_of_the_account(BrokerAccountStatus status, string reason)
+    {
+        _reader.ListAccountsAsync("t.token", Arg.Any<CancellationToken>()).Returns([Brokerage with { Status = status }]);
+
+        ValidationFailedException exception = await Should.ThrowAsync<ValidationFailedException>(() => _handler.Handle(TInvestCommand(), CancellationToken.None));
+
+        exception.Errors.ShouldBe(new Dictionary<string, string> { ["accountId"] = reason });
+    }
+
+    [Test]
+    public async Task TInvest_account_of_another_type_is_an_error_of_the_account()
+    {
+        _reader.ListAccountsAsync("t.token", Arg.Any<CancellationToken>()).Returns([Brokerage with { Type = BrokerAccountType.Other }]);
+
+        ValidationFailedException exception = await Should.ThrowAsync<ValidationFailedException>(() => _handler.Handle(TInvestCommand(), CancellationToken.None));
+
+        exception.Errors.ShouldBe(new Dictionary<string, string> { ["accountId"] = "Only a brokerage account or an IIS can be added." });
+    }
+
+    [Test]
+    public async Task TInvest_account_the_token_does_not_open_is_an_error_of_the_account()
+    {
+        ValidationFailedException exception = await Should.ThrowAsync<ValidationFailedException>(() =>
+            _handler.Handle(TInvestCommand() with { AccountId = "2000000009" }, CancellationToken.None));
+
+        exception.Errors.ShouldBe(new Dictionary<string, string> { ["accountId"] = "The token opens no account 2000000009." });
+    }
+
+    // Scenario "Токен отклонён".
+    [Test]
+    public async Task Token_tinvest_does_not_accept_is_an_error_of_the_token()
+    {
+        _reader.ListAccountsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).ThrowsAsync(new ExchangeKeyRejectedException("T-Invest does not accept the token."));
+
+        ValidationFailedException exception = await Should.ThrowAsync<ValidationFailedException>(() => _handler.Handle(TInvestCommand(), CancellationToken.None));
+
+        exception.Errors.ShouldBe(new Dictionary<string, string> { ["token"] = "T-Invest does not accept the token." });
+        await _repository.DidNotReceiveWithAnyArgs().AddAsync(default!, default!, default);
+    }
+
+    // Scenario "T-Invest не отвечает при создании".
+    [Test]
+    public async Task TInvest_unavailable_saves_nothing()
+    {
+        _reader.ListAccountsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).ThrowsAsync(new ExchangeUnavailableException("T-Invest is unavailable."));
+
+        await Should.ThrowAsync<ExchangeUnavailableException>(() => _handler.Handle(TInvestCommand(), CancellationToken.None));
+        await _repository.DidNotReceiveWithAnyArgs().AddAsync(default!, default!, default);
+    }
+
+    // Requirement "Создание аккаунта T-Invest": the fields are checked before T-Invest is asked.
+    [Test]
+    public async Task Empty_tinvest_fields_are_rejected_without_asking_tinvest()
+    {
+        ValidationFailedException exception = await Should.ThrowAsync<ValidationFailedException>(() =>
+            _handler.Handle(new CreateExchangeAccountCommand(" ", Exchange.TInvest, null, null, "", " "), CancellationToken.None));
+
+        exception.Errors.Keys.Order().ShouldBe(["accountId", "name", "token"]);
+        await _reader.DidNotReceiveWithAnyArgs().ListAccountsAsync(default!, default);
+        await _repository.DidNotReceiveWithAnyArgs().AddAsync(default!, default!, default);
+    }
+
+    // Scenario "Второй токен того же счёта".
+    [Test]
+    public async Task TInvest_account_stored_already_is_an_error_of_the_account()
+    {
+        _repository.AddAsync(Arg.Any<ExchangeAccount>(), Arg.Any<EncryptedSecret>(), Arg.Any<CancellationToken>()).Returns(false);
+
+        ValidationFailedException exception = await Should.ThrowAsync<ValidationFailedException>(() => _handler.Handle(TInvestCommand(), CancellationToken.None));
+
+        exception.Errors.ShouldBe(new Dictionary<string, string> { ["accountId"] = "T-Invest account 2000000001 is already added." });
+    }
+
+    private static CreateExchangeAccountCommand TInvestCommand()
+    {
+        return new CreateExchangeAccountCommand("Брокерский", Exchange.TInvest, null, null, "t.token", "2000000001");
     }
 
     // Scenario "Валидный аккаунт".
@@ -84,7 +202,7 @@ public class CreateExchangeAccountTests
     public async Task Malformed_fields_are_rejected_without_asking_bybit()
     {
         ValidationFailedException exception = await Should.ThrowAsync<ValidationFailedException>(() =>
-            _handler.Handle(new CreateExchangeAccountCommand(" ", "", ""), CancellationToken.None));
+            _handler.Handle(new CreateExchangeAccountCommand(" ", Exchange.Bybit, "", "", null, null), CancellationToken.None));
 
         exception.Errors.Keys.Order().ShouldBe(["apiKey", "apiSecret", "name"]);
         await _inspector.DidNotReceiveWithAnyArgs().InspectAsync(default!, default!, default);
@@ -142,6 +260,6 @@ public class CreateExchangeAccountTests
 
     private static CreateExchangeAccountCommand Command()
     {
-        return new CreateExchangeAccountCommand("Основной", "api-key", "api-secret");
+        return new CreateExchangeAccountCommand("Основной", Exchange.Bybit, "api-key", "api-secret", null, null);
     }
 }

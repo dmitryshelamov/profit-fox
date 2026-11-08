@@ -102,6 +102,17 @@ public class LiveOrderTests
         (deferred.Attempts, deferred.NextAttemptAt).ShouldBe((attempts + 1, Now.AddSeconds(seconds)));
     }
 
+    // The exchange may name a time before which another attempt is useless, such as the opening of the next session: a pause of the
+    // exchange longer than the growing one wins, a shorter one leaves the growing one.
+    [TestCase(0, 18000, 18000)]
+    [TestCase(6, 10, 60)]
+    public void Send_is_deferred_no_sooner_than_the_exchange_says(int attempts, int notBefore, int seconds)
+    {
+        LiveOrder deferred = (Order() with { Attempts = attempts }).Deferred(Now, TimeSpan.FromSeconds(notBefore));
+
+        (deferred.Attempts, deferred.NextAttemptAt).ShouldBe((attempts + 1, Now.AddSeconds(seconds)));
+    }
+
     // An order by amount has no quantity to fill: it is done when the exchange says it filled.
     [Test]
     public void Order_the_exchange_ended_as_filled_is_filled()

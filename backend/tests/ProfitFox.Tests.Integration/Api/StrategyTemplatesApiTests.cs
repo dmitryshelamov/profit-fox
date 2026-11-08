@@ -19,7 +19,7 @@ public class StrategyTemplatesApiTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = await ProfitFoxFactory.CreateAsync();
+        _factory = ProfitFoxFactory.Create();
         _client = _factory.CreateClient();
     }
 

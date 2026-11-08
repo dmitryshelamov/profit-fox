@@ -7,7 +7,6 @@ using Microsoft.Extensions.Time.Testing;
 using Npgsql;
 
 using ProfitFox.Tests.Integration.Infrastructure;
-using ProfitFox.Tests.Integration.Persistence;
 
 using Shouldly;
 
@@ -27,7 +26,7 @@ public class ScannerHostTests
     [SetUp]
     public async Task SetUp()
     {
-        _connectionString = await MarketDataDatabase.CreateConnectionStringAsync();
+        _connectionString = IntegrationEnvironment.ConnectionString;
         _database = NpgsqlDataSource.Create(_connectionString);
         _time = new FakeTimeProvider(Start);
     }
@@ -103,7 +102,7 @@ public class ScannerHostTests
         await AdvanceAsync(TimeSpan.FromMinutes(3));
 
         await WaitAsync(() => Task.FromResult(
-            Enumerable.Range(0, 3).All(minute => bybit.KlineRequests.ToList().Any(request => request.Start <= gap.AddMinutes(minute) && request.End >= gap.AddMinutes(minute)))));
+            Enumerable.Range(0, 3).All(minute => bybit.KlineRequests.Snapshot().Any(request => request.Start <= gap.AddMinutes(minute) && request.End >= gap.AddMinutes(minute)))));
         await WaitAsync(() => Task.FromResult(sockets.Subscribed("kline.1.SOLUSDT")));
     }
 
@@ -112,12 +111,13 @@ public class ScannerHostTests
     public async Task New_pair_is_subscribed_once_the_list_is_read_again()
     {
         (FakeBybitHandler bybit, FakeBybitSocketServer sockets) = await BybitAsync();
-        await StartScannerAsync(bybit, sockets);
+        // The list is read again each minute instead of each hour, so the clock moves a minute, not an hour, a second at a time.
+        await StartScannerAsync(bybit, sockets, new Dictionary<string, string?>(OneDay) { ["Scanner:UniverseRefresh"] = "00:01:00" });
         await WaitAsync(() => Task.FromResult(sockets.Subscribed("kline.1.SOLUSDT")));
 
         bybit.Instruments.Add(("linear", "NEWUSDT"));
         bybit.Coins[("linear", "NEWUSDT")] = ("NEW", "USDT");
-        await AdvanceAsync(TimeSpan.FromHours(1));
+        await AdvanceAsync(TimeSpan.FromMinutes(1));
 
         await WaitAsync(() => Task.FromResult(sockets.Subscribed("kline.1.NEWUSDT")));
     }
@@ -157,9 +157,9 @@ public class ScannerHostTests
         return (bybit, sockets);
     }
 
-    private async Task<ScannerHost> StartScannerAsync(FakeBybitHandler bybit, FakeBybitSocketServer sockets)
+    private async Task<ScannerHost> StartScannerAsync(FakeBybitHandler bybit, FakeBybitSocketServer sockets, IReadOnlyDictionary<string, string?>? settings = null)
     {
-        var scanner = new ScannerHost(_connectionString, bybit, sockets, _time, OneDay);
+        var scanner = new ScannerHost(_connectionString, bybit, sockets, _time, settings ?? OneDay);
         _disposables.Add(scanner);
         await scanner.StartAsync();
 

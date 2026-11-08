@@ -29,7 +29,7 @@ public class IdeaAutoRepositoryTests
     [SetUp]
     public async Task SetUp()
     {
-        _dataSource = await MarketDataDatabase.CreateAsync();
+        _dataSource = MarketDataDatabase.Open();
         _repository = new IdeaAutoRepository(_dataSource, new PostgresTransactionAccessor());
         var account = new ExchangeAccount(Guid.NewGuid(), "Main", "key", 100, new HashSet<MarketCategory> { MarketCategory.Linear }, Now);
         await new ExchangeAccountRepository(_dataSource).AddAsync(account, new EncryptedSecret([1], Encoding.UTF8.GetBytes("cipher"), [2]), CancellationToken.None);
@@ -56,8 +56,11 @@ public class IdeaAutoRepositoryTests
             MarketCategory.Spot,
             IdeaBadge.Flat,
             1.35m,
-            100);
-        IdeaAuto auto = IdeaAutoGenerator.Generate(_account, "Импульс лонг", conditions: conditions);
+            100,
+            FeatureCondition.With,
+            FeatureCondition.Without,
+            Burst: FeatureCondition.With);
+        IdeaAuto auto = IdeaAutoGenerator.Generate(_account, "Импульс лонг", conditions: conditions) with { MaxPerMinutePerSide = 2, MaxOpenPerSide = 5 };
 
         IdeaAuto created = await _repository.CreateAsync(auto, Now, CancellationToken.None);
 
@@ -71,12 +74,25 @@ public class IdeaAutoRepositoryTests
     public async Task Save_writes_the_name_the_account_the_amount_and_the_conditions_but_not_the_mode_or_the_place()
     {
         IdeaAuto created = await _repository.CreateAsync(IdeaAutoGenerator.Generate(_account, "А", mode: IdeaAutoMode.Paper), Now, CancellationToken.None);
-        IdeaAutoConditions conditions = created.Conditions with { Side = IdeaSide.Long, MinCases = 50, Types = [IdeaType.Pullback] };
+        IdeaAutoConditions conditions = created.Conditions with { Side = IdeaSide.Long, MinCases = 50, Types = [IdeaType.Pullback], HighFunding = FeatureCondition.With, Burst = FeatureCondition.Without };
 
-        (await _repository.SaveAsync(created with { Name = "Б", Amount = 150m, Conditions = conditions, Mode = IdeaAutoMode.Live, Position = 9 }, CancellationToken.None)).ShouldBeTrue();
+        (await _repository.SaveAsync(created with { Name = "Б", Amount = 150m, Conditions = conditions, Mode = IdeaAutoMode.Live, Position = 9, MaxOpenPerSide = 3 }, CancellationToken.None)).ShouldBeTrue();
 
-        Shape((await _repository.GetAsync(created.Id, CancellationToken.None))!).ShouldBe(Shape(created with { Name = "Б", Amount = 150m, Conditions = conditions }));
+        Shape((await _repository.GetAsync(created.Id, CancellationToken.None))!).ShouldBe(Shape(created with { Name = "Б", Amount = 150m, Conditions = conditions, MaxOpenPerSide = 3 }));
         (await _repository.SaveAsync(IdeaAutoGenerator.Generate(_account), CancellationToken.None)).ShouldBeFalse();
+    }
+
+    // A condition by a feature that this version does not know is a broken row, not «любой».
+    [Test]
+    public async Task Auto_with_an_unknown_condition_by_a_feature_is_refused()
+    {
+        IdeaAuto created = await _repository.CreateAsync(IdeaAutoGenerator.Generate(_account, "А"), Now, CancellationToken.None);
+        await using (NpgsqlCommand corrupt = _dataSource.CreateCommand($"UPDATE idea_autos SET btc_drop = 'sometimes' WHERE id = '{created.Id}'"))
+        {
+            await corrupt.ExecuteNonQueryAsync();
+        }
+
+        await Should.ThrowAsync<InvalidOperationException>(() => _repository.GetAsync(created.Id, CancellationToken.None));
     }
 
     // Scenario "Перестановка": «А», «Б», «В» become «В», «А», «Б».
@@ -178,6 +194,7 @@ public class IdeaAutoRepositoryTests
         IdeaAutoConditions conditions = auto.Conditions;
 
         return (auto.Id, auto.Name, auto.AccountId, auto.Amount, auto.Mode, auto.Position, auto.DeletedAt, string.Join(',', conditions.Setups), string.Join(',', conditions.Types),
-            string.Join(',', conditions.Intervals), conditions.Side, conditions.Category, conditions.Badge, conditions.MinRiskReward, conditions.MinCases);
+            string.Join(',', conditions.Intervals), conditions.Side, conditions.Category, conditions.Badge, conditions.MinRiskReward, conditions.MinCases,
+            (conditions.DayDrop, conditions.BtcDrop, conditions.HighFunding, conditions.Burst), (auto.MaxPerMinutePerSide, auto.MaxOpenPerSide));
     }
 }

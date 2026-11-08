@@ -17,7 +17,7 @@ namespace ProfitFox.Tests.Integration.Persistence;
 public class AddIdeaTradeLeverageMigrationTests
 {
     // The last migration before the leverage.
-    private const long BeforeLeverage = 202611080002;
+    private const long BeforeLeverage = 202611080009;
 
     private static readonly DateTimeOffset Created = DateTimeOffset.Parse("2026-11-07T10:00:00Z");
 
@@ -27,7 +27,7 @@ public class AddIdeaTradeLeverageMigrationTests
     [SetUp]
     public async Task SetUp()
     {
-        string connectionString = await IntegrationEnvironment.CreateDatabaseAsync();
+        string connectionString = await IntegrationEnvironment.CreateEmptyDatabaseAsync();
         IConfigurationRoot configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:MarketData"] = connectionString })
             .Build();
@@ -54,8 +54,8 @@ public class AddIdeaTradeLeverageMigrationTests
         {
             await connection.ExecuteAsync(
                 """
-                INSERT INTO exchange_accounts (id, name, api_key, secret_nonce, secret_ciphertext, secret_tag, uid, categories, created_at)
-                VALUES (@Account, 'Main', 'key', '\x01', '\x02', '\x03', 100, ARRAY['linear'], @Created)
+                INSERT INTO exchange_accounts (id, name, exchange, api_key, secret_nonce, secret_ciphertext, secret_tag, uid, categories, created_at)
+                VALUES (@Account, 'Main', 'bybit', 'key', '\x01', '\x02', '\x03', 100, ARRAY['linear'], @Created)
                 """,
                 new { Account = account, Created });
             await connection.ExecuteAsync(

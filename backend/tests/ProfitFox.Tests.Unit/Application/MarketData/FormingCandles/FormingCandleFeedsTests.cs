@@ -19,6 +19,7 @@ public class FormingCandleFeedsTests
     private static readonly DateTimeOffset Hour = DateTimeOffset.Parse("2024-03-10T12:00:00Z");
     private static readonly FormingSeries Btc = new(new Instrument(MarketCategory.Spot, "BTCUSDT"), Interval.OneHour);
     private static readonly FormingSeries Eth = new(new Instrument(MarketCategory.Spot, "ETHUSDT"), Interval.OneHour);
+    private static readonly FormingSeries Sber = new(new Instrument(MarketCategory.Moex, "SBER"), Interval.OneHour);
 
     private FakeTimeProvider _time = null!;
     private IFormingCandleStreams _streams = null!;
@@ -56,6 +57,16 @@ public class FormingCandleFeedsTests
             return Task.FromResult<IAsyncDisposable>(subscription);
         });
         _feeds = new FormingCandleFeeds(_streams, _broadcast, _time);
+    }
+
+    // Decision 11 and scenario "Свеча акции в сессии": a series of moex is followed through the port like any other.
+    [Test]
+    public async Task A_series_of_moex_subscribes_the_port()
+    {
+        (await _feeds.JoinAsync("a", Sber, CancellationToken.None)).ShouldBe(new FormingSnapshot(FormingState.Connecting, null));
+
+        _subscriptions.Single().Instrument.ShouldBe(Sber.Instrument);
+        await _feeds.LeaveAsync("a");
     }
 
     // Scenario "Две вкладки" / "Последняя вкладка закрыта".

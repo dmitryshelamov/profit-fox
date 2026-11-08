@@ -18,6 +18,18 @@ export interface AutoFormValues {
   readonly badge: string;
   readonly minRiskReward: string;
   readonly minCases: string;
+  /** The condition by the drop of the pair over a day: `any`, `with` or `without`. */
+  readonly dayDrop: string;
+  /** The condition by the drop of BTC over 4 hours. */
+  readonly btcDrop: string;
+  /** The condition by the high funding. */
+  readonly highFunding: string;
+  /** The condition by the burst of the minute. */
+  readonly burst: string;
+  /** The most new trades of a side in a minute; an empty text is no limit. */
+  readonly maxPerMinutePerSide: string;
+  /** The most open trades of a side; an empty text is no limit. */
+  readonly maxOpenPerSide: string;
 }
 
 /** The names of the fields of the body of an auto in the API and in the form. */
@@ -34,9 +46,18 @@ const fields: ReadonlySet<string> = new Set([
   'badge',
   'minRiskReward',
   'minCases',
+  'dayDrop',
+  'btcDrop',
+  'highFunding',
+  'burst',
+  'maxPerMinutePerSide',
+  'maxOpenPerSide',
 ]);
 
-/** A new auto: the account, the amount and the lowest R:R of the settings of trading by ideas, no budget, no conditions, off. */
+/**
+ * A new auto: the account, the amount and the lowest R:R of the settings of trading by ideas, no budget, no conditions, any of the features,
+ * no limits, off.
+ */
 export function formOfDefaults(settings: {
   accountId: string | null;
   amount: string;
@@ -56,6 +77,12 @@ export function formOfDefaults(settings: {
     badge: '',
     minRiskReward: settings.minRiskReward,
     minCases: '0',
+    dayDrop: 'any',
+    btcDrop: 'any',
+    highFunding: 'any',
+    burst: 'any',
+    maxPerMinutePerSide: '',
+    maxOpenPerSide: '',
   };
 }
 
@@ -74,14 +101,23 @@ export function formOfAuto(auto: Schemas['IdeaAutoResponse']): AutoFormValues {
     badge: auto.badge ?? '',
     minRiskReward: auto.minRiskReward,
     minCases: String(auto.minCases),
+    dayDrop: auto.dayDrop,
+    btcDrop: auto.btcDrop,
+    highFunding: auto.highFunding,
+    burst: auto.burst,
+    maxPerMinutePerSide: limitText(auto.maxPerMinutePerSide),
+    maxOpenPerSide: limitText(auto.maxOpenPerSide),
   };
 }
+
+/** A limit of the API as the form holds it: none is an empty text. */
+const limitText = (limit: number | string | null) => (limit === null ? '' : String(limit));
 
 /** A number the form holds as text; text that is no number goes out as it is, so the API names the field. */
 const numberOf = (text: string) =>
   isDecimalText(text) ? (jsonNumberOf(text) as unknown as number) : text;
 
-/** The body of a save: an empty choice or budget is none; the mode is not in it, it has a request of its own. */
+/** The body of a save: an empty choice, budget or limit is none; the mode is not in it, it has a request of its own. */
 export function bodyOfForm(form: AutoFormValues): Schemas['IdeaAutoBody'] {
   return {
     name: form.name,
@@ -96,6 +132,13 @@ export function bodyOfForm(form: AutoFormValues): Schemas['IdeaAutoBody'] {
     badge: form.badge === '' ? null : form.badge,
     minRiskReward: numberOf(form.minRiskReward),
     minCases: numberOf(form.minCases),
+    dayDrop: form.dayDrop,
+    btcDrop: form.btcDrop,
+    highFunding: form.highFunding,
+    burst: form.burst,
+    maxPerMinutePerSide:
+      form.maxPerMinutePerSide === '' ? null : numberOf(form.maxPerMinutePerSide),
+    maxOpenPerSide: form.maxOpenPerSide === '' ? null : numberOf(form.maxOpenPerSide),
   };
 }
 
@@ -113,6 +156,12 @@ const names: readonly (readonly [keyof AutoFormValues, string])[] = [
   ['badge', 'значок'],
   ['minRiskReward', 'минимальный R:R'],
   ['minCases', 'минимум кейсов'],
+  ['dayDrop', 'падение пары за сутки'],
+  ['btcDrop', 'падение BTC за 4 часа'],
+  ['highFunding', 'высокий funding'],
+  ['burst', 'всплеск'],
+  ['maxPerMinutePerSide', 'новых сделок стороны за минуту'],
+  ['maxOpenPerSide', 'открытых сделок стороны'],
 ];
 
 const sameValue = (left: string | readonly string[], right: string | readonly string[]) =>

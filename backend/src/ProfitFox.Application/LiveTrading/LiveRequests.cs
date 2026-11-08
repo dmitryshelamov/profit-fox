@@ -5,6 +5,7 @@ using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Application.Ports.Security;
 using ProfitFox.Application.Transactions;
 using ProfitFox.Domain.Entities.ExchangeAccounts;
+using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.LiveTrading;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Repositories;
@@ -58,7 +59,12 @@ internal static class LiveRequests
 
         try
         {
-            return new ExchangeKey(account.ApiKey, protector.Decrypt(account.Id, secret));
+            string decrypted = protector.Decrypt(account.Id, secret);
+
+            // Decision 2: on T-Invest the key is the number of the brokerage account and the token its secret.
+            return account.Exchange == Exchange.TInvest
+                ? new ExchangeKey(account.AccountId!, decrypted, Exchange.TInvest)
+                : new ExchangeKey(account.ApiKey!, decrypted);
         }
         catch (CryptographicException)
         {

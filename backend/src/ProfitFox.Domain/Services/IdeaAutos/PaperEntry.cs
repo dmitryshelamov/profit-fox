@@ -15,7 +15,7 @@ namespace ProfitFox.Domain.Services.IdeaAutos;
 /// <summary>
 ///     The checks of a paper entry, which depend on the idea and the amount only: the price beyond the stop or the target, the reward to risk
 ///     below the minimum of the auto, the amount above the largest, the volume or amount below the minimums of the instrument, rules not known yet,
-///     the stop too far for the leverage of the settings on <c>linear</c>, the pair held by the auto itself and the budget of the auto taken by its open trades, which hold the paper trades opened earlier in the minute. The money of the account, its key, hedge mode, the opposite side, the guards and the budget of all the autos are no part of it.
+///     the stop too far for the leverage of the settings on <c>linear</c>, the pair held by the auto itself, whose open trades hold the paper trades opened earlier in the minute. The budgets, the money of the account, its key, hedge mode, the opposite side and the guards are no part of it: an auto that is full does not reach the check.
 /// </summary>
 public static class PaperEntry
 {
@@ -81,11 +81,6 @@ public static class PaperEntry
         if (AutoRefusals.OwnPair(auto, idea.Instrument, books) is { } held)
         {
             refusals.Add(held);
-        }
-
-        if (AutoRefusals.BudgetTaken(auto, auto.Amount, books) is { } budget)
-        {
-            refusals.Add(budget);
         }
 
         return new PaperEntryCheck(refusals, size);

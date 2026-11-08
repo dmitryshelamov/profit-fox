@@ -48,20 +48,20 @@ public class IdeaOutcomesTests
         ], ignoreOrder: true);
     }
 
-    // Requirement "Признаки идей": each case has the features of its own signal; the repeat while the idea was open counts for nothing.
+    // Requirement "Уровень признаков": each case has the features of its own signal; the repeat while the idea was open counts for nothing.
     [Test]
     public async Task Case_has_the_features_of_its_signal()
     {
         IdeaSignal[] signals =
         [
-            Signal(Wif, IdeaType.TwoR, -40, Path() with { StopAfter = 10 }) with { Move = 4.5m },
-            Signal(Wif, IdeaType.TwoR, -10, Path() with { LadderAfter = Ladder(30) }) with { VolumeRatio = 4m },
-            Signal(Wif, IdeaType.TwoR, -10, Path() with { FiredAt = Now.AddDays(-10).AddMinutes(10) }) with { Move = 9m, VolumeRatio = 9m }
+            Signal(Wif, IdeaType.TwoR, -40, Path() with { StopAfter = 10 }) with { PairChange = -0.06m, Funding = 0.0007m },
+            Signal(Wif, IdeaType.TwoR, -10, Path() with { LadderAfter = Ladder(30) }) with { BtcChange = -0.01m },
+            Signal(Wif, IdeaType.TwoR, -10, Path() with { FiredAt = Now.AddDays(-10).AddMinutes(10) }) with { PairChange = -0.5m, BtcChange = -0.5m, Funding = 0.01m }
         ];
 
         IdeaOutcomesResult result = await IdeaOutcomes.WalkAsync(signals.ToAsyncEnumerable(), new IdeaExitRules([]), _ => NoFees, Now, CancellationToken.None);
 
-        result.Outcomes.Select(outcome => outcome.Features).ShouldBe([new IdeaFeatures(true, false), new IdeaFeatures(false, true)]);
+        result.Outcomes.Select(outcome => outcome.Features).ShouldBe([new IdeaFeatures(true, false, true), new IdeaFeatures(false, true, false)]);
     }
 
     // The rule in force decides: with a window of one candle the pullback that filled after 30 minutes did not enter, and its bucket has no case.
@@ -184,6 +184,25 @@ public class IdeaOutcomesTests
         IdeaOutcomesResult result = await IdeaOutcomes.WalkAsync(signals.ToAsyncEnumerable(), new IdeaExitRules([]), _ => NoFees, Now, CancellationToken.None);
 
         result.Roots[90][MarketCategory.Linear].Category.Expectancy.Variance.ShouldBe(0.122887, 0.000001);
+    }
+
+    // Scenario "Прогон пополняет минуту" (decision 2 of add-burst-and-auto-limits): a signal keeps no count of the pairs of its minute; the pass
+    // gives its case the count of its minute, 6 pairs on 1 h no burst, 9 a burst.
+    [Test]
+    public async Task Pass_gives_a_case_the_burst_of_the_count_of_its_minute()
+    {
+        IdeaSignal six = Signal(Wif, IdeaType.TwoR, 0, OnDay(0, Interval.OneHour, 10, true));
+        IdeaSignal nine = Signal(Wif, IdeaType.TwoR, 0, OnDay(1, Interval.OneHour, 10, false));
+
+        IdeaOutcomesResult result = await IdeaOutcomes.WalkAsync(
+            new[] { six, nine }.ToAsyncEnumerable(),
+            new IdeaExitRules([]),
+            _ => NoFees,
+            Now,
+            CancellationToken.None,
+            burstOf: signal => signal == six ? 6 : 9);
+
+        result.Outcomes.Select(outcome => (outcome.FiredAt, outcome.Features.Burst)).ShouldBe([(six.Path.FiredAt, false), (nine.Path.FiredAt, true)]);
     }
 
     // A signal of the interval fired at the hour of the day 80 − 4 · day days ago, the last of a block of 4 days: a +2 R target or a −1 R stop.

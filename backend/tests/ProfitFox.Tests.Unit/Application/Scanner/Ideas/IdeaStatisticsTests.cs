@@ -159,6 +159,39 @@ public class IdeaStatisticsTests
         reports.Single(report => report is { Days: 30, Category: null, Scope: CalibrationScope.Fresh }).Unchecked.ShouldBe(fresh);
     }
 
+    // Decision 2 of add-burst-and-auto-limits: the whole recompute counts the pairs of the minutes of the signals it reads, once, and its cases
+    // take the burst of their minute; 40 longs of 15 min an hour apart in minutes of 25 pairs are checked in rows «всплеск · есть».
+    [Test]
+    public async Task Whole_recompute_gives_the_cases_the_burst_of_their_minute()
+    {
+        IdeaSignal[] signals = [.. Enumerable.Range(0, 40).Select(hour => Signal(Now.AddDays(-5).AddHours(hour), stop: hour % 3 != 0))];
+        _signals.StreamAsync(2, Now.AddDays(-180), null, Arg.Any<CancellationToken>()).Returns(_ => signals.ToAsyncEnumerable());
+        _signals.CountPairsByMinuteAsync(2, Now.AddDays(-180), Arg.Any<CancellationToken>())
+            .Returns(signals.ToDictionary(signal => (signal.Path.FiredAt, IdeaSide.Long, Interval.FifteenMinutes), _ => 25));
+        IReadOnlyCollection<CalibrationReport> reports = [];
+        await _calibrations.ReplaceAsync(2, Arg.Do<IReadOnlyCollection<CalibrationReport>>(written => reports = written), Arg.Any<CancellationToken>());
+
+        await Statistics().RecomputeAsync(CancellationToken.None);
+
+        CalibrationReport all = reports.Single(report => report is { Days: 30, Category: null, Scope: CalibrationScope.All });
+        all.Checked.ShouldBeGreaterThan(0);
+        all.Features.Where(slice => slice.Feature == IdeaFeature.Burst).Select(slice => (slice.Present, slice.Total.Outcome.Cases)).ShouldBe([(true, all.Checked)]);
+        await _signals.Received(1).CountPairsByMinuteAsync(Arg.Any<int>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+    }
+
+    // The recompute of a type × interval writes buckets only, which no feature splits, so it counts no pairs.
+    [Test]
+    public async Task Recompute_of_a_type_and_interval_counts_no_pairs()
+    {
+        IdeaStatistics statistics = Statistics();
+        await statistics.RecomputeAsync(CancellationToken.None);
+        _signals.ClearReceivedCalls();
+
+        await statistics.RecomputeAsync(IdeaType.TwoR, Interval.FifteenMinutes, CancellationToken.None);
+
+        await _signals.DidNotReceiveWithAnyArgs().CountPairsByMinuteAsync(default, default, default);
+    }
+
     private IdeaStatistics Statistics()
     {
         var backtests = new BacktestSettings { DefaultFees = new Dictionary<string, FeeRateSettings> { ["linear"] = new FeeRateSettings { Limit = 0.02m, Market = 0.055m } } };

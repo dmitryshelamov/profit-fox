@@ -7,6 +7,7 @@ using Npgsql;
 using NSubstitute;
 
 using ProfitFox.Application.Ports.LiveTrading;
+using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.Entities.IdeaTrades.Enums;
@@ -16,6 +17,7 @@ using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas;
 using ProfitFox.Tests.Integration.Workers;
 
 using Shouldly;
@@ -310,13 +312,14 @@ public class IdeaTradesApiTests
         item.GetProperty("amount").GetString().ShouldBe("47.00");
         item.GetProperty("result").ValueKind.ShouldBe(JsonValueKind.Null);
         item.GetProperty("reason").ValueKind.ShouldBe(JsonValueKind.Null);
-        foreach (string absent in new[] { "openedAt", "secondsToOutcome", "ideaOutcome", "lastPrice", "currentResult", "currentResultR" })
+        foreach (string absent in new[] { "openedAt", "secondsToOutcome", "ideaOutcome", "ideaEndsAt", "lastPrice", "currentResult", "currentResultR" })
         {
             item.GetProperty(absent).ValueKind.ShouldBe(JsonValueKind.Null, absent);
         }
 
         // A trade made now promises its break-even and reward to risk, though its idea has no bucket.
         item.GetProperty("promise").GetProperty("badge").ValueKind.ShouldBe(JsonValueKind.Null);
+        item.GetProperty("features").GetArrayLength().ShouldBe(0);
 
         JsonElement closed = journal.GetProperty("closed");
         (closed.GetProperty("items").GetArrayLength(), closed.GetProperty("page").GetInt32(), closed.GetProperty("pageSize").GetInt32(), closed.GetProperty("total").GetInt32()).ShouldBe((0, 1, 50, 0));
@@ -378,6 +381,40 @@ public class IdeaTradesApiTests
         promise.GetProperty("netRiskReward").GetString().ShouldNotBeNull();
         JsonElement outcome = item.GetProperty("ideaOutcome");
         (outcome.GetProperty("status").GetString(), outcome.GetProperty("result").GetString()).ShouldBe(("target", "1.84"));
+    }
+
+    // Requirement "Конец идеи у сделки в работе": a trade in work gives the end of the lifetime of its idea once the idea is active.
+    [Test]
+    public async Task Trade_in_work_gives_the_end_of_the_lifetime_of_its_active_idea()
+    {
+        Guid ideaId = await _scenario.SaveIdeaAsync(100m, 98m, 104m);
+        _scenario.SetPrice("100");
+        Guid id = await CreateAsync(ideaId);
+        await using var database = NpgsqlDataSource.Create(_scenario.Factory.ConnectionString);
+        var store = new IdeaRepository(database);
+        Idea idea = (await store.GetAsync(ideaId, CancellationToken.None))!;
+        DateTimeOffset entered = _scenario.Factory.Time.GetUtcNow();
+        Idea active = idea with { Track = idea.Track with { Status = IdeaStatus.Active, StatusAt = entered, EnteredAt = entered } };
+        await store.SaveAsync([], [active], CancellationToken.None);
+
+        JsonElement item = (await JournalAsync()).GetProperty("open")[0];
+
+        item.GetProperty("id").GetGuid().ShouldBe(id);
+        item.GetProperty("ideaEndsAt").GetDateTimeOffset().ShouldBe(active.Track.LifeEndsAt!.Value);
+    }
+
+    // Task 6.2 of add-market-idea-features: a real trade gives the features its idea fired with.
+    [Test]
+    public async Task Journal_gives_the_features_of_the_idea_of_a_trade()
+    {
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m, funding: 0.0006m, burstPairs: 25);
+        _scenario.SetPrice("100");
+        await CreateAsync(idea);
+
+        JsonElement item = (await JournalAsync()).GetProperty("open")[0];
+
+        // Scenario "Сделка со всплеском" of add-burst-and-auto-limits: the burst its idea fired in, too.
+        item.GetProperty("features").EnumerateArray().Select(feature => feature.GetString()).ShouldBe(["high_funding", "burst"]);
     }
 
     // Scenario "Открытая в плюсе": the last price of the exchange gives the current result of an open trade.

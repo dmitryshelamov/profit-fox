@@ -16,11 +16,19 @@
         <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol"/>
         <PackageReference Include="OpenTelemetry.Extensions.Hosting"/>
         <PackageReference Include="Polly"/>
+        <PackageReference Include="Tinkoff.InvestApi"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- The root certificates of the Ministry of Digital Development, which the server certificate of T-Invest chains to (decision 7). -->
+        <None Include="Exchanges\TInvest\Certificates\*.cer" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
 
     <ItemGroup>
         <InternalsVisibleTo Include="ProfitFox.Tests.Integration"/>
         <InternalsVisibleTo Include="ProfitFox.Tests.Unit"/>
+        <!-- NSubstitute makes its substitutes of internal ports of the adapters, such as ITInvestOrderIds, in this assembly. -->
+        <InternalsVisibleTo Include="DynamicProxyGenAssembly2"/>
     </ItemGroup>
 
 </Project>

@@ -40,7 +40,15 @@ public sealed class IdeaStatistics(
     {
         DateTimeOffset now = time.GetUtcNow();
         IReadOnlyList<IdeaExitRule> used = await exitRules.GetAllAsync(cancellationToken);
-        IdeaOutcomesResult result = await WalkAsync(now, null, used, null, cancellationToken);
+        // Decision 2 of add-burst-and-auto-limits: the cases take the burst of their minute, counted from the signals the pass reads.
+        IReadOnlyDictionary<(DateTimeOffset FiredAt, IdeaSide Side, Interval Interval), int> pairs = await signals.CountPairsByMinuteAsync(version.Number, now - Read, cancellationToken);
+        IdeaOutcomesResult result = await WalkAsync(
+            now,
+            null,
+            used,
+            null,
+            cancellationToken,
+            signal => pairs.TryGetValue((signal.Path.FiredAt, signal.Path.Side, signal.Path.Interval), out int count) ? count : null);
         await buckets.ReplaceAsync(version.Number, result.Buckets, null, cancellationToken);
         _roots = result.Roots;
         // Requirement "Проверка после изменения правил": a rule never applied is in force from the start of the version; without a start written,
@@ -76,7 +84,8 @@ public sealed class IdeaStatistics(
         (IdeaType, Interval)? only,
         IReadOnlyList<IdeaExitRule> applied,
         IReadOnlyDictionary<int, IReadOnlyDictionary<MarketCategory, BucketModel.Root>>? roots,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<IdeaSignal, int?>? burstOf = null)
     {
         var rules = new IdeaExitRules(applied);
         IReadOnlyDictionary<MarketCategory, FeeRates> fees = backtests.Policy().DefaultFees;
@@ -87,6 +96,7 @@ public sealed class IdeaStatistics(
             category => fees[category],
             now,
             cancellationToken,
-            roots);
+            roots,
+            burstOf);
     }
 }

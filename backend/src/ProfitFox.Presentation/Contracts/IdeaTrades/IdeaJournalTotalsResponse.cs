@@ -5,14 +5,15 @@ using ProfitFox.Domain.ValueObjects.IdeaTrades;
 namespace ProfitFox.Presentation.Contracts.IdeaTrades;
 
 /// <summary>
-///     The totals of the closed trades of a filter: those closed at the target, at the stop and manually, and apart from them the cancelled and
-///     the failed. The money, the fees, the mean result in R with its 95 % interval (none for one trade, nor the mean for none) and the mean time
-///     to the outcome are over the first three. Numbers are decimal strings.
+///     The totals of the closed trades of a filter: those closed at the target, at the stop, manually and at expiry, and
+///     apart from them the cancelled and the failed. The money, the fees, the mean result in R with its 95 % interval (none for one trade, nor the
+///     mean for none) and the mean time to the outcome are over the first four. Numbers are decimal strings.
 /// </summary>
 public sealed record IdeaJournalTotalsResponse(
     int Targets,
     int Stops,
     int Manual,
+    int Expired,
     int Cancelled,
     int Failed,
     [property: Required] string Result,
@@ -30,6 +31,7 @@ public sealed record IdeaJournalTotalsResponse(
             totals.Targets,
             totals.Stops,
             totals.Manual,
+            totals.Expired,
             totals.Cancelled,
             totals.Failed,
             IdeaTradeResponse.Text(totals.Result),

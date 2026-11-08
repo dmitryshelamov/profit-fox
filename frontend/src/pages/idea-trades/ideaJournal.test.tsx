@@ -80,7 +80,7 @@ describe('screen «Сделки»', () => {
 
     expect(within(row).getByText('SOLUSDT')).toBeInTheDocument();
     expect(within(row).getByText('Открыта')).toBeInTheDocument();
-    expect(within(row).getByText('05.11 10:00')).toBeInTheDocument();
+    expect(within(row).getByText('05.11 13:00')).toBeInTheDocument();
     expect(within(row).getByText('2 ч 15 мин')).toBeInTheDocument();
     expect(within(row).getByText('+0.21 USDT · +0.21 R')).toBeInTheDocument();
     expect(within(row).getByText('▲ +0.14 R · N 412')).toHaveAttribute(
@@ -132,6 +132,48 @@ describe('screen «Сделки»', () => {
     expect(screen.getByText('2 ч 16 мин')).toBeInTheDocument();
   });
 
+  // Scenarios "Идея ещё жива", "Идея закрылась раньше сделки" and "Идея ждёт входа": the time left of the idea comes after the time in
+  // the trade and runs down with it.
+  it('counts down the time left of the idea of a trade, says closed for an idea that closed and a dash for one that waits', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    vi.setSystemTime(new Date('2026-11-05T12:15:00Z'));
+    fakeApi(
+      routes(
+        open([
+          tradeOf({
+            id: 'a',
+            status: 'open',
+            openedAt: '2026-11-05T10:00:00Z',
+            ideaEndsAt: '2026-11-05T13:55:00Z',
+          }),
+          tradeOf({
+            id: 'b',
+            status: 'open',
+            openedAt: '2026-11-05T10:00:00Z',
+            ideaOutcome: { status: 'expired', statusAt: '2026-11-05T12:00:00Z', result: '0.4' },
+          }),
+          tradeOf({ id: 'c' }),
+        ]),
+      ),
+    );
+    renderApp('/idea-trades');
+
+    const table = await screen.findByRole('table', { name: 'Сделки в работе' });
+    const heads = within(table)
+      .getAllByRole('columnheader')
+      .map((head) => head.textContent);
+    const column = heads.indexOf('До конца идеи');
+    const left = (index: number) =>
+      within(within(table).getAllByRole('row')[index]!).getAllByRole('cell')[column]!.textContent;
+
+    expect(heads[column - 1]).toBe('В сделке');
+    expect([left(1), left(2), left(3)]).toEqual(['1 ч 40 мин', 'закрыта', '—']);
+
+    await act(() => vi.advanceTimersByTimeAsync(60_000));
+
+    expect(left(1)).toBe('1 ч 39 мин');
+  });
+
   // Scenario "Цены нет".
   it('shows a dash instead of the result of a trade that has no price, and for one that waits', async () => {
     fakeApi(
@@ -147,7 +189,7 @@ describe('screen «Сделки»', () => {
     const rows = within(await screen.findByRole('table', { name: 'Сделки в работе' })).getAllByRole(
       'row',
     );
-    const now = (row: HTMLElement) => within(row).getAllByRole('cell')[12]!.textContent;
+    const now = (row: HTMLElement) => within(row).getAllByRole('cell')[13]!.textContent;
 
     expect(now(rows[1]!)).toBe('—');
     expect(now(rows[2]!)).toBe('—');
@@ -196,7 +238,7 @@ describe('screen «Сделки»', () => {
     const table = await screen.findByRole('table', { name: 'Закрытые сделки' });
     const row = within(table).getAllByRole('row')[1]!;
 
-    expect(within(row).getByText('05.11 13:30')).toBeInTheDocument();
+    expect(within(row).getByText('05.11 16:30')).toBeInTheDocument();
     expect(within(row).getByText('Закрыта по стопу')).toBeInTheDocument();
     expect(within(row).getByText('-1.05 USDT · -1.06 R')).toBeInTheDocument();
     expect(within(row).getByText('3 ч 30 мин')).toBeInTheDocument();
@@ -255,6 +297,50 @@ describe('screen «Сделки»', () => {
     expect(screen.getByText('Вход не ушёл вовремя.')).toBeInTheDocument();
   });
 
+  // Requirement "Чипы признаков в строках сделок", scenarios "Учебная сделка с признаком" and "Сделка без признаков".
+  it('shows the chips of the features after the setup and the type of a trade, and none without features', async () => {
+    fakeApi(
+      routes(() =>
+        journalOf(
+          [paperTrade({ autoName: 'Лонг после падения', features: ['day_drop'] }), autoTrade()],
+          [
+            tradeOf({
+              id: 'm1',
+              status: 'closed_at_stop',
+              result: '-1',
+              resultR: '-1',
+              features: ['high_funding', 'burst'],
+            }),
+          ],
+        ),
+      ),
+    );
+    renderApp('/idea-trades');
+
+    const rows = within(await screen.findByRole('table', { name: 'Сделки в работе' })).getAllByRole(
+      'row',
+    );
+    const paper = rows.find((row) => row.dataset.origin === 'paper')!;
+    const auto = rows.find((row) => row.dataset.origin === 'auto')!;
+    // The time, who took it and the pair stand before the setup.
+    const setup = within(paper).getAllByRole('cell')[3]!;
+
+    expect(within(setup).getByText('↓ пара')).toHaveAttribute(
+      'title',
+      'пара упала за сутки на 5 % и больше',
+    );
+    expect(within(auto).queryByText(/↓|↑/)).not.toBeInTheDocument();
+    const closed = within(screen.getByRole('table', { name: 'Закрытые сделки' })).getAllByRole(
+      'row',
+    )[1]!;
+    expect(within(closed).getByText('↑ funding')).toBeInTheDocument();
+    // Scenario "Сделка со всплеском".
+    expect(within(closed).getByText('⚡ всплеск')).toHaveAttribute(
+      'title',
+      'сработала вместе с другими парами той же стороны на том же ТФ',
+    );
+  });
+
   // Requirement "Итоги на экране «Сделки»".
   it('shows the totals of the closed trades', async () => {
     fakeApi(
@@ -264,6 +350,7 @@ describe('screen «Сделки»', () => {
             targets: 1,
             stops: 1,
             manual: 1,
+            expired: 1,
             cancelled: 2,
             result: '0.9',
             fees: '0.12',
@@ -282,7 +369,9 @@ describe('screen «Сделки»', () => {
     const totals = await screen.findByRole('region', { name: 'Итоги' });
 
     expect(
-      within(totals).getByText('по цели 1 (33 %) · по стопу 1 (33 %) · вручную 1 (33 %)'),
+      within(totals).getByText(
+        'по цели 1 (25 %) · по стопу 1 (25 %) · вручную 1 (25 %) · по сроку 1 (25 %)',
+      ),
     ).toBeInTheDocument();
     expect(within(totals).getByText('+0.90 USDT · комиссии 0.12 USDT')).toBeInTheDocument();
     expect(within(totals).getByText('+0.30 R (95 %: -1.34 … +1.94)')).toBeInTheDocument();
@@ -766,7 +855,7 @@ describe('block «Отказы автоматов»', () => {
     const table = await screen.findByRole('table', { name: 'Отказы автоматов' });
     const rows = within(table).getAllByRole('row');
 
-    expect(within(rows[1]!).getByText('09:30')).toBeInTheDocument();
+    expect(within(rows[1]!).getByText('12:30')).toBeInTheDocument();
     expect(within(rows[1]!).getByText('Падения шорт')).toBeInTheDocument();
     expect(within(rows[1]!).getByText('с деньгами')).toBeInTheDocument();
     expect(within(rows[1]!).getByText('Падение · 1 ч · Цель 2R · Шорт')).toBeInTheDocument();
@@ -779,7 +868,7 @@ describe('block «Отказы автоматов»', () => {
     expect(within(rows[2]!).getByText('свободно 212.40 из 300 USDT')).toBeInTheDocument();
     expect(within(rows[3]!).getByText('без денег')).toBeInTheDocument();
     expect(within(rows[3]!).getByText('Не успел войти')).toBeInTheDocument();
-    expect(screen.getByText(/сегодня 3 · с 00:00 UTC/)).toBeInTheDocument();
+    expect(screen.getByText(/сегодня 3 · с 03:00 ·/)).toBeInTheDocument();
   });
 
   // Scenario "Отказов нет".
@@ -806,7 +895,7 @@ describe('block «Отказы автоматов»', () => {
     await waitFor(() =>
       expect(requests.some((request) => request.url.includes('period=7d'))).toBe(true),
     );
-    expect(await screen.findByText('07.11 09:30')).toBeInTheDocument();
+    expect(await screen.findByText('07.11 12:30')).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: '7 дней' })).toBeChecked();
   });
 
@@ -856,7 +945,7 @@ describe('banner of the daily stop on «Сделки»', () => {
 
     const banner = await screen.findByRole('status', { name: 'Дневной стоп' });
 
-    expect(banner).toHaveTextContent('Сегодня -30.15 из 30 USDT · сработал в 15:12 UTC');
+    expect(banner).toHaveTextContent('Сегодня -30.15 из 30 USDT · сработал в 18:12 ·');
   });
 
   // Scenario "Стоп не сработал".

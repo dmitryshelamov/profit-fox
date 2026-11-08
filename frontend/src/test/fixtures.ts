@@ -209,11 +209,43 @@ export function resultOf(combination: number, metrics: object = {}) {
 export const exchangeAccount = {
   id: '99999999-9999-4999-8999-999999999999',
   name: 'Проверка',
+  exchange: 'bybit',
   apiKey: 'XKz8apikeyMAIN',
   uid: 24617703,
+  accountId: null,
   categories: ['spot', 'linear'],
   createdAt: '2026-11-02T10:00:00Z',
 };
+
+export const tinvestAccount = {
+  id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  name: 'Брокерский',
+  exchange: 'tinvest',
+  apiKey: null,
+  uid: null,
+  accountId: '2000000001',
+  categories: ['moex'],
+  createdAt: '2026-11-03T10:00:00Z',
+};
+
+export const brokerAccounts = [
+  {
+    id: '2000000001',
+    name: 'Брокерский счёт',
+    type: 'brokerage',
+    status: 'open',
+    access: 'full',
+    problem: null,
+  },
+  {
+    id: '2000000002',
+    name: 'ИИС',
+    type: 'iis',
+    status: 'closed',
+    access: 'full',
+    problem: 'not_open',
+  },
+];
 
 /** A row of the market snapshot with every metric empty; a test sets the ones it needs. */
 export const marketRow = (overrides: Partial<Schemas['MarketRowResponse']> = {}) =>
@@ -276,6 +308,7 @@ export const marketSnapshot = (
           'rsi_extreme',
           'new_extreme',
           'quiet_volume',
+          'accumulation',
         ].map((setup) => [setup, rows.filter((row) => row.setups['15']?.includes(setup)).length]),
       ),
     },
@@ -348,6 +381,7 @@ export const ideaOf = (overrides: Partial<Schemas['IdeaResponse']> = {}) =>
       fewOwnCases: false,
     },
     recent: null,
+    features: [],
     ...overrides,
   }) satisfies Schemas['IdeaResponse'];
 
@@ -415,6 +449,7 @@ export const filterFields = [
       'rsi_extreme',
       'new_extreme',
       'quiet_volume',
+      'accumulation',
     ],
   },
   {
@@ -435,6 +470,7 @@ export const filterFields = [
       'rsi_extreme',
       'new_extreme',
       'quiet_volume',
+      'accumulation',
     ],
   },
   {
@@ -493,12 +529,14 @@ export const tradeOf = (overrides: Partial<Schemas['IdeaTradeResponse']> = {}) =
     secondsToOutcome: null,
     promise: null,
     ideaOutcome: null,
+    ideaEndsAt: null,
     lastPrice: null,
     currentResult: null,
     currentResultR: null,
     origin: 'manual',
     autoId: null,
     autoName: null,
+    features: [],
     ...overrides,
   }) satisfies Schemas['IdeaTradeResponse'];
 
@@ -508,6 +546,7 @@ export const journalTotals = (overrides: Partial<Schemas['IdeaJournalTotalsRespo
     targets: 0,
     stops: 0,
     manual: 0,
+    expired: 0,
     cancelled: 0,
     failed: 0,
     result: '0',
@@ -716,6 +755,8 @@ export const calibrationOf = (overrides: Partial<Schemas['IdeaCalibrationRespons
       {
         interval: '60',
         type: null,
+        feature: null,
+        present: null,
         total: calibrationRowOf({
           from: null,
           to: null,
@@ -760,6 +801,8 @@ export const calibrationOf = (overrides: Partial<Schemas['IdeaCalibrationRespons
       {
         interval: null,
         type: 'pullback',
+        feature: null,
+        present: null,
         total: calibrationRowOf({
           from: null,
           to: null,
@@ -804,6 +847,7 @@ export const calibrationOf = (overrides: Partial<Schemas['IdeaCalibrationRespons
         },
       },
     ],
+    features: [],
     ...overrides,
   }) satisfies Schemas['IdeaCalibrationResponse'];
 
@@ -977,6 +1021,12 @@ export const autoOf = (overrides: Partial<Schemas['IdeaAutoResponse']> = {}) =>
     minCases: 100,
     position: 0,
     budget: null,
+    dayDrop: 'any',
+    btcDrop: 'any',
+    highFunding: 'any',
+    burst: 'any',
+    maxPerMinutePerSide: null,
+    maxOpenPerSide: null,
     ...overrides,
   }) satisfies Schemas['IdeaAutoResponse'];
 

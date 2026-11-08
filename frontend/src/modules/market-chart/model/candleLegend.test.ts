@@ -15,7 +15,7 @@ const candles = [candle('2026-11-04T13:30:00Z', '186.1'), candle('2026-11-04T13:
 describe('candle legend', () => {
   it('tells the candle under the cursor', () => {
     expect(candleLegend(candles, Date.parse('2026-11-04T13:30:00Z') / 1000)).toEqual({
-      time: '04.11 13:30',
+      time: '04.11 16:30',
       open: '185.92',
       high: '186.71',
       low: '185.8',

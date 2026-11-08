@@ -10,8 +10,8 @@ using ProfitFox.Domain.ValueObjects.IdeaAutos;
 namespace ProfitFox.Presentation.Contracts.IdeaAutos;
 
 /// <summary>
-///     An auto with its account, its budget (none for no budget) and its conditions as codes, its place in the list (from 0) and its mode (<c>off</c>,
-///     <c>paper</c> or <c>live</c>).
+///     An auto with its account, its budget (none for no budget) and its conditions as codes, the ones by the features <c>any</c>, <c>with</c> or
+///     <c>without</c>, its place in the list (from 0), its mode (<c>off</c>, <c>paper</c> or <c>live</c>) and its two limits, none for no limit.
 ///     Numbers are decimal strings.
 /// </summary>
 public sealed record IdeaAutoResponse(
@@ -30,7 +30,13 @@ public sealed record IdeaAutoResponse(
     [property: Required] string MinRiskReward,
     int MinCases,
     int Position,
-    string? Budget)
+    string? Budget,
+    [property: Required] string DayDrop,
+    [property: Required] string BtcDrop,
+    [property: Required] string HighFunding,
+    [property: Required] string Burst,
+    int? MaxPerMinutePerSide,
+    int? MaxOpenPerSide)
 {
     public static IdeaAutoResponse Of(IdeaAutoSummary summary)
     {
@@ -53,7 +59,13 @@ public sealed record IdeaAutoResponse(
             Text(conditions.MinRiskReward),
             conditions.MinCases,
             auto.Position,
-            auto.Budget is { } budget ? Text(budget) : null);
+            auto.Budget is { } budget ? Text(budget) : null,
+            conditions.DayDrop.ToCode(),
+            conditions.BtcDrop.ToCode(),
+            conditions.HighFunding.ToCode(),
+            conditions.Burst.ToCode(),
+            auto.MaxPerMinutePerSide,
+            auto.MaxOpenPerSide);
     }
 
     internal static string Text(decimal value)

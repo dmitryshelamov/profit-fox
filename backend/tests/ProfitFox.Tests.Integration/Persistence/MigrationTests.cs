@@ -11,19 +11,19 @@ public class MigrationTests
     [Test]
     public async Task Candles_table_is_a_hypertable()
     {
-        await using NpgsqlDataSource dataSource = await MarketDataDatabase.CreateAsync();
+        await using NpgsqlDataSource dataSource = MarketDataDatabase.Open();
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
 
         IEnumerable<string> hypertables = await connection.QueryAsync<string>("SELECT hypertable_name FROM timescaledb_information.hypertables");
 
-        hypertables.ShouldBe(["candles", "open_interest", "idea_cases"], ignoreOrder: true);
+        hypertables.ShouldBe(["candles", "open_interest", "idea_cases", "liquidations"], ignoreOrder: true);
     }
 
     // Jobs created before the column existed must read as never interrupted; the column is now the count of lost leases.
     [Test]
     public async Task Import_jobs_count_lost_leases_from_zero()
     {
-        await using NpgsqlDataSource dataSource = await MarketDataDatabase.CreateAsync();
+        await using NpgsqlDataSource dataSource = MarketDataDatabase.Open();
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
 
         (string DataType, string IsNullable, string Default) column = await connection.QuerySingleAsync<(string, string, string)>(
@@ -39,7 +39,7 @@ public class MigrationTests
     [Test]
     public async Task Strategy_library_starts_at_revision_zero_without_graphs()
     {
-        await using NpgsqlDataSource dataSource = await MarketDataDatabase.CreateAsync();
+        await using NpgsqlDataSource dataSource = MarketDataDatabase.Open();
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
 
         (await connection.QueryAsync<long>("SELECT revision FROM strategy_library")).ShouldBe([0L]);
@@ -51,7 +51,7 @@ public class MigrationTests
     [Test]
     public async Task Ideas_have_their_tables_and_snapshot_rows_have_no_setups_yet()
     {
-        await using NpgsqlDataSource dataSource = await MarketDataDatabase.CreateAsync();
+        await using NpgsqlDataSource dataSource = MarketDataDatabase.Open();
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
 
         IEnumerable<string> tables = await connection.QueryAsync<string>(
@@ -71,7 +71,7 @@ public class MigrationTests
     [Test]
     public async Task Buckets_have_their_outcomes_and_the_interval_of_the_expectancy_without_a_baseline()
     {
-        await using NpgsqlDataSource dataSource = await MarketDataDatabase.CreateAsync();
+        await using NpgsqlDataSource dataSource = MarketDataDatabase.Open();
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
 
         IEnumerable<(string Name, string DataType, string IsNullable)> columns = await connection.QueryAsync<(string, string, string)>(
@@ -96,7 +96,7 @@ public class MigrationTests
     [Test]
     public async Task Buckets_keep_their_own_numbers_calibration_has_a_scope_and_versions_have_a_start()
     {
-        await using NpgsqlDataSource dataSource = await MarketDataDatabase.CreateAsync();
+        await using NpgsqlDataSource dataSource = MarketDataDatabase.Open();
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
 
         IEnumerable<(string Table, string Name, string DataType, string IsNullable, string? Default)> columns =
@@ -143,5 +143,50 @@ public class MigrationTests
         calibrationKey.ShouldBe(["engine_version", "days", "category", "scope"], ignoreOrder: true);
         versionKey.ShouldBe("engine_version");
         (await connection.QuerySingleAsync<string>("SELECT scope FROM idea_calibration")).ShouldBe("all");
+    }
+
+    // Liquidations are kept for good: daily chunks, one row per event, compressed by pair after 7 days by a policy of TimescaleDB.
+    [Test]
+    public async Task Liquidations_are_daily_chunks_unique_by_event_and_compressed_after_a_week()
+    {
+        await using NpgsqlDataSource dataSource = MarketDataDatabase.Open();
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
+
+        TimeSpan chunk = await connection.QuerySingleAsync<TimeSpan>(
+            "SELECT time_interval FROM timescaledb_information.dimensions WHERE hypertable_name = 'liquidations'");
+        string index = await connection.QuerySingleAsync<string>(
+            "SELECT indexdef FROM pg_indexes WHERE tablename = 'liquidations' AND indexname = 'UX_liquidations_event'");
+        IEnumerable<(string Column, bool SegmentBy)> compression = await connection.QueryAsync<(string, bool)>(
+            "SELECT attname, segmentby_column_index IS NOT NULL FROM timescaledb_information.compression_settings WHERE hypertable_name = 'liquidations'");
+        string? compressAfter = await connection.QuerySingleOrDefaultAsync<string>(
+            """
+            SELECT config ->> 'compress_after' FROM timescaledb_information.jobs
+            WHERE hypertable_name = 'liquidations' AND proc_name = 'policy_compression'
+            """);
+
+        chunk.ShouldBe(TimeSpan.FromDays(1));
+        index.ShouldBe("""CREATE UNIQUE INDEX "UX_liquidations_event" ON public.liquidations USING btree (category, symbol, "time", side, price, quantity)""");
+        compression.ShouldBe([("category", true), ("symbol", true), ("time", false)], ignoreOrder: true);
+        compressAfter.ShouldBe("7 days");
+    }
+
+    [Test]
+    public async Task Stream_breaks_are_keyed_by_stream_and_the_time_it_was_lost()
+    {
+        await using NpgsqlDataSource dataSource = MarketDataDatabase.Open();
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
+
+        IEnumerable<(string Name, string DataType, string IsNullable)> columns = await connection.QueryAsync<(string, string, string)>(
+            "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = 'stream_breaks'");
+        IEnumerable<string> key = await connection.QueryAsync<string>(
+            """
+            SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+            WHERE i.indrelid = 'stream_breaks'::regclass AND i.indisprimary
+            """);
+
+        columns.ShouldBe(
+            [("stream", "text", "NO"), ("lost_at", "timestamp with time zone", "NO"), ("restored_at", "timestamp with time zone", "NO")],
+            ignoreOrder: true);
+        key.ShouldBe(["stream", "lost_at"], ignoreOrder: true);
     }
 }

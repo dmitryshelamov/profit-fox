@@ -79,11 +79,12 @@ public class IdeaOrderTests
         IdeaSetup[] order =
         [
             IdeaSetup.Impulse, IdeaSetup.EarlyImpulse, IdeaSetup.Drop, IdeaSetup.EarlyDrop, IdeaSetup.HighVolatility, IdeaSetup.Breakout, IdeaSetup.FalseBreakout,
-            IdeaSetup.Squeeze, IdeaSetup.Exhaustion, IdeaSetup.RsiExtreme, IdeaSetup.NewExtreme, IdeaSetup.QuietVolume
+            IdeaSetup.Squeeze, IdeaSetup.Exhaustion, IdeaSetup.RsiExtreme, IdeaSetup.NewExtreme, IdeaSetup.QuietVolume,
+            IdeaSetup.Accumulation
         ];
         IdeaView[] views = [.. order.Reverse().Select((setup, index) => View(((char)('a' + index)).ToString(), Setup(setup)))];
 
-        Names(IdeaOrder.Sort(views, IdeaSortColumn.Setup, OrderDirection.Ascending)).ShouldBe("lkjihgfedcba");
+        Names(IdeaOrder.Sort(views, IdeaSortColumn.Setup, OrderDirection.Ascending)).ShouldBe("mlkjihgfedcba");
     }
 
     // Scenario "Сортировка по типу": «Стоп-вход» after «Откат».
@@ -93,6 +94,15 @@ public class IdeaOrderTests
         IdeaView[] views = [View("a", Type(IdeaType.StopEntry)), View("b", Type(IdeaType.Pullback)), View("c", Type(IdeaType.Levels))];
 
         Names(IdeaOrder.Sort(views, IdeaSortColumn.Type, OrderDirection.Ascending)).ShouldBe("cba");
+    }
+
+    // Scenario "Сортировка по сетапу": «Накопление / распределение» after «Объём без движения».
+    [Test]
+    public void Accumulation_goes_after_the_quiet_volume()
+    {
+        IdeaView[] views = [View("a", Setup(IdeaSetup.Accumulation)), View("b", Setup(IdeaSetup.QuietVolume)), View("c", Setup(IdeaSetup.NewExtreme))];
+
+        Names(IdeaOrder.Sort(views, IdeaSortColumn.Setup, OrderDirection.Ascending)).ShouldBe("cba");
     }
 
     [Test]

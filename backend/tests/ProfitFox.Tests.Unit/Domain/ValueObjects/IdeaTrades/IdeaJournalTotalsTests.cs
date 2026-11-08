@@ -27,6 +27,17 @@ public class IdeaJournalTotalsTests
         totals.MeanRHigh!.Value.ShouldBe(0.3m + 1.6437m, 0.0001m);
     }
 
+    // Scenario "Закрытые по сроку в итогах учебных": +1.8 at the target, −1.0 at the stop, −0.2 and +0.1 at expiry; the mean (1.8 − 1.0 − 0.2 + 0.1) / 4.
+    [Test]
+    public void Trades_closed_at_expiry_are_counted_and_go_into_the_mean_and_the_money()
+    {
+        var totals = IdeaJournalTotals.Compute(
+            [Closed(IdeaTradeStatus.ClosedAtTarget, 1.8m), Closed(IdeaTradeStatus.ClosedAtStop, -1.0m), Closed(IdeaTradeStatus.ClosedAtExpiry, -0.2m), Closed(IdeaTradeStatus.ClosedAtExpiry, 0.1m)]);
+
+        (totals.Targets, totals.Stops, totals.Manual, totals.Expired).ShouldBe((1, 1, 0, 2));
+        (totals.Result, totals.MeanR).ShouldBe((0.7m, 0.175m));
+    }
+
     // Scenario "Одна сделка".
     [Test]
     public void One_closed_trade_gives_its_result_as_the_mean_without_an_interval()
@@ -41,7 +52,7 @@ public class IdeaJournalTotalsTests
     {
         var totals = IdeaJournalTotals.Compute([Cancelled()]);
 
-        (totals.Targets, totals.Stops, totals.Manual, totals.Cancelled, totals.Result, totals.Fees).ShouldBe((0, 0, 0, 1, 0m, 0m));
+        (totals.Targets, totals.Stops, totals.Manual, totals.Expired, totals.Cancelled, totals.Result, totals.Fees).ShouldBe((0, 0, 0, 0, 1, 0m, 0m));
         (totals.MeanR, totals.MeanRLow, totals.MeanRHigh, totals.MeanTime).ShouldBe((null, null, null, null));
         (totals.Promise, totals.Idea).ShouldBe((new PromiseComparison(0, null, null), new IdeaComparison(0, null, null)));
     }
@@ -107,6 +118,7 @@ public class IdeaJournalTotalsTests
         {
             IdeaTradeStatus.ClosedAtTarget => IdeaTradeLeg.TakeProfit,
             IdeaTradeStatus.ClosedAtStop => IdeaTradeLeg.StopLoss,
+            IdeaTradeStatus.ClosedAtExpiry => IdeaTradeLeg.Expiry,
             _ => IdeaTradeLeg.Manual
         };
         IdeaTrade trade = New()

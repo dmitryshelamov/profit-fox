@@ -14,7 +14,6 @@ using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Market;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.MarketData;
 using ProfitFox.Tests.Integration.Infrastructure;
-using ProfitFox.Tests.Integration.Persistence;
 
 using Shouldly;
 
@@ -39,7 +38,7 @@ public class IdeasReplayDelayTests
     [SetUp]
     public async Task SetUp()
     {
-        _connectionString = await MarketDataDatabase.CreateConnectionStringAsync();
+        _connectionString = IntegrationEnvironment.ConnectionString;
         _database = NpgsqlDataSource.Create(_connectionString);
         _time = new FakeTimeProvider(Start);
     }

@@ -11,7 +11,7 @@ import {
 import { BotCandleChart, liveCandles } from '@/modules/market-chart';
 import { intervalLabel } from '@/modules/market-data';
 import type { Schemas } from '@/shared/api/client';
-import { formatUtc } from '@/shared/format/format';
+import { formatFullMoment } from '@/shared/format/format';
 
 type Position = Schemas['LivePositionResponse'];
 
@@ -25,13 +25,13 @@ export function BotChart({
   positions,
   asked,
 }: {
-  bot: { id: string; symbol: string; interval: string };
+  bot: { id: string; category: string; symbol: string; interval: string };
   positions: readonly Position[];
   /** The interval of the address, if any. */
   asked: string | undefined;
 }) {
   const navigate = useNavigate();
-  const interval = shownInterval(asked, bot.interval);
+  const interval = shownInterval(asked, bot.interval, bot.category);
   const own = interval === bot.interval;
   const history = useBotCandles(bot.id, interval);
   const forming = useFormingCandle(bot.id);
@@ -57,7 +57,7 @@ export function BotChart({
       className="space-y-3 rounded-xl border border-line bg-panel px-5 py-4"
     >
       <div role="group" aria-label="Интервал" className="flex flex-wrap gap-1">
-        {chartIntervals(bot.interval).map((item) => (
+        {chartIntervals(bot.interval, bot.category).map((item) => (
           <button
             key={item.value}
             type="button"
@@ -81,7 +81,7 @@ export function BotChart({
           aria-label="Последняя свеча"
           className="flex flex-wrap gap-x-4 font-mono text-xs text-muted"
         >
-          <span>{formatUtc(last.openTime)}</span>
+          <span>{formatFullMoment(last.openTime)}</span>
           <span>O {last.open}</span>
           <span>H {last.high}</span>
           <span>L {last.low}</span>
@@ -107,7 +107,7 @@ export function BotChart({
         !history.unavailable && <p className="text-sm text-muted">Свечей за период нет.</p>}
       {history.unavailable && (
         <p role="status" className="text-sm text-warn">
-          История недоступна: Bybit не отвечает
+          История недоступна: биржа не отвечает
         </p>
       )}
       {own ? (

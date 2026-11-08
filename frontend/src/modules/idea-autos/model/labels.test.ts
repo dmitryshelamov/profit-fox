@@ -16,6 +16,12 @@ const auto = {
   badge: 'up',
   minRiskReward: '1.5',
   minCases: 100,
+  dayDrop: 'any',
+  btcDrop: 'any',
+  highFunding: 'any',
+  burst: 'any',
+  maxPerMinutePerSide: null,
+  maxOpenPerSide: null,
 };
 
 describe('labels of autos', () => {
@@ -52,6 +58,26 @@ describe('labels of autos', () => {
     ).toBe('5 мин · обе стороны · оба рынка · любой значок · R:R ≥ 1.5 · N ≥ 100');
   });
 
+  // Scenario "Условие признака в строке": only the features not «любой» are named.
+  it('names the conditions of the features that are not any', () => {
+    expect(conditionLines({ ...auto, dayDrop: 'with' }).where).toBe(
+      '15 мин, 1 ч · Лонг · Линейный · ▲ · R:R ≥ 1.5 · N ≥ 100 · с ↓ пара',
+    );
+    expect(conditionLines({ ...auto, btcDrop: 'with', highFunding: 'without' }).where).toBe(
+      '15 мин, 1 ч · Лонг · Линейный · ▲ · R:R ≥ 1.5 · N ≥ 100 · с ↓ BTC · без ↑ funding',
+    );
+  });
+
+  // Scenarios "Условие признака в строке" for the burst and "Лимиты в строке".
+  it('names the condition of the burst and the limits that are set', () => {
+    expect(conditionLines({ ...auto, burst: 'without', maxPerMinutePerSide: 2 }).where).toBe(
+      '15 мин, 1 ч · Лонг · Линейный · ▲ · R:R ≥ 1.5 · N ≥ 100 · без ⚡ всплеск · ≤ 2/мин на сторону',
+    );
+    expect(conditionLines({ ...auto, burst: 'with', maxOpenPerSide: 5 }).where).toBe(
+      '15 мин, 1 ч · Лонг · Линейный · ▲ · R:R ≥ 1.5 · N ≥ 100 · с ⚡ всплеск · ≤ 5 на сторону',
+    );
+  });
+
   it('names the reasons of a refusal and shows a code it does not know as it is', () => {
     expect(reasonLabel('pair_taken')).toBe('Уже есть сделка по паре');
     expect(reasonLabel('not_enough_money')).toBe('Не хватает денег');
@@ -68,6 +94,8 @@ describe('labels of autos', () => {
     expect(reasonLabel('stop_too_far_for_leverage')).toBe('Стоп дальше, чем позволяет плечо');
     expect(reasonLabel('leverage_differs')).toBe('На символе позиция с другим плечом');
     expect(reasonLabel('leverage_not_set')).toBe('Bybit не дал поставить плечо');
+    expect(reasonLabel('minute_limit')).toBe('Лимит за минуту');
+    expect(reasonLabel('side_limit')).toBe('Лимит на сторону');
     expect(reasonLabel('something_new')).toBe('something_new');
   });
 });

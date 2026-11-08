@@ -9,6 +9,7 @@ using ProfitFox.Application.IdeaTrades.Queries.GetIdeaJournal;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.Entities.ExchangeAccounts;
 using ProfitFox.Domain.Entities.IdeaAutos;
+using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.Entities.IdeaTrades.Enums;
@@ -38,6 +39,7 @@ public class GetIdeaJournalTests
     private IIdeaTradeRepository _trades = null!;
     private IPaperIdeaTradeRepository _paper = null!;
     private IIdeaAutoRepository _autos = null!;
+    private IIdeaRepository _ideas = null!;
     private IMarketHistoryClient _history = null!;
     private GetIdeaJournalQueryHandler _handler = null!;
 
@@ -50,10 +52,12 @@ public class GetIdeaJournalTests
         _paper.GetAllAsync(Arg.Any<CancellationToken>()).Returns([]);
         _autos = Substitute.For<IIdeaAutoRepository>();
         _autos.GetEveryAsync(Arg.Any<CancellationToken>()).Returns(new Dictionary<Guid, IdeaAuto> { [Impulse.Id] = Impulse, [Gone.Id] = Gone });
+        _ideas = Substitute.For<IIdeaRepository>();
+        _ideas.GetManyAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>()).Returns([]);
         IExchangeAccountRepository accounts = Substitute.For<IExchangeAccountRepository>();
         accounts.GetAllAsync(Arg.Any<CancellationToken>()).Returns([new ExchangeAccount(_account, "Основной", "key", 100, new HashSet<MarketCategory> { MarketCategory.Linear }, Noon)]);
         var backtests = new BacktestSettings { DefaultFees = new Dictionary<string, FeeRateSettings> { ["linear"] = new FeeRateSettings { Limit = 0.02m, Market = 0.055m } } };
-        _handler = new GetIdeaJournalQueryHandler(_trades, _paper, _autos, accounts, _history, backtests, new FakeTimeProvider(Noon));
+        _handler = new GetIdeaJournalQueryHandler(_trades, _paper, _autos, _ideas, accounts, _history, backtests, new FakeTimeProvider(Noon));
     }
 
     // Scenario "Сделки в работе и закрытые": two open trades and 120 closed ones, the second page of 50.
@@ -193,7 +197,7 @@ public class GetIdeaJournalTests
     {
         IdeaTrade open = Opened(Noon.AddHours(-1), Eth);
         Trades([open]);
-        _history.GetLastPriceAsync(Eth, Arg.Any<CancellationToken>()).Returns(23.90m);
+        Prices(("ETHUSDT", 23.90m));
 
         GetIdeaJournalResult result = await _handler.Handle(Everything, CancellationToken.None);
 
@@ -202,33 +206,53 @@ public class GetIdeaJournalTests
         (item.LastPrice, item.CurrentResult, item.CurrentResultR).ShouldBe((23.90m, expected, expected / 0.2m));
     }
 
-    // One request for the price of a symbol, however many trades are open on it; a trade that waits for its entry has no result and asks for nothing.
+    // One request for the prices of a category, however many trades are open on a pair; a trade that waits for its entry has no result and asks for nothing.
     [Test]
-    public async Task Last_price_is_asked_once_for_a_symbol_and_not_for_a_trade_that_waits()
+    public async Task Last_prices_are_asked_once_and_not_for_a_trade_that_waits()
     {
-        Trades([Opened(Noon.AddHours(-1), Eth), Opened(Noon.AddHours(-2), Eth), Waiting(Noon.AddHours(-3), instrument: Btc)]);
-        _history.GetLastPriceAsync(Eth, Arg.Any<CancellationToken>()).Returns(23.90m);
+        Trades([Opened(Noon.AddHours(-1), Eth), Opened(Noon.AddHours(-2), Eth), Waiting(Noon.AddHours(-3), instrument: new Instrument(MarketCategory.Spot, "BTCUSDT"))]);
+        Prices(("ETHUSDT", 23.90m));
 
         GetIdeaJournalResult result = await _handler.Handle(Everything, CancellationToken.None);
 
-        await _history.Received(1).GetLastPriceAsync(Eth, Arg.Any<CancellationToken>());
-        await _history.DidNotReceive().GetLastPriceAsync(Btc, Arg.Any<CancellationToken>());
+        await _history.Received(1).GetLastPricesAsync(MarketCategory.Linear, Arg.Any<CancellationToken>());
+        await _history.DidNotReceive().GetLastPricesAsync(MarketCategory.Spot, Arg.Any<CancellationToken>());
         result.Journal!.Open.Select(item => item.CurrentResult is not null).ShouldBe([true, true, false]);
     }
 
-    // Scenario "Bybit не ответил": the journal answers without an error, the trade has no current result.
+    // 100 open paper trades on prod took the journal 23 s, a request of the price after another: the prices of a category come in one request.
     [Test]
-    public async Task Exchange_that_gives_no_price_leaves_the_trade_without_a_current_result()
+    public async Task Last_prices_are_asked_once_for_a_category_however_many_pairs_are_open()
     {
         Trades([Opened(Noon.AddHours(-1), Eth), Opened(Noon.AddHours(-2), Btc)]);
-        _history.GetLastPriceAsync(Eth, Arg.Any<CancellationToken>()).Returns<decimal>(_ => throw new ExchangeUnavailableException("no ticker"));
-        _history.GetLastPriceAsync(Btc, Arg.Any<CancellationToken>()).Returns(23.90m);
+        _history.GetLastPricesAsync(MarketCategory.Linear, Arg.Any<CancellationToken>()).Returns(new Dictionary<string, decimal> { ["ETHUSDT"] = 23.90m, ["BTCUSDT"] = 24m });
 
         GetIdeaJournalResult result = await _handler.Handle(Everything, CancellationToken.None);
 
-        IdeaJournalTrade failed = result.Journal!.Open[0];
-        (failed.LastPrice, failed.CurrentResult, failed.CurrentResultR).ShouldBe((null, null, null));
-        result.Journal.Open[1].CurrentResult.ShouldNotBeNull();
+        await _history.Received(1).GetLastPricesAsync(MarketCategory.Linear, Arg.Any<CancellationToken>());
+        await _history.DidNotReceiveWithAnyArgs().GetLastPriceAsync(default!, default);
+        result.Journal!.Open.Select(item => item.LastPrice).ShouldBe([23.90m, 24m]);
+    }
+
+    // Scenario "Bybit не ответил": the journal answers without an error; the trades of the category that got no price have no current result,
+    // nor does a pair the tickers do not name.
+    [Test]
+    public async Task Exchange_that_gives_no_price_leaves_the_trade_without_a_current_result()
+    {
+        var sol = new Instrument(MarketCategory.Spot, "SOLUSDT");
+        Trades([Opened(Noon.AddHours(-1), Eth), Opened(Noon.AddHours(-2), Btc), Opened(Noon.AddHours(-3), sol)]);
+        _history.GetLastPricesAsync(MarketCategory.Spot, Arg.Any<CancellationToken>()).Returns<IReadOnlyDictionary<string, decimal>>(_ => throw new ExchangeUnavailableException("down"));
+        Prices(("BTCUSDT", 23.90m));
+
+        GetIdeaJournalResult result = await _handler.Handle(Everything, CancellationToken.None);
+
+        result.Journal!.Open.Select(item => item.CurrentResult is not null).ShouldBe([false, true, false]);
+        (result.Journal.Open[0].LastPrice, result.Journal.Open[0].CurrentResultR).ShouldBe((null, null));
+    }
+
+    private void Prices(params (string Symbol, decimal Price)[] linear)
+    {
+        _history.GetLastPricesAsync(MarketCategory.Linear, Arg.Any<CancellationToken>()).Returns(linear.ToDictionary(item => item.Symbol, item => item.Price));
     }
 
     private IdeaTrade Opened(DateTimeOffset createdAt, Instrument instrument)
@@ -335,7 +359,7 @@ public class GetIdeaJournalTests
     {
         IdeaTrade paperOpen = Opened(Noon.AddHours(-1), Eth) with { AutoId = Gone.Id };
         Paper([paperOpen]);
-        _history.GetLastPriceAsync(Eth, Arg.Any<CancellationToken>()).Returns(24m);
+        Prices(("ETHUSDT", 24m));
 
         IdeaJournalTrade view = (await _handler.Handle(Everything, CancellationToken.None)).Journal!.Open.Single();
 
@@ -352,6 +376,120 @@ public class GetIdeaJournalTests
         IdeaJournalTrade view = (await _handler.Handle(Everything, CancellationToken.None)).Journal!.Closed.Items.Single();
 
         view.AccountName.ShouldBe("—");
+    }
+
+    // Requirement "Конец идеи у сделки в работе", scenario "Активная идея": an idea of 15m that lives 16 candles and entered at 10:00 ends at 14:00.
+    [Test]
+    public async Task Open_trade_of_an_active_idea_has_the_end_of_its_lifetime()
+    {
+        Idea idea = Active(Noon.AddHours(-2), 15, 16);
+        Trades([Of(idea, Noon.AddHours(-2)).EntryGrown(new LegTotals(0.47m, 11.0356m, 0.0061m), Noon.AddHours(-2).AddMinutes(1))]);
+        Ideas(idea);
+
+        IdeaJournalTrade view = (await _handler.Handle(Everything, CancellationToken.None)).Journal!.Open.Single();
+
+        view.IdeaEndsAt.ShouldBe(new DateTimeOffset(2026, 11, 6, 14, 0, 0, TimeSpan.Zero));
+    }
+
+    // Scenario "Идея ждёт входа": a pullback that waits for its entry, and so does its idea.
+    [Test]
+    public async Task Trade_of_an_idea_that_waits_for_its_entry_has_no_end_of_the_idea()
+    {
+        Idea idea = IdeaGenerator.Generate(Noon.AddMinutes(-30), type: IdeaType.Pullback);
+        Trades([Of(idea, Noon.AddMinutes(-30))]);
+        Ideas(idea);
+
+        IdeaJournalTrade view = (await _handler.Handle(Everything, CancellationToken.None)).Journal!.Open.Single();
+
+        view.IdeaEndsAt.ShouldBeNull();
+    }
+
+    // Scenario "Идея закрылась раньше сделки": the idea expired and is still stored, and the trade has its outcome.
+    [Test]
+    public async Task Trade_whose_idea_closed_has_the_outcome_of_the_idea_and_no_end_of_it()
+    {
+        Idea idea = IdeaGenerator.Generate(Noon.AddHours(-8), IdeaStatus.Expired, statusAt: Noon.AddHours(-2));
+        IdeaTrade opened = Of(idea, Noon.AddHours(-8)).EntryGrown(new LegTotals(0.47m, 11.0356m, 0.0061m), Noon.AddHours(-8).AddMinutes(1));
+        Trades([opened with { IdeaOutcome = new TradedIdeaOutcome(IdeaStatus.Expired, Noon.AddHours(-2), 0.4m) }]);
+        Ideas(idea);
+
+        IdeaJournalTrade view = (await _handler.Handle(Everything, CancellationToken.None)).Journal!.Open.Single();
+
+        view.IdeaEndsAt.ShouldBeNull();
+        view.Trade.IdeaOutcome.ShouldNotBeNull();
+    }
+
+    // An idea that is no longer stored gives no end.
+    [Test]
+    public async Task Trade_of_an_idea_that_is_no_longer_stored_has_no_end_of_the_idea()
+    {
+        Trades([Of(Active(Noon.AddHours(-2), 15, 16), Noon.AddHours(-2))]);
+
+        IdeaJournalTrade view = (await _handler.Handle(Everything, CancellationToken.None)).Journal!.Open.Single();
+
+        view.IdeaEndsAt.ShouldBeNull();
+    }
+
+    // Scenario "Учебная сделка": a paper auto took an active idea of 5m that lives 48 candles and entered at 09:30; the ideas of the real and the
+    // paper trades come in one read.
+    [Test]
+    public async Task Open_paper_trade_has_the_end_of_its_idea_read_with_the_ideas_of_the_real_ones()
+    {
+        Idea paperIdea = Active(Noon.AddHours(-2.5), 5, 48);
+        Idea realIdea = Active(Noon.AddHours(-2), 15, 16);
+        IdeaTrade paperTrade = Of(paperIdea, Noon.AddHours(-2.5));
+        Trades([Of(realIdea, Noon.AddHours(-2))]);
+        Paper([paperTrade]);
+        Ideas(paperIdea, realIdea);
+
+        IdeaJournal journal = (await _handler.Handle(Everything, CancellationToken.None)).Journal!;
+
+        journal.Open.Single(item => item.Trade.Id == paperTrade.Id).IdeaEndsAt.ShouldBe(new DateTimeOffset(2026, 11, 6, 13, 30, 0, TimeSpan.Zero));
+        await _ideas.Received(1).GetManyAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>());
+        await _ideas.Received(1).GetManyAsync(Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.Order().SequenceEqual(new[] { paperIdea.Id, realIdea.Id }.Order())), Arg.Any<CancellationToken>());
+    }
+
+    // A closed trade has no end of its idea, and its idea is not read.
+    [Test]
+    public async Task Closed_trade_has_no_end_of_its_idea_and_its_idea_is_not_read()
+    {
+        Idea openIdea = Active(Noon.AddHours(-2), 15, 16);
+        IdeaTrade closed = Closed(Noon.AddMinutes(-10));
+        Trades([Of(openIdea, Noon.AddHours(-2)), closed]);
+        Ideas(openIdea, Active(Noon.AddHours(-3), 15, 16) with { Id = closed.IdeaId });
+
+        IdeaJournal journal = (await _handler.Handle(Everything, CancellationToken.None)).Journal!;
+
+        journal.Closed.Items.Single().IdeaEndsAt.ShouldBeNull();
+        await _ideas.Received(1).GetManyAsync(Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.SequenceEqual(new[] { openIdea.Id })), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Without_open_trades_no_idea_is_read()
+    {
+        Trades([Closed(Noon.AddMinutes(-10))]);
+
+        await _handler.Handle(Everything, CancellationToken.None);
+
+        await _ideas.DidNotReceiveWithAnyArgs().GetManyAsync(default!, default);
+    }
+
+    private void Ideas(params Idea[] ideas)
+    {
+        _ideas.GetManyAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>()).Returns(ideas);
+    }
+
+    // An active idea that entered when it fired, on candles of the minutes given, living the candles given.
+    private static Idea Active(DateTimeOffset enteredAt, int candleMinutes, int lifeCandles)
+    {
+        Idea idea = IdeaGenerator.Generate(enteredAt, IdeaStatus.Active);
+
+        return idea with { Track = idea.Track with { CandleMinutes = candleMinutes, LifeCandles = lifeCandles } };
+    }
+
+    private IdeaTrade Of(Idea idea, DateTimeOffset createdAt)
+    {
+        return IdeaTrade.Create(Guid.NewGuid(), idea, _account, 100m, Size(), createdAt);
     }
 
     private void Paper(IEnumerable<IdeaTrade> trades)

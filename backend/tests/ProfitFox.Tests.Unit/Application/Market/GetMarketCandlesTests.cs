@@ -36,7 +36,7 @@ public class GetMarketCandlesTests
         _history = Substitute.For<IMarketHistoryClient>();
         _history.GetCandlesOnceAsync(default!, default, default, default, default).ReturnsForAnyArgs(Array.Empty<Candle>());
         var time = new FakeTimeProvider(Now);
-        _handler = new GetMarketCandlesQueryHandler(new CandleReadThrough(_candles, _history, time), time);
+        _handler = new GetMarketCandlesQueryHandler(new CandleReadThrough(_candles, Substitute.For<ISeriesCoverageRepository>(), _history, time), time);
     }
 
     [Test]

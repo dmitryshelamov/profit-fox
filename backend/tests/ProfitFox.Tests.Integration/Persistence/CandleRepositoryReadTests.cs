@@ -20,7 +20,7 @@ public class CandleRepositoryReadTests
     [SetUp]
     public async Task SetUp()
     {
-        _dataSource = await MarketDataDatabase.CreateAsync();
+        _dataSource = MarketDataDatabase.Open();
         _store = new CandleRepository(_dataSource);
 
         // Stored newest first, the way Bybit pages arrive.

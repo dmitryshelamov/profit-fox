@@ -100,7 +100,7 @@ describe('ideas screen', () => {
         .getAllByRole('link')
         .map((link) => link.textContent),
     ).toEqual(['WIFUSDT', 'SOLUSDT', 'DOGEUSDT']);
-    expect(within(row).getByText('04.11 11:45')).toBeInTheDocument();
+    expect(within(row).getByText('04.11 14:45')).toBeInTheDocument();
     expect(within(row).getByText('Импульс')).toBeInTheDocument();
     expect(within(row).getByText('15 мин')).toBeInTheDocument();
     expect(within(row).getByText('Откат')).toBeInTheDocument();
@@ -337,6 +337,25 @@ describe('ideas screen', () => {
       expect(lastIdeasQuery(requests)).toMatchObject({ Setup: 'squeeze', Type: 'stop_entry' }),
     );
     expect(within(row).getByText('Сжатие')).toBeInTheDocument();
+    expect(within(row).getByText('Стоп-вход')).toBeInTheDocument();
+  });
+
+  // Scenario "Накопление": the stop entry long of an accumulation, found by its setup.
+  it('asks the API for the ideas of an accumulation and names the setup in the row', async () => {
+    const accumulation = ideaOf({
+      id: 'apt-1',
+      symbol: 'APTUSDT',
+      setup: 'accumulation',
+      type: 'stop_entry',
+    });
+    const requests = open({ 'GET /api/ideas': () => json(ideasPage([accumulation])) });
+    renderApp('/ideas');
+    const row = await rowOf('APTUSDT');
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Сетап' }), 'accumulation');
+
+    await waitFor(() => expect(lastIdeasQuery(requests)).toMatchObject({ Setup: 'accumulation' }));
+    expect(within(row).getByText('Накопление / распределение')).toBeInTheDocument();
     expect(within(row).getByText('Стоп-вход')).toBeInTheDocument();
   });
 

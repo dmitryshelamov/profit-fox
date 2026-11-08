@@ -17,6 +17,12 @@ public interface IIdeaSignalRepository
     /// </summary>
     IAsyncEnumerable<IdeaSignal> StreamAsync(int engineVersion, DateTimeOffset from, (IdeaType Type, Interval Interval)? only, CancellationToken cancellationToken);
 
+    /// <summary>
+    ///     The count of the distinct pairs with a signal of a side on an interval in a minute, by the minute they fired in, of the signals of a
+    ///     version fired since <paramref name="from" /> (decision 2 of add-burst-and-auto-limits).
+    /// </summary>
+    Task<IReadOnlyDictionary<(DateTimeOffset FiredAt, IdeaSide Side, Interval Interval), int>> CountPairsByMinuteAsync(int engineVersion, DateTimeOffset from, CancellationToken cancellationToken);
+
     /// <summary>The signals of a pair of a version, oldest fired first.</summary>
     Task<IReadOnlyList<IdeaSignal>> GetAsync(Instrument instrument, int engineVersion, CancellationToken cancellationToken);
 

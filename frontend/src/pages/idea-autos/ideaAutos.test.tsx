@@ -68,6 +68,20 @@ describe('screen «Автоматы»', () => {
     expect(within(row).getByText(exchangeAccount.name)).toBeInTheDocument();
   });
 
+  // Scenario "Условие признака в строке": «с ↓ пара», and no other feature.
+  it('names the condition of a feature that is not any among the conditions of an auto', async () => {
+    fakeApi(routes(() => [autoItemOf({ ...breakouts, dayDrop: 'with' })]));
+    renderApp('/idea-trades/autos');
+
+    await screen.findByRole('table', { name: 'Автоматы' });
+
+    expect(
+      within(rowOf('Пробои 5м')).getByText(
+        '5 мин, 15 мин · обе стороны · оба рынка · любой значок · R:R ≥ 1.2 · N ≥ 50 · с ↓ пара',
+      ),
+    ).toBeInTheDocument();
+  });
+
   // Scenario "Бюджет в списке".
   it('shows what the open trades take of the budget of an auto, or that it has none', async () => {
     fakeApi(
@@ -365,8 +379,8 @@ describe('screen «Автоматы»', () => {
 
     const banner = await screen.findByRole('status', { name: 'Дневной стоп' });
 
-    expect(banner).toHaveTextContent('Дневной стоп сработал — автоматы не входят до 00:00 UTC');
-    expect(banner).toHaveTextContent('Сегодня -30.15 из 30 USDT · сработал в 15:12 UTC');
+    expect(banner).toHaveTextContent('Дневной стоп сработал — автоматы не входят до 03:00');
+    expect(banner).toHaveTextContent('Сегодня -30.15 из 30 USDT · сработал в 18:12 ·');
     expect(banner).toHaveTextContent('ручные входы и открытые сделки работают как обычно');
   });
 

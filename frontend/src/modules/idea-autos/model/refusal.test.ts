@@ -97,26 +97,36 @@ describe('detail of a refusal', () => {
     ).toBe('плечо символа 1× при настройке 5×');
   });
 
+  // Scenario "Отказ по лимиту".
+  it('names how many ideas a limit skipped and the limit', () => {
+    expect(
+      refusalDetailText(refusal(['minute_limit'], { actual: '28', limit: '2', holder: null })),
+    ).toBe('пропущено 28 при лимите 2');
+    expect(
+      refusalDetailText(refusal(['side_limit'], { actual: '2', limit: '3', holder: null })),
+    ).toBe('пропущено 2 при лимите 3');
+  });
+
   it('says whose trade holds the pair', () => {
     expect(refusalDetailText(withHolder({}))).toBe(
       'на Bybit · ideas её взял «Импульс лонг» — он выше в списке',
     );
     expect(refusalDetailText(withHolder({ above: false }))).toBe(
-      'на Bybit · ideas её уже взял «Импульс лонг», с 13:05',
+      'на Bybit · ideas её уже взял «Импульс лонг», с 16:05',
     );
     expect(
       refusalDetailText(
         withHolder({ kind: 'same_auto', paper: true, since: '2026-11-07T12:50:00Z' }),
       ),
-    ).toBe('учебная этого автомата, с 12:50');
+    ).toBe('учебная этого автомата, с 15:50');
     expect(refusalDetailText(withHolder({ kind: 'same_auto' }))).toBe(
-      'у этого автомата, открыта в 13:05',
+      'у этого автомата, открыта в 16:05',
     );
     expect(refusalDetailText(withHolder({ kind: 'manual' }))).toBe(
-      'ручная на Bybit · ideas, с 13:05',
+      'ручная на Bybit · ideas, с 16:05',
     );
     expect(refusalDetailText(withHolder({ paper: true }))).toBe(
-      'учебная «Импульс лонг» на Bybit · ideas, с 13:05',
+      'учебная «Импульс лонг» на Bybit · ideas, с 16:05',
     );
   });
 

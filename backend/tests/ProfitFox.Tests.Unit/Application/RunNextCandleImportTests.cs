@@ -25,6 +25,7 @@ public class RunNextCandleImportTests
     private IMarketHistoryClient _marketHistory = null!;
     private ICandleImportJobRepository _jobs = null!;
     private ICandleRepository _candles = null!;
+    private ISeriesCoverageRepository _coverage = null!;
     private RunNextCandleImportCommandHandler _handler = null!;
     private readonly WorkerIdentity _worker = new WorkerIdentity(Guid.NewGuid());
 
@@ -44,7 +45,133 @@ public class RunNextCandleImportTests
             .Returns([]);
         _jobs.UpdateLeasedAsync(Arg.Any<CandleImportJob>(), _worker.Id, Arg.Any<CancellationToken>()).Returns(true);
         _jobs.RenewLeaseAsync(Arg.Any<Guid>(), _worker.Id, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(true);
-        _handler = new RunNextCandleImportCommandHandler(_marketHistory, _jobs, _candles, new WorkerSettings(), _worker, _time);
+        _coverage = Substitute.For<ISeriesCoverageRepository>();
+        _handler = new RunNextCandleImportCommandHandler(_marketHistory, _jobs, _candles, _coverage, new WorkerSettings(), _worker, _time);
+    }
+
+    // Scenario "Ночь MOEX внутри покрытия": the night hours have no candles, but the day is covered, so nothing is asked for.
+    [Test]
+    public async Task Moex_period_inside_the_coverage_succeeds_without_asking_the_exchange()
+    {
+        CandleImportJob job = MoexJob("2024-03-04T00:00:00Z", "2024-03-05T00:00:00Z");
+        Stored(job, "2024-03-04T07:00:00Z", "2024-03-04T08:00:00Z", "2024-03-04T20:00:00Z");
+        _coverage.GetAsync(job.Instrument, job.Interval, Arg.Any<CancellationToken>()).Returns(new SeriesCoverage(At("2024-03-04T00:00:00Z"), At("2024-03-05T00:00:00Z")));
+
+        await RunAsync();
+
+        RequestedRanges().ShouldBeEmpty();
+        SavedStates()[^1].ShouldBe(job with { Status = CandleImportStatus.Succeeded, StartedAt = Now, FinishedAt = Now });
+        await _coverage.DidNotReceiveWithAnyArgs().UpsertAsync(default!, default, default!, default);
+    }
+
+    // Scenario "Период за границей": only the tail outside the coverage is requested, and the border moves to the end of the period.
+    [Test]
+    public async Task Moex_period_past_the_border_requests_only_the_tail_and_moves_the_border()
+    {
+        CandleImportJob job = MoexJob("2024-03-04T00:00:00Z", "2024-03-05T00:00:00Z");
+        Stored(job, "2024-03-04T07:00:00Z", "2024-03-04T19:00:00Z");
+        _coverage.GetAsync(job.Instrument, job.Interval, Arg.Any<CancellationToken>()).Returns(new SeriesCoverage(At("2024-03-04T00:00:00Z"), At("2024-03-04T20:00:00Z")));
+        ServePages(job, At("2024-03-04T20:00:00Z"), At("2024-03-05T00:00:00Z"), () => Candles("2024-03-04T22:00:00Z", "2024-03-04T20:00:00Z"));
+
+        await RunAsync();
+
+        RequestedRanges().ShouldBe([("2024-03-04T20:00:00Z", "2024-03-05T00:00:00Z")]);
+        StoredOpenTimes().ShouldBe(["2024-03-04T22:00:00Z", "2024-03-04T20:00:00Z"]);
+        await _coverage.Received(1).UpsertAsync(job.Instrument, job.Interval, new SeriesCoverage(At("2024-03-04T00:00:00Z"), At("2024-03-05T00:00:00Z")), Arg.Any<CancellationToken>());
+    }
+
+    // The first import of a series makes its coverage; a range without candles (a weekend) is covered too.
+    [Test]
+    public async Task First_moex_import_makes_the_coverage_even_without_candles()
+    {
+        CandleImportJob job = MoexJob("2024-03-02T00:00:00Z", "2024-03-03T00:00:00Z");
+        ServePages(job, job.From, job.To);
+
+        await RunAsync();
+
+        await _coverage.Received(1).UpsertAsync(job.Instrument, job.Interval, new SeriesCoverage(At("2024-03-02T00:00:00Z"), At("2024-03-03T00:00:00Z")), Arg.Any<CancellationToken>());
+    }
+
+    // Scenario "Граница не заходит в будущее".
+    [Test]
+    public async Task Border_stops_at_the_end_of_the_last_closed_candle()
+    {
+        CandleImportJob job = MoexJob("2024-03-10T10:00:00Z", "2024-03-10T12:30:00Z");
+        ServePages(job, job.From, job.To, () => Candles("2024-03-10T12:00:00Z", "2024-03-10T11:00:00Z", "2024-03-10T10:00:00Z"));
+
+        await RunAsync();
+
+        await _coverage.Received(1).UpsertAsync(job.Instrument, job.Interval, new SeriesCoverage(At("2024-03-10T10:00:00Z"), At("2024-03-10T12:00:00Z")), Arg.Any<CancellationToken>());
+    }
+
+    // After the review: the coverage grows over the whole part of the job loaded so far, [From, end of the range), so the days stored
+    // between the nights do not keep an older period apart from the coverage that stands at «now».
+    [Test]
+    public async Task Older_period_joined_to_the_coverage_through_stored_days_is_covered_whole()
+    {
+        CandleImportJob job = MoexJob("2024-03-08T00:00:00Z", "2024-03-10T12:00:00Z");
+        Stored(job, "2024-03-08T07:00:00Z");
+        _coverage.GetAsync(job.Instrument, job.Interval, Arg.Any<CancellationToken>()).Returns(new SeriesCoverage(At("2024-03-10T00:00:00Z"), At("2024-03-10T12:00:00Z")));
+        ServePages(job, At("2024-03-08T00:00:00Z"), At("2024-03-08T07:00:00Z"));
+        ServePages(job, At("2024-03-08T08:00:00Z"), At("2024-03-10T00:00:00Z"));
+
+        await RunAsync();
+
+        RequestedRanges().ShouldBe([("2024-03-08T00:00:00Z", "2024-03-08T07:00:00Z"), ("2024-03-08T08:00:00Z", "2024-03-10T00:00:00Z")]);
+        await _coverage.Received().UpsertAsync(job.Instrument, job.Interval, new SeriesCoverage(At("2024-03-08T00:00:00Z"), At("2024-03-10T12:00:00Z")), Arg.Any<CancellationToken>());
+    }
+
+    // The progress of the coverage is saved after each range: a job that fails on the second range keeps the first one covered.
+    [Test]
+    public async Task Coverage_grows_from_the_start_of_the_job_after_each_range()
+    {
+        CandleImportJob job = MoexJob("2024-03-08T00:00:00Z", "2024-03-09T00:00:00Z");
+        Stored(job, "2024-03-08T07:00:00Z");
+        ServePages(job, At("2024-03-08T00:00:00Z"), At("2024-03-08T07:00:00Z"));
+        ServePages(job, At("2024-03-08T08:00:00Z"), At("2024-03-09T00:00:00Z"));
+
+        await RunAsync();
+
+        Received.InOrder(() =>
+        {
+            _coverage.UpsertAsync(job.Instrument, job.Interval, new SeriesCoverage(At("2024-03-08T00:00:00Z"), At("2024-03-08T07:00:00Z")), Arg.Any<CancellationToken>());
+            _coverage.UpsertAsync(job.Instrument, job.Interval, new SeriesCoverage(At("2024-03-08T00:00:00Z"), At("2024-03-09T00:00:00Z")), Arg.Any<CancellationToken>());
+        });
+    }
+
+    // After the review: the exchange may still serve the candle that has just closed as unfinished; the border keeps a minute behind the clock.
+    [Test]
+    public async Task Border_keeps_a_minute_behind_the_clock()
+    {
+        _time = new WaitingClock(At("2024-03-10T12:00:30Z"));
+        _handler = new RunNextCandleImportCommandHandler(_marketHistory, _jobs, _candles, _coverage, new WorkerSettings(), _worker, _time);
+        CandleImportJob job = MoexJob("2024-03-10T08:00:00Z", "2024-03-10T13:00:00Z");
+        ServePages(job, job.From, job.To, () => Candles("2024-03-10T11:00:00Z", "2024-03-10T10:00:00Z"));
+
+        await RunAsync();
+
+        await _coverage.Received(1).UpsertAsync(job.Instrument, job.Interval, new SeriesCoverage(At("2024-03-10T08:00:00Z"), At("2024-03-10T11:00:00Z")), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Bybit_import_keeps_no_coverage()
+    {
+        CandleImportJob job = PendingJob("2024-01-01T00:00:00Z", "2024-01-01T03:00:00Z") with { Instrument = new Instrument(MarketCategory.Linear, "BTCUSDT") };
+        Claimable(job);
+        ServePages(job, job.From, job.To, () => Candles("2024-01-01T02:00:00Z"));
+
+        await RunAsync();
+
+        SavedStates()[^1].Status.ShouldBe(CandleImportStatus.Succeeded);
+        _coverage.ReceivedCalls().ShouldBeEmpty();
+    }
+
+    private CandleImportJob MoexJob(string from, string to)
+    {
+        CandleImportJob job = PendingJob(from, to) with { Instrument = new Instrument(MarketCategory.Moex, "SBER") };
+        Claimable(job);
+
+        return job;
     }
 
     [Test]

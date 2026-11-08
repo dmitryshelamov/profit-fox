@@ -4,6 +4,7 @@ const statuses: Record<string, string> = {
   closed_at_target: 'Закрыта по цели',
   closed_at_stop: 'Закрыта по стопу',
   closed_manually: 'Закрыта вручную',
+  closed_at_expiry: 'Закрыта по сроку',
   cancelled: 'Отменена',
   failed: 'Ошибка',
 };

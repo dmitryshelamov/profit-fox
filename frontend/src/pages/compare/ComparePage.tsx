@@ -213,7 +213,7 @@ export function ComparePage({ items: address }: { items: string | undefined }) {
       )}
       <p className="text-xs text-faint">
         Кривые загружаются по одной из деталей каждого результата: таблица видна сразу, кривые
-        дорисовываются. Время по оси — UTC.
+        дорисовываются.
       </p>
     </section>
   );

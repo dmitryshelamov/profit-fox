@@ -69,6 +69,6 @@ describe('state of the guards under the settings', () => {
       resumeText(
         guards({ triggeredAt: '2026-11-07T15:12:00Z', resumesAt: '2026-11-08T00:00:00Z' }),
       ),
-    ).toBe('автоматы снова входят с 08.11 00:00 UTC');
+    ).toBe('автоматы снова входят с 08.11 03:00');
   });
 });

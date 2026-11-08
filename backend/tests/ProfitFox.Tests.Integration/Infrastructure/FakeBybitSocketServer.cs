@@ -155,6 +155,12 @@ public sealed class FakeBybitSocketServer : IAsyncDisposable
         };
     }
 
+    /// <summary>An event of <c>allLiquidation</c>: the side is that of the liquidation order, <c>Sell</c> for a long.</summary>
+    public static JsonObject Liquidation(string symbol, string side, decimal price, decimal quantity, DateTimeOffset at)
+    {
+        return new JsonObject { ["T"] = at.ToUnixTimeMilliseconds(), ["s"] = symbol, ["S"] = side, ["v"] = Text(quantity), ["p"] = Text(price) };
+    }
+
     /// <summary>An order update; the stop or the target Bybit made for an entry has no client id of its own, a parent and a stop order type.</summary>
     public static JsonObject Order(string category, string clientId, string status, decimal filled, string? exchangeId = null, string? parentClientId = null, string? stopOrderType = null)
     {

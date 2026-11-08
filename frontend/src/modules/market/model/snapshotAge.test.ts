@@ -1,4 +1,4 @@
-import { ageText, isStale, utcClock } from './snapshotAge';
+import { ageText, isStale } from './snapshotAge';
 
 const at = Date.parse('2026-11-04T12:00:00Z');
 
@@ -21,12 +21,5 @@ describe('age of the snapshot', () => {
   it('calls a snapshot stale once it is older than 3 minutes', () => {
     expect(isStale('2026-11-04T12:00:00Z', at + 180_000)).toBe(false);
     expect(isStale('2026-11-04T12:00:00Z', at + 181_000)).toBe(true);
-  });
-});
-
-describe('utc clock', () => {
-  it('shows the time of day in UTC, whatever the time zone of the browser', () => {
-    expect(utcClock('2026-11-04T14:32:10+03:00')).toBe('11:32 UTC');
-    expect(utcClock('2026-11-04T07:05:00Z')).toBe('07:05 UTC');
   });
 });

@@ -25,12 +25,15 @@ public class IdeaEngineTests
     private static readonly DateTimeOffset Six = DateTimeOffset.Parse("2024-03-01T06:00:00Z");
 
     private static readonly IdeaRuleSet Rules = new IdeaRuleSet(
-        new Dictionary<Interval, SetupThresholds> { [Interval.FifteenMinutes] = new SetupThresholds(6, 3m, 2m, 1.5m, 3m, 0.1m, 1.5m, 0.2m, 20, 4m, 1m, 3m, 0.3m, 70m, 30m) },
+        new Dictionary<Interval, SetupThresholds> { [Interval.FifteenMinutes] = new SetupThresholds(6, 3m, 2m, 1.5m, 3m, 0.1m, 1.5m, 0.2m, 20, 4m, 1m, 3m, 0.3m, 1.5m, 0.5m, 70m, 30m) },
         1.5m,
         ZoneRules.Default);
 
     // The price step of the pair: a cent on prices about 100.
     private static readonly IdeaInputs Ticked = new IdeaInputs(null, new Dictionary<Interval, VolatilityPercentiles>(), 0.01m);
+
+    // ATR / price 2 / 100 below the 10th percentile 5 % of the 15 minute candles: a squeeze.
+    private static readonly IdeaInputs Squeezed = new IdeaInputs(null, new Dictionary<Interval, VolatilityPercentiles> { [Interval.FifteenMinutes] = new VolatilityPercentiles(0.05m, null) }, 0.01m);
 
     [Test]
     public void Impulse_that_fires_makes_its_ideas_of_every_type_its_levels_allow()
@@ -73,6 +76,28 @@ public class IdeaEngineTests
 
         steps[0].Created.Where(idea => idea.Setup == IdeaSetup.Squeeze).Select(idea => (idea.Track.Plan.Type, idea.Track.Plan.Side, idea.Track.Plan.Entry))
             .ShouldBe([(IdeaType.StopEntry, IdeaSide.Long, 101.81m), (IdeaType.StopEntry, IdeaSide.Short, 98.99m)]);
+    }
+
+    // Scenario "Сжатие и накопление вместе": in the squeeze of the breakout set the candle from 04:00 closes 0.2 up with twice the volume of the
+    // one from 04:15 that falls back to 100; the pair has both setups, each with its own ideas.
+    [Test]
+    public void Squeeze_and_accumulation_hold_together_with_ideas_of_each()
+    {
+        IReadOnlyList<IdeaStep> steps = Run(Accumulated(), Wif, Six, Squeezed);
+
+        steps[0].Setups.ShouldBe([new PairSetup(Interval.FifteenMinutes, IdeaSetup.Squeeze), new PairSetup(Interval.FifteenMinutes, IdeaSetup.Accumulation)], ignoreOrder: true);
+        steps[0].Created.Count(idea => idea.Setup == IdeaSetup.Squeeze).ShouldBe(2);
+        steps[0].Created.Count(idea => idea.Setup == IdeaSetup.Accumulation).ShouldBe(1);
+    }
+
+    // Scenario "Накопление": only «Стоп-вход» long, a step above the range of the squeeze, 101.8; no idea short.
+    [Test]
+    public void Accumulation_gives_only_a_stop_entry_long_beyond_the_range_of_the_squeeze()
+    {
+        IReadOnlyList<IdeaStep> steps = Run(Accumulated(), Wif, Six, Squeezed);
+
+        steps[0].Created.Where(idea => idea.Setup == IdeaSetup.Accumulation).Select(idea => (idea.Track.Plan.Type, idea.Track.Plan.Side, idea.Track.Plan.Entry))
+            .ShouldBe([(IdeaType.StopEntry, IdeaSide.Long, 101.81m)]);
     }
 
     // Scenario "Два сетапа на одном движении": with an impulse of 1.2 ATR and 1 median the climb to 103.1 is an impulse and a breakout.
@@ -238,12 +263,12 @@ public class IdeaEngineTests
             .ShouldBe([IdeaSide.Long, IdeaSide.Short], ignoreOrder: true);
     }
 
-    // The engine keeps the minutes of the longest window of a setup: 6 candles of 15 minutes.
+    // The engine keeps the minutes of the longest window of a setup, 6 candles of 15 minutes, and at least the last minute and the day before it.
     [Test]
     public void Engine_keeps_the_minutes_of_the_longest_window_only()
     {
         var engine = new IdeaEngine(Rules, IdeasEngineVersion.Current);
-        IReadOnlyList<IdeaCandle> minutes = Impulse();
+        IReadOnlyList<IdeaCandle> minutes = DayBefore(1500);
         engine.Warm(Wif, Closed(minutes, Three), [.. minutes.Where(minute => minute.OpenTime < Three)], [], IdeaInputs.None);
 
         foreach (IdeaCandle minute in minutes.Where(minute => minute.OpenTime >= Three))
@@ -251,7 +276,7 @@ public class IdeaEngineTests
             engine.Step(Wif, minute, Ticked, true);
         }
 
-        engine.MinutesHeld(Wif).ShouldBe(90);
+        (engine.Window, engine.MinutesHeld(Wif)).ShouldBe((1441, 1441));
     }
 
     // The replay starts a pair at the first day of its history, before which it has no minutes at all.
@@ -320,6 +345,51 @@ public class IdeaEngineTests
         steps[0].Created.ShouldNotBeEmpty();
     }
 
+    // Scenario "Нет истории" and task 2.1: the impulse fires on a pair whose close a day before was 120, more than 5 % above. With 1 441 minutes
+    // up to the firing one the idea has «падение пары за сутки», with 1 440 the minute a day before is unknown.
+    [TestCase(1441, true)]
+    [TestCase(1440, false)]
+    public void Idea_has_a_day_drop_only_with_the_minute_a_day_before(int held, bool dayDrop)
+    {
+        Idea idea = Run(DayBefore(held), Wif, Three).SelectMany(step => step.Created).First();
+
+        (idea.PairChange is not null, idea.Features.DayDrop).ShouldBe((dayDrop, dayDrop));
+    }
+
+    // Decision 2: the change of BTC and the funding rate come with the inputs of the minute.
+    [Test]
+    public void Idea_has_the_drop_of_btc_and_the_funding_of_its_inputs()
+    {
+        Idea idea = Run(Impulse(), Wif, Three, Ticked with { BtcChange = -0.01m, Funding = 0.0005m }).SelectMany(step => step.Created).First();
+
+        (idea.BtcChange, idea.Funding, idea.Features).ShouldBe((-0.01m, 0.0005m, new IdeaFeatures(false, true, true)));
+    }
+
+    // Decision 2: one path of code, so a live idea has the level of the signal of the replay on the same minutes.
+    [Test]
+    public void Live_idea_has_the_features_of_the_signal_of_the_replay()
+    {
+        IReadOnlyList<IdeaCandle> minutes = DayBefore(1441);
+        IdeaInputs inputs = Ticked with { BtcChange = -0.02m, Funding = 0.0001m };
+        var replay = new IdeaEngine(Rules, IdeasEngineVersion.Current, true);
+        replay.Warm(Wif, Closed(minutes, Three), [.. minutes.Where(minute => minute.OpenTime < Three)], [], IdeaInputs.None);
+        IdeaSignal signal = minutes.Where(minute => minute.OpenTime >= Three).SelectMany(minute => replay.Step(Wif, minute, inputs, true).Signals).First();
+
+        Idea idea = Run(minutes, Wif, Three, inputs).SelectMany(step => step.Created).First();
+
+        (signal.PairChange, signal.BtcChange, signal.Funding).ShouldBe((idea.PairChange, idea.BtcChange, idea.Funding));
+        signal.FeaturesWith(null).ShouldBe(new IdeaFeatures(true, true, false));
+    }
+
+    // The impulse set after flat minutes at 120, so that the pair holds the given number of minutes up to the minute the impulse fires on.
+    private static IReadOnlyList<IdeaCandle> DayBefore(int held)
+    {
+        DateTimeOffset firing = Impulse().Where(minute => minute.OpenTime >= Three).Zip(Run(Impulse(), Wif, Three)).First(pair => pair.Second.Created.Count > 0).First.OpenTime;
+        int before = held - Impulse().Count(minute => minute.OpenTime <= firing);
+
+        return [.. Enumerable.Range(0, before).Select(index => new IdeaCandle(Start.AddMinutes(index - before), 120m, 120m, 120m, 120m, 1m)), .. Impulse()];
+    }
+
     // The impulse set with lows of 98.0 and 98.2 at the first minutes of 01:00 and 02:00.
     private static IReadOnlyList<IdeaCandle> Impulse()
     {
@@ -329,6 +399,20 @@ public class IdeaEngineTests
         [
             .. IdeaFixtures.Setup("impulse").Select(minute => minute.OpenTime == one ? minute with { Low = 98.0m }
                 : minute.OpenTime == one.AddHours(1) ? minute with { Low = 98.2m } : minute)
+        ];
+    }
+
+    // The breakout set with the candle from 04:00 at 200 of volume a minute and its last minute closing at 100.2: 3000 of volume on a rising
+    // candle against 1500 on the falling one from 04:15, the price back at 100.
+    private static IReadOnlyList<IdeaCandle> Accumulated()
+    {
+        var rise = DateTimeOffset.Parse("2024-03-01T04:00:00Z");
+
+        return
+        [
+            .. IdeaFixtures.Breakout().Select(minute => minute.OpenTime == rise.AddMinutes(14) ? minute with { Close = 100.2m, Volume = 200m }
+                : minute.OpenTime >= rise && minute.OpenTime < rise.AddMinutes(14) ? minute with { Volume = 200m }
+                : minute)
         ];
     }
 

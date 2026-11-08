@@ -253,7 +253,7 @@ test('two autos with money made by the form take an idea in the order of the lis
   await page.goto('/idea-trades');
   await expect(refusalRow(page, upper)).toContainText('Дневной стоп', { timeout: 30_000 });
   await expect(page.getByRole('status', { name: 'Дневной стоп' })).toContainText(
-    'Дневной стоп сработал — автоматы не входят до 00:00 UTC',
+    'Дневной стоп сработал — автоматы не входят до 00:00',
   );
   expect((await tradeOrders(request)).length).toBe(known + 1);
   expect(errors).toEqual([]);

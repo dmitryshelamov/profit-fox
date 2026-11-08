@@ -8,15 +8,22 @@ namespace ProfitFox.Application.IdeaTrades.Commands.SaveIdeaTradingSettings;
 
 public sealed class SaveIdeaTradingSettingsCommandHandler(IIdeaTradingSettingsRepository repository, IExchangeAccountRepository accounts) : IRequestHandler<SaveIdeaTradingSettingsCommand>
 {
-    /// <exception cref="ValidationFailedException">An unknown account, an amount, a largest amount or a total risk not above zero, fewer than one trade, a negative reward to the risk, a daily stop not above zero, fewer than one trade of a side, a budget of all the autos not above zero, or a leverage below one.</exception>
+    /// <exception cref="ValidationFailedException">An unknown account or one not of Bybit, an amount, a largest amount or a total risk not above zero, fewer than one trade, a negative reward to the risk, a daily stop not above zero, fewer than one trade of a side, a budget of all the autos not above zero, or a leverage below one.</exception>
     public async Task Handle(SaveIdeaTradingSettingsCommand request, CancellationToken cancellationToken)
     {
         IdeaTradingSettings settings = request.Settings;
         var errors = new Dictionary<string, string>();
 
-        if (settings.AccountId is { } account && await accounts.GetAsync(account, cancellationToken) is null)
+        if (settings.AccountId is { } account)
         {
-            errors["accountId"] = "There is no such exchange account.";
+            if (await accounts.GetAsync(account, cancellationToken) is not { } found)
+            {
+                errors["accountId"] = "There is no such exchange account.";
+            }
+            else if (!IdeaTradeAccounts.CanTrade(found))
+            {
+                errors["accountId"] = IdeaTradeAccounts.NotBybit;
+            }
         }
 
         if (settings.Amount <= 0m)

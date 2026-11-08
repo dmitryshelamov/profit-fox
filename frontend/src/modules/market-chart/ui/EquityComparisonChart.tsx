@@ -8,6 +8,7 @@ import {
 import { useEffect, useRef } from 'react';
 
 import { drawableEquity } from '../model/pricePoint';
+import { localTime } from './chartTime';
 import { token } from './tokens';
 
 export interface EquityLine {
@@ -17,7 +18,7 @@ export interface EquityLine {
   readonly points: readonly { openTime: string; equity: string }[];
 }
 
-/** The equity of several results on one UTC time scale, a colored line for each. */
+/** The equity of several results on one time scale in the local zone, a colored line for each. */
 export function EquityComparisonChart({
   lines,
   label,
@@ -44,7 +45,7 @@ export function EquityComparisonChart({
         vertLines: { color: token('--color-line', '#2c313b') },
         horzLines: { color: token('--color-line', '#2c313b') },
       },
-      timeScale: { timeVisible: true, secondsVisible: false },
+      ...localTime,
     });
     chart.current = api;
 

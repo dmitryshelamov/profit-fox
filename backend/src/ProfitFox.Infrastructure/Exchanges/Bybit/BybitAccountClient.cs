@@ -44,10 +44,11 @@ internal sealed class BybitAccountClient(HttpClient http, ILoggerFactory loggers
         // An account Bybit lists no unified wallet for holds nothing.
         if (balance is null)
         {
-            return new AccountBalance(0m, []);
+            return new AccountBalance("USD", 0m, []);
         }
 
         return new AccountBalance(
+            "USD",
             balance.TotalEquity ?? 0m,
             [
                 .. balance.Assets

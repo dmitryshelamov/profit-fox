@@ -21,6 +21,7 @@ public class CandleReadThroughTests
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2024-03-10T12:30:00Z");
 
     private ICandleRepository _candles = null!;
+    private ISeriesCoverageRepository _coverage = null!;
     private IMarketHistoryClient _history = null!;
     private CandleReadThrough _readThrough = null!;
     private List<Candle> _stored = null!;
@@ -35,7 +36,23 @@ public class CandleReadThroughTests
             .Returns(_ => _stored.Select(candle => candle.OpenTime).Order().ToList());
         _candles.GetAsync(Btc, Interval.OneHour, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(_ => (IReadOnlyList<Candle>)_stored.OrderBy(candle => candle.OpenTime).ToList());
-        _readThrough = new CandleReadThrough(_candles, _history, new FakeTimeProvider(Now));
+        _coverage = Substitute.For<ISeriesCoverageRepository>();
+        _readThrough = new CandleReadThrough(_candles, _coverage, _history, new FakeTimeProvider(Now));
+    }
+
+    // Scenario "Пропуск в истории Bybit": Bybit keeps no coverage, so a gap stays a gap and is asked for again.
+    [Test]
+    public async Task Gap_of_bybit_is_requested_again_and_no_coverage_is_kept()
+    {
+        _stored.AddRange(Hours("2024-03-10T02:00:00Z", "2024-03-10T04:00:00Z"));
+        _history.GetCandlesOnceAsync(Btc, Interval.OneHour, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns([]);
+
+        await ReadAsync("2024-03-10T02:00:00Z", "2024-03-10T05:00:00Z");
+        await ReadAsync("2024-03-10T02:00:00Z", "2024-03-10T05:00:00Z");
+
+        await _history.Received(2).GetCandlesOnceAsync(Btc, Interval.OneHour, DateTimeOffset.Parse("2024-03-10T03:00:00Z"), DateTimeOffset.Parse("2024-03-10T04:00:00Z"), Arg.Any<CancellationToken>());
+        _coverage.ReceivedCalls().ShouldBeEmpty();
+        await _candles.DidNotReceiveWithAnyArgs().UpsertAsync(default!, default, default!, default(SeriesCoverage)!, default);
     }
 
     [Test]
@@ -94,7 +111,7 @@ public class CandleReadThroughTests
         _history.GetCandlesOnceAsync(Btc, Interval.OneHour, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns(Hours("2024-03-10T11:00:00Z"));
         var time = new FakeTimeProvider(DateTimeOffset.Parse("2024-03-10T12:00:04Z"));
-        _readThrough = new CandleReadThrough(_candles, _history, time);
+        _readThrough = new CandleReadThrough(_candles, _coverage, _history, time);
 
         await ReadAsync("2024-03-10T11:00:00Z", "2024-03-10T12:00:00Z");
         await _candles.DidNotReceiveWithAnyArgs().UpsertAsync(default!, default, default!, default);

@@ -26,7 +26,8 @@ internal sealed class IdeaSignalRepository(NpgsqlDataSource dataSource) : IIdeaS
 {
     private const string Columns = """
                                    category, symbol, setup, type, "interval", side, fired_at, engine_version, entry, stop, target, move, volume_ratio, tick,
-                                   entry_after, stop_before_entry_after, stop_after, ladder_after, target_after, closes, tracked_until
+                                   entry_after, stop_before_entry_after, stop_after, ladder_after, target_after, closes, tracked_until, pair_change, btc_change,
+                                   funding
                                    """;
 
     public async Task UpsertAsync(IReadOnlyCollection<IdeaSignal> signals, CancellationToken cancellationToken)
@@ -69,6 +70,9 @@ internal sealed class IdeaSignalRepository(NpgsqlDataSource dataSource) : IIdeaS
                 await WriteAsync(importer, row.TargetAfter, NpgsqlDbType.Integer, cancellationToken);
                 await importer.WriteAsync(row.Closes, NpgsqlDbType.Array | NpgsqlDbType.Numeric, cancellationToken);
                 await importer.WriteAsync(row.TrackedUntil, NpgsqlDbType.TimestampTz, cancellationToken);
+                await WriteAsync(importer, row.PairChange, NpgsqlDbType.Numeric, cancellationToken);
+                await WriteAsync(importer, row.BtcChange, NpgsqlDbType.Numeric, cancellationToken);
+                await WriteAsync(importer, row.Funding, NpgsqlDbType.Numeric, cancellationToken);
             }
 
             await importer.CompleteAsync(cancellationToken);
@@ -112,6 +116,29 @@ internal sealed class IdeaSignalRepository(NpgsqlDataSource dataSource) : IIdeaS
         }
     }
 
+    // Decision 2 of add-burst-and-auto-limits: one grouping over the signals the statistics read, tens of seconds on prod, so past the default 30 s.
+    private static readonly int CountTimeoutSeconds = (int)TimeSpan.FromMinutes(10).TotalSeconds;
+
+    public async Task<IReadOnlyDictionary<(DateTimeOffset FiredAt, IdeaSide Side, Interval Interval), int>> CountPairsByMinuteAsync(
+        int engineVersion,
+        DateTimeOffset from,
+        CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        IEnumerable<PairCountDb> rows = await connection.QueryAsync<PairCountDb>(new CommandDefinition(
+            """
+            SELECT fired_at AS FiredAt, side AS Side, "interval" AS Interval, count(DISTINCT (category, symbol))::integer AS Pairs
+            FROM idea_cases
+            WHERE engine_version = @Version AND fired_at >= @From
+            GROUP BY fired_at, side, "interval"
+            """,
+            new { Version = engineVersion, From = from },
+            commandTimeout: CountTimeoutSeconds,
+            cancellationToken: cancellationToken));
+
+        return rows.ToDictionary(SignalDbConverter.MinuteOf, row => row.Pairs);
+    }
+
     public async Task<IReadOnlyList<IdeaSignal>> GetAsync(Instrument instrument, int engineVersion, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
@@ -144,7 +171,10 @@ internal sealed class IdeaSignalRepository(NpgsqlDataSource dataSource) : IIdeaS
             cancellationToken: cancellationToken));
     }
 
-    // One statement over every case of an old version outran the command timeout on prod (24 M cases), so an hour of them goes at a time.
+    // One statement over every case of an old version outran the command timeout on prod (24 M cases), so an hour of them goes at a time. Even
+    // an hour outran the default 30 s on prod after v29; the clean-up runs in a lane of its own, so a step may take minutes.
+    private static readonly int CleanUpTimeoutSeconds = (int)TimeSpan.FromMinutes(10).TotalSeconds;
+
     public async Task<int> DeleteOtherVersionsAsync(int engineVersion, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
@@ -156,6 +186,7 @@ internal sealed class IdeaSignalRepository(NpgsqlDataSource dataSource) : IIdeaS
             WHERE engine_version <> @Version AND fired_at >= first.at AND fired_at < first.at + interval '1 hour'
             """,
             new { Version = engineVersion },
+            commandTimeout: CleanUpTimeoutSeconds,
             cancellationToken: cancellationToken));
     }
 
@@ -190,7 +221,10 @@ internal sealed class IdeaSignalRepository(NpgsqlDataSource dataSource) : IIdeaS
             LadderAfter = reader.GetFieldValue<int?[]>(17),
             TargetAfter = reader.IsDBNull(18) ? null : reader.GetInt32(18),
             Closes = reader.GetFieldValue<decimal[]>(19),
-            TrackedUntil = reader.GetFieldValue<DateTimeOffset>(20)
+            TrackedUntil = reader.GetFieldValue<DateTimeOffset>(20),
+            PairChange = reader.IsDBNull(21) ? null : reader.GetDecimal(21),
+            BtcChange = reader.IsDBNull(22) ? null : reader.GetDecimal(22),
+            Funding = reader.IsDBNull(23) ? null : reader.GetDecimal(23)
         };
     }
 }

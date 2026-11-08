@@ -184,7 +184,7 @@ describe('market pair page', () => {
     renderApp('/market/linear/SOLUSDT');
 
     const legend = await screen.findByRole('group', { name: 'Свеча' });
-    await waitFor(() => expect(legend).toHaveTextContent('04.11 11:45'));
+    await waitFor(() => expect(legend).toHaveTextContent('04.11 14:45'));
     expect(legend).toHaveTextContent('O 100');
     expect(legend).toHaveTextContent('H 110');
     expect(legend).toHaveTextContent('L 95');

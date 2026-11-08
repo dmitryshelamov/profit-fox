@@ -5,6 +5,7 @@ import {
   durationText,
   excludedText,
   ideaComparisonText,
+  ideaLeftText,
   ideaOutcomeText,
   meanText,
   moneyText,
@@ -31,6 +32,7 @@ const totals = (overrides: Partial<Totals> = {}): Totals => ({
   targets: 1,
   stops: 1,
   manual: 1,
+  expired: 0,
   cancelled: 0,
   failed: 0,
   result: '0.9',
@@ -110,19 +112,55 @@ describe('outcome of the idea of a trade', () => {
   });
 });
 
+describe('time left of the idea of a trade', () => {
+  const now = Date.parse('2026-11-08T12:00:00Z');
+  const outcome = { status: 'expired', statusAt: '2026-11-08T11:00:00Z', result: '0.4' } as const;
+
+  // Scenario "Идея ещё жива".
+  it('counts down to the end of an active idea, a minute less a minute later', () => {
+    const trade = { ideaEndsAt: '2026-11-08T13:40:00Z', ideaOutcome: null };
+
+    expect(ideaLeftText(trade, now)).toBe('1 ч 40 мин');
+    expect(ideaLeftText(trade, now + 60_000)).toBe('1 ч 39 мин');
+  });
+
+  // Scenario "Срок идеи вышел, а сканер её ещё не закрыл".
+  it('says less than a minute once the end has passed and the idea has no outcome yet', () => {
+    expect(ideaLeftText({ ideaEndsAt: '2026-11-08T11:58:00Z', ideaOutcome: null }, now)).toBe(
+      '< 1 мин',
+    );
+  });
+
+  // Scenario "Идея закрылась раньше сделки".
+  it('says closed when the trade has the outcome of its idea', () => {
+    expect(ideaLeftText({ ideaEndsAt: null, ideaOutcome: outcome }, now)).toBe('закрыта');
+  });
+
+  // Scenario "Идея ждёт входа".
+  it('shows a dash with neither an end nor an outcome of the idea', () => {
+    expect(ideaLeftText({ ideaEndsAt: null, ideaOutcome: null }, now)).toBe('—');
+  });
+});
+
 describe('totals of the journal', () => {
   // Scenario "Итоги".
-  it('shows the counts of the outcomes with their shares', () => {
-    expect(outcomeCountsText(totals())).toBe(
-      'по цели 1 (33 %) · по стопу 1 (33 %) · вручную 1 (33 %)',
+  it('shows the counts of the outcomes with their shares of the four', () => {
+    expect(outcomeCountsText(totals({ expired: 1 }))).toBe(
+      'по цели 1 (25 %) · по стопу 1 (25 %) · вручную 1 (25 %) · по сроку 1 (25 %)',
     );
     expect(outcomeCountsText(totals({ targets: 3, stops: 1, manual: 0 }))).toBe(
-      'по цели 3 (75 %) · по стопу 1 (25 %) · вручную 0 (0 %)',
+      'по цели 3 (75 %) · по стопу 1 (25 %) · вручную 0 (0 %) · по сроку 0 (0 %)',
     );
   });
 
   it('shows a dash when nothing is closed', () => {
     expect(outcomeCountsText(totals({ targets: 0, stops: 0, manual: 0 }))).toBe('—');
+  });
+
+  it('counts the trades closed at expiry alone', () => {
+    expect(outcomeCountsText(totals({ targets: 0, stops: 0, manual: 0, expired: 2 }))).toBe(
+      'по цели 0 (0 %) · по стопу 0 (0 %) · вручную 0 (0 %) · по сроку 2 (100 %)',
+    );
   });
 
   it('names the cancelled and the failed apart, and nothing when there are none', () => {
@@ -159,10 +197,13 @@ describe('totals of the journal', () => {
 });
 
 describe('count of the closed trades', () => {
-  it('counts the trades closed at the target, at the stop and manually, with the word that goes with the count', () => {
+  it('counts the trades closed at the target, at the stop, manually and at expiry, with the word that goes with the count', () => {
     expect(closedCountText(totals({ targets: 1, stops: 0, manual: 0 }))).toBe('1 сделка');
     expect(closedCountText(totals({ targets: 2, stops: 1, manual: 0 }))).toBe('3 сделки');
     expect(closedCountText(totals({ targets: 3, stops: 2, manual: 1 }))).toBe('6 сделок');
     expect(closedCountText(totals({ targets: 0, stops: 0, manual: 0 }))).toBe('0 сделок');
+    expect(closedCountText(totals({ targets: 1, stops: 0, manual: 0, expired: 1 }))).toBe(
+      '2 сделки',
+    );
   });
 });

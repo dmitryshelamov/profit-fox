@@ -2,14 +2,18 @@ using MediatR;
 
 using Microsoft.AspNetCore.Mvc;
 
+using ProfitFox.Application.Exceptions;
+using ProfitFox.Application.ExchangeAccounts;
 using ProfitFox.Application.ExchangeAccounts.Commands.CreateExchangeAccount;
 using ProfitFox.Application.ExchangeAccounts.Commands.DeleteExchangeAccount;
 using ProfitFox.Application.ExchangeAccounts.Commands.RenameExchangeAccount;
 using ProfitFox.Application.ExchangeAccounts.Queries.GetExchangeAccount;
 using ProfitFox.Application.ExchangeAccounts.Queries.GetExchangeAccountBalance;
 using ProfitFox.Application.ExchangeAccounts.Queries.GetExchangeAccounts;
+using ProfitFox.Application.ExchangeAccounts.Queries.ListBrokerAccounts;
 using ProfitFox.Application.Ports.ExchangeAccounts;
 using ProfitFox.Domain.Entities.ExchangeAccounts;
+using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Presentation.Contracts.ExchangeAccounts;
 using ProfitFox.Presentation.Contracts.Strategies;
 
@@ -39,8 +43,9 @@ public sealed class ExchangeAccountsController(ISender sender) : ControllerBase
     }
 
     /// <summary>
-    ///     Asks Bybit about the key before saving: a key it does not accept, that cannot trade or can withdraw is a 400 on <c>apiKey</c>;
-    ///     another refusal of Bybit is a 502 with its reason, no answer a 503.
+    ///     Asks the exchange before saving: Bybit about the key (a key it does not accept, that cannot trade or can withdraw is a 400 on
+    ///     <c>apiKey</c>), T-Invest about the accounts of the token (a token it does not accept is a 400 on <c>token</c>, an account that
+    ///     cannot be added a 400 on <c>accountId</c>); another refusal of the exchange is a 502 with its reason, no answer a 503.
     /// </summary>
     [HttpPost]
     [ProducesResponseType<CreatedResponse>(StatusCodes.Status201Created)]
@@ -51,9 +56,34 @@ public sealed class ExchangeAccountsController(ISender sender) : ControllerBase
     {
         try
         {
-            Guid id = await sender.Send(new CreateExchangeAccountCommand(body.Name, body.ApiKey, body.ApiSecret), cancellationToken);
+            if (!ExchangeCodes.TryParse(body.Exchange, out Exchange exchange))
+            {
+                throw new ValidationFailedException(new Dictionary<string, string> { ["exchange"] = "Exchange must be bybit or tinvest." });
+            }
+
+            Guid id = await sender.Send(new CreateExchangeAccountCommand(body.Name, exchange, body.ApiKey, body.ApiSecret, body.Token, body.AccountId), cancellationToken);
 
             return CreatedAtAction(nameof(Get), new { id }, new CreatedResponse(id));
+        }
+        catch (Exception exception) when (ExchangeAccountProblems.Of(exception) is { } problem)
+        {
+            return problem;
+        }
+    }
+
+    /// <summary>The accounts a T-Invest token opens, each with whether it can be added; a token T-Invest does not accept is a 400 on <c>token</c>.</summary>
+    [HttpPost("tinvest/accounts")]
+    [ProducesResponseType<IReadOnlyList<BrokerAccountResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status502BadGateway)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> BrokerAccounts(BrokerTokenBody body, CancellationToken cancellationToken)
+    {
+        try
+        {
+            IReadOnlyList<BrokerAccountOption> accounts = await sender.Send(new ListBrokerAccountsQuery(body.Token), cancellationToken);
+
+            return Ok(accounts.Select(BrokerAccountResponse.Of));
         }
         catch (Exception exception) when (ExchangeAccountProblems.Of(exception) is { } problem)
         {
@@ -98,7 +128,7 @@ public sealed class ExchangeAccountsController(ISender sender) : ControllerBase
         }
     }
 
-    /// <summary>Read from Bybit on each call and never stored; a key Bybit no longer accepts is a 409.</summary>
+    /// <summary>Read from the exchange on each call and never stored, in <c>currency</c>; a key or a token the exchange no longer accepts is a 409.</summary>
     [HttpGet("{id:guid}/balance")]
     [ProducesResponseType<AccountBalanceResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

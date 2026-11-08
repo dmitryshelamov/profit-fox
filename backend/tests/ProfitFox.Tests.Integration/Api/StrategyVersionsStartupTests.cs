@@ -18,7 +18,7 @@ public class StrategyVersionsStartupTests
     [Test]
     public async Task Start_gives_version_one_to_a_strategy_without_versions_and_a_second_start_changes_nothing()
     {
-        string connectionString = await IntegrationEnvironment.CreateDatabaseAsync();
+        string connectionString = IntegrationEnvironment.ConnectionString;
         await using (var migrated = new ProfitFoxFactory(connectionString))
         {
             migrated.CreateClient().Dispose();

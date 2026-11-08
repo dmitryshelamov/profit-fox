@@ -4,6 +4,7 @@ using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.Entities.IdeaTrades.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Exceptions;
+using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Tests.Shared.Generators.Domain.Entity.Ideas;
@@ -34,6 +35,15 @@ public class IdeaTradeTests
     }
 
     // Scenario "Вход на ▲": the promise of the idea at the entry stays on the trade as it was given.
+    // Decision 9 of add-market-idea-features: a trade copies the features of its idea when it is made.
+    [Test]
+    public void New_trade_copies_the_features_of_its_idea()
+    {
+        Idea idea = IdeaGenerator.Generate(Fired) with { PairChange = -0.08m, Funding = 0.0001m, BurstPairs = 30 };
+
+        IdeaTrade.Create(Guid.NewGuid(), idea, Account, 106m, Size(), Now).Features.ShouldBe(new IdeaFeatures(true, false, false, true));
+    }
+
     [Test]
     public void New_trade_carries_the_promise_it_is_given()
     {
@@ -196,6 +206,17 @@ public class IdeaTradeTests
     public void Market_close_of_the_owner_closes_the_trade_manually()
     {
         Entered().ExitGrown(IdeaTradeLeg.Manual, new LegTotals(0.47m, 11.0000m, 0.0060m), Now.AddMinutes(5)).Status.ShouldBe(IdeaTradeStatus.ClosedManually);
+    }
+
+    // Requirement "Закрытие учебной сделки по сроку идеи": the expiry leg sold 0.47 at 23.83 with the fee 0.0062.
+    [Test]
+    public void Exit_by_the_expiry_leg_closes_the_trade_at_expiry_with_the_result()
+    {
+        IdeaTrade trade = Entered().ExitGrown(IdeaTradeLeg.Expiry, new LegTotals(0.47m, 11.2001m, 0.0062m), Now.AddMinutes(5));
+
+        (trade.Status, trade.StatusAt, trade.Expiry, trade.HeldQuantity).ShouldBe((IdeaTradeStatus.ClosedAtExpiry, Now.AddMinutes(5), new LegTotals(0.47m, 11.2001m, 0.0062m), 0m));
+        trade.Result.ShouldBe(11.2001m - 11.0356m - 0.0061m - 0.0062m);
+        trade.Fees.ShouldBe(0.0061m + 0.0062m);
     }
 
     [Test]

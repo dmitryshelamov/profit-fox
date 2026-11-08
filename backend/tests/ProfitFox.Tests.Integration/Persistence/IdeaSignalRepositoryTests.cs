@@ -25,7 +25,7 @@ public class IdeaSignalRepositoryTests
     [SetUp]
     public async Task SetUp()
     {
-        _dataSource = await MarketDataDatabase.CreateAsync();
+        _dataSource = MarketDataDatabase.Open();
         _signals = new IdeaSignalRepository(_dataSource);
     }
 
@@ -49,6 +49,60 @@ public class IdeaSignalRepositoryTests
 
         (await _signals.GetAsync(IdeaGenerator.Wif, IdeasEngineVersion.Current, CancellationToken.None)).Select(IdeaSignalGenerator.Shape)
             .ShouldBe([.. new[] { levels, waiting, target }.Select(IdeaSignalGenerator.Shape)]);
+    }
+
+    // Task 4.2 of add-market-idea-features: a signal is read with the numbers of the market it fired with and so with their level; one without
+    // them reads without features.
+    [Test]
+    public async Task Signals_are_read_back_with_their_numbers_of_the_market()
+    {
+        IdeaSignal marked = IdeaSignalGenerator.Generate(Now) with { PairChange = -0.0712345m, BtcChange = -0.0123m, Funding = 0.0006m };
+        IdeaSignal plain = IdeaSignalGenerator.Generate(Now.AddMinutes(5));
+
+        await _signals.UpsertAsync([marked, plain], CancellationToken.None);
+
+        IReadOnlyList<IdeaSignal> read = await _signals.GetAsync(IdeaGenerator.Wif, IdeasEngineVersion.Current, CancellationToken.None);
+        read.Select(signal => (signal.PairChange, signal.BtcChange, signal.Funding, signal.FeaturesWith(null))).ShouldBe(
+        [
+            (-0.0712345m, -0.0123m, 0.0006m, new IdeaFeatures(true, true, true)),
+            (null, null, null, default)
+        ]);
+        (await _signals.StreamAsync(IdeasEngineVersion.Current, Now.AddMinutes(-1), null, CancellationToken.None).ToArrayAsync()).Select(IdeaSignalGenerator.Shape)
+            .ShouldBe([.. new[] { marked, plain }.Select(IdeaSignalGenerator.Shape)]);
+    }
+
+    // Task 2.2 of add-burst-and-auto-limits: the distinct pairs of a side on an interval by minute. Three types of WIF and WIF spot and ETH in
+    // one minute count three pairs of longs on 15 min; a short, another interval, another minute, another version and a signal before the
+    // start are counted apart or not at all.
+    [Test]
+    public async Task Pairs_are_counted_by_the_minute_the_side_and_the_interval()
+    {
+        var spot = new Instrument(MarketCategory.Spot, "WIFUSDT");
+        var eth = new Instrument(MarketCategory.Linear, "ETHUSDT");
+        IdeaSignal shortOne = IdeaSignalGenerator.Generate(Now, instrument: eth, type: IdeaType.BeyondExtreme);
+        await _signals.UpsertAsync(
+        [
+            IdeaSignalGenerator.Generate(Now),
+            IdeaSignalGenerator.Generate(Now, type: IdeaType.BeyondExtreme),
+            IdeaSignalGenerator.Generate(Now, type: IdeaType.Pullback),
+            IdeaSignalGenerator.Generate(Now, instrument: spot),
+            IdeaSignalGenerator.Generate(Now, instrument: eth),
+            shortOne with { Path = shortOne.Path with { Side = IdeaSide.Short } },
+            IdeaSignalGenerator.Generate(Now, instrument: eth, interval: Interval.OneHour),
+            IdeaSignalGenerator.Generate(Now.AddMinutes(1), instrument: eth),
+            IdeaSignalGenerator.Generate(Now, instrument: new Instrument(MarketCategory.Linear, "SOLUSDT"), engineVersion: IdeasEngineVersion.Current - 1),
+            IdeaSignalGenerator.Generate(Now.AddMinutes(-1), instrument: new Instrument(MarketCategory.Linear, "SOLUSDT"))
+        ], CancellationToken.None);
+
+        IReadOnlyDictionary<(DateTimeOffset FiredAt, IdeaSide Side, Interval Interval), int> pairs = await _signals.CountPairsByMinuteAsync(IdeasEngineVersion.Current, Now, CancellationToken.None);
+
+        pairs.ShouldBe(new Dictionary<(DateTimeOffset FiredAt, IdeaSide Side, Interval Interval), int>
+        {
+            [(Now, IdeaSide.Long, Interval.FifteenMinutes)] = 3,
+            [(Now, IdeaSide.Short, Interval.FifteenMinutes)] = 1,
+            [(Now, IdeaSide.Long, Interval.OneHour)] = 1,
+            [(Now.AddMinutes(1), IdeaSide.Long, Interval.FifteenMinutes)] = 1
+        }, ignoreOrder: true);
     }
 
     // Decision 4: a path written as far as it went is written again as it goes on, under its key.
@@ -164,7 +218,7 @@ public class IdeaSignalRepositoryTests
         var replay = new IdeaReplayRepository(_dataSource);
         var sol = new Instrument(MarketCategory.Spot, "SOLUSDT");
         IdeaSignal generated = IdeaSignalGenerator.Generate(Now, engineVersion: 1);
-        IdeaSignal open = generated with { Path = generated.Path with { Tick = 0.0001m, TrackedUntil = Now.AddHours(1) } };
+        IdeaSignal open = generated with { Path = generated.Path with { Tick = 0.0001m, TrackedUntil = Now.AddHours(1) }, PairChange = -0.06m, Funding = 0.0005m };
         await replay.SetAsync(IdeaGenerator.Wif, 1, new IdeaReplayCursor(Now, [open]), CancellationToken.None);
         await replay.SetAsync(IdeaGenerator.Wif, 1, new IdeaReplayCursor(Now.AddDays(1), [open]), CancellationToken.None);
         await replay.SetAsync(sol, 2, new IdeaReplayCursor(Now, []), CancellationToken.None);

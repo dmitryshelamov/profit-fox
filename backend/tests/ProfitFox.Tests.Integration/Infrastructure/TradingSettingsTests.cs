@@ -10,7 +10,7 @@ using WorkerProgram = ProfitFox.Worker.Program;
 
 namespace ProfitFox.Tests.Integration.Infrastructure;
 
-/// <summary>Only a Worker that trades decrypts keys, so only it needs the master key.</summary>
+/// <summary>Every Worker decrypts secrets, a trading one the keys of the bots and any one the token of T-Invest for an import, so every one needs the master key.</summary>
 public class TradingSettingsTests
 {
     // Scenario "Торговля без мастер-ключа".
@@ -24,11 +24,22 @@ public class TradingSettingsTests
         exception.ToString().ShouldContain("ExchangeAccounts__MasterKey");
     }
 
-    // Scenario "Worker только для бэктестов".
+    // After the review: an import of moex decrypts the token of the T-Invest account, so a Worker without trading needs the key as well.
     [Test]
-    public async Task Worker_without_trading_starts_without_a_master_key()
+    public async Task Worker_without_trading_does_not_start_without_a_master_key_either()
     {
         using IHost host = await ProductionWorkerAsync(trading: false);
+
+        Exception exception = await Should.ThrowAsync<Exception>(() => host.StartAsync());
+
+        exception.ToString().ShouldContain("ExchangeAccounts__MasterKey");
+    }
+
+    // Scenario "Worker только для бэктестов".
+    [Test]
+    public async Task Worker_without_trading_starts_with_a_master_key()
+    {
+        using IHost host = await ProductionWorkerAsync(trading: false, MasterKey());
 
         await host.StartAsync();
         await host.StopAsync();
@@ -39,7 +50,7 @@ public class TradingSettingsTests
     [TestCase(true, true)]
     public async Task Entries_of_the_autos_are_made_by_a_trading_worker_only(bool trading, bool lane)
     {
-        using IHost host = await ProductionWorkerAsync(trading, trading ? new Dictionary<string, string?> { ["ExchangeAccounts:MasterKey"] = Convert.ToBase64String(new byte[32]) } : null);
+        using IHost host = await ProductionWorkerAsync(trading, MasterKey());
 
         host.Services.GetServices<IHostedService>().Any(service => service.GetType().Name == "IdeaAutoEntryBackgroundService").ShouldBe(lane);
     }
@@ -98,10 +109,15 @@ public class TradingSettingsTests
         using IHost host = await WorkerAsync(
             "Production",
             trading: false,
-            new Dictionary<string, string?> { ["Trading:LeaseDuration"] = "00:01:00", ["Trading:LeaseRenewal"] = "00:01:00" });
+            new Dictionary<string, string?>(MasterKey()) { ["Trading:LeaseDuration"] = "00:01:00", ["Trading:LeaseRenewal"] = "00:01:00" });
 
         await host.StartAsync();
         await host.StopAsync();
+    }
+
+    private static Dictionary<string, string?> MasterKey()
+    {
+        return new Dictionary<string, string?> { ["ExchangeAccounts:MasterKey"] = Convert.ToBase64String(new byte[32]) };
     }
 
     private static Task<IHost> ProductionWorkerAsync(bool trading, IReadOnlyDictionary<string, string?>? settings = null)
@@ -111,7 +127,7 @@ public class TradingSettingsTests
 
     private static async Task<IHost> WorkerAsync(string environment, bool trading, IReadOnlyDictionary<string, string?>? settings = null)
     {
-        await using Npgsql.NpgsqlDataSource database = await MarketDataDatabase.CreateAsync();
+        await using Npgsql.NpgsqlDataSource database = MarketDataDatabase.Open();
         HostApplicationBuilder builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
         {
             EnvironmentName = environment,

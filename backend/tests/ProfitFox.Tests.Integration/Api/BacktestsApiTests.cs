@@ -24,7 +24,7 @@ public class BacktestsApiTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = await ProfitFoxFactory.CreateAsync();
+        _factory = ProfitFoxFactory.Create();
         _factory.Bybit.Rules[("linear", "BTCUSDT")] = ("0.10", "0.001", "0.001", "5");
         _client = _factory.CreateClient();
         _scenario = new BacktestScenario(_factory, _client);

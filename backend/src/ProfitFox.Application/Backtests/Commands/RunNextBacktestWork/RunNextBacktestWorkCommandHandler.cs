@@ -21,6 +21,7 @@ public sealed class RunNextBacktestWorkCommandHandler(
     IStrategyLibraryRepository library,
     ICandleRepository candles,
     ICandleImportJobRepository jobs,
+    ISeriesCoverageRepository coverage,
     BacktestInputCache inputs,
     BacktestSettings backtestSettings,
     WorkerSettings settings,
@@ -79,7 +80,9 @@ public sealed class RunNextBacktestWorkCommandHandler(
     /// <summary>
     ///     One step of a backtest before it runs. Missing candles are loaded by an import job, which a Worker runs like any other; the
     ///     backtest counts the stored candles while it waits. Candles still missing after a successful import are not on the exchange: the
-    ///     backtest runs on what is stored and reports the gaps.
+    ///     backtest runs on what is stored and reports the gaps. On a market with sessions the part inside the coverage of the series is not
+    ///     missing (decision 4): the nights are no gaps, and the candles expected are the stored ones and the slots of the part outside the
+    ///     coverage, so a covered series is loaded whole.
     /// </summary>
     /// <returns>
     ///     The backtest running, or <c>null</c> while it still loads or once it failed. A write that finds the backtest moved on writes
@@ -95,9 +98,16 @@ public sealed class RunNextBacktestWorkCommandHandler(
 
         // The job is read before the candles: the candles of a job that has just succeeded are all counted.
         CandleImportJob? job = backtest.ImportJobId is { } jobId ? await jobs.GetAsync(jobId, cancellationToken) : null;
-        long expected = backtest.Interval.CandleCount(backtest.From, backtest.To);
         IReadOnlyList<DateTimeOffset> stored = await candles.GetOpenTimesAsync(backtest.Instrument, backtest.Interval, backtest.From, backtest.To, cancellationToken);
         IReadOnlyList<(DateTimeOffset From, DateTimeOffset To)> missing = backtest.Interval.MissingRanges(stored, backtest.From, backtest.To);
+
+        if (!backtest.Instrument.Category.TradesAroundTheClock() && missing.Count > 0
+                                                                  && await coverage.GetAsync(backtest.Instrument, backtest.Interval, cancellationToken) is { } covered)
+        {
+            missing = covered.Uncovered(missing);
+        }
+
+        long expected = stored.Count + missing.Sum(gap => backtest.Interval.CandleCount(gap.From, gap.To));
         backtest = backtest.Loaded(stored.Count, expected);
 
         if (job is null && missing.Count > 0)

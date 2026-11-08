@@ -21,7 +21,7 @@ public class EndToEndTests
     public async Task Imported_closed_candles_are_read_back_exactly()
     {
         // The app's clock is 2024-03-10T12:30:00Z, so the 12:00 candle Bybit returns is still open.
-        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync();
+        await using var factory = ProfitFoxFactory.Create();
         factory.Bybit.Instruments.Add(("linear", "BTCUSDT"));
         factory.Bybit.Klines.AddRange(
         [
@@ -61,7 +61,7 @@ public class EndToEndTests
     [Test]
     public async Task Import_of_a_loaded_period_asks_bybit_for_nothing_and_keeps_the_candles()
     {
-        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync();
+        await using var factory = ProfitFoxFactory.Create();
         factory.Bybit.Instruments.Add(("linear", "BTCUSDT"));
         factory.Bybit.Klines.AddRange(Hours("2024-03-10T09:00:00Z", "2024-03-10T10:00:00Z", "2024-03-10T11:00:00Z"));
         using HttpClient client = factory.CreateClient();
@@ -83,7 +83,7 @@ public class EndToEndTests
     [Test]
     public async Task Import_of_a_partly_loaded_period_asks_bybit_only_for_the_missing_ranges()
     {
-        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync();
+        await using var factory = ProfitFoxFactory.Create();
         factory.Bybit.Instruments.Add(("linear", "BTCUSDT"));
         factory.Bybit.Klines.AddRange(Hours("2024-03-10T09:00:00Z", "2024-03-10T10:00:00Z", "2024-03-10T11:00:00Z"));
         using HttpClient client = factory.CreateClient();
@@ -106,7 +106,7 @@ public class EndToEndTests
     [Test]
     public async Task Retried_job_loads_only_the_candles_still_missing()
     {
-        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync();
+        await using var factory = ProfitFoxFactory.Create();
         factory.Bybit.Klines.AddRange(Hours("2024-03-10T09:00:00Z", "2024-03-10T10:00:00Z", "2024-03-10T11:00:00Z"));
         using HttpClient client = factory.CreateClient();
         var btcLinear = new Instrument(MarketCategory.Linear, "BTCUSDT");

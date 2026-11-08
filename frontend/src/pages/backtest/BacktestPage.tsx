@@ -12,14 +12,19 @@ import {
 import { botQuery } from '@/modules/bots';
 import { intervalLabel } from '@/modules/market-data';
 import { strategiesQuery } from '@/modules/strategies';
-import { combinationsWord, formatMoment, formatUtc, groupDigits } from '@/shared/format/format';
+import {
+  combinationsWord,
+  formatFullMoment,
+  formatMoment,
+  groupDigits,
+} from '@/shared/format/format';
 import { Button } from '@/shared/ui/Button';
 import { Dialog } from '@/shared/ui/Dialog';
 
 import { ProgressPanel } from './ProgressPanel';
 import { ResultsTable } from './ResultsTable';
 
-const day = (iso: string) => formatUtc(iso).slice(0, 10);
+const day = (iso: string) => formatFullMoment(iso).slice(0, 10);
 
 export function BacktestPage({ backtestId }: { backtestId: string }) {
   const queryClient = useQueryClient();
@@ -73,7 +78,7 @@ export function BacktestPage({ backtestId }: { backtestId: string }) {
           </div>
           <p className="text-sm text-muted">
             {strategyName} v{String(data.strategyVersion)} · {data.category} · {data.symbol} ·{' '}
-            {intervalLabel(data.interval)} · {day(data.from)} – {day(data.to)} UTC ·{' '}
+            {intervalLabel(data.interval)} · {day(data.from)} – {day(data.to)} ·{' '}
             {groupDigits(String(combinations))} {combinationsWord(combinations)} · движок v
             {String(data.engineVersion)}
           </p>
@@ -111,14 +116,16 @@ export function BacktestPage({ backtestId }: { backtestId: string }) {
       )}
       {lateStart && (
         <p className="text-sm text-muted">
-          Первая свеча — {formatUtc(data.actualStart!)} UTC, позже начала периода (
-          {formatUtc(data.from)}).
+          Первая свеча — {formatFullMoment(data.actualStart!)}, позже начала периода (
+          {formatFullMoment(data.from)}).
         </p>
       )}
       {data.gaps.length > 0 && (
         <p className="text-sm text-muted">
           Пропуски в свечах:{' '}
-          {data.gaps.map((gap) => `${formatUtc(gap.from)} – ${formatUtc(gap.to)}`).join('; ')}
+          {data.gaps
+            .map((gap) => `${formatFullMoment(gap.from)} – ${formatFullMoment(gap.to)}`)
+            .join('; ')}
         </p>
       )}
       <ResultsTable

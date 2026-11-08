@@ -18,7 +18,9 @@ using NSubstitute;
 using ProfitFox.Application.Ports.ExchangeAccounts;
 using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
+using ProfitFox.Infrastructure.Exchanges.TInvest;
 using ProfitFox.Presentation;
+using ProfitFox.Tests.Shared.TInvest;
 
 using Serilog.Core;
 
@@ -30,6 +32,9 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
 
     public FakeBybitHandler Bybit { get; } = new FakeBybitHandler();
 
+    /// <summary>Answers the app's gRPC calls to T-Invest; no test reaches the real T-Invest.</summary>
+    public MockTInvestApi TInvest { get; } = new MockTInvestApi();
+
     /// <summary>Answers the app's calls to Bybit with the key of an account; no test reaches the private Bybit API.</summary>
     public IExchangeKeyInspector KeyInspector { get; } = Substitute.For<IExchangeKeyInspector>();
 
@@ -38,6 +43,9 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
 
     /// <summary>Answers what the API sends to the exchange: the leverage of a symbol before an entry, which it takes unless a test says otherwise. The API places no order.</summary>
     public IOrderGateway Orders { get; } = Accepting();
+
+    /// <summary>Answers the app's calls to T-Invest with a token: the accounts it opens and their portfolios; no test reaches T-Invest.</summary>
+    public IBrokerAccountReader BrokerAccounts { get; } = Substitute.For<IBrokerAccountReader>();
 
     /// <summary>
     ///     Whether <see cref="KeyInspector" /> answers the calls with an account key. Without it the app's own Bybit client sends them
@@ -88,9 +96,13 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
     /// <summary>Receives every event the app's logger writes.</summary>
     public ILogEventSink? LogSink { get; init; }
 
-    public static async Task<ProfitFoxFactory> CreateAsync(int workers = 1)
+    /// <summary>Settings of the API over its own, such as <c>TInvest:Trading</c>.</summary>
+    public IReadOnlyDictionary<string, string?> ApiSettings { get; init; } = new Dictionary<string, string?>();
+
+    /// <summary>A factory on the test database, which is emptied before every test.</summary>
+    public static ProfitFoxFactory Create(int workers = 1)
     {
-        return new ProfitFoxFactory(await IntegrationEnvironment.CreateDatabaseAsync()) { Workers = workers };
+        return new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { Workers = workers };
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -120,6 +132,11 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
             builder.UseSetting("Serilog:MinimumLevel:Default", "Verbose");
         }
 
+        foreach ((string key, string? value) in ApiSettings)
+        {
+            builder.UseSetting(key, value);
+        }
+
         if (BybitRestAddress is not null)
         {
             builder.UseSetting("Bybit:RestAddress", BybitRestAddress);
@@ -135,6 +152,8 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
             services.AddSingleton<TimeProvider>(Time);
             services.AddSingleton(Ledger);
             services.AddSingleton(Orders);
+            services.AddSingleton(BrokerAccounts);
+            services.AddSingleton<ITInvestCallInvokers>(new MockTInvestInvokers(TInvest));
             if (FakeKeyInspector)
             {
                 services.AddSingleton(KeyInspector);
@@ -190,7 +209,7 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
             settings["Backtests:MaxParallelism"] = threads.ToString(CultureInfo.InvariantCulture);
         }
 
-        var worker = new WorkerHost(connectionString, Bybit, Time, settings, services, logSink);
+        var worker = new WorkerHost(connectionString, Bybit, Time, settings, services, logSink, TInvest);
         worker.StartAsync().GetAwaiter().GetResult();
 
         return worker;

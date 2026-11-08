@@ -9,6 +9,7 @@ using ProfitFox.Domain.Entities.IdeaAutos;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.Entities.IdeaTrades.Enums;
+using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.MarketData;
@@ -19,6 +20,7 @@ public sealed class GetIdeaJournalQueryHandler(
     IIdeaTradeRepository trades,
     IPaperIdeaTradeRepository paper,
     IIdeaAutoRepository autos,
+    IIdeaRepository ideas,
     IExchangeAccountRepository accounts,
     IMarketHistoryClient history,
     BacktestSettings backtests,
@@ -96,7 +98,14 @@ public sealed class GetIdeaJournalQueryHandler(
         ];
         IReadOnlyList<(IdeaTrade Trade, bool Paper)> opened = [.. matching.Where(item => item.Trade.IsOpen).OrderByDescending(item => item.Trade.CreatedAt).ThenBy(item => item.Trade.Id)];
         IReadOnlyDictionary<Instrument, decimal> prices = await PricesAsync(opened.Select(item => item.Trade), cancellationToken);
-        IReadOnlyList<IdeaJournalTrade> open = [.. opened.Select(item => Worth(item.Trade, AccountName(names, item.Trade.AccountId), prices, item.Paper, everyAuto))];
+        IReadOnlyDictionary<Guid, DateTimeOffset?> ideaEnds = await IdeaEndsAsync(opened.Select(item => item.Trade), cancellationToken);
+        IReadOnlyList<IdeaJournalTrade> open =
+        [
+            .. opened.Select(item => Worth(item.Trade, AccountName(names, item.Trade.AccountId), prices, item.Paper, everyAuto) with
+            {
+                IdeaEndsAt = ideaEnds.GetValueOrDefault(item.Trade.IdeaId)
+            })
+        ];
 
         return new GetIdeaJournalResult(
             new IdeaJournal(
@@ -123,16 +132,40 @@ public sealed class GetIdeaJournalQueryHandler(
         return new IdeaJournalTrade(trade, accountName, Origin: paper ? IdeaTradeOrigin.Paper : trade.AutoId is null ? IdeaTradeOrigin.Manual : IdeaTradeOrigin.Auto, AutoName: trade.AutoId is { } id ? everyAuto[id].Name : null);
     }
 
-    // One request for each symbol of a trade that holds something; an exchange that does not answer leaves the symbol without a price.
+    // The end of the lifetime of the idea of each trade in work, in one read of their ideas, while the idea is active: an idea that waits for its
+    // entry, closed or is no longer stored has none.
+    private async Task<IReadOnlyDictionary<Guid, DateTimeOffset?>> IdeaEndsAsync(IEnumerable<IdeaTrade> opened, CancellationToken cancellationToken)
+    {
+        Guid[] ids = [.. opened.Select(trade => trade.IdeaId)];
+
+        if (ids.Length == 0)
+        {
+            return new Dictionary<Guid, DateTimeOffset?>();
+        }
+
+        return (await ideas.GetManyAsync(ids, cancellationToken)).Where(idea => idea.Track.Status == IdeaStatus.Active).ToDictionary(idea => idea.Id, idea => idea.Track.LifeEndsAt);
+    }
+
+    // One request of all the tickers for each category of a trade that holds something, however many pairs are open: a request a pair took
+    // 23 s for 100 open paper trades. An exchange that does not answer leaves the pairs of the category without a price.
     private async Task<IReadOnlyDictionary<Instrument, decimal>> PricesAsync(IEnumerable<IdeaTrade> opened, CancellationToken cancellationToken)
     {
         var prices = new Dictionary<Instrument, decimal>();
 
-        foreach (Instrument instrument in opened.Where(trade => trade.Status == IdeaTradeStatus.Open).Select(trade => trade.Instrument).Distinct())
+        foreach (IGrouping<MarketCategory, Instrument> category in opened.Where(trade => trade.Status == IdeaTradeStatus.Open).Select(trade => trade.Instrument).Distinct()
+                     .GroupBy(instrument => instrument.Category))
         {
             try
             {
-                prices[instrument] = await history.GetLastPriceAsync(instrument, cancellationToken);
+                IReadOnlyDictionary<string, decimal> last = await history.GetLastPricesAsync(category.Key, cancellationToken);
+
+                foreach (Instrument instrument in category)
+                {
+                    if (last.TryGetValue(instrument.Symbol, out decimal price))
+                    {
+                        prices[instrument] = price;
+                    }
+                }
             }
             catch (ExchangeException)
             {

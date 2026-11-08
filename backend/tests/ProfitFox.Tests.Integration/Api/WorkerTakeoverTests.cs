@@ -36,7 +36,7 @@ public class WorkerTakeoverTests
     [Test]
     public async Task Job_of_a_stopped_worker_is_taken_over_after_its_lease_and_loads_only_the_missing_candles()
     {
-        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        await using var factory = ProfitFoxFactory.Create(workers: 0);
         factory.CreateClient().Dispose();
         await using var dataSource = NpgsqlDataSource.Create(factory.ConnectionString);
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
@@ -73,7 +73,7 @@ public class WorkerTakeoverTests
     [Test]
     public async Task Job_taken_over_for_the_third_time_without_progress_fails()
     {
-        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync();
+        await using var factory = ProfitFoxFactory.Create();
         factory.CreateClient().Dispose();
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ICandleImportJobRepository jobs = scope.ServiceProvider.GetRequiredService<ICandleImportJobRepository>();
@@ -90,7 +90,7 @@ public class WorkerTakeoverTests
     [Test]
     public async Task Backtest_of_a_worker_that_stopped_after_five_combinations_is_finished_by_another_with_the_same_results()
     {
-        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        await using var factory = ProfitFoxFactory.Create(workers: 0);
         using HttpClient client = factory.CreateClient();
         var scenario = new BacktestScenario(factory, client);
         await scenario.CreateBotAsync("ladder");
@@ -123,7 +123,7 @@ public class WorkerTakeoverTests
     [Test]
     public async Task Chunk_whose_lease_expired_for_the_third_time_without_a_result_fails_the_backtest()
     {
-        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        await using var factory = ProfitFoxFactory.Create(workers: 0);
         using HttpClient client = factory.CreateClient();
         var scenario = new BacktestScenario(factory, client);
         await scenario.CreateBotAsync("ladder");
@@ -152,7 +152,7 @@ public class WorkerTakeoverTests
     [Test]
     public async Task Backtest_whose_chunks_are_all_done_succeeds_on_the_next_poll()
     {
-        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        await using var factory = ProfitFoxFactory.Create(workers: 0);
         using HttpClient client = factory.CreateClient();
         var scenario = new BacktestScenario(factory, client);
         await scenario.CreateBotAsync("ladder");
@@ -178,7 +178,7 @@ public class WorkerTakeoverTests
     [Test]
     public async Task Two_workers_share_the_chunks_of_one_grid_and_give_the_results_of_one_worker()
     {
-        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        await using var factory = ProfitFoxFactory.Create(workers: 0);
         using HttpClient client = factory.CreateClient();
         var scenario = new BacktestScenario(factory, client);
         await scenario.CreateBotAsync("ladder");
@@ -210,7 +210,7 @@ public class WorkerTakeoverTests
     [Test]
     public async Task One_worker_finishes_the_older_backtest_before_it_starts_the_newer()
     {
-        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        await using var factory = ProfitFoxFactory.Create(workers: 0);
         using HttpClient client = factory.CreateClient();
         var scenario = new BacktestScenario(factory, client);
         await scenario.CreateBotAsync("ladder");
@@ -234,7 +234,7 @@ public class WorkerTakeoverTests
     [Test]
     public async Task Worker_that_finds_every_chunk_of_the_older_backtest_taken_starts_the_newer()
     {
-        await using ProfitFoxFactory factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        await using var factory = ProfitFoxFactory.Create(workers: 0);
         using HttpClient client = factory.CreateClient();
         var scenario = new BacktestScenario(factory, client);
         await scenario.CreateBotAsync("ladder");

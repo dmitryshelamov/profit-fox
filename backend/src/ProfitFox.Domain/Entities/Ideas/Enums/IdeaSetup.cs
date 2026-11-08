@@ -28,5 +28,11 @@ public enum IdeaSetup
     NewExtreme,
 
     /// <summary>«Объём без движения»: a candle of many medians of volume with a small body; both sides.</summary>
-    QuietVolume
+    QuietVolume,
+
+    /// <summary>
+    ///     «Накопление / распределение»: a squeeze whose closed candles that rose over the close before them have at least Kн times the volume of
+    ///     those that fell, the price not gone that way by more than Pн ATR; long when buying dominates, short when selling does.
+    /// </summary>
+    Accumulation
 }

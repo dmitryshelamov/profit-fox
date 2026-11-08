@@ -18,4 +18,10 @@ public class InstrumentTests
     {
         new Instrument(MarketCategory.Spot, "BTCUSDT").ShouldNotBe(new Instrument(MarketCategory.Linear, "BTCUSDT"));
     }
+
+    [Test]
+    public void Moex_ticker_is_upper_case()
+    {
+        new Instrument(MarketCategory.Moex, "sber").Symbol.ShouldBe("SBER");
+    }
 }

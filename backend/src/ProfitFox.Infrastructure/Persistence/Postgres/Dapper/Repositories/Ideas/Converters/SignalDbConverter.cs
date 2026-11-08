@@ -29,6 +29,9 @@ internal static class SignalDbConverter
             Target = path.Target,
             Move = signal.Move,
             VolumeRatio = signal.VolumeRatio,
+            PairChange = signal.PairChange,
+            BtcChange = signal.BtcChange,
+            Funding = signal.Funding,
             Tick = path.Tick,
             EntryAfter = path.EntryAfter,
             StopBeforeEntryAfter = path.StopBeforeEntryAfter,
@@ -38,6 +41,14 @@ internal static class SignalDbConverter
             Closes = [.. path.Closes],
             TrackedUntil = path.TrackedUntil
         };
+    }
+
+    internal static (DateTimeOffset FiredAt, IdeaSide Side, Interval Interval) MinuteOf(PairCountDb row)
+    {
+        IdeaCodes.TryParseSide(row.Side, out IdeaSide side);
+        MarketDataCodes.TryParseInterval(row.Interval, out Interval interval);
+
+        return (row.FiredAt, side, interval);
     }
 
     internal static IdeaSignal ToDomain(SignalDb row)
@@ -64,6 +75,6 @@ internal static class SignalDbConverter
             row.Closes,
             row.TrackedUntil);
 
-        return new IdeaSignal(new Instrument(category, row.Symbol), setup, path, row.Move, row.VolumeRatio, row.EngineVersion);
+        return new IdeaSignal(new Instrument(category, row.Symbol), setup, path, row.Move, row.VolumeRatio, row.EngineVersion, row.PairChange, row.BtcChange, row.Funding);
     }
 }

@@ -1,7 +1,9 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Scanner;
+using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Infrastructure.Exchanges.Retry;
 
@@ -25,7 +27,7 @@ internal sealed class ScannerRestGate : IDisposable
     private long _limitPause;
     private Task? _restored;
 
-    public ScannerRestGate(IOptionsMonitor<ScannerSettings> monitor, ExchangeResilienceExecutor resilience, IScannerStateRepository state, TimeProvider time)
+    public ScannerRestGate(IOptionsMonitor<ScannerSettings> monitor, [FromKeyedServices(Exchange.Bybit)] ExchangeResilienceExecutor resilience, IScannerStateRepository state, TimeProvider time)
     {
         ScannerSettings settings = monitor.CurrentValue;
         _settings = settings;

@@ -183,6 +183,7 @@ public sealed class BacktestScenario(ProfitFoxFactory factory, HttpClient client
             scope.ServiceProvider.GetRequiredService<IStrategyLibraryRepository>(),
             scope.ServiceProvider.GetRequiredService<ICandleRepository>(),
             scope.ServiceProvider.GetRequiredService<ICandleImportJobRepository>(),
+            scope.ServiceProvider.GetRequiredService<ISeriesCoverageRepository>(),
             new BacktestInputCache(),
             new BacktestSettings { MaxParallelism = 1 },
             settings ?? new WorkerSettings(),

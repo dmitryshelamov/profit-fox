@@ -1,4 +1,10 @@
+using Grpc.Core;
+
+using ProfitFox.Infrastructure.Exchanges.TInvest;
+
 using Shouldly;
+
+using Tinkoff.InvestApi.V1;
 
 namespace ProfitFox.Tests.Integration.Infrastructure;
 
@@ -10,5 +16,21 @@ public class OutboundHttpGuardTests
     {
         HttpClient.DefaultProxy.GetProxy(new Uri("https://api.bybit.com/v5/market/kline"))
             .ShouldBe(new Uri("http://127.0.0.1:9/"));
+        HttpClient.DefaultProxy.GetProxy(new Uri($"https://{TInvestSettings.OfficialHost}:443"))
+            .ShouldBe(new Uri("http://127.0.0.1:9/"));
+    }
+
+    // The gRPC channel of T-Invest runs on the same HTTP stack: a call that slipped past the mock dies at the dead proxy, not at T-Invest.
+    [Test]
+    public async Task Grpc_call_to_tinvest_dies_at_the_dead_proxy()
+    {
+        using var channel = new TInvestChannel(new TInvestSettings(), TInvestCertificates.None);
+        var client = new UsersService.UsersServiceClient(channel.Invoker);
+
+        RpcException exception = await Should.ThrowAsync<RpcException>(async () =>
+            await client.GetAccountsAsync(new GetAccountsRequest(), deadline: DateTime.UtcNow.AddSeconds(10)));
+
+        // The dead proxy refuses the connection: Unavailable on one HTTP stack, Internal on another; never an answer, never the deadline.
+        exception.StatusCode.ShouldBeOneOf(StatusCode.Unavailable, StatusCode.Internal);
     }
 }

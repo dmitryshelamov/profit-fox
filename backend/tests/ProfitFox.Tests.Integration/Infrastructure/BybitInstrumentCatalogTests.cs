@@ -3,6 +3,7 @@ using Bybit.Net.Interfaces.Clients;
 using Microsoft.Extensions.DependencyInjection;
 
 using ProfitFox.Application.Exceptions;
+using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
@@ -20,7 +21,7 @@ public class BybitInstrumentCatalogTests
     [SetUp]
     public async Task SetUp()
     {
-        _factory = await ProfitFoxFactory.CreateAsync(workers: 0);
+        _factory = ProfitFoxFactory.Create(workers: 0);
         _factory.Bybit.Instruments.UnionWith(
             [("spot", "ETHUSDT"), ("spot", "BTCUSDT"), ("linear", "SOLUSDT"), ("linear", "BTCUSDT"), ("linear", "ETHUSDT"), ("linear", "XRPUSDT"), ("linear", "ADAUSDT")]);
         _factory.Bybit.Coins[("spot", "ETHUSDT")] = ("ETH", "USDT");
@@ -156,6 +157,6 @@ public class BybitInstrumentCatalogTests
 
     private BybitMarketDataClient Catalog()
     {
-        return new BybitMarketDataClient(_factory.Services.GetRequiredService<IBybitRestClient>(), _factory.Services.GetRequiredService<ExchangeResilienceExecutor>());
+        return new BybitMarketDataClient(_factory.Services.GetRequiredService<IBybitRestClient>(), _factory.Services.GetRequiredKeyedService<ExchangeResilienceExecutor>(Exchange.Bybit));
     }
 }

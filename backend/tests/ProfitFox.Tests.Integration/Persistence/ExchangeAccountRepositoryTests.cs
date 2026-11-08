@@ -4,9 +4,11 @@ using Dapper;
 
 using Npgsql;
 
+using ProfitFox.Application.ExchangeAccounts;
 using ProfitFox.Application.Strategies;
 using ProfitFox.Domain.Entities.Bots;
 using ProfitFox.Domain.Entities.ExchangeAccounts;
+using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Domain.Exceptions;
@@ -15,6 +17,7 @@ using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.ExchangeAccounts;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Strategies;
+using ProfitFox.Infrastructure.Security;
 using ProfitFox.Tests.Shared.Fixtures.Strategies;
 
 using Shouldly;
@@ -32,7 +35,7 @@ public class ExchangeAccountRepositoryTests
     [SetUp]
     public async Task SetUp()
     {
-        _dataSource = await MarketDataDatabase.CreateAsync();
+        _dataSource = MarketDataDatabase.Open();
         _repository = new ExchangeAccountRepository(_dataSource);
     }
 
@@ -153,6 +156,47 @@ public class ExchangeAccountRepositoryTests
         await new StrategyLibraryRepository(_dataSource).SaveAsync(library.Change, 0, CancellationToken.None);
 
         return bot.Id;
+    }
+
+    // Scenario "Токен в базе зашифрован": the account is read back without its token, which only GetSecret gives, encrypted.
+    [Test]
+    public async Task TInvest_account_is_read_back_with_its_encrypted_token_apart()
+    {
+        var protector = new AesGcmSecretProtector(new ExchangeAccountSettings { MasterKey = Convert.ToBase64String(new byte[32]) });
+        ExchangeAccount account = TInvestAccount("2000000001");
+
+        (await _repository.AddAsync(account, protector.Encrypt(account.Id, "t.token-value"), CancellationToken.None)).ShouldBeTrue();
+
+        ExchangeAccount? read = await _repository.GetAsync(account.Id, CancellationToken.None);
+        read.ShouldBeEquivalentTo(account);
+        (await _repository.GetAllAsync(CancellationToken.None)).Single().ShouldBeEquivalentTo(account);
+        protector.Decrypt(account.Id, (await _repository.GetSecretAsync(account.Id, CancellationToken.None))!).ShouldBe("t.token-value");
+        await using NpgsqlConnection connection = await _dataSource.OpenConnectionAsync();
+        (await connection.ExecuteScalarAsync<string>("SELECT row_to_json(a)::text FROM exchange_accounts a"))!.ShouldNotContain("t.token-value");
+    }
+
+    // Scenario "Второй токен того же счёта".
+    [Test]
+    public async Task One_brokerage_account_is_stored_once()
+    {
+        await _repository.AddAsync(TInvestAccount("2000000001"), Secret, CancellationToken.None);
+
+        (await _repository.AddAsync(TInvestAccount("2000000001"), Secret, CancellationToken.None)).ShouldBeFalse();
+        (await _repository.GetAllAsync(CancellationToken.None)).Count.ShouldBe(1);
+    }
+
+    [Test]
+    public async Task Bybit_and_tinvest_accounts_live_side_by_side()
+    {
+        await _repository.AddAsync(Account(uid: 100), Secret, CancellationToken.None);
+        await _repository.AddAsync(TInvestAccount("2000000001"), Secret, CancellationToken.None);
+
+        (await _repository.GetAllAsync(CancellationToken.None)).Select(account => account.Exchange).Order().ShouldBe([Exchange.Bybit, Exchange.TInvest]);
+    }
+
+    private static ExchangeAccount TInvestAccount(string accountId)
+    {
+        return new ExchangeAccount(Guid.NewGuid(), "Брокерский", Exchange.TInvest, null, null, accountId, new HashSet<MarketCategory> { MarketCategory.Moex }, Created);
     }
 
     private static ExchangeAccount Account(long uid)

@@ -4,6 +4,7 @@ using ProfitFox.Domain.Entities.IdeaTrades.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Services.Ideas;
+using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
@@ -47,13 +48,19 @@ public sealed record IdeaTrade(
     Guid? AutoId = null,
     int Leverage = 1)
 {
+    /// <summary>The close at the expiry of the idea: only a paper trade has it, a real trade's is always none.</summary>
+    public LegTotals Expiry { get; init; } = LegTotals.None;
+
+    /// <summary>The features of the market its idea fired with, copied when the trade was made; a trade before them has none.</summary>
+    public IdeaFeatures Features { get; init; }
+
     public bool IsOpen => Status is IdeaTradeStatus.AwaitingEntry or IdeaTradeStatus.Open;
 
     /// <summary>The quantity the entry filled that no exit has taken out yet.</summary>
     public decimal HeldQuantity => Entry.Quantity - Exited.Quantity;
 
     /// <summary>The money of a closed trade after the fees; none for a trade that is open, cancelled or failed.</summary>
-    public decimal? Result => Status is IdeaTradeStatus.ClosedAtTarget or IdeaTradeStatus.ClosedAtStop or IdeaTradeStatus.ClosedManually
+    public decimal? Result => Status is IdeaTradeStatus.ClosedAtTarget or IdeaTradeStatus.ClosedAtStop or IdeaTradeStatus.ClosedManually or IdeaTradeStatus.ClosedAtExpiry
         ? (Side == IdeaSide.Long ? Exited.Value - Entry.Value : Entry.Value - Exited.Value) - Entry.Fee - Exited.Fee
         : null;
 
@@ -93,9 +100,9 @@ public sealed record IdeaTrade(
     }
 
     private LegTotals Exited => new LegTotals(
-        TakeProfit.Quantity + StopLoss.Quantity + Manual.Quantity,
-        TakeProfit.Value + StopLoss.Value + Manual.Value,
-        TakeProfit.Fee + StopLoss.Fee + Manual.Fee);
+        TakeProfit.Quantity + StopLoss.Quantity + Manual.Quantity + Expiry.Quantity,
+        TakeProfit.Value + StopLoss.Value + Manual.Value + Expiry.Value,
+        TakeProfit.Fee + StopLoss.Fee + Manual.Fee + Expiry.Fee);
 
     public static IdeaTrade Create(Guid id, Idea idea, Guid accountId, decimal entryPrice, IdeaTradeSize size, DateTimeOffset now, IdeaPromise? promise = null, Guid? autoId = null, int leverage = 1)
     {
@@ -128,7 +135,8 @@ public sealed record IdeaTrade(
             now,
             promise,
             AutoId: autoId,
-            Leverage: idea.Instrument.Category == MarketCategory.Spot ? 1 : leverage);
+            Leverage: idea.Instrument.Category == MarketCategory.Spot ? 1 : leverage)
+        { Features = idea.Features };
     }
 
     /// <summary>A pullback that has not entered by its deadline gives its entry up.</summary>
@@ -169,6 +177,7 @@ public sealed record IdeaTrade(
         {
             IdeaTradeLeg.TakeProfit => this with { TakeProfit = TakeProfit + added },
             IdeaTradeLeg.StopLoss => this with { StopLoss = StopLoss + added },
+            IdeaTradeLeg.Expiry => this with { Expiry = Expiry + added },
             _ => this with { Manual = Manual + added }
         };
 
@@ -196,6 +205,7 @@ public sealed record IdeaTrade(
         {
             IdeaTradeLeg.TakeProfit => IdeaTradeStatus.ClosedAtTarget,
             IdeaTradeLeg.StopLoss => IdeaTradeStatus.ClosedAtStop,
+            IdeaTradeLeg.Expiry => IdeaTradeStatus.ClosedAtExpiry,
             _ => IdeaTradeStatus.ClosedManually
         };
 

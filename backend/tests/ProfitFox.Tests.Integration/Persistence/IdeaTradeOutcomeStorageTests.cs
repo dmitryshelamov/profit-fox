@@ -36,7 +36,7 @@ public class IdeaTradeOutcomeStorageTests
     [SetUp]
     public async Task SetUp()
     {
-        _dataSource = await MarketDataDatabase.CreateAsync();
+        _dataSource = MarketDataDatabase.Open();
         var accessor = new PostgresTransactionAccessor();
         _executor = new PostgresTransactionExecutor(_dataSource, accessor);
         _trades = new IdeaTradeRepository(_dataSource, accessor);
@@ -52,14 +52,15 @@ public class IdeaTradeOutcomeStorageTests
         await _dataSource.DisposeAsync();
     }
 
-    // Scenario "Идея дошла до цели": the idea closes in the transaction of the minute and the trade gets its outcome without a new updated_at, so no Worker rereads it.
+    // Scenario "Идея дошла до цели": the idea closes in the transaction of the minute and the trade gets its outcome with the exit price without a new
+    // updated_at, so no Worker rereads it.
     [Test]
     public async Task Closing_idea_writes_its_outcome_on_its_trade_without_touching_the_updated_time()
     {
         (Idea idea, IdeaTrade trade) = await TradeOfIdeaAsync();
         DateTimeOffset before = await UpdatedAtAsync(trade.Id);
         Idea target = Closed(idea, IdeaStatus.Target, 115m);
-        var outcome = new TradedIdeaOutcome(IdeaStatus.Target, Now.AddHours(2), 1.84m);
+        var outcome = new TradedIdeaOutcome(IdeaStatus.Target, Now.AddHours(2), 1.84m, 115m);
 
         await _ideas.SaveAsync([], [target], [new ClosedIdea(idea.Id, outcome)], CancellationToken.None);
 

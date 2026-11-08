@@ -24,7 +24,7 @@ public class CandleRepositoryAggregateTests
     [SetUp]
     public async Task SetUp()
     {
-        _dataSource = await MarketDataDatabase.CreateAsync();
+        _dataSource = MarketDataDatabase.Open();
         _store = new CandleRepository(_dataSource);
         await _store.UpsertAsync(Wif, Interval.OneMinute, [.. IdeaFixtures.Minutes().Select(Candle)], CancellationToken.None);
     }

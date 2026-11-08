@@ -12,15 +12,21 @@ using ProfitFox.Domain.Services.Ideas;
 
 namespace ProfitFox.Tests.Unit.Application.Scanner.Ideas;
 
-/// <summary>The autos of the scanner with no auto on and no paper trade open, for the tests that are not about them.</summary>
+/// <summary>The autos of the scanner with no auto on and no paper trade open but the ones given, for the tests that are not about them.</summary>
 public static class NoAutos
 {
-    public static LiveAutos Create(ScannerMarket market, BacktestSettings fees, TimeProvider? time = null, IIdeaAutoEntryRepository? entries = null, IIdeaAutoRefusalRepository? refusals = null)
+    public static LiveAutos Create(
+        ScannerMarket market,
+        BacktestSettings fees,
+        TimeProvider? time = null,
+        IIdeaAutoEntryRepository? entries = null,
+        IIdeaAutoRefusalRepository? refusals = null,
+        IReadOnlyList<PaperIdeaTrade>? open = null)
     {
         IIdeaAutoRepository autos = Substitute.For<IIdeaAutoRepository>();
         autos.GetEnabledAsync(Arg.Any<CancellationToken>()).Returns([]);
         IPaperIdeaTradeRepository paper = Substitute.For<IPaperIdeaTradeRepository>();
-        paper.GetOpenAsync(Arg.Any<CancellationToken>()).Returns(new List<PaperIdeaTrade>());
+        paper.GetOpenAsync(Arg.Any<CancellationToken>()).Returns(open ?? new List<PaperIdeaTrade>());
 
         return new LiveAutos(
             autos,

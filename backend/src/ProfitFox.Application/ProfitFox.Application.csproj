@@ -8,4 +8,8 @@
         <PackageReference Include="MediatR"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <InternalsVisibleTo Include="ProfitFox.Tests.Unit"/>
+    </ItemGroup>
+
 </Project>

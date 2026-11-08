@@ -8,7 +8,9 @@ internal static class IdeaAutoRepositoryQueries
 {
     private const string Columns = """
                                    id, name, account_id AS "AccountId", amount, mode, setups, types, intervals, side, category, badge,
-                                   min_risk_reward AS "MinRiskReward", min_cases AS "MinCases", position, deleted_at AS "DeletedAt", budget
+                                   min_risk_reward AS "MinRiskReward", min_cases AS "MinCases", position, deleted_at AS "DeletedAt", budget,
+                                   day_drop AS "DayDrop", btc_drop AS "BtcDrop", high_funding AS "HighFunding", burst,
+                                   max_per_minute_per_side AS "MaxPerMinutePerSide", max_open_per_side AS "MaxOpenPerSide"
                                    """;
 
     public static CommandDefinition GetAll(CancellationToken cancellationToken)
@@ -42,9 +44,11 @@ internal static class IdeaAutoRepositoryQueries
     {
         return new CommandDefinition(
             """
-            INSERT INTO idea_autos (id, name, account_id, amount, mode, setups, types, intervals, side, category, badge, min_risk_reward, min_cases, position, created_at, budget)
+            INSERT INTO idea_autos (id, name, account_id, amount, mode, setups, types, intervals, side, category, badge, min_risk_reward, min_cases, position, created_at, budget,
+                day_drop, btc_drop, high_funding, burst, max_per_minute_per_side, max_open_per_side)
             VALUES (@Id, @Name, @AccountId, @Amount, @Mode, @Setups, @Types, @Intervals, @Side, @Category, @Badge, @MinRiskReward, @MinCases,
-                (SELECT COALESCE(MAX(position) + 1, 0) FROM idea_autos WHERE deleted_at IS NULL), @Now, @Budget)
+                (SELECT COALESCE(MAX(position) + 1, 0) FROM idea_autos WHERE deleted_at IS NULL), @Now, @Budget, @DayDrop, @BtcDrop, @HighFunding, @Burst,
+                @MaxPerMinutePerSide, @MaxOpenPerSide)
             RETURNING position
             """,
             new
@@ -63,6 +67,12 @@ internal static class IdeaAutoRepositoryQueries
                 auto.MinRiskReward,
                 auto.MinCases,
                 auto.Budget,
+                auto.DayDrop,
+                auto.BtcDrop,
+                auto.HighFunding,
+                auto.Burst,
+                auto.MaxPerMinutePerSide,
+                auto.MaxOpenPerSide,
                 Now = now
             },
             cancellationToken: cancellationToken);
@@ -73,7 +83,9 @@ internal static class IdeaAutoRepositoryQueries
         return new CommandDefinition(
             """
             UPDATE idea_autos SET name = @Name, account_id = @AccountId, amount = @Amount, setups = @Setups, types = @Types, intervals = @Intervals,
-                side = @Side, category = @Category, badge = @Badge, min_risk_reward = @MinRiskReward, min_cases = @MinCases, budget = @Budget
+                side = @Side, category = @Category, badge = @Badge, min_risk_reward = @MinRiskReward, min_cases = @MinCases, budget = @Budget,
+                day_drop = @DayDrop, btc_drop = @BtcDrop, high_funding = @HighFunding, burst = @Burst,
+                max_per_minute_per_side = @MaxPerMinutePerSide, max_open_per_side = @MaxOpenPerSide
             WHERE id = @Id AND deleted_at IS NULL
             """,
             auto,

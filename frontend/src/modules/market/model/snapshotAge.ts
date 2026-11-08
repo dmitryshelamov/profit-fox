@@ -21,8 +21,3 @@ export function ageText(snapshotAt: string, now: number): string {
 export function isStale(snapshotAt: string, now: number): boolean {
   return ageOf(snapshotAt, now) > staleAfter;
 }
-
-/** The time of day in UTC: «14:32 UTC». */
-export function utcClock(iso: string): string {
-  return `${new Date(iso).toISOString().slice(11, 16)} UTC`;
-}

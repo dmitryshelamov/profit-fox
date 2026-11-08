@@ -27,7 +27,7 @@ public class AddIdeaAutosMigrationTests
     [SetUp]
     public async Task SetUp()
     {
-        string connectionString = await IntegrationEnvironment.CreateDatabaseAsync();
+        string connectionString = await IntegrationEnvironment.CreateEmptyDatabaseAsync();
         IConfigurationRoot configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:MarketData"] = connectionString })
             .Build();
@@ -93,8 +93,8 @@ public class AddIdeaAutosMigrationTests
         await using NpgsqlConnection connection = await _dataSource.OpenConnectionAsync();
         await connection.ExecuteAsync(
             """
-            INSERT INTO exchange_accounts (id, name, api_key, secret_nonce, secret_ciphertext, secret_tag, uid, categories, created_at)
-            VALUES (@Account, 'Main', 'key', '\x01', '\x02', '\x03', 100, ARRAY['linear'], @Created)
+            INSERT INTO exchange_accounts (id, name, exchange, api_key, secret_nonce, secret_ciphertext, secret_tag, uid, categories, created_at)
+            VALUES (@Account, 'Main', 'bybit', 'key', '\x01', '\x02', '\x03', 100, ARRAY['linear'], @Created)
             """,
             new { Account = account, Created });
 

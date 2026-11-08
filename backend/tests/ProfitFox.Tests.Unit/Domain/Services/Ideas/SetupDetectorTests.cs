@@ -15,7 +15,7 @@ namespace ProfitFox.Tests.Unit.Domain.Services.Ideas;
 /// </summary>
 public class SetupDetectorTests
 {
-    private static readonly SetupThresholds Thresholds = new SetupThresholds(6, 3m, 2m, 1.5m, 3m, 0.1m, 1.5m, 0.2m, 20, 4m, 1m, 3m, 0.3m, 70m, 30m);
+    private static readonly SetupThresholds Thresholds = new SetupThresholds(6, 3m, 2m, 1.5m, 3m, 0.1m, 1.5m, 0.2m, 20, 4m, 1m, 3m, 0.3m, 1.5m, 0.5m, 70m, 30m);
     private static readonly DateTimeOffset Five = DateTimeOffset.Parse("2024-03-01T05:00:00Z");
     private static readonly DateTimeOffset Breakout = DateTimeOffset.Parse("2024-03-01T07:30:00Z");
 

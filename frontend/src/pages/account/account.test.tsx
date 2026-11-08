@@ -2,7 +2,7 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { fakeApi, json, problem } from '@/test/fakeApi';
-import { botId, botSummary, exchangeAccount } from '@/test/fixtures';
+import { botId, botSummary, exchangeAccount, tinvestAccount } from '@/test/fixtures';
 import { renderApp } from '@/test/renderApp';
 
 const path = `/accounts/${exchangeAccount.id}`;
@@ -10,10 +10,21 @@ const accountUrl = `GET /api/exchange-accounts/${exchangeAccount.id}`;
 const balanceUrl = `GET /api/exchange-accounts/${exchangeAccount.id}/balance`;
 const details = { ...exchangeAccount, bots: [{ id: botId, name: 'BTC EMA час' }] };
 const balance = {
-  totalEquityUsd: '1675.31',
+  currency: 'USD',
+  totalEquity: '1675.31',
   coins: [
-    { coin: 'USDT', walletBalance: '1000.123456', usdValue: '1000.25' },
-    { coin: 'BTC', walletBalance: '0.01', usdValue: '675.06' },
+    { coin: 'USDT', walletBalance: '1000.123456', value: '1000.25' },
+    { coin: 'BTC', walletBalance: '0.01', value: '675.06' },
+  ],
+};
+const tinvestPath = `/accounts/${tinvestAccount.id}`;
+const tinvestUrl = `GET /api/exchange-accounts/${tinvestAccount.id}`;
+const portfolio = {
+  currency: 'RUB',
+  totalEquity: '53000',
+  coins: [
+    { coin: 'RUB', walletBalance: '50000', value: '50000' },
+    { coin: 'SBER', walletBalance: '10', value: '3000' },
   ],
 };
 
@@ -28,6 +39,7 @@ describe('account page', () => {
     renderApp(path);
 
     expect(await screen.findByText('XKz8apikeyMAIN')).toBeInTheDocument();
+    expect(screen.getByText('Bybit')).toBeInTheDocument();
     expect(screen.getByLabelText('Secret скрыт')).toHaveTextContent('••••••••');
     expect(screen.getByRole('link', { name: 'BTC EMA час' })).toHaveAttribute(
       'href',
@@ -50,12 +62,47 @@ describe('account page', () => {
 
     const table = await screen.findByRole('table', { name: 'Баланс' });
     expect(within(table).getByText('USDT')).toBeInTheDocument();
+    expect(within(table).getByText('Стоимость, USD')).toBeInTheDocument();
     expect(within(table).getByText('1 000.123456')).toBeInTheDocument();
     expect(within(table).getByText('1 675.31')).toBeInTheDocument();
   });
 
+  // Requirement "Страница аккаунта T-Invest": the exchange, the account number, the token as a mask and the category moex.
+  it('shows a t-invest account with its number, the token as a mask and moex', async () => {
+    fakeApi({ [tinvestUrl]: () => json({ ...tinvestAccount, bots: [] }) });
+    renderApp(tinvestPath);
+
+    expect(await screen.findByText('2000000001')).toBeInTheDocument();
+    expect(screen.getByText('T-Invest')).toBeInTheDocument();
+    expect(screen.getByLabelText('Токен скрыт')).toHaveTextContent('••••••••');
+    expect(screen.getByText('moex')).toBeInTheDocument();
+    expect(screen.queryByText('API key')).not.toBeInTheDocument();
+  });
+
+  // Scenario "Баланс в рублях".
+  it('shows the portfolio of a t-invest account in roubles', async () => {
+    fakeApi({
+      [tinvestUrl]: () => json({ ...tinvestAccount, bots: [] }),
+      [`GET /api/exchange-accounts/${tinvestAccount.id}/balance`]: () => json(portfolio),
+    });
+    renderApp(tinvestPath);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Показать баланс' }));
+
+    const table = await screen.findByRole('table', { name: 'Баланс' });
+    expect(within(table).getByText('Бумага')).toBeInTheDocument();
+    expect(within(table).getByText('Количество')).toBeInTheDocument();
+    expect(within(table).getByText('Стоимость, RUB')).toBeInTheDocument();
+    expect(within(table).getByText('Общая стоимость')).toBeInTheDocument();
+    expect(within(table).getByText('RUB')).toBeInTheDocument();
+    expect(within(table).getByText('SBER')).toBeInTheDocument();
+    expect(within(table).getByText('10')).toBeInTheDocument();
+    expect(within(table).getByText('3 000')).toBeInTheDocument();
+    expect(within(table).getByText('53 000')).toBeInTheDocument();
+  });
+
   // Scenario "Биржа недоступна при чтении баланса".
-  it('says that bybit is unavailable and stays usable', async () => {
+  it('says that the exchange is unavailable and stays usable', async () => {
     fakeApi({
       [accountUrl]: () => json(details),
       [balanceUrl]: () => problem(503, 'Bybit is unavailable.'),
@@ -65,7 +112,7 @@ describe('account page', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Показать баланс' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Bybit недоступен, попробуйте позже.',
+      'Биржа недоступна, попробуйте позже.',
     );
     expect(screen.getByRole('button', { name: 'Показать баланс' })).toBeEnabled();
   });

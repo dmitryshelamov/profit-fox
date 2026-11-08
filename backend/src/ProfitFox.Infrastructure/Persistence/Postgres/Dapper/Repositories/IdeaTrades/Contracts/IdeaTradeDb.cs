@@ -68,6 +68,23 @@ internal sealed class IdeaTradeDb
 
     public decimal ManualFee { get; init; }
 
+    /// <summary>Of a paper trade only.</summary>
+    public decimal ExpiryQuantity { get; init; }
+
+    /// <summary>Of a paper trade only.</summary>
+    public decimal ExpiryValue { get; init; }
+
+    /// <summary>Of a paper trade only.</summary>
+    public decimal ExpiryFee { get; init; }
+
+    public bool DayDrop { get; init; }
+
+    public bool BtcDrop { get; init; }
+
+    public bool HighFunding { get; init; }
+
+    public bool Burst { get; init; }
+
     public int LastOrderNumber { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
@@ -89,6 +106,8 @@ internal sealed class IdeaTradeDb
     public DateTimeOffset? IdeaStatusAt { get; init; }
 
     public decimal? IdeaResult { get; init; }
+
+    public decimal? IdeaExitPrice { get; init; }
 
     public DateTimeOffset? OpenedAt { get; init; }
 

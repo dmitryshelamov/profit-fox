@@ -4,7 +4,7 @@ import pg from 'pg';
  * The version of the rules of ideas the scanner runs (`IdeasEngineVersion.Current`): the screens read only its calibration and
  * signals.
  */
-const engineVersion = 5;
+const engineVersion = 7;
 
 /** A client of the disposable database of the run, whose name playwright.config.ts gave to every worker. */
 async function connect(): Promise<pg.Client> {
@@ -21,7 +21,8 @@ async function connect(): Promise<pg.Client> {
 /**
  * Closed ideas of a day's list, which the scanner never touches, so a list is long enough to have pages. `count` ideas of
  * pairs the market does not have, `E2E001USDT` the newest; the risk to reward of the n-th is 10 + n, so the oldest has the
- * highest. Then three of a pair the market has: a risk to reward of 200 on linear and on spot, and of 5 on linear.
+ * highest. Then three of a pair the market has: a risk to reward of 200 on linear and on spot, and of 5 on linear; the first of them
+ * fired after a drop of the pair over a day and with a high funding.
  */
 export async function seedIdeas(count: number): Promise<void> {
   const client = await connect();
@@ -38,11 +39,13 @@ export async function seedIdeas(count: number): Promise<void> {
     );
     await client.query(
       `INSERT INTO ideas (id, category, symbol, setup, type, "interval", side, fired_at, entry, stop, target, risk_reward,
-                          status, status_at, entered_at, exit_price, move, volume_ratio, engine_version)
+                          status, status_at, entered_at, exit_price, move, volume_ratio, engine_version, pair_change, btc_change, funding)
        SELECT gen_random_uuid(), category, 'BTCUSDT', 'drop', 'levels', '60', 'long',
               now() - interval '5 hours', 100, 99, 100 + reward, reward,
-              'target', now() - interval '1 minute', now() - interval '5 hours', 100 + reward, 3, 2, ${engineVersion}
-       FROM (VALUES ('linear', 200), ('spot', 200), ('linear', 5)) AS marker (category, reward)`,
+              'target', now() - interval '1 minute', now() - interval '5 hours', 100 + reward, 3, 2, ${engineVersion},
+              pair_change, btc_change, funding
+       FROM (VALUES ('linear', 200, -0.07, -0.004, 0.0006), ('spot', 200, NULL, -0.004, NULL), ('linear', 5, -0.01, -0.004, 0.0001))
+            AS marker (category, reward, pair_change, btc_change, funding)`,
     );
   } finally {
     await client.end();
@@ -109,7 +112,7 @@ export async function removeOpenIdeas(symbol: string): Promise<void> {
 /**
  * The reports of the calibration over 90 days of all categories among all cases and after the rules changed (120 checked), as the
  * scanner stores them (decimals as strings), with the table by own data, the comparison of the three models and the breakdowns by
- * timeframe and by type, so the screen has
+ * timeframe, by type and by feature, so the screen has
  * tables before the scanner has history enough to check a case. The scanner replaces the reports whole when it recomputes the
  * buckets, once an hour: a test reads the screen right after this.
  */
@@ -178,6 +181,20 @@ export async function seedCalibration(): Promise<void> {
         },
       },
     ],
+    Features: [
+      {
+        Interval: null,
+        Type: null,
+        Feature: 'day_drop',
+        Present: true,
+        Total: row({ From: null, To: null, Promised: '-0.2', Expectancy: '-0.05' }),
+        Up: null,
+        Comparison: {
+          Old: { Cases: 600, Brier: '0.231', Up: null },
+          New: { Cases: 600, Brier: '0.204', Up: null },
+        },
+      },
+    ],
   };
 
   try {
@@ -210,11 +227,11 @@ export async function seedSignals(): Promise<void> {
     await client.query(
       `INSERT INTO idea_cases (category, symbol, setup, type, "interval", side, fired_at, engine_version, entry, stop, target, move,
                                volume_ratio, tick, entry_after, stop_before_entry_after, stop_after, ladder_after, target_after, closes,
-                               tracked_until)
+                               tracked_until, pair_change, btc_change, funding)
        SELECT 'linear', 'E2E001USDT', 'impulse', 'pullback', '15', 'long', date_trunc('minute', now()) - make_interval(days => n),
               ${engineVersion}, 100, 98, NULL, 3, 2, 0.01, 10, NULL, 900,
               ARRAY[100, 200, 350, 500, NULL, NULL, NULL, NULL, NULL, NULL]::integer[], NULL, array_fill(100.5::numeric, ARRAY[19]),
-              date_trunc('minute', now()) - make_interval(days => n) + interval '14 days'
+              date_trunc('minute', now()) - make_interval(days => n) + interval '14 days', -0.01, -0.002, 0.0001
        FROM generate_series(1, 40) AS n
        ON CONFLICT DO NOTHING`,
     );
@@ -295,6 +312,125 @@ export async function seedOpenPaperTrade(
                $4::numeric * 1.04, 1, $4, 1, 'open', now(), 1, $4, 0, 0, 0, 0, 0, 0, 0, now(), now(), date_trunc('minute', now()))`,
       [autoId, accountId, symbol, amount],
     );
+  } finally {
+    await client.end();
+  }
+}
+
+/** The symbol of the paper trade `seedPaperTradeClosedAtExpiry` writes: no other test trades it. */
+export const expiredPaperSymbol = 'LTCUSDT';
+
+const expiredPaperAuto = 'По сроку e2e';
+
+/**
+ * A paper trade of a pair no other test trades that its idea outlived, of an auto that is off: it opened 3 hours ago, 1 coin at 100 with a
+ * risk of 1 USDT, and closed at expiry an hour ago at 99.79 without fees, −0.21 USDT and −0.21 R, as the scanner writes it.
+ */
+export async function seedPaperTradeClosedAtExpiry(accountId: string): Promise<void> {
+  const client = await connect();
+
+  try {
+    const auto = await client.query<{ id: string }>(
+      `INSERT INTO idea_autos (id, name, account_id, amount, mode, setups, types, intervals, min_risk_reward, min_cases, position, created_at)
+       VALUES (gen_random_uuid(), $1, $2, 100, 'off', ARRAY['impulse'], ARRAY['target_2r'], ARRAY['15'], 1.2, 0, 1000, now())
+       RETURNING id`,
+      [expiredPaperAuto, accountId],
+    );
+    await client.query(
+      `INSERT INTO idea_paper_trades (id, idea_id, auto_id, account_id, category, symbol, setup, interval, type, side, entry_price, stop, target,
+                                      quantity, amount, risk, status, status_at, entry_quantity, entry_value, entry_fee, take_profit_quantity,
+                                      take_profit_value, take_profit_fee, stop_loss_quantity, stop_loss_value, stop_loss_fee, expiry_quantity,
+                                      expiry_value, expiry_fee, created_at, opened_at, stepped_until, idea_status, idea_status_at, idea_result,
+                                      idea_exit_price)
+       VALUES (gen_random_uuid(), gen_random_uuid(), $3, $1, 'linear', $2, 'impulse', '15', 'target_2r', 'long', 100, 99, 102,
+               1, 100, 1, 'closed_at_expiry', now() - interval '1 hour', 1, 100, 0, 0, 0, 0, 0, 0, 0, 1, 99.79, 0,
+               now() - interval '3 hours', now() - interval '3 hours', now() - interval '1 hour', 'expired', now() - interval '1 hour', -0.2, 99.79)`,
+      [accountId, expiredPaperSymbol, auto.rows[0]!.id],
+    );
+  } finally {
+    await client.end();
+  }
+}
+
+/** Removes the paper trade `seedPaperTradeClosedAtExpiry` made and its auto. */
+export async function removePaperTradeClosedAtExpiry(): Promise<void> {
+  const client = await connect();
+
+  try {
+    await client.query('DELETE FROM idea_paper_trades WHERE symbol = $1', [expiredPaperSymbol]);
+    await client.query('DELETE FROM idea_autos WHERE name = $1', [expiredPaperAuto]);
+  } finally {
+    await client.end();
+  }
+}
+
+/** The symbols of the paper trades `seedPaperTradesOfIdeas` writes: the scanner of the run keeps neither, so it never steps them. */
+export const ideaLeftSymbols = { active: 'DOTUSDT', closed: 'AVAXUSDT' } as const;
+
+const ideaLeftAuto = 'До конца идеи e2e';
+
+/**
+ * Two open paper trades of an auto that is off: one by an active idea of 15 minutes that lives 24 candles and ends at `endsAt`, and one
+ * whose idea expired, as the scanner writes the outcome of an idea on its trades.
+ */
+export async function seedPaperTradesOfIdeas(accountId: string, endsAt: Date): Promise<void> {
+  const client = await connect();
+
+  try {
+    const auto = await client.query<{ id: string }>(
+      `INSERT INTO idea_autos (id, name, account_id, amount, mode, setups, types, intervals, min_risk_reward, min_cases, position, created_at)
+       VALUES (gen_random_uuid(), $1, $2, 100, 'off', ARRAY['impulse'], ARRAY['target_2r'], ARRAY['15'], 1.2, 0, 1001, now())
+       RETURNING id`,
+      [ideaLeftAuto, accountId],
+    );
+    const idea = await client.query<{ id: string }>(
+      `INSERT INTO ideas (id, category, symbol, setup, type, "interval", side, fired_at, entry, stop, target, risk_reward,
+                          status, status_at, entered_at, exit_price, move, volume_ratio, engine_version, life_candles, target_r, entry_candles)
+       VALUES (gen_random_uuid(), 'linear', $1, 'impulse', 'target_2r', '15', 'long', $2::timestamptz - interval '361 minutes', 100, 98, 104, 2,
+               'active', $2::timestamptz - interval '360 minutes', $2::timestamptz - interval '360 minutes', NULL, 3, 2, ${engineVersion}, 24, 2, NULL)
+       RETURNING id`,
+      [ideaLeftSymbols.active, endsAt.toISOString()],
+    );
+    const paper = `INSERT INTO idea_paper_trades (id, idea_id, auto_id, account_id, category, symbol, setup, interval, type, side, entry_price, stop,
+                                                  target, quantity, amount, risk, status, status_at, entry_quantity, entry_value, entry_fee,
+                                                  take_profit_quantity, take_profit_value, take_profit_fee, stop_loss_quantity, stop_loss_value,
+                                                  stop_loss_fee, created_at, opened_at, stepped_until, idea_status, idea_status_at, idea_result)
+                   VALUES (gen_random_uuid(), $1, $2, $3, 'linear', $4, 'impulse', '15', 'target_2r', 'long', 100, 98, 104, 1, 100, 2, 'open',
+                           now(), 1, 100, 0, 0, 0, 0, 0, 0, 0, now(), now(), date_trunc('minute', now()), $5, $6, $7)`;
+    await client.query(paper, [
+      idea.rows[0]!.id,
+      auto.rows[0]!.id,
+      accountId,
+      ideaLeftSymbols.active,
+      null,
+      null,
+      null,
+    ]);
+    await client.query(paper, [
+      crypto.randomUUID(),
+      auto.rows[0]!.id,
+      accountId,
+      ideaLeftSymbols.closed,
+      'expired',
+      new Date(),
+      0.4,
+    ]);
+  } finally {
+    await client.end();
+  }
+}
+
+/** Removes the paper trades `seedPaperTradesOfIdeas` made, their idea and their auto. */
+export async function removePaperTradesOfIdeas(): Promise<void> {
+  const client = await connect();
+
+  try {
+    const symbols = Object.values(ideaLeftSymbols);
+    await client.query('DELETE FROM idea_paper_trades WHERE symbol = ANY($1)', [symbols]);
+    await client.query("DELETE FROM ideas WHERE category = 'linear' AND symbol = ANY($1)", [
+      symbols,
+    ]);
+    await client.query('DELETE FROM idea_autos WHERE name = $1', [ideaLeftAuto]);
   } finally {
     await client.end();
   }
