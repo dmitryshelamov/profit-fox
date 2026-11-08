@@ -30,6 +30,7 @@ public class CreateCandleImportTests
     {
         _marketHistory = Substitute.For<IMarketHistoryClient>();
         _marketHistory.InstrumentExistsAsync(new Instrument(MarketCategory.Linear, "BTCUSDT"), Arg.Any<CancellationToken>()).Returns(true);
+        _marketHistory.InstrumentExistsAsync(new Instrument(MarketCategory.Moex, "SBER"), Arg.Any<CancellationToken>()).Returns(true);
         _jobs = Substitute.For<ICandleImportJobRepository>();
         _handler = new CreateCandleImportCommandHandler(_marketHistory, _jobs, new FakeTimeProvider(Now));
     }
@@ -92,6 +93,28 @@ public class CreateCandleImportTests
         error.Errors.Keys.ShouldBe([invalidField]);
         await _jobs.DidNotReceiveWithAnyArgs().AddAsync(default!, cancellationToken: default);
         await _marketHistory.DidNotReceiveWithAnyArgs().InstrumentExistsAsync(default!, cancellationToken: default);
+    }
+
+    // Scenario "Дневные свечи MOEX": the interval is checked against the list of the category.
+    [Test]
+    public async Task Daily_interval_on_moex_is_an_error_of_the_interval_without_a_job()
+    {
+        ValidationFailedException error = await Should.ThrowAsync<ValidationFailedException>(() => _handler.Handle(
+            new CreateCandleImportCommand("moex", "SBER", "D", "2024-01-01T00:00:00Z", "2024-02-01T00:00:00Z"),
+            CancellationToken.None));
+
+        error.Errors.ShouldBe(new Dictionary<string, string> { ["interval"] = "Interval must be one of the intervals of moex: 1, 3, 5, 15, 30, 60, 120, 240." });
+        await _jobs.DidNotReceiveWithAnyArgs().AddAsync(default!, cancellationToken: default);
+        await _marketHistory.DidNotReceiveWithAnyArgs().InstrumentExistsAsync(default!, cancellationToken: default);
+    }
+
+    // Scenario "Часовые свечи MOEX".
+    [Test]
+    public async Task Hourly_candles_of_a_moex_share_create_a_job()
+    {
+        await _handler.Handle(new CreateCandleImportCommand("moex", "sber", "60", "2024-01-01T00:00:00Z", "2024-02-01T00:00:00Z"), CancellationToken.None);
+
+        (AddedJob().Instrument, AddedJob().Interval).ShouldBe((new Instrument(MarketCategory.Moex, "SBER"), Interval.OneHour));
     }
 
     // Scenario "Неизвестный символ".

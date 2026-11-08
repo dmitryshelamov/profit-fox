@@ -32,12 +32,12 @@ public static class BotRequests
 
         if (!MarketDataCodes.TryParseCategory(category, out MarketCategory parsedCategory))
         {
-            errors["category"] = "Category must be spot or linear.";
+            errors["category"] = MarketDataCodes.InvalidCategory;
         }
 
-        if (!MarketDataCodes.TryParseInterval(interval, out Interval parsedInterval))
+        if (!MarketDataCodes.TryParseInterval(parsedCategory, interval, out Interval parsedInterval))
         {
-            errors["interval"] = "Interval must be one of Bybit intervals: 1, 3, 5, 15, 30, 60, 120, 240, 360, 720, D, W, M.";
+            errors["interval"] = MarketDataCodes.InvalidInterval(parsedCategory);
         }
 
         var values = new Dictionary<string, NodeValue>();

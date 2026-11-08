@@ -6,13 +6,16 @@ namespace ProfitFox.Application.MarketData.Queries.SearchInstruments;
 public static class InstrumentSearch
 {
     /// <summary>
-    ///     Instruments whose symbol, base coin or quote coin contain the query, ignoring case: symbols that start with the query
+    ///     Instruments whose symbol, base coin, quote coin or name contain the query, ignoring case: symbols that start with the query
     ///     first, then the rest, each part ordered by symbol ordinally, cut to <paramref name="limit" />.
     /// </summary>
     public static IReadOnlyList<ListedInstrument> Find(IEnumerable<ListedInstrument> instruments, string query, int limit)
     {
         return instruments
-            .Where(instrument => Contains(instrument.Symbol, query) || Contains(instrument.BaseCoin, query) || Contains(instrument.QuoteCoin, query))
+            .Where(instrument => Contains(instrument.Symbol, query)
+                                 || Contains(instrument.BaseCoin, query)
+                                 || Contains(instrument.QuoteCoin, query)
+                                 || (instrument.Name is { } name && Contains(name, query)))
             .OrderBy(instrument => instrument.Symbol.StartsWith(query, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
             .ThenBy(instrument => instrument.Symbol, StringComparer.Ordinal)
             .Take(limit)

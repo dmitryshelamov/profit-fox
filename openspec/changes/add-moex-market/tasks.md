@@ -6,16 +6,16 @@
 
 ## 1. Рынок `moex` в домене и кодах
 
-- [ ] 1.1 `MarketCategory.Moex`, `Exchange { Bybit, TInvest }` (`Entities/ExchangeAccounts/Enums`) и
+- [x] 1.1 `MarketCategory.Moex`, `Exchange { Bybit, TInvest }` (`Entities/ExchangeAccounts/Enums`) и
   `MarketCategoryExtensions.Exchange()` (решение 1). Unit-тесты: `Spot` и `Linear` → `Bybit`, `Moex` → `TInvest`;
   `Instrument(Moex, "sber")` даёт символ `SBER`.
-- [ ] 1.2 `MarketDataCodes`: код `moex`, `IntervalsOf(category)` и текст ошибки интервала из списка категории (решение 1).
+- [x] 1.2 `MarketDataCodes`: код `moex`, `IntervalsOf(category)` и текст ошибки интервала из списка категории (решение 1).
   Unit-тесты: `moex` разбирается и печатается; у `Moex` восемь интервалов без `D`, `W`, `M`, `360`, `720`; у `Spot` — все 13.
-- [ ] 1.3 `GetCandlesQueryHandler`, `CreateCandleImportCommandHandler`, `ChartCandles`, `BotRequests` проверяют интервал по
+- [x] 1.3 `GetCandlesQueryHandler`, `CreateCandleImportCommandHandler`, `ChartCandles`, `BotRequests` проверяют интервал по
   `IntervalsOf` категории. Unit-тесты по сценариям «Дневные свечи MOEX», «Часовые свечи MOEX» (`market-data-import`),
   «Интервал не из списка категории» (`market-data-query`), «Интервал не из списка MOEX» (`bot-management`); тесты Bybit
   зелёные без правок.
-- [ ] 1.4 `ListedInstrument` получает `Name` и `ShortEnabled`; `InstrumentSearch.Find` сопоставляет запрос ещё и с названием
+- [x] 1.4 `ListedInstrument` получает `Name` и `ShortEnabled`; `InstrumentSearch.Find` сопоставляет запрос ещё и с названием
   (решение 7). Unit-тест: `сбер` находит `SBER` по названию; поиск Bybit не меняется.
 - [ ] 1.5 `docs/conventions.md`: категория `Moex`, `Exchange`, новые типы этого change (дополняется по ходу групп 2–5).
 

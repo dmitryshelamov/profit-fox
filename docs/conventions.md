@@ -14,6 +14,13 @@ enforces a rule, the check is the source of truth.
   and their pure domain extensions (`Interval`, `IntervalExtensions.CandleEnd`, `IntervalExtensions.CandleOpen`, the start of the candle that contains a moment, `BacktestStatus`); `Entities/Base` holds
   `AggregateRoot`. A bot is part of the `StrategyLibrary` aggregate: it must stay valid against the latest version of its
   strategy.
+- `MarketCategory` is the market an instrument trades on: `Spot` and `Linear` on Bybit, `Moex` (the shares of the main board TQBR of the
+  Moscow Exchange, in roubles, the symbol a ticker such as `SBER`) on T-Invest. `Entities/ExchangeAccounts/Enums/Exchange` names the exchanges
+  (`Bybit`, `TInvest`) and `MarketCategoryExtensions.Exchange()` tells the exchange of a category; the exchange is stored nowhere and never goes
+  over the API. The intervals are a property of the category (`Application/MarketData/MarketDataCodes.IntervalsOf`): Bybit has all 13, `Moex`
+  `1`, `3`, `5`, `15`, `30`, `60`, `120`, `240`; the texts of the errors of a category and of an interval are `MarketDataCodes.InvalidCategory`
+  and `MarketDataCodes.InvalidInterval(category)`. `ListedInstrument` also carries the `Name` of a company and `ShortEnabled` for a share of MOEX,
+  and `InstrumentSearch.Find` matches a query against the name as well.
 - `ValueObjects/<Area>` holds value objects (`Instrument`, `Price`, `Volume`, `InstrumentRules`, `StrategySnapshot`,
   `ParameterSpec`, `SimulationSettings`, `FeeRates` — the fee rates of a category and the slippage the ideas count on fills that do not rest on the book).
 - `Repositories` holds storage ports, named `I<Name>Repository` (`IStrategyLibraryRepository` for strategies, nodes,

@@ -18,9 +18,9 @@ public sealed class GetMarketCandlesQueryHandler(CandleReadThrough readThrough, 
             errors["category"] = MarketQueries.InvalidCategory;
         }
 
-        if (!MarketDataCodes.TryParseInterval(request.Interval ?? string.Empty, out Interval interval))
+        if (!MarketDataCodes.TryParseInterval(category, request.Interval ?? string.Empty, out Interval interval))
         {
-            errors["interval"] = ChartCandles.InvalidInterval;
+            errors["interval"] = MarketDataCodes.InvalidInterval(category);
         }
 
         (IReadOnlyList<Candle>? candles, bool unavailable) = await ChartCandles.ReadAsync(

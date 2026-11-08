@@ -23,12 +23,12 @@ public sealed class CreateCandleImportCommandHandler(
 
         if (!MarketDataCodes.TryParseCategory(request.Category, out MarketCategory category))
         {
-            errors["category"] = "Category must be spot or linear.";
+            errors["category"] = MarketDataCodes.InvalidCategory;
         }
 
-        if (!MarketDataCodes.TryParseInterval(request.Interval, out Interval interval))
+        if (!MarketDataCodes.TryParseInterval(category, request.Interval, out Interval interval))
         {
-            errors["interval"] = "Interval must be one of Bybit intervals: 1, 3, 5, 15, 30, 60, 120, 240, 360, 720, D, W, M.";
+            errors["interval"] = MarketDataCodes.InvalidInterval(category);
         }
 
         DateTimeOffset now = time.GetUtcNow();

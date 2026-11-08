@@ -10,8 +10,6 @@ namespace ProfitFox.Application.MarketData;
 /// </summary>
 public static class ChartCandles
 {
-    public const string InvalidInterval = "Interval must be one of Bybit intervals: 1, 3, 5, 15, 30, 60, 120, 240, 360, 720, D, W, M.";
-
     // The most candles of one page of the exchange.
     private const int MaxCandles = 1000;
 

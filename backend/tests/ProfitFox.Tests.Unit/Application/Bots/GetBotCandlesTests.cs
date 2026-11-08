@@ -81,6 +81,19 @@ public class GetBotCandlesTests
         await _history.DidNotReceiveWithAnyArgs().GetCandlesOnceAsync(default!, default, default, default, default);
     }
 
+    // Requirement "Валидация параметров чтения": the interval must be in the list of the category of the bot.
+    [Test]
+    public async Task Interval_outside_the_list_of_the_category_of_the_bot_is_an_error_of_the_interval()
+    {
+        var sber = new Bot(Guid.NewGuid(), "EMA SBER", Guid.NewGuid(), new Dictionary<string, NodeValue>(), new Instrument(MarketCategory.Moex, "SBER"), Interval.OneHour, 1000m, Now, Now);
+        _library.GetBotAsync(sber.Id, Arg.Any<CancellationToken>()).Returns(sber);
+
+        GetBotCandlesResult result = (await _handler.Handle(new GetBotCandlesQuery(sber.Id, "D", "2024-03-01T08:00:00Z", "2024-03-10T11:00:00Z"), CancellationToken.None))!;
+
+        result.Candles.ShouldBeNull();
+        result.Errors.ShouldBe(new Dictionary<string, string> { ["interval"] = "Interval must be one of the intervals of moex: 1, 3, 5, 15, 30, 60, 120, 240." });
+    }
+
     [Test]
     public async Task From_is_lowered_to_the_start_of_its_candle()
     {

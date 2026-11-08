@@ -5,8 +5,8 @@ namespace ProfitFox.Domain.ValueObjects.MarketData;
 /// <summary>
 ///     An instrument the exchange lists in a market category, with the coins it trades, whether it trades now and whether it is a
 ///     perpetual contract (never on spot), since when it trades if the exchange tells (on linear only), the step of its price,
-///     whether it is a non-crypto (TradFi) instrument: a stock, an ETF, a commodity or forex, and the step and the minimums of the volume
-///     and amount of an order.
+///     whether it is a non-crypto (TradFi) instrument: a stock, an ETF, a commodity or forex, the step and the minimums of the volume
+///     and amount of an order, and, for a share of MOEX, the name of the company and whether it can be sold short.
 /// </summary>
 public sealed record ListedInstrument(
     MarketCategory Category,
@@ -20,4 +20,6 @@ public sealed record ListedInstrument(
     bool TradFi = false,
     decimal? QuantityStep = null,
     decimal? MinQuantity = null,
-    decimal? MinAmount = null);
+    decimal? MinAmount = null,
+    string? Name = null,
+    bool ShortEnabled = false);
