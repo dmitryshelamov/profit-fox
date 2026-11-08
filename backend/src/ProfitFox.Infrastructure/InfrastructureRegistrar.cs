@@ -257,6 +257,7 @@ public static class InfrastructureRegistrar
         }
 
         services.AddSingleton(tinvest);
+        services.AddSingleton(new MoexTradingSettings(tinvest.Trading));
         services.AddSingleton(TInvestCertificates.Load(tinvest.Certificates, AppContext.BaseDirectory));
         services.AddSingleton<ITInvestCallInvokers, TInvestChannel>();
         services.AddSingleton<TInvestRequestLimiter>();

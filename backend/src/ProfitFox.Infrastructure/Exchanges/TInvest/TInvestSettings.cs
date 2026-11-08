@@ -29,6 +29,9 @@ internal sealed record TInvestSettings
 
     public TInvestCertificateSettings Certificates { get; init; } = new TInvestCertificateSettings();
 
+    /// <summary>Whether the API starts bots on MOEX (decision 1 of <c>add-moex-live-bots</c>); off by default.</summary>
+    public bool Trading { get; init; }
+
     /// <summary>
     ///     Why the settings are wrong, or <c>null</c>: the endpoint goes only to the official host, or to a test host under <c>.invalid</c>,
     ///     and every limit is above zero.

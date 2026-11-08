@@ -3,6 +3,7 @@ using System.Globalization;
 using MediatR;
 
 using ProfitFox.Application.Exceptions;
+using ProfitFox.Application.ExchangeAccounts;
 using ProfitFox.Application.MarketData;
 using ProfitFox.Application.Ports.ExchangeAccounts;
 using ProfitFox.Application.Ports.LiveTrading;
@@ -32,11 +33,13 @@ public sealed class StartBotCommandHandler(
     IExchangeAccountRepository accounts,
     ISecretProtector protector,
     IExchangeKeyInspector inspector,
+    IBrokerAccountReader broker,
     IExchangeLedger ledger,
     IInstrumentCatalog catalog,
     ILiveBotRepository live,
     IIdeaTradeRepository ideaTrades,
     ITransactionExecutor executor,
+    MoexTradingSettings moex,
     TimeProvider time) : IRequestHandler<StartBotCommand>
 {
     /// <summary>
@@ -44,23 +47,32 @@ public sealed class StartBotCommandHandler(
     ///     on the latest version of its strategy; a Worker does the trading.
     /// </summary>
     /// <exception cref="NotFoundException">There is no such bot.</exception>
-    /// <exception cref="ConflictException">The bot works, the account cannot trade it, or its market has no live trading yet: the reason says why.</exception>
+    /// <exception cref="ConflictException">The bot works, the account cannot trade it, or the trading on MOEX is off: the reason says why.</exception>
     /// <exception cref="ExchangeUnavailableException">The exchange did not answer.</exception>
     public async Task Handle(StartBotCommand request, CancellationToken cancellationToken)
     {
         StrategyLibrary loaded = await library.LoadAsync(cancellationToken);
         Bot bot = loaded.Bots.SingleOrDefault(bot => bot.Id == request.Id) ?? throw new NotFoundException($"There is no bot {request.Id}.");
 
-        // Decision 10: no order goes to T-Invest in this change, so no check of a key of Bybit runs with a T-Invest account either.
-        if (bot.Instrument.Category.Exchange() == Exchange.TInvest)
+        // Decision 1: while the trading on MOEX is off, no bot of moex starts, and nothing is asked of any exchange.
+        if (bot.Instrument.Category.Exchange() == Exchange.TInvest && !moex.Enabled)
         {
-            throw new ConflictException("Trading on MOEX is not supported yet.");
+            throw new ConflictException("Trading on MOEX is disabled.");
         }
 
         ExchangeAccount account = (bot.ExchangeAccountId is { } id ? await accounts.GetAsync(id, cancellationToken) : null)
                                   ?? throw new ConflictException("The bot has no exchange account.");
         ExchangeKey key = await LiveRequests.KeyAsync(accounts, protector, account, cancellationToken);
-        await CheckKeyAsync(bot, key, cancellationToken);
+
+        // Decision 10: the account of T-Invest is checked at the broker, a key of Bybit at Bybit.
+        if (key.Exchange == Exchange.TInvest)
+        {
+            await CheckBrokerAccountAsync(key, cancellationToken);
+        }
+        else
+        {
+            await CheckBybitKeyAsync(bot, key, cancellationToken);
+        }
         string quote = await QuoteCoinAsync(bot.Instrument, cancellationToken);
 
         await LiveRequests.ChangeAsync(
@@ -86,7 +98,7 @@ public sealed class StartBotCommandHandler(
             cancellationToken);
     }
 
-    private async Task CheckKeyAsync(Bot bot, ExchangeKey key, CancellationToken cancellationToken)
+    private async Task CheckBybitKeyAsync(Bot bot, ExchangeKey key, CancellationToken cancellationToken)
     {
         try
         {
@@ -105,6 +117,29 @@ public sealed class StartBotCommandHandler(
         catch (ExchangeKeyRejectedException exception)
         {
             throw new ConflictException(exception.Message);
+        }
+    }
+
+    /// <summary>The token of the key must still open its account, open and with full access.</summary>
+    private async Task CheckBrokerAccountAsync(ExchangeKey key, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<BrokerAccount> opened;
+
+        try
+        {
+            opened = await broker.ListAccountsAsync(key.Secret, cancellationToken);
+        }
+        catch (ExchangeKeyRejectedException exception)
+        {
+            throw new ConflictException(exception.Message);
+        }
+
+        BrokerAccount account = opened.SingleOrDefault(item => item.Id == key.ApiKey)
+                                ?? throw new ConflictException($"The token no longer opens the account {key.ApiKey}.");
+
+        if (BrokerAccountRules.Problem(account) is { } problem)
+        {
+            throw new ConflictException(BrokerAccountRules.Describe(problem));
         }
     }
 

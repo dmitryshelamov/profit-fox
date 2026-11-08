@@ -17,17 +17,17 @@ T-Invest. Решения — в design.md, требования — в `specs/`.
 
 ## 2. Запуск бота на MOEX
 
-- [ ] 2.1 `Application/LiveTrading/MoexTradingSettings(Enabled)`; `TInvestSettings.Trading` (`bool`, `false`) читается в
+- [x] 2.1 `Application/LiveTrading/MoexTradingSettings(Enabled)`; `TInvestSettings.Trading` (`bool`, `false`) читается в
   `ConfigureTInvest` и регистрируется для API. Тест регистрации: без секции `Enabled == false`.
-- [ ] 2.2 `StartBotCommandHandler`: бот `moex` при выключенной торговле — `ConflictException("Trading on MOEX is disabled.")`
+- [x] 2.2 `StartBotCommandHandler`: бот `moex` при выключенной торговле — `ConflictException("Trading on MOEX is disabled.")`
   до обращений к портам; конфликт «not supported yet» удалён. Тесты: отказ без вызовов `IBrokerAccountReader` и
   `IExchangeLedger`; при включённой — запуск идёт дальше.
-- [ ] 2.3 Проверка счёта T-Invest при запуске: `IBrokerAccountReader.ListAccountsAsync(token)` → счёт аккаунта найден, открыт,
+- [x] 2.3 Проверка счёта T-Invest при запуске: `IBrokerAccountReader.ListAccountsAsync(token)` → счёт аккаунта найден, открыт,
   полный доступ (`BrokerAccountRules.Problem`), иначе конфликт с причиной; `IExchangeKeyInspector` и hedge — только для
   Bybit. Тесты: счёт только для чтения → конфликт; счёт пропал из списка → конфликт; Bybit без изменений.
-- [ ] 2.4 Деньги при запуске на `moex`: `GetFreeAsync(key, "RUB")` через порт; тест `StartBot` с `50 000` RUB, из них `10 000`
+- [x] 2.4 Деньги при запуске на `moex`: `GetFreeAsync(key, "RUB")` через порт; тест `StartBot` с `50 000` RUB, из них `10 000`
   заблокированы, и балансом `45 000` → «Not enough free money».
-- [ ] 2.5 Интеграционный тест API: `POST /api/bots/{id}/start` бота `moex` при выключенной торговле → 409 с причиной; при
+- [x] 2.5 Интеграционный тест API: `POST /api/bots/{id}/start` бота `moex` при выключенной торговле → 409 с причиной; при
   включённой (`TInvest:Trading=true` в тестовом хосте) и моке счёта → 204 и бот «запущен». Спека `live-trading`
   «Торговля на MOEX выключателем» и «Запуск бота» покрыты.
 

@@ -148,7 +148,10 @@ enforces a rule, the check is the source of truth.
   a unit inside a unit is refused, and `EnsureNoTransaction` guards a call that must not hold a transaction open (the
   exchange).
 - `LiveTrading` holds the commands of live trading (start, pause, resume, stop, close the position, claim and run a bot; the start of a
-  bot on `moex` is a conflict «Trading on MOEX is not supported yet» before any call to an exchange, until the live bots of MOEX come),
+  bot on `moex` is a conflict «Trading on MOEX is disabled» before any call to an exchange while `MoexTradingSettings.Enabled` (the
+  `TInvest:Trading` setting of the API) is off, and otherwise checks the account of T-Invest at the broker through `IBrokerAccountReader`:
+  the token still opens it, open and with full access, instead of the key and the hedge mode of Bybit; `LiveRequests.KeyAsync` builds the
+  `ExchangeKey` by the exchange of the account, on T-Invest the number of the brokerage account with the token),
   `LiveTradingCodes`, and `Runtime/LiveBotSession`: one session keeps one bot for the take of its lease, takes its inputs
   one at a time from a queue, writes every change in one unit of work after checking the lease, and sends orders only
   once they are written; `Runtime/LiveBotReconciler` compares the books of a bot and of the bots that share its
