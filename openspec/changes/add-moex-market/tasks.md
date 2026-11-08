@@ -21,28 +21,28 @@
 
 ## 2. Аккаунт T-Invest
 
-- [ ] 2.1 `ExchangeAccount` с `Exchange`, nullable `ApiKey`/`Uid`, `AccountId` и инвариантами в конструкторе (решение 2);
+- [x] 2.1 `ExchangeAccount` с `Exchange`, nullable `ApiKey`/`Uid`, `AccountId` и инвариантами в конструкторе (решение 2);
   `IExchangeAccountRepository.AddAsync` отказывает по уникальному `(exchange, account_id)`. Unit-тесты инвариантов:
   аккаунт Bybit без ключа и аккаунт T-Invest без счёта не создаются.
-- [ ] 2.2 Миграция `AddMoexMarketMigration`: `exchange` с заполнением `'bybit'`, nullable `api_key`/`uid`, `account_id`,
+- [x] 2.2 Миграция `AddMoexMarketMigration`: `exchange` с заполнением `'bybit'`, nullable `api_key`/`uid`, `account_id`,
   CHECK категорий с `moex`, частичные уникальные индексы, таблица `candle_coverage` (решения 2, 4, 12). Интеграционный
   тест миграции: старые строки получили `exchange = 'bybit'`, второй аккаунт того же `account_id` отклоняется базой,
   строка покрытия вставляется и читается.
-- [ ] 2.3 `ExchangeAccountRepository` и `ExchangeAccountDb` с новыми колонками. Интеграционные тесты: аккаунт T-Invest
+- [x] 2.3 `ExchangeAccountRepository` и `ExchangeAccountDb` с новыми колонками. Интеграционные тесты: аккаунт T-Invest
   сохраняется с зашифрованным токеном и читается без него (сценарий «Токен в базе зашифрован»); `GetSecretAsync`
   расшифровывается `AesGcmSecretProtector` в тот же токен; уникальность счёта (сценарий «Второй токен того же счёта»).
-- [ ] 2.4 Порт `Ports/ExchangeAccounts/IBrokerAccountReader` (`ListAccountsAsync(token)` → `BrokerAccount` с номером,
+- [x] 2.4 Порт `Ports/ExchangeAccounts/IBrokerAccountReader` (`ListAccountsAsync(token)` → `BrokerAccount` с номером,
   названием, типом, статусом, доступом и причиной недоступности; `GetPortfolioAsync(token, accountId)`) и валюта в
   `AccountBalance` (решение 2). Unit-тест чистой проверки «можно сохранить»: открытый брокерский с `FullAccess` — да,
   закрытый ИИС — `not_open`, чтение — `not_full_access`.
-- [ ] 2.5 `CreateExchangeAccountCommand` с `Exchange`, `Token`, `AccountId`; обработчик по бирже: Bybit как сейчас, T-Invest —
+- [x] 2.5 `CreateExchangeAccountCommand` с `Exchange`, `Token`, `AccountId`; обработчик по бирже: Bybit как сейчас, T-Invest —
   повторное чтение счетов и проверка выбранного (решение 2). Unit-тесты по сценариям «Валидный аккаунт T-Invest»,
   «Доступ отозван между выбором и сохранением», «T-Invest не отвечает при создании», пустые поля — ошибки по полям, счета
   не читаются; сценарии Bybit зелёные.
-- [ ] 2.6 Запрос `ListBrokerAccountsQuery(token)` и `GetExchangeAccountBalance` по бирже (Bybit — инспектор, T-Invest —
+- [x] 2.6 Запрос `ListBrokerAccountsQuery(token)` и `GetExchangeAccountBalance` по бирже (Bybit — инспектор, T-Invest —
   `IBrokerAccountReader`, валюта `RUB`). Unit-тесты по сценариям «Два счёта токена», «Токен отклонён», «Портфель со
   стоимостью».
-- [ ] 2.7 Контракты и контроллер: `exchange` в `ExchangeAccountBody` (`bybit` по умолчанию), `token`, `accountId`;
+- [x] 2.7 Контракты и контроллер: `exchange` в `ExchangeAccountBody` (`bybit` по умолчанию), `token`, `accountId`;
   `exchange`/`accountId` в ответах; `POST /api/exchange-accounts/tinvest/accounts`; `currency` в балансе; тело с токеном
   не логируется (решение 11). Интеграционные тесты API на моке: создание аккаунта T-Invest возвращает id и ответ без
   токена; старое тело без `exchange` создаёт аккаунт Bybit; список счетов токена.

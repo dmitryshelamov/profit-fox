@@ -148,7 +148,8 @@ public class BybitAccountClientTests
 
         AccountBalance balance = await Client(handler).GetBalanceAsync("key", Secret, CancellationToken.None);
 
-        balance.TotalEquityUsd.ShouldBe(1675.31m);
+        balance.Currency.ShouldBe("USD");
+        balance.TotalEquity.ShouldBe(1675.31m);
         balance.Coins.ShouldBe([new CoinBalance("USDT", 1000.123456m, 1000.25m), new CoinBalance("BTC", 0.01m, 675.06m)]);
         BybitRequests.Describe(handler.Requests.Single()).ShouldBe(BybitRequests.Describe("/v5/account/wallet-balance?accountType=UNIFIED"));
         handler.Requests.Single().Host.ShouldBe("api.bybit.com");
@@ -162,7 +163,7 @@ public class BybitAccountClientTests
 
         AccountBalance balance = await Client(handler).GetBalanceAsync("key", Secret, CancellationToken.None);
 
-        balance.TotalEquityUsd.ShouldBe(0m);
+        balance.TotalEquity.ShouldBe(0m);
         balance.Coins.ShouldBe([new CoinBalance("USDT", 1000m, 0m)]);
     }
 
@@ -173,7 +174,7 @@ public class BybitAccountClientTests
 
         AccountBalance balance = await Client(handler).GetBalanceAsync("key", Secret, CancellationToken.None);
 
-        balance.TotalEquityUsd.ShouldBe(0m);
+        balance.TotalEquity.ShouldBe(0m);
         balance.Coins.ShouldBeEmpty();
     }
 

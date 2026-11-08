@@ -78,6 +78,10 @@ enforces a rule, the check is the source of truth.
 - `IdeaAutos` is the area of the autos that take ideas by themselves: `Entities/IdeaAutos` holds `IdeaAuto` (a named auto with its account, amount, mode, conditions, place in the list and `Budget`, the cap of the sum of the amounts of its open trades, none for no budget; soft-deleted with `DeletedAt`; `MaxPerMinutePerSide` and `MaxOpenPerSide`, the most new trades of a side it takes in a minute and the most open trades of a side, real and paper, none for no limit), `PaperIdeaTrade` (an `IdeaTrade` of an auto on paper with the auto and `SteppedUntil`, the open time of the next minute to step it by), `IdeaAutoEntry` (the request of an auto with money to enter by an idea, with the account, amount and lowest reward to risk of the minute of the idea, the place of the auto and the order of the idea) and `IdeaAutoRefusal` (an idea that fit an auto and was not taken, with the copy of the idea, every reason and the detail of the first); `Entities/IdeaAutos/Enums` holds `IdeaAutoMode` (`Off`, `Paper`, `Live`) and `FeatureCondition` (`Any`, `With`, `Without`: what an auto asks of a feature of the market of an idea); `ValueObjects/IdeaAutos` holds `IdeaAutoConditions`, `AutoRefusal`, `RefusalDetail`, `PairHolder`, `AutoBooks` (the trades an auto is checked against), `PaperEntryCheck`, `DailyLossState`, `LimitSkip` (the ideas of a side a limit of an auto skipped in a minute: the first, the limit, how many) and `AutoMinute` (what the autos did in a minute, written with the ideas of the minute); `Services/IdeaAutos` holds the pure functions: `AutoConditions` (whether an idea fits the conditions, the features of the market among them), `AutoMinutePlan` (the order an auto takes the ideas of a minute in, by the promised expectancy of the bucket then the net reward to risk, ideas without a bucket last, and its two limits over one minute: an idea over a limit is skipped and counted, one `LimitSkip` a side), `PaperEntry` (the checks of a paper entry), `PaperFill` (the fill of a paper trade by the closed minutes, and its close at the exit price of its idea when the idea expires), `AutoRefusals` (the pair held, the budget of the auto and of all the autos, the open trades of a side, the daily stop), `AutoBudget` (what the open trades take of the budget of an auto, its real trades on any account and its paper ones, and of the budget of all the autos, the real trades of every auto; a trade takes its `Amount`, the amount after the volume was rounded, and a new entry is checked with the amount it asks for) and `DailyLossStop`. `IdeaTrade.AutoId` is the auto that took a trade (none for a manual one); `IdeaTradingSettings` also holds the three guards of the autos with money, `DailyLossLimit`, `MaxSameDirection` and `AutosBudget`, none while off; `IdeaTradeRefusal` also has the reasons only an auto is given (`DailyStop`, `TooManySameDirection`, `PairTaken`, `Late`, `AutoOff`, `RulesUnknown`, `EntryError`, `BudgetTaken`, `AutosBudgetTaken`, `MinuteLimit`, `SideLimit`); `IdeaTradeRefusals.DetailOf` tells the numbers of a reason. `Market` pairs (`ScannerPair`) and `ListedInstrument` also carry the step of the volume and the minimums of the volume and amount of an order (`QuantityStep`, `MinQuantity`, `MinAmount`).
 - `SavedFilters` is the area of saved filters: `Entities/SavedFilters` holds `SavedFilter` and the enums `SavedFilterPlace`, `FilterField`,
   `FilterOperator`; `ValueObjects/SavedFilters` holds `FilterCondition`.
+- `ExchangeAccount` is one flat record for both exchanges: `Exchange`, the `ApiKey` and `Uid` of a Bybit account, the `AccountId` (the
+  number of the brokerage account) of a T-Invest account; the constructor keeps the fields of each exchange, and a T-Invest account
+  trades in `Moex`. The secret of either (the API secret, the token) is kept apart, encrypted, and `IExchangeAccountRepository.AddAsync`
+  refuses a second account of the same uid (Bybit) or account number (T-Invest).
 - `Exceptions` holds domain exceptions: a broken domain rule that the caller reports to the user
   (`GraphValidationException`, `NodeInUseException`, `BotsAffectedException`).
 - The domain knows no wire codes and no vendor names: enums, not strings. Codes are mapped at the boundaries:
@@ -117,7 +121,14 @@ enforces a rule, the check is the source of truth.
   `ExchangeKeyRejectedException`).
 - `ExchangeAccounts` holds the commands and queries of exchange accounts and `ExchangeKeyRules`, the pure check of what a key may do. The secret of an account is decrypted only in the query
   that calls the exchange with it, and a bot refers to its account by id (`BotAccount` carries the categories the key
-  trades in into the checks of the bot).
+  trades in into the checks of the bot). `ExchangeCodes` (`bybit`, `tinvest`) are the codes of the exchange in the API and in stored rows.
+  `CreateExchangeAccountCommand` creates an account by its exchange: Bybit from the key and the secret as before, T-Invest from the
+  token and the account number, reading the accounts of the token again through `Ports/ExchangeAccounts/IBrokerAccountReader`
+  (`ListAccountsAsync(token)`, `GetPortfolioAsync(token, accountId)`) and taking only an account `BrokerAccountRules` has no problem
+  with (`not_open`, `not_full_access`, `unsupported_type`; `BrokerAccountCodes` are the codes of the type, status and access of a
+  `BrokerAccount`). `ListBrokerAccountsQuery(token)` lists the accounts of a token with the problem of each, storing nothing.
+  `AccountBalance` carries its `Currency` (`USD` on Bybit, `RUB` on T-Invest); `GetExchangeAccountBalance` reads a Bybit account through
+  `IExchangeKeyInspector` and a T-Invest account through `IBrokerAccountReader`.
 - `Transactions/ITransactionExecutor` runs a unit of work in one transaction: its writes commit together or not at all,
   a unit inside a unit is refused, and `EnsureNoTransaction` guards a call that must not hold a transaction open (the
   exchange).
@@ -400,6 +411,11 @@ enforces a rule, the check is the source of truth.
 
 ## Presentation (`ProfitFox.Presentation`)
 
+- `ExchangeAccountsController`: `POST /api/exchange-accounts` takes `exchange` (`bybit` by default, with `apiKey` and `apiSecret`; `tinvest`
+  with `token` and `accountId`), the answers of an account carry `exchange` and `accountId` with `apiKey` and `uid` nullable;
+  `POST /api/exchange-accounts/tinvest/accounts` `{ token }` lists the accounts of a token (`[{ id, name, type, status, access, problem }]`,
+  a token T-Invest rejects is a 400 on `token`); `GET .../{id}/balance` gives `currency`, `totalEquity` and `coins` with their `value` in it.
+  No endpoint logs a body: the request logging writes the method, the path and the status only.
 - `Controllers` holds controllers only (`BotsController`, `BacktestsController`, `InstrumentsController`: `GET /api/market-data/instruments?category&query&limit`
   → `[{ category, symbol, baseCoin, quoteCoin }]`; field errors 400, exchange unavailable 503); request and response types go to
   `Contracts/<Area>` (`Contracts/Bots`, `Contracts/Backtests`).

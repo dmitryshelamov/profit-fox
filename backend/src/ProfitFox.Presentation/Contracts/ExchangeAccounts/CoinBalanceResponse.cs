@@ -1,3 +1,4 @@
 namespace ProfitFox.Presentation.Contracts.ExchangeAccounts;
 
-public sealed record CoinBalanceResponse(string Coin, string WalletBalance, string UsdValue);
+/// <summary>A coin or a share the account holds and its value in the currency of the balance.</summary>
+public sealed record CoinBalanceResponse(string Coin, string WalletBalance, string Value);

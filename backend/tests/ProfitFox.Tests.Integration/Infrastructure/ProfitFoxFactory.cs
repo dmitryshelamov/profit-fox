@@ -36,6 +36,9 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
     /// <summary>Answers the app's reads of what an account holds on the exchange.</summary>
     public IExchangeLedger Ledger { get; } = Substitute.For<IExchangeLedger>();
 
+    /// <summary>Answers the app's calls to T-Invest with a token: the accounts it opens and their portfolios; no test reaches T-Invest.</summary>
+    public IBrokerAccountReader BrokerAccounts { get; } = Substitute.For<IBrokerAccountReader>();
+
     /// <summary>
     ///     Whether <see cref="KeyInspector" /> answers the calls with an account key. Without it the app's own Bybit client sends them
     ///     through its HTTP pipeline to <see cref="Bybit" />.
@@ -132,6 +135,7 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
         {
             services.AddSingleton<TimeProvider>(Time);
             services.AddSingleton(Ledger);
+            services.AddSingleton(BrokerAccounts);
             if (FakeKeyInspector)
             {
                 services.AddSingleton(KeyInspector);
