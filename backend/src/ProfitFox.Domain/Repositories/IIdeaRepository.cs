@@ -47,6 +47,9 @@ public interface IIdeaRepository
 
     Task<Idea?> GetAsync(Guid id, CancellationToken cancellationToken);
 
+    /// <summary>The ideas of the ids given that are still stored; the ones no longer stored are left out.</summary>
+    Task<IReadOnlyList<Idea>> GetManyAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken);
+
     /// <summary>
     ///     Deletes the ideas that reached the target, the stop or expired before <paramref name="closedBefore" />; returns how many went. The
     ///     open ideas stay however old they are.

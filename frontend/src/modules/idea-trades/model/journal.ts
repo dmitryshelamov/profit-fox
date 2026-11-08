@@ -6,6 +6,7 @@ import { roundDecimal, showDecimal } from '@/shared/format/format';
 type Promise = Schemas['IdeaPromiseResponse'];
 type Outcome = Schemas['IdeaOutcomeResponse'];
 type Totals = Schemas['IdeaJournalTotalsResponse'];
+type Trade = Schemas['IdeaTradeResponse'];
 
 const dash = '—';
 
@@ -34,6 +35,20 @@ export function durationText(seconds: number | string | null): string {
   }
 
   return `${rest} мин`;
+}
+
+/** The time left of the idea of a trade in work: «закрыта» once it has its outcome, the time to its end while it is active, a dash otherwise. */
+export function ideaLeftText(
+  trade: Pick<Trade, 'ideaEndsAt' | 'ideaOutcome'>,
+  now: number,
+): string {
+  if (trade.ideaOutcome !== null) {
+    return 'закрыта';
+  }
+
+  return trade.ideaEndsAt === null
+    ? dash
+    : durationText((Date.parse(trade.ideaEndsAt) - now) / 1000);
 }
 
 const rText = (value: string) => `${showDecimal(value, 2, true)} R`;

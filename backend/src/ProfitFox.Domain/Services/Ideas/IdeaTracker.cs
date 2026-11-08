@@ -107,7 +107,7 @@ public static class IdeaTracker
 
         DateTimeOffset end = minute.OpenTime.AddMinutes(1);
 
-        return end >= track.EnteredAt!.Value.AddMinutes(track.LifeCandles * track.CandleMinutes)
+        return end >= track.LifeEndsAt
             ? track with { Status = IdeaStatus.Expired, StatusAt = end, ExitPrice = minute.Close }
             : track;
     }

@@ -5,6 +5,7 @@ using System.Text.Json;
 using Npgsql;
 
 using ProfitFox.Application.Ports.LiveTrading;
+using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.Entities.IdeaTrades.Enums;
@@ -14,6 +15,7 @@ using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas;
 using ProfitFox.Tests.Integration.Workers;
 
 using Shouldly;
@@ -277,7 +279,7 @@ public class IdeaTradesApiTests
         item.GetProperty("amount").GetString().ShouldBe("47.00");
         item.GetProperty("result").ValueKind.ShouldBe(JsonValueKind.Null);
         item.GetProperty("reason").ValueKind.ShouldBe(JsonValueKind.Null);
-        foreach (string absent in new[] { "openedAt", "secondsToOutcome", "ideaOutcome", "lastPrice", "currentResult", "currentResultR" })
+        foreach (string absent in new[] { "openedAt", "secondsToOutcome", "ideaOutcome", "ideaEndsAt", "lastPrice", "currentResult", "currentResultR" })
         {
             item.GetProperty(absent).ValueKind.ShouldBe(JsonValueKind.Null, absent);
         }
@@ -346,6 +348,26 @@ public class IdeaTradesApiTests
         promise.GetProperty("netRiskReward").GetString().ShouldNotBeNull();
         JsonElement outcome = item.GetProperty("ideaOutcome");
         (outcome.GetProperty("status").GetString(), outcome.GetProperty("result").GetString()).ShouldBe(("target", "1.84"));
+    }
+
+    // Requirement "Конец идеи у сделки в работе": a trade in work gives the end of the lifetime of its idea once the idea is active.
+    [Test]
+    public async Task Trade_in_work_gives_the_end_of_the_lifetime_of_its_active_idea()
+    {
+        Guid ideaId = await _scenario.SaveIdeaAsync(100m, 98m, 104m);
+        _scenario.SetPrice("100");
+        Guid id = await CreateAsync(ideaId);
+        await using var database = NpgsqlDataSource.Create(_scenario.Factory.ConnectionString);
+        var store = new IdeaRepository(database);
+        Idea idea = (await store.GetAsync(ideaId, CancellationToken.None))!;
+        DateTimeOffset entered = _scenario.Factory.Time.GetUtcNow();
+        Idea active = idea with { Track = idea.Track with { Status = IdeaStatus.Active, StatusAt = entered, EnteredAt = entered } };
+        await store.SaveAsync([], [active], CancellationToken.None);
+
+        JsonElement item = (await JournalAsync()).GetProperty("open")[0];
+
+        item.GetProperty("id").GetGuid().ShouldBe(id);
+        item.GetProperty("ideaEndsAt").GetDateTimeOffset().ShouldBe(active.Track.LifeEndsAt!.Value);
     }
 
     // Task 6.2 of add-market-idea-features: a real trade gives the features its idea fired with.

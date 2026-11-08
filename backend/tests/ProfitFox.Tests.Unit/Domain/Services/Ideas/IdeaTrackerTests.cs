@@ -261,6 +261,22 @@ public class IdeaTrackerTests
         minutes.Aggregate(fired, IdeaTracker.Step).Status.ShouldBe(IdeaStatus.Expired);
     }
 
+    // Requirement "Конец идеи у сделки в работе": 16 candles of 15 minutes from the entry at 10:00 end at 14:00.
+    [Test]
+    public void Life_of_an_entered_idea_ends_its_candles_after_the_entry()
+    {
+        var entered = DateTimeOffset.Parse("2024-03-01T10:00:00Z");
+        var track = new IdeaTrack(TwoR, Fired, 15, 16, 2m, null, IdeaStatus.Active, entered, entered);
+
+        track.LifeEndsAt.ShouldBe(DateTimeOffset.Parse("2024-03-01T14:00:00Z"));
+    }
+
+    [Test]
+    public void Idea_without_an_entry_has_no_end_of_life()
+    {
+        Track(Pullback).LifeEndsAt.ShouldBeNull();
+    }
+
     private static IdeaTrack Run(IdeaPlan plan, params IdeaCandle[] minutes)
     {
         return minutes.Aggregate(Track(plan), IdeaTracker.Step);

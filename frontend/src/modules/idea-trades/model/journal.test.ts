@@ -5,6 +5,7 @@ import {
   durationText,
   excludedText,
   ideaComparisonText,
+  ideaLeftText,
   ideaOutcomeText,
   meanText,
   moneyText,
@@ -108,6 +109,36 @@ describe('outcome of the idea of a trade', () => {
       ideaOutcomeText({ status: 'expired', statusAt: '2026-11-05T12:00:00Z', result: null }),
     ).toBe('Истекла');
     expect(ideaOutcomeText(null)).toBe('—');
+  });
+});
+
+describe('time left of the idea of a trade', () => {
+  const now = Date.parse('2026-11-08T12:00:00Z');
+  const outcome = { status: 'expired', statusAt: '2026-11-08T11:00:00Z', result: '0.4' } as const;
+
+  // Scenario "Идея ещё жива".
+  it('counts down to the end of an active idea, a minute less a minute later', () => {
+    const trade = { ideaEndsAt: '2026-11-08T13:40:00Z', ideaOutcome: null };
+
+    expect(ideaLeftText(trade, now)).toBe('1 ч 40 мин');
+    expect(ideaLeftText(trade, now + 60_000)).toBe('1 ч 39 мин');
+  });
+
+  // Scenario "Срок идеи вышел, а сканер её ещё не закрыл".
+  it('says less than a minute once the end has passed and the idea has no outcome yet', () => {
+    expect(ideaLeftText({ ideaEndsAt: '2026-11-08T11:58:00Z', ideaOutcome: null }, now)).toBe(
+      '< 1 мин',
+    );
+  });
+
+  // Scenario "Идея закрылась раньше сделки".
+  it('says closed when the trade has the outcome of its idea', () => {
+    expect(ideaLeftText({ ideaEndsAt: null, ideaOutcome: outcome }, now)).toBe('закрыта');
+  });
+
+  // Scenario "Идея ждёт входа".
+  it('shows a dash with neither an end nor an outcome of the idea', () => {
+    expect(ideaLeftText({ ideaEndsAt: null, ideaOutcome: null }, now)).toBe('—');
   });
 });
 

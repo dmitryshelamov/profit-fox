@@ -3,10 +3,13 @@ import { type APIRequestContext, expect, type Page, test } from '@playwright/tes
 import { createStrategy, reference } from './api';
 import {
   expiredPaperSymbol,
+  ideaLeftSymbols,
   removeOpenIdeas,
   removePaperTradeClosedAtExpiry,
+  removePaperTradesOfIdeas,
   seedOpenIdea,
   seedPaperTradeClosedAtExpiry,
+  seedPaperTradesOfIdeas,
 } from './seed';
 
 // Acceptance of the journal of the trades by ideas against the real API and a trading Worker on the Bybit stub: the owner enters by an idea on the page of
@@ -301,6 +304,33 @@ test('a paper trade closed at the expiry of its idea is in the table with its st
     );
   } finally {
     await removePaperTradeClosedAtExpiry();
+  }
+});
+
+// Requirement "Группа «В работе»", scenarios "Идея ещё жива" and "Идея закрылась раньше сделки": the time left of the idea of a trade in
+// work runs down with the clock of the page, and a trade whose idea closed says so.
+test('the time left of the idea of a trade in work runs down, and a trade whose idea closed says it is closed', async ({
+  page,
+}) => {
+  const now = Date.now();
+  await seedPaperTradesOfIdeas(accountId, new Date(now + (100 * 60 + 30) * 1000));
+
+  try {
+    await page.clock.install({ time: now });
+    await page.goto('/idea-trades');
+    const table = page.getByRole('table', { name: 'Сделки в работе' });
+    const left = (symbol: string) =>
+      table.getByRole('row').filter({ hasText: symbol }).getByRole('cell').nth(12);
+
+    await expect(table.getByRole('columnheader').nth(12)).toHaveText('До конца идеи');
+    await expect(left(ideaLeftSymbols.active)).toHaveText('1 ч 40 мин');
+    await expect(left(ideaLeftSymbols.closed)).toHaveText('закрыта');
+
+    await page.clock.fastForward('01:00');
+
+    await expect(left(ideaLeftSymbols.active)).toHaveText('1 ч 39 мин');
+  } finally {
+    await removePaperTradesOfIdeas();
   }
 });
 
