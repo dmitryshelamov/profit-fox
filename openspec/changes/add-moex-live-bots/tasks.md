@@ -69,15 +69,15 @@ T-Invest. Решения — в design.md, требования — в `specs/`.
 
 ## 6. Гейтвей заявок T-Invest
 
-- [ ] 6.1 `TInvestOrderGateway.PlaceAsync`: лоты (не целое → `Permanent`), `DAY` для лимитной, рыночная без цены, `Protection`
+- [x] 6.1 `TInvestOrderGateway.PlaceAsync`: лоты (не целое → `Permanent`), `DAY` для лимитной, рыночная без цены, `Protection`
   / `ReduceOnly` → `Permanent`, `request_id` из `TInvestOrderIds` до отправки, `exchange_order_id` в таблицу после. Unit-тесты
   на моке: записанный запрос `PostOrder` (счёт, uid, лоты, `Quotation`, `time_in_force`), повтор с тем же `order_id`.
-- [ ] 6.2 Таблица отказов (решение 5): `30057` → `Accepted` с чтением состояния; `30098`/статус → `Transient` с `RetryAfter` до
+- [x] 6.2 Таблица отказов (решение 5): `30057` → `Accepted` с чтением состояния; `30098`/статус → `Transient` с `RetryAfter` до
   сессии (минута без расписания); `30099`/коридор → `Transient` минута; постоянные коды → `Permanent` с кодом без текста
   брокера; транспортные статусы → `Transient`; `UNAUTHENTICATED` → `Permanent`. Unit-тест на каждую строку таблицы.
-- [ ] 6.3 `CancelAsync` по `OrderIdType.Request`, `CancelByExchangeIdAsync` по `Exchange`; `NOT_FOUND` и «уже в конечном
+- [x] 6.3 `CancelAsync` по `OrderIdType.Request`, `CancelByExchangeIdAsync` по `Exchange`; `NOT_FOUND` и «уже в конечном
   состоянии» → `AlreadyDone`; иной отказ → `Permanent`. Unit-тесты.
-- [ ] 6.4 Проверка перед отправкой: `MayPlace` вызывается до `PostOrder`; закрытая сессия — ни одного `PostOrder` в записи
+- [x] 6.4 Проверка перед отправкой: `MayPlace` вызывается до `PostOrder`; закрытая сессия — ни одного `PostOrder` в записи
   мока. Unit-тест.
 
 ## 7. Леджер T-Invest
