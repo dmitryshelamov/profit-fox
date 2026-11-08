@@ -78,6 +78,18 @@ public class BybitLedgerTests
         BybitRequests.Describe(handler.Requests.Single()).ShouldBe(BybitRequests.Describe("/v5/position/list?category=linear&symbol=BTCUSDT"));
     }
 
+    // Review of add-idea-trade-leverage: no row of the symbol, or a row without its leverage, is an answer the port does not take, not a crash.
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task Linear_position_without_the_leverage_of_the_symbol_is_an_exchange_error(bool row)
+    {
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(row ? Positions(Position(0, "", "0", leverage: "")) : Positions());
+
+        ExchangeException error = await Should.ThrowAsync<ExchangeException>(() => Ledger(handler).GetLinearPositionAsync(Key, Linear, CancellationToken.None));
+
+        error.Message.ShouldBe("Bybit told no leverage of BTCUSDT.");
+    }
+
     [Test]
     public async Task Spot_holding_is_the_coin_on_the_account()
     {
