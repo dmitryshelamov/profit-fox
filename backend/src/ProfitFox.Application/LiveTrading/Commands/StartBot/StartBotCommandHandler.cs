@@ -11,6 +11,7 @@ using ProfitFox.Application.Ports.Security;
 using ProfitFox.Application.Transactions;
 using ProfitFox.Domain.Entities.Bots;
 using ProfitFox.Domain.Entities.ExchangeAccounts;
+using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.Entities.IdeaTrades.Enums;
@@ -43,12 +44,19 @@ public sealed class StartBotCommandHandler(
     ///     on the latest version of its strategy; a Worker does the trading.
     /// </summary>
     /// <exception cref="NotFoundException">There is no such bot.</exception>
-    /// <exception cref="ConflictException">The bot works, or the account cannot trade it: the reason says why.</exception>
+    /// <exception cref="ConflictException">The bot works, the account cannot trade it, or its market has no live trading yet: the reason says why.</exception>
     /// <exception cref="ExchangeUnavailableException">The exchange did not answer.</exception>
     public async Task Handle(StartBotCommand request, CancellationToken cancellationToken)
     {
         StrategyLibrary loaded = await library.LoadAsync(cancellationToken);
         Bot bot = loaded.Bots.SingleOrDefault(bot => bot.Id == request.Id) ?? throw new NotFoundException($"There is no bot {request.Id}.");
+
+        // Decision 10: no order goes to T-Invest in this change, so no check of a key of Bybit runs with a T-Invest account either.
+        if (bot.Instrument.Category.Exchange() == Exchange.TInvest)
+        {
+            throw new ConflictException("Trading on MOEX is not supported yet.");
+        }
+
         ExchangeAccount account = (bot.ExchangeAccountId is { } id ? await accounts.GetAsync(id, cancellationToken) : null)
                                   ?? throw new ConflictException("The bot has no exchange account.");
         ExchangeKey key = await LiveRequests.KeyAsync(accounts, protector, account, cancellationToken);
