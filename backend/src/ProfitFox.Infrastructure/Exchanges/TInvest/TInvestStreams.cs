@@ -20,7 +20,7 @@ namespace ProfitFox.Infrastructure.Exchanges.TInvest;
 ///     A stream that ends, breaks or is silent for <see cref="Silence" /> (it pings every 30 s) opens again after 1, 2, 5, 10, then 30 s,
 ///     subscribes its series again and tells every listener <c>restored</c>. An event of the stream of orders is a signal: the state of
 ///     the order is read by its request id, again while T-Invest does not know it yet, and the end of a filled order waits up to a minute
-///     for its commission. One for the process.
+///     for its commission; an order that does not read tells every listener <c>restored</c>. One for the process.
 /// </summary>
 internal sealed class TInvestStreams(
     ITInvestCallInvokers invokers,
@@ -292,11 +292,33 @@ internal sealed class TInvestStreams(
     }
 
     /// <summary>
+    ///     A message of the stream of orders, told by <see cref="ReadOrderAsync" />; a message whose order does not read (T-Invest, the
+    ///     table of the ids or the share) counts as an error of the stream and tells every listener <c>restored</c>, so the sessions read
+    ///     their orders themselves and no fill is lost without a word.
+    /// </summary>
+    private async Task OrderAsync(ExchangeKey key, OrderStateStreamResponse.Types.OrderState update, Listeners<AccountListener> listeners, CancellationToken stop)
+    {
+        try
+        {
+            await ReadOrderAsync(key, update, listeners, stop);
+        }
+        catch (OperationCanceledException) when (stop.IsCancellationRequested)
+        {
+            // The last listener left.
+        }
+        catch (Exception)
+        {
+            metrics.Count(TInvestMethodGroup.Orders, "OrderStateStream", "error");
+            Tell(listeners.Items, listener => listener.Restored());
+        }
+    }
+
+    /// <summary>
     ///     What a message of the stream of orders tells (decision 7): an order of nobody in the system that traded is a fill of nobody on its
     ///     share; an order of a bot is read again by its request id, while T-Invest does not know it yet or its trades do not add up, and a
     ///     filled one without its commission yet again later, so its end comes with the commission.
     /// </summary>
-    private async Task OrderAsync(ExchangeKey key, OrderStateStreamResponse.Types.OrderState update, Listeners<AccountListener> listeners, CancellationToken stop)
+    private async Task ReadOrderAsync(ExchangeKey key, OrderStateStreamResponse.Types.OrderState update, Listeners<AccountListener> listeners, CancellationToken stop)
     {
         var instrument = new Instrument(MarketCategory.Moex, update.Ticker);
         string? clientId = Guid.TryParse(update.OrderRequestId, out Guid request) ? await ids.ClientIdOfAsync(request, stop) : null;

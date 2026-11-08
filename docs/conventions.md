@@ -284,14 +284,16 @@ enforces a rule, the check is the source of truth.
   of `GetOrderPrice` for a limit buy of at least 100 000 ₽, no hedge, no orders of a parent) and `TInvestStreams` (`IExchangeStreams` and
   `IFormingCandleStreams`: one `OrderStateStream` an account with pings, whose message is a signal: the state of an order of a bot is read
   by its request id up to 5 times a second apart while T-Invest does not know it or its stages disagree, a filled one without its
-  commission again at 5, 15, 30 and 60 s, and an order of nobody that traded is a fill of nobody on its share; two `MarketDataStream`s of
+  commission again at 5, 15, 30 and 60 s, and an order of nobody that traded is a fill of nobody on its share; a message whose order does
+  not read (T-Invest, the table of the ids or the share) counts as `error` of the stream and tells every listener of the account
+  `restored`, so the sessions read their orders themselves; two `MarketDataStream`s of
   the process with the token of `TInvestTokenSource`, of the closed candles (`waiting_close`) and of the forming ones, a series subscribed
   once for all its listeners and taken off by the last; a stream that ends, breaks or is silent for 90 s opens again after 1, 2, 5, 10,
   then 30 s, subscribes its series again and tells every listener `restored` (the forming ones `lost` first); a minute after the end of the
   trading day of a share its listeners of closed candles are told `restored`). `TInvestCall` throws `TInvestRefusedException` with the
   code of the detail for a refusal (`TInvestNotFoundException` for `NOT_FOUND`).
   The metrics live on the meter `ProfitFox.TInvest`: the counter `profitfox.tinvest.requests` {`group`, `method`, `outcome`} (a stream
-  counts its open as `ok` or `error` and its break as `lost`) and the gauges
+  counts its open as `ok` or `error`, its break as `lost`, and a message of orders that does not read as `error`) and the gauges
   `profitfox.tinvest.limit` and `profitfox.tinvest.limit_remaining` {`group`} from the headers `x-ratelimit-limit` and `x-ratelimit-remaining`;
   `MetricsRegistrar` lists the meter. No test and no local run calls the real T-Invest: the test hosts put `MockTInvestApi` behind
   `ITInvestCallInvokers`, and `appsettings.Testing.json` points the endpoint at `tinvest.invalid`.

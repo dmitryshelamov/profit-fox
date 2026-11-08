@@ -237,6 +237,54 @@ public class TInvestStreamsTests
         (events.Orders.Single().State, events.Orders.Single().FilledQuantity).ShouldBe((ExchangeOrderState.Filled, 20m));
     }
 
+    // An order whose state does not read is not lost without a word: every listener of the account is told restored, so the sessions
+    // read their orders again; the message counts as an error of the stream, and the stream goes on.
+    [Test]
+    public async Task Order_whose_state_does_not_read_tells_every_listener_restored_and_the_stream_goes_on()
+    {
+        using var requests = new MetricCollector<long>(_host.MeterFactory, TInvestMetrics.MeterName, "profitfox.tinvest.requests");
+        _host.Api.Fail("GetOrderState", StatusCode.Unavailable);
+        var first = new Events();
+        var second = new Events();
+        await OpenAccountAsync(first);
+        await AccountAsync(second);
+
+        _orders.Send(Message(Request.ToString()));
+
+        await EventuallyAsync(() => first.Restored == 1 && second.Restored == 1, "the restore of every listener");
+        first.Orders.ShouldBeEmpty();
+        _orders.IsOpen.ShouldBeTrue();
+        _orders.Opens.ShouldBe(1);
+        requests.GetMeasurementSnapshot()
+            .Select(measurement => ((string)measurement.Tags["group"]!, (string)measurement.Tags["method"]!, (string)measurement.Tags["outcome"]!))
+            .ShouldContain(("orders", "OrderStateStream", "error"));
+
+        _host.Api.On<GetOrderStateRequest, OrderState>("GetOrderState", _ => State(OrderExecutionReportStatus.ExecutionReportStatusNew));
+        _orders.Send(Message(Request.ToString()));
+
+        await EventuallyAsync(() => !first.Orders.IsEmpty && !second.Orders.IsEmpty, "the next order");
+        first.Restored.ShouldBe(1);
+    }
+
+    // The last listener leaving while an order is read again is no failure of the read.
+    [Test]
+    public async Task Read_of_an_order_cut_short_by_the_last_listener_leaving_is_no_error()
+    {
+        using var requests = new MetricCollector<long>(_host.MeterFactory, TInvestMetrics.MeterName, "profitfox.tinvest.requests");
+        _host.Api.Fail("GetOrderState", StatusCode.NotFound, "50005");
+        IAsyncDisposable subscription = await AccountAsync(new Events());
+        await EventuallyAsync(() => _orders.IsOpen, "the stream of orders");
+        _orders.Send(Message(Request.ToString()));
+        await EventuallyAsync(() => _host.Api.Calls.Any(call => call.Method == "GetOrderState"), "the first read");
+
+        await subscription.DisposeAsync();
+        await Task.Delay(50);
+
+        requests.GetMeasurementSnapshot()
+            .Select(measurement => ((string)measurement.Tags["group"]!, (string)measurement.Tags["method"]!, (string)measurement.Tags["outcome"]!))
+            .ShouldNotContain(("orders", "OrderStateStream", "error"));
+    }
+
     // Scenario "Стрим оборвался": opened again after 1, 2, 5, 10, then 30 s; every listener is told it is back.
     [Test]
     public async Task Broken_stream_of_orders_opens_again_ever_more_slowly_and_tells_it_is_back()
