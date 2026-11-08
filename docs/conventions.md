@@ -244,7 +244,9 @@ enforces a rule, the check is the source of truth.
   test host under `.invalid`; `AppName`; `RequestTimeout`; `Limits` a minute by group of methods; `Certificates`), `TInvestChannel` (the one
   `GrpcChannel` of the process behind `ITInvestCallInvokers`, which tests replace with `Tests.Shared/TInvest/MockTInvestApi`),
   `TInvestCertificates` (the pinned chain of the server certificate: the `.cer` files of `Exchanges/TInvest/Certificates`, copied to the
-  output, by the SHA-256 thumbprints of the settings; empty thumbprints pin nothing), `TInvestCall` (every unary call: `TInvestRequestLimiter`
+  output, by the SHA-256 thumbprints of the settings; the chain is built for server authentication from the certificates the server
+  presented and the pinned ones, without a download, and its second element must be the pinned Sub CA itself, not another Sub CA of
+  the same root; empty thumbprints pin nothing), `TInvestCall` (every unary call: `TInvestRequestLimiter`
   → `authorization: Bearer` and `x-app-name` → deadline → `TInvestMetrics` → the exceptions of Application; `OnceAsync` is one attempt,
   `WithRetriesAsync` the ladder of `ExchangeResilienceExecutor`; `RESOURCE_EXHAUSTED` pauses the group of the token until `x-ratelimit-reset`
   and is `ExchangeRateLimitedException`, `NOT_FOUND` is `TInvestNotFoundException`, a refusal carries the error code of the status detail and

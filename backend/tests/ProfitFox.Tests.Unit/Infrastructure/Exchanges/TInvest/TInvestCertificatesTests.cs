@@ -18,6 +18,9 @@ public class TInvestCertificatesTests
     private X509Certificate2 _sub = null!;
     private X509Certificate2 _server = null!;
     private X509Certificate2 _otherRoot = null!;
+    private X509Certificate2 _otherSub = null!;
+    private X509Certificate2 _otherServer = null!;
+    private X509Certificate2 _clientOnly = null!;
 
     [SetUp]
     public void SetUp()
@@ -26,10 +29,16 @@ public class TInvestCertificatesTests
         using var subKey = RSA.Create(2048);
         using var serverKey = RSA.Create(2048);
         using var otherKey = RSA.Create(2048);
+        using var otherSubKey = RSA.Create(2048);
+        using var otherServerKey = RSA.Create(2048);
+        using var clientOnlyKey = RSA.Create(2048);
         _root = Authority("CN=Test Trusted Root CA", rootKey, issuer: null, issuerKey: null);
         _sub = Authority("CN=Test Trusted Sub CA", subKey, _root, rootKey);
         _server = Server("invest-public-api.tbank.ru", serverKey, _sub, subKey);
         _otherRoot = Authority("CN=Other Root CA", otherKey, issuer: null, issuerKey: null);
+        _otherSub = Authority("CN=Other Sub CA of the same root", otherSubKey, _root, rootKey);
+        _otherServer = Server("invest-public-api.tbank.ru", otherServerKey, _otherSub, otherSubKey);
+        _clientOnly = Server("invest-public-api.tbank.ru", clientOnlyKey, _sub, subKey, ClientAuth);
     }
 
     [TearDown]
@@ -39,6 +48,30 @@ public class TInvestCertificatesTests
         _sub.Dispose();
         _server.Dispose();
         _otherRoot.Dispose();
+        _otherSub.Dispose();
+        _otherServer.Dispose();
+        _clientOnly.Dispose();
+    }
+
+    // After the review: the Sub CA is pinned, not only the root. A server of another Sub CA of the same root, whose chain the server
+    // itself presents in the handshake, is refused.
+    [Test]
+    public void Chain_through_another_sub_ca_of_the_pinned_root_fails()
+    {
+        new TInvestCertificates(_root, _sub).Accept(_otherServer, [_otherSub], SslPolicyErrors.RemoteCertificateChainErrors).ShouldBeFalse();
+    }
+
+    [Test]
+    public void Chain_the_server_presents_through_the_pinned_sub_ca_passes()
+    {
+        new TInvestCertificates(_root, _sub).Accept(_server, [_sub], SslPolicyErrors.RemoteCertificateChainErrors).ShouldBeTrue();
+    }
+
+    // After the review: the pinned chain is checked for the server authentication usage, as the system trust would.
+    [Test]
+    public void Certificate_without_the_server_authentication_usage_fails()
+    {
+        new TInvestCertificates(_root, _sub).Accept(_clientOnly, SslPolicyErrors.RemoteCertificateChainErrors).ShouldBeFalse();
     }
 
     [Test]
@@ -170,13 +203,20 @@ public class TInvestCertificatesTests
             : request.Create(issuer.SubjectName, X509SignatureGenerator.CreateForRSA(issuerKey!, RSASignaturePadding.Pkcs1), Now, Now.AddYears(5), RandomNumberGenerator.GetBytes(16));
     }
 
-    private static X509Certificate2 Server(string host, RSA key, X509Certificate2 issuer, RSA issuerKey)
+    private static readonly Oid ClientAuth = new Oid("1.3.6.1.5.5.7.3.2");
+
+    private static X509Certificate2 Server(string host, RSA key, X509Certificate2 issuer, RSA issuerKey, Oid? usage = null)
     {
         var request = new CertificateRequest($"CN={host}", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
         var names = new SubjectAlternativeNameBuilder();
         names.AddDnsName(host);
         request.CertificateExtensions.Add(names.Build());
+
+        if (usage is not null)
+        {
+            request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { usage }, false));
+        }
 
         return request.Create(issuer.SubjectName, X509SignatureGenerator.CreateForRSA(issuerKey, RSASignaturePadding.Pkcs1), Now, Now.AddYears(1), RandomNumberGenerator.GetBytes(16));
     }

@@ -20,13 +20,14 @@ internal sealed class TInvestChannel : ITInvestCallInvokers, IDisposable
         {
             SslOptions = new SslClientAuthenticationOptions
             {
-                RemoteCertificateValidationCallback = (_, certificate, _, errors) => certificates.Accept(
+                RemoteCertificateValidationCallback = (_, certificate, chain, errors) => certificates.Accept(
                     certificate switch
                     {
                         X509Certificate2 loaded => loaded,
                         { } raw => X509CertificateLoader.LoadCertificate(raw.GetRawCertData()),
                         null => null
                     },
+                    chain is null ? [] : [.. chain.ChainElements.Skip(1).Select(element => element.Certificate)],
                     errors)
             }
         };

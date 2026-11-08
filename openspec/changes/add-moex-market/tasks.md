@@ -165,7 +165,7 @@
 - [x] 8.11 Лимитер: `Limits` > 0 в `TInvestSettings.Problem()`; ключ словарей — SHA-256-отпечаток токена (решение 7);
   `Waiting_request_is_cancelled_with_its_token` ждёт `Should.ThrowAsync`. Unit-тесты.
 - [x] 8.12 `TInvestTokenSource`: кэш — ссылочный `sealed record` через `Volatile.Read`/`Volatile.Write`.
-- [ ] 8.13 Пиннинг: второй элемент цепочки — закреплённый Sub CA, `DisableCertificateDownloads`, OID serverAuth в
+- [x] 8.13 Пиннинг: второй элемент цепочки — закреплённый Sub CA, `DisableCertificateDownloads`, OID serverAuth в
   `ApplicationPolicy`. Unit-тест: сервер другого Sub CA под тем же корнем отклоняется.
 - [ ] 8.14 Фронтенд `AccountForm`: переключатель биржи и токен заблокированы на время запросов, устаревший ответ игнорируется,
   смена токена сбрасывает счета; `not_open` — «не открыт»; «Ключ / счёт» в списке; «биржа не отвечает» в графике и форме

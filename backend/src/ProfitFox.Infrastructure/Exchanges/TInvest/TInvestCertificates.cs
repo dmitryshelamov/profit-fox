@@ -8,12 +8,15 @@ namespace ProfitFox.Infrastructure.Exchanges.TInvest;
 ///     The pinned chain of the server certificate of T-Invest: the Russian Trusted Root CA and the Sub CA that issues the server
 ///     certificate, loaded from the <c>.cer</c> files next to the app by the SHA-256 thumbprints of the settings. A server certificate
 ///     the system trusts passes; one the system does not trust passes only when it chains to the pinned root through the pinned Sub CA
-///     and its name matches. Without thumbprints nothing is pinned and the system trust alone decides.
+///     itself (another Sub CA of the same root does not do), for server authentication, and its name matches. Without thumbprints nothing is pinned and the system trust alone decides.
 /// </summary>
 internal sealed class TInvestCertificates(X509Certificate2? root, X509Certificate2? sub)
 {
     /// <summary>Pins nothing.</summary>
     public static readonly TInvestCertificates None = new TInvestCertificates(null, null);
+
+    // The extended key usage of a server certificate, id-kp-serverAuth.
+    private static readonly Oid ServerAuthentication = new Oid("1.3.6.1.5.5.7.3.1");
 
     /// <summary>Loads the pinned certificates from the <c>.cer</c> files of the folder, each by its thumbprint; a file with another thumbprint is refused.</summary>
     /// <exception cref="InvalidOperationException">A file has a thumbprint the settings do not name, or a named certificate has no file.</exception>
@@ -63,8 +66,21 @@ internal sealed class TInvestCertificates(X509Certificate2? root, X509Certificat
         return Convert.ToHexString(SHA256.HashData(certificate.RawData));
     }
 
-    /// <summary>Whether the server certificate is accepted; the callback of the TLS handshake.</summary>
+    /// <summary>Whether the server certificate is accepted, with no other certificate of the handshake; the callback of the TLS handshake.</summary>
     public bool Accept(X509Certificate2? certificate, SslPolicyErrors errors)
+    {
+        return Accept(certificate, [], errors);
+    }
+
+    /// <summary>
+    ///     Whether the server certificate is accepted: the system trusts it, or it chains to the pinned root through the pinned Sub CA as
+    ///     the second element of the chain, built for server authentication from the certificates the server presented and the pinned
+    ///     ones alone, without a download.
+    /// </summary>
+    /// <param name="certificate">The certificate of the server.</param>
+    /// <param name="presented">The other certificates the server sent in the handshake, such as its Sub CA.</param>
+    /// <param name="errors">The errors the TLS stack found.</param>
+    public bool Accept(X509Certificate2? certificate, IReadOnlyCollection<X509Certificate2> presented, SslPolicyErrors errors)
     {
         if (errors == SslPolicyErrors.None)
         {
@@ -81,9 +97,15 @@ internal sealed class TInvestCertificates(X509Certificate2? root, X509Certificat
         chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
         chain.ChainPolicy.CustomTrustStore.Add(root);
         chain.ChainPolicy.ExtraStore.Add(sub);
+        chain.ChainPolicy.ExtraStore.AddRange(presented.ToArray());
+        chain.ChainPolicy.DisableCertificateDownloads = true;
+        chain.ChainPolicy.ApplicationPolicy.Add(ServerAuthentication);
         chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
 
-        return chain.Build(certificate) && chain.ChainElements[^1].Certificate.RawData.AsSpan().SequenceEqual(root.RawData);
+        return chain.Build(certificate)
+               && chain.ChainElements.Count == 3
+               && chain.ChainElements[1].Certificate.RawData.AsSpan().SequenceEqual(sub.RawData)
+               && chain.ChainElements[2].Certificate.RawData.AsSpan().SequenceEqual(root.RawData);
     }
 
     private static bool Matches(string thumbprint, string expected)
