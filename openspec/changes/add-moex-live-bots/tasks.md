@@ -36,13 +36,13 @@ T-Invest. Решения — в design.md, требования — в `specs/`.
 - [x] 3.1 `Exchanges/Routing/RoutedOrderGateway`, `RoutedExchangeLedger`, `RoutedExchangeStreams` (по `key.Exchange`;
   `SubscribeCandlesAsync` — по `Category.Exchange()`), `RoutedFormingCandleStreams` (по категории); реализации Bybit и T-Invest
   keyed по `Exchange`. Unit-тесты: вызов с ключом T-Invest уходит в реализацию T-Invest, с ключом Bybit — в Bybit.
-- [ ] 3.2 Регистрация в `InfrastructureRegistrar`: маршрутизаторы — единственные реализации четырёх портов; `BybitStreams`
+- [x] 3.2 Регистрация в `InfrastructureRegistrar`: маршрутизаторы — единственные реализации четырёх портов; `BybitStreams`
   keyed `Bybit` для обоих интерфейсов стримов; `StreamsRegistrationTests` и `ResilienceRegistrationTests` переписаны под
-  keyed; `LiveTradingScenario` с `FakeExchange` зелёный без изменений. Выполняется после группы 8 (design.md, «Отклонения при
+  keyed; `LiveTradingScenario` с `FakeExchange` зелёный без изменений. Выполнена после группы 8 (design.md, «Отклонения при
   внедрении»).
-- [ ] 3.3 `FormingCandleFeeds.JoinAsync` больше не отвечает `NoData` для T-Invest: подписка идёт в порт. Тест: серия T-Invest
+- [x] 3.3 `FormingCandleFeeds.JoinAsync` больше не отвечает `NoData` для T-Invest: подписка идёт в порт. Тест: серия T-Invest
   подписывает `IFormingCandleStreams`; прежний тест на `NoData` удалён. `docs/conventions.md`: абзац о `FormingCandleFeeds`
-  и о маршрутизации портов торговли. Выполняется после группы 8 (design.md, «Отклонения при внедрении»).
+  и о маршрутизации портов торговли. Выполнена после группы 8 (design.md, «Отклонения при внедрении»).
 
 ## 4. Идентификаторы и состояния заявок T-Invest
 

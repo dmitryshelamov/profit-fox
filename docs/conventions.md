@@ -128,8 +128,9 @@ enforces a rule, the check is the source of truth.
   singleton) keeps one feed per series (`FormingSeries`, instrument and interval) however many connections watch it,
   subscribes `Ports/MarketData/IFormingCandleStreams` for the first viewer and takes it off after the last, and tells the
   viewers through `Ports/MarketData/IFormingCandleBroadcast`; its state is `Connecting`, `Live` or `NoData` (a lost
-  connection, a refused or closed subscription, or 90 s of silence). A series of an instrument of T-Invest (`Category.Exchange()`) is
-  `NoData` at once and subscribes nothing, until the live bots of MOEX bring the streams of T-Invest. `FormingCandleThrottle` lets one update a second through. A
+  connection, a refused or closed subscription, or 90 s of silence). The port is `RoutedFormingCandleStreams`, so a series of `moex` comes
+  from the stream of the forming candles of T-Invest like a series of Bybit from Bybit, and a closed market is `NoData` by the silence.
+  `FormingCandleThrottle` lets one update a second through. A
   `FormingCandle` is only for showing: it is never stored and never reaches a strategy, so the Worker's code path takes
   closed candles from `IExchangeStreams` alone.
 - `Exceptions` holds `BaseApplicationException` and its subclasses, also vendor-neutral (`ExchangeException`,
@@ -295,7 +296,13 @@ enforces a rule, the check is the source of truth.
   `ITInvestCallInvokers`, and `appsettings.Testing.json` points the endpoint at `tinvest.invalid`.
 - `Exchanges/Routing` holds `RoutedMarketHistoryClient`, `RoutedInstrumentRulesProvider` and `RoutedInstrumentCatalog`: the registered
   read ports, each choosing Bybit or T-Invest by `Category.Exchange()`; the adapters of both exchanges are registered keyed by
-  `Exchange`, and `CachedInstrumentCatalog` stays over the routed catalog, caching the list of `moex` on the same terms.
+  `Exchange`, and `CachedInstrumentCatalog` stays over the routed catalog, caching the list of `moex` on the same terms. The ports of
+  trading are routed the same way and registered as the routers only: `RoutedOrderGateway` and `RoutedExchangeLedger` by
+  `ExchangeKey.Exchange`, `RoutedExchangeStreams` by the key for an account and by the category for the candles, and
+  `RoutedFormingCandleStreams` by the category; `BybitOrderGateway` and `BybitLedger` (typed clients of `IHttpClientFactory`),
+  `TInvestOrderGateway` and `TInvestLedger` are keyed by `Exchange`, and the singletons `BybitStreams` and `TInvestStreams` are keyed
+  for both interfaces of streams. A test that replaces a port whole with `FakeExchange` removes the router and its keyed
+  implementations together.
 - `Exchanges/<Vendor>` holds adapters over vendor SDKs, including the mapping of domain values to SDK types
   (`BybitCodes`). `Exchanges/Retry` holds Polly pipelines: `ExchangeResilienceExecutor` (the ladder of retries and the circuit breaker) is
   registered keyed by `Exchange`, one instance per exchange, so an exchange that does not answer never opens the circuit of the other; a
@@ -315,7 +322,7 @@ enforces a rule, the check is the source of truth.
 - `Exchanges/Bybit/BybitAccountClient` implements `IExchangeKeyInspector`: a typed `HttpClient` that builds a Bybit client
   with the key for one call and drops it, one attempt per call. `Security/AesGcmSecretProtector` encrypts secrets with the
   master key (AES-256-GCM, the account id as associated data).
-- `Exchanges/Bybit/BybitStreams` implements `IExchangeStreams` as one singleton for the process, so the connections to
+- `Exchanges/Bybit/BybitStreams` implements `IExchangeStreams` of Bybit as one singleton for the process, so the connections to
   Bybit follow the pairs and accounts, not the bots: one public socket client whose connections carry one kline topic
   per category, symbol and interval, and one private client per account key with the `order` and `execution` topics.
   The first subscriber of a topic subscribes it at Bybit, the others join; the last to leave takes it off. Every

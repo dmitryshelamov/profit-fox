@@ -59,27 +59,14 @@ public class FormingCandleFeedsTests
         _feeds = new FormingCandleFeeds(_streams, _broadcast, _time);
     }
 
-    // After the review: T-Invest has no stream of the forming candle until the live bots of MOEX come, so a series of moex is without data at
-    // once, and nothing is asked of the streams of Bybit, which would refuse the symbol and be asked again and again.
+    // Decision 11 and scenario "Свеча акции в сессии": a series of moex is followed through the port like any other.
     [Test]
-    public async Task A_series_of_moex_is_without_data_and_subscribes_nothing()
+    public async Task A_series_of_moex_subscribes_the_port()
     {
-        (await _feeds.JoinAsync("a", Sber, CancellationToken.None)).ShouldBe(new FormingSnapshot(FormingState.NoData, null));
+        (await _feeds.JoinAsync("a", Sber, CancellationToken.None)).ShouldBe(new FormingSnapshot(FormingState.Connecting, null));
 
-        _time.Advance(TimeSpan.FromMinutes(5));
-        _streams.ReceivedCalls().ShouldBeEmpty();
-        _broadcast.ReceivedCalls().ShouldBeEmpty();
+        _subscriptions.Single().Instrument.ShouldBe(Sber.Instrument);
         await _feeds.LeaveAsync("a");
-    }
-
-    [Test]
-    public async Task A_viewer_that_moves_to_a_series_of_moex_leaves_its_feed()
-    {
-        await _feeds.JoinAsync("a", Btc, CancellationToken.None);
-
-        await _feeds.JoinAsync("a", Sber, CancellationToken.None);
-
-        _subscriptions.Single().Disposed.ShouldBe(1);
     }
 
     // Scenario "Две вкладки" / "Последняя вкладка закрыта".
