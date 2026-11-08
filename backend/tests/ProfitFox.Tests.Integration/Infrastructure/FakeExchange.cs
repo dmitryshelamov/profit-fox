@@ -463,9 +463,9 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
         return Task.FromResult(false);
     }
 
-    public Task<decimal> GetLeverageAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
+    public Task<LinearPosition> GetLinearPositionAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
     {
-        return Task.FromResult(Leverage);
+        return Task.FromResult(new LinearPosition(Leverage, Holding));
     }
 
     public Task<OrderOutcome> SetLeverageAsync(ExchangeKey key, Instrument instrument, int leverage, CancellationToken cancellationToken)

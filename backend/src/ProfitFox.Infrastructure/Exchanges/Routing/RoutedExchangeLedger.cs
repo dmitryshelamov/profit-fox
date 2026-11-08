@@ -27,6 +27,11 @@ internal sealed class RoutedExchangeLedger(
         return Of(key).GetHoldingAsync(key, instrument, baseCoin, cancellationToken);
     }
 
+    public Task<LinearPosition> GetLinearPositionAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
+    {
+        return Of(key).GetLinearPositionAsync(key, instrument, cancellationToken);
+    }
+
     public Task<IReadOnlyList<ExchangeOrder>> GetOpenOrdersAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
     {
         return Of(key).GetOpenOrdersAsync(key, instrument, cancellationToken);
@@ -60,11 +65,6 @@ internal sealed class RoutedExchangeLedger(
     public Task<FeeSchedule> GetFeesAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
     {
         return Of(key).GetFeesAsync(key, instrument, cancellationToken);
-    }
-
-    public Task<decimal> GetLeverageAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
-    {
-        return Of(key).GetLeverageAsync(key, instrument, cancellationToken);
     }
 
     private IExchangeLedger Of(ExchangeKey key)

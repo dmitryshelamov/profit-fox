@@ -97,7 +97,7 @@ public class RunNextAutoEntryTests
         _settings.GetAsync(Arg.Any<CancellationToken>()).Returns(IdeaTradingSettings.Default with { AccountId = AccountId, MaxAmount = 500m, MaxOpenTrades = 8, MaxTotalRisk = 100m });
         _history.GetLastPriceAsync(Wif, Arg.Any<CancellationToken>()).Returns(100m);
         _ledger.GetFreeAsync(Arg.Any<ExchangeKey>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(1000m);
-        _ledger.GetLeverageAsync(Arg.Any<ExchangeKey>(), Wif, Arg.Any<CancellationToken>()).Returns(1m);
+        _ledger.GetLinearPositionAsync(Arg.Any<ExchangeKey>(), Wif, Arg.Any<CancellationToken>()).Returns(new LinearPosition(1m, 0m));
         _ledger.GetOpenOrdersAsync(Arg.Any<ExchangeKey>(), Wif, Arg.Any<CancellationToken>()).Returns([]);
         _gateway.SetLeverageAsync(Arg.Any<ExchangeKey>(), Wif, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new OrderOutcome(OrderOutcomeKind.Accepted));
         _live.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new Dictionary<Guid, LiveBot>());
@@ -346,7 +346,7 @@ public class RunNextAutoEntryTests
     [Test]
     public async Task Leverage_of_an_empty_symbol_is_set_before_the_trade_of_the_auto_is_saved()
     {
-        _ledger.GetLeverageAsync(Arg.Any<ExchangeKey>(), Wif, Arg.Any<CancellationToken>()).Returns(10m);
+        _ledger.GetLinearPositionAsync(Arg.Any<ExchangeKey>(), Wif, Arg.Any<CancellationToken>()).Returns(new LinearPosition(10m, 0m));
 
         (await Run()).ShouldBeTrue();
 
@@ -372,7 +372,7 @@ public class RunNextAutoEntryTests
     [Test]
     public async Task Leverage_bybit_refuses_is_written_as_a_refusal()
     {
-        _ledger.GetLeverageAsync(Arg.Any<ExchangeKey>(), Wif, Arg.Any<CancellationToken>()).Returns(10m);
+        _ledger.GetLinearPositionAsync(Arg.Any<ExchangeKey>(), Wif, Arg.Any<CancellationToken>()).Returns(new LinearPosition(10m, 0m));
         _gateway.SetLeverageAsync(Arg.Any<ExchangeKey>(), Wif, 1, Arg.Any<CancellationToken>()).Returns(new OrderOutcome(OrderOutcomeKind.Permanent, Reason: "leverage invalid"));
 
         (await Run()).ShouldBeTrue();
@@ -387,7 +387,7 @@ public class RunNextAutoEntryTests
     [Test]
     public async Task Request_stays_when_the_exchange_does_not_answer_to_the_leverage()
     {
-        _ledger.GetLeverageAsync(Arg.Any<ExchangeKey>(), Wif, Arg.Any<CancellationToken>()).Returns(10m);
+        _ledger.GetLinearPositionAsync(Arg.Any<ExchangeKey>(), Wif, Arg.Any<CancellationToken>()).Returns(new LinearPosition(10m, 0m));
         _gateway.SetLeverageAsync(Arg.Any<ExchangeKey>(), Wif, 1, Arg.Any<CancellationToken>()).Returns(new OrderOutcome(OrderOutcomeKind.Transient, Reason: "Too many visits"));
 
         (await Run()).ShouldBeFalse();

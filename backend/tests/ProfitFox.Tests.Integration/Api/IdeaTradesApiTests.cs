@@ -198,7 +198,7 @@ public class IdeaTradesApiTests
     [Test]
     public async Task Entry_on_linear_sets_the_leverage_of_an_empty_symbol_and_the_trade_keeps_it()
     {
-        _scenario.Factory.Ledger.GetLeverageAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, Arg.Any<CancellationToken>()).Returns(10m);
+        _scenario.Factory.Ledger.GetLinearPositionAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, Arg.Any<CancellationToken>()).Returns(new LinearPosition(10m, 0m));
         Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m);
         _scenario.SetPrice("100");
 
@@ -212,7 +212,7 @@ public class IdeaTradesApiTests
     [Test]
     public async Task Entry_whose_leverage_bybit_refuses_is_refused_with_the_reason_and_saves_nothing()
     {
-        _scenario.Factory.Ledger.GetLeverageAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, Arg.Any<CancellationToken>()).Returns(10m);
+        _scenario.Factory.Ledger.GetLinearPositionAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, Arg.Any<CancellationToken>()).Returns(new LinearPosition(10m, 0m));
         _scenario.Factory.Orders.SetLeverageAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, 1, Arg.Any<CancellationToken>())
             .Returns(new OrderOutcome(OrderOutcomeKind.Permanent, Reason: "leverage invalid"));
         Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m);
