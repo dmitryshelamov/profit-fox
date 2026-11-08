@@ -135,7 +135,7 @@ public sealed record IdeaTrade(
             now,
             promise,
             AutoId: autoId,
-            Leverage: idea.Instrument.Category == MarketCategory.Spot ? 1 : leverage)
+            Leverage: idea.Instrument.Category == MarketCategory.Linear ? leverage : 1)
         { Features = idea.Features };
     }
 

@@ -74,11 +74,12 @@ public class IdeaTradeTests
         IdeaTrade.Create(Guid.NewGuid(), idea, Account, 106m, Size(), Now, leverage: 5).Leverage.ShouldBe(5);
     }
 
-    // Scenario "Вход на споте": the spot has no leverage, whatever the settings say.
-    [Test]
-    public void New_trade_on_the_spot_keeps_the_leverage_of_one()
+    // Scenarios "Вход на споте" and "Вход на MOEX": only linear has a leverage, whatever the settings say.
+    [TestCase(MarketCategory.Spot)]
+    [TestCase(MarketCategory.Moex)]
+    public void New_trade_off_linear_keeps_the_leverage_of_one(MarketCategory category)
     {
-        Idea idea = IdeaGenerator.Generate(Fired, instrument: new Instrument(MarketCategory.Spot, "DKNGUSDT"));
+        Idea idea = IdeaGenerator.Generate(Fired, instrument: new Instrument(category, "DKNGUSDT"));
 
         IdeaTrade.Create(Guid.NewGuid(), idea, Account, 106m, Size(), Now, leverage: 5).Leverage.ShouldBe(1);
     }
