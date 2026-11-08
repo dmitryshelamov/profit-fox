@@ -98,6 +98,17 @@ public class TInvestTokenSourceTests
         await Should.ThrowAsync<ExchangeUnavailableException>(() => _source.GetAsync(CancellationToken.None));
     }
 
+    // The account was deleted between reading it and reading its secret.
+    [Test]
+    public async Task Account_whose_secret_is_gone_leaves_the_data_unavailable()
+    {
+        ExchangeAccount account = TInvest("2000000001", Now.AddDays(-1));
+        _accounts.GetAllAsync(Arg.Any<CancellationToken>()).Returns([account]);
+        _accounts.GetSecretAsync(account.Id, Arg.Any<CancellationToken>()).Returns((EncryptedSecret?)null);
+
+        await Should.ThrowAsync<ExchangeUnavailableException>(() => _source.GetAsync(CancellationToken.None));
+    }
+
     // An account added right after a failed read is seen at once: a miss is not kept.
     [Test]
     public async Task Account_added_after_a_miss_is_used_at_once()

@@ -92,10 +92,12 @@ public class TInvestCallTests
         _api.Calls.Count.ShouldBe(2);
     }
 
-    [Test]
-    public async Task Reset_outside_one_second_to_an_hour_pauses_for_a_minute()
+    [TestCase("0")]
+    [TestCase("3601")]
+    [TestCase("soon")]
+    public async Task Reset_outside_one_second_to_an_hour_pauses_for_a_minute(string reset)
     {
-        _api.Fail("GetCandles", StatusCode.ResourceExhausted, "30042", new Metadata { { "x-ratelimit-reset", "0" } });
+        _api.Fail("GetCandles", StatusCode.ResourceExhausted, "30042", new Metadata { { "x-ratelimit-reset", reset } });
         await Should.ThrowAsync<ExchangeRateLimitedException>(() => GetCandlesAsync());
         _api.Forget("GetCandles").On<GetCandlesRequest, GetCandlesResponse>("GetCandles", _ => new GetCandlesResponse());
 

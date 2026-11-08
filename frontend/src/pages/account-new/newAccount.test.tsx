@@ -84,6 +84,7 @@ describe('new account', () => {
     const brokerage = await screen.findByRole('radio', { name: /2000000001/ });
     const iis = screen.getByRole('radio', { name: /2000000002/ });
     expect(iis).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Добавить аккаунт' })).toBeDisabled();
     expect(screen.getByText('закрыт')).toBeInTheDocument();
     expect(screen.getByText('Брокерский счёт')).toBeInTheDocument();
     const asked = requests.find((request) => request.url.endsWith('/tinvest/accounts'))!;
@@ -102,6 +103,16 @@ describe('new account', () => {
       token: 't.token-value',
       accountId: '2000000001',
     });
+  });
+
+  it('says when the token opens no account', async () => {
+    fakeApi({ [brokerAccountsUrl]: () => json([]) });
+    renderApp('/accounts/new');
+
+    await fillTInvest();
+
+    expect(await screen.findByText('У токена нет счетов.')).toBeInTheDocument();
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
   });
 
   it('shows the error of a rejected token at the field and clears the token', async () => {

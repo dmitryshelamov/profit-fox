@@ -76,12 +76,6 @@ internal sealed class TInvestCall(ITInvestCallInvokers invokers, TInvestRequestL
         TInvestMethodGroup group = TInvestMethods.GroupOf(method.ServiceName);
         await limiter.AcquireAsync(token, group, cancellationToken);
         var headers = new Metadata { { "authorization", $"Bearer {token}" }, { "x-app-name", settings.AppName } };
-
-        foreach (Metadata.Entry entry in options.Headers ?? [])
-        {
-            headers.Add(entry);
-        }
-
         CallOptions sent = options
             .WithHeaders(headers)
             .WithDeadline(time.GetUtcNow().UtcDateTime + settings.RequestTimeout)
@@ -92,7 +86,6 @@ internal sealed class TInvestCall(ITInvestCallInvokers invokers, TInvestRequestL
             using AsyncUnaryCall<TResponse> call = invokers.Invoker.AsyncUnaryCall(method, host, sent, request);
             TResponse response = await call.ResponseAsync;
             metrics.Observe(group, await call.ResponseHeadersAsync);
-            metrics.Observe(group, call.GetTrailers());
             metrics.Count(group, method.Name, "ok");
 
             return response;

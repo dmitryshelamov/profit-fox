@@ -143,7 +143,7 @@ public class CreateCandleImportTests
         ValidationFailedException error = await Should.ThrowAsync<ValidationFailedException>(() =>
             _handler.Handle(new CreateCandleImportCommand("spot", "NOSUCHUSDT", "60", "2024-01-01T00:00:00Z", "2024-02-01T00:00:00Z"), CancellationToken.None));
 
-        error.Errors.Keys.ShouldBe(["symbol"]);
+        error.Errors.ShouldBe(new Dictionary<string, string> { ["symbol"] = "Bybit has no NOSUCHUSDT in spot." });
         await _jobs.DidNotReceiveWithAnyArgs().AddAsync(default!, cancellationToken: default);
     }
 

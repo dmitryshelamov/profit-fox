@@ -17,7 +17,7 @@
   зелёные без правок.
 - [x] 1.4 `ListedInstrument` получает `Name` и `ShortEnabled`; `InstrumentSearch.Find` сопоставляет запрос ещё и с названием
   (решение 7). Unit-тест: `сбер` находит `SBER` по названию; поиск Bybit не меняется.
-- [ ] 1.5 `docs/conventions.md`: категория `Moex`, `Exchange`, новые типы этого change (дополняется по ходу групп 2–5).
+- [x] 1.5 `docs/conventions.md`: категория `Moex`, `Exchange`, новые типы этого change (дополняется по ходу групп 2–5).
 
 ## 2. Аккаунт T-Invest
 
@@ -130,7 +130,7 @@
 
 ## 7. Сборка и чек-лист
 
-- [ ] 7.1 `dotnet build`, `dotnet test`, `dotnet format --verify-no-changes` зелёные; `OutboundHttpGuard` не фиксирует ни
+- [x] 7.1 `dotnet build`, `dotnet test`, `dotnet format --verify-no-changes` зелёные; `OutboundHttpGuard` не фиксирует ни
   одного запроса к хосту T-Invest из тестов.
 - [ ] 7.2 Чек-лист на реальном счёте (design.md, с разрешения владельца, только чтения): результаты записаны поправкой в
   design.md, `DefaultFees:moex` и решение по `D` обновлены по ним.

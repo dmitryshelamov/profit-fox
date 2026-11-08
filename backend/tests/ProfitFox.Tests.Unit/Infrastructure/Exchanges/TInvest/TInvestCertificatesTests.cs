@@ -66,6 +66,34 @@ public class TInvestCertificatesTests
     }
 
     [Test]
+    public void Untrusted_chain_without_a_certificate_fails()
+    {
+        new TInvestCertificates(_root, _sub).Accept(null, SslPolicyErrors.RemoteCertificateChainErrors).ShouldBeFalse();
+    }
+
+    [Test]
+    public void Thumbprints_with_colons_match_the_files()
+    {
+        string directory = Folder(_root, _sub);
+        var settings = new TInvestCertificateSettings
+        {
+            Directory = "certs",
+            RootThumbprint = string.Join(':', TInvestCertificates.Thumbprint(_root).Chunk(2).Select(pair => new string(pair))).ToLowerInvariant(),
+            SubThumbprint = TInvestCertificates.Thumbprint(_sub)
+        };
+
+        TInvestCertificates.Load(settings, directory).Accept(_server, SslPolicyErrors.RemoteCertificateChainErrors).ShouldBeTrue();
+    }
+
+    [Test]
+    public void Missing_folder_of_named_certificates_is_refused()
+    {
+        var settings = new TInvestCertificateSettings { Directory = "no-such-certs", RootThumbprint = TInvestCertificates.Thumbprint(_root), SubThumbprint = TInvestCertificates.Thumbprint(_sub) };
+
+        Should.Throw<InvalidOperationException>(() => TInvestCertificates.Load(settings, Path.GetTempPath()));
+    }
+
+    [Test]
     public void Untrusted_chain_without_pins_fails()
     {
         TInvestCertificates.None.Accept(_server, SslPolicyErrors.RemoteCertificateChainErrors).ShouldBeFalse();

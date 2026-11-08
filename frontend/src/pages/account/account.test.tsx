@@ -90,7 +90,10 @@ describe('account page', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Показать баланс' }));
 
     const table = await screen.findByRole('table', { name: 'Баланс' });
+    expect(within(table).getByText('Бумага')).toBeInTheDocument();
+    expect(within(table).getByText('Количество')).toBeInTheDocument();
     expect(within(table).getByText('Стоимость, RUB')).toBeInTheDocument();
+    expect(within(table).getByText('Общая стоимость')).toBeInTheDocument();
     expect(within(table).getByText('RUB')).toBeInTheDocument();
     expect(within(table).getByText('SBER')).toBeInTheDocument();
     expect(within(table).getByText('10')).toBeInTheDocument();

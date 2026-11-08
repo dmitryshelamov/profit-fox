@@ -87,6 +87,17 @@ public class TInvestAccountClientTests
         (request.AccountId, request.Currency).ShouldBe(("2000000001", PortfolioRequest.Types.CurrencyRequest.Rub));
     }
 
+    [Test]
+    public async Task Empty_portfolio_is_zero_roubles()
+    {
+        _host.Api.On<PortfolioRequest, PortfolioResponse>("GetPortfolio", _ => new PortfolioResponse());
+
+        AccountBalance balance = await _host.AccountClient.GetPortfolioAsync("t.user", "2000000001", CancellationToken.None);
+
+        (balance.Currency, balance.TotalEquity).ShouldBe(("RUB", 0m));
+        balance.Coins.ShouldBe([new CoinBalance("RUB", 0m, 0m)]);
+    }
+
     private static MoneyValue Money(decimal value)
     {
         var quotation = value.ToQuotation();
