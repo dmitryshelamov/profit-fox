@@ -26,7 +26,7 @@ public class FakeBybitHandler : HttpMessageHandler
     public int? LinearPageSize { get; set; }
 
     /// <summary>The <c>category</c> of every instruments-info request without a symbol, in order.</summary>
-    public List<string> ListRequests { get; } = [];
+    public RequestLog<string> ListRequests { get; } = new RequestLog<string>();
 
     /// <summary>Price and lot filters of listed instruments, as Bybit writes them; an instrument without them is listed bare.</summary>
     public Dictionary<(string Category, string Symbol), (string TickSize, string QuantityStep, string MinQuantity, string MinAmount)> Rules { get; } = [];
@@ -38,7 +38,7 @@ public class FakeBybitHandler : HttpMessageHandler
     public List<string[]> Klines { get; } = [];
 
     /// <summary>The <c>[start, end]</c> of every kline request, in order.</summary>
-    public List<(DateTimeOffset Start, DateTimeOffset End)> KlineRequests { get; } = [];
+    public RequestLog<(DateTimeOffset Start, DateTimeOffset End)> KlineRequests { get; } = new RequestLog<(DateTimeOffset Start, DateTimeOffset End)>();
 
     /// <summary>Tickers Bybit reports now: last price, bid, ask and, on linear, open interest in coins and the funding rate, as Bybit writes them.</summary>
     public Dictionary<(string Category, string Symbol), (string Last, string Bid, string Ask, string OpenInterest, string FundingRate)> Tickers { get; } = [];
@@ -50,19 +50,21 @@ public class FakeBybitHandler : HttpMessageHandler
     public int? OpenInterestPageSize { get; set; }
 
     /// <summary>The query of every open interest request, in order.</summary>
-    public List<string> OpenInterestRequests { get; } = [];
+    public RequestLog<string> OpenInterestRequests { get; } = new RequestLog<string>();
 
     /// <summary>Funding settlements of linear symbols, as (symbol, time, rate).</summary>
     public List<(string Symbol, DateTimeOffset Time, string Rate)> FundingRates { get; } = [];
 
     /// <summary>The <c>[startTime, endTime]</c> of every funding history request, in order.</summary>
-    public List<(DateTimeOffset Start, DateTimeOffset End)> FundingRequests { get; } = [];
+    public RequestLog<(DateTimeOffset Start, DateTimeOffset End)> FundingRequests { get; } = new RequestLog<(DateTimeOffset Start, DateTimeOffset End)>();
 
     /// <summary>The category of every tickers request, in order.</summary>
-    public List<string> TickerRequests { get; } = [];
+    public RequestLog<string> TickerRequests { get; } = new RequestLog<string>();
 
     /// <summary>How many HTTP requests the app made, answered or not.</summary>
-    public int Requests { get; private set; }
+    public int Requests => Volatile.Read(ref _requests);
+
+    private int _requests;
 
     public bool Unavailable { get; set; }
 
@@ -83,7 +85,7 @@ public class FakeBybitHandler : HttpMessageHandler
 
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        Requests++;
+        Interlocked.Increment(ref _requests);
 
         if (Unavailable)
         {
@@ -164,7 +166,7 @@ public class FakeBybitHandler : HttpMessageHandler
     private string InstrumentsList(NameValueCollection query)
     {
         string category = query["category"]!;
-        ListRequests.Add(category);
+        ListRequests.Record(category);
         var all = Instruments.Where(instrument => instrument.Category == category).OrderBy(instrument => instrument.Symbol, StringComparer.Ordinal).ToList();
         var pageSize = category == "linear" ? LinearPageSize ?? int.Parse(query["limit"] ?? "500") : all.Count;
         var offset = int.Parse(query["cursor"] ?? "0");
@@ -194,7 +196,7 @@ public class FakeBybitHandler : HttpMessageHandler
     {
         var start = DateTimeOffset.FromUnixTimeMilliseconds(long.Parse(query["start"]!));
         var end = DateTimeOffset.FromUnixTimeMilliseconds(long.Parse(query["end"]!));
-        KlineRequests.Add((start, end));
+        KlineRequests.Record((start, end));
         IEnumerable<string> items = Klines
             .Select(row => (OpenTime: DateTimeOffset.Parse(row[0]), Row: row))
             .Where(candle => candle.OpenTime >= start && candle.OpenTime <= end)
@@ -207,7 +209,7 @@ public class FakeBybitHandler : HttpMessageHandler
 
     private string TickersOf(string category)
     {
-        TickerRequests.Add(category);
+        TickerRequests.Record(category);
         IEnumerable<string> items = Tickers.Where(ticker => ticker.Key.Category == category).Select(ticker =>
         {
             (string last, string bid, string ask, string openInterest, string fundingRate) = ticker.Value;
@@ -224,7 +226,7 @@ public class FakeBybitHandler : HttpMessageHandler
     // Newest first in the inclusive [startTime, endTime], a page at a time; the cursor is the offset of the next page.
     private string OpenInterestOf(NameValueCollection query)
     {
-        OpenInterestRequests.Add(query.ToString()!);
+        OpenInterestRequests.Record(query.ToString()!);
         string symbol = query["symbol"]!;
         var start = DateTimeOffset.FromUnixTimeMilliseconds(long.Parse(query["startTime"]!));
         var end = DateTimeOffset.FromUnixTimeMilliseconds(long.Parse(query["endTime"]!));
@@ -244,7 +246,7 @@ public class FakeBybitHandler : HttpMessageHandler
         string symbol = query["symbol"]!;
         var start = DateTimeOffset.FromUnixTimeMilliseconds(long.Parse(query["startTime"]!));
         var end = DateTimeOffset.FromUnixTimeMilliseconds(long.Parse(query["endTime"]!));
-        FundingRequests.Add((start, end));
+        FundingRequests.Record((start, end));
         IEnumerable<string> items = FundingRates.Where(rate => rate.Symbol == symbol && rate.Time >= start && rate.Time <= end)
             .OrderByDescending(rate => rate.Time)
             .Take(int.Parse(query["limit"] ?? "200"))
