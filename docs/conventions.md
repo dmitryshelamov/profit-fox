@@ -23,7 +23,8 @@ enforces a rule, the check is the source of truth.
   and `InstrumentSearch.Find` matches a query against the name as well.
 - `ValueObjects/MarketData/SeriesCoverage(From, Until)` is the border of the coverage of a series of candles: inside it storage holds
   every candle the exchange gave, so a candle missing there was not traded. `Extend(from, to)` widens it by a range that touches or
-  overlaps it and leaves a separate range alone; `Uncovered(ranges)` cuts the coverage out of the missing ranges. It is kept only for a
+  overlaps it and leaves a separate range alone; `Uncovered(ranges)` cuts the coverage out of the missing ranges; `Margin` (a minute) is how
+  far behind the clock the border stays, since the exchange may still serve the candle that has just closed as unfinished. It is kept only for a
   market with sessions (`MarketCategoryExtensions.TradesAroundTheClock()` is false for `Moex`); Bybit has no nights and keeps none.
   `ISeriesCoverageRepository` reads and writes it (`candle_coverage`), and `ICandleRepository.UpsertAsync` with a coverage writes the
   candles and the border in one transaction.
@@ -114,10 +115,11 @@ enforces a rule, the check is the source of truth.
 - `MarketData/CandleReadThrough` reads a period of closed candles from storage and fills what is missing with one request
   of `IMarketHistoryClient.GetCandlesOnceAsync` (a single attempt, at most 1000 candles), writing only the missing closed
   candles; an `ExchangeException` gives the stored candles and `Unavailable`. It is not a candle import: no job, no lease.
-  On `moex` only the part outside the `SeriesCoverage` of the series is missing, and the border moves to the end of the part asked
-  for, never past the last closed candle, in the transaction of the candles; `RunNextCandleImportCommandHandler` does the same per
-  range of a job, moving the border once the range is loaded. A symbol is checked at the exchange of its category, and the error names
-  it (`ExchangeCodes.DisplayName`: `Bybit`, `T-Invest`).
+  On `moex` only the part outside the `SeriesCoverage` of the series is missing, and the coverage grows over the whole period asked
+  for, never past the last closed candle less `SeriesCoverage.Margin`, in the transaction of the candles (inside the period everything
+  is stored, covered or has just been asked for); `RunNextCandleImportCommandHandler` grows it over the job up to the end of each range
+  once the range is loaded. A period apart from the coverage leaves it as it is. A symbol is checked at the exchange of its category,
+  and the error names it (`ExchangeCodes.DisplayName`: `Bybit`, `T-Invest`).
   `Bots/Queries/GetBotCandles` aligns and cuts the period of a bot's chart (`from` down to the start of its candle, `to` up
   to the start of the current one, 1000 candles at most) and reads it through.
 - `MarketData/FormingCandles` holds the feeds of the current candle, which only the API uses: `FormingCandleFeeds` (a

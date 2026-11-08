@@ -6,6 +6,12 @@ namespace ProfitFox.Domain.ValueObjects.MarketData;
 /// </summary>
 public sealed record SeriesCoverage
 {
+    /// <summary>
+    ///     How far behind the clock the border stays: the exchange may still serve the candle that has just closed as unfinished, and the
+    ///     adapter drops such a candle; a border past it would never ask for it again.
+    /// </summary>
+    public static readonly TimeSpan Margin = TimeSpan.FromMinutes(1);
+
     public DateTimeOffset From { get; }
 
     public DateTimeOffset Until { get; }

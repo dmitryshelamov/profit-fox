@@ -102,6 +102,35 @@ public class CandleReadThroughCoverageTests
         await _candles.Received(1).UpsertAsync(Sber, Interval.OneHour, Arg.Any<IReadOnlyCollection<Candle>>(), new SeriesCoverage(today.AddHours(8), today.AddHours(12)), Arg.Any<CancellationToken>());
     }
 
+    // After the review: the border grows over the whole period asked for, not over the gaps alone, so the candles stored between two
+    // gaps do not keep the gaps apart from the coverage. Inside the period everything is stored, covered or has just been asked for.
+    [Test]
+    public async Task Period_touching_the_coverage_through_stored_candles_is_covered_whole()
+    {
+        DateTimeOffset tuesday = Monday.AddDays(1);
+        _stored.AddRange(Enumerable.Range(12, 8).Select(hour => CandleGenerator.Generate(Monday.AddHours(hour))));
+        _stored.AddRange(Enumerable.Range(7, 5).Select(hour => CandleGenerator.Generate(tuesday.AddHours(hour))));
+        _coverage.GetAsync(Sber, Interval.OneHour, Arg.Any<CancellationToken>()).Returns(new SeriesCoverage(Monday, Monday.AddHours(12)));
+
+        await _readThrough.ReadAsync(Sber, Interval.OneHour, Monday.AddHours(12), tuesday.AddHours(12), CancellationToken.None);
+
+        await _history.Received(1).GetCandlesOnceAsync(Sber, Interval.OneHour, Monday.AddHours(20), tuesday.AddHours(7), Arg.Any<CancellationToken>());
+        await _candles.Received(1).UpsertAsync(Sber, Interval.OneHour, Arg.Any<IReadOnlyCollection<Candle>>(), new SeriesCoverage(Monday, tuesday.AddHours(12)), Arg.Any<CancellationToken>());
+    }
+
+    // After the review: the exchange may still serve the candle that has just closed as unfinished, and the adapter drops such a candle; a
+    // border past it would never ask for it again. The border keeps a minute behind the clock on a market with sessions.
+    [Test]
+    public async Task Border_keeps_a_minute_behind_the_clock()
+    {
+        var today = DateTimeOffset.Parse("2024-03-10T00:00:00Z");
+        var readThrough = new CandleReadThrough(_candles, _coverage, _history, new FakeTimeProvider(today.AddHours(12).AddSeconds(30)));
+
+        await readThrough.ReadAsync(Sber, Interval.OneHour, today.AddHours(8), today.AddHours(13), CancellationToken.None);
+
+        await _candles.Received(1).UpsertAsync(Sber, Interval.OneHour, Arg.Any<IReadOnlyCollection<Candle>>(), new SeriesCoverage(today.AddHours(8), today.AddHours(11)), Arg.Any<CancellationToken>());
+    }
+
     [Test]
     public async Task Period_inside_the_current_candle_leaves_the_coverage_alone()
     {

@@ -26,8 +26,8 @@ public sealed class RunNextCandleImportCommandHandler(
     ///     Loads the closed candles of <c>[From, To)</c> that are not stored yet, page by page; saved pages survive a failure. While the
     ///     exchange is unavailable, the job tries again after each pause; a stored candle starts the pauses and the lost leases over. The
     ///     job runs while this Worker holds its lease; once the lease is lost, the job stops without another write. On a market with
-    ///     sessions only the part outside the coverage of the series is missing, and once a range is loaded the border of the coverage
-    ///     moves to its end, never past the last closed candle (decision 4).
+    ///     sessions only the part outside the coverage of the series is missing, and once a range is loaded the coverage grows over the job
+    ///     up to its end, never past the last closed candle less <see cref="SeriesCoverage.Margin" /> (decision 4).
     /// </summary>
     public async Task<bool> Handle(RunNextCandleImportCommand request, CancellationToken cancellationToken)
     {
@@ -144,13 +144,14 @@ public sealed class RunNextCandleImportCommandHandler(
                         }
                     }
 
-                    // The range is loaded whole: what is not stored inside it was not traded, up to the last closed candle.
-                    DateTimeOffset lastClosed = job.Interval.CandleOpen(now);
+                    // The job is loaded up to the end of the range: what is not stored in [From, end of the range) was not traded, up to the
+                    // last closed candle less SeriesCoverage.Margin. A job apart from the coverage leaves it as it is (decision 4).
+                    DateTimeOffset lastClosed = job.Interval.CandleOpen(now - SeriesCoverage.Margin);
                     DateTimeOffset border = to < lastClosed ? to : lastClosed;
 
-                    if (bordered && border > from)
+                    if (bordered && border > job.From)
                     {
-                        covered = (covered ?? new SeriesCoverage(from, border)).Extend(from, border);
+                        covered = (covered ?? new SeriesCoverage(job.From, border)).Extend(job.From, border);
                         await coverage.UpsertAsync(job.Instrument, job.Interval, covered, running.Token);
                     }
                 }

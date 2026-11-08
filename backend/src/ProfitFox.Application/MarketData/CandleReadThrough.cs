@@ -14,8 +14,9 @@ public sealed record CandleReadThroughResult(IReadOnlyList<Candle> Candles, bool
 ///     Reads a period of closed candles from storage and first fills what is missing from the exchange with one request, a single
 ///     attempt. It is not a candle import: it takes no lease and waits for no queue, and it stores only closed candles that were
 ///     missing, so the rows an import writes are never changed. On a market with sessions (<see cref="MarketCategoryExtensions.TradesAroundTheClock" />)
-///     only the part outside the coverage of the series is missing, and the border of the coverage moves to the end of the part asked
-///     for, in the transaction of the candles, never past the last closed candle (decision 4). Bybit has no gaps and keeps no coverage.
+///     only the part outside the coverage of the series is missing, and the border of the coverage moves to the end of the period asked
+///     for, in the transaction of the candles, never past the last closed candle less <see cref="SeriesCoverage.Margin" /> (decision 4).
+///     Bybit has no gaps and keeps no coverage.
 /// </summary>
 public sealed class CandleReadThrough(ICandleRepository candles, ISeriesCoverageRepository coverage, IMarketHistoryClient history, TimeProvider time)
 {
@@ -51,12 +52,14 @@ public sealed class CandleReadThrough(ICandleRepository candles, ISeriesCoverage
                 IReadOnlyList<Candle> fetched = await history.GetCandlesOnceAsync(instrument, interval, missing[0].From, missing[^1].To, cancellationToken);
                 DateTimeOffset now = time.GetUtcNow();
                 Candle[] gaps = [.. fetched.Where(candle => candle.IsClosedAt(interval, now - CloseMargin) && missing.Any(range => candle.OpenTime >= range.From && candle.OpenTime < range.To))];
-                DateTimeOffset lastClosed = interval.CandleOpen(now - CloseMargin);
-                DateTimeOffset border = missing[^1].To < lastClosed ? missing[^1].To : lastClosed;
+                // The whole period asked for is verified: inside it everything is stored, covered or has just been asked for. The border
+                // stays SeriesCoverage.Margin behind the clock. A period apart from the coverage leaves it as it is (decision 4).
+                DateTimeOffset lastClosed = interval.CandleOpen(now - SeriesCoverage.Margin);
+                DateTimeOffset border = to < lastClosed ? to : lastClosed;
 
-                if (bordered && border > missing[0].From)
+                if (bordered && border > from)
                 {
-                    await candles.UpsertAsync(instrument, interval, gaps, (covered ?? new SeriesCoverage(missing[0].From, border)).Extend(missing[0].From, border), cancellationToken);
+                    await candles.UpsertAsync(instrument, interval, gaps, (covered ?? new SeriesCoverage(from, border)).Extend(from, border), cancellationToken);
                 }
                 else if (gaps.Length > 0)
                 {
