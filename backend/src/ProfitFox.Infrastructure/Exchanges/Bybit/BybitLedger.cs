@@ -4,6 +4,7 @@ using Bybit.Net.Objects.Models.V5;
 
 using Microsoft.Extensions.Logging;
 
+using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.ValueObjects.MarketData;
@@ -46,7 +47,12 @@ internal sealed class BybitLedger(HttpClient http, ILoggerFactory loggers, Bybit
         IReadOnlyList<BybitPosition> positions = await PositionsAsync(key, instrument, cancellationToken);
 
         // In the one-way mode Bybit lists one row of the symbol, with its leverage even when there is no position.
-        return new LinearPosition(positions.First().Leverage!.Value, Size(positions));
+        if (positions.FirstOrDefault()?.Leverage is not { } leverage)
+        {
+            throw new ExchangeException($"Bybit told no leverage of {instrument.Symbol}.");
+        }
+
+        return new LinearPosition(leverage, Size(positions));
     }
 
     public async Task<IReadOnlyList<ExchangeOrder>> GetOpenOrdersAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
