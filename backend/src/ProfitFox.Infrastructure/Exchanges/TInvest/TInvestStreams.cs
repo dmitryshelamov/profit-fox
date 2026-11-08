@@ -103,7 +103,7 @@ internal sealed class TInvestStreams(
         }
 
         var listener = new AccountListener(order, fill, restored);
-        await stream.JoinAsync(listener, cancellationToken);
+        await stream.JoinAsync(key, listener, cancellationToken);
 
         return new Leave(() => stream.LeaveAsync(listener));
     }
@@ -181,21 +181,36 @@ internal sealed class TInvestStreams(
         }
     }
 
-    /// <summary>The stream of the orders of one account: the first listener opens it, the last one closes it.</summary>
+    /// <summary>
+    ///     The stream of the orders of one account: the first listener opens it, the last one closes it, and a listener with another token
+    ///     of the account (the owner changed it) opens it again with that token.
+    /// </summary>
     private sealed class AccountStream(TInvestStreams owner, ExchangeKey key)
     {
         private readonly SemaphoreSlim _gate = new SemaphoreSlim(1, 1);
         private readonly Listeners<AccountListener> _listeners = new Listeners<AccountListener>();
+        private readonly Lock _keyLock = new Lock();
+        private ExchangeKey _key = key;
+        private CancellationTokenSource? _call;
         private CancellationTokenSource? _stop;
         private Task _loop = Task.CompletedTask;
 
-        public async Task JoinAsync(AccountListener listener, CancellationToken cancellationToken)
+        public async Task JoinAsync(ExchangeKey key, AccountListener listener, CancellationToken cancellationToken)
         {
             await _gate.WaitAsync(cancellationToken);
 
             try
             {
                 _listeners.Add(listener);
+
+                lock (_keyLock)
+                {
+                    if (key.Secret != _key.Secret)
+                    {
+                        _key = key;
+                        _call?.Cancel();
+                    }
+                }
 
                 if (_stop is null)
                 {
@@ -241,13 +256,22 @@ internal sealed class TInvestStreams(
             while (!stop.IsCancellationRequested)
             {
                 var established = false;
+                ExchangeKey current;
+                using var call = CancellationTokenSource.CreateLinkedTokenSource(stop);
+
+                // The call is known before the key is read, so a new token either is read now or cancels this call.
+                lock (_keyLock)
+                {
+                    _call = call;
+                    current = _key;
+                }
 
                 try
                 {
-                    var request = new OrderStateStreamRequest { Accounts = { key.ApiKey }, PingDelayMillis = PingMilliseconds };
-                    using AsyncServerStreamingCall<OrderStateStreamResponse> stream = client.OrderStateStream(request, owner.Options(key.Secret, stop));
+                    var request = new OrderStateStreamRequest { Accounts = { current.ApiKey }, PingDelayMillis = PingMilliseconds };
+                    using AsyncServerStreamingCall<OrderStateStreamResponse> stream = client.OrderStateStream(request, owner.Options(current.Secret, call.Token));
 
-                    while (await owner.NextAsync(stream.ResponseStream, stop))
+                    while (await owner.NextAsync(stream.ResponseStream, call.Token))
                     {
                         if (!established)
                         {
@@ -263,7 +287,7 @@ internal sealed class TInvestStreams(
 
                         if (stream.ResponseStream.Current.PayloadCase == OrderStateStreamResponse.PayloadOneofCase.OrderState)
                         {
-                            _ = owner.OrderAsync(key, stream.ResponseStream.Current.OrderState, _listeners, stop);
+                            _ = owner.OrderAsync(current, stream.ResponseStream.Current.OrderState, _listeners, stop);
                         }
                     }
                 }
@@ -271,9 +295,23 @@ internal sealed class TInvestStreams(
                 {
                     return;
                 }
+                catch (OperationCanceledException)
+                {
+                    // The token of the account changed: opened again with it at once.
+                    lost = true;
+
+                    continue;
+                }
                 catch (Exception exception) when (exception is RpcException or TimeoutException)
                 {
                     // Lost: opened again below.
+                }
+                finally
+                {
+                    lock (_keyLock)
+                    {
+                        _call = null;
+                    }
                 }
 
                 owner.Metrics.Count(TInvestMethodGroup.Orders, "OrderStateStream", established ? "lost" : "error");

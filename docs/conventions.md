@@ -282,7 +282,8 @@ enforces a rule, the check is the source of truth.
   (`IExchangeLedger`: the free roubles less those blocked from `GetPositions`, the shares with those blocked, the active orders by
   `GetOrders` told by their request ids, an order and its stages by `GetOrderState`, the fee rate `deal_commission / initial_order_amount`
   of `GetOrderPrice` for a limit buy of at least 100 000 ₽, no hedge, no orders of a parent) and `TInvestStreams` (`IExchangeStreams` and
-  `IFormingCandleStreams`: one `OrderStateStream` an account with pings, whose message is a signal: the state of an order of a bot is read
+  `IFormingCandleStreams`: one `OrderStateStream` an account with pings, opened again at once with the token of a listener whose token
+  of the account differs (the owner changed it), whose message is a signal: the state of an order of a bot is read
   by its request id up to 5 times a second apart while T-Invest does not know it or its stages disagree, a filled one without its
   commission again at 5, 15, 30 and 60 s, and an order of nobody that traded is a fill of nobody on its share; a message whose order does
   not read (T-Invest, the table of the ids or the share) counts as `error` of the stream and tells every listener of the account

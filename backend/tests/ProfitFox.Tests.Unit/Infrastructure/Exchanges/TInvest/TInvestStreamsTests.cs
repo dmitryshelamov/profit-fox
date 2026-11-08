@@ -98,6 +98,37 @@ public class TInvestStreamsTests
         _orders.IsOpen.ShouldBeFalse();
     }
 
+    // The token of the account changed in the UI: a listener with the new token opens the stream again with it at once, for every listener.
+    [Test]
+    public async Task Listener_with_a_new_token_of_the_account_opens_its_stream_again_with_the_new_token()
+    {
+        var first = new Events();
+        await OpenAccountAsync(first);
+        var renewed = new ExchangeKey(AccountNumber, "t.renewed", Exchange.TInvest);
+
+        _subscriptions.Add(await _streams.SubscribeAccountAsync(renewed, _ => { }, _ => { }, () => { }, CancellationToken.None));
+
+        await EventuallyAsync(() => _orders.Opens == 2, "the stream again");
+        _orders.Streams[0].IsOpen.ShouldBeFalse();
+        _host.Api.Calls.Last(call => call.Method == "OrderStateStream").Header("authorization").ShouldBe("Bearer t.renewed");
+        _orders.Send(Ping());
+        await EventuallyAsync(() => first.Restored == 1, "the restore");
+    }
+
+    [Test]
+    public async Task Listener_with_a_new_token_after_the_stream_closed_opens_it_with_the_new_token()
+    {
+        IAsyncDisposable old = await AccountAsync(new Events());
+        await EventuallyAsync(() => _orders.IsOpen, "the stream of orders");
+        await old.DisposeAsync();
+        var renewed = new ExchangeKey(AccountNumber, "t.renewed", Exchange.TInvest);
+
+        _subscriptions.Add(await _streams.SubscribeAccountAsync(renewed, _ => { }, _ => { }, () => { }, CancellationToken.None));
+
+        await EventuallyAsync(() => _orders.Opens == 2, "the stream again");
+        _host.Api.Calls.Last(call => call.Method == "OrderStateStream").Header("authorization").ShouldBe("Bearer t.renewed");
+    }
+
     // The message is a signal: the order of the bot comes from the state read by its request id.
     [Test]
     public async Task Order_of_a_bot_comes_from_its_state_read_by_the_request_id()
