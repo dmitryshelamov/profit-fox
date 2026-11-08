@@ -251,6 +251,7 @@ public class TInvestStreamsTests
             int opens = _orders.Opens;
             DateTimeOffset broken = _host.Time.GetUtcNow();
             _orders.Fail(StatusCode.Unavailable);
+            await SettleAsync();
 
             await AdvanceUntilAsync(() => _orders.Opens == opens + 1, TimeSpan.FromMilliseconds(250), "the stream again");
             (_host.Time.GetUtcNow() - broken).ShouldBeInRange(TimeSpan.FromSeconds(seconds), TimeSpan.FromSeconds(seconds) + TimeSpan.FromMilliseconds(250));
@@ -288,6 +289,7 @@ public class TInvestStreamsTests
         DateTimeOffset broken = _host.Time.GetUtcNow();
 
         _orders.Fail(StatusCode.Unavailable);
+        await SettleAsync();
 
         await AdvanceUntilAsync(() => _orders.Opens == 3, TimeSpan.FromMilliseconds(250), "the stream again");
         (_host.Time.GetUtcNow() - broken).ShouldBeLessThan(TimeSpan.FromSeconds(2));
@@ -554,13 +556,11 @@ public class TInvestStreamsTests
     {
         await CandlesAsync(Sber, new Events());
         await EventuallyAsync(() => _host.Api.Calls.Count(call => call.Method == "TradingSchedules") == 1, "the schedule");
+        DateTimeOffset asked = _host.Time.GetUtcNow();
 
-        _host.Time.Advance(TimeSpan.FromMinutes(59));
-        await Task.Delay(50);
-        _host.Api.Calls.Count(call => call.Method == "TradingSchedules").ShouldBe(1);
-        _host.Time.Advance(TimeSpan.FromMinutes(1));
+        await AdvanceUntilAsync(() => _host.Api.Calls.Count(call => call.Method == "TradingSchedules") == 2, TimeSpan.FromMinutes(1), "the schedule again");
 
-        await EventuallyAsync(() => _host.Api.Calls.Count(call => call.Method == "TradingSchedules") == 2, "the schedule again");
+        (_host.Time.GetUtcNow() - asked).ShouldBeGreaterThanOrEqualTo(TimeSpan.FromHours(1));
     }
 
     private async Task OpenAccountAsync(Events events)
@@ -612,6 +612,12 @@ public class TInvestStreamsTests
         }
 
         return subscribed;
+    }
+
+    /// <summary>Real time for a stream to take a break in and start its pause on the clock, before the clock moves.</summary>
+    private static Task SettleAsync()
+    {
+        return Task.Delay(200);
     }
 
     /// <summary>Real time passes for the work the streams have started; the clock stands.</summary>
