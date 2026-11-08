@@ -202,6 +202,39 @@ public class TInvestTradingStatusesTests
         _host.Api.Calls.Count.ShouldBe(2);
     }
 
+    // Decision 9: a minute after the end of a trading day the sessions read their orders again; the day ends with its last interval of the exchange.
+    [Test]
+    public async Task Trading_day_ends_with_its_last_interval_of_the_exchange()
+    {
+        _host.Time.SetUtcNow(DateTimeOffset.Parse("2024-03-11T12:00:00Z"));
+        _host.Api.On<TradingSchedulesRequest, TradingSchedulesResponse>("TradingSchedules", _ => Schedule(
+            Day("2024-03-11", ("regular_trading_session_main", "2024-03-11T07:00:00Z", "2024-03-11T15:40:00Z"), ("regular_trading_session_evening", "2024-03-11T16:05:00Z", "2024-03-11T20:50:00Z"), ("dealer_regular_trading_session_evening", "2024-03-11T20:50:00Z", "2024-03-11T21:59:00Z")),
+            Day("2024-03-12", ("regular_trading_session_main", "2024-03-12T07:00:00Z", "2024-03-12T15:40:00Z"))));
+
+        (await _statuses.TradingDayEndAsync(Token, TInvestFixtures.SberExchange, CancellationToken.None)).ShouldBe(DateTimeOffset.Parse("2024-03-11T20:50:00Z"));
+
+        _host.Time.SetUtcNow(DateTimeOffset.Parse("2024-03-11T20:51:00Z"));
+        (await _statuses.TradingDayEndAsync(Token, TInvestFixtures.SberExchange, CancellationToken.None)).ShouldBe(DateTimeOffset.Parse("2024-03-12T15:40:00Z"));
+    }
+
+    [Test]
+    public async Task Trading_day_with_an_interval_of_an_unknown_type_tells_no_end()
+    {
+        _host.Time.SetUtcNow(DateTimeOffset.Parse("2024-03-11T12:00:00Z"));
+        _host.Api.On<TradingSchedulesRequest, TradingSchedulesResponse>("TradingSchedules", _ => Schedule(
+            Day("2024-03-11", ("regular_trading_session_main", "2024-03-11T07:00:00Z", "2024-03-11T15:40:00Z"), ("auction_of_the_future", "2024-03-11T16:00:00Z", "2024-03-11T16:10:00Z"))));
+
+        (await _statuses.TradingDayEndAsync(Token, TInvestFixtures.SberExchange, CancellationToken.None)).ShouldBeNull();
+    }
+
+    [Test]
+    public async Task Trading_day_end_without_a_schedule_is_none()
+    {
+        _host.Api.Fail("TradingSchedules", StatusCode.Unavailable);
+
+        (await _statuses.TradingDayEndAsync(Token, TInvestFixtures.SberExchange, CancellationToken.None)).ShouldBeNull();
+    }
+
     private Task<TInvestPlacement> MayPlaceAsync(OrderType type, decimal? price)
     {
         return _statuses.MayPlaceAsync(Token, _sber, type, price, CancellationToken.None);

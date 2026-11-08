@@ -265,7 +265,31 @@ enforces a rule, the check is the source of truth.
   the period with the source `Exchange` and no limit, complete ones only, the volume lots × lot and the turnover volume × (high + low + close) / 3)
   and `TInvestAccountClient` (`IBrokerAccountReader`: `GetAccounts`, `GetPortfolio` in roubles: every position with a quantity as a row, a currency by its ISO code (the first three letters of its
   ticker) worth its quantity at the current price in roubles, the roubles always a row, the total from `total_amount_portfolio`).
-  The metrics live on the meter `ProfitFox.TInvest`: the counter `profitfox.tinvest.requests` {`group`, `method`, `outcome`} and the gauges
+  The ports of trading on T-Invest: `TInvestOrderIds` (`ITInvestOrderIds`, the table `moex_orders` on a connection of its own for every
+  call, outside any unit of work: a random request id written under the client id of an order before its first send, every send of the
+  order with it, the exchange id added after; an order whose request id has no row is of nobody), `TInvestOrderStates` (an `ExchangeOrder`
+  of an `OrderState`: the volume lots × lot, the value the sum of the stages, the fee `executed_commission` in roubles; the stages as fills
+  without a fee; `Complete` whether the stages add up to the lots executed), `TInvestOrderReads` (the state by request or exchange id,
+  `null` on `NOT_FOUND`), `TInvestTradingStatuses` (`MayPlaceAsync`: the trading status and the corridor of the order book of a share,
+  kept 5 s, `TInvestPlacement`; `NextSessionStartAsync` and `TradingDayEndAsync` by `TradingSchedules` of the exchange of the share
+  (`TInvestShare.Exchange`), kept to the end of the UTC day: the intervals of the exchange count, those of the dealer do not, a day with
+  another type tells none), `TInvestOrderGateway` (`IOrderGateway`: an order in lots, a limit one `DAY` and a market one without a price,
+  sent only while `MayPlaceAsync` takes it; a closed session is `Transient` with `RetryAfter` until the next session or a minute, the
+  corridor a minute; the refusals by the code of `TInvestRefusedException` (`30057` an order taken, read by its request id); a cancel by
+  the request id, `AlreadyDone` for an order without one, one T-Invest does not know or one that ended), `TInvestLedger`
+  (`IExchangeLedger`: the free roubles less those blocked from `GetPositions`, the shares with those blocked, the active orders by
+  `GetOrders` told by their request ids, an order and its stages by `GetOrderState`, the fee rate `deal_commission / initial_order_amount`
+  of `GetOrderPrice` for a limit buy of at least 100 000 ₽, no hedge, no orders of a parent) and `TInvestStreams` (`IExchangeStreams` and
+  `IFormingCandleStreams`: one `OrderStateStream` an account with pings, whose message is a signal: the state of an order of a bot is read
+  by its request id up to 5 times a second apart while T-Invest does not know it or its stages disagree, a filled one without its
+  commission again at 5, 15, 30 and 60 s, and an order of nobody that traded is a fill of nobody on its share; two `MarketDataStream`s of
+  the process with the token of `TInvestTokenSource`, of the closed candles (`waiting_close`) and of the forming ones, a series subscribed
+  once for all its listeners and taken off by the last; a stream that ends, breaks or is silent for 90 s opens again after 1, 2, 5, 10,
+  then 30 s, subscribes its series again and tells every listener `restored` (the forming ones `lost` first); a minute after the end of the
+  trading day of a share its listeners of closed candles are told `restored`). `TInvestCall` throws `TInvestRefusedException` with the
+  code of the detail for a refusal (`TInvestNotFoundException` for `NOT_FOUND`).
+  The metrics live on the meter `ProfitFox.TInvest`: the counter `profitfox.tinvest.requests` {`group`, `method`, `outcome`} (a stream
+  counts its open as `ok` or `error` and its break as `lost`) and the gauges
   `profitfox.tinvest.limit` and `profitfox.tinvest.limit_remaining` {`group`} from the headers `x-ratelimit-limit` and `x-ratelimit-remaining`;
   `MetricsRegistrar` lists the meter. No test and no local run calls the real T-Invest: the test hosts put `MockTInvestApi` behind
   `ITInvestCallInvokers`, and `appsettings.Testing.json` points the endpoint at `tinvest.invalid`.
@@ -574,7 +598,9 @@ enforces a rule, the check is the source of truth.
 - Ports are replaced with NSubstitute mocks. Hand-written stubs exist only for transport and the exchange: HTTP
   (`StubHttpHandler`, `FakeBybitHandler`), because NSubstitute cannot replace the protected `SendAsync`; the Bybit v5
   streams on a local port (`FakeBybitSocketServer`); the gRPC server of T-Invest in process (`Tests.Shared/TInvest/MockTInvestApi`, a
-  `CallInvoker` with handlers by method name that records every call with its metadata and fails a method with the status a test asks for);
+  `CallInvoker` with handlers by method name that records every call with its metadata and fails a method with the status a test asks for,
+  and answers the server and duplex streams from a `MockTInvestStream` script, `OnServerStream` and `OnDuplex`: each call opens a
+  `MockTInvestStreamCall` with what the client wrote on it, which the test sends answers to, completes or fails with a status);
   and `FakeExchange`, one exchange account in memory behind
   `IExchangeLedger`, `IOrderGateway` and `IExchangeStreams` for the live trading runtime, whose orders, fills and streams
   depend on each other as a mock cannot keep.

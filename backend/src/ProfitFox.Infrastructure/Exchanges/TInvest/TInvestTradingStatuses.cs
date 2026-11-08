@@ -67,40 +67,15 @@ internal sealed class TInvestTradingStatuses(TInvestCall call, TimeProvider time
     public async Task<DateTimeOffset?> NextSessionStartAsync(string token, string exchange, CancellationToken cancellationToken)
     {
         DateTimeOffset now = time.GetUtcNow();
-        TradingSchedulesResponse schedule;
 
-        try
+        foreach (TradingDay day in await DaysAsync(token, exchange, cancellationToken) ?? [])
         {
-            schedule = await CachedAsync(
-                _schedules,
-                exchange,
-                now.UtcDateTime.Date.AddDays(1) - now.UtcDateTime,
-                () => call.OnceAsync(
-                    token,
-                    invoker => new InstrumentsService.InstrumentsServiceClient(invoker).TradingSchedulesAsync(
-                        new TradingSchedulesRequest { Exchange = exchange, From = now.ToProtoTimestamp(), To = now.AddDays(7).ToProtoTimestamp() }),
-                    cancellationToken));
-        }
-        catch (ExchangeException)
-        {
-            return null;
-        }
-
-        foreach (TradingDay day in schedule.Exchanges.SelectMany(item => item.Days).OrderBy(day => day.Date.ToUtcMoment()))
-        {
-            if (day.Intervals.Any(interval => !ExchangeIntervals.Contains(interval.Type) && !interval.Type.StartsWith(DealerPrefix, StringComparison.Ordinal)))
+            if (!Known(day))
             {
                 return null;
             }
 
-            DateTimeOffset[] starts =
-            [
-                .. day.Intervals
-                    .Where(interval => ExchangeIntervals.Contains(interval.Type))
-                    .Select(interval => interval.Interval.StartTs.ToUtcMoment())
-                    .Where(start => start > now)
-                    .Order()
-            ];
+            DateTimeOffset[] starts = [.. Intervals(day).Select(interval => interval.StartTs.ToUtcMoment()).Where(start => start > now).Order()];
 
             if (starts.Length > 0)
             {
@@ -109,6 +84,65 @@ internal sealed class TInvestTradingStatuses(TInvestCall call, TimeProvider time
         }
 
         return null;
+    }
+
+    /// <summary>When the trading day of the exchange that has not ended yet ends, with its last interval of the exchange; <c>null</c> as for a session.</summary>
+    public async Task<DateTimeOffset?> TradingDayEndAsync(string token, string exchange, CancellationToken cancellationToken)
+    {
+        DateTimeOffset now = time.GetUtcNow();
+
+        foreach (TradingDay day in await DaysAsync(token, exchange, cancellationToken) ?? [])
+        {
+            if (!Known(day))
+            {
+                return null;
+            }
+
+            DateTimeOffset[] ends = [.. Intervals(day).Select(interval => interval.EndTs.ToUtcMoment())];
+
+            if (ends.Length > 0 && ends.Max() > now)
+            {
+                return ends.Max();
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The days of the schedule from now for a week, in their order; <c>null</c> when the schedule does not read.</summary>
+    private async Task<IReadOnlyList<TradingDay>?> DaysAsync(string token, string exchange, CancellationToken cancellationToken)
+    {
+        DateTimeOffset now = time.GetUtcNow();
+
+        try
+        {
+            TradingSchedulesResponse schedule = await CachedAsync(
+                _schedules,
+                exchange,
+                now.UtcDateTime.Date.AddDays(1) - now.UtcDateTime,
+                () => call.OnceAsync(
+                    token,
+                    invoker => new InstrumentsService.InstrumentsServiceClient(invoker).TradingSchedulesAsync(
+                        new TradingSchedulesRequest { Exchange = exchange, From = now.ToProtoTimestamp(), To = now.AddDays(7).ToProtoTimestamp() }),
+                    cancellationToken));
+
+            return [.. schedule.Exchanges.SelectMany(item => item.Days).OrderBy(day => day.Date.ToUtcMoment())];
+        }
+        catch (ExchangeException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>A day whose every interval is of the exchange or of the dealer; another type tells nothing the system can trust.</summary>
+    private static bool Known(TradingDay day)
+    {
+        return day.Intervals.All(interval => ExchangeIntervals.Contains(interval.Type) || interval.Type.StartsWith(DealerPrefix, StringComparison.Ordinal));
+    }
+
+    private static IEnumerable<TradingInterval.Types.TimeInterval> Intervals(TradingDay day)
+    {
+        return day.Intervals.Where(interval => ExchangeIntervals.Contains(interval.Type)).Select(interval => interval.Interval);
     }
 
     private async Task<T> CachedAsync<T>(Dictionary<string, (DateTimeOffset Expires, T Value)> cache, string key, TimeSpan lifetime, Func<Task<T>> read)

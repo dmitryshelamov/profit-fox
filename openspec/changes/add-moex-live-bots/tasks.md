@@ -93,22 +93,23 @@ T-Invest. Решения — в design.md, требования — в `specs/`.
 
 ## 8. Стримы T-Invest
 
-- [ ] 8.1 `MockTInvestApi`: `OnServerStream` и `OnDuplex` со скриптом (канал ответов, запись запросов и входящих сообщений,
+- [x] 8.1 `MockTInvestApi`: `OnServerStream` и `OnDuplex` со скриптом (канал ответов, запись запросов и входящих сообщений,
   `Complete()`, `Fail(status)`); `MockTInvestApiTests` на оба вида.
-- [ ] 8.2 `TInvestStreams.SubscribeAccountAsync`: один `OrderStateStream` на аккаунт с `ping_delay_millis`; сообщение → чтение
+- [x] 8.2 `TInvestStreams.SubscribeAccountAsync`: один `OrderStateStream` на аккаунт с `ping_delay_millis`; сообщение → чтение
   `GetOrderState` по `request_id` до 5 раз с паузой секунда при `NOT_FOUND` → `ExchangeOrder` и новые `ExchangeFill`
   слушателям; без строки — чужая заявка (`ClientId = ""`, инструмент по тикеру). Unit-тесты: два слушателя — один стрим;
   событие раньше состояния; чужая заявка; последний слушатель закрывает стрим.
-- [ ] 8.3 Поздняя комиссия: при `FILL` с нулевой комиссией состояние перечитывается через 5, 15, 30, 60 с (`TimeProvider`),
+- [x] 8.3 Поздняя комиссия: при `FILL` с нулевой комиссией состояние перечитывается через 5, 15, 30, 60 с (`TimeProvider`),
   конец заявки уходит с первой ненулевой комиссией или через минуту с нулём. Unit-тесты на `FakeTimeProvider`.
-- [ ] 8.4 Переподключение стрима заявок: конец или ошибка → паузы 1, 2, 5, 10, 30 с; тишина 90 с без пингов → переоткрытие;
+- [x] 8.4 Переподключение стрима заявок: конец или ошибка → паузы 1, 2, 5, 10, 30 с; тишина 90 с без пингов → переоткрытие;
   после восстановления `restored` каждому слушателю; конец торгового дня по расписанию (+1 мин) → `restored`. Unit-тесты.
-- [ ] 8.5 Стримы свечей: два `MarketDataStream` на процесс (`waiting_close` true/false, токен `TInvestTokenSource`,
+  Сигнал конца дня приходит слушателям закрытых свечей серии (design.md, «Отклонения при внедрении»).
+- [x] 8.5 Стримы свечей: два `MarketDataStream` на процесс (`waiting_close` true/false, токен `TInvestTokenSource`,
   `PingSettings 30 с`), подписка на серию однажды, отписка последним слушателем, `Candle` с объёмом × лот и оборотом как у
   истории; переподключение с повторной подпиской и `restored`. Unit-тесты: две подписки в одном стриме; закрытая свеча
   только из «закрытого» стрима; обрыв → повторная подписка.
-- [ ] 8.6 Метрики: открытие стрима — запрос его группы (`outcome` `ok` / `error`), обрыв — `lost`. Unit-тест на `MeterListener`.
-- [ ] 8.7 `docs/conventions.md`: раздел `Exchanges/TInvest` дополнен гейтвеем, леджером, стримами, `TInvestOrderIds`,
+- [x] 8.6 Метрики: открытие стрима — запрос его группы (`outcome` `ok` / `error`), обрыв — `lost`. Unit-тест на `MeterListener`.
+- [x] 8.7 `docs/conventions.md`: раздел `Exchanges/TInvest` дополнен гейтвеем, леджером, стримами, `TInvestOrderIds`,
   `TInvestTradingStatuses`, `TInvestOrderStates`; мок — стримами.
 
 ## 9. Сессия и пауза биржи
