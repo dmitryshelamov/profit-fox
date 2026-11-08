@@ -237,10 +237,15 @@ public sealed class IdeaTradeEntryCalculator(
         Instrument instrument = preparation.Idea.Instrument;
         Guid? accountId = preparation.Account?.Id;
 
+        // One read of the position list gives the leverage and the position; the open orders are read at the same time.
+        Task<LinearPosition> position = ledger.GetLinearPositionAsync(key, instrument, cancellationToken);
+        Task<IReadOnlyList<ExchangeOrder>> orders = ledger.GetOpenOrdersAsync(key, instrument, cancellationToken);
+        await Task.WhenAll(position, orders);
+
         return new LinearSymbol(
-            await ledger.GetLeverageAsync(key, instrument, cancellationToken),
-            await ledger.GetHoldingAsync(key, instrument, preparation.BaseCoin, cancellationToken),
-            (await ledger.GetOpenOrdersAsync(key, instrument, cancellationToken)).Count,
+            position.Result.Leverage,
+            position.Result.Size,
+            orders.Result.Count,
             [.. open.Where(trade => trade.AccountId == accountId && trade.Instrument == instrument).Select(trade => trade.Leverage)]);
     }
 

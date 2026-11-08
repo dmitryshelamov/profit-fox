@@ -40,8 +40,8 @@ internal sealed class TInvestLedger(TInvestCall call, TInvestShares shares, ITIn
         return positions.Securities.Where(security => security.InstrumentUid == share.Uid).Sum(security => (decimal)(security.Balance + security.Blocked));
     }
 
-    /// <summary>The shares of MOEX have no leverage: refused without a call.</summary>
-    public Task<decimal> GetLeverageAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
+    /// <summary>The shares of MOEX have no symbol of <c>linear</c>: refused without a call.</summary>
+    public Task<LinearPosition> GetLinearPositionAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
     {
         throw new ExchangeException("T-Invest has no leverage of a symbol.");
     }

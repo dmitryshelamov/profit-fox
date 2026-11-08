@@ -118,8 +118,7 @@ public class IdeaEntryApiTests
     public async Task Position_with_another_leverage_is_a_reason()
     {
         await SaveLeverageAsync(5);
-        _scenario.Factory.Ledger.GetLeverageAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, Arg.Any<CancellationToken>()).Returns(1m);
-        _scenario.Factory.Ledger.GetHoldingAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, "BTC", Arg.Any<CancellationToken>()).Returns(0.5m);
+        _scenario.Factory.Ledger.GetLinearPositionAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, Arg.Any<CancellationToken>()).Returns(new LinearPosition(1m, 0.5m));
         Guid idea = await SaveIdeaAsync(100m, 98m, 104m);
         SetPrice("100");
 

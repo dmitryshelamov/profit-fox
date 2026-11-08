@@ -65,7 +65,7 @@ public class IdeaTradingTests
     [Test]
     public async Task Entry_on_linear_after_the_leverage_is_set_is_sent_as_before()
     {
-        _scenario.Factory.Ledger.GetLeverageAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, Arg.Any<CancellationToken>()).Returns(10m);
+        _scenario.Factory.Ledger.GetLinearPositionAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, Arg.Any<CancellationToken>()).Returns(new LinearPosition(10m, 0m));
         Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m);
         _scenario.SetPrice("100");
         HttpResponseMessage created = await _scenario.Client.PostAsJsonAsync("/api/idea-trades", new { ideaId = idea, accountId = _scenario.Account, amount = 47.3m });

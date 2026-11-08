@@ -229,7 +229,7 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
     private static IExchangeLedger AtOne()
     {
         IExchangeLedger ledger = Substitute.For<IExchangeLedger>();
-        ledger.GetLeverageAsync(Arg.Any<ExchangeKey>(), Arg.Any<Domain.ValueObjects.MarketData.Instrument>(), Arg.Any<CancellationToken>()).Returns(1m);
+        ledger.GetLinearPositionAsync(Arg.Any<ExchangeKey>(), Arg.Any<Domain.ValueObjects.MarketData.Instrument>(), Arg.Any<CancellationToken>()).Returns(new LinearPosition(1m, 0m));
 
         return ledger;
     }
