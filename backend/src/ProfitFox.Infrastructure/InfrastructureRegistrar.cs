@@ -31,6 +31,7 @@ using ProfitFox.Infrastructure.BackgroundServices;
 using ProfitFox.Infrastructure.Exchanges;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
 using ProfitFox.Infrastructure.Exchanges.Retry;
+using ProfitFox.Infrastructure.Exchanges.TInvest;
 using ProfitFox.Infrastructure.Mediatr;
 using ProfitFox.Infrastructure.Observability;
 using ProfitFox.Infrastructure.Persistence.Postgres;
@@ -185,6 +186,7 @@ public static class InfrastructureRegistrar
         services.AddSingleton<IFormingCandleStreams>(provider => provider.GetRequiredService<BybitStreams>());
         services.AddSingleton<ILiveTradingJournal, LoggingLiveTradingJournal>();
         services.AddSingleton<ExchangeResilienceExecutor>();
+        ConfigureTInvest(configuration, services);
         services.AddTransient<IMarketHistoryClient, BybitMarketDataClient>();
         services.AddTransient<CandleReadThrough>();
         services.AddTransient<IdeaTradeEntryCalculator>();
@@ -220,6 +222,32 @@ public static class InfrastructureRegistrar
             provider.GetRequiredService<WorkerIdentity>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddSingleton<BacktestInputCache>();
+    }
+
+    /// <summary>
+    ///     The adapter of T-Invest (decisions 3 and 7): one channel of the process, one limiter and one token source, the clients of
+    ///     market data and of accounts over them. Nothing connects until a call, and no call goes without a T-Invest account in storage.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The endpoint is not the official host, or a certificate file does not match the settings.</exception>
+    private static void ConfigureTInvest(IConfiguration configuration, IServiceCollection services)
+    {
+        TInvestSettings tinvest = configuration.GetSection("TInvest").Get<TInvestSettings>() ?? new TInvestSettings();
+
+        if (tinvest.Problem() is { } problem)
+        {
+            throw new InvalidOperationException(problem);
+        }
+
+        services.AddSingleton(tinvest);
+        services.AddSingleton(TInvestCertificates.Load(tinvest.Certificates, AppContext.BaseDirectory));
+        services.AddSingleton<ITInvestCallInvokers, TInvestChannel>();
+        services.AddSingleton<TInvestRequestLimiter>();
+        services.AddSingleton<TInvestMetrics>();
+        services.AddSingleton<TInvestTokenSource>();
+        services.AddSingleton<TInvestShares>();
+        services.AddTransient<TInvestCall>();
+        services.AddTransient<TInvestMarketDataClient>();
+        services.AddTransient<IBrokerAccountReader, TInvestAccountClient>();
     }
 
     private static bool IsMasterKey(string? value)

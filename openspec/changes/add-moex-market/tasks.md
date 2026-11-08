@@ -49,38 +49,38 @@
 
 ## 3. Адаптер T-Invest
 
-- [ ] 3.1 Пакет `Tinkoff.InvestApi` в `Directory.Packages.props` и `ProfitFox.Infrastructure.csproj`; `TInvestSettings` с
+- [x] 3.1 Пакет `Tinkoff.InvestApi` в `Directory.Packages.props` и `ProfitFox.Infrastructure.csproj`; `TInvestSettings` с
   валидацией endpoint (официальный хост или `.invalid`), секция `TInvest` в `appsettings.json` трёх хостов с бюджетами
   `MarketData` API 100 / Worker 150 / Scanner 50 (решения 3, 7). `dotnet build` зелёный; unit-тест: чужой хост не проходит
   валидацию.
-- [ ] 3.2 `Tests.Shared/TInvest/MockTInvestApi` (`CallInvoker` с обработчиками по методу, запись вызовов, метаданных и
+- [x] 3.2 `Tests.Shared/TInvest/MockTInvestApi` (`CallInvoker` с обработчиками по методу, запись вызовов, метаданных и
   трейлеров, `RpcException` по требованию) и `ITInvestCallInvokers` в адаптере (решения 6, 7). Unit-тест мока: вызов
   зарегистрированного метода отдаёт ответ и записывает `authorization` и `x-app-name`.
-- [ ] 3.3 `TInvestValues` (решение 7). Unit-тесты: `Quotation(305, 500000000)` → `305.5`; обратный перевод без `double`;
+- [x] 3.3 `TInvestValues` (решение 7). Unit-тесты: `Quotation(305, 500000000)` → `305.5`; обратный перевод без `double`;
   отрицательные нано; `Timestamp` → UTC.
-- [ ] 3.4 `TInvestRequestLimiter` (решение 7). Unit-тесты на `FakeTimeProvider`: лимит группы в окне минуты; разные
+- [x] 3.4 `TInvestRequestLimiter` (решение 7). Unit-тесты на `FakeTimeProvider`: лимит группы в окне минуты; разные
   токены не делят окно; `Pause` держит группу до сброса и не укорачивается более ранней паузой; ожидание до отправки.
-- [ ] 3.5 `TInvestCall`: лимитер → метаданные → дедлайн → метрики → перевод `RpcException` (решение 7). Unit-тесты на моке:
+- [x] 3.5 `TInvestCall`: лимитер → метаданные → дедлайн → метрики → перевод `RpcException` (решение 7). Unit-тесты на моке:
   `Unauthenticated` → `ExchangeKeyRejectedException`; `ResourceExhausted` с трейлером `x-ratelimit-reset: 7` →
   `ExchangeRateLimitedException` и пауза группы на 7 с; `Unavailable` → `ExchangeUnavailableException`; описание статуса
   `30220` попадает в `ExchangeException` кодом, прочий текст брокера — нет.
-- [ ] 3.6 `TInvestMetrics` и регистрация meter в `MetricsRegistrar` (решение 7). Unit-тесты через `MetricCollector` по
+- [x] 3.6 `TInvestMetrics` и регистрация meter в `MetricsRegistrar` (решение 7). Unit-тесты через `MetricCollector` по
   сценариям «Чтение свечей», «Лимит токена», «Остаток группы market_data»; вызов, не выпущенный паузой, не считается.
-- [ ] 3.7 `TInvestChannel` с проверкой цепочки до закреплённого корня через Sub CA по отпечаткам из настроек; файлы `.cer`
+- [x] 3.7 `TInvestChannel` с проверкой цепочки до закреплённого корня через Sub CA по отпечаткам из настроек; файлы `.cer`
   копируются в вывод (решение 7). Unit-тесты: цепочка из тестовых самоподписанных сертификатов с верными отпечатками
   проходит, с чужим отпечатком или несовпадающим именем — нет; файл с другим отпечатком не загружается.
-- [ ] 3.8 `TInvestTokenSource` (решение 3). Unit-тесты: без аккаунта T-Invest — `ExchangeUnavailableException` «данные
+- [x] 3.8 `TInvestTokenSource` (решение 3). Unit-тесты: без аккаунта T-Invest — `ExchangeUnavailableException` «данные
   T-Invest недоступны» и ни одного вызова мока; с аккаунтом — расшифрованный токен; повторное чтение в пределах 5 минут
   не идёт в репозиторий; через 5 минут после удаления аккаунта источник пуст.
-- [ ] 3.9 `TInvestShares`: `ShareBy(ticker, TQBR)` с кэшем час, фильтр рубли / API-торговля / лот и шаг цены (решение 7).
+- [x] 3.9 `TInvestShares`: `ShareBy(ticker, TQBR)` с кэшем час, фильтр рубли / API-торговля / лот и шаг цены (решение 7).
   Unit-тесты на моке: акция разрешается один раз за час; акция другой валюты или без API-торговли — `ExchangeException`.
-- [ ] 3.10 `TInvestMarketDataClient`: каталог (`Shares(BASE)` с фильтром TQBR), `InstrumentExistsAsync`, правила инструмента,
+- [x] 3.10 `TInvestMarketDataClient`: каталог (`Shares(BASE)` с фильтром TQBR), `InstrumentExistsAsync`, правила инструмента,
   `GetLastPriceAsync`/`GetLastPricesAsync` (решение 7). Unit-тесты на моке по сценариям «Акции MOEX в поиске», «Акция не
   TQBR», «Правила акции»; `ListedInstrument` несёт `TradFi`, `Name`, `ShortEnabled`, лот как шаг и минимум.
-- [ ] 3.11 История: окна по интервалу, обход от конца периода, источник `Exchange` без `limit`, только `is_complete`, объём ×
+- [x] 3.11 История: окна по интервалу, обход от конца периода, источник `Exchange` без `limit`, только `is_complete`, объём ×
   лот, оборот по типичной цене (решение 7). Unit-тесты на моке по сценарию «Лоты в акции»; неделя часовых свечей идёт
   одним окном, три месяца — двумя; `GetCandlesOnceAsync` одной попыткой; незакрытая свеча отброшена; свечи новейшие первыми.
-- [ ] 3.12 `TInvestAccountClient : IBrokerAccountReader`: `GetAccounts`, `GetPortfolio` в рублях (решение 7). Unit-тесты на
+- [x] 3.12 `TInvestAccountClient : IBrokerAccountReader`: `GetAccounts`, `GetPortfolio` в рублях (решение 7). Unit-тесты на
   моке: счета с типами и доступом; портфель `50 000` ₽ + `10` `SBER` по `300` → строки и общая стоимость `53 000`.
 
 ## 4. Маршрутизация и покрытие

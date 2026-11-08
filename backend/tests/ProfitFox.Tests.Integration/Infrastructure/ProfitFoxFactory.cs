@@ -18,7 +18,9 @@ using NSubstitute;
 using ProfitFox.Application.Ports.ExchangeAccounts;
 using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
+using ProfitFox.Infrastructure.Exchanges.TInvest;
 using ProfitFox.Presentation;
+using ProfitFox.Tests.Shared.TInvest;
 
 using Serilog.Core;
 
@@ -29,6 +31,9 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
     public string ConnectionString => connectionString;
 
     public FakeBybitHandler Bybit { get; } = new FakeBybitHandler();
+
+    /// <summary>Answers the app's gRPC calls to T-Invest; no test reaches the real T-Invest.</summary>
+    public MockTInvestApi TInvest { get; } = new MockTInvestApi();
 
     /// <summary>Answers the app's calls to Bybit with the key of an account; no test reaches the private Bybit API.</summary>
     public IExchangeKeyInspector KeyInspector { get; } = Substitute.For<IExchangeKeyInspector>();
@@ -136,6 +141,7 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
             services.AddSingleton<TimeProvider>(Time);
             services.AddSingleton(Ledger);
             services.AddSingleton(BrokerAccounts);
+            services.AddSingleton<ITInvestCallInvokers>(new MockTInvestInvokers(TInvest));
             if (FakeKeyInspector)
             {
                 services.AddSingleton(KeyInspector);
@@ -191,7 +197,7 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
             settings["Backtests:MaxParallelism"] = threads.ToString(CultureInfo.InvariantCulture);
         }
 
-        var worker = new WorkerHost(connectionString, Bybit, Time, settings, services, logSink);
+        var worker = new WorkerHost(connectionString, Bybit, Time, settings, services, logSink, TInvest);
         worker.StartAsync().GetAwaiter().GetResult();
 
         return worker;

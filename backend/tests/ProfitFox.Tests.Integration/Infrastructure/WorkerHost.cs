@@ -8,6 +8,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
+using ProfitFox.Infrastructure.Exchanges.TInvest;
+using ProfitFox.Tests.Shared.TInvest;
+
 using Serilog.Core;
 
 using WorkerProgram = ProfitFox.Worker.Program;
@@ -28,13 +31,15 @@ public sealed class WorkerHost : IAsyncDisposable
     /// <param name="settings">Settings over the Worker's own, such as <c>Backtests:MaxParallelism</c>.</param>
     /// <param name="services">Replaces services of the Worker after its own registration.</param>
     /// <param name="logSink">Receives every event the Worker's logger writes.</param>
+    /// <param name="tinvest">Answers every gRPC call of the Worker to T-Invest; a fresh one answers nothing.</param>
     public WorkerHost(
         string connectionString,
         FakeBybitHandler bybit,
         TimeProvider time,
         IReadOnlyDictionary<string, string?>? settings = null,
         Action<IServiceCollection>? services = null,
-        ILogEventSink? logSink = null)
+        ILogEventSink? logSink = null,
+        MockTInvestApi? tinvest = null)
     {
         HostApplicationBuilder builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
         {
@@ -45,6 +50,7 @@ public sealed class WorkerHost : IAsyncDisposable
         builder.Configuration.AddInMemoryCollection(settings ?? new Dictionary<string, string?>());
         WorkerProgram.Configure(builder);
         builder.Services.AddSingleton<TimeProvider>(time);
+        builder.Services.AddSingleton<ITInvestCallInvokers>(new MockTInvestInvokers(tinvest ?? new MockTInvestApi()));
 
         // Bybit.Net configures its own primary handler, so replace the whole client: no test may reach the real Bybit.
         builder.Services.AddSingleton<IBybitRestClient>(_ => new BybitRestClient(

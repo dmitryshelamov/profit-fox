@@ -222,6 +222,29 @@ enforces a rule, the check is the source of truth.
   an event storage already had is not counted. `MetricsRegistrar` lists both meters.
 - A new HTTP client to Bybit is made only through `IHttpClientFactory` (`AddHttpClient`), or its requests are missing from the
   metrics.
+- `Exchanges/TInvest` is the adapter of T-Invest Invest API on the generated gRPC clients of the NuGet package `Tinkoff.InvestApi`
+  (`Tinkoff.InvestApi.V1`, without the facade of the SDK): `TInvestSettings` (the `TInvest` section: `Endpoint`, only the official host or a
+  test host under `.invalid`; `AppName`; `RequestTimeout`; `Limits` a minute by group of methods; `Certificates`), `TInvestChannel` (the one
+  `GrpcChannel` of the process behind `ITInvestCallInvokers`, which tests replace with `Tests.Shared/TInvest/MockTInvestApi`),
+  `TInvestCertificates` (the pinned chain of the server certificate: the `.cer` files of `Exchanges/TInvest/Certificates`, copied to the
+  output, by the SHA-256 thumbprints of the settings; empty thumbprints pin nothing), `TInvestCall` (every unary call: `TInvestRequestLimiter`
+  → `authorization: Bearer` and `x-app-name` → deadline → `TInvestMetrics` → the exceptions of Application; `OnceAsync` is one attempt,
+  `WithRetriesAsync` the ladder of `ExchangeResilienceExecutor`; `RESOURCE_EXHAUSTED` pauses the group of the token until `x-ratelimit-reset`
+  and is `ExchangeRateLimitedException`, `NOT_FOUND` is `TInvestNotFoundException`, a refusal carries the error code of the status detail and
+  never the text of the broker), `TInvestRequestLimiter` (a sliding window of a minute per token and `TInvestMethodGroup`, `TInvestMethods`
+  names the group of a service), `TInvestValues` (`Quotation` and `MoneyValue` ↔ `decimal` as `units + nano / 1e9`, timestamps in UTC),
+  `TInvestCodes` (the `CandleInterval` of an `Interval` and the longest window of one request of candles: 1 and 3 min a day, 5 min a week,
+  15 and 30 min three weeks, the hours 90 days), `TInvestTokenSource` (the token of the oldest T-Invest account of storage, kept 5 minutes;
+  without an account `ExchangeUnavailableException` and no request), `TInvestShares` (a ticker resolved into a share of TQBR with `ShareBy`,
+  kept an hour; a share the system trades is in roubles, trades through the API and has a positive lot and price step),
+  `TInvestMarketDataClient` (`IMarketHistoryClient`, `IInstrumentRulesProvider` and `IInstrumentCatalog` for `Moex`: the catalog from
+  `Shares(BASE)`, the rules lot = step = minimum and no minimum amount, the last prices by uid, the candles window by window from the end of
+  the period with the source `Exchange` and no limit, complete ones only, the volume lots × lot and the turnover volume × (high + low + close) / 3)
+  and `TInvestAccountClient` (`IBrokerAccountReader`: `GetAccounts`, `GetPortfolio` in roubles, the roubles of the account as one row).
+  The metrics live on the meter `ProfitFox.TInvest`: the counter `profitfox.tinvest.requests` {`group`, `method`, `outcome`} and the gauges
+  `profitfox.tinvest.limit` and `profitfox.tinvest.limit_remaining` {`group`} from the headers `x-ratelimit-limit` and `x-ratelimit-remaining`;
+  `MetricsRegistrar` lists the meter. No test and no local run calls the real T-Invest: the test hosts put `MockTInvestApi` behind
+  `ITInvestCallInvokers`, and `appsettings.Testing.json` points the endpoint at `tinvest.invalid`.
 - `Exchanges/<Vendor>` holds adapters over vendor SDKs, including the mapping of domain values to SDK types
   (`BybitCodes`). `Exchanges/Retry` holds Polly pipelines. `BybitMarketDataClient` implements `IInstrumentCatalog` (spot in one
   answer, linear by following the cursor; one attempt per request). The registered `IInstrumentCatalog` is
@@ -334,6 +357,23 @@ enforces a rule, the check is the source of truth.
 
   ```json
   "Bybit": { "RestAddress": "http://127.0.0.1:5296" }
+  ```
+
+- The `TInvest` section (`TInvestSettings`, bound in `InfrastructureRegistrar`), in the `appsettings.json` of the API, the Worker and the
+  scanner: the endpoint of the live Invest API (the registrar refuses any other host but one under `.invalid`, which the tests use), the
+  app name, the timeout of a call, the requests a minute of each group of methods with one token in this process (the `MarketData` budget
+  is 100 for the API, 150 for the Worker and 50 for the scanner, below the 300 of the token together) and the certificates the server
+  chains to: the folder of the `.cer` files and the SHA-256 thumbprints of the Russian Trusted Root CA and Sub CA (empty pins nothing).
+  No secret: the token is in the database.
+
+  ```json
+  "TInvest": {
+    "Endpoint": "https://invest-public-api.tbank.ru:443",
+    "AppName": "profit-fox",
+    "RequestTimeout": "00:00:10",
+    "Limits": { "Users": 50, "Instruments": 150, "MarketData": 100, "Operations": 100, "Orders": 50 },
+    "Certificates": { "Directory": "Exchanges/TInvest/Certificates", "RootThumbprint": "", "SubThumbprint": "" }
+  }
   ```
 
 - The `Metrics` section (`MetricsSettings`, bound in `MetricsRegistrar`): `OtlpEndpoint`, the full URL of the metrics path of an
@@ -500,7 +540,9 @@ enforces a rule, the check is the source of truth.
 - `Fixtures/IdeaAutos` holds the reference minutes of the paper trades (a long enters at 100 with the stop at 98 and the target at 104; the pullback sets wait for a limit at 100) with the answers written out in `PaperFillTests`; `Generators/Domain/Entity/IdeaAutos` makes an auto.
 - Ports are replaced with NSubstitute mocks. Hand-written stubs exist only for transport and the exchange: HTTP
   (`StubHttpHandler`, `FakeBybitHandler`), because NSubstitute cannot replace the protected `SendAsync`; the Bybit v5
-  streams on a local port (`FakeBybitSocketServer`); and `FakeExchange`, one exchange account in memory behind
+  streams on a local port (`FakeBybitSocketServer`); the gRPC server of T-Invest in process (`Tests.Shared/TInvest/MockTInvestApi`, a
+  `CallInvoker` with handlers by method name that records every call with its metadata and fails a method with the status a test asks for);
+  and `FakeExchange`, one exchange account in memory behind
   `IExchangeLedger`, `IOrderGateway` and `IExchangeStreams` for the live trading runtime, whose orders, fills and streams
   depend on each other as a mock cannot keep.
   `FakeExchange` also makes the stop and the target of an entry with a stop and a target on `linear` (no client id, `ParentClientId`, a stop kind), fires them at a
