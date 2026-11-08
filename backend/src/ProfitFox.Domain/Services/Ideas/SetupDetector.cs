@@ -39,10 +39,27 @@ public static class SetupDetector
         SetupThresholds thresholds,
         VolatilityPercentiles percentiles)
     {
+        var windows = new SetupWindows(candleMinutes, thresholds.Candles);
+
+        foreach (IdeaCandle minute in minutes)
+        {
+            windows.Add(minute);
+        }
+
+        return Detect(basis, windows, thresholds, percentiles);
+    }
+
+    /// <param name="basis">What the setups are measured against: the closed candles of the interval before the last candle.</param>
+    /// <param name="windows">The windows of the last candle and of the impulse, grown by every minute up to the last closed one.</param>
+    /// <param name="thresholds">The thresholds of the interval.</param>
+    /// <param name="percentiles">The percentiles of ATR / price of the pair on the interval; without one, no squeeze or no high volatility.</param>
+    public static SetupReading Detect(SetupBase basis, SetupWindows windows, SetupThresholds thresholds, VolatilityPercentiles percentiles)
+    {
         decimal atr = basis.Atr;
         decimal median = basis.Median;
-        Window impulse = Measure(minutes, Math.Min(minutes.Count, thresholds.Candles * candleMinutes), thresholds.Candles, atr, median);
-        Window last = Measure(minutes, Math.Min(minutes.Count, candleMinutes), 1, atr, median);
+        Window impulse = Measure(windows.Impulse, thresholds.Candles, atr, median);
+        Window last = Measure(windows.Last, 1, atr, median);
+        decimal close = windows.Last.Last.Close;
         var signals = new List<SetupSignal>();
         bool rise = impulse.Move >= thresholds.Move && impulse.Volume >= thresholds.Volume;
         bool fall = -impulse.Move >= thresholds.Move && impulse.Volume >= thresholds.Volume;
@@ -67,12 +84,12 @@ public static class SetupDetector
             signals.Add(last.Signal(IdeaSetup.EarlyDrop, IdeaSide.Short));
         }
 
-        if (atr / minutes[^1].Close > percentiles.High)
+        if (atr / close > percentiles.High)
         {
             signals.Add(last.Signal(IdeaSetup.HighVolatility, null));
         }
 
-        var candle = new IdeaCandle(last.First.OpenTime, last.First.Open, last.High, last.Low, minutes[^1].Close, last.Sum);
+        var candle = new IdeaCandle(last.First.OpenTime, last.First.Open, last.High, last.Low, close, last.Sum);
         var input = new CandleSetupInput(basis.Closed, candle, atr, median, basis.Zones, basis.Rsi, percentiles.Low, [.. signals]);
 
         return new SetupReading(atr, [.. signals, .. CandleSetupDetector.Detect(input, thresholds)]);
@@ -91,37 +108,13 @@ public static class SetupDetector
         return (volumes[(volumes.Length / 2) - 1] + volumes[volumes.Length / 2]) / 2;
     }
 
-    /// <summary>
-    ///     The window of the last <paramref name="count" /> minutes, read in place: the replay reads it every minute of history, so it copies
-    ///     nothing and takes the sum, the low and the high in one pass, in the order of the minutes (decision 1 of speed-up-ideas-replay).
-    /// </summary>
-    private static Window Measure(IReadOnlyList<IdeaCandle> minutes, int count, int candles, decimal atr, decimal median)
+    /// <summary>The window as the setups measure it: its move in ATR and its volume a candle in medians, with its low, high and first minute.</summary>
+    private static Window Measure(MinuteWindow minutes, int candles, decimal atr, decimal median)
     {
-        int first = minutes.Count - count;
-        IdeaCandle open = minutes[first];
-        decimal sum = open.Volume;
-        decimal low = open.Low;
-        decimal high = open.High;
-
-        for (int index = first + 1; index < minutes.Count; index++)
-        {
-            IdeaCandle minute = minutes[index];
-            sum += minute.Volume;
-
-            if (minute.Low < low)
-            {
-                low = minute.Low;
-            }
-
-            if (minute.High > high)
-            {
-                high = minute.High;
-            }
-        }
-
+        decimal sum = minutes.Sum;
         decimal volume = sum / candles;
 
-        return new Window((minutes[^1].Close - open.Open) / atr, median > 0 ? volume / median : 0m, low, high, open, sum);
+        return new Window((minutes.Last.Close - minutes.First.Open) / atr, median > 0 ? volume / median : 0m, minutes.Low, minutes.High, minutes.First, sum);
     }
 
     /// <summary>The move of a window in ATR, signed, and its volume a candle in medians; its first minute and the sum of its volumes.</summary>

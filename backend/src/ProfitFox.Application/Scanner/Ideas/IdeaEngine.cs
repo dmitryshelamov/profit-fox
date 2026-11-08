@@ -61,9 +61,19 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion, bool replay
 
             pair.Series[interval] = series;
             pair.Holding[interval] = [];
+            pair.Windows[interval] = new SetupWindows(Minutes(interval), rules.Thresholds[interval].Candles);
         }
 
-        pair.Minutes.AddRange(minutes.TakeLast(_window));
+        foreach (IdeaCandle minute in minutes.TakeLast(_window))
+        {
+            pair.Minutes.Add(minute);
+
+            foreach (SetupWindows windows in pair.Windows.Values)
+            {
+                windows.Add(minute);
+            }
+        }
+
         IReadOnlyList<Idea> caught = CatchUp(open, minutes);
         pair.Open.AddRange(caught.Where(idea => idea.IsOpen));
         _pairs[instrument] = pair;
@@ -136,6 +146,11 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion, bool replay
             series.Add(minute);
         }
 
+        foreach (SetupWindows windows in pair.Windows.Values)
+        {
+            windows.Add(minute);
+        }
+
         var setups = new List<PairSetup>();
         var created = new List<Idea>();
         var signals = new List<IdeaSignal>();
@@ -173,7 +188,7 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion, bool replay
             SetupBase? basis = pair.Series[interval].Measure(end, rules.Zones);
             SetupReading? reading = basis is null
                 ? null
-                : SetupDetector.Detect(basis, pair.Minutes, Minutes(interval), thresholds, percentiles);
+                : SetupDetector.Detect(basis, pair.Windows[interval], thresholds, percentiles);
             readings.Add((interval, basis, SetupDetector.Fired(pair.Holding[interval], reading)));
             pair.Holding[interval] = [.. reading?.Signals.Select(signal => signal.Setup) ?? []];
         }
@@ -263,6 +278,9 @@ public sealed class IdeaEngine(IdeaRuleSet rules, int engineVersion, bool replay
         public Dictionary<Interval, IdeaSeries> Series { get; } = [];
 
         public Dictionary<Interval, IReadOnlyCollection<IdeaSetup>> Holding { get; } = [];
+
+        /// <summary>The windows of the last candle and of the impulse of each interval, grown with the minutes.</summary>
+        public Dictionary<Interval, SetupWindows> Windows { get; } = [];
 
         public List<IdeaCandle> Minutes { get; } = [];
 
