@@ -257,7 +257,8 @@ enforces a rule, the check is the source of truth.
   `TInvestMarketDataClient` (`IMarketHistoryClient`, `IInstrumentRulesProvider` and `IInstrumentCatalog` for `Moex`: the catalog from
   `Shares(BASE)`, the rules lot = step = minimum and no minimum amount, the last prices by uid, the candles window by window from the end of
   the period with the source `Exchange` and no limit, complete ones only, the volume lots × lot and the turnover volume × (high + low + close) / 3)
-  and `TInvestAccountClient` (`IBrokerAccountReader`: `GetAccounts`, `GetPortfolio` in roubles, the roubles of the account as one row).
+  and `TInvestAccountClient` (`IBrokerAccountReader`: `GetAccounts`, `GetPortfolio` in roubles: every position with a quantity as a row, a currency by its ISO code (the first three letters of its
+  ticker) worth its quantity at the current price in roubles, the roubles always a row, the total from `total_amount_portfolio`).
   The metrics live on the meter `ProfitFox.TInvest`: the counter `profitfox.tinvest.requests` {`group`, `method`, `outcome`} and the gauges
   `profitfox.tinvest.limit` and `profitfox.tinvest.limit_remaining` {`group`} from the headers `x-ratelimit-limit` and `x-ratelimit-remaining`;
   `MetricsRegistrar` lists the meter. No test and no local run calls the real T-Invest: the test hosts put `MockTInvestApi` behind

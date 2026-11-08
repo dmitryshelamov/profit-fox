@@ -160,7 +160,7 @@
 - [ ] 8.8 Мастер-ключ обязателен у всех Worker (решение 12, поправка): импорт `moex` расшифровывает токен. Тест регистрации.
 - [ ] 8.9 Аккаунт не Bybit отклоняется в настройках торговли по идеям, в автомате и в `IdeaTradeEntryCalculator.AccessAsync` до
   `KeyAsync`. Unit-тесты.
-- [ ] 8.10 Портфель T-Invest: каждая валютная позиция отдельной строкой, стоимость в рублях, итог из `TotalAmountPortfolio`.
+- [x] 8.10 Портфель T-Invest: каждая валютная позиция отдельной строкой, стоимость в рублях, итог из `TotalAmountPortfolio`.
   Unit-тест с RUB и USD.
 - [x] 8.11 Лимитер: `Limits` > 0 в `TInvestSettings.Problem()`; ключ словарей — SHA-256-отпечаток токена (решение 7);
   `Waiting_request_is_cancelled_with_its_token` ждёт `Should.ThrowAsync`. Unit-тесты.

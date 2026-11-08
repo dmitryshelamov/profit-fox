@@ -182,6 +182,10 @@ Unit- и интеграционные тесты идут на in-process мок
   `rub`, `api_trade_available_flag`, лот и шаг цены положительны; `ListedInstrument` получает `ShortEnabled` и `Name`
   (поиск по названию) при `TradFi = true`, `BaseCoin` = тикер, `QuoteCoin` = `RUB`.
 - `TInvestAccountClient : IBrokerAccountReader`: `GetAccounts` (номер, название, тип, статус, доступ), `GetPortfolio` в рублях.
+  Поправка после ревью: строка «RUB» бралась из `total_amount_currencies` (все валюты в рублях), а валютные позиции отфильтровывались —
+  доллары показались бы количеством рублей. Теперь каждая валютная позиция — своя строка по ISO-коду (первые три буквы тикера,
+  `USD000UTSTOM` → `USD`), стоимость — количество × `current_price` в рублях (для RUB — количество), общая стоимость — из
+  `total_amount_portfolio`.
 - `TInvestMetrics`: `Meter("ProfitFox.TInvest")`, счётчик `profitfox.tinvest.requests` {`group`, `method`, `outcome`} и
   гейджи `profitfox.tinvest.limit` / `profitfox.tinvest.limit_remaining` {`group`} из заголовков `x-ratelimit-limit` /
   `x-ratelimit-remaining`; `MetricsRegistrar` добавляет meter.

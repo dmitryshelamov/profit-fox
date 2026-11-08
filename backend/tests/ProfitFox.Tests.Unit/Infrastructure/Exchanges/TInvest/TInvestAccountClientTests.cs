@@ -87,6 +87,31 @@ public class TInvestAccountClientTests
         (request.AccountId, request.Currency).ShouldBe(("2000000001", PortfolioRequest.Types.CurrencyRequest.Rub));
     }
 
+    // After the review: every currency is a row of its own by its ISO code, its worth in roubles at the current price; the roubles of the
+    // answer (every currency counted in roubles) are not the roubles of the account.
+    [Test]
+    public async Task Each_currency_is_a_row_of_its_own_worth_in_roubles()
+    {
+        _host.Api.On<PortfolioRequest, PortfolioResponse>(
+            "GetPortfolio",
+            _ => new PortfolioResponse
+            {
+                TotalAmountPortfolio = Money(62000m),
+                TotalAmountCurrencies = Money(59000m),
+                Positions =
+                {
+                    new PortfolioPosition { InstrumentType = "currency", Ticker = "RUB000UTSTOM", Quantity = 50000m.ToQuotation(), CurrentPrice = Money(1m) },
+                    new PortfolioPosition { InstrumentType = "currency", Ticker = "USD000UTSTOM", Quantity = 100m.ToQuotation(), CurrentPrice = Money(90m) },
+                    new PortfolioPosition { InstrumentType = "share", Ticker = "SBER", Quantity = 10m.ToQuotation(), CurrentPrice = Money(300m) }
+                }
+            });
+
+        AccountBalance balance = await _host.AccountClient.GetPortfolioAsync("t.user", "2000000001", CancellationToken.None);
+
+        balance.TotalEquity.ShouldBe(62000m);
+        balance.Coins.ShouldBe([new CoinBalance("RUB", 50000m, 50000m), new CoinBalance("USD", 100m, 9000m), new CoinBalance("SBER", 10m, 3000m)]);
+    }
+
     [Test]
     public async Task Empty_portfolio_is_zero_roubles()
     {
