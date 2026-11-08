@@ -11,6 +11,9 @@ internal static class TInvestFixtures
 {
     public const string SberUid = "e6123145-9665-43e0-8413-cd61b8aa9b13";
 
+    /// <summary>The trading schedule SBER keeps: the morning, the main and the evening sessions, the weekends and the dealer hours.</summary>
+    public const string SberExchange = "moex_mrng_evng_e_wknd_dlr";
+
     public static Share Sber(string classCode = "TQBR", string currency = "rub", bool apiTrade = true, int lot = 10, decimal step = 0.01m)
     {
         return new Share
@@ -23,7 +26,8 @@ internal static class TInvestFixtures
             Lot = lot,
             MinPriceIncrement = step.ToQuotation(),
             ApiTradeAvailableFlag = apiTrade,
-            ShortEnabledFlag = true
+            ShortEnabledFlag = true,
+            Exchange = SberExchange
         };
     }
 

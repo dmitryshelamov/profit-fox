@@ -46,14 +46,14 @@ T-Invest. Решения — в design.md, требования — в `specs/`.
 
 ## 4. Идентификаторы и состояния заявок T-Invest
 
-- [ ] 4.1 Миграция `AddMoexOrdersMigration`: таблица `moex_orders` по design.md (решение 3); интеграционный тест
+- [x] 4.1 Миграция `AddMoexOrdersMigration`: таблица `moex_orders` по design.md (решение 3); интеграционный тест
   `TInvestOrderIdsTests` в `Tests.Integration/Persistence`: запись, чтение по `client_id` и по `request_id`, дописывание
   `exchange_order_id`, уникальность `request_id`.
-- [ ] 4.2 `Exchanges/TInvest/TInvestOrderIds` (над `ITransactionExecutor`/Dapper, как репозитории): `EnsureAsync(clientId,
+- [x] 4.2 `Exchanges/TInvest/TInvestOrderIds` (над `ITransactionExecutor`/Dapper, как репозитории): `EnsureAsync(clientId,
   accountId, uid)` возвращает существующий или новый случайный `request_id`; `ClientIdOf(requestId)`; `SetExchangeIdAsync`.
   Тест: повторный `EnsureAsync` отдаёт тот же `request_id`.
-- [ ] 4.3 `TInvestShare.Exchange` (поле `exchange` акции) в `TInvestShares.Tradable`; тест маппинга.
-- [ ] 4.4 `TInvestOrderStates`: `ExchangeOrder` из `OrderState` (объём лоты × лот, стоимость Σ stages, комиссия
+- [x] 4.3 `TInvestShare.Exchange` (поле `exchange` акции) в `TInvestShares.Tradable`; тест маппинга.
+- [x] 4.4 `TInvestOrderStates`: `ExchangeOrder` из `OrderState` (объём лоты × лот, стоимость Σ stages, комиссия
   `executed_commission`, состояния `NEW`/`PARTIALLYFILL` → `Open`, `FILL` → `Filled`, `CANCELLED` → `Cancelled`, `REJECTED` →
   `Rejected`), `ExchangeFill` из `stages`; расхождение Σ stages с `lots_executed` — признак «перечитать». Unit-тесты на каждом
   состоянии и на расхождении.
