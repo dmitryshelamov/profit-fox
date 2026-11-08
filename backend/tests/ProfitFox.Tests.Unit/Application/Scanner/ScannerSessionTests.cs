@@ -883,6 +883,7 @@ public class ScannerSessionTests
                 settings,
                 new IdeasEngineVersion(IdeasEngineVersion.Current),
                 pace,
+                _journal,
                 _time),
             new IdeaStatistics(
                 _ideaSignals,

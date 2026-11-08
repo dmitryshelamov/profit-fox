@@ -2,6 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 
 using NSubstitute;
 
+using ProfitFox.Application.Ports.Market;
 using ProfitFox.Application.Scanner;
 using ProfitFox.Application.Scanner.Ideas;
 using ProfitFox.Domain.Entities.Ideas;
@@ -41,6 +42,7 @@ public class IdeasReplayTests
     private IFundingRateRepository _funding = null!;
     private ScannerMarket _market = null!;
     private ScannerPace _pace = null!;
+    private IScannerJournal _journal = null!;
     private FakeTimeProvider _time = null!;
     // The signals as storage holds them, by key and firing: a write of one stored goes over it.
     private Dictionary<(IdeaKey, DateTimeOffset), IdeaSignal> _written = null!;
@@ -60,6 +62,7 @@ public class IdeasReplayTests
         _funding.GetAsync(Arg.Any<Instrument>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
         _market = new ScannerMarket();
         _pace = new ScannerPace();
+        _journal = Substitute.For<IScannerJournal>();
         _time = new FakeTimeProvider(March1.AddDays(1).AddMinutes(5));
         _written = [];
         _writes = [];
@@ -224,6 +227,19 @@ public class IdeasReplayTests
         _time.Advance(TimeSpan.FromSeconds(10));
         (await step).ShouldBeTrue();
         _written.ShouldNotBeEmpty();
+    }
+
+    // Scenario "Ход в логе" (decision 1 of speed-up-ideas-replay): the end of a turn goes to the journal with the pair, the days it replayed and
+    // the time of the engine, of the reads and of the writes, each never negative.
+    [Test]
+    public async Task Turn_writes_its_pair_days_and_timings_to_the_journal()
+    {
+        Keep(March1.AddDays(2));
+        _time.Advance(TimeSpan.FromDays(1));
+
+        await Replay().StepAsync(CancellationToken.None);
+
+        _journal.Received(1).Replayed(Wif, 2, Arg.Is<TimeSpan>(engine => engine >= TimeSpan.Zero), Arg.Is<TimeSpan>(reads => reads >= TimeSpan.Zero), Arg.Is<TimeSpan>(writes => writes >= TimeSpan.Zero));
     }
 
     // Scenario "Повторный прогон после смены правил": the signals and cursors of other versions go, so a new version replays from the start.
@@ -415,6 +431,7 @@ public class IdeasReplayTests
             new ScannerSettings(),
             new IdeasEngineVersion(version),
             _pace,
+            _journal,
             _time);
     }
 
