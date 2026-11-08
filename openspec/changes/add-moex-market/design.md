@@ -138,6 +138,11 @@ covered_from, covered_until)` через `ISeriesCoverageRepository` (Get, Upser
 запроса. В этом change адаптер не реализует `IOrderGateway`, `IExchangeLedger`, `IExchangeStreams`; запуск бота на `moex`
 отклоняется в `StartBotCommandHandler` до любого обращения к бирже.
 
+**Поправка после ревью (живая свеча бота на `moex`).** `IFormingCandleStreams` реализован только `BybitStreams`, и страница бота
+`moex` / `SBER` подписывалась на `kline.<interval>.SBER` у Bybit linear, получала отказ и повторяла подписку по `ScheduleRetry`, пока
+открыта. Теперь `FormingCandleFeeds.JoinAsync` для инструмента с `Category.Exchange() == Exchange.TInvest` сразу отдаёт `NoData`,
+ничего не подписывая (и снимает зрителя с его прежней серии); живые свечи T-Invest — change `add-moex-live-bots`.
+
 ### 6. Проверка: мок и чек-лист на реальном счёте, без песочницы
 
 Unit- и интеграционные тесты идут на in-process моке gRPC (`Tests.Shared/TInvest/MockTInvestApi` — `CallInvoker` с

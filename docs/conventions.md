@@ -128,7 +128,8 @@ enforces a rule, the check is the source of truth.
   singleton) keeps one feed per series (`FormingSeries`, instrument and interval) however many connections watch it,
   subscribes `Ports/MarketData/IFormingCandleStreams` for the first viewer and takes it off after the last, and tells the
   viewers through `Ports/MarketData/IFormingCandleBroadcast`; its state is `Connecting`, `Live` or `NoData` (a lost
-  connection, a refused or closed subscription, or 90 s of silence). `FormingCandleThrottle` lets one update a second through. A
+  connection, a refused or closed subscription, or 90 s of silence). A series of an instrument of T-Invest (`Category.Exchange()`) is
+  `NoData` at once and subscribes nothing, until the live bots of MOEX bring the streams of T-Invest. `FormingCandleThrottle` lets one update a second through. A
   `FormingCandle` is only for showing: it is never stored and never reaches a strategy, so the Worker's code path takes
   closed candles from `IExchangeStreams` alone.
 - `Exceptions` holds `BaseApplicationException` and its subclasses, also vendor-neutral (`ExchangeException`,
