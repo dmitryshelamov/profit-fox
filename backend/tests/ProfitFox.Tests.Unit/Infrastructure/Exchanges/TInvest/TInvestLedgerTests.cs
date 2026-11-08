@@ -2,6 +2,7 @@ using Grpc.Core;
 
 using NSubstitute;
 
+using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
@@ -197,6 +198,44 @@ public class TInvestLedgerTests
         var trial = (GetOrderPriceRequest)_host.Api.Calls.Single(call => call.Method == "GetOrderPrice").Request;
         (trial.AccountId, trial.InstrumentId, trial.Direction, trial.Price.ToDecimal(), trial.Quantity).ShouldBe((AccountNumber, TInvestFixtures.SberUid, OrderDirection.Buy, 300m, 34L));
         _host.Api.Calls.ShouldNotContain(call => call.Method == "PostOrder");
+    }
+
+    // Without a last price of the share, as outside a session, the trial order has no amount: a refusal of the exchange, not a crash.
+    [TestCase("no row")]
+    [TestCase("no price")]
+    [TestCase("zero")]
+    public async Task Fee_rate_without_a_last_price_is_a_refusal_of_the_exchange(string told)
+    {
+        _host.Api
+            .On<GetLastPricesRequest, GetLastPricesResponse>("GetLastPrices", _ => told switch
+            {
+                "no row" => new GetLastPricesResponse(),
+                "no price" => new GetLastPricesResponse { LastPrices = { new LastPrice { InstrumentUid = TInvestFixtures.SberUid } } },
+                _ => new GetLastPricesResponse { LastPrices = { new LastPrice { InstrumentUid = TInvestFixtures.SberUid, Price = 0m.ToQuotation() } } }
+            })
+            .On<GetOrderPriceRequest, GetOrderPriceResponse>("GetOrderPrice", _ => new GetOrderPriceResponse { InitialOrderAmount = Money(100_000m, "rub"), DealCommission = Money(50m, "rub") });
+
+        ExchangeException exception = await Should.ThrowAsync<ExchangeException>(() => _ledger.GetFeesAsync(Key, Sber, CancellationToken.None));
+
+        exception.ShouldBeOfType<ExchangeUnavailableException>();
+        exception.Message.ShouldBe("T-Invest told no last price of SBER: the fee rate waits for one.");
+        _host.Api.Calls.ShouldNotContain(call => call.Method == "GetOrderPrice");
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task Fee_rate_of_a_trial_order_without_an_amount_is_a_refusal_of_the_exchange(bool zero)
+    {
+        _host.Api
+            .On<GetLastPricesRequest, GetLastPricesResponse>("GetLastPrices", _ => new GetLastPricesResponse { LastPrices = { new LastPrice { InstrumentUid = TInvestFixtures.SberUid, Price = 300m.ToQuotation() } } })
+            .On<GetOrderPriceRequest, GetOrderPriceResponse>("GetOrderPrice", _ => zero
+                ? new GetOrderPriceResponse { InitialOrderAmount = Money(0m, "rub"), DealCommission = Money(0m, "rub") }
+                : new GetOrderPriceResponse { DealCommission = Money(50m, "rub") });
+
+        ExchangeException exception = await Should.ThrowAsync<ExchangeException>(() => _ledger.GetFeesAsync(Key, Sber, CancellationToken.None));
+
+        exception.ShouldBeOfType<ExchangeUnavailableException>();
+        exception.Message.ShouldBe("T-Invest told no amount of the trial order of SBER: the fee rate waits for one.");
     }
 
     private static OrderState State(string id, string request, OrderExecutionReportStatus status, long executed = 0, params OrderStage[] stages)

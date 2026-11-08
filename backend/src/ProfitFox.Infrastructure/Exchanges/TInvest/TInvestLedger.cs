@@ -1,3 +1,4 @@
+using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Domain.ValueObjects.Strategies;
 
@@ -108,6 +109,7 @@ internal sealed class TInvestLedger(TInvestCall call, TInvestShares shares, ITIn
     ///     The rate is the commission of a trial limit buy of whole lots for at least <see cref="TrialAmount" /> at the last price, by
     ///     <c>GetOrderPrice</c>, which places nothing; T-Invest has no method of the tariff. A limit and a market order pay the same.
     /// </summary>
+    /// <exception cref="ExchangeUnavailableException">T-Invest told no last price of the share or no amount of the trial order.</exception>
     public async Task<FeeSchedule> GetFeesAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
     {
         TInvestShare share = await shares.ShareByAsync(instrument.Symbol, cancellationToken);
@@ -115,7 +117,13 @@ internal sealed class TInvestLedger(TInvestCall call, TInvestShares shares, ITIn
             key.Secret,
             invoker => new MarketDataService.MarketDataServiceClient(invoker).GetLastPricesAsync(new GetLastPricesRequest { InstrumentId = { share.Uid } }),
             cancellationToken);
-        decimal price = last.LastPrices.Single(item => item.InstrumentUid == share.Uid).Price.ToDecimal();
+        decimal price = last.LastPrices.SingleOrDefault(item => item.InstrumentUid == share.Uid)?.Price?.ToDecimal() ?? 0m;
+
+        if (price <= 0m)
+        {
+            throw new ExchangeUnavailableException($"T-Invest told no last price of {instrument.Symbol}: the fee rate waits for one.");
+        }
+
         var trial = new GetOrderPriceRequest
         {
             AccountId = key.ApiKey,
@@ -125,7 +133,14 @@ internal sealed class TInvestLedger(TInvestCall call, TInvestShares shares, ITIn
             Quantity = (long)Math.Ceiling(TrialAmount / (price * share.Lot))
         };
         GetOrderPriceResponse estimate = await call.OnceAsync(key.Secret, invoker => new OrdersService.OrdersServiceClient(invoker).GetOrderPriceAsync(trial), cancellationToken);
-        decimal rate = estimate.DealCommission.ToDecimal() / estimate.InitialOrderAmount.ToDecimal();
+        decimal amount = estimate.InitialOrderAmount?.ToDecimal() ?? 0m;
+
+        if (amount <= 0m)
+        {
+            throw new ExchangeUnavailableException($"T-Invest told no amount of the trial order of {instrument.Symbol}: the fee rate waits for one.");
+        }
+
+        decimal rate = estimate.DealCommission.ToDecimal() / amount;
 
         return new FeeSchedule(rate, rate, instrument.Category);
     }

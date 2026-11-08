@@ -282,7 +282,8 @@ enforces a rule, the check is the source of truth.
   the request id, `AlreadyDone` for an order without one, one T-Invest does not know or one that ended), `TInvestLedger`
   (`IExchangeLedger`: the free roubles less those blocked from `GetPositions`, the shares with those blocked, the active orders by
   `GetOrders` told by their request ids, an order and its stages by `GetOrderState`, the fee rate `deal_commission / initial_order_amount`
-  of `GetOrderPrice` for a limit buy of at least 100 000 ₽, no hedge, no orders of a parent) and `TInvestStreams` (`IExchangeStreams` and
+  of `GetOrderPrice` for a limit buy of at least 100 000 ₽, `ExchangeUnavailableException` without a last price of the share or an amount
+  of the trial order, no hedge, no orders of a parent) and `TInvestStreams` (`IExchangeStreams` and
   `IFormingCandleStreams`: one `OrderStateStream` an account with pings, opened again at once with the token of a listener whose token
   of the account differs (the owner changed it), whose message is a signal: the state of an order of a bot is read
   by its request id up to 5 times a second apart while T-Invest does not know it or its stages disagree, a filled one without its
