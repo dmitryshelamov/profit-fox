@@ -65,9 +65,9 @@
 
 ## 5. Проверка
 
-- [ ] 5.1 `dotnet build`, `dotnet test`, `dotnet format --verify-no-changes`, фронтенд `lint`, `format:check`, `typecheck`,
+- [x] 5.1 `dotnet build`, `dotnet test`, `dotnet format --verify-no-changes`, фронтенд `lint`, `format:check`, `typecheck`,
   `test`, `build`, `test:e2e` — все зелёные; отпечаток референсных кейсов прежний при версии 7.
-- [ ] 5.2 Локальный прогон сканера с `ReplayTurns=2` на dev-базе: в логе две строки `Replayed` по разным парам, баннер
+- [x] 5.2 Локальный прогон сканера с `ReplayTurns=2` на dev-базе: в логе две строки `Replayed` по разным парам, баннер
   прогона на «Рынке» виден и исчезает, когда прогон догнал пары; в design.md записан итоговый выигрыш профиль-теста
   (с/пару-день до и после).
 
