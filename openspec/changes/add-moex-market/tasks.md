@@ -158,7 +158,7 @@
 - [ ] 8.7 Фронтенд: `chartIntervals(own, category)` и `shownInterval(asked, own, category)` через `intervalsOf(category)`; у бота
   `moex` нет `D`. Тесты `chartIntervals.test.ts` и страницы бота.
 - [ ] 8.8 Мастер-ключ обязателен у всех Worker (решение 12, поправка): импорт `moex` расшифровывает токен. Тест регистрации.
-- [ ] 8.9 Аккаунт не Bybit отклоняется в настройках торговли по идеям, в автомате и в `IdeaTradeEntryCalculator.AccessAsync` до
+- [x] 8.9 Аккаунт не Bybit отклоняется в настройках торговли по идеям, в автомате и в `IdeaTradeEntryCalculator.AccessAsync` до
   `KeyAsync`. Unit-тесты.
 - [x] 8.10 Портфель T-Invest: каждая валютная позиция отдельной строкой, стоимость в рублях, итог из `TotalAmountPortfolio`.
   Unit-тест с RUB и USD.

@@ -131,7 +131,8 @@ public sealed class IdeaTradeEntryCalculator(
 
     private async Task<(ExchangeKey? Key, AccountAccess Access)> AccessAsync(ExchangeAccount? account, Instrument instrument, CancellationToken cancellationToken)
     {
-        if (account is null)
+        // An account of another exchange has no key of Bybit to enter with (IdeaTradeAccounts): no secret is read and Bybit is not asked.
+        if (account is null || !IdeaTradeAccounts.CanTrade(account))
         {
             return (null, AccountAccess.NoKey);
         }

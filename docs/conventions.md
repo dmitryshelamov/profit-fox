@@ -157,7 +157,8 @@ enforces a rule, the check is the source of truth.
   warms up its indicators with. `Ports/LiveTrading` holds `IExchangeLedger` (REST reads of an account), `IOrderGateway` (orders
   and cancels, a refusal is an outcome) and `IExchangeStreams` (closed candles, order updates and fills, and a signal
   when a stream is back after a gap).
-- `IdeaTrades` holds the trades by ideas: `IdeaTradeEntryCalculator` (`PrepareAsync` asks the exchange and reads the settings and the buckets, `EvaluateAsync` sizes the
+- `IdeaTrades` holds the trades by ideas: `IdeaTradeAccounts` (the accounts the trades can go through: those of Bybit, until the ideas of MOEX come;
+  the settings of trading by ideas and an auto refuse any other on the save, and the entry gives it no key and asks Bybit nothing), `IdeaTradeEntryCalculator` (`PrepareAsync` asks the exchange and reads the settings and the buckets, `EvaluateAsync` sizes the
   trade, names the reasons by the books of the account and builds the promise of the idea with `IdeaView.Of`, so the entry can be made again under the lock of the account), `IdeaTradeCodes` (statuses, roles,
   legs, times in force and the reason codes), the commands `CreateIdeaTrade`, `CancelIdeaTrade`, `CloseIdeaTrade` and `SaveIdeaTradingSettings`, the queries
   `GetIdeaEntry`, `GetIdeaJournal` (the open trades with the last price of their symbols from `IMarketHistoryClient`, one request a symbol and none on an error; a page of the closed ones by the time they closed; the totals of all the closed ones of the filter; filters, paging and field errors like `GetIdeas`, filtered and cut in memory) and `GetIdeaTradingSettings`, `IdeaJournalTrade` (a trade with its account name and, when open, its worth at the last price), and `Runtime/IdeaTradeSession`: one session keeps one trade for the take of its lease as a bot's

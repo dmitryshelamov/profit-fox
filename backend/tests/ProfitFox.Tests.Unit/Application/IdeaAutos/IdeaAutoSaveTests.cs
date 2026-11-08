@@ -7,6 +7,7 @@ using ProfitFox.Application.IdeaAutos;
 using ProfitFox.Application.IdeaAutos.Commands.CreateIdeaAuto;
 using ProfitFox.Application.IdeaAutos.Commands.SaveIdeaAuto;
 using ProfitFox.Domain.Entities.ExchangeAccounts;
+using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.IdeaAutos;
 using ProfitFox.Domain.Entities.IdeaAutos.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
@@ -37,6 +38,19 @@ public class IdeaAutoSaveTests
         _accounts.GetAsync(Account, Arg.Any<CancellationToken>()).Returns(new ExchangeAccount(Account, "Bybit · ideas", "key", 100, new HashSet<MarketCategory> { MarketCategory.Linear }, DateTimeOffset.UnixEpoch));
         _settings.GetAsync(Arg.Any<CancellationToken>()).Returns(IdeaTradingSettings.Default);
         _autos.CreateAsync(Arg.Any<IdeaAuto>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(call => call.Arg<IdeaAuto>());
+    }
+
+    // After the review: the autos trade through Bybit only; an account of T-Invest is an error of the account, not a null key at the entry.
+    [Test]
+    public async Task TInvest_account_is_an_error_of_the_account()
+    {
+        var tinvest = Guid.NewGuid();
+        _accounts.GetAsync(tinvest, Arg.Any<CancellationToken>())
+            .Returns(new ExchangeAccount(tinvest, "Брокерский", Exchange.TInvest, null, null, "2000000001", new HashSet<MarketCategory> { MarketCategory.Moex }, DateTimeOffset.UnixEpoch));
+
+        ValidationFailedException exception = await Should.ThrowAsync<ValidationFailedException>(() => CreateAsync(Input(amount: 50m, budget: null) with { AccountId = tinvest }));
+
+        exception.Errors.Keys.ShouldBe(["accountId"]);
     }
 
     // Scenario "Бюджет меньше суммы".

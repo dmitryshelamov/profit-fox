@@ -138,6 +138,12 @@ covered_from, covered_until)` через `ISeriesCoverageRepository` (Get, Upser
 запроса. В этом change адаптер не реализует `IOrderGateway`, `IExchangeLedger`, `IExchangeStreams`; запуск бота на `moex`
 отклоняется в `StartBotCommandHandler` до любого обращения к бирже.
 
+**Поправка после ревью (аккаунт T-Invest в идеях).** Настройки торговли по идеям и автомат проверяли только существование
+аккаунта, а дальше `IdeaTradeEntryCalculator.AccessAsync` → `LiveRequests.KeyAsync` строил `ExchangeKey(account.ApiKey!, токен)` и шёл
+в Bybit с `null`. Теперь `IdeaTradeAccounts.CanTrade` (только `Exchange.Bybit`, до change `add-moex-ideas`) отклоняет аккаунт при
+сохранении настроек и автомата (ошибка по полю `accountId`), а `AccessAsync` для такого аккаунта отдаёт `NoKey`, не читая секрет и
+не обращаясь к Bybit.
+
 **Поправка после ревью (живая свеча бота на `moex`).** `IFormingCandleStreams` реализован только `BybitStreams`, и страница бота
 `moex` / `SBER` подписывалась на `kline.<interval>.SBER` у Bybit linear, получала отказ и повторяла подписку по `ScheduleRetry`, пока
 открыта. Теперь `FormingCandleFeeds.JoinAsync` для инструмента с `Category.Exchange() == Exchange.TInvest` сразу отдаёт `NoData`,
