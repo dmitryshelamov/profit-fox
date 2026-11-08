@@ -127,6 +127,13 @@ internal sealed class IdeaRepository(NpgsqlDataSource dataSource) : IIdeaReposit
         return row is null ? null : IdeaDbConverter.ToDomain(row);
     }
 
+    public async Task<IReadOnlyList<Idea>> GetManyAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        return [.. (await connection.QueryAsync<IdeaDb>(IdeaRepositoryQueries.GetMany(ids, cancellationToken))).Select(IdeaDbConverter.ToDomain)];
+    }
+
     public async Task<int> DeleteClosedBeforeAsync(DateTimeOffset closedBefore, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);

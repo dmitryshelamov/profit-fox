@@ -96,6 +96,11 @@ internal static class IdeaRepositoryQueries
         return new CommandDefinition($"SELECT id, {Columns}, {OwnColumns} FROM ideas WHERE id = @Id", new { Id = id }, cancellationToken: cancellationToken);
     }
 
+    internal static CommandDefinition GetMany(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition($"SELECT id, {Columns}, {OwnColumns} FROM ideas WHERE id = ANY(@Ids)", new { Ids = ids.ToArray() }, cancellationToken: cancellationToken);
+    }
+
     internal static CommandDefinition DeleteClosedBefore(DateTimeOffset closedBefore, CancellationToken cancellationToken)
     {
         return new CommandDefinition(

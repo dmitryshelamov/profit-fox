@@ -10,7 +10,7 @@
 
 ## 2. Чтение идей по id
 
-- [ ] 2.1 `IIdeaRepository.GetManyAsync(IReadOnlyCollection<Guid> ids)` и его Dapper-реализация с запросом в
+- [x] 2.1 `IIdeaRepository.GetManyAsync(IReadOnlyCollection<Guid> ids)` и его Dapper-реализация с запросом в
   `IdeaRepositoryQueries`: отдаёт хранящиеся идеи из списка, отсутствующие пропускает. Интеграционный тест в
   `IdeaRepositoryTests` (две идеи из трёх id, одна удалена). Проверка: тест сначала красный, потом зелёный
 
