@@ -17,7 +17,8 @@ namespace ProfitFox.Presentation.Contracts.IdeaTrades;
 ///     the journal or while the idea is open. An open trade has the last price of its pair and what it is worth at it, none while it waits for
 ///     its entry or when the exchange gave no price. <c>origin</c> tells who took the trade, <c>manual</c>, <c>auto</c> or <c>paper</c>, with the id and the name
 ///     of the auto, the name of a deleted one too. <c>features</c> are the codes of the features of the market its idea fired with
-///     (<c>day_drop</c>, <c>btc_drop</c>, <c>high_funding</c>), copied when the trade was made.
+///     (<c>day_drop</c>, <c>btc_drop</c>, <c>high_funding</c>), copied when the trade was made. <c>ideaEndsAt</c> is the end of the lifetime of
+///     the idea of a trade in work while the idea is active, none while it waits for its entry, once it closed and for a closed trade.
 /// </summary>
 public sealed record IdeaTradeResponse(
     Guid Id,
@@ -53,7 +54,8 @@ public sealed record IdeaTradeResponse(
     [property: Required] string Origin,
     Guid? AutoId,
     string? AutoName,
-    [property: Required] IReadOnlyList<string> Features)
+    [property: Required] IReadOnlyList<string> Features,
+    DateTimeOffset? IdeaEndsAt)
 {
     public static IdeaTradeResponse Of(IdeaJournalTrade view)
     {
@@ -98,7 +100,8 @@ public sealed record IdeaTradeResponse(
             },
             trade.AutoId,
             view.AutoName,
-            IdeaCodes.Codes(trade.Features));
+            IdeaCodes.Codes(trade.Features),
+            view.IdeaEndsAt);
     }
 
     internal static string Text(decimal value)

@@ -16,12 +16,12 @@
 
 ## 3. Конец идеи в журнале
 
-- [ ] 3.1 Red → green: `GetIdeaJournalQueryHandler` дочитывает идеи сделок в работе (реальных и учебных) одним вызовом
+- [x] 3.1 Red → green: `GetIdeaJournalQueryHandler` дочитывает идеи сделок в работе (реальных и учебных) одним вызовом
   `GetManyAsync` и кладёт в `IdeaJournalTrade.IdeaEndsAt` `LifeEndsAt` активной идеи. Тесты в `GetIdeaJournalTests` по
   сценариям спеки `idea-trades-journal` «Конец идеи у сделки в работе»: активная идея, ждёт входа, закрылась раньше
   сделки, учебная; закрытые сделки без момента и без чтения идей; без сделок в работе идеи не читаются. Проверка: каждый
   тест был красным
-- [ ] 3.2 `IdeaTradeResponse.IdeaEndsAt` (`ideaEndsAt`) и строка в его `<summary>`; контрактный/интеграционный тест
+- [x] 3.2 `IdeaTradeResponse.IdeaEndsAt` (`ideaEndsAt`) и строка в его `<summary>`; контрактный/интеграционный тест
   журнала, если он сверяет поля ответа. Проверка: `dotnet build`, `dotnet test backend/ProfitFox.sln`,
   `dotnet format backend/ProfitFox.sln --verify-no-changes`
 
