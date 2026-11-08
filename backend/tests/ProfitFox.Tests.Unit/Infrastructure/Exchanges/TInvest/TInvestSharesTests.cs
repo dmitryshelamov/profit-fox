@@ -37,7 +37,7 @@ public class TInvestSharesTests
         _host.Time.Advance(TimeSpan.FromTicks(1));
         await _host.Shares.ShareByAsync("SBER", CancellationToken.None);
 
-        first.ShouldBe(new TInvestShare(TInvestFixtures.SberUid, "SBER", "Сбер Банк", 10, 0.01m, ShortEnabled: true));
+        first.ShouldBe(new TInvestShare(TInvestFixtures.SberUid, "SBER", "Сбер Банк", 10, 0.01m, ShortEnabled: true, TInvestFixtures.SberExchange));
         second.ShouldBe(first);
         _host.Api.Calls.Count.ShouldBe(2);
         var request = (InstrumentRequest)_host.Api.Calls[0].Request;

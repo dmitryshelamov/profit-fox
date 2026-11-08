@@ -76,7 +76,7 @@ internal sealed class TInvestShares(TInvestCall call, TInvestTokenSource tokens,
                && share.ApiTradeAvailableFlag
                && share.Lot > 0
                && step > 0m
-            ? new TInvestShare(share.Uid, share.Ticker, share.Name, share.Lot, step, share.ShortEnabledFlag)
+            ? new TInvestShare(share.Uid, share.Ticker, share.Name, share.Lot, step, share.ShortEnabledFlag, share.Exchange)
             : null;
     }
 }

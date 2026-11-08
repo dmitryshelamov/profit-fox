@@ -99,10 +99,15 @@ public sealed record LiveOrder(
         return this with { Status = LiveOrderStatus.CancelSent };
     }
 
-    /// <summary>A send the exchange did not take is tried again ever more slowly, at most a minute later.</summary>
-    public LiveOrder Deferred(DateTimeOffset now)
+    /// <summary>
+    ///     A send the exchange did not take is tried again ever more slowly, at most a minute later, and never before
+    ///     <paramref name="notBefore" /> from now when the exchange named such a pause.
+    /// </summary>
+    public LiveOrder Deferred(DateTimeOffset now, TimeSpan? notBefore = null)
     {
-        return this with { Attempts = Attempts + 1, NextAttemptAt = now + TimeSpan.FromSeconds(Math.Min(Math.Pow(2, Attempts), 60)) };
+        var growing = TimeSpan.FromSeconds(Math.Min(Math.Pow(2, Attempts), 60));
+
+        return this with { Attempts = Attempts + 1, NextAttemptAt = now + (notBefore > growing ? notBefore.Value : growing) };
     }
 
     /// <summary>The exchange ended the order as filled; an order by amount has no quantity to tell it by.</summary>

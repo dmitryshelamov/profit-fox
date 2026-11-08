@@ -127,16 +127,21 @@ internal sealed class TInvestCall(
             case StatusCode.Unavailable or StatusCode.Internal or StatusCode.Aborted or StatusCode.DeadlineExceeded:
                 return new TransientExchangeException(exception.StatusCode.ToString());
             case StatusCode.NotFound:
-                return new TInvestNotFoundException(Refusal(exception));
+                return new TInvestNotFoundException(CodeOf(exception), Refusal(exception));
             default:
-                return new ExchangeException(Refusal(exception));
+                return new TInvestRefusedException(CodeOf(exception), Refusal(exception));
         }
     }
 
     // The detail of a refusal of T-Invest is its error code; any text of the broker stays in the trailers and out of the message.
+    private static int? CodeOf(RpcException exception)
+    {
+        return int.TryParse(exception.Status.Detail, NumberStyles.None, CultureInfo.InvariantCulture, out int code) ? code : null;
+    }
+
     private static string Refusal(RpcException exception)
     {
-        return int.TryParse(exception.Status.Detail, NumberStyles.None, CultureInfo.InvariantCulture, out int code)
+        return CodeOf(exception) is { } code
             ? $"T-Invest refused the request with code {code}."
             : $"T-Invest refused the request ({exception.StatusCode}).";
     }

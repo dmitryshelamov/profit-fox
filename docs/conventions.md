@@ -128,8 +128,9 @@ enforces a rule, the check is the source of truth.
   singleton) keeps one feed per series (`FormingSeries`, instrument and interval) however many connections watch it,
   subscribes `Ports/MarketData/IFormingCandleStreams` for the first viewer and takes it off after the last, and tells the
   viewers through `Ports/MarketData/IFormingCandleBroadcast`; its state is `Connecting`, `Live` or `NoData` (a lost
-  connection, a refused or closed subscription, or 90 s of silence). A series of an instrument of T-Invest (`Category.Exchange()`) is
-  `NoData` at once and subscribes nothing, until the live bots of MOEX bring the streams of T-Invest. `FormingCandleThrottle` lets one update a second through. A
+  connection, a refused or closed subscription, or 90 s of silence). The port is `RoutedFormingCandleStreams`, so a series of `moex` comes
+  from the stream of the forming candles of T-Invest like a series of Bybit from Bybit, and a closed market is `NoData` by the silence.
+  `FormingCandleThrottle` lets one update a second through. A
   `FormingCandle` is only for showing: it is never stored and never reaches a strategy, so the Worker's code path takes
   closed candles from `IExchangeStreams` alone.
 - `Exceptions` holds `BaseApplicationException` and its subclasses, also vendor-neutral (`ExchangeException`,
@@ -148,11 +149,15 @@ enforces a rule, the check is the source of truth.
   a unit inside a unit is refused, and `EnsureNoTransaction` guards a call that must not hold a transaction open (the
   exchange).
 - `LiveTrading` holds the commands of live trading (start, pause, resume, stop, close the position, claim and run a bot; the start of a
-  bot on `moex` is a conflict «Trading on MOEX is not supported yet» before any call to an exchange, until the live bots of MOEX come),
+  bot on `moex` is a conflict «Trading on MOEX is disabled» before any call to an exchange while `MoexTradingSettings.Enabled` (the
+  `TInvest:Trading` setting of the API) is off, and otherwise checks the account of T-Invest at the broker through `IBrokerAccountReader`:
+  the token still opens it, open and with full access, instead of the key and the hedge mode of Bybit; `LiveRequests.KeyAsync` builds the
+  `ExchangeKey` by the exchange of the account, on T-Invest the number of the brokerage account with the token),
   `LiveTradingCodes`, and `Runtime/LiveBotSession`: one session keeps one bot for the take of its lease, takes its inputs
   one at a time from a queue, writes every change in one unit of work after checking the lease, and sends orders only
   once they are written; `Runtime/LiveBotReconciler` compares the books of a bot and of the bots that share its
-  holding with the exchange and stops them all on a difference; `Runtime/LiveRunMapping` maps the stored position and
+  holding (on the spot the bots of its coin, on `linear` and `moex` those of its instrument) with the exchange and stops them all on a
+  difference; `Runtime/LiveRunMapping` maps the stored position and
   orders of a bot to the snapshot of its run and back; `Runtime/LiveWarmUpHistory` reads the last closed candles a bot
   warms up its indicators with. `Ports/LiveTrading` holds `IExchangeLedger` (REST reads of an account), `IOrderGateway` (orders
   and cancels, a refusal is an outcome) and `IExchangeStreams` (closed candles, order updates and fills, and a signal
@@ -262,13 +267,49 @@ enforces a rule, the check is the source of truth.
   the period with the source `Exchange` and no limit, complete ones only, the volume lots × lot and the turnover volume × (high + low + close) / 3)
   and `TInvestAccountClient` (`IBrokerAccountReader`: `GetAccounts`, `GetPortfolio` in roubles: every position with a quantity as a row, a currency by its ISO code (the first three letters of its
   ticker) worth its quantity at the current price in roubles, the roubles always a row, the total from `total_amount_portfolio`).
-  The metrics live on the meter `ProfitFox.TInvest`: the counter `profitfox.tinvest.requests` {`group`, `method`, `outcome`} and the gauges
+  The ports of trading on T-Invest: `TInvestOrderIds` (`ITInvestOrderIds`, the table `moex_orders` on a connection of its own for every
+  call, outside any unit of work: a random request id written under the client id of an order before its first send, every send of the
+  order with it, the exchange id added after; an order whose request id has no row is of nobody), `TInvestOrderStates` (an `ExchangeOrder`
+  of an `OrderState`: the volume lots × lot, the value the sum of the stages, the fee `executed_commission` in roubles; the stages as fills
+  without a fee; `Complete` whether the stages add up to the lots executed), `TInvestOrderReads` (the state by request or exchange id,
+  `null` on `NOT_FOUND`), `TInvestTradingStatuses` (`MayPlaceAsync`: the trading status and the corridor of the order book of a share,
+  kept 5 s, `TInvestPlacement`; `NextSessionStartAsync` and `TradingDayEndAsync` by `TradingSchedules` of the exchange of the share
+  (`TInvestShare.Exchange`), kept to the end of the UTC day: the intervals of the exchange count, those of the dealer do not, a day with
+  another type tells none; a session that started within the last minute is the one opening now), `TInvestOrderGateway`
+  (`IOrderGateway`: an order in lots, a limit one `DAY` and a market one without a price, sent only while `MayPlaceAsync` takes it; a
+  closed session is `Transient` with `RetryAfter` until the next session, or a minute without a schedule or in the first minute of a
+  session, the corridor a minute; the refusals by the code of `TInvestRefusedException` (`30057` an order taken, read by its request id); a cancel by
+  the request id, `AlreadyDone` for an order without one, one T-Invest does not know or one that ended), `TInvestLedger`
+  (`IExchangeLedger`: the free roubles less those blocked from `GetPositions`, the shares with those blocked, the active orders by
+  `GetOrders` told by their request ids, an order and its stages by `GetOrderState`, the fee rate `deal_commission / initial_order_amount`
+  of `GetOrderPrice` for a limit buy of at least 100 000 ₽, `ExchangeUnavailableException` without a last price of the share or an amount
+  of the trial order, no hedge, no orders of a parent) and `TInvestStreams` (`IExchangeStreams` and
+  `IFormingCandleStreams`: one `OrderStateStream` an account with pings, opened again at once with the token of a listener whose token
+  of the account differs (the owner changed it), whose message is a signal: the state of an order of a bot is read
+  by its request id up to 5 times a second apart while T-Invest does not know it or its stages disagree, a filled one without its
+  commission again at 5, 15, 30 and 60 s, and an order of nobody that traded is a fill of nobody on its share; a message whose order does
+  not read (T-Invest, the table of the ids or the share) counts as `error` of the stream and tells every listener of the account
+  `restored`, so the sessions read their orders themselves; two `MarketDataStream`s of
+  the process with the token of `TInvestTokenSource`, of the closed candles (`waiting_close`) and of the forming ones, a series subscribed
+  once for all its listeners and taken off by the last; a stream that ends, breaks, is silent for 90 s or fails on a message (a candle it
+  cannot tell, a listener that threw) opens again after 1, 2, 5, 10, then 30 s, subscribes its series again and tells every listener
+  `restored` (the forming ones `lost` first); a minute after the end of the
+  trading day of a share its listeners of closed candles are told `restored`). `TInvestCall` throws `TInvestRefusedException` with the
+  code of the detail for a refusal (`TInvestNotFoundException` for `NOT_FOUND`).
+  The metrics live on the meter `ProfitFox.TInvest`: the counter `profitfox.tinvest.requests` {`group`, `method`, `outcome`} (a stream
+  counts its open as `ok` or `error`, its break as `lost`, and a message of orders that does not read as `error`) and the gauges
   `profitfox.tinvest.limit` and `profitfox.tinvest.limit_remaining` {`group`} from the headers `x-ratelimit-limit` and `x-ratelimit-remaining`;
   `MetricsRegistrar` lists the meter. No test and no local run calls the real T-Invest: the test hosts put `MockTInvestApi` behind
   `ITInvestCallInvokers`, and `appsettings.Testing.json` points the endpoint at `tinvest.invalid`.
 - `Exchanges/Routing` holds `RoutedMarketHistoryClient`, `RoutedInstrumentRulesProvider` and `RoutedInstrumentCatalog`: the registered
   read ports, each choosing Bybit or T-Invest by `Category.Exchange()`; the adapters of both exchanges are registered keyed by
-  `Exchange`, and `CachedInstrumentCatalog` stays over the routed catalog, caching the list of `moex` on the same terms.
+  `Exchange`, and `CachedInstrumentCatalog` stays over the routed catalog, caching the list of `moex` on the same terms. The ports of
+  trading are routed the same way and registered as the routers only: `RoutedOrderGateway` and `RoutedExchangeLedger` by
+  `ExchangeKey.Exchange`, `RoutedExchangeStreams` by the key for an account and by the category for the candles, and
+  `RoutedFormingCandleStreams` by the category; `BybitOrderGateway` and `BybitLedger` (typed clients of `IHttpClientFactory`),
+  `TInvestOrderGateway` and `TInvestLedger` are keyed by `Exchange`, and the singletons `BybitStreams` and `TInvestStreams` are keyed
+  for both interfaces of streams. A test that replaces a port whole with `FakeExchange` removes the router and its keyed
+  implementations together.
 - `Exchanges/<Vendor>` holds adapters over vendor SDKs, including the mapping of domain values to SDK types
   (`BybitCodes`). `Exchanges/Retry` holds Polly pipelines: `ExchangeResilienceExecutor` (the ladder of retries and the circuit breaker) is
   registered keyed by `Exchange`, one instance per exchange, so an exchange that does not answer never opens the circuit of the other; a
@@ -288,7 +329,7 @@ enforces a rule, the check is the source of truth.
 - `Exchanges/Bybit/BybitAccountClient` implements `IExchangeKeyInspector`: a typed `HttpClient` that builds a Bybit client
   with the key for one call and drops it, one attempt per call. `Security/AesGcmSecretProtector` encrypts secrets with the
   master key (AES-256-GCM, the account id as associated data).
-- `Exchanges/Bybit/BybitStreams` implements `IExchangeStreams` as one singleton for the process, so the connections to
+- `Exchanges/Bybit/BybitStreams` implements `IExchangeStreams` of Bybit as one singleton for the process, so the connections to
   Bybit follow the pairs and accounts, not the bots: one public socket client whose connections carry one kline topic
   per category, symbol and interval, and one private client per account key with the `order` and `execution` topics.
   The first subscriber of a topic subscribes it at Bybit, the others join; the last to leave takes it off. Every
@@ -571,7 +612,9 @@ enforces a rule, the check is the source of truth.
 - Ports are replaced with NSubstitute mocks. Hand-written stubs exist only for transport and the exchange: HTTP
   (`StubHttpHandler`, `FakeBybitHandler`), because NSubstitute cannot replace the protected `SendAsync`; the Bybit v5
   streams on a local port (`FakeBybitSocketServer`); the gRPC server of T-Invest in process (`Tests.Shared/TInvest/MockTInvestApi`, a
-  `CallInvoker` with handlers by method name that records every call with its metadata and fails a method with the status a test asks for);
+  `CallInvoker` with handlers by method name that records every call with its metadata and fails a method with the status a test asks for,
+  and answers the server and duplex streams from a `MockTInvestStream` script, `OnServerStream` and `OnDuplex`: each call opens a
+  `MockTInvestStreamCall` with what the client wrote on it, which the test sends answers to, completes or fails with a status);
   and `FakeExchange`, one exchange account in memory behind
   `IExchangeLedger`, `IOrderGateway` and `IExchangeStreams` for the live trading runtime, whose orders, fills and streams
   depend on each other as a mock cannot keep.

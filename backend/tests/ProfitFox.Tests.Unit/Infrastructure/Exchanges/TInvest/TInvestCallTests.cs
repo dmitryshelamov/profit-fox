@@ -159,6 +159,7 @@ public class TInvestCallTests
         ExchangeException exception = await Should.ThrowAsync<ExchangeException>(() => GetCandlesAsync());
 
         exception.Message.ShouldBe("T-Invest refused the request with code 30220.");
+        exception.ShouldBeOfType<TInvestRefusedException>().Code.ShouldBe(30220);
     }
 
     [Test]
@@ -169,6 +170,18 @@ public class TInvestCallTests
         ExchangeException exception = await Should.ThrowAsync<ExchangeException>(() => GetCandlesAsync());
 
         exception.Message.ShouldBe("T-Invest refused the request (FailedPrecondition).");
+        exception.ShouldBeOfType<TInvestRefusedException>().Code.ShouldBeNull();
+    }
+
+    // An order or an instrument T-Invest does not know is a refusal with its code too.
+    [Test]
+    public async Task Not_found_carries_its_code()
+    {
+        _api.Fail("GetCandles", StatusCode.NotFound, "50005");
+
+        ExchangeException exception = await Should.ThrowAsync<ExchangeException>(() => GetCandlesAsync());
+
+        exception.ShouldBeOfType<TInvestNotFoundException>().Code.ShouldBe(50005);
     }
 
     // After the review: a call cancelled by its own token is no failure of the exchange; it is not counted and not translated.

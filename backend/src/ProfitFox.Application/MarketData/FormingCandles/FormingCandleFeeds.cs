@@ -1,14 +1,12 @@
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.MarketData;
-using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
-using ProfitFox.Domain.Entities.MarketData.Enums;
 
 namespace ProfitFox.Application.MarketData.FormingCandles;
 
 /// <summary>
 ///     The feeds of the current candle, one per series however many viewers watch it: the first viewer subscribes the port, the
-///     last to leave takes the subscription off. A connection follows one series at a time. Only the API registers it. A series of
-///     T-Invest is without data at once and subscribes nothing until the live bots of MOEX come.
+///     last to leave takes the subscription off. A connection follows one series at a time. Only the API registers it. The port is the
+///     router of the exchange of the category, so a series of MOEX comes from the streams of T-Invest.
 /// </summary>
 public sealed class FormingCandleFeeds(IFormingCandleStreams streams, IFormingCandleBroadcast broadcast, TimeProvider time)
 {
@@ -19,15 +17,6 @@ public sealed class FormingCandleFeeds(IFormingCandleStreams streams, IFormingCa
     /// <summary>Makes the connection a viewer of the series, after it leaves the series it watched; returns where the feed is now.</summary>
     public async Task<FormingSnapshot> JoinAsync(string connectionId, FormingSeries series, CancellationToken cancellationToken)
     {
-        // T-Invest has no stream of the forming candle until the live bots of MOEX come (change add-moex-live-bots): the streams of
-        // Bybit would refuse the symbol and be asked again and again while the page is open.
-        if (series.Instrument.Category.Exchange() == Exchange.TInvest)
-        {
-            await LeaveAsync(connectionId);
-
-            return new FormingSnapshot(FormingState.NoData, null);
-        }
-
         Feed? leaving = null;
         Feed feed;
         bool created = false;

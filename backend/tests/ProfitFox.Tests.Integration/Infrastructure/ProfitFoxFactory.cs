@@ -93,6 +93,9 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
     /// <summary>Receives every event the app's logger writes.</summary>
     public ILogEventSink? LogSink { get; init; }
 
+    /// <summary>Settings of the API over its own, such as <c>TInvest:Trading</c>.</summary>
+    public IReadOnlyDictionary<string, string?> ApiSettings { get; init; } = new Dictionary<string, string?>();
+
     /// <summary>A factory on the test database, which is emptied before every test.</summary>
     public static ProfitFoxFactory Create(int workers = 1)
     {
@@ -124,6 +127,11 @@ public class ProfitFoxFactory(string connectionString) : WebApplicationFactory<P
             }
 
             builder.UseSetting("Serilog:MinimumLevel:Default", "Verbose");
+        }
+
+        foreach ((string key, string? value) in ApiSettings)
+        {
+            builder.UseSetting(key, value);
         }
 
         if (BybitRestAddress is not null)
