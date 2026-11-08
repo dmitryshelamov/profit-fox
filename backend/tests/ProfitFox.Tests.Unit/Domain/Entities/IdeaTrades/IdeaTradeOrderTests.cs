@@ -100,6 +100,15 @@ public class IdeaTradeOrderTests
         cancel.CancelTaken().Status.ShouldBe(LiveOrderStatus.CancelSent);
     }
 
+    [TestCase(0, 18000, 18000)]
+    [TestCase(9, 10, 60)]
+    public void Refused_send_is_tried_again_no_sooner_than_the_exchange_says(int attempts, int notBefore, int seconds)
+    {
+        IdeaTradeOrder deferred = (Entry() with { Attempts = attempts }).Deferred(Now, TimeSpan.FromSeconds(notBefore));
+
+        (deferred.Attempts, deferred.NextAttemptAt).ShouldBe((attempts + 1, Now.AddSeconds(seconds)));
+    }
+
     [Test]
     public void Refused_send_is_tried_again_ever_more_slowly_up_to_a_minute()
     {

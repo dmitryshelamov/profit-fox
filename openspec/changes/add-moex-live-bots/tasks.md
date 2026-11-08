@@ -6,13 +6,13 @@ T-Invest. Решения — в design.md, требования — в `specs/`.
 
 ## 1. Домен и порты
 
-- [ ] 1.1 `ExchangeKey` получает `Exchange` (по умолчанию `Bybit`); `ToString` по-прежнему без секрета. Тест: ключ T-Invest
+- [x] 1.1 `ExchangeKey` получает `Exchange` (по умолчанию `Bybit`); `ToString` по-прежнему без секрета. Тест: ключ T-Invest
   печатает номер счёта и биржу, не токен.
-- [ ] 1.2 `OrderOutcome.RetryAfter` (`TimeSpan?`); `LiveOrder.Deferred(now, TimeSpan? notBefore = null)` назначает
+- [x] 1.2 `OrderOutcome.RetryAfter` (`TimeSpan?`); `LiveOrder.Deferred(now, TimeSpan? notBefore = null)` назначает
   `NextAttemptAt` не раньше `now + notBefore` и не раньше нарастающей паузы; `IdeaTradeOrder.Deferred` получает тот же
   необязательный параметр. Тесты: пауза биржи длиннее нарастающей побеждает; без неё поведение прежнее (существующие тесты
   зелёные).
-- [ ] 1.3 `LiveRequests.KeyAsync` строит ключ по бирже аккаунта: Bybit — `ApiKey` + секрет, T-Invest — `AccountId` + токен,
+- [x] 1.3 `LiveRequests.KeyAsync` строит ключ по бирже аккаунта: Bybit — `ApiKey` + секрет, T-Invest — `AccountId` + токен,
   `Exchange` аккаунта. Тест на обе биржи.
 
 ## 2. Запуск бота на MOEX
