@@ -5346,7 +5346,7 @@ export interface components {
          * @description The entry of an idea as it would be made now. Numbers are decimal strings: the price, the quantity, the amount, the loss at the stop and the profit at the target it
          *     really takes at that quantity after the fees, the reward to the risk after the fees and without them, the free money of the account (none without a key), the leverage (one on the spot)
          *     and the margin, the amount at the leverage. IReadOnlyList&lt;string&gt; IdeaEntryResponse.Reasons are the codes of what stops the entry, IReadOnlyDictionary&lt;string, RefusalDetailResponse?&gt; IdeaEntryResponse.Details the numbers of
-         *     each by its code, none for a reason without.
+         *     each by its code, none for a reason without; a reason named twice has the numbers it was named with first.
          */
         IdeaEntryResponse: {
             /** Format: uuid */
