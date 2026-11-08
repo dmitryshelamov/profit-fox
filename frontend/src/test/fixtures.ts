@@ -537,6 +537,8 @@ export const tradeOf = (overrides: Partial<Schemas['IdeaTradeResponse']> = {}) =
     autoId: null,
     autoName: null,
     features: [],
+    leverage: 1,
+    margin: '79.15',
     ...overrides,
   }) satisfies Schemas['IdeaTradeResponse'];
 

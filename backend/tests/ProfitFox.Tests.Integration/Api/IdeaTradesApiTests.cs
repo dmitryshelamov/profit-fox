@@ -403,6 +403,28 @@ public class IdeaTradesApiTests
         item.GetProperty("ideaEndsAt").GetDateTimeOffset().ShouldBe(active.Track.LifeEndsAt!.Value);
     }
 
+    // Scenarios "Плечо и залог сделки" and "Старая сделка с неизвестным плечом": a trade gives the leverage it entered with and its margin; one made
+    // before the leverage gives neither, its leverage is unknown.
+    [Test]
+    public async Task Journal_gives_the_leverage_and_the_margin_of_a_trade_and_none_when_it_is_unknown()
+    {
+        IdeaTrade known = await _scenario.CreateTradeAsync(quantity: 1m, leverage: 5);
+        _scenario.Factory.Time.Advance(TimeSpan.FromMinutes(1));
+        IdeaTrade old = await _scenario.CreateTradeAsync(quantity: 1m);
+        await using (var database = NpgsqlDataSource.Create(_scenario.Factory.ConnectionString))
+        {
+            await using NpgsqlCommand forget = database.CreateCommand($"UPDATE idea_trades SET leverage = NULL WHERE id = '{old.Id}'");
+            await forget.ExecuteNonQueryAsync();
+        }
+
+        JsonElement open = (await JournalAsync()).GetProperty("open");
+
+        JsonElement oldItem = open.EnumerateArray().Single(item => item.GetProperty("id").GetGuid() == old.Id);
+        (oldItem.GetProperty("leverage").ValueKind, oldItem.GetProperty("margin").ValueKind).ShouldBe((JsonValueKind.Null, JsonValueKind.Null));
+        JsonElement knownItem = open.EnumerateArray().Single(item => item.GetProperty("id").GetGuid() == known.Id);
+        (knownItem.GetProperty("leverage").GetInt32(), knownItem.GetProperty("margin").GetString()).ShouldBe((5, "21"));
+    }
+
     // Task 6.2 of add-market-idea-features: a real trade gives the features its idea fired with.
     [Test]
     public async Task Journal_gives_the_features_of_the_idea_of_a_trade()

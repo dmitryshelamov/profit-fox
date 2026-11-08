@@ -5544,6 +5544,8 @@ export interface components {
          *     of the auto, the name of a deleted one too. `features` are the codes of the features of the market its idea fired with
          *     (`day_drop`, `btc_drop`, `high_funding`), copied when the trade was made. `ideaEndsAt` is the end of the lifetime of
          *     the idea of a trade in work while the idea is active, none while it waits for its entry, once it closed and for a closed trade.
+         *     `leverage` is the leverage the trade entered with (one off `linear`) and `margin` its amount at it; both are none for a trade
+         *     made before the leverage, whose leverage is unknown.
          */
         IdeaTradeResponse: {
             /** Format: uuid */
@@ -5590,6 +5592,9 @@ export interface components {
             features: string[];
             /** Format: date-time */
             ideaEndsAt: null | string;
+            /** Format: int32 */
+            leverage: null | number | string;
+            margin: null | string;
         };
         /** @description A page of trades: its number from 1 (the last page when the one asked for is past the end), its size and the count of all the closed trades of the filter. */
         IdeaTradesPageResponse: {

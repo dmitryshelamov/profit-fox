@@ -7,6 +7,7 @@ import {
   ideaComparisonText,
   ideaLeftText,
   ideaOutcomeText,
+  leverageText,
   meanText,
   moneyText,
   outcomeCountsText,
@@ -139,6 +140,24 @@ describe('time left of the idea of a trade', () => {
   // Scenario "Идея ждёт входа".
   it('shows a dash with neither an end nor an outcome of the idea', () => {
     expect(ideaLeftText({ ideaEndsAt: null, ideaOutcome: null }, now)).toBe('—');
+  });
+});
+
+describe('leverage of a trade', () => {
+  // Scenario "Плечо и залог сделки".
+  it('shows the leverage and the margin of a trade on linear, the margin in USDT to cents', () => {
+    expect(leverageText({ category: 'linear', leverage: 5, margin: '15.83' })).toBe(
+      '5× · 15.83 USDT',
+    );
+  });
+
+  // Scenario "Старая сделка с неизвестным плечом": not 1×, the leverage is unknown.
+  it('shows a dash for a trade whose leverage is unknown', () => {
+    expect(leverageText({ category: 'linear', leverage: null, margin: null })).toBe('—');
+  });
+
+  it('shows a dash off linear, where there is no leverage', () => {
+    expect(leverageText({ category: 'spot', leverage: 1, margin: '79.15' })).toBe('—');
   });
 });
 

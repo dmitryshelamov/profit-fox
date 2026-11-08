@@ -93,6 +93,30 @@ describe('screen «Сделки»', () => {
     expect(within(row).getByRole('button', { name: 'Закрыть по рынку' })).toBeInTheDocument();
   });
 
+  // Scenarios "Плечо и залог сделки" and "Старая сделка с неизвестным плечом": a trade made before the leverage shows a dash, not 1×.
+  it('shows the leverage and the margin of a trade in work, and a dash when its leverage is unknown', async () => {
+    fakeApi(
+      routes(
+        open([
+          tradeOf({ id: 'aaaaaaaa-0000-4000-8000-000000000002', leverage: 5, margin: '15.83' }),
+          tradeOf({ symbol: 'WIFUSDT', leverage: null, margin: null }),
+        ]),
+      ),
+    );
+    renderApp('/idea-trades');
+
+    const table = await screen.findByRole('table', { name: 'Сделки в работе' });
+    const column = within(table)
+      .getAllByRole('columnheader')
+      .findIndex((head) => head.textContent === 'Плечо');
+    const [known, old] = within(table)
+      .getAllByRole('row')
+      .slice(1)
+      .map((row) => within(row).getAllByRole('cell')[column]!.textContent);
+
+    expect([known, old]).toEqual(['5× · 15.83 USDT', '—']);
+  });
+
   // The average of the fills and the risk come with every decimal the exchange gave; they would stretch the table.
   it('shows the fill price by the decimals of the entry and the risk in cents', async () => {
     fakeApi(

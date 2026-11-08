@@ -13,7 +13,10 @@ using Shouldly;
 
 namespace ProfitFox.Tests.Integration.Persistence;
 
-/// <summary>Migration Plan 1 of the leverage: the settings and the trades saved before have the leverage of one, as they entered.</summary>
+/// <summary>
+///     Migration Plan 1 of the leverage: the settings saved before have the leverage of one, the trades saved before an unknown one: they entered at
+///     whatever the symbol had on the exchange, often the 10× of Bybit.
+/// </summary>
 public class AddIdeaTradeLeverageMigrationTests
 {
     // The last migration before the leverage.
@@ -46,7 +49,7 @@ public class AddIdeaTradeLeverageMigrationTests
     }
 
     [Test]
-    public async Task Old_settings_and_trades_have_the_leverage_of_one()
+    public async Task Old_settings_have_the_leverage_of_one_and_old_trades_an_unknown_one()
     {
         var account = Guid.NewGuid();
         var trade = Guid.NewGuid();
@@ -75,7 +78,7 @@ public class AddIdeaTradeLeverageMigrationTests
 
         await using NpgsqlConnection read = await _dataSource.OpenConnectionAsync();
         (await read.QuerySingleAsync<int>("SELECT leverage FROM idea_trading_settings WHERE id = 1")).ShouldBe(1);
-        (await read.QuerySingleAsync<int>("SELECT leverage FROM idea_trades WHERE id = @trade", new { trade })).ShouldBe(1);
+        (await read.QuerySingleAsync<int?>("SELECT leverage FROM idea_trades WHERE id = @trade", new { trade })).ShouldBeNull();
     }
 
     private void Migrate(long? version)

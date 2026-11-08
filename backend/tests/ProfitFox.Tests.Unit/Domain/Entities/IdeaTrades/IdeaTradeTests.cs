@@ -91,6 +91,13 @@ public class IdeaTradeTests
         (New() with { Amount = 100m, Leverage = 4 }).Margin.ShouldBe(25m);
     }
 
+    // Scenario "Старая сделка с неизвестным плечом": a trade made before the leverage takes its whole amount, as it did then.
+    [Test]
+    public void Margin_of_a_trade_with_an_unknown_leverage_is_its_amount()
+    {
+        (New() with { Amount = 100m, Leverage = null }).Margin.ShouldBe(100m);
+    }
+
     // Decision 8: a pullback waits the 4 candles of its window from the moment it fired; the others enter at once.
     [Test]
     public void Pullback_keeps_the_deadline_of_its_entry_and_the_price_of_its_idea()
