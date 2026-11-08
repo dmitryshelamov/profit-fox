@@ -84,6 +84,11 @@ public class MoexBacktestTests
         Guid id = await RunAsync();
 
         JsonElement backtest = await _client.GetFromJsonAsync<JsonElement>($"/api/backtests/{id}");
+
+        // After the review: the nights inside the coverage are not gaps, and the whole series counts as loaded.
+        backtest.GetProperty("gaps").GetArrayLength().ShouldBe(0, backtest.GetRawText());
+        JsonElement progress = backtest.GetProperty("progress");
+        (progress.GetProperty("loadedCandles").GetInt64(), progress.GetProperty("expectedCandles").GetInt64()).ShouldBe((28L, 28L));
         JsonElement rules = backtest.GetProperty("rules");
         (Number(rules, "tickSize"), Number(rules, "quantityStep"), Number(rules, "minQuantity"), Number(rules, "minAmount")).ShouldBe((0.01m, 10m, 10m, 0m));
         JsonElement simulation = backtest.GetProperty("simulation");

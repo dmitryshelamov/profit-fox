@@ -118,8 +118,10 @@ enforces a rule, the check is the source of truth.
   On `moex` only the part outside the `SeriesCoverage` of the series is missing, and the coverage grows over the whole period asked
   for, never past the last closed candle less `SeriesCoverage.Margin`, in the transaction of the candles (inside the period everything
   is stored, covered or has just been asked for); `RunNextCandleImportCommandHandler` grows it over the job up to the end of each range
-  once the range is loaded. A period apart from the coverage leaves it as it is. A symbol is checked at the exchange of its category,
-  and the error names it (`ExchangeCodes.DisplayName`: `Bybit`, `T-Invest`).
+  once the range is loaded. A period apart from the coverage leaves it as it is. `RunNextBacktestWorkCommandHandler` takes the coverage
+  out of the missing ranges of a backtest on such a market too, before it decides on an import and before it writes the gaps, and expects
+  the stored candles plus the slots outside the coverage, so a covered series is loaded whole. A symbol is checked at the exchange of its
+  category, and the error names it (`ExchangeCodes.DisplayName`: `Bybit`, `T-Invest`).
   `Bots/Queries/GetBotCandles` aligns and cuts the period of a bot's chart (`from` down to the start of its candle, `to` up
   to the start of the current one, 1000 candles at most) and reads it through.
 - `MarketData/FormingCandles` holds the feeds of the current candle, which only the API uses: `FormingCandleFeeds` (a
