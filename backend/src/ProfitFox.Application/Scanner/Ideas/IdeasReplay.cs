@@ -148,6 +148,7 @@ public sealed class IdeasReplay(
                     series.Add(IdeaCandles.FromMinutes(interval, minutes, day, day + Day));
                 }
 
+                Settle(open, ended, day + Day);
                 timings.Engine.Stop();
                 last = minutes[^1];
                 timings.Writes.Start();
@@ -230,13 +231,19 @@ public sealed class IdeasReplay(
         return new Market(btc.ToDictionary(candle => candle.OpenTime, candle => candle.Close.Value), rates);
     }
 
-    // Steps the open paths by the minute; the ones that end move to the ended.
+    // Steps the open paths by the minute, lazily (decision 1 of speed-up-ideas-replay): a path the minute did not touch stays as it is, tracked
+    // until the end of the day once the day ends; the ones that end move to the ended.
     private static void Advance(List<IdeaSignal> open, List<IdeaSignal> ended, IdeaCandle minute)
     {
         for (int index = open.Count - 1; index >= 0; index--)
         {
             IdeaSignal signal = open[index];
-            SignalPath path = SignalPathTracker.Step(signal.Path, minute);
+            SignalPath path = SignalPathTracker.StepLazily(signal.Path, minute);
+
+            if (ReferenceEquals(path, signal.Path))
+            {
+                continue;
+            }
 
             if (!path.IsOpen)
             {
@@ -246,6 +253,32 @@ public sealed class IdeasReplay(
             else
             {
                 open[index] = signal with { Path = path };
+            }
+        }
+    }
+
+    // The end of a day: every open path is tracked until it, and one whose window closed right there ends with the day.
+    private static void Settle(List<IdeaSignal> open, List<IdeaSignal> ended, DateTimeOffset until)
+    {
+        for (int index = open.Count - 1; index >= 0; index--)
+        {
+            IdeaSignal signal = open[index];
+
+            if (signal.Path.TrackedUntil == until)
+            {
+                continue;
+            }
+
+            IdeaSignal tracked = signal with { Path = signal.Path with { TrackedUntil = until } };
+
+            if (!tracked.Path.IsOpen)
+            {
+                ended.Add(tracked);
+                open.RemoveAt(index);
+            }
+            else
+            {
+                open[index] = tracked;
             }
         }
     }

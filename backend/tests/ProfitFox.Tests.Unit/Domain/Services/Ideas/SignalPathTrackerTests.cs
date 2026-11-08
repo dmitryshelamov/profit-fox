@@ -130,6 +130,59 @@ public class SignalPathTrackerTests
         (path.LadderAfter[0], path.StopAfter).ShouldBe(((int?)1, (int?)2));
     }
 
+    // Decision 1 of speed-up-ideas-replay: the replay steps every open path every minute, so a minute that touches nothing gives the path back as it
+    // is, without moving TrackedUntil; the paths of the steps are the same once TrackedUntil is set.
+    [Test]
+    public void Lazy_step_gives_the_same_path_back_while_nothing_touches_it()
+    {
+        SignalPath entered = SignalPathTracker.Step(SignalPath.Fired(Market, Interval.FifteenMinutes, Fired, 0.01m), Minute(0, 100m, 100.4m, 99.8m, 100.2m));
+
+        SignalPath lazy = SignalPathTracker.StepLazily(entered, Minute(1, 100.2m, 100.6m, 99.9m, 100.3m));
+
+        ReferenceEquals(lazy, entered).ShouldBeTrue();
+        lazy.TrackedUntil.ShouldBe(Fired.AddMinutes(1));
+    }
+
+    [Test]
+    public void Lazy_steps_give_the_path_of_the_steps_once_tracked_until_is_set()
+    {
+        IdeaCandle[] minutes = [.. IdeaFixtures.PathToStop().Take(50)];
+
+        SignalPath lazy = minutes.Aggregate(SignalPath.Fired(Market, Interval.FifteenMinutes, Fired, 0.01m), SignalPathTracker.StepLazily);
+
+        // The close at the end of the third candle of the grid, 45 minutes after the entry, is the last touch.
+        lazy.TrackedUntil.ShouldBe(Fired.AddMinutes(45));
+        Same(lazy with { TrackedUntil = Fired.AddMinutes(50) }, Run(Market, minutes));
+        Same(IdeaFixtures.PathToStop().Aggregate(SignalPath.Fired(Market, Interval.FifteenMinutes, Fired, 0.01m), SignalPathTracker.StepLazily), Run(Market, IdeaFixtures.PathToStop()));
+    }
+
+    // A path that ends by time (a market signal without an entry, the horizon of a pullback) ends on the lazy step of the minute after, tracked until
+    // the open of that minute: the same path as the steps give.
+    [Test]
+    public void Lazy_step_ends_a_path_by_time_on_the_minute_after()
+    {
+        IdeaCandle beyond = Minute(0, 97.5m, 98m, 97m, 97.5m);
+        var pullback = new IdeaPlan(IdeaType.Pullback, IdeaSide.Long, 99m, 97m, 103m);
+        IdeaCandle[] week = [.. Flat(0, 10080, 100m), Minute(10080, 100m, 100m, 98m, 99m)];
+
+        SignalPath stale = SignalPathTracker.StepLazily(SignalPath.Fired(Market, Interval.FifteenMinutes, Fired, 0.01m), beyond);
+        SignalPath ended = SignalPathTracker.StepLazily(stale, Minute(1, 97.5m, 98m, 97m, 97.5m));
+        SignalPath lateByAWeek = ((IEnumerable<IdeaCandle>)[.. week, Minute(10081, 99m, 99m, 99m, 99m)]).Aggregate(SignalPath.Fired(pullback, Interval.FifteenMinutes, Fired, 0.01m), SignalPathTracker.StepLazily);
+
+        stale.IsOpen.ShouldBeTrue();
+        Same(ended, Run(Market, beyond));
+        ended.IsOpen.ShouldBeFalse();
+        Same(lateByAWeek, Run(pullback, week));
+    }
+
+    // Two paths with the same values: the ladder and the closes are lists, which a record compares by reference.
+    private static void Same(SignalPath actual, SignalPath expected)
+    {
+        actual.LadderAfter.ShouldBe(expected.LadderAfter);
+        actual.Closes.ShouldBe(expected.Closes);
+        (actual with { LadderAfter = expected.LadderAfter, Closes = expected.Closes }).ShouldBe(expected);
+    }
+
     private static SignalPath Run(IdeaPlan plan, params IdeaCandle[] minutes)
     {
         return minutes.Aggregate(SignalPath.Fired(plan, Interval.FifteenMinutes, Fired, 0.01m), SignalPathTracker.Step);

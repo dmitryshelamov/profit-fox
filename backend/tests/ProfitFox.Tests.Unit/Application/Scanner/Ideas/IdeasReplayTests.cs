@@ -242,6 +242,24 @@ public class IdeasReplayTests
         _journal.Received(1).Replayed(Wif, 2, Arg.Is<TimeSpan>(engine => engine >= TimeSpan.Zero), Arg.Is<TimeSpan>(reads => reads >= TimeSpan.Zero), Arg.Is<TimeSpan>(writes => writes >= TimeSpan.Zero));
     }
 
+    // Decision 1 of speed-up-ideas-replay: the paths are stepped lazily, so one whose window closes right at the end of a day (a pullback fired 7
+    // days before, a minute before midnight, whose limit was never touched) ends with the day: written as ended, tracked until midnight, and
+    // kept out of the cursor.
+    [Test]
+    public async Task Path_whose_window_closes_at_the_end_of_a_day_ends_with_the_day()
+    {
+        var plan = new IdeaPlan(IdeaType.Pullback, IdeaSide.Long, 10m, 9m, 12m);
+        var waiting = new IdeaSignal(Wif, IdeaSetup.Impulse, SignalPath.Fired(plan, Interval.FifteenMinutes, March1.AddDays(-7).AddMinutes(-1), Tick) with { TrackedUntil = March1 }, 3m, 2m, IdeasEngineVersion.Current);
+        _stored[Wif] = new IdeaReplayCursor(March1, [waiting]);
+
+        await Replay().StepAsync(CancellationToken.None);
+
+        IdeaSignal ended = _written[(waiting.Key, waiting.Path.FiredAt)];
+        (ended.Path.IsOpen, ended.Path.EntryAfter, ended.Path.TrackedUntil).ShouldBe((false, null, March1.AddDays(1)));
+        _writes[0].ShouldContain(ended);
+        _stored[Wif].Open.ShouldNotContain(signal => signal.Path.FiredAt == waiting.Path.FiredAt);
+    }
+
     // Scenario "Повторный прогон после смены правил": the signals and cursors of other versions go, so a new version replays from the start.
     // Prod held 24 M cases of version 4, more than one statement deletes within the command timeout, so a step removes an hour of them, and
     // the cursors go once no signal is left.

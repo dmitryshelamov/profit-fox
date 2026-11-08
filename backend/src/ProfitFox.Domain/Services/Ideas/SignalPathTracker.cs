@@ -19,15 +19,47 @@ public static class SignalPathTracker
             return path;
         }
 
+        return Move(path, minute) with { TrackedUntil = minute.OpenTime.AddMinutes(1) };
+    }
+
+    /// <summary>
+    ///     Steps a path tracked up to the open of <paramref name="minute" />, whatever its <see cref="SignalPath.TrackedUntil" /> says, and gives
+    ///     it back as it is when the minute touched nothing on it (decision 1 of speed-up-ideas-replay: the replay steps every open path every
+    ///     minute, and a new record for each was a fifth of a turn). A path the minute touched is tracked until its end; a path that had ended by
+    ///     time at the open of the minute is tracked until that open, as the steps leave it. Once <see cref="SignalPath.TrackedUntil" /> is set
+    ///     to where the tracking stopped, the path is the one the steps give.
+    /// </summary>
+    public static SignalPath StepLazily(SignalPath path, IdeaCandle minute)
+    {
+        if (!path.IsOpen)
+        {
+            return path;
+        }
+
+        DateTimeOffset until = minute.OpenTime;
+
+        if (!path.IsOpenAt(until))
+        {
+            return path with { TrackedUntil = until };
+        }
+
+        SignalPath moved = Move(path, minute);
+
+        return ReferenceEquals(moved, path) ? path : moved with { TrackedUntil = until.AddMinutes(1) };
+    }
+
+    // The entry or the exit of a path on the minute, the tracking left to the caller.
+    private static SignalPath Move(SignalPath path, IdeaCandle minute)
+    {
         DateTimeOffset end = minute.OpenTime.AddMinutes(1);
         int sinceFired = (int)(end - path.FiredAt).TotalMinutes;
 
         if (path.EntryAfter is null)
         {
-            return Enter(path with { TrackedUntil = end }, minute, sinceFired);
+            return Enter(path, minute, sinceFired);
         }
 
-        return Exit(path with { TrackedUntil = end }, minute, (int)(end - path.EnteredAt!.Value).TotalMinutes);
+        return Exit(path, minute, (int)(end - path.EnteredAt!.Value).TotalMinutes);
     }
 
     private static SignalPath Enter(SignalPath path, IdeaCandle minute, int sinceFired)
