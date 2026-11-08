@@ -190,7 +190,9 @@ enforces a rule, the check is the source of truth.
   `IdeaInputs`; in a replay it keeps no ideas and gives every signal), `LiveIdeas` (the warm-ups and the minute of live ideas after the snapshot; counts the distinct pairs of a side on an interval among the ideas of the minute into their `BurstPairs` before the autos and storage; reads the exit
   rules every minute and puts a type × interval whose rule changed into `IdeaRecomputes`; the ideas that closed on the minute go to storage with their
   outcome for the trades made of them, and `CatchUpTradeOutcomesAsync` writes it once at the start of the session for the trades that missed it), `IdeasReplay` (the replay of history pair by pair and day
-  by day, with the minutes of BTC and the funding settlements a day reads for the features of its signals, the paths of the signals open at the cursor, the clean-up of other versions), `IdeaOutcomes` (one pass over the signals by key and firing:
+  by day, with the minutes of BTC and the funding settlements a day reads for the features of its signals, the paths of the signals open at the cursor, the clean-up of other versions;
+  `StartAsync` starts the turn of the pair furthest behind among those no turn runs, up to `Ideas:ReplayTurns` at once, the closes of BTC of a day shared by the turns for the
+  last 16 days and the funding of a pair read once a turn; the end of a turn goes to `IScannerJournal.Replayed` with its days and the time of the engine, of the reads and of the writes), `IdeaOutcomes` (one pass over the signals by key and firing:
   the clustered sums of the buckets, their parents and their categories, the buckets of the model and the outcomes of the calibration, `IdeaOutcomesResult`
   with the roots of the categories; the burst of a case from the count of the pairs of its minute it is given) and `IdeaStatistics` (the buckets and the calibration from that
   pass, the whole one with the counts of the pairs by minute of `IIdeaSignalRepository.CountPairsByMinuteAsync`, whole once an hour in a lane of `ScannerSession`, a type × interval after its rule changed in another, so it never waits for the whole one; that
@@ -474,9 +476,12 @@ enforces a rule, the check is the source of truth.
     "ByInterval": { "240": { "Move": 2.5 } },
     "StopBuffer": 1.5,
     "ZoneMerge": 0.5,
-    "ZoneStrength": 2
+    "ZoneStrength": 2,
+    "ReplayTurns": 2
   }
   ```
+
+  `ReplayTurns` is how many turns of the replay of history run at once, each on a pair of its own; prod lowers it with `Ideas__ReplayTurns`.
 
 ## Presentation (`ProfitFox.Presentation`)
 

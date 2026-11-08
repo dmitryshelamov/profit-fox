@@ -445,6 +445,47 @@ public class IdeasReplayTests
         Shape(_written.Values).ShouldBe(whole);
     }
 
+    // Scenario "Те же сигналы" (decision 1 of speed-up-ideas-replay): the histories of WIFUSDT and SOLUSDT, each with minutes and funding of its
+    // own, replayed by one turn of each alone and by two turns at once give the same signals, paths and cursors; the BTC of the days is shared.
+    [Test]
+    public async Task One_turn_and_two_turns_with_another_pair_give_the_same_signals()
+    {
+        var sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
+        DateTimeOffset end = March1.AddDays(3);
+        _minutes = Waves(March1.AddHours(-4), end);
+        IReadOnlyList<IdeaCandle> solMinutes = [.. Waves(March1.AddHours(-7), end).Select(minute => minute with { Volume = minute.Volume * 3m })];
+        Serve(sol, () => solMinutes);
+        _btc = [.. Waves(March1.AddHours(-5), end).Select(minute => minute with { Close = minute.Close * 400m })];
+        Funding(Wif, new FundingRatePoint(March1.AddHours(-3), 0.0009m), new FundingRatePoint(March1.AddDays(1.5), 0.0002m));
+        Funding(sol, new FundingRatePoint(March1.AddHours(-2), -0.0004m));
+        _time.Advance(TimeSpan.FromDays(2));
+        var alone = new Dictionary<Instrument, (string[] Signals, IdeaReplayCursor Cursor)>();
+
+        foreach (Instrument pair in new[] { Wif, sol })
+        {
+            _market.Keep([new ScannerPair(Wif, false), new ScannerPair(sol, false), new ScannerPair(pair, true, HistoryFrom: March1, CoveredUntil: end, TickSize: Tick)]);
+            await Step(Replay());
+            alone[pair] = ([.. Shape(_written.Values)], _stored[pair]);
+            _written.Clear();
+            _stored.Clear();
+        }
+
+        _market.Keep([.. new[] { Wif, sol }.Select(pair => new ScannerPair(pair, true, HistoryFrom: March1, CoveredUntil: end, TickSize: Tick))]);
+        IdeasReplay replay = Replay();
+
+        Task first = (await replay.StartAsync(CancellationToken.None))!;
+        Task second = (await replay.StartAsync(CancellationToken.None))!;
+        await Task.WhenAll(first, second);
+
+        foreach ((Instrument pair, (string[] signals, IdeaReplayCursor cursor)) in alone)
+        {
+            signals.ShouldNotBeEmpty();
+            Shape(_written.Values.Where(signal => signal.Instrument == pair)).ShouldBe(signals);
+            _stored[pair].ReplayedUntil.ShouldBe(cursor.ReplayedUntil);
+            Shape(_stored[pair].Open).ShouldBe(Shape(cursor.Open));
+        }
+    }
+
     // Scenario "Повторный прогон после смены правил": the signals and cursors of other versions go, so a new version replays from the start.
     // Prod held 24 M cases of version 4, more than one statement deletes within the command timeout, so a step removes an hour of them, and
     // the cursors go once no signal is left.
@@ -640,6 +681,13 @@ public class IdeasReplayTests
 
             return IdeaCandles.FromMinutes(call.ArgAt<Interval>(1), minutes(), call.ArgAt<DateTimeOffset>(2), call.ArgAt<DateTimeOffset>(3));
         });
+    }
+
+    // The funding settlements of a pair, as storage reads them.
+    private void Funding(Instrument instrument, params FundingRatePoint[] settlements)
+    {
+        _funding.GetAsync(instrument, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(call =>
+            (IReadOnlyList<FundingRatePoint>)[.. settlements.Where(point => point.Time >= call.ArgAt<DateTimeOffset>(1) && point.Time < call.ArgAt<DateTimeOffset>(2)).Take(call.ArgAt<int>(3))]);
     }
 
     // Whether a turn of the pair has started: its warm-up asked for its candles.

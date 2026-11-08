@@ -21,8 +21,8 @@ namespace ProfitFox.Application.Scanner;
 ///     and the ideas. Nine lanes run side by side: the stream's candles go to storage in batches; the liquidations of linear pairs go to storage
 ///     in batches, and the breaks of their stream to a table of their own, since the missed events cannot be loaded again; the REST lane catches up the pairs that lag behind, reads the list
 ///     again, tops up funding and loads history, one piece at a time; the minute cycle computes the snapshot and the live ideas; one lane clears the signals of other versions of the rules; the lane of
-///     ideas reads the warm-ups of the live ideas, replays history from storage only and removes the ideas closed more than a week ago once an
-///     hour; one lane of statistics recomputes the buckets and the calibration once an hour, another the buckets of a type × interval whose exit
+///     ideas reads the warm-ups of the live ideas, replays history from storage only in turns side by side, each on a pair of its own, and
+///     removes the ideas closed more than a week ago once an hour; one lane of statistics recomputes the buckets and the calibration once an hour, another the buckets of a type × interval whose exit
 ///     rule changed (requirement "Пересчёт корзин"). A failed step is logged and tried again; only the end of the lease stops the session.
 /// </summary>
 public sealed class ScannerSession(
