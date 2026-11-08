@@ -51,6 +51,15 @@ export function ideaLeftText(
     : durationText((Date.parse(trade.ideaEndsAt) - now) / 1000);
 }
 
+/** The leverage of a trade on linear and its margin in USDT: «5× · 15.83 USDT»; a dash off linear and for a trade made before the leverage, whose leverage is unknown. */
+export function leverageText(trade: Pick<Trade, 'category' | 'leverage' | 'margin'>): string {
+  if (trade.category !== 'linear' || trade.leverage === null || trade.margin === null) {
+    return dash;
+  }
+
+  return `${trade.leverage}× · ${showDecimal(trade.margin, 2)} USDT`;
+}
+
 const rText = (value: string) => `${showDecimal(value, 2, true)} R`;
 
 /** What the idea promised at the entry: the badge, the expectancy in R and the cases of the bucket; a dash when there is no bucket. */

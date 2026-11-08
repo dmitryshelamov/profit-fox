@@ -48,6 +48,16 @@ public class TInvestLedgerTests
         _host.Dispose();
     }
 
+    // add-idea-trade-leverage: the shares of MOEX have no leverage to read; the refusal goes nowhere near T-Invest.
+    [Test]
+    public async Task Leverage_is_refused_without_a_call()
+    {
+        ExchangeException error = await Should.ThrowAsync<ExchangeException>(() => _ledger.GetLeverageAsync(Key, Sber, CancellationToken.None));
+
+        error.Message.ShouldBe("T-Invest has no leverage of a symbol.");
+        _host.Api.Calls.ShouldBeEmpty();
+    }
+
     // Scenario "Рубли на счёте T-Invest": 50 000 ₽ of which 10 000 are blocked by an order.
     [Test]
     public async Task Free_roubles_are_the_money_less_what_orders_block()

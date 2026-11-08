@@ -79,4 +79,15 @@ public class IdeaTradingSettingsRepositoryTests
         await _repository.SaveAsync(IdeaTradingSettings.Default, CancellationToken.None);
         (await _repository.GetAsync(CancellationToken.None)).ShouldBe(IdeaTradingSettings.Default);
     }
+
+    // Requirement "Настройки торговли идеями": the leverage is saved with the rest.
+    [Test]
+    public async Task Leverage_is_saved_with_the_settings()
+    {
+        IdeaTradingSettings leveraged = IdeaTradingSettings.Default with { Leverage = 3 };
+
+        await _repository.SaveAsync(leveraged, CancellationToken.None);
+
+        (await _repository.GetAsync(CancellationToken.None)).ShouldBe(leveraged);
+    }
 }

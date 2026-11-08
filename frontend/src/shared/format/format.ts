@@ -85,6 +85,11 @@ export function roundDecimal(value: string, digits: number): string {
   return negative && /[1-9]/.test(result) ? `-${result}` : result;
 }
 
+/** A decimal string to a tenth, without a zero tenth: `12.00` is `12`, `16.666…` is `16.7`. */
+export function roundTenth(value: string): string {
+  return roundDecimal(value, 1).replace(/\.0$/, '');
+}
+
 /** A decimal string for the screen: rounded, grouped by thousands, with `+` in front of a positive one when asked. */
 export function showDecimal(value: string, digits: number, withSign = false): string {
   const rounded = roundDecimal(value, digits);

@@ -4,6 +4,8 @@ using System.Text.Json;
 
 using Npgsql;
 
+using NSubstitute;
+
 using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
@@ -192,6 +194,37 @@ public class IdeaTradesApiTests
         (await NothingSavedAsync()).ShouldBeTrue();
     }
 
+    // Scenario "Символ с плечом 10×": the API sets the leverage of the settings on the empty symbol, and the trade keeps it.
+    [Test]
+    public async Task Entry_on_linear_sets_the_leverage_of_an_empty_symbol_and_the_trade_keeps_it()
+    {
+        _scenario.Factory.Ledger.GetLeverageAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, Arg.Any<CancellationToken>()).Returns(10m);
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m);
+        _scenario.SetPrice("100");
+
+        Guid id = await CreateAsync(idea);
+
+        await _scenario.Factory.Orders.Received(1).SetLeverageAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, 1, Arg.Any<CancellationToken>());
+        (await _scenario.TradeAsync(id)).Leverage.ShouldBe(1);
+    }
+
+    // Scenario "Bybit отказал": a 409 with the reason, and no trade.
+    [Test]
+    public async Task Entry_whose_leverage_bybit_refuses_is_refused_with_the_reason_and_saves_nothing()
+    {
+        _scenario.Factory.Ledger.GetLeverageAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, Arg.Any<CancellationToken>()).Returns(10m);
+        _scenario.Factory.Orders.SetLeverageAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, 1, Arg.Any<CancellationToken>())
+            .Returns(new OrderOutcome(OrderOutcomeKind.Permanent, Reason: "leverage invalid"));
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m);
+        _scenario.SetPrice("100");
+
+        HttpResponseMessage response = await _scenario.Client.PostAsJsonAsync(Url, new { ideaId = idea, accountId = _scenario.Account, amount = 47.3m });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("reasons").EnumerateArray().Select(reason => reason.GetString()).ShouldBe(["leverage_not_set"]);
+        (await NothingSavedAsync()).ShouldBeTrue();
+    }
+
     // Scenario "Лимит открытых сделок": the second entry sees the first one under the lock of the account.
     [Test]
     public async Task Second_entry_sees_the_first_and_the_limit_of_open_trades()
@@ -368,6 +401,28 @@ public class IdeaTradesApiTests
 
         item.GetProperty("id").GetGuid().ShouldBe(id);
         item.GetProperty("ideaEndsAt").GetDateTimeOffset().ShouldBe(active.Track.LifeEndsAt!.Value);
+    }
+
+    // Scenarios "Плечо и залог сделки" and "Старая сделка с неизвестным плечом": a trade gives the leverage it entered with and its margin; one made
+    // before the leverage gives neither, its leverage is unknown.
+    [Test]
+    public async Task Journal_gives_the_leverage_and_the_margin_of_a_trade_and_none_when_it_is_unknown()
+    {
+        IdeaTrade known = await _scenario.CreateTradeAsync(quantity: 1m, leverage: 5);
+        _scenario.Factory.Time.Advance(TimeSpan.FromMinutes(1));
+        IdeaTrade old = await _scenario.CreateTradeAsync(quantity: 1m);
+        await using (var database = NpgsqlDataSource.Create(_scenario.Factory.ConnectionString))
+        {
+            await using NpgsqlCommand forget = database.CreateCommand($"UPDATE idea_trades SET leverage = NULL WHERE id = '{old.Id}'");
+            await forget.ExecuteNonQueryAsync();
+        }
+
+        JsonElement open = (await JournalAsync()).GetProperty("open");
+
+        JsonElement oldItem = open.EnumerateArray().Single(item => item.GetProperty("id").GetGuid() == old.Id);
+        (oldItem.GetProperty("leverage").ValueKind, oldItem.GetProperty("margin").ValueKind).ShouldBe((JsonValueKind.Null, JsonValueKind.Null));
+        JsonElement knownItem = open.EnumerateArray().Single(item => item.GetProperty("id").GetGuid() == known.Id);
+        (knownItem.GetProperty("leverage").GetInt32(), knownItem.GetProperty("margin").GetString()).ShouldBe((5, "21"));
     }
 
     // Task 6.2 of add-market-idea-features: a real trade gives the features its idea fired with.

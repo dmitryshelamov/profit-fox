@@ -98,6 +98,12 @@ internal sealed class TInvestOrderGateway(TInvestCall call, TInvestShares shares
         return CancelAsync(key, () => Task.FromResult<string?>(exchangeOrderId), OrderIdType.Exchange, cancellationToken);
     }
 
+    /// <summary>The shares of MOEX have no leverage: refused without a call.</summary>
+    public Task<OrderOutcome> SetLeverageAsync(ExchangeKey key, Instrument instrument, int leverage, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(new OrderOutcome(OrderOutcomeKind.Permanent, Reason: "T-Invest has no leverage of a symbol."));
+    }
+
     private async Task<OrderOutcome> CancelAsync(ExchangeKey key, Func<Task<string?>> idOf, OrderIdType type, CancellationToken cancellationToken)
     {
         // An order that never went to T-Invest is not there to cancel.

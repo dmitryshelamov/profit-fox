@@ -81,6 +81,18 @@ public class IdeaTradeRepositoryTests
         (await _repository.GetOpenAsync(CancellationToken.None)).Select(open => open.AutoId).ShouldBe([auto, null]);
     }
 
+    // Decision 6: the trade keeps the leverage it entered with through the saves of a Worker, so the margin of an entry that waits is its own.
+    [Test]
+    public async Task Trade_keeps_its_leverage_through_a_save_of_a_Worker()
+    {
+        IdeaTrade trade = await CreateAsync(Now, leverage: 5);
+
+        await SaveAsync(trade.EntryGrown(new LegTotals(0.47m, 49.82m, 0.02m), Now.AddMinutes(1)));
+
+        (await _repository.GetAsync(trade.Id, CancellationToken.None))!.Leverage.ShouldBe(5);
+        (await _repository.GetOpenAsync(CancellationToken.None)).ShouldHaveSingleItem().Leverage.ShouldBe(5);
+    }
+
     [Test]
     public async Task Only_trades_that_wait_or_are_open_are_open()
     {
@@ -263,9 +275,9 @@ public class IdeaTradeRepositoryTests
         (await _repository.IsChildAsync("bybit-1", CancellationToken.None)).ShouldBeFalse();
     }
 
-    private async Task<IdeaTrade> CreateAsync(DateTimeOffset at, IdeaType type = IdeaType.TwoR, IdeaPromise? promise = null, Guid? autoId = null, Idea? idea = null)
+    private async Task<IdeaTrade> CreateAsync(DateTimeOffset at, IdeaType type = IdeaType.TwoR, IdeaPromise? promise = null, Guid? autoId = null, Idea? idea = null, int leverage = 1)
     {
-        var trade = IdeaTrade.Create(Guid.NewGuid(), idea ?? IdeaGenerator.Generate(at, type: type), _account, 106m, new IdeaTradeSize(0.47m, 49.82m, 0.2m, 0.368m, 1.84m), at, promise, autoId);
+        var trade = IdeaTrade.Create(Guid.NewGuid(), idea ?? IdeaGenerator.Generate(at, type: type), _account, 106m, new IdeaTradeSize(0.47m, 49.82m, 0.2m, 0.368m, 1.84m), at, promise, autoId, leverage);
         var entry = IdeaTradeOrder.NewEntry(trade.Id, 1, OrderSide.Buy, OrderType.Market, TimeInForce.GoodTilCancelled, null, 0.47m, new Protection(trade.Target, trade.Stop), at);
         await _executor.ExecuteAsync(
             async token =>

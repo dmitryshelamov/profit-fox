@@ -66,6 +66,71 @@ public class IdeaEntryApiTests
         _scenario.Exchange.Sent.ShouldBeEmpty();
     }
 
+    // Scenario "Залог при плече": the leverage changes the margin only.
+    [Test]
+    public async Task Leverage_of_the_settings_gives_the_margin_on_linear()
+    {
+        await SaveLeverageAsync(5);
+        Guid idea = await SaveIdeaAsync(100m, 98m, 104m);
+        SetPrice("100");
+
+        JsonElement entry = await EntryAsync(idea, amount: "47.3");
+
+        (entry.GetProperty("quantity").GetString(), entry.GetProperty("amount").GetString()).ShouldBe(("0.47", "47.00"));
+        entry.GetProperty("leverage").GetInt32().ShouldBe(5);
+        decimal.Parse(entry.GetProperty("margin").GetString()!, System.Globalization.CultureInfo.InvariantCulture).ShouldBe(9.40m);
+        entry.GetProperty("reasons").GetArrayLength().ShouldBe(0);
+    }
+
+    // Scenario "Плечо на споте".
+    [Test]
+    public async Task Spot_has_the_leverage_of_one_and_the_margin_of_its_amount()
+    {
+        await SaveLeverageAsync(5);
+        _scenario.Factory.Bybit.Rules[("spot", "BTCUSDT")] = ("0.01", "0.01", "0.01", "1");
+        _scenario.Factory.Bybit.Tickers[("spot", "BTCUSDT")] = ("100", "100", "100", "1", "0.0001");
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m, instrument: new Instrument(MarketCategory.Spot, "BTCUSDT"));
+
+        JsonElement entry = await EntryAsync(idea, amount: "50");
+
+        entry.GetProperty("leverage").GetInt32().ShouldBe(1);
+        entry.GetProperty("margin").GetString().ShouldBe(entry.GetProperty("amount").GetString());
+    }
+
+    // Scenario "Стоп дальше ликвидации" through the API: the code of the reason.
+    [Test]
+    public async Task Stop_too_far_for_the_leverage_is_a_reason()
+    {
+        await SaveLeverageAsync(5);
+        Guid idea = await SaveIdeaAsync(100m, 88m, 130m);
+        SetPrice("100");
+
+        JsonElement entry = await EntryAsync(idea, amount: "47.3");
+
+        Reasons(entry).ShouldBe(["stop_too_far_for_leverage"]);
+        JsonElement detail = entry.GetProperty("details").GetProperty("stop_too_far_for_leverage");
+        decimal.Parse(detail.GetProperty("actual").GetString()!, System.Globalization.CultureInfo.InvariantCulture).ShouldBe(12m);
+        decimal.Parse(detail.GetProperty("limit").GetString()!, System.Globalization.CultureInfo.InvariantCulture).ShouldBe(10m);
+    }
+
+    // Scenario "Чужая позиция с другим плечом" through the API: the code of the reason, and the leverage is not changed.
+    [Test]
+    public async Task Position_with_another_leverage_is_a_reason()
+    {
+        await SaveLeverageAsync(5);
+        _scenario.Factory.Ledger.GetLeverageAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, Arg.Any<CancellationToken>()).Returns(1m);
+        _scenario.Factory.Ledger.GetHoldingAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, "BTC", Arg.Any<CancellationToken>()).Returns(0.5m);
+        Guid idea = await SaveIdeaAsync(100m, 98m, 104m);
+        SetPrice("100");
+
+        JsonElement entry = await EntryAsync(idea, amount: "47.3");
+
+        Reasons(entry).ShouldBe(["leverage_differs"]);
+        JsonElement detail = entry.GetProperty("details").GetProperty("leverage_differs");
+        (detail.GetProperty("actual").GetString(), detail.GetProperty("limit").GetString()).ShouldBe(("1", "5"));
+        await _scenario.Factory.Orders.DidNotReceiveWithAnyArgs().SetLeverageAsync(default!, default!, default, default);
+    }
+
     // Scenario "Сумма упёрлась в предел": the amount is not cut, it is named as the reason.
     [Test]
     public async Task Amount_above_the_limit_is_a_reason_and_is_not_cut()
@@ -257,6 +322,14 @@ public class IdeaEntryApiTests
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("errors").EnumerateObject().Select(error => error.Name).ShouldBe(["amount"]);
+    }
+
+    private async Task SaveLeverageAsync(int leverage)
+    {
+        HttpResponseMessage saved = await _scenario.Client.PutAsJsonAsync(
+            "/api/idea-trading/settings",
+            new { accountId = _scenario.Account, amount = 20m, maxAmount = 200m, maxOpenTrades = 5, maxTotalRisk = 100m, minRiskReward = 1.5m, leverage });
+        saved.StatusCode.ShouldBe(HttpStatusCode.NoContent);
     }
 
     private static IReadOnlyList<string> Reasons(JsonElement entry)

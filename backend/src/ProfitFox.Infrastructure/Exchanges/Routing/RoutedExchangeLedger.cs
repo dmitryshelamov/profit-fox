@@ -62,6 +62,11 @@ internal sealed class RoutedExchangeLedger(
         return Of(key).GetFeesAsync(key, instrument, cancellationToken);
     }
 
+    public Task<decimal> GetLeverageAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
+    {
+        return Of(key).GetLeverageAsync(key, instrument, cancellationToken);
+    }
+
     private IExchangeLedger Of(ExchangeKey key)
     {
         return key.Exchange == Exchange.TInvest ? tinvest : bybit;

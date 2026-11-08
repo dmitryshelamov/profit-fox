@@ -1,6 +1,6 @@
 namespace ProfitFox.Presentation.Contracts.IdeaTrades;
 
-/// <summary>The settings of trading by ideas: the account to enter on, the amount and the largest amount of a trade in USDT, the most open trades and their total risk, the lowest reward to the risk after the fees.</summary>
+/// <summary>The settings of trading by ideas: the account to enter on, the amount and the largest amount of a trade in USDT, the most open trades and their total risk, the lowest reward to the risk after the fees, the leverage on futures.</summary>
 public sealed class IdeaTradingSettingsBody
 {
     public Guid? AccountId { get; init; }
@@ -23,4 +23,10 @@ public sealed class IdeaTradingSettingsBody
 
     /// <summary>The most the open real trades of all the autos may hold in USDT; none switches the guard off.</summary>
     public decimal? AutosBudget { get; init; }
+
+    /// <summary>
+    ///     The leverage a trade on <c>linear</c> enters at, a whole number from one; one when it is not sent. A number, so that one that is not whole is an
+    ///     error of this field and not of the body.
+    /// </summary>
+    public decimal Leverage { get; init; } = 1m;
 }

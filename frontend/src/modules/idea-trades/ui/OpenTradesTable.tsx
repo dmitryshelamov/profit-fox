@@ -7,7 +7,13 @@ import { Button } from '@/shared/ui/Button';
 import { Dialog } from '@/shared/ui/Dialog';
 
 import { useCancelTrade, useCloseTrade } from '../api';
-import { durationText, ideaLeftText, promiseHint, promiseText } from '../model/journal';
+import {
+  durationText,
+  ideaLeftText,
+  leverageText,
+  promiseHint,
+  promiseText,
+} from '../model/journal';
 import { resultText } from '../model/result';
 import { canCancel, canClose } from '../model/status';
 import {
@@ -120,6 +126,7 @@ export function OpenTradesTable({ trades }: { trades: readonly IdeaTrade[] }) {
                   'Цель',
                   'Объём',
                   'Риск',
+                  'Плечо',
                   'Статус',
                   'В сделке',
                   'До конца идеи',
@@ -140,6 +147,7 @@ export function OpenTradesTable({ trades }: { trades: readonly IdeaTrade[] }) {
                 <OriginCell trade={trade} />
                 <InstrumentCells trade={trade} />
                 <LevelCells trade={trade} risk />
+                <td className={`${cell} font-mono whitespace-nowrap`}>{leverageText(trade)}</td>
                 <StatusCell trade={trade} />
                 <td className={`${cell} whitespace-nowrap`}>
                   {trade.openedAt === null

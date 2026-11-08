@@ -119,6 +119,12 @@ function EntryForm({
           <Line label="R:R после комиссий">
             {`${showDecimal(calculation.riskReward, 2)} (без ком. ${showDecimal(calculation.riskRewardWithoutFees, 2)})`}
           </Line>
+          {idea.category === 'linear' && (
+            <>
+              <Line label="Плечо">{`${calculation.leverage}×`}</Line>
+              <Line label="Залог">{`${showDecimal(calculation.margin, 2)} ${calculation.quote}`}</Line>
+            </>
+          )}
           <Line label="Свободные деньги">
             {calculation.freeMoney === null
               ? '—'
@@ -129,7 +135,7 @@ function EntryForm({
       {reasons.length > 0 && (
         <ul aria-label="Причины отказа" className="space-y-1 text-sm text-err">
           {reasons.map((reason) => (
-            <li key={reason}>{reasonText(reason)}</li>
+            <li key={reason}>{reasonText(reason, calculation?.details[reason])}</li>
           ))}
         </ul>
       )}
@@ -148,7 +154,7 @@ function EntryForm({
 
 /**
  * The window of an entry by an idea: the account and the amount, by default those of the settings, and the calculation of the API for
- * them, read again when they change and at least every 5 seconds. The entry is off while there is a reason, which is named. «Войти»
+ * them, read again when they change and at least every 5 seconds; on linear with the leverage and the margin. The entry is off while there is a reason, which is named. «Войти»
  * saves the trade and calls `onEntered`.
  */
 export function EntryDialog({

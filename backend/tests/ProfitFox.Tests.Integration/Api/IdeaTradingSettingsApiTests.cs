@@ -38,7 +38,26 @@ public class IdeaTradingSettingsApiTests
         settings.GetProperty("maxOpenTrades").GetInt32().ShouldBe(5);
         settings.GetProperty("maxTotalRisk").GetString().ShouldBe("5");
         settings.GetProperty("minRiskReward").GetString().ShouldBe("1.5");
+        settings.GetProperty("leverage").GetInt32().ShouldBe(1);
         settings.GetProperty("accountId").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    // Scenario "Сохранение плеча".
+    [Test]
+    public async Task Leverage_is_saved_and_read_back()
+    {
+        (await _scenario.Client.PutAsJsonAsync(Url, Body(leverage: 3))).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        (await ReadAsync()).GetProperty("leverage").GetInt32().ShouldBe(3);
+    }
+
+    // Scenarios "Плечо ноль" and "Плечо не целое".
+    [Test]
+    public async Task Leverage_below_one_or_not_whole_is_refused_by_its_field_and_nothing_changes()
+    {
+        await ShouldBeRefusedOnAsync(await _scenario.Client.PutAsJsonAsync(Url, Body(leverage: 0)), "leverage");
+        await ShouldBeRefusedOnAsync(await _scenario.Client.PutAsJsonAsync(Url, Body(leverage: 2.5m)), "leverage");
+        (await ReadAsync()).GetProperty("leverage").GetInt32().ShouldBe(1);
     }
 
     [Test]
@@ -98,9 +117,10 @@ public class IdeaTradingSettingsApiTests
         decimal minRiskReward = 1.5m,
         decimal? dailyLossLimit = null,
         int? maxSameDirection = null,
-        decimal? autosBudget = null)
+        decimal? autosBudget = null,
+        object? leverage = null)
     {
-        return new { accountId, amount, maxAmount, maxOpenTrades, maxTotalRisk, minRiskReward, dailyLossLimit, maxSameDirection, autosBudget };
+        return new { accountId, amount, maxAmount, maxOpenTrades, maxTotalRisk, minRiskReward, dailyLossLimit, maxSameDirection, autosBudget, leverage = leverage ?? 1 };
     }
 
     private async Task<JsonElement> ReadAsync()

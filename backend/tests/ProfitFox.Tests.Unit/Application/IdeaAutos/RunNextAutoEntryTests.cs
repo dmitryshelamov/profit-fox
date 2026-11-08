@@ -49,6 +49,8 @@ public class RunNextAutoEntryTests
     private IIdeaTradeRepository _trades = null!;
     private IIdeaTradingSettingsRepository _settings = null!;
     private IExchangeLedger _ledger = null!;
+    private IOrderGateway _gateway = null!;
+    private ILiveTradingJournal _journal = null!;
     private IMarketHistoryClient _history = null!;
     private ILiveBotRepository _live = null!;
     private ITransactionExecutor _executor = null!;
@@ -72,6 +74,8 @@ public class RunNextAutoEntryTests
         _trades = Substitute.For<IIdeaTradeRepository>();
         _settings = Substitute.For<IIdeaTradingSettingsRepository>();
         _ledger = Substitute.For<IExchangeLedger>();
+        _gateway = Substitute.For<IOrderGateway>();
+        _journal = Substitute.For<ILiveTradingJournal>();
         _history = Substitute.For<IMarketHistoryClient>();
         _live = Substitute.For<ILiveBotRepository>();
         _executor = Substitute.For<ITransactionExecutor>();
@@ -93,9 +97,12 @@ public class RunNextAutoEntryTests
         _settings.GetAsync(Arg.Any<CancellationToken>()).Returns(IdeaTradingSettings.Default with { AccountId = AccountId, MaxAmount = 500m, MaxOpenTrades = 8, MaxTotalRisk = 100m });
         _history.GetLastPriceAsync(Wif, Arg.Any<CancellationToken>()).Returns(100m);
         _ledger.GetFreeAsync(Arg.Any<ExchangeKey>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(1000m);
+        _ledger.GetLeverageAsync(Arg.Any<ExchangeKey>(), Wif, Arg.Any<CancellationToken>()).Returns(1m);
+        _ledger.GetOpenOrdersAsync(Arg.Any<ExchangeKey>(), Wif, Arg.Any<CancellationToken>()).Returns([]);
+        _gateway.SetLeverageAsync(Arg.Any<ExchangeKey>(), Wif, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new OrderOutcome(OrderOutcomeKind.Accepted));
         _live.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new Dictionary<Guid, LiveBot>());
         _executor.ExecuteAsync(Arg.Any<Func<CancellationToken, Task<int>>>(), Arg.Any<CancellationToken>()).Returns(call => call.ArgAt<Func<CancellationToken, Task<int>>>(0)(CancellationToken.None));
-        _handler = new RunNextAutoEntryCommandHandler(_entries, _autos, _refusals, _ideas, _paper, _trades, Calculator(), _live, _executor, new FakeTimeProvider(Now));
+        _handler = new RunNextAutoEntryCommandHandler(_entries, _autos, _refusals, _ideas, _paper, _trades, Calculator(), _live, _executor, _gateway, _journal, new FakeTimeProvider(Now));
     }
 
     [TearDown]
@@ -332,6 +339,61 @@ public class RunNextAutoEntryTests
 
         (await Run()).ShouldBeFalse();
 
+        await _entries.DidNotReceiveWithAnyArgs().DeleteAsync(default, default);
+    }
+
+    // Requirement "Плечо перед входом на linear": the entry of an auto sets the leverage of an empty symbol as a manual one does.
+    [Test]
+    public async Task Leverage_of_an_empty_symbol_is_set_before_the_trade_of_the_auto_is_saved()
+    {
+        _ledger.GetLeverageAsync(Arg.Any<ExchangeKey>(), Wif, Arg.Any<CancellationToken>()).Returns(10m);
+
+        (await Run()).ShouldBeTrue();
+
+        Received.InOrder(() =>
+        {
+            _gateway.SetLeverageAsync(Arg.Any<ExchangeKey>(), Wif, 1, Arg.Any<CancellationToken>());
+            _trades.CreateAsync(Arg.Is<IdeaTrade>(trade => trade!.Leverage == 1), Arg.Any<IdeaTradeOrder>(), Now, Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Test]
+    public async Task Trade_of_the_auto_keeps_the_leverage_of_the_settings()
+    {
+        _settings.GetAsync(Arg.Any<CancellationToken>()).Returns(IdeaTradingSettings.Default with { AccountId = AccountId, MaxAmount = 500m, MaxOpenTrades = 8, MaxTotalRisk = 100m, Leverage = 2 });
+
+        await Run();
+
+        await _gateway.Received(1).SetLeverageAsync(Arg.Any<ExchangeKey>(), Wif, 2, Arg.Any<CancellationToken>());
+        await _trades.Received(1).CreateAsync(Arg.Is<IdeaTrade>(trade => trade!.Leverage == 2), Arg.Any<IdeaTradeOrder>(), Now, Arg.Any<CancellationToken>());
+    }
+
+    // Scenario "Bybit отказал": the refusal is written, the request is gone, there is no trade, and the message of Bybit goes to the log.
+    [Test]
+    public async Task Leverage_bybit_refuses_is_written_as_a_refusal()
+    {
+        _ledger.GetLeverageAsync(Arg.Any<ExchangeKey>(), Wif, Arg.Any<CancellationToken>()).Returns(10m);
+        _gateway.SetLeverageAsync(Arg.Any<ExchangeKey>(), Wif, 1, Arg.Any<CancellationToken>()).Returns(new OrderOutcome(OrderOutcomeKind.Permanent, Reason: "leverage invalid"));
+
+        (await Run()).ShouldBeTrue();
+
+        await _trades.DidNotReceiveWithAnyArgs().CreateAsync(default!, default!, default, default);
+        await _refusals.Received(1).AddAsync(Arg.Is<IdeaAutoRefusal>(refusal => refusal!.Reasons.Count == 1 && refusal.Reasons[0] == IdeaTradeRefusal.LeverageNotSet && refusal.Detail == null), Arg.Any<CancellationToken>());
+        await _entries.Received(1).DeleteAsync(_entry.Id, Arg.Any<CancellationToken>());
+        _journal.Received(1).LeverageRefused(AccountId, Wif, 1, "leverage invalid");
+    }
+
+    // As the silence of the exchange while the entry is prepared: the request stays for the next pass.
+    [Test]
+    public async Task Request_stays_when_the_exchange_does_not_answer_to_the_leverage()
+    {
+        _ledger.GetLeverageAsync(Arg.Any<ExchangeKey>(), Wif, Arg.Any<CancellationToken>()).Returns(10m);
+        _gateway.SetLeverageAsync(Arg.Any<ExchangeKey>(), Wif, 1, Arg.Any<CancellationToken>()).Returns(new OrderOutcome(OrderOutcomeKind.Transient, Reason: "Too many visits"));
+
+        (await Run()).ShouldBeFalse();
+
+        await _trades.DidNotReceiveWithAnyArgs().CreateAsync(default!, default!, default, default);
+        await _refusals.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
         await _entries.DidNotReceiveWithAnyArgs().DeleteAsync(default, default);
     }
 

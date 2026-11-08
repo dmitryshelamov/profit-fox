@@ -2,6 +2,7 @@ using MediatR;
 
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.IdeaTrades;
+using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Application.Transactions;
 using ProfitFox.Domain.Entities.IdeaAutos;
 using ProfitFox.Domain.Entities.IdeaAutos.Enums;
@@ -23,9 +24,14 @@ public sealed class RunNextAutoEntryCommandHandler(
     IdeaTradeEntryCalculator calculator,
     ILiveBotRepository live,
     ITransactionExecutor executor,
+    IOrderGateway gateway,
+    ILiveTradingJournal journal,
     TimeProvider time) : IRequestHandler<RunNextAutoEntryCommand, bool>
 {
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(60);
+
+    // What an entry gives back when the exchange did not answer to the leverage: the request stays, as when it is silent while the entry is prepared.
+    private const int ExchangeSilent = 1;
 
     /// <summary>
     ///     Under the lock of the requests, which lets one Worker at a time work, takes the earliest request. One that waited more than 60 seconds
@@ -34,7 +40,7 @@ public sealed class RunNextAutoEntryCommandHandler(
     ///     account and of the creation of trades, with the account, the amount and the lowest reward to risk the request carries.
     /// </summary>
     /// <returns>
-    ///     <c>false</c> when there is no request, another Worker holds the lock, or the exchange did not answer: the request stays. An entry that
+    ///     <c>false</c> when there is no request, another Worker holds the lock, or the exchange did not answer, to the entry or to the leverage: the request stays. An entry that
     ///     cannot be prepared for another reason is refused, «Нет ключа» for an account that is gone and «Ошибка подготовки входа» otherwise.
     /// </returns>
     public async Task<bool> Handle(RunNextAutoEntryCommand request, CancellationToken cancellationToken)
@@ -96,9 +102,7 @@ public sealed class RunNextAutoEntryCommandHandler(
             return true;
         }
 
-        await executor.ExecuteAsync(async token => await EnterAsync(entry, idea, preparation, token), cancellationToken);
-
-        return true;
+        return await executor.ExecuteAsync(async token => await EnterAsync(entry, idea, preparation, token), cancellationToken) != ExchangeSilent;
     }
 
     private async Task<int> EnterAsync(IdeaAutoEntry entry, Idea idea, EntryPreparation preparation, CancellationToken cancellationToken)
@@ -134,7 +138,23 @@ public sealed class RunNextAutoEntryCommandHandler(
             return await WriteRefusalAsync(entry, idea, calculation.Refusals, now, cancellationToken);
         }
 
-        IdeaTrade trade = IdeaTrade.Create(Guid.NewGuid(), idea, entry.AccountId, preparation.Price, calculation.Size, now, calculation.Promise, entry.AutoId) with { LastOrderNumber = 1 };
+        OrderOutcomeKind leverage = await EntryLeverage.SetAsync(calculation, gateway, journal, cancellationToken);
+
+        if (leverage == OrderOutcomeKind.Transient)
+        {
+            return ExchangeSilent;
+        }
+
+        if (leverage == OrderOutcomeKind.Permanent)
+        {
+            return await WriteRefusalAsync(entry, idea, [new AutoRefusal(IdeaTradeRefusal.LeverageNotSet)], now, cancellationToken);
+        }
+
+        IdeaTrade trade = IdeaTrade.Create(Guid.NewGuid(), idea, entry.AccountId, preparation.Price, calculation.Size, now, calculation.Promise, entry.AutoId, calculation.Leverage)
+                          with
+        {
+            LastOrderNumber = 1
+        };
         await trades.CreateAsync(trade, IdeaTradeOrder.NewEntryOf(trade, now), now, cancellationToken);
         await entries.DeleteAsync(entry.Id, cancellationToken);
 

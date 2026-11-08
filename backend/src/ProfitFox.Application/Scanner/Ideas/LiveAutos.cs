@@ -198,7 +198,7 @@ public sealed class LiveAutos(
                 IdeaCandle birth = births[idea.Instrument];
                 ScannerPair pair = market.Find(idea.Instrument)!;
                 FeeRates fees = _fees[idea.Instrument.Category];
-                PaperEntryCheck check = PaperEntry.Check(auto, idea, birth, RulesOf(pair), fees, tradingSettings.MaxAmount, books);
+                PaperEntryCheck check = PaperEntry.Check(auto, idea, birth, RulesOf(pair), fees, tradingSettings.MaxAmount, tradingSettings.Leverage, books);
 
                 if (check.Refusals.Count > 0)
                 {

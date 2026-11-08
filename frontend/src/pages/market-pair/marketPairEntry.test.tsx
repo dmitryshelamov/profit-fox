@@ -83,7 +83,8 @@ describe('entry by an idea from the pair page', () => {
     expect(within(dialog).getByLabelText('Аккаунт')).toHaveValue(exchangeAccount.id);
     expect(within(dialog).getByLabelText('Сумма, USDT')).toHaveValue('20');
     expect(within(dialog).getByText('0.47')).toBeInTheDocument();
-    expect(within(dialog).getByText('79.15 USDT')).toBeInTheDocument();
+    // The amount, and the margin that equals it at 1×.
+    expect(within(dialog).getAllByText('79.15 USDT')).toHaveLength(2);
     expect(within(dialog).getByText('0.99 USDT')).toBeInTheDocument();
     expect(within(dialog).getByText('1.82 USDT')).toBeInTheDocument();
     expect(within(dialog).getByText('1.84 (без ком. 2.00)')).toBeInTheDocument();
@@ -91,6 +92,71 @@ describe('entry by an idea from the pair page', () => {
     expect(within(dialog).getByRole('button', { name: 'Войти' })).toBeEnabled();
     const asked = requests.find((request) => request.url.includes('/entry'))!;
     expect(new URL(asked.url).search).toBe(`?accountId=${exchangeAccount.id}&amount=20`);
+  });
+
+  // Scenario "Плечо и залог на фьючерсах".
+  it('shows the leverage and the margin on linear', async () => {
+    fakeApi(
+      routes({
+        'GET /api/ideas/idea-pullback/entry': () =>
+          json(entryOf({ amount: '47.00', leverage: 5, margin: '9.4' })),
+      }),
+    );
+    renderApp('/market/linear/SOLUSDT');
+
+    const { dialog } = await openEntry();
+
+    expect(await within(dialog).findByText('Плечо')).toBeInTheDocument();
+    expect(within(dialog).getByText('5×')).toBeInTheDocument();
+    expect(within(dialog).getByText('Залог')).toBeInTheDocument();
+    expect(within(dialog).getByText('9.40 USDT')).toBeInTheDocument();
+  });
+
+  // Scenario "Стоп слишком далеко": the reason with its numbers, and no entry.
+  it('names the stop too far for the leverage with its numbers and turns «Войти» off', async () => {
+    fakeApi(
+      routes({
+        'GET /api/ideas/idea-pullback/entry': () =>
+          json(
+            entryOf({
+              reasons: ['stop_too_far_for_leverage'],
+              details: {
+                stop_too_far_for_leverage: { actual: '12.00', limit: '10', holder: null },
+              },
+            }),
+          ),
+      }),
+    );
+    renderApp('/market/linear/SOLUSDT');
+
+    const { dialog } = await openEntry();
+
+    const reasons = await within(dialog).findByRole('list', { name: 'Причины отказа' });
+    expect(reasons).toHaveTextContent('Стоп дальше, чем позволяет плечо: 12 % при пределе 10 %');
+    expect(within(dialog).getByRole('button', { name: 'Войти' })).toBeDisabled();
+  });
+
+  // Scenario "Без плеча на споте".
+  it('shows neither the leverage nor the margin on the spot', async () => {
+    const spot = '/api/market/spot/SOLUSDT';
+    fakeApi({
+      ...routes(),
+      [`GET ${spot}`]: () =>
+        json(marketRow({ category: 'spot', symbol: 'SOLUSDT', price: '168.42' })),
+      [`GET ${spot}/candles`]: () => json({ interval: '60', candles: [], unavailable: false }),
+      [`GET ${spot}/open-interest`]: () => json([]),
+      [`GET ${spot}/funding`]: () => json([]),
+      [`GET ${spot}/ideas`]: () => json([{ ...pullback, category: 'spot' }]),
+      [`GET ${spot}/zones`]: () => json({ price: '168.4', zones: [] }),
+      [`POST ${spot}/own-idea`]: () => json({ made: false }),
+    });
+    renderApp('/market/spot/SOLUSDT');
+
+    const { dialog } = await openEntry();
+
+    expect(await within(dialog).findByText('79.15 USDT')).toBeInTheDocument();
+    expect(within(dialog).queryByText('Плечо')).toBeNull();
+    expect(within(dialog).queryByText('Залог')).toBeNull();
   });
 
   it('asks again when the amount changes', async () => {

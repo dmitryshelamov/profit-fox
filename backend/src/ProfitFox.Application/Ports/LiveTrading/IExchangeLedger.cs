@@ -20,6 +20,10 @@ public interface IExchangeLedger
     /// <exception cref="ProfitFox.Application.Exceptions.ExchangeException">The exchange refused or did not answer.</exception>
     Task<decimal> GetHoldingAsync(ExchangeKey key, Instrument instrument, string baseCoin, CancellationToken cancellationToken);
 
+    /// <summary>The leverage of the symbol of <c>linear</c> on the account, with a position or without.</summary>
+    /// <exception cref="ProfitFox.Application.Exceptions.ExchangeException">The exchange refused or did not answer.</exception>
+    Task<decimal> GetLeverageAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken);
+
     /// <summary>Every open order of the account on the instrument.</summary>
     /// <exception cref="ProfitFox.Application.Exceptions.ExchangeException">The exchange refused or did not answer.</exception>
     Task<IReadOnlyList<ExchangeOrder>> GetOpenOrdersAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken);

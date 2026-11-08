@@ -56,6 +56,16 @@ public class TInvestOrderGatewayTests
         _host.Dispose();
     }
 
+    // add-idea-trade-leverage: the shares of MOEX have no leverage to set; the refusal goes nowhere near T-Invest.
+    [Test]
+    public async Task Leverage_is_refused_without_a_call()
+    {
+        OrderOutcome outcome = await _gateway.SetLeverageAsync(Key, Sber, 5, CancellationToken.None);
+
+        outcome.ShouldBe(new OrderOutcome(OrderOutcomeKind.Permanent, Reason: "T-Invest has no leverage of a symbol."));
+        _host.Api.Calls.ShouldBeEmpty();
+    }
+
     // Scenario "Лимитная покупка": 20 shares at 250.5 with a lot of 10 go as a limit of the day for 2 lots from the account.
     [Test]
     public async Task Limit_buy_goes_for_the_day_in_lots_with_the_request_id_written_before()

@@ -59,6 +59,16 @@ public class BybitLedgerTests
         (await Ledger(handler).GetHoldingAsync(Key, Linear, "BTC", CancellationToken.None)).ShouldBe(holding);
     }
 
+    // Decision 2: in the one-way mode Bybit lists the row of the symbol with its leverage even without a position.
+    [Test]
+    public async Task Leverage_is_the_one_of_the_row_of_the_symbol_without_a_position()
+    {
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(Positions(Position(0, "", "0", leverage: "10")));
+
+        (await Ledger(handler).GetLeverageAsync(Key, Linear, CancellationToken.None)).ShouldBe(10m);
+        BybitRequests.Describe(handler.Requests.Single()).ShouldBe(BybitRequests.Describe("/v5/position/list?category=linear&symbol=BTCUSDT"));
+    }
+
     [Test]
     public async Task Spot_holding_is_the_coin_on_the_account()
     {
@@ -231,11 +241,11 @@ public class BybitLedgerTests
         return $$"""{"retCode":0,"retMsg":"OK","result":{"list":[{{string.Join(",", positions)}}],"nextPageCursor":"","category":"linear"},"retExtInfo":{},"time":1}""";
     }
 
-    private static string Position(int index, string side, string size)
+    private static string Position(int index, string side, string size, string leverage = "1")
     {
         return $$"""
                  {"positionIdx":{{index}},"riskId":1,"riskLimitValue":"2000000","symbol":"BTCUSDT","side":"{{side}}","size":"{{size}}","avgPrice":"0",
-                 "positionValue":"0","tradeMode":0,"positionStatus":"Normal","autoAddMargin":0,"adlRankIndicator":0,"leverage":"1","positionBalance":"0",
+                 "positionValue":"0","tradeMode":0,"positionStatus":"Normal","autoAddMargin":0,"adlRankIndicator":0,"leverage":"{{leverage}}","positionBalance":"0",
                  "markPrice":"100","liqPrice":"","bustPrice":"","positionMM":"0","positionIM":"0","tpslMode":"Full","takeProfit":"0","stopLoss":"0",
                  "trailingStop":"0","unrealisedPnl":"0","cumRealisedPnl":"0","seq":1,"isReduceOnly":false,"createdTime":"1676538056258",
                  "updatedTime":"1697673600012"}

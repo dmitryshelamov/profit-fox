@@ -42,6 +42,12 @@ internal sealed class BybitLedger(HttpClient http, ILoggerFactory loggers, Bybit
             .Sum(position => position.Side switch { PositionSide.Buy => position.Quantity, PositionSide.Sell => -position.Quantity, _ => 0m });
     }
 
+    public async Task<decimal> GetLeverageAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
+    {
+        // In the one-way mode Bybit lists one row of the symbol, with its leverage even when there is no position.
+        return (await PositionsAsync(key, instrument, cancellationToken)).First().Leverage!.Value;
+    }
+
     public async Task<IReadOnlyList<ExchangeOrder>> GetOpenOrdersAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
     {
         using BybitRestClient client = Client(key);
