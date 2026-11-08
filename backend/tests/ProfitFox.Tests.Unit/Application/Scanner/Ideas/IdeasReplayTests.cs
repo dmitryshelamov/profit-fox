@@ -323,6 +323,36 @@ public class IdeasReplayTests
         _stored[Wif].ReplayedUntil.ShouldBe(March1.AddDays(2));
     }
 
+    // Scenario "Минутный цикл опоздал" (decision 2 of speed-up-ideas-replay): with the snapshot 3 seconds late neither of two turns starts its next
+    // day; once the snapshot is back in time both go on.
+    [Test]
+    public async Task Late_minute_cycle_holds_both_turns()
+    {
+        var sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
+        Serve(sol, () => _minutes);
+        _market.Keep([.. new[] { Wif, sol }.Select(pair => new ScannerPair(pair, true, HistoryFrom: March1, CoveredUntil: March1.AddDays(1), TickSize: Tick))]);
+        _pace.Snapshot(_time.GetUtcNow(), _time.GetUtcNow().AddSeconds(3));
+        IdeasReplay replay = Replay();
+        Task first = (await replay.StartAsync(CancellationToken.None))!;
+        Task second = (await replay.StartAsync(CancellationToken.None))!;
+        await WaitAsync(() => Started(Wif) && Started(sol));
+        await Task.Delay(50);
+
+        await _candles.DidNotReceive().GetAsync(Arg.Any<Instrument>(), Interval.OneMinute, March1, March1.AddDays(1), 1440, Arg.Any<CancellationToken>());
+
+        _pace.Snapshot(_time.GetUtcNow(), _time.GetUtcNow());
+
+        while (!(first.IsCompleted && second.IsCompleted))
+        {
+            _time.Advance(TimeSpan.FromSeconds(10));
+            await Task.Delay(10);
+        }
+
+        await Task.WhenAll(first, second);
+        _stored[Wif].ReplayedUntil.ShouldBe(March1.AddDays(1));
+        _stored[sol].ReplayedUntil.ShouldBe(March1.AddDays(1));
+    }
+
     // Scenario "Повторный прогон после смены правил": the signals and cursors of other versions go, so a new version replays from the start.
     // Prod held 24 M cases of version 4, more than one statement deletes within the command timeout, so a step removes an hour of them, and
     // the cursors go once no signal is left.
