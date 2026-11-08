@@ -1,7 +1,7 @@
 import { ApiError } from '@/shared/api/client';
 import { type FieldErrors, layOutProblems, type ProblemErrors } from '@/shared/api/problems';
 
-const fields = new Set(['name', 'apiKey', 'apiSecret']);
+const fields = new Set(['name', 'exchange', 'apiKey', 'apiSecret', 'token', 'accountId']);
 
 /** The errors of an account request by form field. */
 export function accountFieldErrors(errors: ProblemErrors): FieldErrors {
@@ -24,8 +24,8 @@ export function accountProblem(error: unknown): string {
   }
 
   if (error.status === 503) {
-    return 'Bybit недоступен, попробуйте позже.';
+    return 'Биржа недоступна, попробуйте позже.';
   }
 
-  return error.status === 502 ? `Bybit отклонил запрос: ${error.message}` : error.message;
+  return error.status === 502 ? `Биржа отклонила запрос: ${error.message}` : error.message;
 }

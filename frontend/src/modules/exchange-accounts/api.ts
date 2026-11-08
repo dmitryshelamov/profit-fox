@@ -3,6 +3,12 @@ import { queryOptions } from '@tanstack/react-query';
 import { api, type Schemas, unwrap } from '@/shared/api/client';
 
 export type ExchangeAccount = Schemas['ExchangeAccountResponse'];
+export type BrokerAccount = Schemas['BrokerAccountResponse'];
+
+/** The name of an exchange on the screen. */
+export function exchangeName(exchange: string): string {
+  return exchange === 'tinvest' ? 'T-Invest' : 'Bybit';
+}
 
 export const accountsQuery = queryOptions({
   queryKey: ['exchange-accounts'],
@@ -30,6 +36,11 @@ export function accountBalanceQuery(id: string) {
 
 export async function createAccount(body: Schemas['ExchangeAccountBody']): Promise<string> {
   return unwrap(await api.POST('/api/exchange-accounts', { body })).id;
+}
+
+/** The accounts a T-Invest token opens, each with whether it can be added; the token is stored nowhere. */
+export async function listBrokerAccounts(token: string): Promise<BrokerAccount[]> {
+  return unwrap(await api.POST('/api/exchange-accounts/tinvest/accounts', { body: { token } }));
 }
 
 export async function renameAccount(id: string, name: string): Promise<void> {

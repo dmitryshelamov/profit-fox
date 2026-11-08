@@ -587,8 +587,12 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
   wrong (definition ↔ canvas, pins, wire types, error paths, draft comparison): plain TypeScript without React.
 - Modules of the bot section: `bots` (queries, `BotForm`, server errors by field, `parameterValues` from form text),
   `backtests` (queries with polling every 2 s while a backtest is unfinished, `BacktestForm`, status, ranges, grid,
-  period, result columns, engine conflicts), `market-data` (instrument search for symbol suggestions, Bybit
-  intervals), `exchange-accounts` (queries, `AccountForm`, `EnvironmentBadge`, `BalanceTable`, server problems of an
+  period, result columns, engine conflicts), `market-data` (instrument search for symbol suggestions, the intervals: `intervals` of Bybit, `intervalsOf(category)`
+  (eight for `moex`, without `D`) and `marketCategories` with the type `MarketCategory`, `'spot' | 'linear' | 'moex'`),
+  `exchange-accounts` (queries, `AccountForm` with the switch of the exchange: Bybit takes a key and a secret, T-Invest a token and
+  one of the accounts «Показать счета» lists through `listBrokerAccounts`, an account with a `problem` cannot be chosen and shows why
+  (`model/brokerAccounts`: the labels of the type, status and problem); a refusal of the server clears the secret, the token and the
+  accounts; `exchangeName`, `EnvironmentBadge`, `BalanceTable` with the currency of the answer, server problems of an
   account; the balance query is disabled and runs only on the page's action), `comparison` (the set of results on `useSyncExternalStore` over `sessionStorage`, the bar in
   `AppShell`, the mark checkbox), `market-chart` (`PriceEquityChart` and `EquityComparisonChart` on
   `lightweight-charts`, fill markers, candles per point; for the bot chart `BotCandleChart` with volume, fill arrows,

@@ -1256,8 +1256,9 @@ export interface paths {
         };
         put?: never;
         /**
-         * Asks Bybit about the key before saving: a key it does not accept, that cannot trade or can withdraw is a 400 on `apiKey`;
-         *     another refusal of Bybit is a 502 with its reason, no answer a 503.
+         * Asks the exchange before saving: Bybit about the key (a key it does not accept, that cannot trade or can withdraw is a 400 on
+         *     `apiKey`), T-Invest about the accounts of the token (a token it does not accept is a 400 on `token`, an account that
+         *     cannot be added a 400 on `accountId`); another refusal of the exchange is a 502 with its reason, no answer a 503.
          */
         post: {
             parameters: {
@@ -1465,6 +1466,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/exchange-accounts/tinvest/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** The accounts a T-Invest token opens, each with whether it can be added; a token T-Invest does not accept is a 400 on `token`. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BrokerTokenBody"];
+                    "text/json": components["schemas"]["BrokerTokenBody"];
+                    "application/*+json": components["schemas"]["BrokerTokenBody"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["BrokerAccountResponse"][];
+                        "application/json": components["schemas"]["BrokerAccountResponse"][];
+                        "text/json": components["schemas"]["BrokerAccountResponse"][];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Bad Gateway */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/exchange-accounts/{id}/balance": {
         parameters: {
             query?: never;
@@ -1472,7 +1550,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read from Bybit on each call and never stored; a key Bybit no longer accepts is a 409. */
+        /** Read from the exchange on each call and never stored, in `currency`; a key or a token the exchange no longer accepts is a 409. */
         get: {
             parameters: {
                 query?: never;
@@ -4565,9 +4643,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description Amounts are decimal strings: JSON numbers lose precision in JavaScript clients. */
+        /** @description Amounts are decimal strings in `currency` (`USD` on Bybit, `RUB` on T-Invest): JSON numbers lose precision in JavaScript clients. */
         AccountBalanceResponse: {
-            totalEquityUsd: string;
+            currency: string;
+            totalEquity: string;
             coins: components["schemas"]["CoinBalanceResponse"][];
         };
         /** @description A bot that trades with the account. */
@@ -4742,6 +4821,23 @@ export interface components {
             closeRequested: boolean;
         };
         /**
+         * @description An account a T-Invest token opens: `type` is `brokerage`, `iis` or `other`, `status` `new`, `open` or
+         *     `closed`, `access` `full`, `read_only` or `none`; `problem` is why it cannot be added (`not_open`,
+         *     `not_full_access`, `unsupported_type`), `null` when it can.
+         */
+        BrokerAccountResponse: {
+            id: string;
+            name: string;
+            type: string;
+            status: string;
+            access: string;
+            problem: null | string;
+        };
+        /** @description A T-Invest token whose accounts are asked for; it is stored nowhere and never logged. */
+        BrokerTokenBody: {
+            token: string;
+        };
+        /**
          * @description The statistics of a bucket: its cases with an outcome, of them the targets, the stops and the expired ones, the share of targets among
          *     all of them and the expectancy in R of the model with their 95 % intervals and the badge by the expectancy, `up`, `flat` or
          *     `down` (no share, intervals or badge with bool BucketStatisticsResponse.EnoughData false, «мало данных»: the parent has fewer than 30 cases). Beside
@@ -4870,10 +4966,11 @@ export interface components {
             /** @description Name of the copy; defaults to the source name with a mark. */
             name?: null | string;
         };
+        /** @description A coin or a share the account holds and its value in the currency of the balance. */
         CoinBalanceResponse: {
             coin: string;
             walletBalance: string;
-            usdValue: string;
+            value: string;
         };
         CreateBacktestBody: {
             /** @description ISO 8601 with an offset or `Z`. */
@@ -4919,33 +5016,47 @@ export interface components {
             low: string;
             close: string;
         };
-        /** @description A new exchange account; the secret is stored encrypted and never returned. */
+        /**
+         * @description A new exchange account. `exchange` is `bybit` (the default, for a body without it) with `apiKey` and `apiSecret`,
+         *     or `tinvest` with `token` and `accountId`, the number of the brokerage account. The secret and the token are stored
+         *     encrypted and never returned.
+         */
         ExchangeAccountBody: {
             name: string;
-            apiKey: string;
-            apiSecret: string;
+            exchange?: string;
+            apiKey?: null | string;
+            apiSecret?: null | string;
+            token?: null | string;
+            accountId?: null | string;
         };
         /** @description An account with the bots that trade with it. */
         ExchangeAccountDetailsResponse: {
             /** Format: uuid */
             id: string;
             name: string;
-            apiKey: string;
+            exchange: string;
+            apiKey: null | string;
             /** Format: int64 */
-            uid: number | string;
+            uid: null | number | string;
+            accountId: null | string;
             categories: string[];
             /** Format: date-time */
             createdAt: string;
             bots: components["schemas"]["AccountBotResponse"][];
         };
-        /** @description An account without its secret: the API never returns it. */
+        /**
+         * @description An account without its secret: the API never returns it. `exchange` is `bybit` or `tinvest`; a Bybit account has
+         *     `apiKey` and `uid`, a T-Invest account `accountId`, the number of its brokerage account.
+         */
         ExchangeAccountResponse: {
             /** Format: uuid */
             id: string;
             name: string;
-            apiKey: string;
+            exchange: string;
+            apiKey: null | string;
             /** Format: int64 */
-            uid: number | string;
+            uid: null | number | string;
+            accountId: null | string;
             categories: string[];
             /** Format: date-time */
             createdAt: string;

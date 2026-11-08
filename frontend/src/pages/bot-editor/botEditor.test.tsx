@@ -17,6 +17,7 @@ const instruments = [
   { category: 'spot', symbol: 'BTCUSDT', baseCoin: 'BTC', quoteCoin: 'USDT' },
   { category: 'spot', symbol: 'BTCEUR', baseCoin: 'BTC', quoteCoin: 'EUR' },
   { category: 'spot', symbol: 'ETHBTC', baseCoin: 'ETH', quoteCoin: 'BTC' },
+  { category: 'moex', symbol: 'SBER', baseCoin: 'SBER', quoteCoin: 'RUB' },
 ];
 
 function routes(extra: Record<string, () => Response> = {}) {
@@ -314,6 +315,61 @@ describe('bot form', () => {
     expect(await screen.findByText('Символ NOPEUSDT не найден.')).toBeInTheDocument();
     expect(screen.getByLabelText('Символ')).toHaveValue('NOPEUSDT');
     expect(screen.getByRole('alert')).toHaveTextContent('Бот не сохранён');
+  });
+
+  // Scenario "Интервалы MOEX": the list follows the category, and an interval that is not in the new list is reset.
+  it('offers the intervals of moex without D and resets an interval moex does not have', async () => {
+    fakeApi(routes());
+    renderApp('/bots/new');
+
+    await userEvent.selectOptions(await screen.findByLabelText('Интервал'), 'D');
+    await userEvent.click(screen.getByRole('button', { name: 'moex' }));
+
+    expect(
+      [...screen.getByLabelText<HTMLSelectElement>('Интервал').options].map(
+        (option) => option.value,
+      ),
+    ).toEqual(['1', '3', '5', '15', '30', '60', '120', '240']);
+    expect(screen.getByLabelText('Интервал')).toHaveValue('60');
+  });
+
+  it('keeps an interval moex has when the category changes', async () => {
+    fakeApi(routes());
+    renderApp('/bots/new');
+
+    await userEvent.selectOptions(await screen.findByLabelText('Интервал'), '15');
+    await userEvent.click(screen.getByRole('button', { name: 'moex' }));
+
+    expect(screen.getByLabelText('Интервал')).toHaveValue('15');
+  });
+
+  // Scenario "Подсказки акций".
+  it('suggests the shares of moex with roubles as the quote', async () => {
+    fakeApi(routes());
+    renderApp('/bots/new');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'moex' }));
+    await userEvent.type(screen.getByLabelText('Символ'), 'SB');
+
+    await waitFor(() =>
+      expect(
+        [...document.querySelectorAll('#bot-symbols option')].map((option) => [
+          option.getAttribute('value'),
+          option.textContent,
+        ]),
+      ).toEqual([['SBER', 'SBER / RUB']]),
+    );
+  });
+
+  // Scenario "Рубли".
+  it('labels the balance of a share of moex with roubles', async () => {
+    fakeApi(routes());
+    renderApp('/bots/new');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'moex' }));
+    await userEvent.type(screen.getByLabelText('Символ'), 'SBER');
+
+    expect(await screen.findByText('RUB')).toBeInTheDocument();
   });
 
   // Scenario "Валюта котировки".

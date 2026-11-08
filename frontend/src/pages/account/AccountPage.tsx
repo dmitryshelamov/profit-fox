@@ -9,6 +9,7 @@ import {
   accountQuery,
   BalanceTable,
   deleteAccount,
+  exchangeName,
   renameAccount,
 } from '@/modules/exchange-accounts';
 import { ApiError } from '@/shared/api/client';
@@ -131,19 +132,40 @@ export function AccountPage({ accountId }: { accountId: string }) {
       )}
       <dl className="grid grid-cols-3 gap-x-8 gap-y-4 rounded-xl border border-line bg-panel px-5 py-4 text-sm">
         <div>
-          <dt className={term}>API key</dt>
-          <dd className="font-mono break-all">{data.apiKey}</dd>
+          <dt className={term}>Биржа</dt>
+          <dd>{exchangeName(data.exchange)}</dd>
         </div>
-        <div>
-          <dt className={term}>API secret</dt>
-          <dd className="font-mono" aria-label="Secret скрыт">
-            ••••••••
-          </dd>
-        </div>
-        <div>
-          <dt className={term}>UID Bybit</dt>
-          <dd className="font-mono">{data.uid}</dd>
-        </div>
+        {data.exchange === 'tinvest' ? (
+          <>
+            <div>
+              <dt className={term}>Номер счёта</dt>
+              <dd className="font-mono">{data.accountId}</dd>
+            </div>
+            <div>
+              <dt className={term}>Токен</dt>
+              <dd className="font-mono" aria-label="Токен скрыт">
+                ••••••••
+              </dd>
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <dt className={term}>API key</dt>
+              <dd className="font-mono break-all">{data.apiKey}</dd>
+            </div>
+            <div>
+              <dt className={term}>API secret</dt>
+              <dd className="font-mono" aria-label="Secret скрыт">
+                ••••••••
+              </dd>
+            </div>
+            <div>
+              <dt className={term}>UID Bybit</dt>
+              <dd className="font-mono">{data.uid}</dd>
+            </div>
+          </>
+        )}
         <div>
           <dt className={term}>Торгует</dt>
           <dd className="font-mono">{data.categories.join(', ')}</dd>
@@ -190,7 +212,9 @@ export function AccountPage({ accountId }: { accountId: string }) {
         )}
         {balance.data && !balance.isError && <BalanceTable balance={balance.data} />}
         {!balance.data && !balance.isError && (
-          <p className="text-sm text-muted">Баланс читается с Bybit по запросу и не хранится.</p>
+          <p className="text-sm text-muted">
+            Баланс читается с {exchangeName(data.exchange)} по запросу и не хранится.
+          </p>
         )}
       </section>
       {confirming && (
@@ -206,8 +230,8 @@ export function AccountPage({ accountId }: { accountId: string }) {
           }
         >
           <p className="text-sm text-muted">
-            Ключи аккаунта удаляются из системы. На Bybit ключ остаётся — отзовите его там, если он
-            больше не нужен.
+            Ключи аккаунта удаляются из системы. На бирже ключ или токен остаётся — отзовите его
+            там, если он больше не нужен.
           </p>
         </Dialog>
       )}
