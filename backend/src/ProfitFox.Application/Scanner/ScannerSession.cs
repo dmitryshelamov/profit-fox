@@ -355,46 +355,86 @@ public sealed class ScannerSession(
             journal.Failed("trade-outcomes", exception);
         }
 
-        while (!cancellationToken.IsCancellationRequested)
+        // The turns of the replay that run (decision 2 of speed-up-ideas-replay): they use the services of the session, so none outlives it.
+        var turns = new List<Task>();
+
+        try
         {
-            try
+            while (!cancellationToken.IsCancellationRequested)
             {
-                if (time.GetUtcNow() >= closedAt)
+                try
                 {
-                    await ideas.RemoveClosedAsync(cancellationToken);
-                    await CleanUpAutosAsync(cancellationToken);
-                    closedAt = time.GetUtcNow() + ClosedRemoval;
-                }
+                    if (time.GetUtcNow() >= closedAt)
+                    {
+                        await ideas.RemoveClosedAsync(cancellationToken);
+                        await CleanUpAutosAsync(cancellationToken);
+                        closedAt = time.GetUtcNow() + ClosedRemoval;
+                    }
 
-                // The warm-ups of the live ideas go before the history.
-                bool warmed = await ideas.ReadWarmUpsAsync(cancellationToken);
+                    // The warm-ups of the live ideas go before the history.
+                    bool warmed = await ideas.ReadWarmUpsAsync(cancellationToken);
 
-                if (warmed)
-                {
-                    continue;
-                }
+                    if (warmed)
+                    {
+                        continue;
+                    }
 
-                if (!_cleaned.Task.IsCompleted)
-                {
-                    // No history to replay before the clean-up ends: the next warm-ups come within a minute, the history once it ends.
-                    await Task.WhenAny(Task.Delay(TimeSpan.FromMinutes(1), time, cancellationToken), _cleaned.Task);
+                    if (Ended(turns))
+                    {
+                        // The pair of a turn that failed is taken again after the retry, the other turns going on meanwhile.
+                        await Task.Delay(Retry, time, cancellationToken);
+
+                        continue;
+                    }
+
+                    if (!_cleaned.Task.IsCompleted)
+                    {
+                        // No history to replay before the clean-up ends: the next warm-ups come within a minute, the history once it ends.
+                        await Task.WhenAny(Task.Delay(TimeSpan.FromMinutes(1), time, cancellationToken), _cleaned.Task);
+                        cancellationToken.ThrowIfCancellationRequested();
+
+                        continue;
+                    }
+
+                    while (await replay.StartAsync(cancellationToken) is { } turn)
+                    {
+                        turns.Add(turn);
+                    }
+
+                    // The next warm-ups come within a minute; a turn that ends makes room for the next one at once.
+                    await Task.WhenAny([Task.Delay(TimeSpan.FromMinutes(1), time, cancellationToken), .. turns]);
                     cancellationToken.ThrowIfCancellationRequested();
                 }
-                else if (await replay.StartAsync(cancellationToken) is { } turn)
+                catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
                 {
-                    await turn;
+                    journal.Failed("ideas", exception);
+                    await Task.Delay(Retry, time, cancellationToken);
                 }
-                else
-                {
-                    await Task.Delay(TimeSpan.FromMinutes(1), time, cancellationToken);
-                }
-            }
-            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
-            {
-                journal.Failed("ideas", exception);
-                await Task.Delay(Retry, time, cancellationToken);
             }
         }
+        finally
+        {
+            await Task.WhenAll(turns.Select(turn => turn.ContinueWith(_ => { }, TaskScheduler.Default)));
+        }
+    }
+
+    /// <summary>Takes the turns that ended off the list; a turn that failed is logged. <c>true</c> when one failed.</summary>
+    private bool Ended(List<Task> turns)
+    {
+        var failed = false;
+
+        foreach (Task turn in turns.Where(turn => turn.IsCompleted).ToArray())
+        {
+            turns.Remove(turn);
+
+            if (turn.Exception?.InnerException is { } exception)
+            {
+                journal.Failed("ideas", exception);
+                failed = true;
+            }
+        }
+
+        return failed;
     }
 
     // Next to the closed ideas, once an hour: the old refusals of the autos go and the requests nobody took become refusals. The two do not wait for
