@@ -59,7 +59,7 @@
 - [x] 4.2 `ScannerState.Replay`, `GetMarketQueryHandler` читает прогресс с `IdeasEngineVersion.Current`;
   `MarketResponse.Replay` (`done`, `total`, `slowest`, `engineVersion`), OpenAPI и `npm run generate` типов (сценарий «Ход
   прогона в ответе»). Тесты: обработчик отдаёт прогресс; тест контракта ответа.
-- [ ] 4.3 `ScannerBanners`: баннер «Прогон идей: N из M инструментов» тона `run` с версией правил и местной датой
+- [x] 4.3 `ScannerBanners`: баннер «Прогон идей: N из M инструментов» тона `run` с версией правил и местной датой
   отстающего дня, пока `done < total`; нет при `done == total`, в том числе `0 из 0` (сценарии «Прогон идёт», «Прогон
   закончен»). Тесты компонента на три состояния; `npm run lint`, `format:check`, `typecheck`, `test`, `build`.
 

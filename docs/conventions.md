@@ -495,7 +495,7 @@ enforces a rule, the check is the source of truth.
   `Contracts/<Area>` (`Contracts/Bots`, `Contracts/Backtests`).
 - `MarketController`: `GET /api/market` (one page of the snapshot and the state of the scanner: `category`, `search`, `setup`, `interval`,
   `savedFilter`, `sort`, `direction`, `page`, `pageSize`; the answer has `items`, `page`, `pageSize`, `total`, `pairs`, `categories` and `setups`,
-  the counts of the chips), `GET /api/market/{category}/{symbol}` (a row;
+  the counts of the chips, and `replay`, the progress of the replay of ideas of `IdeasEngineVersion.Current` that `IIdeaReplayRepository.ProgressAsync` counts on reading), `GET /api/market/{category}/{symbol}` (a row;
   404 when the snapshot has no such pair), `.../candles?interval&from&to` (as the bot chart), `.../open-interest?from&to` and
   `.../funding?from&to` (linear only, from storage, at most 1000 points); contracts in `Contracts/Market`. It never calls Bybit
   but for the candles of a pair.
@@ -620,8 +620,8 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
   every 15 s and asked with the category, the search (after a pause of 300 ms), the setup chip and its interval, the saved filter, the sort and the page,
   the row, open interest and funding of a pair; the counts of the category buttons and of the chips come from the answer, nothing is filtered or sorted in the browser;
   `model` for the codes of the sort columns, the size of a page and the rest of the choice kept in the browser (`choice`), the age of the snapshot and
-  compact numbers; `setups` for the setups, the interval of setups and the column «Сетап»; `MarketTable`, the banners and the mark of
-  incomplete data), `ideas` (queries of one page of the ideas, of a pair's ideas, zones, the own idea, the calibration, the exit rules and the preview of a candidate
+  compact numbers; `setups` for the setups, the interval of setups and the column «Сетап»; `MarketTable`, the banners (the history, the pause of REST, the replay of ideas while
+  `done < total`, stale data) and the mark of incomplete data), `ideas` (queries of one page of the ideas, of a pair's ideas, zones, the own idea, the calibration, the exit rules and the preview of a candidate
   rule (asked 300 ms after its last change), and the apply of a rule; `model` for the labels, the codes of the sort columns, the
   badge of the bucket, «мало данных», the break-even rounded up and the shares of the outcomes (`stats`), the colour of a difference, the verdict of the Brier
   score and the names of the rows of the calibration (`calibration`), profit and loss at the risk per idea and its storage in the browser (`riskStorage`), the groups of a
