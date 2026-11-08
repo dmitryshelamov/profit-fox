@@ -2,10 +2,10 @@
 
 ## 1. Конец жизни идеи в домене
 
-- [ ] 1.1 Red → green: `IdeaTrack.LifeEndsAt` — `EnteredAt + LifeCandles × CandleMinutes`, нет без входа; тесты в
+- [x] 1.1 Red → green: `IdeaTrack.LifeEndsAt` — `EnteredAt + LifeCandles × CandleMinutes`, нет без входа; тесты в
   `IdeaTrackerTests` (или рядом с `IdeaTrack`) на 15m × 16 свечей от 10:00 → 14:00 и на идею без входа. Проверка:
   `dotnet test --filter IdeaTracker` зелёный, оба теста были красными
-- [ ] 1.2 Refactor: `IdeaTracker.Exit` сравнивает конец минуты с `LifeEndsAt`; поведение и тесты не меняются. Проверка:
+- [x] 1.2 Refactor: `IdeaTracker.Exit` сравнивает конец минуты с `LifeEndsAt`; поведение и тесты не меняются. Проверка:
   все тесты `IdeaTrackerTests` и `ExitOutcomesAgreementTests` зелёные
 
 ## 2. Чтение идей по id
