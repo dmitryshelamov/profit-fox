@@ -530,7 +530,7 @@ internal sealed class LiveBotSession(
 
                         break;
                     case ExchangeOrderState.Rejected:
-                        LiveOrder rejected = next.Rejected(order.RejectReason ?? "Bybit rejected the order.");
+                        LiveOrder rejected = next.Rejected(order.RejectReason ?? "The exchange rejected the order.");
                         await SaveOrderAsync(rejected, token);
                         _bot = _bot.Fail(rejected.RejectReason!);
                         commands.AddRange(Apply(new OrderRejected(time.GetUtcNow(), LiveRunMapping.RunId(live.Number))));
@@ -740,18 +740,18 @@ internal sealed class LiveBotSession(
                     break;
                 case SendStep.Rejected:
                     journal.Refused(_id, code, outcome.Reason ?? "refused");
-                    await EndAsync(order.Number, live => live.Rejected(outcome.Reason ?? "Bybit refused the order."), cancellationToken);
+                    await EndAsync(order.Number, live => live.Rejected(outcome.Reason ?? "The exchange refused the order."), cancellationToken);
 
                     break;
                 case SendStep.CancelRefused:
                     journal.Refused(_id, code, outcome.Reason ?? "refused");
 
                     // The order stays on the exchange and is never left unwatched: the bot stops with the reason and asks
-                    // again ever more slowly, until Bybit takes the cancel or the owner cancels the order on Bybit.
+                    // again ever more slowly, until the exchange takes the cancel or the owner cancels the order there.
                     LiveOrder paused = order.Deferred(now);
                     await WriteOrderAsync(
                         paused,
-                        bot => bot.Fail($"Bybit refused to cancel order {code}: {outcome.Reason} Cancel it on Bybit: the bot stops once Bybit shows the order done."),
+                        bot => bot.Fail($"The exchange refused to cancel order {code}: {outcome.Reason} Cancel it on the exchange: the bot stops once the exchange shows the order done."),
                         cancellationToken);
                     _ = LaterAsync(new WakeInput(), paused.NextAttemptAt!.Value - now, cancellationToken);
 

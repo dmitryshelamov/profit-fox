@@ -64,14 +64,14 @@ public sealed class StartBotCommandHandler(
                                   ?? throw new ConflictException("The bot has no exchange account.");
         ExchangeKey key = await LiveRequests.KeyAsync(accounts, protector, account, cancellationToken);
 
-        // Decision 10: the account of T-Invest is checked at the broker, a key of Bybit at Bybit.
+        // Decision 10: an account of the broker is checked by its token, an API key with its secret at its exchange.
         if (key.Exchange == Exchange.TInvest)
         {
             await CheckBrokerAccountAsync(key, cancellationToken);
         }
         else
         {
-            await CheckBybitKeyAsync(bot, key, cancellationToken);
+            await CheckApiKeyAsync(bot, key, cancellationToken);
         }
         string quote = await QuoteCoinAsync(bot.Instrument, cancellationToken);
 
@@ -98,7 +98,7 @@ public sealed class StartBotCommandHandler(
             cancellationToken);
     }
 
-    private async Task CheckBybitKeyAsync(Bot bot, ExchangeKey key, CancellationToken cancellationToken)
+    private async Task CheckApiKeyAsync(Bot bot, ExchangeKey key, CancellationToken cancellationToken)
     {
         try
         {
@@ -210,6 +210,6 @@ public sealed class StartBotCommandHandler(
         IReadOnlyList<ListedInstrument> listed = await catalog.ListAsync(instrument.Category, cancellationToken);
 
         return listed.SingleOrDefault(item => item.Symbol == instrument.Symbol)?.QuoteCoin
-               ?? throw new ConflictException($"Bybit no longer lists {instrument.Symbol} in {instrument.Category.ToCode()}.");
+               ?? throw new ConflictException($"{instrument.Category.Exchange().DisplayName()} no longer lists {instrument.Symbol} in {instrument.Category.ToCode()}.");
     }
 }

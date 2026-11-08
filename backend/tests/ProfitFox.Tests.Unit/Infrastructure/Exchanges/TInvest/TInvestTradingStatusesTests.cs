@@ -217,6 +217,19 @@ public class TInvestTradingStatusesTests
         (await _statuses.TradingDayEndAsync(Token, TInvestFixtures.SberExchange, CancellationToken.None)).ShouldBe(DateTimeOffset.Parse("2024-03-12T15:40:00Z"));
     }
 
+    // A weekend has no interval of the exchange: the trading day that ends next is the Monday.
+    [Test]
+    public async Task Day_without_an_interval_of_the_exchange_is_passed_over()
+    {
+        _host.Time.SetUtcNow(DateTimeOffset.Parse("2024-03-16T12:00:00Z"));
+        _host.Api.On<TradingSchedulesRequest, TradingSchedulesResponse>("TradingSchedules", _ => Schedule(
+            Day("2024-03-16"),
+            Day("2024-03-17", ("dealer_regular_trading_session_main", "2024-03-17T07:00:00Z", "2024-03-17T15:40:00Z")),
+            Day("2024-03-18", ("regular_trading_session_main", "2024-03-18T07:00:00Z", "2024-03-18T15:40:00Z"))));
+
+        (await _statuses.TradingDayEndAsync(Token, TInvestFixtures.SberExchange, CancellationToken.None)).ShouldBe(DateTimeOffset.Parse("2024-03-18T15:40:00Z"));
+    }
+
     [Test]
     public async Task Trading_day_with_an_interval_of_an_unknown_type_tells_no_end()
     {

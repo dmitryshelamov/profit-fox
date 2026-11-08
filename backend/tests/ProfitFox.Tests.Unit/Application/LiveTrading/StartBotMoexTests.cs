@@ -155,6 +155,14 @@ public class StartBotMoexTests
         exception.Message.ShouldStartWith("Not enough free money on the account: 40000 RUB");
     }
 
+    [Test]
+    public async Task Share_t_invest_no_longer_lists_does_not_start()
+    {
+        _catalog.ListAsync(MarketCategory.Moex, Arg.Any<CancellationToken>()).Returns([]);
+
+        await ShouldBeRefusedAsync("T-Invest no longer lists SBER in moex.");
+    }
+
     private async Task ShouldBeRefusedAsync(string reason)
     {
         ConflictException exception = await Should.ThrowAsync<ConflictException>(() => Handler(enabled: true).Handle(new StartBotCommand(_bot.Id), CancellationToken.None));

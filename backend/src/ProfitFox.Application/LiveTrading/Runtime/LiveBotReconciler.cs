@@ -251,7 +251,8 @@ internal sealed class LiveBotReconciler(
     {
         IReadOnlyList<Bot> bots = [.. (await library.GetBotsAsync(cancellationToken)).Where(other => other.ExchangeAccountId == accountId)];
 
-        if (instrument.Category == MarketCategory.Linear)
+        // Only the spot holds a coin that several symbols trade; a position of linear and the shares of moex belong to their instrument.
+        if (instrument.Category != MarketCategory.Spot)
         {
             return [.. bots.Where(other => other.Instrument == instrument)];
         }
@@ -266,7 +267,7 @@ internal sealed class LiveBotReconciler(
     {
         IReadOnlyList<IdeaTrade> open = [.. (await ideaTrades.GetOpenAsync(cancellationToken)).Where(trade => trade.AccountId == accountId)];
 
-        if (instrument.Category == MarketCategory.Linear)
+        if (instrument.Category != MarketCategory.Spot)
         {
             return [.. open.Where(trade => trade.Instrument == instrument)];
         }

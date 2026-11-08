@@ -602,7 +602,7 @@ public class LiveTradingTests
 
         await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).Status == LiveBotStatus.Failed, "the failed bot");
         (await _scenario.LiveAsync(bot)).StopReason.ShouldBe(
-            $"Bybit refused to cancel order {_scenario.Exchange.CancelTimes[0].ClientId}: API key is invalid. Cancel it on Bybit: the bot stops once Bybit shows the order done.");
+            $"The exchange refused to cancel order {_scenario.Exchange.CancelTimes[0].ClientId}: API key is invalid. Cancel it on the exchange: the bot stops once the exchange shows the order done.");
         DateTimeOffset[] times = [.. _scenario.Exchange.CancelTimes.Where(cancel => cancel.ClientId == _scenario.Exchange.CancelTimes[0].ClientId).Select(cancel => cancel.At)];
         TimeSpan[] gaps = [.. times.Zip(times.Skip(1), (before, after) => after - before)];
         gaps.Skip(1).First().ShouldBeGreaterThanOrEqualTo(TimeSpan.FromSeconds(2));
@@ -629,7 +629,7 @@ public class LiveTradingTests
         _scenario.Exchange.CancelOnBybit(LiveTradingScenario.ClientId(bot, 3));
 
         await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).Status == LiveBotStatus.Failed, "the failed bot");
-        (await _scenario.LiveAsync(bot)).StopReason.ShouldStartWith("Bybit refused to cancel order ");
+        (await _scenario.LiveAsync(bot)).StopReason.ShouldStartWith("The exchange refused to cancel order ");
         (await _scenario.OrdersAsync(bot)).ShouldAllBe(order => order.Status != LiveOrderStatus.PendingCancel);
     }
 
