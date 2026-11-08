@@ -60,10 +60,10 @@ T-Invest. Решения — в design.md, требования — в `specs/`.
 
 ## 5. Статус торгов, коридор, расписание
 
-- [ ] 5.1 `TInvestTradingStatuses`: `GetTradingStatus` и `GetOrderBook(depth 1)` с кэшем 5 с на `uid`; `MayPlace(uid, type,
+- [x] 5.1 `TInvestTradingStatuses`: `GetTradingStatus` и `GetOrderBook(depth 1)` с кэшем 5 с на `uid`; `MayPlace(uid, type,
   price)` → пропуск / «сессия закрыта» / «цена вне коридора». Unit-тесты на моке: флаги типа заявки, пустой и
   перевёрнутый коридор, кэш (второй вызов в 5 с не ходит к бирже).
-- [ ] 5.2 Расписание: `TradingSchedules(exchange, сегодня..+7)` с кэшем до конца дня; `NextSessionStart(exchange, now)` по
+- [x] 5.2 Расписание: `TradingSchedules(exchange, сегодня..+7)` с кэшем до конца дня; `NextSessionStart(exchange, now)` по
   словарю интервалов (design.md, решение 6); нечитаемое расписание или неизвестный тип → `null`. Unit-тесты: ночь → утро
   `06:50` МСК; `dealer_*` не считается; неизвестный тип → `null`; `30003` на прошлую дату не роняет.
 
