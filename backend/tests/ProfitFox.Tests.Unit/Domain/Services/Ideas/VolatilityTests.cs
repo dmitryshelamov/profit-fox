@@ -48,6 +48,16 @@ public class VolatilityTests
         Volatility.Percentile(ratios, 0.9m).ShouldBe(0.180m);
     }
 
+    // Decision 1 of speed-up-ideas-replay: a day of the replay takes both percentiles of 90 days of ratios of each interval, sorted once.
+    [Test]
+    public void Both_percentiles_come_from_one_sorting_of_the_ratios()
+    {
+        decimal[] ratios = [.. Enumerable.Range(1, 200).Select(value => value * 0.001m).OrderBy(value => (value * 7919m) % 1m)];
+
+        Volatility.Percentiles(ratios).ShouldBe(new VolatilityPercentiles(0.020m, 0.180m));
+        Volatility.Percentiles([.. Enumerable.Range(1, 99).Select(value => (decimal)value)]).ShouldBeNull();
+    }
+
     [Test]
     public void Fewer_than_a_hundred_ratios_give_no_percentile()
     {

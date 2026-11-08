@@ -38,6 +38,25 @@ public static class Volatility
 
         decimal[] sorted = [.. ratios.Order()];
 
+        return Rank(sorted, rank);
+    }
+
+    /// <summary>The 10th and the 90th percentiles of the same ratios, sorted once; none with fewer than 100 ratios.</summary>
+    public static VolatilityPercentiles? Percentiles(IReadOnlyList<decimal> ratios)
+    {
+        if (ratios.Count < MinimumRatios)
+        {
+            return null;
+        }
+
+        decimal[] sorted = [.. ratios.Order()];
+
+        return new VolatilityPercentiles(Rank(sorted, 0.1m), Rank(sorted, 0.9m));
+    }
+
+    // Nearest rank: the value at the ceiling of the rank of the count.
+    private static decimal Rank(decimal[] sorted, decimal rank)
+    {
         return sorted[(int)Math.Ceiling(sorted.Length * rank) - 1];
     }
 }

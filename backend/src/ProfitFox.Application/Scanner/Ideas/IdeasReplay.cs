@@ -290,12 +290,10 @@ public sealed class IdeasReplay(
 
         foreach ((Interval interval, Ratios series) in ratios)
         {
-            IReadOnlyList<decimal> between = series.Between(day - PercentileWindow, day);
-
             // Both need the same 100 ratios: a day has both or neither.
-            if (Volatility.Percentile(between, 0.9m) is { } high)
+            if (Volatility.Percentiles(series.Between(day - PercentileWindow, day)) is { } both)
             {
-                percentiles[interval] = new VolatilityPercentiles(Volatility.Percentile(between, 0.1m), high);
+                percentiles[interval] = both;
             }
         }
 
