@@ -48,6 +48,65 @@ public class BacktestSettingsTests
         settings.HasIdeaSlippage().ShouldBeFalse();
     }
 
+    // Decision 9: a backtest on a category without base rates would have no fees; the services refuse to start without them.
+    [Test]
+    public void Category_without_fees_is_named()
+    {
+        var settings = new BacktestSettings
+        {
+            DefaultFees = new Dictionary<string, FeeRateSettings>
+            {
+                ["spot"] = new FeeRateSettings { Limit = 0.1m, Market = 0.1m },
+                ["linear"] = new FeeRateSettings { Limit = 0.02m, Market = 0.055m }
+            }
+        };
+
+        settings.CategoriesWithoutFees().ShouldBe(["moex"]);
+    }
+
+    [Test]
+    public void Every_category_with_fees_leaves_none_named()
+    {
+        var settings = new BacktestSettings
+        {
+            DefaultFees = new Dictionary<string, FeeRateSettings>
+            {
+                ["spot"] = new FeeRateSettings { Limit = 0.1m, Market = 0.1m },
+                ["linear"] = new FeeRateSettings { Limit = 0.02m, Market = 0.055m },
+                ["moex"] = new FeeRateSettings { Limit = 0.05m, Market = 0.05m }
+            }
+        };
+
+        settings.CategoriesWithoutFees().ShouldBeEmpty();
+    }
+
+    // Scenario "Ставки MOEX по умолчанию".
+    [Test]
+    public void Policy_gives_the_rates_of_moex()
+    {
+        var settings = new BacktestSettings
+        {
+            DefaultFees = new Dictionary<string, FeeRateSettings> { ["moex"] = new FeeRateSettings { Limit = 0.05m, Market = 0.05m, Slippage = 0.1m } }
+        };
+
+        settings.Policy().DefaultFees[MarketCategory.Moex].ShouldBe(new FeeRates(0.05m, 0.05m, 0.1m));
+    }
+
+    [Test]
+    public void Idea_slippage_does_not_ask_for_moex()
+    {
+        var settings = new BacktestSettings
+        {
+            DefaultFees = new Dictionary<string, FeeRateSettings>
+            {
+                ["spot"] = new FeeRateSettings { Limit = 0.1m, Market = 0.1m, Slippage = 0.1m },
+                ["linear"] = new FeeRateSettings { Limit = 0.02m, Market = 0.055m, Slippage = 0.05m }
+            }
+        };
+
+        settings.HasIdeaSlippage().ShouldBeTrue();
+    }
+
     private static decimal? Rate(string? value)
     {
         return value is null ? null : decimal.Parse(value, System.Globalization.CultureInfo.InvariantCulture);

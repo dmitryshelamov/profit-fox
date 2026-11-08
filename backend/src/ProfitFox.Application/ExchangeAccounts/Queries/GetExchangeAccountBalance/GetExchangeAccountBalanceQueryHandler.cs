@@ -6,15 +6,21 @@ using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.ExchangeAccounts;
 using ProfitFox.Application.Ports.Security;
 using ProfitFox.Domain.Entities.ExchangeAccounts;
+using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.ExchangeAccounts;
 
 namespace ProfitFox.Application.ExchangeAccounts.Queries.GetExchangeAccountBalance;
 
-public sealed class GetExchangeAccountBalanceQueryHandler(IExchangeAccountRepository repository, IExchangeKeyInspector inspector, ISecretProtector protector)
+public sealed class GetExchangeAccountBalanceQueryHandler(
+    IExchangeAccountRepository repository,
+    IExchangeKeyInspector inspector,
+    IBrokerAccountReader broker,
+    ISecretProtector protector)
     : IRequestHandler<GetExchangeAccountBalanceQuery, AccountBalance?>
 {
-    /// <exception cref="ConflictException">The exchange no longer accepts the key, or the master key changed since the account was added.</exception>
+    /// <summary>The balance of a Bybit account from its key, the portfolio of a T-Invest account from its token, in roubles.</summary>
+    /// <exception cref="ConflictException">The exchange no longer accepts the key or the token, or the master key changed since the account was added.</exception>
     /// <exception cref="ExchangeUnavailableException">The exchange did not answer.</exception>
     public async Task<AccountBalance?> Handle(GetExchangeAccountBalanceQuery request, CancellationToken cancellationToken)
     {
@@ -39,7 +45,9 @@ public sealed class GetExchangeAccountBalanceQueryHandler(IExchangeAccountReposi
 
         try
         {
-            return await inspector.GetBalanceAsync(account.ApiKey, plaintext, cancellationToken);
+            return account.Exchange == Exchange.TInvest
+                ? await broker.GetPortfolioAsync(plaintext, account.AccountId!, cancellationToken)
+                : await inspector.GetBalanceAsync(account.ApiKey!, plaintext, cancellationToken);
         }
         catch (ExchangeKeyRejectedException exception)
         {

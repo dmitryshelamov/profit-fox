@@ -3,6 +3,7 @@ using Bybit.Net.Interfaces.Clients;
 using Microsoft.Extensions.DependencyInjection;
 
 using ProfitFox.Application.Exceptions;
+using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
@@ -156,6 +157,6 @@ public class BybitInstrumentCatalogTests
 
     private BybitMarketDataClient Catalog()
     {
-        return new BybitMarketDataClient(_factory.Services.GetRequiredService<IBybitRestClient>(), _factory.Services.GetRequiredService<ExchangeResilienceExecutor>());
+        return new BybitMarketDataClient(_factory.Services.GetRequiredService<IBybitRestClient>(), _factory.Services.GetRequiredKeyedService<ExchangeResilienceExecutor>(Exchange.Bybit));
     }
 }

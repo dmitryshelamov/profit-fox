@@ -18,6 +18,9 @@ namespace ProfitFox.Application.Market.Queries.GetMarket;
 public sealed class GetMarketQueryHandler(IMarketSnapshotRepository snapshots, IScannerStateRepository state, ISavedFilterRepository filters, TimeProvider time)
     : IRequestHandler<GetMarketQuery, GetMarketResult>
 {
+    // The scanner follows Bybit only: moex gets no chip until the ideas of MOEX come (design of add-moex-market, decision 11).
+    private static readonly MarketCategory[] ScannerCategories = [MarketCategory.Spot, MarketCategory.Linear];
+
     private static readonly IdeaSetup[] SetupChips = Enum.GetValues<IdeaSetup>();
 
     public async Task<GetMarketResult> Handle(GetMarketQuery request, CancellationToken cancellationToken)
@@ -86,7 +89,7 @@ public sealed class GetMarketQueryHandler(IMarketSnapshotRepository snapshots, I
         MarketSnapshotRow[] chosen = [.. left.Where(row => request.Setup is null || Holds(setups, row, interval, setup))];
         var counts = new MarketCounts(
             rows.Count,
-            Enum.GetValues<MarketCategory>().ToDictionary(each => each, each => rows.Count(row => row.Instrument.Category == each)),
+            ScannerCategories.ToDictionary(each => each, each => rows.Count(row => row.Instrument.Category == each)),
             left.Length,
             SetupChips.ToDictionary(chip => chip, chip => left.Count(row => Holds(setups, row, interval, chip))));
 

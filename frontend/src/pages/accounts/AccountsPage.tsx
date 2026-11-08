@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 
-import { accountsQuery } from '@/modules/exchange-accounts';
+import { accountsQuery, exchangeName } from '@/modules/exchange-accounts';
 
 const cell = 'px-5 py-4';
 
@@ -14,8 +14,8 @@ export function AccountsPage() {
         <div className="space-y-2">
           <h1 className="text-2xl font-bold">Аккаунты</h1>
           <p className="text-sm text-muted">
-            Ключи Bybit, от имени которых будут торговать боты. Secret хранится зашифрованным и не
-            показывается.
+            Ключи Bybit и токены T-Invest, от имени которых будут торговать боты. Secret и токен
+            хранятся зашифрованными и не показываются.
           </p>
         </div>
         <Link
@@ -38,8 +38,9 @@ export function AccountsPage() {
         <table className="w-full border-separate border-spacing-y-2 text-sm">
           <thead className="text-left text-[11px] tracking-wide text-faint uppercase">
             <tr>
+              <th className={cell}>Биржа</th>
               <th className={cell}>Название</th>
-              <th className={cell}>API key</th>
+              <th className={cell}>Ключ / счёт</th>
               <th className={cell}>UID</th>
               <th className={cell}>Торгует</th>
               <th className={cell} />
@@ -48,8 +49,11 @@ export function AccountsPage() {
           <tbody>
             {accounts.data.map((account) => (
               <tr key={account.id} className="bg-panel">
+                <td className={cell}>{exchangeName(account.exchange)}</td>
                 <td className={`${cell} font-semibold`}>{account.name}</td>
-                <td className={`${cell} font-mono text-muted`}>{account.apiKey}</td>
+                <td className={`${cell} font-mono text-muted`}>
+                  {account.exchange === 'tinvest' ? account.accountId : account.apiKey}
+                </td>
                 <td className={`${cell} font-mono`}>{account.uid}</td>
                 <td className={`${cell} font-mono`}>{account.categories.join(', ')}</td>
                 <td className={`${cell} text-right whitespace-nowrap`}>

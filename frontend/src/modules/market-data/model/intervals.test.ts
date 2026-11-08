@@ -1,4 +1,4 @@
-import { intervalLabel, intervals } from './intervals';
+import { intervalLabel, intervals, intervalsOf, marketCategories } from './intervals';
 
 describe('intervals', () => {
   it('lists the Bybit intervals in ascending order', () => {
@@ -17,6 +17,28 @@ describe('intervals', () => {
       'W',
       'M',
     ]);
+  });
+
+  // Scenario "Интервалы MOEX": the intervals are a property of the category.
+  it.each(['spot', 'linear'] as const)('gives %s every interval of Bybit', (category) => {
+    expect(intervalsOf(category)).toEqual(intervals);
+  });
+
+  it('gives moex the eight intervals up to four hours, without D', () => {
+    expect(intervalsOf('moex').map((interval) => interval.value)).toEqual([
+      '1',
+      '3',
+      '5',
+      '15',
+      '30',
+      '60',
+      '120',
+      '240',
+    ]);
+  });
+
+  it('names the three market categories', () => {
+    expect(marketCategories).toEqual(['spot', 'linear', 'moex']);
   });
 
   it.each([

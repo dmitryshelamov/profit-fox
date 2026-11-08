@@ -27,6 +27,9 @@ public class ExchangeAccountsApiTests
 {
     private const string Accounts = "/api/exchange-accounts";
     private const string Secret = "secret-that-never-leaves";
+    private const string Token = "t.token-that-never-leaves";
+
+    private static readonly BrokerAccount Brokerage = new BrokerAccount("2000000001", "Брокерский счёт", BrokerAccountType.Brokerage, BrokerAccountStatus.Open, BrokerAccountAccess.Full);
 
     private static readonly ExchangeKeyInfo TradingKey = new ExchangeKeyInfo(
         100,
@@ -66,7 +69,9 @@ public class ExchangeAccountsApiTests
         string list = await _client.GetStringAsync(Accounts);
         JsonElement account = JsonDocument.Parse(read).RootElement;
         (account.GetProperty("name").GetString(), account.GetProperty("apiKey").GetString()).ShouldBe(("Основной", "api-key"));
+        account.GetProperty("exchange").GetString().ShouldBe("bybit");
         account.GetProperty("uid").GetInt64().ShouldBe(100);
+        account.GetProperty("accountId").ValueKind.ShouldBe(JsonValueKind.Null);
         account.GetProperty("categories").EnumerateArray().Select(category => category.GetString()).ShouldBe(["spot", "linear"]);
         account.GetProperty("bots").GetArrayLength().ShouldBe(0);
         JsonDocument.Parse(list).RootElement.EnumerateArray().ShouldHaveSingleItem().GetProperty("id").GetGuid().ShouldBe(id);
@@ -213,7 +218,7 @@ public class ExchangeAccountsApiTests
     {
         Guid id = await CreateAsync();
         _factory.KeyInspector.GetBalanceAsync("api-key", Secret, Arg.Any<CancellationToken>())
-            .Returns(new AccountBalance(1675.31m, [new CoinBalance("USDT", 1000.123456m, 1000.25m), new CoinBalance("BTC", 0.01m, 675.06m)]));
+            .Returns(new AccountBalance("USD", 1675.31m, [new CoinBalance("USDT", 1000.123456m, 1000.25m), new CoinBalance("BTC", 0.01m, 675.06m)]));
 
         JsonElement balance = await _client.GetFromJsonAsync<JsonElement>($"{Accounts}/{id}/balance");
 
@@ -221,7 +226,7 @@ public class ExchangeAccountsApiTests
                 JsonNode.Parse(balance.GetRawText()),
                 JsonNode.Parse(
                     """
-                    {"totalEquityUsd":"1675.31","coins":[{"coin":"USDT","walletBalance":"1000.123456","usdValue":"1000.25"},{"coin":"BTC","walletBalance":"0.01","usdValue":"675.06"}]}
+                    {"currency":"USD","totalEquity":"1675.31","coins":[{"coin":"USDT","walletBalance":"1000.123456","value":"1000.25"},{"coin":"BTC","walletBalance":"0.01","value":"675.06"}]}
                     """))
             .ShouldBeTrue(balance.GetRawText());
     }
@@ -271,6 +276,153 @@ public class ExchangeAccountsApiTests
             logs.ShouldContain(log => log.RenderMessage(null).Contains("/v5/user/query-api"));
             logs.ShouldAllBe(log => !Rendered(log).Contains(Secret));
         }
+    }
+
+    // Scenarios "Валидный аккаунт T-Invest", "Биржа в ответе" and "Токен в базе зашифрован": the token stays out of the answers, the row and the log.
+    [Test]
+    public async Task TInvest_account_is_created_and_read_without_its_token()
+    {
+        var logs = new List<LogEvent>();
+        ILogEventSink sink = Substitute.For<ILogEventSink>();
+        sink.When(log => log.Emit(Arg.Any<LogEvent>())).Do(call =>
+        {
+            lock (logs)
+            {
+                logs.Add(call.Arg<LogEvent>()!);
+            }
+        });
+        var factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { Workers = 0, LogSink = sink, VerboseLogs = true };
+        factory.BrokerAccounts.ListAccountsAsync(Token, Arg.Any<CancellationToken>()).Returns([Brokerage]);
+
+        await using (factory)
+        {
+            using HttpClient client = factory.CreateClient();
+            HttpResponseMessage created = await client.PostAsJsonAsync(Accounts, TInvestBody());
+
+            created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+            Guid id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+            string read = await client.GetStringAsync($"{Accounts}/{id}");
+            string list = await client.GetStringAsync(Accounts);
+            JsonElement account = JsonDocument.Parse(read).RootElement;
+            (account.GetProperty("exchange").GetString(), account.GetProperty("accountId").GetString()).ShouldBe(("tinvest", "2000000001"));
+            account.GetProperty("apiKey").ValueKind.ShouldBe(JsonValueKind.Null);
+            account.GetProperty("uid").ValueKind.ShouldBe(JsonValueKind.Null);
+            account.GetProperty("categories").EnumerateArray().Select(category => category.GetString()).ShouldBe(["moex"]);
+            read.ShouldNotContain(Token);
+            list.ShouldNotContain(Token);
+            await using var connection = new NpgsqlConnection(factory.ConnectionString);
+            (await connection.ExecuteScalarAsync<string>("SELECT row_to_json(a)::text FROM exchange_accounts a"))!.ShouldNotContain(Token);
+        }
+
+        lock (logs)
+        {
+            logs.ShouldContain(log => log.RenderMessage(null).Contains(Accounts));
+            logs.ShouldAllBe(log => !Rendered(log).Contains(Token));
+        }
+    }
+
+    // After the review: the token of a listing of accounts, accepted or rejected, stays out of the log as the token of a creation does.
+    [Test]
+    public async Task Token_of_a_listing_of_accounts_never_reaches_the_log()
+    {
+        const string rejected = "t.wrong-token-that-never-leaves";
+        var logs = new List<LogEvent>();
+        ILogEventSink sink = Substitute.For<ILogEventSink>();
+        sink.When(log => log.Emit(Arg.Any<LogEvent>())).Do(call =>
+        {
+            lock (logs)
+            {
+                logs.Add(call.Arg<LogEvent>()!);
+            }
+        });
+        var factory = new ProfitFoxFactory(IntegrationEnvironment.ConnectionString) { Workers = 0, LogSink = sink, VerboseLogs = true };
+        factory.BrokerAccounts.ListAccountsAsync(Token, Arg.Any<CancellationToken>()).Returns([Brokerage]);
+        factory.BrokerAccounts.ListAccountsAsync(rejected, Arg.Any<CancellationToken>()).ThrowsAsync(new ExchangeKeyRejectedException("T-Invest does not accept the token."));
+
+        await using (factory)
+        {
+            using HttpClient client = factory.CreateClient();
+
+            (await client.PostAsJsonAsync($"{Accounts}/tinvest/accounts", new { token = Token })).StatusCode.ShouldBe(HttpStatusCode.OK);
+            (await client.PostAsJsonAsync($"{Accounts}/tinvest/accounts", new { token = rejected })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        }
+
+        lock (logs)
+        {
+            logs.ShouldContain(log => log.Level == LogEventLevel.Verbose || log.Level == LogEventLevel.Debug);
+            logs.ShouldContain(log => log.RenderMessage(null).Contains($"{Accounts}/tinvest/accounts"));
+            logs.ShouldAllBe(log => !Rendered(log).Contains(Token));
+            logs.ShouldAllBe(log => !Rendered(log).Contains(rejected));
+        }
+    }
+
+    // Scenario "Доступ отозван между выбором и сохранением".
+    [Test]
+    public async Task TInvest_account_the_token_cannot_fully_open_is_a_bad_request_on_the_account()
+    {
+        _factory.BrokerAccounts.ListAccountsAsync(Token, Arg.Any<CancellationToken>()).Returns([Brokerage with { Access = BrokerAccountAccess.ReadOnly }]);
+
+        HttpResponseMessage response = await _client.PostAsJsonAsync(Accounts, TInvestBody());
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errors").TryGetProperty("accountId", out _).ShouldBeTrue();
+        (await _client.GetFromJsonAsync<JsonElement>(Accounts)).GetArrayLength().ShouldBe(0);
+    }
+
+    // Scenario "Два счёта токена" and "Токен отклонён".
+    [Test]
+    public async Task Accounts_of_a_token_are_listed_with_whether_each_can_be_added()
+    {
+        _factory.BrokerAccounts.ListAccountsAsync(Token, Arg.Any<CancellationToken>())
+            .Returns([Brokerage, new BrokerAccount("2000000002", "ИИС", BrokerAccountType.Iis, BrokerAccountStatus.Closed, BrokerAccountAccess.Full)]);
+        _factory.BrokerAccounts.ListAccountsAsync("t.wrong", Arg.Any<CancellationToken>()).ThrowsAsync(new ExchangeKeyRejectedException("T-Invest does not accept the token."));
+
+        HttpResponseMessage response = await _client.PostAsJsonAsync($"{Accounts}/tinvest/accounts", new { token = Token });
+        HttpResponseMessage rejected = await _client.PostAsJsonAsync($"{Accounts}/tinvest/accounts", new { token = "t.wrong" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        JsonNode.DeepEquals(
+                JsonNode.Parse(await response.Content.ReadAsStringAsync()),
+                JsonNode.Parse(
+                    """
+                    [{"id":"2000000001","name":"Брокерский счёт","type":"brokerage","status":"open","access":"full","problem":null},
+                     {"id":"2000000002","name":"ИИС","type":"iis","status":"closed","access":"full","problem":"not_open"}]
+                    """))
+            .ShouldBeTrue(await response.Content.ReadAsStringAsync());
+        rejected.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await rejected.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errors").TryGetProperty("token", out _).ShouldBeTrue();
+    }
+
+    [Test]
+    public async Task Unknown_exchange_is_a_bad_request_on_the_exchange()
+    {
+        HttpResponseMessage response = await _client.PostAsJsonAsync(Accounts, new { name = "X", exchange = "binance" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errors").TryGetProperty("exchange", out _).ShouldBeTrue();
+    }
+
+    // Scenario "Портфель со стоимостью".
+    [Test]
+    public async Task Balance_of_a_tinvest_account_is_its_portfolio_in_roubles()
+    {
+        _factory.BrokerAccounts.ListAccountsAsync(Token, Arg.Any<CancellationToken>()).Returns([Brokerage]);
+        _factory.BrokerAccounts.GetPortfolioAsync(Token, "2000000001", Arg.Any<CancellationToken>())
+            .Returns(new AccountBalance("RUB", 53000m, [new CoinBalance("RUB", 50000m, 50000m), new CoinBalance("SBER", 10m, 3000m)]));
+        HttpResponseMessage created = await _client.PostAsJsonAsync(Accounts, TInvestBody());
+        Guid id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        JsonElement balance = await _client.GetFromJsonAsync<JsonElement>($"{Accounts}/{id}/balance");
+
+        JsonNode.DeepEquals(
+                JsonNode.Parse(balance.GetRawText()),
+                JsonNode.Parse("""{"currency":"RUB","totalEquity":"53000","coins":[{"coin":"RUB","walletBalance":"50000","value":"50000"},{"coin":"SBER","walletBalance":"10","value":"3000"}]}"""))
+            .ShouldBeTrue(balance.GetRawText());
+    }
+
+    private static JsonObject TInvestBody()
+    {
+        return new JsonObject { ["name"] = "Брокерский", ["exchange"] = "tinvest", ["token"] = Token, ["accountId"] = "2000000001" };
     }
 
     private static string Rendered(LogEvent log)

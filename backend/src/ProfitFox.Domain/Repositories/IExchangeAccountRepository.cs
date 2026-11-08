@@ -6,7 +6,7 @@ namespace ProfitFox.Domain.Repositories;
 /// <summary>Stores exchange accounts; only <see cref="GetSecretAsync" /> reads the encrypted secret.</summary>
 public interface IExchangeAccountRepository
 {
-    /// <summary>Returns <c>false</c> and saves nothing when an account of the same uid is stored.</summary>
+    /// <summary>Returns <c>false</c> and saves nothing when an account of the exchange with the same uid (Bybit) or account number (T-Invest) is stored.</summary>
     Task<bool> AddAsync(ExchangeAccount account, EncryptedSecret secret, CancellationToken cancellationToken);
 
     Task<ExchangeAccount?> GetAsync(Guid id, CancellationToken cancellationToken);

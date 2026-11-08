@@ -23,9 +23,9 @@ public sealed class GetBotCandlesQueryHandler(IStrategyLibraryRepository library
         var errors = new Dictionary<string, string>();
         Interval interval = bot.Interval;
 
-        if (request.Interval is not null && !MarketDataCodes.TryParseInterval(request.Interval, out interval))
+        if (request.Interval is not null && !MarketDataCodes.TryParseInterval(bot.Instrument.Category, request.Interval, out interval))
         {
-            errors["interval"] = ChartCandles.InvalidInterval;
+            errors["interval"] = MarketDataCodes.InvalidInterval(bot.Instrument.Category);
         }
 
         (IReadOnlyList<Candle>? candles, bool unavailable) = await ChartCandles.ReadAsync(readThrough, time, bot.Instrument, interval, request.From, request.To, errors, cancellationToken);

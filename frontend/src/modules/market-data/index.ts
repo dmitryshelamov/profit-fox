@@ -1,2 +1,8 @@
 export { instrumentsQuery } from './api';
-export { intervalLabel, intervals } from './model/intervals';
+export {
+  intervalLabel,
+  intervals,
+  intervalsOf,
+  marketCategories,
+  type MarketCategory,
+} from './model/intervals';

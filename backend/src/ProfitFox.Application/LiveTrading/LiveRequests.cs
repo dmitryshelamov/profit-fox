@@ -58,7 +58,7 @@ internal static class LiveRequests
 
         try
         {
-            return new ExchangeKey(account.ApiKey, protector.Decrypt(account.Id, secret));
+            return new ExchangeKey(account.ApiKey!, protector.Decrypt(account.Id, secret));
         }
         catch (CryptographicException)
         {

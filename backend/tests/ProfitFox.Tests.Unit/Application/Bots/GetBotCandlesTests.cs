@@ -39,7 +39,7 @@ public class GetBotCandlesTests
         _history = Substitute.For<IMarketHistoryClient>();
         _history.GetCandlesOnceAsync(default!, default, default, default, default).ReturnsForAnyArgs(Array.Empty<Candle>());
         var time = new FakeTimeProvider(Now);
-        _handler = new GetBotCandlesQueryHandler(_library, new CandleReadThrough(_candles, _history, time), time);
+        _handler = new GetBotCandlesQueryHandler(_library, new CandleReadThrough(_candles, Substitute.For<ISeriesCoverageRepository>(), _history, time), time);
     }
 
     [Test]
@@ -81,6 +81,19 @@ public class GetBotCandlesTests
         await _history.DidNotReceiveWithAnyArgs().GetCandlesOnceAsync(default!, default, default, default, default);
     }
 
+    // Requirement "Валидация параметров чтения": the interval must be in the list of the category of the bot.
+    [Test]
+    public async Task Interval_outside_the_list_of_the_category_of_the_bot_is_an_error_of_the_interval()
+    {
+        var sber = new Bot(Guid.NewGuid(), "EMA SBER", Guid.NewGuid(), new Dictionary<string, NodeValue>(), new Instrument(MarketCategory.Moex, "SBER"), Interval.OneHour, 1000m, Now, Now);
+        _library.GetBotAsync(sber.Id, Arg.Any<CancellationToken>()).Returns(sber);
+
+        GetBotCandlesResult result = (await _handler.Handle(new GetBotCandlesQuery(sber.Id, "D", "2024-03-01T08:00:00Z", "2024-03-10T11:00:00Z"), CancellationToken.None))!;
+
+        result.Candles.ShouldBeNull();
+        result.Errors.ShouldBe(new Dictionary<string, string> { ["interval"] = "Interval must be one of the intervals of moex: 1, 3, 5, 15, 30, 60, 120, 240." });
+    }
+
     [Test]
     public async Task From_is_lowered_to_the_start_of_its_candle()
     {
@@ -113,7 +126,7 @@ public class GetBotCandlesTests
     public async Task To_is_cut_before_a_candle_that_closed_less_than_the_close_margin_ago()
     {
         var time = new FakeTimeProvider(DateTimeOffset.Parse("2024-03-10T12:00:03Z"));
-        _handler = new GetBotCandlesQueryHandler(_library, new CandleReadThrough(_candles, _history, time), time);
+        _handler = new GetBotCandlesQueryHandler(_library, new CandleReadThrough(_candles, Substitute.For<ISeriesCoverageRepository>(), _history, time), time);
 
         await HandleAsync(null, "2024-03-10T08:00:00Z", "2024-03-10T13:00:00Z");
 

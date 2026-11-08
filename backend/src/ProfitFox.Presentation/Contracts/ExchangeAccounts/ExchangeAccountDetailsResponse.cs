@@ -6,8 +6,10 @@ namespace ProfitFox.Presentation.Contracts.ExchangeAccounts;
 public sealed record ExchangeAccountDetailsResponse(
     Guid Id,
     string Name,
-    string ApiKey,
-    long Uid,
+    string Exchange,
+    string? ApiKey,
+    long? Uid,
+    string? AccountId,
     IReadOnlyList<string> Categories,
     DateTimeOffset CreatedAt,
     IReadOnlyList<AccountBotResponse> Bots)
@@ -19,8 +21,10 @@ public sealed record ExchangeAccountDetailsResponse(
         return new ExchangeAccountDetailsResponse(
             account.Id,
             account.Name,
+            account.Exchange,
             account.ApiKey,
             account.Uid,
+            account.AccountId,
             account.Categories,
             account.CreatedAt,
             [.. result.Bots.Select(bot => new AccountBotResponse(bot.Id, bot.Name))]);

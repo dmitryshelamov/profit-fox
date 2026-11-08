@@ -8,6 +8,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
+using ProfitFox.Infrastructure.Exchanges.TInvest;
+using ProfitFox.Tests.Shared.TInvest;
+
 using Serilog.Core;
 
 using ScannerProgram = ProfitFox.Scanner.Program;
@@ -51,6 +54,7 @@ public sealed class ScannerHost : IAsyncDisposable
         builder.Configuration.AddInMemoryCollection(settings ?? new Dictionary<string, string?>());
         ScannerProgram.Configure(builder);
         builder.Services.AddSingleton<TimeProvider>(time);
+        builder.Services.AddSingleton<ITInvestCallInvokers>(new MockTInvestInvokers(new MockTInvestApi()));
 
         // Bybit.Net configures its own primary handler, so replace the whole client: no test may reach the real Bybit.
         builder.Services.AddSingleton<IBybitRestClient>(_ => new BybitRestClient(

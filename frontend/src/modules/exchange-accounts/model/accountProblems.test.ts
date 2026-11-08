@@ -8,10 +8,17 @@ describe('account problems', () => {
       accountFieldErrors({
         name: ['Name must not be empty.'],
         apiKey: ['Bybit does not accept the key.'],
+        token: ['T-Invest does not accept the token.'],
+        accountId: ['The account is not open.'],
         other: ['Something else.'],
       }),
     ).toEqual({
-      fields: { name: ['Name must not be empty.'], apiKey: ['Bybit does not accept the key.'] },
+      fields: {
+        name: ['Name must not be empty.'],
+        apiKey: ['Bybit does not accept the key.'],
+        token: ['T-Invest does not accept the token.'],
+        accountId: ['The account is not open.'],
+      },
       form: ['Something else.'],
     });
   });
@@ -59,17 +66,17 @@ describe('account problems', () => {
     );
   });
 
-  it('says that bybit is unavailable', () => {
+  it('says that the exchange is unavailable', () => {
     expect(accountProblem(new ApiError(503, 'Bybit is unavailable.'))).toBe(
-      'Bybit недоступен, попробуйте позже.',
+      'Биржа недоступна, попробуйте позже.',
     );
   });
 
-  // Bybit answered and refused: waiting will not help, so the reason is shown instead of "try later".
-  it('shows the reason bybit refused the request', () => {
+  // The exchange answered and refused: waiting will not help, so the reason is shown instead of "try later".
+  it('shows the reason the exchange refused the request', () => {
     expect(
       accountProblem(new ApiError(502, '10002: please check your server timestamp or recv_window')),
-    ).toBe('Bybit отклонил запрос: 10002: please check your server timestamp or recv_window');
+    ).toBe('Биржа отклонила запрос: 10002: please check your server timestamp or recv_window');
   });
 
   it('keeps the message of any other answer', () => {

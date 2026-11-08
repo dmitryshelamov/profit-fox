@@ -28,6 +28,7 @@ internal static class PostgresRegistrar
     {
         services.AddSingleton(_ => NpgsqlDataSource.Create(ConnectionString(configuration)));
         services.AddScoped<ICandleRepository, CandleRepository>();
+        services.AddScoped<ISeriesCoverageRepository, SeriesCoverageRepository>();
         services.AddScoped<ICandleImportJobRepository, CandleImportJobRepository>();
         services.AddScoped<IStrategyLibraryRepository, StrategyLibraryRepository>();
         services.AddScoped<IBacktestRepository, BacktestRepository>();

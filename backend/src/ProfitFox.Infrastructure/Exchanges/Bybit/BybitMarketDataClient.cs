@@ -8,8 +8,11 @@ using Bybit.Net.Objects.Models.V5;
 using CryptoExchange.Net.Objects;
 using CryptoExchange.Net.Objects.Errors;
 
+using Microsoft.Extensions.DependencyInjection;
+
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.MarketData;
+using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Exchanges.Retry;
@@ -20,7 +23,8 @@ using MarketCategory = ProfitFox.Domain.Entities.MarketData.Enums.MarketCategory
 namespace ProfitFox.Infrastructure.Exchanges.Bybit;
 
 /// <summary>Public Bybit v5 market data through Bybit.Net; no API key, never sends orders.</summary>
-internal sealed class BybitMarketDataClient(IBybitRestClient bybit, ExchangeResilienceExecutor resilience) : IMarketHistoryClient, IInstrumentRulesProvider, IInstrumentCatalog
+internal sealed class BybitMarketDataClient(IBybitRestClient bybit, [FromKeyedServices(Exchange.Bybit)] ExchangeResilienceExecutor resilience)
+    : IMarketHistoryClient, IInstrumentRulesProvider, IInstrumentCatalog
 {
     private const int PageSize = 1000;
 

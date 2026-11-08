@@ -1,5 +1,6 @@
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ideas;
+using ProfitFox.Application.IdeaTrades;
 using ProfitFox.Application.MarketData;
 using ProfitFox.Application.Scanner.Ideas;
 using ProfitFox.Domain.Entities.IdeaAutos.Enums;
@@ -37,9 +38,13 @@ public static class IdeaAutoValidation
             errors["name"] = "An auto with this name already exists.";
         }
 
-        if (await accounts.GetAsync(input.AccountId, cancellationToken) is null)
+        if (await accounts.GetAsync(input.AccountId, cancellationToken) is not { } account)
         {
             errors["accountId"] = "There is no such exchange account.";
+        }
+        else if (!IdeaTradeAccounts.CanTrade(account))
+        {
+            errors["accountId"] = IdeaTradeAccounts.NotBybit;
         }
 
         if (input.Amount <= 0m)

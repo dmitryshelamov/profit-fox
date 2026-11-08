@@ -19,6 +19,7 @@ public class FormingCandleFeedsTests
     private static readonly DateTimeOffset Hour = DateTimeOffset.Parse("2024-03-10T12:00:00Z");
     private static readonly FormingSeries Btc = new(new Instrument(MarketCategory.Spot, "BTCUSDT"), Interval.OneHour);
     private static readonly FormingSeries Eth = new(new Instrument(MarketCategory.Spot, "ETHUSDT"), Interval.OneHour);
+    private static readonly FormingSeries Sber = new(new Instrument(MarketCategory.Moex, "SBER"), Interval.OneHour);
 
     private FakeTimeProvider _time = null!;
     private IFormingCandleStreams _streams = null!;
@@ -56,6 +57,29 @@ public class FormingCandleFeedsTests
             return Task.FromResult<IAsyncDisposable>(subscription);
         });
         _feeds = new FormingCandleFeeds(_streams, _broadcast, _time);
+    }
+
+    // After the review: T-Invest has no stream of the forming candle until the live bots of MOEX come, so a series of moex is without data at
+    // once, and nothing is asked of the streams of Bybit, which would refuse the symbol and be asked again and again.
+    [Test]
+    public async Task A_series_of_moex_is_without_data_and_subscribes_nothing()
+    {
+        (await _feeds.JoinAsync("a", Sber, CancellationToken.None)).ShouldBe(new FormingSnapshot(FormingState.NoData, null));
+
+        _time.Advance(TimeSpan.FromMinutes(5));
+        _streams.ReceivedCalls().ShouldBeEmpty();
+        _broadcast.ReceivedCalls().ShouldBeEmpty();
+        await _feeds.LeaveAsync("a");
+    }
+
+    [Test]
+    public async Task A_viewer_that_moves_to_a_series_of_moex_leaves_its_feed()
+    {
+        await _feeds.JoinAsync("a", Btc, CancellationToken.None);
+
+        await _feeds.JoinAsync("a", Sber, CancellationToken.None);
+
+        _subscriptions.Single().Disposed.ShouldBe(1);
     }
 
     // Scenario "Две вкладки" / "Последняя вкладка закрыта".

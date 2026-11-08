@@ -12,6 +12,7 @@ using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.Ports.Security;
 using ProfitFox.Application.Transactions;
 using ProfitFox.Domain.Entities.ExchangeAccounts;
+using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.IdeaAutos;
 using ProfitFox.Domain.Entities.IdeaAutos.Enums;
 using ProfitFox.Domain.Entities.Ideas;
@@ -277,6 +278,19 @@ public class RunNextAutoEntryTests
         await _refusals.Received(1).AddAsync(Arg.Is<IdeaAutoRefusal>(refusal => refusal!.Reasons.Single() == IdeaTradeRefusal.NoKey), Arg.Any<CancellationToken>());
         await _entries.Received(1).DeleteAsync(_entry.Id, Arg.Any<CancellationToken>());
         await _trades.DidNotReceiveWithAnyArgs().CreateAsync(default!, default!, default, default);
+    }
+
+    // After the review: an account of T-Invest has no key of Bybit; the entry is refused for the key before any secret is read or Bybit is asked.
+    [Test]
+    public async Task Request_with_a_tinvest_account_is_refused_for_the_key_without_reading_the_secret()
+    {
+        _accounts.GetAsync(AccountId, Arg.Any<CancellationToken>())
+            .Returns(new ExchangeAccount(AccountId, "Брокерский", Exchange.TInvest, null, null, "2000000001", new HashSet<MarketCategory> { MarketCategory.Moex }, Now));
+
+        (await Run()).ShouldBeTrue();
+
+        await _refusals.Received(1).AddAsync(Arg.Is<IdeaAutoRefusal>(refusal => refusal!.Reasons.Single() == IdeaTradeRefusal.NoKey), Arg.Any<CancellationToken>());
+        await _accounts.DidNotReceiveWithAnyArgs().GetSecretAsync(default, default);
     }
 
     // The exchange no longer lists the pair of the idea, so the preparation fails: the request is refused with the error of the entry.

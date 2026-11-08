@@ -12,6 +12,7 @@ using ProfitFox.Application.Ports.ExchangeAccounts;
 using ProfitFox.Application.Ports.Security;
 using ProfitFox.Domain.Entities.Bots;
 using ProfitFox.Domain.Entities.ExchangeAccounts;
+using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Repositories;
@@ -159,26 +160,64 @@ public class ExchangeAccountHandlersTests
     [Test]
     public async Task Balance_is_read_with_the_decrypted_secret()
     {
-        var balance = new AccountBalance(1675.31m, [new CoinBalance("USDT", 1000m, 1000m)]);
-        (ISecretProtector protector, IExchangeKeyInspector inspector) = Exchange();
+        var balance = new AccountBalance("USD", 1675.31m, [new CoinBalance("USDT", 1000m, 1000m)]);
+        (ISecretProtector protector, IExchangeKeyInspector inspector) = Bybit();
         inspector.GetBalanceAsync("api-key", "api-secret", Arg.Any<CancellationToken>()).Returns(balance);
 
-        AccountBalance? read = await new GetExchangeAccountBalanceQueryHandler(_accounts, inspector, protector)
+        AccountBalance? read = await new GetExchangeAccountBalanceQueryHandler(_accounts, inspector, Substitute.For<IBrokerAccountReader>(), protector)
             .Handle(new GetExchangeAccountBalanceQuery(Account.Id), CancellationToken.None);
 
         read.ShouldBe(balance);
+    }
+
+    // Scenario "Портфель со стоимостью": the portfolio of a T-Invest account is read with the decrypted token, in roubles.
+    [Test]
+    public async Task Balance_of_a_tinvest_account_is_its_portfolio_read_with_the_token()
+    {
+        var tinvest = new ExchangeAccount(Guid.NewGuid(), "Брокерский", Exchange.TInvest, null, null, "2000000001", new HashSet<MarketCategory> { MarketCategory.Moex }, Now);
+        _accounts.GetAsync(tinvest.Id, Arg.Any<CancellationToken>()).Returns(tinvest);
+        _accounts.GetSecretAsync(tinvest.Id, Arg.Any<CancellationToken>()).Returns(Encrypted);
+        ISecretProtector protector = Substitute.For<ISecretProtector>();
+        protector.Decrypt(tinvest.Id, Encrypted).Returns("t.token");
+        IBrokerAccountReader reader = Substitute.For<IBrokerAccountReader>();
+        var portfolio = new AccountBalance("RUB", 53000m, [new CoinBalance("RUB", 50000m, 50000m), new CoinBalance("SBER", 10m, 3000m)]);
+        reader.GetPortfolioAsync("t.token", "2000000001", Arg.Any<CancellationToken>()).Returns(portfolio);
+        IExchangeKeyInspector inspector = Substitute.For<IExchangeKeyInspector>();
+
+        AccountBalance? read = await new GetExchangeAccountBalanceQueryHandler(_accounts, inspector, reader, protector)
+            .Handle(new GetExchangeAccountBalanceQuery(tinvest.Id), CancellationToken.None);
+
+        read.ShouldBe(portfolio);
+        await inspector.DidNotReceiveWithAnyArgs().GetBalanceAsync(default!, default!, default);
+    }
+
+    // The token was revoked or the access to the account taken away: the account itself is out of date.
+    [Test]
+    public async Task Balance_of_a_tinvest_account_whose_token_is_rejected_is_a_conflict()
+    {
+        var tinvest = new ExchangeAccount(Guid.NewGuid(), "Брокерский", Exchange.TInvest, null, null, "2000000001", new HashSet<MarketCategory> { MarketCategory.Moex }, Now);
+        _accounts.GetAsync(tinvest.Id, Arg.Any<CancellationToken>()).Returns(tinvest);
+        _accounts.GetSecretAsync(tinvest.Id, Arg.Any<CancellationToken>()).Returns(Encrypted);
+        IBrokerAccountReader reader = Substitute.For<IBrokerAccountReader>();
+        reader.GetPortfolioAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).ThrowsAsync(new ExchangeKeyRejectedException("T-Invest does not accept the token."));
+
+        ConflictException exception = await Should.ThrowAsync<ConflictException>(() =>
+            new GetExchangeAccountBalanceQueryHandler(_accounts, Substitute.For<IExchangeKeyInspector>(), reader, Substitute.For<ISecretProtector>())
+                .Handle(new GetExchangeAccountBalanceQuery(tinvest.Id), CancellationToken.None));
+
+        exception.Message.ShouldBe("T-Invest does not accept the token.");
     }
 
     // Scenario "Ключ отозван".
     [Test]
     public async Task Balance_of_a_key_bybit_no_longer_accepts_is_a_conflict()
     {
-        (ISecretProtector protector, IExchangeKeyInspector inspector) = Exchange();
+        (ISecretProtector protector, IExchangeKeyInspector inspector) = Bybit();
         inspector.GetBalanceAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new ExchangeKeyRejectedException("Bybit does not accept the key: API key is invalid."));
 
         ConflictException exception = await Should.ThrowAsync<ConflictException>(() =>
-            new GetExchangeAccountBalanceQueryHandler(_accounts, inspector, protector).Handle(new GetExchangeAccountBalanceQuery(Account.Id), CancellationToken.None));
+            new GetExchangeAccountBalanceQueryHandler(_accounts, inspector, Substitute.For<IBrokerAccountReader>(), protector).Handle(new GetExchangeAccountBalanceQuery(Account.Id), CancellationToken.None));
 
         exception.Message.ShouldBe("Bybit does not accept the key: API key is invalid.");
     }
@@ -187,11 +226,11 @@ public class ExchangeAccountHandlersTests
     [Test]
     public async Task Balance_of_a_secret_the_master_key_does_not_decrypt_is_a_conflict()
     {
-        (ISecretProtector protector, IExchangeKeyInspector inspector) = Exchange();
+        (ISecretProtector protector, IExchangeKeyInspector inspector) = Bybit();
         protector.Decrypt(Account.Id, Encrypted).Throws(new CryptographicException("The computed authentication tag did not match the input authentication tag."));
 
         ConflictException exception = await Should.ThrowAsync<ConflictException>(() =>
-            new GetExchangeAccountBalanceQueryHandler(_accounts, inspector, protector).Handle(new GetExchangeAccountBalanceQuery(Account.Id), CancellationToken.None));
+            new GetExchangeAccountBalanceQueryHandler(_accounts, inspector, Substitute.For<IBrokerAccountReader>(), protector).Handle(new GetExchangeAccountBalanceQuery(Account.Id), CancellationToken.None));
 
         exception.Message.ShouldBe("The secret of the account does not decrypt with the current master key; delete the account and add it again.");
         await inspector.DidNotReceiveWithAnyArgs().GetBalanceAsync(default!, default!, default);
@@ -201,10 +240,10 @@ public class ExchangeAccountHandlersTests
     [Test]
     public async Task Balance_of_an_account_whose_secret_is_gone_is_not_found()
     {
-        (ISecretProtector protector, IExchangeKeyInspector inspector) = Exchange();
+        (ISecretProtector protector, IExchangeKeyInspector inspector) = Bybit();
         _accounts.GetSecretAsync(Account.Id, Arg.Any<CancellationToken>()).Returns((EncryptedSecret?)null);
 
-        (await new GetExchangeAccountBalanceQueryHandler(_accounts, inspector, protector).Handle(new GetExchangeAccountBalanceQuery(Account.Id), CancellationToken.None))
+        (await new GetExchangeAccountBalanceQueryHandler(_accounts, inspector, Substitute.For<IBrokerAccountReader>(), protector).Handle(new GetExchangeAccountBalanceQuery(Account.Id), CancellationToken.None))
             .ShouldBeNull();
         await inspector.DidNotReceiveWithAnyArgs().GetBalanceAsync(default!, default!, default);
     }
@@ -212,14 +251,14 @@ public class ExchangeAccountHandlersTests
     [Test]
     public async Task Balance_of_an_unknown_account_is_not_found()
     {
-        (ISecretProtector protector, IExchangeKeyInspector inspector) = Exchange();
+        (ISecretProtector protector, IExchangeKeyInspector inspector) = Bybit();
 
-        (await new GetExchangeAccountBalanceQueryHandler(_accounts, inspector, protector).Handle(new GetExchangeAccountBalanceQuery(Guid.NewGuid()), CancellationToken.None))
+        (await new GetExchangeAccountBalanceQueryHandler(_accounts, inspector, Substitute.For<IBrokerAccountReader>(), protector).Handle(new GetExchangeAccountBalanceQuery(Guid.NewGuid()), CancellationToken.None))
             .ShouldBeNull();
         await inspector.DidNotReceiveWithAnyArgs().GetBalanceAsync(default!, default!, default);
     }
 
-    private static (ISecretProtector Protector, IExchangeKeyInspector Inspector) Exchange()
+    private static (ISecretProtector Protector, IExchangeKeyInspector Inspector) Bybit()
     {
         ISecretProtector protector = Substitute.For<ISecretProtector>();
         protector.Decrypt(Account.Id, Encrypted).Returns("api-secret");

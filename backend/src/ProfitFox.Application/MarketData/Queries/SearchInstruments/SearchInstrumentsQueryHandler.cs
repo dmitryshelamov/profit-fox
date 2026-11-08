@@ -17,7 +17,7 @@ public sealed class SearchInstrumentsQueryHandler(IInstrumentCatalog catalog) : 
 
         if (!MarketDataCodes.TryParseCategory(request.Category, out MarketCategory category))
         {
-            errors["category"] = "Category must be spot or linear.";
+            errors["category"] = MarketDataCodes.InvalidCategory;
         }
 
         if (string.IsNullOrWhiteSpace(request.Query))

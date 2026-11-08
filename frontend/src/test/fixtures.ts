@@ -209,11 +209,43 @@ export function resultOf(combination: number, metrics: object = {}) {
 export const exchangeAccount = {
   id: '99999999-9999-4999-8999-999999999999',
   name: 'Проверка',
+  exchange: 'bybit',
   apiKey: 'XKz8apikeyMAIN',
   uid: 24617703,
+  accountId: null,
   categories: ['spot', 'linear'],
   createdAt: '2026-11-02T10:00:00Z',
 };
+
+export const tinvestAccount = {
+  id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  name: 'Брокерский',
+  exchange: 'tinvest',
+  apiKey: null,
+  uid: null,
+  accountId: '2000000001',
+  categories: ['moex'],
+  createdAt: '2026-11-03T10:00:00Z',
+};
+
+export const brokerAccounts = [
+  {
+    id: '2000000001',
+    name: 'Брокерский счёт',
+    type: 'brokerage',
+    status: 'open',
+    access: 'full',
+    problem: null,
+  },
+  {
+    id: '2000000002',
+    name: 'ИИС',
+    type: 'iis',
+    status: 'closed',
+    access: 'full',
+    problem: 'not_open',
+  },
+];
 
 /** A row of the market snapshot with every metric empty; a test sets the ones it needs. */
 export const marketRow = (overrides: Partial<Schemas['MarketRowResponse']> = {}) =>

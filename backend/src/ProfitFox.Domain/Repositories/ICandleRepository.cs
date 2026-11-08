@@ -10,6 +10,12 @@ public interface ICandleRepository
     /// <summary>Inserts the candles or replaces the stored ones with the same open time.</summary>
     Task UpsertAsync(Instrument instrument, Interval interval, IReadOnlyCollection<Candle> candles, CancellationToken cancellationToken);
 
+    /// <summary>
+    ///     Inserts or replaces the candles and writes the coverage of the series in the same transaction, so the border never says more
+    ///     than storage holds.
+    /// </summary>
+    Task UpsertAsync(Instrument instrument, Interval interval, IReadOnlyCollection<Candle> candles, SeriesCoverage coverage, CancellationToken cancellationToken);
+
     /// <summary>Inserts the candles of several instruments in one batch or replaces the stored ones with the same open time.</summary>
     Task UpsertAsync(Interval interval, IReadOnlyCollection<(Instrument Instrument, Candle Candle)> candles, CancellationToken cancellationToken);
 

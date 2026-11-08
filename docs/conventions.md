@@ -14,6 +14,20 @@ enforces a rule, the check is the source of truth.
   and their pure domain extensions (`Interval`, `IntervalExtensions.CandleEnd`, `IntervalExtensions.CandleOpen`, the start of the candle that contains a moment, `BacktestStatus`); `Entities/Base` holds
   `AggregateRoot`. A bot is part of the `StrategyLibrary` aggregate: it must stay valid against the latest version of its
   strategy.
+- `MarketCategory` is the market an instrument trades on: `Spot` and `Linear` on Bybit, `Moex` (the shares of the main board TQBR of the
+  Moscow Exchange, in roubles, the symbol a ticker such as `SBER`) on T-Invest. `Entities/ExchangeAccounts/Enums/Exchange` names the exchanges
+  (`Bybit`, `TInvest`) and `MarketCategoryExtensions.Exchange()` tells the exchange of a category; the exchange is stored nowhere and never goes
+  over the API. The intervals are a property of the category (`Application/MarketData/MarketDataCodes.IntervalsOf`): Bybit has all 13, `Moex`
+  `1`, `3`, `5`, `15`, `30`, `60`, `120`, `240`; the texts of the errors of a category and of an interval are `MarketDataCodes.InvalidCategory`
+  and `MarketDataCodes.InvalidInterval(category)`. `ListedInstrument` also carries the `Name` of a company and `ShortEnabled` for a share of MOEX,
+  and `InstrumentSearch.Find` matches a query against the name as well.
+- `ValueObjects/MarketData/SeriesCoverage(From, Until)` is the border of the coverage of a series of candles: inside it storage holds
+  every candle the exchange gave, so a candle missing there was not traded. `Extend(from, to)` widens it by a range that touches or
+  overlaps it and leaves a separate range alone; `Uncovered(ranges)` cuts the coverage out of the missing ranges; `Margin` (a minute) is how
+  far behind the clock the border stays, since the exchange may still serve the candle that has just closed as unfinished. It is kept only for a
+  market with sessions (`MarketCategoryExtensions.TradesAroundTheClock()` is false for `Moex`); Bybit has no nights and keeps none.
+  `ISeriesCoverageRepository` reads and writes it (`candle_coverage`), and `ICandleRepository.UpsertAsync` with a coverage writes the
+  candles and the border in one transaction.
 - `ValueObjects/<Area>` holds value objects (`Instrument`, `Price`, `Volume`, `InstrumentRules`, `StrategySnapshot`,
   `ParameterSpec`, `SimulationSettings`, `FeeRates` — the fee rates of a category and the slippage the ideas count on fills that do not rest on the book).
 - `Repositories` holds storage ports, named `I<Name>Repository` (`IStrategyLibraryRepository` for strategies, nodes,
@@ -71,6 +85,10 @@ enforces a rule, the check is the source of truth.
 - `IdeaAutos` is the area of the autos that take ideas by themselves: `Entities/IdeaAutos` holds `IdeaAuto` (a named auto with its account, amount, mode, conditions, place in the list and `Budget`, the cap of the sum of the amounts of its open trades, none for no budget; soft-deleted with `DeletedAt`; `MaxPerMinutePerSide` and `MaxOpenPerSide`, the most new trades of a side it takes in a minute and the most open trades of a side, real and paper, none for no limit), `PaperIdeaTrade` (an `IdeaTrade` of an auto on paper with the auto and `SteppedUntil`, the open time of the next minute to step it by), `IdeaAutoEntry` (the request of an auto with money to enter by an idea, with the account, amount and lowest reward to risk of the minute of the idea, the place of the auto and the order of the idea) and `IdeaAutoRefusal` (an idea that fit an auto and was not taken, with the copy of the idea, every reason and the detail of the first); `Entities/IdeaAutos/Enums` holds `IdeaAutoMode` (`Off`, `Paper`, `Live`) and `FeatureCondition` (`Any`, `With`, `Without`: what an auto asks of a feature of the market of an idea); `ValueObjects/IdeaAutos` holds `IdeaAutoConditions`, `AutoRefusal`, `RefusalDetail`, `PairHolder`, `AutoBooks` (the trades an auto is checked against), `PaperEntryCheck`, `DailyLossState`, `LimitSkip` (the ideas of a side a limit of an auto skipped in a minute: the first, the limit, how many) and `AutoMinute` (what the autos did in a minute, written with the ideas of the minute); `Services/IdeaAutos` holds the pure functions: `AutoConditions` (whether an idea fits the conditions, the features of the market among them), `AutoMinutePlan` (the order an auto takes the ideas of a minute in, by the promised expectancy of the bucket then the net reward to risk, ideas without a bucket last, and its two limits over one minute: an idea over a limit is skipped and counted, one `LimitSkip` a side), `PaperEntry` (the checks of a paper entry), `PaperFill` (the fill of a paper trade by the closed minutes, and its close at the exit price of its idea when the idea expires), `AutoRefusals` (the pair held, the budget of the auto and of all the autos, the open trades of a side, the daily stop), `AutoBudget` (what the open trades take of the budget of an auto, its real trades on any account and its paper ones, and of the budget of all the autos, the real trades of every auto; a trade takes its `Amount`, the amount after the volume was rounded, and a new entry is checked with the amount it asks for) and `DailyLossStop`. `IdeaTrade.AutoId` is the auto that took a trade (none for a manual one); `IdeaTradingSettings` also holds the three guards of the autos with money, `DailyLossLimit`, `MaxSameDirection` and `AutosBudget`, none while off; `IdeaTradeRefusal` also has the reasons only an auto is given (`DailyStop`, `TooManySameDirection`, `PairTaken`, `Late`, `AutoOff`, `RulesUnknown`, `EntryError`, `BudgetTaken`, `AutosBudgetTaken`, `MinuteLimit`, `SideLimit`); `IdeaTradeRefusals.DetailOf` tells the numbers of a reason. `Market` pairs (`ScannerPair`) and `ListedInstrument` also carry the step of the volume and the minimums of the volume and amount of an order (`QuantityStep`, `MinQuantity`, `MinAmount`).
 - `SavedFilters` is the area of saved filters: `Entities/SavedFilters` holds `SavedFilter` and the enums `SavedFilterPlace`, `FilterField`,
   `FilterOperator`; `ValueObjects/SavedFilters` holds `FilterCondition`.
+- `ExchangeAccount` is one flat record for both exchanges: `Exchange`, the `ApiKey` and `Uid` of a Bybit account, the `AccountId` (the
+  number of the brokerage account) of a T-Invest account; the constructor keeps the fields of each exchange, and a T-Invest account
+  trades in `Moex`. The secret of either (the API secret, the token) is kept apart, encrypted, and `IExchangeAccountRepository.AddAsync`
+  refuses a second account of the same uid (Bybit) or account number (T-Invest).
 - `Exceptions` holds domain exceptions: a broken domain rule that the caller reports to the user
   (`GraphValidationException`, `NodeInUseException`, `BotsAffectedException`).
 - The domain knows no wire codes and no vendor names: enums, not strings. Codes are mapped at the boundaries:
@@ -97,24 +115,40 @@ enforces a rule, the check is the source of truth.
 - `MarketData/CandleReadThrough` reads a period of closed candles from storage and fills what is missing with one request
   of `IMarketHistoryClient.GetCandlesOnceAsync` (a single attempt, at most 1000 candles), writing only the missing closed
   candles; an `ExchangeException` gives the stored candles and `Unavailable`. It is not a candle import: no job, no lease.
+  On `moex` only the part outside the `SeriesCoverage` of the series is missing, and the coverage grows over the whole period asked
+  for, never past the last closed candle less `SeriesCoverage.Margin`, in the transaction of the candles (inside the period everything
+  is stored, covered or has just been asked for); `RunNextCandleImportCommandHandler` grows it over the job up to the end of each range
+  once the range is loaded. A period apart from the coverage leaves it as it is. `RunNextBacktestWorkCommandHandler` takes the coverage
+  out of the missing ranges of a backtest on such a market too, before it decides on an import and before it writes the gaps, and expects
+  the stored candles plus the slots outside the coverage, so a covered series is loaded whole. A symbol is checked at the exchange of its
+  category, and the error names it (`ExchangeCodes.DisplayName`: `Bybit`, `T-Invest`).
   `Bots/Queries/GetBotCandles` aligns and cuts the period of a bot's chart (`from` down to the start of its candle, `to` up
   to the start of the current one, 1000 candles at most) and reads it through.
 - `MarketData/FormingCandles` holds the feeds of the current candle, which only the API uses: `FormingCandleFeeds` (a
   singleton) keeps one feed per series (`FormingSeries`, instrument and interval) however many connections watch it,
   subscribes `Ports/MarketData/IFormingCandleStreams` for the first viewer and takes it off after the last, and tells the
   viewers through `Ports/MarketData/IFormingCandleBroadcast`; its state is `Connecting`, `Live` or `NoData` (a lost
-  connection, a refused or closed subscription, or 90 s of silence). `FormingCandleThrottle` lets one update a second through. A
+  connection, a refused or closed subscription, or 90 s of silence). A series of an instrument of T-Invest (`Category.Exchange()`) is
+  `NoData` at once and subscribes nothing, until the live bots of MOEX bring the streams of T-Invest. `FormingCandleThrottle` lets one update a second through. A
   `FormingCandle` is only for showing: it is never stored and never reaches a strategy, so the Worker's code path takes
   closed candles from `IExchangeStreams` alone.
 - `Exceptions` holds `BaseApplicationException` and its subclasses, also vendor-neutral (`ExchangeException`,
   `ExchangeKeyRejectedException`).
 - `ExchangeAccounts` holds the commands and queries of exchange accounts and `ExchangeKeyRules`, the pure check of what a key may do. The secret of an account is decrypted only in the query
   that calls the exchange with it, and a bot refers to its account by id (`BotAccount` carries the categories the key
-  trades in into the checks of the bot).
+  trades in into the checks of the bot). `ExchangeCodes` (`bybit`, `tinvest`) are the codes of the exchange in the API and in stored rows.
+  `CreateExchangeAccountCommand` creates an account by its exchange: Bybit from the key and the secret as before, T-Invest from the
+  token and the account number, reading the accounts of the token again through `Ports/ExchangeAccounts/IBrokerAccountReader`
+  (`ListAccountsAsync(token)`, `GetPortfolioAsync(token, accountId)`) and taking only an account `BrokerAccountRules` has no problem
+  with (`not_open`, `not_full_access`, `unsupported_type`; `BrokerAccountCodes` are the codes of the type, status and access of a
+  `BrokerAccount`). `ListBrokerAccountsQuery(token)` lists the accounts of a token with the problem of each, storing nothing.
+  `AccountBalance` carries its `Currency` (`USD` on Bybit, `RUB` on T-Invest); `GetExchangeAccountBalance` reads a Bybit account through
+  `IExchangeKeyInspector` and a T-Invest account through `IBrokerAccountReader`.
 - `Transactions/ITransactionExecutor` runs a unit of work in one transaction: its writes commit together or not at all,
   a unit inside a unit is refused, and `EnsureNoTransaction` guards a call that must not hold a transaction open (the
   exchange).
-- `LiveTrading` holds the commands of live trading (start, pause, resume, stop, close the position, claim and run a bot),
+- `LiveTrading` holds the commands of live trading (start, pause, resume, stop, close the position, claim and run a bot; the start of a
+  bot on `moex` is a conflict «Trading on MOEX is not supported yet» before any call to an exchange, until the live bots of MOEX come),
   `LiveTradingCodes`, and `Runtime/LiveBotSession`: one session keeps one bot for the take of its lease, takes its inputs
   one at a time from a queue, writes every change in one unit of work after checking the lease, and sends orders only
   once they are written; `Runtime/LiveBotReconciler` compares the books of a bot and of the bots that share its
@@ -123,7 +157,8 @@ enforces a rule, the check is the source of truth.
   warms up its indicators with. `Ports/LiveTrading` holds `IExchangeLedger` (REST reads of an account), `IOrderGateway` (orders
   and cancels, a refusal is an outcome) and `IExchangeStreams` (closed candles, order updates and fills, and a signal
   when a stream is back after a gap).
-- `IdeaTrades` holds the trades by ideas: `IdeaTradeEntryCalculator` (`PrepareAsync` asks the exchange and reads the settings and the buckets, `EvaluateAsync` sizes the
+- `IdeaTrades` holds the trades by ideas: `IdeaTradeAccounts` (the accounts the trades can go through: those of Bybit, until the ideas of MOEX come;
+  the settings of trading by ideas and an auto refuse any other on the save, and the entry gives it no key and asks Bybit nothing), `IdeaTradeEntryCalculator` (`PrepareAsync` asks the exchange and reads the settings and the buckets, `EvaluateAsync` sizes the
   trade, names the reasons by the books of the account and builds the promise of the idea with `IdeaView.Of`, so the entry can be made again under the lock of the account), `IdeaTradeCodes` (statuses, roles,
   legs, times in force and the reason codes), the commands `CreateIdeaTrade`, `CancelIdeaTrade`, `CloseIdeaTrade` and `SaveIdeaTradingSettings`, the queries
   `GetIdeaEntry`, `GetIdeaJournal` (the open trades with the last price of their symbols from `IMarketHistoryClient`, one request a symbol and none on an error; a page of the closed ones by the time they closed; the totals of all the closed ones of the filter; filters, paging and field errors like `GetIdeas`, filtered and cut in memory) and `GetIdeaTradingSettings`, `IdeaJournalTrade` (a trade with its account name and, when open, its worth at the last price), and `Runtime/IdeaTradeSession`: one session keeps one trade for the take of its lease as a bot's
@@ -204,8 +239,40 @@ enforces a rule, the check is the source of truth.
   an event storage already had is not counted. `MetricsRegistrar` lists both meters.
 - A new HTTP client to Bybit is made only through `IHttpClientFactory` (`AddHttpClient`), or its requests are missing from the
   metrics.
+- `Exchanges/TInvest` is the adapter of T-Invest Invest API on the generated gRPC clients of the NuGet package `Tinkoff.InvestApi`
+  (`Tinkoff.InvestApi.V1`, without the facade of the SDK): `TInvestSettings` (the `TInvest` section: `Endpoint`, only the official host or a
+  test host under `.invalid`; `AppName`; `RequestTimeout`; `Limits` a minute by group of methods; `Certificates`), `TInvestChannel` (the one
+  `GrpcChannel` of the process behind `ITInvestCallInvokers`, which tests replace with `Tests.Shared/TInvest/MockTInvestApi`),
+  `TInvestCertificates` (the pinned chain of the server certificate: the `.cer` files of `Exchanges/TInvest/Certificates`, copied to the
+  output, by the SHA-256 thumbprints of the settings; the chain is built for server authentication from the certificates the server
+  presented and the pinned ones, without a download, and its second element must be the pinned Sub CA itself, not another Sub CA of
+  the same root; empty thumbprints pin nothing), `TInvestCall` (every unary call: `TInvestRequestLimiter`
+  → `authorization: Bearer` and `x-app-name` → deadline → `TInvestMetrics` → the exceptions of Application; `OnceAsync` is one attempt,
+  `WithRetriesAsync` the ladder of `ExchangeResilienceExecutor`; `RESOURCE_EXHAUSTED` pauses the group of the token until `x-ratelimit-reset`
+  and is `ExchangeRateLimitedException`, `NOT_FOUND` is `TInvestNotFoundException`, a refusal carries the error code of the status detail and
+  never the text of the broker; a call cancelled by its own token is an `OperationCanceledException`, neither counted nor translated, and the
+  channel throws it itself with `ThrowOperationCanceledOnCancellation`), `TInvestRequestLimiter` (a sliding window of a minute per token, kept by its SHA-256 fingerprint, and `TInvestMethodGroup`,
+  `TInvestMethods` names the group of a service; every limit of the settings is above zero, or the registrar refuses them), `TInvestValues` (`Quotation` and `MoneyValue` ↔ `decimal` as `units + nano / 1e9`, timestamps in UTC),
+  `TInvestCodes` (the `CandleInterval` of an `Interval` and the longest window of one request of candles: 1 and 3 min a day, 5 min a week,
+  15 and 30 min three weeks, the hours 90 days), `TInvestTokenSource` (the token of the oldest T-Invest account of storage, kept 5 minutes;
+  without an account `ExchangeUnavailableException` and no request), `TInvestShares` (a ticker resolved into a share of TQBR with `ShareBy`,
+  kept an hour; a share the system trades is in roubles, trades through the API and has a positive lot and price step),
+  `TInvestMarketDataClient` (`IMarketHistoryClient`, `IInstrumentRulesProvider` and `IInstrumentCatalog` for `Moex`: the catalog from
+  `Shares(BASE)`, the rules lot = step = minimum and no minimum amount, the last prices by uid, the candles window by window from the end of
+  the period with the source `Exchange` and no limit, complete ones only, the volume lots × lot and the turnover volume × (high + low + close) / 3)
+  and `TInvestAccountClient` (`IBrokerAccountReader`: `GetAccounts`, `GetPortfolio` in roubles: every position with a quantity as a row, a currency by its ISO code (the first three letters of its
+  ticker) worth its quantity at the current price in roubles, the roubles always a row, the total from `total_amount_portfolio`).
+  The metrics live on the meter `ProfitFox.TInvest`: the counter `profitfox.tinvest.requests` {`group`, `method`, `outcome`} and the gauges
+  `profitfox.tinvest.limit` and `profitfox.tinvest.limit_remaining` {`group`} from the headers `x-ratelimit-limit` and `x-ratelimit-remaining`;
+  `MetricsRegistrar` lists the meter. No test and no local run calls the real T-Invest: the test hosts put `MockTInvestApi` behind
+  `ITInvestCallInvokers`, and `appsettings.Testing.json` points the endpoint at `tinvest.invalid`.
+- `Exchanges/Routing` holds `RoutedMarketHistoryClient`, `RoutedInstrumentRulesProvider` and `RoutedInstrumentCatalog`: the registered
+  read ports, each choosing Bybit or T-Invest by `Category.Exchange()`; the adapters of both exchanges are registered keyed by
+  `Exchange`, and `CachedInstrumentCatalog` stays over the routed catalog, caching the list of `moex` on the same terms.
 - `Exchanges/<Vendor>` holds adapters over vendor SDKs, including the mapping of domain values to SDK types
-  (`BybitCodes`). `Exchanges/Retry` holds Polly pipelines. `BybitMarketDataClient` implements `IInstrumentCatalog` (spot in one
+  (`BybitCodes`). `Exchanges/Retry` holds Polly pipelines: `ExchangeResilienceExecutor` (the ladder of retries and the circuit breaker) is
+  registered keyed by `Exchange`, one instance per exchange, so an exchange that does not answer never opens the circuit of the other; a
+  consumer takes it with `[FromKeyedServices(Exchange.Bybit)]` or `[FromKeyedServices(Exchange.TInvest)]`. `BybitMarketDataClient` implements `IInstrumentCatalog` (spot in one
   answer, linear by following the cursor; one attempt per request). The registered `IInstrumentCatalog` is
   `Exchanges/CachedInstrumentCatalog` over it: a list per category is kept for 5 minutes on `TimeProvider`, a failure is not kept.
 - `Exchanges/ScannerRestGate` is the one way of the scanner's REST requests: a token bucket of `Scanner:RestRequestsPerSecond`
@@ -282,7 +349,9 @@ enforces a rule, the check is the source of truth.
   Application declares a settings record (`BacktestSettings`), Infrastructure binds the section to it in
   `InfrastructureRegistrar`; handlers take the record, never `IConfiguration`.
 - The `Backtests` section: the limit of combinations, the number of threads and the default fee rates in percent by
-  market category.
+  market category. Every category has its `Limit` and `Market` (`BacktestSettings.CategoriesWithoutFees` is empty, or the service
+  does not start); the rates of `moex` (0.05 / 0.05, the tariff «Трейдер») are provisional until the owner reads `GetOrderPrice`,
+  and its `Slippage` is a stand-in until the ideas of MOEX come.
 
   ```json
   "Backtests": {
@@ -290,7 +359,8 @@ enforces a rule, the check is the source of truth.
     "MaxParallelism": null,
     "DefaultFees": {
       "spot": { "Limit": 0.1, "Market": 0.1 },
-      "linear": { "Limit": 0.02, "Market": 0.055 }
+      "linear": { "Limit": 0.02, "Market": 0.055 },
+      "moex": { "Limit": 0.05, "Market": 0.05 }
     }
   }
   ```
@@ -318,6 +388,23 @@ enforces a rule, the check is the source of truth.
   "Bybit": { "RestAddress": "http://127.0.0.1:5296" }
   ```
 
+- The `TInvest` section (`TInvestSettings`, bound in `InfrastructureRegistrar`), in the `appsettings.json` of the API, the Worker and the
+  scanner: the endpoint of the live Invest API (the registrar refuses any other host but one under `.invalid`, which the tests use), the
+  app name, the timeout of a call, the requests a minute of each group of methods with one token in this process (the `MarketData` budget
+  is 100 for the API, 150 for the Worker and 50 for the scanner, below the 300 of the token together) and the certificates the server
+  chains to: the folder of the `.cer` files and the SHA-256 thumbprints of the Russian Trusted Root CA and Sub CA (empty pins nothing).
+  No secret: the token is in the database.
+
+  ```json
+  "TInvest": {
+    "Endpoint": "https://invest-public-api.tbank.ru:443",
+    "AppName": "profit-fox",
+    "RequestTimeout": "00:00:10",
+    "Limits": { "Users": 50, "Instruments": 150, "MarketData": 100, "Operations": 100, "Orders": 50 },
+    "Certificates": { "Directory": "Exchanges/TInvest/Certificates", "RootThumbprint": "", "SubThumbprint": "" }
+  }
+  ```
+
 - The `Metrics` section (`MetricsSettings`, bound in `MetricsRegistrar`): `OtlpEndpoint`, the full URL of the metrics path of an
   OTLP receiver, empty by default, so tests and local runs push nothing; `ExportInterval`, 5 seconds by default. Nothing is in
   `appsettings.json`: production sets `Metrics__OtlpEndpoint` (Prometheus on soyo-03, `http://192.168.8.142:9090/api/v1/otlp/v1/metrics`)
@@ -329,9 +416,9 @@ enforces a rule, the check is the source of truth.
 
 - The `ExchangeAccounts` section (`ExchangeAccountSettings`): `MasterKey`, 32 bytes in base64, encrypts the secrets of
   exchange accounts. Only `appsettings.Development.json` and `appsettings.Testing.json` of the API carry a key; any other
-  environment sets `ExchangeAccounts__MasterKey`, or the API does not start. A Worker requires it only with
-  `Trading:Enabled`, as it decrypts keys only to trade; its `appsettings.Development.json` and `appsettings.Testing.json`
-  carry the same keys as the API's.
+  environment sets `ExchangeAccounts__MasterKey`, or the API does not start. Every Worker requires it too: a trading one
+  decrypts the keys of the bots, and any one decrypts the token of T-Invest for an import of `moex`; its
+  `appsettings.Development.json` and `appsettings.Testing.json` carry the same keys as the API's. The scanner gets none.
 - The `Trading` section of the Worker (`TradingSettings`): `Enabled`, `false` by default. Only a trading Worker takes live
   bots (`LiveTradingBackgroundService`); a Worker on another machine that only runs backtests leaves it off. A local run
   never sends real orders: in Development a trading Worker does not start unless both `Bybit:RestAddress` and
@@ -393,6 +480,11 @@ enforces a rule, the check is the source of truth.
 
 ## Presentation (`ProfitFox.Presentation`)
 
+- `ExchangeAccountsController`: `POST /api/exchange-accounts` takes `exchange` (`bybit` by default, with `apiKey` and `apiSecret`; `tinvest`
+  with `token` and `accountId`), the answers of an account carry `exchange` and `accountId` with `apiKey` and `uid` nullable;
+  `POST /api/exchange-accounts/tinvest/accounts` `{ token }` lists the accounts of a token (`[{ id, name, type, status, access, problem }]`,
+  a token T-Invest rejects is a 400 on `token`); `GET .../{id}/balance` gives `currency`, `totalEquity` and `coins` with their `value` in it.
+  No endpoint logs a body: the request logging writes the method, the path and the status only.
 - `Controllers` holds controllers only (`BotsController`, `BacktestsController`, `InstrumentsController`: `GET /api/market-data/instruments?category&query&limit`
   → `[{ category, symbol, baseCoin, quoteCoin }]`; field errors 400, exchange unavailable 503); request and response types go to
   `Contracts/<Area>` (`Contracts/Bots`, `Contracts/Backtests`).
@@ -472,12 +564,15 @@ enforces a rule, the check is the source of truth.
   `Generators/Domain/{Entity,ValueObject}/<Area>`, each a static `<Type>Generator.Generate(...)`. `Builders/<Area>` holds
   fluent builders for structures a generator cannot randomize meaningfully (`GraphBuilder` for strategy graphs), and
   `Fixtures/<Area>` holds reference documents as embedded resources (the reference strategies EMA, EMA Short, DCA, Ladder;
-  reference candle sets for backtests in `Fixtures/Backtests`; reference minutes and candles of the ideas and the fingerprints of
+  reference candle sets for backtests in `Fixtures/Backtests`: the hourly set of Bybit and `sber-hourly`, two trading days of a share
+  of MOEX with the night between them empty; reference minutes and candles of the ideas and the fingerprints of
   `IdeasEngineVersion` in `Fixtures/Ideas`).
 - `Fixtures/IdeaAutos` holds the reference minutes of the paper trades (a long enters at 100 with the stop at 98 and the target at 104; the pullback sets wait for a limit at 100) with the answers written out in `PaperFillTests`; `Generators/Domain/Entity/IdeaAutos` makes an auto.
 - Ports are replaced with NSubstitute mocks. Hand-written stubs exist only for transport and the exchange: HTTP
   (`StubHttpHandler`, `FakeBybitHandler`), because NSubstitute cannot replace the protected `SendAsync`; the Bybit v5
-  streams on a local port (`FakeBybitSocketServer`); and `FakeExchange`, one exchange account in memory behind
+  streams on a local port (`FakeBybitSocketServer`); the gRPC server of T-Invest in process (`Tests.Shared/TInvest/MockTInvestApi`, a
+  `CallInvoker` with handlers by method name that records every call with its metadata and fails a method with the status a test asks for);
+  and `FakeExchange`, one exchange account in memory behind
   `IExchangeLedger`, `IOrderGateway` and `IExchangeStreams` for the live trading runtime, whose orders, fills and streams
   depend on each other as a mock cannot keep.
   `FakeExchange` also makes the stop and the target of an entry with a stop and a target on `linear` (no client id, `ParentClientId`, a stop kind), fires them at a
@@ -504,8 +599,13 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
   wrong (definition ↔ canvas, pins, wire types, error paths, draft comparison): plain TypeScript without React.
 - Modules of the bot section: `bots` (queries, `BotForm`, server errors by field, `parameterValues` from form text),
   `backtests` (queries with polling every 2 s while a backtest is unfinished, `BacktestForm`, status, ranges, grid,
-  period, result columns, engine conflicts), `market-data` (instrument search for symbol suggestions, Bybit
-  intervals), `exchange-accounts` (queries, `AccountForm`, `EnvironmentBadge`, `BalanceTable`, server problems of an
+  period, result columns, engine conflicts), `market-data` (instrument search for symbol suggestions, the intervals: `intervals` of Bybit, `intervalsOf(category)`
+  (eight for `moex`, without `D`) and `marketCategories` with the type `MarketCategory`, `'spot' | 'linear' | 'moex'`),
+  `exchange-accounts` (queries, `AccountForm` with the switch of the exchange: Bybit takes a key and a secret, T-Invest a token and
+  one of the accounts «Показать счета» lists through `listBrokerAccounts`, an account with a `problem` cannot be chosen and shows why
+  (`model/brokerAccounts`: the labels of the type, status and problem); a refusal of the server clears the secret, the token and the
+  accounts, a changed token drops the accounts read with the old one, and while the accounts are read or the account is saved the
+  switch of the exchange and the token are locked, so a late answer finds the form as it was; `exchangeName`, `EnvironmentBadge`, `BalanceTable` with the currency of the answer, server problems of an
   account; the balance query is disabled and runs only on the page's action), `comparison` (the set of results on `useSyncExternalStore` over `sessionStorage`, the bar in
   `AppShell`, the mark checkbox), `market-chart` (`PriceEquityChart` and `EquityComparisonChart` on
   `lightweight-charts`, fill markers, candles per point; for the bot chart `BotCandleChart` with volume, fill arrows,
@@ -533,8 +633,10 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
   without float math. `bots` also holds the bot chart's data: `useBotCandles` (pages going back, a minute-by-minute tail,
   start over when too far behind), `useFormingCandle` over `realtime/followFormingCandle` (the SignalR hub
   `/api/hubs/bot-chart`, which is not in OpenAPI: its message types are written by hand in `model/formingCandle.ts`,
-  with the reducer and the channel text) and `chartIntervals` (the interval switcher; the `?interval=` of the bot route
-  is read there, the bot's own interval never goes to the address). The router writes text search values as they are, so
+  with the reducer and the channel text) and `chartIntervals` (the interval switcher, `chartIntervals(own, category)` and
+  `shownInterval(asked, own, category)` over `intervalsOf(category)`, so a bot on `moex` is offered no `D`; the `?interval=` of the bot route
+  is read there, the bot's own interval never goes to the address). Texts about an exchange that does not answer name «биржа», not Bybit,
+  since the data of a share come from T-Invest. The router writes text search values as they are, so
   `?interval=5` is not quoted. `shared/format` shows decimal strings with thousands
   spacing without float math, and UTC dates. Decimal strings become numbers only in `market-chart/model`, for drawing.
 - «+ Новая стратегия» opens `pages/strategies/NewStrategyDialog`: an empty canvas or one of the built-in templates (`strategyTemplatesQuery`, the cards show name,

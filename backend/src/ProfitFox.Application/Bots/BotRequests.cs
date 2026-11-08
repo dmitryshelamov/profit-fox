@@ -1,6 +1,7 @@
 using System.Text.Json;
 
 using ProfitFox.Application.Exceptions;
+using ProfitFox.Application.ExchangeAccounts;
 using ProfitFox.Application.MarketData;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.Strategies;
@@ -32,12 +33,12 @@ public static class BotRequests
 
         if (!MarketDataCodes.TryParseCategory(category, out MarketCategory parsedCategory))
         {
-            errors["category"] = "Category must be spot or linear.";
+            errors["category"] = MarketDataCodes.InvalidCategory;
         }
 
-        if (!MarketDataCodes.TryParseInterval(interval, out Interval parsedInterval))
+        if (!MarketDataCodes.TryParseInterval(parsedCategory, interval, out Interval parsedInterval))
         {
-            errors["interval"] = "Interval must be one of Bybit intervals: 1, 3, 5, 15, 30, 60, 120, 240, 360, 720, D, W, M.";
+            errors["interval"] = MarketDataCodes.InvalidInterval(parsedCategory);
         }
 
         var values = new Dictionary<string, NodeValue>();
@@ -106,7 +107,7 @@ public static class BotRequests
         if (!await marketHistory.InstrumentExistsAsync(instrument, cancellationToken))
         {
             throw new ValidationFailedException(
-                new Dictionary<string, string> { ["symbol"] = $"Bybit has no {instrument.Symbol} in {instrument.Category.ToCode()}." });
+                new Dictionary<string, string> { ["symbol"] = $"{instrument.Category.Exchange().DisplayName()} has no {instrument.Symbol} in {instrument.Category.ToCode()}." });
         }
     }
 
