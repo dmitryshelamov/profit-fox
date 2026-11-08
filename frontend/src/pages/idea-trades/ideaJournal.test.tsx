@@ -132,6 +132,48 @@ describe('screen «Сделки»', () => {
     expect(screen.getByText('2 ч 16 мин')).toBeInTheDocument();
   });
 
+  // Scenarios "Идея ещё жива", "Идея закрылась раньше сделки" and "Идея ждёт входа": the time left of the idea comes after the time in
+  // the trade and runs down with it.
+  it('counts down the time left of the idea of a trade, says closed for an idea that closed and a dash for one that waits', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    vi.setSystemTime(new Date('2026-11-05T12:15:00Z'));
+    fakeApi(
+      routes(
+        open([
+          tradeOf({
+            id: 'a',
+            status: 'open',
+            openedAt: '2026-11-05T10:00:00Z',
+            ideaEndsAt: '2026-11-05T13:55:00Z',
+          }),
+          tradeOf({
+            id: 'b',
+            status: 'open',
+            openedAt: '2026-11-05T10:00:00Z',
+            ideaOutcome: { status: 'expired', statusAt: '2026-11-05T12:00:00Z', result: '0.4' },
+          }),
+          tradeOf({ id: 'c' }),
+        ]),
+      ),
+    );
+    renderApp('/idea-trades');
+
+    const table = await screen.findByRole('table', { name: 'Сделки в работе' });
+    const heads = within(table)
+      .getAllByRole('columnheader')
+      .map((head) => head.textContent);
+    const column = heads.indexOf('До конца идеи');
+    const left = (index: number) =>
+      within(within(table).getAllByRole('row')[index]!).getAllByRole('cell')[column]!.textContent;
+
+    expect(heads[column - 1]).toBe('В сделке');
+    expect([left(1), left(2), left(3)]).toEqual(['1 ч 40 мин', 'закрыта', '—']);
+
+    await act(() => vi.advanceTimersByTimeAsync(60_000));
+
+    expect(left(1)).toBe('1 ч 39 мин');
+  });
+
   // Scenario "Цены нет".
   it('shows a dash instead of the result of a trade that has no price, and for one that waits', async () => {
     fakeApi(
@@ -147,7 +189,7 @@ describe('screen «Сделки»', () => {
     const rows = within(await screen.findByRole('table', { name: 'Сделки в работе' })).getAllByRole(
       'row',
     );
-    const now = (row: HTMLElement) => within(row).getAllByRole('cell')[12]!.textContent;
+    const now = (row: HTMLElement) => within(row).getAllByRole('cell')[13]!.textContent;
 
     expect(now(rows[1]!)).toBe('—');
     expect(now(rows[2]!)).toBe('—');

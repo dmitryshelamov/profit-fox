@@ -5535,7 +5535,8 @@ export interface components {
          *     the journal or while the idea is open. An open trade has the last price of its pair and what it is worth at it, none while it waits for
          *     its entry or when the exchange gave no price. `origin` tells who took the trade, `manual`, `auto` or `paper`, with the id and the name
          *     of the auto, the name of a deleted one too. `features` are the codes of the features of the market its idea fired with
-         *     (`day_drop`, `btc_drop`, `high_funding`), copied when the trade was made.
+         *     (`day_drop`, `btc_drop`, `high_funding`), copied when the trade was made. `ideaEndsAt` is the end of the lifetime of
+         *     the idea of a trade in work while the idea is active, none while it waits for its entry, once it closed and for a closed trade.
          */
         IdeaTradeResponse: {
             /** Format: uuid */
@@ -5580,6 +5581,8 @@ export interface components {
             autoId: null | string;
             autoName: null | string;
             features: string[];
+            /** Format: date-time */
+            ideaEndsAt: null | string;
         };
         /** @description A page of trades: its number from 1 (the last page when the one asked for is past the end), its size and the count of all the closed trades of the filter. */
         IdeaTradesPageResponse: {

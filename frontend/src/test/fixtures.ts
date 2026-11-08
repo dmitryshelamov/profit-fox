@@ -529,6 +529,7 @@ export const tradeOf = (overrides: Partial<Schemas['IdeaTradeResponse']> = {}) =
     secondsToOutcome: null,
     promise: null,
     ideaOutcome: null,
+    ideaEndsAt: null,
     lastPrice: null,
     currentResult: null,
     currentResultR: null,

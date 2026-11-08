@@ -27,18 +27,18 @@
 
 ## 4. Колонка «До конца идеи»
 
-- [ ] 4.1 Перегенерировать `frontend/src/shared/api/generated/schema.d.ts` (`npm run generate:api` против локального
+- [x] 4.1 Перегенерировать `frontend/src/shared/api/generated/schema.d.ts` (`npm run generate:api` против локального
   API) — в `IdeaTrade` появляется `ideaEndsAt`. Проверка: `npm run typecheck`
-- [ ] 4.2 Red → green: `ideaLeftText(trade, now)` в `idea-trades/model/journal.ts` — «закрыта» при исходе идеи,
+- [x] 4.2 Red → green: `ideaLeftText(trade, now)` в `idea-trades/model/journal.ts` — «закрыта» при исходе идеи,
   обратный отсчёт по `ideaEndsAt` через `durationText` («< 1 мин» после конца), иначе «—»; тесты в `journal.test.ts` по
   сценариям спеки `idea-trades-interface`. Проверка: `npm test` — тесты были красными
-- [ ] 4.3 Колонка «До конца идеи» после «В сделке» в `OpenTradesTable` на том же `useNow`; e2e-сценарий в
+- [x] 4.3 Колонка «До конца идеи» после «В сделке» в `OpenTradesTable` на том же `useNow`; e2e-сценарий в
   `frontend/e2e/idea-trades.spec.ts` на таймер и «закрыта». Проверка: `npm run lint`, `npm run format:check`,
   `npm run typecheck`, `npm test`, `npm run build`, `npm run test:e2e`
 
 ## 5. Проверка целиком
 
-- [ ] 5.1 Локально открыть «Сделки» с учебной сделкой по активной идее и убедиться, что колонка тикает и совпадает с
+- [x] 5.1 Локально открыть «Сделки» с учебной сделкой по активной идее и убедиться, что колонка тикает и совпадает с
   моментом истечения идеи на её странице пары. Проверка: скриншот таблицы
 
 ## Workflow follow-up
