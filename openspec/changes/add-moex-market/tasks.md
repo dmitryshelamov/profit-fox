@@ -151,7 +151,7 @@
   создаётся, `gaps` пустые, загружено 100 %; интеграционный тест `MoexBacktestTests` проверяет `gaps`.
 - [x] 8.3 Запас границы `SeriesCoverage.Margin` = 1 мин в read-through и импорте: `border = min(to, CandleOpen(now − Margin))`;
   Bybit без изменений. Unit-тесты обоих обработчиков; чек-лист 7.2 дополнен пунктами про `is_complete` и выравнивание 120/240.
-- [ ] 8.4 Свой `ExchangeResilienceExecutor` на биржу (keyed по `Exchange`): открытая цепь T-Invest не трогает вызовы Bybit. Unit-тест.
+- [x] 8.4 Свой `ExchangeResilienceExecutor` на биржу (keyed по `Exchange`): открытая цепь T-Invest не трогает вызовы Bybit. Unit-тест.
 - [ ] 8.5 Живая свеча бота на `moex`: feed отдаёт `NoData` без подписки на Bybit (`RoutedFormingCandleStreams`). Unit-тест.
 - [ ] 8.6 Отмена gRPC-вызова: `ThrowOperationCanceledOnCancellation` в канале, `Cancelled` при отменённом токене —
   `OperationCanceledException` без учёта в метриках. Unit-тест на моке.

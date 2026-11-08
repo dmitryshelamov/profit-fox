@@ -191,7 +191,10 @@ public static class InfrastructureRegistrar
         services.AddSingleton<IExchangeStreams>(provider => provider.GetRequiredService<BybitStreams>());
         services.AddSingleton<IFormingCandleStreams>(provider => provider.GetRequiredService<BybitStreams>());
         services.AddSingleton<ILiveTradingJournal, LoggingLiveTradingJournal>();
-        services.AddSingleton<ExchangeResilienceExecutor>();
+
+        // A circuit breaker per exchange: a T-Invest that does not answer never opens the circuit of Bybit.
+        services.AddKeyedSingleton<ExchangeResilienceExecutor>(Exchange.Bybit);
+        services.AddKeyedSingleton<ExchangeResilienceExecutor>(Exchange.TInvest);
         ConfigureTInvest(configuration, services);
 
         // The read ports go to the exchange of the category (decision 8): Bybit for spot and linear, T-Invest for moex.

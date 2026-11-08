@@ -264,7 +264,9 @@ enforces a rule, the check is the source of truth.
   read ports, each choosing Bybit or T-Invest by `Category.Exchange()`; the adapters of both exchanges are registered keyed by
   `Exchange`, and `CachedInstrumentCatalog` stays over the routed catalog, caching the list of `moex` on the same terms.
 - `Exchanges/<Vendor>` holds adapters over vendor SDKs, including the mapping of domain values to SDK types
-  (`BybitCodes`). `Exchanges/Retry` holds Polly pipelines. `BybitMarketDataClient` implements `IInstrumentCatalog` (spot in one
+  (`BybitCodes`). `Exchanges/Retry` holds Polly pipelines: `ExchangeResilienceExecutor` (the ladder of retries and the circuit breaker) is
+  registered keyed by `Exchange`, one instance per exchange, so an exchange that does not answer never opens the circuit of the other; a
+  consumer takes it with `[FromKeyedServices(Exchange.Bybit)]` or `[FromKeyedServices(Exchange.TInvest)]`. `BybitMarketDataClient` implements `IInstrumentCatalog` (spot in one
   answer, linear by following the cursor; one attempt per request). The registered `IInstrumentCatalog` is
   `Exchanges/CachedInstrumentCatalog` over it: a list per category is kept for 5 minutes on `TimeProvider`, a failure is not kept.
 - `Exchanges/ScannerRestGate` is the one way of the scanner's REST requests: a token bucket of `Scanner:RestRequestsPerSecond`

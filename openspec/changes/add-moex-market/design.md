@@ -181,6 +181,11 @@ Unit- и интеграционные тесты идут на in-process мок
   гейджи `profitfox.tinvest.limit` / `profitfox.tinvest.limit_remaining` {`group`} из заголовков `x-ratelimit-limit` /
   `x-ratelimit-remaining`; `MetricsRegistrar` добавляет meter.
 
+**Поправка после ревью (circuit breaker на биржу).** Один экземпляр `ExchangeResilienceExecutor` на обе биржи делил и circuit
+breaker (10 запросов, 50 % отказов, пауза 15 с): недоступный T-Invest (шесть отказов одной лестницы ретраев импорта) открывал
+цепь для Bybit, и в торгующем Worker падали `GetLastPriceAsync` автоматов и прогрев истории. Теперь executor регистрируется keyed
+по `Exchange`, по экземпляру на биржу: `TInvestCall` берёт экземпляр T-Invest, `BybitMarketDataClient` и `ScannerRestGate` — Bybit.
+
 ### 8. Маршрутизация портов чтения по категории
 
 `Infrastructure/Exchanges/Routing/RoutedMarketHistoryClient`, `RoutedInstrumentRulesProvider`, `RoutedInstrumentCatalog`:

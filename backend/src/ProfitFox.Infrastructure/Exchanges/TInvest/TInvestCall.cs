@@ -2,7 +2,10 @@ using System.Globalization;
 
 using Grpc.Core;
 
+using Microsoft.Extensions.DependencyInjection;
+
 using ProfitFox.Application.Exceptions;
+using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Infrastructure.Exchanges.Retry;
 
 namespace ProfitFox.Infrastructure.Exchanges.TInvest;
@@ -12,10 +15,17 @@ namespace ProfitFox.Infrastructure.Exchanges.TInvest;
 ///     deadline are set, the answer is counted in the metrics and its limit headers read, and an <see cref="RpcException" /> becomes an
 ///     exception of Application: <c>UNAUTHENTICATED</c> and <c>PERMISSION_DENIED</c> a rejected key; <c>RESOURCE_EXHAUSTED</c> a pause of
 ///     the group until <c>x-ratelimit-reset</c> and a rate limit; <c>UNAVAILABLE</c>, <c>INTERNAL</c>, <c>ABORTED</c> and
-///     <c>DEADLINE_EXCEEDED</c> an unavailable exchange, retried by the ladder of <see cref="ExchangeResilienceExecutor" /> where the
-///     caller asks for retries; the rest a refusal with the error code of the detail. No text of the broker reaches a message.
+///     <c>DEADLINE_EXCEEDED</c> an unavailable exchange, retried by the ladder of the <see cref="ExchangeResilienceExecutor" /> of T-Invest
+///     (its circuit breaker is apart from the one of Bybit) where the caller asks for retries; the rest a refusal with the error code of
+///     the detail. No text of the broker reaches a message.
 /// </summary>
-internal sealed class TInvestCall(ITInvestCallInvokers invokers, TInvestRequestLimiter limiter, TInvestMetrics metrics, ExchangeResilienceExecutor resilience, TInvestSettings settings, TimeProvider time)
+internal sealed class TInvestCall(
+    ITInvestCallInvokers invokers,
+    TInvestRequestLimiter limiter,
+    TInvestMetrics metrics,
+    [FromKeyedServices(Exchange.TInvest)] ExchangeResilienceExecutor resilience,
+    TInvestSettings settings,
+    TimeProvider time)
 {
     private static readonly TimeSpan DefaultPause = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan MaxPause = TimeSpan.FromHours(1);
