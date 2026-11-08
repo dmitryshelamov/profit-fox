@@ -24,7 +24,7 @@ public static class SetupDetector
 
         decimal median = Median([.. closed.TakeLast(MedianCandles).Select(candle => candle.Volume)]);
 
-        return new SetupBase(closed, atr, median, ZoneFinder.Find(closed, atr, rules), Rsi.Smooth(closed));
+        return new SetupBase(closed, atr, median, ZoneFinder.Find(closed, atr, rules), Rsi.Smooth(closed), CandleExtremes.Of(closed));
     }
 
     /// <param name="basis">What the setups are measured against: the closed candles of the interval before the last candle.</param>
@@ -90,7 +90,7 @@ public static class SetupDetector
         }
 
         var candle = new IdeaCandle(last.First.OpenTime, last.First.Open, last.High, last.Low, close, last.Sum);
-        var input = new CandleSetupInput(basis.Closed, candle, atr, median, basis.Zones, basis.Rsi, percentiles.Low, [.. signals]);
+        var input = new CandleSetupInput(basis.Closed, candle, atr, median, basis.Zones, basis.Rsi, percentiles.Low, [.. signals], basis.Extremes);
 
         return new SetupReading(atr, [.. signals, .. CandleSetupDetector.Detect(input, thresholds)]);
     }
