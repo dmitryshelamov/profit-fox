@@ -17,8 +17,9 @@ namespace ProfitFox.Infrastructure.Exchanges.TInvest;
 /// <summary>
 ///     The streams of T-Invest of the process (decision 9): one <c>OrderStateStream</c> an account, however many bots listen to it, and
 ///     two <c>MarketDataStream</c>s, of the closed candles and of the forming ones, with one subscription a series for all its listeners.
-///     A stream that ends, breaks or is silent for <see cref="Silence" /> (it pings every 30 s) opens again after 1, 2, 5, 10, then 30 s,
-///     subscribes its series again and tells every listener <c>restored</c>. An event of the stream of orders is a signal: the state of
+///     A stream that ends, breaks, is silent for <see cref="Silence" /> (it pings every 30 s) or fails on a message (a candle it cannot
+///     tell, a listener that threw) opens again after 1, 2, 5, 10, then 30 s, subscribes its series again and tells every listener
+///     <c>restored</c>. An event of the stream of orders is a signal: the state of
 ///     the order is read by its request id, again while T-Invest does not know it yet, and the end of a filled order waits up to a minute
 ///     for its commission; an order that does not read tells every listener <c>restored</c>. One for the process.
 /// </summary>
@@ -302,9 +303,9 @@ internal sealed class TInvestStreams(
 
                     continue;
                 }
-                catch (Exception exception) when (exception is RpcException or TimeoutException)
+                catch (Exception)
                 {
-                    // Lost: opened again below.
+                    // Lost, or a listener that failed: opened again below.
                 }
                 finally
                 {
@@ -563,9 +564,9 @@ internal sealed class TInvestStreams(
                         }
                     }
                 }
-                catch (Exception exception) when (exception is RpcException or TimeoutException or Application.Exceptions.ExchangeException)
+                catch (Exception)
                 {
-                    // Lost: opened again below.
+                    // Lost, or a candle the stream cannot tell: opened again below.
                 }
 
                 await _gate.WaitAsync();

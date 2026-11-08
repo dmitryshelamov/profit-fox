@@ -290,8 +290,9 @@ enforces a rule, the check is the source of truth.
   not read (T-Invest, the table of the ids or the share) counts as `error` of the stream and tells every listener of the account
   `restored`, so the sessions read their orders themselves; two `MarketDataStream`s of
   the process with the token of `TInvestTokenSource`, of the closed candles (`waiting_close`) and of the forming ones, a series subscribed
-  once for all its listeners and taken off by the last; a stream that ends, breaks or is silent for 90 s opens again after 1, 2, 5, 10,
-  then 30 s, subscribes its series again and tells every listener `restored` (the forming ones `lost` first); a minute after the end of the
+  once for all its listeners and taken off by the last; a stream that ends, breaks, is silent for 90 s or fails on a message (a candle it
+  cannot tell, a listener that threw) opens again after 1, 2, 5, 10, then 30 s, subscribes its series again and tells every listener
+  `restored` (the forming ones `lost` first); a minute after the end of the
   trading day of a share its listeners of closed candles are told `restored`). `TInvestCall` throws `TInvestRefusedException` with the
   code of the detail for a refusal (`TInvestNotFoundException` for `NOT_FOUND`).
   The metrics live on the meter `ProfitFox.TInvest`: the counter `profitfox.tinvest.requests` {`group`, `method`, `outcome`} (a stream

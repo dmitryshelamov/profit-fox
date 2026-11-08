@@ -341,6 +341,36 @@ public class TInvestStreamsTests
         await EventuallyAsync(() => first.Restored == 1 && second.Restored == 1, "the restore of every listener");
     }
 
+    // A listener that fails on the stream of orders does not end the stream for good: it is lost and opened again.
+    [Test]
+    public async Task Listener_that_fails_on_the_stream_of_orders_loses_it_which_opens_again()
+    {
+        var events = new Events();
+        _subscriptions.Add(await _streams.SubscribeAccountAsync(
+            Key,
+            events.Orders.Enqueue,
+            events.Fills.Enqueue,
+            () =>
+            {
+                if (++events.Restored == 1)
+                {
+                    throw new InvalidOperationException("The session failed.");
+                }
+            },
+            CancellationToken.None));
+        await EventuallyAsync(() => _orders.IsOpen, "the stream of orders");
+        _orders.Send(Ping());
+        await Task.Delay(50);
+        _orders.Fail(StatusCode.Unavailable);
+        await AdvanceUntilAsync(() => _orders.Opens == 2, TimeSpan.FromMilliseconds(250), "the stream again");
+
+        _orders.Send(Ping());
+
+        await AdvanceUntilAsync(() => _orders.Opens == 3, TimeSpan.FromMilliseconds(250), "the stream once more");
+        _orders.Send(Ping());
+        await EventuallyAsync(() => events.Restored == 2, "the restore");
+    }
+
     [Test]
     public async Task Listener_that_leaves_while_the_stream_waits_to_open_again_closes_it()
     {
@@ -572,6 +602,32 @@ public class TInvestStreamsTests
         await AdvanceUntilAsync(() => _market.Opens == 2 && Subscribed(_market.Streams[1]).Count == 2, TimeSpan.FromMilliseconds(250), "the stream again");
         _market.Send(Ping(market: true));
         await EventuallyAsync(() => sber.Restored == 1, "the restore");
+    }
+
+    // A candle the stream cannot tell (its data make no sense) does not end the stream for good: it is lost and opened again, and the
+    // next candle comes.
+    [Test]
+    public async Task Candle_the_stream_cannot_tell_loses_the_stream_which_opens_again()
+    {
+        using var requests = new MetricCollector<long>(_host.MeterFactory, TInvestMetrics.MeterName, "profitfox.tinvest.requests");
+        var sber = new Events();
+        await CandlesAsync(Sber, sber);
+        await EventuallyAsync(() => FirstSubscribed().Count == 1, "the subscription");
+        var open = DateTimeOffset.Parse("2024-03-11T09:00:00Z");
+        Tinkoff.InvestApi.V1.Candle broken = Candle(TInvestFixtures.SberUid, open, 251m, 7);
+        broken.Time = new Timestamp { Seconds = long.MinValue };
+
+        _market.Send(new MarketDataResponse { Candle = broken });
+
+        await AdvanceUntilAsync(() => _market.Opens == 2 && Subscribed(_market.Streams[1]).Count == 1, TimeSpan.FromMilliseconds(250), "the stream again");
+        _market.Streams[0].IsOpen.ShouldBeFalse();
+        requests.GetMeasurementSnapshot()
+            .Select(measurement => ((string)measurement.Tags["group"]!, (string)measurement.Tags["method"]!, (string)measurement.Tags["outcome"]!))
+            .ShouldContain(("market_data", "MarketDataStream", "lost"));
+        _market.Send(new MarketDataResponse { Candle = Candle(TInvestFixtures.SberUid, open, 251m, 7) });
+
+        await EventuallyAsync(() => !sber.Candles.IsEmpty, "the next candle");
+        sber.Restored.ShouldBe(1);
     }
 
     [Test]
