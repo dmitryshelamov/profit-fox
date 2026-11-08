@@ -165,12 +165,16 @@ internal sealed class TInvestOrderGateway(TInvestCall call, TInvestShares shares
         return new OrderOutcome(OrderOutcomeKind.Accepted, exchangeId);
     }
 
-    /// <summary>The next attempt waits for the opening of the next session by the schedule, or a minute without one.</summary>
+    /// <summary>
+    ///     The next attempt waits for the opening of the next session by the schedule, or a minute without one or in the first minute of a
+    ///     session, whose status may take no orders yet.
+    /// </summary>
     private async Task<OrderOutcome> UntilSessionAsync(ExchangeKey key, TInvestShare share, CancellationToken cancellationToken)
     {
         DateTimeOffset? opening = await statuses.NextSessionStartAsync(key.Secret, share.Exchange, cancellationToken);
+        DateTimeOffset now = time.GetUtcNow();
 
-        return new OrderOutcome(OrderOutcomeKind.Transient, RetryAfter: opening is { } start ? start - time.GetUtcNow() : Minute);
+        return new OrderOutcome(OrderOutcomeKind.Transient, RetryAfter: opening is { } start && start > now ? start - now : Minute);
     }
 
     /// <summary>A token T-Invest does not accept is a refusal for good; no answer, a rate limit or a failure of T-Invest a transient one.</summary>

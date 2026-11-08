@@ -275,9 +275,10 @@ enforces a rule, the check is the source of truth.
   `null` on `NOT_FOUND`), `TInvestTradingStatuses` (`MayPlaceAsync`: the trading status and the corridor of the order book of a share,
   kept 5 s, `TInvestPlacement`; `NextSessionStartAsync` and `TradingDayEndAsync` by `TradingSchedules` of the exchange of the share
   (`TInvestShare.Exchange`), kept to the end of the UTC day: the intervals of the exchange count, those of the dealer do not, a day with
-  another type tells none), `TInvestOrderGateway` (`IOrderGateway`: an order in lots, a limit one `DAY` and a market one without a price,
-  sent only while `MayPlaceAsync` takes it; a closed session is `Transient` with `RetryAfter` until the next session or a minute, the
-  corridor a minute; the refusals by the code of `TInvestRefusedException` (`30057` an order taken, read by its request id); a cancel by
+  another type tells none; a session that started within the last minute is the one opening now), `TInvestOrderGateway`
+  (`IOrderGateway`: an order in lots, a limit one `DAY` and a market one without a price, sent only while `MayPlaceAsync` takes it; a
+  closed session is `Transient` with `RetryAfter` until the next session, or a minute without a schedule or in the first minute of a
+  session, the corridor a minute; the refusals by the code of `TInvestRefusedException` (`30057` an order taken, read by its request id); a cancel by
   the request id, `AlreadyDone` for an order without one, one T-Invest does not know or one that ended), `TInvestLedger`
   (`IExchangeLedger`: the free roubles less those blocked from `GetPositions`, the shares with those blocked, the active orders by
   `GetOrders` told by their request ids, an order and its stages by `GetOrderState`, the fee rate `deal_commission / initial_order_amount`

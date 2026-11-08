@@ -9,12 +9,16 @@ namespace ProfitFox.Infrastructure.Exchanges.TInvest;
 /// <summary>
 ///     What the exchange takes now (decision 6): the trading status of a share and its price corridor, each read at most every
 ///     <see cref="StatusLifetime" />, and the schedule of an exchange, kept to the end of the day. The next session opens with the first
-///     interval of the exchange (the auctions and the sessions of the morning, the main and the evening ones) after now; the hours of the
-///     dealer do not count, and a day with an interval of another type tells none. One for the process.
+///     interval of the exchange (the auctions and the sessions of the morning, the main and the evening ones) after now, or the one that
+///     opened within the last minute; the hours of the dealer do not count, and a day with an interval of another type tells none. One
+///     for the process.
 /// </summary>
 internal sealed class TInvestTradingStatuses(TInvestCall call, TimeProvider time)
 {
     public static readonly TimeSpan StatusLifetime = TimeSpan.FromSeconds(5);
+
+    /// <summary>A session that started this long ago is still the one opening now: its status may take no orders yet.</summary>
+    public static readonly TimeSpan Opening = TimeSpan.FromMinutes(1);
 
     private const string DealerPrefix = "dealer_";
 
@@ -63,7 +67,10 @@ internal sealed class TInvestTradingStatuses(TInvestCall call, TimeProvider time
         return down > 0m && up >= down && price >= down && price <= up ? TInvestPlacement.Open : TInvestPlacement.OutOfCorridor;
     }
 
-    /// <summary>When the next session of the exchange opens, or <c>null</c> when the schedule does not read or tells none.</summary>
+    /// <summary>
+    ///     When the next session of the exchange opens, the one that opened within the last <see cref="Opening" /> included, or <c>null</c>
+    ///     when the schedule does not read or tells none.
+    /// </summary>
     public async Task<DateTimeOffset?> NextSessionStartAsync(string token, string exchange, CancellationToken cancellationToken)
     {
         DateTimeOffset now = time.GetUtcNow();
@@ -75,7 +82,7 @@ internal sealed class TInvestTradingStatuses(TInvestCall call, TimeProvider time
                 return null;
             }
 
-            DateTimeOffset[] starts = [.. Intervals(day).Select(interval => interval.StartTs.ToUtcMoment()).Where(start => start > now).Order()];
+            DateTimeOffset[] starts = [.. Intervals(day).Select(interval => interval.StartTs.ToUtcMoment()).Where(start => start > now - Opening).Order()];
 
             if (starts.Length > 0)
             {

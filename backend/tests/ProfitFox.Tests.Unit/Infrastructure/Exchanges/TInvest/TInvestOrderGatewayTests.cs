@@ -176,6 +176,19 @@ public class TInvestOrderGatewayTests
         Posted().ShouldBeEmpty();
     }
 
+    // A bot that wakes at the opening while the status still takes no orders waits a minute, not until the session after.
+    [Test]
+    public async Task Order_the_status_does_not_take_in_the_first_minute_of_the_session_waits_a_minute()
+    {
+        _host.Time.SetUtcNow(DateTimeOffset.Parse("2024-03-11T03:50:30Z"));
+        _status = new GetTradingStatusResponse { ApiTradeAvailableFlag = false };
+        OpensAt("2024-03-11T03:50:00Z");
+
+        OrderOutcome outcome = await PlaceAsync(new OrderRequest("b-1", OrderSide.Buy, OrderType.Limit, 250.5m, 20m, null));
+
+        (outcome.Kind, outcome.RetryAfter).ShouldBe((OrderOutcomeKind.Transient, TimeSpan.FromMinutes(1)));
+    }
+
     // Scenario "Расписание не читается".
     [Test]
     public async Task Closed_session_without_a_schedule_waits_a_minute()

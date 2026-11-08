@@ -153,6 +153,28 @@ public class TInvestTradingStatusesTests
         (await _statuses.NextSessionStartAsync(Token, TInvestFixtures.SberExchange, CancellationToken.None)).ShouldBe(DateTimeOffset.Parse("2024-03-11T07:00:00Z"));
     }
 
+    // A session whose start is less than a minute gone is the one opening now: a bot that wakes at the opening, while the status still
+    // takes no orders, waits for it and not for the session after.
+    [Test]
+    public async Task Session_started_within_the_last_minute_is_the_one_opening_now()
+    {
+        _host.Time.SetUtcNow(DateTimeOffset.Parse("2024-03-11T03:50:30Z"));
+        _host.Api.On<TradingSchedulesRequest, TradingSchedulesResponse>("TradingSchedules", _ => Schedule(
+            Day("2024-03-11", ("opening_auction_morning", "2024-03-11T03:50:00Z", "2024-03-11T04:00:00Z"), ("regular_trading_session_morning", "2024-03-11T04:00:00Z", "2024-03-11T06:50:00Z"))));
+
+        (await _statuses.NextSessionStartAsync(Token, TInvestFixtures.SberExchange, CancellationToken.None)).ShouldBe(DateTimeOffset.Parse("2024-03-11T03:50:00Z"));
+    }
+
+    [Test]
+    public async Task Session_started_a_minute_ago_is_gone()
+    {
+        _host.Time.SetUtcNow(DateTimeOffset.Parse("2024-03-11T03:51:00Z"));
+        _host.Api.On<TradingSchedulesRequest, TradingSchedulesResponse>("TradingSchedules", _ => Schedule(
+            Day("2024-03-11", ("opening_auction_morning", "2024-03-11T03:50:00Z", "2024-03-11T04:00:00Z"), ("regular_trading_session_morning", "2024-03-11T04:00:00Z", "2024-03-11T06:50:00Z"))));
+
+        (await _statuses.NextSessionStartAsync(Token, TInvestFixtures.SberExchange, CancellationToken.None)).ShouldBe(DateTimeOffset.Parse("2024-03-11T04:00:00Z"));
+    }
+
     // A changed dictionary of the intervals falls back to a pause of a minute, never to an order into a closed session.
     [Test]
     public async Task Day_with_an_interval_of_an_unknown_type_tells_no_session()
