@@ -271,6 +271,37 @@ describe('screen «Сделки»', () => {
     expect(within(row).queryByRole('button')).toBeNull();
   });
 
+  // Scenarios "Ликвидированная сделка" and "Закрытая по ADL".
+  it('shows a trade the exchange liquidated or closed by ADL with its result and the time to the outcome', async () => {
+    fakeApi(
+      routes(() =>
+        journalOf(
+          [],
+          [
+            tradeOf({
+              status: 'liquidated',
+              result: '-1.76',
+              resultR: '-0.24',
+              secondsToOutcome: 480,
+            }),
+            tradeOf({ status: 'closed_by_adl', result: '0.5', resultR: '0.5' }),
+          ],
+        ),
+      ),
+    );
+    renderApp('/idea-trades');
+
+    const rows = within(await screen.findByRole('table', { name: 'Закрытые сделки' })).getAllByRole(
+      'row',
+    );
+
+    expect(within(rows[1]!).getByText('Ликвидирована')).toBeInTheDocument();
+    expect(within(rows[1]!).getByText('-1.76 USDT · -0.24 R')).toBeInTheDocument();
+    expect(within(rows[1]!).getByText('8 мин')).toBeInTheDocument();
+    expect(within(rows[2]!).getByText('Закрыта биржей (ADL)')).toBeInTheDocument();
+    expect(within(rows[2]!).getByText('+0.50 USDT · +0.50 R')).toBeInTheDocument();
+  });
+
   // Scenario "Сделка до выкатки".
   it('shows dashes in the columns of the promise and of the idea of a trade made before the journal', async () => {
     fakeApi(
