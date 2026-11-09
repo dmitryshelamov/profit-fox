@@ -28,6 +28,23 @@ public static class CaseResult
         return ((Side(plan.Side) * (exit - entry)) - paid) / risk;
     }
 
+    /// <summary>
+    ///     The gross result of a closed idea in R (decision 1 of add-own-idea-numbers): (exit − entry) / (entry − stop) for long, mirrored for short,
+    ///     at the prices of the plan, without the fees and the slippage. An idea with no price to exit at, one that never entered among them, has
+    ///     none.
+    /// </summary>
+    public static decimal? GrossR(IdeaTrack track)
+    {
+        if (track.ExitPrice is not { } exit)
+        {
+            return null;
+        }
+
+        IdeaPlan plan = track.Plan;
+
+        return Side(plan.Side) * (exit - plan.Entry) / Math.Abs(plan.Entry - plan.Stop);
+    }
+
     /// <summary>The price an entry at <paramref name="price" /> fills at: a pullback at its limit, any other entry worse by the slippage.</summary>
     public static decimal EntryFill(IdeaType type, IdeaSide side, decimal price, FeeRates fees)
     {
