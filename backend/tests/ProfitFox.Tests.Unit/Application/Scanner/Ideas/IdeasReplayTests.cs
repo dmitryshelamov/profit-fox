@@ -547,6 +547,7 @@ public class IdeasReplayTests
     [Test]
     public async Task Clean_up_removes_an_hour_of_other_versions_a_step_and_the_cursors_at_the_end()
     {
+        _cursors.HasOtherVersionsAsync(2, Arg.Any<CancellationToken>()).Returns(true);
         _signals.DeleteOtherVersionsAsync(2, Arg.Any<CancellationToken>()).Returns(4, 0);
         IdeasReplay replay = Replay(2);
 
@@ -556,6 +557,20 @@ public class IdeasReplayTests
 
         await _signals.Received(2).DeleteOtherVersionsAsync(2, Arg.Any<CancellationToken>());
         await _cursors.Received(1).DeleteOtherVersionsAsync(2, Arg.Any<CancellationToken>());
+    }
+
+    // The cursors of a version go after its last signal, so none of another version means no signal of one either. Looking for such a signal
+    // among the 80 M of the version in force read them all on prod and outran the timeout of the step at every start of the scanner, and the
+    // replay and the statistics wait for the clean-up.
+    [Test]
+    public async Task Clean_up_reads_no_signals_while_no_cursor_of_another_version_is_left()
+    {
+        IdeasReplay replay = Replay(2);
+
+        (await replay.CleanUpAsync(CancellationToken.None)).ShouldBeFalse();
+
+        await _signals.DidNotReceive().DeleteOtherVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+        await _cursors.DidNotReceive().DeleteOtherVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
     // Decision 5 and scenario "Перцентили после прогона": the percentiles of a day come from the candles before it; after the turn the last

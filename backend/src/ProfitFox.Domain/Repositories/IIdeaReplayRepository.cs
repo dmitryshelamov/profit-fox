@@ -18,6 +18,9 @@ public interface IIdeaReplayRepository
     /// </summary>
     Task<IdeaReplayProgress> ProgressAsync(int engineVersion, DateTimeOffset historyStart, CancellationToken cancellationToken);
 
+    /// <summary>Whether a cursor of another version is left.</summary>
+    Task<bool> HasOtherVersionsAsync(int engineVersion, CancellationToken cancellationToken);
+
     /// <summary>Removes the cursors of every other version.</summary>
     Task DeleteOtherVersionsAsync(int engineVersion, CancellationToken cancellationToken);
 }

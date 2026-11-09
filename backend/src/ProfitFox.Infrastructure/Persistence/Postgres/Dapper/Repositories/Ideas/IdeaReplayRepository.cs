@@ -79,6 +79,14 @@ internal sealed class IdeaReplayRepository(NpgsqlDataSource dataSource) : IIdeaR
         return new IdeaReplayProgress(row.Done, row.Total, row.Slowest, engineVersion);
     }
 
+    public async Task<bool> HasOtherVersionsAsync(int engineVersion, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        return await connection.ExecuteScalarAsync<bool>(
+            new CommandDefinition("SELECT EXISTS (SELECT 1 FROM idea_replay WHERE engine_version <> @Version)", new { Version = engineVersion }, cancellationToken: cancellationToken));
+    }
+
     public async Task DeleteOtherVersionsAsync(int engineVersion, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);

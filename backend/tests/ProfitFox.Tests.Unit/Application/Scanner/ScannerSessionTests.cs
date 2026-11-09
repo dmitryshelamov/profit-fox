@@ -120,6 +120,9 @@ public class ScannerSessionTests
         _versions = Substitute.For<IIdeaEngineVersionRepository>();
         _cursors = Substitute.For<IIdeaReplayRepository>();
         _cursors.GetAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new Dictionary<Instrument, IdeaReplayCursor>());
+
+        // The sessions of these tests start with a clean-up to do: the signals of other versions are looked for only while a cursor of one is left.
+        _cursors.HasOtherVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(true);
         _time = new FakeTimeProvider(Start);
         _closed = null!;
         _liquidated = null!;

@@ -276,6 +276,20 @@ public class IdeaSignalRepositoryTests
         (await replay.GetAsync(2, CancellationToken.None)).Keys.ShouldBe([sol]);
     }
 
+    // The clean-up looks for signals of other versions only while a cursor of one is left.
+    [Test]
+    public async Task Cursor_of_another_version_is_told_from_the_cursors_of_the_version()
+    {
+        var replay = new IdeaReplayRepository(_dataSource);
+
+        (await replay.HasOtherVersionsAsync(2, CancellationToken.None)).ShouldBeFalse();
+
+        await replay.SetAsync(IdeaGenerator.Wif, 2, new IdeaReplayCursor(Now, []), CancellationToken.None);
+
+        (await replay.HasOtherVersionsAsync(2, CancellationToken.None)).ShouldBeFalse();
+        (await replay.HasOtherVersionsAsync(3, CancellationToken.None)).ShouldBeTrue();
+    }
+
     // Decision 5: an applied rule goes over the one before it of its type × interval.
     [Test]
     public async Task Exit_rules_are_kept_per_type_and_interval()
