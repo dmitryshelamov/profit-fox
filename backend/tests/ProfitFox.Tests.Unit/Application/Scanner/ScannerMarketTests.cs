@@ -119,6 +119,21 @@ public class ScannerMarketTests
         market.Snapshot(End, End).Single().Metrics.Change4h.ShouldBe(106m);
     }
 
+    // Fix: after the restart of 2026-11-09 the stream closed a minute of LQTYUSDT while its day was read from storage, the day ended before
+    // the coverage that had moved, and memory never took it: the pair showed no changes until the next restart.
+    [Test]
+    public void Day_read_from_storage_joins_a_minute_the_stream_closed_meanwhile()
+    {
+        var market = new ScannerMarket();
+        market.Keep([new ScannerPair(Sol, true, CoveredUntil: End.AddMinutes(-1))]);
+        market.Closed(Sol, AsCandle(MarketFixtures.Day()[^1]));
+
+        market.Loaded(Sol, End.AddMinutes(-1).AddDays(-1), End.AddMinutes(-1), Day().SkipLast(1));
+
+        market.HoldsMinutes(Sol).ShouldBeTrue();
+        market.Snapshot(End, End).Single().Metrics.Change4h.ShouldBe(106m);
+    }
+
     [Test]
     public void Gap_loaded_without_the_day_before_it_covers_only_itself()
     {
