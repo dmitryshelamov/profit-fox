@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Services.Ideas;
@@ -146,7 +148,7 @@ public class SetupDetectorTests
 
         CandleExtremes extremes = SetupDetector.Base(closed, ZoneRules.Default)!.Extremes!;
 
-        (extremes.High.ToString(), extremes.Low.ToString()).ShouldBe(("120.0", "90.0"));
+        (extremes.High.ToString(CultureInfo.InvariantCulture), extremes.Low.ToString(CultureInfo.InvariantCulture)).ShouldBe(("120.0", "90.0"));
         SetupDetector.Base(closed[..199], ZoneRules.Default)!.Extremes.ShouldBeNull();
     }
 

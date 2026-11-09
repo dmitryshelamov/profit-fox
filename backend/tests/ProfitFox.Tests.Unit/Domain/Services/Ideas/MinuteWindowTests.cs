@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.ValueObjects.Ideas;
 
@@ -45,7 +47,7 @@ public class MinuteWindowTests
         window.Add(Minute(1, 100m, 101m, 99m, 100m, 2m));
         window.Add(Minute(2, 100m, 101m, 99m, 100m, 4m));
 
-        window.Sum.ToString().ShouldBe("6");
+        window.Sum.ToString(CultureInfo.InvariantCulture).ShouldBe("6");
         window.Sum.ShouldBe(2m + 4m);
     }
 
@@ -58,11 +60,11 @@ public class MinuteWindowTests
         window.Add(Minute(1, 100m, 101.00m, 99.00m, 100m, 1m));
         window.Add(Minute(2, 100m, 100.5m, 99.5m, 100m, 1m));
 
-        (window.Low.ToString(), window.High.ToString()).ShouldBe(("99.0", "101.0"));
+        (window.Low.ToString(CultureInfo.InvariantCulture), window.High.ToString(CultureInfo.InvariantCulture)).ShouldBe(("99.0", "101.0"));
 
         window.Add(Minute(3, 100m, 100.5m, 99.5m, 100m, 1m));
 
-        (window.Low.ToString(), window.High.ToString()).ShouldBe(("99.00", "101.00"));
+        (window.Low.ToString(CultureInfo.InvariantCulture), window.High.ToString(CultureInfo.InvariantCulture)).ShouldBe(("99.00", "101.00"));
     }
 
     // Against the pass over the minutes on a long random walk: every step gives the sum, low and high of the last minutes.
@@ -82,8 +84,8 @@ public class MinuteWindowTests
             window.Add(minutes[^1]);
             IdeaCandle[] last = [.. minutes.TakeLast(60)];
 
-            (window.Sum.ToString(), window.Low.ToString(), window.High.ToString(), window.First).ShouldBe(
-                (last.Sum(minute => minute.Volume).ToString(), last.Min(minute => minute.Low).ToString(), last.Max(minute => minute.High).ToString(), last[0]));
+            (window.Sum.ToString(CultureInfo.InvariantCulture), window.Low.ToString(CultureInfo.InvariantCulture), window.High.ToString(CultureInfo.InvariantCulture), window.First).ShouldBe(
+                (last.Sum(minute => minute.Volume).ToString(CultureInfo.InvariantCulture), last.Min(minute => minute.Low).ToString(CultureInfo.InvariantCulture), last.Max(minute => minute.High).ToString(CultureInfo.InvariantCulture), last[0]));
         }
     }
 
