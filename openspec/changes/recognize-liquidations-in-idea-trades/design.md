@@ -49,7 +49,8 @@
 ### 2. Отдельный вход сессии `ForcedFillInput`
 
 В обработчике исполнений потока `IdeaTradeSession` проверка идёт раньше `Mine`: исполнение `Kind != Trade` по
-инструменту сделки — это `ForcedFillInput(fill)`, а не `ForeignFillInput`. Сверку оно не планирует. Сессии всех сделок
+инструменту сделки — это `ForcedFillInput(fill)`, а не `ForeignFillInput`. Сверку оно не планирует. Поток Bybit
+отдаёт вид исполнения (`execType`) так же, как REST: проверено в задаче 1.1 (Open Questions). Сессии всех сделок
 символа получают его из своих подписок, и каждая применяет только свою долю (решение 3).
 
 ### 3. Доли считаются один раз и хранятся, а применяет каждая сессия свою
@@ -151,6 +152,8 @@ T-Invest — `ExchangeException`, как у `GetLinearPositionAsync`. `RoutedExc
 
 ## Open Questions
 
-- Отдаёт ли поток Bybit `execType` у `BybitUserTradeUpdate` в Bybit.Net 7.7 так же, как REST (`BybitUserTrade.
-  TradeType`)? Проверяется первой задачей apply. Если нет, исполнение без клиентского id на символе сделки пойдёт через
-  догрузку REST перед сверкой (решение 5), и итог тот же, только позже на `PollInterval × 3`.
+- ~~Отдаёт ли поток Bybit `execType` у `BybitUserTradeUpdate` в Bybit.Net 7.7 так же, как REST (`BybitUserTrade.
+  TradeType`)?~~ Решено (задача 1.1): да. В Bybit.Net 7.7 `BybitUserTradeUpdate` наследует `BybitUserTrade`, и
+  свойство `TradeType` (`TradeType?`, JSON `execType`) объявлено в `BybitUserTrade`, поэтому поток отдаёт его так же,
+  как REST. Ветка потока решения 2 работает как задумано, а догрузка решения 5 остаётся страховкой для пропущенных
+  исполнений.
