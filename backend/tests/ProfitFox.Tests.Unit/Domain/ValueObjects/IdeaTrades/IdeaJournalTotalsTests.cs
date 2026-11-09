@@ -20,7 +20,7 @@ public class IdeaJournalTotalsTests
         var totals = IdeaJournalTotals.Compute(
             [Closed(IdeaTradeStatus.ClosedAtTarget, 1.8m), Closed(IdeaTradeStatus.ClosedAtStop, -1.1m), Closed(IdeaTradeStatus.ClosedManually, 0.2m), Cancelled(), Failed()]);
 
-        (totals.Targets, totals.Stops, totals.Manual, totals.Cancelled, totals.Failed).ShouldBe((1, 1, 1, 1, 1));
+        (totals.Targets, totals.Stops, totals.Manual, totals.Liquidated, totals.Adl, totals.Cancelled, totals.Failed).ShouldBe((1, 1, 1, 0, 0, 1, 1));
         totals.Result.ShouldBe(0.9m);
         totals.MeanR.ShouldBe(0.3m);
         totals.MeanRLow!.Value.ShouldBe(0.3m - 1.6437m, 0.0001m);
@@ -36,6 +36,32 @@ public class IdeaJournalTotalsTests
 
         (totals.Targets, totals.Stops, totals.Manual, totals.Expired).ShouldBe((1, 1, 0, 2));
         (totals.Result, totals.MeanR).ShouldBe((0.7m, 0.175m));
+    }
+
+    // Scenario "Ликвидация в итогах": −1.0 at the stop, −0.24 liquidated and +0.5 closed by ADL; the mean (−1.0 − 0.24 + 0.5) / 3.
+    [Test]
+    public void Liquidated_trades_and_trades_closed_by_adl_are_counted_and_go_into_the_mean_the_money_and_the_fees()
+    {
+        var totals = IdeaJournalTotals.Compute(
+        [
+            Closed(IdeaTradeStatus.ClosedAtStop, -1.0m, fee: 0.01m, minutes: 30),
+            Closed(IdeaTradeStatus.Liquidated, -0.24m, fee: 0.02m, minutes: 60),
+            Closed(IdeaTradeStatus.ClosedByAdl, 0.5m, fee: 0.03m, minutes: 90)
+        ]);
+
+        (totals.Stops, totals.Liquidated, totals.Adl).ShouldBe((1, 1, 1));
+        (totals.Result, totals.MeanR).ShouldBe((-0.74m, -0.74m / 3m));
+        totals.Fees.ShouldBe(0.12m);
+        totals.MeanTime.ShouldBe(TimeSpan.FromMinutes(60));
+    }
+
+    // Scenario "Ликвидированная с обещанием": promised −0.10 R, got −0.24 R.
+    [Test]
+    public void Liquidated_trade_with_a_promise_is_compared_with_its_promise()
+    {
+        var totals = IdeaJournalTotals.Compute([Closed(IdeaTradeStatus.Liquidated, -0.24m, promised: -0.1m)]);
+
+        totals.Promise.ShouldBe(new PromiseComparison(1, -0.1m, -0.24m));
     }
 
     // Scenario "Одна сделка".
@@ -119,6 +145,8 @@ public class IdeaJournalTotalsTests
             IdeaTradeStatus.ClosedAtTarget => IdeaTradeLeg.TakeProfit,
             IdeaTradeStatus.ClosedAtStop => IdeaTradeLeg.StopLoss,
             IdeaTradeStatus.ClosedAtExpiry => IdeaTradeLeg.Expiry,
+            IdeaTradeStatus.Liquidated => IdeaTradeLeg.Liquidation,
+            IdeaTradeStatus.ClosedByAdl => IdeaTradeLeg.Adl,
             _ => IdeaTradeLeg.Manual
         };
         IdeaTrade trade = New()
