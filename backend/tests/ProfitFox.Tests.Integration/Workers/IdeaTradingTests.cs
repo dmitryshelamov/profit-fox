@@ -798,6 +798,27 @@ public class IdeaTradingTests
         (await _scenario.TradeAsync(trade.Id)).Status.ShouldBe(IdeaTradeStatus.Liquidated);
     }
 
+    // Decision 4: Bybit usually cancels the stop and the target of a position it liquidated; those it left are taken off, as after a market close,
+    // and the executions of the orders of the trade are kept with it.
+    [TestCase(ExchangeFillKind.Liquidation, IdeaTradeStatus.Liquidated)]
+    [TestCase(ExchangeFillKind.Adl, IdeaTradeStatus.ClosedByAdl)]
+    public async Task Trade_closed_by_the_exchange_takes_off_the_stop_and_the_target_left_and_keeps_its_fills(ExchangeFillKind kind, IdeaTradeStatus status)
+    {
+        IdeaTrade trade = await _scenario.CreateTradeAsync();
+        string entry = new IdeaTradeOrderId(trade.Id, 1).Code;
+        _scenario.StartWorker();
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the entry");
+        _scenario.Exchange.Fill(entry, 0.47m, 105m, fee: 0.02m, trades: false);
+        await _scenario.WaitAsync(async () => (await _scenario.TradeChildrenAsync(trade.Id)).Count == 2, "the stop and the target");
+
+        _scenario.Exchange.ForceFill(kind, OrderSide.Sell, 0.47m, 95m, 0.03m, LiveTradingScenario.Linear);
+
+        await _scenario.WaitAsync(() => _scenario.Exchange.ChildCancels.Count == 2, "the stop and the target taken off");
+        await _scenario.WaitAsync(async () => (await _scenario.TradeChildrenAsync(trade.Id)).All(child => child.Finished), "the stop and the target ended");
+        await _scenario.WaitAsync(async () => (await _scenario.TradeFillsAsync(trade.Id)).Count == 1, "the fill of the entry");
+        (await _scenario.TradeAsync(trade.Id)).Status.ShouldBe(status);
+    }
+
     // Scenario "ADL закрыла сделку": a short bought back by the auto-deleveraging of Bybit.
     [Test]
     public async Task Auto_deleveraging_on_the_stream_closes_a_short_by_the_exchange()

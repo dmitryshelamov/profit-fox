@@ -808,7 +808,8 @@ internal sealed class IdeaTradeSession(
 
     /// <summary>
     ///     A trade that is over still has work while an order of it stands: the entry of a failed trade is taken off, since its stop and target
-    ///     would guard a position nobody follows, and the stop and the target a market close left are taken off. Returns whether nothing is left.
+    ///     would guard a position nobody follows, and the stop and the target a market close, a liquidation or an auto-deleveraging left are taken
+    ///     off. Returns whether nothing is left.
     /// </summary>
     private async Task<bool> WindDownAsync(CancellationToken cancellationToken)
     {
@@ -817,14 +818,16 @@ internal sealed class IdeaTradeSession(
             await RequestCancelAsync(entry.Number, cancellationToken);
         }
 
-        if (!_fillsKept && _trade.Status is IdeaTradeStatus.ClosedAtTarget or IdeaTradeStatus.ClosedAtStop or IdeaTradeStatus.ClosedManually)
+        if (!_fillsKept && _trade.Status is IdeaTradeStatus.ClosedAtTarget or IdeaTradeStatus.ClosedAtStop or IdeaTradeStatus.ClosedManually or IdeaTradeStatus.Liquidated
+                or IdeaTradeStatus.ClosedByAdl)
         {
             await KeepFillsAsync(cancellationToken);
         }
 
         var left = false;
 
-        if (_trade.Status == IdeaTradeStatus.ClosedManually)
+        // A market close leaves the stop and the target standing, and the exchange may leave them after it closed the position by itself.
+        if (_trade.Status is IdeaTradeStatus.ClosedManually or IdeaTradeStatus.Liquidated or IdeaTradeStatus.ClosedByAdl)
         {
             left = await TakeChildrenOffAsync(cancellationToken);
         }
