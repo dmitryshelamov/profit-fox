@@ -65,8 +65,29 @@ public class BybitLedgerTests
     {
         using StubHttpHandler handler = new StubHttpHandler().RespondJson(Positions(Position(0, "", "0", leverage: "10")));
 
-        (await Ledger(handler).GetLeverageAsync(Key, Linear, CancellationToken.None)).ShouldBe(10m);
+        (await Ledger(handler).GetLinearPositionAsync(Key, Linear, CancellationToken.None)).ShouldBe(new LinearPosition(10m, 0m));
+    }
+
+    // Review of add-idea-trade-leverage: the leverage and the position of the symbol come from one read of the position list.
+    [Test]
+    public async Task Linear_position_is_the_leverage_and_the_position_of_the_row_of_the_symbol_in_one_read()
+    {
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(Positions(Position(0, "Sell", "0.5", leverage: "10")));
+
+        (await Ledger(handler).GetLinearPositionAsync(Key, Linear, CancellationToken.None)).ShouldBe(new LinearPosition(10m, -0.5m));
         BybitRequests.Describe(handler.Requests.Single()).ShouldBe(BybitRequests.Describe("/v5/position/list?category=linear&symbol=BTCUSDT"));
+    }
+
+    // Review of add-idea-trade-leverage: no row of the symbol, or a row without its leverage, is an answer the port does not take, not a crash.
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task Linear_position_without_the_leverage_of_the_symbol_is_an_exchange_error(bool row)
+    {
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(row ? Positions(Position(0, "", "0", leverage: "")) : Positions());
+
+        ExchangeException error = await Should.ThrowAsync<ExchangeException>(() => Ledger(handler).GetLinearPositionAsync(Key, Linear, CancellationToken.None));
+
+        error.Message.ShouldBe("Bybit told no leverage of BTCUSDT.");
     }
 
     [Test]

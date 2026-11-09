@@ -29,9 +29,13 @@ describe('reasons an entry is refused', () => {
     ).toBe('Стоп дальше, чем позволяет плечо: 20 % при пределе 16.7 %');
   });
 
-  it('says the leverage of a symbol that is taken', () => {
+  // Review of add-idea-trade-leverage: the symbol may be held by an order or a trade that waits, not only by a position.
+  it('says the leverage of a symbol that is taken, by a position, an order or a trade', () => {
     expect(reasonText('leverage_differs', { actual: '1', limit: '5' })).toBe(
-      'На символе открыта позиция с плечом 1× — плечо не поменять',
+      'Символ занят позицией, ордером или сделкой с плечом 1× — плечо не поменять',
+    );
+    expect(reasonText('leverage_differs')).toBe(
+      'Символ занят позицией, ордером или сделкой с другим плечом — плечо не поменять',
     );
   });
 

@@ -58,7 +58,7 @@ public class RoutedTradingPortsTests
         expected.GetFreeAsync(key, "RUB", Arg.Any<CancellationToken>()).Returns(5m);
         expected.IsHedgeModeAsync(key, instrument, Arg.Any<CancellationToken>()).Returns(true);
         expected.GetHoldingAsync(key, instrument, "SBER", Arg.Any<CancellationToken>()).Returns(7m);
-        expected.GetLeverageAsync(key, instrument, Arg.Any<CancellationToken>()).Returns(3m);
+        expected.GetLinearPositionAsync(key, instrument, Arg.Any<CancellationToken>()).Returns(new LinearPosition(3m, 7m));
         expected.GetOpenOrdersAsync(key, instrument, Arg.Any<CancellationToken>()).Returns([order]);
         expected.FindOrderAsync(key, instrument, "c-1", Arg.Any<CancellationToken>()).Returns(order);
         expected.FindOrderByExchangeIdAsync(key, instrument, "e-1", Arg.Any<CancellationToken>()).Returns(order);
@@ -70,7 +70,7 @@ public class RoutedTradingPortsTests
         (await routed.GetFreeAsync(key, "RUB", CancellationToken.None)).ShouldBe(5m);
         (await routed.IsHedgeModeAsync(key, instrument, CancellationToken.None)).ShouldBeTrue();
         (await routed.GetHoldingAsync(key, instrument, "SBER", CancellationToken.None)).ShouldBe(7m);
-        (await routed.GetLeverageAsync(key, instrument, CancellationToken.None)).ShouldBe(3m);
+        (await routed.GetLinearPositionAsync(key, instrument, CancellationToken.None)).ShouldBe(new LinearPosition(3m, 7m));
         (await routed.GetOpenOrdersAsync(key, instrument, CancellationToken.None)).ShouldBe([order]);
         (await routed.FindOrderAsync(key, instrument, "c-1", CancellationToken.None)).ShouldBe(order);
         (await routed.FindOrderByExchangeIdAsync(key, instrument, "e-1", CancellationToken.None)).ShouldBe(order);

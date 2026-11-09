@@ -60,6 +60,15 @@ public class IdeaTradingSettingsApiTests
         (await ReadAsync()).GetProperty("leverage").GetInt32().ShouldBe(1);
     }
 
+    // Review of add-idea-trade-leverage: a whole leverage too large for the settings either way is a 400 by its field, not a failure of the server.
+    [TestCase(1e12)]
+    [TestCase(-1e12)]
+    public async Task Leverage_beyond_the_whole_numbers_of_the_settings_is_refused_by_its_field(decimal leverage)
+    {
+        await ShouldBeRefusedOnAsync(await _scenario.Client.PutAsJsonAsync(Url, Body(leverage: leverage)), "leverage");
+        (await ReadAsync()).GetProperty("leverage").GetInt32().ShouldBe(1);
+    }
+
     [Test]
     public async Task Saved_settings_are_read_back()
     {

@@ -20,7 +20,8 @@ const reasons: Record<string, string> = {
   stop_entry_not_supported:
     'Стоп-вход пока не берётся: он ждёт выхода цены из диапазона, а вход здесь — по рынку или лимиткой',
   stop_too_far_for_leverage: 'Стоп дальше, чем позволяет плечо',
-  leverage_differs: 'На символе открыта позиция с другим плечом — плечо не поменять',
+  leverage_differs:
+    'Символ занят позицией, ордером или сделкой с другим плечом — плечо не поменять',
   leverage_not_set: 'Bybit не дал поставить плечо',
 };
 
@@ -32,7 +33,7 @@ const told: Record<string, (detail: Detail) => string> = {
   stop_too_far_for_leverage: (detail) =>
     `Стоп дальше, чем позволяет плечо: ${roundTenth(detail.actual!)} % при пределе ${roundTenth(detail.limit!)} %`,
   leverage_differs: (detail) =>
-    `На символе открыта позиция с плечом ${detail.actual}× — плечо не поменять`,
+    `Символ занят позицией, ордером или сделкой с плечом ${detail.actual}× — плечо не поменять`,
 };
 
 /** What stops an entry, in words, with its numbers when they are given; a code the interface does not know is shown as it is. */

@@ -92,7 +92,7 @@ describe('labels of autos', () => {
     expect(reasonLabel('amount_above_max')).toBe('Больше максимума на одну сделку');
     expect(reasonLabel('total_risk_exceeded')).toBe('Максимальный убыток по стопам');
     expect(reasonLabel('stop_too_far_for_leverage')).toBe('Стоп дальше, чем позволяет плечо');
-    expect(reasonLabel('leverage_differs')).toBe('На символе позиция с другим плечом');
+    expect(reasonLabel('leverage_differs')).toBe('Символ занят с другим плечом');
     expect(reasonLabel('leverage_not_set')).toBe('Bybit не дал поставить плечо');
     expect(reasonLabel('minute_limit')).toBe('Лимит за минуту');
     expect(reasonLabel('side_limit')).toBe('Лимит на сторону');

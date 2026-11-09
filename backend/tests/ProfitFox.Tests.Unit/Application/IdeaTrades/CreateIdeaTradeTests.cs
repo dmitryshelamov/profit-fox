@@ -66,7 +66,7 @@ public class CreateIdeaTradeTests
         _live.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new Dictionary<Guid, LiveBot>());
         _history.GetLastPriceAsync(Arg.Any<Instrument>(), Arg.Any<CancellationToken>()).Returns(100m);
         _ledger.GetFreeAsync(Key, "USDT", Arg.Any<CancellationToken>()).Returns(1000m);
-        _ledger.GetLeverageAsync(Key, Dkng, Arg.Any<CancellationToken>()).Returns(10m);
+        _ledger.GetLinearPositionAsync(Key, Dkng, Arg.Any<CancellationToken>()).Returns(new LinearPosition(10m, 0m));
         _ledger.GetOpenOrdersAsync(Key, Dkng, Arg.Any<CancellationToken>()).Returns([]);
         _gateway.SetLeverageAsync(Key, Dkng, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new OrderOutcome(OrderOutcomeKind.Accepted));
         Settings(leverage: 1);
@@ -106,7 +106,7 @@ public class CreateIdeaTradeTests
     [Test]
     public async Task Leverage_the_symbol_has_already_is_not_set()
     {
-        _ledger.GetLeverageAsync(Key, Dkng, Arg.Any<CancellationToken>()).Returns(1m);
+        _ledger.GetLinearPositionAsync(Key, Dkng, Arg.Any<CancellationToken>()).Returns(new LinearPosition(1m, 0m));
         Idea idea = Idea(Dkng);
 
         await _handler.Handle(new CreateIdeaTradeCommand(idea.Id, AccountId, 50m), CancellationToken.None);
@@ -123,7 +123,7 @@ public class CreateIdeaTradeTests
         Idea first = Idea(Dkng);
         var waiting = IdeaTrade.Create(Guid.NewGuid(), first, AccountId, 100m, new IdeaTradeSize(0.5m, 50m, 0.1m, 0.5m, 5m), Now.AddSeconds(-5), leverage: 1);
         _trades.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([waiting]);
-        _ledger.GetLeverageAsync(Key, Dkng, Arg.Any<CancellationToken>()).Returns(1m);
+        _ledger.GetLinearPositionAsync(Key, Dkng, Arg.Any<CancellationToken>()).Returns(new LinearPosition(1m, 0m));
         Settings(leverage: 5);
         Idea second = Idea(Dkng);
 

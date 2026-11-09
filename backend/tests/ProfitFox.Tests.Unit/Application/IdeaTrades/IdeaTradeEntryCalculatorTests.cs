@@ -61,7 +61,7 @@ public class IdeaTradeEntryCalculatorTests
         _catalog.ListAsync(MarketCategory.Linear, Arg.Any<CancellationToken>()).Returns([new ListedInstrument(MarketCategory.Linear, "ETHUSDT", "ETH", "USDT")]);
         _catalog.ListAsync(MarketCategory.Spot, Arg.Any<CancellationToken>()).Returns([new ListedInstrument(MarketCategory.Spot, "ETHUSDT", "ETH", "USDT")]);
         _ledger.GetFreeAsync(Key, "USDT", Arg.Any<CancellationToken>()).Returns(10_000m);
-        _ledger.GetLeverageAsync(Key, Arg.Any<Instrument>(), Arg.Any<CancellationToken>()).Returns(1m);
+        _ledger.GetLinearPositionAsync(Arg.Any<ExchangeKey>(), Arg.Any<Instrument>(), Arg.Any<CancellationToken>()).Returns(new LinearPosition(1m, 0m));
         _ledger.GetOpenOrdersAsync(Key, Arg.Any<Instrument>(), Arg.Any<CancellationToken>()).Returns([]);
         _calculator = new IdeaTradeEntryCalculator(
             Substitute.For<IIdeaRepository>(),
@@ -192,14 +192,14 @@ public class IdeaTradeEntryCalculatorTests
         EntryCalculation entry = await _calculator.EvaluateAsync(Preparation(minRiskReward: 1.2m, amount: 50m, leverage: 5, category: MarketCategory.Spot, keyed: true), null, CancellationToken.None);
 
         (entry.Leverage, entry.Margin).ShouldBe((1, entry.Size.Amount));
-        await _ledger.DidNotReceive().GetLeverageAsync(Arg.Any<ExchangeKey>(), Arg.Any<Instrument>(), Arg.Any<CancellationToken>());
+        await _ledger.DidNotReceive().GetLinearPositionAsync(Arg.Any<ExchangeKey>(), Arg.Any<Instrument>(), Arg.Any<CancellationToken>());
     }
 
     // Scenario "Чужая позиция с другим плечом".
     [Test]
     public async Task Position_on_the_symbol_with_another_leverage_is_named_with_both_leverages()
     {
-        _ledger.GetHoldingAsync(Key, Instrument(), "ETH", Arg.Any<CancellationToken>()).Returns(0.5m);
+        _ledger.GetLinearPositionAsync(Key, Instrument(), Arg.Any<CancellationToken>()).Returns(new LinearPosition(1m, 0.5m));
 
         EntryCalculation entry = await _calculator.EvaluateAsync(Preparation(minRiskReward: 1.2m, leverage: 5, keyed: true), null, CancellationToken.None);
 
@@ -222,7 +222,7 @@ public class IdeaTradeEntryCalculatorTests
     [Test]
     public async Task Empty_symbol_with_another_leverage_is_no_reason()
     {
-        _ledger.GetLeverageAsync(Key, Instrument(), Arg.Any<CancellationToken>()).Returns(10m);
+        _ledger.GetLinearPositionAsync(Key, Instrument(), Arg.Any<CancellationToken>()).Returns(new LinearPosition(10m, 0m));
 
         EntryCalculation entry = await _calculator.EvaluateAsync(Preparation(minRiskReward: 1.2m, leverage: 1, keyed: true), null, CancellationToken.None);
 
@@ -251,11 +251,39 @@ public class IdeaTradeEntryCalculatorTests
     {
         var waiting = IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(Now, instrument: Instrument()), Account, 100m, new IdeaTradeSize(1m, 100m, 2m, 4m, 2m), Now, leverage: 5);
         _trades.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([waiting]);
-        _ledger.GetLeverageAsync(Key, Instrument(), Arg.Any<CancellationToken>()).Returns(10m);
+        _ledger.GetLinearPositionAsync(Key, Instrument(), Arg.Any<CancellationToken>()).Returns(new LinearPosition(10m, 0m));
 
         EntryCalculation entry = await _calculator.EvaluateAsync(Preparation(minRiskReward: 1.2m, leverage: 5, keyed: true), null, CancellationToken.None);
 
         entry.LeverageToSet.ShouldBeNull();
+    }
+
+    // Review of add-idea-trade-leverage: the leverage and the position of the symbol come from one read of the exchange.
+    [Test]
+    public async Task Symbol_is_read_with_one_read_of_its_leverage_and_position()
+    {
+        _ledger.GetLinearPositionAsync(Key, Instrument(), Arg.Any<CancellationToken>()).Returns(new LinearPosition(1m, 0.5m));
+
+        EntryCalculation entry = await _calculator.EvaluateAsync(Preparation(minRiskReward: 1.2m, leverage: 5, keyed: true), null, CancellationToken.None);
+
+        (entry.Symbol!.Leverage, entry.Symbol.Position).ShouldBe((1m, 0.5m));
+        await _ledger.Received(1).GetLinearPositionAsync(Key, Instrument(), Arg.Any<CancellationToken>());
+        await _ledger.DidNotReceiveWithAnyArgs().GetHoldingAsync(default!, default!, default!, default);
+    }
+
+    // The open orders of the symbol are asked for while its position is read, not after.
+    [Test]
+    public async Task Open_orders_are_read_while_the_position_is_read()
+    {
+        var position = new TaskCompletionSource<LinearPosition>();
+        _ledger.GetLinearPositionAsync(Key, Instrument(), Arg.Any<CancellationToken>()).Returns(position.Task);
+
+        Task<EntryCalculation> entry = _calculator.EvaluateAsync(Preparation(minRiskReward: 1.2m, keyed: true), null, CancellationToken.None);
+
+        await _ledger.Received(1).GetLinearPositionAsync(Key, Instrument(), Arg.Any<CancellationToken>());
+        await _ledger.Received(1).GetOpenOrdersAsync(Key, Instrument(), Arg.Any<CancellationToken>());
+        position.SetResult(new LinearPosition(1m, 0m));
+        (await entry).Reasons.ShouldBeEmpty();
     }
 
     // A key that does not trade linear has its reason already: the symbol is not asked for.
@@ -265,7 +293,7 @@ public class IdeaTradeEntryCalculatorTests
         EntryCalculation entry = await _calculator.EvaluateAsync(Preparation(minRiskReward: 1.2m, keyed: true, access: AccountAccess.CategoryNotTraded), null, CancellationToken.None);
 
         entry.Reasons.ShouldBe([IdeaTradeRefusal.CategoryNotTraded]);
-        await _ledger.DidNotReceive().GetLeverageAsync(Arg.Any<ExchangeKey>(), Arg.Any<Instrument>(), Arg.Any<CancellationToken>());
+        await _ledger.DidNotReceive().GetLinearPositionAsync(Arg.Any<ExchangeKey>(), Arg.Any<Instrument>(), Arg.Any<CancellationToken>());
     }
 
     // Scenario "Ждущая сделка занимает свой залог": 100 USDT at 4× waits on another symbol and takes 25, the new 100 at 5× takes 20.
@@ -276,7 +304,7 @@ public class IdeaTradeEntryCalculatorTests
         _trades.GetOpenAsync(Arg.Any<CancellationToken>()).Returns([waiting]);
         _catalog.ListAsync(MarketCategory.Linear, Arg.Any<CancellationToken>())
             .Returns([new ListedInstrument(MarketCategory.Linear, "ETHUSDT", "ETH", "USDT"), new ListedInstrument(MarketCategory.Linear, "SOLUSDT", "SOL", "USDT")]);
-        _ledger.GetLeverageAsync(Key, Instrument(), Arg.Any<CancellationToken>()).Returns(5m);
+        _ledger.GetLinearPositionAsync(Key, Instrument(), Arg.Any<CancellationToken>()).Returns(new LinearPosition(5m, 0m));
 
         _ledger.GetFreeAsync(Key, "USDT", Arg.Any<CancellationToken>()).Returns(40m);
         (await _calculator.EvaluateAsync(Preparation(minRiskReward: 1.2m, amount: 100m, leverage: 5, keyed: true), null, CancellationToken.None)).Reasons.ShouldBe([IdeaTradeRefusal.NotEnoughMoney]);

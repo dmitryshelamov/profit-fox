@@ -48,11 +48,11 @@ public class TInvestLedgerTests
         _host.Dispose();
     }
 
-    // add-idea-trade-leverage: the shares of MOEX have no leverage to read; the refusal goes nowhere near T-Invest.
+    // add-idea-trade-leverage: MOEX has no symbol of linear to read; the refusal goes nowhere near T-Invest.
     [Test]
-    public async Task Leverage_is_refused_without_a_call()
+    public async Task Linear_position_is_refused_without_a_call()
     {
-        ExchangeException error = await Should.ThrowAsync<ExchangeException>(() => _ledger.GetLeverageAsync(Key, Sber, CancellationToken.None));
+        ExchangeException error = await Should.ThrowAsync<ExchangeException>(() => _ledger.GetLinearPositionAsync(Key, Sber, CancellationToken.None));
 
         error.Message.ShouldBe("T-Invest has no leverage of a symbol.");
         _host.Api.Calls.ShouldBeEmpty();
