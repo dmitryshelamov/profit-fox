@@ -105,6 +105,51 @@ public class IdeaSignalRepositoryTests
         }, ignoreOrder: true);
     }
 
+    // The pairs are counted a week of signals at a time, the weeks cut where the chunks of the table are (Thursday 00:00 UTC): the minutes on
+    // both sides of a cut, the minute of the cut itself and a minute weeks earlier are each counted once, with every pair of theirs.
+    [Test]
+    public async Task Pairs_are_counted_once_on_both_sides_of_a_week()
+    {
+        var cut = DateTimeOffset.Parse("2024-03-07T00:00:00Z");
+        var eth = new Instrument(MarketCategory.Linear, "ETHUSDT");
+        await _signals.UpsertAsync(
+        [
+            IdeaSignalGenerator.Generate(cut.AddDays(-21).AddMinutes(7)),
+            IdeaSignalGenerator.Generate(cut.AddMinutes(-1)),
+            IdeaSignalGenerator.Generate(cut.AddMinutes(-1), instrument: eth),
+            IdeaSignalGenerator.Generate(cut),
+            IdeaSignalGenerator.Generate(cut, instrument: eth),
+            IdeaSignalGenerator.Generate(cut, type: IdeaType.Pullback),
+            IdeaSignalGenerator.Generate(Now)
+        ], CancellationToken.None);
+
+        IReadOnlyDictionary<(DateTimeOffset FiredAt, IdeaSide Side, Interval Interval), int> pairs = await _signals.CountPairsByMinuteAsync(
+            IdeasEngineVersion.Current,
+            cut.AddDays(-30),
+            CancellationToken.None);
+
+        pairs.ShouldBe(new Dictionary<(DateTimeOffset FiredAt, IdeaSide Side, Interval Interval), int>
+        {
+            [(cut.AddDays(-21).AddMinutes(7), IdeaSide.Long, Interval.FifteenMinutes)] = 1,
+            [(cut.AddMinutes(-1), IdeaSide.Long, Interval.FifteenMinutes)] = 2,
+            [(cut, IdeaSide.Long, Interval.FifteenMinutes)] = 2,
+            [(Now, IdeaSide.Long, Interval.FifteenMinutes)] = 1
+        }, ignoreOrder: true);
+    }
+
+    [Test]
+    public async Task No_pairs_are_counted_without_signals_of_the_version()
+    {
+        await _signals.UpsertAsync([IdeaSignalGenerator.Generate(Now, engineVersion: IdeasEngineVersion.Current - 1)], CancellationToken.None);
+
+        IReadOnlyDictionary<(DateTimeOffset FiredAt, IdeaSide Side, Interval Interval), int> pairs = await _signals.CountPairsByMinuteAsync(
+            IdeasEngineVersion.Current,
+            Now.AddDays(-30),
+            CancellationToken.None);
+
+        pairs.ShouldBeEmpty();
+    }
+
     // Decision 4: a path written as far as it went is written again as it goes on, under its key.
     [Test]
     public async Task Signal_written_again_takes_the_path_it_has_gone_on_to()

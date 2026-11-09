@@ -116,27 +116,68 @@ internal sealed class IdeaSignalRepository(NpgsqlDataSource dataSource) : IIdeaS
         }
     }
 
-    // Decision 2 of add-burst-and-auto-limits: one grouping over the signals the statistics read, tens of seconds on prod, so past the default 30 s.
+    // Decision 2 of add-burst-and-auto-limits, as prod measured it on 2026-11-09 with 77 M signals of a replay: one grouping with
+    // count(DISTINCT (category, symbol)) sorts every signal on disk by keys of text; it did not end in 10 minutes, nor a week of it in 4, and
+    // the statistics stood still for a day. So the pairs are counted a week of signals at a time, the weeks cut where the chunks of the table
+    // are, and by hashing: the pairs of each minute first, then how many — 68 s for a week of 6.6 M signals beside two other scans of the
+    // table. The 2.6 M pairs of the minutes of that week took 290 MB, hence the memory of each transaction.
+    private static readonly TimeSpan CountSlice = TimeSpan.FromDays(7);
     private static readonly int CountTimeoutSeconds = (int)TimeSpan.FromMinutes(10).TotalSeconds;
+    private const string CountMemory = "384MB";
 
     public async Task<IReadOnlyDictionary<(DateTimeOffset FiredAt, IdeaSide Side, Interval Interval), int>> CountPairsByMinuteAsync(
         int engineVersion,
         DateTimeOffset from,
         CancellationToken cancellationToken)
     {
+        var pairs = new Dictionary<(DateTimeOffset FiredAt, IdeaSide Side, Interval Interval), int>();
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        IEnumerable<PairCountDb> rows = await connection.QueryAsync<PairCountDb>(new CommandDefinition(
-            """
-            SELECT fired_at AS FiredAt, side AS Side, "interval" AS Interval, count(DISTINCT (category, symbol))::integer AS Pairs
-            FROM idea_cases
-            WHERE engine_version = @Version AND fired_at >= @From
-            GROUP BY fired_at, side, "interval"
-            """,
-            new { Version = engineVersion, From = from },
-            commandTimeout: CountTimeoutSeconds,
-            cancellationToken: cancellationToken));
+        DateTimeOffset? last = await LastFiringAsync(connection, engineVersion, from, cancellationToken);
 
-        return rows.ToDictionary(SignalDbConverter.MinuteOf, row => row.Pairs);
+        // The chunks of the table are weeks from the Unix epoch.
+        DateTimeOffset week = DateTimeOffset.UnixEpoch + (CountSlice * Math.Floor((from - DateTimeOffset.UnixEpoch) / CountSlice));
+
+        for (; week <= last; week += CountSlice)
+        {
+            await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await connection.ExecuteAsync(new CommandDefinition($"SET LOCAL work_mem = '{CountMemory}'", transaction: transaction, cancellationToken: cancellationToken));
+            IEnumerable<PairCountDb> rows = await connection.QueryAsync<PairCountDb>(new CommandDefinition(
+                """
+                SELECT fired_at AS FiredAt, side AS Side, "interval" AS Interval, count(*)::integer AS Pairs
+                FROM (
+                    SELECT fired_at, side, "interval", category, symbol
+                    FROM idea_cases
+                    WHERE engine_version = @Version AND fired_at >= @From AND fired_at < @To
+                    GROUP BY fired_at, side, "interval", category, symbol
+                ) pairs
+                GROUP BY fired_at, side, "interval"
+                """,
+                new { Version = engineVersion, From = week > from ? week : from, To = week + CountSlice },
+                transaction,
+                CountTimeoutSeconds,
+                cancellationToken: cancellationToken));
+
+            foreach (PairCountDb row in rows)
+            {
+                pairs.Add(SignalDbConverter.MinuteOf(row), row.Pairs);
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        return pairs;
+    }
+
+    private static async Task<DateTimeOffset?> LastFiringAsync(NpgsqlConnection connection, int engineVersion, DateTimeOffset from, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand("SELECT max(fired_at) FROM idea_cases WHERE engine_version = @version AND fired_at >= @from", connection);
+        command.Parameters.AddWithValue("version", engineVersion);
+        command.Parameters.AddWithValue("from", from);
+        await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        await reader.ReadAsync(cancellationToken);
+
+        // Npgsql reads timestamptz as a UTC DateTimeOffset only when asked for one; Dapper would get a DateTime.
+        return await reader.IsDBNullAsync(0, cancellationToken) ? null : reader.GetFieldValue<DateTimeOffset>(0);
     }
 
     public async Task<IReadOnlyList<IdeaSignal>> GetAsync(Instrument instrument, int engineVersion, CancellationToken cancellationToken)
