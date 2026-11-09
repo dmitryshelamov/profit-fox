@@ -51,7 +51,7 @@ public class IdeaViewTests
     }
 
     // Scenario "Дальняя цель «Уровней»": the idea of «Уровни» with R:R 4 takes the multiplier 0.675 of the band from 3 to 6 of the curve of its
-    // interval, side and category; the curve of another interval does not count.
+    // interval, side and category; the curves of another interval, side or category do not count.
     [Test]
     public void Idea_of_levels_has_the_probability_of_its_bucket_times_the_multiplier_of_its_band()
     {
@@ -59,8 +59,9 @@ public class IdeaViewTests
         var bucket = new BucketStatistics(400, 88, 300, 12, 0.22m, 0.18m, 0.26m, -0.1m, -0.2m, 0m) { GrossExpectancy = 0m };
         RiskRewardCurve curve = Curve(idea.Interval, (400, 110), (300, 57), (200, 27), (100, 6));
         RiskRewardCurve other = Curve(idea.Interval == Interval.OneHour ? Interval.FourHours : Interval.OneHour, (400, 0), (300, 0), (200, 200), (100, 0));
+        RiskRewardCurve[] others = [other, other with { Interval = idea.Interval, Side = IdeaSide.Short }, other with { Interval = idea.Interval, Category = MarketCategory.Spot }];
 
-        IdeaView view = IdeaView.Of([idea], [new IdeaBucket(KeyOf(idea), 90, bucket)], [other, curve], Fees).Single();
+        IdeaView view = IdeaView.Of([idea], [new IdeaBucket(KeyOf(idea), 90, bucket)], [.. others, curve], Fees).Single();
 
         (view.Numbers.Multiplier, view.Numbers.Probability).ShouldBe((0.675m, 0.1485m));
     }
