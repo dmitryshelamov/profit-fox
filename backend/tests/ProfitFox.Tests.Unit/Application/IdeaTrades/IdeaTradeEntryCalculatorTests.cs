@@ -351,7 +351,7 @@ public class IdeaTradeEntryCalculatorTests
         };
         ExchangeAccount? account = keyed ? new ExchangeAccount(Account, "Main", "key", 100, new HashSet<MarketCategory> { MarketCategory.Linear, MarketCategory.Spot }, Now) : null;
 
-        return new EntryPreparation(idea, settings, account, keyed ? Key : null, access, 100m, 100m, Rules, Fees, amount, "USDT", "ETH", []);
+        return new EntryPreparation(idea, settings, account, keyed ? Key : null, access, 100m, 100m, Rules, Fees, amount, "USDT", "ETH", [], []);
     }
 
     private static AutoEntry Entry(decimal minRiskReward, decimal? budget = null)

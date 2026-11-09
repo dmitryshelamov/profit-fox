@@ -64,14 +64,15 @@ public class IdeaTradesApiTests
         _scenario.Exchange.Sent.ShouldBeEmpty();
     }
 
-    // Requirement "Обещание на входе", scenario "Вход на ▲": the promise is the statistics of the bucket as «Идеи» shows them, with the break-even and the
-    // reward to risk after the fees and the slippage from the price the trade entered at (101, not the 100 of the idea).
+    // Requirement "Обещание на входе", scenario "Вход на ▲": the promise is the own numbers of the idea as «Идеи» shows them, from the price the
+    // trade entered at (101, not the 100 of the idea): the expectancy without costs of the bucket +0.18242 R with +0.08242…+0.28242 R less the
+    // costs 0.0021 × 101 / 5 = 0.04242 R, with the break-even and the reward to risk after the fees and the slippage from that price.
     [Test]
     public async Task Entry_on_an_up_badge_keeps_the_promise_of_the_bucket_and_a_recount_of_the_bucket_does_not_change_it()
     {
         Guid idea = await _scenario.SaveIdeaAsync(100m, 96m, 112m);
         _scenario.SetPrice("101");
-        await _scenario.SaveBucketAsync(new BucketStatistics(412, 130, 270, 12, 0.31m, 0.27m, 0.36m, 0.14m, 0.04m, 0.24m));
+        await _scenario.SaveBucketAsync(new BucketStatistics(412, 130, 270, 12, 0.31m, 0.27m, 0.36m, 0.14m, 0.04m, 0.24m) { GrossExpectancy = 0.18242m, GrossExpectancyLow = 0.08242m, GrossExpectancyHigh = 0.28242m });
 
         Guid id = await CreateAsync(idea);
 
@@ -391,7 +392,7 @@ public class IdeaTradesApiTests
     {
         Guid idea = await _scenario.SaveIdeaAsync(100m, 96m, 112m);
         _scenario.SetPrice("101");
-        await _scenario.SaveBucketAsync(new BucketStatistics(412, 130, 270, 12, 0.31m, 0.27m, 0.36m, 0.14m, 0.04m, 0.24m));
+        await _scenario.SaveBucketAsync(new BucketStatistics(412, 130, 270, 12, 0.31m, 0.27m, 0.36m, 0.14m, 0.04m, 0.24m) { GrossExpectancy = 0.18242m, GrossExpectancyLow = 0.08242m, GrossExpectancyHigh = 0.28242m });
         Guid id = await CreateAsync(idea);
         await _scenario.WriteIdeaOutcomeAsync(idea, new TradedIdeaOutcome(IdeaStatus.Target, _scenario.Factory.Time.GetUtcNow(), 1.84m));
 

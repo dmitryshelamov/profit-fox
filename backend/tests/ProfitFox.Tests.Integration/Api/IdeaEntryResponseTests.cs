@@ -35,7 +35,7 @@ public class IdeaEntryResponseTests
     {
         Idea idea = IdeaGenerator.Generate(Now);
         var rules = new InstrumentRules(0.01m, 0.01m, 0.01m, 5m);
-        var preparation = new EntryPreparation(idea, IdeaTradingSettings.Default, null, null, AccountAccess.NoKey, 100m, 100m, rules, new FeeRates(0.02m, 0.055m), 50m, "USDT", "BTC", []);
+        var preparation = new EntryPreparation(idea, IdeaTradingSettings.Default, null, null, AccountAccess.NoKey, 100m, 100m, rules, new FeeRates(0.02m, 0.055m), 50m, "USDT", "BTC", [], []);
         var size = new IdeaTradeSize(0.5m, 50m, 1m, 2m, 2m);
 
         return new EntryCalculation(preparation, idea.Track.Plan, size, null, refusals, new IdeaPromise(null, null, null, null, 0.35m, 1.8m), 1, null);

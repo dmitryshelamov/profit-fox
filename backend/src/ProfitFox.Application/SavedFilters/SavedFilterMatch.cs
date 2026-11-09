@@ -36,7 +36,7 @@ public static class SavedFilterMatch
             FilterField.IdeaInterval => view.Idea.Interval.ToCode() == condition.Choice,
             FilterField.IdeaSide => view.Idea.Track.Plan.Side.ToCode() == condition.Choice,
             FilterField.RiskReward => Holds(condition, view.Shares.NetRiskReward),
-            FilterField.Probability => Holds(condition, view.Probability),
+            FilterField.Probability => Holds(condition, view.Numbers.Probability),
             FilterField.Expectancy when condition.Operator == FilterOperator.ReliablyPositive => view.Bucket?.Badge == IdeaBadge.Up,
             FilterField.Expectancy => Holds(condition, view.Bucket?.Expectancy),
             _ => null

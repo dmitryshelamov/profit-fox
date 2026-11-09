@@ -78,7 +78,7 @@ public static class IdeaOrder
             IdeaSortColumn.Stop => view.Idea.Track.Plan.Stop,
             IdeaSortColumn.Target => view.Idea.Track.Plan.Target,
             IdeaSortColumn.RiskReward => view.Shares.NetRiskReward,
-            IdeaSortColumn.Probability => view.Probability,
+            IdeaSortColumn.Probability => view.Numbers.Probability,
             IdeaSortColumn.Expectancy => view.Bucket?.Expectancy,
             IdeaSortColumn.Profit => view.Shares.ProfitPerUsdt,
             _ => (int)view.Idea.Track.Status

@@ -36,7 +36,7 @@ public sealed class FitSavedFilterQueryHandler(
         IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>> setups = await snapshots.GetSetupsAsync(cancellationToken);
         var rowsByPair = rows.ToDictionary(row => row.Instrument);
         IReadOnlyList<Idea> recent = await ideas.GetRecentAsync(time.GetUtcNow() - IdeaQueries.ClosedShown, null, cancellationToken);
-        IReadOnlyList<IdeaView> views = IdeaView.Of(recent, await buckets.GetAsync(version.Number, cancellationToken), backtests.Policy().DefaultFees);
+        IReadOnlyList<IdeaView> views = IdeaView.Of(recent, await buckets.GetAsync(version.Number, cancellationToken), await buckets.GetCurvesAsync(version.Number, cancellationToken), backtests.Policy().DefaultFees);
 
         return new FitSavedFilterResult(
             rows.Count(row => SavedFilterMatch.Pair(conditions, row, setups.GetValueOrDefault(row.Instrument) ?? [])),

@@ -57,10 +57,5 @@ public sealed record BucketStatistics(
 
     public decimal? SignalExpectancy => Signals is { } signals ? Expectancy * Cases / signals : null;
 
-    public IdeaBadge? Badge => ExpectancyLow switch
-    {
-        null => null,
-        > 0 => IdeaBadge.Up,
-        _ => ExpectancyHigh < 0 ? IdeaBadge.Down : IdeaBadge.Flat
-    };
+    public IdeaBadge? Badge => IdeaBadges.Of(ExpectancyLow, ExpectancyHigh);
 }

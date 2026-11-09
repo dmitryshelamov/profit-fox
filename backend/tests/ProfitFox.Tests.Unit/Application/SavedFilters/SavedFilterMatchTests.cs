@@ -183,10 +183,11 @@ public class SavedFilterMatchTests
         Passes(View(null), Compare(FilterField.Expectancy, FilterOperator.Greater, -5m)).ShouldBeFalse();
     }
 
+    // A bucket of «мало данных» has no probability of the model, so its idea has none (decision 5 of add-own-idea-numbers).
     [Test]
     public void An_idea_with_too_little_data_does_not_pass_a_condition_on_its_probability()
     {
-        IdeaView idea = View(IdeaViewGenerator.Bucket(0.3m, 0.9m, cases: 29));
+        IdeaView idea = View(IdeaViewGenerator.Bucket(0.3m, cases: 12));
 
         Passes(idea, Compare(FilterField.Probability, FilterOperator.Greater, 0m)).ShouldBeFalse();
     }

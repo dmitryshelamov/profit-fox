@@ -113,14 +113,15 @@ public class IdeaOrderTests
         Names(IdeaOrder.Sort(views, IdeaSortColumn.Symbol, OrderDirection.Ascending)).ShouldBe("cba");
     }
 
-    // Scenario "Вероятность без данных".
+    // Scenario "Вероятность без данных": a bucket of «мало данных» has no probability of the model, so its idea has none (decision 5 of
+    // add-own-idea-numbers).
     [TestCase(OrderDirection.Ascending, "bc")]
     [TestCase(OrderDirection.Descending, "cb")]
     public void Ideas_without_a_probability_stay_under_the_others(OrderDirection direction, string expectedHead)
     {
         IdeaView[] views =
         [
-            View("f", bucket: IdeaViewGenerator.Bucket(0m, 0.9m, cases: 29)),
+            View("f", bucket: IdeaViewGenerator.Bucket(0m, cases: 12)),
             View("b", bucket: IdeaViewGenerator.Bucket(0m, 0.46m)),
             View("n"),
             View("c", bucket: IdeaViewGenerator.Bucket(0m, 0.51m))
