@@ -24,7 +24,12 @@ internal sealed class IdeaBucketRepository(NpgsqlDataSource dataSource) : IIdeaB
                                    gross_expectancy_low AS "GrossExpectancyLow", gross_expectancy_high AS "GrossExpectancyHigh"
                                    """;
 
-    public async Task ReplaceAsync(int engineVersion, IReadOnlyCollection<IdeaBucket> buckets, (IdeaType Type, Interval Interval)? only, CancellationToken cancellationToken)
+    public async Task ReplaceAsync(
+        int engineVersion,
+        IReadOnlyCollection<IdeaBucket> buckets,
+        IReadOnlyCollection<RiskRewardCurve> curves,
+        (IdeaType Type, Interval Interval)? only,
+        CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
@@ -48,7 +53,56 @@ internal sealed class IdeaBucketRepository(NpgsqlDataSource dataSource) : IIdeaB
                 buckets.Select(bucket => Row(engineVersion, bucket)),
                 transaction,
                 cancellationToken: cancellationToken));
+        // The recompute of a type × interval replaces the curve of its interval only when the type is «Уровни»; that of another type has none.
+        await connection.ExecuteAsync(new CommandDefinition(
+            """DELETE FROM idea_risk_reward_curves WHERE @Whole OR engine_version <> @Version OR "interval" = @Interval""",
+            new { Whole = only is null, Version = engineVersion, Interval = only is { Type: IdeaType.Levels } levels ? levels.Interval.ToCode() : null },
+            transaction,
+            cancellationToken: cancellationToken));
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                """
+                INSERT INTO idea_risk_reward_curves (engine_version, "interval", side, category, band, cases, targets)
+                VALUES (@EngineVersion, @Interval, @Side, @Category, @Band, @Cases, @Targets)
+                """,
+                curves.SelectMany(curve => curve.Bands.Select(band => new RiskRewardBandDb
+                {
+                    EngineVersion = engineVersion,
+                    Interval = curve.Interval.ToCode(),
+                    Side = curve.Side.ToCode(),
+                    Category = curve.Category.ToCode(),
+                    Band = band.Band.ToCode(),
+                    Cases = band.Cases,
+                    Targets = band.Targets
+                })),
+                transaction,
+                cancellationToken: cancellationToken));
         await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<RiskRewardCurve>> GetCurvesAsync(int engineVersion, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        IEnumerable<RiskRewardBandDb> rows = await connection.QueryAsync<RiskRewardBandDb>(
+            new CommandDefinition(
+                """
+                SELECT engine_version AS "EngineVersion", "interval", side, category, band, cases, targets
+                FROM idea_risk_reward_curves WHERE engine_version = @Version
+                """,
+                new { Version = engineVersion },
+                cancellationToken: cancellationToken));
+
+        return
+        [
+            .. rows.GroupBy(row => (row.Interval, row.Side, row.Category)).Select(set =>
+            {
+                MarketDataCodes.TryParseInterval(set.Key.Interval, out Interval interval);
+                IdeaCodes.TryParseSide(set.Key.Side, out IdeaSide side);
+                MarketDataCodes.TryParseCategory(set.Key.Category, out MarketCategory category);
+
+                return new RiskRewardCurve(interval, side, category, [.. set.Select(row => new RiskRewardBandCount(IdeaCodes.ParseBand(row.Band), row.Cases, row.Targets))]);
+            })
+        ];
     }
 
     public async Task<IReadOnlyList<IdeaBucket>> GetAsync(int engineVersion, CancellationToken cancellationToken)

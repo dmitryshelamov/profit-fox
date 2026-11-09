@@ -52,7 +52,7 @@ public sealed class IdeaStatistics(
             cancellationToken,
             settings.CalibrationCases,
             signal => pairs.TryGetValue((signal.Path.FiredAt, signal.Path.Side, signal.Path.Interval), out int count) ? count : null);
-        await buckets.ReplaceAsync(version.Number, result.Buckets, null, cancellationToken);
+        await buckets.ReplaceAsync(version.Number, result.Buckets, result.Curves, null, cancellationToken);
         _roots = result.Roots;
 
         if (result.Outcomes is { } outcomes)
@@ -84,7 +84,7 @@ public sealed class IdeaStatistics(
 
         // The buckets need no outcome kept.
         IdeaOutcomesResult result = await WalkAsync(time.GetUtcNow(), (type, interval), await exitRules.GetAllAsync(cancellationToken), roots, cancellationToken, 0);
-        await buckets.ReplaceAsync(version.Number, result.Buckets, (type, interval), cancellationToken);
+        await buckets.ReplaceAsync(version.Number, result.Buckets, result.Curves, (type, interval), cancellationToken);
     }
 
     private async Task<IdeaOutcomesResult> WalkAsync(

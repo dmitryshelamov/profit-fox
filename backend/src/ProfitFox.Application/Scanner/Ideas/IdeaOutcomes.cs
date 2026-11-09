@@ -85,7 +85,7 @@ public static class IdeaOutcomes
             })
         ];
 
-        return new IdeaOutcomesResult(buckets, outcomes.Outcomes, used);
+        return new IdeaOutcomesResult(buckets, outcomes.Outcomes, used, sums.Curves());
     }
 
     private static void Walk(
@@ -118,6 +118,12 @@ public static class IdeaOutcomes
             if (result is { } results)
             {
                 sums.Add(bucket.Category, holding, path.FiredAt, outcome.Status, results);
+
+                // Decision 4 of add-own-idea-numbers: the curve of «Уровни» counts the cases of 90 days by the reward to risk of their plans.
+                if (bucket.Type == IdeaType.Levels && path.FiredAt >= now.AddDays(-90))
+                {
+                    sums.AddBand(bucket, RiskRewardBands.Of(outcome.Plan.RiskReward), outcome.Status);
+                }
 
                 if (outcomes.Count())
                 {
@@ -178,6 +184,9 @@ public static class IdeaOutcomes
 
         public Dictionary<(IdeaBucketKey, int), int> Signals { get; } = [];
 
+        // The cases and the targets of the bands of the curves of «Уровни» by their set interval × side × category.
+        private readonly Dictionary<(Interval Interval, IdeaSide Side, MarketCategory Category), Dictionary<RiskRewardBand, (int Cases, int Targets)>> _bands = [];
+
         // Decision 2 of cluster-idea-cases-by-holding: a category mixes the types × intervals, so its groups are the blocks of the longest holding
         // among its cases, known only once the pass is over. Until then its cases are the sums of each firing, which no block splits.
         private readonly Dictionary<MarketCategory, CategoryCases> _cases = [];
@@ -196,6 +205,32 @@ public static class IdeaOutcomes
             Of(Parents[days], BucketModel.Parent.Of(bucket), holding).Add(firedAt, status, r.Net);
             Of(GrossBuckets[days], bucket, holding).Add(firedAt, status, r.Gross);
             Of(GrossParents[days], BucketModel.Parent.Of(bucket), holding).Add(firedAt, status, r.Gross);
+        }
+
+        public void AddBand(IdeaBucketKey bucket, RiskRewardBand band, IdeaStatus status)
+        {
+            (Interval, IdeaSide, MarketCategory) set = (bucket.Interval, bucket.Side, bucket.Category);
+
+            if (!_bands.TryGetValue(set, out Dictionary<RiskRewardBand, (int Cases, int Targets)>? bands))
+            {
+                bands = [];
+                _bands[set] = bands;
+            }
+
+            (int cases, int targets) = bands.GetValueOrDefault(band);
+            bands[band] = (cases + 1, targets + (status == IdeaStatus.Target ? 1 : 0));
+        }
+
+        public IReadOnlyList<RiskRewardCurve> Curves()
+        {
+            return
+            [
+                .. _bands.Select(set => new RiskRewardCurve(
+                    set.Key.Interval,
+                    set.Key.Side,
+                    set.Key.Category,
+                    [.. set.Value.Select(band => new RiskRewardBandCount(band.Key, band.Value.Cases, band.Value.Targets))]))
+            ];
         }
 
         /// <summary>A case of a category, of any age, with the holding of its rule.</summary>

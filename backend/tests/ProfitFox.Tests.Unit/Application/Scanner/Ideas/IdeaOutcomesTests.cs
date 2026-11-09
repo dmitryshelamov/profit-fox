@@ -163,6 +163,27 @@ public class IdeaOutcomesTests
         bucket.Expectancy.ShouldBe((NetResult(IdeaStatus.Target) + NetResult(IdeaStatus.Stop)) / 2);
     }
 
+    // Requirement "Кривая «Уровней» по R:R", scenario "Сетапы вместе" (decision 4 of add-own-idea-numbers): the cases of «Уровни» of «Импульс»
+    // and of «Пролив» on 15 min long linear go into one curve by the reward to risk of their plans, a target at R:R 2 and a stop at R:R 0.5;
+    // the case of «Уровни» older than 90 days and the case of «Цель 2R» do not.
+    [Test]
+    public async Task Pass_counts_the_cases_and_the_targets_of_the_bands_of_levels_by_their_set()
+    {
+        IdeaSignal[] signals =
+        [
+            Signal(Wif, IdeaType.Levels, -20, Path() with { Target = 104m, TargetAfter = 30 }),
+            Signal(Wif, IdeaType.Levels, -15, Path() with { Target = 101m, StopAfter = 10 }) with { Setup = IdeaSetup.Drop },
+            Signal(Wif, IdeaType.Levels, -100, Path() with { Target = 104m, TargetAfter = 30 }) with { Setup = IdeaSetup.Breakout },
+            Signal(Wif, IdeaType.TwoR, -10, Path() with { LadderAfter = Ladder(30) })
+        ];
+
+        IdeaOutcomesResult result = await IdeaOutcomes.WalkAsync(signals.ToAsyncEnumerable(), new IdeaExitRules([]), _ => NoFees, Now, CancellationToken.None);
+
+        RiskRewardCurve curve = result.Curves.ShouldHaveSingleItem();
+        (curve.Interval, curve.Side, curve.Category).ShouldBe((Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear));
+        curve.Bands.ShouldBe([new RiskRewardBandCount(RiskRewardBand.From2To3, 1, 1), new RiskRewardBandCount(RiskRewardBand.UpTo2, 1, 0)], ignoreOrder: true);
+    }
+
     // Decision 1 of cluster-idea-cases-by-holding: «Цель 2R» on 4 h holds 24 candles, 4 days. WIF and ETH fire at 10:00 and 14:00 of the
     // same day every 4 days, 20 days, with equal results: a +2 R target on every third day, a −1 R stop on the others. The 40 cases are 20
     // groups of two, not 40 hours: +0.05 R with −0.6371…+0.7371 R by t₁₉ and a share of 35 % over 16.7 effective cases,

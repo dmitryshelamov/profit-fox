@@ -71,7 +71,7 @@ public class IdeasApiTests
                 new IdeaBucket(key, 90, BucketStatisticsCalculator.Compute(180, 200, 20, 40m, 400m)),
                 new IdeaBucket(key, 30, BucketStatisticsCalculator.Compute(6, 5, 1, 2.4m, 20m))
             ],
-            null, CancellationToken.None);
+            [], null, CancellationToken.None);
 
         JsonElement ideas = await ItemsAsync("/api/ideas?side=long");
 
@@ -166,7 +166,7 @@ public class IdeasApiTests
                     FewOwnCases = true
                 })
             ],
-            null, CancellationToken.None);
+            [], null, CancellationToken.None);
 
         JsonElement[] ideas = [.. (await ItemsAsync("/api/ideas")).EnumerateArray()];
 
@@ -192,7 +192,7 @@ public class IdeasApiTests
         await new IdeaBucketRepository(_database).ReplaceAsync(
             IdeasEngineVersion.Current,
             [new IdeaBucket(new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear), 90, BucketStatisticsCalculator.Compute(10, 30, 0, -10m, 70m))],
-            null, CancellationToken.None);
+            [], null, CancellationToken.None);
 
         JsonElement[] ideas = [.. (await ItemsAsync("/api/ideas")).EnumerateArray()];
 
@@ -209,7 +209,7 @@ public class IdeasApiTests
         Idea idea = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol, tick: 0.5m);
         await new IdeaRepository(_database).SaveAsync([idea], [], CancellationToken.None);
         var key = new IdeaBucketKey(IdeaSetup.Drop, IdeaType.Pullback, Interval.OneHour, IdeaSide.Short, MarketCategory.Spot);
-        await new IdeaBucketRepository(_database).ReplaceAsync(IdeasEngineVersion.Current, [new IdeaBucket(key, 30, BucketStatisticsCalculator.Compute(6, 5, 1, 2.4m, 20m))], null, CancellationToken.None);
+        await new IdeaBucketRepository(_database).ReplaceAsync(IdeasEngineVersion.Current, [new IdeaBucket(key, 30, BucketStatisticsCalculator.Compute(6, 5, 1, 2.4m, 20m))], [], null, CancellationToken.None);
 
         JsonElement read = await GetAsync($"/api/ideas/{idea.Id}");
         (read.GetProperty("symbol").GetString(), read.GetProperty("tick").GetString()).ShouldBe(("SOLUSDT", "0.5"));
@@ -497,7 +497,7 @@ public class IdeasApiTests
                 new IdeaBucket(key, 90, BucketStatisticsCalculator.Compute(180, 200, 20, 100m, 1000m)),
                 new IdeaBucket(key with { Category = MarketCategory.Spot }, 90, BucketStatisticsCalculator.Compute(180, 200, 20, 100m, 1000m))
             ],
-            null, CancellationToken.None);
+            [], null, CancellationToken.None);
         HttpResponseMessage created = await _client.PostAsJsonAsync(
             "/api/saved-filters",
             new
