@@ -28,7 +28,7 @@
 
 ## 3. Хранение
 
-- [ ] 3.1 Миграция `AddIdeaTradeForcedExitsMigration`: колонки `liquidation_*` и `adl_*` в `idea_trades` (`numeric NOT
+- [x] 3.1 Миграция `AddIdeaTradeForcedExitsMigration`: колонки `liquidation_*` и `adl_*` в `idea_trades` (`numeric NOT
   NULL DEFAULT 0`), новый `CK_idea_trades_status` с `liquidated` и `closed_by_adl`, таблица `idea_trade_forced_shares`
   (ключ `exec_id` + `trade_id`, FK с каскадом). Готово, когда тест миграции (старые строки с нулями, новые статусы
   принимаются) зелёный.
