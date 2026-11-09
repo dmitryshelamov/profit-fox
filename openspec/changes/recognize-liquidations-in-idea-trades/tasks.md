@@ -72,7 +72,7 @@
 
 ## 6. Проверка
 
-- [ ] 6.1 `dotnet build`, `dotnet test`, `dotnet format --verify-no-changes`, а во `frontend/` — `npm run lint`,
+- [x] 6.1 `dotnet build`, `dotnet test`, `dotnet format --verify-no-changes`, а во `frontend/` — `npm run lint`,
   `format:check`, `typecheck`, `test`, `build` и `test:e2e`. Готово, когда всё зелёное.
 
 ## Workflow follow-up
