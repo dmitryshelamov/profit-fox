@@ -358,6 +358,28 @@ public class ScannerSessionTests
         await Should.ThrowAsync<OperationCanceledException>(session);
     }
 
+    // The turns use the services of the session, so none outlives it: a session that is stopped waits for its running turns, and the failure
+    // of one that ends then is logged.
+    [Test]
+    public async Task Session_that_stops_waits_for_its_turns_and_logs_the_one_that_fails()
+    {
+        var failure = new InvalidOperationException("turn");
+        var gate = new TaskCompletionSource<IReadOnlyList<IdeaCandle>>();
+        ReplayPairs();
+        _candles.GetAggregatedAsync(Arg.Any<Instrument>(), Arg.Any<Interval>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(_ => gate.Task);
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session(historyDays: 2).RunAsync(cancellation.Token);
+        await WaitAsync(() => Warmed(Btc) > 0 && Warmed(Sol) > 0, advance: true);
+
+        await cancellation.CancelAsync();
+        await Task.Delay(200);
+
+        session.IsCompleted.ShouldBeFalse();
+        gate.SetException(failure);
+        await Should.ThrowAsync<OperationCanceledException>(session);
+        _journal.Received().Failed("ideas", failure);
+    }
+
     // The lane goes round while the turns run: the warm-ups of the live ideas are read and the closed ideas removed each hour without waiting
     // for the end of a turn.
     [Test]

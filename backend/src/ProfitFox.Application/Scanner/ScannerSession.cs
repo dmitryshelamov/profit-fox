@@ -415,6 +415,7 @@ public sealed class ScannerSession(
         finally
         {
             await Task.WhenAll(turns.Select(turn => turn.ContinueWith(_ => { }, TaskScheduler.Default)));
+            Ended(turns);
         }
     }
 
