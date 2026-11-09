@@ -3,6 +3,7 @@ using Microsoft.Extensions.Time.Testing;
 using Npgsql;
 
 using ProfitFox.Application.Backtests;
+using ProfitFox.Application.Scanner;
 using ProfitFox.Application.Scanner.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
@@ -142,6 +143,7 @@ public class IdeaStatisticsRecomputeTests
             new IdeaCalibrationRepository(_dataSource),
             new IdeaEngineVersionRepository(_dataSource),
             new BacktestSettings { DefaultFees = new Dictionary<string, FeeRateSettings> { ["linear"] = new FeeRateSettings() } },
+            new ScannerSettings(),
             new IdeasEngineVersion(IdeasEngineVersion.Current),
             new FakeTimeProvider(Now));
     }

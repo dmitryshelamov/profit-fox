@@ -11,7 +11,8 @@ namespace ProfitFox.Application.Scanner.Ideas;
 /// <summary>
 ///     The statistics of the ideas by the exit rules in force (decision 7): the signals of the version fired in the last 180 days, one pass by
 ///     <see cref="IdeaOutcomes" />. The whole recompute replaces the buckets and the calibration (decision 6 of honest-idea-probability); the one
-///     of a type × interval only its buckets.
+///     of a type × interval only its buckets. The calibration walks the outcome of every case, which the pass keeps in memory, so over more
+///     cases than <see cref="ScannerSettings.CalibrationCases" /> the whole recompute leaves it as it was.
 /// </summary>
 public sealed class IdeaStatistics(
     IIdeaSignalRepository signals,
@@ -20,6 +21,7 @@ public sealed class IdeaStatistics(
     IIdeaCalibrationRepository calibrations,
     IIdeaEngineVersionRepository versions,
     BacktestSettings backtests,
+    ScannerSettings settings,
     IdeasEngineVersion version,
     TimeProvider time)
 {
@@ -48,21 +50,26 @@ public sealed class IdeaStatistics(
             used,
             null,
             cancellationToken,
+            settings.CalibrationCases,
             signal => pairs.TryGetValue((signal.Path.FiredAt, signal.Path.Side, signal.Path.Interval), out int count) ? count : null);
         await buckets.ReplaceAsync(version.Number, result.Buckets, null, cancellationToken);
         _roots = result.Roots;
-        // Requirement "Проверка после изменения правил": a rule never applied is in force from the start of the version; without a start written,
-        // no case is fresh.
-        DateTimeOffset started = await versions.GetStartAsync(version.Number, cancellationToken) ?? now;
-        var rules = new IdeaExitRules(used);
-        await calibrations.ReplaceAsync(
-            version.Number,
-            CalibrationCalculator.Compute(
-                result.Outcomes,
-                now,
-                (type, interval) => rules.Of(type, interval).AppliedAt is { } applied && applied > started ? applied : started,
-                (type, interval) => rules.Of(type, interval).Holding),
-            cancellationToken);
+
+        if (result.Outcomes is { } outcomes)
+        {
+            // Requirement "Проверка после изменения правил": a rule never applied is in force from the start of the version; without a start
+            // written, no case is fresh.
+            DateTimeOffset started = await versions.GetStartAsync(version.Number, cancellationToken) ?? now;
+            var rules = new IdeaExitRules(used);
+            await calibrations.ReplaceAsync(
+                version.Number,
+                CalibrationCalculator.Compute(
+                    outcomes,
+                    now,
+                    (type, interval) => rules.Of(type, interval).AppliedAt is { } applied && applied > started ? applied : started,
+                    (type, interval) => rules.Of(type, interval).Holding),
+                cancellationToken);
+        }
 
         return [.. (await exitRules.GetAllAsync(cancellationToken)).Except(used).Select(rule => (rule.Type, rule.Interval))];
     }
@@ -75,7 +82,8 @@ public sealed class IdeaStatistics(
             return;
         }
 
-        IdeaOutcomesResult result = await WalkAsync(time.GetUtcNow(), (type, interval), await exitRules.GetAllAsync(cancellationToken), roots, cancellationToken);
+        // The buckets need no outcome kept.
+        IdeaOutcomesResult result = await WalkAsync(time.GetUtcNow(), (type, interval), await exitRules.GetAllAsync(cancellationToken), roots, cancellationToken, 0);
         await buckets.ReplaceAsync(version.Number, result.Buckets, (type, interval), cancellationToken);
     }
 
@@ -85,6 +93,7 @@ public sealed class IdeaStatistics(
         IReadOnlyList<IdeaExitRule> applied,
         IReadOnlyDictionary<int, IReadOnlyDictionary<MarketCategory, BucketModel.Root>>? roots,
         CancellationToken cancellationToken,
+        int keep,
         Func<IdeaSignal, int?>? burstOf = null)
     {
         var rules = new IdeaExitRules(applied);
@@ -97,6 +106,7 @@ public sealed class IdeaStatistics(
             now,
             cancellationToken,
             roots,
-            burstOf);
+            burstOf,
+            keep);
     }
 }

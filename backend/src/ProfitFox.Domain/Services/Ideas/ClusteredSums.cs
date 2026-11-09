@@ -107,6 +107,17 @@ public sealed class ClusteredSums(TimeSpan block)
         Change(firedAt, status, result, -1);
     }
 
+    /// <summary>Adds the cases fired at one moment at once: the counts of their outcomes, the total of their results and that of the squares of them.</summary>
+    public void Add(DateTimeOffset firedAt, int targets, int stops, int expired, decimal results, decimal squaredResults)
+    {
+        Targets += targets;
+        Stops += stops;
+        Expired += expired;
+        TotalR += results;
+        TotalSquaredR += squaredResults;
+        Move(firedAt, targets + stops + expired, results, targets);
+    }
+
     private void Change(DateTimeOffset firedAt, IdeaStatus status, decimal result, int sign)
     {
         switch (status)
@@ -124,10 +135,15 @@ public sealed class ClusteredSums(TimeSpan block)
 
         TotalR += sign * result;
         TotalSquaredR += sign * result * result;
+        Move(firedAt, sign, sign * result, status == IdeaStatus.Target ? sign : 0);
+    }
 
+    // The group of the block of the firing changes by the cases, their results and their targets.
+    private void Move(DateTimeOffset firedAt, int cases, decimal results, int targets)
+    {
         long number = (firedAt - DateTimeOffset.UnixEpoch).Ticks / block.Ticks;
         Group before = _groups.GetValueOrDefault(number);
-        var after = new Group(before.Cases + sign, before.Results + (sign * result), before.Targets + (status == IdeaStatus.Target ? sign : 0));
+        var after = new Group(before.Cases + cases, before.Results + results, before.Targets + targets);
 
         // The aggregates move by the difference of the contribution of the one group that changed.
         SquaredCounts += ((long)after.Cases * after.Cases) - ((long)before.Cases * before.Cases);

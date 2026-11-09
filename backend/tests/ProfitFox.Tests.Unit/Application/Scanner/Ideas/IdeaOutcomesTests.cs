@@ -39,13 +39,26 @@ public class IdeaOutcomesTests
             new IdeaBucket(pullback, 90, TooLittleData(0, 0, 1, 0.5m) with { Signals = 2 }),
             new IdeaBucket(pullback, 30, TooLittleData(0, 0, 1, 0.5m) with { Signals = 2 })
         ], ignoreOrder: true);
-        result.Outcomes.ShouldBe(
+        result.Outcomes!.ShouldBe(
         [
             new IdeaOutcome(twoR, Now.AddDays(-40), Now.AddDays(-40).AddMinutes(9), IdeaStatus.Stop, -1m),
             new IdeaOutcome(twoR, Now.AddDays(-10), Now.AddDays(-10).AddMinutes(29), IdeaStatus.Target, 2m),
             new IdeaOutcome(pullback, Now.AddDays(-4), Now.AddDays(-4).AddMinutes(29 + 360), IdeaStatus.Expired, 0.5m),
             new IdeaOutcome(twoR with { Category = MarketCategory.Spot }, Now.AddDays(-100), Now.AddDays(-100).AddMinutes(29), IdeaStatus.Target, 2m)
         ], ignoreOrder: true);
+    }
+
+    // The calibration walks every outcome or none: a pass that counts more cases than it may keep, here 4, gives the same buckets without the
+    // outcomes.
+    [Test]
+    public async Task Pass_over_more_cases_than_it_keeps_gives_the_buckets_without_the_outcomes()
+    {
+        IdeaOutcomesResult kept = await IdeaOutcomes.WalkAsync(Signals(), new IdeaExitRules([]), _ => NoFees, Now, CancellationToken.None, keep: 4);
+        IdeaOutcomesResult dropped = await IdeaOutcomes.WalkAsync(Signals(), new IdeaExitRules([]), _ => NoFees, Now, CancellationToken.None, keep: 3);
+
+        kept.Outcomes!.Count.ShouldBe(4);
+        dropped.Outcomes.ShouldBeNull();
+        dropped.Buckets.ShouldBe(kept.Buckets, ignoreOrder: true);
     }
 
     // Requirement "Уровень признаков": each case has the features of its own signal; the repeat while the idea was open counts for nothing.
@@ -61,7 +74,7 @@ public class IdeaOutcomesTests
 
         IdeaOutcomesResult result = await IdeaOutcomes.WalkAsync(signals.ToAsyncEnumerable(), new IdeaExitRules([]), _ => NoFees, Now, CancellationToken.None);
 
-        result.Outcomes.Select(outcome => outcome.Features).ShouldBe([new IdeaFeatures(true, false, true), new IdeaFeatures(false, true, false)]);
+        result.Outcomes!.Select(outcome => outcome.Features).ShouldBe([new IdeaFeatures(true, false, true), new IdeaFeatures(false, true, false)]);
     }
 
     // The rule in force decides: with a window of one candle the pullback that filled after 30 minutes did not enter, and its bucket has no case.
@@ -86,7 +99,7 @@ public class IdeaOutcomesTests
             Now,
             CancellationToken.None);
 
-        result.Outcomes.Single(outcome => outcome.Key.Category == MarketCategory.Spot).Result.ShouldBe(2m - (0.204m / 2m));
+        result.Outcomes!.Single(outcome => outcome.Key.Category == MarketCategory.Spot).Result.ShouldBe(2m - (0.204m / 2m));
     }
 
     // Decision 4: 30 cases of «Импульс» and 30 of «Пролив» of one parent, a day apart, every third a +2 R target, the rest −1 R stops: the
@@ -186,6 +199,44 @@ public class IdeaOutcomesTests
         result.Roots[90][MarketCategory.Linear].Category.Expectancy.Variance.ShouldBe(0.122887, 0.000001);
     }
 
+    // A category counts every outcome of its cases: of 30 cases a day apart, in turn a +2 R target, a −1 R stop and an expiry at the entry,
+    // a third are targets and the mean is a third of an R.
+    [Test]
+    public async Task Pass_counts_the_targets_the_stops_and_the_expired_cases_of_a_category()
+    {
+        IdeaSignal[] signals =
+        [
+            .. Enumerable.Range(0, 30).Select(index => Signal(Wif, IdeaType.TwoR, -45 + index, (index % 3) switch
+            {
+                0 => Path() with { LadderAfter = Ladder(30) },
+                1 => Path() with { StopAfter = 10 },
+                _ => Path()
+            }))
+        ];
+
+        IdeaOutcomesResult result = await IdeaOutcomes.WalkAsync(signals.ToAsyncEnumerable(), new IdeaExitRules([]), _ => NoFees, Now, CancellationToken.None);
+
+        BucketModel.Level category = result.Roots[90][MarketCategory.Linear].Category;
+        (category.Cases, category.Share.Mean, category.Expectancy.Mean).ShouldBe((30, 10m / 30m, 10m / 30m));
+    }
+
+    // A category keeps the spread of the results of its cases: WIF with a +2 R target at 10:00 and ETH with a −1 R stop at 11:00 of 20 days are
+    // 20 blocks of 6 hours with the same total, so the variance of the mean of the category is not below s² / n = (40 · 1.5² / 39) / 40.
+    [Test]
+    public async Task Pass_keeps_the_spread_of_the_results_of_a_category()
+    {
+        var eth = new Instrument(MarketCategory.Linear, "ETHUSDT");
+        IdeaSignal[] signals =
+        [
+            .. Enumerable.Range(0, 20).Select(day => Signal(Wif, IdeaType.TwoR, 0, OnDay(day, Interval.FifteenMinutes, 10, true))),
+            .. Enumerable.Range(0, 20).Select(day => Signal(eth, IdeaType.TwoR, 0, OnDay(day, Interval.FifteenMinutes, 11, false)))
+        ];
+
+        IdeaOutcomesResult result = await IdeaOutcomes.WalkAsync(signals.ToAsyncEnumerable(), new IdeaExitRules([]), _ => NoFees, Now, CancellationToken.None);
+
+        result.Roots[90][MarketCategory.Linear].Category.Expectancy.Variance.ShouldBe(90.0 / 39 / 40, 0.000001);
+    }
+
     // Scenario "Прогон пополняет минуту" (decision 2 of add-burst-and-auto-limits): a signal keeps no count of the pairs of its minute; the pass
     // gives its case the count of its minute, 6 pairs on 1 h no burst, 9 a burst.
     [Test]
@@ -202,7 +253,7 @@ public class IdeaOutcomesTests
             CancellationToken.None,
             burstOf: signal => signal == six ? 6 : 9);
 
-        result.Outcomes.Select(outcome => (outcome.FiredAt, outcome.Features.Burst)).ShouldBe([(six.Path.FiredAt, false), (nine.Path.FiredAt, true)]);
+        result.Outcomes!.Select(outcome => (outcome.FiredAt, outcome.Features.Burst)).ShouldBe([(six.Path.FiredAt, false), (nine.Path.FiredAt, true)]);
     }
 
     // A signal of the interval fired at the hour of the day 80 − 4 · day days ago, the last of a block of 4 days: a +2 R target or a −1 R stop.

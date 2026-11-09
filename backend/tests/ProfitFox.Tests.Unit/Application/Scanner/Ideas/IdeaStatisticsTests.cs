@@ -3,6 +3,7 @@ using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 
 using ProfitFox.Application.Backtests;
+using ProfitFox.Application.Scanner;
 using ProfitFox.Application.Scanner.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
@@ -62,6 +63,17 @@ public class IdeaStatisticsTests
                     && reports.Single(report => report.Days == 30 && report.Category == MarketCategory.Linear && report.Scope == CalibrationScope.All).Unchecked == 1),
                 Arg.Any<CancellationToken>());
         });
+    }
+
+    // The calibration walks every case of the pass or none: over more cases than the scanner keeps for it, here none, the buckets are replaced
+    // and the calibration stays as it was.
+    [Test]
+    public async Task Whole_recompute_over_more_cases_than_the_calibration_takes_replaces_the_buckets_only()
+    {
+        await Statistics(new ScannerSettings { CalibrationCases = 0 }).RecomputeAsync(CancellationToken.None);
+
+        await _buckets.Received(1).ReplaceAsync(2, Arg.Is<IReadOnlyCollection<IdeaBucket>>(buckets => buckets!.Count == 2), null, Arg.Any<CancellationToken>());
+        await _calibrations.DidNotReceiveWithAnyArgs().ReplaceAsync(default, default!, default);
     }
 
     // Review of tune-idea-rules: a rule applied while the whole recompute ran is in buckets the pass wrote by the rule before it; the pass names
@@ -192,11 +204,11 @@ public class IdeaStatisticsTests
         await _signals.DidNotReceiveWithAnyArgs().CountPairsByMinuteAsync(default, default, default);
     }
 
-    private IdeaStatistics Statistics()
+    private IdeaStatistics Statistics(ScannerSettings? settings = null)
     {
         var backtests = new BacktestSettings { DefaultFees = new Dictionary<string, FeeRateSettings> { ["linear"] = new FeeRateSettings { Limit = 0.02m, Market = 0.055m } } };
 
-        return new IdeaStatistics(_signals, _rules, _buckets, _calibrations, _versions, backtests, new IdeasEngineVersion(2), new FakeTimeProvider(Now));
+        return new IdeaStatistics(_signals, _rules, _buckets, _calibrations, _versions, backtests, settings ?? new ScannerSettings(), new IdeasEngineVersion(2), new FakeTimeProvider(Now));
     }
 
     // «Цель 2R» of 15 minutes entered at 100 with the stop at 98, +2 R at 30 minutes or the stop at 10; the close of every point of the grid 100.

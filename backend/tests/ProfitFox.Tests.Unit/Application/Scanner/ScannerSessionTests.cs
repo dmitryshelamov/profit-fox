@@ -979,6 +979,7 @@ public class ScannerSessionTests
                 Substitute.For<IIdeaCalibrationRepository>(),
                 _versions,
                 new BacktestSettings(),
+                new ScannerSettings(),
                 new IdeasEngineVersion(IdeasEngineVersion.Current),
                 _time),
             recomputes,
