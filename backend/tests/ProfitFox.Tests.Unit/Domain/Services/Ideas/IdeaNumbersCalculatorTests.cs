@@ -93,6 +93,14 @@ public class IdeaNumbersCalculatorTests
         (numbers.Multiplier, numbers.Probability, numbers.ProbabilityLow, numbers.ProbabilityHigh).ShouldBe((multiplier, probability, low, high));
     }
 
+    // The band of the reward to risk the multiplier of «Уровни» is of, which the hint of the probability names; none for another type.
+    [Test]
+    public void Numbers_of_levels_name_the_band_of_their_multiplier()
+    {
+        IdeaNumbersCalculator.Compute(Plan(IdeaType.Levels, 98m, 108m), Linear, null, Curve).Band.ShouldBe(RiskRewardBand.From3To6);
+        IdeaNumbersCalculator.Compute(Plan(IdeaType.TwoR, 98m, 108m), Linear, null, Curve).Band.ShouldBeNull();
+    }
+
     // Scenario "Не больше единицы".
     [Test]
     public void Probability_of_levels_is_never_above_one()

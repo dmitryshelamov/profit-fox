@@ -14,25 +14,27 @@ public static class IdeaNumbersCalculator
     public static IdeaNumbers Compute(IdeaPlan plan, FeeRates fees, BucketStatistics? bucket, RiskRewardCurve? curve)
     {
         decimal costs = IdeaCosts.R(plan, fees);
-        decimal multiplier = plan.Type == IdeaType.Levels ? RiskRewardCurve.MultiplierFor(curve, plan.RiskReward) : 1m;
+        bool levels = plan.Type == IdeaType.Levels;
+        decimal multiplier = levels ? RiskRewardCurve.MultiplierFor(curve, plan.RiskReward) : 1m;
+        var costsOnly = new IdeaNumbers(costs, multiplier, null, null, null, null, null, null, null) { Band = levels ? RiskRewardBands.Of(plan.RiskReward) : null };
 
         if (bucket?.GrossExpectancy is not { } gross)
         {
-            return new IdeaNumbers(costs, multiplier, null, null, null, null, null, null, null);
+            return costsOnly;
         }
 
         decimal expectancy = gross - costs;
 
-        return new IdeaNumbers(
-            costs,
-            multiplier,
-            Capped(bucket.Probability * multiplier),
-            Capped(bucket.ProbabilityLow * multiplier),
-            Capped(bucket.ProbabilityHigh * multiplier),
-            expectancy,
-            bucket.GrossExpectancyLow - costs,
-            bucket.GrossExpectancyHigh - costs,
-            expectancy * Math.Abs(plan.Entry - plan.Stop) / plan.Entry);
+        return costsOnly with
+        {
+            Probability = Capped(bucket.Probability * multiplier),
+            ProbabilityLow = Capped(bucket.ProbabilityLow * multiplier),
+            ProbabilityHigh = Capped(bucket.ProbabilityHigh * multiplier),
+            Expectancy = expectancy,
+            ExpectancyLow = bucket.GrossExpectancyLow - costs,
+            ExpectancyHigh = bucket.GrossExpectancyHigh - costs,
+            ExpectancyPerUsdt = expectancy * Math.Abs(plan.Entry - plan.Stop) / plan.Entry
+        };
     }
 
     private static decimal? Capped(decimal? probability)

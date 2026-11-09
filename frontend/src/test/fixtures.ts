@@ -329,7 +329,10 @@ export const ideasPage = (
     ...overrides,
   }) satisfies Schemas['IdeasPageResponse'];
 
-/** A trade idea of the API: a long «Откат» on 15 minutes, awaiting entry, with a bucket that has enough data. */
+/**
+ * A trade idea of the API: a long «Откат» on 15 minutes, awaiting entry, with a bucket that has enough data and its own numbers, those of
+ * the bucket without costs less 0.0625 R of costs.
+ */
 export const ideaOf = (overrides: Partial<Schemas['IdeaResponse']> = {}) =>
   ({
     id: '11111111-1111-4111-8111-111111111111',
@@ -356,6 +359,19 @@ export const ideaOf = (overrides: Partial<Schemas['IdeaResponse']> = {}) =>
     move: '3.1',
     volumeRatio: '4.2',
     breakEven: '0.3517',
+    numbers: {
+      probability: '0.46',
+      probabilityLow: '0.41',
+      probabilityHigh: '0.51',
+      multiplier: '1',
+      band: null,
+      expectancy: '0.38',
+      expectancyLow: '0.12',
+      expectancyHigh: '0.64',
+      badge: 'up',
+      costs: '0.0625',
+      expectancyPerUsdt: '0.0076',
+    },
     bucket: {
       cases: 120,
       targets: 55,
@@ -380,6 +396,9 @@ export const ideaOf = (overrides: Partial<Schemas['IdeaResponse']> = {}) =>
       ownExpectancyHigh: '0.8',
       parentWeight: '0.3',
       fewOwnCases: false,
+      grossExpectancy: '0.4425',
+      grossExpectancyLow: '0.1825',
+      grossExpectancyHigh: '0.7025',
     },
     recent: null,
     features: [],
@@ -928,6 +947,9 @@ export const exitBucketOf = (overrides: Partial<Schemas['BucketStatisticsRespons
     ownExpectancyHigh: null,
     parentWeight: null,
     fewOwnCases: false,
+    grossExpectancy: null,
+    grossExpectancyLow: null,
+    grossExpectancyHigh: null,
     ...overrides,
   }) satisfies Schemas['BucketStatisticsResponse'];
 

@@ -20,5 +20,8 @@ public sealed record IdeaNumbers(
     decimal? ExpectancyHigh,
     decimal? ExpectancyPerUsdt)
 {
+    /// <summary>The band of the reward to risk of the plan of «Уровни» the multiplier is of; none for the other types.</summary>
+    public RiskRewardBand? Band { get; init; }
+
     public IdeaBadge? Badge => IdeaBadges.Of(ExpectancyLow, ExpectancyHigh);
 }

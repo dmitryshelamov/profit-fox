@@ -40,6 +40,9 @@ const fewData = ideaOf({
     ownExpectancyHigh: null,
     parentWeight: null,
     fewOwnCases: false,
+    grossExpectancy: '0',
+    grossExpectancyLow: null,
+    grossExpectancyHigh: null,
   },
 });
 const noBucket = ideaOf({ id: 'doge-1', symbol: 'DOGEUSDT', bucket: null });

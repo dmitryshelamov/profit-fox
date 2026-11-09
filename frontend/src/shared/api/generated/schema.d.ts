@@ -4842,7 +4842,9 @@ export interface components {
          *     all of them and the expectancy in R of the model with their 95 % intervals and the badge by the expectancy, `up`, `flat` or
          *     `down` (no share, intervals or badge with bool BucketStatisticsResponse.EnoughData false, «мало данных»: the parent has fewer than 30 cases). Beside
          *     them the own share and expectancy of the bucket with their intervals (none under 30 own cases), the weight of the parent in the
-         *     expectancy of the model and bool BucketStatisticsResponse.FewOwnCases, «мало своих данных». A bucket of «Откат» or «Стоп-вход» also has the signals it
+         *     expectancy of the model and bool BucketStatisticsResponse.FewOwnCases, «мало своих данных», and the expectancy of the model without costs, over the results
+         *     at the prices of the plan, with its interval (none for a bucket counted before it was kept; no interval with «мало данных»). A bucket of
+         *     «Откат» or «Стоп-вход» also has the signals it
          *     counted, the share of them that entered and the expectancy per signal. Shares are fractions as decimal strings.
          */
         BucketStatisticsResponse: {
@@ -4874,6 +4876,9 @@ export interface components {
             ownExpectancyHigh: null | string;
             parentWeight: null | string;
             fewOwnCases: boolean;
+            grossExpectancy: null | string;
+            grossExpectancyLow: null | string;
+            grossExpectancyHigh: null | string;
         };
         /**
          * @description The old model, the own numbers of a bucket from 30 own cases without clustering or shrinking, against the new one and the model with
@@ -5456,6 +5461,27 @@ export interface components {
             promise: components["schemas"]["PromiseComparisonResponse"];
             ideas: components["schemas"]["IdeaComparisonResponse"];
         };
+        /**
+         * @description The own numbers of an idea, which the list sorts and filters by in place of those of its bucket: the probability with its 95 % interval,
+         *     the probability of the bucket over 90 days times string IdeaNumbersResponse.Multiplier, the multiplier of the band of the reward to risk of the plan of
+         *     «Уровни» (string? IdeaNumbersResponse.Band: `up_to_2`, `from_2_to_3`, `from_3_to_6`, `from_6`; for the other types 1 and none); the
+         *     expectancy in R with its interval, the expectancy of the bucket without costs less string IdeaNumbersResponse.Costs, the fees and the slippage of the
+         *     idea in R, and the badge by that interval, `up`, `flat` or `down`; and string? IdeaNumbersResponse.ExpectancyPerUsdt, the expectancy on
+         *     1 USDT of the amount of a deal. What an idea does not have is none. Numbers are decimal strings, shares fractions.
+         */
+        IdeaNumbersResponse: {
+            probability: null | string;
+            probabilityLow: null | string;
+            probabilityHigh: null | string;
+            multiplier: string;
+            band: null | string;
+            expectancy: null | string;
+            expectancyLow: null | string;
+            expectancyHigh: null | string;
+            badge: null | string;
+            costs: string;
+            expectancyPerUsdt: null | string;
+        };
         /** @description How the idea of a trade ended: the status it closed with (`target`, `stop` or `expired`), when, and its result in R as a decimal string, none for an idea that never entered. */
         IdeaOutcomeResponse: {
             status: string;
@@ -5478,8 +5504,8 @@ export interface components {
             netRiskReward: string;
         };
         /**
-         * @description A trade idea with its levels and where it stands, and the statistics of its bucket over 90 days (BucketStatisticsResponse? IdeaResponse.Bucket) and over the last
-         *     30 (BucketStatisticsResponse? IdeaResponse.Recent), none while the bucket has no case. string? IdeaResponse.BreakEven is the share of targets the idea breaks even at after the fees if it
+         * @description A trade idea with its levels and where it stands, its own numbers (IdeaNumbersResponse IdeaResponse.Numbers), and the statistics of its bucket over 90 days
+         *     (BucketStatisticsResponse? IdeaResponse.Bucket) and over the last 30 (BucketStatisticsResponse? IdeaResponse.Recent), none while the bucket has no case. string? IdeaResponse.BreakEven is the share of targets the idea breaks even at after the fees if it
          *     never expires, none when the target does not cover them.
          *     string IdeaResponse.ProfitPerUsdt, string IdeaResponse.LossPerUsdt and string IdeaResponse.RiskPerUsdt are its money on 1 USDT of the amount of a deal,
          *     after the fees. string IdeaResponse.RiskReward is the ratio of the prices, string IdeaResponse.NetRiskReward the profit over the loss after the fees. string? IdeaResponse.Tick is the price step of the pair, none for an idea made before it was kept. Numbers are decimal strings; string IdeaResponse.Move in ATR, string IdeaResponse.VolumeRatio in medians of volume.
@@ -5515,6 +5541,7 @@ export interface components {
             move: string;
             volumeRatio: string;
             breakEven: null | string;
+            numbers: components["schemas"]["IdeaNumbersResponse"];
             bucket: null | components["schemas"]["BucketStatisticsResponse"];
             recent: null | components["schemas"]["BucketStatisticsResponse"];
             features: string[];

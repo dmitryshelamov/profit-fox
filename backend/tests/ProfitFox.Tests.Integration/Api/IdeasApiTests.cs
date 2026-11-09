@@ -185,6 +185,59 @@ public class IdeasApiTests
     }
 
     // An idea of a bucket without cases has only its own break-even; the list goes by expectancy.
+    // Scenario "Свои числа в ответе" (decision 8 of add-own-idea-numbers): the idea of linear at 100 with the stop at 99.7 has its own numbers
+    // beside those of its bucket, which stay; the numbers of the block as values.
+    [Test]
+    public async Task Idea_comes_with_its_own_numbers_beside_those_of_its_bucket()
+    {
+        Idea generated = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol);
+        Idea idea = generated with { Track = generated.Track with { Plan = new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 100m, 99.7m, 100.6m) } };
+        await new IdeaRepository(_database).SaveAsync([idea], [], CancellationToken.None);
+        var key = new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear);
+        var statistics = new BucketStatistics(400, 180, 200, 20, 0.45m, 0.4m, 0.5m, -0.21m, -0.25m, -0.17m) { GrossExpectancy = -0.02m, GrossExpectancyLow = -0.06m, GrossExpectancyHigh = 0.02m };
+        await new IdeaBucketRepository(_database).ReplaceAsync(IdeasEngineVersion.Current, [new IdeaBucket(key, 90, statistics)], [], null, CancellationToken.None);
+
+        JsonElement read = (await ItemsAsync("/api/ideas")).EnumerateArray().Single();
+
+        JsonElement own = read.GetProperty("numbers");
+        (Number(own, "costs"), Number(own, "expectancy"), Number(own, "expectancyLow"), Number(own, "expectancyHigh"), Number(own, "expectancyPerUsdt"))
+            .ShouldBe((0.7m, -0.72m, -0.76m, -0.68m, -0.00216m));
+        (own.GetProperty("badge").GetString(), Number(own, "probability"), Number(own, "multiplier"), own.GetProperty("band").ValueKind).ShouldBe(("down", 0.45m, 1m, JsonValueKind.Null));
+        JsonElement bucket = read.GetProperty("bucket");
+        (bucket.GetProperty("expectancy").GetString(), bucket.GetProperty("grossExpectancy").GetString()).ShouldBe(("-0.21", "-0.02"));
+        (bucket.GetProperty("grossExpectancyLow").GetString(), bucket.GetProperty("grossExpectancyHigh").GetString()).ShouldBe(("-0.06", "0.02"));
+    }
+
+    // Scenario "Множитель «Уровней» в ответе": the idea of «Уровни» with R:R 4 has the probability of its bucket 0.22 times the multiplier 0.675
+    // of the band from 3 to 6 of the curve of 15 min long linear; the bucket keeps its 0.22.
+    [Test]
+    public async Task Idea_of_levels_comes_with_the_multiplier_of_its_band()
+    {
+        Idea generated = IdeaGenerator.Generate(SnapshotAt.AddMinutes(-20), instrument: Sol, type: IdeaType.Levels);
+        Idea idea = generated with { Track = generated.Track with { Plan = new IdeaPlan(IdeaType.Levels, IdeaSide.Long, 100m, 98m, 108m) } };
+        await new IdeaRepository(_database).SaveAsync([idea], [], CancellationToken.None);
+        var key = new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.Levels, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear);
+        var statistics = new BucketStatistics(400, 88, 300, 12, 0.22m, 0.18m, 0.26m, -0.1m, -0.2m, 0m) { GrossExpectancy = 0m, GrossExpectancyLow = -0.1m, GrossExpectancyHigh = 0.1m };
+        var curve = new RiskRewardCurve(
+            Interval.FifteenMinutes,
+            IdeaSide.Long,
+            MarketCategory.Linear,
+            [
+                new RiskRewardBandCount(RiskRewardBand.UpTo2, 400, 110),
+                new RiskRewardBandCount(RiskRewardBand.From2To3, 300, 57),
+                new RiskRewardBandCount(RiskRewardBand.From3To6, 200, 27),
+                new RiskRewardBandCount(RiskRewardBand.From6, 100, 6)
+            ]);
+        await new IdeaBucketRepository(_database).ReplaceAsync(IdeasEngineVersion.Current, [new IdeaBucket(key, 90, statistics)], [curve], null, CancellationToken.None);
+
+        JsonElement read = await GetAsync($"/api/ideas/{idea.Id}");
+
+        JsonElement own = read.GetProperty("numbers");
+        (Number(own, "probability"), Number(own, "probabilityLow"), Number(own, "probabilityHigh"), Number(own, "multiplier"), own.GetProperty("band").GetString())
+            .ShouldBe((0.1485m, 0.1215m, 0.1755m, 0.675m, "from_3_to_6"));
+        read.GetProperty("bucket").GetProperty("probability").GetString().ShouldBe("0.22");
+    }
+
     [Test]
     public async Task Ideas_without_a_bucket_have_their_own_break_even_and_come_last()
     {
@@ -789,6 +842,11 @@ public class IdeasApiTests
         await new IdeaRepository(_database).SaveAsync(ideas, [], CancellationToken.None);
 
         return ideas;
+    }
+
+    private static decimal Number(JsonElement element, string property)
+    {
+        return decimal.Parse(element.GetProperty(property).GetString()!, CultureInfo.InvariantCulture);
     }
 
     private async Task<JsonElement> ItemsAsync(string path)

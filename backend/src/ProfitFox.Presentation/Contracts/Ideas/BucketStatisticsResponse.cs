@@ -10,7 +10,9 @@ namespace ProfitFox.Presentation.Contracts.Ideas;
 ///     all of them and the expectancy in R of the model with their 95 % intervals and the badge by the expectancy, <c>up</c>, <c>flat</c> or
 ///     <c>down</c> (no share, intervals or badge with <see cref="EnoughData" /> false, «мало данных»: the parent has fewer than 30 cases). Beside
 ///     them the own share and expectancy of the bucket with their intervals (none under 30 own cases), the weight of the parent in the
-///     expectancy of the model and <see cref="FewOwnCases" />, «мало своих данных». A bucket of «Откат» or «Стоп-вход» also has the signals it
+///     expectancy of the model and <see cref="FewOwnCases" />, «мало своих данных», and the expectancy of the model without costs, over the results
+///     at the prices of the plan, with its interval (none for a bucket counted before it was kept; no interval with «мало данных»). A bucket of
+///     «Откат» or «Стоп-вход» also has the signals it
 ///     counted, the share of them that entered and the expectancy per signal. Shares are fractions as decimal strings.
 /// </summary>
 public sealed record BucketStatisticsResponse(
@@ -36,7 +38,10 @@ public sealed record BucketStatisticsResponse(
     string? OwnExpectancyLow,
     string? OwnExpectancyHigh,
     string? ParentWeight,
-    bool FewOwnCases)
+    bool FewOwnCases,
+    string? GrossExpectancy,
+    string? GrossExpectancyLow,
+    string? GrossExpectancyHigh)
 {
     public static BucketStatisticsResponse? Of(BucketStatistics? statistics)
     {
@@ -65,7 +70,10 @@ public sealed record BucketStatisticsResponse(
                 Text(statistics.OwnExpectancyLow),
                 Text(statistics.OwnExpectancyHigh),
                 Text(statistics.ParentWeight),
-                statistics.FewOwnCases);
+                statistics.FewOwnCases,
+                Text(statistics.GrossExpectancy),
+                Text(statistics.GrossExpectancyLow),
+                Text(statistics.GrossExpectancyHigh));
     }
 
     private static string? Text(decimal? value)

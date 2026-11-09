@@ -35,6 +35,9 @@ const bucket = (overrides: Partial<Bucket> = {}): Bucket => ({
   ownExpectancyHigh: '0.42',
   parentWeight: '0.2',
   fewOwnCases: false,
+  grossExpectancy: '0.2',
+  grossExpectancyLow: '0.08',
+  grossExpectancyHigh: '0.32',
   ...overrides,
 });
 
