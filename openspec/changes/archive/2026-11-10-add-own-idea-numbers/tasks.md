@@ -69,14 +69,14 @@
   одной корзины», «Из чего сложено ожидание», «Множитель «Уровней» по наведению», «Идея без ожидания»
 - [x] 7.2 `ProbabilityCell` и `ExpectancyCell` показывают свои числа идеи; проверка: `IdeaCells.test.tsx` — значок и
   ожидание идеи, вторая строка в деньгах, «мало своих данных» на месте, «—» без значка у идеи без ожидания
-- [ ] 7.3 E2E списка идей: сиды с двумя идеями одной корзины с разным стопом; проверка: `npm run test:e2e` — разные
+- [x] 7.3 E2E списка идей: сиды с двумя идеями одной корзины с разным стопом; проверка: `npm run test:e2e` — разные
   ожидания в строках и порядок по умолчанию по деньгам
 
 ## 8. Проверка целиком
 
 - [x] 8.1 `dotnet build backend/ProfitFox.sln`, `dotnet test backend/ProfitFox.sln` и
   `dotnet format backend/ProfitFox.sln --verify-no-changes` проходят
-- [ ] 8.2 В `frontend/`: `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run build` и
+- [x] 8.2 В `frontend/`: `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run build` и
   `npm run test:e2e` проходят
 - [x] 8.3 Пройти diff: каждая ветка и проверка нового кода требуется тестом; лишнее удалить или сначала написать тест
 - [x] 8.4 `openspec validate add-own-idea-numbers --strict` проходит
