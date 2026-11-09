@@ -34,7 +34,9 @@ public static class IdeaTradeCodes
     {
         ["take_profit"] = IdeaTradeLeg.TakeProfit,
         ["stop_loss"] = IdeaTradeLeg.StopLoss,
-        ["manual"] = IdeaTradeLeg.Manual
+        ["manual"] = IdeaTradeLeg.Manual,
+        ["liquidation"] = IdeaTradeLeg.Liquidation,
+        ["adl"] = IdeaTradeLeg.Adl
     };
 
     private static readonly Dictionary<string, TimeInForce> TimesInForceByCode = new Dictionary<string, TimeInForce>(StringComparer.Ordinal)

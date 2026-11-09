@@ -2,6 +2,10 @@ using Dapper;
 
 using Npgsql;
 
+using ProfitFox.Application.Ideas;
+using ProfitFox.Application.MarketData;
+using ProfitFox.Domain.Entities.Ideas.Enums;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaTrades.Contracts;
 
 namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaTrades.Queries;
@@ -303,6 +307,58 @@ internal static class IdeaTradeRepositoryQueries
             ON CONFLICT (exec_id) DO NOTHING
             """,
             fill,
+            transaction,
+            cancellationToken: cancellationToken);
+    }
+
+    public static CommandDefinition LockHolders(Guid accountId, Instrument instrument, IdeaSide side, NpgsqlTransaction transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            $"SELECT {TradeColumns} FROM idea_trades WHERE account_id = @AccountId AND category = @Category AND symbol = @Symbol AND side = @Side AND status = 'open' ORDER BY id FOR UPDATE",
+            new { AccountId = accountId, Category = instrument.Category.ToCode(), instrument.Symbol, Side = side.ToCode() },
+            transaction,
+            cancellationToken: cancellationToken);
+    }
+
+    public static CommandDefinition HasForcedShares(string execId, NpgsqlTransaction transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            "SELECT EXISTS (SELECT 1 FROM idea_trade_forced_shares WHERE exec_id = @ExecId)",
+            new { ExecId = execId },
+            transaction,
+            cancellationToken: cancellationToken);
+    }
+
+    public static CommandDefinition AddForcedShare(IdeaTradeForcedShareDb share, NpgsqlTransaction transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            """
+            INSERT INTO idea_trade_forced_shares (exec_id, trade_id, kind, quantity, value, fee, executed_at, applied)
+            VALUES (@ExecId, @TradeId, @Kind, @Quantity, @Value, @Fee, @ExecutedAt, false)
+            ON CONFLICT (exec_id, trade_id) DO NOTHING
+            """,
+            share,
+            transaction,
+            cancellationToken: cancellationToken);
+    }
+
+    public static CommandDefinition GetUnappliedForcedShare(string execId, Guid tradeId, NpgsqlTransaction transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            """
+            SELECT exec_id AS "ExecId", trade_id AS "TradeId", kind, quantity, value, fee, executed_at AS "ExecutedAt"
+            FROM idea_trade_forced_shares WHERE exec_id = @ExecId AND trade_id = @TradeId AND NOT applied
+            """,
+            new { ExecId = execId, TradeId = tradeId },
+            transaction,
+            cancellationToken: cancellationToken);
+    }
+
+    public static CommandDefinition MarkForcedShareApplied(string execId, Guid tradeId, NpgsqlTransaction transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            "UPDATE idea_trade_forced_shares SET applied = true WHERE exec_id = @ExecId AND trade_id = @TradeId",
+            new { ExecId = execId, TradeId = tradeId },
             transaction,
             cancellationToken: cancellationToken);
     }

@@ -243,6 +243,30 @@ internal static class IdeaTradeDbConverter
             fill.ExecutedAt);
     }
 
+    internal static IdeaTradeForcedShareDb FromDomain(IdeaTradeForcedShare share)
+    {
+        return new IdeaTradeForcedShareDb
+        {
+            ExecId = share.ExecId,
+            TradeId = share.TradeId,
+            Kind = share.Leg.ToCode(),
+            Quantity = share.Totals.Quantity,
+            Value = share.Totals.Value,
+            Fee = share.Totals.Fee,
+            ExecutedAt = share.ExecutedAt
+        };
+    }
+
+    internal static IdeaTradeForcedShare ToDomain(IdeaTradeForcedShareDb share)
+    {
+        return new IdeaTradeForcedShare(
+            share.ExecId,
+            share.TradeId,
+            IdeaTradeCodes.TryParseLeg(share.Kind, out IdeaTradeLeg leg) ? leg : throw Unknown("kind", share.Kind),
+            new LegTotals(share.Quantity, share.Value, share.Fee),
+            share.ExecutedAt);
+    }
+
     internal static IdeaTradingSettings ToDomain(IdeaTradingSettingsDb settings)
     {
         return new IdeaTradingSettings(settings.AccountId, settings.Amount, settings.MaxAmount, settings.MaxOpenTrades, settings.MaxTotalRisk, settings.MinRiskReward, settings.DailyLossLimit, settings.MaxSameDirection, settings.AutosBudget, settings.Leverage);
