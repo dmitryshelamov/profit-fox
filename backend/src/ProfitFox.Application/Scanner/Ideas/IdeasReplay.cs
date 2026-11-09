@@ -283,6 +283,12 @@ public sealed class IdeasReplay(
     /// </summary>
     private async Task<Dictionary<DateTimeOffset, decimal>> BtcAsync(DateTimeOffset day, CancellationToken cancellationToken)
     {
+        // A day BTC has not loaded to its end yet (or BTC outside the list) is read for this turn only: a later turn may find more of it.
+        if (!(market.Listed().FirstOrDefault(pair => pair.Instrument == Btc)?.CoveredUntil >= day + Day))
+        {
+            return await ReadBtcAsync(day, cancellationToken);
+        }
+
         Task<Dictionary<DateTimeOffset, decimal>>? read;
 
         lock (_lock)
@@ -305,12 +311,10 @@ public sealed class IdeasReplay(
         }
         catch
         {
+            // Only this read goes: a turn that came after it may have stored a read of its own.
             lock (_lock)
             {
-                if (_btc.GetValueOrDefault(day) == read)
-                {
-                    _btc.Remove(day);
-                }
+                ((ICollection<KeyValuePair<DateTimeOffset, Task<Dictionary<DateTimeOffset, decimal>>>>)_btc).Remove(new(day, read));
             }
 
             throw;
@@ -370,11 +374,6 @@ public sealed class IdeasReplay(
         for (int index = open.Count - 1; index >= 0; index--)
         {
             IdeaSignal signal = open[index];
-
-            if (signal.Path.TrackedUntil == until)
-            {
-                continue;
-            }
 
             IdeaSignal tracked = signal with { Path = signal.Path with { TrackedUntil = until } };
 

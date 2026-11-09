@@ -360,6 +360,7 @@ public class IdeasReplayTests
         var sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
         Serve(sol, () => _minutes);
         _market.Keep([.. new[] { Wif, sol }.Select(pair => new ScannerPair(pair, true, HistoryFrom: March1, CoveredUntil: March1.AddDays(1), TickSize: Tick))]);
+        KeepBtc(March1.AddDays(1));
         IdeasReplay replay = Replay();
 
         (await Step(replay)).ShouldBeTrue();
@@ -369,11 +370,43 @@ public class IdeasReplayTests
         await _candles.Received(1).GetAsync(Btc, Interval.OneMinute, March1.AddMinutes(-240), March1.AddDays(1), 1680, Arg.Any<CancellationToken>());
     }
 
+    // A day of BTC the history of BTC has not filled yet is not kept: the next turn over the day reads what has been loaded meanwhile.
+    [Test]
+    public async Task Closes_of_btc_of_a_day_it_does_not_cover_yet_are_read_again_by_the_next_turn()
+    {
+        var sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
+        Serve(sol, () => _minutes);
+        _market.Keep([.. new[] { Wif, sol }.Select(pair => new ScannerPair(pair, true, HistoryFrom: March1, CoveredUntil: March1.AddDays(1), TickSize: Tick))]);
+        KeepBtc(March1.AddHours(12));
+        IdeasReplay replay = Replay();
+
+        (await Step(replay)).ShouldBeTrue();
+        (await Step(replay)).ShouldBeTrue();
+
+        await _candles.Received(2).GetAsync(Btc, Interval.OneMinute, March1.AddMinutes(-240), March1.AddDays(1), 1680, Arg.Any<CancellationToken>());
+    }
+
+    // BTC outside the list of pairs has no coverage to trust, so its days are not kept either.
+    [Test]
+    public async Task Closes_of_btc_are_read_again_while_btc_is_not_in_the_list()
+    {
+        var sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
+        Serve(sol, () => _minutes);
+        _market.Keep([.. new[] { Wif, sol }.Select(pair => new ScannerPair(pair, true, HistoryFrom: March1, CoveredUntil: March1.AddDays(1), TickSize: Tick))]);
+        IdeasReplay replay = Replay();
+
+        (await Step(replay)).ShouldBeTrue();
+        (await Step(replay)).ShouldBeTrue();
+
+        await _candles.Received(2).GetAsync(Btc, Interval.OneMinute, March1.AddMinutes(-240), March1.AddDays(1), 1680, Arg.Any<CancellationToken>());
+    }
+
     // A read of BTC that failed is not kept: the turn fails, and the next turn over the day reads it again.
     [Test]
     public async Task Failed_read_of_btc_is_read_again_by_the_next_turn()
     {
         var failure = new InvalidOperationException("storage down");
+        KeepBtc(March1.AddDays(1));
         _candles.GetAsync(Btc, Interval.OneMinute, March1.AddMinutes(-240), March1.AddDays(1), 1680, Arg.Any<CancellationToken>())
             .Returns(Task.FromException<IReadOnlyList<Candle>>(failure), Task.FromResult<IReadOnlyList<Candle>>([]));
         IdeasReplay replay = Replay();
@@ -392,6 +425,7 @@ public class IdeasReplayTests
         var sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
         Serve(sol, () => _minutes);
         _market.Keep([.. new[] { Wif, sol }.Select(pair => new ScannerPair(pair, true, HistoryFrom: March1, CoveredUntil: March1.AddDays(17), TickSize: Tick))]);
+        KeepBtc(March1.AddDays(17));
         _time.Advance(TimeSpan.FromDays(17));
         IdeasReplay replay = Replay();
 
@@ -714,6 +748,12 @@ public class IdeasReplayTests
     private static IdeaReplayCursor Until(DateTimeOffset replayedUntil)
     {
         return Arg.Is<IdeaReplayCursor>(cursor => cursor!.ReplayedUntil == replayedUntil);
+    }
+
+    // BTC in the list with its history covered up to the time, but with none of it to replay.
+    private void KeepBtc(DateTimeOffset coveredUntil)
+    {
+        _market.Keep([new ScannerPair(Btc, true, CoveredUntil: coveredUntil)]);
     }
 
     private void Keep(DateTimeOffset coveredUntil)
