@@ -122,8 +122,11 @@ public sealed class ScannerMarket
                 book.Minutes[candle.OpenTime] = Minute(candle);
             }
 
-            // Memory holds the minutes from MinutesFrom to the coverage without a hole.
-            if (book.MinutesFrom is null ? book.Pair.CoveredUntil is null || to >= book.Pair.CoveredUntil : from < book.MinutesFrom && to >= book.MinutesFrom)
+            // Memory holds the minutes from MinutesFrom to the coverage without a hole. A load that ends before the coverage still joins it when
+            // memory holds the minute at its end: the stream closed that minute meanwhile and moved the coverage on by the minutes it brought.
+            if (book.MinutesFrom is null
+                    ? book.Pair.CoveredUntil is null || to >= book.Pair.CoveredUntil || book.Minutes.ContainsKey(to)
+                    : from < book.MinutesFrom && to >= book.MinutesFrom)
             {
                 book.MinutesFrom = from;
             }
