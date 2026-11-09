@@ -2,6 +2,10 @@ using Dapper;
 
 using Npgsql;
 
+using ProfitFox.Application.Ideas;
+using ProfitFox.Application.MarketData;
+using ProfitFox.Domain.Entities.Ideas.Enums;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaTrades.Contracts;
 
 namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaTrades.Queries;
@@ -16,6 +20,8 @@ internal static class IdeaTradeRepositoryQueries
                                         take_profit_quantity AS "TakeProfitQuantity", take_profit_value AS "TakeProfitValue", take_profit_fee AS "TakeProfitFee",
                                         stop_loss_quantity AS "StopLossQuantity", stop_loss_value AS "StopLossValue", stop_loss_fee AS "StopLossFee",
                                         manual_quantity AS "ManualQuantity", manual_value AS "ManualValue", manual_fee AS "ManualFee",
+                                        liquidation_quantity AS "LiquidationQuantity", liquidation_value AS "LiquidationValue", liquidation_fee AS "LiquidationFee",
+                                        adl_quantity AS "AdlQuantity", adl_value AS "AdlValue", adl_fee AS "AdlFee",
                                         last_order_number AS "LastOrderNumber", created_at AS "CreatedAt", lease_epoch AS "LeaseEpoch",
                                         promised_badge AS "PromisedBadge", promised_probability AS "PromisedProbability", promised_expectancy AS "PromisedExpectancy",
                                         promised_cases AS "PromisedCases", break_even AS "BreakEven", net_risk_reward AS "NetRiskReward",
@@ -214,6 +220,8 @@ internal static class IdeaTradeRepositoryQueries
                 take_profit_quantity = @TakeProfitQuantity, take_profit_value = @TakeProfitValue, take_profit_fee = @TakeProfitFee,
                 stop_loss_quantity = @StopLossQuantity, stop_loss_value = @StopLossValue, stop_loss_fee = @StopLossFee,
                 manual_quantity = @ManualQuantity, manual_value = @ManualValue, manual_fee = @ManualFee,
+                liquidation_quantity = @LiquidationQuantity, liquidation_value = @LiquidationValue, liquidation_fee = @LiquidationFee,
+                adl_quantity = @AdlQuantity, adl_value = @AdlValue, adl_fee = @AdlFee,
                 last_order_number = @LastOrderNumber, opened_at = @OpenedAt, updated_at = @Now
             WHERE id = @Id
             """,
@@ -237,6 +245,12 @@ internal static class IdeaTradeRepositoryQueries
                 trade.ManualQuantity,
                 trade.ManualValue,
                 trade.ManualFee,
+                trade.LiquidationQuantity,
+                trade.LiquidationValue,
+                trade.LiquidationFee,
+                trade.AdlQuantity,
+                trade.AdlValue,
+                trade.AdlFee,
                 trade.LastOrderNumber,
                 trade.OpenedAt,
                 Now = now
@@ -293,6 +307,58 @@ internal static class IdeaTradeRepositoryQueries
             ON CONFLICT (exec_id) DO NOTHING
             """,
             fill,
+            transaction,
+            cancellationToken: cancellationToken);
+    }
+
+    public static CommandDefinition LockHolders(Guid accountId, Instrument instrument, IdeaSide side, NpgsqlTransaction transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            $"SELECT {TradeColumns} FROM idea_trades WHERE account_id = @AccountId AND category = @Category AND symbol = @Symbol AND side = @Side AND status = 'open' ORDER BY id FOR UPDATE",
+            new { AccountId = accountId, Category = instrument.Category.ToCode(), instrument.Symbol, Side = side.ToCode() },
+            transaction,
+            cancellationToken: cancellationToken);
+    }
+
+    public static CommandDefinition HasForcedShares(string execId, NpgsqlTransaction transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            "SELECT EXISTS (SELECT 1 FROM idea_trade_forced_shares WHERE exec_id = @ExecId)",
+            new { ExecId = execId },
+            transaction,
+            cancellationToken: cancellationToken);
+    }
+
+    public static CommandDefinition AddForcedShare(IdeaTradeForcedShareDb share, NpgsqlTransaction transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            """
+            INSERT INTO idea_trade_forced_shares (exec_id, trade_id, kind, quantity, value, fee, executed_at, applied)
+            VALUES (@ExecId, @TradeId, @Kind, @Quantity, @Value, @Fee, @ExecutedAt, false)
+            ON CONFLICT (exec_id, trade_id) DO NOTHING
+            """,
+            share,
+            transaction,
+            cancellationToken: cancellationToken);
+    }
+
+    public static CommandDefinition GetUnappliedForcedShare(string execId, Guid tradeId, NpgsqlTransaction transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            """
+            SELECT exec_id AS "ExecId", trade_id AS "TradeId", kind, quantity, value, fee, executed_at AS "ExecutedAt"
+            FROM idea_trade_forced_shares WHERE exec_id = @ExecId AND trade_id = @TradeId AND NOT applied
+            """,
+            new { ExecId = execId, TradeId = tradeId },
+            transaction,
+            cancellationToken: cancellationToken);
+    }
+
+    public static CommandDefinition MarkForcedShareApplied(string execId, Guid tradeId, NpgsqlTransaction transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            "UPDATE idea_trade_forced_shares SET applied = true WHERE exec_id = @ExecId AND trade_id = @TradeId",
+            new { ExecId = execId, TradeId = tradeId },
             transaction,
             cancellationToken: cancellationToken);
     }

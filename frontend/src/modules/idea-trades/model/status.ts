@@ -5,6 +5,8 @@ const statuses: Record<string, string> = {
   closed_at_stop: 'Закрыта по стопу',
   closed_manually: 'Закрыта вручную',
   closed_at_expiry: 'Закрыта по сроку',
+  liquidated: 'Ликвидирована',
+  closed_by_adl: 'Закрыта биржей (ADL)',
   cancelled: 'Отменена',
   failed: 'Ошибка',
 };

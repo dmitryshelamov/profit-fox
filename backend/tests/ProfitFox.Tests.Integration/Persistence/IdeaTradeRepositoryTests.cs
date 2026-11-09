@@ -115,6 +115,26 @@ public class IdeaTradeRepositoryTests
         (await _repository.GetAsync(trade.Id, CancellationToken.None)).ShouldBeEquivalentTo(changed);
     }
 
+    // Decision 4 of recognize-liquidations-in-idea-trades: a liquidation in part, then the auto-deleveraging of the rest, and the liquidation of all.
+    [Test]
+    public async Task Saved_trade_keeps_what_the_liquidation_and_the_auto_deleveraging_took()
+    {
+        IdeaTrade adl = await CreateAsync(Now);
+        IdeaTrade liquidated = await CreateAsync(Now.AddMinutes(1));
+        IdeaTrade byAdl = adl.EntryGrown(new LegTotals(0.47m, 49.82m, 0.02m), Now.AddMinutes(1))
+            .ExitGrown(IdeaTradeLeg.Liquidation, new LegTotals(0.2m, 19m, 0.01m), Now.AddMinutes(2))
+            .ExitGrown(IdeaTradeLeg.Adl, new LegTotals(0.27m, 26m, 0.015m), Now.AddMinutes(3));
+        IdeaTrade byLiquidation = liquidated.EntryGrown(new LegTotals(0.47m, 49.82m, 0.02m), Now.AddMinutes(1))
+            .ExitGrown(IdeaTradeLeg.Liquidation, new LegTotals(0.47m, 45m, 0.025m), Now.AddMinutes(2));
+
+        await SaveAsync(byAdl);
+        await SaveAsync(byLiquidation);
+
+        (await _repository.GetAsync(adl.Id, CancellationToken.None)).ShouldBeEquivalentTo(byAdl);
+        (await _repository.GetAsync(liquidated.Id, CancellationToken.None)).ShouldBeEquivalentTo(byLiquidation);
+        (byAdl.Status, byLiquidation.Status).ShouldBe((IdeaTradeStatus.ClosedByAdl, IdeaTradeStatus.Liquidated));
+    }
+
     // Decisions 1 and 2: the Worker's save writes neither the promise nor the outcome of the idea; the scanner writes the outcome, and the save keeps it.
     [Test]
     public async Task Save_of_a_Worker_keeps_the_promise_and_the_outcome_of_the_idea_and_writes_the_time_it_opened()
@@ -273,6 +293,75 @@ public class IdeaTradeRepositoryTests
         (await _repository.GetFillsAsync(trade.Id, CancellationToken.None)).ShouldHaveSingleItem().ShouldBeEquivalentTo(fill);
         (await _repository.IsChildAsync("bybit-2", CancellationToken.None)).ShouldBeTrue();
         (await _repository.IsChildAsync("bybit-1", CancellationToken.None)).ShouldBeFalse();
+    }
+
+    // Decision 3 of recognize-liquidations-in-idea-trades: the shares of one execution are written once, and each trade applies its own once.
+    [Test]
+    public async Task Shares_of_an_execution_are_written_once_and_each_is_applied_once()
+    {
+        IdeaTrade first = await CreateAsync(Now);
+        IdeaTrade second = await CreateAsync(Now.AddMinutes(1));
+        var mine = new IdeaTradeForcedShare("bust-1", first.Id, IdeaTradeLeg.Liquidation, new LegTotals(300m, 750m, 0.3m), Now);
+        var theirs = new IdeaTradeForcedShare("bust-1", second.Id, IdeaTradeLeg.Liquidation, new LegTotals(100m, 250m, 0.1m), Now);
+
+        (await InUnitAsync(token => _repository.HasForcedSharesAsync("bust-1", token))).ShouldBeFalse();
+        await InUnitAsync(async token =>
+        {
+            await _repository.AddForcedSharesAsync([mine, theirs], token);
+
+            return 0;
+        });
+        await InUnitAsync(async token =>
+        {
+            await _repository.AddForcedSharesAsync([mine with { Totals = new LegTotals(1m, 1m, 1m) }], token);
+
+            return 0;
+        });
+
+        (await InUnitAsync(token => _repository.HasForcedSharesAsync("bust-1", token))).ShouldBeTrue();
+        (await InUnitAsync(token => _repository.HasForcedSharesAsync("bust-2", token))).ShouldBeFalse();
+        (await InUnitAsync(token => _repository.GetUnappliedForcedShareAsync("bust-1", first.Id, token))).ShouldBe(mine);
+        await InUnitAsync(async token =>
+        {
+            await _repository.MarkForcedShareAppliedAsync("bust-1", first.Id, token);
+
+            return 0;
+        });
+        (await InUnitAsync(token => _repository.GetUnappliedForcedShareAsync("bust-1", first.Id, token))).ShouldBeNull();
+        (await InUnitAsync(token => _repository.GetUnappliedForcedShareAsync("bust-1", second.Id, token))).ShouldBe(theirs);
+        await using NpgsqlConnection connection = await _dataSource.OpenConnectionAsync();
+        (await connection.QuerySingleAsync<int>("SELECT count(*) FROM idea_trade_forced_shares WHERE exec_id = 'bust-1'")).ShouldBe(2);
+    }
+
+    // Decision 3: the trades an execution closes are the open ones of the account, the symbol and the side, locked in the order of their ids.
+    [Test]
+    public async Task Holders_of_a_side_are_the_open_trades_of_the_account_and_the_symbol_in_the_order_of_their_ids()
+    {
+        var linear = new ProfitFox.Domain.ValueObjects.MarketData.Instrument(MarketCategory.Linear, "JCTUSDT");
+        IdeaTrade[] longs = [await OpenAsync(linear, IdeaSide.Long), await OpenAsync(linear, IdeaSide.Long), await OpenAsync(linear, IdeaSide.Long)];
+        await OpenAsync(linear, IdeaSide.Short);
+        await OpenAsync(new ProfitFox.Domain.ValueObjects.MarketData.Instrument(MarketCategory.Linear, "WIFUSDT"), IdeaSide.Long);
+        await CreateAsync(Now, idea: IdeaGenerator.Generate(Now, instrument: linear));
+        await SaveAsync(longs[2].EntryGrown(longs[2].Entry, Now).ExitGrown(IdeaTradeLeg.StopLoss, longs[2].Entry, Now));
+
+        IReadOnlyList<IdeaTrade> holders = await InUnitAsync(token => _repository.LockHoldersAsync(_account, linear, IdeaSide.Long, token));
+
+        holders.Select(trade => trade.Id).ShouldBe(longs.Take(2).Select(trade => trade.Id).Order());
+        (await InUnitAsync(token => _repository.LockHoldersAsync(Guid.NewGuid(), linear, IdeaSide.Long, token))).ShouldBeEmpty();
+    }
+
+    private async Task<IdeaTrade> OpenAsync(ProfitFox.Domain.ValueObjects.MarketData.Instrument instrument, IdeaSide side)
+    {
+        IdeaTrade trade = await CreateAsync(Now, idea: IdeaGenerator.Generate(Now, instrument: instrument, side: side));
+        IdeaTrade open = trade.EntryGrown(new LegTotals(100m, 250m, 0.1m), Now);
+        await SaveAsync(open);
+
+        return open;
+    }
+
+    private Task<T> InUnitAsync<T>(Func<CancellationToken, Task<T>> work)
+    {
+        return _executor.ExecuteAsync(work, CancellationToken.None);
     }
 
     private async Task<IdeaTrade> CreateAsync(DateTimeOffset at, IdeaType type = IdeaType.TwoR, IdeaPromise? promise = null, Guid? autoId = null, Idea? idea = null, int leverage = 1)

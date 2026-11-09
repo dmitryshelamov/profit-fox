@@ -362,6 +362,29 @@ public class IdeaTradesApiTests
         totals.GetProperty("meanRLow").ValueKind.ShouldBe(JsonValueKind.Null);
     }
 
+    // Scenario "Ликвидация в итогах": a liquidated trade and one closed by ADL are closed trades with their results, counted apart in the totals.
+    [Test]
+    public async Task Liquidated_trade_and_trade_closed_by_adl_are_in_the_journal_and_its_totals()
+    {
+        IdeaTrade liquidated = await _scenario.CreateTradeAsync(risk: 1m);
+        IdeaTrade adl = await _scenario.CreateTradeAsync(risk: 1m);
+        DateTimeOffset now = _scenario.Factory.Time.GetUtcNow();
+        await _scenario.ChangeTradeAsync(
+            liquidated.Id,
+            current => current.EntryGrown(new LegTotals(1m, 100m, 0m), now).ExitGrown(IdeaTradeLeg.Liquidation, new LegTotals(1m, 99.76m, 0m), now.AddMinutes(1)));
+        await _scenario.ChangeTradeAsync(
+            adl.Id,
+            current => current.EntryGrown(new LegTotals(1m, 100m, 0m), now).ExitGrown(IdeaTradeLeg.Adl, new LegTotals(1m, 100.5m, 0m), now.AddMinutes(2)));
+
+        JsonElement journal = await JournalAsync();
+
+        JsonElement items = journal.GetProperty("closed").GetProperty("items");
+        (items[0].GetProperty("status").GetString(), items[0].GetProperty("result").GetString()).ShouldBe(("closed_by_adl", "0.5"));
+        (items[1].GetProperty("status").GetString(), items[1].GetProperty("resultR").GetString()).ShouldBe(("liquidated", "-0.24"));
+        JsonElement totals = journal.GetProperty("totals");
+        (totals.GetProperty("liquidated").GetInt32(), totals.GetProperty("adl").GetInt32(), totals.GetProperty("result").GetString()).ShouldBe((1, 1, "0.26"));
+    }
+
     // Requirements "Обещание на входе" and "Исход идеи на сделке" reach the journal: the promise of the entry and the outcome the scanner wrote.
     [Test]
     public async Task Journal_carries_the_promise_of_the_entry_and_the_outcome_of_the_idea()

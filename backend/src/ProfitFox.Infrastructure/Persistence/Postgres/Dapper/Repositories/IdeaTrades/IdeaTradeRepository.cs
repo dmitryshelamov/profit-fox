@@ -2,9 +2,11 @@ using Dapper;
 
 using Npgsql;
 
+using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaTrades.Contracts;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaTrades.Converters;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.IdeaTrades.Queries;
@@ -137,6 +139,46 @@ internal sealed class IdeaTradeRepository(NpgsqlDataSource dataSource, PostgresT
         PostgresTransaction current = accessor.Current;
 
         return await current.Connection.ExecuteAsync(IdeaTradeRepositoryQueries.AddFill(IdeaTradeDbConverter.FromDomain(fill), current.Transaction, cancellationToken)) > 0;
+    }
+
+    public async Task<IReadOnlyList<IdeaTrade>> LockHoldersAsync(Guid accountId, Instrument instrument, IdeaSide side, CancellationToken cancellationToken)
+    {
+        PostgresTransaction current = accessor.Current;
+        IEnumerable<IdeaTradeDb> trades = await current.Connection.QueryAsync<IdeaTradeDb>(IdeaTradeRepositoryQueries.LockHolders(accountId, instrument, side, current.Transaction, cancellationToken));
+
+        return [.. trades.Select(IdeaTradeDbConverter.ToDomain)];
+    }
+
+    public async Task<bool> HasForcedSharesAsync(string execId, CancellationToken cancellationToken)
+    {
+        PostgresTransaction current = accessor.Current;
+
+        return await current.Connection.ExecuteScalarAsync<bool>(IdeaTradeRepositoryQueries.HasForcedShares(execId, current.Transaction, cancellationToken));
+    }
+
+    public async Task AddForcedSharesAsync(IReadOnlyList<IdeaTradeForcedShare> shares, CancellationToken cancellationToken)
+    {
+        PostgresTransaction current = accessor.Current;
+
+        foreach (IdeaTradeForcedShare share in shares)
+        {
+            await current.Connection.ExecuteAsync(IdeaTradeRepositoryQueries.AddForcedShare(IdeaTradeDbConverter.FromDomain(share), current.Transaction, cancellationToken));
+        }
+    }
+
+    public async Task<IdeaTradeForcedShare?> GetUnappliedForcedShareAsync(string execId, Guid tradeId, CancellationToken cancellationToken)
+    {
+        PostgresTransaction current = accessor.Current;
+        IdeaTradeForcedShareDb? share = await current.Connection.QuerySingleOrDefaultAsync<IdeaTradeForcedShareDb>(
+            IdeaTradeRepositoryQueries.GetUnappliedForcedShare(execId, tradeId, current.Transaction, cancellationToken));
+
+        return share is null ? null : IdeaTradeDbConverter.ToDomain(share);
+    }
+
+    public async Task MarkForcedShareAppliedAsync(string execId, Guid tradeId, CancellationToken cancellationToken)
+    {
+        PostgresTransaction current = accessor.Current;
+        await current.Connection.ExecuteAsync(IdeaTradeRepositoryQueries.MarkForcedShareApplied(execId, tradeId, current.Transaction, cancellationToken));
     }
 
     public async Task<bool> IsChildAsync(string exchangeOrderId, CancellationToken cancellationToken)

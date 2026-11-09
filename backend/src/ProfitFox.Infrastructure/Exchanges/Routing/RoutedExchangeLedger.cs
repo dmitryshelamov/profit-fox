@@ -62,6 +62,11 @@ internal sealed class RoutedExchangeLedger(
         return Of(key).GetFillsAsync(key, instrument, clientId, cancellationToken);
     }
 
+    public Task<IReadOnlyList<ExchangeFill>> GetForcedFillsAsync(ExchangeKey key, Instrument instrument, DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        return Of(key).GetForcedFillsAsync(key, instrument, since, cancellationToken);
+    }
+
     public Task<FeeSchedule> GetFeesAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
     {
         return Of(key).GetFeesAsync(key, instrument, cancellationToken);

@@ -11,6 +11,9 @@ namespace ProfitFox.Presentation.Contracts.IdeaTrades;
 /// <summary>
 ///     A trade by an idea: the pair, the setup, the interval, the type and the side of its idea as codes, the account, the levels and the size it
 ///     was entered with, its status and the time of it, the reason of an «Ошибка» and the result of a closed trade in money and in R (none before).
+///     The status is <c>awaiting_entry</c>, <c>open</c>, <c>closed_at_target</c>, <c>closed_at_stop</c>, <c>closed_manually</c>,
+///     <c>closed_at_expiry</c> (a paper trade), <c>liquidated</c> or <c>closed_by_adl</c> (the exchange closed the position by a liquidation or by
+///     auto-deleveraging), <c>cancelled</c> or <c>failed</c>.
 ///     Numbers are decimal strings; <see cref="FilledPrice" /> is the average price the entry was filled at, none before any fill.
 ///     <c>openedAt</c> is the first fill of the entry and <c>secondsToOutcome</c> the time from it to the close of a closed trade;
 ///     <c>promise</c> is what the idea promised at the entry and <c>ideaOutcome</c> how the idea ended, none for a trade made before

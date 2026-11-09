@@ -34,6 +34,8 @@ const totals = (overrides: Partial<Totals> = {}): Totals => ({
   stops: 1,
   manual: 1,
   expired: 0,
+  liquidated: 0,
+  adl: 0,
   cancelled: 0,
   failed: 0,
   result: '0.9',
@@ -172,6 +174,16 @@ describe('totals of the journal', () => {
     );
   });
 
+  // Scenario "Есть ликвидация": the liquidated and the closed by ADL stand in the row only when there are any.
+  it('adds the liquidated and the closed by ADL to the outcomes only when there are any', () => {
+    expect(outcomeCountsText(totals({ targets: 1, stops: 2, manual: 0, liquidated: 1 }))).toBe(
+      'по цели 1 (25 %) · по стопу 2 (50 %) · вручную 0 (0 %) · по сроку 0 (0 %) · ликвидировано 1 (25 %)',
+    );
+    expect(outcomeCountsText(totals({ targets: 1, stops: 0, manual: 0, adl: 1 }))).toBe(
+      'по цели 1 (50 %) · по стопу 0 (0 %) · вручную 0 (0 %) · по сроку 0 (0 %) · ADL 1 (50 %)',
+    );
+  });
+
   it('shows a dash when nothing is closed', () => {
     expect(outcomeCountsText(totals({ targets: 0, stops: 0, manual: 0 }))).toBe('—');
   });
@@ -224,5 +236,9 @@ describe('count of the closed trades', () => {
     expect(closedCountText(totals({ targets: 1, stops: 0, manual: 0, expired: 1 }))).toBe(
       '2 сделки',
     );
+    expect(closedCountText(totals({ targets: 1, stops: 2, manual: 0, liquidated: 1 }))).toBe(
+      '4 сделки',
+    );
+    expect(closedCountText(totals({ targets: 0, stops: 0, manual: 0, adl: 1 }))).toBe('1 сделка');
   });
 });

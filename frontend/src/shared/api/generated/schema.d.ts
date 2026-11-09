@@ -5424,9 +5424,10 @@ export interface components {
             paperTotals: components["schemas"]["IdeaJournalTotalsResponse"];
         };
         /**
-         * @description The totals of the closed trades of a filter: those closed at the target, at the stop, manually and at expiry, and
-         *     apart from them the cancelled and the failed. The money, the fees, the mean result in R with its 95 % interval (none for one trade, nor the
-         *     mean for none) and the mean time to the outcome are over the first four. Numbers are decimal strings.
+         * @description The totals of the closed trades of a filter: those closed at the target, at the stop, manually, at expiry, liquidated (`liquidated`) and
+         *     closed by the auto-deleveraging of the exchange (`adl`), and apart from them the cancelled and the failed. The money, the fees, the mean
+         *     result in R with its 95 % interval (none for one trade, nor the mean for none) and the mean time to the outcome are over the first six.
+         *     Numbers are decimal strings.
          */
         IdeaJournalTotalsResponse: {
             /** Format: int32 */
@@ -5437,6 +5438,10 @@ export interface components {
             manual: number | string;
             /** Format: int32 */
             expired: number | string;
+            /** Format: int32 */
+            liquidated: number | string;
+            /** Format: int32 */
+            adl: number | string;
             /** Format: int32 */
             cancelled: number | string;
             /** Format: int32 */
@@ -5536,6 +5541,9 @@ export interface components {
         /**
          * @description A trade by an idea: the pair, the setup, the interval, the type and the side of its idea as codes, the account, the levels and the size it
          *     was entered with, its status and the time of it, the reason of an «Ошибка» and the result of a closed trade in money and in R (none before).
+         *     The status is `awaiting_entry`, `open`, `closed_at_target`, `closed_at_stop`, `closed_manually`,
+         *     `closed_at_expiry` (a paper trade), `liquidated` or `closed_by_adl` (the exchange closed the position by a liquidation or by
+         *     auto-deleveraging), `cancelled` or `failed`.
          *     Numbers are decimal strings; string? IdeaTradeResponse.FilledPrice is the average price the entry was filled at, none before any fill.
          *     `openedAt` is the first fill of the entry and `secondsToOutcome` the time from it to the close of a closed trade;
          *     `promise` is what the idea promised at the entry and `ideaOutcome` how the idea ended, none for a trade made before

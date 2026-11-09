@@ -1,10 +1,12 @@
 using System.Net;
 
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
@@ -143,8 +145,8 @@ public class BybitLedgerTests
 
         fills.ShouldBe(
         [
-            new ExchangeFill("e-1", "c-1", 0.4m, 100m, 0.0004m, "BTC", DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_000_000), Spot, "x-c-1"),
-            new ExchangeFill("e-2", "c-1", 0.6m, 101m, 0.06m, "USDT", DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_060_000), Spot, "x-c-1")
+            new ExchangeFill("e-1", "c-1", 0.4m, 100m, 0.0004m, "BTC", DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_000_000), Spot, "x-c-1", Side: OrderSide.Buy),
+            new ExchangeFill("e-2", "c-1", 0.6m, 101m, 0.06m, "USDT", DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_060_000), Spot, "x-c-1", Side: OrderSide.Buy)
         ]);
         BybitRequests.Describe(handler.Requests.Single()).ShouldBe(BybitRequests.Describe("/v5/execution/list?category=spot&symbol=BTCUSDT&orderLinkId=c-1"));
     }
@@ -189,6 +191,67 @@ public class BybitLedgerTests
         orders.Select(order => (order.ExchangeId, order.State, order.StopKind)).ShouldBe([("x-tp", ExchangeOrderState.Open, StopOrderKind.TakeProfit), ("x-sl", ExchangeOrderState.Filled, StopOrderKind.StopLoss)]);
         BybitRequests.Describe(handler.Requests[0]).ShouldBe(BybitRequests.Describe("/v5/order/realtime?category=linear&symbol=BTCUSDT&openOnly=0&limit=50"));
         BybitRequests.Describe(handler.Requests[1]).ShouldBe(BybitRequests.Describe("/v5/order/history?category=linear&symbol=BTCUSDT&limit=50"));
+    }
+
+    // Requirement "Ликвидация и ADL": a fill tells what made it, a liquidation or an auto-deleveraging of Bybit apart from a trade, and its side.
+    [TestCase("BustTrade", "Sell", ExchangeFillKind.Liquidation, OrderSide.Sell)]
+    [TestCase("AdlTrade", "Buy", ExchangeFillKind.Adl, OrderSide.Buy)]
+    [TestCase("Trade", "Buy", ExchangeFillKind.Trade, OrderSide.Buy)]
+    [TestCase("Funding", "Sell", ExchangeFillKind.Trade, OrderSide.Sell)]
+    public async Task Fill_tells_its_kind_and_its_side(string type, string side, ExchangeFillKind kind, OrderSide orderSide)
+    {
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(Executions(Execution("e-1", "0.4", "100", "0.02", "USDT", 1_700_000_000_000, type, side)));
+
+        ExchangeFill fill = (await Ledger(handler).GetOrderFillsAsync(Key, Linear, "x-c-1", CancellationToken.None)).Single();
+
+        (fill.Kind, fill.Side).ShouldBe((kind, orderSide));
+    }
+
+    // Decision 5 of recognize-liquidations-in-idea-trades: the liquidations and the auto-deleveraging of the symbol since the time asked, the oldest first.
+    [Test]
+    public async Task Forced_fills_of_a_symbol_are_the_liquidations_and_the_auto_deleveraging_since_the_time_asked()
+    {
+        var clock = new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds(1_700_100_000_000));
+        using StubHttpHandler handler = new StubHttpHandler()
+            .RespondJson(Executions(Execution("bust-1", "1100", "0.014229", "0.0086", "USDT", 1_700_000_060_000, "BustTrade", "Sell")))
+            .RespondJson(Executions(Execution("adl-1", "0.2", "101", "0.01", "USDT", 1_700_000_000_000, "AdlTrade", "Sell")));
+
+        IReadOnlyList<ExchangeFill> fills = await Ledger(handler, clock).GetForcedFillsAsync(Key, Linear, DateTimeOffset.FromUnixTimeMilliseconds(1_699_990_000_000), CancellationToken.None);
+
+        fills.Select(fill => (fill.ExecId, fill.Kind)).ShouldBe([("adl-1", ExchangeFillKind.Adl), ("bust-1", ExchangeFillKind.Liquidation)]);
+        BybitRequests.Describe(handler.Requests[0]).ShouldBe(BybitRequests.Describe("/v5/execution/list?category=linear&symbol=BTCUSDT&execType=BustTrade&startTime=1699990000000"));
+        BybitRequests.Describe(handler.Requests[1]).ShouldBe(BybitRequests.Describe("/v5/execution/list?category=linear&symbol=BTCUSDT&execType=AdlTrade&startTime=1699990000000"));
+    }
+
+    // Bybit keeps no more than 7 days of executions in one window: an older start is moved to 7 days ago.
+    [Test]
+    public async Task Forced_fills_are_asked_no_further_back_than_seven_days()
+    {
+        var now = DateTimeOffset.FromUnixTimeMilliseconds(1_700_100_000_000);
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(Executions()).RespondJson(Executions());
+
+        await Ledger(handler, new FakeTimeProvider(now)).GetForcedFillsAsync(Key, Linear, now.AddDays(-10), CancellationToken.None);
+
+        long start = now.AddDays(-7).ToUnixTimeMilliseconds();
+        BybitRequests.Describe(handler.Requests[0]).ShouldBe(BybitRequests.Describe($"/v5/execution/list?category=linear&symbol=BTCUSDT&execType=BustTrade&startTime={start}"));
+        BybitRequests.Describe(handler.Requests[1]).ShouldBe(BybitRequests.Describe($"/v5/execution/list?category=linear&symbol=BTCUSDT&execType=AdlTrade&startTime={start}"));
+    }
+
+    [Test]
+    public async Task Forced_fills_are_read_from_every_page()
+    {
+        var now = DateTimeOffset.FromUnixTimeMilliseconds(1_700_100_000_000);
+        using StubHttpHandler handler = new StubHttpHandler()
+            .RespondJson(ExecutionPage("page-2", Execution("bust-1", "0.4", "100", "0", "USDT", 1_700_000_000_000, "BustTrade", "Sell")))
+            .RespondJson(ExecutionPage("", Execution("bust-2", "0.6", "100", "0", "USDT", 1_700_000_060_000, "BustTrade", "Sell")))
+            .RespondJson(Executions());
+
+        IReadOnlyList<ExchangeFill> fills = await Ledger(handler, new FakeTimeProvider(now)).GetForcedFillsAsync(Key, Linear, now.AddDays(-1), CancellationToken.None);
+
+        fills.Select(fill => fill.ExecId).ShouldBe(["bust-1", "bust-2"]);
+        BybitRequests.Describe(handler.Requests[1]).ShouldBe(
+            BybitRequests.Describe($"/v5/execution/list?category=linear&symbol=BTCUSDT&execType=BustTrade&startTime={now.AddDays(-1).ToUnixTimeMilliseconds()}&cursor=page-2"));
+        handler.Requests.Count.ShouldBe(3);
     }
 
     [Test]
@@ -238,9 +301,9 @@ public class BybitLedgerTests
         await Should.ThrowAsync<ExchangeUnavailableException>(() => Ledger(handler).GetOpenOrdersAsync(Key, Spot, CancellationToken.None));
     }
 
-    private static BybitLedger Ledger(StubHttpHandler handler)
+    private static BybitLedger Ledger(StubHttpHandler handler, TimeProvider? clock = null)
     {
-        return new BybitLedger(handler.CreateClient(), NullLoggerFactory.Instance, new BybitSettings());
+        return new BybitLedger(handler.CreateClient(), NullLoggerFactory.Instance, new BybitSettings(), clock ?? TimeProvider.System);
     }
 
     private static string Wallet(params string[] coins)
@@ -306,11 +369,11 @@ public class BybitLedgerTests
         return $$"""{"retCode":0,"retMsg":"OK","result":{"list":[{{string.Join(",", executions)}}],"nextPageCursor":"{{cursor}}","category":"spot"},"retExtInfo":{},"time":1}""";
     }
 
-    private static string Execution(string id, string quantity, string price, string fee, string feeCoin, long at)
+    private static string Execution(string id, string quantity, string price, string fee, string feeCoin, long at, string type = "Trade", string side = "Buy")
     {
         return $$"""
-                 {"symbol":"BTCUSDT","orderId":"x-c-1","orderLinkId":"c-1","side":"Buy","orderPrice":"100","orderQty":"1","leavesQty":"0","orderType":"Limit",
-                 "execFee":"{{fee}}","feeCurrency":"{{feeCoin}}","execId":"{{id}}","execPrice":"{{price}}","execQty":"{{quantity}}","execType":"Trade",
+                 {"symbol":"BTCUSDT","orderId":"x-c-1","orderLinkId":"c-1","side":"{{side}}","orderPrice":"100","orderQty":"1","leavesQty":"0","orderType":"Limit",
+                 "execFee":"{{fee}}","feeCurrency":"{{feeCoin}}","execId":"{{id}}","execPrice":"{{price}}","execQty":"{{quantity}}","execType":"{{type}}",
                  "execValue":"0","execTime":"{{at}}","isMaker":true,"feeRate":"0.0001"}
                  """;
     }

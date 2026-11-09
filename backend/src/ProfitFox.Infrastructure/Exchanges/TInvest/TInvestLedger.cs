@@ -111,6 +111,12 @@ internal sealed class TInvestLedger(TInvestCall call, TInvestShares shares, ITIn
         return TInvestOrderStates.Fills(state, clientId, (await shares.ShareByAsync(instrument.Symbol, cancellationToken)).Lot, instrument);
     }
 
+    /// <summary>The shares of MOEX are not liquidated in this trading: refused without a call.</summary>
+    public Task<IReadOnlyList<ExchangeFill>> GetForcedFillsAsync(ExchangeKey key, Instrument instrument, DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        throw new ExchangeException("T-Invest has no liquidations.");
+    }
+
     /// <summary>
     ///     The rate is the commission of a trial limit buy of whole lots for at least <see cref="TrialAmount" /> at the last price, by
     ///     <c>GetOrderPrice</c>, which places nothing; T-Invest has no method of the tariff. A limit and a market order pay the same.

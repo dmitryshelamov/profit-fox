@@ -51,6 +51,12 @@ public sealed record IdeaTrade(
     /// <summary>The close at the expiry of the idea: only a paper trade has it, a real trade's is always none.</summary>
     public LegTotals Expiry { get; init; } = LegTotals.None;
 
+    /// <summary>What the liquidations of the exchange took out of a real trade.</summary>
+    public LegTotals Liquidation { get; init; } = LegTotals.None;
+
+    /// <summary>What the auto-deleveraging of the exchange took out of a real trade.</summary>
+    public LegTotals Adl { get; init; } = LegTotals.None;
+
     /// <summary>The features of the market its idea fired with, copied when the trade was made; a trade before them has none.</summary>
     public IdeaFeatures Features { get; init; }
 
@@ -61,6 +67,7 @@ public sealed record IdeaTrade(
 
     /// <summary>The money of a closed trade after the fees; none for a trade that is open, cancelled or failed.</summary>
     public decimal? Result => Status is IdeaTradeStatus.ClosedAtTarget or IdeaTradeStatus.ClosedAtStop or IdeaTradeStatus.ClosedManually or IdeaTradeStatus.ClosedAtExpiry
+        or IdeaTradeStatus.Liquidated or IdeaTradeStatus.ClosedByAdl
         ? (Side == IdeaSide.Long ? Exited.Value - Entry.Value : Entry.Value - Exited.Value) - Entry.Fee - Exited.Fee
         : null;
 
@@ -99,10 +106,7 @@ public sealed record IdeaTrade(
         return ResultAt(price, takerPercent) / Risk;
     }
 
-    private LegTotals Exited => new LegTotals(
-        TakeProfit.Quantity + StopLoss.Quantity + Manual.Quantity + Expiry.Quantity,
-        TakeProfit.Value + StopLoss.Value + Manual.Value + Expiry.Value,
-        TakeProfit.Fee + StopLoss.Fee + Manual.Fee + Expiry.Fee);
+    private LegTotals Exited => TakeProfit + StopLoss + Manual + Expiry + Liquidation + Adl;
 
     public static IdeaTrade Create(Guid id, Idea idea, Guid accountId, decimal entryPrice, IdeaTradeSize size, DateTimeOffset now, IdeaPromise? promise = null, Guid? autoId = null, int leverage = 1)
     {
@@ -178,6 +182,8 @@ public sealed record IdeaTrade(
             IdeaTradeLeg.TakeProfit => this with { TakeProfit = TakeProfit + added },
             IdeaTradeLeg.StopLoss => this with { StopLoss = StopLoss + added },
             IdeaTradeLeg.Expiry => this with { Expiry = Expiry + added },
+            IdeaTradeLeg.Liquidation => this with { Liquidation = Liquidation + added },
+            IdeaTradeLeg.Adl => this with { Adl = Adl + added },
             _ => this with { Manual = Manual + added }
         };
 
@@ -206,6 +212,8 @@ public sealed record IdeaTrade(
             IdeaTradeLeg.TakeProfit => IdeaTradeStatus.ClosedAtTarget,
             IdeaTradeLeg.StopLoss => IdeaTradeStatus.ClosedAtStop,
             IdeaTradeLeg.Expiry => IdeaTradeStatus.ClosedAtExpiry,
+            IdeaTradeLeg.Liquidation => IdeaTradeStatus.Liquidated,
+            IdeaTradeLeg.Adl => IdeaTradeStatus.ClosedByAdl,
             _ => IdeaTradeStatus.ClosedManually
         };
 

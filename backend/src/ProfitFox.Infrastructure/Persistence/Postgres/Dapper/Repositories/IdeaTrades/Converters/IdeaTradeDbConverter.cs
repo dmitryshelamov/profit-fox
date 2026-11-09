@@ -57,6 +57,12 @@ internal static class IdeaTradeDbConverter
             ManualQuantity = trade.Manual.Quantity,
             ManualValue = trade.Manual.Value,
             ManualFee = trade.Manual.Fee,
+            LiquidationQuantity = trade.Liquidation.Quantity,
+            LiquidationValue = trade.Liquidation.Value,
+            LiquidationFee = trade.Liquidation.Fee,
+            AdlQuantity = trade.Adl.Quantity,
+            AdlValue = trade.Adl.Value,
+            AdlFee = trade.Adl.Fee,
             ExpiryQuantity = trade.Expiry.Quantity,
             ExpiryValue = trade.Expiry.Value,
             ExpiryFee = trade.Expiry.Fee,
@@ -79,7 +85,7 @@ internal static class IdeaTradeDbConverter
         };
     }
 
-    /// <summary>A real trade reads no columns of the expiry, so its leg of the expiry is always none.</summary>
+    /// <summary>A real trade reads no columns of the expiry, so its leg of the expiry is always none; a paper trade reads none of the liquidation and the auto-deleveraging.</summary>
     internal static IdeaTrade ToDomain(IdeaTradeDb trade)
     {
         return new IdeaTrade(
@@ -124,6 +130,8 @@ internal static class IdeaTradeDbConverter
             trade.Leverage)
         {
             Expiry = new LegTotals(trade.ExpiryQuantity, trade.ExpiryValue, trade.ExpiryFee),
+            Liquidation = new LegTotals(trade.LiquidationQuantity, trade.LiquidationValue, trade.LiquidationFee),
+            Adl = new LegTotals(trade.AdlQuantity, trade.AdlValue, trade.AdlFee),
             Features = new IdeaFeatures(trade.DayDrop, trade.BtcDrop, trade.HighFunding, trade.Burst)
         };
     }
@@ -233,6 +241,30 @@ internal static class IdeaTradeDbConverter
             fill.Fee,
             LiveTradingCodes.TryParseFeeAsset(fill.FeeAsset, out FeeAsset asset) ? asset : throw Unknown("fee asset", fill.FeeAsset),
             fill.ExecutedAt);
+    }
+
+    internal static IdeaTradeForcedShareDb FromDomain(IdeaTradeForcedShare share)
+    {
+        return new IdeaTradeForcedShareDb
+        {
+            ExecId = share.ExecId,
+            TradeId = share.TradeId,
+            Kind = share.Leg.ToCode(),
+            Quantity = share.Totals.Quantity,
+            Value = share.Totals.Value,
+            Fee = share.Totals.Fee,
+            ExecutedAt = share.ExecutedAt
+        };
+    }
+
+    internal static IdeaTradeForcedShare ToDomain(IdeaTradeForcedShareDb share)
+    {
+        return new IdeaTradeForcedShare(
+            share.ExecId,
+            share.TradeId,
+            IdeaTradeCodes.TryParseLeg(share.Kind, out IdeaTradeLeg leg) ? leg : throw Unknown("kind", share.Kind),
+            new LegTotals(share.Quantity, share.Value, share.Fee),
+            share.ExecutedAt);
     }
 
     internal static IdeaTradingSettings ToDomain(IdeaTradingSettingsDb settings)

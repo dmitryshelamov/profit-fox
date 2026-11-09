@@ -1,5 +1,7 @@
+using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
+using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Domain.Repositories;
 
@@ -59,6 +61,24 @@ public interface IIdeaTradeRepository
 
     /// <summary>In a unit of work: <c>false</c> and nothing written when the exchange's id of the fill is stored already.</summary>
     Task<bool> AddFillAsync(IdeaTradeFill fill, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     In a unit of work: locks the open trades of the account on the instrument on the side, in the order of their ids, as the comparison
+    ///     with the exchange locks the trades it fails.
+    /// </summary>
+    Task<IReadOnlyList<IdeaTrade>> LockHoldersAsync(Guid accountId, Instrument instrument, IdeaSide side, CancellationToken cancellationToken);
+
+    /// <summary>In a unit of work: whether the shares of the execution of the exchange with this id are written.</summary>
+    Task<bool> HasForcedSharesAsync(string execId, CancellationToken cancellationToken);
+
+    /// <summary>In a unit of work: writes the shares of an execution; a share of a trade that is written already stays as it is.</summary>
+    Task AddForcedSharesAsync(IReadOnlyList<IdeaTradeForcedShare> shares, CancellationToken cancellationToken);
+
+    /// <summary>In a unit of work: the share of the trade in the execution, <c>null</c> when it has none or applied it.</summary>
+    Task<IdeaTradeForcedShare?> GetUnappliedForcedShareAsync(string execId, Guid tradeId, CancellationToken cancellationToken);
+
+    /// <summary>In a unit of work: the trade applied its share in the execution.</summary>
+    Task MarkForcedShareAppliedAsync(string execId, Guid tradeId, CancellationToken cancellationToken);
 
     /// <summary>Whether the exchange's id is the stop or the target of a trade.</summary>
     Task<bool> IsChildAsync(string exchangeOrderId, CancellationToken cancellationToken);

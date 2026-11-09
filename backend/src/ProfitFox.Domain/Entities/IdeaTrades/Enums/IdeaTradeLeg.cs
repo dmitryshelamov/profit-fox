@@ -10,5 +10,11 @@ public enum IdeaTradeLeg
     Manual,
 
     /// <summary>The close of a paper trade at the exit price of its idea when the idea expires.</summary>
-    Expiry
+    Expiry,
+
+    /// <summary>The exchange liquidated the position, wholly or in part.</summary>
+    Liquidation,
+
+    /// <summary>The exchange closed the position by auto-deleveraging, wholly or in part.</summary>
+    Adl
 }

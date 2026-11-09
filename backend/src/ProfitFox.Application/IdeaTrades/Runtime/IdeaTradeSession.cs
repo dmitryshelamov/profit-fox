@@ -16,6 +16,7 @@ using ProfitFox.Domain.Entities.LiveTrading.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.Services.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.LiveTrading;
 using ProfitFox.Domain.ValueObjects.MarketData;
@@ -108,7 +109,12 @@ internal sealed class IdeaTradeSession(
                 },
                 fill =>
                 {
-                    if (Mine(fill))
+                    if (fill.Kind != ExchangeFillKind.Trade && fill.Instrument == _trade.Instrument)
+                    {
+                        // The exchange closed a position of the symbol by itself, with an order of its own: an exit, not a foreign fill.
+                        _inputs.Writer.TryWrite(new ForcedFillInput(fill));
+                    }
+                    else if (Mine(fill))
                     {
                         _inputs.Writer.TryWrite(new FillInput(fill));
                     }
@@ -204,7 +210,7 @@ internal sealed class IdeaTradeSession(
 
     /// <summary>
     ///     Builds the books again from the database, then reads what the exchange did meanwhile: the totals of the unfinished orders, of the
-    ///     stop and the target, and the entry when the stop or the target is told before it.
+    ///     stop and the target, the entry when the stop or the target is told before it, and the liquidations and the auto-deleveraging of the symbol.
     /// </summary>
     private async Task RebuildAsync(CancellationToken cancellationToken)
     {
@@ -281,6 +287,16 @@ internal sealed class IdeaTradeSession(
                 await OrderAsync(child, cancellationToken);
             }
         }
+
+        // The exchange may have liquidated or auto-deleveraged the position unheard: its history of the symbol since the trade opened tells; a trade
+        // that waits has not opened yet.
+        if (_trade is { OpenedAt: { } opened } && _trade.Instrument.Category == MarketCategory.Linear)
+        {
+            foreach (ExchangeFill forced in await ledger.GetForcedFillsAsync(_context.Key, _context.Instrument, opened, cancellationToken))
+            {
+                await ForcedAsync(forced, cancellationToken);
+            }
+        }
     }
 
     /// <summary>Reads the stop and the target that are not over in the books: one may have fired or been cancelled unheard.</summary>
@@ -337,6 +353,10 @@ internal sealed class IdeaTradeSession(
                 await TradeAsync(fill, cancellationToken);
 
                 break;
+            case ForcedFillInput { Fill: var forced }:
+                await ForcedAsync(forced, cancellationToken);
+
+                break;
             case RestoreInput:
                 await RebuildAsync(cancellationToken);
 
@@ -387,6 +407,50 @@ internal sealed class IdeaTradeSession(
                 await repository.AddFillAsync(
                     new IdeaTradeFill(fill.ExecId, _id, exchangeId, fill.Quantity, fill.Price, fill.Fee, fill.FeeCoin == _context.BaseCoin ? FeeAsset.Base : FeeAsset.Quote, fill.At),
                     token);
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    ///     A liquidation or an auto-deleveraging of the exchange that closes the side of the trade. Under the locks of the open trades of that side,
+    ///     taken in the order of their ids, the execution is split between them once; then this trade applies its own share, once. The shares of
+    ///     the other trades are theirs to apply.
+    /// </summary>
+    private async Task ForcedAsync(ExchangeFill fill, CancellationToken cancellationToken)
+    {
+        IdeaSide closed = fill.Side == OrderSide.Sell ? IdeaSide.Long : IdeaSide.Short;
+
+        if (_trade.Status != IdeaTradeStatus.Open || _trade.Side != closed)
+        {
+            return;
+        }
+
+        IdeaTradeLeg leg = fill.Kind == ExchangeFillKind.Liquidation ? IdeaTradeLeg.Liquidation : IdeaTradeLeg.Adl;
+        await executor.ExecuteAsync(
+            async token =>
+            {
+                IReadOnlyList<IdeaTrade> holders = await repository.LockHoldersAsync(_trade.AccountId, _trade.Instrument, closed, token);
+                _trade = await repository.LockLeasedAsync(_id, worker.Id, leased.Epoch, token) ?? throw new LeaseLostException();
+
+                if (!await repository.HasForcedSharesAsync(fill.ExecId, token))
+                {
+                    IReadOnlyList<ForcedFillShare> shares = ForcedFillShares.Split(
+                        fill.Quantity,
+                        fill.Price,
+                        fill.Fee,
+                        _context.Rules.QuantityStep,
+                        [.. holders.Select(holder => new ForcedFillHolder(holder.Id, holder.HeldQuantity))]);
+                    await repository.AddForcedSharesAsync([.. shares.Select(share => new IdeaTradeForcedShare(fill.ExecId, share.TradeId, leg, share.Totals, fill.At))], token);
+                }
+
+                if (await repository.GetUnappliedForcedShareAsync(fill.ExecId, _id, token) is { } own)
+                {
+                    _trade = _trade.ExitGrown(own.Leg, own.Totals, time.GetUtcNow());
+                    await repository.MarkForcedShareAppliedAsync(fill.ExecId, _id, token);
+                    await repository.SaveAsync(_trade, time.GetUtcNow(), token);
+                }
+
+                return 0;
             },
             cancellationToken);
     }
@@ -754,7 +818,8 @@ internal sealed class IdeaTradeSession(
 
     /// <summary>
     ///     A trade that is over still has work while an order of it stands: the entry of a failed trade is taken off, since its stop and target
-    ///     would guard a position nobody follows, and the stop and the target a market close left are taken off. Returns whether nothing is left.
+    ///     would guard a position nobody follows, and the stop and the target a market close, a liquidation or an auto-deleveraging left are taken
+    ///     off. Returns whether nothing is left.
     /// </summary>
     private async Task<bool> WindDownAsync(CancellationToken cancellationToken)
     {
@@ -763,14 +828,16 @@ internal sealed class IdeaTradeSession(
             await RequestCancelAsync(entry.Number, cancellationToken);
         }
 
-        if (!_fillsKept && _trade.Status is IdeaTradeStatus.ClosedAtTarget or IdeaTradeStatus.ClosedAtStop or IdeaTradeStatus.ClosedManually)
+        if (!_fillsKept && _trade.Status is IdeaTradeStatus.ClosedAtTarget or IdeaTradeStatus.ClosedAtStop or IdeaTradeStatus.ClosedManually or IdeaTradeStatus.Liquidated
+                or IdeaTradeStatus.ClosedByAdl)
         {
             await KeepFillsAsync(cancellationToken);
         }
 
         var left = false;
 
-        if (_trade.Status == IdeaTradeStatus.ClosedManually)
+        // A market close leaves the stop and the target standing, and the exchange may leave them after it closed the position by itself.
+        if (_trade.Status is IdeaTradeStatus.ClosedManually or IdeaTradeStatus.Liquidated or IdeaTradeStatus.ClosedByAdl)
         {
             left = await TakeChildrenOffAsync(cancellationToken);
         }

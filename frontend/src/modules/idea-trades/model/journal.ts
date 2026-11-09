@@ -101,26 +101,43 @@ export function ideaOutcomeText(outcome: Outcome | null): string {
 
 const share = (count: number, all: number) => `${count} (${Math.round((count * 100) / all)} %)`;
 
-/** The trades closed at the target, at the stop, manually and at expiry, each with its share of the four; a dash when there are none. */
+/**
+ * The trades closed at the target, at the stop, manually and at expiry, and the liquidated and the closed by ADL when there are any, each with
+ * its share of all of them; a dash when there are none.
+ */
 export function outcomeCountsText(totals: Totals): string {
   const targets = Number(totals.targets);
   const stops = Number(totals.stops);
   const manual = Number(totals.manual);
   const expired = Number(totals.expired);
-  const all = targets + stops + manual + expired;
+  const liquidated = Number(totals.liquidated);
+  const adl = Number(totals.adl);
+  const all = closedCount(totals);
+  const parts = [
+    `по цели ${share(targets, all)}`,
+    `по стопу ${share(stops, all)}`,
+    `вручную ${share(manual, all)}`,
+    `по сроку ${share(expired, all)}`,
+    liquidated > 0 ? `ликвидировано ${share(liquidated, all)}` : null,
+    adl > 0 ? `ADL ${share(adl, all)}` : null,
+  ].filter((part) => part !== null);
 
-  return all === 0
-    ? dash
-    : `по цели ${share(targets, all)} · по стопу ${share(stops, all)} · вручную ${share(manual, all)} · по сроку ${share(expired, all)}`;
+  return all === 0 ? dash : parts.join(' · ');
 }
 
-/** How many trades closed at the target, at the stop, manually and at expiry, with the word that goes with the count. */
+/** How many trades closed at the target, at the stop, manually, at expiry, liquidated and by ADL, with the word that goes with the count. */
 export function closedCountText(totals: Totals): string {
-  return counted(
-    Number(totals.targets) + Number(totals.stops) + Number(totals.manual) + Number(totals.expired),
-    'сделка',
-    'сделки',
-    'сделок',
+  return counted(closedCount(totals), 'сделка', 'сделки', 'сделок');
+}
+
+function closedCount(totals: Totals): number {
+  return (
+    Number(totals.targets) +
+    Number(totals.stops) +
+    Number(totals.manual) +
+    Number(totals.expired) +
+    Number(totals.liquidated) +
+    Number(totals.adl)
   );
 }
 

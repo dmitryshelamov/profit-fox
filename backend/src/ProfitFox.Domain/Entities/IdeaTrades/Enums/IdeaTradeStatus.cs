@@ -21,6 +21,12 @@ public enum IdeaTradeStatus
     /// <summary>«Закрыта по сроку»: a paper trade its idea outlived, closed at the exit price of the idea.</summary>
     ClosedAtExpiry,
 
+    /// <summary>«Ликвидирована»: the liquidation of the exchange took out the last of the position.</summary>
+    Liquidated,
+
+    /// <summary>«Закрыта биржей (ADL)»: the auto-deleveraging of the exchange took out the last of the position.</summary>
+    ClosedByAdl,
+
     /// <summary>«Отменена»: the entry ended with no fill.</summary>
     Cancelled,
 

@@ -46,6 +46,22 @@ internal static class BybitCodes
         };
     }
 
+    /// <summary>What made an execution: Bybit's liquidation (<c>BustTrade</c>) and auto-deleveraging (<c>AdlTrade</c>), any other a trade.</summary>
+    internal static ExchangeFillKind ToFillKind(this TradeType? type)
+    {
+        return type switch
+        {
+            TradeType.BustTrade => ExchangeFillKind.Liquidation,
+            TradeType.AdlTrade => ExchangeFillKind.Adl,
+            _ => ExchangeFillKind.Trade
+        };
+    }
+
+    internal static Domain.Entities.Strategies.Enums.OrderSide ToDomain(this OrderSide side)
+    {
+        return side == OrderSide.Buy ? Domain.Entities.Strategies.Enums.OrderSide.Buy : Domain.Entities.Strategies.Enums.OrderSide.Sell;
+    }
+
     internal static Category ToBybit(this MarketCategory category)
     {
         return Categories[category];
