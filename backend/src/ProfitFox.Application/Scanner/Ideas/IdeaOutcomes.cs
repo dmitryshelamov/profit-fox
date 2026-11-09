@@ -28,6 +28,7 @@ public static class IdeaOutcomes
     ///     The count of the distinct pairs of the side and interval of a signal in its minute, which gives the burst of its case (decision 2 of
     ///     add-burst-and-auto-limits); none counts none.
     /// </param>
+    /// <param name="keep">The most cases whose outcomes the pass keeps for the calibration; a pass that counts more gives none of them.</param>
     public static async Task<IdeaOutcomesResult> WalkAsync(
         IAsyncEnumerable<IdeaSignal> signals,
         IdeaExitRules rules,
@@ -35,10 +36,11 @@ public static class IdeaOutcomes
         DateTimeOffset now,
         CancellationToken cancellationToken,
         IReadOnlyDictionary<int, IReadOnlyDictionary<MarketCategory, BucketModel.Root>>? roots = null,
-        Func<IdeaSignal, int?>? burstOf = null)
+        Func<IdeaSignal, int?>? burstOf = null,
+        int keep = int.MaxValue)
     {
         var sums = new Sums();
-        var outcomes = new List<IdeaOutcome>();
+        var outcomes = new Kept(keep);
         var key = new List<IdeaSignal>();
 
         await foreach (IdeaSignal signal in signals.WithCancellation(cancellationToken))
@@ -53,7 +55,7 @@ public static class IdeaOutcomes
         }
 
         Walk(key, rules, fees, now, sums, outcomes, burstOf);
-        SumCategories(outcomes, rules, now, sums);
+        sums.SumCategories(now);
 
         Dictionary<int, IReadOnlyDictionary<MarketCategory, BucketModel.Root>> used = Days.ToDictionary(
             days => days,
@@ -67,7 +69,7 @@ public static class IdeaOutcomes
                     bucket.Value with { Signals = IdeaExitRule.HasWindow(bucket.Key.Type) ? sums.Signals[(bucket.Key, days)] : null })))
         ];
 
-        return new IdeaOutcomesResult(buckets, outcomes, used);
+        return new IdeaOutcomesResult(buckets, outcomes.Outcomes, used);
     }
 
     private static void Walk(
@@ -76,7 +78,7 @@ public static class IdeaOutcomes
         Func<MarketCategory, FeeRates> fees,
         DateTimeOffset now,
         Sums sums,
-        List<IdeaOutcome> outcomes,
+        Kept outcomes,
         Func<IdeaSignal, int?>? burstOf)
     {
         if (key.Count == 0)
@@ -98,8 +100,13 @@ public static class IdeaOutcomes
 
             if (result is { } r)
             {
-                IdeaSignal signal = signals[path];
-                outcomes.Add(new IdeaOutcome(bucket, path.FiredAt, outcome.StatusAt, outcome.Status, r, signal.FeaturesWith(burstOf?.Invoke(signal))));
+                sums.Add(bucket.Category, holding, path.FiredAt, outcome.Status, r);
+
+                if (outcomes.Count())
+                {
+                    IdeaSignal signal = signals[path];
+                    outcomes.Outcomes!.Add(new IdeaOutcome(bucket, path.FiredAt, outcome.StatusAt, outcome.Status, r, signal.FeaturesWith(burstOf?.Invoke(signal))));
+                }
             }
 
             foreach (int days in Days.Where(days => path.FiredAt >= now.AddDays(-days)))
@@ -109,25 +116,22 @@ public static class IdeaOutcomes
         }
     }
 
-    // Decision 2 of cluster-idea-cases-by-holding: a category mixes the types × intervals, so its groups are the blocks of the longest holding
-    // among its cases, known only once the pass is over.
-    private static void SumCategories(List<IdeaOutcome> outcomes, IdeaExitRules rules, DateTimeOffset now, Sums sums)
+    // The outcomes of the cases for the calibration, which walks all of them or none: none once the pass counted more cases than it may keep.
+    private sealed class Kept(int limit)
     {
-        foreach (IGrouping<MarketCategory, IdeaOutcome> category in outcomes.GroupBy(outcome => outcome.Key.Category))
+        private int _counted;
+
+        public List<IdeaOutcome>? Outcomes { get; private set; } = [];
+
+        /// <summary>Counts a case; tells whether the pass still keeps the outcomes.</summary>
+        public bool Count()
         {
-            TimeSpan longest = category.Max(outcome => rules.Of(outcome.Key.Type, outcome.Key.Interval).Holding);
-
-            foreach (int days in Days)
+            if (++_counted > limit)
             {
-                var categorySums = new ClusteredSums(longest);
-
-                foreach (IdeaOutcome outcome in category.Where(outcome => outcome.FiredAt >= now.AddDays(-days)))
-                {
-                    categorySums.Add(outcome.FiredAt, outcome.Status, outcome.Result);
-                }
-
-                sums.Categories[days][category.Key] = categorySums;
+                Outcomes = null;
             }
+
+            return Outcomes is not null;
         }
     }
 
@@ -146,6 +150,10 @@ public static class IdeaOutcomes
 
         public Dictionary<(IdeaBucketKey, int), int> Signals { get; } = [];
 
+        // Decision 2 of cluster-idea-cases-by-holding: a category mixes the types × intervals, so its groups are the blocks of the longest holding
+        // among its cases, known only once the pass is over. Until then its cases are the sums of each firing, which no block splits.
+        private readonly Dictionary<MarketCategory, CategoryCases> _cases = [];
+
         // A signal without an entry only counts as a signal.
         public void Add(IdeaBucketKey bucket, int days, TimeSpan holding, DateTimeOffset firedAt, IdeaStatus status, decimal? result)
         {
@@ -160,6 +168,44 @@ public static class IdeaOutcomes
             Of(Parents[days], BucketModel.Parent.Of(bucket), holding).Add(firedAt, status, r);
         }
 
+        /// <summary>A case of a category, of any age, with the holding of its rule.</summary>
+        public void Add(MarketCategory category, TimeSpan holding, DateTimeOffset firedAt, IdeaStatus status, decimal result)
+        {
+            if (!_cases.TryGetValue(category, out CategoryCases? cases))
+            {
+                cases = new CategoryCases();
+                _cases[category] = cases;
+            }
+
+            cases.Longest = holding > cases.Longest ? holding : cases.Longest;
+            Firing before = cases.Firings.GetValueOrDefault(firedAt);
+            cases.Firings[firedAt] = new Firing(
+                before.Targets + (status == IdeaStatus.Target ? 1 : 0),
+                before.Stops + (status == IdeaStatus.Stop ? 1 : 0),
+                before.Expired + (status is IdeaStatus.Target or IdeaStatus.Stop ? 0 : 1),
+                before.Results + result,
+                before.SquaredResults + (result * result));
+        }
+
+        /// <summary>The sums of the categories by the blocks of the longest holding of their cases, once the pass is over.</summary>
+        public void SumCategories(DateTimeOffset now)
+        {
+            foreach ((MarketCategory category, CategoryCases cases) in _cases)
+            {
+                foreach (int days in Days)
+                {
+                    var sums = new ClusteredSums(cases.Longest);
+
+                    foreach ((DateTimeOffset firedAt, Firing firing) in cases.Firings.Where(firing => firing.Key >= now.AddDays(-days)))
+                    {
+                        sums.Add(firedAt, firing.Targets, firing.Stops, firing.Expired, firing.Results, firing.SquaredResults);
+                    }
+
+                    Categories[days][category] = sums;
+                }
+            }
+        }
+
         private static ClusteredSums Of<TKey>(Dictionary<TKey, ClusteredSums> sums, TKey key, TimeSpan holding)
             where TKey : notnull
         {
@@ -171,5 +217,15 @@ public static class IdeaOutcomes
 
             return found;
         }
+
+        private sealed class CategoryCases
+        {
+            public TimeSpan Longest { get; set; }
+
+            public Dictionary<DateTimeOffset, Firing> Firings { get; } = [];
+        }
+
+        // The cases of a category fired at one moment: the counts of their outcomes, the total of their results and that of the squares of them.
+        private readonly record struct Firing(int Targets, int Stops, int Expired, decimal Results, decimal SquaredResults);
     }
 }

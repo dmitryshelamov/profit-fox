@@ -33,6 +33,12 @@ public sealed class ScannerSettings
     /// <summary>How often the holder renews the lease of the stream; shorter than <see cref="LeaseDuration" />.</summary>
     public TimeSpan LeaseRenewal { get; init; } = TimeSpan.FromSeconds(10);
 
+    /// <summary>
+    ///     The most cases of a whole pass of the statistics whose outcomes the scanner keeps in memory for the calibration; a pass over more
+    ///     recomputes the buckets and leaves the calibration as it was.
+    /// </summary>
+    public int CalibrationCases { get; init; } = 5_000_000;
+
     /// <summary>Minute candle topics on one connection of the stream.</summary>
     public int TopicsPerConnection { get; init; } = 100;
 }

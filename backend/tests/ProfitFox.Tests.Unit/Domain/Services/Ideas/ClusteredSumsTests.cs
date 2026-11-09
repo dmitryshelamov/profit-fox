@@ -38,6 +38,19 @@ public class ClusteredSumsTests
         Totals(sums).ShouldBe((2, 1, 1, 0, 1m, 5m, 2, 2L, 1m, 5m, 1L, 1L));
     }
 
+    // The cases of one firing added as their sums are the cases added one by one: a +2 R target, a −1 R stop and an expiry at +0.5 R of one
+    // hour, a +2 R target of the next. Two groups of 3 and 1: n_g² = 9 + 1, n_g·S_g = 3 · 1.5 + 2, S_g² = 2.25 + 4, n_g·T_g = 3 + 1, T_g² = 1 + 1.
+    [Test]
+    public void Cases_of_one_firing_added_as_their_sums_are_the_cases_added_one_by_one()
+    {
+        var sums = new ClusteredSums(OneHour);
+
+        sums.Add(Hour, 1, 1, 1, 1.5m, 5.25m);
+        sums.Add(Hour.AddHours(1), 1, 0, 0, 2m, 4m);
+
+        Totals(sums).ShouldBe((4, 2, 1, 1, 3.5m, 9.25m, 2, 10L, 6.5m, 6.25m, 4L, 2L));
+    }
+
     // Scenario "Окно входа удлиняет блок": blocks of 28 hours run from the Unix epoch, so one of them is 31 May 04:00 to 1 June 08:00 UTC.
     [Test]
     public void Cases_of_one_block_of_the_holding_are_one_group()
