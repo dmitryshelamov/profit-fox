@@ -59,10 +59,17 @@ public sealed class IdeasReplay(
 
     /// <summary>
     ///     Removes an hour of the signals of other versions of the rules, and their cursors once no signal is left, so a new version replays
-    ///     history from the start; <c>true</c> while some are left.
+    ///     history from the start; <c>true</c> while some are left. The cursors of a version go after its last signal, so with no cursor of
+    ///     another version left there is no signal of one to look for: among the 80 M signals of the version in force on prod that search read
+    ///     them all and outran the timeout of the step at every start of the scanner, with the replay and the statistics waiting for it.
     /// </summary>
     public async Task<bool> CleanUpAsync(CancellationToken cancellationToken)
     {
+        if (!await cursors.HasOtherVersionsAsync(version.Number, cancellationToken))
+        {
+            return false;
+        }
+
         if (await signals.DeleteOtherVersionsAsync(version.Number, cancellationToken) > 0)
         {
             return true;
