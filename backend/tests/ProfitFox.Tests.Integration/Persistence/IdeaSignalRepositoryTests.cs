@@ -190,6 +190,45 @@ public class IdeaSignalRepositoryTests
         twoR.Select(signal => signal.Path.FiredAt).ShouldBe([Now.AddHours(1), Now, Now.AddHours(2), Now.AddMinutes(-1)]);
     }
 
+    // The signals are read a pair at a time, the pairs taken along the key of the table: every pair comes whole and once, by category and
+    // symbol, a symbol of both categories twice; a pair with signals of another version only, or only before the start, gives none and does
+    // not end the stream.
+    [Test]
+    public async Task Signals_are_streamed_pair_after_pair()
+    {
+        var btc = new Instrument(MarketCategory.Linear, "BTCUSDT");
+        var eth = new Instrument(MarketCategory.Linear, "ETHUSDT");
+        var sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
+        var spotBtc = new Instrument(MarketCategory.Spot, "BTCUSDT");
+        await _signals.UpsertAsync(
+        [
+            IdeaSignalGenerator.Generate(Now, instrument: spotBtc),
+            IdeaSignalGenerator.Generate(Now.AddHours(1)),
+            IdeaSignalGenerator.Generate(Now, instrument: sol, engineVersion: IdeasEngineVersion.Current - 1),
+            IdeaSignalGenerator.Generate(Now.AddDays(-2), instrument: eth),
+            IdeaSignalGenerator.Generate(Now.AddHours(2), instrument: btc),
+            IdeaSignalGenerator.Generate(Now, instrument: btc),
+            IdeaSignalGenerator.Generate(Now)
+        ], CancellationToken.None);
+
+        IdeaSignal[] all = await _signals.StreamAsync(IdeasEngineVersion.Current, Now.AddDays(-1), null, CancellationToken.None).ToArrayAsync();
+
+        all.Select(signal => (signal.Instrument, signal.Path.FiredAt)).ShouldBe(
+        [
+            (btc, Now),
+            (btc, Now.AddHours(2)),
+            (IdeaGenerator.Wif, Now),
+            (IdeaGenerator.Wif, Now.AddHours(1)),
+            (spotBtc, Now)
+        ]);
+    }
+
+    [Test]
+    public async Task No_signals_are_streamed_from_an_empty_table()
+    {
+        (await _signals.StreamAsync(IdeasEngineVersion.Current, Now.AddDays(-1), null, CancellationToken.None).ToArrayAsync()).ShouldBeEmpty();
+    }
+
     // Decision 6: a new version of the rules clears the signals of the old ones, and the cases of version 4 with them, an hour of them at a
     // time, from the first.
     [Test]

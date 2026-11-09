@@ -96,24 +96,66 @@ internal sealed class IdeaSignalRepository(NpgsqlDataSource dataSource) : IIdeaS
         (IdeaType Type, Interval Interval)? only,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        // One statement in the order of the whole key sorted the 67 M signals of a replay on prod (2026-11-09) before its first row and
+        // outran the timeout of the command, so no statistics were computed. A pair at a time the rows come off the primary key of each
+        // chunk at once, 1.8 s for the 119 k signals of a pair there; the pairs are in the order of the key too.
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        foreach ((string category, string symbol) in await PairsAsync(connection, cancellationToken))
+        {
+            await using var command = new NpgsqlCommand(
+                $"""
+                 SELECT {Columns} FROM idea_cases
+                 WHERE category = @category AND symbol = @symbol AND engine_version = @version AND fired_at >= @from
+                   AND (@type::text IS NULL OR (type = @type AND "interval" = @interval))
+                 ORDER BY setup, type, "interval", side, fired_at
+                 """,
+                connection);
+            command.Parameters.AddWithValue("category", category);
+            command.Parameters.AddWithValue("symbol", symbol);
+            command.Parameters.AddWithValue("version", engineVersion);
+            command.Parameters.AddWithValue("from", from);
+            command.Parameters.Add(new NpgsqlParameter("type", NpgsqlDbType.Text) { Value = (object?)only?.Type.ToCode() ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter("interval", NpgsqlDbType.Text) { Value = (object?)only?.Interval.ToCode() ?? DBNull.Value });
+            await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                yield return SignalDbConverter.ToDomain(Row(reader));
+            }
+        }
+    }
+
+    // The pairs that have signals, of any version, by category and symbol: each step takes the first key after the pair before it off the
+    // primary key, 7 s for the 995 pairs of prod, where a DISTINCT would read every signal.
+    private static async Task<List<(string Category, string Symbol)>> PairsAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
+    {
         await using var command = new NpgsqlCommand(
-            $"""
-             SELECT {Columns} FROM idea_cases
-             WHERE engine_version = @version AND fired_at >= @from AND (@type::text IS NULL OR (type = @type AND "interval" = @interval))
-             ORDER BY category, symbol, setup, type, "interval", side, fired_at
-             """,
+            """
+            WITH RECURSIVE pairs AS (
+                (SELECT category, symbol FROM idea_cases ORDER BY category, symbol LIMIT 1)
+                UNION ALL
+                SELECT following.category, following.symbol
+                FROM pairs
+                CROSS JOIN LATERAL (
+                    SELECT category, symbol FROM idea_cases
+                    WHERE (category, symbol) > (pairs.category, pairs.symbol)
+                    ORDER BY category, symbol
+                    LIMIT 1
+                ) following
+            )
+            SELECT category, symbol FROM pairs ORDER BY category, symbol
+            """,
             connection);
-        command.Parameters.AddWithValue("version", engineVersion);
-        command.Parameters.AddWithValue("from", from);
-        command.Parameters.Add(new NpgsqlParameter("type", NpgsqlDbType.Text) { Value = (object?)only?.Type.ToCode() ?? DBNull.Value });
-        command.Parameters.Add(new NpgsqlParameter("interval", NpgsqlDbType.Text) { Value = (object?)only?.Interval.ToCode() ?? DBNull.Value });
         await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        var pairs = new List<(string Category, string Symbol)>();
 
         while (await reader.ReadAsync(cancellationToken))
         {
-            yield return SignalDbConverter.ToDomain(Row(reader));
+            pairs.Add((reader.GetString(0), reader.GetString(1)));
         }
+
+        return pairs;
     }
 
     // Decision 2 of add-burst-and-auto-limits, as prod measured it on 2026-11-09 with 77 M signals of a replay: one grouping with
