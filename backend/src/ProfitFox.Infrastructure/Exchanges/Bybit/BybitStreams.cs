@@ -173,7 +173,18 @@ internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings setting
                         foreach (BybitUserTradeUpdate trade in update.Data)
                         {
                             Instrument? instrument = trade.Category.ToDomain() is { } category ? new Instrument(category, trade.Symbol) : null;
-                            var fill = new ExchangeFill(trade.TradeId, trade.ClientOrderId ?? "", trade.Quantity, trade.Price, trade.Fee ?? 0m, trade.FeeAsset ?? "", Utc(trade.Timestamp), instrument, trade.OrderId);
+                            var fill = new ExchangeFill(
+                                trade.TradeId,
+                                trade.ClientOrderId ?? "",
+                                trade.Quantity,
+                                trade.Price,
+                                trade.Fee ?? 0m,
+                                trade.FeeAsset ?? "",
+                                Utc(trade.Timestamp),
+                                instrument,
+                                trade.OrderId,
+                                trade.TradeType.ToFillKind(),
+                                trade.Side.ToDomain());
 
                             foreach (AccountListener listener in topic.Listeners)
                             {

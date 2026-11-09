@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
@@ -143,8 +144,8 @@ public class BybitLedgerTests
 
         fills.ShouldBe(
         [
-            new ExchangeFill("e-1", "c-1", 0.4m, 100m, 0.0004m, "BTC", DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_000_000), Spot, "x-c-1"),
-            new ExchangeFill("e-2", "c-1", 0.6m, 101m, 0.06m, "USDT", DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_060_000), Spot, "x-c-1")
+            new ExchangeFill("e-1", "c-1", 0.4m, 100m, 0.0004m, "BTC", DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_000_000), Spot, "x-c-1", Side: OrderSide.Buy),
+            new ExchangeFill("e-2", "c-1", 0.6m, 101m, 0.06m, "USDT", DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_060_000), Spot, "x-c-1", Side: OrderSide.Buy)
         ]);
         BybitRequests.Describe(handler.Requests.Single()).ShouldBe(BybitRequests.Describe("/v5/execution/list?category=spot&symbol=BTCUSDT&orderLinkId=c-1"));
     }
@@ -189,6 +190,20 @@ public class BybitLedgerTests
         orders.Select(order => (order.ExchangeId, order.State, order.StopKind)).ShouldBe([("x-tp", ExchangeOrderState.Open, StopOrderKind.TakeProfit), ("x-sl", ExchangeOrderState.Filled, StopOrderKind.StopLoss)]);
         BybitRequests.Describe(handler.Requests[0]).ShouldBe(BybitRequests.Describe("/v5/order/realtime?category=linear&symbol=BTCUSDT&openOnly=0&limit=50"));
         BybitRequests.Describe(handler.Requests[1]).ShouldBe(BybitRequests.Describe("/v5/order/history?category=linear&symbol=BTCUSDT&limit=50"));
+    }
+
+    // Requirement "Ликвидация и ADL": a fill tells what made it, a liquidation or an auto-deleveraging of Bybit apart from a trade, and its side.
+    [TestCase("BustTrade", "Sell", ExchangeFillKind.Liquidation, OrderSide.Sell)]
+    [TestCase("AdlTrade", "Buy", ExchangeFillKind.Adl, OrderSide.Buy)]
+    [TestCase("Trade", "Buy", ExchangeFillKind.Trade, OrderSide.Buy)]
+    [TestCase("Funding", "Sell", ExchangeFillKind.Trade, OrderSide.Sell)]
+    public async Task Fill_tells_its_kind_and_its_side(string type, string side, ExchangeFillKind kind, OrderSide orderSide)
+    {
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(Executions(Execution("e-1", "0.4", "100", "0.02", "USDT", 1_700_000_000_000, type, side)));
+
+        ExchangeFill fill = (await Ledger(handler).GetOrderFillsAsync(Key, Linear, "x-c-1", CancellationToken.None)).Single();
+
+        (fill.Kind, fill.Side).ShouldBe((kind, orderSide));
     }
 
     [Test]
@@ -306,11 +321,11 @@ public class BybitLedgerTests
         return $$"""{"retCode":0,"retMsg":"OK","result":{"list":[{{string.Join(",", executions)}}],"nextPageCursor":"{{cursor}}","category":"spot"},"retExtInfo":{},"time":1}""";
     }
 
-    private static string Execution(string id, string quantity, string price, string fee, string feeCoin, long at)
+    private static string Execution(string id, string quantity, string price, string fee, string feeCoin, long at, string type = "Trade", string side = "Buy")
     {
         return $$"""
-                 {"symbol":"BTCUSDT","orderId":"x-c-1","orderLinkId":"c-1","side":"Buy","orderPrice":"100","orderQty":"1","leavesQty":"0","orderType":"Limit",
-                 "execFee":"{{fee}}","feeCurrency":"{{feeCoin}}","execId":"{{id}}","execPrice":"{{price}}","execQty":"{{quantity}}","execType":"Trade",
+                 {"symbol":"BTCUSDT","orderId":"x-c-1","orderLinkId":"c-1","side":"{{side}}","orderPrice":"100","orderQty":"1","leavesQty":"0","orderType":"Limit",
+                 "execFee":"{{fee}}","feeCurrency":"{{feeCoin}}","execId":"{{id}}","execPrice":"{{price}}","execQty":"{{quantity}}","execType":"{{type}}",
                  "execValue":"0","execTime":"{{at}}","isMaker":true,"feeRate":"0.0001"}
                  """;
     }

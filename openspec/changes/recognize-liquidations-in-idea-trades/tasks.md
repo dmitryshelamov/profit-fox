@@ -8,7 +8,7 @@
 - [x] 1.1 Проверить в Bybit.Net 7.7, что у `BybitUserTradeUpdate` (поток) есть `TradeType`, как у `BybitUserTrade`
   (REST). Результат записать в `design.md` (Open Questions → решение 2). Готово, когда ответ записан. Если поля нет,
   ветка потока в 4.2 опирается только на догрузку из 4.4.
-- [ ] 1.2 `ExchangeFillKind` (`Trade`, `Liquidation`, `Adl`) и `ExchangeFill.Kind` / `Side` с умолчаниями `Trade` /
+- [x] 1.2 `ExchangeFillKind` (`Trade`, `Liquidation`, `Adl`) и `ExchangeFill.Kind` / `Side` с умолчаниями `Trade` /
   `null`. `BybitStreams` и `BybitLedger.FillsAsync` берут `BustTrade` → `Liquidation`, `AdlTrade` → `Adl`, остальное →
   `Trade`, и сторону. Готово, когда тесты `BybitLedgerTests` и потока на исполнение с `execType: "BustTrade"` /
   `"AdlTrade"` / `"Trade"` зелёные.

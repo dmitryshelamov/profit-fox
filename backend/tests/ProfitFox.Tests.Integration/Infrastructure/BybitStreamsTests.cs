@@ -6,6 +6,7 @@ using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
 
@@ -95,7 +96,7 @@ public class BybitStreamsTests
         orders.TryTake(out ExchangeOrder? order, TimeSpan.FromSeconds(10)).ShouldBeTrue();
         order.ShouldBe(new ExchangeOrder("c-1", "x-c-1", ExchangeOrderState.Open, 0.4m, null, 40m, 0.02m, "USDT"));
         fills.TryTake(out ExchangeFill? fill, TimeSpan.FromSeconds(10)).ShouldBeTrue();
-        fill.ShouldBe(new ExchangeFill("e-1", "c-1", 0.4m, 100m, 0.02m, "USDT", Open, Linear, "x-c-1"));
+        fill.ShouldBe(new ExchangeFill("e-1", "c-1", 0.4m, 100m, 0.02m, "USDT", Open, Linear, "x-c-1", Side: OrderSide.Buy));
         _server.Authentications.ShouldBe(1);
     }
 
@@ -149,6 +150,23 @@ public class BybitStreamsTests
 
         fills.TryTake(out ExchangeFill? fill, TimeSpan.FromSeconds(10)).ShouldBeTrue();
         fill!.Instrument.ShouldBe(traded ? Linear : null);
+    }
+
+    // Requirement "Ликвидация и ADL": a fill of the stream tells a liquidation or an auto-deleveraging of Bybit, which has no client id, and its side.
+    [TestCase("BustTrade", "Sell", ExchangeFillKind.Liquidation, OrderSide.Sell)]
+    [TestCase("AdlTrade", "Buy", ExchangeFillKind.Adl, OrderSide.Buy)]
+    [TestCase("Trade", "Sell", ExchangeFillKind.Trade, OrderSide.Sell)]
+    public async Task Fill_tells_its_kind_and_its_side(string type, string side, ExchangeFillKind kind, OrderSide orderSide)
+    {
+        var fills = new BlockingCollection<ExchangeFill>();
+        await using IAsyncDisposable subscription = await _streams.SubscribeAccountAsync(
+            new ExchangeKey("key", "secret"), _ => { }, fills.Add, () => { }, CancellationToken.None);
+        await _server.WaitForTopicAsync("execution");
+
+        await _server.PushAsync("execution", [FakeBybitSocketServer.Execution("linear", "", "e-1", 1100m, 0.014229m, 0.0086m, "USDT", Open, exchangeId: "x-bust", type: type, side: side)]);
+
+        fills.TryTake(out ExchangeFill? fill, TimeSpan.FromSeconds(10)).ShouldBeTrue();
+        (fill!.Kind, fill.Side).ShouldBe((kind, orderSide));
     }
 
     // Requirement "Соединения с биржей": the bots of an account share its private connection and pick their own events.

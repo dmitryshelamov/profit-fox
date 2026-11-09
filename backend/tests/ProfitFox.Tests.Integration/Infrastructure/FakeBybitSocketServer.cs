@@ -189,7 +189,18 @@ public sealed class FakeBybitSocketServer : IAsyncDisposable
         };
     }
 
-    public static JsonObject Execution(string category, string clientId, string execId, decimal quantity, decimal price, decimal fee, string feeCoin, DateTimeOffset at, string? exchangeId = null)
+    public static JsonObject Execution(
+        string category,
+        string clientId,
+        string execId,
+        decimal quantity,
+        decimal price,
+        decimal fee,
+        string feeCoin,
+        DateTimeOffset at,
+        string? exchangeId = null,
+        string type = "Trade",
+        string side = "Buy")
     {
         return new JsonObject
         {
@@ -197,7 +208,7 @@ public sealed class FakeBybitSocketServer : IAsyncDisposable
             ["symbol"] = "BTCUSDT",
             ["orderId"] = exchangeId ?? $"x-{clientId}",
             ["orderLinkId"] = clientId,
-            ["side"] = "Buy",
+            ["side"] = side,
             ["orderType"] = "Limit",
             ["orderPrice"] = "100",
             ["orderQty"] = "1",
@@ -207,7 +218,7 @@ public sealed class FakeBybitSocketServer : IAsyncDisposable
             ["execPrice"] = Text(price),
             ["execFee"] = Text(fee),
             ["feeCurrency"] = feeCoin,
-            ["execType"] = "Trade",
+            ["execType"] = type,
             ["execValue"] = "0",
             ["execTime"] = at.ToUnixTimeMilliseconds().ToString(System.Globalization.CultureInfo.InvariantCulture),
             ["isMaker"] = true,
