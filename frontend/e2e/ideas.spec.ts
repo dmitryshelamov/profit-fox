@@ -1,6 +1,12 @@
 import { expect, type Locator, test } from '@playwright/test';
 
-import { seedCalibration, seedIdeas } from './seed';
+import {
+  ownNumbersSymbols,
+  removeOwnNumbers,
+  seedCalibration,
+  seedIdeas,
+  seedOwnNumbers,
+} from './seed';
 
 // Acceptance of the trade ideas against the real API and scanner on the Bybit stub. The scanner primes the setups of its
 // pairs on the first minute after its warm-up, so a setup that holds at start-up never fires: the stub starts a steep, loud
@@ -477,6 +483,39 @@ test('the link «Калибровка» of the ideas opens the calibration with 
     'aria-pressed',
     'true',
   );
+
+  expect(errors).toEqual([]);
+});
+
+// Requirements "Ожидание идеи" and "Сортировка списка идей" of add-own-idea-numbers: two ideas of one bucket with the stops 0.3 % and 5 %
+// from the entry have their own expectancies, −0.72 R and −0.06 R, with the money on 100 USDT under them, and the list goes by the
+// expectancy on 1 USDT, so the idea of the narrow stop, which loses less money, stands above the other (see `seedOwnNumbers`).
+test('two ideas of one bucket have their own expectancies, and the list goes by the expectancy per USDT', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await seedOwnNumbers();
+
+  try {
+    await page.goto('/ideas');
+    await page.getByRole('combobox', { name: 'Сетап' }).selectOption({ label: 'Истощение' });
+    const rows = page.locator('tbody tr');
+    const narrow = rows.filter({ hasText: ownNumbersSymbols.narrow });
+    const wide = rows.filter({ hasText: ownNumbersSymbols.wide });
+
+    await expect(narrow).toContainText('-0.72 R');
+    await expect(narrow).toContainText('на 100 USDT: -0.22');
+    await expect(wide).toContainText('-0.06 R');
+    await expect(wide).toContainText('на 100 USDT: -0.31');
+    const texts = await rows.allTextContents();
+    const at = (symbol: string) => texts.findIndex((text) => text.includes(symbol));
+    expect(at(ownNumbersSymbols.narrow)).toBeLessThan(at(ownNumbersSymbols.wide));
+
+    await page.getByRole('combobox', { name: 'Сетап' }).selectOption('');
+  } finally {
+    await removeOwnNumbers();
+  }
 
   expect(errors).toEqual([]);
 });

@@ -52,6 +52,58 @@ export async function seedIdeas(count: number): Promise<void> {
   }
 }
 
+/** The pairs of the two ideas of one bucket of `seedOwnNumbers`: the stop 0.3 % and 5 % from the entry. */
+export const ownNumbersSymbols = { narrow: 'E2ENARROWUSDT', wide: 'E2EWIDEUSDT' } as const;
+
+/**
+ * Two closed ideas of one bucket «Истощение» «Цель 2R» 4 h long linear at 100, with the stops 99.7 and 95, and the bucket over 90 days with
+ * the expectancy of the model −0.21 R and without costs −0.02 R with −0.06…+0.02 R (add-own-idea-numbers). With the fees of linear the
+ * ideas cost 0.70 R and 0.042 R, so their own expectancies are −0.72 R and −0.062 R, −0.00216 and −0.0031 on 1 USDT. The scanner replaces
+ * the buckets whole when it recomputes them, once an hour: a test reads the screen right after this.
+ */
+export async function seedOwnNumbers(): Promise<void> {
+  const client = await connect();
+
+  try {
+    await client.query(
+      `INSERT INTO ideas (id, category, symbol, setup, type, "interval", side, fired_at, entry, stop, target, risk_reward,
+                          status, status_at, entered_at, exit_price, move, volume_ratio, engine_version)
+       SELECT gen_random_uuid(), 'linear', symbol, 'exhaustion', 'target_2r', '240', 'long', now() - interval '3 hours', 100, stop,
+              100 + 2 * (100 - stop), 2, 'stop', now() - interval '1 minute', now() - interval '3 hours', stop, 3, 2, ${engineVersion}
+       FROM (VALUES ($1, 99.7), ($2, 95)) AS pair (symbol, stop)`,
+      [ownNumbersSymbols.narrow, ownNumbersSymbols.wide],
+    );
+    await client.query(
+      `INSERT INTO idea_buckets (engine_version, days, setup, type, "interval", side, category, cases, targets, stops, expired,
+                                 probability, probability_low, probability_high, expectancy, expectancy_low, expectancy_high, signals,
+                                 gross_expectancy, gross_expectancy_low, gross_expectancy_high)
+       VALUES (${engineVersion}, 90, 'exhaustion', 'target_2r', '240', 'long', 'linear', 400, 120, 260, 20,
+               0.3, 0.26, 0.34, -0.21, -0.25, -0.17, NULL, -0.02, -0.06, 0.02)
+       ON CONFLICT DO NOTHING`,
+    );
+  } finally {
+    await client.end();
+  }
+}
+
+/** Removes the ideas and the bucket of `seedOwnNumbers`. */
+export async function removeOwnNumbers(): Promise<void> {
+  const client = await connect();
+
+  try {
+    await client.query(`DELETE FROM ideas WHERE category = 'linear' AND symbol IN ($1, $2)`, [
+      ownNumbersSymbols.narrow,
+      ownNumbersSymbols.wide,
+    ]);
+    await client.query(
+      `DELETE FROM idea_buckets WHERE engine_version = ${engineVersion} AND setup = 'exhaustion' AND type = 'target_2r'
+         AND "interval" = '240' AND side = 'long' AND category = 'linear'`,
+    );
+  } finally {
+    await client.end();
+  }
+}
+
 /** What an open idea of the trades needs: the pair, the type and the side, the levels, and how long ago it fired. */
 export interface OpenIdea {
   readonly symbol: string;
