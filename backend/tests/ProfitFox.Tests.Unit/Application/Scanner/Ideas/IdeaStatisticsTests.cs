@@ -53,7 +53,7 @@ public class IdeaStatisticsTests
             _buckets.ReplaceAsync(
                 2,
                 Arg.Is<IReadOnlyCollection<IdeaBucket>>(buckets => buckets!.Count == 2
-                    && buckets.All(bucket => bucket.Statistics == new BucketStatistics(1, 1, 0, 0, null, null, null, result, null, null) { OwnExpectancy = result })),
+                    && buckets.All(bucket => bucket.Statistics == new BucketStatistics(1, 1, 0, 0, null, null, null, result, null, null) { OwnExpectancy = result, GrossExpectancy = 2m })),
                 null,
                 Arg.Any<CancellationToken>());
             _calibrations.ReplaceAsync(
@@ -114,7 +114,8 @@ public class IdeaStatisticsTests
     }
 
     // Decision 4: the category is the root of every parent, so the pass of a type × interval takes its sums from the last whole pass. 40 cases
-    // of «Цель 2R», every other a stop, next to 40 stops of «За экстремум»: the buckets of «Цель 2R» come out of both passes the same.
+    // of «Цель 2R», every other a stop, next to 40 stops of «За экстремум»: the buckets of «Цель 2R» come out of both passes the same, the
+    // expectancy without costs too, shrunk to the roots of the second run of the whole pass (decision 3 of add-own-idea-numbers).
     [Test]
     public async Task Recompute_of_a_type_and_interval_shrinks_to_the_categories_of_the_whole_pass()
     {
@@ -136,7 +137,7 @@ public class IdeaStatisticsTests
 
         written.Count.ShouldBe(2);
         written[1].Buckets.ShouldBe(written[0].Buckets.Where(bucket => bucket.Key.Type == IdeaType.TwoR), ignoreOrder: true);
-        written[1].Buckets.ShouldAllBe(bucket => bucket.Statistics.Probability != null);
+        written[1].Buckets.ShouldAllBe(bucket => bucket.Statistics.Probability != null && bucket.Statistics.GrossExpectancyLow != null);
     }
 
     // Decision 4: after a restart the pass of a type × interval waits for the first whole pass, which writes its buckets anyway.

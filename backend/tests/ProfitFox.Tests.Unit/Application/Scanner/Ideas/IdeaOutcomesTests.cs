@@ -20,6 +20,7 @@ public class IdeaOutcomesTests
     private static readonly Instrument Wif = new Instrument(MarketCategory.Linear, "WIFUSDT");
     private static readonly Instrument Eth = new Instrument(MarketCategory.Spot, "ETHUSDT");
     private static readonly FeeRates NoFees = new FeeRates(0m, 0m);
+    private static readonly FeeRates Slipping = new FeeRates(0.02m, 0.055m, 0.05m);
     // The holding of «Цель 2R» on 15 minutes by default: 24 candles.
     private static readonly TimeSpan SixHours = TimeSpan.FromHours(6);
 
@@ -120,13 +121,46 @@ public class IdeaOutcomesTests
         IdeaBucketKey drop = impulse with { Setup = IdeaSetup.Drop };
         result.Buckets.ShouldBe(
         [
-            new IdeaBucket(impulse, 90, Model(signals, 90)[impulse]),
-            new IdeaBucket(drop, 90, Model(signals, 90)[drop]),
-            new IdeaBucket(impulse, 30, Model(signals, 30)[impulse]),
-            new IdeaBucket(drop, 30, Model(signals, 30)[drop])
+            new IdeaBucket(impulse, 90, WithGross(Model(signals, 90)[impulse])),
+            new IdeaBucket(drop, 90, WithGross(Model(signals, 90)[drop])),
+            new IdeaBucket(impulse, 30, WithGross(Model(signals, 30)[impulse])),
+            new IdeaBucket(drop, 30, WithGross(Model(signals, 30)[drop]))
         ], ignoreOrder: true);
         result.Buckets.Single(bucket => bucket.Key == impulse && bucket.Days == 90).Statistics.OwnProbability.ShouldBe(10m / 30m);
         result.Buckets.Single(bucket => bucket.Key == impulse && bucket.Days == 30).Statistics.FewOwnCases.ShouldBeTrue();
+    }
+
+    // Requirement "Ожидание корзины без издержек" (decision 3 of add-own-idea-numbers): the same 60 cases with the fees and the slippage of
+    // linear. The gross expectancy of a bucket is the expectancy of a second run of the model over the results without costs, +2 R and −1 R,
+    // with the same blocks and shrinking; scenario "Числа корзины прежние": the numbers of the bucket stay those of the model after costs.
+    [Test]
+    public async Task Pass_gives_the_buckets_the_expectancy_of_the_model_without_costs()
+    {
+        IdeaSignal[] signals =
+        [
+            .. Enumerable.Range(0, 30).Select(index => Signal(Wif, IdeaSetup.Impulse, -45 + index, index % 3 == 0 ? Path() with { LadderAfter = Ladder(30) } : Path() with { StopAfter = 10 })),
+            .. Enumerable.Range(0, 30).Select(index => Signal(Wif, IdeaSetup.Drop, -40 + index, index % 3 == 1 ? Path() with { LadderAfter = Ladder(30) } : Path() with { StopAfter = 10 }))
+        ];
+
+        IdeaOutcomesResult result = await IdeaOutcomes.WalkAsync(signals.ToAsyncEnumerable(), new IdeaExitRules([]), _ => Slipping, Now, CancellationToken.None);
+
+        var impulse = new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear);
+        BucketStatistics bucket = result.Buckets.Single(found => found.Key == impulse && found.Days == 90).Statistics;
+        BucketStatistics gross = Model(signals, 90)[impulse];
+        (bucket.GrossExpectancy, bucket.GrossExpectancyLow, bucket.GrossExpectancyHigh).ShouldBe((gross.Expectancy, gross.ExpectancyLow, gross.ExpectancyHigh));
+        (bucket with { GrossExpectancy = null, GrossExpectancyLow = null, GrossExpectancyHigh = null }).ShouldBe(Model(signals, 90, NetResult(IdeaStatus.Target), NetResult(IdeaStatus.Stop))[impulse]);
+    }
+
+    // Scenario "Мало данных": a bucket of a stop and a target without a parent of 30 cases has its own mean without costs, +0.5 R, and no
+    // interval.
+    [Test]
+    public async Task Bucket_of_too_little_data_has_its_own_mean_without_costs()
+    {
+        IdeaOutcomesResult result = await IdeaOutcomes.WalkAsync(Signals(), new IdeaExitRules([]), _ => Slipping, Now, CancellationToken.None);
+
+        BucketStatistics bucket = result.Buckets.Single(found => found.Key.Type == IdeaType.TwoR && found.Key.Category == MarketCategory.Linear && found.Days == 90).Statistics;
+        (bucket.GrossExpectancy, bucket.GrossExpectancyLow, bucket.GrossExpectancyHigh).ShouldBe((0.5m, null, null));
+        bucket.Expectancy.ShouldBe((NetResult(IdeaStatus.Target) + NetResult(IdeaStatus.Stop)) / 2);
     }
 
     // Decision 1 of cluster-idea-cases-by-holding: «Цель 2R» on 4 h holds 24 candles, 4 days. WIF and ETH fire at 10:00 and 14:00 of the
@@ -196,7 +230,7 @@ public class IdeaOutcomesTests
 
         IdeaOutcomesResult result = await IdeaOutcomes.WalkAsync(signals.ToAsyncEnumerable(), new IdeaExitRules([]), _ => NoFees, Now, CancellationToken.None);
 
-        result.Roots[90][MarketCategory.Linear].Category.Expectancy.Variance.ShouldBe(0.122887, 0.000001);
+        result.Roots.Net[90][MarketCategory.Linear].Category.Expectancy.Variance.ShouldBe(0.122887, 0.000001);
     }
 
     // A category counts every outcome of its cases: of 30 cases a day apart, in turn a +2 R target, a −1 R stop and an expiry at the entry,
@@ -216,7 +250,7 @@ public class IdeaOutcomesTests
 
         IdeaOutcomesResult result = await IdeaOutcomes.WalkAsync(signals.ToAsyncEnumerable(), new IdeaExitRules([]), _ => NoFees, Now, CancellationToken.None);
 
-        BucketModel.Level category = result.Roots[90][MarketCategory.Linear].Category;
+        BucketModel.Level category = result.Roots.Net[90][MarketCategory.Linear].Category;
         (category.Cases, category.Share.Mean, category.Expectancy.Mean).ShouldBe((30, 10m / 30m, 10m / 30m));
     }
 
@@ -234,7 +268,7 @@ public class IdeaOutcomesTests
 
         IdeaOutcomesResult result = await IdeaOutcomes.WalkAsync(signals.ToAsyncEnumerable(), new IdeaExitRules([]), _ => NoFees, Now, CancellationToken.None);
 
-        result.Roots[90][MarketCategory.Linear].Category.Expectancy.Variance.ShouldBe(90.0 / 39 / 40, 0.000001);
+        result.Roots.Net[90][MarketCategory.Linear].Category.Expectancy.Variance.ShouldBe(90.0 / 39 / 40, 0.000001);
     }
 
     // Scenario "Прогон пополняет минуту" (decision 2 of add-burst-and-auto-limits): a signal keeps no count of the pairs of its minute; the pass
@@ -264,8 +298,8 @@ public class IdeaOutcomesTests
         return target ? path with { LadderAfter = Ladder(30) } : path with { StopAfter = 10 };
     }
 
-    // The model of the signals fired in the last days, without fees: a target is +2 R, a stop −1 R.
-    private static IReadOnlyDictionary<IdeaBucketKey, BucketStatistics> Model(IdeaSignal[] signals, int days)
+    // The model of the signals fired in the last days, without fees by default: a target is +2 R, a stop −1 R.
+    private static IReadOnlyDictionary<IdeaBucketKey, BucketStatistics> Model(IdeaSignal[] signals, int days, decimal targetR = 2m, decimal stopR = -1m)
     {
         var buckets = new Dictionary<IdeaBucketKey, ClusteredSums>();
         var parents = new Dictionary<BucketModel.Parent, ClusteredSums>();
@@ -282,11 +316,26 @@ public class IdeaOutcomesTests
                          categories.GetValueOrDefault(signal.Bucket.Category) ?? (categories[signal.Bucket.Category] = new ClusteredSums(SixHours))
                      })
             {
-                sums.Add(signal.Path.FiredAt, target ? IdeaStatus.Target : IdeaStatus.Stop, target ? 2m : -1m);
+                sums.Add(signal.Path.FiredAt, target ? IdeaStatus.Target : IdeaStatus.Stop, target ? targetR : stopR);
             }
         }
 
         return BucketModel.Build(buckets, parents, BucketModel.Roots(parents, categories));
+    }
+
+    // Without fees the expectancy without costs is the expectancy of the model.
+    private static BucketStatistics WithGross(BucketStatistics statistics)
+    {
+        return statistics with { GrossExpectancy = statistics.Expectancy, GrossExpectancyLow = statistics.ExpectancyLow, GrossExpectancyHigh = statistics.ExpectancyHigh };
+    }
+
+    // The result after the fees and the slippage of a case of the long 100 → 98 / 104 at its target or its stop.
+    private static decimal NetResult(IdeaStatus status)
+    {
+        decimal exit = status == IdeaStatus.Target ? 104m : 98m;
+        DateTimeOffset fired = Now.AddDays(-1);
+
+        return CaseResult.R(new IdeaTrack(new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 100m, 98m, 104m), fired, 15, 24, 2m, null, status, fired, fired, exit), Slipping)!.Value;
     }
 
     private static async IAsyncEnumerable<IdeaSignal> Signals()
@@ -336,7 +385,7 @@ public class IdeaOutcomesTests
     // «Мало данных»: the counts and the own expectancy.
     private static BucketStatistics TooLittleData(int targets, int stops, int expired, decimal expectancy)
     {
-        return new BucketStatistics(targets + stops + expired, targets, stops, expired, null, null, null, expectancy, null, null) { OwnExpectancy = expectancy };
+        return new BucketStatistics(targets + stops + expired, targets, stops, expired, null, null, null, expectancy, null, null) { OwnExpectancy = expectancy, GrossExpectancy = expectancy };
     }
 
     // +2 R first touched at the given minute from the entry.

@@ -20,7 +20,8 @@ internal sealed class IdeaBucketRepository(NpgsqlDataSource dataSource) : IIdeaB
                                    expectancy_low AS "ExpectancyLow", expectancy_high AS "ExpectancyHigh", signals,
                                    own_probability AS "OwnProbability", own_probability_low AS "OwnProbabilityLow", own_probability_high AS "OwnProbabilityHigh",
                                    own_expectancy AS "OwnExpectancy", own_expectancy_low AS "OwnExpectancyLow", own_expectancy_high AS "OwnExpectancyHigh",
-                                   parent_weight AS "ParentWeight", few_own_cases AS "FewOwnCases"
+                                   parent_weight AS "ParentWeight", few_own_cases AS "FewOwnCases", gross_expectancy AS "GrossExpectancy",
+                                   gross_expectancy_low AS "GrossExpectancyLow", gross_expectancy_high AS "GrossExpectancyHigh"
                                    """;
 
     public async Task ReplaceAsync(int engineVersion, IReadOnlyCollection<IdeaBucket> buckets, (IdeaType Type, Interval Interval)? only, CancellationToken cancellationToken)
@@ -37,10 +38,12 @@ internal sealed class IdeaBucketRepository(NpgsqlDataSource dataSource) : IIdeaB
                 """
                 INSERT INTO idea_buckets (engine_version, days, setup, type, "interval", side, category, cases, targets, stops, expired, probability,
                     probability_low, probability_high, expectancy, expectancy_low, expectancy_high, signals, own_probability, own_probability_low,
-                    own_probability_high, own_expectancy, own_expectancy_low, own_expectancy_high, parent_weight, few_own_cases)
+                    own_probability_high, own_expectancy, own_expectancy_low, own_expectancy_high, parent_weight, few_own_cases, gross_expectancy,
+                    gross_expectancy_low, gross_expectancy_high)
                 VALUES (@EngineVersion, @Days, @Setup, @Type, @Interval, @Side, @Category, @Cases, @Targets, @Stops, @Expired, @Probability,
                     @ProbabilityLow, @ProbabilityHigh, @Expectancy, @ExpectancyLow, @ExpectancyHigh, @Signals, @OwnProbability, @OwnProbabilityLow,
-                    @OwnProbabilityHigh, @OwnExpectancy, @OwnExpectancyLow, @OwnExpectancyHigh, @ParentWeight, @FewOwnCases)
+                    @OwnProbabilityHigh, @OwnExpectancy, @OwnExpectancyLow, @OwnExpectancyHigh, @ParentWeight, @FewOwnCases, @GrossExpectancy,
+                    @GrossExpectancyLow, @GrossExpectancyHigh)
                 """,
                 buckets.Select(bucket => Row(engineVersion, bucket)),
                 transaction,
@@ -88,7 +91,10 @@ internal sealed class IdeaBucketRepository(NpgsqlDataSource dataSource) : IIdeaB
             OwnExpectancyLow = statistics.OwnExpectancyLow,
             OwnExpectancyHigh = statistics.OwnExpectancyHigh,
             ParentWeight = statistics.ParentWeight,
-            FewOwnCases = statistics.FewOwnCases
+            FewOwnCases = statistics.FewOwnCases,
+            GrossExpectancy = statistics.GrossExpectancy,
+            GrossExpectancyLow = statistics.GrossExpectancyLow,
+            GrossExpectancyHigh = statistics.GrossExpectancyHigh
         };
     }
 
@@ -113,7 +119,10 @@ internal sealed class IdeaBucketRepository(NpgsqlDataSource dataSource) : IIdeaB
                 OwnExpectancyLow = row.OwnExpectancyLow,
                 OwnExpectancyHigh = row.OwnExpectancyHigh,
                 ParentWeight = row.ParentWeight,
-                FewOwnCases = row.FewOwnCases
+                FewOwnCases = row.FewOwnCases,
+                GrossExpectancy = row.GrossExpectancy,
+                GrossExpectancyLow = row.GrossExpectancyLow,
+                GrossExpectancyHigh = row.GrossExpectancyHigh
             });
     }
 }

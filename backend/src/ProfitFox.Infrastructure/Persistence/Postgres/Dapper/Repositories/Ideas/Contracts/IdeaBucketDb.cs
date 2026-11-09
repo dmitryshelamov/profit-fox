@@ -53,4 +53,10 @@ internal sealed class IdeaBucketDb
     public decimal? ParentWeight { get; init; }
 
     public bool FewOwnCases { get; init; }
+
+    public decimal? GrossExpectancy { get; init; }
+
+    public decimal? GrossExpectancyLow { get; init; }
+
+    public decimal? GrossExpectancyHigh { get; init; }
 }

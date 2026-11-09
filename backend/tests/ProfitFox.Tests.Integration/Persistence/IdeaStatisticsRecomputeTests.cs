@@ -69,6 +69,22 @@ public class IdeaStatisticsRecomputeTests
         (await new IdeaCalibrationRepository(_dataSource).GetAsync(IdeasEngineVersion.Current, 30, null, CalibrationScope.All, CancellationToken.None))!.Checked.ShouldBe(21);
     }
 
+    // Task 2.4 of add-own-idea-numbers: the sums without costs are block sums, as those after costs, and keep no outcome of a case. A pass
+    // that may keep none still writes the buckets with their expectancy without costs and leaves the calibration as it was.
+    [Test]
+    public async Task Pass_that_keeps_no_outcome_writes_the_expectancy_without_costs()
+    {
+        await new IdeaSignalRepository(_dataSource).UpsertAsync(
+            [.. Enumerable.Range(0, 40).Select(index => IdeaSignalGenerator.Generate(Now.AddDays(-20).AddHours(index), index % 3 == 0 ? IdeaStatus.Target : IdeaStatus.Stop))],
+            CancellationToken.None);
+
+        await Statistics(new ScannerSettings { CalibrationCases = 0 }).RecomputeAsync(CancellationToken.None);
+
+        (await new IdeaBucketRepository(_dataSource).GetAsync(IdeasEngineVersion.Current, CancellationToken.None))
+            .ShouldAllBe(bucket => bucket.Statistics.GrossExpectancy == bucket.Statistics.Expectancy && bucket.Statistics.GrossExpectancyLow != null);
+        (await new IdeaCalibrationRepository(_dataSource).GetAsync(IdeasEngineVersion.Current, 30, null, CalibrationScope.All, CancellationToken.None)).ShouldBeNull();
+    }
+
     // Decision 3 of cluster-idea-cases-by-holding: the calibration groups by the holding of the rules of the pass. 30 cases 60 days ago give
     // the model; 16 blocks of 6 hours 20 days ago have two cases each, at the first and the fourth hour, a +2 R target in every other block.
     // The 32 cases of the last 30 days are 16 groups of 2: +0.5 R with −0.3255…+1.3255 R by t₁₅, not −0.028…+1.028 R of 32 hours.
@@ -131,10 +147,14 @@ public class IdeaStatisticsRecomputeTests
         Dictionary<BucketModel.Parent, ClusteredSums> parents = new() { [BucketModel.Parent.Of(key)] = parent };
 
         return BucketModel.Build(buckets, parents, BucketModel.Roots(parents, new Dictionary<MarketCategory, ClusteredSums> { [MarketCategory.Linear] = category }))
-            .Select(bucket => new IdeaBucket(bucket.Key, days, bucket.Value));
+            // Without fees the expectancy without costs is that of the model.
+            .Select(bucket => new IdeaBucket(
+                bucket.Key,
+                days,
+                bucket.Value with { GrossExpectancy = bucket.Value.Expectancy, GrossExpectancyLow = bucket.Value.ExpectancyLow, GrossExpectancyHigh = bucket.Value.ExpectancyHigh }));
     }
 
-    private IdeaStatistics Statistics()
+    private IdeaStatistics Statistics(ScannerSettings? settings = null)
     {
         return new IdeaStatistics(
             new IdeaSignalRepository(_dataSource),
@@ -143,7 +163,7 @@ public class IdeaStatisticsRecomputeTests
             new IdeaCalibrationRepository(_dataSource),
             new IdeaEngineVersionRepository(_dataSource),
             new BacktestSettings { DefaultFees = new Dictionary<string, FeeRateSettings> { ["linear"] = new FeeRateSettings() } },
-            new ScannerSettings(),
+            settings ?? new ScannerSettings(),
             new IdeasEngineVersion(IdeasEngineVersion.Current),
             new FakeTimeProvider(Now));
     }

@@ -23,7 +23,10 @@ public static class IdeaOutcomes
     /// <param name="rules"></param>
     /// <param name="fees"></param>
     /// <param name="now"></param>
-    /// <param name="cancellationToken"></param>    /// <param name="roots">The roots of the categories by the days of the window, of the last whole pass; none takes those of this pass.</param>
+    /// <param name="cancellationToken"></param>    /// <param name="roots">
+    ///     The roots of the categories by the days of the window, of the model and of the model without costs, of the last whole pass; none takes
+    ///     those of this pass.
+    /// </param>
     /// <param name="burstOf">
     ///     The count of the distinct pairs of the side and interval of a signal in its minute, which gives the burst of its case (decision 2 of
     ///     add-burst-and-auto-limits); none counts none.
@@ -35,7 +38,7 @@ public static class IdeaOutcomes
         Func<MarketCategory, FeeRates> fees,
         DateTimeOffset now,
         CancellationToken cancellationToken,
-        IReadOnlyDictionary<int, IReadOnlyDictionary<MarketCategory, BucketModel.Root>>? roots = null,
+        IdeaRoots? roots = null,
         Func<IdeaSignal, int?>? burstOf = null,
         int keep = int.MaxValue)
     {
@@ -57,16 +60,29 @@ public static class IdeaOutcomes
         Walk(key, rules, fees, now, sums, outcomes, burstOf);
         sums.SumCategories(now);
 
-        Dictionary<int, IReadOnlyDictionary<MarketCategory, BucketModel.Root>> used = Days.ToDictionary(
-            days => days,
-            days => roots?[days] ?? BucketModel.Roots(sums.Parents[days], sums.Categories[days]));
+        var used = new IdeaRoots(
+            Days.ToDictionary(days => days, days => roots?.Net[days] ?? BucketModel.Roots(sums.Parents[days], sums.Categories[days])),
+            Days.ToDictionary(days => days, days => roots?.Gross[days] ?? BucketModel.Roots(sums.GrossParents[days], sums.GrossCategories[days])));
         IdeaBucket[] buckets =
         [
-            .. Days.SelectMany(days => BucketModel.Build(sums.Buckets[days], sums.Parents[days], used[days])
-                .Select(bucket => new IdeaBucket(
-                    bucket.Key,
-                    days,
-                    bucket.Value with { Signals = IdeaExitRule.HasWindow(bucket.Key.Type) ? sums.Signals[(bucket.Key, days)] : null })))
+            .. Days.SelectMany(days =>
+            {
+                // Decision 3 of add-own-idea-numbers: the same model a second time over the results without costs, of which the buckets take
+                // only the expectancy and its interval.
+                IReadOnlyDictionary<IdeaBucketKey, BucketStatistics> gross = BucketModel.Build(sums.GrossBuckets[days], sums.GrossParents[days], used.Gross[days]);
+
+                return BucketModel.Build(sums.Buckets[days], sums.Parents[days], used.Net[days])
+                    .Select(bucket => new IdeaBucket(
+                        bucket.Key,
+                        days,
+                        bucket.Value with
+                        {
+                            Signals = IdeaExitRule.HasWindow(bucket.Key.Type) ? sums.Signals[(bucket.Key, days)] : null,
+                            GrossExpectancy = gross[bucket.Key].Expectancy,
+                            GrossExpectancyLow = gross[bucket.Key].ExpectancyLow,
+                            GrossExpectancyHigh = gross[bucket.Key].ExpectancyHigh
+                        }));
+            })
         ];
 
         return new IdeaOutcomesResult(buckets, outcomes.Outcomes, used);
@@ -96,16 +112,17 @@ public static class IdeaOutcomes
 
         foreach ((SignalPath path, IdeaTrack outcome) in ExitOutcomes.Counted(key.Select(signal => signal.Path), rule))
         {
-            decimal? result = CaseResult.R(outcome, rates);
+            // A case with a result has a price to exit at, and so a result without costs.
+            CaseResults? result = CaseResult.R(outcome, rates) is { } net ? new CaseResults(net, CaseResult.GrossR(outcome)!.Value) : null;
 
-            if (result is { } r)
+            if (result is { } results)
             {
-                sums.Add(bucket.Category, holding, path.FiredAt, outcome.Status, r);
+                sums.Add(bucket.Category, holding, path.FiredAt, outcome.Status, results);
 
                 if (outcomes.Count())
                 {
                     IdeaSignal signal = signals[path];
-                    outcomes.Outcomes!.Add(new IdeaOutcome(bucket, path.FiredAt, outcome.StatusAt, outcome.Status, r, signal.FeaturesWith(burstOf?.Invoke(signal))));
+                    outcomes.Outcomes!.Add(new IdeaOutcome(bucket, path.FiredAt, outcome.StatusAt, outcome.Status, results.Net, signal.FeaturesWith(burstOf?.Invoke(signal))));
                 }
             }
 
@@ -115,6 +132,9 @@ public static class IdeaOutcomes
             }
         }
     }
+
+    // The result of a case after costs and without them.
+    private readonly record struct CaseResults(decimal Net, decimal Gross);
 
     // The outcomes of the cases for the calibration, which walks all of them or none: none once the pass counted more cases than it may keep.
     private sealed class Kept(int limit)
@@ -148,6 +168,14 @@ public static class IdeaOutcomes
 
         public Dictionary<int, Dictionary<MarketCategory, ClusteredSums>> Categories { get; } = Days.ToDictionary(days => days, _ => new Dictionary<MarketCategory, ClusteredSums>());
 
+        // The same sums over the results without costs (decision 3 of add-own-idea-numbers).
+        public Dictionary<int, Dictionary<IdeaBucketKey, ClusteredSums>> GrossBuckets { get; } = Days.ToDictionary(days => days, _ => new Dictionary<IdeaBucketKey, ClusteredSums>());
+
+        public Dictionary<int, Dictionary<BucketModel.Parent, ClusteredSums>> GrossParents { get; } =
+            Days.ToDictionary(days => days, _ => new Dictionary<BucketModel.Parent, ClusteredSums>());
+
+        public Dictionary<int, Dictionary<MarketCategory, ClusteredSums>> GrossCategories { get; } = Days.ToDictionary(days => days, _ => new Dictionary<MarketCategory, ClusteredSums>());
+
         public Dictionary<(IdeaBucketKey, int), int> Signals { get; } = [];
 
         // Decision 2 of cluster-idea-cases-by-holding: a category mixes the types × intervals, so its groups are the blocks of the longest holding
@@ -155,7 +183,7 @@ public static class IdeaOutcomes
         private readonly Dictionary<MarketCategory, CategoryCases> _cases = [];
 
         // A signal without an entry only counts as a signal.
-        public void Add(IdeaBucketKey bucket, int days, TimeSpan holding, DateTimeOffset firedAt, IdeaStatus status, decimal? result)
+        public void Add(IdeaBucketKey bucket, int days, TimeSpan holding, DateTimeOffset firedAt, IdeaStatus status, CaseResults? result)
         {
             Signals[(bucket, days)] = Signals.GetValueOrDefault((bucket, days)) + 1;
 
@@ -164,12 +192,14 @@ public static class IdeaOutcomes
                 return;
             }
 
-            Of(Buckets[days], bucket, holding).Add(firedAt, status, r);
-            Of(Parents[days], BucketModel.Parent.Of(bucket), holding).Add(firedAt, status, r);
+            Of(Buckets[days], bucket, holding).Add(firedAt, status, r.Net);
+            Of(Parents[days], BucketModel.Parent.Of(bucket), holding).Add(firedAt, status, r.Net);
+            Of(GrossBuckets[days], bucket, holding).Add(firedAt, status, r.Gross);
+            Of(GrossParents[days], BucketModel.Parent.Of(bucket), holding).Add(firedAt, status, r.Gross);
         }
 
         /// <summary>A case of a category, of any age, with the holding of its rule.</summary>
-        public void Add(MarketCategory category, TimeSpan holding, DateTimeOffset firedAt, IdeaStatus status, decimal result)
+        public void Add(MarketCategory category, TimeSpan holding, DateTimeOffset firedAt, IdeaStatus status, CaseResults result)
         {
             if (!_cases.TryGetValue(category, out CategoryCases? cases))
             {
@@ -183,8 +213,10 @@ public static class IdeaOutcomes
                 before.Targets + (status == IdeaStatus.Target ? 1 : 0),
                 before.Stops + (status == IdeaStatus.Stop ? 1 : 0),
                 before.Expired + (status is IdeaStatus.Target or IdeaStatus.Stop ? 0 : 1),
-                before.Results + result,
-                before.SquaredResults + (result * result));
+                before.Results + result.Net,
+                before.SquaredResults + (result.Net * result.Net),
+                before.GrossResults + result.Gross,
+                before.SquaredGrossResults + (result.Gross * result.Gross));
         }
 
         /// <summary>The sums of the categories by the blocks of the longest holding of their cases, once the pass is over.</summary>
@@ -195,13 +227,16 @@ public static class IdeaOutcomes
                 foreach (int days in Days)
                 {
                     var sums = new ClusteredSums(cases.Longest);
+                    var gross = new ClusteredSums(cases.Longest);
 
                     foreach ((DateTimeOffset firedAt, Firing firing) in cases.Firings.Where(firing => firing.Key >= now.AddDays(-days)))
                     {
                         sums.Add(firedAt, firing.Targets, firing.Stops, firing.Expired, firing.Results, firing.SquaredResults);
+                        gross.Add(firedAt, firing.Targets, firing.Stops, firing.Expired, firing.GrossResults, firing.SquaredGrossResults);
                     }
 
                     Categories[days][category] = sums;
+                    GrossCategories[days][category] = gross;
                 }
             }
         }
@@ -225,7 +260,8 @@ public static class IdeaOutcomes
             public Dictionary<DateTimeOffset, Firing> Firings { get; } = [];
         }
 
-        // The cases of a category fired at one moment: the counts of their outcomes, the total of their results and that of the squares of them.
-        private readonly record struct Firing(int Targets, int Stops, int Expired, decimal Results, decimal SquaredResults);
+        // The cases of a category fired at one moment: the counts of their outcomes, the total of their results and that of the squares of them,
+        // after costs and without.
+        private readonly record struct Firing(int Targets, int Stops, int Expired, decimal Results, decimal SquaredResults, decimal GrossResults, decimal SquaredGrossResults);
     }
 }
