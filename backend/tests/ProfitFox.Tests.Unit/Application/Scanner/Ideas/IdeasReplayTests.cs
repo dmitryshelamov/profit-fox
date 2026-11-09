@@ -242,18 +242,19 @@ public class IdeasReplayTests
         _journal.Received(1).Replayed(Wif, 2, Arg.Is<TimeSpan>(engine => engine >= TimeSpan.Zero), Arg.Is<TimeSpan>(reads => reads >= TimeSpan.Zero), Arg.Is<TimeSpan>(writes => writes >= TimeSpan.Zero));
     }
 
-    // Decision 1 of speed-up-ideas-replay: the paths are stepped lazily, so one whose window closes right at the end of a day (a pullback fired 7
-    // days before, a minute before midnight, whose limit was never touched) ends with the day: written as ended, tracked until midnight, and
-    // kept out of the cursor.
+    // Decision 1 of speed-up-ideas-replay: the paths are stepped lazily, so one whose window closes right at the end of a day (a pullback fired
+    // 6 days and a minute before it, so its 7 days run out with the minute 23:59 of the day, and whose limit was never touched) is open at the
+    // cursor and ends with the day: written as ended, tracked until midnight, and kept out of the cursor.
     [Test]
     public async Task Path_whose_window_closes_at_the_end_of_a_day_ends_with_the_day()
     {
         var plan = new IdeaPlan(IdeaType.Pullback, IdeaSide.Long, 10m, 9m, 12m);
-        var waiting = new IdeaSignal(Wif, IdeaSetup.Impulse, SignalPath.Fired(plan, Interval.FifteenMinutes, March1.AddDays(-7).AddMinutes(-1), Tick) with { TrackedUntil = March1 }, 3m, 2m, IdeasEngineVersion.Current);
+        var waiting = new IdeaSignal(Wif, IdeaSetup.Impulse, SignalPath.Fired(plan, Interval.FifteenMinutes, March1.AddDays(-6).AddMinutes(-1), Tick) with { TrackedUntil = March1 }, 3m, 2m, IdeasEngineVersion.Current);
         _stored[Wif] = new IdeaReplayCursor(March1, [waiting]);
 
         await Step(Replay());
 
+        waiting.Path.IsOpen.ShouldBeTrue();
         IdeaSignal ended = _written[(waiting.Key, waiting.Path.FiredAt)];
         (ended.Path.IsOpen, ended.Path.EntryAfter, ended.Path.TrackedUntil).ShouldBe((false, null, March1.AddDays(1)));
         _writes[0].ShouldContain(ended);
@@ -418,22 +419,42 @@ public class IdeasReplayTests
         await _candles.Received(2).GetAsync(Btc, Interval.OneMinute, March1.AddMinutes(-240), March1.AddDays(1), 1680, Arg.Any<CancellationToken>());
     }
 
-    // The closes of at most 16 days are kept, the oldest going first: a second turn over 17 days reads the first day again and the last not.
+    // The closes of the days of the history window and two more are kept, the oldest going first: with 3 days of history a second turn over 6
+    // days reads the first day again and the last not.
     [Test]
-    public async Task Closes_of_btc_of_at_most_sixteen_days_are_kept()
+    public async Task Closes_of_btc_of_the_days_of_the_history_window_and_two_more_are_kept()
     {
         var sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
         Serve(sol, () => _minutes);
-        _market.Keep([.. new[] { Wif, sol }.Select(pair => new ScannerPair(pair, true, HistoryFrom: March1, CoveredUntil: March1.AddDays(17), TickSize: Tick))]);
-        KeepBtc(March1.AddDays(17));
-        _time.Advance(TimeSpan.FromDays(17));
-        IdeasReplay replay = Replay();
+        _market.Keep([.. new[] { Wif, sol }.Select(pair => new ScannerPair(pair, true, HistoryFrom: March1, CoveredUntil: March1.AddDays(6), TickSize: Tick))]);
+        KeepBtc(March1.AddDays(6));
+        _time.SetUtcNow(March1.AddDays(3));
+        IdeasReplay replay = Replay(historyDays: 3);
 
         await Step(replay);
         await Step(replay);
 
         await _candles.Received(2).GetAsync(Btc, Interval.OneMinute, March1.AddMinutes(-240), March1.AddDays(1), 1680, Arg.Any<CancellationToken>());
-        await _candles.Received(1).GetAsync(Btc, Interval.OneMinute, March1.AddDays(16).AddMinutes(-240), March1.AddDays(17), 1680, Arg.Any<CancellationToken>());
+        await _candles.Received(1).GetAsync(Btc, Interval.OneMinute, March1.AddDays(5).AddMinutes(-240), March1.AddDays(6), 1680, Arg.Any<CancellationToken>());
+    }
+
+    // In a full replay each turn walks the days of one pair: every day of the history window stays, so the pairs after the first read none of
+    // them again.
+    [Test]
+    public async Task Closes_of_btc_of_every_day_of_the_history_window_are_kept_across_pairs()
+    {
+        var sol = new Instrument(MarketCategory.Linear, "SOLUSDT");
+        Serve(sol, () => _minutes);
+        _market.Keep([.. new[] { Wif, sol }.Select(pair => new ScannerPair(pair, true, HistoryFrom: March1, CoveredUntil: March1.AddDays(20), TickSize: Tick))]);
+        KeepBtc(March1.AddDays(20));
+        _time.Advance(TimeSpan.FromDays(20));
+        IdeasReplay replay = Replay();
+
+        (await Step(replay)).ShouldBeTrue();
+        (await Step(replay)).ShouldBeTrue();
+
+        _stored.Keys.ShouldBe([Wif, sol], ignoreOrder: true);
+        _candles.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(ICandleRepository.GetAsync) && Equals(call.GetArguments()[0], Btc)).ShouldBe(20);
     }
 
     // Decision 3: the funding of a pair is read once a turn, over its days and the 7 days before the first, a settlement an hour at the most.
@@ -761,7 +782,7 @@ public class IdeasReplayTests
         _market.Keep([new ScannerPair(Wif, true, HistoryFrom: March1, CoveredUntil: coveredUntil, TickSize: Tick)]);
     }
 
-    private IdeasReplay Replay(int version = IdeasEngineVersion.Current, IdeasSettings? settings = null)
+    private IdeasReplay Replay(int version = IdeasEngineVersion.Current, IdeasSettings? settings = null, int historyDays = 90)
     {
         return new IdeasReplay(
             _candles,
@@ -771,7 +792,7 @@ public class IdeasReplayTests
             _funding,
             _market,
             settings ?? Settings,
-            new ScannerSettings(),
+            new ScannerSettings { HistoryDays = historyDays },
             new IdeasEngineVersion(version),
             _pace,
             _journal,

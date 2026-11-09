@@ -48,8 +48,8 @@ public sealed class IdeasReplay(
     private const int FundingPerDay = 24;
     private const int FundingSpareDays = 8;
 
-    // The days of closes of BTC the turns share, the oldest going first (decision 3 of speed-up-ideas-replay).
-    private const int BtcDays = 16;
+    // The days of closes of BTC kept beyond the days of the history window: the day being replayed and the one a clock tick ahead.
+    private const int BtcSpareDays = 2;
 
     // The cursors and the pairs the turns run, which the turns share (decision 2 of speed-up-ideas-replay).
     private readonly Lock _lock = new Lock();
@@ -112,11 +112,17 @@ public sealed class IdeasReplay(
         return Task.Run(() => RunAsync(next, cancellationToken), CancellationToken.None);
     }
 
+    /// <summary>The first day a turn may replay: the day ceiling of the time less the days of history the scanner keeps.</summary>
+    public static DateTimeOffset HistoryStart(DateTimeOffset now, int historyDays)
+    {
+        return Ceiling(now.AddDays(-historyDays));
+    }
+
     // The turn of the pair furthest behind among those no turn runs; called under the lock.
     private Turn? Next()
     {
         DateTimeOffset now = time.GetUtcNow();
-        DateTimeOffset historyStart = Ceiling(now.AddDays(-scanner.HistoryDays));
+        DateTimeOffset historyStart = HistoryStart(now, scanner.HistoryDays);
 
         return market.Listed()
             // A pair waits for its price step too: a day replayed without ideas would never be replayed again.
@@ -278,8 +284,8 @@ public sealed class IdeasReplay(
 
     /// <summary>
     ///     The closes of the minutes of <c>linear</c> / <c>BTCUSDT</c> from 240 minutes before a day to its end, which the features of the signals
-    ///     of the day are measured by (decision 5 of add-market-idea-features): read once for every turn over the day, the last 16 days kept
-    ///     (decision 3 of speed-up-ideas-replay). A read that failed is not kept, so the next turn reads it again.
+    ///     of the day are measured by (decision 5 of add-market-idea-features): read once for every turn over the day, every day of the history window
+    ///     kept (decision 3 of speed-up-ideas-replay) once BTC is loaded to the end of it. A read that failed is not kept, so the next turn reads it again.
     /// </summary>
     private async Task<Dictionary<DateTimeOffset, decimal>> BtcAsync(DateTimeOffset day, CancellationToken cancellationToken)
     {
@@ -298,7 +304,7 @@ public sealed class IdeasReplay(
                 read = ReadBtcAsync(day, cancellationToken);
                 _btc[day] = read;
 
-                if (_btc.Count > BtcDays)
+                if (_btc.Count > scanner.HistoryDays + BtcSpareDays)
                 {
                     _btc.Remove(_btc.Keys.Min());
                 }
