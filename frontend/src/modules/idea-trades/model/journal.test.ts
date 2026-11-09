@@ -34,6 +34,8 @@ const totals = (overrides: Partial<Totals> = {}): Totals => ({
   stops: 1,
   manual: 1,
   expired: 0,
+  liquidated: 0,
+  adl: 0,
   cancelled: 0,
   failed: 0,
   result: '0.9',
