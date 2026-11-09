@@ -39,14 +39,31 @@ async function orders(request: APIRequestContext, query: string) {
   return ((await response.json()) as { result: { list: Order[] } }).result.list;
 }
 
-async function position(request: APIRequestContext): Promise<{ side: string; size: string }[]> {
-  const response = await request.get(`${stub}/v5/position/list?category=linear&symbol=ETHUSDT`, {
+interface Position {
+  side: string;
+  size: string;
+  leverage: string;
+}
+
+async function position(request: APIRequestContext, symbol = 'ETHUSDT'): Promise<Position[]> {
+  const response = await request.get(`${stub}/v5/position/list?category=linear&symbol=${symbol}`, {
     headers: key,
   });
 
-  return ((await response.json()) as { result: { list: { side: string; size: string }[] } }).result
-    .list;
+  return ((await response.json()) as { result: { list: Position[] } }).result.list;
 }
+
+async function setLeverage(request: APIRequestContext, symbol: string, leverage: string) {
+  const response = await request.post(`${stub}/v5/position/set-leverage`, {
+    headers: key,
+    data: { category: 'linear', symbol, buyLeverage: leverage, sellLeverage: leverage },
+  });
+
+  return ((await response.json()) as { retCode: number }).retCode;
+}
+
+/** A symbol without a position is one row with no side and a size of zero, as Bybit lists it in the one-way mode. */
+const flat = [{ side: '', size: '0' }];
 
 test.afterEach(async ({ request }) => {
   await request.get(`${stub}/control/price?symbol=ETHUSDT`);
@@ -76,7 +93,7 @@ test('an entry with a stop and a target makes two orders, the price fires one, a
       })
     ).retCode,
   ).toBe(0);
-  expect(await position(request)).toEqual([]);
+  expect(await position(request)).toMatchObject(flat);
 
   await request.get(`${stub}/control/fill?orderLinkId=${link}&price=3000`);
 
@@ -103,7 +120,7 @@ test('an entry with a stop and a target makes two orders, the price fires one, a
   const fired = [target, ...history.result.list].find((order) => order?.orderStatus === 'Filled');
   expect(fired?.stopOrderType).toBe('PartialTakeProfit');
   expect(await orders(request, '')).toEqual([]);
-  expect(await position(request)).toEqual([]);
+  expect(await position(request)).toMatchObject(flat);
 });
 
 test('a limit order that is IOC and cannot fill at once is cancelled, and a reduce-only order needs a position', async ({
@@ -142,4 +159,17 @@ test('a limit order that is IOC and cannot fill at once is cancelled, and a redu
     orderLinkId: `i-reduce-${Date.now()}`,
   });
   expect(refused.retCode).toBe(110017);
+});
+
+test('the leverage of a symbol is 10 until it is set, the same leverage again is «not modified», and the positions give it', async ({
+  request,
+}) => {
+  expect(await position(request, 'SOLUSDT')).toMatchObject([{ ...flat[0], leverage: '10' }]);
+
+  expect(await setLeverage(request, 'SOLUSDT', '3')).toBe(0);
+  expect(await position(request, 'SOLUSDT')).toMatchObject([{ leverage: '3' }]);
+  expect(await setLeverage(request, 'SOLUSDT', '3')).toBe(110043);
+
+  // The symbol gets back the leverage of an untouched one for the other tests.
+  expect(await setLeverage(request, 'SOLUSDT', '10')).toBe(0);
 });

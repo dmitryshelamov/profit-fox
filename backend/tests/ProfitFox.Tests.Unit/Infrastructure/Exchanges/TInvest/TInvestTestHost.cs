@@ -42,7 +42,10 @@ internal sealed class TInvestTestHost : IDisposable
         protector.Decrypt(account.Id, encrypted).Returns(Token);
         _services = new ServiceCollection().AddMetrics().AddScoped(_ => Accounts).BuildServiceProvider();
         Limiter = new TInvestRequestLimiter(Settings, Time);
-        Call = new TInvestCall(new Invokers(Api), Limiter, new TInvestMetrics(_services.GetRequiredService<IMeterFactory>()), new ExchangeResilienceExecutor(Time), Settings, Time);
+        Invokers = new CallInvokers(Api);
+        MeterFactory = _services.GetRequiredService<IMeterFactory>();
+        Metrics = new TInvestMetrics(MeterFactory);
+        Call = new TInvestCall(Invokers, Limiter, Metrics, new ExchangeResilienceExecutor(Time), Settings, Time);
         Tokens = new TInvestTokenSource(_services.GetRequiredService<IServiceScopeFactory>(), protector, Time);
         Shares = new TInvestShares(Call, Tokens, Time);
         MarketData = new TInvestMarketDataClient(Call, Tokens, Shares);
@@ -59,6 +62,13 @@ internal sealed class TInvestTestHost : IDisposable
 
     public TInvestRequestLimiter Limiter { get; }
 
+    /// <summary>The invokers the calls go through: <see cref="Api" />.</summary>
+    public ITInvestCallInvokers Invokers { get; }
+
+    public IMeterFactory MeterFactory { get; }
+
+    public TInvestMetrics Metrics { get; }
+
     public TInvestCall Call { get; }
 
     public TInvestTokenSource Tokens { get; }
@@ -74,7 +84,7 @@ internal sealed class TInvestTestHost : IDisposable
         _services.Dispose();
     }
 
-    private sealed class Invokers(CallInvoker invoker) : ITInvestCallInvokers
+    private sealed class CallInvokers(CallInvoker invoker) : ITInvestCallInvokers
     {
         public CallInvoker Invoker => invoker;
     }

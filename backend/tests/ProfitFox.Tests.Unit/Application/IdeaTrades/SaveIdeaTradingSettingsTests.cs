@@ -12,7 +12,10 @@ using Shouldly;
 
 namespace ProfitFox.Tests.Unit.Application.IdeaTrades;
 
-/// <summary>Requirement "Настройки торговли по идеям": the account of the settings is one the trades by ideas can go through.</summary>
+/// <summary>
+///     Requirement "Настройки торговли по идеям": the account of the settings is one the trades by ideas can go through, and the leverage of the
+///     settings is a whole number from one.
+/// </summary>
 public class SaveIdeaTradingSettingsTests
 {
     private static readonly Guid Account = Guid.Parse("22222222-2222-4222-8222-222222222222");
@@ -49,6 +52,15 @@ public class SaveIdeaTradingSettingsTests
         ValidationFailedException exception = await Should.ThrowAsync<ValidationFailedException>(() => _handler.Handle(new SaveIdeaTradingSettingsCommand(IdeaTradingSettings.Default with { AccountId = Account }), CancellationToken.None));
 
         exception.Errors.Keys.ShouldBe(["accountId"]);
+    }
+
+    // Scenario "Плечо ноль".
+    [Test]
+    public async Task Leverage_below_one_is_an_error_of_its_field_and_nothing_is_saved()
+    {
+        ValidationFailedException error = await Should.ThrowAsync<ValidationFailedException>(() => SaveAsync(IdeaTradingSettings.Default with { Leverage = 0 }));
+
+        error.Errors.Keys.ShouldBe(["leverage"]);
         await _settings.DidNotReceiveWithAnyArgs().SaveAsync(default!, default);
     }
 
@@ -60,5 +72,18 @@ public class SaveIdeaTradingSettingsTests
         ValidationFailedException exception = await Should.ThrowAsync<ValidationFailedException>(() => _handler.Handle(new SaveIdeaTradingSettingsCommand(IdeaTradingSettings.Default with { AccountId = Account }), CancellationToken.None));
 
         exception.Errors.Keys.ShouldBe(["accountId"]);
+    }
+
+    [Test]
+    public async Task Leverage_of_one_is_saved()
+    {
+        await SaveAsync(IdeaTradingSettings.Default with { Leverage = 1 });
+
+        await _settings.Received(1).SaveAsync(IdeaTradingSettings.Default, Arg.Any<CancellationToken>());
+    }
+
+    private Task SaveAsync(IdeaTradingSettings settings)
+    {
+        return _handler.Handle(new SaveIdeaTradingSettingsCommand(settings), CancellationToken.None);
     }
 }

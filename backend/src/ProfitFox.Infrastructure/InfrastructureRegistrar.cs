@@ -185,17 +185,30 @@ public static class InfrastructureRegistrar
         services.AddTransient<BybitRestMetricsHandler>();
         services.ConfigureHttpClientDefaults(builder => builder.AddHttpMessageHandler<BybitRestMetricsHandler>());
         services.AddHttpClient<IExchangeKeyInspector, BybitAccountClient>();
-        services.AddHttpClient<IExchangeLedger, BybitLedger>();
-        services.AddHttpClient<IOrderGateway, BybitOrderGateway>();
-        services.AddSingleton<BybitStreams>();
-        services.AddSingleton<IExchangeStreams>(provider => provider.GetRequiredService<BybitStreams>());
-        services.AddSingleton<IFormingCandleStreams>(provider => provider.GetRequiredService<BybitStreams>());
         services.AddSingleton<ILiveTradingJournal, LoggingLiveTradingJournal>();
 
         // A circuit breaker per exchange: a T-Invest that does not answer never opens the circuit of Bybit.
         services.AddKeyedSingleton<ExchangeResilienceExecutor>(Exchange.Bybit);
         services.AddKeyedSingleton<ExchangeResilienceExecutor>(Exchange.TInvest);
         ConfigureTInvest(configuration, services);
+
+        // The ports of trading go to the exchange of the key, the candles to the exchange of the category (decision 2 of
+        // add-moex-live-bots); the streams of closed and of forming candles of an exchange are one object.
+        services.AddHttpClient<BybitLedger>();
+        services.AddHttpClient<BybitOrderGateway>();
+        services.AddKeyedTransient<IExchangeLedger>(Exchange.Bybit, (provider, _) => provider.GetRequiredService<BybitLedger>());
+        services.AddKeyedTransient<IOrderGateway>(Exchange.Bybit, (provider, _) => provider.GetRequiredService<BybitOrderGateway>());
+        services.AddKeyedTransient<IExchangeLedger, TInvestLedger>(Exchange.TInvest);
+        services.AddKeyedTransient<IOrderGateway, TInvestOrderGateway>(Exchange.TInvest);
+        services.AddTransient<IExchangeLedger, RoutedExchangeLedger>();
+        services.AddTransient<IOrderGateway, RoutedOrderGateway>();
+        services.AddSingleton<BybitStreams>();
+        services.AddKeyedSingleton<IExchangeStreams>(Exchange.Bybit, (provider, _) => provider.GetRequiredService<BybitStreams>());
+        services.AddKeyedSingleton<IFormingCandleStreams>(Exchange.Bybit, (provider, _) => provider.GetRequiredService<BybitStreams>());
+        services.AddKeyedSingleton<IExchangeStreams>(Exchange.TInvest, (provider, _) => provider.GetRequiredService<TInvestStreams>());
+        services.AddKeyedSingleton<IFormingCandleStreams>(Exchange.TInvest, (provider, _) => provider.GetRequiredService<TInvestStreams>());
+        services.AddSingleton<IExchangeStreams, RoutedExchangeStreams>();
+        services.AddSingleton<IFormingCandleStreams, RoutedFormingCandleStreams>();
 
         // The read ports go to the exchange of the category (decision 8): Bybit for spot and linear, T-Invest for moex.
         services.AddKeyedTransient<IMarketHistoryClient, BybitMarketDataClient>(Exchange.Bybit);
@@ -259,6 +272,7 @@ public static class InfrastructureRegistrar
         }
 
         services.AddSingleton(tinvest);
+        services.AddSingleton(new MoexTradingSettings(tinvest.Trading));
         services.AddSingleton(TInvestCertificates.Load(tinvest.Certificates, AppContext.BaseDirectory));
         services.AddSingleton<ITInvestCallInvokers, TInvestChannel>();
         services.AddSingleton<TInvestRequestLimiter>();
@@ -268,6 +282,9 @@ public static class InfrastructureRegistrar
         services.AddTransient<TInvestCall>();
         services.AddTransient<TInvestMarketDataClient>();
         services.AddTransient<IBrokerAccountReader, TInvestAccountClient>();
+        services.AddSingleton<ITInvestOrderIds, TInvestOrderIds>();
+        services.AddSingleton<TInvestTradingStatuses>();
+        services.AddSingleton<TInvestStreams>();
     }
 
     private static bool IsMasterKey(string? value)

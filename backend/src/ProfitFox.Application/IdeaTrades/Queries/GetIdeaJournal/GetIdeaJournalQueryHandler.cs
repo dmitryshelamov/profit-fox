@@ -20,6 +20,7 @@ public sealed class GetIdeaJournalQueryHandler(
     IIdeaTradeRepository trades,
     IPaperIdeaTradeRepository paper,
     IIdeaAutoRepository autos,
+    IIdeaRepository ideas,
     IExchangeAccountRepository accounts,
     IMarketHistoryClient history,
     BacktestSettings backtests,
@@ -97,7 +98,14 @@ public sealed class GetIdeaJournalQueryHandler(
         ];
         IReadOnlyList<(IdeaTrade Trade, bool Paper)> opened = [.. matching.Where(item => item.Trade.IsOpen).OrderByDescending(item => item.Trade.CreatedAt).ThenBy(item => item.Trade.Id)];
         IReadOnlyDictionary<Instrument, decimal> prices = await PricesAsync(opened.Select(item => item.Trade), cancellationToken);
-        IReadOnlyList<IdeaJournalTrade> open = [.. opened.Select(item => Worth(item.Trade, AccountName(names, item.Trade.AccountId), prices, item.Paper, everyAuto))];
+        IReadOnlyDictionary<Guid, DateTimeOffset?> ideaEnds = await IdeaEndsAsync(opened.Select(item => item.Trade), cancellationToken);
+        IReadOnlyList<IdeaJournalTrade> open =
+        [
+            .. opened.Select(item => Worth(item.Trade, AccountName(names, item.Trade.AccountId), prices, item.Paper, everyAuto) with
+            {
+                IdeaEndsAt = ideaEnds.GetValueOrDefault(item.Trade.IdeaId)
+            })
+        ];
 
         return new GetIdeaJournalResult(
             new IdeaJournal(
@@ -122,6 +130,20 @@ public sealed class GetIdeaJournalQueryHandler(
     private static IdeaJournalTrade Of(IdeaTrade trade, string accountName, bool paper, IReadOnlyDictionary<Guid, IdeaAuto> everyAuto)
     {
         return new IdeaJournalTrade(trade, accountName, Origin: paper ? IdeaTradeOrigin.Paper : trade.AutoId is null ? IdeaTradeOrigin.Manual : IdeaTradeOrigin.Auto, AutoName: trade.AutoId is { } id ? everyAuto[id].Name : null);
+    }
+
+    // The end of the lifetime of the idea of each trade in work, in one read of their ideas, while the idea is active: an idea that waits for its
+    // entry, closed or is no longer stored has none.
+    private async Task<IReadOnlyDictionary<Guid, DateTimeOffset?>> IdeaEndsAsync(IEnumerable<IdeaTrade> opened, CancellationToken cancellationToken)
+    {
+        Guid[] ids = [.. opened.Select(trade => trade.IdeaId)];
+
+        if (ids.Length == 0)
+        {
+            return new Dictionary<Guid, DateTimeOffset?>();
+        }
+
+        return (await ideas.GetManyAsync(ids, cancellationToken)).Where(idea => idea.Track.Status == IdeaStatus.Active).ToDictionary(idea => idea.Id, idea => idea.Track.LifeEndsAt);
     }
 
     // One request of all the tickers for each category of a trade that holds something, however many pairs are open: a request a pair took

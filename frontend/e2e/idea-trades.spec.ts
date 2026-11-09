@@ -3,10 +3,13 @@ import { type APIRequestContext, expect, type Page, test } from '@playwright/tes
 import { createStrategy, reference } from './api';
 import {
   expiredPaperSymbol,
+  ideaLeftSymbols,
   removeOpenIdeas,
   removePaperTradeClosedAtExpiry,
+  removePaperTradesOfIdeas,
   seedOpenIdea,
   seedPaperTradeClosedAtExpiry,
+  seedPaperTradesOfIdeas,
 } from './seed';
 
 // Acceptance of the journal of the trades by ideas against the real API and a trading Worker on the Bybit stub: the owner enters by an idea on the page of
@@ -32,6 +35,7 @@ interface StubOrder {
 }
 
 let accountId = '';
+let accountKey = '';
 
 /** A result in profit, in money and in R; a part keeps a no-break space so it does not wrap inside. */
 const inProfit = /\+\d+\.\d{2}\sUSDT · \+\d+\.\d{2}\sR/;
@@ -43,6 +47,16 @@ async function stubOrders(request: APIRequestContext): Promise<StubOrder[]> {
 /** The stops and targets the stub made for entries: they have no client id of their own. */
 async function stubChildren(request: APIRequestContext): Promise<StubOrder[]> {
   return (await (await request.get(`${stub}/control/children`)).json()) as StubOrder[];
+}
+
+/** The leverage of ETHUSDT of the linear market on the stub. */
+async function stubLeverage(request: APIRequestContext, apiKey: string): Promise<string> {
+  const response = await request.get(`${stub}/v5/position/list?category=linear&symbol=ETHUSDT`, {
+    headers: { 'X-BAPI-API-KEY': apiKey },
+  });
+
+  return ((await response.json()) as { result: { list: { leverage: string }[] } }).result.list[0]!
+    .leverage;
 }
 
 /** The orders of trades by ideas on the stub, the entries and the closes: their client ids start with `i`. */
@@ -106,8 +120,9 @@ const closedRow = (page: Page) =>
 test.beforeAll(async ({ request }) => {
   test.setTimeout(240_000);
   const uid = String(Date.now());
+  accountKey = `e2e-valid-${uid}`;
   const created = await request.post('/api/exchange-accounts', {
-    data: { name: `Сделки ${uid}`, apiKey: `e2e-valid-${uid}`, apiSecret: 'e2e-secret' },
+    data: { name: `Сделки ${uid}`, apiKey: accountKey, apiSecret: 'e2e-secret' },
   });
   expect(created.status()).toBe(201);
   accountId = ((await created.json()) as { id: string }).id;
@@ -151,10 +166,12 @@ test('an entry by an idea places the entry with its stop and target on linear, a
 
   const dialog = await openEntry(page, 'Уровни');
   await expect(dialog.getByLabel('Аккаунт')).toHaveValue(accountId);
-  await expect(dialog.getByText('3000')).toBeVisible();
+  await expect(dialog.getByText('3000', { exact: true })).toBeVisible();
   // The amount of the settings buys 0.01 ETH at 3000; the window shows what that loses at the stop and earns at the target.
   await expect(dialog.getByLabel('Сумма, USDT')).toHaveValue('30');
-  await expect(dialog.getByText('30.00 USDT')).toBeVisible();
+  // The amount, and the margin that equals it at the leverage of 1 of the settings.
+  await expect(dialog.getByText('30.00 USDT')).toHaveCount(2);
+  await expect(dialog.getByText('1×', { exact: true })).toBeVisible();
   await expect(dialog.getByText('Убыток по стопу')).toBeVisible();
   await expect(dialog.getByText('Прибыль по цели')).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Войти' })).toBeEnabled();
@@ -171,6 +188,8 @@ test('an entry by an idea places the entry with its stop and target on linear, a
     stopLoss: '2900',
   });
   await expect(workRow(page)).toContainText('Ждёт входа');
+  // The symbol had the 10× of an untouched one: the entry set the leverage of the settings on it first.
+  expect(await stubLeverage(request, accountKey)).toBe('1');
 
   await request.get(`${stub}/control/fill?orderLinkId=${entry.orderLinkId}&price=3000`);
   await expect(workRow(page)).toContainText('Открыта', { timeout: 45_000 });
@@ -301,6 +320,33 @@ test('a paper trade closed at the expiry of its idea is in the table with its st
     );
   } finally {
     await removePaperTradeClosedAtExpiry();
+  }
+});
+
+// Requirement "Группа «В работе»", scenarios "Идея ещё жива" and "Идея закрылась раньше сделки": the time left of the idea of a trade in
+// work runs down with the clock of the page, and a trade whose idea closed says so.
+test('the time left of the idea of a trade in work runs down, and a trade whose idea closed says it is closed', async ({
+  page,
+}) => {
+  const now = Date.now();
+  await seedPaperTradesOfIdeas(accountId, new Date(now + (100 * 60 + 30) * 1000));
+
+  try {
+    await page.clock.install({ time: now });
+    await page.goto('/idea-trades');
+    const table = page.getByRole('table', { name: 'Сделки в работе' });
+    const left = (symbol: string) =>
+      table.getByRole('row').filter({ hasText: symbol }).getByRole('cell').nth(13);
+
+    await expect(table.getByRole('columnheader').nth(13)).toHaveText('До конца идеи');
+    await expect(left(ideaLeftSymbols.active)).toHaveText('1 ч 40 мин');
+    await expect(left(ideaLeftSymbols.closed)).toHaveText('закрыта');
+
+    await page.clock.fastForward('01:00');
+
+    await expect(left(ideaLeftSymbols.active)).toHaveText('1 ч 39 мин');
+  } finally {
+    await removePaperTradesOfIdeas();
   }
 });
 

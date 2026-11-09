@@ -19,4 +19,6 @@ internal sealed class IdeaTradingSettingsDb
     public int? MaxSameDirection { get; init; }
 
     public decimal? AutosBudget { get; init; }
+
+    public int Leverage { get; init; }
 }

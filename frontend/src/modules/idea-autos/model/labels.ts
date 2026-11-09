@@ -140,6 +140,9 @@ const reasons: Record<string, string> = {
   entry_error: 'Ошибка подготовки входа',
   budget_taken: 'Бюджет автомата занят',
   autos_budget_taken: 'Бюджет автоматов занят',
+  stop_too_far_for_leverage: 'Стоп дальше, чем позволяет плечо',
+  leverage_differs: 'Символ занят с другим плечом',
+  leverage_not_set: 'Bybit не дал поставить плечо',
   minute_limit: 'Лимит за минуту',
   side_limit: 'Лимит на сторону',
 };

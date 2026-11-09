@@ -166,6 +166,48 @@ public class LiveTradingTests
         (await _scenario.LiveAsync(bot)).Status.ShouldBe(LiveBotStatus.Running);
     }
 
+    // Scenario "Пауза, названная биржей": a refusal that names how long another attempt is useless, such as until the next session opens,
+    // defers the send no sooner than that, not by the growing pause of a minute at most; the bot keeps running.
+    [Test]
+    public async Task Transient_refusal_with_a_pause_of_the_exchange_is_sent_again_no_sooner()
+    {
+        Guid bot = await _scenario.CreateBotAsync();
+        _scenario.Exchange.Refusals.Enqueue(new OrderOutcome(OrderOutcomeKind.Transient, Reason: "The session is closed.", RetryAfter: TimeSpan.FromHours(5)));
+        _scenario.StartWorker();
+
+        await _scenario.ActAsync(bot, "start");
+
+        await _scenario.WaitAsync(async () => (await _scenario.OrdersAsync(bot)).SingleOrDefault()?.Attempts == 1, "the deferred order");
+        LiveOrder order = (await _scenario.OrdersAsync(bot)).Single();
+        order.NextAttemptAt!.Value.ShouldBeGreaterThan(_scenario.Factory.Time.GetUtcNow() + TimeSpan.FromHours(4.9));
+        // Two minutes, past the longest growing pause, while the Worker polls and renews the lease.
+        for (var second = 0; second < 120; second++)
+        {
+            _scenario.Factory.Time.Advance(TimeSpan.FromSeconds(1));
+            await Task.Delay(25);
+        }
+
+        _scenario.Exchange.Sent.Count.ShouldBe(1);
+        (await _scenario.LiveAsync(bot)).Status.ShouldBe(LiveBotStatus.Running);
+    }
+
+    // Task 9.2: a deferred order never reached the exchange, so a stop cancels it without it; the exchange does not know it.
+    [Test]
+    public async Task Deferred_order_the_exchange_never_took_is_cancelled_on_stop()
+    {
+        Guid bot = await _scenario.CreateBotAsync();
+        _scenario.Exchange.Refusals.Enqueue(new OrderOutcome(OrderOutcomeKind.Transient, Reason: "The session is closed.", RetryAfter: TimeSpan.FromHours(5)));
+        _scenario.StartWorker();
+        await _scenario.ActAsync(bot, "start");
+        await _scenario.WaitAsync(async () => (await _scenario.OrdersAsync(bot)).SingleOrDefault()?.Attempts == 1, "the deferred order");
+
+        await _scenario.ActAsync(bot, "stop");
+
+        await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).Status == LiveBotStatus.Stopped, "the stop");
+        (await _scenario.OrdersAsync(bot)).Single().Status.ShouldBe(LiveOrderStatus.Cancelled);
+        _scenario.Exchange.Orders.ShouldBeEmpty();
+    }
+
     // Scenario "Исполнение на паузе": the fill counts, the strategy places nothing on it.
     [Test]
     public async Task Paused_bot_keeps_its_books_and_places_nothing()
@@ -560,7 +602,7 @@ public class LiveTradingTests
 
         await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).Status == LiveBotStatus.Failed, "the failed bot");
         (await _scenario.LiveAsync(bot)).StopReason.ShouldBe(
-            $"Bybit refused to cancel order {_scenario.Exchange.CancelTimes[0].ClientId}: API key is invalid. Cancel it on Bybit: the bot stops once Bybit shows the order done.");
+            $"The exchange refused to cancel order {_scenario.Exchange.CancelTimes[0].ClientId}: API key is invalid. Cancel it on the exchange: the bot stops once the exchange shows the order done.");
         DateTimeOffset[] times = [.. _scenario.Exchange.CancelTimes.Where(cancel => cancel.ClientId == _scenario.Exchange.CancelTimes[0].ClientId).Select(cancel => cancel.At)];
         TimeSpan[] gaps = [.. times.Zip(times.Skip(1), (before, after) => after - before)];
         gaps.Skip(1).First().ShouldBeGreaterThanOrEqualTo(TimeSpan.FromSeconds(2));
@@ -587,7 +629,7 @@ public class LiveTradingTests
         _scenario.Exchange.CancelOnBybit(LiveTradingScenario.ClientId(bot, 3));
 
         await _scenario.WaitAsync(async () => (await _scenario.LiveAsync(bot)).Status == LiveBotStatus.Failed, "the failed bot");
-        (await _scenario.LiveAsync(bot)).StopReason.ShouldStartWith("Bybit refused to cancel order ");
+        (await _scenario.LiveAsync(bot)).StopReason.ShouldStartWith("The exchange refused to cancel order ");
         (await _scenario.OrdersAsync(bot)).ShouldAllBe(order => order.Status != LiveOrderStatus.PendingCancel);
     }
 

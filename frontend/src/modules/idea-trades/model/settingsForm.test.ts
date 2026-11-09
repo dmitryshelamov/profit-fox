@@ -13,6 +13,7 @@ describe('settings form', () => {
         dailyLossLimit: '30',
         maxSameDirection: 5,
         autosBudget: '200',
+        leverage: 3,
       }),
     ).toEqual({
       accountId: '',
@@ -24,6 +25,7 @@ describe('settings form', () => {
       dailyLossLimit: '30',
       maxSameDirection: '5',
       autosBudget: '200',
+      leverage: '3',
     });
   });
 
@@ -38,6 +40,7 @@ describe('settings form', () => {
       dailyLossLimit: null,
       maxSameDirection: null,
       autosBudget: null,
+      leverage: 1,
     });
 
     expect(form.dailyLossLimit).toBe('');

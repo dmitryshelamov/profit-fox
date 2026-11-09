@@ -364,6 +364,78 @@ export async function removePaperTradeClosedAtExpiry(): Promise<void> {
   }
 }
 
+/** The symbols of the paper trades `seedPaperTradesOfIdeas` writes: the scanner of the run keeps neither, so it never steps them. */
+export const ideaLeftSymbols = { active: 'DOTUSDT', closed: 'AVAXUSDT' } as const;
+
+const ideaLeftAuto = 'До конца идеи e2e';
+
+/**
+ * Two open paper trades of an auto that is off: one by an active idea of 15 minutes that lives 24 candles and ends at `endsAt`, and one
+ * whose idea expired, as the scanner writes the outcome of an idea on its trades.
+ */
+export async function seedPaperTradesOfIdeas(accountId: string, endsAt: Date): Promise<void> {
+  const client = await connect();
+
+  try {
+    const auto = await client.query<{ id: string }>(
+      `INSERT INTO idea_autos (id, name, account_id, amount, mode, setups, types, intervals, min_risk_reward, min_cases, position, created_at)
+       VALUES (gen_random_uuid(), $1, $2, 100, 'off', ARRAY['impulse'], ARRAY['target_2r'], ARRAY['15'], 1.2, 0, 1001, now())
+       RETURNING id`,
+      [ideaLeftAuto, accountId],
+    );
+    const idea = await client.query<{ id: string }>(
+      `INSERT INTO ideas (id, category, symbol, setup, type, "interval", side, fired_at, entry, stop, target, risk_reward,
+                          status, status_at, entered_at, exit_price, move, volume_ratio, engine_version, life_candles, target_r, entry_candles)
+       VALUES (gen_random_uuid(), 'linear', $1, 'impulse', 'target_2r', '15', 'long', $2::timestamptz - interval '361 minutes', 100, 98, 104, 2,
+               'active', $2::timestamptz - interval '360 minutes', $2::timestamptz - interval '360 minutes', NULL, 3, 2, ${engineVersion}, 24, 2, NULL)
+       RETURNING id`,
+      [ideaLeftSymbols.active, endsAt.toISOString()],
+    );
+    const paper = `INSERT INTO idea_paper_trades (id, idea_id, auto_id, account_id, category, symbol, setup, interval, type, side, entry_price, stop,
+                                                  target, quantity, amount, risk, status, status_at, entry_quantity, entry_value, entry_fee,
+                                                  take_profit_quantity, take_profit_value, take_profit_fee, stop_loss_quantity, stop_loss_value,
+                                                  stop_loss_fee, created_at, opened_at, stepped_until, idea_status, idea_status_at, idea_result)
+                   VALUES (gen_random_uuid(), $1, $2, $3, 'linear', $4, 'impulse', '15', 'target_2r', 'long', 100, 98, 104, 1, 100, 2, 'open',
+                           now(), 1, 100, 0, 0, 0, 0, 0, 0, 0, now(), now(), date_trunc('minute', now()), $5, $6, $7)`;
+    await client.query(paper, [
+      idea.rows[0]!.id,
+      auto.rows[0]!.id,
+      accountId,
+      ideaLeftSymbols.active,
+      null,
+      null,
+      null,
+    ]);
+    await client.query(paper, [
+      crypto.randomUUID(),
+      auto.rows[0]!.id,
+      accountId,
+      ideaLeftSymbols.closed,
+      'expired',
+      new Date(),
+      0.4,
+    ]);
+  } finally {
+    await client.end();
+  }
+}
+
+/** Removes the paper trades `seedPaperTradesOfIdeas` made, their idea and their auto. */
+export async function removePaperTradesOfIdeas(): Promise<void> {
+  const client = await connect();
+
+  try {
+    const symbols = Object.values(ideaLeftSymbols);
+    await client.query('DELETE FROM idea_paper_trades WHERE symbol = ANY($1)', [symbols]);
+    await client.query("DELETE FROM ideas WHERE category = 'linear' AND symbol = ANY($1)", [
+      symbols,
+    ]);
+    await client.query('DELETE FROM idea_autos WHERE name = $1', [ideaLeftAuto]);
+  } finally {
+    await client.end();
+  }
+}
+
 /** The symbol of the real trades `seedClosedTrade` writes: no other test trades it, so they leave the rows of the others alone. */
 export const closedTradeSymbol = 'XRPUSDT';
 

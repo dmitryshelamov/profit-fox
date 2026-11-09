@@ -2,6 +2,7 @@ using MediatR;
 
 using Microsoft.AspNetCore.Mvc;
 
+using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.IdeaAutos.Queries.GetIdeaGuards;
 using ProfitFox.Application.IdeaTrades.Commands.SaveIdeaTradingSettings;
 using ProfitFox.Application.IdeaTrades.Queries.GetIdeaTradingSettings;
@@ -32,7 +33,16 @@ public sealed class IdeaTradingSettingsController(ISender sender) : ControllerBa
     {
         try
         {
-            await sender.Send(new SaveIdeaTradingSettingsCommand(new IdeaTradingSettings(body.AccountId, body.Amount, body.MaxAmount, body.MaxOpenTrades, body.MaxTotalRisk, body.MinRiskReward, body.DailyLossLimit, body.MaxSameDirection, body.AutosBudget)), cancellationToken);
+            if (body.Leverage != decimal.Truncate(body.Leverage) || body.Leverage is > int.MaxValue or < int.MinValue)
+            {
+                throw new ValidationFailedException(new Dictionary<string, string> { ["leverage"] = "The leverage must be a whole number." });
+            }
+
+            await sender.Send(
+                new SaveIdeaTradingSettingsCommand(new IdeaTradingSettings(
+                    body.AccountId, body.Amount, body.MaxAmount, body.MaxOpenTrades, body.MaxTotalRisk, body.MinRiskReward, body.DailyLossLimit, body.MaxSameDirection, body.AutosBudget,
+                    (int)body.Leverage)),
+                cancellationToken);
 
             return NoContent();
         }

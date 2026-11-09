@@ -20,7 +20,8 @@ internal static class IdeaTradeRepositoryQueries
                                         promised_badge AS "PromisedBadge", promised_probability AS "PromisedProbability", promised_expectancy AS "PromisedExpectancy",
                                         promised_cases AS "PromisedCases", break_even AS "BreakEven", net_risk_reward AS "NetRiskReward",
                                         idea_status AS "IdeaStatus", idea_status_at AS "IdeaStatusAt", idea_result AS "IdeaResult", idea_exit_price AS "IdeaExitPrice",
-                                        opened_at AS "OpenedAt", auto_id AS "AutoId", day_drop AS "DayDrop", btc_drop AS "BtcDrop", high_funding AS "HighFunding", burst AS "Burst"
+                                        opened_at AS "OpenedAt", auto_id AS "AutoId", day_drop AS "DayDrop", btc_drop AS "BtcDrop", high_funding AS "HighFunding", burst AS "Burst",
+                                        leverage
                                         """;
 
     private const string OrderColumns = """
@@ -127,13 +128,13 @@ internal static class IdeaTradeRepositoryQueries
                 status, status_at, reason, cancel_requested, close_requested, entry_quantity, entry_value, entry_fee,
                 take_profit_quantity, take_profit_value, take_profit_fee, stop_loss_quantity, stop_loss_value, stop_loss_fee,
                 manual_quantity, manual_value, manual_fee, last_order_number, created_at, lease_epoch, updated_at,
-                promised_badge, promised_probability, promised_expectancy, promised_cases, break_even, net_risk_reward, auto_id, day_drop, btc_drop, high_funding, burst)
+                promised_badge, promised_probability, promised_expectancy, promised_cases, break_even, net_risk_reward, auto_id, day_drop, btc_drop, high_funding, burst, leverage)
             VALUES (
                 @Id, @IdeaId, @AccountId, @Category, @Symbol, @Setup, @Interval, @Type, @Side, @EntryPrice, @Stop, @Target, @Quantity, @Amount, @Risk, @EntryDeadline,
                 @Status, @StatusAt, @Reason, @CancelRequested, @CloseRequested, @EntryQuantity, @EntryValue, @EntryFee,
                 @TakeProfitQuantity, @TakeProfitValue, @TakeProfitFee, @StopLossQuantity, @StopLossValue, @StopLossFee,
                 @ManualQuantity, @ManualValue, @ManualFee, @LastOrderNumber, @CreatedAt, 0, @Now,
-                @PromisedBadge, @PromisedProbability, @PromisedExpectancy, @PromisedCases, @BreakEven, @NetRiskReward, @AutoId, @DayDrop, @BtcDrop, @HighFunding, @Burst)
+                @PromisedBadge, @PromisedProbability, @PromisedExpectancy, @PromisedCases, @BreakEven, @NetRiskReward, @AutoId, @DayDrop, @BtcDrop, @HighFunding, @Burst, @Leverage)
             """,
             new
             {
@@ -183,6 +184,7 @@ internal static class IdeaTradeRepositoryQueries
                 trade.BtcDrop,
                 trade.HighFunding,
                 trade.Burst,
+                trade.Leverage,
                 Now = now
             },
             transaction,

@@ -7,7 +7,13 @@ import { Button } from '@/shared/ui/Button';
 import { Dialog } from '@/shared/ui/Dialog';
 
 import { useCancelTrade, useCloseTrade } from '../api';
-import { durationText, promiseHint, promiseText } from '../model/journal';
+import {
+  durationText,
+  ideaLeftText,
+  leverageText,
+  promiseHint,
+  promiseText,
+} from '../model/journal';
 import { resultText } from '../model/result';
 import { canCancel, canClose } from '../model/status';
 import {
@@ -81,7 +87,7 @@ function Confirm({ asked, onDone }: { asked: Asked; onDone: () => void }) {
   );
 }
 
-/** The moment now in milliseconds, taken again every half a minute so the time in a trade runs on while the data stands. */
+/** The moment now in milliseconds, taken again every half a minute so the time in a trade and the time left of its idea run on while the data stands. */
 function useNow(): number {
   const [now, setNow] = useState(() => Date.now());
 
@@ -120,8 +126,10 @@ export function OpenTradesTable({ trades }: { trades: readonly IdeaTrade[] }) {
                   'Цель',
                   'Объём',
                   'Риск',
+                  'Плечо',
                   'Статус',
                   'В сделке',
+                  'До конца идеи',
                   'Сейчас',
                   'Обещание',
                   '',
@@ -139,12 +147,14 @@ export function OpenTradesTable({ trades }: { trades: readonly IdeaTrade[] }) {
                 <OriginCell trade={trade} />
                 <InstrumentCells trade={trade} />
                 <LevelCells trade={trade} risk />
+                <td className={`${cell} font-mono whitespace-nowrap`}>{leverageText(trade)}</td>
                 <StatusCell trade={trade} />
                 <td className={`${cell} whitespace-nowrap`}>
                   {trade.openedAt === null
                     ? '—'
                     : durationText((now - Date.parse(trade.openedAt)) / 1000)}
                 </td>
+                <td className={`${cell} whitespace-nowrap`}>{ideaLeftText(trade, now)}</td>
                 <td className={`${cell} font-mono`}>
                   {byParts(resultText(trade.currentResult, trade.currentResultR))}
                 </td>

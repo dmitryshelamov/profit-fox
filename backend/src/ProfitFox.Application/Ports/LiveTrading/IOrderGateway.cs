@@ -2,7 +2,7 @@ using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Application.Ports.LiveTrading;
 
-/// <summary>Sends orders and cancels of an account to the exchange; a refusal is an outcome, never an exception.</summary>
+/// <summary>Sends orders and cancels of an account to the exchange, and sets the leverage of a symbol; a refusal is an outcome, never an exception.</summary>
 public interface IOrderGateway
 {
     Task<OrderOutcome> PlaceAsync(ExchangeKey key, Instrument instrument, OrderRequest order, CancellationToken cancellationToken);
@@ -11,4 +11,7 @@ public interface IOrderGateway
 
     /// <summary>Cancels an order by the exchange's id of it: the stop and the target of an entry have no client id.</summary>
     Task<OrderOutcome> CancelByExchangeIdAsync(ExchangeKey key, Instrument instrument, string exchangeOrderId, CancellationToken cancellationToken);
+
+    /// <summary>Sets the leverage of the symbol of <c>linear</c> on the account, one for the buy and the sell; a symbol that has it already is accepted.</summary>
+    Task<OrderOutcome> SetLeverageAsync(ExchangeKey key, Instrument instrument, int leverage, CancellationToken cancellationToken);
 }

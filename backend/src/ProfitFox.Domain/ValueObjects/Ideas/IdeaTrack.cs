@@ -21,6 +21,9 @@ public sealed record IdeaTrack(
     decimal? ExitPrice = null,
     decimal? Tick = null)
 {
+    /// <summary>The moment the lifetime of an entered idea ends: <see cref="LifeCandles" /> of its interval from its entry; none before it enters.</summary>
+    public DateTimeOffset? LifeEndsAt => EnteredAt?.AddMinutes(LifeCandles * CandleMinutes);
+
     public static IdeaTrack Fired(IdeaPlan plan, DateTimeOffset firedAt, int candleMinutes, IdeaExitRule rule, decimal? tick = null)
     {
         return new IdeaTrack(plan, firedAt, candleMinutes, rule.LifeCandles, rule.TargetR, rule.EntryCandles, IdeaStatus.AwaitingEntry, firedAt, Tick: tick);

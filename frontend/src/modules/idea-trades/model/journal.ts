@@ -6,6 +6,7 @@ import { roundDecimal, showDecimal } from '@/shared/format/format';
 type Promise = Schemas['IdeaPromiseResponse'];
 type Outcome = Schemas['IdeaOutcomeResponse'];
 type Totals = Schemas['IdeaJournalTotalsResponse'];
+type Trade = Schemas['IdeaTradeResponse'];
 
 const dash = '—';
 
@@ -34,6 +35,29 @@ export function durationText(seconds: number | string | null): string {
   }
 
   return `${rest} мин`;
+}
+
+/** The time left of the idea of a trade in work: «закрыта» once it has its outcome, the time to its end while it is active, a dash otherwise. */
+export function ideaLeftText(
+  trade: Pick<Trade, 'ideaEndsAt' | 'ideaOutcome'>,
+  now: number,
+): string {
+  if (trade.ideaOutcome !== null) {
+    return 'закрыта';
+  }
+
+  return trade.ideaEndsAt === null
+    ? dash
+    : durationText((Date.parse(trade.ideaEndsAt) - now) / 1000);
+}
+
+/** The leverage of a trade on linear and its margin in USDT: «5× · 15.83 USDT»; a dash off linear and for a trade made before the leverage, whose leverage is unknown. */
+export function leverageText(trade: Pick<Trade, 'category' | 'leverage' | 'margin'>): string {
+  if (trade.category !== 'linear' || trade.leverage === null || trade.margin === null) {
+    return dash;
+  }
+
+  return `${trade.leverage}× · ${showDecimal(trade.margin, 2)} USDT`;
 }
 
 const rText = (value: string) => `${showDecimal(value, 2, true)} R`;

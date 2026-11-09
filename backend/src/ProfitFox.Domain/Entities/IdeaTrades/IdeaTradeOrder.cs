@@ -115,10 +115,15 @@ public sealed record IdeaTradeOrder(
         return this with { Status = LiveOrderStatus.CancelSent };
     }
 
-    /// <summary>A send the exchange did not take is tried again ever more slowly, at most a minute later.</summary>
-    public IdeaTradeOrder Deferred(DateTimeOffset now)
+    /// <summary>
+    ///     A send the exchange did not take is tried again ever more slowly, at most a minute later, and never before
+    ///     <paramref name="notBefore" /> from now when the exchange named such a pause.
+    /// </summary>
+    public IdeaTradeOrder Deferred(DateTimeOffset now, TimeSpan? notBefore = null)
     {
-        return this with { Attempts = Attempts + 1, NextAttemptAt = now + TimeSpan.FromSeconds(Math.Min(Math.Pow(2, Attempts), 60)) };
+        var growing = TimeSpan.FromSeconds(Math.Min(Math.Pow(2, Attempts), 60));
+
+        return this with { Attempts = Attempts + 1, NextAttemptAt = now + (notBefore > growing ? notBefore.Value : growing) };
     }
 
     public IdeaTradeOrder Completed()

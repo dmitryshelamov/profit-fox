@@ -252,11 +252,11 @@ public sealed class LiveTradingScenario : IAsyncDisposable
     ///     A trade by an idea saved as the API saves it: waiting for its entry, with the entry order saved to be sent. The idea is a market
     ///     <c>TwoR</c> long on BTCUSDT on the linear market of 15 minutes that fired a few minutes ago: entry 105, stop 100, target 115.
     /// </summary>
-    public async Task<IdeaTrade> CreateTradeAsync(IdeaType type = IdeaType.TwoR, IdeaSide side = IdeaSide.Long, decimal quantity = 0.47m, Instrument? instrument = null, decimal risk = 2m, Guid? autoId = null)
+    public async Task<IdeaTrade> CreateTradeAsync(IdeaType type = IdeaType.TwoR, IdeaSide side = IdeaSide.Long, decimal quantity = 0.47m, Instrument? instrument = null, decimal risk = 2m, Guid? autoId = null, int leverage = 1)
     {
         DateTimeOffset now = Factory.Time.GetUtcNow();
         Idea idea = IdeaGenerator.Generate(now.AddMinutes(-5), instrument: instrument ?? Linear, type: type, side: side);
-        var trade = IdeaTrade.Create(Guid.NewGuid(), idea, Account, 105m, new IdeaTradeSize(quantity, quantity * 105m, risk, risk * 2m, 2m), now, autoId: autoId);
+        var trade = IdeaTrade.Create(Guid.NewGuid(), idea, Account, 105m, new IdeaTradeSize(quantity, quantity * 105m, risk, risk * 2m, 2m), now, autoId: autoId, leverage: leverage);
         bool pullback = type == IdeaType.Pullback;
         var entry = IdeaTradeOrder.NewEntry(
             trade.Id,

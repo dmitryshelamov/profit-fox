@@ -145,6 +145,24 @@ public class IdeaRepositoryTests
         (await _store.GetAsync(idea.Id, CancellationToken.None)).ShouldBe(active);
     }
 
+    // Task 2.1 of add-idea-time-left: the journal reads the ideas of its open trades by id; one that is no longer stored is left out.
+    [Test]
+    public async Task Ideas_are_read_by_their_ids_without_the_ones_no_longer_stored()
+    {
+        Idea active = IdeaGenerator.Generate(Now, IdeaStatus.Active);
+        Idea expired = IdeaGenerator.Generate(Now.AddHours(-30), IdeaStatus.Expired, setup: IdeaSetup.Drop, statusAt: Now.AddHours(-2));
+        Idea deleted = IdeaGenerator.Generate(Now, setup: IdeaSetup.EarlyDrop);
+        Idea notAsked = IdeaGenerator.Generate(Now, side: IdeaSide.Short);
+        await _store.SaveAsync([active, expired, deleted, notAsked], [], CancellationToken.None);
+
+        await using (NpgsqlConnection connection = await _dataSource.OpenConnectionAsync())
+        {
+            await connection.ExecuteAsync("DELETE FROM ideas WHERE id = @Id", new { deleted.Id });
+        }
+
+        (await _store.GetManyAsync([active.Id, expired.Id, deleted.Id], CancellationToken.None)).ShouldBe([active, expired], ignoreOrder: true);
+    }
+
     // The ideas of the API: the open ones and the ones closed in the last day, of one pair or of all.
     [Test]
     public async Task Recent_ideas_are_the_open_ones_and_the_ones_closed_since()

@@ -78,9 +78,9 @@ enforces a rule, the check is the source of truth.
   the market close of the owner, saved before it goes to the exchange, like `LiveOrder`), `IdeaTradeChild` (the stop or the target the exchange made, by
   its exchange id), `IdeaTradeFill` and `IdeaTradingSettings`, and the enums `IdeaTradeStatus`, `IdeaTradeLeg`, `IdeaTradeOrderRole`, `IdeaTradeRefusal`,
   `AccountAccess`; `ValueObjects/IdeaTrades` holds `IdeaTradeOrderId` (the id of an order of a trade, `i` + 25 base-36 digits + `-` + number, which never
-  reads as a `ClientOrderId`), `IdeaTradeSize`, `IdeaTradingLimits`, `IdeaTradeEntry`, `IdeaTradeAccount`, `OpenIdeaTrades`, `TradeHolding`, `LegTotals`,
+  reads as a `ClientOrderId`), `IdeaTradeSize`, `IdeaTradingLimits`, `IdeaTradeEntry`, `IdeaTradeAccount` (with `LinearSymbol`, the leverage of the symbol of `linear` on the account, its position and its open orders), `OpenIdeaTrades`, `TradeHolding`, `LegTotals`,
   `Protection`, `LeasedIdeaTrade`, `ChangedIdeaTrade`, `IdeaPromise` (the badge, probability, expectancy and cases of the bucket of the idea over 90 days, and the break-even and the reward to risk after the fees from the entry price, kept as they were when the trade was entered), `TradedIdeaOutcome` (the status, time, result in R and exit price an idea closed with, kept on the trade so the clean-up of closed ideas does not take it; named apart from `ValueObjects/Ideas/IdeaOutcome`, which is a case of the calibration), `ClosedIdea` (an idea that closed and its outcome, to be written on its trades), `IdeaJournalTotals` (the pure totals of the closed trades of a journal: the counts by outcome (at the target, at the stop, manually, at expiry, cancelled, failed), the money, the fees, the mean result in R with its 95 % interval, the mean time to the outcome, `PromiseComparison` and `IdeaComparison`); `Services/IdeaTrades` holds the pure `IdeaTradeSizing` (the volume the amount buys, rounded down to the step,
-  with the loss at the stop and the profit at the target) and `IdeaTradeRefusals` (every reason an entry is refused). `Reconciliation.Check` and `StartFunds.Enough` take the
+  with the loss at the stop and the profit at the target) and `IdeaTradeRefusals` (every reason an entry is refused, with `StopTooFar`, the stop at half the way to the liquidation at a leverage, which `PaperEntry` checks too). `Reconciliation.Check` and `StartFunds.Enough` take the
   trades next to the bots.
 - `IdeaAutos` is the area of the autos that take ideas by themselves: `Entities/IdeaAutos` holds `IdeaAuto` (a named auto with its account, amount, mode, conditions, place in the list and `Budget`, the cap of the sum of the amounts of its open trades, none for no budget; soft-deleted with `DeletedAt`; `MaxPerMinutePerSide` and `MaxOpenPerSide`, the most new trades of a side it takes in a minute and the most open trades of a side, real and paper, none for no limit), `PaperIdeaTrade` (an `IdeaTrade` of an auto on paper with the auto and `SteppedUntil`, the open time of the next minute to step it by), `IdeaAutoEntry` (the request of an auto with money to enter by an idea, with the account, amount and lowest reward to risk of the minute of the idea, the place of the auto and the order of the idea) and `IdeaAutoRefusal` (an idea that fit an auto and was not taken, with the copy of the idea, every reason and the detail of the first); `Entities/IdeaAutos/Enums` holds `IdeaAutoMode` (`Off`, `Paper`, `Live`) and `FeatureCondition` (`Any`, `With`, `Without`: what an auto asks of a feature of the market of an idea); `ValueObjects/IdeaAutos` holds `IdeaAutoConditions`, `AutoRefusal`, `RefusalDetail`, `PairHolder`, `AutoBooks` (the trades an auto is checked against), `PaperEntryCheck`, `DailyLossState`, `LimitSkip` (the ideas of a side a limit of an auto skipped in a minute: the first, the limit, how many) and `AutoMinute` (what the autos did in a minute, written with the ideas of the minute); `Services/IdeaAutos` holds the pure functions: `AutoConditions` (whether an idea fits the conditions, the features of the market among them), `AutoMinutePlan` (the order an auto takes the ideas of a minute in, by the promised expectancy of the bucket then the net reward to risk, ideas without a bucket last, and its two limits over one minute: an idea over a limit is skipped and counted, one `LimitSkip` a side), `PaperEntry` (the checks of a paper entry), `PaperFill` (the fill of a paper trade by the closed minutes, and its close at the exit price of its idea when the idea expires), `AutoRefusals` (the pair held, the budget of the auto and of all the autos, the open trades of a side, the daily stop), `AutoBudget` (what the open trades take of the budget of an auto, its real trades on any account and its paper ones, and of the budget of all the autos, the real trades of every auto; a trade takes its `Amount`, the amount after the volume was rounded, and a new entry is checked with the amount it asks for) and `DailyLossStop`. `IdeaTrade.AutoId` is the auto that took a trade (none for a manual one); `IdeaTradingSettings` also holds the three guards of the autos with money, `DailyLossLimit`, `MaxSameDirection` and `AutosBudget`, none while off; `IdeaTradeRefusal` also has the reasons only an auto is given (`DailyStop`, `TooManySameDirection`, `PairTaken`, `Late`, `AutoOff`, `RulesUnknown`, `EntryError`, `BudgetTaken`, `AutosBudgetTaken`, `MinuteLimit`, `SideLimit`); `IdeaTradeRefusals.DetailOf` tells the numbers of a reason. `Market` pairs (`ScannerPair`) and `ListedInstrument` also carry the step of the volume and the minimums of the volume and amount of an order (`QuantityStep`, `MinQuantity`, `MinAmount`).
 - `SavedFilters` is the area of saved filters: `Entities/SavedFilters` holds `SavedFilter` and the enums `SavedFilterPlace`, `FilterField`,
@@ -128,8 +128,9 @@ enforces a rule, the check is the source of truth.
   singleton) keeps one feed per series (`FormingSeries`, instrument and interval) however many connections watch it,
   subscribes `Ports/MarketData/IFormingCandleStreams` for the first viewer and takes it off after the last, and tells the
   viewers through `Ports/MarketData/IFormingCandleBroadcast`; its state is `Connecting`, `Live` or `NoData` (a lost
-  connection, a refused or closed subscription, or 90 s of silence). A series of an instrument of T-Invest (`Category.Exchange()`) is
-  `NoData` at once and subscribes nothing, until the live bots of MOEX bring the streams of T-Invest. `FormingCandleThrottle` lets one update a second through. A
+  connection, a refused or closed subscription, or 90 s of silence). The port is `RoutedFormingCandleStreams`, so a series of `moex` comes
+  from the stream of the forming candles of T-Invest like a series of Bybit from Bybit, and a closed market is `NoData` by the silence.
+  `FormingCandleThrottle` lets one update a second through. A
   `FormingCandle` is only for showing: it is never stored and never reaches a strategy, so the Worker's code path takes
   closed candles from `IExchangeStreams` alone.
 - `Exceptions` holds `BaseApplicationException` and its subclasses, also vendor-neutral (`ExchangeException`,
@@ -148,18 +149,22 @@ enforces a rule, the check is the source of truth.
   a unit inside a unit is refused, and `EnsureNoTransaction` guards a call that must not hold a transaction open (the
   exchange).
 - `LiveTrading` holds the commands of live trading (start, pause, resume, stop, close the position, claim and run a bot; the start of a
-  bot on `moex` is a conflict «Trading on MOEX is not supported yet» before any call to an exchange, until the live bots of MOEX come),
+  bot on `moex` is a conflict «Trading on MOEX is disabled» before any call to an exchange while `MoexTradingSettings.Enabled` (the
+  `TInvest:Trading` setting of the API) is off, and otherwise checks the account of T-Invest at the broker through `IBrokerAccountReader`:
+  the token still opens it, open and with full access, instead of the key and the hedge mode of Bybit; `LiveRequests.KeyAsync` builds the
+  `ExchangeKey` by the exchange of the account, on T-Invest the number of the brokerage account with the token),
   `LiveTradingCodes`, and `Runtime/LiveBotSession`: one session keeps one bot for the take of its lease, takes its inputs
   one at a time from a queue, writes every change in one unit of work after checking the lease, and sends orders only
   once they are written; `Runtime/LiveBotReconciler` compares the books of a bot and of the bots that share its
-  holding with the exchange and stops them all on a difference; `Runtime/LiveRunMapping` maps the stored position and
+  holding (on the spot the bots of its coin, on `linear` and `moex` those of its instrument) with the exchange and stops them all on a
+  difference; `Runtime/LiveRunMapping` maps the stored position and
   orders of a bot to the snapshot of its run and back; `Runtime/LiveWarmUpHistory` reads the last closed candles a bot
-  warms up its indicators with. `Ports/LiveTrading` holds `IExchangeLedger` (REST reads of an account), `IOrderGateway` (orders
-  and cancels, a refusal is an outcome) and `IExchangeStreams` (closed candles, order updates and fills, and a signal
+  warms up its indicators with. `Ports/LiveTrading` holds `IExchangeLedger` (REST reads of an account, the leverage and the position of a symbol of `linear` in one read too, `LinearPosition`), `IOrderGateway` (orders
+  and cancels and the leverage of a symbol, a refusal is an outcome) and `IExchangeStreams` (closed candles, order updates and fills, and a signal
   when a stream is back after a gap).
 - `IdeaTrades` holds the trades by ideas: `IdeaTradeAccounts` (the accounts the trades can go through: those of Bybit, until the ideas of MOEX come;
   the settings of trading by ideas and an auto refuse any other on the save, and the entry gives it no key and asks Bybit nothing), `IdeaTradeEntryCalculator` (`PrepareAsync` asks the exchange and reads the settings and the buckets, `EvaluateAsync` sizes the
-  trade, names the reasons by the books of the account and builds the promise of the idea with `IdeaView.Of`, so the entry can be made again under the lock of the account), `IdeaTradeCodes` (statuses, roles,
+  trade, names the reasons by the books of the account and builds the promise of the idea with `IdeaView.Of`, so the entry can be made again under the lock of the account), `EntryLeverage` (sets the leverage of the settings on the symbol of `linear` under the lock of the account, after the checks, for a manual entry and the entry of an auto), `IdeaTradeCodes` (statuses, roles,
   legs, times in force and the reason codes), the commands `CreateIdeaTrade`, `CancelIdeaTrade`, `CloseIdeaTrade` and `SaveIdeaTradingSettings`, the queries
   `GetIdeaEntry`, `GetIdeaJournal` (the open trades with the last price of their symbols from `IMarketHistoryClient`, one request a symbol and none on an error; a page of the closed ones by the time they closed; the totals of all the closed ones of the filter; filters, paging and field errors like `GetIdeas`, filtered and cut in memory) and `GetIdeaTradingSettings`, `IdeaJournalTrade` (a trade with its account name and, when open, its worth at the last price), and `Runtime/IdeaTradeSession`: one session keeps one trade for the take of its lease as a bot's
   session does (one queue of inputs, one unit of work per change after the lease check, orders sent once written), sends its entry, follows the entry and the
@@ -264,13 +269,49 @@ enforces a rule, the check is the source of truth.
   the period with the source `Exchange` and no limit, complete ones only, the volume lots × lot and the turnover volume × (high + low + close) / 3)
   and `TInvestAccountClient` (`IBrokerAccountReader`: `GetAccounts`, `GetPortfolio` in roubles: every position with a quantity as a row, a currency by its ISO code (the first three letters of its
   ticker) worth its quantity at the current price in roubles, the roubles always a row, the total from `total_amount_portfolio`).
-  The metrics live on the meter `ProfitFox.TInvest`: the counter `profitfox.tinvest.requests` {`group`, `method`, `outcome`} and the gauges
+  The ports of trading on T-Invest: `TInvestOrderIds` (`ITInvestOrderIds`, the table `moex_orders` on a connection of its own for every
+  call, outside any unit of work: a random request id written under the client id of an order before its first send, every send of the
+  order with it, the exchange id added after; an order whose request id has no row is of nobody), `TInvestOrderStates` (an `ExchangeOrder`
+  of an `OrderState`: the volume lots × lot, the value the sum of the stages, the fee `executed_commission` in roubles; the stages as fills
+  without a fee; `Complete` whether the stages add up to the lots executed), `TInvestOrderReads` (the state by request or exchange id,
+  `null` on `NOT_FOUND`), `TInvestTradingStatuses` (`MayPlaceAsync`: the trading status and the corridor of the order book of a share,
+  kept 5 s, `TInvestPlacement`; `NextSessionStartAsync` and `TradingDayEndAsync` by `TradingSchedules` of the exchange of the share
+  (`TInvestShare.Exchange`), kept to the end of the UTC day: the intervals of the exchange count, those of the dealer do not, a day with
+  another type tells none; a session that started within the last minute is the one opening now), `TInvestOrderGateway`
+  (`IOrderGateway`: an order in lots, a limit one `DAY` and a market one without a price, sent only while `MayPlaceAsync` takes it; a
+  closed session is `Transient` with `RetryAfter` until the next session, or a minute without a schedule or in the first minute of a
+  session, the corridor a minute; the refusals by the code of `TInvestRefusedException` (`30057` an order taken, read by its request id); a cancel by
+  the request id, `AlreadyDone` for an order without one, one T-Invest does not know or one that ended), `TInvestLedger`
+  (`IExchangeLedger`: the free roubles less those blocked from `GetPositions`, the shares with those blocked, the active orders by
+  `GetOrders` told by their request ids, an order and its stages by `GetOrderState`, the fee rate `deal_commission / initial_order_amount`
+  of `GetOrderPrice` for a limit buy of at least 100 000 ₽, `ExchangeUnavailableException` without a last price of the share or an amount
+  of the trial order, no hedge, no orders of a parent) and `TInvestStreams` (`IExchangeStreams` and
+  `IFormingCandleStreams`: one `OrderStateStream` an account with pings, opened again at once with the token of a listener whose token
+  of the account differs (the owner changed it), whose message is a signal: the state of an order of a bot is read
+  by its request id up to 5 times a second apart while T-Invest does not know it or its stages disagree, a filled one without its
+  commission again at 5, 15, 30 and 60 s, and an order of nobody that traded is a fill of nobody on its share; a message whose order does
+  not read (T-Invest, the table of the ids or the share) counts as `error` of the stream and tells every listener of the account
+  `restored`, so the sessions read their orders themselves; two `MarketDataStream`s of
+  the process with the token of `TInvestTokenSource`, of the closed candles (`waiting_close`) and of the forming ones, a series subscribed
+  once for all its listeners and taken off by the last; a stream that ends, breaks, is silent for 90 s or fails on a message (a candle it
+  cannot tell, a listener that threw) opens again after 1, 2, 5, 10, then 30 s, subscribes its series again and tells every listener
+  `restored` (the forming ones `lost` first); a minute after the end of the
+  trading day of a share its listeners of closed candles are told `restored`). `TInvestCall` throws `TInvestRefusedException` with the
+  code of the detail for a refusal (`TInvestNotFoundException` for `NOT_FOUND`).
+  The metrics live on the meter `ProfitFox.TInvest`: the counter `profitfox.tinvest.requests` {`group`, `method`, `outcome`} (a stream
+  counts its open as `ok` or `error`, its break as `lost`, and a message of orders that does not read as `error`) and the gauges
   `profitfox.tinvest.limit` and `profitfox.tinvest.limit_remaining` {`group`} from the headers `x-ratelimit-limit` and `x-ratelimit-remaining`;
   `MetricsRegistrar` lists the meter. No test and no local run calls the real T-Invest: the test hosts put `MockTInvestApi` behind
   `ITInvestCallInvokers`, and `appsettings.Testing.json` points the endpoint at `tinvest.invalid`.
 - `Exchanges/Routing` holds `RoutedMarketHistoryClient`, `RoutedInstrumentRulesProvider` and `RoutedInstrumentCatalog`: the registered
   read ports, each choosing Bybit or T-Invest by `Category.Exchange()`; the adapters of both exchanges are registered keyed by
-  `Exchange`, and `CachedInstrumentCatalog` stays over the routed catalog, caching the list of `moex` on the same terms.
+  `Exchange`, and `CachedInstrumentCatalog` stays over the routed catalog, caching the list of `moex` on the same terms. The ports of
+  trading are routed the same way and registered as the routers only: `RoutedOrderGateway` and `RoutedExchangeLedger` by
+  `ExchangeKey.Exchange`, `RoutedExchangeStreams` by the key for an account and by the category for the candles, and
+  `RoutedFormingCandleStreams` by the category; `BybitOrderGateway` and `BybitLedger` (typed clients of `IHttpClientFactory`),
+  `TInvestOrderGateway` and `TInvestLedger` are keyed by `Exchange`, and the singletons `BybitStreams` and `TInvestStreams` are keyed
+  for both interfaces of streams. A test that replaces a port whole with `FakeExchange` removes the router and its keyed
+  implementations together.
 - `Exchanges/<Vendor>` holds adapters over vendor SDKs, including the mapping of domain values to SDK types
   (`BybitCodes`). `Exchanges/Retry` holds Polly pipelines: `ExchangeResilienceExecutor` (the ladder of retries and the circuit breaker) is
   registered keyed by `Exchange`, one instance per exchange, so an exchange that does not answer never opens the circuit of the other; a
@@ -290,7 +331,7 @@ enforces a rule, the check is the source of truth.
 - `Exchanges/Bybit/BybitAccountClient` implements `IExchangeKeyInspector`: a typed `HttpClient` that builds a Bybit client
   with the key for one call and drops it, one attempt per call. `Security/AesGcmSecretProtector` encrypts secrets with the
   master key (AES-256-GCM, the account id as associated data).
-- `Exchanges/Bybit/BybitStreams` implements `IExchangeStreams` as one singleton for the process, so the connections to
+- `Exchanges/Bybit/BybitStreams` implements `IExchangeStreams` of Bybit as one singleton for the process, so the connections to
   Bybit follow the pairs and accounts, not the bots: one public socket client whose connections carry one kline topic
   per category, symbol and interval, and one private client per account key with the `order` and `execution` topics.
   The first subscriber of a topic subscribes it at Bybit, the others join; the last to leave takes it off. Every
@@ -576,7 +617,9 @@ enforces a rule, the check is the source of truth.
 - Ports are replaced with NSubstitute mocks. Hand-written stubs exist only for transport and the exchange: HTTP
   (`StubHttpHandler`, `FakeBybitHandler`), because NSubstitute cannot replace the protected `SendAsync`; the Bybit v5
   streams on a local port (`FakeBybitSocketServer`); the gRPC server of T-Invest in process (`Tests.Shared/TInvest/MockTInvestApi`, a
-  `CallInvoker` with handlers by method name that records every call with its metadata and fails a method with the status a test asks for);
+  `CallInvoker` with handlers by method name that records every call with its metadata and fails a method with the status a test asks for,
+  and answers the server and duplex streams from a `MockTInvestStream` script, `OnServerStream` and `OnDuplex`: each call opens a
+  `MockTInvestStreamCall` with what the client wrote on it, which the test sends answers to, completes or fails with a status);
   and `FakeExchange`, one exchange account in memory behind
   `IExchangeLedger`, `IOrderGateway` and `IExchangeStreams` for the live trading runtime, whose orders, fills and streams
   depend on each other as a mock cannot keep.

@@ -102,7 +102,7 @@ public class ScannerHostTests
         await AdvanceAsync(TimeSpan.FromMinutes(3));
 
         await WaitAsync(() => Task.FromResult(
-            Enumerable.Range(0, 3).All(minute => bybit.KlineRequests.ToList().Any(request => request.Start <= gap.AddMinutes(minute) && request.End >= gap.AddMinutes(minute)))));
+            Enumerable.Range(0, 3).All(minute => bybit.KlineRequests.Snapshot().Any(request => request.Start <= gap.AddMinutes(minute) && request.End >= gap.AddMinutes(minute)))));
         await WaitAsync(() => Task.FromResult(sockets.Subscribed("kline.1.SOLUSDT")));
     }
 

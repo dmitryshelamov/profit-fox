@@ -144,6 +144,8 @@ export interface SettingsInput {
   readonly maxSameDirection: string;
   /** The most the open real trades of all the autos may hold; an empty text switches the guard off. */
   readonly autosBudget: string;
+  /** The leverage a trade on linear enters at. */
+  readonly leverage: string;
 }
 
 /** A number the form holds as text; text that is no number goes out as it is, so the API names the field. */
@@ -162,6 +164,7 @@ export async function saveSettings(input: SettingsInput): Promise<void> {
         dailyLossLimit: input.dailyLossLimit === '' ? null : field(input.dailyLossLimit),
         maxSameDirection: input.maxSameDirection === '' ? null : field(input.maxSameDirection),
         autosBudget: input.autosBudget === '' ? null : field(input.autosBudget),
+        leverage: field(input.leverage),
       },
     }),
   );

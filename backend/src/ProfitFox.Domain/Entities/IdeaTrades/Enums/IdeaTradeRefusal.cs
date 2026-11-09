@@ -19,6 +19,15 @@ public enum IdeaTradeRefusal
     HedgeMode,
     StopEntryNotSupported,
 
+    /// <summary>On <c>linear</c> the stop is at least half the way to the liquidation at the leverage of the entry.</summary>
+    StopTooFarForLeverage,
+
+    /// <summary>On <c>linear</c> the account has a position or open orders on the symbol, and the leverage of the symbol is not the one of the entry.</summary>
+    LeverageDiffers,
+
+    /// <summary>The exchange did not set the leverage on the symbol before the entry.</summary>
+    LeverageNotSet,
+
     DailyStop,
     TooManySameDirection,
     PairTaken,

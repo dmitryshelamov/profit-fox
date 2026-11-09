@@ -26,6 +26,9 @@ internal sealed class BybitOrderGateway(HttpClient http, ILoggerFactory loggers,
     // An order link id Bybit has taken already, in linear and on the spot: the order is there.
     private static readonly HashSet<string> RepeatedClientIdCodes = ["110072", "170141"];
 
+    // A leverage the symbol has already: «leverage not modified».
+    private static readonly HashSet<string> LeverageNotModifiedCodes = ["110043"];
+
     // Bybit's own failures: an internal error, a timeout of its server, the rate limit.
     private static readonly HashSet<string> TransientCodes = ["10000", "10006", "10016"];
 
@@ -84,10 +87,18 @@ internal sealed class BybitOrderGateway(HttpClient http, ILoggerFactory loggers,
         return result.Success ? new OrderOutcome(OrderOutcomeKind.Accepted, result.Data.OrderId) : Refusal(result, FinishedOrderCodes, OrderOutcomeKind.AlreadyDone);
     }
 
+    public async Task<OrderOutcome> SetLeverageAsync(ExchangeKey key, Instrument instrument, int leverage, CancellationToken cancellationToken)
+    {
+        using BybitRestClient client = BybitKeyClients.Create(http, loggers, settings, key.ApiKey, key.Secret);
+        HttpResult result = await client.V5Api.Account.SetLeverageAsync(instrument.Category.ToBybit(), instrument.Symbol, leverage, leverage, cancellationToken);
+
+        return result.Success ? new OrderOutcome(OrderOutcomeKind.Accepted) : Refusal(result, LeverageNotModifiedCodes, OrderOutcomeKind.Accepted);
+    }
+
     /// <param name="result"></param>
     /// <param name="known">Codes that are no refusal for this call.</param>
     /// <param name="knownKind">What they mean.</param>
-    private static OrderOutcome Refusal<T>(HttpResult<T> result, HashSet<string> known, OrderOutcomeKind knownKind)
+    private static OrderOutcome Refusal(IHttpResult result, HashSet<string> known, OrderOutcomeKind knownKind)
     {
         string? code = result.Error!.ErrorCode;
 

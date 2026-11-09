@@ -33,6 +33,12 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
     /// <summary>The coin on the account, or the position of the symbol in <c>linear</c>.</summary>
     public decimal Holding { get; set; }
 
+    /// <summary>The leverage of the symbol in <c>linear</c>: 10 until it is set, as on Bybit.</summary>
+    public decimal Leverage { get; set; } = 10m;
+
+    /// <summary>Every leverage set on a symbol, in order.</summary>
+    public List<(Instrument Instrument, int Leverage)> LeverageSets { get; } = [];
+
     /// <summary>Every order sent, a repeated one too.</summary>
     public List<OrderRequest> Sent { get; } = [];
 
@@ -455,6 +461,22 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
     public Task<bool> IsHedgeModeAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
     {
         return Task.FromResult(false);
+    }
+
+    public Task<LinearPosition> GetLinearPositionAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(new LinearPosition(Leverage, Holding));
+    }
+
+    public Task<OrderOutcome> SetLeverageAsync(ExchangeKey key, Instrument instrument, int leverage, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            LeverageSets.Add((instrument, leverage));
+            Leverage = leverage;
+        }
+
+        return Task.FromResult(new OrderOutcome(OrderOutcomeKind.Accepted));
     }
 
     /// <summary>How many times the holding of the account was read: once per comparison of a reconciliation.</summary>

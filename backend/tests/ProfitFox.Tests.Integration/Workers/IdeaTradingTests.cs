@@ -1,3 +1,7 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+
 using NSubstitute;
 
 using ProfitFox.Application.Ports.LiveTrading;
@@ -55,6 +59,25 @@ public class IdeaTradingTests
         (await _scenario.TradeOrdersAsync(trade.Id)).Single().Status.ShouldBe(LiveOrderStatus.Filled);
         await _scenario.WaitAsync(async () => (await _scenario.TradeFillsAsync(trade.Id)).Count == 2, "the fills of the entry and the target");
         (await _scenario.TradeFillsAsync(trade.Id)).Select(fill => (fill.Quantity, fill.FeeAsset)).ShouldBe([(0.47m, FeeAsset.Quote), (0.47m, FeeAsset.Quote)]);
+    }
+
+    // Scenario "Символ с плечом 10×": the entry made through the API after it set the leverage goes to the exchange as before.
+    [Test]
+    public async Task Entry_on_linear_after_the_leverage_is_set_is_sent_as_before()
+    {
+        _scenario.Factory.Ledger.GetLinearPositionAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, Arg.Any<CancellationToken>()).Returns(new LinearPosition(10m, 0m));
+        Guid idea = await _scenario.SaveIdeaAsync(100m, 98m, 104m);
+        _scenario.SetPrice("100");
+        HttpResponseMessage created = await _scenario.Client.PostAsJsonAsync("/api/idea-trades", new { ideaId = idea, accountId = _scenario.Account, amount = 47.3m });
+        created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+        IdeaTrade trade = await _scenario.TradeAsync((await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid());
+        await _scenario.Factory.Orders.Received(1).SetLeverageAsync(Arg.Any<ExchangeKey>(), LiveTradingScenario.Linear, 1, Arg.Any<CancellationToken>());
+
+        _scenario.StartWorker();
+
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the entry");
+        _scenario.Exchange.Orders.Single().ShouldBe(new OrderRequest(new IdeaTradeOrderId(trade.Id, 1).Code, OrderSide.Buy, OrderType.Market, null, trade.Quantity, null, new Protection(104m, 98m)));
+        _scenario.Exchange.LeverageSets.ShouldBeEmpty();
     }
 
     // Scenario "Откат не дождался": the limit of the pullback is cancelled when the time of the entry of the idea is out.

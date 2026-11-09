@@ -118,6 +118,20 @@ public class PaperEntryTests
         Check(books: Books(real: [manual], paper: [other])).Refusals.ShouldBeEmpty();
     }
 
+    // Scenario "Учебный со стопом дальше ликвидации": 12 % at 5×, where less than 10 % is allowed.
+    [Test]
+    public void Stop_too_far_for_the_leverage_on_linear_is_named_with_the_share_and_the_limit()
+    {
+        Check(stop: 88m, target: 130m, leverage: 5).Refusals.ShouldBe([new AutoRefusal(IdeaTradeRefusal.StopTooFarForLeverage, RefusalDetail.Numbers(12m, 10m))]);
+    }
+
+    // Scenario "Учебный на споте при плече": the spot has no leverage.
+    [Test]
+    public void Stop_far_from_the_entry_does_not_matter_on_the_spot()
+    {
+        Check(category: MarketCategory.Spot, stop: 70m, target: 160m, leverage: 5).Refusals.ShouldBeEmpty();
+    }
+
     private static PaperEntryCheck Check(
         IdeaAuto? auto = null,
         IdeaType type = IdeaType.TwoR,
@@ -126,14 +140,17 @@ public class PaperEntryTests
         decimal? target = null,
         InstrumentRules? rules = null,
         bool unknownRules = false,
-        AutoBooks? books = null)
+        AutoBooks? books = null,
+        MarketCategory category = MarketCategory.Linear,
+        decimal? stop = null,
+        int leverage = 1)
     {
-        Idea generated = IdeaGenerator.Generate(Fired, type: type, side: side);
-        IdeaPlan plan = side == IdeaSide.Long ? new IdeaPlan(type, side, 100m, 98m, target ?? 104m) : new IdeaPlan(type, side, 100m, 102m, target ?? 96m);
+        Idea generated = IdeaGenerator.Generate(Fired, type: type, side: side, instrument: new Instrument(category, "WIFUSDT"));
+        IdeaPlan plan = side == IdeaSide.Long ? new IdeaPlan(type, side, 100m, stop ?? 98m, target ?? 104m) : new IdeaPlan(type, side, 100m, stop ?? 102m, target ?? 96m);
         Idea idea = generated with { Track = generated.Track with { Plan = plan } };
         var birth = new IdeaCandle(Fired, close, close, close, close, 1m);
 
-        return PaperEntry.Check(auto ?? Auto, idea, birth, unknownRules ? null : rules ?? Rules, Fees, 500m, books ?? Books());
+        return PaperEntry.Check(auto ?? Auto, idea, birth, unknownRules ? null : rules ?? Rules, Fees, 500m, leverage, books ?? Books());
     }
 
     private static AutoBooks Books(IReadOnlyCollection<IdeaTrade>? real = null, IReadOnlyCollection<PaperIdeaTrade>? paper = null)

@@ -19,7 +19,7 @@ internal sealed class IdeaTradingSettingsRepository(NpgsqlDataSource dataSource)
                 """
                 SELECT account_id AS "AccountId", amount, max_amount AS "MaxAmount", max_open_trades AS "MaxOpenTrades",
                     max_total_risk AS "MaxTotalRisk", min_risk_reward AS "MinRiskReward", daily_loss_limit AS "DailyLossLimit",
-                    max_same_direction AS "MaxSameDirection", autos_budget AS "AutosBudget"
+                    max_same_direction AS "MaxSameDirection", autos_budget AS "AutosBudget", leverage
                 FROM idea_trading_settings WHERE id = 1
                 """,
                 cancellationToken: cancellationToken));
@@ -33,11 +33,12 @@ internal sealed class IdeaTradingSettingsRepository(NpgsqlDataSource dataSource)
         await connection.ExecuteAsync(
             new CommandDefinition(
                 """
-                INSERT INTO idea_trading_settings (id, account_id, amount, max_amount, max_open_trades, max_total_risk, min_risk_reward, daily_loss_limit, max_same_direction, autos_budget)
-                VALUES (1, @AccountId, @Amount, @MaxAmount, @MaxOpenTrades, @MaxTotalRisk, @MinRiskReward, @DailyLossLimit, @MaxSameDirection, @AutosBudget)
+                INSERT INTO idea_trading_settings (id, account_id, amount, max_amount, max_open_trades, max_total_risk, min_risk_reward, daily_loss_limit, max_same_direction, autos_budget, leverage)
+                VALUES (1, @AccountId, @Amount, @MaxAmount, @MaxOpenTrades, @MaxTotalRisk, @MinRiskReward, @DailyLossLimit, @MaxSameDirection, @AutosBudget, @Leverage)
                 ON CONFLICT (id) DO UPDATE SET account_id = EXCLUDED.account_id, amount = EXCLUDED.amount, max_amount = EXCLUDED.max_amount,
                     max_open_trades = EXCLUDED.max_open_trades, max_total_risk = EXCLUDED.max_total_risk, min_risk_reward = EXCLUDED.min_risk_reward,
-                    daily_loss_limit = EXCLUDED.daily_loss_limit, max_same_direction = EXCLUDED.max_same_direction, autos_budget = EXCLUDED.autos_budget
+                    daily_loss_limit = EXCLUDED.daily_loss_limit, max_same_direction = EXCLUDED.max_same_direction, autos_budget = EXCLUDED.autos_budget,
+                    leverage = EXCLUDED.leverage
                 """,
                 settings,
                 cancellationToken: cancellationToken));

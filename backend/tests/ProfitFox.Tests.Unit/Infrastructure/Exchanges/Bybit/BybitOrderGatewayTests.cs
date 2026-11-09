@@ -17,6 +17,7 @@ public class BybitOrderGatewayTests
 {
     private static readonly ExchangeKey Key = new ExchangeKey("key", "secret-value-never-shown");
     private static readonly Instrument Spot = new Instrument(MarketCategory.Spot, "BTCUSDT");
+    private static readonly Instrument Linear = new Instrument(MarketCategory.Linear, "BTCUSDT");
     private static readonly OrderRequest Limit = new OrderRequest("c-1", OrderSide.Buy, OrderType.Limit, 99m, 1m, null);
 
     [Test]
@@ -231,6 +232,49 @@ public class BybitOrderGatewayTests
         using StubHttpHandler handler = new StubHttpHandler().RespondJson(Answer(code, "Order does not exist.", "{}"));
 
         (await Gateway(handler).CancelAsync(Key, Spot, "c-1", CancellationToken.None)).Kind.ShouldBe(OrderOutcomeKind.AlreadyDone);
+    }
+
+    // Decision 2: one leverage for the buy and the sell, as the one-way mode wants.
+    [Test]
+    public async Task Leverage_is_set_the_same_for_the_buy_and_the_sell()
+    {
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(Answer(0, "OK", "{}"));
+
+        (await Gateway(handler).SetLeverageAsync(Key, Linear, 5, CancellationToken.None)).ShouldBe(new OrderOutcome(OrderOutcomeKind.Accepted));
+
+        handler.Requests.Single().AbsolutePath.ShouldBe("/v5/position/set-leverage");
+        handler.Bodies.Single().ShouldContain("\"category\":\"linear\"");
+        handler.Bodies.Single().ShouldContain("\"symbol\":\"BTCUSDT\"");
+        handler.Bodies.Single().ShouldContain("\"buyLeverage\":\"5\"");
+        handler.Bodies.Single().ShouldContain("\"sellLeverage\":\"5\"");
+    }
+
+    // Bybit answers 110043 «leverage not modified» when the symbol has the leverage already.
+    [Test]
+    public async Task Leverage_the_symbol_has_already_is_accepted()
+    {
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(Answer(110043, "leverage not modified", "{}"));
+
+        (await Gateway(handler).SetLeverageAsync(Key, Linear, 1, CancellationToken.None)).Kind.ShouldBe(OrderOutcomeKind.Accepted);
+    }
+
+    // Scenario "Bybit отказал": above the largest leverage of the symbol.
+    [Test]
+    public async Task Leverage_bybit_refuses_is_permanent_with_the_message()
+    {
+        using StubHttpHandler handler = new StubHttpHandler().RespondJson(Answer(10001, "leverage invalid", "{}"));
+
+        (await Gateway(handler).SetLeverageAsync(Key, Linear, 50, CancellationToken.None)).ShouldBe(new OrderOutcome(OrderOutcomeKind.Permanent, Reason: "leverage invalid"));
+    }
+
+    [Test]
+    public async Task Leverage_without_an_answer_or_with_a_failure_of_bybit_is_transient()
+    {
+        using StubHttpHandler failure = new StubHttpHandler().RespondJson(Answer(10006, "Too many visits", "{}"));
+        using StubHttpHandler silence = new StubHttpHandler().Respond(HttpStatusCode.BadGateway);
+
+        (await Gateway(failure).SetLeverageAsync(Key, Linear, 5, CancellationToken.None)).Kind.ShouldBe(OrderOutcomeKind.Transient);
+        (await Gateway(silence).SetLeverageAsync(Key, Linear, 5, CancellationToken.None)).Kind.ShouldBe(OrderOutcomeKind.Transient);
     }
 
     private static BybitOrderGateway Gateway(StubHttpHandler handler)

@@ -4,6 +4,7 @@ using Bybit.Net.Objects.Models.V5;
 
 using Microsoft.Extensions.Logging;
 
+using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.ValueObjects.MarketData;
@@ -38,8 +39,20 @@ internal sealed class BybitLedger(HttpClient http, ILoggerFactory loggers, Bybit
             return (await CoinAsync(key, baseCoin, cancellationToken))?.WalletBalance ?? 0m;
         }
 
-        return (await PositionsAsync(key, instrument, cancellationToken))
-            .Sum(position => position.Side switch { PositionSide.Buy => position.Quantity, PositionSide.Sell => -position.Quantity, _ => 0m });
+        return Size(await PositionsAsync(key, instrument, cancellationToken));
+    }
+
+    public async Task<LinearPosition> GetLinearPositionAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<BybitPosition> positions = await PositionsAsync(key, instrument, cancellationToken);
+
+        // In the one-way mode Bybit lists one row of the symbol, with its leverage even when there is no position.
+        if (positions.FirstOrDefault()?.Leverage is not { } leverage)
+        {
+            throw new ExchangeException($"Bybit told no leverage of {instrument.Symbol}.");
+        }
+
+        return new LinearPosition(leverage, Size(positions));
     }
 
     public async Task<IReadOnlyList<ExchangeOrder>> GetOpenOrdersAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
@@ -151,6 +164,12 @@ internal sealed class BybitLedger(HttpClient http, ILoggerFactory loggers, Bybit
         using BybitRestClient client = Client(key);
 
         return [.. BybitKeyClients.Unwrap(await client.V5Api.Trading.GetPositionsAsync(instrument.Category.ToBybit(), instrument.Symbol, ct: cancellationToken)).List];
+    }
+
+    // The position of the symbol, a short below zero.
+    private static decimal Size(IEnumerable<BybitPosition> positions)
+    {
+        return positions.Sum(position => position.Side switch { PositionSide.Buy => position.Quantity, PositionSide.Sell => -position.Quantity, _ => 0m });
     }
 
     private BybitRestClient Client(ExchangeKey key)

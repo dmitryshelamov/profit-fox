@@ -27,6 +27,8 @@
     <ItemGroup>
         <InternalsVisibleTo Include="ProfitFox.Tests.Integration"/>
         <InternalsVisibleTo Include="ProfitFox.Tests.Unit"/>
+        <!-- NSubstitute makes its substitutes of internal ports of the adapters, such as ITInvestOrderIds, in this assembly. -->
+        <InternalsVisibleTo Include="DynamicProxyGenAssembly2"/>
     </ItemGroup>
 
 </Project>
