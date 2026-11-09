@@ -12,9 +12,11 @@ public interface IIdeaReplayRepository
 
     /// <summary>
     ///     How far the replay of <paramref name="engineVersion" /> has gone over the pairs it takes: listed, with their history loaded, their
-    ///     coverage and their price step, as the choice of a turn takes them.
+    ///     coverage and their price step, as the choice of a turn takes them. A pair is done once it is at most a day behind the day of its
+    ///     coverage, counting from the later of its cursor, the end of its first whole day and <paramref name="historyStart" />, the day
+    ///     ceiling of now less the days of history the replay keeps.
     /// </summary>
-    Task<IdeaReplayProgress> ProgressAsync(int engineVersion, CancellationToken cancellationToken);
+    Task<IdeaReplayProgress> ProgressAsync(int engineVersion, DateTimeOffset historyStart, CancellationToken cancellationToken);
 
     /// <summary>Removes the cursors of every other version.</summary>
     Task DeleteOtherVersionsAsync(int engineVersion, CancellationToken cancellationToken);

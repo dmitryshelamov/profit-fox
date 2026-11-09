@@ -20,6 +20,9 @@ public class IdeaReplayProgressTests
 {
     private static readonly DateTimeOffset March10 = DateTimeOffset.Parse("2024-03-10T00:00:00Z");
 
+    // The day ceiling of now less the days of history, before which the replay starts no pair.
+    private static readonly DateTimeOffset HistoryStart = March10.AddDays(-90);
+
     private NpgsqlDataSource _dataSource = null!;
     private IdeaReplayRepository _cursors = null!;
     private ScannerPairRepository _pairs = null!;
@@ -60,7 +63,7 @@ public class IdeaReplayProgressTests
         await Cursor("ETHUSDT", March10.AddDays(-5), IdeasEngineVersion.Current);
         await Cursor("DOGEUSDT", March10.AddDays(-5), IdeasEngineVersion.Current);
 
-        IdeaReplayProgress progress = await _cursors.ProgressAsync(IdeasEngineVersion.Current, CancellationToken.None);
+        IdeaReplayProgress progress = await _cursors.ProgressAsync(IdeasEngineVersion.Current, HistoryStart, CancellationToken.None);
 
         progress.ShouldBe(new IdeaReplayProgress(1, 4, March10.AddDays(-2), IdeasEngineVersion.Current));
     }
@@ -73,19 +76,59 @@ public class IdeaReplayProgressTests
         await Cursor("WIFUSDT", March10, IdeasEngineVersion.Current);
         await Cursor("SOLUSDT", March10, IdeasEngineVersion.Current);
 
-        (await _cursors.ProgressAsync(IdeasEngineVersion.Current, CancellationToken.None)).ShouldBe(new IdeaReplayProgress(2, 2, null, IdeasEngineVersion.Current));
+        (await _cursors.ProgressAsync(IdeasEngineVersion.Current, HistoryStart, CancellationToken.None)).ShouldBe(new IdeaReplayProgress(2, 2, null, IdeasEngineVersion.Current));
     }
 
     // Scenario "Прогон ещё не начинался": a new version without cursors has replayed none of the pairs; an empty database has none to replay.
     [Test]
     public async Task Progress_of_a_version_without_cursors_is_none_of_the_pairs()
     {
-        (await _cursors.ProgressAsync(IdeasEngineVersion.Current, CancellationToken.None)).ShouldBe(new IdeaReplayProgress(0, 0, null, IdeasEngineVersion.Current));
+        (await _cursors.ProgressAsync(IdeasEngineVersion.Current, HistoryStart, CancellationToken.None)).ShouldBe(new IdeaReplayProgress(0, 0, null, IdeasEngineVersion.Current));
 
         await _pairs.SaveAsync([Pair("WIFUSDT", March10.AddHours(12))], CancellationToken.None);
         await Cursor("WIFUSDT", March10, IdeasEngineVersion.Current - 1);
 
-        (await _cursors.ProgressAsync(IdeasEngineVersion.Current, CancellationToken.None)).ShouldBe(new IdeaReplayProgress(0, 1, null, IdeasEngineVersion.Current));
+        (await _cursors.ProgressAsync(IdeasEngineVersion.Current, HistoryStart, CancellationToken.None)).ShouldBe(new IdeaReplayProgress(0, 1, null, IdeasEngineVersion.Current));
+    }
+
+    // A pair at most a day behind the day of its coverage is done: right after midnight every pair has one new day to come and stays done.
+    [Test]
+    public async Task Progress_counts_a_pair_a_day_behind_its_coverage_as_replayed_and_two_days_as_not()
+    {
+        await _pairs.SaveAsync([Pair("WIFUSDT", March10.AddHours(12)), Pair("SOLUSDT", March10.AddHours(12))], CancellationToken.None);
+        await Cursor("WIFUSDT", March10.AddDays(-1), IdeasEngineVersion.Current);
+        await Cursor("SOLUSDT", March10.AddDays(-2), IdeasEngineVersion.Current);
+
+        (await _cursors.ProgressAsync(IdeasEngineVersion.Current, HistoryStart, CancellationToken.None))
+            .ShouldBe(new IdeaReplayProgress(1, 2, March10.AddDays(-2), IdeasEngineVersion.Current));
+    }
+
+    // A pair listed today has no full day to replay and takes no turn: counted, done, and not the slowest.
+    [Test]
+    public async Task Progress_counts_a_pair_listed_today_as_replayed()
+    {
+        await _pairs.SaveAsync([Pair("NEWUSDT", March10.AddHours(12)) with { HistoryFrom = March10.AddHours(5) }], CancellationToken.None);
+
+        (await _cursors.ProgressAsync(IdeasEngineVersion.Current, HistoryStart, CancellationToken.None)).ShouldBe(new IdeaReplayProgress(1, 1, null, IdeasEngineVersion.Current));
+    }
+
+    // A coverage older than the history window leaves nothing to replay.
+    [Test]
+    public async Task Progress_counts_a_pair_covered_only_before_the_history_window_as_replayed()
+    {
+        await _pairs.SaveAsync([Pair("OLDUSDT", HistoryStart.AddDays(-5))], CancellationToken.None);
+
+        (await _cursors.ProgressAsync(IdeasEngineVersion.Current, HistoryStart, CancellationToken.None)).ShouldBe(new IdeaReplayProgress(1, 1, null, IdeasEngineVersion.Current));
+    }
+
+    // A cursor older than the history window starts over from the window's start, which is then the slowest day.
+    [Test]
+    public async Task Progress_of_a_cursor_older_than_the_history_window_starts_from_the_window()
+    {
+        await _pairs.SaveAsync([Pair("WIFUSDT", March10.AddHours(12))], CancellationToken.None);
+        await Cursor("WIFUSDT", HistoryStart.AddDays(-3), IdeasEngineVersion.Current);
+
+        (await _cursors.ProgressAsync(IdeasEngineVersion.Current, HistoryStart, CancellationToken.None)).ShouldBe(new IdeaReplayProgress(0, 1, HistoryStart, IdeasEngineVersion.Current));
     }
 
     private static ScannerPair Pair(string symbol, DateTimeOffset coveredUntil)

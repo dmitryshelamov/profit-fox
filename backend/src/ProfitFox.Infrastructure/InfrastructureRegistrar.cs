@@ -117,7 +117,6 @@ public static class InfrastructureRegistrar
 
         ConfigureCommon(configuration, services);
         MetricsRegistrar.Configure(configuration, services, "scanner");
-        services.AddSingleton(settings);
 
         // Only the gate follows a change of the settings while the scanner runs; the rest read them once at the start.
         services.Configure<ScannerSettings>(configuration.GetSection("Scanner"));
@@ -216,6 +215,9 @@ public static class InfrastructureRegistrar
         services.AddSingleton(configuration.GetSection("Backtests").Get<BacktestSettings>() ?? new BacktestSettings());
         RequireIdeaSlippage(configuration, services);
         services.AddSingleton(configuration.GetSection("Ideas").Get<IdeasSettings>() ?? new IdeasSettings());
+
+        // The API reads the days of history the scanner keeps for the progress of the replay; without the section it is the default.
+        services.AddSingleton(configuration.GetSection("Scanner").Get<ScannerSettings>() ?? new ScannerSettings());
         services.AddSingleton(new EngineVersion(EngineVersion.Current));
         services.AddSingleton(new IdeasEngineVersion(IdeasEngineVersion.Current));
         services.AddSingleton(configuration.GetSection("ExchangeAccounts").Get<ExchangeAccountSettings>() ?? new ExchangeAccountSettings());

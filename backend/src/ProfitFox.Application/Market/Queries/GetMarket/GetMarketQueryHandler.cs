@@ -4,6 +4,8 @@ using ProfitFox.Application.Ideas;
 using ProfitFox.Application.MarketData;
 using ProfitFox.Application.Paging;
 using ProfitFox.Application.SavedFilters;
+using ProfitFox.Application.Scanner;
+using ProfitFox.Application.Scanner.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData.Enums;
@@ -21,6 +23,7 @@ public sealed class GetMarketQueryHandler(
     IScannerStateRepository state,
     ISavedFilterRepository filters,
     IIdeaReplayRepository cursors,
+    ScannerSettings scannerSettings,
     TimeProvider time)
     : IRequestHandler<GetMarketQuery, GetMarketResult>
 {
@@ -84,7 +87,7 @@ public sealed class GetMarketQueryHandler(
         }
 
         // The progress of the replay of the version of the rules this build runs.
-        scanner = scanner with { Replay = await cursors.ProgressAsync(IdeasEngineVersion.Current, cancellationToken) };
+        scanner = scanner with { Replay = await cursors.ProgressAsync(IdeasEngineVersion.Current, IdeasReplay.HistoryStart(time.GetUtcNow(), scannerSettings.HistoryDays), cancellationToken) };
         IReadOnlyList<MarketSnapshotRow> rows = await snapshots.GetAllAsync(cancellationToken);
         IReadOnlyDictionary<Instrument, IReadOnlyList<PairSetup>> setups = await snapshots.GetSetupsAsync(cancellationToken);
         MarketSnapshotRow[] left =

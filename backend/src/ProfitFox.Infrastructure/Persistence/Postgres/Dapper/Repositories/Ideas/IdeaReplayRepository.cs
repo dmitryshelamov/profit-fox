@@ -52,20 +52,28 @@ internal sealed class IdeaReplayRepository(NpgsqlDataSource dataSource) : IIdeaR
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task<IdeaReplayProgress> ProgressAsync(int engineVersion, CancellationToken cancellationToken)
+    public async Task<IdeaReplayProgress> ProgressAsync(int engineVersion, DateTimeOffset historyStart, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync(cancellationToken);
         Progress row = await connection.QuerySingleAsync<Progress>(
             new CommandDefinition(
                 """
-                SELECT count(*) FILTER (WHERE r.replayed_until >= date_trunc('day', p.covered_until, 'UTC'))::int AS "Done",
+                -- reached: where a turn of the pair would go on from (IdeasReplay.Next: a cursor older than the start of the pair starts it over);
+                -- needed: the day before the last whole day of its coverage, so a pair that waits for the day just closed is still done.
+                WITH pairs AS (
+                    SELECT greatest(@HistoryStart, date_trunc('day', p.history_from + interval '24 hours' - interval '1 microsecond', 'UTC'), r.replayed_until) AS reached,
+                           date_trunc('day', p.covered_until, 'UTC') - interval '24 hours' AS needed,
+                           r.replayed_until IS NOT NULL AS has_cursor
+                    FROM scanner_pairs p
+                    LEFT JOIN idea_replay r ON r.category = p.category AND r.symbol = p.symbol AND r.engine_version = @Version
+                    WHERE p.listed AND p.history_from IS NOT NULL AND p.covered_until IS NOT NULL AND p.tick_size IS NOT NULL
+                )
+                SELECT count(*) FILTER (WHERE reached >= needed)::int AS "Done",
                        count(*)::int AS "Total",
-                       min(r.replayed_until) FILTER (WHERE r.replayed_until < date_trunc('day', p.covered_until, 'UTC')) AS "Slowest"
-                FROM scanner_pairs p
-                LEFT JOIN idea_replay r ON r.category = p.category AND r.symbol = p.symbol AND r.engine_version = @Version
-                WHERE p.listed AND p.history_from IS NOT NULL AND p.covered_until IS NOT NULL AND p.tick_size IS NOT NULL
+                       min(reached) FILTER (WHERE reached < needed AND has_cursor) AS "Slowest"
+                FROM pairs
                 """,
-                new { Version = engineVersion },
+                new { Version = engineVersion, HistoryStart = historyStart },
                 cancellationToken: cancellationToken));
 
         return new IdeaReplayProgress(row.Done, row.Total, row.Slowest, engineVersion);
