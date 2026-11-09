@@ -13,8 +13,8 @@ namespace ProfitFox.Domain.Services.Ideas;
 public sealed class MinuteWindow(int length)
 {
     private readonly Queue<IdeaCandle> _minutes = new Queue<IdeaCandle>(length);
-    private readonly Candidates _lows = new Candidates((candidate, minute) => candidate.Low > minute.Low);
-    private readonly Candidates _highs = new Candidates((candidate, minute) => candidate.High < minute.High);
+    private readonly Candidates _lows = new Candidates(length, (candidate, minute) => candidate.Low > minute.Low);
+    private readonly Candidates _highs = new Candidates(length, (candidate, minute) => candidate.High < minute.High);
 
     // How many minutes in the window have each scale of volume, so the sum goes on the largest one among them.
     private readonly int[] _scales = new int[29];
@@ -66,34 +66,32 @@ public sealed class MinuteWindow(int length)
 
     /// <summary>
     ///     The minutes of the window that may still be its low (or high), in order: a minute that comes drops the ones before it that are worse,
-    ///     so the first is the best and, among equals, the earliest. A minute drops out of the front when it leaves the window.
+    ///     so the first is the best and, among equals, the earliest. A minute drops out of the front when it leaves the window. Kept in a ring
+    ///     of the window's length, which the candidates never outgrow.
     /// </summary>
-    private sealed class Candidates(Func<IdeaCandle, IdeaCandle, bool> worse)
+    private sealed class Candidates(int length, Func<IdeaCandle, IdeaCandle, bool> worse)
     {
-        private readonly List<(long Number, IdeaCandle Minute)> _queue = [];
-        private int _front;
+        private readonly (long Number, IdeaCandle Minute)[] _ring = new (long, IdeaCandle)[length];
+        private int _head;
+        private int _count;
 
-        public IdeaCandle Front => _queue[_front].Minute;
+        public IdeaCandle Front => _ring[_head].Minute;
 
         public void Add(IdeaCandle minute, long number, long leftUntil)
         {
-            while (_front < _queue.Count && _queue[_front].Number <= leftUntil)
+            while (_count > 0 && _ring[_head].Number <= leftUntil)
             {
-                _front++;
+                _head = (_head + 1) % length;
+                _count--;
             }
 
-            while (_queue.Count > _front && worse(_queue[^1].Minute, minute))
+            while (_count > 0 && worse(_ring[(_head + _count - 1) % length].Minute, minute))
             {
-                _queue.RemoveAt(_queue.Count - 1);
+                _count--;
             }
 
-            if (_front > 0 && _front == _queue.Count)
-            {
-                _queue.Clear();
-                _front = 0;
-            }
-
-            _queue.Add((number, minute));
+            _ring[(_head + _count) % length] = (number, minute);
+            _count++;
         }
     }
 }
