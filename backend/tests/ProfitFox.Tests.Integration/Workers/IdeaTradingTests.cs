@@ -866,6 +866,84 @@ public class IdeaTradingTests
         (open.Status, open.HeldQuantity, open.Liquidation).ShouldBe((IdeaTradeStatus.Open, 0.6m, new LegTotals(0.4m, 38m, 0.04m)));
     }
 
+    // Scenario "Ликвидация, пока Worker лежал": the liquidation is read from the history of the symbol since the trade opened, not failed.
+    [Test]
+    public async Task Liquidation_while_the_worker_was_down_closes_the_trade_from_the_history()
+    {
+        IdeaTrade trade = await OpenTradeAsync(0.47m);
+        await _scenario.StopWorkerAsync(_scenario.Workers.Single());
+        _scenario.Exchange.ForceFill(ExchangeFillKind.Liquidation, OrderSide.Sell, 0.47m, 95m, 0.03m, LiveTradingScenario.Linear, silently: true);
+
+        _scenario.StartWorker();
+
+        await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(trade.Id)).Status != IdeaTradeStatus.Open, "the trade closed");
+        IdeaTrade liquidated = await _scenario.TradeAsync(trade.Id);
+        (liquidated.Status, liquidated.Reason).ShouldBe((IdeaTradeStatus.Liquidated, null));
+        liquidated.Result.ShouldBe((0.47m * 95m) - (0.47m * 105m) - 0.02m - 0.03m);
+    }
+
+    // Scenario "Ликвидация не уронила сделку": the stream missed the liquidation, and the comparison a foreign fill set off finds it in the history
+    // when it reads the exchange again, before it fails anything: 0 on the exchange against 0 in the books.
+    [Test]
+    public async Task Liquidation_the_stream_missed_is_found_before_the_comparison_fails_the_trade()
+    {
+        IdeaTrade trade = await OpenTradeAsync(0.47m);
+        await SettleAsync();
+        _scenario.Exchange.ForceFill(ExchangeFillKind.Liquidation, OrderSide.Sell, 0.47m, 95m, 0.03m, LiveTradingScenario.Linear, silently: true);
+
+        _scenario.Exchange.ForeignFill("manual-1", 0.1m, 95m, LiveTradingScenario.Linear);
+
+        await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(trade.Id)).Status != IdeaTradeStatus.Open, "the trade closed");
+        await SettleAsync();
+        (await _scenario.TradeAsync(trade.Id)).Status.ShouldBe(IdeaTradeStatus.Liquidated);
+        _scenario.Exchange.Holding.ShouldBe(0m);
+    }
+
+    // The history of the liquidations is asked only for an open trade on linear that knows when it opened: the spot, a trade that waits and a
+    // trade an older Worker opened ask nothing.
+    [Test]
+    public async Task Trade_on_the_spot_does_not_ask_for_liquidations()
+    {
+        IdeaTrade trade = await _scenario.CreateTradeAsync(instrument: LiveTradingScenario.Spot);
+        _scenario.StartWorker();
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the entry");
+        _scenario.Exchange.Fill(new IdeaTradeOrderId(trade.Id, 1).Code, 0.47m, 105m, fee: 0.02m);
+        await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(trade.Id)).Status == IdeaTradeStatus.Open, "the open trade");
+
+        _scenario.Exchange.RestoreAccount();
+        await SettleAsync();
+
+        _scenario.Exchange.ForcedFillReads.ShouldBe(0);
+    }
+
+    [Test]
+    public async Task Trade_that_waits_does_not_ask_for_liquidations()
+    {
+        await _scenario.CreateTradeAsync(IdeaType.Pullback);
+        _scenario.StartWorker();
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == 1, "the limit");
+
+        _scenario.Exchange.RestoreAccount();
+        await SettleAsync();
+
+        _scenario.Exchange.ForcedFillReads.ShouldBe(0);
+    }
+
+    [Test]
+    public async Task Trade_without_an_open_time_does_not_ask_for_liquidations()
+    {
+        IdeaTrade trade = await OpenTradeAsync(0.47m);
+        await _scenario.StopWorkerAsync(_scenario.Workers.Single());
+        await _scenario.ChangeTradeAsync(trade.Id, locked => locked with { OpenedAt = null });
+        int reads = _scenario.Exchange.ForcedFillReads;
+
+        _scenario.StartWorker();
+        await _scenario.WaitAsync(() => _scenario.Exchange.AccountSubscribers == 1, "the trade taken again");
+        await SettleAsync();
+
+        _scenario.Exchange.ForcedFillReads.ShouldBe(reads);
+    }
+
     // A liquidation of another symbol of the account is no exit of this trade.
     [Test]
     public async Task Liquidation_of_another_symbol_does_not_touch_the_trade()

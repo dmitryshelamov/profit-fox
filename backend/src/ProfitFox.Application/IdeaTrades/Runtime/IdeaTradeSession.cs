@@ -210,7 +210,7 @@ internal sealed class IdeaTradeSession(
 
     /// <summary>
     ///     Builds the books again from the database, then reads what the exchange did meanwhile: the totals of the unfinished orders, of the
-    ///     stop and the target, and the entry when the stop or the target is told before it.
+    ///     stop and the target, the entry when the stop or the target is told before it, and the liquidations and the auto-deleveraging of the symbol.
     /// </summary>
     private async Task RebuildAsync(CancellationToken cancellationToken)
     {
@@ -285,6 +285,16 @@ internal sealed class IdeaTradeSession(
             foreach (ExchangeOrder child in await ledger.GetOrdersOfParentAsync(_context.Key, _context.Instrument, new IdeaTradeOrderId(_id, 1).Code, cancellationToken))
             {
                 await OrderAsync(child, cancellationToken);
+            }
+        }
+
+        // The exchange may have liquidated or auto-deleveraged the position unheard: its history of the symbol since the trade opened tells; a trade
+        // that waits has not opened yet.
+        if (_trade is { OpenedAt: { } opened } && _trade.Instrument.Category == MarketCategory.Linear)
+        {
+            foreach (ExchangeFill forced in await ledger.GetForcedFillsAsync(_context.Key, _context.Instrument, opened, cancellationToken))
+            {
+                await ForcedAsync(forced, cancellationToken);
             }
         }
     }
