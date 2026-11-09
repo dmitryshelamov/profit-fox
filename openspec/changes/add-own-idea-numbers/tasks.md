@@ -74,12 +74,12 @@
 
 ## 8. Проверка целиком
 
-- [ ] 8.1 `dotnet build backend/ProfitFox.sln`, `dotnet test backend/ProfitFox.sln` и
+- [x] 8.1 `dotnet build backend/ProfitFox.sln`, `dotnet test backend/ProfitFox.sln` и
   `dotnet format backend/ProfitFox.sln --verify-no-changes` проходят
 - [ ] 8.2 В `frontend/`: `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run build` и
   `npm run test:e2e` проходят
-- [ ] 8.3 Пройти diff: каждая ветка и проверка нового кода требуется тестом; лишнее удалить или сначала написать тест
-- [ ] 8.4 `openspec validate add-own-idea-numbers --strict` проходит
+- [x] 8.3 Пройти diff: каждая ветка и проверка нового кода требуется тестом; лишнее удалить или сначала написать тест
+- [x] 8.4 `openspec validate add-own-idea-numbers --strict` проходит
 
 ## Workflow follow-up
 
