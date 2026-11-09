@@ -157,13 +157,15 @@ public class IdeasApiTests
                     OwnExpectancy = 0.30m,
                     OwnExpectancyLow = 0.02m,
                     OwnExpectancyHigh = 0.58m,
-                    ParentWeight = 0.80m
+                    ParentWeight = 0.80m,
+                    GrossExpectancy = -0.05m
                 }),
                 new IdeaBucket(key with { Setup = IdeaSetup.Drop }, 90, new BucketStatistics(12, 6, 6, 0, 0.35m, 0.3m, 0.4m, -0.20m, -0.3m, -0.1m)
                 {
                     OwnExpectancy = 0.50m,
                     ParentWeight = 0.92m,
-                    FewOwnCases = true
+                    FewOwnCases = true,
+                    GrossExpectancy = -0.15m
                 })
             ],
             [], null, CancellationToken.None);
@@ -191,7 +193,7 @@ public class IdeasApiTests
         await new IdeaRepository(_database).SaveAsync([without, withBucket], [], CancellationToken.None);
         await new IdeaBucketRepository(_database).ReplaceAsync(
             IdeasEngineVersion.Current,
-            [new IdeaBucket(new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear), 90, BucketStatisticsCalculator.Compute(10, 30, 0, -10m, 70m))],
+            [new IdeaBucket(new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear), 90, IdeaViewGenerator.WithGross(BucketStatisticsCalculator.Compute(10, 30, 0, -10m, 70m)))],
             [], null, CancellationToken.None);
 
         JsonElement[] ideas = [.. (await ItemsAsync("/api/ideas")).EnumerateArray()];
@@ -494,8 +496,8 @@ public class IdeasApiTests
         await new IdeaBucketRepository(_database).ReplaceAsync(
             IdeasEngineVersion.Current,
             [
-                new IdeaBucket(key, 90, BucketStatisticsCalculator.Compute(180, 200, 20, 100m, 1000m)),
-                new IdeaBucket(key with { Category = MarketCategory.Spot }, 90, BucketStatisticsCalculator.Compute(180, 200, 20, 100m, 1000m))
+                new IdeaBucket(key, 90, IdeaViewGenerator.WithGross(BucketStatisticsCalculator.Compute(180, 200, 20, 100m, 1000m))),
+                new IdeaBucket(key with { Category = MarketCategory.Spot }, 90, IdeaViewGenerator.WithGross(BucketStatisticsCalculator.Compute(180, 200, 20, 100m, 1000m)))
             ],
             [], null, CancellationToken.None);
         HttpResponseMessage created = await _client.PostAsJsonAsync(

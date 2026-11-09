@@ -81,6 +81,34 @@ public class IdeaTradeEntryCalculatorTests
             new BacktestSettings());
     }
 
+    // Requirement "Обещание на входе", scenario "Издержки от цены входа" (decision 9 of add-own-idea-numbers): the bucket without costs −0.02 R
+    // with −0.06…+0.02 R, the stop of the idea 98, its entry 100, and the trade enters by the market at 99: the promise is −0.02 − 0.0021 × 99 / 1
+    // = −0.2279 R with ▼ by −0.2679…−0.1879 R, not −0.125 R by the entry of the idea nor the −0.21 R of the bucket; N stays that of the bucket.
+    [Test]
+    public async Task Promise_is_the_own_numbers_of_the_idea_from_the_price_of_the_entry()
+    {
+        EntryPreparation preparation = Preparation(minRiskReward: 1.2m);
+        var bucket = new BucketStatistics(400, 180, 200, 20, 0.45m, 0.4m, 0.5m, -0.21m, -0.25m, -0.17m) { GrossExpectancy = -0.02m, GrossExpectancyLow = -0.06m, GrossExpectancyHigh = 0.02m };
+        preparation = preparation with { Price = 99m, Fees = new FeeRates(0.02m, 0.055m, 0.05m), Buckets = [new IdeaBucket(KeyOf(preparation.Idea), 90, bucket)] };
+
+        IdeaPromise promise = (await _calculator.EvaluateAsync(preparation, null, CancellationToken.None)).Promise;
+
+        (promise.Badge, promise.Probability, promise.Expectancy, promise.Cases).ShouldBe((IdeaBadge.Down, 0.45m, -0.2279m, 400));
+    }
+
+    // Scenario "Мало данных": no badge and no probability; the cases and the expectancy of the idea, +0.40 − 0.0021 × 99 / 1 = +0.1921 R.
+    [Test]
+    public async Task Promise_of_a_bucket_of_too_little_data_has_the_cases_and_the_expectancy_only()
+    {
+        EntryPreparation preparation = Preparation(minRiskReward: 1.2m);
+        var bucket = new BucketStatistics(12, 6, 6, 0, null, null, null, 0.3m, null, null) { GrossExpectancy = 0.4m };
+        preparation = preparation with { Price = 99m, Fees = new FeeRates(0.02m, 0.055m, 0.05m), Buckets = [new IdeaBucket(KeyOf(preparation.Idea), 90, bucket)] };
+
+        IdeaPromise promise = (await _calculator.EvaluateAsync(preparation, null, CancellationToken.None)).Promise;
+
+        (promise.Badge, promise.Probability, promise.Expectancy, promise.Cases).ShouldBe((null, null, 0.1921m, 12));
+    }
+
     // Scenario "Ниже настроек, выше автомата": the reward to risk of the entry is about 1.32, the settings want 1.5 and the auto 1.2.
     [Test]
     public async Task Auto_enters_with_its_own_lowest_reward_to_risk_below_that_of_the_settings()
@@ -352,6 +380,11 @@ public class IdeaTradeEntryCalculatorTests
         ExchangeAccount? account = keyed ? new ExchangeAccount(Account, "Main", "key", 100, new HashSet<MarketCategory> { MarketCategory.Linear, MarketCategory.Spot }, Now) : null;
 
         return new EntryPreparation(idea, settings, account, keyed ? Key : null, access, 100m, 100m, Rules, Fees, amount, "USDT", "ETH", [], []);
+    }
+
+    private static IdeaBucketKey KeyOf(Idea idea)
+    {
+        return new IdeaBucketKey(idea.Setup, idea.Track.Plan.Type, idea.Interval, idea.Track.Plan.Side, idea.Instrument.Category);
     }
 
     private static AutoEntry Entry(decimal minRiskReward, decimal? budget = null)

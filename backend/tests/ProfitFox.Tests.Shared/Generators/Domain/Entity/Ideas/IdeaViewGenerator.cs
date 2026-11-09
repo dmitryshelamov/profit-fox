@@ -24,6 +24,12 @@ public static class IdeaViewGenerator
         return new IdeaNumbers(0m, 1m, probability, probability, probability, expectancy, low, high, perUsdt);
     }
 
+    /// <summary>The statistics with the expectancy without costs and its interval those of the model, as a bucket of cases without fees has them.</summary>
+    public static BucketStatistics WithGross(BucketStatistics statistics)
+    {
+        return statistics with { GrossExpectancy = statistics.Expectancy, GrossExpectancyLow = statistics.ExpectancyLow, GrossExpectancyHigh = statistics.ExpectancyHigh };
+    }
+
     /// <summary>
     ///     The statistics of a bucket of <paramref name="cases" /> cases: the interval of the probability 0.05 each side of it, and the interval
     ///     of the expectancy the test gives, none by default.

@@ -200,8 +200,39 @@ public class SavedFilterMatchTests
 
         Passes(View(IdeaViewGenerator.Bucket(0.12m, 0.46m, expectancyLow: 0.002m, expectancyHigh: 0.238m)), reliably).ShouldBeTrue();
         Passes(View(IdeaViewGenerator.Bucket(0.05m, 0.46m, expectancyLow: -0.068m, expectancyHigh: 0.168m)), reliably).ShouldBeFalse();
-        Passes(View(IdeaViewGenerator.Bucket(0.3m, 0.9m, cases: 29)), reliably).ShouldBeFalse();
+        Passes(View(IdeaViewGenerator.Bucket(0.3m, cases: 12)), reliably).ShouldBeFalse();
         Passes(View(null), reliably).ShouldBeFalse();
+    }
+
+    // Scenario "Ожидание идеи, а не корзины" (decision 5 of add-own-idea-numbers): the condition compares the expectancy of the idea in R.
+    [Test]
+    public void Expectancy_condition_compares_the_expectancy_of_the_idea_not_of_its_bucket()
+    {
+        FilterCondition above = Compare(FilterField.Expectancy, FilterOperator.Greater, -0.1m);
+        BucketStatistics bucket = IdeaViewGenerator.Bucket(-0.21m, 0.45m);
+
+        Passes(View(bucket, numbers: IdeaViewGenerator.Numbers(-0.72m, -0.00216m)), above).ShouldBeFalse();
+        Passes(View(bucket, numbers: IdeaViewGenerator.Numbers(-0.062m, -0.0031m)), above).ShouldBeTrue();
+    }
+
+    // Scenario "Вероятность идеи «Уровни»": the probability of the idea, 0.22 × 0.675, not that of its bucket.
+    [Test]
+    public void Probability_condition_compares_the_probability_of_the_idea()
+    {
+        IdeaView idea = View(IdeaViewGenerator.Bucket(-0.21m, 0.22m), numbers: IdeaViewGenerator.Numbers(-0.1m, probability: 0.1485m));
+
+        Passes(idea, Compare(FilterField.Probability, FilterOperator.GreaterOrEqual, 0.2m)).ShouldBeFalse();
+    }
+
+    // Scenario "Надёжно выше нуля": two ideas of one bucket of ≈, ▲ by the interval of the first and ≈ by that of the second.
+    [Test]
+    public void Reliably_positive_holds_when_the_badge_of_the_idea_is_up()
+    {
+        FilterCondition reliably = Compare(FilterField.Expectancy, FilterOperator.ReliablyPositive, null);
+        BucketStatistics bucket = IdeaViewGenerator.Bucket(0.05m, 0.46m, expectancyLow: -0.068m, expectancyHigh: 0.168m);
+
+        Passes(View(bucket, numbers: IdeaViewGenerator.Numbers(0.058m, 0.0029m, 0.018m, 0.098m)), reliably).ShouldBeTrue();
+        Passes(View(bucket, numbers: IdeaViewGenerator.Numbers(-0.005m, -0.0001m, -0.045m, 0.035m)), reliably).ShouldBeFalse();
     }
 
     // Scenario "Идея пары без строки снимка".
@@ -228,9 +259,9 @@ public class SavedFilterMatchTests
         return SavedFilterMatch.Idea([condition], idea, Row(None), NoSetups);
     }
 
-    private static IdeaView View(BucketStatistics? bucket, IdeaShares? shares = null)
+    private static IdeaView View(BucketStatistics? bucket, IdeaShares? shares = null, IdeaNumbers? numbers = null)
     {
-        return IdeaViewGenerator.Generate(IdeaGenerator.Generate(DateTimeOffset.Parse("2024-03-10T12:00:00Z", CultureInfo.InvariantCulture)), bucket, shares);
+        return IdeaViewGenerator.Generate(IdeaGenerator.Generate(DateTimeOffset.Parse("2024-03-10T12:00:00Z", CultureInfo.InvariantCulture)), bucket, shares, numbers);
     }
 
     private static MarketSnapshotRow Row(PairMetrics metrics, MarketCategory category = MarketCategory.Linear)

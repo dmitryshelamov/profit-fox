@@ -34,13 +34,14 @@ public sealed class AutoMinutePlan
     public IReadOnlyList<LimitSkip> Skips => [.. _skips.Values];
 
     /// <summary>
-    ///     The order of the ideas of a minute by their promise, as indexes: the highest expectancy of the bucket first, then the highest reward to
-    ///     risk after the fees; ideas without a bucket last, by their reward to risk; equal ones in the order they were born.
+    ///     The order of the ideas of a minute by their promise, as indexes: the highest expectancy of the idea on 1 USDT of the amount first
+    ///     (decision 6 of add-own-idea-numbers), then the highest reward to risk after the fees; ideas without an expectancy last, by their reward
+    ///     to risk; equal ones in the order they were born.
     /// </summary>
-    public static IReadOnlyList<int> Order(IReadOnlyList<(BucketStatistics? Bucket, IdeaShares Shares)> promises)
+    public static IReadOnlyList<int> Order(IReadOnlyList<(IdeaNumbers Numbers, IdeaShares Shares)> promises)
     {
         return [.. Enumerable.Range(0, promises.Count)
-            .OrderByDescending(index => promises[index].Bucket?.Expectancy ?? decimal.MinValue)
+            .OrderByDescending(index => promises[index].Numbers.ExpectancyPerUsdt ?? decimal.MinValue)
             .ThenByDescending(index => promises[index].Shares.NetRiskReward)];
     }
 

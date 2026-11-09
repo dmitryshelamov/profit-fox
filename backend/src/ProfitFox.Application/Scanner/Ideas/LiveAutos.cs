@@ -155,7 +155,7 @@ public sealed class LiveAutos(
         IReadOnlyDictionary<Guid, IdeaAuto>? every = null;
         DateTimeOffset now = time.GetUtcNow();
 
-        IReadOnlyList<int> order = AutoMinutePlan.Order([.. views.Select(view => (view.Bucket, view.Shares))]);
+        IReadOnlyList<int> order = AutoMinutePlan.Order([.. views.Select(view => (view.Numbers, view.Shares))]);
 
         foreach (IdeaAuto auto in enabled.OrderBy(auto => auto.Position))
         {
@@ -166,7 +166,7 @@ public sealed class LiveAutos(
             {
                 Idea idea = born[order[fired]];
 
-                if (!AutoConditions.Match(idea, views[order[fired]].Bucket, auto.Conditions))
+                if (!AutoConditions.Match(idea, views[order[fired]].Bucket, views[order[fired]].Numbers.Badge, auto.Conditions))
                 {
                     continue;
                 }
@@ -242,7 +242,7 @@ public sealed class LiveAutos(
         Idea atPrice = idea with { Track = idea.Track with { Plan = idea.Track.Plan with { Entry = PaperFill.EntryPrice(idea, birth) } } };
         IdeaView view = IdeaView.Of([atPrice], bucketList, curves, _fees)[0];
 
-        return new IdeaPromise(view.Bucket?.Badge, view.Numbers.Probability, view.Bucket?.Expectancy, view.Bucket?.Cases, view.Shares.BreakEven, view.Shares.NetRiskReward);
+        return new IdeaPromise(view.Numbers.Badge, view.Numbers.Probability, view.Numbers.Expectancy, view.Bucket?.Cases, view.Shares.BreakEven, view.Shares.NetRiskReward);
     }
 
     // None while the list of instruments has not told the step and the minimums of the volume of the pair.

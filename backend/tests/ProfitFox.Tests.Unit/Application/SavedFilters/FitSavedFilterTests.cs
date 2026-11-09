@@ -99,10 +99,11 @@ public class FitSavedFilterTests
         exception.Errors.Keys.ShouldBe(["conditions[0].field"]);
     }
 
+    // The bucket of an idea with the expectancy given after costs and without them: the condition reads that of the idea, less its costs.
     private static IdeaBucket Bucket(Idea idea, decimal expectancy)
     {
         var key = new IdeaBucketKey(idea.Setup, idea.Track.Plan.Type, idea.Interval, idea.Track.Plan.Side, idea.Instrument.Category);
 
-        return new IdeaBucket(key, 90, IdeaViewGenerator.Bucket(expectancy, 0.5m));
+        return new IdeaBucket(key, 90, IdeaViewGenerator.Bucket(expectancy, 0.5m) with { GrossExpectancy = expectancy });
     }
 }

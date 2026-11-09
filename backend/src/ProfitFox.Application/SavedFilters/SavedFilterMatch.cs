@@ -10,8 +10,8 @@ namespace ProfitFox.Application.SavedFilters;
 
 /// <summary>
 ///     Applies the conditions of a saved filter, joined by «и». A metric without a value does not pass, the setup of a pair holds on any
-///     interval, a field of choices is «=» its code; the probability counts only for a bucket of enough cases, and «надёжно > 0» holds when the
-///     badge of the bucket is ▲.
+///     interval, a field of choices is «=» its code; the probability and the expectancy, in R, are the own numbers of the idea, and «надёжно > 0»
+///     holds when the badge of the idea is ▲ (decision 5 of add-own-idea-numbers).
 /// </summary>
 public static class SavedFilterMatch
 {
@@ -37,8 +37,8 @@ public static class SavedFilterMatch
             FilterField.IdeaSide => view.Idea.Track.Plan.Side.ToCode() == condition.Choice,
             FilterField.RiskReward => Holds(condition, view.Shares.NetRiskReward),
             FilterField.Probability => Holds(condition, view.Numbers.Probability),
-            FilterField.Expectancy when condition.Operator == FilterOperator.ReliablyPositive => view.Bucket?.Badge == IdeaBadge.Up,
-            FilterField.Expectancy => Holds(condition, view.Bucket?.Expectancy),
+            FilterField.Expectancy when condition.Operator == FilterOperator.ReliablyPositive => view.Numbers.Badge == IdeaBadge.Up,
+            FilterField.Expectancy => Holds(condition, view.Numbers.Expectancy),
             _ => null
         };
     }

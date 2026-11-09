@@ -97,7 +97,7 @@ public class SavedFiltersApiTests
         Idea linear = IdeaGenerator.Generate(snapshotAt.AddMinutes(-20), instrument: sol);
         await new IdeaRepository(_database).SaveAsync([linear, IdeaGenerator.Generate(snapshotAt.AddMinutes(-20), instrument: eth)], [], CancellationToken.None);
         var key = new IdeaBucketKey(IdeaSetup.Impulse, IdeaType.TwoR, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear);
-        await new IdeaBucketRepository(_database).ReplaceAsync(IdeasEngineVersion.Current, [new IdeaBucket(key, 90, BucketStatisticsCalculator.Compute(180, 200, 20, 100m, 1000m))], [], null, CancellationToken.None);
+        await new IdeaBucketRepository(_database).ReplaceAsync(IdeasEngineVersion.Current, [new IdeaBucket(key, 90, IdeaViewGenerator.WithGross(BucketStatisticsCalculator.Compute(180, 200, 20, 100m, 1000m)))], [], null, CancellationToken.None);
 
         return linear.Id;
     }

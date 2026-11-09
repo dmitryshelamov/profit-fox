@@ -134,19 +134,44 @@ public class LiveAutosTests
     }
 
     [Test]
-    public async Task Badge_and_cases_of_the_bucket_of_the_idea_are_the_ones_the_conditions_look_at()
+    public async Task Badge_of_the_idea_and_cases_of_its_bucket_are_the_ones_the_conditions_look_at()
     {
         IdeaAuto auto = Enable(Auto("Пробои 5м", IdeaAutoMode.Paper, amount: 50m) with { Conditions = Conditions() with { Badge = IdeaBadge.Up, MinCases = 100 } });
         Idea idea = Born();
         var key = new IdeaBucketKey(idea.Setup, idea.Track.Plan.Type, idea.Interval, idea.Track.Plan.Side, MarketCategory.Linear);
-        var statistics = new BucketStatistics(400, 0, 0, 0, 0.4m, 0.3m, 0.5m, 0.2m, 0.1m, 0.3m);
+        // The idea has its own badge ▲: +0.3 R without costs with +0.2…+0.4 R, less the costs of 0.0011 × 100 / 2 = 0.055 R.
+        var statistics = new BucketStatistics(400, 0, 0, 0, 0.4m, 0.3m, 0.5m, 0.2m, 0.1m, 0.3m) { GrossExpectancy = 0.3m, GrossExpectancyLow = 0.2m, GrossExpectancyHigh = 0.4m };
         _buckets.GetAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([new IdeaBucket(key, 90, statistics)]);
         _autos.GetEnabledAsync(Arg.Any<CancellationToken>()).Returns([auto]);
 
         AutoMinute minute = (await RunAsync([idea]))!;
 
         IdeaPromise promise = minute.Opened.Single().Trade.Promise!;
-        (promise.Badge, promise.Cases, promise.Expectancy).ShouldBe((IdeaBadge.Up, 400, 0.2m));
+        (promise.Badge, promise.Cases, promise.Expectancy).ShouldBe((IdeaBadge.Up, 400, 0.245m));
+    }
+
+    // Requirement "Обещание на входе", scenario "Издержки от цены входа" (decision 9 of add-own-idea-numbers): a paper trade enters at the close
+    // 99 of the minute of the birth, and the promise is the expectancy of the idea from there, −0.02 − 0.0021 × 99 / 1 = −0.2279 R.
+    [Test]
+    public async Task Promise_of_a_paper_trade_is_the_expectancy_of_the_idea_from_its_entry_price()
+    {
+        IdeaAuto auto = Enable(Auto("Пробои 5м", IdeaAutoMode.Paper, amount: 50m));
+        Idea idea = Born();
+        var key = new IdeaBucketKey(idea.Setup, idea.Track.Plan.Type, idea.Interval, idea.Track.Plan.Side, MarketCategory.Linear);
+        var statistics = new BucketStatistics(400, 0, 0, 0, 0.4m, 0.3m, 0.5m, -0.21m, -0.25m, -0.17m) { GrossExpectancy = -0.02m, GrossExpectancyLow = -0.06m, GrossExpectancyHigh = 0.02m };
+        _buckets.GetAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([new IdeaBucket(key, 90, statistics)]);
+        _autos.GetEnabledAsync(Arg.Any<CancellationToken>()).Returns([auto]);
+        var slipping = new BacktestSettings
+        {
+            DefaultFees = new Dictionary<string, FeeRateSettings> { ["spot"] = new FeeRateSettings { Limit = 0.1m, Market = 0.1m }, ["linear"] = new FeeRateSettings { Limit = 0.02m, Market = 0.055m, Slippage = 0.05m } }
+        };
+        var live = new LiveAutos(_autos, _paper, _trades, _settings, _buckets, _candles, _entries, _refusals, new IdeasEngineVersion(IdeasEngineVersion.Current), _market, slipping, Scanner, _time);
+        var births = new Dictionary<Instrument, IdeaCandle> { [Wif] = new IdeaCandle(Fired, 99.9m, 100.2m, 98.9m, 99m, 1m) };
+
+        AutoMinute minute = (await live.RunAsync(End, [idea], births, [], CancellationToken.None))!;
+
+        IdeaPromise promise = minute.Opened.Single().Trade.Promise!;
+        (promise.Badge, promise.Expectancy, promise.Cases).ShouldBe((IdeaBadge.Down, -0.2279m, 400));
     }
 
     // Scenario "R:R ниже минимума" for a paper auto: the refusal is written once, with the numbers.
@@ -594,11 +619,12 @@ public class LiveAutosTests
     }
 
     // The bucket of the idea over 90 days with its expectancy.
+    // The bucket of an idea with the expectancy given, after costs and without them: the ideas share their plan, and so their costs and risk.
     private static IdeaBucket Bucket(Idea idea, decimal expectancy)
     {
         var key = new IdeaBucketKey(idea.Setup, idea.Track.Plan.Type, idea.Interval, idea.Track.Plan.Side, idea.Instrument.Category);
 
-        return new IdeaBucket(key, 90, new BucketStatistics(100, 40, 60, 0, 0.4m, null, null, expectancy, null, null));
+        return new IdeaBucket(key, 90, new BucketStatistics(100, 40, 60, 0, 0.4m, null, null, expectancy, null, null) { GrossExpectancy = expectancy });
     }
 
     // The minute of the ideas of the pairs, each born in the minute of 13:40 that closed at 100.

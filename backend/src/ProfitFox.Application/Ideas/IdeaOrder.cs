@@ -5,8 +5,8 @@ namespace ProfitFox.Application.Ideas;
 /// <summary>
 ///     The order of the ideas of «Идеи»: by a column in either direction, ideas without a value in the column last whichever way it goes, and
 ///     equal values by <see cref="ByExpectancy" />, so the order of the same ideas never changes. Setup, type, side and status go in the order of
-///     their lists, which is the order of the enums; the probability counts only for a bucket of enough cases; the profit goes by the profit on
-///     1 USDT and the R:R by the reward to risk after the fees.
+///     their lists, which is the order of the enums; the probability and the expectancy are the own numbers of the idea, the expectancy on 1 USDT
+///     of the amount (decision 6 of add-own-idea-numbers); the profit goes by the profit on 1 USDT and the R:R by the reward to risk after the fees.
 /// </summary>
 public static class IdeaOrder
 {
@@ -54,7 +54,7 @@ public static class IdeaOrder
         return [.. ThenByExpectancy(byKey), .. ByExpectancy(all.Where(view => Key(view, column) is null))];
     }
 
-    /// <summary>Highest expectancy first, ideas of a bucket without cases last; newest first among equals, then by id.</summary>
+    /// <summary>Highest expectancy on 1 USDT first, ideas without an expectancy of their own last; newest first among equals, then by id.</summary>
     public static IReadOnlyList<IdeaView> ByExpectancy(IEnumerable<IdeaView> views)
     {
         return [.. ThenByExpectancy(views.OrderBy(_ => 0))];
@@ -62,7 +62,7 @@ public static class IdeaOrder
 
     private static IOrderedEnumerable<IdeaView> ThenByExpectancy(IOrderedEnumerable<IdeaView> views)
     {
-        return views.ThenByDescending(view => view.Bucket?.Expectancy ?? decimal.MinValue).ThenByDescending(view => view.Idea.Track.FiredAt).ThenBy(view => view.Idea.Id);
+        return views.ThenByDescending(view => view.Numbers.ExpectancyPerUsdt ?? decimal.MinValue).ThenByDescending(view => view.Idea.Track.FiredAt).ThenBy(view => view.Idea.Id);
     }
 
     private static decimal? Key(IdeaView view, IdeaSortColumn column)
@@ -79,7 +79,7 @@ public static class IdeaOrder
             IdeaSortColumn.Target => view.Idea.Track.Plan.Target,
             IdeaSortColumn.RiskReward => view.Shares.NetRiskReward,
             IdeaSortColumn.Probability => view.Numbers.Probability,
-            IdeaSortColumn.Expectancy => view.Bucket?.Expectancy,
+            IdeaSortColumn.Expectancy => view.Numbers.ExpectancyPerUsdt,
             IdeaSortColumn.Profit => view.Shares.ProfitPerUsdt,
             _ => (int)view.Idea.Track.Status
         };

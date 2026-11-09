@@ -106,7 +106,7 @@ public sealed class GetIdeasQueryHandler(
 
         if (request.NonNegativeExpectancy)
         {
-            views = views.Where(view => view.Bucket?.Expectancy >= 0);
+            views = views.Where(view => view.Numbers.Expectancy >= 0);
         }
 
         if (filter is not null)
