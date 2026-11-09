@@ -15,10 +15,13 @@ using ExchangeOrderState = ProfitFox.Application.Ports.LiveTrading.ExchangeOrder
 namespace ProfitFox.Infrastructure.Exchanges.Bybit;
 
 /// <summary>Reads what an account holds on Bybit with its key, one attempt per call. Never sends orders.</summary>
-internal sealed class BybitLedger(HttpClient http, ILoggerFactory loggers, BybitSettings settings) : IExchangeLedger
+internal sealed class BybitLedger(HttpClient http, ILoggerFactory loggers, BybitSettings settings, TimeProvider time) : IExchangeLedger
 {
     // The most orders Bybit lists in one page.
     private const int PageSize = 50;
+
+    // Bybit lists the executions of no more than 7 days in one window.
+    private static readonly TimeSpan HistoryWindow = TimeSpan.FromDays(7);
 
     public async Task<decimal> GetFreeAsync(ExchangeKey key, string coin, CancellationToken cancellationToken)
     {
@@ -120,20 +123,44 @@ internal sealed class BybitLedger(HttpClient http, ILoggerFactory loggers, Bybit
 
     private async Task<IReadOnlyList<ExchangeFill>> FillsAsync(ExchangeKey key, Instrument instrument, string? clientId, string? exchangeOrderId, CancellationToken cancellationToken)
     {
+        return Fills(instrument, await TradesAsync(key, instrument, clientId, exchangeOrderId, null, null, cancellationToken));
+    }
+
+    private async Task<IReadOnlyList<BybitUserTrade>> TradesAsync(
+        ExchangeKey key,
+        Instrument instrument,
+        string? clientId,
+        string? exchangeOrderId,
+        TradeType? type,
+        DateTime? start,
+        CancellationToken cancellationToken)
+    {
         using BybitRestClient client = Client(key);
         var trades = new List<BybitUserTrade>();
         string? cursor = null;
 
-        // An order filled in many parts lists its fills on more than one page.
+        // An order filled in many parts lists its fills on more than one page, and so may the history of a symbol.
         do
         {
             BybitResponse<BybitUserTrade> page = BybitKeyClients.Unwrap(await client.V5Api.Trading.GetUserTradesAsync(
-                instrument.Category.ToBybit(), instrument.Symbol, orderId: exchangeOrderId, clientOrderId: clientId, cursor: cursor, ct: cancellationToken));
+                instrument.Category.ToBybit(),
+                instrument.Symbol,
+                orderId: exchangeOrderId,
+                clientOrderId: clientId,
+                startTime: start,
+                tradeType: type,
+                cursor: cursor,
+                ct: cancellationToken));
             trades.AddRange(page.List);
             cursor = string.IsNullOrEmpty(page.NextPageCursor) ? null : page.NextPageCursor;
         }
         while (cursor is not null);
 
+        return trades;
+    }
+
+    private static IReadOnlyList<ExchangeFill> Fills(Instrument instrument, IEnumerable<BybitUserTrade> trades)
+    {
         return
         [
             .. trades
@@ -151,6 +178,19 @@ internal sealed class BybitLedger(HttpClient http, ILoggerFactory loggers, Bybit
                     trade.TradeType.ToFillKind(),
                     trade.Side.ToDomain()))
         ];
+    }
+
+    public async Task<IReadOnlyList<ExchangeFill>> GetForcedFillsAsync(ExchangeKey key, Instrument instrument, DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        DateTimeOffset oldest = time.GetUtcNow() - HistoryWindow;
+        DateTime start = (since > oldest ? since : oldest).UtcDateTime;
+
+        return Fills(
+            instrument,
+            [
+                .. await TradesAsync(key, instrument, null, null, TradeType.BustTrade, start, cancellationToken),
+                .. await TradesAsync(key, instrument, null, null, TradeType.AdlTrade, start, cancellationToken)
+            ]);
     }
 
     public async Task<FeeSchedule> GetFeesAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)

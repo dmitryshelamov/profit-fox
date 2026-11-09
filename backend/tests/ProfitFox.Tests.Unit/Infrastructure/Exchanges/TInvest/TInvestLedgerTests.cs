@@ -58,6 +58,16 @@ public class TInvestLedgerTests
         _host.Api.Calls.ShouldBeEmpty();
     }
 
+    // Decision 5 of recognize-liquidations-in-idea-trades: the shares of MOEX are never liquidated in this trading.
+    [Test]
+    public async Task Forced_fills_are_refused_without_a_call()
+    {
+        ExchangeException error = await Should.ThrowAsync<ExchangeException>(() => _ledger.GetForcedFillsAsync(Key, Sber, DateTimeOffset.UnixEpoch, CancellationToken.None));
+
+        error.Message.ShouldBe("T-Invest has no liquidations.");
+        _host.Api.Calls.ShouldBeEmpty();
+    }
+
     // Scenario "Рубли на счёте T-Invest": 50 000 ₽ of which 10 000 are blocked by an order.
     [Test]
     public async Task Free_roubles_are_the_money_less_what_orders_block()

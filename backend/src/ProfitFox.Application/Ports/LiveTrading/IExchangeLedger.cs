@@ -48,6 +48,13 @@ public interface IExchangeLedger
     /// <exception cref="ProfitFox.Application.Exceptions.ExchangeException">The exchange refused or did not answer.</exception>
     Task<IReadOnlyList<ExchangeFill>> GetFillsAsync(ExchangeKey key, Instrument instrument, string clientId, CancellationToken cancellationToken);
 
+    /// <summary>
+    ///     The liquidations and the auto-deleveraging of the account on the symbol of <c>linear</c> since <paramref name="since" />, the oldest first:
+    ///     executions of the exchange's own orders, which have no client id.
+    /// </summary>
+    /// <exception cref="ProfitFox.Application.Exceptions.ExchangeException">The exchange refused or did not answer.</exception>
+    Task<IReadOnlyList<ExchangeFill>> GetForcedFillsAsync(ExchangeKey key, Instrument instrument, DateTimeOffset since, CancellationToken cancellationToken);
+
     /// <summary>The fee rates of the account on the instrument: maker for a limit order, taker for a market one.</summary>
     /// <exception cref="ProfitFox.Application.Exceptions.ExchangeException">The exchange refused or did not answer.</exception>
     Task<FeeSchedule> GetFeesAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken);

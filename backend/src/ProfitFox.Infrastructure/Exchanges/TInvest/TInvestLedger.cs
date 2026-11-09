@@ -116,6 +116,12 @@ internal sealed class TInvestLedger(TInvestCall call, TInvestShares shares, ITIn
     ///     <c>GetOrderPrice</c>, which places nothing; T-Invest has no method of the tariff. A limit and a market order pay the same.
     /// </summary>
     /// <exception cref="ExchangeUnavailableException">T-Invest told no last price of the share or no amount of the trial order.</exception>
+    /// <summary>The shares of MOEX are not liquidated in this trading: refused without a call.</summary>
+    public Task<IReadOnlyList<ExchangeFill>> GetForcedFillsAsync(ExchangeKey key, Instrument instrument, DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        throw new ExchangeException("T-Invest has no liquidations.");
+    }
+
     public async Task<FeeSchedule> GetFeesAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
     {
         TInvestShare share = await shares.ShareByAsync(instrument.Symbol, cancellationToken);

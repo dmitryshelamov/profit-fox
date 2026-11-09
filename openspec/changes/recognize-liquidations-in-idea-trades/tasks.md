@@ -40,7 +40,7 @@
 
 ## 4. Сессия сделки
 
-- [ ] 4.1 `IExchangeLedger.GetForcedFillsAsync(key, instrument, since)`: в `BybitLedger` два запроса
+- [x] 4.1 `IExchangeLedger.GetForcedFillsAsync(key, instrument, since)`: в `BybitLedger` два запроса
   `GetUserTradesAsync` с `execType` и курсором, начало — `max(since, сейчас − 7 дней)`. В `TInvestLedger` —
   `ExchangeException`, в `RoutedExchangeLedger` — передача дальше. Готово, когда тесты `BybitLedgerTests` (параметры
   запроса, страницы), `TInvestLedgerTests` и `RoutedTradingPortsTests` зелёные.

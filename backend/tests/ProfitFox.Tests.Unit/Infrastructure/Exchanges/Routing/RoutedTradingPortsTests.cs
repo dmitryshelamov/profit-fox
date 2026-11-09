@@ -65,6 +65,7 @@ public class RoutedTradingPortsTests
         expected.GetOrdersOfParentAsync(key, instrument, "c-1", Arg.Any<CancellationToken>()).Returns([order]);
         expected.GetOrderFillsAsync(key, instrument, "e-1", Arg.Any<CancellationToken>()).Returns([fill]);
         expected.GetFillsAsync(key, instrument, "c-1", Arg.Any<CancellationToken>()).Returns([fill]);
+        expected.GetForcedFillsAsync(key, instrument, DateTimeOffset.UnixEpoch, Arg.Any<CancellationToken>()).Returns([fill]);
         expected.GetFeesAsync(key, instrument, Arg.Any<CancellationToken>()).Returns(fees);
 
         (await routed.GetFreeAsync(key, "RUB", CancellationToken.None)).ShouldBe(5m);
@@ -77,6 +78,7 @@ public class RoutedTradingPortsTests
         (await routed.GetOrdersOfParentAsync(key, instrument, "c-1", CancellationToken.None)).ShouldBe([order]);
         (await routed.GetOrderFillsAsync(key, instrument, "e-1", CancellationToken.None)).ShouldBe([fill]);
         (await routed.GetFillsAsync(key, instrument, "c-1", CancellationToken.None)).ShouldBe([fill]);
+        (await routed.GetForcedFillsAsync(key, instrument, DateTimeOffset.UnixEpoch, CancellationToken.None)).ShouldBe([fill]);
         (await routed.GetFeesAsync(key, instrument, CancellationToken.None)).ShouldBe(fees);
 
         other.ReceivedCalls().ShouldBeEmpty();

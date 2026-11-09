@@ -553,6 +553,11 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
         }
     }
 
+    public Task<IReadOnlyList<ExchangeFill>> GetForcedFillsAsync(ExchangeKey key, Instrument instrument, DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        throw new NotImplementedException();
+    }
+
     public Task<FeeSchedule> GetFeesAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref _feeRequests);
