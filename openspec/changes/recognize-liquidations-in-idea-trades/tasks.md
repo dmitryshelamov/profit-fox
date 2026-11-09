@@ -44,7 +44,7 @@
   `GetUserTradesAsync` с `execType` и курсором, начало — `max(since, сейчас − 7 дней)`. В `TInvestLedger` —
   `ExchangeException`, в `RoutedExchangeLedger` — передача дальше. Готово, когда тесты `BybitLedgerTests` (параметры
   запроса, страницы), `TInvestLedgerTests` и `RoutedTradingPortsTests` зелёные.
-- [ ] 4.2 `ForcedFillInput` в `IdeaTradeSession`: исполнение `Kind != Trade` по инструменту сделки разбирается раньше
+- [x] 4.2 `ForcedFillInput` в `IdeaTradeSession`: исполнение `Kind != Trade` по инструменту сделки разбирается раньше
   `Mine` и не планирует сверку. Применение по решению 3 design (блокировки по id, доли один раз, своя доля с
   `applied`). Готово, когда юнит-тесты сессии со стабом зелёные: «Ликвидация закрыла сделку», «Две сделки на символе»
   (каждая сессия применяет свою долю), «Исполнение пришло дважды», «Сделка другой стороны».

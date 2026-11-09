@@ -9,8 +9,10 @@ using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.IdeaTrades;
 using ProfitFox.Domain.Entities.IdeaTrades.Enums;
 using ProfitFox.Domain.Entities.LiveTrading.Enums;
+using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Tests.Integration.Infrastructure;
 
 using Shouldly;
@@ -777,6 +779,102 @@ public class IdeaTradingTests
         _scenario.Exchange.Sent.Count.ShouldBe(1);
     }
 
+    // Scenarios "Ликвидация закрыла сделку" and "Ликвидация с результатом": the liquidation of Bybit is an order of its own with no client id of ours;
+    // it closes the trade with the result of its execution, and no comparison fails the trade for the position it took.
+    [Test]
+    public async Task Liquidation_on_the_stream_closes_the_trade_with_the_result_of_its_execution()
+    {
+        IdeaTrade trade = await OpenTradeAsync(0.47m);
+        await SettleAsync();
+
+        _scenario.Exchange.ForceFill(ExchangeFillKind.Liquidation, OrderSide.Sell, 0.47m, 95m, 0.03m, LiveTradingScenario.Linear);
+
+        await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(trade.Id)).Status == IdeaTradeStatus.Liquidated, "the liquidated trade");
+        IdeaTrade liquidated = await _scenario.TradeAsync(trade.Id);
+        liquidated.Liquidation.ShouldBe(new LegTotals(0.47m, 0.47m * 95m, 0.03m));
+        liquidated.Result.ShouldBe((0.47m * 95m) - (0.47m * 105m) - 0.02m - 0.03m);
+        liquidated.ResultR.ShouldBe(liquidated.Result / 2m);
+        await SettleAsync();
+        (await _scenario.TradeAsync(trade.Id)).Status.ShouldBe(IdeaTradeStatus.Liquidated);
+    }
+
+    // Scenario "ADL закрыла сделку": a short bought back by the auto-deleveraging of Bybit.
+    [Test]
+    public async Task Auto_deleveraging_on_the_stream_closes_a_short_by_the_exchange()
+    {
+        IdeaTrade trade = await OpenShortAsync(0.4m);
+
+        _scenario.Exchange.ForceFill(ExchangeFillKind.Adl, OrderSide.Buy, 0.4m, 100m, 0.02m, LiveTradingScenario.Linear);
+
+        await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(trade.Id)).Status == IdeaTradeStatus.ClosedByAdl, "the trade closed by ADL");
+        IdeaTrade closed = await _scenario.TradeAsync(trade.Id);
+        closed.Adl.ShouldBe(new LegTotals(0.4m, 40m, 0.02m));
+        closed.Result.ShouldBe((0.4m * 105m) - 40m - 0.02m - 0.02m);
+    }
+
+    // Scenario "Две сделки на символе": 0.3 and 0.1 held, 0.4 liquidated with the fee 0.4; each session applies its own share.
+    [Test]
+    public async Task Liquidation_of_two_trades_of_the_side_gives_each_its_share()
+    {
+        IdeaTrade first = await OpenTradeAsync(0.3m);
+        IdeaTrade second = await OpenTradeAsync(0.1m);
+        await SettleAsync();
+
+        _scenario.Exchange.ForceFill(ExchangeFillKind.Liquidation, OrderSide.Sell, 0.4m, 95m, 0.4m, LiveTradingScenario.Linear);
+
+        await _scenario.WaitAsync(
+            async () => (await _scenario.TradeAsync(first.Id)).Status == IdeaTradeStatus.Liquidated && (await _scenario.TradeAsync(second.Id)).Status == IdeaTradeStatus.Liquidated,
+            "both trades liquidated");
+        (await _scenario.TradeAsync(first.Id)).Liquidation.ShouldBe(new LegTotals(0.3m, 28.5m, 0.3m));
+        (await _scenario.TradeAsync(second.Id)).Liquidation.ShouldBe(new LegTotals(0.1m, 9.5m, 0.1m));
+    }
+
+    // Scenario "Исполнение пришло дважды": a liquidation of a part told twice takes the part out once.
+    [Test]
+    public async Task Liquidation_told_twice_takes_its_part_out_once()
+    {
+        IdeaTrade trade = await OpenTradeAsync(1m);
+        await SettleAsync();
+        ExchangeFill fill = _scenario.Exchange.ForceFill(ExchangeFillKind.Liquidation, OrderSide.Sell, 0.4m, 95m, 0.04m, LiveTradingScenario.Linear);
+        await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(trade.Id)).Liquidation.Quantity == 0.4m, "the part liquidated");
+
+        _scenario.Exchange.RepeatFill(fill);
+        await SettleAsync();
+
+        IdeaTrade open = await _scenario.TradeAsync(trade.Id);
+        (open.Status, open.HeldQuantity, open.Liquidation).ShouldBe((IdeaTradeStatus.Open, 0.6m, new LegTotals(0.4m, 38m, 0.04m)));
+    }
+
+    // A liquidation of another symbol of the account is no exit of this trade.
+    [Test]
+    public async Task Liquidation_of_another_symbol_does_not_touch_the_trade()
+    {
+        IdeaTrade trade = await OpenTradeAsync(0.47m);
+        await SettleAsync();
+
+        _scenario.Exchange.ForceFill(ExchangeFillKind.Liquidation, OrderSide.Sell, 0.47m, 95m, 0.03m, new Instrument(MarketCategory.Linear, "ETHUSDT"));
+        await SettleAsync();
+
+        IdeaTrade untouched = await _scenario.TradeAsync(trade.Id);
+        (untouched.Status, untouched.HeldQuantity, untouched.Liquidation).ShouldBe((IdeaTradeStatus.Open, 0.47m, LegTotals.None));
+    }
+
+    // Scenario "Сделка другой стороны": a liquidation that sells closes no short, and it sets no comparison off.
+    [Test]
+    public async Task Liquidation_that_sells_does_not_touch_a_short()
+    {
+        IdeaTrade trade = await OpenShortAsync(0.47m);
+        await SettleAsync();
+        int reads = _scenario.Exchange.HoldingReads;
+
+        _scenario.Exchange.ForceFill(ExchangeFillKind.Liquidation, OrderSide.Sell, 0.47m, 95m, 0.03m, LiveTradingScenario.Linear);
+        await SettleAsync();
+
+        IdeaTrade untouched = await _scenario.TradeAsync(trade.Id);
+        (untouched.Status, untouched.HeldQuantity, untouched.Liquidation).ShouldBe((IdeaTradeStatus.Open, 0.47m, LegTotals.None));
+        _scenario.Exchange.HoldingReads.ShouldBe(reads);
+    }
+
     /// <summary>A bot long on the linear market with the position 1; a Worker runs.</summary>
     private async Task<Guid> BotWithPositionAsync()
     {
@@ -795,6 +893,24 @@ public class IdeaTradingTests
     private async Task<IdeaTrade> OpenTradeAsync(decimal quantity)
     {
         IdeaTrade trade = await _scenario.CreateTradeAsync(quantity: quantity);
+
+        if (_scenario.Workers.Count == 0)
+        {
+            _scenario.StartWorker();
+        }
+
+        int sent = _scenario.Exchange.Orders.Count;
+        await _scenario.WaitAsync(() => _scenario.Exchange.Orders.Count == sent + 1, "the entry");
+        _scenario.Exchange.Fill(new IdeaTradeOrderId(trade.Id, 1).Code, quantity, 105m, fee: 0.02m);
+        await _scenario.WaitAsync(async () => (await _scenario.TradeChildrenAsync(trade.Id)).Count == 2, "the stop and the target");
+
+        return trade;
+    }
+
+    /// <summary>A short whose entry at 105 is filled and whose stop and target stand; a Worker runs.</summary>
+    private async Task<IdeaTrade> OpenShortAsync(decimal quantity)
+    {
+        IdeaTrade trade = await _scenario.CreateTradeAsync(side: IdeaSide.Short, quantity: quantity);
 
         if (_scenario.Workers.Count == 0)
         {

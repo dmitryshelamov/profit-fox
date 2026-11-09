@@ -16,6 +16,7 @@ using ProfitFox.Domain.Entities.LiveTrading.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.Services.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.IdeaTrades;
 using ProfitFox.Domain.ValueObjects.LiveTrading;
 using ProfitFox.Domain.ValueObjects.MarketData;
@@ -108,7 +109,12 @@ internal sealed class IdeaTradeSession(
                 },
                 fill =>
                 {
-                    if (Mine(fill))
+                    if (fill.Kind != ExchangeFillKind.Trade && fill.Instrument == _trade.Instrument)
+                    {
+                        // The exchange closed a position of the symbol by itself, with an order of its own: an exit, not a foreign fill.
+                        _inputs.Writer.TryWrite(new ForcedFillInput(fill));
+                    }
+                    else if (Mine(fill))
                     {
                         _inputs.Writer.TryWrite(new FillInput(fill));
                     }
@@ -337,6 +343,10 @@ internal sealed class IdeaTradeSession(
                 await TradeAsync(fill, cancellationToken);
 
                 break;
+            case ForcedFillInput { Fill: var forced }:
+                await ForcedAsync(forced, cancellationToken);
+
+                break;
             case RestoreInput:
                 await RebuildAsync(cancellationToken);
 
@@ -387,6 +397,50 @@ internal sealed class IdeaTradeSession(
                 await repository.AddFillAsync(
                     new IdeaTradeFill(fill.ExecId, _id, exchangeId, fill.Quantity, fill.Price, fill.Fee, fill.FeeCoin == _context.BaseCoin ? FeeAsset.Base : FeeAsset.Quote, fill.At),
                     token);
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    ///     A liquidation or an auto-deleveraging of the exchange that closes the side of the trade. Under the locks of the open trades of that side,
+    ///     taken in the order of their ids, the execution is split between them once; then this trade applies its own share, once. The shares of
+    ///     the other trades are theirs to apply.
+    /// </summary>
+    private async Task ForcedAsync(ExchangeFill fill, CancellationToken cancellationToken)
+    {
+        IdeaSide closed = fill.Side == OrderSide.Sell ? IdeaSide.Long : IdeaSide.Short;
+
+        if (_trade.Status != IdeaTradeStatus.Open || _trade.Side != closed)
+        {
+            return;
+        }
+
+        IdeaTradeLeg leg = fill.Kind == ExchangeFillKind.Liquidation ? IdeaTradeLeg.Liquidation : IdeaTradeLeg.Adl;
+        await executor.ExecuteAsync(
+            async token =>
+            {
+                IReadOnlyList<IdeaTrade> holders = await repository.LockHoldersAsync(_trade.AccountId, _trade.Instrument, closed, token);
+                _trade = await repository.LockLeasedAsync(_id, worker.Id, leased.Epoch, token) ?? throw new LeaseLostException();
+
+                if (!await repository.HasForcedSharesAsync(fill.ExecId, token))
+                {
+                    IReadOnlyList<ForcedFillShare> shares = ForcedFillShares.Split(
+                        fill.Quantity,
+                        fill.Price,
+                        fill.Fee,
+                        _context.Rules.QuantityStep,
+                        [.. holders.Select(holder => new ForcedFillHolder(holder.Id, holder.HeldQuantity))]);
+                    await repository.AddForcedSharesAsync([.. shares.Select(share => new IdeaTradeForcedShare(fill.ExecId, share.TradeId, leg, share.Totals, fill.At))], token);
+                }
+
+                if (await repository.GetUnappliedForcedShareAsync(fill.ExecId, _id, token) is { } own)
+                {
+                    _trade = _trade.ExitGrown(own.Leg, own.Totals, time.GetUtcNow());
+                    await repository.MarkForcedShareAppliedAsync(fill.ExecId, _id, token);
+                    await repository.SaveAsync(_trade, time.GetUtcNow(), token);
+                }
+
+                return 0;
             },
             cancellationToken);
     }

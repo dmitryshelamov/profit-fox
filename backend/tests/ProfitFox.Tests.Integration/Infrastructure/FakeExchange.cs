@@ -20,6 +20,7 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
     private readonly Dictionary<string, List<ExchangeFill>> _fills = [];
     private readonly Dictionary<string, List<ExchangeFill>> _late = [];
     private readonly Dictionary<string, Child> _children = [];
+    private readonly List<ExchangeFill> _forced = [];
     private readonly List<Action<Candle>> _candles = [];
     private readonly List<Action<ExchangeOrder>> _orderUpdates = [];
     private readonly List<Action<ExchangeFill>> _fillUpdates = [];
@@ -390,6 +391,57 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
         }
     }
 
+    /// <summary>
+    ///     Bybit closes a position of <paramref name="instrument" /> by itself, by a liquidation or an auto-deleveraging: an order of its own with no
+    ///     client id sells or buys back <paramref name="quantity" />, the position shrinks, and the execution stays in the history of the symbol.
+    ///     <paramref name="silently" /> keeps it from the stream, as a Worker that is down misses it.
+    /// </summary>
+    public ExchangeFill ForceFill(
+        ExchangeFillKind kind,
+        OrderSide side,
+        decimal quantity,
+        decimal price,
+        decimal fee,
+        Instrument instrument,
+        string? execId = null,
+        bool silently = false)
+    {
+        ExchangeFill fill;
+        Action<ExchangeFill>[] handlers;
+
+        lock (_lock)
+        {
+            string id = execId ?? $"e-{++_execs}";
+            fill = new ExchangeFill(id, "", quantity, price, fee, "USDT", Clock.GetUtcNow(), instrument, $"x-{id}", kind, side);
+            _forced.Add(fill);
+            Holding += side == OrderSide.Buy ? quantity : -quantity;
+            handlers = silently ? [] : [.. _fillUpdates];
+        }
+
+        foreach (Action<ExchangeFill> handler in handlers)
+        {
+            handler(fill);
+        }
+
+        return fill;
+    }
+
+    /// <summary>Tells the stream of an execution once more, as Bybit may repeat one.</summary>
+    public void RepeatFill(ExchangeFill fill)
+    {
+        Action<ExchangeFill>[] handlers;
+
+        lock (_lock)
+        {
+            handlers = [.. _fillUpdates];
+        }
+
+        foreach (Action<ExchangeFill> handler in handlers)
+        {
+            handler(fill);
+        }
+    }
+
     /// <summary>A fill of an order nobody of the system placed, such as the owner by hand, made on <paramref name="instrument" />.</summary>
     public void ForeignFill(string clientId, decimal quantity, decimal price, Instrument? instrument)
     {
@@ -553,9 +605,19 @@ public sealed class FakeExchange : IExchangeLedger, IOrderGateway, IExchangeStre
         }
     }
 
+    /// <summary>How many times the liquidations and the auto-deleveraging of a symbol were read.</summary>
+    public int ForcedFillReads => _forcedFillReads;
+
+    private int _forcedFillReads;
+
     public Task<IReadOnlyList<ExchangeFill>> GetForcedFillsAsync(ExchangeKey key, Instrument instrument, DateTimeOffset since, CancellationToken cancellationToken)
     {
-        throw new NotImplementedException();
+        Interlocked.Increment(ref _forcedFillReads);
+
+        lock (_lock)
+        {
+            return Task.FromResult<IReadOnlyList<ExchangeFill>>([.. _forced.Where(fill => fill.Instrument == instrument && fill.At >= since).OrderBy(fill => fill.At)]);
+        }
     }
 
     public Task<FeeSchedule> GetFeesAsync(ExchangeKey key, Instrument instrument, CancellationToken cancellationToken)

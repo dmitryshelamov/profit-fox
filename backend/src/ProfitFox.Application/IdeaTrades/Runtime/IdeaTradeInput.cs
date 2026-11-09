@@ -12,6 +12,9 @@ internal sealed record OrderInput(ExchangeOrder Order) : IdeaTradeInput;
 /// <summary>An execution of an order of the trade, or of its stop or target, from the exchange.</summary>
 internal sealed record FillInput(ExchangeFill Fill) : IdeaTradeInput;
 
+/// <summary>A liquidation or an auto-deleveraging of the exchange on the instrument of the trade: an exit of the trades of the side it closes.</summary>
+internal sealed record ForcedFillInput(ExchangeFill Fill) : IdeaTradeInput;
+
 /// <summary>A stream is back after a gap: what came meanwhile is read again.</summary>
 internal sealed record RestoreInput : IdeaTradeInput;
 
