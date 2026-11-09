@@ -115,6 +115,26 @@ public class IdeaTradeRepositoryTests
         (await _repository.GetAsync(trade.Id, CancellationToken.None)).ShouldBeEquivalentTo(changed);
     }
 
+    // Decision 4 of recognize-liquidations-in-idea-trades: a liquidation in part, then the auto-deleveraging of the rest, and the liquidation of all.
+    [Test]
+    public async Task Saved_trade_keeps_what_the_liquidation_and_the_auto_deleveraging_took()
+    {
+        IdeaTrade adl = await CreateAsync(Now);
+        IdeaTrade liquidated = await CreateAsync(Now.AddMinutes(1));
+        IdeaTrade byAdl = adl.EntryGrown(new LegTotals(0.47m, 49.82m, 0.02m), Now.AddMinutes(1))
+            .ExitGrown(IdeaTradeLeg.Liquidation, new LegTotals(0.2m, 19m, 0.01m), Now.AddMinutes(2))
+            .ExitGrown(IdeaTradeLeg.Adl, new LegTotals(0.27m, 26m, 0.015m), Now.AddMinutes(3));
+        IdeaTrade byLiquidation = liquidated.EntryGrown(new LegTotals(0.47m, 49.82m, 0.02m), Now.AddMinutes(1))
+            .ExitGrown(IdeaTradeLeg.Liquidation, new LegTotals(0.47m, 45m, 0.025m), Now.AddMinutes(2));
+
+        await SaveAsync(byAdl);
+        await SaveAsync(byLiquidation);
+
+        (await _repository.GetAsync(adl.Id, CancellationToken.None)).ShouldBeEquivalentTo(byAdl);
+        (await _repository.GetAsync(liquidated.Id, CancellationToken.None)).ShouldBeEquivalentTo(byLiquidation);
+        (byAdl.Status, byLiquidation.Status).ShouldBe((IdeaTradeStatus.ClosedByAdl, IdeaTradeStatus.Liquidated));
+    }
+
     // Decisions 1 and 2: the Worker's save writes neither the promise nor the outcome of the idea; the scanner writes the outcome, and the save keeps it.
     [Test]
     public async Task Save_of_a_Worker_keeps_the_promise_and_the_outcome_of_the_idea_and_writes_the_time_it_opened()

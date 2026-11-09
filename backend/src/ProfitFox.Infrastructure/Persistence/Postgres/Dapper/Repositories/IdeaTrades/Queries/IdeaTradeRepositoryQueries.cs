@@ -16,6 +16,8 @@ internal static class IdeaTradeRepositoryQueries
                                         take_profit_quantity AS "TakeProfitQuantity", take_profit_value AS "TakeProfitValue", take_profit_fee AS "TakeProfitFee",
                                         stop_loss_quantity AS "StopLossQuantity", stop_loss_value AS "StopLossValue", stop_loss_fee AS "StopLossFee",
                                         manual_quantity AS "ManualQuantity", manual_value AS "ManualValue", manual_fee AS "ManualFee",
+                                        liquidation_quantity AS "LiquidationQuantity", liquidation_value AS "LiquidationValue", liquidation_fee AS "LiquidationFee",
+                                        adl_quantity AS "AdlQuantity", adl_value AS "AdlValue", adl_fee AS "AdlFee",
                                         last_order_number AS "LastOrderNumber", created_at AS "CreatedAt", lease_epoch AS "LeaseEpoch",
                                         promised_badge AS "PromisedBadge", promised_probability AS "PromisedProbability", promised_expectancy AS "PromisedExpectancy",
                                         promised_cases AS "PromisedCases", break_even AS "BreakEven", net_risk_reward AS "NetRiskReward",
@@ -214,6 +216,8 @@ internal static class IdeaTradeRepositoryQueries
                 take_profit_quantity = @TakeProfitQuantity, take_profit_value = @TakeProfitValue, take_profit_fee = @TakeProfitFee,
                 stop_loss_quantity = @StopLossQuantity, stop_loss_value = @StopLossValue, stop_loss_fee = @StopLossFee,
                 manual_quantity = @ManualQuantity, manual_value = @ManualValue, manual_fee = @ManualFee,
+                liquidation_quantity = @LiquidationQuantity, liquidation_value = @LiquidationValue, liquidation_fee = @LiquidationFee,
+                adl_quantity = @AdlQuantity, adl_value = @AdlValue, adl_fee = @AdlFee,
                 last_order_number = @LastOrderNumber, opened_at = @OpenedAt, updated_at = @Now
             WHERE id = @Id
             """,
@@ -237,6 +241,12 @@ internal static class IdeaTradeRepositoryQueries
                 trade.ManualQuantity,
                 trade.ManualValue,
                 trade.ManualFee,
+                trade.LiquidationQuantity,
+                trade.LiquidationValue,
+                trade.LiquidationFee,
+                trade.AdlQuantity,
+                trade.AdlValue,
+                trade.AdlFee,
                 trade.LastOrderNumber,
                 trade.OpenedAt,
                 Now = now

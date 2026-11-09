@@ -32,7 +32,7 @@
   NULL DEFAULT 0`), новый `CK_idea_trades_status` с `liquidated` и `closed_by_adl`, таблица `idea_trade_forced_shares`
   (ключ `exec_id` + `trade_id`, FK с каскадом). Готово, когда тест миграции (старые строки с нулями, новые статусы
   принимаются) зелёный.
-- [ ] 3.2 `IdeaTradeDb`, конвертеры и запросы Dapper для новых ног. Коды `liquidated` и `closed_by_adl` в
+- [x] 3.2 `IdeaTradeDb`, конвертеры и запросы Dapper для новых ног. Коды `liquidated` и `closed_by_adl` в
   `IdeaTradeCodes`. Готово, когда `IdeaTradeRepositoryTests` на сохранение и чтение обеих ног и статусов зелёные.
 - [ ] 3.3 Методы репозитория долей (порт `IIdeaTradeRepository`): есть ли доли исполнения, вставка долей, доля сделки
   без `applied`, отметка `applied`, блокировка открытых сделок аккаунта, символа и стороны по порядку id. Готово, когда

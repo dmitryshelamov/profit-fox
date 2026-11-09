@@ -68,6 +68,24 @@ internal sealed class IdeaTradeDb
 
     public decimal ManualFee { get; init; }
 
+    /// <summary>Of a real trade only.</summary>
+    public decimal LiquidationQuantity { get; init; }
+
+    /// <summary>Of a real trade only.</summary>
+    public decimal LiquidationValue { get; init; }
+
+    /// <summary>Of a real trade only.</summary>
+    public decimal LiquidationFee { get; init; }
+
+    /// <summary>Of a real trade only.</summary>
+    public decimal AdlQuantity { get; init; }
+
+    /// <summary>Of a real trade only.</summary>
+    public decimal AdlValue { get; init; }
+
+    /// <summary>Of a real trade only.</summary>
+    public decimal AdlFee { get; init; }
+
     /// <summary>Of a paper trade only.</summary>
     public decimal ExpiryQuantity { get; init; }
 
