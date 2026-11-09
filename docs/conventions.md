@@ -200,7 +200,7 @@ enforces a rule, the check is the source of truth.
   every day of the history window (`Scanner:HistoryDays` and two more), kept once BTC is covered to the end of the day, and the funding of a pair read once a turn; the end of a turn goes to `IScannerJournal.Replayed` with its days and the time of the engine, of the reads and of the writes), `IdeaOutcomes` (one pass over the signals by key and firing:
   the clustered sums of the buckets, their parents and their categories, the buckets of the model and the outcomes of the calibration, `IdeaOutcomesResult`
   with the roots of the categories; the burst of a case from the count of the pairs of its minute it is given) and `IdeaStatistics` (the buckets and the calibration from that
-  pass, the whole one with the counts of the pairs by minute of `IIdeaSignalRepository.CountPairsByMinuteAsync`, whole once an hour in a lane of `ScannerSession`, a type × interval after its rule changed in another, so it never waits for the whole one; that
+  pass, the whole one with the counts of the pairs by minute of `IIdeaSignalRepository.CountPairsByMinuteAsync` (counted a week of signals at a time, by hashing, since one grouping over the signals of a replay did not end on prod), whole once an hour in a lane of `ScannerSession`, a type × interval after its rule changed in another, so it never waits for the whole one; that
   one shrinks to the roots of the categories of the last whole pass and writes nothing before the first; the start of the version, written when
   the session takes the lease, and the rules applied tell the calibration after the rules changed). `Scanner/ScannerPace` tells the
   replay whether the snapshot came late.
