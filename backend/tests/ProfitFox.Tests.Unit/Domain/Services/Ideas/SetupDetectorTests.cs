@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Services.Ideas;
@@ -133,6 +135,21 @@ public class SetupDetectorTests
 
         fired.ShouldBe([(Breakout.AddMinutes(4), IdeaSetup.Breakout)]);
         held.Count.ShouldBe(10);
+    }
+
+    // The base carries the high and the low of the last 200 closed candles, the first of their value as Max and Min take them, none with fewer.
+    [Test]
+    public void Base_carries_the_extremes_of_the_last_two_hundred_closed_candles()
+    {
+        IdeaCandle[] closed =
+        [
+            .. Enumerable.Range(0, 230).Select(index => new IdeaCandle(Five.AddMinutes(15 * index), 100m, index == 10 ? 150m : index == 40 ? 120.0m : index == 60 ? 120.00m : 110m, index == 50 ? 90.0m : index == 70 ? 90.00m : 95m, 100m, 1m))
+        ];
+
+        CandleExtremes extremes = SetupDetector.Base(closed, ZoneRules.Default)!.Extremes!;
+
+        (extremes.High.ToString(CultureInfo.InvariantCulture), extremes.Low.ToString(CultureInfo.InvariantCulture)).ShouldBe(("120.0", "90.0"));
+        SetupDetector.Base(closed[..199], ZoneRules.Default)!.Extremes.ShouldBeNull();
     }
 
     private static SetupReading? Reading(string set, DateTimeOffset at, decimal? percentile = null)

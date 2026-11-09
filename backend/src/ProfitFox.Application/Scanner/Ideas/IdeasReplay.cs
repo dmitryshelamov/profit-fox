@@ -1,3 +1,6 @@
+using System.Diagnostics;
+
+using ProfitFox.Application.Ports.Market;
 using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
@@ -17,7 +20,8 @@ namespace ProfitFox.Application.Scanner.Ideas;
 ///     the turn are written as far as they go, and written again as they go on.
 ///     The percentiles of volatility of a day come from the 90 days before it, and the last ones go to storage for the live ideas. Between
 ///     days the turn waits while the minute cycle is late. The levels go on today's price step of the pair, the only one the list of
-///     instruments tells.
+///     instruments tells. The end of a turn goes to the journal with the pair, its days and the time it spent in the engine, in reads and in
+///     writes (decision 1 of speed-up-ideas-replay).
 /// </summary>
 public sealed class IdeasReplay(
     ICandleRepository candles,
@@ -30,6 +34,7 @@ public sealed class IdeasReplay(
     ScannerSettings scanner,
     IdeasEngineVersion version,
     ScannerPace pace,
+    IScannerJournal journal,
     TimeProvider time)
 {
     private static readonly TimeSpan Day = TimeSpan.FromDays(1);
@@ -39,9 +44,17 @@ public sealed class IdeasReplay(
     private static readonly TimeSpan FundingBefore = TimeSpan.FromDays(7);
     private static readonly Instrument Btc = new Instrument(MarketCategory.Linear, "BTCUSDT");
 
-    // A settlement every hour at the most over the 8 days of funding a day reads.
-    private const int FundingRead = 8 * 24;
+    // A settlement every hour at the most, over the days of a turn, the 7 days before its first one and a day to spare.
+    private const int FundingPerDay = 24;
+    private const int FundingSpareDays = 8;
 
+    // The days of closes of BTC kept beyond the days of the history window: the day being replayed and the one a clock tick ahead.
+    private const int BtcSpareDays = 2;
+
+    // The cursors and the pairs the turns run, which the turns share (decision 2 of speed-up-ideas-replay).
+    private readonly Lock _lock = new Lock();
+    private readonly HashSet<Instrument> _running = [];
+    private readonly Dictionary<DateTimeOffset, Task<Dictionary<DateTimeOffset, decimal>>> _btc = [];
     private Dictionary<Instrument, IdeaReplayCursor>? _cursors;
 
     /// <summary>
@@ -60,51 +73,109 @@ public sealed class IdeasReplay(
         return false;
     }
 
-    /// <summary>Replays the turn of the pair furthest behind; <c>false</c> when every pair is replayed up to its coverage.</summary>
-    public async Task<bool> StepAsync(CancellationToken cancellationToken)
+    /// <summary>
+    ///     Starts the turn of the pair furthest behind among those no turn runs, while fewer than <see cref="IdeasSettings.ReplayTurns" /> run
+    ///     (decision 2 of speed-up-ideas-replay); the turn runs on the thread pool and its pair goes to another turn only once it ends. None when
+    ///     as many turns run or every other pair is replayed up to its coverage.
+    /// </summary>
+    public async Task<Task?> StartAsync(CancellationToken cancellationToken)
     {
-        _cursors ??= new Dictionary<Instrument, IdeaReplayCursor>(await cursors.GetAsync(version.Number, cancellationToken));
+        if (_cursors is null)
+        {
+            IReadOnlyDictionary<Instrument, IdeaReplayCursor> stored = await cursors.GetAsync(version.Number, cancellationToken);
+
+            lock (_lock)
+            {
+                _cursors ??= new Dictionary<Instrument, IdeaReplayCursor>(stored);
+            }
+        }
+
+        Turn? next;
+
+        lock (_lock)
+        {
+            if (_running.Count >= settings.ReplayTurns)
+            {
+                return null;
+            }
+
+            next = Next();
+
+            if (next is null)
+            {
+                return null;
+            }
+
+            _running.Add(next.Pair.Instrument);
+        }
+
+        return Task.Run(() => RunAsync(next, cancellationToken), CancellationToken.None);
+    }
+
+    /// <summary>The first day a turn may replay: the day ceiling of the time less the days of history the scanner keeps.</summary>
+    public static DateTimeOffset HistoryStart(DateTimeOffset now, int historyDays)
+    {
+        return Ceiling(now.AddDays(-historyDays));
+    }
+
+    // The turn of the pair furthest behind among those no turn runs; called under the lock.
+    private Turn? Next()
+    {
         DateTimeOffset now = time.GetUtcNow();
-        DateTimeOffset historyStart = Ceiling(now.AddDays(-scanner.HistoryDays));
-        Turn? next = market.Listed()
+        DateTimeOffset historyStart = HistoryStart(now, scanner.HistoryDays);
+
+        return market.Listed()
             // A pair waits for its price step too: a day replayed without ideas would never be replayed again.
-            .Where(pair => pair is { HistoryFrom: not null, CoveredUntil: not null, TickSize: not null })
+            .Where(pair => pair is { HistoryFrom: not null, CoveredUntil: not null, TickSize: not null } && !_running.Contains(pair.Instrument))
             .Select(pair =>
             {
                 DateTimeOffset start = Max(historyStart, Ceiling(pair.HistoryFrom!.Value));
 
                 // A cursor older than the history window starts the pair over: the days after it may hold no minutes any more.
-                IdeaReplayCursor? stored = _cursors.GetValueOrDefault(pair.Instrument);
+                IdeaReplayCursor? stored = _cursors!.GetValueOrDefault(pair.Instrument);
                 IdeaReplayCursor? cursor = stored?.ReplayedUntil >= start ? stored : null;
 
                 return new Turn(pair, start, Floor(pair.CoveredUntil!.Value), cursor, stored is not null && cursor is null);
             })
             .Where(turn => turn.From < turn.Until)
             .MinBy(turn => turn.Cursor?.ReplayedUntil ?? DateTimeOffset.MinValue);
+    }
 
-        if (next is null)
+    private async Task RunAsync(Turn turn, CancellationToken cancellationToken)
+    {
+        try
         {
-            return false;
+            await ReplayAsync(turn, cancellationToken);
         }
-
-        await ReplayAsync(next, cancellationToken);
-
-        return true;
+        finally
+        {
+            lock (_lock)
+            {
+                _running.Remove(turn.Pair.Instrument);
+            }
+        }
     }
 
     private async Task ReplayAsync(Turn turn, CancellationToken cancellationToken)
     {
         Instrument instrument = turn.Pair.Instrument;
+        var timings = new Timings();
         // The signals a pair started over had stored stay out: a path of them left unfinished would leave the later signals of its key undecided.
         if (turn.StartsOver)
         {
+            timings.Writes.Start();
             await signals.DeleteAsync(instrument, version.Number, cancellationToken);
+            timings.Writes.Stop();
         }
 
         var engine = new IdeaEngine(settings.Rules(), version.Number, true);
-        (Dictionary<Interval, Ratios> ratios, IdeaCandle? last) = await WarmAsync(engine, instrument, turn, cancellationToken);
+        (Dictionary<Interval, Ratios> ratios, IdeaCandle? last) = await WarmAsync(engine, instrument, turn, timings, cancellationToken);
         List<IdeaSignal> open = [.. turn.Cursor?.Open ?? []];
         var ended = new List<IdeaSignal>();
+        int days = 0;
+        timings.Reads.Start();
+        IReadOnlyList<FundingRatePoint> rates = await FundingAsync(instrument, turn, cancellationToken);
+        timings.Reads.Stop();
 
         for (DateTimeOffset day = turn.From; day < turn.Until; day += Day)
         {
@@ -113,15 +184,20 @@ public sealed class IdeasReplay(
                 await Task.Delay(PaceWait, time, cancellationToken);
             }
 
+            days++;
             var inputs = new IdeaInputs(null, Percentiles(ratios, day), turn.Pair.TickSize);
+            timings.Reads.Start();
             IReadOnlyList<IdeaCandle> known = Minutes(await candles.GetAsync(instrument, Interval.OneMinute, day, day + Day, 1440, cancellationToken));
-            Market dayMarket = await MarketAsync(instrument, day, cancellationToken);
+            var dayMarket = new Market(await BtcAsync(day, cancellationToken), [.. rates.Where(rate => rate.Time >= day - FundingBefore && rate.Time < day + Day)]);
+            timings.Reads.Stop();
 
             // Before the first trade of a pair there is nothing to replay; after it every minute of the day is fed, the ones without trades flat.
             IReadOnlyList<IdeaCandle> minutes = IdeaCandles.Minutes(known, day, day + Day, last?.Close);
 
             if (minutes.Count > 0)
             {
+                timings.Engine.Start();
+
                 foreach (IdeaCandle minute in minutes)
                 {
                     // A signal goes on from the minute after it fired.
@@ -134,19 +210,32 @@ public sealed class IdeasReplay(
                     series.Add(IdeaCandles.FromMinutes(interval, minutes, day, day + Day));
                 }
 
+                Settle(open, ended, day + Day);
+                timings.Engine.Stop();
                 last = minutes[^1];
+                timings.Writes.Start();
                 await signals.UpsertAsync(ended, cancellationToken);
+                timings.Writes.Stop();
                 ended = [];
             }
 
             var cursor = new IdeaReplayCursor(day + Day, [.. open]);
+            timings.Writes.Start();
             await cursors.SetAsync(instrument, version.Number, cursor, cancellationToken);
-            _cursors![instrument] = cursor;
+            timings.Writes.Stop();
+
+            lock (_lock)
+            {
+                _cursors![instrument] = cursor;
+            }
         }
 
+        timings.Writes.Start();
         await signals.UpsertAsync(open, cancellationToken);
         IReadOnlyDictionary<Interval, VolatilityPercentiles> latest = Percentiles(ratios, turn.Until);
         await volatility.SaveAsync([.. latest.Select(entry => new IdeaVolatility(instrument, entry.Key, entry.Value.High!.Value, entry.Value.Low))], cancellationToken);
+        timings.Writes.Stop();
+        journal.Replayed(instrument, days, timings.Engine.Elapsed, timings.Reads.Elapsed, timings.Writes.Elapsed);
     }
 
     /// <summary>
@@ -157,9 +246,11 @@ public sealed class IdeasReplay(
         IdeaEngine engine,
         Instrument instrument,
         Turn turn,
+        Timings timings,
         CancellationToken cancellationToken)
     {
         DateTimeOffset from = turn.From;
+        timings.Reads.Start();
         var closed = new Dictionary<Interval, IReadOnlyList<IdeaCandle>>();
         var ratios = new Dictionary<Interval, Ratios>();
         var histories = new Dictionary<Interval, IReadOnlyList<IdeaCandle>>();
@@ -182,34 +273,94 @@ public sealed class IdeasReplay(
         TimeSpan span = Day * Math.Max(1, (int)Math.Ceiling(engine.Window / Day.TotalMinutes));
         IReadOnlyList<IdeaCandle> known = Minutes(await candles.GetAsync(instrument, Interval.OneMinute, from - span, from, (int)span.TotalMinutes, cancellationToken));
         decimal? closeBefore = histories[Interval.FiveMinutes].LastOrDefault(candle => Interval.FiveMinutes.CandleEnd(candle.OpenTime) <= from - span)?.Close;
+        timings.Reads.Stop();
+        timings.Engine.Start();
         IReadOnlyList<IdeaCandle> minutes = IdeaCandles.Minutes(known, from - span, from, closeBefore);
         engine.Warm(instrument, closed, minutes, [], new IdeaInputs(null, Percentiles(ratios, from - Day), turn.Pair.TickSize));
+        timings.Engine.Stop();
 
         return (ratios, minutes.Count > 0 ? minutes[^1] : null);
     }
 
     /// <summary>
-    ///     The market of a day the features of its signals are measured by (decision 5 of add-market-idea-features): the closes of the minutes of
-    ///     <c>linear</c> / <c>BTCUSDT</c> from 240 minutes before the day to its end, and the funding settlements of a linear pair from 7 days
-    ///     before it, an interval of funding being 8 hours at the most.
+    ///     The closes of the minutes of <c>linear</c> / <c>BTCUSDT</c> from 240 minutes before a day to its end, which the features of the signals
+    ///     of the day are measured by (decision 5 of add-market-idea-features): read once for every turn over the day, every day of the history window
+    ///     kept (decision 3 of speed-up-ideas-replay) once BTC is loaded to the end of it. A read that failed is not kept, so the next turn reads it again.
     /// </summary>
-    private async Task<Market> MarketAsync(Instrument instrument, DateTimeOffset day, CancellationToken cancellationToken)
+    private async Task<Dictionary<DateTimeOffset, decimal>> BtcAsync(DateTimeOffset day, CancellationToken cancellationToken)
     {
-        IReadOnlyList<Candle> btc = await candles.GetAsync(Btc, Interval.OneMinute, day - BtcSpan, day + Day, (int)(BtcSpan + Day).TotalMinutes, cancellationToken);
-        IReadOnlyList<FundingRatePoint> rates = instrument.Category == MarketCategory.Linear
-            ? await funding.GetAsync(instrument, day - FundingBefore, day + Day, FundingRead, cancellationToken)
-            : [];
+        // A day BTC has not loaded to its end yet (or BTC outside the list) is read for this turn only: a later turn may find more of it.
+        if (!(market.Listed().FirstOrDefault(pair => pair.Instrument == Btc)?.CoveredUntil >= day + Day))
+        {
+            return await ReadBtcAsync(day, cancellationToken);
+        }
 
-        return new Market(btc.ToDictionary(candle => candle.OpenTime, candle => candle.Close.Value), rates);
+        Task<Dictionary<DateTimeOffset, decimal>>? read;
+
+        lock (_lock)
+        {
+            if (!_btc.TryGetValue(day, out read))
+            {
+                read = ReadBtcAsync(day, cancellationToken);
+                _btc[day] = read;
+
+                if (_btc.Count > scanner.HistoryDays + BtcSpareDays)
+                {
+                    _btc.Remove(_btc.Keys.Min());
+                }
+            }
+        }
+
+        try
+        {
+            return await read;
+        }
+        catch
+        {
+            // Only this read goes: a turn that came after it may have stored a read of its own.
+            lock (_lock)
+            {
+                ((ICollection<KeyValuePair<DateTimeOffset, Task<Dictionary<DateTimeOffset, decimal>>>>)_btc).Remove(new(day, read));
+            }
+
+            throw;
+        }
     }
 
-    // Steps the open paths by the minute; the ones that end move to the ended.
+    private async Task<Dictionary<DateTimeOffset, decimal>> ReadBtcAsync(DateTimeOffset day, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<Candle> btc = await candles.GetAsync(Btc, Interval.OneMinute, day - BtcSpan, day + Day, (int)(BtcSpan + Day).TotalMinutes, cancellationToken);
+
+        return btc.ToDictionary(candle => candle.OpenTime, candle => candle.Close.Value);
+    }
+
+    /// <summary>
+    ///     The funding settlements of a linear pair over the days of a turn and the 7 days before its first one, read once a turn (decision 3 of
+    ///     speed-up-ideas-replay); a day takes those of the 7 days before it, as a read of its own gave, an interval of funding being 8 hours at
+    ///     the most. None on spot.
+    /// </summary>
+    private async Task<IReadOnlyList<FundingRatePoint>> FundingAsync(Instrument instrument, Turn turn, CancellationToken cancellationToken)
+    {
+        int days = (int)((turn.Until - turn.From) / Day);
+
+        return instrument.Category == MarketCategory.Linear
+            ? await funding.GetAsync(instrument, turn.From - FundingBefore, turn.Until, FundingPerDay * (days + FundingSpareDays), cancellationToken)
+            : [];
+    }
+
+    // Steps the open paths by the minute, lazily (decision 1 of speed-up-ideas-replay): a path the minute did not touch stays as it is, tracked
+    // until the end of the day once the day ends; the ones that end move to the ended.
     private static void Advance(List<IdeaSignal> open, List<IdeaSignal> ended, IdeaCandle minute)
     {
         for (int index = open.Count - 1; index >= 0; index--)
         {
             IdeaSignal signal = open[index];
-            SignalPath path = SignalPathTracker.Step(signal.Path, minute);
+            SignalPath path = SignalPathTracker.StepLazily(signal.Path, minute);
+
+            if (ReferenceEquals(path, signal.Path))
+            {
+                continue;
+            }
 
             if (!path.IsOpen)
             {
@@ -223,6 +374,27 @@ public sealed class IdeasReplay(
         }
     }
 
+    // The end of a day: every open path is tracked until it, and one whose window closed right there ends with the day.
+    private static void Settle(List<IdeaSignal> open, List<IdeaSignal> ended, DateTimeOffset until)
+    {
+        for (int index = open.Count - 1; index >= 0; index--)
+        {
+            IdeaSignal signal = open[index];
+
+            IdeaSignal tracked = signal with { Path = signal.Path with { TrackedUntil = until } };
+
+            if (!tracked.Path.IsOpen)
+            {
+                ended.Add(tracked);
+                open.RemoveAt(index);
+            }
+            else
+            {
+                open[index] = tracked;
+            }
+        }
+    }
+
     /// <summary>The 10th and 90th percentiles of each interval on a day: of the same ratios of the 90 days before it.</summary>
     private static Dictionary<Interval, VolatilityPercentiles> Percentiles(Dictionary<Interval, Ratios> ratios, DateTimeOffset day)
     {
@@ -230,12 +402,10 @@ public sealed class IdeasReplay(
 
         foreach ((Interval interval, Ratios series) in ratios)
         {
-            IReadOnlyList<decimal> between = series.Between(day - PercentileWindow, day);
-
             // Both need the same 100 ratios: a day has both or neither.
-            if (Volatility.Percentile(between, 0.9m) is { } high)
+            if (Volatility.Percentiles(series.Between(day - PercentileWindow, day)) is { } both)
             {
-                percentiles[interval] = new VolatilityPercentiles(Volatility.Percentile(between, 0.1m), high);
+                percentiles[interval] = both;
             }
         }
 
@@ -262,6 +432,16 @@ public sealed class IdeasReplay(
     private static DateTimeOffset Max(DateTimeOffset left, DateTimeOffset right)
     {
         return left > right ? left : right;
+    }
+
+    /// <summary>How long a turn spent in the engine (the warm-up, the minutes and the paths), in reads of storage and in writes to it.</summary>
+    private sealed class Timings
+    {
+        public Stopwatch Engine { get; } = new Stopwatch();
+
+        public Stopwatch Reads { get; } = new Stopwatch();
+
+        public Stopwatch Writes { get; } = new Stopwatch();
     }
 
     private sealed record Turn(ScannerPair Pair, DateTimeOffset Start, DateTimeOffset Until, IdeaReplayCursor? Cursor, bool StartsOver)

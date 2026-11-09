@@ -46,9 +46,15 @@ public sealed record SignalPath(
     ///     Whether the path goes on: it ends at the stop, before or after the entry, 7 days after the entry, at the minute that opens 7 days after
     ///     the firing without one — which ends a window of 7 days — or at the first minute of a market signal that did not enter.
     /// </summary>
-    public bool IsOpen => StopAfter is null && StopBeforeEntryAfter is null && (EnteredAt is { } entered
-        ? TrackedUntil < entered + Horizon
-        : IsMarket ? TrackedUntil == FiredAt : TrackedUntil <= FiredAt + Horizon);
+    public bool IsOpen => IsOpenAt(TrackedUntil);
+
+    /// <summary>Whether the path would go on were it tracked until <paramref name="trackedUntil" />.</summary>
+    public bool IsOpenAt(DateTimeOffset trackedUntil)
+    {
+        return StopAfter is null && StopBeforeEntryAfter is null && (EnteredAt is { } entered
+            ? trackedUntil < entered + Horizon
+            : IsMarket ? trackedUntil == FiredAt : trackedUntil <= FiredAt + Horizon);
+    }
 
     public static SignalPath Fired(IdeaPlan plan, Interval interval, DateTimeOffset firedAt, decimal tick)
     {

@@ -195,7 +195,9 @@ enforces a rule, the check is the source of truth.
   `IdeaInputs`; in a replay it keeps no ideas and gives every signal), `LiveIdeas` (the warm-ups and the minute of live ideas after the snapshot; counts the distinct pairs of a side on an interval among the ideas of the minute into their `BurstPairs` before the autos and storage; reads the exit
   rules every minute and puts a type × interval whose rule changed into `IdeaRecomputes`; the ideas that closed on the minute go to storage with their
   outcome for the trades made of them, and `CatchUpTradeOutcomesAsync` writes it once at the start of the session for the trades that missed it), `IdeasReplay` (the replay of history pair by pair and day
-  by day, with the minutes of BTC and the funding settlements a day reads for the features of its signals, the paths of the signals open at the cursor, the clean-up of other versions), `IdeaOutcomes` (one pass over the signals by key and firing:
+  by day, with the minutes of BTC and the funding settlements a day reads for the features of its signals, the paths of the signals open at the cursor, the clean-up of other versions;
+  `StartAsync` starts the turn of the pair furthest behind among those no turn runs, up to `Ideas:ReplayTurns` at once, the closes of BTC of a day shared by the turns for
+  every day of the history window (`Scanner:HistoryDays` and two more), kept once BTC is covered to the end of the day, and the funding of a pair read once a turn; the end of a turn goes to `IScannerJournal.Replayed` with its days and the time of the engine, of the reads and of the writes), `IdeaOutcomes` (one pass over the signals by key and firing:
   the clustered sums of the buckets, their parents and their categories, the buckets of the model and the outcomes of the calibration, `IdeaOutcomesResult`
   with the roots of the categories; the burst of a case from the count of the pairs of its minute it is given) and `IdeaStatistics` (the buckets and the calibration from that
   pass, the whole one with the counts of the pairs by minute of `IIdeaSignalRepository.CountPairsByMinuteAsync`, whole once an hour in a lane of `ScannerSession`, a type × interval after its rule changed in another, so it never waits for the whole one; that
@@ -515,9 +517,12 @@ enforces a rule, the check is the source of truth.
     "ByInterval": { "240": { "Move": 2.5 } },
     "StopBuffer": 1.5,
     "ZoneMerge": 0.5,
-    "ZoneStrength": 2
+    "ZoneStrength": 2,
+    "ReplayTurns": 2
   }
   ```
+
+  `ReplayTurns` is how many turns of the replay of history run at once, each on a pair of its own; prod lowers it with `Ideas__ReplayTurns`.
 
 ## Presentation (`ProfitFox.Presentation`)
 
@@ -531,7 +536,7 @@ enforces a rule, the check is the source of truth.
   `Contracts/<Area>` (`Contracts/Bots`, `Contracts/Backtests`).
 - `MarketController`: `GET /api/market` (one page of the snapshot and the state of the scanner: `category`, `search`, `setup`, `interval`,
   `savedFilter`, `sort`, `direction`, `page`, `pageSize`; the answer has `items`, `page`, `pageSize`, `total`, `pairs`, `categories` and `setups`,
-  the counts of the chips), `GET /api/market/{category}/{symbol}` (a row;
+  the counts of the chips, and `replay`, the progress of the replay of ideas of `IdeasEngineVersion.Current` that `IIdeaReplayRepository.ProgressAsync` counts on reading, given the first day of the history window: a pair is done when it is at most a day behind the day of its coverage), `GET /api/market/{category}/{symbol}` (a row;
   404 when the snapshot has no such pair), `.../candles?interval&from&to` (as the bot chart), `.../open-interest?from&to` and
   `.../funding?from&to` (linear only, from storage, at most 1000 points); contracts in `Contracts/Market`. It never calls Bybit
   but for the candles of a pair.
@@ -658,8 +663,8 @@ React, TypeScript and Vite; the layout follows ProfitGraph's frontend. Interface
   every 15 s and asked with the category, the search (after a pause of 300 ms), the setup chip and its interval, the saved filter, the sort and the page,
   the row, open interest and funding of a pair; the counts of the category buttons and of the chips come from the answer, nothing is filtered or sorted in the browser;
   `model` for the codes of the sort columns, the size of a page and the rest of the choice kept in the browser (`choice`), the age of the snapshot and
-  compact numbers; `setups` for the setups, the interval of setups and the column «Сетап»; `MarketTable`, the banners and the mark of
-  incomplete data), `ideas` (queries of one page of the ideas, of a pair's ideas, zones, the own idea, the calibration, the exit rules and the preview of a candidate
+  compact numbers; `setups` for the setups, the interval of setups and the column «Сетап»; `MarketTable`, the banners (the history, the pause of REST, the replay of ideas while
+  `done < total`, stale data) and the mark of incomplete data), `ideas` (queries of one page of the ideas, of a pair's ideas, zones, the own idea, the calibration, the exit rules and the preview of a candidate
   rule (asked 300 ms after its last change), and the apply of a rule; `model` for the labels, the codes of the sort columns, the
   badge of the bucket, «мало данных», the break-even rounded up and the shares of the outcomes (`stats`), the colour of a difference, the verdict of the Brier
   score and the names of the rows of the calibration (`calibration`), profit and loss at the risk per idea and its storage in the browser (`riskStorage`), the groups of a

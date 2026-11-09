@@ -1,7 +1,7 @@
 import { useId } from 'react';
 
 import type { Schemas } from '@/shared/api/client';
-import { formatClock, groupDigits } from '@/shared/format/format';
+import { formatClock, formatDay, groupDigits } from '@/shared/format/format';
 
 import { ageText, isStale } from '../model/snapshotAge';
 
@@ -63,8 +63,9 @@ function Panel({
 }
 
 /**
- * What the scanner says about its own state: the history still loading, or paused by the rate limit of Bybit, and data
- * gone stale. The time it would take to load the rest is not shown: the state of the scanner does not tell the pace.
+ * What the scanner says about its own state: the history still loading, or paused by the rate limit of Bybit, the replay
+ * of ideas not caught up with every pair, and data gone stale. The time it would take to load the rest is not shown: the
+ * state of the scanner does not tell the pace.
  */
 export function ScannerBanners({
   market,
@@ -73,10 +74,11 @@ export function ScannerBanners({
   market: Schemas['MarketResponse'];
   now: number;
 }) {
-  const { history, restPausedUntil, snapshotAt } = market;
+  const { history, replay, restPausedUntil, snapshotAt } = market;
   const loaded = Number(history.loaded);
   const total = Number(history.total);
   const loading = loaded < total;
+  const replaying = Number(replay.done) < Number(replay.total);
 
   return (
     <>
@@ -96,6 +98,13 @@ export function ScannerBanners({
             progress={{ loaded, total, suffix: '' }}
           />
         )
+      )}
+      {replaying && (
+        <Panel
+          tone="run"
+          title={`Прогон идей: ${groupDigits(String(replay.done))} из ${groupDigits(String(replay.total))} инструментов`}
+          text={`Правила v${replay.engineVersion}, ${replay.slowest === null ? 'прогон ещё не начинался' : `самый отстающий день — ${formatDay(replay.slowest)}`}. Сигналы по истории и вероятности корзин дополняются по мере прогона, таблица обновляется как обычно.`}
+        />
       )}
       {snapshotAt !== null && isStale(snapshotAt, now) && (
         <Panel

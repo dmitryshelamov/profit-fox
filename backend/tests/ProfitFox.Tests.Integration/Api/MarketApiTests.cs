@@ -5,10 +5,13 @@ using System.Text.Json;
 using Npgsql;
 
 using ProfitFox.Domain.Entities.Ideas.Enums;
+using ProfitFox.Domain.Entities.Market;
 using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.Services.Ideas;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Market;
 using ProfitFox.Tests.Integration.Infrastructure;
 
@@ -140,6 +143,35 @@ public class MarketApiTests
 
         (market.GetProperty("items").GetArrayLength(), market.GetProperty("page").GetInt32(), market.GetProperty("total").GetInt32()).ShouldBe((20, 2, 120));
         market.GetProperty("items")[0].GetProperty("symbol").GetString().ShouldBe("P100USDT");
+    }
+
+    // Scenario "Ход прогона в ответе" (decision 4 of speed-up-ideas-replay): one pair replayed up to its coverage of two, the other behind it.
+    [Test]
+    public async Task Market_carries_the_progress_of_the_replay()
+    {
+        var march10 = DateTimeOffset.Parse("2024-03-10T00:00:00Z", CultureInfo.InvariantCulture);
+        var wif = new Instrument(MarketCategory.Linear, "WIFUSDT");
+        var pepe = new Instrument(MarketCategory.Linear, "PEPEUSDT");
+        await new ScannerPairRepository(_database).SaveAsync(
+            [.. new[] { wif, pepe }.Select(pair => new ScannerPair(pair, true, HistoryFrom: march10.AddDays(-90), CoveredUntil: SnapshotAt, TickSize: 0.0001m))],
+            CancellationToken.None);
+        var cursors = new IdeaReplayRepository(_database);
+        await cursors.SetAsync(wif, IdeasEngineVersion.Current, new IdeaReplayCursor(march10, []), CancellationToken.None);
+        await cursors.SetAsync(pepe, IdeasEngineVersion.Current, new IdeaReplayCursor(march10.AddDays(-25), []), CancellationToken.None);
+
+        JsonElement replay = (await GetAsync("/api/market")).GetProperty("replay");
+
+        (replay.GetProperty("done").GetInt32(), replay.GetProperty("total").GetInt32(), replay.GetProperty("engineVersion").GetInt32()).ShouldBe((1, 2, IdeasEngineVersion.Current));
+        replay.GetProperty("slowest").GetDateTimeOffset().ShouldBe(march10.AddDays(-25));
+    }
+
+    // Scenario "Прогон ещё не начинался": no pairs to replay, none replayed and no slowest day.
+    [Test]
+    public async Task Market_without_pairs_to_replay_has_none_replayed()
+    {
+        JsonElement replay = (await GetAsync("/api/market")).GetProperty("replay");
+
+        (replay.GetProperty("done").GetInt32(), replay.GetProperty("total").GetInt32(), replay.GetProperty("slowest").ValueKind).ShouldBe((0, 0, JsonValueKind.Null));
     }
 
     // Scenario "Сканер ни разу не работал".

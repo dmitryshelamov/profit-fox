@@ -291,6 +291,49 @@ describe('market screen', () => {
     expect(screen.queryByText(/История:/)).not.toBeInTheDocument();
   });
 
+  // Scenario "Прогон идёт" (speed-up-ideas-replay): the banner tells how many pairs the replay of ideas has caught up, the version of its rules
+  // and the slowest day in the local date, and the table goes on.
+  it('shows how far the replay of ideas has gone while it has not caught up with every pair', async () => {
+    open(() =>
+      marketSnapshot([sol], {
+        replay: { done: 507, total: 1211, slowest: '2026-08-15T00:00:00Z', engineVersion: 7 },
+      }),
+    );
+    renderApp('/market');
+
+    const banner = await screen.findByRole('status', {
+      name: 'Прогон идей: 507 из 1\u00a0211 инструментов',
+    });
+    expect(
+      within(banner).getByText(/Правила v7, самый отстающий день — 15\.08\.2026/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('table')).toBeInTheDocument();
+  });
+
+  it('says the replay has not begun while no pair has a day of it', async () => {
+    open(() =>
+      marketSnapshot([sol], { replay: { done: 0, total: 1211, slowest: null, engineVersion: 8 } }),
+    );
+    renderApp('/market');
+
+    const banner = await screen.findByRole('status', {
+      name: 'Прогон идей: 0 из 1\u00a0211 инструментов',
+    });
+    expect(within(banner).getByText(/Правила v8, прогон ещё не начинался/)).toBeInTheDocument();
+  });
+
+  // Scenario "Прогон закончен": no banner once the replay caught up, nor while there is nothing to replay.
+  it.each([
+    [1211, 1211],
+    [0, 0],
+  ])('shows no replay banner at %i of %i', async (done, total) => {
+    open(() => marketSnapshot([sol], { replay: { done, total, slowest: null, engineVersion: 7 } }));
+    renderApp('/market');
+    await tableOf();
+
+    expect(screen.queryByText(/Прогон идей/)).not.toBeInTheDocument();
+  });
+
   // Scenario "Сканер на паузе".
   it('says that Bybit limited the requests with the end of the pause, and goes on showing the table', async () => {
     open(() =>

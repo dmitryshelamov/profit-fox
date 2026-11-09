@@ -317,6 +317,89 @@ public class ScannerSessionTests
         await Should.ThrowAsync<OperationCanceledException>(session);
     }
 
+    // Scenario "Два хода одновременно" (decision 2 of speed-up-ideas-replay): the lane of ideas runs two turns at once, each on a pair of its own.
+    [Test]
+    public async Task Lane_of_ideas_runs_two_turns_at_once()
+    {
+        var gate = new TaskCompletionSource<IReadOnlyList<IdeaCandle>>();
+        ReplayPairs();
+        _candles.GetAggregatedAsync(Arg.Any<Instrument>(), Arg.Any<Interval>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(_ => gate.Task);
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session(historyDays: 2).RunAsync(cancellation.Token);
+
+        await WaitAsync(() => Warmed(Btc) > 0 && Warmed(Sol) > 0, advance: true);
+
+        gate.SetResult([]);
+        await WaitAsync(() => Replayed(Btc) && Replayed(Sol), advance: true);
+        await cancellation.CancelAsync();
+        await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
+    // A turn that fails is logged and its pair is taken again after the retry, while the other turn goes on.
+    [Test]
+    public async Task Failed_turn_is_logged_and_stops_neither_the_other_turn_nor_the_lane()
+    {
+        var failure = new InvalidOperationException("turn");
+        var gate = new TaskCompletionSource<IReadOnlyList<IdeaCandle>>();
+        ReplayPairs();
+        _candles.GetAggregatedAsync(Btc, Arg.Any<Interval>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<IReadOnlyList<IdeaCandle>>(failure));
+        _candles.GetAggregatedAsync(Sol, Arg.Any<Interval>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(_ => gate.Task);
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session(historyDays: 2).RunAsync(cancellation.Token);
+
+        await WaitAsync(() => Warmed(Sol) > 0 && Warmed(Btc) >= 2, advance: true);
+
+        _journal.Received().Failed("ideas", failure);
+        Warmed(Sol).ShouldBe(1);
+        gate.SetResult([]);
+        await WaitAsync(() => Replayed(Sol), advance: true);
+        await cancellation.CancelAsync();
+        await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
+    // The turns use the services of the session, so none outlives it: a session that is stopped waits for its running turns, and the failure
+    // of one that ends then is logged.
+    [Test]
+    public async Task Session_that_stops_waits_for_its_turns_and_logs_the_one_that_fails()
+    {
+        var failure = new InvalidOperationException("turn");
+        var gate = new TaskCompletionSource<IReadOnlyList<IdeaCandle>>();
+        ReplayPairs();
+        _candles.GetAggregatedAsync(Arg.Any<Instrument>(), Arg.Any<Interval>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(_ => gate.Task);
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session(historyDays: 2).RunAsync(cancellation.Token);
+        await WaitAsync(() => Warmed(Btc) > 0 && Warmed(Sol) > 0, advance: true);
+
+        await cancellation.CancelAsync();
+        await Task.Delay(200);
+
+        session.IsCompleted.ShouldBeFalse();
+        gate.SetException(failure);
+        await Should.ThrowAsync<OperationCanceledException>(session);
+        _journal.Received().Failed("ideas", failure);
+    }
+
+    // The lane goes round while the turns run: the warm-ups of the live ideas are read and the closed ideas removed each hour without waiting
+    // for the end of a turn.
+    [Test]
+    public async Task Lane_of_ideas_goes_on_while_the_turns_run()
+    {
+        var gate = new TaskCompletionSource<IReadOnlyList<IdeaCandle>>();
+        ReplayPairs();
+        _candles.GetAggregatedAsync(Arg.Any<Instrument>(), Arg.Any<Interval>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(_ => gate.Task);
+        using var cancellation = new CancellationTokenSource();
+        Task session = Session(historyDays: 2).RunAsync(cancellation.Token);
+        await WaitAsync(() => Warmed(Btc) > 0 && Warmed(Sol) > 0, advance: true);
+
+        await WaitAsync(() => _ideaStore.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IIdeaRepository.DeleteClosedBeforeAsync)) >= 2, advance: true);
+
+        (Warmed(Btc), Warmed(Sol)).ShouldBe((1, 1));
+        gate.SetResult([]);
+        await cancellation.CancelAsync();
+        await Should.ThrowAsync<OperationCanceledException>(session);
+    }
+
     // Scenario "Минута во время пересчёта": the statistics have a lane of their own; while a recompute stands, the replay goes on.
     [Test]
     public async Task Replay_goes_on_while_the_statistics_are_recomputed()
@@ -842,10 +925,11 @@ public class ScannerSessionTests
     }
 
     /// <param name="universeRefresh">How often the session reads the list of pairs again; without it, the default hour.</param>
-    private ScannerSession Session(TimeSpan? universeRefresh = null)
+    /// <param name="historyDays">The days of history the scanner keeps, and the replay replays.</param>
+    private ScannerSession Session(TimeSpan? universeRefresh = null, int historyDays = 1)
     {
         var market = new ScannerMarket();
-        var settings = new ScannerSettings { HistoryDays = 1, UniverseRefresh = universeRefresh ?? new ScannerSettings().UniverseRefresh };
+        var settings = new ScannerSettings { HistoryDays = historyDays, UniverseRefresh = universeRefresh ?? new ScannerSettings().UniverseRefresh };
         var pace = new ScannerPace();
         var recomputes = new IdeaRecomputes();
         var ideas = new LiveIdeas(_ideaStore, Substitute.For<IIdeaVolatilityRepository>(), _candles, Substitute.For<IFundingRateRepository>(), _exitRules, recomputes, market, new IdeasSettings(), new BacktestSettings(), NoAutos.Create(market, new BacktestSettings(), _time, _entries, _refusals), _time);
@@ -883,6 +967,7 @@ public class ScannerSessionTests
                 settings,
                 new IdeasEngineVersion(IdeasEngineVersion.Current),
                 pace,
+                _journal,
                 _time),
             new IdeaStatistics(
                 _ideaSignals,
@@ -900,6 +985,26 @@ public class ScannerSessionTests
             new ScannerMetrics(_meters.GetRequiredService<System.Diagnostics.Metrics.IMeterFactory>()),
             _journal,
             _time);
+    }
+
+    // BTCUSDT on spot and SOLUSDT on linear, with their history and price step, each with a day to replay when the scanner keeps 2 days.
+    private void ReplayPairs()
+    {
+        _stored = [new ScannerPair(Btc, true, HistoryFrom: Start.AddDays(-2), CoveredUntil: Start, TickSize: 0.01m), new ScannerPair(Sol, true, HistoryFrom: Start.AddDays(-2), CoveredUntil: Start, TickSize: 0.01m)];
+        _feed.ListInstrumentsAsync(MarketCategory.Linear, Arg.Any<CancellationToken>()).Returns([new ListedInstrument(MarketCategory.Linear, "SOLUSDT", "SOL", "USDT", true, true)]);
+        _candles.GetAsync(Arg.Any<Instrument>(), Interval.OneMinute, Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
+    }
+
+    // How many turns of a pair warmed up: each asks for the candles of its intervals first.
+    private int Warmed(Instrument instrument)
+    {
+        return _candles.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(ICandleRepository.GetAggregatedAsync)
+                                                      && Equals(call.GetArguments()[0], instrument) && Equals(call.GetArguments()[1], Interval.FiveMinutes));
+    }
+
+    private bool Replayed(Instrument instrument)
+    {
+        return _cursors.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(IIdeaReplayRepository.SetAsync) && Equals(call.GetArguments()[0], instrument));
     }
 
     private async Task WaitAsync(Func<bool> condition, bool advance = false)

@@ -376,6 +376,17 @@ public class CandleSetupDetectorTests
         Signal(IdeaSetup.QuietVolume, Input(Candle(100m, 100.9m, 99.3m, 100.4m, 2.9m), 2m, [])).ShouldBeNull();
     }
 
+    // Decision 1 of speed-up-ideas-replay: the extremes of the last 200 closed candles come with the base, measured once as it changes, so the
+    // detector reads them instead of the candles when it has them.
+    [Test]
+    public void New_extreme_is_read_by_the_extremes_of_the_base_when_given()
+    {
+        CandleSetupInput input = Extremes(200, 115m) with { Extremes = new CandleExtremes(116m, 100m) };
+
+        Signal(IdeaSetup.NewExtreme, input).ShouldBeNull();
+        Signal(IdeaSetup.NewExtreme, input with { Extremes = new CandleExtremes(114m, 100m) })!.Side.ShouldBe(IdeaSide.Long);
+    }
+
     // 200 or 199 candles from 100 to 110, the 150th from the end up to 120 and down to 100; one more before them from 90 to 130.
     private static CandleSetupInput Extremes(int count, decimal close)
     {

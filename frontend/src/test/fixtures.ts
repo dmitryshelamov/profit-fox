@@ -283,6 +283,7 @@ export const marketSnapshot = (
     snapshotAt: new Date().toISOString(),
     history: { loaded: rows.length, total: rows.length },
     restPausedUntil: null,
+    replay: { done: rows.length, total: rows.length, slowest: null, engineVersion: 7 },
     items: rows,
     page: 1,
     pageSize: 50,

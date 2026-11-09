@@ -74,6 +74,15 @@ public class ScannerSettingsTests
         Ideas(ScannerHost.ContentRoot()).ShouldContainKeyAndValue("Ideas:Thresholds:FlatMove", "0.5");
     }
 
+    // Decision 2 of speed-up-ideas-replay: the settings file carries the turns of the replay, which the environment lowers on prod.
+    [Test]
+    public void Scanner_settings_carry_the_turns_of_the_replay()
+    {
+        Ideas(ScannerHost.ContentRoot()).ShouldContainKeyAndValue("Ideas:ReplayTurns", "2");
+        new ConfigurationBuilder().AddJsonFile(Path.Combine(ScannerHost.ContentRoot(), "appsettings.json")).AddInMemoryCollection(new Dictionary<string, string?> { ["Ideas:ReplayTurns"] = "1" }).Build()
+            .GetSection("Ideas").Get<IdeasSettings>()!.ReplayTurns.ShouldBe(1);
+    }
+
     private static Dictionary<string, string?> Fees(string folder)
     {
         IConfigurationRoot configuration = new ConfigurationBuilder().AddJsonFile(Path.Combine(folder, "appsettings.json")).Build();

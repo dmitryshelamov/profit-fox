@@ -9,8 +9,6 @@ namespace ProfitFox.Domain.Services.Ideas;
 /// </summary>
 public static class CandleSetupDetector
 {
-    private const int ExtremeCandles = 200;
-
     public static IReadOnlyList<SetupSignal> Detect(CandleSetupInput input, SetupThresholds thresholds)
     {
         var signals = new List<SetupSignal>();
@@ -100,16 +98,14 @@ public static class CandleSetupDetector
         }
 
         // «Новый максимум / минимум»: the last minute closed beyond the high or the low of the last 200 closed candles; the side of the way out.
-        if (input.Closed.Count >= ExtremeCandles)
+        if ((input.Extremes ?? CandleExtremes.Of(input.Closed)) is { } extremes)
         {
-            IdeaCandle[] candles = [.. input.Closed.TakeLast(ExtremeCandles)];
-
-            if (last.Close > candles.Max(candle => candle.High))
+            if (last.Close > extremes.High)
             {
                 signals.Add(Signal(IdeaSetup.NewExtreme, IdeaSide.Long, input, volume));
             }
 
-            if (last.Close < candles.Min(candle => candle.Low))
+            if (last.Close < extremes.Low)
             {
                 signals.Add(Signal(IdeaSetup.NewExtreme, IdeaSide.Short, input, volume));
             }

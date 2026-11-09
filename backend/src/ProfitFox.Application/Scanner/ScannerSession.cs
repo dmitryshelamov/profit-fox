@@ -21,8 +21,8 @@ namespace ProfitFox.Application.Scanner;
 ///     and the ideas. Nine lanes run side by side: the stream's candles go to storage in batches; the liquidations of linear pairs go to storage
 ///     in batches, and the breaks of their stream to a table of their own, since the missed events cannot be loaded again; the REST lane catches up the pairs that lag behind, reads the list
 ///     again, tops up funding and loads history, one piece at a time; the minute cycle computes the snapshot and the live ideas; one lane clears the signals of other versions of the rules; the lane of
-///     ideas reads the warm-ups of the live ideas, replays history from storage only and removes the ideas closed more than a week ago once an
-///     hour; one lane of statistics recomputes the buckets and the calibration once an hour, another the buckets of a type × interval whose exit
+///     ideas reads the warm-ups of the live ideas, replays history from storage only in turns side by side, each on a pair of its own, and
+///     removes the ideas closed more than a week ago once an hour; one lane of statistics recomputes the buckets and the calibration once an hour, another the buckets of a type × interval whose exit
 ///     rule changed (requirement "Пересчёт корзин"). A failed step is logged and tried again; only the end of the lease stops the session.
 /// </summary>
 public sealed class ScannerSession(
@@ -355,42 +355,87 @@ public sealed class ScannerSession(
             journal.Failed("trade-outcomes", exception);
         }
 
-        while (!cancellationToken.IsCancellationRequested)
+        // The turns of the replay that run (decision 2 of speed-up-ideas-replay): they use the services of the session, so none outlives it.
+        var turns = new List<Task>();
+
+        try
         {
-            try
+            while (!cancellationToken.IsCancellationRequested)
             {
-                if (time.GetUtcNow() >= closedAt)
+                try
                 {
-                    await ideas.RemoveClosedAsync(cancellationToken);
-                    await CleanUpAutosAsync(cancellationToken);
-                    closedAt = time.GetUtcNow() + ClosedRemoval;
-                }
+                    if (time.GetUtcNow() >= closedAt)
+                    {
+                        await ideas.RemoveClosedAsync(cancellationToken);
+                        await CleanUpAutosAsync(cancellationToken);
+                        closedAt = time.GetUtcNow() + ClosedRemoval;
+                    }
 
-                // The warm-ups of the live ideas go before the history.
-                bool warmed = await ideas.ReadWarmUpsAsync(cancellationToken);
+                    // The warm-ups of the live ideas go before the history.
+                    bool warmed = await ideas.ReadWarmUpsAsync(cancellationToken);
 
-                if (warmed)
-                {
-                    continue;
-                }
+                    if (warmed)
+                    {
+                        continue;
+                    }
 
-                if (!_cleaned.Task.IsCompleted)
-                {
-                    // No history to replay before the clean-up ends: the next warm-ups come within a minute, the history once it ends.
-                    await Task.WhenAny(Task.Delay(TimeSpan.FromMinutes(1), time, cancellationToken), _cleaned.Task);
+                    if (Ended(turns))
+                    {
+                        // The pair of a turn that failed is taken again after the retry, the other turns going on meanwhile.
+                        await Task.Delay(Retry, time, cancellationToken);
+
+                        continue;
+                    }
+
+                    if (!_cleaned.Task.IsCompleted)
+                    {
+                        // No history to replay before the clean-up ends: the next warm-ups come within a minute, the history once it ends.
+                        await Task.WhenAny(Task.Delay(TimeSpan.FromMinutes(1), time, cancellationToken), _cleaned.Task);
+                        cancellationToken.ThrowIfCancellationRequested();
+
+                        continue;
+                    }
+
+                    while (await replay.StartAsync(cancellationToken) is { } turn)
+                    {
+                        turns.Add(turn);
+                    }
+
+                    // The next warm-ups come within a minute; a turn that ends makes room for the next one at once.
+                    await Task.WhenAny([Task.Delay(TimeSpan.FromMinutes(1), time, cancellationToken), .. turns]);
                     cancellationToken.ThrowIfCancellationRequested();
                 }
-                else if (!await replay.StepAsync(cancellationToken))
+                catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
                 {
-                    await Task.Delay(TimeSpan.FromMinutes(1), time, cancellationToken);
+                    journal.Failed("ideas", exception);
+                    await Task.Delay(Retry, time, cancellationToken);
                 }
             }
-            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        }
+        finally
+        {
+            await Task.WhenAll(turns.Select(turn => turn.ContinueWith(_ => { }, TaskScheduler.Default)));
+            Ended(turns);
+        }
+    }
+
+    /// <summary>Takes the turns that ended off the list; a turn that failed is logged. <c>true</c> when one failed.</summary>
+    private bool Ended(List<Task> turns)
+    {
+        var failed = false;
+
+        foreach (Task turn in turns.Where(turn => turn.IsCompleted).ToArray())
+        {
+            turns.Remove(turn);
+
+            if (turn.Exception?.InnerException is { } exception)
             {
                 journal.Failed("ideas", exception);
-                await Task.Delay(Retry, time, cancellationToken);
+                failed = true;
             }
         }
+
+        return failed;
     }
 
     // Next to the closed ideas, once an hour: the old refusals of the autos go and the requests nobody took become refusals. The two do not wait for

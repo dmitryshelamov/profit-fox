@@ -5740,10 +5740,25 @@ export interface components {
             total: number | string;
         };
         /**
+         * @description How far the replay of ideas has gone: `done` of the `total` pairs to replay are replayed up to their coverage; `slowest` is
+         *     the earliest day the others have reached, none when none of them has begun; `engineVersion` the version of the rules it replays.
+         */
+        MarketReplayResponse: {
+            /** Format: int32 */
+            done: number | string;
+            /** Format: int32 */
+            total: number | string;
+            /** Format: date-time */
+            slowest: null | string;
+            /** Format: int32 */
+            engineVersion: number | string;
+        };
+        /**
          * @description A page of the market snapshot with the state of the scanner; `restPausedUntil` only while the pause lasts. `page` is the number of
          *     the page from 1 (the last page when the one asked for is past the end) and `total` the count of the pairs that meet the query.
          *     `pairs` is the count of the whole snapshot and `categories` the counts of its categories; `setups` holds, by setup code and
-         *     `all`, the pairs that have the setup on the interval among those left by the category, the search and the saved filter.
+         *     `all`, the pairs that have the setup on the interval among those left by the category, the search and the saved filter. `replay`
+         *     is the progress of the replay of ideas.
          */
         MarketResponse: {
             /** Format: date-time */
@@ -5766,6 +5781,7 @@ export interface components {
             setups: {
                 [key: string]: number | string;
             };
+            replay: components["schemas"]["MarketReplayResponse"];
         };
         /**
          * @description The row of a pair in the market snapshot, with the time it was computed. Numbers are decimal strings, an empty metric is `null`; changes and spread in
