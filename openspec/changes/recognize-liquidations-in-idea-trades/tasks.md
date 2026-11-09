@@ -15,7 +15,7 @@
 
 ## 2. Домен
 
-- [ ] 2.1 `IdeaTradeLeg.Liquidation` / `Adl`, `IdeaTrade.Liquidation` / `Adl` (`LegTotals`) в `Exited`. Статусы
+- [x] 2.1 `IdeaTradeLeg.Liquidation` / `Adl`, `IdeaTrade.Liquidation` / `Adl` (`LegTotals`) в `Exited`. Статусы
   `Liquidated` / `ClosedByAdl` в `Settled` и в `Result`. Готово, когда юнит-тесты `IdeaTradeTests` зелёные:
   «Ликвидация закрыла сделку» (JCTUSDT 1100 по 0.014229, результат и R), «ADL закрыла сделку», «Частичная ликвидация»
   (400 из 1000 → «Открыта» 600, затем стоп → «Закрыта по стопу», результат из обеих ног).

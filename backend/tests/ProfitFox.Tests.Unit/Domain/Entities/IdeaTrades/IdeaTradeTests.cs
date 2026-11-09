@@ -227,6 +227,45 @@ public class IdeaTradeTests
         trade.Fees.ShouldBe(0.0061m + 0.0062m);
     }
 
+    // Scenario "Ликвидация закрыла сделку": JCTUSDT long 1100 bought at 0.01582, Bybit liquidated all of it at 0.014229 with the fee 0.0086.
+    [Test]
+    public void Liquidation_closes_the_trade_with_the_result_of_the_real_fills()
+    {
+        IdeaTrade entered = New(new IdeaTradeSize(1100m, 17.402m, 7.4m, 0.368m, 1.84m)).EntryGrown(new LegTotals(1100m, 17.402m, 0.0096m), Now);
+
+        IdeaTrade trade = entered.ExitGrown(IdeaTradeLeg.Liquidation, new LegTotals(1100m, 15.6519m, 0.0086m), Now.AddMinutes(5));
+
+        (trade.Status, trade.StatusAt, trade.IsOpen, trade.HeldQuantity).ShouldBe((IdeaTradeStatus.Liquidated, Now.AddMinutes(5), false, 0m));
+        trade.Liquidation.ShouldBe(new LegTotals(1100m, 15.6519m, 0.0086m));
+        trade.Result.ShouldBe(15.6519m - 17.402m - 0.0096m - 0.0086m);
+        trade.ResultR.ShouldBe(-1.7683m / 7.4m);
+        trade.Fees.ShouldBe(0.0096m + 0.0086m);
+    }
+
+    // Scenario "ADL закрыла сделку": Bybit closed the long by auto-deleveraging at 24.10.
+    [Test]
+    public void Auto_deleveraging_closes_the_trade_by_the_exchange_with_the_result()
+    {
+        IdeaTrade trade = Entered().ExitGrown(IdeaTradeLeg.Adl, new LegTotals(0.47m, 11.327m, 0.0062m), Now.AddMinutes(5));
+
+        (trade.Status, trade.Adl, trade.HeldQuantity).ShouldBe((IdeaTradeStatus.ClosedByAdl, new LegTotals(0.47m, 11.327m, 0.0062m), 0m));
+        trade.Result.ShouldBe(11.327m - 11.0356m - 0.0061m - 0.0062m);
+    }
+
+    // Scenario "Частичная ликвидация": 400 of 1000 liquidated leave the trade open on 600, and the stop that closes the rest names the close.
+    [Test]
+    public void Liquidation_of_a_part_leaves_the_trade_open_and_the_stop_of_the_rest_closes_it_with_both_legs()
+    {
+        IdeaTrade entered = New(new IdeaTradeSize(1000m, 20m, 2m, 0.368m, 1.84m)).EntryGrown(new LegTotals(1000m, 20m, 0.01m), Now);
+
+        IdeaTrade part = entered.ExitGrown(IdeaTradeLeg.Liquidation, new LegTotals(400m, 7.2m, 0.004m), Now.AddMinutes(5));
+        IdeaTrade closed = part.ExitGrown(IdeaTradeLeg.StopLoss, new LegTotals(600m, 10.92m, 0.006m), Now.AddMinutes(6));
+
+        (part.Status, part.HeldQuantity, part.Result, part.Liquidation).ShouldBe((IdeaTradeStatus.Open, 600m, null, new LegTotals(400m, 7.2m, 0.004m)));
+        (closed.Status, closed.HeldQuantity).ShouldBe((IdeaTradeStatus.ClosedAtStop, 0m));
+        closed.Result.ShouldBe(7.2m + 10.92m - 20m - 0.01m - 0.004m - 0.006m);
+    }
+
     [Test]
     public void Exit_of_a_part_leaves_the_trade_open_with_the_rest()
     {
@@ -348,9 +387,9 @@ public class IdeaTradeTests
         closed.Fail("late", Now.AddMinutes(6)).ShouldBe(closed);
     }
 
-    private static IdeaTrade New()
+    private static IdeaTrade New(IdeaTradeSize? size = null)
     {
-        return IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(Fired), Account, 106m, Size(), Now);
+        return IdeaTrade.Create(Guid.NewGuid(), IdeaGenerator.Generate(Fired), Account, 106m, size ?? Size(), Now);
     }
 
     private static IdeaTrade Entered()
