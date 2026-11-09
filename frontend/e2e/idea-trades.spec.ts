@@ -166,7 +166,7 @@ test('an entry by an idea places the entry with its stop and target on linear, a
 
   const dialog = await openEntry(page, 'Уровни');
   await expect(dialog.getByLabel('Аккаунт')).toHaveValue(accountId);
-  await expect(dialog.getByText('3000')).toBeVisible();
+  await expect(dialog.getByText('3000', { exact: true })).toBeVisible();
   // The amount of the settings buys 0.01 ETH at 3000; the window shows what that loses at the stop and earns at the target.
   await expect(dialog.getByLabel('Сумма, USDT')).toHaveValue('30');
   // The amount, and the margin that equals it at the leverage of 1 of the settings.
@@ -336,9 +336,9 @@ test('the time left of the idea of a trade in work runs down, and a trade whose 
     await page.goto('/idea-trades');
     const table = page.getByRole('table', { name: 'Сделки в работе' });
     const left = (symbol: string) =>
-      table.getByRole('row').filter({ hasText: symbol }).getByRole('cell').nth(12);
+      table.getByRole('row').filter({ hasText: symbol }).getByRole('cell').nth(13);
 
-    await expect(table.getByRole('columnheader').nth(12)).toHaveText('До конца идеи');
+    await expect(table.getByRole('columnheader').nth(13)).toHaveText('До конца идеи');
     await expect(left(ideaLeftSymbols.active)).toHaveText('1 ч 40 мин');
     await expect(left(ideaLeftSymbols.closed)).toHaveText('закрыта');
 
