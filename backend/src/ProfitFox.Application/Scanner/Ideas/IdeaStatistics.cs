@@ -29,7 +29,7 @@ public sealed class IdeaStatistics(
 
     // The roots of the categories of the last whole pass (decision 4 of honest-idea-intervals); none before the first one. The two lanes of the
     // statistics run side by side, and a reference is written whole.
-    private volatile IReadOnlyDictionary<int, IReadOnlyDictionary<MarketCategory, BucketModel.Root>>? _roots;
+    private volatile IdeaRoots? _roots;
 
     /// <summary>Writes the start of the version of the rules when the scanner takes the lease; the first start of a version stays.</summary>
     public async Task StartVersionAsync(CancellationToken cancellationToken)
@@ -52,7 +52,7 @@ public sealed class IdeaStatistics(
             cancellationToken,
             settings.CalibrationCases,
             signal => pairs.TryGetValue((signal.Path.FiredAt, signal.Path.Side, signal.Path.Interval), out int count) ? count : null);
-        await buckets.ReplaceAsync(version.Number, result.Buckets, null, cancellationToken);
+        await buckets.ReplaceAsync(version.Number, result.Buckets, result.Curves, null, cancellationToken);
         _roots = result.Roots;
 
         if (result.Outcomes is { } outcomes)
@@ -84,14 +84,14 @@ public sealed class IdeaStatistics(
 
         // The buckets need no outcome kept.
         IdeaOutcomesResult result = await WalkAsync(time.GetUtcNow(), (type, interval), await exitRules.GetAllAsync(cancellationToken), roots, cancellationToken, 0);
-        await buckets.ReplaceAsync(version.Number, result.Buckets, (type, interval), cancellationToken);
+        await buckets.ReplaceAsync(version.Number, result.Buckets, result.Curves, (type, interval), cancellationToken);
     }
 
     private async Task<IdeaOutcomesResult> WalkAsync(
         DateTimeOffset now,
         (IdeaType, Interval)? only,
         IReadOnlyList<IdeaExitRule> applied,
-        IReadOnlyDictionary<int, IReadOnlyDictionary<MarketCategory, BucketModel.Root>>? roots,
+        IdeaRoots? roots,
         CancellationToken cancellationToken,
         int keep,
         Func<IdeaSignal, int?>? burstOf = null)

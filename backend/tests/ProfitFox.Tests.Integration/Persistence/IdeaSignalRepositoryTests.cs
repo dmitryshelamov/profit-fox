@@ -271,9 +271,9 @@ public class IdeaSignalRepositoryTests
         var buckets = new IdeaBucketRepository(_dataSource);
         var full = new IdeaBucket(Key(IdeaSetup.Impulse), 90, new BucketStatistics(400, 180, 200, 20, 0.45m, 0.40m, 0.50m, 0.12m, 0.002m, 0.238m));
         var few = new IdeaBucket(Key(IdeaSetup.Drop) with { Type = IdeaType.Pullback }, 30, new BucketStatistics(12, 5, 6, 1, null, null, null, -0.1m, null, null, 24));
-        await buckets.ReplaceAsync(1, [new IdeaBucket(Key(IdeaSetup.EarlyDrop), 90, few.Statistics)], null, CancellationToken.None);
+        await buckets.ReplaceAsync(1, [new IdeaBucket(Key(IdeaSetup.EarlyDrop), 90, few.Statistics)], [], null, CancellationToken.None);
 
-        await buckets.ReplaceAsync(2, [full, few], null, CancellationToken.None);
+        await buckets.ReplaceAsync(2, [full, few], [], null, CancellationToken.None);
 
         (await buckets.GetAsync(2, CancellationToken.None)).ShouldBe([full, few], ignoreOrder: true);
         (await buckets.GetAsync(1, CancellationToken.None)).ShouldBeEmpty();
@@ -287,10 +287,10 @@ public class IdeaSignalRepositoryTests
         var twoR = new IdeaBucket(Key(IdeaSetup.Impulse), 90, new BucketStatistics(12, 5, 6, 1, null, null, null, -0.1m, null, null));
         IdeaBucket hour = twoR with { Key = twoR.Key with { Interval = Interval.OneHour } };
         IdeaBucket pullback = twoR with { Key = twoR.Key with { Type = IdeaType.Pullback } };
-        await buckets.ReplaceAsync(2, [twoR, hour, pullback], null, CancellationToken.None);
+        await buckets.ReplaceAsync(2, [twoR, hour, pullback], [], null, CancellationToken.None);
         IdeaBucket recomputed = twoR with { Days = 30 };
 
-        await buckets.ReplaceAsync(2, [recomputed], (IdeaType.TwoR, Interval.FifteenMinutes), CancellationToken.None);
+        await buckets.ReplaceAsync(2, [recomputed], [], (IdeaType.TwoR, Interval.FifteenMinutes), CancellationToken.None);
 
         (await buckets.GetAsync(2, CancellationToken.None)).ShouldBe([recomputed, hour, pullback], ignoreOrder: true);
     }

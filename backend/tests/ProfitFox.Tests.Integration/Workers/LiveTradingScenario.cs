@@ -299,7 +299,7 @@ public sealed class LiveTradingScenario : IAsyncDisposable
     {
         var key = new IdeaBucketKey(IdeaSetup.Impulse, type, Interval.FifteenMinutes, IdeaSide.Long, MarketCategory.Linear);
         await using var database = Npgsql.NpgsqlDataSource.Create(Factory.ConnectionString);
-        await new IdeaBucketRepository(database).ReplaceAsync(IdeasEngineVersion.Current, [new IdeaBucket(key, 90, statistics)], null, CancellationToken.None);
+        await new IdeaBucketRepository(database).ReplaceAsync(IdeasEngineVersion.Current, [new IdeaBucket(key, 90, statistics)], [], null, CancellationToken.None);
     }
 
     /// <summary>Writes how the idea ended on the trades made of it, as the scanner does when the idea closes.</summary>

@@ -40,6 +40,16 @@ public sealed record BucketStatistics(
     /// <summary>The weight of the parent in the expectancy of the model, 1 − B (decision 2 of honest-idea-intervals).</summary>
     public decimal? ParentWeight { get; init; }
 
+    /// <summary>
+    ///     The expectancy without costs (decision 3 of add-own-idea-numbers): the model run a second time over the results at the prices of the
+    ///     plan, its interval none for «мало данных»; none for a bucket stored before it was counted.
+    /// </summary>
+    public decimal? GrossExpectancy { get; init; }
+
+    public decimal? GrossExpectancyLow { get; init; }
+
+    public decimal? GrossExpectancyHigh { get; init; }
+
     /// <summary>«Мало своих данных»: fewer than 30 own cases, the numbers of the model by the parent.</summary>
     public bool FewOwnCases { get; init; }
 
@@ -47,10 +57,5 @@ public sealed record BucketStatistics(
 
     public decimal? SignalExpectancy => Signals is { } signals ? Expectancy * Cases / signals : null;
 
-    public IdeaBadge? Badge => ExpectancyLow switch
-    {
-        null => null,
-        > 0 => IdeaBadge.Up,
-        _ => ExpectancyHigh < 0 ? IdeaBadge.Down : IdeaBadge.Flat
-    };
+    public IdeaBadge? Badge => IdeaBadges.Of(ExpectancyLow, ExpectancyHigh);
 }

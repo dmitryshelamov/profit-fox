@@ -34,26 +34,33 @@ public class AutoMinutePlanTests
         0) with
     { Mode = IdeaAutoMode.Paper };
 
-    // Scenario "Лучшая идея первой": the idea promised +0.05 R before the one promised −0.10 R.
+    // Scenario "Лучшая идея первой": of the same risk on 1 USDT, 0.02, the idea promised +0.05 R before the one promised −0.10 R.
     [Test]
     public void Idea_of_the_highest_expectancy_comes_first()
     {
-        AutoMinutePlan.Order([(Bucket(-0.10m), Shares(2m)), (Bucket(0.05m), Shares(1m))]).ShouldBe([1, 0]);
+        AutoMinutePlan.Order([(Numbers(-0.10m, -0.002m), Shares(2m)), (Numbers(0.05m, 0.001m), Shares(1m))]).ShouldBe([1, 0]);
     }
 
-    // Scenario "Идея без корзины последней": an idea without a bucket comes after one promised −0.20 R, whatever its reward to risk; ideas without
-    // a bucket go by their reward to risk among themselves.
+    // Scenario "По деньгам, а не по R" (decision 6 of add-own-idea-numbers): −0.72 R loses −0.00216 on 1 USDT, less than −0.062 R at −0.0031.
     [Test]
-    public void Idea_without_a_bucket_comes_last()
+    public void Ideas_go_by_the_expectancy_per_usdt_not_in_r()
     {
-        AutoMinutePlan.Order([(null, Shares(3m)), (Bucket(-0.20m), Shares(1m)), (null, Shares(4m))]).ShouldBe([1, 2, 0]);
+        AutoMinutePlan.Order([(Numbers(-0.062m, -0.0031m), Shares(2m)), (Numbers(-0.72m, -0.00216m), Shares(1m))]).ShouldBe([1, 0]);
+    }
+
+    // Scenario "Идея без корзины последней": an idea without an expectancy comes after one promised −0.20 R, whatever its reward to risk; ideas
+    // without one go by their reward to risk among themselves.
+    [Test]
+    public void Idea_without_an_expectancy_comes_last()
+    {
+        AutoMinutePlan.Order([(Numbers(null, null), Shares(3m)), (Numbers(-0.20m, -0.004m), Shares(1m)), (Numbers(null, null), Shares(4m))]).ShouldBe([1, 2, 0]);
     }
 
     // Equal expectancies go by the net reward to risk, the highest first; equal ones keep the order of birth.
     [Test]
     public void Equal_expectancy_goes_by_the_net_reward_to_risk_then_by_birth()
     {
-        AutoMinutePlan.Order([(Bucket(0.1m), Shares(1.5m)), (Bucket(0.1m), Shares(2.5m)), (Bucket(0.1m), Shares(1.5m))]).ShouldBe([1, 0, 2]);
+        AutoMinutePlan.Order([(Numbers(0.1m, 0.002m), Shares(1.5m)), (Numbers(0.1m, 0.002m), Shares(2.5m)), (Numbers(0.1m, 0.002m), Shares(1.5m))]).ShouldBe([1, 0, 2]);
     }
 
     // Scenario "Тридцать лонгов": with a limit of 2 a minute the auto takes two longs, and the 28 other longs are one skip of the minute limit
@@ -147,9 +154,10 @@ public class AutoMinutePlanTests
         return [.. taken];
     }
 
-    private static BucketStatistics Bucket(decimal expectancy)
+    // The own numbers of an idea with its expectancy in R and on 1 USDT of the amount.
+    private static IdeaNumbers Numbers(decimal? expectancy, decimal? perUsdt)
     {
-        return new BucketStatistics(100, 40, 60, 0, 0.4m, null, null, expectancy, null, null);
+        return new IdeaNumbers(0m, 1m, null, null, null, expectancy, null, null, perUsdt);
     }
 
     // Shares of a reward to risk after the fees.

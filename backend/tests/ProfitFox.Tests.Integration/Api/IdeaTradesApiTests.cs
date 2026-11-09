@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -64,14 +66,15 @@ public class IdeaTradesApiTests
         _scenario.Exchange.Sent.ShouldBeEmpty();
     }
 
-    // Requirement "Обещание на входе", scenario "Вход на ▲": the promise is the statistics of the bucket as «Идеи» shows them, with the break-even and the
-    // reward to risk after the fees and the slippage from the price the trade entered at (101, not the 100 of the idea).
+    // Requirement "Обещание на входе", scenario "Вход на ▲": the promise is the own numbers of the idea as «Идеи» shows them, from the price the
+    // trade entered at (101, not the 100 of the idea): the expectancy without costs of the bucket +0.18242 R with +0.08242…+0.28242 R less the
+    // costs 0.0021 × 101 / 5 = 0.04242 R, with the break-even and the reward to risk after the fees and the slippage from that price.
     [Test]
     public async Task Entry_on_an_up_badge_keeps_the_promise_of_the_bucket_and_a_recount_of_the_bucket_does_not_change_it()
     {
         Guid idea = await _scenario.SaveIdeaAsync(100m, 96m, 112m);
         _scenario.SetPrice("101");
-        await _scenario.SaveBucketAsync(new BucketStatistics(412, 130, 270, 12, 0.31m, 0.27m, 0.36m, 0.14m, 0.04m, 0.24m));
+        await _scenario.SaveBucketAsync(new BucketStatistics(412, 130, 270, 12, 0.31m, 0.27m, 0.36m, 0.14m, 0.04m, 0.24m) { GrossExpectancy = 0.18242m, GrossExpectancyLow = 0.08242m, GrossExpectancyHigh = 0.28242m });
 
         Guid id = await CreateAsync(idea);
 
@@ -82,13 +85,13 @@ public class IdeaTradesApiTests
         (await _scenario.TradeAsync(id)).Promise.ShouldBe(promise);
     }
 
-    // Scenario "Мало данных": no badge and no probability, the cases and the expectancy stay.
+    // Scenario "Мало данных": no badge and no probability, the cases and the expectancy of the idea stay, +0.09242 R without costs less 0.04242 R.
     [Test]
     public async Task Entry_on_a_bucket_with_too_few_cases_keeps_its_cases_and_expectancy_only()
     {
         Guid idea = await _scenario.SaveIdeaAsync(100m, 96m, 112m);
         _scenario.SetPrice("101");
-        await _scenario.SaveBucketAsync(new BucketStatistics(12, 4, 8, 0, null, null, null, 0.05m, null, null));
+        await _scenario.SaveBucketAsync(new BucketStatistics(12, 4, 8, 0, null, null, null, 0.05m, null, null) { GrossExpectancy = 0.09242m });
 
         IdeaPromise promise = (await _scenario.TradeAsync(await CreateAsync(idea))).Promise!;
 
@@ -391,7 +394,7 @@ public class IdeaTradesApiTests
     {
         Guid idea = await _scenario.SaveIdeaAsync(100m, 96m, 112m);
         _scenario.SetPrice("101");
-        await _scenario.SaveBucketAsync(new BucketStatistics(412, 130, 270, 12, 0.31m, 0.27m, 0.36m, 0.14m, 0.04m, 0.24m));
+        await _scenario.SaveBucketAsync(new BucketStatistics(412, 130, 270, 12, 0.31m, 0.27m, 0.36m, 0.14m, 0.04m, 0.24m) { GrossExpectancy = 0.18242m, GrossExpectancyLow = 0.08242m, GrossExpectancyHigh = 0.28242m });
         Guid id = await CreateAsync(idea);
         await _scenario.WriteIdeaOutcomeAsync(idea, new TradedIdeaOutcome(IdeaStatus.Target, _scenario.Factory.Time.GetUtcNow(), 1.84m));
 
@@ -399,7 +402,8 @@ public class IdeaTradesApiTests
 
         item.GetProperty("id").GetGuid().ShouldBe(id);
         JsonElement promise = item.GetProperty("promise");
-        (promise.GetProperty("badge").GetString(), promise.GetProperty("probability").GetString(), promise.GetProperty("expectancy").GetString(), promise.GetProperty("cases").GetInt32()).ShouldBe(("up", "0.31", "0.14", 412));
+        (promise.GetProperty("badge").GetString(), promise.GetProperty("probability").GetString(), decimal.Parse(promise.GetProperty("expectancy").GetString()!, CultureInfo.InvariantCulture), promise.GetProperty("cases").GetInt32())
+            .ShouldBe(("up", "0.31", 0.14m, 412));
         promise.GetProperty("breakEven").GetString().ShouldNotBeNull();
         promise.GetProperty("netRiskReward").GetString().ShouldNotBeNull();
         JsonElement outcome = item.GetProperty("ideaOutcome");

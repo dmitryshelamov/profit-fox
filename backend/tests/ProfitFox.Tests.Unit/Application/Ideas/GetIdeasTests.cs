@@ -47,15 +47,21 @@ public class GetIdeasTests
         _buckets.GetAsync(IdeasEngineVersion.Current, Arg.Any<CancellationToken>()).Returns([]);
         _snapshots.GetAllAsync(Arg.Any<CancellationToken>()).Returns([]);
         _snapshots.GetSetupsAsync(Arg.Any<CancellationToken>()).Returns(new Dictionary<Instrument, IReadOnlyList<PairSetup>>());
+        _handler = Handler();
+    }
+
+    private GetIdeasQueryHandler Handler(decimal? slippage = null)
+    {
         var backtests = new BacktestSettings
         {
             DefaultFees = new Dictionary<string, FeeRateSettings>
             {
                 ["spot"] = new FeeRateSettings { Limit = 0.1m, Market = 0.1m },
-                ["linear"] = new FeeRateSettings { Limit = 0.02m, Market = 0.055m }
+                ["linear"] = new FeeRateSettings { Limit = 0.02m, Market = 0.055m, Slippage = slippage }
             }
         };
-        _handler = new GetIdeasQueryHandler(_ideas, _buckets, _snapshots, _filters, _pairs, new IdeasEngineVersion(IdeasEngineVersion.Current), backtests, new FakeTimeProvider(Noon));
+
+        return new GetIdeasQueryHandler(_ideas, _buckets, _snapshots, _filters, _pairs, new IdeasEngineVersion(IdeasEngineVersion.Current), backtests, new FakeTimeProvider(Noon));
     }
 
     // Scenario "Страница идей": the ideas come newest first, as they have no bucket and so equal expectancy.
@@ -191,6 +197,22 @@ public class GetIdeasTests
         await _pairs.DidNotReceive().GetTradFiAsync(Arg.Any<CancellationToken>());
     }
 
+    // Scenario "Только с ожиданием не ниже нуля" (decision 5 of add-own-idea-numbers): by the expectancy of the idea. Two ideas of one bucket
+    // with the expectancy +0.10 R without costs, at 100 with the stops 95 and 98 and the fees of linear with the slippage: +0.10 − 0.0021 × 100 / 5
+    // = +0.058 R passes, +0.10 − 0.0021 × 100 / 2 = −0.005 R does not.
+    [Test]
+    public async Task Only_non_negative_expectancy_keeps_the_ideas_whose_own_expectancy_is_not_below_zero()
+    {
+        Idea wide = Planned(Idea(1), 95m);
+        Idea near = Planned(Idea(2), 98m);
+        _ideas.GetRecentAsync(Noon.AddHours(-24), null, Arg.Any<CancellationToken>()).Returns([wide, near]);
+        _buckets.GetAsync(IdeasEngineVersion.Current, Arg.Any<CancellationToken>()).Returns([Bucket(wide, 0.1m)]);
+
+        GetIdeasResult result = await Handler(slippage: 0.05m).Handle(Everything with { NonNegativeExpectancy = true }, CancellationToken.None);
+
+        result.Page!.Items.Select(view => view.Idea.Id).ShouldBe([wide.Id]);
+    }
+
     [Test]
     public async Task Only_non_negative_expectancy_drops_the_ideas_without_a_bucket_and_the_negative_ones()
     {
@@ -198,7 +220,7 @@ public class GetIdeasTests
         Idea bad = Idea(2, IdeaSetup.Drop);
         Idea none = Idea(3, IdeaSetup.EarlyDrop);
         _ideas.GetRecentAsync(Noon.AddHours(-24), null, Arg.Any<CancellationToken>()).Returns([good, bad, none]);
-        _buckets.GetAsync(IdeasEngineVersion.Current, Arg.Any<CancellationToken>()).Returns([Bucket(good, 0m), Bucket(bad, -0.1m)]);
+        _buckets.GetAsync(IdeasEngineVersion.Current, Arg.Any<CancellationToken>()).Returns([Bucket(good, 0.1m), Bucket(bad, -0.1m)]);
 
         GetIdeasResult result = await _handler.Handle(Everything with { NonNegativeExpectancy = true }, CancellationToken.None);
 
@@ -291,16 +313,22 @@ public class GetIdeasTests
         return IdeaGenerator.Generate(Noon.AddHours(-12).AddMinutes(-number), status, setup: setup, side: side) with { Id = Id(number) };
     }
 
+    private static Idea Planned(Idea idea, decimal stop)
+    {
+        return idea with { Track = idea.Track with { Plan = new IdeaPlan(IdeaType.TwoR, IdeaSide.Long, 100m, stop, 110m) } };
+    }
+
     private static Guid Id(int number)
     {
         return new Guid(number, 0, 0, new byte[8]);
     }
 
-    private static IdeaBucket Bucket(Idea idea, decimal expectancy)
+    // The bucket of an idea with the expectancy given, after costs and without them; the ideas of a test share their plan, and so their costs.
+    private static IdeaBucket Bucket(Idea idea, decimal expectancy, decimal? low = null, decimal? high = null)
     {
         var key = new IdeaBucketKey(idea.Setup, idea.Track.Plan.Type, idea.Interval, idea.Track.Plan.Side, idea.Instrument.Category);
 
-        return new IdeaBucket(key, 90, IdeaViewGenerator.Bucket(expectancy, 0.5m));
+        return new IdeaBucket(key, 90, IdeaViewGenerator.Bucket(expectancy, 0.5m) with { GrossExpectancy = expectancy, GrossExpectancyLow = low, GrossExpectancyHigh = high });
     }
 
     private SavedFilter Filter(params FilterCondition[] conditions)

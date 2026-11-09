@@ -105,7 +105,18 @@ public class AutoConditionsTests
     [TestCase(IdeaBadge.Down, null, false)]
     public void Badge_fits_when_it_is_not_worse_than_the_chosen_one(IdeaBadge chosen, IdeaBadge? of, bool fits)
     {
-        Match(Idea(), Bucket(of), Everything with { Badge = chosen }).ShouldBe(fits);
+        AutoConditions.Match(Idea(), Bucket(), of, Everything with { Badge = chosen }).ShouldBe(fits);
+    }
+
+    // Scenario "Две идеи одной корзины" (decision 5 of add-own-idea-numbers): the badge is that of the idea, not of its bucket of ≈; the idea of
+    // the wide stop with ≈ fits an auto of ≈, the idea of the narrow stop with ▼ does not.
+    [Test]
+    public void Badge_is_that_of_the_idea_not_of_its_bucket()
+    {
+        BucketStatistics bucket = Bucket(IdeaBadge.Flat);
+        IdeaAutoConditions flat = Everything with { Badge = IdeaBadge.Flat };
+
+        (AutoConditions.Match(Idea(), bucket, IdeaBadge.Flat, flat), AutoConditions.Match(Idea(), bucket, IdeaBadge.Down, flat)).ShouldBe((true, false));
     }
 
     [Test]
@@ -114,7 +125,7 @@ public class AutoConditionsTests
         Match(Idea(), null, Everything with { Badge = IdeaBadge.Down }).ShouldBeFalse();
     }
 
-    // Scenario "Любой значок": the bucket says «мало данных» and the auto takes any badge.
+    // Scenario "Любой значок": the bucket says «мало данных», the idea has no badge, and the auto takes any badge.
     [Test]
     public void Any_badge_fits_the_idea_without_a_badge()
     {
@@ -170,9 +181,10 @@ public class AutoConditionsTests
         Match(Idea(), null, Everything).ShouldBeTrue();
     }
 
+    // An idea with the badge of its bucket.
     private static bool Match(Idea idea, BucketStatistics? bucket, IdeaAutoConditions conditions)
     {
-        return AutoConditions.Match(idea, bucket, conditions);
+        return AutoConditions.Match(idea, bucket, bucket?.Badge, conditions);
     }
 
     private static Idea Idea(

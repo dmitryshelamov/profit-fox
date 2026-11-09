@@ -10,9 +10,10 @@ namespace ProfitFox.Domain.Services.IdeaAutos;
 public static class AutoConditions
 {
     /// <param name="idea"></param>
-    /// <param name="bucket">The statistics of the bucket of the idea over 90 days, none without a case.</param>
+    /// <param name="bucket">The statistics of the bucket of the idea over 90 days, none without a case, whose cases the minimum counts.</param>
+    /// <param name="badge">The badge of the idea itself (decision 5 of add-own-idea-numbers), none without one.</param>
     /// <param name="conditions"></param>
-    public static bool Match(Idea idea, BucketStatistics? bucket, IdeaAutoConditions conditions)
+    public static bool Match(Idea idea, BucketStatistics? bucket, IdeaBadge? badge, IdeaAutoConditions conditions)
     {
         return conditions.Setups.Contains(idea.Setup)
                && conditions.Types.Contains(idea.Track.Plan.Type)
@@ -20,7 +21,7 @@ public static class AutoConditions
                && (conditions.Side is null || conditions.Side == idea.Track.Plan.Side)
                && (conditions.Category is null || conditions.Category == idea.Instrument.Category)
                && (bucket?.Cases ?? 0) >= conditions.MinCases
-               && BadgeFits(bucket?.Badge, conditions.Badge)
+               && BadgeFits(badge, conditions.Badge)
                && FeatureFits(idea.Features.DayDrop, conditions.DayDrop)
                && FeatureFits(idea.Features.BtcDrop, conditions.BtcDrop)
                && FeatureFits(idea.Features.HighFunding, conditions.HighFunding)

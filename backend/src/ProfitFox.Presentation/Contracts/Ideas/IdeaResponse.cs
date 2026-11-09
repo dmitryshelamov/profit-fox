@@ -8,8 +8,8 @@ using ProfitFox.Domain.ValueObjects.Ideas;
 namespace ProfitFox.Presentation.Contracts.Ideas;
 
 /// <summary>
-///     A trade idea with its levels and where it stands, and the statistics of its bucket over 90 days (<see cref="Bucket" />) and over the last
-///     30 (<see cref="Recent" />), none while the bucket has no case. <see cref="BreakEven" /> is the share of targets the idea breaks even at after the fees if it
+///     A trade idea with its levels and where it stands, its own numbers (<see cref="Numbers" />), and the statistics of its bucket over 90 days
+///     (<see cref="Bucket" />) and over the last 30 (<see cref="Recent" />), none while the bucket has no case. <see cref="BreakEven" /> is the share of targets the idea breaks even at after the fees if it
 ///     never expires, none when the target does not cover them.
 ///     <see cref="ProfitPerUsdt" />, <see cref="LossPerUsdt" /> and <see cref="RiskPerUsdt" /> are its money on 1 USDT of the amount of a deal,
 ///     after the fees. <see cref="RiskReward" /> is the ratio of the prices, <see cref="NetRiskReward" /> the profit over the loss after the fees. <see cref="Tick" /> is the price step of the pair, none for an idea made before it was kept. Numbers are decimal strings; <see cref="Move" /> in ATR, <see cref="VolumeRatio" /> in medians of volume.
@@ -41,6 +41,7 @@ public sealed record IdeaResponse(
     string Move,
     string VolumeRatio,
     string? BreakEven,
+    IdeaNumbersResponse Numbers,
     BucketStatisticsResponse? Bucket,
     BucketStatisticsResponse? Recent,
     IReadOnlyList<string> Features)
@@ -75,6 +76,7 @@ public sealed record IdeaResponse(
             Text(idea.Move),
             Text(idea.VolumeRatio),
             view.Shares.BreakEven?.ToString(CultureInfo.InvariantCulture),
+            IdeaNumbersResponse.Of(view.Numbers),
             BucketStatisticsResponse.Of(view.Bucket),
             BucketStatisticsResponse.Of(view.Recent),
             IdeaCodes.Codes(idea.Features));

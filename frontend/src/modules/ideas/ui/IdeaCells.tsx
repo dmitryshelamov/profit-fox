@@ -5,9 +5,11 @@ import { showDecimal } from '@/shared/format/format';
 import { sideLabel, statusLabel } from '../model/labels';
 import {
   breakEvenText,
+  expectancyHint,
   expectancyText,
-  outcomeShares,
-  ownNumbers,
+  ideaBadge,
+  perHundredText,
+  probabilityHint,
   probabilityView,
 } from '../model/stats';
 
@@ -22,14 +24,18 @@ const badgeLabel = {
 } as const;
 
 /**
- * The probability of an idea's bucket with the number of cases after it, «46 % · 412», or «мало данных»; under it, small, the break-even of
- * the idea, and on hover the shares of the outcomes of the bucket.
+ * The probability of the idea with the number of cases of its bucket after it, «46 % · 412», or «мало данных»; under it, small, the
+ * break-even of the idea, and on hover, for «Уровни», the probability of the bucket times the multiplier of the band, then the shares of the
+ * outcomes of the bucket.
  */
 export function ProbabilityCell({ idea }: { idea: Idea }) {
-  const view = probabilityView(idea.bucket);
+  const view = probabilityView(idea.numbers, idea.bucket);
 
   return (
-    <span className="inline-flex flex-col gap-0.5" title={outcomeShares(idea.bucket) ?? undefined}>
+    <span
+      className="inline-flex flex-col gap-0.5"
+      title={probabilityHint(idea.numbers, idea.bucket) ?? undefined}
+    >
       {view.enough ? (
         <span className="whitespace-nowrap">
           {view.percent} %<span className="ml-1 text-xs text-faint">· {view.cases}</span>
@@ -45,22 +51,29 @@ export function ProbabilityCell({ idea }: { idea: Idea }) {
 }
 
 /**
- * The expectancy of the model of an idea's bucket in R, the badge of the bucket before it when the bucket has enough data, and on hover the
- * own numbers of the bucket; under it, small, «мало своих данных» for a bucket of fewer than 30 own cases.
+ * The expectancy of the idea in R with its badge before it; under it, small, the expectancy on 100 USDT of the amount and «мало своих
+ * данных» for a bucket of fewer than 30 own cases; on hover what the expectancy is made of and the own numbers of the bucket.
  */
 export function ExpectancyCell({ idea }: { idea: Idea }) {
-  const { badge } = probabilityView(idea.bucket);
+  const badge = ideaBadge(idea.numbers);
+  const perHundred = perHundredText(idea.numbers);
 
   return (
-    <span className="inline-flex flex-col gap-0.5" title={ownNumbers(idea.bucket) ?? undefined}>
+    <span
+      className="inline-flex flex-col gap-0.5"
+      title={expectancyHint(idea.numbers, idea.bucket) ?? undefined}
+    >
       <span className="whitespace-nowrap">
         {badge !== null && (
           <span role="img" aria-label={badgeLabel[badge]} className={`mr-1 ${badgeColour[badge]}`}>
             {badge}
           </span>
         )}
-        {expectancyText(idea.bucket)}
+        {expectancyText(idea.numbers)}
       </span>
+      {perHundred !== null && (
+        <span className="whitespace-nowrap text-[11px] text-faint">{perHundred}</span>
+      )}
       {idea.bucket?.fewOwnCases === true && (
         <span className="whitespace-nowrap text-[11px] text-faint">мало своих данных</span>
       )}

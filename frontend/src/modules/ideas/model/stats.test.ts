@@ -2,14 +2,34 @@ import type { Schemas } from '@/shared/api/client';
 
 import {
   breakEvenText,
+  expectancyHint,
   expectancyText,
+  ideaBadge,
   moneyOutcome,
   outcomeShares,
   ownNumbers,
+  perHundredText,
+  probabilityHint,
   probabilityView,
 } from './stats';
 
 type Bucket = Schemas['BucketStatisticsResponse'];
+type Numbers = Schemas['IdeaNumbersResponse'];
+
+const numbers = (overrides: Partial<Numbers> = {}): Numbers => ({
+  probability: '0.45',
+  probabilityLow: '0.4',
+  probabilityHigh: '0.5',
+  multiplier: '1',
+  band: null,
+  expectancy: '0.12',
+  expectancyLow: '0.002',
+  expectancyHigh: '0.238',
+  badge: 'up',
+  costs: '0.08',
+  expectancyPerUsdt: '0.0024',
+  ...overrides,
+});
 
 const bucket = (overrides: Partial<Bucket> = {}): Bucket => ({
   cases: 400,
@@ -35,42 +55,94 @@ const bucket = (overrides: Partial<Bucket> = {}): Bucket => ({
   ownExpectancyHigh: '0.42',
   parentWeight: '0.2',
   fewOwnCases: false,
+  grossExpectancy: '0.2',
+  grossExpectancyLow: '0.08',
+  grossExpectancyHigh: '0.32',
   ...overrides,
 });
 
 describe('probabilityView', () => {
-  // Scenario "Ожидание надёжно выше нуля": the badge comes from the bucket, by the interval of its expectancy.
-  it('shows the probability in percent with N and the badge of the bucket', () => {
-    expect(probabilityView(bucket())).toEqual({
+  // Requirement "Раздел «Идеи»": the probability of the idea with N of the cases of its bucket.
+  it('shows the probability of the idea in percent with N of its bucket', () => {
+    expect(probabilityView(numbers({ probability: '0.1485' }), bucket())).toEqual({
       enough: true,
-      percent: '45',
+      percent: '15',
       cases: 400,
-      badge: '▲',
     });
   });
 
-  // Scenario "Идея выше базовой линии": the interval of the expectancy holds zero.
-  it.each([
-    ['flat', '≈'],
-    ['down', '▼'],
-  ])('draws the badge %s as %s', (badge, symbol) => {
-    expect(probabilityView(bucket({ badge })).badge).toBe(symbol);
-  });
-
   // Scenario "Мало данных".
-  it('says there is too little data below 30 cases and shows no badge', () => {
+  it('says there is too little data while the idea has no probability', () => {
     expect(
-      probabilityView(bucket({ cases: 12, enoughData: false, probability: null, badge: null })),
-    ).toEqual({ enough: false, percent: null, cases: 12, badge: null });
+      probabilityView(
+        numbers({ probability: null }),
+        bucket({ cases: 12, enoughData: false, probability: null }),
+      ),
+    ).toEqual({ enough: false, percent: null, cases: 12 });
   });
 
-  it('says too little data for a bucket without a case', () => {
-    expect(probabilityView(null)).toEqual({ enough: false, percent: null, cases: 0, badge: null });
+  it('says too little data for an idea without a bucket', () => {
+    expect(probabilityView(numbers({ probability: null }), null)).toEqual({
+      enough: false,
+      percent: null,
+      cases: 0,
+    });
   });
 
   it('keeps the digits of a probability that is not a whole percent', () => {
-    expect(probabilityView(bucket({ probability: '0.4649' })).percent).toBe('46');
-    expect(probabilityView(bucket({ probability: '0.465' })).percent).toBe('47');
+    expect(probabilityView(numbers({ probability: '0.4649' }), bucket()).percent).toBe('46');
+    expect(probabilityView(numbers({ probability: '0.465' }), bucket()).percent).toBe('47');
+  });
+});
+
+describe('ideaBadge', () => {
+  // Scenario "Ожидание надёжно выше нуля": the badge of the idea, by the interval of its own expectancy.
+  it.each([
+    ['up', '▲'],
+    ['flat', '≈'],
+    ['down', '▼'],
+  ])('draws the badge %s of the idea as %s', (badge, symbol) => {
+    expect(ideaBadge(numbers({ badge }))).toBe(symbol);
+  });
+
+  it('has no badge for an idea without an interval of its expectancy', () => {
+    expect(ideaBadge(numbers({ badge: null }))).toBeNull();
+  });
+});
+
+describe('probabilityHint', () => {
+  // Scenario "Множитель «Уровней» по наведению": the probability of the bucket and the multiplier of the band, then the shares.
+  it('starts with the probability of the bucket times the multiplier of the band of «Уровни»', () => {
+    expect(
+      probabilityHint(
+        numbers({ probability: '0.1485', multiplier: '0.675', band: 'from_3_to_6' }),
+        bucket({ probability: '0.22' }),
+      ),
+    ).toBe('корзина 22 % × 0.68 по R:R 3–6 · Цель 45 % · Стоп 50 % · Истекла 5 %');
+  });
+
+  it.each([
+    ['up_to_2', 'до 2'],
+    ['from_2_to_3', '2–3'],
+    ['from_6', 'от 6'],
+  ])('names the band %s as «%s»', (band, label) => {
+    expect(
+      probabilityHint(numbers({ multiplier: '1.375', band }), bucket({ probability: '0.22' })),
+    ).toBe(`корзина 22 % × 1.38 по R:R ${label} · Цель 45 % · Стоп 50 % · Истекла 5 %`);
+  });
+
+  it('tells the shares alone for another type or a bucket without a probability', () => {
+    expect(probabilityHint(numbers(), bucket())).toBe('Цель 45 % · Стоп 50 % · Истекла 5 %');
+    expect(
+      probabilityHint(
+        numbers({ probability: null, band: 'from_3_to_6' }),
+        bucket({ probability: null, enoughData: false }),
+      ),
+    ).toBe('Цель 45 % · Стоп 50 % · Истекла 5 %');
+  });
+
+  it('tells nothing for an idea without a bucket', () => {
+    expect(probabilityHint(numbers({ probability: null }), null)).toBeNull();
   });
 });
 
@@ -147,13 +219,62 @@ describe('ownNumbers', () => {
 });
 
 describe('expectancyText', () => {
-  it('shows the expectancy in R with its sign', () => {
-    expect(expectancyText(bucket({ expectancy: '0.376' }))).toBe('+0.38 R');
-    expect(expectancyText(bucket({ expectancy: '-0.1' }))).toBe('-0.10 R');
+  // Scenario "Две идеи одной корзины": the expectancy of each idea in R.
+  it('shows the expectancy of the idea in R with its sign', () => {
+    expect(expectancyText(numbers({ expectancy: '-0.72' }))).toBe('-0.72 R');
+    expect(expectancyText(numbers({ expectancy: '-0.062' }))).toBe('-0.06 R');
+    expect(expectancyText(numbers({ expectancy: '0.376' }))).toBe('+0.38 R');
   });
 
-  it('shows a dash for a bucket without a case', () => {
-    expect(expectancyText(null)).toBe('—');
+  // Scenario "Идея без ожидания".
+  it('shows a dash for an idea without an expectancy', () => {
+    expect(expectancyText(numbers({ expectancy: null }))).toBe('—');
+  });
+});
+
+describe('perHundredText', () => {
+  // Scenario "Две идеи одной корзины": the expectancy on 100 USDT of the amount.
+  it('shows the expectancy of the idea on 100 USDT of the amount', () => {
+    expect(perHundredText(numbers({ expectancyPerUsdt: '-0.00216' }))).toBe('на 100 USDT: -0.22');
+    expect(perHundredText(numbers({ expectancyPerUsdt: '-0.0031' }))).toBe('на 100 USDT: -0.31');
+  });
+
+  // Scenario "Идея без ожидания".
+  it('shows nothing for an idea without an expectancy', () => {
+    expect(perHundredText(numbers({ expectancy: null, expectancyPerUsdt: null }))).toBeNull();
+  });
+});
+
+describe('expectancyHint', () => {
+  // Scenario "Из чего сложено ожидание": the expectancy of the bucket without costs less the costs, then the own numbers of the bucket.
+  it('starts with the expectancy of the bucket without costs less the costs of the idea', () => {
+    expect(
+      expectancyHint(
+        numbers({ expectancy: '-0.72', costs: '0.7' }),
+        bucket({
+          grossExpectancy: '-0.02',
+          cases: 35,
+          ownProbability: '0.4',
+          ownExpectancy: '0.3',
+          parentWeight: '0.8',
+        }),
+      ),
+    ).toBe(
+      'без издержек -0.02 R − издержки 0.70 R\nв самой корзине: 35 случаев · 40 % · +0.30 R · по родителю 80 %',
+    );
+  });
+
+  it('tells the own numbers alone for an idea without an expectancy', () => {
+    expect(
+      expectancyHint(
+        numbers({ expectancy: null }),
+        bucket({ grossExpectancy: null, cases: 35, parentWeight: '0.8', ownExpectancy: '0.3' }),
+      ),
+    ).toBe('в самой корзине: 35 случаев · 40 % · +0.30 R · по родителю 80 %');
+  });
+
+  it('tells nothing for an idea without a bucket', () => {
+    expect(expectancyHint(numbers({ expectancy: null }), null)).toBeNull();
   });
 });
 

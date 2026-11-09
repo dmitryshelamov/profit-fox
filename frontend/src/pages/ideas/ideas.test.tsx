@@ -40,9 +40,39 @@ const fewData = ideaOf({
     ownExpectancyHigh: null,
     parentWeight: null,
     fewOwnCases: false,
+    grossExpectancy: '0',
+    grossExpectancyLow: null,
+    grossExpectancyHigh: null,
+  },
+  // «Мало данных»: the expectancy of the idea without an interval, no probability and no badge.
+  numbers: {
+    ...ideaOf().numbers,
+    probability: null,
+    probabilityLow: null,
+    probabilityHigh: null,
+    expectancy: '-0.0625',
+    expectancyLow: null,
+    expectancyHigh: null,
+    badge: null,
+    expectancyPerUsdt: '-0.00125',
   },
 });
-const noBucket = ideaOf({ id: 'doge-1', symbol: 'DOGEUSDT', bucket: null });
+const noBucket = ideaOf({
+  id: 'doge-1',
+  symbol: 'DOGEUSDT',
+  bucket: null,
+  numbers: {
+    ...ideaOf().numbers,
+    probability: null,
+    probabilityLow: null,
+    probabilityHigh: null,
+    expectancy: null,
+    expectancyLow: null,
+    expectancyHigh: null,
+    badge: null,
+    expectancyPerUsdt: null,
+  },
+});
 
 const bigFilter = savedFilterOf({
   id: 'big',
@@ -138,14 +168,20 @@ describe('ideas screen', () => {
     renderApp('/ideas');
     await rowOf('WIFUSDT');
 
+    expect(screen.getByText(/по ожиданию идеи на 1 USDT суммы\./)).toBeInTheDocument();
     expect(
-      screen.getByText(/Вероятность и ожидание — числа модели: доля «Цель» и средний итог корзины/),
+      screen.getByText(
+        /Вероятность и ожидание — свои числа идеи: доля «Цель» её корзины за 90 дней по модели/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/ожидание корзины без издержек минус издержки самой идеи в R/),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/безубыток идеи после комиссий и проскальзывания\./),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/интервал ожидания модели выше нуля, содержит ноль или ниже нуля/),
+      screen.getByText(/интервал ожидания идеи выше нуля, содержит ноль или ниже нуля/),
     ).toBeInTheDocument();
     expect(
       screen.getByText(

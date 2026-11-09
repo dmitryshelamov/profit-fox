@@ -148,13 +148,14 @@ public sealed class LiveAutos(
         CancellationToken cancellationToken)
     {
         IReadOnlyList<IdeaBucket> bucketList = await buckets.GetAsync(version.Number, cancellationToken);
-        IReadOnlyList<IdeaView> views = IdeaView.Of(born, bucketList, _fees);
+        IReadOnlyList<RiskRewardCurve> curves = await buckets.GetCurvesAsync(version.Number, cancellationToken);
+        IReadOnlyList<IdeaView> views = IdeaView.Of(born, bucketList, curves, _fees);
         IdeaTradingSettings tradingSettings = await settings.GetAsync(cancellationToken);
         IReadOnlyCollection<IdeaTrade>? openReal = null;
         IReadOnlyDictionary<Guid, IdeaAuto>? every = null;
         DateTimeOffset now = time.GetUtcNow();
 
-        IReadOnlyList<int> order = AutoMinutePlan.Order([.. views.Select(view => (view.Bucket, view.Shares))]);
+        IReadOnlyList<int> order = AutoMinutePlan.Order([.. views.Select(view => (view.Numbers, view.Shares))]);
 
         foreach (IdeaAuto auto in enabled.OrderBy(auto => auto.Position))
         {
@@ -165,7 +166,7 @@ public sealed class LiveAutos(
             {
                 Idea idea = born[order[fired]];
 
-                if (!AutoConditions.Match(idea, views[order[fired]].Bucket, auto.Conditions))
+                if (!AutoConditions.Match(idea, views[order[fired]].Bucket, views[order[fired]].Numbers.Badge, auto.Conditions))
                 {
                     continue;
                 }
@@ -207,7 +208,7 @@ public sealed class LiveAutos(
                     continue;
                 }
 
-                PaperIdeaTrade trade = PaperFill.Open(Guid.NewGuid(), idea, auto.Id, auto.AccountId, check.Size!, PromiseOf(idea, birth, bucketList), birth, fees);
+                PaperIdeaTrade trade = PaperFill.Open(Guid.NewGuid(), idea, auto.Id, auto.AccountId, check.Size!, PromiseOf(idea, birth, bucketList, curves), birth, fees);
                 working[trade.Trade.Id] = trade;
                 opened.Add(trade);
                 plan.Took(idea);
@@ -236,12 +237,12 @@ public sealed class LiveAutos(
     }
 
     // What the idea promises at the price the paper trade enters at: the statistics of its bucket as the list of ideas shows them, and the money from that price.
-    private IdeaPromise PromiseOf(Idea idea, IdeaCandle birth, IReadOnlyList<IdeaBucket> bucketList)
+    private IdeaPromise PromiseOf(Idea idea, IdeaCandle birth, IReadOnlyList<IdeaBucket> bucketList, IReadOnlyList<RiskRewardCurve> curves)
     {
         Idea atPrice = idea with { Track = idea.Track with { Plan = idea.Track.Plan with { Entry = PaperFill.EntryPrice(idea, birth) } } };
-        IdeaView view = IdeaView.Of([atPrice], bucketList, _fees)[0];
+        IdeaView view = IdeaView.Of([atPrice], bucketList, curves, _fees)[0];
 
-        return new IdeaPromise(view.Bucket?.Badge, view.Probability, view.Bucket?.Expectancy, view.Bucket?.Cases, view.Shares.BreakEven, view.Shares.NetRiskReward);
+        return new IdeaPromise(view.Numbers.Badge, view.Numbers.Probability, view.Numbers.Expectancy, view.Bucket?.Cases, view.Shares.BreakEven, view.Shares.NetRiskReward);
     }
 
     // None while the list of instruments has not told the step and the minimums of the volume of the pair.

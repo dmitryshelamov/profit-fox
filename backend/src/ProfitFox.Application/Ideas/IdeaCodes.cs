@@ -10,7 +10,8 @@ namespace ProfitFox.Application.Ideas;
 ///     (<c>levels</c>, <c>target_2r</c>, <c>beyond_extreme</c>, <c>pullback</c>, <c>stop_entry</c>), sides (<c>long</c>, <c>short</c>) and statuses
 ///     (<c>awaiting_entry</c>, <c>active</c>, <c>target</c>, <c>stop</c>, <c>expired</c>) in the API and in stored rows, and badges of buckets
 ///     (<c>up</c>, <c>flat</c>, <c>down</c>), scopes of calibration (<c>all</c>, <c>fresh</c>) and features of the market (<c>day_drop</c>,
-///     <c>btc_drop</c>, <c>high_funding</c>) in the API.
+///     <c>btc_drop</c>, <c>high_funding</c>) in the API, and bands of the reward to risk of «Уровни» (<c>up_to_2</c>, <c>from_2_to_3</c>,
+///     <c>from_3_to_6</c>, <c>from_6</c>) in the API and in stored rows.
 /// </summary>
 public static class IdeaCodes
 {
@@ -75,6 +76,24 @@ public static class IdeaCodes
         ["flat"] = IdeaBadge.Flat,
         ["down"] = IdeaBadge.Down
     };
+
+    private static readonly Dictionary<string, RiskRewardBand> BandsByCode = new Dictionary<string, RiskRewardBand>
+    {
+        ["up_to_2"] = RiskRewardBand.UpTo2,
+        ["from_2_to_3"] = RiskRewardBand.From2To3,
+        ["from_3_to_6"] = RiskRewardBand.From3To6,
+        ["from_6"] = RiskRewardBand.From6
+    };
+
+    public static RiskRewardBand ParseBand(string code)
+    {
+        return BandsByCode[code];
+    }
+
+    public static string ToCode(this RiskRewardBand band)
+    {
+        return BandsByCode.Single(pair => pair.Value == band).Key;
+    }
 
     public static bool TryParseSetup(string code, out IdeaSetup setup)
     {

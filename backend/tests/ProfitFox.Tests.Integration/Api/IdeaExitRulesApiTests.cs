@@ -178,7 +178,7 @@ public class IdeaExitRulesApiTests
         await new IdeaBucketRepository(_database).ReplaceAsync(
             IdeasEngineVersion.Current,
             [new IdeaBucket(key, 90, BucketStatisticsCalculator.Compute(30, 60, 10, -6m, 200m, 200))],
-            null,
+            [], null,
             CancellationToken.None);
 
         JsonElement bucket = (await _client.GetFromJsonAsync<JsonElement>("/api/ideas")).GetProperty("items")[0].GetProperty("bucket");

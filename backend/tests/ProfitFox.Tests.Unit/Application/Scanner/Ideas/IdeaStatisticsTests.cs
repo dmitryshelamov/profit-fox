@@ -53,7 +53,8 @@ public class IdeaStatisticsTests
             _buckets.ReplaceAsync(
                 2,
                 Arg.Is<IReadOnlyCollection<IdeaBucket>>(buckets => buckets!.Count == 2
-                    && buckets.All(bucket => bucket.Statistics == new BucketStatistics(1, 1, 0, 0, null, null, null, result, null, null) { OwnExpectancy = result })),
+                    && buckets.All(bucket => bucket.Statistics == new BucketStatistics(1, 1, 0, 0, null, null, null, result, null, null) { OwnExpectancy = result, GrossExpectancy = 2m })),
+                Arg.Any<IReadOnlyCollection<RiskRewardCurve>>(),
                 null,
                 Arg.Any<CancellationToken>());
             _calibrations.ReplaceAsync(
@@ -72,7 +73,7 @@ public class IdeaStatisticsTests
     {
         await Statistics(new ScannerSettings { CalibrationCases = 0 }).RecomputeAsync(CancellationToken.None);
 
-        await _buckets.Received(1).ReplaceAsync(2, Arg.Is<IReadOnlyCollection<IdeaBucket>>(buckets => buckets!.Count == 2), null, Arg.Any<CancellationToken>());
+        await _buckets.Received(1).ReplaceAsync(2, Arg.Is<IReadOnlyCollection<IdeaBucket>>(buckets => buckets!.Count == 2), Arg.Any<IReadOnlyCollection<RiskRewardCurve>>(), null, Arg.Any<CancellationToken>());
         await _calibrations.DidNotReceiveWithAnyArgs().ReplaceAsync(default, default!, default);
     }
 
@@ -108,13 +109,15 @@ public class IdeaStatisticsTests
         await _buckets.Received(1).ReplaceAsync(
             2,
             Arg.Is<IReadOnlyCollection<IdeaBucket>>(buckets => buckets!.All(bucket => bucket.Statistics.Expired == 1)),
+            Arg.Any<IReadOnlyCollection<RiskRewardCurve>>(),
             (IdeaType.TwoR, Interval.FifteenMinutes),
             Arg.Any<CancellationToken>());
         await _calibrations.DidNotReceiveWithAnyArgs().ReplaceAsync(default, default!, default);
     }
 
     // Decision 4: the category is the root of every parent, so the pass of a type × interval takes its sums from the last whole pass. 40 cases
-    // of «Цель 2R», every other a stop, next to 40 stops of «За экстремум»: the buckets of «Цель 2R» come out of both passes the same.
+    // of «Цель 2R», every other a stop, next to 40 stops of «За экстремум»: the buckets of «Цель 2R» come out of both passes the same, the
+    // expectancy without costs too, shrunk to the roots of the second run of the whole pass (decision 3 of add-own-idea-numbers).
     [Test]
     public async Task Recompute_of_a_type_and_interval_shrinks_to_the_categories_of_the_whole_pass()
     {
@@ -123,10 +126,11 @@ public class IdeaStatisticsTests
         _signals.StreamAsync(2, Now.AddDays(-180), null, Arg.Any<CancellationToken>()).Returns(_ => twoR.Concat(beyond).ToAsyncEnumerable());
         _signals.StreamAsync(2, Now.AddDays(-180), (IdeaType.TwoR, Interval.FifteenMinutes), Arg.Any<CancellationToken>()).Returns(_ => twoR.ToAsyncEnumerable());
         var written = new List<(IReadOnlyCollection<IdeaBucket> Buckets, (IdeaType, Interval)? Only)>();
-        await _buckets.ReplaceAsync(2, Arg.Do<IReadOnlyCollection<IdeaBucket>>(buckets => written.Add((buckets, null))), null, Arg.Any<CancellationToken>());
+        await _buckets.ReplaceAsync(2, Arg.Do<IReadOnlyCollection<IdeaBucket>>(buckets => written.Add((buckets, null))), Arg.Any<IReadOnlyCollection<RiskRewardCurve>>(), null, Arg.Any<CancellationToken>());
         await _buckets.ReplaceAsync(
             2,
             Arg.Do<IReadOnlyCollection<IdeaBucket>>(buckets => written.Add((buckets, (IdeaType.TwoR, Interval.FifteenMinutes)))),
+            Arg.Any<IReadOnlyCollection<RiskRewardCurve>>(),
             (IdeaType.TwoR, Interval.FifteenMinutes),
             Arg.Any<CancellationToken>());
         IdeaStatistics statistics = Statistics();
@@ -136,7 +140,25 @@ public class IdeaStatisticsTests
 
         written.Count.ShouldBe(2);
         written[1].Buckets.ShouldBe(written[0].Buckets.Where(bucket => bucket.Key.Type == IdeaType.TwoR), ignoreOrder: true);
-        written[1].Buckets.ShouldAllBe(bucket => bucket.Statistics.Probability != null);
+        written[1].Buckets.ShouldAllBe(bucket => bucket.Statistics.Probability != null && bucket.Statistics.GrossExpectancyLow != null);
+    }
+
+    // Decision 7 of add-own-idea-numbers: the curves of «Уровни» of the pass go to storage with the buckets, by the whole recompute and by the
+    // recompute of «Уровни» on an interval.
+    [Test]
+    public async Task Recomputes_write_the_curves_of_levels_with_the_buckets()
+    {
+        _signals.StreamAsync(2, Now.AddDays(-180), Arg.Any<(IdeaType, Interval)?>(), Arg.Any<CancellationToken>())
+            .Returns(_ => new[] { Signal(Now.AddDays(-1), type: IdeaType.Levels) with { Path = Signal(Now.AddDays(-1), type: IdeaType.Levels).Path with { TargetAfter = 30 } } }.ToAsyncEnumerable());
+        var written = new List<IReadOnlyCollection<RiskRewardCurve>>();
+        await _buckets.ReplaceAsync(2, Arg.Any<IReadOnlyCollection<IdeaBucket>>(), Arg.Do<IReadOnlyCollection<RiskRewardCurve>>(written.Add), Arg.Any<(IdeaType, Interval)?>(), Arg.Any<CancellationToken>());
+        IdeaStatistics statistics = Statistics();
+
+        await statistics.RecomputeAsync(CancellationToken.None);
+        await statistics.RecomputeAsync(IdeaType.Levels, Interval.FifteenMinutes, CancellationToken.None);
+
+        written.Count.ShouldBe(2);
+        written.ShouldAllBe(curves => curves.Single().Bands.Single() == new RiskRewardBandCount(RiskRewardBand.From2To3, 1, 1));
     }
 
     // Decision 4: after a restart the pass of a type × interval waits for the first whole pass, which writes its buckets anyway.
@@ -145,7 +167,7 @@ public class IdeaStatisticsTests
     {
         await Statistics().RecomputeAsync(IdeaType.TwoR, Interval.FifteenMinutes, CancellationToken.None);
 
-        await _buckets.DidNotReceiveWithAnyArgs().ReplaceAsync(default, default!, default, default);
+        await _buckets.DidNotReceiveWithAnyArgs().ReplaceAsync(default, default!, default!, default, default);
     }
 
     // Scenario "Правило не применялось" and decision 5: a type × interval whose rule was never applied, or applied before the start of the

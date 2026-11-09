@@ -4,12 +4,30 @@ using ProfitFox.Domain.ValueObjects.Ideas;
 
 namespace ProfitFox.Tests.Shared.Generators.Domain.Entity.Ideas;
 
-/// <summary>An idea with the statistics of its bucket, none unless the test gives them, and the money of an idea of entry 105, stop 100 and target 115.</summary>
+/// <summary>
+///     An idea with the statistics of its bucket, none unless the test gives them, the money of an idea of entry 105, stop 100 and target 115, and
+///     its own numbers: those the test gives, by default those of its bucket without costs.
+/// </summary>
 public static class IdeaViewGenerator
 {
-    public static IdeaView Generate(Idea idea, BucketStatistics? bucket = null, IdeaShares? shares = null)
+    public static IdeaView Generate(Idea idea, BucketStatistics? bucket = null, IdeaShares? shares = null, IdeaNumbers? numbers = null)
     {
-        return new IdeaView(idea, bucket, null, shares ?? new IdeaShares(0.09m, 0.05m, 0.05m));
+        IdeaShares money = shares ?? new IdeaShares(0.09m, 0.05m, 0.05m);
+
+        return new IdeaView(idea, bucket, null, money, numbers ?? new IdeaNumbers(0m, 1m, bucket?.Probability, bucket?.ProbabilityLow, bucket?.ProbabilityHigh,
+            bucket?.Expectancy, bucket?.ExpectancyLow, bucket?.ExpectancyHigh, bucket?.Expectancy * money.RiskPerUsdt));
+    }
+
+    /// <summary>The own numbers of an idea with the expectancy, its interval and the expectancy on 1 USDT the test gives.</summary>
+    public static IdeaNumbers Numbers(decimal? expectancy, decimal? perUsdt = null, decimal? low = null, decimal? high = null, decimal? probability = null)
+    {
+        return new IdeaNumbers(0m, 1m, probability, probability, probability, expectancy, low, high, perUsdt);
+    }
+
+    /// <summary>The statistics with the expectancy without costs and its interval those of the model, as a bucket of cases without fees has them.</summary>
+    public static BucketStatistics WithGross(BucketStatistics statistics)
+    {
+        return statistics with { GrossExpectancy = statistics.Expectancy, GrossExpectancyLow = statistics.ExpectancyLow, GrossExpectancyHigh = statistics.ExpectancyHigh };
     }
 
     /// <summary>

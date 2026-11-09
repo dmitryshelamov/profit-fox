@@ -24,7 +24,7 @@ public sealed class GetPairIdeasQueryHandler(IIdeaRepository ideas, IIdeaBucketR
         IReadOnlyList<Idea> recent = await ideas.GetRecentAsync(time.GetUtcNow() - IdeaQueries.ClosedShown, new Instrument(category, request.Symbol), cancellationToken);
 
         return new GetPairIdeasResult(
-            IdeaOrder.ByExpectancy(IdeaView.Of(recent, await buckets.GetAsync(version.Number, cancellationToken), backtests.Policy().DefaultFees)),
+            IdeaOrder.ByExpectancy(IdeaView.Of(recent, await buckets.GetAsync(version.Number, cancellationToken), await buckets.GetCurvesAsync(version.Number, cancellationToken), backtests.Policy().DefaultFees)),
             new Dictionary<string, string>());
     }
 }

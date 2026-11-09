@@ -6,36 +6,59 @@ import { roundDecimal, showDecimal } from '@/shared/format/format';
 import { bucketCasesText } from './labels';
 
 type Bucket = Schemas['BucketStatisticsResponse'];
+type Numbers = Schemas['IdeaNumbersResponse'];
 
 export type Badge = '▲' | '≈' | '▼';
 
 const badges: Record<string, Badge> = { up: '▲', flat: '≈', down: '▼' };
 
-/** The symbol of the code of a badge of a bucket: `up` is ▲, `flat` ≈, `down` ▼. */
+/** The symbol of the code of a badge of a bucket or an idea: `up` is ▲, `flat` ≈, `down` ▼. */
 export const badgeSymbol = (code: string): Badge => badges[code]!;
 
 export interface ProbabilityView {
   readonly enough: boolean;
-  /** The probability in whole percent; `null` while there is too little data. */
+  /** The probability of the idea in whole percent; `null` while there is too little data. */
   readonly percent: string | null;
+  /** The cases of the bucket of the idea. */
   readonly cases: number;
-  /** The badge of the bucket by the interval of its expectancy; `null` while there is too little data. */
-  readonly badge: Badge | null;
 }
 
-/** What the probability column of an idea shows: its bucket, or «мало данных» for fewer than 30 cases or no case. */
-export function probabilityView(bucket: Bucket | null): ProbabilityView {
-  if (bucket === null || !bucket.enoughData) {
-    return { enough: false, percent: null, cases: Number(bucket?.cases ?? 0), badge: null };
+/** What the probability column of an idea shows: its own probability with N of its bucket, or «мало данных» while it has none. */
+export function probabilityView(numbers: Numbers, bucket: Bucket | null): ProbabilityView {
+  const cases = Number(bucket?.cases ?? 0);
+
+  return numbers.probability === null
+    ? { enough: false, percent: null, cases }
+    : { enough: true, percent: percentOf(numbers.probability), cases };
+}
+
+/** The badge of the idea by the interval of its own expectancy; `null` without one. */
+export function ideaBadge(numbers: Numbers): Badge | null {
+  return numbers.badge === null ? null : badgeSymbol(numbers.badge);
+}
+
+const bandLabels: Record<string, string> = {
+  up_to_2: 'до 2',
+  from_2_to_3: '2–3',
+  from_3_to_6: '3–6',
+  from_6: 'от 6',
+};
+
+/**
+ * The hint of the probability of an idea: for «Уровни» first the probability of its bucket times the multiplier of the band of its reward
+ * to risk, «корзина 22 % × 0.68 по R:R 3–6», then the shares of the outcomes of the bucket; none without a bucket.
+ */
+export function probabilityHint(numbers: Numbers, bucket: Bucket | null): string | null {
+  const shares = outcomeShares(bucket);
+
+  if (shares === null || numbers.band === null || bucket!.probability === null) {
+    return shares;
   }
 
-  return {
-    enough: true,
-    percent: roundDecimal(shiftDecimal(bucket.probability!, 2), 0),
-    cases: Number(bucket.cases),
-    badge: badgeSymbol(bucket.badge!),
-  };
+  return `корзина ${percentOf(bucket!.probability)} % × ${showDecimal(numbers.multiplier, 2)} по R:R ${bandLabels[numbers.band]} · ${shares}`;
 }
+
+const percentOf = (share: string) => roundDecimal(shiftDecimal(share, 2), 0);
 
 /** The break-even of an idea after the fees, rounded up to a whole percent, or that its target does not cover the fees. */
 export function breakEvenText(breakEven: string | null): string {
@@ -85,9 +108,30 @@ export function ownNumbers(bucket: Bucket | null): string | null {
   return `в самой корзине: ${bucketCasesText(Number(bucket.cases))}${share} · ${showDecimal(bucket.ownExpectancy, 2, true)} R · по родителю ${roundDecimal(shiftDecimal(bucket.parentWeight, 2), 0)} %`;
 }
 
-/** The expectancy of the bucket in R with a sign, or a dash for a bucket without a case. */
-export function expectancyText(bucket: Bucket | null): string {
-  return bucket === null ? '—' : `${showDecimal(bucket.expectancy, 2, true)} R`;
+/** The expectancy of the idea in R with a sign, or a dash for an idea without one. */
+export function expectancyText(numbers: Numbers): string {
+  return numbers.expectancy === null ? '—' : `${showDecimal(numbers.expectancy, 2, true)} R`;
+}
+
+/** The expectancy of the idea on 100 USDT of the amount of a deal, a share of the amount and not a forecast of money; none without one. */
+export function perHundredText(numbers: Numbers): string | null {
+  return numbers.expectancyPerUsdt === null
+    ? null
+    : `на 100 USDT: ${showDecimal(multiplyDecimals(numbers.expectancyPerUsdt, '100'), 2, true)}`;
+}
+
+/**
+ * The hint of the expectancy of an idea: what it is made of, «без издержек −0.02 R − издержки 0.70 R», and on the next line the own numbers
+ * of its bucket; none without a bucket.
+ */
+export function expectancyHint(numbers: Numbers, bucket: Bucket | null): string | null {
+  const own = ownNumbers(bucket);
+  const made =
+    numbers.expectancy === null
+      ? null
+      : `без издержек ${showDecimal(bucket!.grossExpectancy!, 2, true)} R − издержки ${showDecimal(numbers.costs, 2)} R`;
+
+  return [made, own].filter((line) => line !== null).join('\n') || null;
 }
 
 export interface MoneyOutcome {

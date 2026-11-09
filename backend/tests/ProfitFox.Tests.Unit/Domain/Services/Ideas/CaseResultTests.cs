@@ -102,6 +102,36 @@ public class CaseResultTests
         CaseResult.R(track, Fees).ShouldBeNull();
     }
 
+    // Requirement "Итог случая без издержек", scenario "Цель": the plan prices, without fees and slippage, give the target its +2 R.
+    [Test]
+    public void Gross_result_of_a_target_is_its_reward_at_the_plan_prices()
+    {
+        CaseResult.GrossR(Closed(IdeaType.TwoR, IdeaSide.Long, 100m, 98m, 104m, IdeaStatus.Target, 104m)).ShouldBe(2m);
+    }
+
+    // Scenario "Стоп".
+    [Test]
+    public void Gross_result_of_a_stop_is_minus_one_r()
+    {
+        CaseResult.GrossR(Closed(IdeaType.TwoR, IdeaSide.Long, 100m, 98m, 104m, IdeaStatus.Stop, 98m)).ShouldBe(-1m);
+    }
+
+    // Scenario "Истёк по close у short".
+    [Test]
+    public void Gross_result_of_a_short_that_expired_at_its_close()
+    {
+        CaseResult.GrossR(Closed(IdeaType.TwoR, IdeaSide.Short, 100m, 102m, 96m, IdeaStatus.Expired, 99m)).ShouldBe(0.5m);
+    }
+
+    // Scenario "Сигнал без входа".
+    [Test]
+    public void Pullback_without_an_entry_has_no_gross_result()
+    {
+        var track = new IdeaTrack(new IdeaPlan(IdeaType.Pullback, IdeaSide.Long, 100m, 98m, 104m), Fired, 5, 24, 2m, 4, IdeaStatus.Expired, Fired.AddMinutes(20));
+
+        CaseResult.GrossR(track).ShouldBeNull();
+    }
+
     private static IdeaTrack Closed(IdeaType type, IdeaSide side, decimal entry, decimal stop, decimal target, IdeaStatus status, decimal exit)
     {
         return new IdeaTrack(new IdeaPlan(type, side, entry, stop, target), Fired, 5, 24, 2m, null, status, Fired.AddMinutes(30), Fired, exit);

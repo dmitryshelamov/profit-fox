@@ -102,11 +102,11 @@ public sealed class GetIdeasQueryHandler(
             && (request.Category is null || idea.Instrument.Category == category)
             && (!request.ActiveOnly || idea.IsOpen)
             && !tradFi.Contains(idea.Instrument));
-        IEnumerable<IdeaView> views = IdeaView.Of(matching, await buckets.GetAsync(version.Number, cancellationToken), backtests.Policy().DefaultFees);
+        IEnumerable<IdeaView> views = IdeaView.Of(matching, await buckets.GetAsync(version.Number, cancellationToken), await buckets.GetCurvesAsync(version.Number, cancellationToken), backtests.Policy().DefaultFees);
 
         if (request.NonNegativeExpectancy)
         {
-            views = views.Where(view => view.Bucket?.Expectancy >= 0);
+            views = views.Where(view => view.Numbers.Expectancy >= 0);
         }
 
         if (filter is not null)

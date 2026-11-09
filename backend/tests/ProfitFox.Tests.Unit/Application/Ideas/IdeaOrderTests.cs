@@ -113,14 +113,15 @@ public class IdeaOrderTests
         Names(IdeaOrder.Sort(views, IdeaSortColumn.Symbol, OrderDirection.Ascending)).ShouldBe("cba");
     }
 
-    // Scenario "Вероятность без данных".
+    // Scenario "Вероятность без данных": a bucket of «мало данных» has no probability of the model, so its idea has none (decision 5 of
+    // add-own-idea-numbers).
     [TestCase(OrderDirection.Ascending, "bc")]
     [TestCase(OrderDirection.Descending, "cb")]
     public void Ideas_without_a_probability_stay_under_the_others(OrderDirection direction, string expectedHead)
     {
         IdeaView[] views =
         [
-            View("f", bucket: IdeaViewGenerator.Bucket(0m, 0.9m, cases: 29)),
+            View("f", bucket: IdeaViewGenerator.Bucket(0m, cases: 12)),
             View("b", bucket: IdeaViewGenerator.Bucket(0m, 0.46m)),
             View("n"),
             View("c", bucket: IdeaViewGenerator.Bucket(0m, 0.51m))
@@ -157,6 +158,37 @@ public class IdeaOrderTests
 
         // The R:R after the fees is the same for all five.
         Names(IdeaOrder.Sort(views, IdeaSortColumn.RiskReward, direction)).ShouldBe("dabce");
+    }
+
+    // Scenario "Ожидание по деньгам" (decision 6 of add-own-idea-numbers): the column «Ожидание» and the order without a column go by the
+    // expectancy of the idea on 1 USDT of the amount, not in R.
+    [Test]
+    public void Expectancy_goes_by_the_expectancy_per_usdt_not_in_r()
+    {
+        IdeaView[] views =
+        [
+            View("a", bucket: IdeaViewGenerator.Bucket(-0.21m), numbers: IdeaViewGenerator.Numbers(-0.062m, -0.0031m)),
+            View("b", bucket: IdeaViewGenerator.Bucket(-0.21m), numbers: IdeaViewGenerator.Numbers(-0.72m, -0.00216m))
+        ];
+
+        Names(IdeaOrder.Sort(views, IdeaSortColumn.Expectancy, OrderDirection.Descending)).ShouldBe("ba");
+        Names(IdeaOrder.ByExpectancy(views)).ShouldBe("ba");
+    }
+
+    // Equal values go by the expectancy on 1 USDT too; an idea without an expectancy of its own stays under the others whichever way.
+    [TestCase(OrderDirection.Ascending)]
+    [TestCase(OrderDirection.Descending)]
+    public void Equal_values_go_by_the_expectancy_per_usdt_and_ideas_without_one_last(OrderDirection direction)
+    {
+        IdeaView[] views =
+        [
+            View("n", bucket: IdeaViewGenerator.Bucket(0.5m), numbers: IdeaViewGenerator.Numbers(null)),
+            View("b", bucket: IdeaViewGenerator.Bucket(0.1m), numbers: IdeaViewGenerator.Numbers(-0.062m, -0.0031m)),
+            View("a", bucket: IdeaViewGenerator.Bucket(-0.1m), numbers: IdeaViewGenerator.Numbers(-0.72m, -0.00216m))
+        ];
+
+        Names(IdeaOrder.Sort(views, IdeaSortColumn.RiskReward, direction)).ShouldBe("abn");
+        Names(IdeaOrder.Sort(views, IdeaSortColumn.Expectancy, direction)).ShouldEndWith("n");
     }
 
     [Test]
@@ -199,11 +231,11 @@ public class IdeaOrderTests
     }
 
     // Three ideas that differ only in what the test changes; the name is the first byte of the id.
-    private static IdeaView View(string name, Func<Idea, Idea>? change = null, BucketStatistics? bucket = null, IdeaShares? shares = null)
+    private static IdeaView View(string name, Func<Idea, Idea>? change = null, BucketStatistics? bucket = null, IdeaShares? shares = null, IdeaNumbers? numbers = null)
     {
         Idea idea = IdeaGenerator.Generate(Noon.AddMinutes(-30));
 
-        return IdeaViewGenerator.Generate((change ?? (same => same))(idea) with { Id = new Guid(name[0], 0, 0, new byte[8]) }, bucket, shares);
+        return IdeaViewGenerator.Generate((change ?? (same => same))(idea) with { Id = new Guid(name[0], 0, 0, new byte[8]) }, bucket, shares, numbers);
     }
 
     private static Func<Idea, Idea> FiredAt(DateTimeOffset firedAt)

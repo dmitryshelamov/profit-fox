@@ -88,7 +88,7 @@ public sealed class IdeaTradeEntryCalculator(
         ListedInstrument listed = (await catalog.ListAsync(instrument.Category, cancellationToken)).Single(item => item.Symbol == instrument.Symbol);
 
         return new EntryPreparation(idea, saved, account, key, access, price, current, instrumentRules, backtests.Policy().DefaultFees[instrument.Category], asked, listed.QuoteCoin, listed.BaseCoin,
-            await buckets.GetAsync(version.Number, cancellationToken));
+            await buckets.GetAsync(version.Number, cancellationToken), await buckets.GetCurvesAsync(version.Number, cancellationToken));
     }
 
     /// <summary>Sizes the trade and names what stops it, by the books of the account as they are now.</summary>
@@ -128,14 +128,15 @@ public sealed class IdeaTradeEntryCalculator(
     }
 
     /// <summary>
-    ///     What the idea promises at this entry: the statistics of its bucket as the list of ideas shows them, and the break-even and the reward to
-    ///     risk after the fees from the price of the entry, which <paramref name="idea" /> carries in its plan.
+    ///     What the idea promises at this entry: its own numbers as the list of ideas shows them and the cases of its bucket, and the break-even and
+    ///     the reward to risk after the fees, all from the price of the entry, which <paramref name="idea" /> carries in its plan (decision 9 of
+    ///     add-own-idea-numbers).
     /// </summary>
     private static IdeaPromise PromiseOf(Idea idea, EntryPreparation preparation)
     {
-        IdeaView view = IdeaView.Of([idea], preparation.Buckets, new Dictionary<MarketCategory, FeeRates> { [idea.Instrument.Category] = preparation.Fees })[0];
+        IdeaView view = IdeaView.Of([idea], preparation.Buckets, preparation.Curves, new Dictionary<MarketCategory, FeeRates> { [idea.Instrument.Category] = preparation.Fees })[0];
 
-        return new IdeaPromise(view.Bucket?.Badge, view.Probability, view.Bucket?.Expectancy, view.Bucket?.Cases, view.Shares.BreakEven, view.Shares.NetRiskReward);
+        return new IdeaPromise(view.Numbers.Badge, view.Numbers.Probability, view.Numbers.Expectancy, view.Bucket?.Cases, view.Shares.BreakEven, view.Shares.NetRiskReward);
     }
 
     private async Task<(ExchangeKey? Key, AccountAccess Access)> AccessAsync(ExchangeAccount? account, Instrument instrument, CancellationToken cancellationToken)
@@ -255,7 +256,10 @@ public sealed class IdeaTradeEntryCalculator(
     }
 }
 
-/// <summary>What <see cref="IdeaTradeEntryCalculator.PrepareAsync" /> learned: the idea, the settings, the account and what its key may do, the price the trade enters at, the price of the market now, the rules and the fees.</summary>
+/// <summary>
+///     What <see cref="IdeaTradeEntryCalculator.PrepareAsync" /> learned: the idea, the settings, the account and what its key may do, the price the
+///     trade enters at, the price of the market now, the rules and the fees, and the buckets and the curves of «Уровни» the promise is made of.
+/// </summary>
 public sealed record EntryPreparation(
     Idea Idea,
     IdeaTradingSettings Settings,
@@ -269,7 +273,8 @@ public sealed record EntryPreparation(
     decimal Amount,
     string Quote,
     string BaseCoin,
-    IReadOnlyList<IdeaBucket> Buckets);
+    IReadOnlyList<IdeaBucket> Buckets,
+    IReadOnlyList<RiskRewardCurve> Curves);
 
 /// <summary>
 ///     The entry as it would be made now: the plan from the price, the size, the free money (none without a key), what stops it (the reasons of the
