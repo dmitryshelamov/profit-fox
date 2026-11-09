@@ -819,6 +819,32 @@ public class IdeaTradingTests
         (await _scenario.TradeAsync(trade.Id)).Status.ShouldBe(status);
     }
 
+    // Task 4.5 on the stub of the streams of Bybit: the liquidation of an open long comes as an execution BustTrade with no client id of ours, the
+    // position of the stub is 0, the trade is liquidated with its result, and no comparison is set off or fails it.
+    [Test]
+    public async Task Liquidation_from_the_stream_of_bybit_closes_the_trade_and_fails_nothing()
+    {
+        await using FakeBybitSocketServer server = await FakeBybitSocketServer.StartAsync();
+        IdeaTrade trade = await OpenTradeAsync(0.47m);
+        await _scenario.StopWorkerAsync(_scenario.Workers.Single());
+        _scenario.StartWorker(bybitSocketAddress: server.Address);
+        await server.WaitForTopicAsync("execution");
+        await SettleAsync();
+        int reads = _scenario.Exchange.HoldingReads;
+        _scenario.Exchange.Holding = 0m;
+
+        await server.PushAsync(
+            "execution",
+            [FakeBybitSocketServer.Execution("linear", "", "bust-1", 0.47m, 95m, 0.03m, "USDT", _scenario.Factory.Time.GetUtcNow(), exchangeId: "x-bust", type: "BustTrade", side: "Sell")]);
+
+        await _scenario.WaitAsync(async () => (await _scenario.TradeAsync(trade.Id)).Status == IdeaTradeStatus.Liquidated, "the liquidated trade");
+        (await _scenario.TradeAsync(trade.Id)).Result.ShouldBe((0.47m * 95m) - (0.47m * 105m) - 0.02m - 0.03m);
+        await SettleAsync();
+        IdeaTrade settled = await _scenario.TradeAsync(trade.Id);
+        (settled.Status, settled.Reason).ShouldBe((IdeaTradeStatus.Liquidated, null));
+        _scenario.Exchange.HoldingReads.ShouldBe(reads);
+    }
+
     // Scenario "ADL закрыла сделку": a short bought back by the auto-deleveraging of Bybit.
     [Test]
     public async Task Auto_deleveraging_on_the_stream_closes_a_short_by_the_exchange()
