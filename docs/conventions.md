@@ -195,6 +195,14 @@ enforces a rule, the check is the source of truth.
   bot and the pair share. `Paging` holds `PageRequest` (the number from 1 and the size 50, 100 or 200 a client asked for, with the field errors
   `page` and `pageSize`; `Slice` gives a `Page<T>`, the last page when the number is past the end), `OrderDirection` and its codes `asc` and `desc`.
   `GetIdeas` and `GetMarket` filter, order and cut the page in memory, and `GetMarket` also counts the pairs for the chips; neither returns a whole list.
+- `TradeFlow` holds the collector of the trade flow: `TradeFlowMinutes` (the minutes in memory: a trade adds to the minute of its time, a minute
+  goes to storage `CloseMargin`, 5 s, after its end, and a written one stays until `LateLimit`, 2 minutes, after its end, so a late trade writes it
+  again whole; a later trade is dropped), `TradeFlowSession` (while the collector holds the lease: the listed pairs of `linear` and `spot` from
+  `IScannerPairRepository`, read again every 5 minutes, a new pair subscribed on its own and a pair out of trading no longer written; every
+  5 s the closed minutes go to a queue written in one batch, tried again until storage refuses it for the lease
+  (`TradeFlowLeaseLostException`); the breaks of the stream go to `stream_breaks` as `trades`, the first from the end of the last stored minute to
+  the subscription), `TradeFlowMetrics` (the counter `profitfox.tradeflow.trades` by `category` on the meter `ProfitFox.TradeFlow`, one per trade the
+  session took from the stream) and `Ports/Market/ITradeFlowJournal`.
 - `Scanner/Ideas/LiveAutos` is what the autos do in a minute of the scanner: it reads the autos that are on every minute, gives the ideas born in the minute to each in the order of the list, each auto taking them in the order of `AutoMinutePlan` within its limits (a request carries its place in that order, and the ideas a limit skipped are one refusal of the auto, the side and the minute), checks and opens the paper trades (`PaperEntry`, `PaperFill`) or writes the requests of the autos with money, steps the open paper trades by the closed minutes of their pairs (up to the end of the coverage of the pair, by the stored minutes when the memory no longer holds them) and returns the `AutoMinute` that `LiveIdeas` writes in the transaction of the ideas; once an hour it deletes the refusals older than 7 days and turns the requests no Worker took into refusals «Не успел войти».
 - `Scanner/Ideas` holds the ideas of the scanner: `IdeasSettings` (the `Ideas` section, with `ThresholdSettings` and `ThresholdOverride`),
   `IdeaRuleSet`, `IdeaSeries` (at most 220 closed candles of a pair on an interval and the minutes of the forming one, and the `SetupBase` it keeps until
