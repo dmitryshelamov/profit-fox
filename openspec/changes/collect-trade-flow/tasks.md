@@ -17,14 +17,14 @@ design.md, сценарии — на дельты спек этого измен
 
 ## 2. Хранение
 
-- [ ] 2.1 Миграция: `trade_flow_minutes` — гипертаблица по дню, PK `(category, symbol, open_time)`, сжатие по
+- [x] 2.1 Миграция: `trade_flow_minutes` — гипертаблица по дню, PK `(category, symbol, open_time)`, сжатие по
   `category, symbol`, политика 7 дней; `trade_flow_days`; `trade_flow_state` с одной строкой (решения 2, 7, 8). Готово,
   когда интеграционный тест миграции видит гипертаблицу, PK и политику в `timescaledb_information.jobs`.
-- [ ] 2.2 `TradeFlowMinuteRepository`: пачка через `unnest … ON CONFLICT DO UPDATE`, замена дня пары в одной транзакции
+- [x] 2.2 `TradeFlowMinuteRepository`: пачка через `unnest … ON CONFLICT DO UPDATE`, замена дня пары в одной транзакции
   (delete + insert), бары через `time_bucket`, первая и последняя минута. Готово, когда зелёные интеграционные тесты по
   сценариям «Повторная запись», «Старые минуты» (замена и чтение после `compress_chunk`), «Часовые бары» и «Минута без
   сделок» (бара нет).
-- [ ] 2.3 `TradeFlowDayRepository` и `TradeFlowStateRepository` (захват, продление, чужая аренда) по образцу
+- [x] 2.3 `TradeFlowDayRepository` и `TradeFlowStateRepository` (захват, продление, чужая аренда) по образцу
   `ScannerStateRepository`. Готово, когда зелёные интеграционные тесты по сценариям «Два сборщика» и «Держатель упал» на
   уровне репозитория.
 

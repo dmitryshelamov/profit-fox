@@ -16,7 +16,7 @@ public class MigrationTests
 
         IEnumerable<string> hypertables = await connection.QueryAsync<string>("SELECT hypertable_name FROM timescaledb_information.hypertables");
 
-        hypertables.ShouldBe(["candles", "open_interest", "idea_cases", "liquidations"], ignoreOrder: true);
+        hypertables.ShouldBe(["candles", "open_interest", "idea_cases", "liquidations", "trade_flow_minutes"], ignoreOrder: true);
     }
 
     // Jobs created before the column existed must read as never interrupted; the column is now the count of lost leases.
@@ -188,5 +188,80 @@ public class MigrationTests
             [("stream", "text", "NO"), ("lost_at", "timestamp with time zone", "NO"), ("restored_at", "timestamp with time zone", "NO")],
             ignoreOrder: true);
         key.ShouldBe(["stream", "lost_at"], ignoreOrder: true);
+    }
+
+    // Decision 7 of collect-trade-flow: the minutes of the trade flow are kept for good, one row per pair and minute, daily chunks compressed
+    // by pair after 7 days by a policy of TimescaleDB.
+    [Test]
+    public async Task Trade_flow_minutes_are_daily_chunks_keyed_by_pair_and_minute_and_compressed_after_a_week()
+    {
+        await using NpgsqlDataSource dataSource = MarketDataDatabase.Open();
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
+
+        TimeSpan chunk = await connection.QuerySingleAsync<TimeSpan>(
+            "SELECT time_interval FROM timescaledb_information.dimensions WHERE hypertable_name = 'trade_flow_minutes'");
+        IEnumerable<(string Name, string DataType, string IsNullable)> columns = await connection.QueryAsync<(string, string, string)>(
+            "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = 'trade_flow_minutes'");
+        IEnumerable<string> key = await connection.QueryAsync<string>(
+            """
+            SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+            WHERE i.indrelid = 'trade_flow_minutes'::regclass AND i.indisprimary
+            """);
+        IEnumerable<(string Column, bool SegmentBy)> compression = await connection.QueryAsync<(string, bool)>(
+            "SELECT attname, segmentby_column_index IS NOT NULL FROM timescaledb_information.compression_settings WHERE hypertable_name = 'trade_flow_minutes'");
+        string? compressAfter = await connection.QuerySingleOrDefaultAsync<string>(
+            """
+            SELECT config ->> 'compress_after' FROM timescaledb_information.jobs
+            WHERE hypertable_name = 'trade_flow_minutes' AND proc_name = 'policy_compression'
+            """);
+
+        chunk.ShouldBe(TimeSpan.FromDays(1));
+        columns.ShouldBe(
+        [
+            ("category", "text", "NO"), ("symbol", "text", "NO"), ("open_time", "timestamp with time zone", "NO"),
+            ("buy_volume", "numeric", "NO"), ("sell_volume", "numeric", "NO"), ("buy_turnover", "numeric", "NO"), ("sell_turnover", "numeric", "NO"),
+            ("buy_trades", "integer", "NO"), ("sell_trades", "integer", "NO")
+        ],
+            ignoreOrder: true);
+        key.ShouldBe(["category", "symbol", "open_time"], ignoreOrder: true);
+        compression.ShouldBe([("category", true), ("symbol", true), ("open_time", false)], ignoreOrder: true);
+        compressAfter.ShouldBe("7 days");
+    }
+
+    // Decision 8: a day of a pair read from the archive, rebuilt or missing, once per pair and day.
+    [Test]
+    public async Task Trade_flow_days_are_keyed_by_pair_and_day()
+    {
+        await using NpgsqlDataSource dataSource = MarketDataDatabase.Open();
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
+
+        IEnumerable<(string Name, string DataType, string IsNullable)> columns = await connection.QueryAsync<(string, string, string)>(
+            "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = 'trade_flow_days'");
+        IEnumerable<string> key = await connection.QueryAsync<string>(
+            """
+            SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+            WHERE i.indrelid = 'trade_flow_days'::regclass AND i.indisprimary
+            """);
+
+        columns.ShouldBe(
+        [
+            ("category", "text", "NO"), ("symbol", "text", "NO"), ("day", "timestamp with time zone", "NO"), ("status", "text", "NO"),
+            ("at", "timestamp with time zone", "NO")
+        ],
+            ignoreOrder: true);
+        key.ShouldBe(["category", "symbol", "day"], ignoreOrder: true);
+    }
+
+    // Decision 2: one row for the lease of the one collector that holds the trade flow, free at first.
+    [Test]
+    public async Task Trade_flow_state_is_one_row_with_a_free_lease()
+    {
+        await using NpgsqlDataSource dataSource = MarketDataDatabase.Open();
+        await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
+
+        IEnumerable<(int Id, Guid? Owner, DateTimeOffset? Until)> rows = await connection.QueryAsync<(int, Guid?, DateTimeOffset?)>(
+            "SELECT id, lease_owner, leased_until FROM trade_flow_state");
+
+        rows.ShouldBe([(1, null, null)]);
     }
 }

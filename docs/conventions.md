@@ -375,6 +375,11 @@ enforces a rule, the check is the source of truth.
   chunks, unique by the whole event (`INSERT … ON CONFLICT DO NOTHING`, the rows inserted counted by side), compressed by
   `category, symbol` after 7 days by a policy of TimescaleDB and never deleted, the first compression in the project;
   `stream_breaks` holds the breaks of a stream by its name and the time it was lost.
+  `trade_flow_minutes` is a hypertable of daily chunks keyed by `category, symbol, open_time`, compressed by `category, symbol` after 7 days and never
+  deleted, as `liquidations`; `TradeFlowMinuteRepository` writes a batch by `unnest … ON CONFLICT DO UPDATE` (a minute written again replaces the
+  stored one) and a day of a pair by a delete and an insert in one transaction, each after it locks the row of `trade_flow_state` with its lease
+  (`FOR UPDATE`), and reads the bars of an interval with `time_bucket`. `trade_flow_days` holds a day of a pair read from the archive (`rebuilt` or
+  `missing`, and when); `trade_flow_state` is one row with the lease of the collector, taken and renewed as `scanner_state`.
 - `Repositories/Ideas` holds `ideas` (one open idea per key kept by a partial unique index; the ideas made and moved on a minute are
   written in one transaction), `idea_cases` (a hypertable of the signals with their paths, `IdeaSignalRepository`: a batch goes in by binary copy and onto
   its key, fired time and version, a path written again goes on; read one by one in the order of key and firing; the outcome columns of version 4 stay
