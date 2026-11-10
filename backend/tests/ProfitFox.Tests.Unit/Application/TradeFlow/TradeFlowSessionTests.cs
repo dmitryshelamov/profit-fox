@@ -41,6 +41,8 @@ public class TradeFlowSessionTests
     private List<IReadOnlyCollection<(Instrument Instrument, TradeFlowMinute Minute)>> _saved = null!;
     private IReadOnlyList<ScannerPair> _listed = [];
     private ServiceProvider _meters = null!;
+    private ITradeArchive _archive = null!;
+    private ITradeFlowDayRepository _days = null!;
 
     [SetUp]
     public void SetUp()
@@ -80,6 +82,9 @@ public class TradeFlowSessionTests
             });
         _journal = Substitute.For<ITradeFlowJournal>();
         _meters = new ServiceCollection().AddMetrics().BuildServiceProvider();
+        _archive = Substitute.For<ITradeArchive>();
+        _days = Substitute.For<ITradeFlowDayRepository>();
+        _days.GetAsync(Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns([]);
     }
 
     [TearDown]
@@ -324,6 +329,84 @@ public class TradeFlowSessionTests
         await StopAsync(lease, session);
     }
 
+    // Scenario "Минуты пишутся во время загрузки": the rebuild runs in a lane of its own and keeps no write of the minutes waiting.
+    [Test]
+    public async Task Minutes_are_written_while_a_day_is_read_from_the_archive()
+    {
+        var reading = new TaskCompletionSource();
+        _archive.ReadDayAsync(Arg.Any<Instrument>(), Arg.Any<DateTimeOffset>(), Arg.Any<Action<TradeEvent>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                reading.TrySetResult();
+                await Task.Delay(Timeout.Infinite, call.ArgAt<CancellationToken>(3));
+
+                return true;
+            });
+        using var lease = new CancellationTokenSource();
+        Task session = Session().RunAsync(lease.Token);
+        await WaitAsync(() => Subscriptions().Count == 1 && reading.Task.IsCompleted);
+
+        Trade(Sol, new TradeEvent(Minute.AddSeconds(20), TradeSide.Buy, 2m, 150m));
+        await AdvanceToAsync(Minute.AddSeconds(75), () => _saved.Count > 0);
+
+        _saved.Single().ShouldBe([(Sol, new TradeFlowMinute(Minute, 2m, 0m, 300m, 0m, 1, 0))]);
+        await StopAsync(lease, session);
+    }
+
+    // Scenario "Архив ещё не вышел": the queue of days is built right after the start and again every hour.
+    [Test]
+    public async Task Days_are_asked_for_at_the_start_and_again_every_hour()
+    {
+        _listed = [new ScannerPair(Sol, true)];
+        using var lease = new CancellationTokenSource();
+        Task session = Session().RunAsync(lease.Token);
+        await WaitAsync(() => _archive.ReceivedCalls().Count() == 1);
+
+        await AdvanceToAsync(Start.AddMinutes(59), () => false, mayTimeOut: true);
+        int beforeAnHour = _archive.ReceivedCalls().Count();
+        await AdvanceToAsync(Start.AddHours(1), () => _archive.ReceivedCalls().Count() == 2);
+
+        beforeAnHour.ShouldBe(1);
+        await StopAsync(lease, session);
+    }
+
+    [Test]
+    public async Task Failed_pass_of_the_archive_is_logged_and_tried_again_in_an_hour()
+    {
+        _listed = [new ScannerPair(Sol, true)];
+        var failure = new ExchangeUnavailableException("archive down");
+        _archive.ReadDayAsync(Arg.Any<Instrument>(), Arg.Any<DateTimeOffset>(), Arg.Any<Action<TradeEvent>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<bool>(failure), Task.FromResult(false));
+        using var lease = new CancellationTokenSource();
+        Task session = Session().RunAsync(lease.Token);
+        await WaitAsync(() => _journal.ReceivedCalls().Any());
+
+        await AdvanceToAsync(Start.AddHours(1), () => _archive.ReceivedCalls().Count() == 2);
+
+        _journal.Received(1).Failed("archive", failure);
+        await StopAsync(lease, session);
+    }
+
+    // Scenario "Пересборка из архива не считается", and decision 2: a day refused for the lease ends the session.
+    [Test]
+    public async Task Day_of_the_archive_is_not_counted_and_one_refused_for_the_lease_ends_the_session()
+    {
+        _listed = [new ScannerPair(Sol, true)];
+        using var collector = new MetricCollector<long>(_meters.GetRequiredService<System.Diagnostics.Metrics.IMeterFactory>(), "ProfitFox.TradeFlow", "profitfox.tradeflow.trades");
+        _archive.ReadDayAsync(Arg.Any<Instrument>(), Arg.Any<DateTimeOffset>(), Arg.Any<Action<TradeEvent>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                call.ArgAt<Action<TradeEvent>>(2)(new TradeEvent(Minute.AddDays(-1), TradeSide.Buy, 1m, 1m));
+
+                return true;
+            });
+        _minutes.ReplaceDayAsync(Owner, Arg.Any<Instrument>(), Arg.Any<DateTimeOffset>(), Arg.Any<IReadOnlyCollection<TradeFlowMinute>>(), Arg.Any<CancellationToken>()).Returns(false);
+
+        await Should.ThrowAsync<TradeFlowLeaseLostException>(Session().RunAsync(CancellationToken.None));
+
+        collector.GetMeasurementSnapshot().ShouldBeEmpty();
+    }
+
     // Requirement "Счётчик сделок потока": a trade the collector took counts, a trade of a pair out of trading does not.
     [Test]
     public async Task Taken_trades_are_counted_by_category()
@@ -346,7 +429,16 @@ public class TradeFlowSessionTests
 
     private TradeFlowSession Session()
     {
-        return new TradeFlowSession(_pairs, _minutes, _breaks, _streams, new TradeFlowMetrics(_meters.GetRequiredService<System.Diagnostics.Metrics.IMeterFactory>()), new WorkerIdentity(Owner), _journal, _time);
+        return new TradeFlowSession(
+            _pairs,
+            _minutes,
+            _breaks,
+            _streams,
+            new TradeFlowRebuild(_archive, _minutes, _days, new TradeFlowSettings { HistoryDays = 1 }, new WorkerIdentity(Owner), _journal, _time),
+            new TradeFlowMetrics(_meters.GetRequiredService<System.Diagnostics.Metrics.IMeterFactory>()),
+            new WorkerIdentity(Owner),
+            _journal,
+            _time);
     }
 
     private List<(IReadOnlyList<Instrument> Instruments, Action<Instrument, TradeEvent> Traded, Action<DateTimeOffset> Lost, Action<DateTimeOffset> Restored)> Subscriptions()
@@ -384,12 +476,12 @@ public class TradeFlowSessionTests
         }
     }
 
-    /// <summary>Moves the clock a second at a time up to <paramref name="until" />, giving the lanes time to run, then waits for the condition.</summary>
+    /// <summary>Moves the clock 5 seconds, the interval of the writes, at a time up to <paramref name="until" />, giving the lanes time to run, then waits for the condition.</summary>
     private async Task AdvanceToAsync(DateTimeOffset until, Func<bool> condition, bool mayTimeOut = false)
     {
         while (_time.GetUtcNow() < until)
         {
-            _time.Advance(TimeSpan.FromSeconds(1));
+            _time.Advance(TradeFlowSession.WriteInterval);
             await Task.Delay(5);
         }
 

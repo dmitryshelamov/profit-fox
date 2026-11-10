@@ -1,0 +1,6 @@
+timestamp,symbol,side,size,price,tickDirection,trdMatchID,grossValue,homeNotional,foreignNotional,RPI
+1794225910.1000,SOLUSDT,Buy,0.5,150.5,ZeroPlusTick,m0,0,0.5,0,1
+1794225900.000,SOLUSDT,Sell,1,150,ZeroPlusTick,m1,0,1,0,0
+1794225899.999,SOLUSDT,Sell,3,149,ZeroPlusTick,m2,0,3,0,0
+1794225870.25,SOLUSDT,Buy,1,151,ZeroPlusTick,m3,0,1,0,0
+1794225841.5,SOLUSDT,Buy,2,150,ZeroPlusTick,m4,0,2,0,0

@@ -15,13 +15,14 @@ namespace ProfitFox.Application.TradeFlow;
 ///     linear and spot from the list of the scanner, reads the list again every <see cref="PairsRefresh" />, subscribes a new pair on its own
 ///     and stops writing a pair out of trading. Every <see cref="WriteInterval" /> the lane of writes takes the closed minutes into a queue and
 ///     writes the queue in one batch, the breaks of the stream (<c>trades</c>) next to it; a batch that failed stays in the queue and is tried
-///     again, until storage refuses it for the lease, which ends the session.
+///     again, until storage refuses it for the lease, which ends the session. A lane of its own rebuilds the closed days from the daily archive.
 /// </summary>
 public sealed class TradeFlowSession(
     IScannerPairRepository pairs,
     ITradeFlowMinuteRepository minutes,
     IStreamBreakRepository breaks,
     IMarketStreams streams,
+    TradeFlowRebuild rebuild,
     TradeFlowMetrics metrics,
     WorkerIdentity identity,
     ITradeFlowJournal journal,
@@ -32,6 +33,9 @@ public sealed class TradeFlowSession(
 
     /// <summary>How often the lane of writes takes the closed minutes and writes what waits.</summary>
     public static readonly TimeSpan WriteInterval = TimeSpan.FromSeconds(5);
+
+    /// <summary>How often the collector builds the queue of days to rebuild from the archive again.</summary>
+    public static readonly TimeSpan ArchiveRefresh = TimeSpan.FromHours(1);
 
     private const string Stream = "trades";
 
@@ -61,7 +65,7 @@ public sealed class TradeFlowSession(
         {
             await SubscribeAsync([.. _listed], cancellationToken);
             Restored(time.GetUtcNow());
-            Task[] lanes = [WriteAsync(session.Token), PairsAsync(session.Token)];
+            Task[] lanes = [WriteAsync(session.Token), PairsAsync(session.Token), ArchiveAsync(session.Token)];
             Task first = await Task.WhenAny(lanes);
 
             await session.CancelAsync();
@@ -145,6 +149,27 @@ public sealed class TradeFlowSession(
             {
                 journal.Failed("pairs", exception);
             }
+        }
+    }
+
+    /// <summary>
+    ///     The rebuild of closed days from the archive, right after the start and then every <see cref="ArchiveRefresh" />, apart from the
+    ///     writes of the minutes; a pass that failed is logged and the next one starts over.
+    /// </summary>
+    private async Task ArchiveAsync(CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            try
+            {
+                await rebuild.RunAsync([.. _listed], cancellationToken);
+            }
+            catch (Exception exception) when (exception is not TradeFlowLeaseLostException && !cancellationToken.IsCancellationRequested)
+            {
+                journal.Failed("archive", exception);
+            }
+
+            await Task.Delay(ArchiveRefresh, time, cancellationToken);
         }
     }
 

@@ -16,6 +16,7 @@
         <EmbeddedResource Include="Fixtures\Market\*.json"/>
         <EmbeddedResource Include="Fixtures\Ideas\*.json"/>
         <EmbeddedResource Include="Fixtures\IdeaAutos\*.json"/>
+        <EmbeddedResource Include="Fixtures\TradeFlow\*.csv"/>
     </ItemGroup>
 
     <ItemGroup>

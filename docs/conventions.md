@@ -202,7 +202,11 @@ enforces a rule, the check is the source of truth.
   5 s the closed minutes go to a queue written in one batch, tried again until storage refuses it for the lease
   (`TradeFlowLeaseLostException`); the breaks of the stream go to `stream_breaks` as `trades`, the first from the end of the last stored minute to
   the subscription), `TradeFlowMetrics` (the counter `profitfox.tradeflow.trades` by `category` on the meter `ProfitFox.TradeFlow`, one per trade the
-  session took from the stream) and `Ports/Market/ITradeFlowJournal`.
+  session took from the stream), `TradeFlowRebuild` (a pass over the days UTC of every listed pair in `[today − HistoryDays, yesterday]` that
+  `trade_flow_days` has no record of, the freshest first, each from `ArchiveNotBefore` of the next day: a file of the archive replaces the minutes
+  of the pair in its day and records it `rebuilt`; no file leaves it to the next pass and, `MissingAfter` (3 days) after its end, records it `missing`;
+  one file at a time; a lane of the session runs a pass at the start and every hour, apart from the writes of the minutes), `TradeFlowSettings` and
+  `Ports/Market/ITradeFlowJournal`.
 - `Scanner/Ideas/LiveAutos` is what the autos do in a minute of the scanner: it reads the autos that are on every minute, gives the ideas born in the minute to each in the order of the list, each auto taking them in the order of `AutoMinutePlan` within its limits (a request carries its place in that order, and the ideas a limit skipped are one refusal of the auto, the side and the minute), checks and opens the paper trades (`PaperEntry`, `PaperFill`) or writes the requests of the autos with money, steps the open paper trades by the closed minutes of their pairs (up to the end of the coverage of the pair, by the stored minutes when the memory no longer holds them) and returns the `AutoMinute` that `LiveIdeas` writes in the transaction of the ideas; once an hour it deletes the refusals older than 7 days and turns the requests no Worker took into refusals «Не успел войти».
 - `Scanner/Ideas` holds the ideas of the scanner: `IdeasSettings` (the `Ideas` section, with `ThresholdSettings` and `ThresholdOverride`),
   `IdeaRuleSet`, `IdeaSeries` (at most 220 closed candles of a pair on an interval and the minutes of the forming one, and the `SetupBase` it keeps until
@@ -348,6 +352,10 @@ enforces a rule, the check is the source of truth.
   `Buy` → `Long`, `Sell` → `Short`) on another, so a break of one stream does not touch the other; the trades (`publicTrade`, linear and spot,
   10 topics a request; the side of the taker, `Buy` → `TradeSide.Buy`; every trade, a block trade and one of the RPI orders too) on a third, with
   one break of the stream for the breaks of its subscriptions, as the liquidations.
+  `Exchanges/Bybit/BybitTradeArchive` implements `ITradeArchive` over the daily archive of trades (`public.bybit.com`, a static host, so its client has
+  no limiter of REST): `trading/S/S2026-11-09.csv.gz` of `linear` (the time in seconds with a fraction, read as a `decimal`) and
+  `spot/S/S_2026-11-09.csv.gz` of `spot` (the time in milliseconds), read line by line as the file is downloaded and decompressed; 404 is no file,
+  another error `ExchangeUnavailableException`.
 - `Exchanges/Bybit/BybitAccountClient` implements `IExchangeKeyInspector`: a typed `HttpClient` that builds a Bybit client
   with the key for one call and drops it, one attempt per call. `Security/AesGcmSecretProtector` encrypts secrets with the
   master key (AES-256-GCM, the account id as associated data).
@@ -649,6 +657,8 @@ enforces a rule, the check is the source of truth.
   and `FakeExchange`, one exchange account in memory behind
   `IExchangeLedger`, `IOrderGateway` and `IExchangeStreams` for the live trading runtime, whose orders, fills and streams
   depend on each other as a mock cannot keep.
+  The daily archive of trades is served by `FakeBybitArchiveServer` on a local port, with the reference files of `Tests.Shared/Fixtures/TradeFlow`
+  (SOLUSDT on 2026-11-09 in both formats, the same five trades).
   `FakeExchange` also makes the stop and the target of an entry with a stop and a target on `linear` (no client id, `ParentClientId`, a stop kind), fires them at a
   price (`TriggerChild`) and cancels them by exchange id.
 - Assertions use Shouldly.
