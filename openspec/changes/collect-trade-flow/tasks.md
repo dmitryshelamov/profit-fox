@@ -30,12 +30,12 @@ design.md, сценарии — на дельты спек этого измен
 
 ## 3. Поток Bybit
 
-- [ ] 3.1 `BybitMarketStreams.SubscribeTradesAsync` (решение 4): свой клиент сокета, `publicTrade` пачками по 10, отдельно
+- [x] 3.1 `BybitMarketStreams.SubscribeTradesAsync` (решение 4): свой клиент сокета, `publicTrade` пачками по 10, отдельно
   `linear` и `spot`; `Buy` → `TradeSide.Buy`; все сделки, включая RPI и блочные (решение 5); `lost` / `restored` через
   `Breaks`. Готово, когда зелёные интеграционные тесты на `FakeBybitSocketServer`: пуш `publicTrade.SOLUSDT` даёт
   событие с полями, 25 пар — 3 запроса подписки, отказ биржи — `ExchangeUnavailableException`, обрыв — `lost`, затем
   `restored`.
-- [ ] 3.2 `FakeBybitSocketServer` принимает подписку на `publicTrade.*` и пушит сделки. Готово, когда эти пуши используют
+- [x] 3.2 `FakeBybitSocketServer` принимает подписку на `publicTrade.*` и пушит сделки. Готово, когда эти пуши используют
   тесты задачи 3.1.
 
 ## 4. Сессия сборщика

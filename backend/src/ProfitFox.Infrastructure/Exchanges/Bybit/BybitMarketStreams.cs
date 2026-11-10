@@ -25,7 +25,8 @@ namespace ProfitFox.Infrastructure.Exchanges.Bybit;
 ///     The minute candles of the whole market on a socket client of their own, apart from <see cref="BybitStreams" /> of the bots
 ///     (decision 5): <see cref="BatchSize" /> topics in a subscribe request, as many requests on a connection as
 ///     <see cref="ScannerSettings.TopicsPerConnection" /> allows. CryptoExchange.Net reconnects and subscribes again. The liquidations of
-///     linear pairs (topic <c>allLiquidation</c>) go the same way on a client of their own, so a break of one stream does not touch the other.
+///     linear pairs (topic <c>allLiquidation</c>) go the same way on a client of their own, so a break of one stream does not touch the other,
+///     and so do the trades of linear and spot pairs (topic <c>publicTrade</c>, decision 4 of collect-trade-flow).
 /// </summary>
 internal sealed class BybitMarketStreams(ILoggerFactory loggers, BybitSettings settings, ScannerSettings scanner, TimeProvider time) : IMarketStreams
 {
@@ -113,14 +114,48 @@ internal sealed class BybitMarketStreams(ILoggerFactory loggers, BybitSettings s
         return stream;
     }
 
-    public Task<IAsyncDisposable> SubscribeTradesAsync(
+    public async Task<IAsyncDisposable> SubscribeTradesAsync(
         IReadOnlyList<Instrument> instruments,
         Action<Instrument, TradeEvent> traded,
         Action<DateTimeOffset> lost,
         Action<DateTimeOffset> restored,
         CancellationToken cancellationToken)
     {
-        throw new NotSupportedException("The stream of trades comes with task 3.1 of collect-trade-flow.");
+        BybitSocketClient client = Client();
+        var stream = new Stream(client);
+        var breaks = new Breaks(lost, restored, time);
+
+        try
+        {
+            foreach (IGrouping<MarketCategory, Instrument> category in instruments.GroupBy(instrument => instrument.Category))
+            {
+                foreach (Instrument[] batch in category.Chunk(BatchSize))
+                {
+                    string[] symbols = [.. batch.Select(instrument => instrument.Symbol)];
+
+                    // Made with no token: CryptoExchange.Net closes a subscription when the token it was made with is cancelled.
+                    WebSocketResult<UpdateSubscription> result = category.Key == MarketCategory.Spot
+                        ? await client.V5SpotApi.SubscribeToTradeUpdatesAsync(symbols, update => Trades(category.Key, update.Data, traded), CancellationToken.None)
+                        : await client.V5LinearApi.SubscribeToTradeUpdatesAsync(symbols, update => Trades(category.Key, update.Data, traded), CancellationToken.None);
+
+                    if (!result.Success)
+                    {
+                        throw new ExchangeUnavailableException($"Bybit refused the stream: {result.Error!.Message}");
+                    }
+
+                    result.Data.ConnectionLost += breaks.Lost;
+                    result.Data.ConnectionRestored += _ => breaks.Restored();
+                }
+            }
+        }
+        catch
+        {
+            await stream.DisposeAsync();
+
+            throw;
+        }
+
+        return stream;
     }
 
     /// <summary>The client puts this many topics on a connection before it opens another; it counts each topic of a batch.</summary>
@@ -147,6 +182,21 @@ internal sealed class BybitMarketStreams(ILoggerFactory loggers, BybitSettings s
                     update.Side == OrderSide.Buy ? LiquidationSide.Long : LiquidationSide.Short,
                     update.Price,
                     update.Quantity));
+        }
+    }
+
+    // Every trade counts, a block trade and a trade of the RPI orders too, as in the daily archive (decision 5 of collect-trade-flow).
+    private static void Trades(MarketCategory category, BybitTrade[] trades, Action<Instrument, TradeEvent> traded)
+    {
+        foreach (BybitTrade trade in trades)
+        {
+            traded(
+                new Instrument(category, trade.Symbol),
+                new TradeEvent(
+                    new DateTimeOffset(DateTime.SpecifyKind(trade.Timestamp, DateTimeKind.Utc)),
+                    trade.Side == OrderSide.Buy ? TradeSide.Buy : TradeSide.Sell,
+                    trade.Quantity,
+                    trade.Price));
         }
     }
 

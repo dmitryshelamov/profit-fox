@@ -182,4 +182,89 @@ public class BybitMarketStreamsTests
         (await restored.WaitAsync(TimeSpan.FromSeconds(2))).ShouldBeFalse();
         lost.ShouldBe(1);
     }
+
+    // Requirement "Минутные суммы сделок" and decision 5 of collect-trade-flow: every trade comes with the side of its taker, a block trade and
+    // a trade of the RPI orders too.
+    [TestCase(MarketCategory.Linear, "Buy", TradeSide.Buy, false, false)]
+    [TestCase(MarketCategory.Spot, "Sell", TradeSide.Sell, false, false)]
+    [TestCase(MarketCategory.Linear, "Sell", TradeSide.Sell, true, false)]
+    [TestCase(MarketCategory.Spot, "Buy", TradeSide.Buy, false, true)]
+    public async Task Trade_comes_with_its_instrument_time_side_volume_and_price(MarketCategory category, string takerSide, TradeSide side, bool block, bool rpi)
+    {
+        var at = DateTimeOffset.Parse("2026-11-09T12:04:59.999Z", CultureInfo.InvariantCulture);
+        var instrument = new Instrument(category, "SOLUSDT");
+        var trades = new BlockingCollection<(Instrument, TradeEvent)>();
+        await using IAsyncDisposable subscription = await _streams.SubscribeTradesAsync(
+            [instrument], (traded, trade) => trades.Add((traded, trade)), _ => { }, _ => { }, CancellationToken.None);
+
+        await _server.PushAsync("publicTrade.SOLUSDT", [FakeBybitSocketServer.Trade("SOLUSDT", takerSide, 2.5m, 150.25m, at, block, rpi)]);
+
+        trades.TryTake(out (Instrument Instrument, TradeEvent Trade) received, TimeSpan.FromSeconds(10)).ShouldBeTrue();
+        received.ShouldBe((instrument, new TradeEvent(at, side, 2.5m, 150.25m)));
+    }
+
+    [Test]
+    public async Task Trades_of_25_pairs_go_in_3_subscribe_requests()
+    {
+        Instrument[] linear = [.. Enumerable.Range(0, 25).Select(i => new Instrument(MarketCategory.Linear, $"C{i:000}USDT"))];
+
+        await using IAsyncDisposable subscription = await _streams.SubscribeTradesAsync(linear, (_, _) => { }, _ => { }, _ => { }, CancellationToken.None);
+
+        linear.ShouldAllBe(instrument => _server.Subscribed($"publicTrade.{instrument.Symbol}"));
+        _server.SubscribeSizes.ShouldBe([10, 10, 5]);
+    }
+
+    [Test]
+    public async Task Trades_of_linear_and_spot_go_to_their_own_streams()
+    {
+        await using IAsyncDisposable subscription = await _streams.SubscribeTradesAsync(
+            [Sol, new Instrument(MarketCategory.Spot, "BTCUSDT")], (_, _) => { }, _ => { }, _ => { }, CancellationToken.None);
+
+        _server.Connections("/v5/public/linear").ShouldBe(1);
+        _server.Connections("/v5/public/spot").ShouldBe(1);
+    }
+
+    [Test]
+    public async Task Refused_trade_subscription_means_the_exchange_is_unavailable()
+    {
+        _server.RefusedTopics["publicTrade.SOLUSDT"] = true;
+
+        await Should.ThrowAsync<ProfitFox.Application.Exceptions.ExchangeUnavailableException>(() =>
+            _streams.SubscribeTradesAsync([Sol], (_, _) => { }, _ => { }, _ => { }, CancellationToken.None));
+    }
+
+    // Requirement "Разрывы потока сделок": both ends of a break are told with the time of the collector.
+    [Test]
+    public async Task Break_of_the_trade_stream_is_told_lost_then_restored()
+    {
+        var events = new BlockingCollection<(string, DateTimeOffset)>();
+        await using IAsyncDisposable subscription = await _streams.SubscribeTradesAsync(
+            [Sol, new Instrument(MarketCategory.Spot, "BTCUSDT")], (_, _) => { }, at => events.Add(("lost", at)), at => events.Add(("restored", at)), CancellationToken.None);
+
+        await _server.DropAsync();
+
+        events.TryTake(out (string, DateTimeOffset) first, TimeSpan.FromSeconds(30)).ShouldBeTrue();
+        events.TryTake(out (string, DateTimeOffset) second, TimeSpan.FromSeconds(30)).ShouldBeTrue();
+        first.ShouldBe(("lost", Now));
+        second.ShouldBe(("restored", Now));
+        events.TryTake(out _, TimeSpan.FromSeconds(2)).ShouldBeFalse();
+    }
+
+    [Test]
+    public async Task Disposing_takes_every_trade_subscription_off()
+    {
+        IAsyncDisposable subscription = await _streams.SubscribeTradesAsync([Sol, new Instrument(MarketCategory.Spot, "BTCUSDT")], (_, _) => { }, _ => { }, _ => { }, CancellationToken.None);
+
+        await subscription.DisposeAsync();
+
+        DateTime until = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+
+        while ((_server.Connections("/v5/public/linear") + _server.Connections("/v5/public/spot")) > 0 && DateTime.UtcNow < until)
+        {
+            await Task.Delay(20);
+        }
+
+        _server.Subscribed("publicTrade.SOLUSDT").ShouldBeFalse();
+        _server.Subscribed("publicTrade.BTCUSDT").ShouldBeFalse();
+    }
 }

@@ -337,7 +337,9 @@ enforces a rule, the check is the source of truth.
   never shortens it. `Exchanges/Bybit/BybitPublicDataClient`
   implements `IMarketDataFeed` through it; `Exchanges/Bybit/BybitMarketStreams` implements `IMarketStreams` on a socket client of its
   own, apart from `BybitStreams`, and the liquidations (`allLiquidation`; Bybit's side is the side of the liquidated position:
-  `Buy` → `Long`, `Sell` → `Short`) on another, so a break of one stream does not touch the other.
+  `Buy` → `Long`, `Sell` → `Short`) on another, so a break of one stream does not touch the other; the trades (`publicTrade`, linear and spot,
+  10 topics a request; the side of the taker, `Buy` → `TradeSide.Buy`; every trade, a block trade and one of the RPI orders too) on a third, with
+  one break of the stream for the breaks of its subscriptions, as the liquidations.
 - `Exchanges/Bybit/BybitAccountClient` implements `IExchangeKeyInspector`: a typed `HttpClient` that builds a Bybit client
   with the key for one call and drops it, one attempt per call. `Security/AesGcmSecretProtector` encrypts secrets with the
   master key (AES-256-GCM, the account id as associated data).

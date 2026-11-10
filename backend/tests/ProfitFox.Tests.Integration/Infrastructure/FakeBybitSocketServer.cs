@@ -161,6 +161,24 @@ public sealed class FakeBybitSocketServer : IAsyncDisposable
         return new JsonObject { ["T"] = at.ToUnixTimeMilliseconds(), ["s"] = symbol, ["S"] = side, ["v"] = Text(quantity), ["p"] = Text(price) };
     }
 
+    /// <summary>A trade of <c>publicTrade</c>: the side is that of the taker; a block trade and a trade of the RPI orders come the same way.</summary>
+    public static JsonObject Trade(string symbol, string side, decimal quantity, decimal price, DateTimeOffset at, bool block = false, bool rpi = false)
+    {
+        return new JsonObject
+        {
+            ["T"] = at.ToUnixTimeMilliseconds(),
+            ["s"] = symbol,
+            ["S"] = side,
+            ["v"] = Text(quantity),
+            ["p"] = Text(price),
+            ["L"] = "PlusTick",
+            ["i"] = Guid.NewGuid().ToString(),
+            ["BT"] = block,
+            ["RPI"] = rpi,
+            ["seq"] = 1
+        };
+    }
+
     /// <summary>An order update; the stop or the target Bybit made for an entry has no client id of its own, a parent and a stop order type.</summary>
     public static JsonObject Order(string category, string clientId, string status, decimal filled, string? exchangeId = null, string? parentClientId = null, string? stopOrderType = null)
     {
