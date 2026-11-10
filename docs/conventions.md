@@ -247,12 +247,14 @@ enforces a rule, the check is the source of truth.
 ## Infrastructure (`ProfitFox.Infrastructure`)
 
 - `InfrastructureRegistrar` is the only public entry point: `Configure` for the API, `ConfigureWorker` for the Worker,
-  `ConfigureScanner` for the scanner.
+  `ConfigureScanner` for the scanner, `ConfigureTradeFlow` for the collector of the trade flow (storage, metrics, the stream of trades, the client of
+  the daily archive with `TradeFlow:ArchiveAddress` and a timeout of 5 minutes, the session and its lane of the lease; none of the common
+  registrations: no MediatR, no REST of Bybit, no T-Invest, no master key).
   Both call internal registrars such as `Mediatr/MediatrRegistrar` and `Persistence/Postgres/PostgresRegistrar`; only
   `ConfigureWorker` registers the background services that run work.
 - `Observability` holds the metrics of the services: `MetricsSettings` (the `Metrics` section) and
-  `MetricsRegistrar.Configure(configuration, services, serviceName)`, which `Configure`, `ConfigureWorker` and `ConfigureScanner`
-  call with `api`, `worker` and `scanner`. With `Metrics:OtlpEndpoint` set, OpenTelemetry pushes the meters it lists over OTLP
+  `MetricsRegistrar.Configure(configuration, services, serviceName)`, which `Configure`, `ConfigureWorker`, `ConfigureScanner` and
+  `ConfigureTradeFlow` call with `api`, `worker`, `scanner` and `trade-flow`. With `Metrics:OtlpEndpoint` set, OpenTelemetry pushes the meters it lists over OTLP
   (`http/protobuf`, cumulative) every `Metrics:ExportInterval`; the name becomes `service.name`, which Prometheus turns into the
   `job` label. Without it no meter provider is registered and the instruments record into nothing. Instruments are made with
   `System.Diagnostics.Metrics` through `IMeterFactory`, never with OpenTelemetry types.
@@ -265,7 +267,8 @@ enforces a rule, the check is the source of truth.
   lowest remainder since the previous collection, which takes it; so the meter has one reader, the exporter.
 - The metrics of the scanner live where they are counted, on the meter `ProfitFox.Scanner`: `Application/Scanner/ScannerMetrics`, a
   singleton whose counter `profitfox.scanner.liquidations` grows by the rows of liquidations storage added, by `side` (`long`, `short`);
-  an event storage already had is not counted. `MetricsRegistrar` lists both meters.
+  an event storage already had is not counted. The metrics of the collector live on the meter `ProfitFox.TradeFlow` (`Application/TradeFlow/TradeFlowMetrics`).
+  `MetricsRegistrar` lists every meter.
 - A new HTTP client to Bybit is made only through `IHttpClientFactory` (`AddHttpClient`), or its requests are missing from the
   metrics.
 - `Exchanges/TInvest` is the adapter of T-Invest Invest API on the generated gRPC clients of the NuGet package `Tinkoff.InvestApi`
@@ -485,7 +488,7 @@ enforces a rule, the check is the source of truth.
 - The `Metrics` section (`MetricsSettings`, bound in `MetricsRegistrar`): `OtlpEndpoint`, the full URL of the metrics path of an
   OTLP receiver, empty by default, so tests and local runs push nothing; `ExportInterval`, 5 seconds by default. Nothing is in
   `appsettings.json`: production sets `Metrics__OtlpEndpoint` (Prometheus on soyo-03, `http://192.168.8.142:9090/api/v1/otlp/v1/metrics`)
-  in the environment of `api`, `worker` and `scanner`.
+  in the environment of `api`, `worker`, `scanner` and `trade-flow`.
 
   ```json
   "Metrics": { "OtlpEndpoint": "http://127.0.0.1:9090/api/v1/otlp/v1/metrics", "ExportInterval": "00:00:05" }
@@ -622,6 +625,28 @@ enforces a rule, the check is the source of truth.
   a test host (`ScannerHost`) calls `Configure` too. It never migrates the database and never reads keys: public Bybit data only.
 - `ScannerBackgroundService` waits for the lease of the stream and, while it holds it, runs a `ScannerSession` in a scope of its own;
   a second scanner opens no connection to Bybit.
+
+## TradeFlow (`ProfitFox.TradeFlow`)
+
+- A generic host with no HTTP, like the scanner: `Program.Configure` adds `config/trade-flow.json` under the content root (the file on the server,
+  mounted into the container, over every other source), Serilog and `InfrastructureRegistrar.ConfigureTradeFlow`; a test host (`TradeFlowHost`)
+  calls `Configure` too. It never migrates the database, never reads keys and never calls Bybit REST: the public stream of trades and the daily
+  archive only.
+- `TradeFlowBackgroundService` waits for the lease of the trade flow (`trade_flow_state`) and, while it holds it, runs a `TradeFlowSession` in a
+  scope of its own; a second collector opens no connection to Bybit and asks the archive nothing.
+- The `TradeFlow` section (`TradeFlowSettings`), in the collector's `appsettings.json` only: the days of history rebuilt from the archive, the address
+  of the archive, the time of the next day before which a day is not asked for, and the lease (the renewal shorter than the lease, or the collector
+  does not start).
+
+  ```json
+  "TradeFlow": {
+    "HistoryDays": 30,
+    "ArchiveAddress": "https://public.bybit.com",
+    "ArchiveNotBefore": "02:30:00",
+    "LeaseDuration": "00:00:30",
+    "LeaseRenewal": "00:00:10"
+  }
+  ```
 
 ## Files
 

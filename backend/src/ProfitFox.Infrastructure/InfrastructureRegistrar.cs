@@ -24,6 +24,7 @@ using ProfitFox.Application.Scanner.Backfill;
 using ProfitFox.Application.Scanner.Ideas;
 using ProfitFox.Application.Scanner.Minute;
 using ProfitFox.Application.Scanner.Universe;
+using ProfitFox.Application.TradeFlow;
 using ProfitFox.Application.Workers;
 using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Services.Backtests;
@@ -137,6 +138,42 @@ public static class InfrastructureRegistrar
         services.AddScoped<ScannerSession>();
         services.AddSingleton<ScannerMetrics>();
         services.AddHostedService<ScannerBackgroundService>();
+    }
+
+    /// <summary>
+    ///     The services of the collector of the trade flow (decision 1 of collect-trade-flow): the stream of trades and the daily archive, from
+    ///     public Bybit data only, and storage; no master key, no REST of Bybit, no Worker or scanner lanes.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The lease of the trade flow would expire before the collector renews it.</exception>
+    public static void ConfigureTradeFlow(IConfiguration configuration, IServiceCollection services)
+    {
+        TradeFlowSettings settings = configuration.GetSection("TradeFlow").Get<TradeFlowSettings>() ?? new TradeFlowSettings();
+
+        if (settings.LeaseRenewal >= settings.LeaseDuration)
+        {
+            throw new InvalidOperationException("TradeFlow:LeaseRenewal must be shorter than TradeFlow:LeaseDuration.");
+        }
+
+        PostgresRegistrar.Configure(configuration, services);
+        MetricsRegistrar.Configure(configuration, services, "trade-flow");
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(settings);
+        services.AddSingleton(configuration.GetSection("Bybit").Get<BybitSettings>() ?? new BybitSettings());
+
+        // The collector puts as many topics on a connection as the scanner does.
+        services.AddSingleton(configuration.GetSection("Scanner").Get<ScannerSettings>() ?? new ScannerSettings());
+        services.AddSingleton(new WorkerIdentity(Guid.NewGuid()));
+        services.AddSingleton<IMarketStreams, BybitMarketStreams>();
+        services.AddHttpClient<ITradeArchive, BybitTradeArchive>(client =>
+        {
+            client.BaseAddress = new Uri(settings.ArchiveAddress);
+            client.Timeout = BybitTradeArchive.Timeout;
+        });
+        services.AddSingleton<ITradeFlowJournal, LoggingTradeFlowJournal>();
+        services.AddSingleton<TradeFlowMetrics>();
+        services.AddScoped<TradeFlowRebuild>();
+        services.AddScoped<TradeFlowSession>();
+        services.AddHostedService<TradeFlowBackgroundService>();
     }
 
     private static void RequireMasterKey(IConfiguration configuration, IServiceCollection services)

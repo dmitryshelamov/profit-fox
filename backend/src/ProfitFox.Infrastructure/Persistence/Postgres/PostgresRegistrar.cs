@@ -44,6 +44,8 @@ internal static class PostgresRegistrar
         services.AddScoped<ILiquidationRepository, LiquidationRepository>();
         services.AddScoped<IStreamBreakRepository, StreamBreakRepository>();
         services.AddScoped<IMarketSnapshotRepository, MarketSnapshotRepository>();
+        services.AddScoped<ITradeFlowMinuteRepository, TradeFlowMinuteRepository>();
+        services.AddScoped<ITradeFlowDayRepository, TradeFlowDayRepository>();
         services.AddScoped<IIdeaRepository, IdeaRepository>();
         services.AddScoped<IIdeaAutoRepository, IdeaAutoRepository>();
         services.AddScoped<IPaperIdeaTradeRepository, PaperIdeaTradeRepository>();
@@ -60,6 +62,7 @@ internal static class PostgresRegistrar
 
         // The gate of the scanner's REST requests and its lease lane are singletons; the repository keeps nothing but the data source.
         services.AddSingleton<IScannerStateRepository, ScannerStateRepository>();
+        services.AddSingleton<ITradeFlowStateRepository, TradeFlowStateRepository>();
         services
             .AddFluentMigratorCore()
             .ConfigureRunner(runner => runner

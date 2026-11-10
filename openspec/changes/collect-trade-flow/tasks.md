@@ -48,7 +48,7 @@ design.md, сценарии — на дельты спек этого измен
   от последней записанной минуты до подписки нового держателя (решения 3, 6, 9). Готово, когда зелёные юнит-тесты по
   сценариям «Новая пара в списке», «Пара снята с торгов», «База недоступна», «Соединение восстановилось» и «Перезапуск при
   выкатке».
-- [ ] 4.3 `TradeFlowMetrics`: счётчик `profitfox.tradeflow.trades{category}` на метре `ProfitFox.TradeFlow`. Готово, когда
+- [x] 4.3 `TradeFlowMetrics`: счётчик `profitfox.tradeflow.trades{category}` на метре `ProfitFox.TradeFlow`. Готово, когда
   зелёные юнит-тест «Сделки приняты» и интеграционный тест экспорта, как `MetricsExportTests` сканера.
 
 ## 5. Архив
@@ -65,13 +65,13 @@ design.md, сценарии — на дельты спек этого измен
 
 ## 6. Хост сборщика
 
-- [ ] 6.1 Проект `backend/src/ProfitFox.TradeFlow` (как `ProfitFox.Scanner`): `Program.Configure`,
+- [x] 6.1 Проект `backend/src/ProfitFox.TradeFlow` (как `ProfitFox.Scanner`): `Program.Configure`,
   `InfrastructureRegistrar.ConfigureTradeFlow`, `TradeFlowBackgroundService` с арендой через `LeaseKeeper`, полоса
   архива, секция `TradeFlow` в `appsettings*.json`, `config/trade-flow.json` с сервера, `Dockerfile`; проект добавлен в
   `ProfitFox.sln`. Готово, когда интеграционный тест хоста (`TradeFlowHost`) на `FakeBybitSocketServer` и Postgres
   показывает: два хоста — пишет один («Два сборщика»), минуты пушнутых сделок появляются в базе, остановка держателя —
   второй берёт аренду. `docs/conventions.md` получает раздел «TradeFlow (`ProfitFox.TradeFlow`)».
-- [ ] 6.2 Сценарии «Сборщик не запущен» и «Поток сделок без сканера» (дельта `market-scanner`). Готово, когда зелёные
+- [x] 6.2 Сценарии «Сборщик не запущен» и «Поток сделок без сканера» (дельта `market-scanner`). Готово, когда зелёные
   интеграционные тесты: API и сканер работают без сборщика, а сборщик пишет минуты пар из `scanner_pairs` без сканера.
 
 ## 7. API

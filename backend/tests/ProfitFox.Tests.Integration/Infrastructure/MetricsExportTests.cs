@@ -10,7 +10,9 @@ using OpenTelemetry.Metrics;
 
 using ProfitFox.Application.Ports.ExchangeAccounts;
 using ProfitFox.Application.Scanner;
+using ProfitFox.Application.TradeFlow;
 using ProfitFox.Domain.Entities.Market.Enums;
+using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
 
 using Shouldly;
@@ -61,6 +63,26 @@ public class MetricsExportTests
         new ScannerMetrics(worker.Services.GetRequiredService<IMeterFactory>()).Liquidated(new Dictionary<LiquidationSide, int> { [LiquidationSide.Long] = 1 });
 
         (await receiver.WaitAsync(body => Has(body, "profitfox.scanner.liquidations"), TimeSpan.FromSeconds(2))).ShouldBeTrue();
+    }
+
+    // Requirement "Счётчик сделок потока": the collector pushes its counter under the name of its service, trade-flow.
+    [Test]
+    public async Task Collector_pushes_its_trades_as_the_trade_flow_service()
+    {
+        using var receiver = new OtlpReceiver();
+        await using FakeBybitSocketServer sockets = await FakeBybitSocketServer.StartAsync();
+        await using FakeBybitArchiveServer archive = await FakeBybitArchiveServer.StartAsync();
+        await using var collector = new TradeFlowHost(
+            IntegrationEnvironment.ConnectionString,
+            sockets,
+            archive,
+            TimeProvider.System,
+            new Dictionary<string, string?> { ["Metrics:OtlpEndpoint"] = receiver.Endpoint, ["Metrics:ExportInterval"] = "00:00:01" });
+        await collector.StartAsync();
+
+        collector.Services.GetRequiredService<TradeFlowMetrics>().Traded(MarketCategory.Linear);
+
+        (await receiver.WaitAsync(body => Has(body, "profitfox.tradeflow.trades") && Has(body, "trade-flow"), TimeSpan.FromSeconds(2))).ShouldBeTrue();
     }
 
     // Scenario "Адрес не задан": no setting, or an empty one.

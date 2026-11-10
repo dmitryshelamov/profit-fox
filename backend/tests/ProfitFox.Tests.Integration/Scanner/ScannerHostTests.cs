@@ -69,6 +69,20 @@ public class ScannerHostTests
         (await ScalarAsync<int>("SELECT count(*) FROM candles WHERE symbol = 'SOLUSDT' AND open_time = @Minute", new { Minute = minute.AddMinutes(1) })).ShouldBe(0);
     }
 
+    // Scenario "Сборщик не запущен" of collect-trade-flow: the scanner keeps the market without the collector, and no minute of the trade
+    // flow is stored.
+    [Test]
+    public async Task Scanner_keeps_the_market_without_the_collector_of_the_trade_flow()
+    {
+        (FakeBybitHandler bybit, FakeBybitSocketServer sockets) = await BybitAsync();
+        await StartScannerAsync(bybit, sockets);
+
+        await WaitAsync(async () => await ScalarAsync<int>("SELECT count(*) FROM market_snapshot") == 2);
+
+        (await ScalarAsync<int>("SELECT count(*) FROM trade_flow_minutes")).ShouldBe(0);
+        sockets.Subscribed("publicTrade.SOLUSDT").ShouldBeFalse();
+    }
+
     // Requirement "Один держатель потока", scenarios "Два сканера" and "Держатель упал".
     [Test]
     public async Task Only_one_of_two_scanners_holds_the_stream_and_the_other_takes_it_once_the_lease_expires()
