@@ -50,6 +50,15 @@ enforces a rule, the check is the source of truth.
   `PairMetrics`, `MarketSnapshotRow`, `LiquidationEvent` (time, side, price, volume of a liquidation as the stream gives it) and
   `StreamBreak` (a stream, when it was lost and when it was back); `ILiquidationRepository` stores the events and
   `IStreamBreakRepository` the breaks of a stream whose missed events cannot be loaded again; `Services/Market/MarketMetrics` is the pure function of the metrics of a pair.
+- `TradeFlow` is the area of the trade flow of the collector (`ProfitFox.TradeFlow`), the buys and sells of every pair by the minute. Its domain types
+  sit in the folders of `Market`: `Entities/Market/Enums` holds `TradeSide` (the side of the taker of a trade: `buy`, `sell` in
+  `Application/Market/MarketCodes`) and `TradeFlowDayStatus` (`Rebuilt`, `Missing`: what the daily archive gave for a day of a pair);
+  `ValueObjects/Market` holds `TradeEvent` (time, side, volume in coins and price of a trade as the stream or the archive gives it),
+  `TradeFlowMinute` (the volume, turnover and number of trades of each side in a minute: `Start` puts a trade in the minute of its time, `Add`
+  adds one; a bar of an interval is the same record, the sum of its minutes) and `TradeFlowDay` (a day UTC of a pair, its midnight, the archive
+  was read for, its status and when). `ITradeFlowMinuteRepository` stores the minutes (a batch and a day of a pair replaced under the lease, the
+  bars of an interval, the first minute of a pair and the last of any), `ITradeFlowDayRepository` the days read from the archive and
+  `ITradeFlowStateRepository` the lease of the flow.
 - `Ideas` is the area of trade ideas: `Entities/Ideas` holds `Idea` (a live idea, one open per `IdeaKey`) and the enums `IdeaSetup`,
   `IdeaType`, `IdeaSide`, `IdeaStatus`, `IdeaFeature` (a feature of the market an idea fired with, as the calibration and the autos name it, the burst among them), `IdeaBadge` (▲ ≈ ▼ of a bucket or an idea by the interval of its expectancy, `IdeaBadges.Of`), `RiskRewardBand` (a band of the reward to risk of «Уровни», `RiskRewardBands.Of`), `CalibrationScope` (all cases or those after the rules changed); `ValueObjects/Ideas` holds `IdeaCandle` (a minute or a candle of an interval, its volume the
   turnover), `MinuteAggregate`, `SetupThresholds`, `SetupSignal`, `SetupReading`, `SetupBase` (what the setups of an interval are measured against
@@ -180,7 +189,7 @@ enforces a rule, the check is the source of truth.
   writes them in batches, and every break of their stream goes to `stream_breaks` as `liquidations`: a lost connection until it is back, a
   batch that failed to be written, the time between taking a subscription off and making it again, and, when the session starts, the time
   from the last stored event (none without one). `Ports/Market` holds `IMarketDataFeed` (REST of public data, through the scanner's own rate limit),
-  `IMarketStreams` (minute candles in batches; the liquidations of linear pairs, with the times a connection was lost and back) and `IScannerJournal`. `Market/Queries` holds the queries of the market API
+  `IMarketStreams` (minute candles in batches; the liquidations of linear pairs and the trades of linear and spot pairs, each with the times a connection was lost and back), `ITradeArchive` (the trades of a day of a pair from the daily archive, or no file) and `IScannerJournal`. `Market/Queries` holds the queries of the market API
   (`GetMarket`, `GetMarketPair`, `GetMarketCandles`, `GetMarketSeries`); `Market/MarketOrder` is the order of the rows of «Рынок»
   (a column and a direction, rows without a value last, equal values by category code and symbol, ordinally); `MarketData/ChartCandles` is the period of a chart the
   bot and the pair share. `Paging` holds `PageRequest` (the number from 1 and the size 50, 100 or 200 a client asked for, with the field errors

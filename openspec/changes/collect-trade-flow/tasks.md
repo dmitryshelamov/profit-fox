@@ -6,11 +6,11 @@ design.md, сценарии — на дельты спек этого измен
 
 ## 1. Домен
 
-- [ ] 1.1 `TradeSide { Buy, Sell }` с кодами `buy` / `sell`, `TradeEvent(Time, Side, Quantity, Price)` и
+- [x] 1.1 `TradeSide { Buy, Sell }` с кодами `buy` / `sell`, `TradeEvent(Time, Side, Quantity, Price)` и
   `TradeFlowMinute(OpenTime, BuyVolume, SellVolume, BuyTurnover, SellTurnover, BuyTrades, SellTrades)` с чистым
   `Add(TradeEvent)` (`ValueObjects/Market`). Готово, когда зелёные юнит-тесты по сценариям «Сделки одной минуты» и
   «Сделка на границе минуты».
-- [ ] 1.2 Порты `ITradeFlowMinuteRepository` (замена пачки минут, замена дня пары, чтение баров по интервалу, первая минута
+- [x] 1.2 Порты `ITradeFlowMinuteRepository` (замена пачки минут, замена дня пары, чтение баров по интервалу, первая минута
   пары, последняя записанная минута), `ITradeFlowDayRepository` (`rebuilt` / `missing`, дни пары в окне),
   `ITradeFlowStateRepository` (аренда), `IMarketStreams.SubscribeTradesAsync`, `ITradeArchive` (поток сделок дня пары или
   «нет файла»). Готово, когда сборка проходит, а `docs/conventions.md` описывает новые типы и область `TradeFlow`.

@@ -21,4 +21,11 @@ public class MarketCodesTests
     {
         MarketCodes.TryParseLiquidationSide("Sell", out _).ShouldBeFalse();
     }
+
+    [TestCase(TradeSide.Buy, "buy")]
+    [TestCase(TradeSide.Sell, "sell")]
+    public void Trade_side_has_a_code(TradeSide side, string code)
+    {
+        side.ToCode().ShouldBe(code);
+    }
 }

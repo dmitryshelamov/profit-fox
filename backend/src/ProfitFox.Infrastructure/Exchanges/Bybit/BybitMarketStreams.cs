@@ -113,6 +113,16 @@ internal sealed class BybitMarketStreams(ILoggerFactory loggers, BybitSettings s
         return stream;
     }
 
+    public Task<IAsyncDisposable> SubscribeTradesAsync(
+        IReadOnlyList<Instrument> instruments,
+        Action<Instrument, TradeEvent> traded,
+        Action<DateTimeOffset> lost,
+        Action<DateTimeOffset> restored,
+        CancellationToken cancellationToken)
+    {
+        throw new NotSupportedException("The stream of trades comes with task 3.1 of collect-trade-flow.");
+    }
+
     /// <summary>The client puts this many topics on a connection before it opens another; it counts each topic of a batch.</summary>
     private BybitSocketClient Client()
     {

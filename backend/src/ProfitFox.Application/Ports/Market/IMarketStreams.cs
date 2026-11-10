@@ -32,4 +32,18 @@ public interface IMarketStreams
         Action<DateTimeOffset> lost,
         Action<DateTimeOffset> restored,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Subscribes the public trades of every instrument, linear and spot, in batches spread over connections of their own, apart from the
+    ///     candles and the liquidations. <paramref name="lost" /> and <paramref name="restored" /> tell, with the time they were seen, that a
+    ///     connection broke and that it is back; the trades between them are missed. Disposing the result takes every subscription off and
+    ///     closes the connections.
+    /// </summary>
+    /// <exception cref="ExchangeUnavailableException">The exchange refused a subscription.</exception>
+    Task<IAsyncDisposable> SubscribeTradesAsync(
+        IReadOnlyList<Instrument> instruments,
+        Action<Instrument, TradeEvent> traded,
+        Action<DateTimeOffset> lost,
+        Action<DateTimeOffset> restored,
+        CancellationToken cancellationToken);
 }
