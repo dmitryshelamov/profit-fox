@@ -28,6 +28,7 @@ export {
   markersOf,
   type PricePoint,
 } from './model/pricePoint';
+export { type TradeFlowInput, tradeFlowSeries } from './model/tradeFlowSeries';
 export { type FillInput, type TradeMarker, tradeMarkers } from './model/tradeMarkers';
 export { type CandlesPage, type ReadCandles, useCandlePages } from './model/useCandlePages';
 export { type VolumeBar, volumeBars } from './model/volumeBars';
@@ -36,3 +37,4 @@ export { EquityComparisonChart, type EquityLine } from './ui/EquityComparisonCha
 export { FundingChart } from './ui/FundingChart';
 export { OpenInterestChart } from './ui/OpenInterestChart';
 export { PriceEquityChart } from './ui/PriceEquityChart';
+export { TradeFlowChart } from './ui/TradeFlowChart';

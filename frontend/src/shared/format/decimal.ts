@@ -46,6 +46,11 @@ export function shiftDecimal(value: string, places: number): string {
     : text(units, scale - places);
 }
 
+/** The exact sum of two decimal strings. */
+export function addDecimals(left: string, right: string): string {
+  return subtractDecimals(left, subtractDecimals('0', right));
+}
+
 /** The exact difference of two decimal strings. */
 export function subtractDecimals(left: string, right: string): string {
   const a = parts(left);

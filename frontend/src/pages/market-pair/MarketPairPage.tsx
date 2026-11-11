@@ -41,6 +41,7 @@ import {
   type ZoneInput,
 } from '@/modules/market-chart';
 import { intervalLabel } from '@/modules/market-data';
+import { TradeFlowPanel } from '@/modules/trade-flow';
 import { ApiError } from '@/shared/api/client';
 import { groupDigits } from '@/shared/format/format';
 
@@ -294,6 +295,9 @@ function IdeasHub({
           selected && selected.interval === shown ? firedMark(selected.firedAt, shown) : undefined
         }
       />
+      {category !== 'moex' && (
+        <TradeFlowPanel category={category} symbol={symbol} interval={shown} />
+      )}
       <section
         aria-label="Идеи пары"
         className="space-y-3 rounded-xl border border-line bg-panel px-4 py-4"

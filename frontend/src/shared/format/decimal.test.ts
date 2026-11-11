@@ -1,4 +1,5 @@
 import {
+  addDecimals,
   compareDecimals,
   divideDecimals,
   multiplyDecimals,
@@ -64,5 +65,16 @@ describe('divideDecimals', () => {
     expect(divideDecimals('2', '3', 2)).toBe('0.67');
     expect(divideDecimals('-1', '8', 2)).toBe('-0.13');
     expect(divideDecimals('0.5', '0.25', 1)).toBe('2');
+  });
+});
+
+describe('addDecimals', () => {
+  it.each([
+    ['451', '0.125', '451.125'],
+    ['0.1', '0.2', '0.3'],
+    ['-1.5', '0.25', '-1.25'],
+    ['90', '0', '90'],
+  ])('%s + %s is exactly %s', (left, right, sum) => {
+    expect(addDecimals(left, right)).toBe(sum);
   });
 });
