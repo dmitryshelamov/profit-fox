@@ -226,6 +226,18 @@ describe('market pair page, panel «Покупки и продажи»', () => {
     expect(caption).toHaveTextContent('Покупки 49');
     expect(caption).toHaveTextContent('неполный');
     expect(within(panel).getByText('в реальном времени')).toBeInTheDocument();
+    // The current bar is drawn apart from the closed ones.
+    const current = Date.parse('2026-11-04T12:00:00Z') / 1000;
+    await waitFor(() =>
+      expect(drawn('Histogram')).toContainEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ time: current, value: 49, color: expect.any(String) }),
+        ]),
+      ),
+    );
+    expect(drawn('Histogram').flat()).toContainEqual(
+      expect.not.objectContaining({ color: expect.anything() }),
+    );
     act(() => hub!.onLost());
     expect(within(panel).getByText('нет данных')).toBeInTheDocument();
     expect(within(panel).getByRole('group', { name: 'Последний бар' })).toHaveTextContent(

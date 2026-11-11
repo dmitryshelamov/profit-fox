@@ -81,6 +81,26 @@ public class TradeFlowHubTests
         await WaitAsync(() => !_server.Subscribed(Topic));
     }
 
+    // A connection follows one pair at a time: joining another pair leaves the group of the first, whose minutes another tab still gets.
+    [Test]
+    public async Task Joining_another_pair_leaves_the_first()
+    {
+        (HubConnection hub, Messages messages) = await ConnectAsync();
+        await hub.InvokeAsync<JsonElement>("Join", "linear", "SOLUSDT");
+        await _server.WaitForTopicAsync(Topic);
+
+        await hub.InvokeAsync<JsonElement>("Join", "spot", "BTCUSDT");
+        (HubConnection other, Messages otherMessages) = await ConnectAsync();
+        await other.InvokeAsync<JsonElement>("Join", "linear", "SOLUSDT");
+        await _server.WaitForTopicAsync("publicTrade.BTCUSDT");
+        await _server.PushAsync(Topic, [FakeBybitSocketServer.Trade("SOLUSDT", "Buy", 1m, 150m, _factory.Time.GetUtcNow())]);
+        await otherMessages.NextAsync("TradeFlowMinute");
+        await _server.PushAsync("publicTrade.BTCUSDT", [FakeBybitSocketServer.Trade("BTCUSDT", "Buy", 1m, 70000m, _factory.Time.GetUtcNow())]);
+
+        JsonElement flow = await messages.NextAsync("TradeFlowMinute");
+        decimal.Parse(flow.GetProperty("buyTurnover").GetString()!, CultureInfo.InvariantCulture).ShouldBe(70000m);
+    }
+
     // Decision 10: the hub does not open for moex.
     [TestCase("moex", "SBER")]
     [TestCase("inverse", "SOLUSDT")]
