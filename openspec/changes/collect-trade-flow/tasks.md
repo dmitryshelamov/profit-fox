@@ -124,7 +124,7 @@ design.md, сценарии — на дельты спек этого измен
 - [ ] 10.3 С одобрения владельца: сервис `trade-flow` в `docker-compose.prod.yml` (`cpus: 1`, память 512 МБ, имя сервиса
   для метрик `trade-flow`, OTLP как у сканера). Новая копия `deploy.sh` на сервере — шаг владельца. Готово, когда
   владелец подтвердил изменения, а `docker compose -f docker-compose.prod.yml config` проходит.
-- [ ] 10.4 Сквозная проверка: `dotnet build`, `dotnet test`, `dotnet format --verify-no-changes`, проверки фронтенда и
+- [x] 10.4 Сквозная проверка: `dotnet build`, `dotnet test`, `dotnet format --verify-no-changes`, проверки фронтенда и
   `npm run test:e2e` зелёные. Затем проход по diff: каждая ветка и проверка нового кода требуется каким-то тестом.
 
 ## Workflow follow-up
