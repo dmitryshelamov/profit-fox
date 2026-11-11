@@ -14,6 +14,7 @@ using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
+using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
 using ExchangeOrderState = ProfitFox.Application.Ports.LiveTrading.ExchangeOrderState;
@@ -27,7 +28,7 @@ namespace ProfitFox.Infrastructure.Exchanges.Bybit;
 ///     topic per instrument and interval however many subscribers listen to it, and the private order and execution topics of
 ///     an account. CryptoExchange.Net reconnects; a restored connection is told to every subscriber of its topics.
 /// </summary>
-internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings settings) : IExchangeStreams, IFormingCandleStreams
+internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings settings) : IExchangeStreams, IFormingCandleStreams, ITradeFlowStreams
 {
     private readonly BybitSocketClient _public = new BybitSocketClient(Options.Create(new BybitSocketOptions { Environment = settings.Environment() }), loggers);
     private readonly Lock _lock = new Lock();
@@ -82,6 +83,37 @@ internal sealed class BybitStreams(ILoggerFactory loggers, BybitSettings setting
         }
 
         return JoinAsync(topic, new AccountListener(order, fill, restored), () => OpenAccountAsync(key, topic), cancellationToken);
+    }
+
+    /// <summary>
+    ///     The trades of a pair on the shared public client (decision 10 of collect-trade-flow). The feeds of the trade flow keep one subscription a
+    ///     pair, so the topic is not shared here: each subscription is its own, made with no token like the others.
+    /// </summary>
+    public async Task<IAsyncDisposable> SubscribeTradesAsync(Instrument instrument, Action<TradeEvent> traded, Action lost, Action restored, Action closed, CancellationToken cancellationToken)
+    {
+        WebSocketResult<UpdateSubscription> result = instrument.Category == MarketCategory.Spot
+            ? await _public.V5SpotApi.SubscribeToTradeUpdatesAsync(instrument.Symbol, update => Trades(update.Data, traded), CancellationToken.None)
+            : await _public.V5LinearApi.SubscribeToTradeUpdatesAsync(instrument.Symbol, update => Trades(update.Data, traded), CancellationToken.None);
+
+        if (!result.Success)
+        {
+            throw new ExchangeUnavailableException($"Bybit refused the stream: {result.Error!.Message}");
+        }
+
+        UpdateSubscription subscription = result.Data;
+        subscription.ConnectionLost += lost;
+        subscription.ConnectionRestored += _ => restored();
+        subscription.ConnectionClosed += closed;
+
+        return new Leave(() => new ValueTask(_public.UnsubscribeAsync(subscription)));
+    }
+
+    private static void Trades(IEnumerable<BybitTrade> trades, Action<TradeEvent> traded)
+    {
+        foreach (BybitTrade trade in trades)
+        {
+            traded(BybitTradeEvents.Of(trade));
+        }
     }
 
     /// <summary>

@@ -22,4 +22,23 @@ internal sealed class StreamBreakRepository(NpgsqlDataSource dataSource) : IStre
                 streamBreak,
                 cancellationToken: cancellationToken));
     }
+
+    public async Task<IReadOnlyList<StreamBreak>> GetAsync(string stream, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken)
+    {
+        await using NpgsqlCommand command = dataSource.CreateCommand(
+            "SELECT lost_at, restored_at FROM stream_breaks WHERE stream = @stream AND lost_at < @to AND restored_at > @from ORDER BY lost_at");
+        command.Parameters.AddWithValue("stream", stream);
+        command.Parameters.AddWithValue("from", from);
+        command.Parameters.AddWithValue("to", to);
+        await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        var breaks = new List<StreamBreak>();
+
+        // Npgsql reads timestamptz as a UTC DateTimeOffset only when asked for one; Dapper would get a DateTime.
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            breaks.Add(new StreamBreak(stream, reader.GetFieldValue<DateTimeOffset>(0), reader.GetFieldValue<DateTimeOffset>(1)));
+        }
+
+        return breaks;
+    }
 }

@@ -190,13 +190,7 @@ internal sealed class BybitMarketStreams(ILoggerFactory loggers, BybitSettings s
     {
         foreach (BybitTrade trade in trades)
         {
-            traded(
-                new Instrument(category, trade.Symbol),
-                new TradeEvent(
-                    new DateTimeOffset(DateTime.SpecifyKind(trade.Timestamp, DateTimeKind.Utc)),
-                    trade.Side == OrderSide.Buy ? TradeSide.Buy : TradeSide.Sell,
-                    trade.Quantity,
-                    trade.Price));
+            traded(new Instrument(category, trade.Symbol), BybitTradeEvents.Of(trade));
         }
     }
 

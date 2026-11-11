@@ -202,7 +202,13 @@ enforces a rule, the check is the source of truth.
   5 s the closed minutes go to a queue written in one batch, tried again until storage refuses it for the lease
   (`TradeFlowLeaseLostException`); the breaks of the stream go to `stream_breaks` as `trades`, the first from the end of the last stored minute to
   the subscription), `TradeFlowMetrics` (the counter `profitfox.tradeflow.trades` by `category` on the meter `ProfitFox.TradeFlow`, one per trade the
-  session took from the stream), `TradeFlowRebuild` (a pass over the days UTC of every listed pair in `[today − HistoryDays, yesterday]` that
+  session took from the stream), `TradeFlowGaps` (the breaks of the stream in a period cut by the days UTC, without the parts in the days the archive
+  rebuilt for the pair), `Queries/GetTradeFlowBars` (the bars of an interval 1, 5, 15, 60, 240 or D, `from` down to the start of its bar, the end cut to
+  the start of the current minute, at most 1000 bars, with the first stored minute of the pair and the gaps; `moex` is not found), `Live/TradeFlowFeeds`
+  (the feeds of the current bar, one per pair however many connections watch it, like `FormingCandleFeeds`: the sums of the current minute since the
+  subscription, started again at the boundary of a minute, out at most once a second, a new minute at once; `Connecting`, `Live` or `NoData` for a lost
+  connection, a refused or closed subscription, made again after 5 s, or 90 s of silence; over `Ports/MarketData/ITradeFlowStreams`, which
+  `BybitStreams` implements on its public client, and `ITradeFlowBroadcast`; only the API registers it), `TradeFlowRebuild` (a pass over the days UTC of every listed pair in `[today − HistoryDays, yesterday]` that
   `trade_flow_days` has no record of, the freshest first, each from `ArchiveNotBefore` of the next day: a file of the archive replaces the minutes
   of the pair in its day and records it `rebuilt`; no file leaves it to the next pass and, `MissingAfter` (3 days) after its end, records it `missing`;
   one file at a time; a lane of the session runs a pass at the start and every hour, apart from the writes of the minutes), `TradeFlowSettings` and
@@ -575,7 +581,9 @@ enforces a rule, the check is the source of truth.
   `savedFilter`, `sort`, `direction`, `page`, `pageSize`; the answer has `items`, `page`, `pageSize`, `total`, `pairs`, `categories` and `setups`,
   the counts of the chips, and `replay`, the progress of the replay of ideas of `IdeasEngineVersion.Current` that `IIdeaReplayRepository.ProgressAsync` counts on reading, given the first day of the history window: a pair is done when it is at most a day behind the day of its coverage), `GET /api/market/{category}/{symbol}` (a row;
   404 when the snapshot has no such pair), `.../candles?interval&from&to` (as the bot chart), `.../open-interest?from&to` and
-  `.../funding?from&to` (linear only, from storage, at most 1000 points); contracts in `Contracts/Market`. It never calls Bybit
+  `.../funding?from&to` (linear only, from storage, at most 1000 points), `.../trade-flow?interval&from&to` (the bars of buys and sells of linear
+  and spot from storage, `interval` 1, 5, 15, 60, 240 or D, at most 1000, with `since` and `gaps`; 404 for `moex`; contracts in `Contracts/TradeFlow`);
+  contracts in `Contracts/Market`. It never calls Bybit
   but for the candles of a pair.
   `MarketController` also has `.../ideas` (the ideas of a pair), `.../zones?interval` (5, 15, 60, 240) and `POST .../own-idea`; the rows of
   `GET /api/market` and of a pair carry `setups`. `IdeasController`: `GET /api/ideas` (filters `setup`, `interval`, `type`, `side`,
@@ -601,7 +609,10 @@ enforces a rule, the check is the source of truth.
   (the state) until `Unsubscribe()` or the disconnect. The hub is not in the OpenAPI document; the frontend writes its
   message types itself. `BotChartBroadcast` implements `IFormingCandleBroadcast` over `IHubContext`, one group per series;
   `Program` registers it and SignalR, `InfrastructureRegistrar.Configure` registers `FormingCandleFeeds`, and the Worker has
-  neither.
+  neither. `TradeFlowHub`, `/api/hubs/trade-flow`, is the second: `Join(category, symbol)` answers `{ state, flow }` or fails with
+  `trade_flow_not_found` for `moex`, then `TradeFlowMinute` (`openTime`, the buys and sells of the current minute as decimal strings and counts, and
+  `since`, the moment the feed subscribed) and `TradeFlowStatus` come until `Leave()` or the disconnect; `TradeFlowBroadcast` implements
+  `ITradeFlowBroadcast`, one group per pair.
 - Mark required contract members with `[Required]`, not the C# `required` keyword: a missing JSON property is then
   reported under its own name, not under `$`.
 - An endpoint the frontend calls declares every answer with `[ProducesResponseType]`: the frontend takes its API types

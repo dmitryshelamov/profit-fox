@@ -11,9 +11,11 @@ using ProfitFox.Application.Market.Queries.GetMarket;
 using ProfitFox.Application.Market.Queries.GetMarketCandles;
 using ProfitFox.Application.Market.Queries.GetMarketPair;
 using ProfitFox.Application.Market.Queries.GetMarketSeries;
+using ProfitFox.Application.TradeFlow.Queries.GetTradeFlowBars;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Presentation.Contracts.Ideas;
 using ProfitFox.Presentation.Contracts.Market;
+using ProfitFox.Presentation.Contracts.TradeFlow;
 
 namespace ProfitFox.Presentation.Controllers;
 
@@ -72,6 +74,27 @@ public sealed class MarketController(ISender sender) : ControllerBase
         GetMarketCandlesResult result = await sender.Send(new GetMarketCandlesQuery(category, symbol, parameters.Interval, parameters.From, parameters.To), cancellationToken);
 
         return result.Candles is null ? Invalid(result.Errors) : Ok(MarketCandlesResponse.Of(result));
+    }
+
+    /// <summary>
+    ///     The bars of buys and sells of a pair of linear or spot in <c>[from, to)</c> on <c>interval</c> (1, 5, 15, 60, 240, D), from storage: each
+    ///     the sum of its minutes, the end cut to the start of the current minute, at most 1000 bars; with the first stored minute of the pair and
+    ///     the gaps of the flow. A pair of moex has no trade flow.
+    /// </summary>
+    [HttpGet("{category}/{symbol}/trade-flow")]
+    [ProducesResponseType<TradeFlowBarsResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> TradeFlow(string category, string symbol, [FromQuery] MarketCandlesQueryParameters parameters, CancellationToken cancellationToken)
+    {
+        GetTradeFlowBarsResult result = await sender.Send(new GetTradeFlowBarsQuery(category, symbol, parameters.Interval, parameters.From, parameters.To), cancellationToken);
+
+        if (result.NotFound)
+        {
+            return NotFound();
+        }
+
+        return result.Bars is null ? Invalid(result.Errors) : Ok(TradeFlowBarsResponse.Of(result));
     }
 
     /// <summary>

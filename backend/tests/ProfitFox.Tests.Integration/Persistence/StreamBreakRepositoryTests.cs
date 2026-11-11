@@ -45,4 +45,24 @@ public class StreamBreakRepositoryTests
         await using NpgsqlConnection connection = await dataSource.OpenConnectionAsync();
         (await connection.QuerySingleAsync<DateTime>("SELECT restored_at FROM stream_breaks")).ShouldBe(lostAt.AddMinutes(9).UtcDateTime);
     }
+
+    // Decision 9 of collect-trade-flow: the breaks of a stream that overlap a period, of no other stream.
+    [Test]
+    public async Task Breaks_of_a_stream_that_overlap_the_period_are_read()
+    {
+        await using NpgsqlDataSource dataSource = MarketDataDatabase.Open();
+        var repository = new StreamBreakRepository(dataSource);
+        var from = DateTimeOffset.Parse("2026-11-10T14:00:00Z", CultureInfo.InvariantCulture);
+        var before = new StreamBreak("trades", from.AddMinutes(-10), from.AddMinutes(-1));
+        var across = new StreamBreak("trades", from.AddMinutes(-1), from.AddMinutes(1));
+        var inside = new StreamBreak("trades", from.AddMinutes(30), from.AddMinutes(31));
+        var after = new StreamBreak("trades", from.AddHours(1), from.AddHours(1).AddMinutes(1));
+
+        foreach (StreamBreak streamBreak in new[] { before, across, inside, after, new StreamBreak("liquidations", from.AddMinutes(5), from.AddMinutes(6)) })
+        {
+            await repository.AddAsync(streamBreak, CancellationToken.None);
+        }
+
+        (await repository.GetAsync("trades", from, from.AddHours(1), CancellationToken.None)).ShouldBe([across, inside], ignoreOrder: true);
+    }
 }

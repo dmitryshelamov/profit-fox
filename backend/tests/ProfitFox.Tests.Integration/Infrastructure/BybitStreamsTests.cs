@@ -2,11 +2,14 @@ using System.Collections.Concurrent;
 
 using Microsoft.Extensions.Logging.Abstractions;
 
+using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.LiveTrading;
 using ProfitFox.Application.Ports.MarketData;
+using ProfitFox.Domain.Entities.Market.Enums;
 using ProfitFox.Domain.Entities.MarketData;
 using ProfitFox.Domain.Entities.MarketData.Enums;
 using ProfitFox.Domain.Entities.Strategies.Enums;
+using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Exchanges.Bybit;
 
@@ -503,6 +506,72 @@ public class BybitStreamsTests
         (await restored.WaitAsync(TimeSpan.FromSeconds(30))).ShouldBeTrue();
         await Task.Delay(200);
         lost.ShouldBe(1);
+    }
+
+    // Decision 10 of collect-trade-flow: the trades of a pair for its current bar, on the public client the API shares with the candles.
+    [TestCase(MarketCategory.Linear, "Buy", TradeSide.Buy)]
+    [TestCase(MarketCategory.Spot, "Sell", TradeSide.Sell)]
+    public async Task Trades_of_a_pair_come_with_their_time_side_volume_and_price(MarketCategory category, string takerSide, TradeSide side)
+    {
+        var at = DateTimeOffset.Parse("2026-11-11T12:04:30.250Z", System.Globalization.CultureInfo.InvariantCulture);
+        var trades = new BlockingCollection<TradeEvent>();
+        await using IAsyncDisposable subscription = await TradeFlow().SubscribeTradesAsync(
+            new Instrument(category, "SOLUSDT"), trades.Add, () => { }, () => { }, () => { }, CancellationToken.None);
+
+        await _server.PushAsync("publicTrade.SOLUSDT", [FakeBybitSocketServer.Trade("SOLUSDT", takerSide, 1.5m, 150.5m, at)]);
+
+        trades.TryTake(out TradeEvent? trade, TimeSpan.FromSeconds(10)).ShouldBeTrue();
+        trade.ShouldBe(new TradeEvent(at, side, 1.5m, 150.5m));
+    }
+
+    [Test]
+    public async Task Trades_and_candles_of_a_pair_share_the_public_connection()
+    {
+        await using IAsyncDisposable candles = await Forming().SubscribeAsync(Linear, Interval.OneHour, _ => { }, () => { }, () => { }, () => { }, CancellationToken.None);
+        await using IAsyncDisposable trades = await TradeFlow().SubscribeTradesAsync(Linear, _ => { }, () => { }, () => { }, () => { }, CancellationToken.None);
+
+        _server.Subscribed("publicTrade.BTCUSDT").ShouldBeTrue();
+        _server.Connections("/v5/public/linear").ShouldBe(1);
+    }
+
+    [Test]
+    public async Task Refused_trade_topic_is_unavailable()
+    {
+        _server.RefusedTopics["publicTrade.BTCUSDT"] = true;
+
+        await Should.ThrowAsync<ExchangeUnavailableException>(() =>
+            TradeFlow().SubscribeTradesAsync(Linear, _ => { }, () => { }, () => { }, () => { }, CancellationToken.None));
+    }
+
+    [Test]
+    public async Task Drop_of_the_trades_is_told_as_lost_and_then_restored()
+    {
+        var events = new BlockingCollection<string>();
+        await using IAsyncDisposable subscription = await TradeFlow().SubscribeTradesAsync(
+            Linear, _ => { }, () => events.Add("lost"), () => events.Add("restored"), () => { }, CancellationToken.None);
+
+        await _server.DropAsync();
+
+        events.TryTake(out string? first, TimeSpan.FromSeconds(30)).ShouldBeTrue();
+        events.TryTake(out string? second, TimeSpan.FromSeconds(30)).ShouldBeTrue();
+        (first, second).ShouldBe(("lost", "restored"));
+    }
+
+    [Test]
+    public async Task Disposing_takes_the_trade_topic_off()
+    {
+        await using IAsyncDisposable candles = await Forming().SubscribeAsync(Linear, Interval.OneHour, _ => { }, () => { }, () => { }, () => { }, CancellationToken.None);
+        IAsyncDisposable trades = await TradeFlow().SubscribeTradesAsync(Linear, _ => { }, () => { }, () => { }, () => { }, CancellationToken.None);
+
+        await trades.DisposeAsync();
+
+        await WaitAsync(() => !_server.Subscribed("publicTrade.BTCUSDT"));
+        _server.Subscribed("kline.60.BTCUSDT").ShouldBeTrue();
+    }
+
+    private ITradeFlowStreams TradeFlow()
+    {
+        return _streams;
     }
 
     private IFormingCandleStreams Forming()

@@ -25,6 +25,7 @@ using ProfitFox.Application.Scanner.Ideas;
 using ProfitFox.Application.Scanner.Minute;
 using ProfitFox.Application.Scanner.Universe;
 using ProfitFox.Application.TradeFlow;
+using ProfitFox.Application.TradeFlow.Live;
 using ProfitFox.Application.Workers;
 using ProfitFox.Domain.Entities.ExchangeAccounts.Enums;
 using ProfitFox.Domain.Services.Backtests;
@@ -57,6 +58,11 @@ public static class InfrastructureRegistrar
 
         // The feeds of the current candle are the API's alone (the broadcast they need is the hub's, registered by the API host).
         services.AddSingleton<FormingCandleFeeds>();
+
+        // The current bar of the trade flow: one feed a pair on the public client of Bybit the API shares with the candles (decision 10 of
+        // collect-trade-flow); its broadcast is the hub's too.
+        services.AddSingleton<ITradeFlowStreams>(provider => provider.GetRequiredService<BybitStreams>());
+        services.AddSingleton<TradeFlowFeeds>();
     }
 
     /// <summary>The services of a Worker: the lanes that take candle imports and backtest work from the database; it requires the master key.</summary>

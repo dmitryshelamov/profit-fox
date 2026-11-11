@@ -39,6 +39,7 @@ public class Program
             // The current candle of a bot's chart is the API's own work: its feeds and the hub that shows them live only here.
             builder.Services.AddSignalR();
             builder.Services.AddSingleton<IFormingCandleBroadcast, BotChartBroadcast>();
+            builder.Services.AddSingleton<ITradeFlowBroadcast, TradeFlowBroadcast>();
 
             WebApplication app = builder.Build();
 
@@ -56,6 +57,7 @@ public class Program
 
             app.MapControllers();
             app.MapHub<BotChartHub>(BotChartHub.Path);
+            app.MapHub<TradeFlowHub>(TradeFlowHub.Path);
 
             await app.RunAsync();
         }
