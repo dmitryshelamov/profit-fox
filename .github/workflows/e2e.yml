@@ -60,9 +60,12 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      # Built ahead, so the API starts within the time Playwright waits for it.
-      - name: Build API
-        run: dotnet build ../backend/src/ProfitFox.Presentation
+      # Built ahead, so the API and the collector of the trade flow start within the time Playwright waits for them; Playwright starts the
+      # collector next to the API, the Worker and the scanner (playwright.config.ts).
+      - name: Build API and collector
+        run: |
+          dotnet build ../backend/src/ProfitFox.Presentation
+          dotnet build ../backend/src/ProfitFox.TradeFlow
 
       - name: Install
         run: npm ci

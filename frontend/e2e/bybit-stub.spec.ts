@@ -1,3 +1,5 @@
+import { gunzipSync } from 'node:zlib';
+
 import { type APIRequestContext, expect, test } from '@playwright/test';
 
 // The stub of Bybit itself: an entry of the linear market with a stop and a target in the Partial mode makes the two orders
@@ -172,4 +174,23 @@ test('the leverage of a symbol is 10 until it is set, the same leverage again is
 
   // The symbol gets back the leverage of an untouched one for the other tests.
   expect(await setLeverage(request, 'SOLUSDT', '10')).toBe(0);
+});
+
+// The daily archive of trades the collector of the trade flow rebuilds closed days from: a file of a closed day in the format of its category,
+// none for today.
+test('the archive has a file of trades of a closed day in the format of its category and none for today', async ({
+  request,
+}) => {
+  const day = (offset: number) =>
+    new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+
+  const linear = await request.get(`${stub}/trading/SOLUSDT/SOLUSDT${day(-1)}.csv.gz`);
+  const spot = await request.get(`${stub}/spot/SOLUSDT/SOLUSDT_${day(-1)}.csv.gz`);
+  const today = await request.get(`${stub}/trading/SOLUSDT/SOLUSDT${day(0)}.csv.gz`);
+
+  expect(linear.status()).toBe(200);
+  expect(gunzipSync(await linear.body()).toString()).toMatch(/^timestamp,symbol,side,size,price/);
+  expect(spot.status()).toBe(200);
+  expect(gunzipSync(await spot.body()).toString()).toMatch(/^id,timestamp,price,volume,side/);
+  expect(today.status()).toBe(404);
 });

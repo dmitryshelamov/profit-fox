@@ -4,9 +4,12 @@
 // answer (`e2e-valid-<uid>`, `e2e-withdraw`, anything else is rejected). An entry of the linear market with a stop and a target (Partial mode) makes the two orders Bybit makes for it,
 // with their parent and a stop order type; `/control/price` sets the last price of a symbol and fires them; the position of a symbol follows the fills; an IOC limit that cannot fill at once
 // is cancelled; a reduce-only order needs a position to reduce. A symbol of the linear market has a leverage, 10 until `/v5/position/set-leverage` sets it, which the list of positions gives. The scanner also reads tickers, open interest and
-// funding history here, and subscribes minute candles in batches. `/control/pump` starts a steep, loud rise of one symbol from the next minute, which the scanner's setups read as an impulse. Response shapes follow the integration tests' FakeBybitHandler.
+// funding history here, and subscribes minute candles in batches. Every subscribed `publicTrade` topic gets a trade every half second, buys and
+// sells in turn, and the daily archive of trades (`/trading/S/S<day>.csv.gz`, `/spot/S/S_<day>.csv.gz`) has two trades at noon of any closed day, for
+// the collector of the trade flow. `/control/pump` starts a steep, loud rise of one symbol from the next minute, which the scanner's setups read as an impulse. Response shapes follow the integration tests' FakeBybitHandler.
 // Usage: node e2e/bybit-stub.ts <port>
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { gzipSync } from 'node:zlib';
 
 import { type WebSocket, WebSocketServer } from 'ws';
 
@@ -958,6 +961,8 @@ const server = createServer((request, response) => {
     send(response, [...children.values()]);
   } else if (url.pathname === '/control/orders') {
     send(response, [...orders.values()]);
+  } else if (archiveDay(url.pathname) !== null) {
+    archive(response, url.pathname);
   } else if (url.pathname === '/v5/market/time') {
     const now = Date.now();
     send(response, {
@@ -971,6 +976,73 @@ const server = createServer((request, response) => {
     send(response, { retCode: 10001, retMsg: `Not stubbed: ${url.pathname}`, result: {} }, 404);
   }
 });
+
+const linearArchive = /^\/trading\/([A-Z]+)\/\1(\d{4}-\d{2}-\d{2})\.csv\.gz$/;
+const spotArchive = /^\/spot\/([A-Z]+)\/\1_(\d{4}-\d{2}-\d{2})\.csv\.gz$/;
+
+/** The day of a file of the daily archive of trades, or `null` for another path. */
+function archiveDay(path: string): string | null {
+  return linearArchive.exec(path)?.[2] ?? spotArchive.exec(path)?.[2] ?? null;
+}
+
+/**
+ * A file of the daily archive in the format of its category: a buy of 2 and a sell of 1 at noon of the day, at the price of that minute. A day that
+ * has not closed yet has no file, as on Bybit.
+ */
+function archive(response: ServerResponse, path: string) {
+  const day = Date.parse(`${archiveDay(path)}T00:00:00Z`);
+  const linear = linearArchive.exec(path);
+  const symbol = (linear ?? spotArchive.exec(path))![1]!;
+  const instrument = instruments.find((candidate) => candidate.symbol === symbol);
+
+  if (!instrument || day + 86_400_000 > Date.now()) {
+    response.writeHead(404).end();
+
+    return;
+  }
+
+  const noon = day + 12 * 3_600_000;
+  const at = minutePrice(instrument, (noon - listedAt) / 60_000);
+  const rows = linear
+    ? [
+        'timestamp,symbol,side,size,price,tickDirection,trdMatchID,grossValue,homeNotional,foreignNotional,RPI',
+        `${noon / 1000}.0000,${symbol},Buy,2,${at},PlusTick,a,0,2,0,0`,
+        `${noon / 1000 + 1}.5000,${symbol},Sell,1,${at},MinusTick,b,0,1,0,0`,
+      ]
+    : [
+        'id,timestamp,price,volume,side,rpi',
+        `1,${noon},${at},2,buy,0`,
+        `2,${noon + 1500},${at},1,sell,0`,
+      ];
+  response
+    .writeHead(200, { 'Content-Type': 'application/gzip' })
+    .end(gzipSync(`${rows.join('\n')}\n`));
+}
+
+/** A trade every half second on every subscribed `publicTrade` topic, a buy and a sell in turn, at the price of the current minute. */
+let tradeCount = 0;
+
+setInterval(() => {
+  const now = Date.now();
+  tradeCount += 1;
+
+  for (const instrument of instruments) {
+    push(`publicTrade.${instrument.symbol}`, [
+      {
+        T: now,
+        s: instrument.symbol,
+        S: tradeCount % 2 === 0 ? 'Sell' : 'Buy',
+        v: String(1 + (tradeCount % 3)),
+        p: String(minutePrice(instrument, Math.floor((now - listedAt) / 60_000))),
+        L: 'PlusTick',
+        i: `${instrument.symbol}-${tradeCount}`,
+        BT: false,
+        RPI: false,
+        seq: tradeCount,
+      },
+    ]);
+  }
+}, 500);
 
 server.on('upgrade', (request, socket, head) => {
   const path = new URL(request.url ?? '/', `http://127.0.0.1:${port}`).pathname;

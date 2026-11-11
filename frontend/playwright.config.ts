@@ -54,8 +54,19 @@ const scanner = [
   'dotnet run --no-launch-profile --project ../backend/src/ProfitFox.Scanner',
 ].join(' ');
 
+// The collector of the trade flow takes the pairs the scanner listed, the stream of trades and two days of the archive from the stub. It starts
+// once the snapshot has the pairs: it reads the list again every 5 minutes and builds the queue of the archive every hour.
+const tradeFlow = [
+  `until curl -sf http://127.0.0.1:${apiPort}/api/market | grep -q SOLUSDT; do sleep 2; done;`,
+  'DOTNET_ENVIRONMENT=Testing',
+  'TradeFlow__HistoryDays=2',
+  `TradeFlow__ArchiveAddress=http://127.0.0.1:${bybitPort}`,
+  ...shared,
+  'dotnet run --no-launch-profile --project ../backend/src/ProfitFox.TradeFlow',
+].join(' ');
+
 /**
- * End-to-end tests drive the interface through the web image (Caddy) against the real API, Worker and scanner on a
+ * End-to-end tests drive the interface through the web image (Caddy) against the real API, Worker, scanner and collector of the trade flow on a
  * disposable database, dropped afterwards. Bybit is a local stub, so nothing reaches the exchange.
  */
 export default defineConfig({
@@ -98,6 +109,13 @@ export default defineConfig({
       wait: { stdout: /Took the stream of the market/ },
       reuseExistingServer: false,
       timeout: 180_000,
+    },
+    {
+      command: tradeFlow,
+      // Testing logs ProfitFox from Information: the collector is ready once it holds the trade flow.
+      wait: { stdout: /Took the trade flow/ },
+      reuseExistingServer: false,
+      timeout: 360_000,
     },
     {
       command: `docker build -q -t profit-fox-web . && docker run --rm --name ${container} ${network} profit-fox-web`,
