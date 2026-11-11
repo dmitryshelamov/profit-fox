@@ -117,9 +117,12 @@ jobs:
           build api backend/src/ProfitFox.Presentation/Dockerfile backend
           build worker backend/src/ProfitFox.Worker/Dockerfile backend
           build scanner backend/src/ProfitFox.Scanner/Dockerfile backend
+          build trade-flow backend/src/ProfitFox.TradeFlow/Dockerfile backend
           build web frontend/Dockerfile frontend
 
-  # The four images of the version are in GHCR. Checked here, so the runner on soyo-03 needs neither Docker nor a token.
+  # The images of the version are in GHCR: the four of every version and the collector of the trade flow, which a version before it has none of, so
+  # a rollback to such a version deploys without it (deploy.sh leaves the collector stopped). Checked here, so the runner on soyo-03 needs neither
+  # Docker nor a token.
   images:
     needs: build
     if: >-
@@ -147,6 +150,8 @@ jobs:
             docker manifest inspect "ghcr.io/$GITHUB_REPOSITORY-$image:$VERSION" >/dev/null ||
               { echo "ghcr.io/$GITHUB_REPOSITORY-$image:$VERSION is not published"; exit 1; }
           done
+          docker manifest inspect "ghcr.io/$GITHUB_REPOSITORY-trade-flow:$VERSION" >/dev/null ||
+            echo "ghcr.io/$GITHUB_REPOSITORY-trade-flow:$VERSION is not published: version $VERSION runs without the collector"
           echo "version=$VERSION" >>"$GITHUB_OUTPUT"
 
   # One deploy at a time. The production environment waits for the owner's approval and admits only main.

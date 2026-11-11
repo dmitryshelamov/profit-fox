@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests of the command parsing of deploy.sh, the only input the deploy key can pass to the server.
+# Tests of the command parsing of deploy.sh, the only input the deploy key can pass to the server, and of the order of its roll-out.
 # Run: bash deploy/deploy.test.sh
 set -uo pipefail
 
@@ -90,6 +90,79 @@ in_main_gives behind yes
 in_main_gives identical yes
 in_main_gives ahead no
 in_main_gives diverged no
+
+# The roll-out of a version, with compose, docker and the wait for the API replaced: each writes what it was asked to a log, from a subshell
+# too, as roll_out reads the services and the containers in subshells and fails by exit.
+log="$(mktemp)"
+trap 'rm -f "$log"' EXIT
+services="api worker scanner web db trade-flow"
+api_answers=yes
+compose() {
+  echo "compose $*" >>"$log"
+  if [[ "$*" == "config --services" ]]; then
+    tr ' ' '\n' <<<"$services"
+  fi
+}
+docker() {
+  echo "docker $*" >>"$log"
+  if [[ "$1" == ps ]]; then
+    echo collector-1
+  fi
+}
+wait_for_api() {
+  echo "wait for api" >>"$log"
+  [[ "$api_answers" == yes ]]
+}
+version=8
+
+# Runs roll_out in a subshell; leaves its output, its status and the calls it made.
+roll() {
+  : >"$log"
+  output="$( (roll_out) 2>&1)"
+  status=$?
+  made="$(tr '\n' ';' <"$log")"
+}
+
+# Takes the status of the check just made.
+check() {
+  local held=$? name="$1"
+  if ((held == 0)); then
+    echo "ok: $name"
+  else
+    echo "FAIL: $name"$'\n'"  status $status, output '$output'"$'\n'"  calls $made"
+    failures=$((failures + 1))
+  fi
+}
+
+stopping="compose config --services;compose stop worker scanner;docker ps --quiet --filter label=com.docker.compose.service=trade-flow;docker stop collector-1;"
+api="compose up --detach --wait db;compose up --detach --no-deps api;wait for api;"
+
+# Scenario "Обычная выкатка": the collector stops with the Worker and the scanner and starts after the API answered on the new version.
+roll
+((status == 0)) && [[ "$made" == "${stopping}${api}compose up --detach --no-deps worker scanner web;compose up --detach --no-deps trade-flow;" ]]
+check "a deploy stops the collector with the Worker and the scanner and starts it after the API"
+
+# Scenario "API не поднялся": the deploy fails, and the Worker, the scanner and the collector stay stopped.
+api_answers=no
+roll
+((status != 0)) && [[ "$made" == "${stopping}${api}" && "$output" == *"the collector stay stopped"* ]]
+check "an API that does not answer fails the deploy and starts neither the Worker, nor the scanner, nor the collector"
+api_answers=yes
+
+# Scenario "Откат на версию без сборщика": the version has no such service, so the collector of the later version stops and stays stopped.
+services="api worker scanner web db"
+roll
+((status == 0)) && [[ "$made" == "${stopping}${api}compose up --detach --no-deps worker scanner web;" &&
+  "$output" == *"has no collector of the trade flow; it stays stopped"* ]]
+check "a version without the collector stops it and leaves it stopped"
+
+# The images whose revision is checked: the collector only when the version has it.
+services="api worker scanner web db trade-flow"
+with="$(images_of_version | tr '\n' ' ')"
+services="api worker scanner web db"
+without="$(images_of_version | tr '\n' ' ')"
+[[ "$with" == "api worker scanner web trade-flow " && "$without" == "api worker scanner web " ]]
+check "the images of a version have the collector only when the version runs it"
 
 if ((failures > 0)); then
   echo "$failures failed"

@@ -102,6 +102,19 @@ version. The starting thresholds are provisional: to try others, put them into `
 `IdeasEngineVersion.Current`, deploy and wait for the replay of the new version (about a day on production), then compare its
 buckets with the version before. Every case keeps the move and the volume it fired with, for analysis.
 
+### Trade flow collector
+
+The collector (`backend/src/ProfitFox.TradeFlow`) subscribes the public trades of every listed `linear` and `spot` pair of the scanner and
+writes the buys and sells of each minute (volume, USDT turnover, trades) to `trade_flow_minutes`; every night it rebuilds each closed day of
+each pair from the Bybit daily trades archive at `public.bybit.com` (30 days of history at the first start, `TradeFlow:HistoryDays`). It never
+trades and reads no keys; one collector holds the flow at a time. Start it after the API and the scanner:
+
+```bash
+dotnet run --project backend/src/ProfitFox.TradeFlow
+```
+
+The pair page shows the panel «Покупки и продажи» from these minutes and the live current minute of the hub `/api/hubs/trade-flow`.
+
 ## Production
 
 Production runs on soyo-01 (`192.168.8.111`) in the local network only: the interface and the API are at
@@ -114,11 +127,12 @@ Production runs on soyo-01 (`192.168.8.111`) in the local network only: the inte
 | `api` | the API; migrates the database on start; `127.0.0.1:8080` on the server for the deploy to wait for it |
 | `worker` | the Worker, with live trading on (`Trading__Enabled=true`): real money |
 | `scanner` | the market scanner; it gets no master key |
+| `trade-flow` | the trade flow collector, limited to one core; no master key (added to the compose file by the owner) |
 | `web` | Caddy on port 80: the interface, and `/api` forwarded to the API |
 
 Nothing is built on soyo-01 or anywhere in the LAN: from Russian networks some nuget.org addresses fail at TLS. A
 GitHub-hosted runner builds the images, soyo-01 pulls them from the public GHCR packages
-`ghcr.io/dmitryshelamov/profit-fox-{api,worker,scanner,web}`, and a self-hosted GitHub Actions runner on soyo-03
+`ghcr.io/dmitryshelamov/profit-fox-{api,worker,scanner,trade-flow,web}`, and a self-hosted GitHub Actions runner on soyo-03
 (`192.168.8.142`, label `soyo-03`) only starts the deploy on soyo-01 over SSH.
 
 ### Versions
@@ -129,15 +143,17 @@ A version is a number `N`: tag `vN` on a commit of `main`, and images `:N` built
 ### Deploy and roll back
 
 1. A merge into `main` runs CI, then `.github/workflows/deploy.yml`. Once CI passes, and Frontend and E2E pass where
-   the commit has them, the `build` job tags the commit `v<max+1>` and pushes the four images `:N`.
-2. The `images` job checks that the four images `:N` are in GHCR, and the `deploy` job on soyo-03 waits for the owner's approval in the `production` environment: Actions → the Deploy run →
+   the commit has them, the `build` job tags the commit `v<max+1>` and pushes the five images `:N`.
+2. The `images` job checks that the four images `:N` of every version are in GHCR (a version before the collector has no
+   `trade-flow` image and deploys without it), and the `deploy` job on soyo-03 waits for the owner's approval in the `production` environment: Actions → the Deploy run →
    Review deployments → Approve. The time of the approval is the time of the deploy: live bots stop for it.
 3. The job runs `deploy N` on soyo-01 over SSH. `~/profit-fox/deploy.sh` checks on GitHub that tag `vN` is on a commit
    of `main`, downloads `docker-compose.prod.yml` of that commit to `~/profit-fox/releases/N/`, pulls the images and
-   checks they are built from that commit. Then it stops the Worker and the scanner, starts the database, updates the
-   API and waits up to 120 s for `/openapi/v1.json`, and only then starts the Worker, the scanner and the web of version
-   `N`. If the API does not answer, the deploy fails and the Worker and the scanner stay stopped. The running version
-   is in `~/profit-fox/current`.
+   checks they are built from that commit. Then it stops the Worker, the scanner and the collector, starts the database,
+   updates the API and waits up to 120 s for `/openapi/v1.json`, and only then starts the Worker, the scanner, the web and
+   the collector of version `N`. If the API does not answer, the deploy fails and the Worker, the scanner and the collector
+   stay stopped. A version whose compose file has no `trade-flow` service leaves the collector stopped, its data kept. The
+   running version is in `~/profit-fox/current`.
 
 To roll back, or to deploy a version again: Actions → Deploy → Run workflow on `main` with the version number, then
 approve. Such a run builds nothing; the images `:N` must be in GHCR. A rollback keeps the data, but the database keeps
@@ -219,7 +235,7 @@ The owner, in GitHub:
   for all external contributors".
 - Settings → Rules → Rulesets → New tag ruleset for `v*`: restrict updates and deletions, block force pushes. Creation
   stays allowed: the `build` job creates the tags.
-- After the first build: each package `profit-fox-api`, `-worker`, `-scanner`, `-web` → Package settings → Change
+- After the first build: each package `profit-fox-api`, `-worker`, `-scanner`, `-trade-flow`, `-web` → Package settings → Change
   visibility → Public. Until then soyo-01 cannot pull the images and the deploy fails at the pull, before anything stops.
 
 The agent, with the owner's approval. On soyo-03, the deploy key and the host key of soyo-01:
