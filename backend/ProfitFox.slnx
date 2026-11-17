@@ -14,7 +14,7 @@
   <Folder Name="/src/live/">
     <Project Path="src/live/ProfitFox.Bot.Api/ProfitFox.Bot.Api.csproj" />
     <Project Path="src/live/ProfitFox.Bot.Application/ProfitFox.Bot.Application.csproj" />
-    <Project Path="src/live/ProfitFox.Bot.Domain /ProfitFox.Bot.Domain.csproj" />
+    <Project Path="src/live/ProfitFox.Bot.Domain/ProfitFox.Bot.Domain.csproj" />
     <Project Path="src/live/ProfitFox.Bot.Infrastructure/ProfitFox.Bot.Infrastructure.csproj" />
     <Project Path="src/live/ProfitFox.Bot.Worker/ProfitFox.Bot.Worker.csproj" />
   </Folder>
