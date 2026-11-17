@@ -1,0 +1,6 @@
+# Analyzer severities enforced by `dotnet build` (see Directory.Build.props).
+# Kept out of .editorconfig so the two files never set the same key.
+is_global = true
+
+# Unnecessary using directive.
+dotnet_diagnostic.IDE0005.severity = error

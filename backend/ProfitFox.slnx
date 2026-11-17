@@ -1,6 +1,15 @@
 <Solution>
   <Folder Name="/common/">
+    <File Path="..\.editorconfig" />
     <File Path="..\.gitignore" />
+    <File Path=".globalconfig" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Build.targets" />
+    <File Path="Directory.Packages.props" />
+    <File Path="src\BannedSymbols.txt" />
+    <File Path="src\Directory.Build.props" />
+    <File Path="src\engine\BannedSymbols.Engine.txt" />
+    <File Path="src\engine\Directory.Build.props" />
   </Folder>
   <Folder Name="/src/" />
   <Folder Name="/src/bench/">

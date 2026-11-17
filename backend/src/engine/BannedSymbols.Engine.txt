@@ -1,0 +1,14 @@
+P:System.DateTime.UtcNow;Engine reads time from the candles it is given, never from the clock
+P:System.DateTimeOffset.UtcNow;Engine reads time from the candles it is given, never from the clock
+T:System.TimeProvider;Engine reads time from the candles it is given, never from the clock
+T:System.Diagnostics.Stopwatch;Engine reads time from the candles it is given, never from the clock
+P:System.Environment.TickCount;Engine reads time from the candles it is given, never from the clock
+P:System.Environment.TickCount64;Engine reads time from the candles it is given, never from the clock
+P:System.Random.Shared;Take a seeded Random from the caller: a run must repeat
+M:System.Random.#ctor;Take a seeded Random from the caller: a run must repeat
+M:System.Guid.NewGuid;Take ids from the caller: a run must repeat
+T:System.IO.File;Engine gets its data from the caller, never from files
+T:System.IO.Directory;Engine gets its data from the caller, never from files
+T:System.IO.FileStream;Engine gets its data from the caller, never from files
+T:System.Console;Engine reports through its results, never to the console
+T:System.Net.Http.HttpClient;Engine gets its data from the caller, never from the network

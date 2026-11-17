@@ -1,0 +1,25 @@
+#!/bin/sh
+# Fast checks before a commit: build (with analyzers), format and the layout of XML doc summaries. Tests run in CI.
+# Enable once per clone: git config core.hooksPath .githooks
+set -e
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+
+# The .NET build reads backend/ and .editorconfig.
+if echo "$staged" | grep -qE '^(backend/|\.editorconfig$|scripts/verify-format\.sh$)'; then
+    dotnet build backend/ProfitFox.slnx --nologo -v:q
+    # dotnet format --verify-no-changes, but for the space between attributes the code style keeps: see the script.
+    sh scripts/verify-format.sh backend/ProfitFox.slnx
+fi
+
+# A <summary> is never on one line: `/// <summary>`, the text indented by 5 spaces, `/// </summary>`.
+# dotnet format does not check XML doc layout.
+staged_cs=$(echo "$staged" | grep -E '\.cs$' || true)
+if [ -n "$staged_cs" ]; then
+    one_line=$(echo "$staged_cs" | xargs grep -nE '/// <summary>.+</summary>' || true)
+    if [ -n "$one_line" ]; then
+        echo "One-line <summary>; write it on three lines:"
+        echo "$one_line"
+        exit 1
+    fi
+fi
