@@ -1,0 +1,10 @@
+<Project>
+
+    <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))"/>
+
+    <ItemGroup>
+        <!-- Engine is pure: no clock, unseeded randomness, files, console or network (docs/conventions.md). -->
+        <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.Engine.txt"/>
+    </ItemGroup>
+
+</Project>
