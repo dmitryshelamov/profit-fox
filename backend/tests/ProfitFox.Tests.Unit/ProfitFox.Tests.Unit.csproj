@@ -22,9 +22,11 @@
 
     <ItemGroup>
         <None Include="Engine\Strategy\Fixtures\**" CopyToOutputDirectory="PreserveNewest"/>
+        <None Include="Engine\Simulation\Fixtures\**" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\..\src\engine\ProfitFox.Engine.Simulation\ProfitFox.Engine.Simulation.csproj"/>
         <ProjectReference Include="..\..\src\engine\ProfitFox.Engine.Strategy\ProfitFox.Engine.Strategy.csproj"/>
     </ItemGroup>
 
