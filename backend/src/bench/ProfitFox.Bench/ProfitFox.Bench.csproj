@@ -6,4 +6,22 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
+    <ItemGroup>
+        <ProjectReference Include="..\..\engine\ProfitFox.Engine.Strategy\ProfitFox.Engine.Strategy.csproj"/>
+        <ProjectReference Include="..\..\engine\ProfitFox.Engine.Simulation\ProfitFox.Engine.Simulation.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Google.Protobuf" Version="3.36.2"/>
+        <PackageReference Include="Grpc.Net.Client" Version="2.85.0"/>
+        <PackageReference Include="Grpc.Tools" Version="2.85.0">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Protobuf Include="MarketData\Protos\*.proto" GrpcServices="Both" ProtoRoot="MarketData\Protos"/>
+    </ItemGroup>
+
 </Project>
