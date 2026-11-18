@@ -43,7 +43,7 @@ public sealed class HypothesisRunTests
     {
         await using MarketDataServer server = await MarketDataServer.Start();
 
-        RunResult result = await Runner(server, new FakeRepository()).Run(Options(parity: false, dump: null), CancellationToken.None);
+        RunResult result = await Runner(server, new FakeRepository()).Run(Options(parity: false, KeptDump("run")), CancellationToken.None);
 
         Assert.That(result.Verdict!.Kind, Is.EqualTo(VerdictKind.InsufficientData), "four weekly blocks are fewer than 20");
         Assert.That(result.Rows, Has.Count.GreaterThan(50));
@@ -59,7 +59,7 @@ public sealed class HypothesisRunTests
     public async Task A_parity_run_never_computes_the_outcomes_of_events()
     {
         await using MarketDataServer server = await MarketDataServer.Start();
-        string dump = Path.Combine(_bench, "..", "dump");
+        string dump = KeptDump("parity") ?? Path.Combine(_bench, "..", "dump");
 
         RunResult result = await Runner(server, new FakeRepository()).Run(Options(parity: true, dump), CancellationToken.None);
 
@@ -103,6 +103,12 @@ public sealed class HypothesisRunTests
         Assert.That(CommandLine.Parse(["parity", "h"], out string? error), Is.Null);
         Assert.That(error, Does.Contain("--out"));
         Assert.That(CommandLine.Parse(["run", "h", "--period", "later"], out _), Is.Null);
+    }
+
+    // PROFIT_FOX_KEEP_DUMP=<folder> keeps the dumps of these runs there, to try bench/parity/check.py on them.
+    private static string? KeptDump(string name)
+    {
+        return Environment.GetEnvironmentVariable("PROFIT_FOX_KEEP_DUMP") is { Length: > 0 } folder ? Path.Combine(folder, name) : null;
     }
 
     private HypothesisRunner Runner(MarketDataServer server, IRepository repository)

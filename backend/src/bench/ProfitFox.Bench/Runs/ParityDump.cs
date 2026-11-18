@@ -23,6 +23,7 @@ public sealed class ParityDump : IDisposable
     private readonly StreamWriter _funding;
     private readonly StreamWriter _coverage;
     private readonly StreamWriter _minutes;
+    private readonly StreamWriter _spans;
     private readonly StreamWriter _events;
     private readonly StreamWriter _randoms;
     private StreamWriter? _outcomes;
@@ -35,6 +36,7 @@ public sealed class ParityDump : IDisposable
         _funding = Open("funding", "instrument,time_ms,rate");
         _coverage = Open("coverage", "feed,instrument,span_from_ms,from_ms,until_ms");
         _minutes = Open("minutes", "instrument,span_from_ms,span_to_ms,open_ms,open,high,low,close");
+        _spans = Open("spans", "instrument,span_from_ms,span_to_ms");
         _events = Open("events", "instrument,moment_ms,block,status");
         _randoms = Open("randoms", "instrument,event_ms,entry_ms_planned," + string.Join(',', OutcomeColumns));
     }
@@ -64,6 +66,7 @@ public sealed class ParityDump : IDisposable
 
         foreach ((DateTimeOffset from, DateTimeOffset to, HistoryRead<HistoryCandle> minutes) in data.Spans)
         {
+            Row(_spans, symbol, Ms(from), Ms(to));
             foreach (TimeRange range in minutes.Coverage)
             {
                 Row(_coverage, "minutes", symbol, Ms(from), Ms(range.From), Ms(range.Until));
@@ -122,6 +125,7 @@ public sealed class ParityDump : IDisposable
         _funding.Dispose();
         _coverage.Dispose();
         _minutes.Dispose();
+        _spans.Dispose();
         _events.Dispose();
         _randoms.Dispose();
         _outcomes?.Dispose();
