@@ -8,6 +8,7 @@ namespace ProfitFox.Engine.Strategy.Nodes;
 /// </summary>
 public sealed class NodeKind
 {
+    private readonly Func<NodeDefinition, GraphDefinition, Node> _create;
     private readonly Func<GraphDefinition, IReadOnlyList<PinDeclaration>> _inputs;
     private readonly Func<GraphDefinition, IReadOnlyList<PinDeclaration>> _outputs;
 
@@ -19,16 +20,23 @@ public sealed class NodeKind
         string name,
         Func<GraphDefinition, IReadOnlyList<PinDeclaration>> inputs,
         Func<GraphDefinition, IReadOnlyList<PinDeclaration>> outputs,
-        IReadOnlyList<SettingDeclaration> settings)
+        IReadOnlyList<SettingDeclaration> settings,
+        Func<NodeDefinition, GraphDefinition, Node> create)
     {
         Name = name;
         _inputs = inputs;
         _outputs = outputs;
         Settings = settings;
+        _create = create;
     }
 
-    internal NodeKind(string name, IReadOnlyList<PinDeclaration> inputs, IReadOnlyList<PinDeclaration> outputs, IReadOnlyList<SettingDeclaration> settings)
-        : this(name, _ => inputs, _ => outputs, settings)
+    internal NodeKind(
+        string name,
+        IReadOnlyList<PinDeclaration> inputs,
+        IReadOnlyList<PinDeclaration> outputs,
+        IReadOnlyList<SettingDeclaration> settings,
+        Func<NodeDefinition, Node> create)
+        : this(name, _ => inputs, _ => outputs, settings, (node, _) => create(node))
     {
     }
 
@@ -40,5 +48,13 @@ public sealed class NodeKind
     public IReadOnlyList<PinDeclaration> Outputs(GraphDefinition graph)
     {
         return _outputs(graph);
+    }
+
+    /// <summary>
+    ///     A new node of this kind with its own state, for one pair.
+    /// </summary>
+    internal Node Create(NodeDefinition node, GraphDefinition graph)
+    {
+        return _create(node, graph);
     }
 }

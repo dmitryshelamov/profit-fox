@@ -27,4 +27,8 @@
         <ProjectReference Include="..\ProfitFox.Tests.Shared\ProfitFox.Tests.Shared.csproj"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <None Include="Engine\**\Fixtures\**\*.csv" CopyToOutputDirectory="PreserveNewest"/>
+    </ItemGroup>
+
 </Project>
