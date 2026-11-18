@@ -12,6 +12,7 @@ internal static class Program
     private static int Main(string[] args)
     {
         Console.Error.WriteLine("usage: bench run <hypothesis folder> [--period exploration|holdout|new-data]");
+
         return 2;
     }
 }
