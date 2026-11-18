@@ -1,0 +1,22 @@
+{
+  "formatVersion": 1,
+  "outputs": [
+    { "name": "entry", "type": "boolean" }
+  ],
+  "nodes": [
+    { "id": "rate", "kind": "funding-rate" },
+    { "id": "prev", "kind": "previous" },
+    { "id": "now", "kind": "compare", "settings": { "operation": "ge" }, "inputs": { "b": 0.0005 } },
+    { "id": "was", "kind": "compare", "settings": { "operation": "lt" }, "inputs": { "b": 0.0005 } },
+    { "id": "first", "kind": "and" },
+    { "id": "out", "kind": "outputs" }
+  ],
+  "wires": [
+    { "from": "rate.value", "to": "now.a" },
+    { "from": "rate.value", "to": "prev.value" },
+    { "from": "prev.result", "to": "was.a" },
+    { "from": "now.result", "to": "first.a" },
+    { "from": "was.result", "to": "first.b" },
+    { "from": "first.result", "to": "out.entry" }
+  ]
+}
