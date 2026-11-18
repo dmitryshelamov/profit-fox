@@ -1,0 +1,6 @@
+@ProfitFox.Bot.Presentation_HostAddress = http://localhost:5027
+
+GET {{ProfitFox.Bot.Presentation_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
