@@ -5,7 +5,7 @@ using ProfitFox.Bench.MarketData.Protos;
 namespace ProfitFox.Tests.Integration.Bench.MarketData;
 
 /// <summary>
-///     The funding feed of the fake market-data service: coverage first, then a payment every 8 hours.
+///     The funding feed of the fake market-data service: coverage first, then a payment every 8 hours with the rates of <see cref="FakeMarketData.RateAt" />.
 /// </summary>
 public sealed class FakeFundingFeed(FakeMarketData data) : FundingPaymentFeed.FundingPaymentFeedBase
 {
@@ -22,7 +22,7 @@ public sealed class FakeFundingFeed(FakeMarketData data) : FundingPaymentFeed.Fu
         {
             for (DateTimeOffset time = range.From.ToDateTimeOffset(); time < range.Until.ToDateTimeOffset(); time += TimeSpan.FromHours(8))
             {
-                var payment = new FundingPaymentUpdate { InstrumentId = instrument, Time = Timestamp.FromDateTimeOffset(time), FundingRate = "0.0005" };
+                var payment = new FundingPaymentUpdate { InstrumentId = instrument, Time = Timestamp.FromDateTimeOffset(time), FundingRate = FakeMarketData.RateAt(time) };
                 await responseStream.WriteAsync(new FundingPaymentHistoryItem { Payment = payment });
             }
         }

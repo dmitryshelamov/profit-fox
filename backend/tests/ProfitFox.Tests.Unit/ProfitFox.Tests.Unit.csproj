@@ -28,7 +28,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <None Include="Engine\**\Fixtures\**\*.csv" CopyToOutputDirectory="PreserveNewest"/>
+        <None Include="**\Fixtures\**\*.csv;**\Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
 
 </Project>

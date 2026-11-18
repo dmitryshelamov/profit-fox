@@ -16,48 +16,24 @@ namespace ProfitFox.Engine.Simulation.Trades;
 /// </summary>
 public static class TradeSimulator
 {
+    /// <summary>
+    ///     Whether a trade counts or why it is left out, without computing its outcome: what the bench may know of an
+    ///     event before it is allowed to read its outcome.
+    /// </summary>
+    public static TradeStatus Check(MinutePath path, DateTimeOffset moment, TradePlan plan, TradeCosts costs)
+    {
+        return Prepare(path, moment, plan, costs).Status;
+    }
+
     public static TradeOutcome Simulate(MinutePath path, DateTimeOffset moment, TradePlan plan, TradeCosts costs)
     {
-        if (moment.UtcTicks % TimeSpan.TicksPerMinute != 0)
+        (TradeStatus status, int start, int entryStep, int lastTraded) = Prepare(path, moment, plan, costs);
+        if (status != TradeStatus.Ok)
         {
-            throw new ArgumentException("An entry moment is on a minute.", nameof(moment));
+            return TradeOutcome.Excluded(status);
         }
 
         int horizon = plan.HorizonMinutes;
-        long first = path.MinuteIndex(moment);
-        if (first < 0 || first + horizon > path.Minutes)
-        {
-            return TradeOutcome.Excluded(TradeStatus.Coverage);
-        }
-
-        int start = (int)first;
-        int entryStep = -1;
-        int lastTraded = -1;
-        for (int step = 0; step < horizon; step++)
-        {
-            if (!path.Covered(start + step))
-            {
-                return TradeOutcome.Excluded(TradeStatus.Coverage);
-            }
-
-            if (!double.IsNaN(path.Open(start + step)))
-            {
-                entryStep = entryStep < 0 ? step : entryStep;
-                lastTraded = step;
-            }
-        }
-
-        if (entryStep < 0)
-        {
-            return TradeOutcome.Excluded(TradeStatus.NoTrade);
-        }
-
-        if (costs.Funding && path.FundingFrom is { } fundingFrom
-                          && !(moment >= fundingFrom && moment + plan.Horizon < path.FundingUntil))
-        {
-            return TradeOutcome.Excluded(TradeStatus.Funding);
-        }
-
         double side = (int)plan.Side;
         bool isLong = plan.Side == TradeSide.Long;
         double entryRaw = path.Open(start + entryStep);
@@ -124,5 +100,55 @@ public static class TradeSimulator
             funding,
             net,
             r);
+    }
+
+    // The checks of coverage, trades and funding on the whole horizon, and where the entry and the last trade are.
+    private static (TradeStatus Status, int Start, int EntryStep, int LastTraded) Prepare(
+        MinutePath path,
+        DateTimeOffset moment,
+        TradePlan plan,
+        TradeCosts costs)
+    {
+        if (moment.UtcTicks % TimeSpan.TicksPerMinute != 0)
+        {
+            throw new ArgumentException("An entry moment is on a minute.", nameof(moment));
+        }
+
+        int horizon = plan.HorizonMinutes;
+        long first = path.MinuteIndex(moment);
+        if (first < 0 || first + horizon > path.Minutes)
+        {
+            return (TradeStatus.Coverage, 0, -1, -1);
+        }
+
+        int start = (int)first;
+        int entryStep = -1;
+        int lastTraded = -1;
+        for (int step = 0; step < horizon; step++)
+        {
+            if (!path.Covered(start + step))
+            {
+                return (TradeStatus.Coverage, start, -1, -1);
+            }
+
+            if (!double.IsNaN(path.Open(start + step)))
+            {
+                entryStep = entryStep < 0 ? step : entryStep;
+                lastTraded = step;
+            }
+        }
+
+        if (entryStep < 0)
+        {
+            return (TradeStatus.NoTrade, start, -1, -1);
+        }
+
+        if (costs.Funding && path.FundingFrom is { } fundingFrom
+                          && !(moment >= fundingFrom && moment + plan.Horizon < path.FundingUntil))
+        {
+            return (TradeStatus.Funding, start, -1, -1);
+        }
+
+        return (TradeStatus.Ok, start, entryStep, lastTraded);
     }
 }

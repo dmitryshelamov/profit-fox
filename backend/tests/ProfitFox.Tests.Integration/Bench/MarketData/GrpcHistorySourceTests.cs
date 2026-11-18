@@ -40,7 +40,7 @@ public sealed class GrpcHistorySourceTests
         HistoryRead<HistoryPayment> read = await source.ReadFunding("btc", Start, Start.AddDays(1), CancellationToken.None);
 
         Assert.That(read.Items.Select(payment => payment.Time), Is.EqualTo(new[] { Start, Start.AddHours(8), Start.AddHours(16) }));
-        Assert.That(read.Items[0].ToFundingPayment(), Is.EqualTo(new FundingPayment(Start, 0.0005m)));
+        Assert.That(read.Items[0].ToFundingPayment(), Is.EqualTo(new FundingPayment(Start, 0.0001m)));
     }
 
     [Test]

@@ -64,6 +64,25 @@ public sealed class MarketHistory
         return read;
     }
 
+    /// <summary>
+    ///     Funding payments at times in [<paramref name="from" />, <paramref name="through" />]: a payment exactly at the end
+    ///     of the period belongs to the trades that end there. The coverage reaches past <paramref name="through" /> when the
+    ///     payment there is known.
+    /// </summary>
+    public async Task<HistoryRead<HistoryPayment>> FundingThrough(
+        string instrumentId,
+        DateTimeOffset from,
+        DateTimeOffset through,
+        CancellationToken cancellation)
+    {
+        CheckWindow(from, through);
+        DateTimeOffset to = through + TimeSpan.FromSeconds(1);
+        HistoryRead<HistoryPayment> read = await _source.ReadFunding(instrumentId, from, to, cancellation);
+        read = read with { Coverage = Coverage.Trim(read.Coverage, from, to) };
+        _hash.Add(instrumentId, read);
+        return read;
+    }
+
     private void CheckWindow(DateTimeOffset from, DateTimeOffset to)
     {
         if (to <= from)
