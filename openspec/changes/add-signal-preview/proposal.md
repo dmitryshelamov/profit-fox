@@ -9,8 +9,8 @@
 
 ## What Changes
 
-- Новое веб-приложение стенда `ProfitFox.Bench.Api`, отдельно от бота. Пока оно запускается локально на Маке, без Docker
-  и развёртывания.
+- Новое веб-приложение стенда `ProfitFox.Bench.Presentation`, отдельно от бота. Пока оно запускается локально на Маке,
+  без Docker и развёртывания.
 - API предпросмотра:
   - список пар — те же linear USDT перпетуалы, что видит стенд;
   - список гипотез из `bench/hypotheses` с их сигналом и таймфреймом;
@@ -42,7 +42,7 @@
 ## Impact
 
 - **Код:**
-  - новый проект `backend/src/bench/ProfitFox.Bench.Api`;
+  - новый проект `backend/src/bench/ProfitFox.Bench.Presentation`;
   - общий расчёт событий пары в `ProfitFox.Bench`;
   - тесты в `ProfitFox.Tests.Unit` и `ProfitFox.Tests.Integration` (поддельный сервис данных из шага 1);
   - новая папка `frontend/`.

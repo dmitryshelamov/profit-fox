@@ -37,10 +37,17 @@
 
 ## Decisions
 
-### 1. Отдельное приложение `ProfitFox.Bench.Api` в зоне bench
+### 1. Отдельное приложение `ProfitFox.Bench.Presentation` в зоне bench
 
-Новый веб-проект `backend/src/bench/ProfitFox.Bench.Api` ссылается на `ProfitFox.Bench` и `ProfitFox.Engine.Strategy`.
-У него явный `Main` и minimal API. Слушает только `localhost:5240`. Настройки в `appsettings.json`:
+Новый веб-проект `backend/src/bench/ProfitFox.Bench.Presentation` ссылается на `ProfitFox.Bench`. Он устроен как
+`ProfitFox.Bot.Presentation`:
+
+- явный `Main`;
+- контроллеры в `Controllers/`, пути в нижнем регистре;
+- порт `localhost:5240` в `launchSettings.json`;
+- OpenAPI в разработке.
+
+Настройки в `appsettings.json`:
 
 - `MarketData:GrpcUrl` и `MarketData:RestUrl` — как у CLI;
 - `Bench:Folder` — путь к `bench/` в репозитории, по умолчанию относительно корня.
@@ -129,7 +136,7 @@ OpenAPI-документ отдаётся на `/openapi/v1.json`. Типы фр
 Два процесса на Маке:
 
 ```bash
-dotnet run --project backend/src/bench/ProfitFox.Bench.Api
+dotnet run --project backend/src/bench/ProfitFox.Bench.Presentation
 ```
 
 ```bash

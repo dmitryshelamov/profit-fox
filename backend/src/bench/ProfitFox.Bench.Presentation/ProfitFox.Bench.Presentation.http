@@ -1,0 +1,39 @@
+@ProfitFox.Bench.Presentation_HostAddress = http://localhost:5240
+
+GET {{ProfitFox.Bench.Presentation_HostAddress}}/api/instruments
+Accept: application/json
+
+###
+
+GET {{ProfitFox.Bench.Presentation_HostAddress}}/api/hypotheses
+Accept: application/json
+
+###
+
+POST {{ProfitFox.Bench.Presentation_HostAddress}}/api/preview
+Content-Type: application/json
+
+{
+  "instrument": "PRLUSDT",
+  "timeframe": "4h",
+  "signal": {
+    "formatVersion": 1,
+    "parameters": [{ "name": "threshold", "type": "number", "value": 0.0005 }],
+    "outputs": [{ "name": "entry", "type": "event" }],
+    "nodes": [
+      { "id": "p", "kind": "parameters" },
+      { "id": "rate", "kind": "funding-rate" },
+      { "id": "high", "kind": "compare", "settings": { "operation": "ge" } },
+      { "id": "first", "kind": "first-time" },
+      { "id": "out", "kind": "outputs" }
+    ],
+    "wires": [
+      { "from": "rate.value", "to": "high.a" },
+      { "from": "p.threshold", "to": "high.b" },
+      { "from": "high.result", "to": "first.value" },
+      { "from": "first.event", "to": "out.entry" }
+    ]
+  }
+}
+
+###
