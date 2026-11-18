@@ -5,7 +5,8 @@ namespace ProfitFox.Tests.Unit.Engine.Simulation;
 
 /// <summary>
 ///     Task 5.2: the outcomes of the C# simulator equal those of <c>simulate</c> of the Python bench on the same synthetic
-///     paths. The fixture (<c>Fixtures/Outcomes</c>, made by <c>export_outcome_fixture.py</c>) has four paths of 3000
+///     paths. The fixture (<c>Fixtures/Outcomes</c>, exported from the Python bench <c>profit-fox-bench</c>
+///     at commit <c>13bd168</c> by a script removed by task 9.1, in commit <c>c1f09c0</c>) has four paths of 3000
 ///     minutes with gaps, minutes without trades, an uncovered stretch, partly known funding and a pair without funding,
 ///     and 1200 trades with their Python outcomes.
 /// </summary>

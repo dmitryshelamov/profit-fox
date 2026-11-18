@@ -105,7 +105,7 @@ public sealed class HypothesisRunTests
         Assert.That(CommandLine.Parse(["run", "h", "--period", "later"], out _), Is.Null);
     }
 
-    // PROFIT_FOX_KEEP_DUMP=<folder> keeps the dumps of these runs there, to try bench/parity/check.py on them.
+    // PROFIT_FOX_KEEP_DUMP=<folder> keeps the dumps of these runs there, to look at them.
     private static string? KeptDump(string name)
     {
         return Environment.GetEnvironmentVariable("PROFIT_FOX_KEEP_DUMP") is { Length: > 0 } folder ? Path.Combine(folder, name) : null;

@@ -7,7 +7,8 @@ namespace ProfitFox.Tests.Unit.Engine.Strategy.Execution;
 
 /// <summary>
 ///     Task 4.3: the H0001 graph gives the same events as <c>event.py</c> of the Python bench on the same data. The
-///     fixture (<c>Fixtures/H0001</c>, made by <c>export_parity_fixture.py</c>) has real funding payments of January and
+///     fixture (<c>Fixtures/H0001</c>, exported from the Python bench <c>profit-fox-bench</c> at commit <c>13bd168</c> by
+///     a script removed by task 9.1, in commit <c>349db8b</c>) has real funding payments of January and
 ///     February 2026, a generated grid of 4h bars with the bars <c>event.py</c> drops already left out, and its events.
 /// </summary>
 public sealed class H0001ParityTests

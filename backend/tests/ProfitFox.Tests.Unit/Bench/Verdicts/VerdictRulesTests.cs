@@ -6,7 +6,9 @@ namespace ProfitFox.Tests.Unit.Bench.Verdicts;
 
 /// <summary>
 ///     Spec hypothesis-bench: the required t, blind power and the verdict, against <c>verdict.py</c> of the Python bench
-///     (task 7.3). The fixture (<c>Fixtures/Verdict</c>, made by <c>export_verdict_fixture.py</c>) is synthetic.
+///     (task 7.3). The fixture (<c>Fixtures/Verdict</c>) is synthetic, exported from the Python bench
+///     <c>profit-fox-bench</c> at commit <c>13bd168</c>; the export script was removed by task 9.1 and is in commit
+///     <c>a8bbfc1</c>.
 /// </summary>
 public sealed class VerdictRulesTests
 {
