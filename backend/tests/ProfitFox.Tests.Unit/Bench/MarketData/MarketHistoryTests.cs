@@ -1,4 +1,5 @@
-using ProfitFox.Bench.MarketData.History;
+using ProfitFox.Bench.Application.MarketData;
+using ProfitFox.Bench.Domain.MarketData;
 using ProfitFox.Engine.Strategy.Execution;
 
 namespace ProfitFox.Tests.Unit.Bench.MarketData;

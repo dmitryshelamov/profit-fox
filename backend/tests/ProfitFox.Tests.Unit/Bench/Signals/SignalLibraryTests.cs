@@ -1,6 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using ProfitFox.Bench.Signals;
+using ProfitFox.Bench.Application.Signals;
+using ProfitFox.Bench.Domain.Signals;
+using ProfitFox.Bench.Infrastructure.Signals;
 using ProfitFox.Engine.Strategy.Graph.Reading;
 using ProfitFox.Tests.Unit.Bench.Hypotheses;
 
@@ -21,7 +23,7 @@ public sealed class SignalLibraryTests
     public void Create()
     {
         _folder = Path.Combine(Path.GetTempPath(), "profit-fox-signals-" + Guid.NewGuid().ToString("N"));
-        _library = new SignalLibrary(_folder);
+        _library = new SignalLibrary(new SignalFiles(_folder));
     }
 
     [TearDown]

@@ -1,7 +1,9 @@
-using ProfitFox.Bench.Ledger;
-using ProfitFox.Bench.Runs;
-using ProfitFox.Bench.Verdicts;
+using ProfitFox.Bench.Application.Runs;
+using ProfitFox.Bench.Domain.Ledger;
+using ProfitFox.Bench.Domain.Runs;
+using ProfitFox.Bench.Domain.Verdicts;
 using ProfitFox.Engine.Simulation.Trades;
+
 using static ProfitFox.Tests.Unit.Bench.Runs.Designs;
 
 namespace ProfitFox.Tests.Unit.Bench.Runs;
@@ -11,7 +13,7 @@ namespace ProfitFox.Tests.Unit.Bench.Runs;
 /// </summary>
 public sealed class RunReportTests
 {
-    private static readonly long First = Blocks.Of(Utc(2026, 1, 5), ProfitFox.Bench.Hypotheses.TimeBlock.Week);
+    private static readonly long First = Blocks.Of(Utc(2026, 1, 5), ProfitFox.Bench.Domain.Hypotheses.TimeBlock.Week);
     private static readonly (long Block, double Mean, int Events)[] Pseudo = [(First, 0.0004, 3), (First + 1, -0.0002, 2)];
 
     [Test]

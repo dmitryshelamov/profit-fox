@@ -1,8 +1,8 @@
-using ProfitFox.Bench.MarketData.History;
-using ProfitFox.Bench.Runs;
-using ProfitFox.Bench.Signals;
+using ProfitFox.Bench.Domain.MarketData;
+using ProfitFox.Bench.Domain.Signals;
 using ProfitFox.Engine.Strategy.Graph;
 using ProfitFox.Tests.Unit.Engine.Strategy.Graph;
+
 using static ProfitFox.Tests.Unit.Bench.Runs.Designs;
 
 namespace ProfitFox.Tests.Unit.Bench.Signals;

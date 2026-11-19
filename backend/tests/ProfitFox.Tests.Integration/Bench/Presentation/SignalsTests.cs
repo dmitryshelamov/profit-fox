@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using ProfitFox.Bench.Hypotheses;
+using ProfitFox.Bench.Infrastructure.Hypotheses;
 using ProfitFox.Bench.Presentation.Errors;
 using ProfitFox.Bench.Presentation.Signals;
 using ProfitFox.Tests.Integration.Bench.MarketData;
@@ -172,7 +172,7 @@ public sealed class SignalsTests
             folder = folder.Parent;
         }
 
-        string file = File.ReadAllText(Path.Combine(folder!.FullName, "bench", "hypotheses", "H0001-funding-short-4h", HypothesisReader.FileName));
+        string file = File.ReadAllText(Path.Combine(folder!.FullName, "bench", "hypotheses", "H0001-funding-short-4h", HypothesisFiles.FileName));
         return JsonNode.Parse(file)!["signal"]!.AsObject().DeepClone().AsObject();
     }
 }

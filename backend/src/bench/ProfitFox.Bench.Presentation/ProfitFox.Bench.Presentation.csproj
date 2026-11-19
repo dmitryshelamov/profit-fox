@@ -7,7 +7,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\ProfitFox.Bench\ProfitFox.Bench.csproj"/>
+        <ProjectReference Include="..\ProfitFox.Bench.Application\ProfitFox.Bench.Application.csproj"/>
+        <ProjectReference Include="..\ProfitFox.Bench.Infrastructure\ProfitFox.Bench.Infrastructure.csproj"/>
     </ItemGroup>
 
     <ItemGroup>

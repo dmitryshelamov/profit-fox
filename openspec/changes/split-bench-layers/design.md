@@ -224,9 +224,13 @@ Timeframe, JsonElement? Signal)` — поля запроса как есть. О
 ### 9. Тесты на месте
 
 Папки тестов (`Tests.Unit/Bench/Runs`, `.../Signals` и т. д.) не переезжают по слоям. Меняются ссылки проектов,
-`using` и сборка объектов. Проверка в задачах: в `git diff` по `backend/tests` нет изменённых строк с `Assert`,
-`Is.`, `Has.`, `Does.`, `Throws.`. Единственное исключение — перенос проверок `RunLedgerTests` (решение 5): строки
-переезжают без изменений.
+`using` и сборка объектов. Проверка в задачах: в `git diff` по `backend/tests` ожидания не меняются. В строках с
+`Assert`, `Is.`, `Has.`, `Does.`, `Throws.` меняются только имена того, что проверяется, а ожидаемые значения и тексты
+остаются:
+
+- `ledger.CheckCanRun(…)` и `ledger.Attempts(…)` становятся `LedgerRules.…(ledger.Entries(), …)` (решение 5);
+- `new RunLedger(…)` становится `new LedgerFile(…)`;
+- пространство имён protos в `Has.All.Matches<…>` в `PreviewTests` меняется на новое.
 
 ### 10. Сверка H0001
 

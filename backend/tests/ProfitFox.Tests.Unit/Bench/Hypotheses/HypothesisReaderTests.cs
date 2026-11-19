@@ -1,5 +1,7 @@
 using System.Text.Json.Nodes;
-using ProfitFox.Bench.Hypotheses;
+using ProfitFox.Bench.Application.Hypotheses;
+using ProfitFox.Bench.Domain.Hypotheses;
+using ProfitFox.Bench.Infrastructure.Hypotheses;
 using ProfitFox.Engine.Simulation.Trades;
 
 namespace ProfitFox.Tests.Unit.Bench.Hypotheses;
@@ -11,12 +13,12 @@ public sealed class HypothesisReaderTests
 {
     public static readonly string H0001Folder = Path.Combine(Repository.Root, "bench", "hypotheses", "H0001-funding-short-4h");
 
-    private static readonly string H0001Text = File.ReadAllText(Path.Combine(H0001Folder, HypothesisReader.FileName));
+    private static readonly string H0001Text = File.ReadAllText(Path.Combine(H0001Folder, HypothesisFiles.FileName));
 
     [Test]
     public void H0001_is_read_from_the_repository()
     {
-        Hypothesis hypothesis = HypothesisReader.Read(H0001Folder);
+        Hypothesis hypothesis = Read(H0001Folder);
 
         Assert.That(hypothesis.Id, Is.EqualTo("H0001"));
         Assert.That(hypothesis.Timeframe, Is.EqualTo(TimeSpan.FromHours(4)));
@@ -78,10 +80,18 @@ public sealed class HypothesisReaderTests
     {
         string hash = HypothesisReader.Parse(H0001Folder, H0001Text).Hash;
         string changed = HypothesisReader.Parse(H0001Folder, H0001Text.Replace("0.0005", "0.001", StringComparison.Ordinal)).Hash;
-        string windows = HypothesisReader.Read(Write(H0001Text.Replace("\n", "\r\n", StringComparison.Ordinal))).Hash;
+        string windows = Read(Write(H0001Text.Replace("\n", "\r\n", StringComparison.Ordinal))).Hash;
 
         Assert.That(changed, Is.Not.EqualTo(hash));
         Assert.That(windows, Is.EqualTo(hash));
+    }
+
+    /// <summary>
+    ///     The hypothesis of a folder, read from its file as a run reads it.
+    /// </summary>
+    public static Hypothesis Read(string folder)
+    {
+        return new HypothesisCatalog(new HypothesisFiles(Path.GetDirectoryName(folder)!)).Read(folder);
     }
 
     private static HypothesisException Refused(Action<JsonObject> change)
@@ -95,7 +105,7 @@ public sealed class HypothesisReaderTests
     {
         string folder = Path.Combine(Path.GetTempPath(), $"profit-fox-{Guid.NewGuid():N}", "H0001-funding-short-4h");
         Directory.CreateDirectory(folder);
-        File.WriteAllText(Path.Combine(folder, HypothesisReader.FileName), text);
+        File.WriteAllText(Path.Combine(folder, HypothesisFiles.FileName), text);
         return folder;
     }
 }

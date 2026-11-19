@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using ProfitFox.Bench.Application.Hypotheses;
+using ProfitFox.Bench.Domain.Hypotheses;
 using ProfitFox.Bench.Presentation.Hypotheses;
 
 namespace ProfitFox.Bench.Presentation.Controllers;
@@ -8,12 +10,14 @@ namespace ProfitFox.Bench.Presentation.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-public class HypothesesController(BenchFolder bench) : ControllerBase
+public class HypothesesController(HypothesisCatalog hypotheses) : ControllerBase
 {
     [HttpGet(Name = "ListHypotheses")]
     [ProducesResponseType<HypothesisResponse[]>(StatusCodes.Status200OK)]
     public ActionResult<HypothesisResponse[]> Get()
     {
-        return HypothesisList.Read(bench).ToArray();
+        return hypotheses.List()
+            .Select(item => new HypothesisResponse(item.Id, item.Name, item.Timeframe is { } timeframe ? Timeframes.Name(timeframe) : null, item.Signal, item.Error))
+            .ToArray();
     }
 }
