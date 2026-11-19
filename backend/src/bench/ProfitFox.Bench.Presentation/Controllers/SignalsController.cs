@@ -1,8 +1,9 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using ProfitFox.Bench.Application.Signals;
+using ProfitFox.Bench.Domain.Signals;
 using ProfitFox.Bench.Presentation.Errors;
 using ProfitFox.Bench.Presentation.Signals;
-using ProfitFox.Bench.Signals;
 using ProfitFox.Engine.Strategy.Graph;
 using ProfitFox.Engine.Strategy.Graph.Reading;
 

@@ -1,9 +1,13 @@
 using Grpc.Net.Client;
-using ProfitFox.Bench.Hypotheses;
-using ProfitFox.Bench.Ledger;
-using ProfitFox.Bench.MarketData;
-using ProfitFox.Bench.MarketData.History;
-using ProfitFox.Bench.Runs;
+using ProfitFox.Bench.Application.Hypotheses;
+using ProfitFox.Bench.Application.MarketData;
+using ProfitFox.Bench.Application.Runs;
+using ProfitFox.Bench.Domain.Hypotheses;
+using ProfitFox.Bench.Domain.Ledger;
+using ProfitFox.Bench.Infrastructure.Hypotheses;
+using ProfitFox.Bench.Infrastructure.Ledger;
+using ProfitFox.Bench.Infrastructure.MarketData;
+using ProfitFox.Bench.Infrastructure.Runs;
 
 namespace ProfitFox.Bench.Cli;
 
@@ -36,8 +40,16 @@ internal static class Program
             BenchSettings settings = BenchSettings.Load(AppContext.BaseDirectory);
             using GrpcChannel channel = GrpcChannel.ForAddress(settings.GrpcUrl, new GrpcChannelOptions { MaxReceiveMessageSize = 64 * 1024 * 1024 });
             using var http = new HttpClient { BaseAddress = new Uri(settings.RestUrl), Timeout = TimeSpan.FromMinutes(1) };
-            var catalog = new InstrumentCatalog(http);
-            var runner = new HypothesisRunner(new GrpcHistorySource(channel), catalog.LinearUsdtPerpetuals, new GitRepository(root), Path.Combine(root, "bench"), Console.Out);
+            string bench = Path.Combine(root, "bench");
+            var runner = new HypothesisRunner(
+                new HypothesisCatalog(new HypothesisFiles(Path.Combine(bench, "hypotheses"))),
+                new GrpcHistorySource(channel),
+                new InstrumentCatalog(http),
+                new GitRepository(root),
+                new LedgerFile(Path.Combine(bench, "ledger.jsonl")),
+                new ReportFiles(bench),
+                new ParityDumpFiles(),
+                Console.Out);
             var options = new RunOptions(
                 Path.GetFullPath(command.Folder),
                 command.Period,

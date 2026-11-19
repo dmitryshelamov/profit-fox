@@ -1,10 +1,14 @@
+using ProfitFox.Bench.Application.Hypotheses;
+using ProfitFox.Bench.Application.MarketData;
+using ProfitFox.Bench.Application.Runs;
 using ProfitFox.Bench.Cli;
-using ProfitFox.Bench.Hypotheses;
-using ProfitFox.Bench.Ledger;
-using ProfitFox.Bench.MarketData;
-using ProfitFox.Bench.MarketData.History;
-using ProfitFox.Bench.Runs;
-using ProfitFox.Bench.Verdicts;
+using ProfitFox.Bench.Domain.Ledger;
+using ProfitFox.Bench.Domain.Runs;
+using ProfitFox.Bench.Domain.Verdicts;
+using ProfitFox.Bench.Infrastructure.Hypotheses;
+using ProfitFox.Bench.Infrastructure.Ledger;
+using ProfitFox.Bench.Infrastructure.MarketData;
+using ProfitFox.Bench.Infrastructure.Runs;
 using ProfitFox.Engine.Simulation.Trades;
 using ProfitFox.Tests.Integration.Bench.MarketData;
 
@@ -28,7 +32,7 @@ public sealed class HypothesisRunTests
         _bench = Path.Combine(Path.GetTempPath(), $"profit-fox-bench-{Guid.NewGuid():N}", "bench");
         _hypothesis = Path.Combine(_bench, "hypotheses", "H0001-funding-short-4h");
         Directory.CreateDirectory(_hypothesis);
-        File.Copy(Path.Combine(Root(), "bench", "hypotheses", "H0001-funding-short-4h", HypothesisReader.FileName), Path.Combine(_hypothesis, HypothesisReader.FileName));
+        File.Copy(Path.Combine(Root(), "bench", "hypotheses", "H0001-funding-short-4h", HypothesisFiles.FileName), Path.Combine(_hypothesis, HypothesisFiles.FileName));
     }
 
     [TearDown]
@@ -49,7 +53,7 @@ public sealed class HypothesisRunTests
         Assert.That(result.Rows, Has.Count.GreaterThan(50));
         Assert.That(result.Rows.Select(row => row.Instrument).Distinct(), Is.EquivalentTo(new[] { "BTCUSDT", "ETHUSDT", "SOLUSDT" }));
         Assert.That(result.Rows, Has.All.Matches<EventRow>(row => row.Moment.Hour == 8));
-        LedgerEntry entry = new RunLedger(Path.Combine(_bench, "ledger.jsonl")).Entries().Single();
+        LedgerEntry entry = new LedgerFile(Path.Combine(_bench, "ledger.jsonl")).Entries().Single();
         Assert.That(entry.Status, Is.EqualTo(RunStatus.InsufficientData));
         Assert.That(entry.DataHash, Has.Length.EqualTo(64));
         Assert.That(File.ReadAllText(result.ReportPath), Does.Contain("Данных мало").And.Contain("Исходы событий не читались"));
@@ -68,7 +72,7 @@ public sealed class HypothesisRunTests
         Assert.That(result.Rows.SelectMany(row => row.Randoms), Has.Some.Matches<RandomTrade>(trade => trade.Outcome.Status == TradeStatus.Ok));
         Assert.That(File.Exists(Path.Combine(dump, "randoms.csv.gz")), Is.True);
         Assert.That(File.Exists(Path.Combine(dump, "event_outcomes.csv.gz")), Is.False);
-        Assert.That(new RunLedger(Path.Combine(_bench, "ledger.jsonl")).Entries().Single().Status, Is.EqualTo(RunStatus.Parity));
+        Assert.That(new LedgerFile(Path.Combine(_bench, "ledger.jsonl")).Entries().Single().Status, Is.EqualTo(RunStatus.Parity));
     }
 
     [Test]
@@ -90,7 +94,7 @@ public sealed class HypothesisRunTests
         server.Data.Failure = Grpc.Core.StatusCode.Unavailable;
 
         Assert.That(() => Runner(server, new FakeRepository()).Run(Options(parity: false, dump: null), CancellationToken.None), Throws.InstanceOf<HistoryUnavailableException>());
-        Assert.That(new RunLedger(Path.Combine(_bench, "ledger.jsonl")).Entries().Single().Status, Is.EqualTo(RunStatus.Failed));
+        Assert.That(new LedgerFile(Path.Combine(_bench, "ledger.jsonl")).Entries().Single().Status, Is.EqualTo(RunStatus.Failed));
     }
 
     [Test]
@@ -113,8 +117,15 @@ public sealed class HypothesisRunTests
 
     private HypothesisRunner Runner(MarketDataServer server, IRepository repository)
     {
-        var catalog = new InstrumentCatalog(server.Http);
-        return new HypothesisRunner(new GrpcHistorySource(server.Channel), catalog.LinearUsdtPerpetuals, repository, _bench, TextWriter.Null);
+        return new HypothesisRunner(
+            new HypothesisCatalog(new HypothesisFiles(Path.Combine(_bench, "hypotheses"))),
+            new GrpcHistorySource(server.Channel),
+            new InstrumentCatalog(server.Http),
+            repository,
+            new LedgerFile(Path.Combine(_bench, "ledger.jsonl")),
+            new ReportFiles(_bench),
+            new ParityDumpFiles(),
+            TextWriter.Null);
     }
 
     private RunOptions Options(bool parity, string? dump)

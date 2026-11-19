@@ -1,4 +1,4 @@
-using ProfitFox.Bench.Runs;
+using ProfitFox.Bench.Domain.Runs;
 
 namespace ProfitFox.Bench.Cli;
 

@@ -1,5 +1,5 @@
-using ProfitFox.Bench.Hypotheses;
-using ProfitFox.Bench.Runs;
+using ProfitFox.Bench.Domain.Hypotheses;
+using ProfitFox.Bench.Domain.Runs;
 using ProfitFox.Tests.Unit.Bench.Hypotheses;
 
 namespace ProfitFox.Tests.Unit.Bench.Runs;
@@ -9,7 +9,7 @@ namespace ProfitFox.Tests.Unit.Bench.Runs;
 /// </summary>
 internal static class Designs
 {
-    public static readonly Hypothesis H0001 = HypothesisReader.Read(HypothesisReaderTests.H0001Folder);
+    public static readonly Hypothesis H0001 = HypothesisReaderTests.Read(HypothesisReaderTests.H0001Folder);
 
     public static RunDesign Exploration(Hypothesis? hypothesis = null)
     {

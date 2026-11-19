@@ -23,7 +23,9 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\bench\ProfitFox.Bench\ProfitFox.Bench.csproj"/>
+        <ProjectReference Include="..\..\src\bench\ProfitFox.Bench.Domain\ProfitFox.Bench.Domain.csproj"/>
+        <ProjectReference Include="..\..\src\bench\ProfitFox.Bench.Application\ProfitFox.Bench.Application.csproj"/>
+        <ProjectReference Include="..\..\src\bench\ProfitFox.Bench.Infrastructure\ProfitFox.Bench.Infrastructure.csproj"/>
         <ProjectReference Include="..\..\src\bench\ProfitFox.Bench.Presentation\ProfitFox.Bench.Presentation.csproj"/>
         <ProjectReference Include="..\..\src\bench\ProfitFox.Bench.Cli\ProfitFox.Bench.Cli.csproj"/>
         <ProjectReference Include="..\ProfitFox.Tests.Shared\ProfitFox.Tests.Shared.csproj"/>

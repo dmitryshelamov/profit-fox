@@ -62,3 +62,18 @@ dotnet run --project backend/src/bench/ProfitFox.Bench.Cli -- run bench/hypothes
 
 Сверочный прогон без вердикта — `parity <папка гипотезы> --out <папка>`. Результат сверки с Python-стендом —
 `bench/parity/README.md`.
+
+## Слои стенда
+
+Стенд в `backend/src/bench` разделён на четыре слоя, как зона бота. Ссылки идут только внутрь:
+
+- `ProfitFox.Bench.Domain` — правила без ввода-вывода: гипотеза, периоды, случайные входы, вердикт, правила журнала,
+  события сигнала. Ссылается только на движок.
+- `ProfitFox.Bench.Application` — сценарии (прогон, предпросмотр, библиотека сигналов, список гипотез) и порты:
+  `IHistorySource`, `IInstrumentCatalog`, `IRunLedger`, `IRepository`, `IRunReports`, `IParityDumps`,
+  `IHypothesisStore`, `ISignalStore`.
+- `ProfitFox.Bench.Infrastructure` — адаптеры портов: gRPC и REST сервиса данных, файлы `bench/`, git.
+- `ProfitFox.Bench.Presentation` (API) и `ProfitFox.Bench.Cli` (`bench`) — точки входа, они же собирают зависимости.
+
+Новое хранилище, например база для журнала или сигналов, — это новый адаптер порта в Infrastructure. Сценарии и правила
+при этом не меняются.

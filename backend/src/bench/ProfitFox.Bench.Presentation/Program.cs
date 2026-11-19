@@ -1,6 +1,6 @@
 using Grpc.Net.Client;
-using ProfitFox.Bench.MarketData;
-using ProfitFox.Bench.MarketData.History;
+using ProfitFox.Bench.Application.MarketData;
+using ProfitFox.Bench.Infrastructure.MarketData;
 
 namespace ProfitFox.Bench.Presentation;
 
@@ -21,7 +21,7 @@ public class Program
 
         builder.Services.AddSingleton(_ => GrpcChannel.ForAddress(grpc, new GrpcChannelOptions { MaxReceiveMessageSize = 64 * 1024 * 1024 }));
         builder.Services.AddSingleton<IHistorySource>(services => new GrpcHistorySource(services.GetRequiredService<GrpcChannel>()));
-        builder.Services.AddSingleton(_ => new InstrumentCatalog(new HttpClient { BaseAddress = rest, Timeout = TimeSpan.FromMinutes(1) }));
+        builder.Services.AddSingleton<IInstrumentCatalog>(_ => new InstrumentCatalog(new HttpClient { BaseAddress = rest, Timeout = TimeSpan.FromMinutes(1) }));
         builder.Services.AddBenchPresentation(new BenchFolder(folder));
 
         WebApplication app = builder.Build();

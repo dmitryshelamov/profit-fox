@@ -6,7 +6,9 @@
     <Folder Name="/src/bench/">
         <Project Path="src/bench/ProfitFox.Bench.Presentation/ProfitFox.Bench.Presentation.csproj" />
         <Project Path="src/bench/ProfitFox.Bench.Cli/ProfitFox.Bench.Cli.csproj" />
-        <Project Path="src/bench/ProfitFox.Bench/ProfitFox.Bench.csproj" />
+        <Project Path="src/bench/ProfitFox.Bench.Application/ProfitFox.Bench.Application.csproj" />
+        <Project Path="src/bench/ProfitFox.Bench.Domain/ProfitFox.Bench.Domain.csproj" />
+        <Project Path="src/bench/ProfitFox.Bench.Infrastructure/ProfitFox.Bench.Infrastructure.csproj" />
     </Folder>
     <Folder Name="/src/engine/">
         <Project Path="src/engine/ProfitFox.Engine.Simulation/ProfitFox.Engine.Simulation.csproj" />

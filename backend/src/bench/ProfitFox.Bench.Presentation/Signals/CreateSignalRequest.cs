@@ -1,5 +1,5 @@
 using System.Text.Json;
-using ProfitFox.Bench.Signals;
+using ProfitFox.Bench.Domain.Signals;
 
 namespace ProfitFox.Bench.Presentation.Signals;
 

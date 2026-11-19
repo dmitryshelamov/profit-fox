@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
-using ProfitFox.Bench.MarketData;
+using ProfitFox.Bench.Application.MarketData;
+using ProfitFox.Bench.Application.Preview;
 using ProfitFox.Bench.Presentation.Errors;
 using ProfitFox.Bench.Presentation.Preview;
 
@@ -20,8 +21,10 @@ public class PreviewController(SignalPreview preview) : ControllerBase
     {
         try
         {
-            PreviewResult result = await preview.Run(request, cancellation);
-            return result.Preview is { } found ? found : BadRequest(result.Refused);
+            PreviewOutcome outcome = await preview.Run(new PreviewQuery(request.Instrument, request.Timeframe, request.Signal), cancellation);
+            return outcome.Preview is { } found
+                ? PreviewResponses.Of(found)
+                : BadRequest(new ErrorResponse([.. outcome.Errors.Select(RequestErrors.Of)]));
         }
         catch (HistoryUnavailableException exception)
         {

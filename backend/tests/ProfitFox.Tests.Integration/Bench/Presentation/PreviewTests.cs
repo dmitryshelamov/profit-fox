@@ -2,14 +2,17 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using ProfitFox.Bench.Application.Hypotheses;
+using ProfitFox.Bench.Application.Runs;
+using ProfitFox.Bench.Domain.Runs;
+using ProfitFox.Bench.Infrastructure.Hypotheses;
+using ProfitFox.Bench.Infrastructure.Ledger;
+using ProfitFox.Bench.Infrastructure.MarketData;
+using ProfitFox.Bench.Infrastructure.Runs;
 using ProfitFox.Bench.Presentation.Errors;
 using ProfitFox.Bench.Presentation.Hypotheses;
 using ProfitFox.Bench.Presentation.Instruments;
 using ProfitFox.Bench.Presentation.Preview;
-using ProfitFox.Bench.Hypotheses;
-using ProfitFox.Bench.MarketData;
-using ProfitFox.Bench.MarketData.History;
-using ProfitFox.Bench.Runs;
 using ProfitFox.Tests.Integration.Bench.MarketData;
 using ProfitFox.Tests.Integration.Bench.Runs;
 
@@ -34,7 +37,7 @@ public sealed class PreviewTests
         _bench = Path.Combine(_root, "bench");
         string h0001 = Path.Combine(_bench, "hypotheses", "H0001-funding-short-4h");
         Directory.CreateDirectory(h0001);
-        File.WriteAllText(Path.Combine(h0001, HypothesisReader.FileName), H0001File());
+        File.WriteAllText(Path.Combine(h0001, HypothesisFiles.FileName), H0001File());
     }
 
     [TearDown]
@@ -64,7 +67,7 @@ public sealed class PreviewTests
         file["id"] = "H0002";
         file["name"] = "x";
         file.Remove("signal");
-        File.WriteAllText(Path.Combine(broken, HypothesisReader.FileName), file.ToJsonString());
+        File.WriteAllText(Path.Combine(broken, HypothesisFiles.FileName), file.ToJsonString());
         await using MarketDataServer market = await MarketDataServer.Start();
         await using BenchPresentationServer api = await BenchPresentationServer.Start(market, _bench);
 
@@ -123,10 +126,10 @@ public sealed class PreviewTests
 
         DateTimeOffset end = Periods.ExplorationEnd;
         Assert.That(DateTimeOffset.FromUnixTimeMilliseconds(preview.Candles[^1].OpenTime), Is.EqualTo(end.AddHours(-4)), "the last candle closes at the end");
-        Assert.That(market.Data.CandleRequests, Has.All.Matches<ProfitFox.Bench.MarketData.Protos.CandleHistoryRequest>(request => request.To.ToDateTimeOffset() <= end));
+        Assert.That(market.Data.CandleRequests, Has.All.Matches<ProfitFox.Bench.Infrastructure.MarketData.Protos.CandleHistoryRequest>(request => request.To.ToDateTimeOffset() <= end));
         Assert.That(
             market.Data.FundingRequests,
-            Has.All.Matches<ProfitFox.Bench.MarketData.Protos.FundingPaymentHistoryRequest>(request => request.To.ToDateTimeOffset() <= end.AddSeconds(1)),
+            Has.All.Matches<ProfitFox.Bench.Infrastructure.MarketData.Protos.FundingPaymentHistoryRequest>(request => request.To.ToDateTimeOffset() <= end.AddSeconds(1)),
             "the payment exactly at the end is read, as by a run of exploration");
     }
 
@@ -193,9 +196,16 @@ public sealed class PreviewTests
         string bench = Path.Combine(_root, "run", "bench");
         string hypothesis = Path.Combine(bench, "hypotheses", "H0001-funding-short-4h");
         Directory.CreateDirectory(hypothesis);
-        File.WriteAllText(Path.Combine(hypothesis, HypothesisReader.FileName), H0001File());
-        var catalog = new InstrumentCatalog(market.Http);
-        var runner = new HypothesisRunner(new GrpcHistorySource(market.Channel), catalog.LinearUsdtPerpetuals, new FakeRepository(), bench, TextWriter.Null);
+        File.WriteAllText(Path.Combine(hypothesis, HypothesisFiles.FileName), H0001File());
+        var runner = new HypothesisRunner(
+            new HypothesisCatalog(new HypothesisFiles(Path.Combine(bench, "hypotheses"))),
+            new GrpcHistorySource(market.Channel),
+            new InstrumentCatalog(market.Http),
+            new FakeRepository(),
+            new LedgerFile(Path.Combine(bench, "ledger.jsonl")),
+            new ReportFiles(bench),
+            new ParityDumpFiles(),
+            TextWriter.Null);
         var options = new RunOptions(hypothesis, Period.Exploration, Parity: true, Path.Combine(_root, "dump"), new DateTimeOffset(2026, 11, 18, 0, 0, 0, TimeSpan.Zero));
         return await runner.Run(options, CancellationToken.None);
     }
@@ -213,6 +223,6 @@ public sealed class PreviewTests
             folder = folder.Parent;
         }
 
-        return File.ReadAllText(Path.Combine(folder!.FullName, "bench", "hypotheses", "H0001-funding-short-4h", HypothesisReader.FileName));
+        return File.ReadAllText(Path.Combine(folder!.FullName, "bench", "hypotheses", "H0001-funding-short-4h", HypothesisFiles.FileName));
     }
 }

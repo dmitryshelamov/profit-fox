@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
-using ProfitFox.Bench.MarketData;
+using ProfitFox.Bench.Application.MarketData;
+using ProfitFox.Bench.Domain.MarketData;
 using ProfitFox.Bench.Presentation.Instruments;
 
 namespace ProfitFox.Bench.Presentation.Controllers;
@@ -9,7 +10,7 @@ namespace ProfitFox.Bench.Presentation.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-public class InstrumentsController(InstrumentCatalog catalog) : ControllerBase
+public class InstrumentsController(IInstrumentCatalog catalog) : ControllerBase
 {
     [HttpGet(Name = "ListInstruments")]
     [ProducesResponseType<InstrumentResponse[]>(StatusCodes.Status200OK)]
