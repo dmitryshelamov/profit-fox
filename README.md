@@ -4,7 +4,7 @@
 
 Страница показывает, где граф сигнала срабатывает на паре в разведке (до 2026-05-15 включительно): график свечей с
 метками событий и их список. Вердикта, исходов сделок и строк в журнале нет. Спецификация —
-`openspec/specs/signal-preview` (пока изменение не в архиве — `openspec/changes/add-signal-preview`).
+`openspec/specs/signal-preview`.
 
 Нужны .NET 10, Node 22+ и доступ к сервису данных на soyo-02 (`192.168.8.213`, порты 5237 и 5236).
 
@@ -34,7 +34,7 @@
 Их можно задать и переменными окружения: `MarketData__GrpcUrl`, `MarketData__RestUrl`, `Bench__Folder`.
 
 Ответ на одну пару идёт около 12 с: столько сервис данных отдаёт свечи и фандинг с начала данных (замер в
-`openspec/changes/add-signal-preview/design.md`).
+`openspec/changes/archive/2026-11-19-add-signal-preview/design.md`).
 
 Типы API для фронтенда генерируются из OpenAPI работающего API:
 
