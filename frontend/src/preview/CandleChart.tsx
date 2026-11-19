@@ -21,13 +21,26 @@ interface Drawn {
   readonly markers: ISeriesMarkersPluginApi<Time>;
 }
 
-/** The candles of the pair with a mark on each candle that closed at an event; the chart counts time in UTC. */
+/** A part of the chart to show: from and to in seconds, as the chart counts time. */
+export interface ChartRange {
+  readonly from: number;
+  readonly to: number;
+}
+
+/**
+ * The candles of the pair with a mark on each candle that closed at an event; the chart counts time in UTC. A
+ * `focus` shows that part of the chart, as a click on an event asks.
+ */
 export function CandleChart({
   candles,
   marks,
+  focus,
+  heightClass = 'h-[480px]',
 }: {
   readonly candles: readonly PreviewCandle[];
   readonly marks: readonly EventMark[];
+  readonly focus?: ChartRange | null;
+  readonly heightClass?: string;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const drawn = useRef<Drawn | null>(null);
@@ -85,5 +98,13 @@ export function CandleChart({
     current.chart.timeScale().fitContent();
   }, [candles, marks]);
 
-  return <div ref={container} className="h-[480px] w-full" data-testid="chart" />;
+  useEffect(() => {
+    if (focus && drawn.current) {
+      drawn.current.chart
+        .timeScale()
+        .setVisibleRange({ from: focus.from as UTCTimestamp, to: focus.to as UTCTimestamp });
+    }
+  }, [focus]);
+
+  return <div ref={container} className={`${heightClass} w-full`} data-testid="chart" />;
 }

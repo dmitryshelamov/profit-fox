@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using ProfitFox.Bench.Presentation.Preview;
+using ProfitFox.Bench.Signals;
 
 namespace ProfitFox.Bench.Presentation;
 
@@ -12,6 +13,8 @@ public static class BenchPresentation
     public static IServiceCollection AddBenchPresentation(this IServiceCollection services, BenchFolder folder)
     {
         services.AddSingleton(folder);
+        services.AddSingleton(new SignalLibrary(Path.Combine(folder.Path, "signals")));
+        services.AddSingleton<PreviewHistoryCache>();
         services.AddSingleton<SignalPreview>();
         services.AddRouting(options => options.LowercaseUrls = true);
         services.AddControllers()

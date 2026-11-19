@@ -1,0 +1,187 @@
+[
+  {
+    "kind": "parameters",
+    "title": "Параметры",
+    "group": "Граф",
+    "inputs": [],
+    "outputs": [],
+    "settings": [],
+    "pinsFromGraph": "parameters"
+  },
+  {
+    "kind": "candle",
+    "title": "Свеча",
+    "group": "Данные",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "open",
+        "type": "number"
+      },
+      {
+        "name": "high",
+        "type": "number"
+      },
+      {
+        "name": "low",
+        "type": "number"
+      },
+      {
+        "name": "close",
+        "type": "number"
+      },
+      {
+        "name": "volume",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "funding-rate",
+    "title": "Фандинг",
+    "group": "Данные",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "value",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "compare",
+    "title": "Сравнить",
+    "group": "Логика",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "boolean"
+      }
+    ],
+    "settings": [
+      {
+        "name": "operation",
+        "values": ["gt", "ge", "lt", "le", "eq", "ne"]
+      }
+    ]
+  },
+  {
+    "kind": "previous",
+    "title": "Предыдущее",
+    "group": "Данные",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "and",
+    "title": "И",
+    "group": "Логика",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "boolean"
+      },
+      {
+        "name": "b",
+        "type": "boolean"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "boolean"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "or",
+    "title": "Или",
+    "group": "Логика",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "boolean"
+      },
+      {
+        "name": "b",
+        "type": "boolean"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "boolean"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "not",
+    "title": "Не",
+    "group": "Логика",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "boolean"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "boolean"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "first-time",
+    "title": "Впервые",
+    "group": "Логика",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "boolean"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "event",
+        "type": "event"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "outputs",
+    "title": "Выходы",
+    "group": "Граф",
+    "inputs": [],
+    "outputs": [],
+    "settings": [],
+    "pinsFromGraph": "outputs"
+  }
+]

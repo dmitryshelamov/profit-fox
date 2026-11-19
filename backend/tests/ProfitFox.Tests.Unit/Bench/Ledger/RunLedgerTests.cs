@@ -112,6 +112,30 @@ public sealed class RunLedgerTests
         Assert.That(GitRepository.Changed(""), Is.Empty);
     }
 
+    [Test]
+    public void The_signals_of_the_constructor_do_not_make_the_tree_dirty()
+    {
+        const string porcelain = "?? bench/signals/funding-high.json\n M bench/signals/price-drop.json\nR  bench/signals/a.json -> bench/signals/b.json\n";
+
+        Assert.That(GitRepository.Changed(porcelain), Is.Empty);
+    }
+
+    [Test]
+    public void A_hypothesis_beside_a_signal_still_makes_the_tree_dirty()
+    {
+        const string porcelain = "?? bench/signals/funding-high.json\n?? bench/hypotheses/H0002-x/hypothesis.json\n";
+
+        Assert.That(GitRepository.Changed(porcelain), Is.EqualTo(new[] { "bench/hypotheses/H0002-x/hypothesis.json" }));
+    }
+
+    [Test]
+    public void A_file_named_like_the_signals_folder_still_makes_the_tree_dirty()
+    {
+        const string porcelain = "?? bench/signals.json\n";
+
+        Assert.That(GitRepository.Changed(porcelain), Is.EqualTo(new[] { "bench/signals.json" }));
+    }
+
     private static LedgerEntry Entry(string hypothesis, string status, string period = "exploration")
     {
         return new LedgerEntry
