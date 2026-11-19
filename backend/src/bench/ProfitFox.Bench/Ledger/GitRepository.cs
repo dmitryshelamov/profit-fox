@@ -18,7 +18,9 @@ public sealed class GitRepository(string root) : IRepository
     }
 
     /// <summary>
-    ///     The changed paths of <c>git status --porcelain</c>, without the ledger and the reports the bench writes itself.
+    ///     The changed paths of <c>git status --porcelain</c>, without the ledger and the reports the bench writes itself and
+    ///     without the signals of the constructor: a run reads only its hypothesis, which keeps its own copy of the graph
+    ///     (spec hypothesis-bench «Чистое дерево»).
     /// </summary>
     public static IReadOnlyList<string> Changed(string porcelain)
     {
@@ -26,7 +28,9 @@ public sealed class GitRepository(string root) : IRepository
             .Where(line => line.Length > 3)
             .Select(line => line[3..].Trim().Trim('"'))
             .Select(path => path.Contains(" -> ", StringComparison.Ordinal) ? path[(path.IndexOf(" -> ", StringComparison.Ordinal) + 4)..] : path)
-            .Where(path => path != "bench/ledger.jsonl" && !path.StartsWith("bench/reports/", StringComparison.Ordinal))];
+            .Where(path => path != "bench/ledger.jsonl"
+                           && !path.StartsWith("bench/reports/", StringComparison.Ordinal)
+                           && !path.StartsWith("bench/signals/", StringComparison.Ordinal))];
     }
 
     private string Git(params string[] arguments)

@@ -12,9 +12,10 @@ namespace ProfitFox.Bench.Presentation.Preview;
 /// <summary>
 ///     The preview of a signal on one pair over exploration (spec signal-preview), with the events computed like those of
 ///     a bench run. The request is checked whole before any history is read; history after the end of exploration is
-///     never read; nothing goes to the ledger or the reports.
+///     never read; nothing goes to the ledger or the reports. The history of the last pairs stays in memory, so a second
+///     preview of the same pair and timeframe does not read it again.
 /// </summary>
-public sealed class SignalPreview(IHistorySource source, InstrumentCatalog catalog)
+public sealed class SignalPreview(IHistorySource source, InstrumentCatalog catalog, PreviewHistoryCache cache)
 {
     public async Task<PreviewResult> Run(PreviewRequest request, CancellationToken cancellation)
     {
@@ -56,10 +57,9 @@ public sealed class SignalPreview(IHistorySource source, InstrumentCatalog catal
             return new PreviewResult(Preview: null, new ErrorResponse(errors));
         }
 
-        using var hash = new HistoryHash();
-        var history = new MarketHistory(source, Periods.ExplorationEnd, hash);
-        HistoryRead<HistoryCandle> candles = await history.Candles(pair.Id, timeframe, Periods.DataStart, Periods.ExplorationEnd, cancellation);
-        HistoryRead<HistoryPayment> funding = await history.FundingThrough(pair.Id, Periods.DataStart, Periods.ExplorationEnd, cancellation);
+        PreviewHistory history = await cache.Get(pair.Id, timeframe, () => Read(pair.Id, timeframe), cancellation);
+        HistoryRead<HistoryCandle> candles = history.Candles;
+        HistoryRead<HistoryPayment> funding = history.Funding;
         IReadOnlyList<DateTimeOffset> events = PairEvents.Of(signal, timeframe, pair.Symbol, candles.Items, funding.Items);
 
         var preview = new PreviewResponse(
@@ -70,6 +70,16 @@ public sealed class SignalPreview(IHistorySource source, InstrumentCatalog catal
             [.. events.Select(moment => new PreviewEvent(Ms(moment)))],
             Ms(Periods.ExplorationEnd));
         return new PreviewResult(preview, Refused: null);
+    }
+
+    // The whole of exploration, as a run of exploration reads it. The hash is not needed, but the reader wants one.
+    private async Task<PreviewHistory> Read(string instrument, TimeSpan timeframe)
+    {
+        using var hash = new HistoryHash();
+        var history = new MarketHistory(source, Periods.ExplorationEnd, hash);
+        HistoryRead<HistoryCandle> candles = await history.Candles(instrument, timeframe, Periods.DataStart, Periods.ExplorationEnd, CancellationToken.None);
+        HistoryRead<HistoryPayment> funding = await history.FundingThrough(instrument, Periods.DataStart, Periods.ExplorationEnd, CancellationToken.None);
+        return new PreviewHistory(candles, funding);
     }
 
     private static PreviewCandle Candle(HistoryCandle candle)

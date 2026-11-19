@@ -75,6 +75,11 @@ public static class NodeCatalog
         }
         .ToDictionary(kind => kind.Name, StringComparer.Ordinal);
 
+    /// <summary>
+    ///     Every kind, in the order the catalog declares them: what the constructor offers (change add-signal-constructor).
+    /// </summary>
+    public static IReadOnlyList<NodeKind> All { get; } = [.. Kinds.Values];
+
     public static NodeKind? Find(string name)
     {
         return Kinds.GetValueOrDefault(name);

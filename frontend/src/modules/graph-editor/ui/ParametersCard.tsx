@@ -1,0 +1,233 @@
+import { useState } from 'react';
+
+import { setParameters } from '../model/operations';
+import type { GraphDocument, GraphParameter, PinType } from '../model/types';
+import { formatValue, parseValue } from '../model/values';
+import { buttonClass, Card, fieldClass } from './Card';
+
+const types: readonly PinType[] = ['number', 'boolean', 'duration'];
+
+const startValue: Record<PinType, GraphParameter['value']> = {
+  number: 0,
+  boolean: false,
+  duration: '1h',
+  event: 0,
+};
+
+/**
+ * The parameters of the graph (spec signal-constructor «Параметры графа»): name, type, value, and for a number the
+ * bounds. The outputs of every `parameters` node follow the list; a renamed parameter keeps its wires.
+ */
+export function ParametersCard({
+  document,
+  readOnly,
+  onChange,
+  onClose,
+}: {
+  readonly document: GraphDocument;
+  readonly readOnly: boolean;
+  readonly onChange: (document: GraphDocument) => void;
+  readonly onClose: () => void;
+}) {
+  const parameters = document.graph.parameters;
+  const [name, setName] = useState('');
+  const taken = parameters.some((parameter) => parameter.name === name);
+
+  const change = (index: number, parameter: GraphParameter) => {
+    const before = parameters[index]!;
+    const next = parameters.map((current, at) => (at === index ? parameter : current));
+    onChange(
+      setParameters(
+        document,
+        next,
+        before.name !== parameter.name ? { [before.name]: parameter.name } : {},
+      ),
+    );
+  };
+
+  return (
+    <Card title="Параметры" onClose={onClose}>
+      {parameters.length === 0 && <p className="text-zinc-400">Параметров нет.</p>}
+      {parameters.map((parameter, index) => (
+        <fieldset
+          key={index}
+          aria-label={`Параметр ${parameter.name}`}
+          className="flex flex-col gap-1 rounded border border-zinc-800 p-2"
+        >
+          <input
+            aria-label="Имя параметра"
+            className={fieldClass}
+            defaultValue={parameter.name}
+            key={parameter.name}
+            readOnly={readOnly}
+            onBlur={(event) => {
+              const renamed = event.target.value.trim();
+              if (
+                renamed !== '' &&
+                renamed !== parameter.name &&
+                !parameters.some((other) => other.name === renamed)
+              ) {
+                change(index, { ...parameter, name: renamed });
+              }
+            }}
+          />
+          <select
+            aria-label="Тип параметра"
+            className={fieldClass}
+            value={parameter.type}
+            disabled={readOnly}
+            onChange={(event) => {
+              const type = event.target.value as PinType;
+              change(index, { name: parameter.name, type, value: startValue[type] });
+            }}
+          >
+            {types.map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </select>
+          <ValueField
+            label="Значение параметра"
+            value={parameter.value}
+            type={parameter.type}
+            readOnly={readOnly}
+            onValue={(value) => value !== undefined && change(index, { ...parameter, value })}
+          />
+          {parameter.type === 'number' && (
+            <span className="flex gap-2">
+              <BoundField
+                label="Минимум"
+                value={parameter.minimum}
+                readOnly={readOnly}
+                onValue={(minimum) => change(index, withBound(parameter, 'minimum', minimum))}
+              />
+              <BoundField
+                label="Максимум"
+                value={parameter.maximum}
+                readOnly={readOnly}
+                onValue={(maximum) => change(index, withBound(parameter, 'maximum', maximum))}
+              />
+            </span>
+          )}
+          {!readOnly && (
+            <button
+              type="button"
+              className={buttonClass}
+              onClick={() =>
+                onChange(
+                  setParameters(
+                    document,
+                    parameters.filter((_, at) => at !== index),
+                  ),
+                )
+              }
+            >
+              Удалить параметр
+            </button>
+          )}
+        </fieldset>
+      ))}
+      {!readOnly && (
+        <form
+          className="flex gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (name !== '' && !taken) {
+              onChange(
+                setParameters(document, [...parameters, { name, type: 'number', value: 0 }]),
+              );
+              setName('');
+            }
+          }}
+        >
+          <input
+            aria-label="Имя нового параметра"
+            className={`${fieldClass} flex-1`}
+            placeholder="threshold"
+            value={name}
+            onChange={(event) => setName(event.target.value.trim())}
+          />
+          <button type="submit" className={buttonClass} disabled={name === '' || taken}>
+            Добавить
+          </button>
+        </form>
+      )}
+    </Card>
+  );
+}
+
+function withBound(
+  parameter: GraphParameter,
+  bound: 'minimum' | 'maximum',
+  value: number | undefined,
+): GraphParameter {
+  const next: Record<string, unknown> = { ...parameter };
+  if (value === undefined) {
+    delete next[bound];
+  } else {
+    next[bound] = value;
+  }
+
+  return next as unknown as GraphParameter;
+}
+
+function ValueField({
+  label,
+  value,
+  type,
+  readOnly,
+  onValue,
+}: {
+  readonly label: string;
+  readonly value: GraphParameter['value'];
+  readonly type: PinType;
+  readonly readOnly: boolean;
+  readonly onValue: (value: GraphParameter['value'] | undefined) => void;
+}) {
+  return (
+    <input
+      aria-label={label}
+      className={fieldClass}
+      defaultValue={formatValue(value)}
+      key={`${type}:${formatValue(value)}`}
+      readOnly={readOnly}
+      onBlur={(event) => {
+        const parsed = parseValue(event.target.value, type);
+        if (parsed !== value) {
+          onValue(parsed);
+        }
+      }}
+    />
+  );
+}
+
+function BoundField({
+  label,
+  value,
+  readOnly,
+  onValue,
+}: {
+  readonly label: string;
+  readonly value: number | undefined;
+  readonly readOnly: boolean;
+  readonly onValue: (value: number | undefined) => void;
+}) {
+  return (
+    <input
+      aria-label={label}
+      placeholder={label.toLowerCase()}
+      className={`${fieldClass} w-full`}
+      defaultValue={value === undefined ? '' : String(value)}
+      key={String(value)}
+      readOnly={readOnly}
+      onBlur={(event) => {
+        const parsed = parseValue(event.target.value, 'number');
+        const bound = typeof parsed === 'number' ? parsed : undefined;
+        if (bound !== value) {
+          onValue(bound);
+        }
+      }}
+    />
+  );
+}

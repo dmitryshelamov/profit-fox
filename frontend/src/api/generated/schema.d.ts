@@ -36,6 +36,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListNodeKinds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/preview": {
         parameters: {
             query?: never;
@@ -52,10 +68,82 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/signals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListSignals"];
+        put?: never;
+        post: operations["CreateSignal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/signals/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetSignal"];
+        put: operations["ReplaceSignal"];
+        post?: never;
+        delete: operations["DeleteSignal"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/signals/{name}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["RenameSignal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/signals/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ValidateSignalGraph"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        CreateSignalRequest: {
+            name: null | string;
+            description: null | string;
+            graph: null | components["schemas"]["JsonElement"];
+            layout: null | {
+                [key: string]: components["schemas"]["NodePosition"];
+            };
+        };
         ErrorResponse: {
             errors: components["schemas"]["RequestError"][];
         };
@@ -71,6 +159,25 @@ export interface components {
             symbol: string;
         };
         JsonElement: unknown;
+        NodeKindResponse: {
+            kind: string;
+            title: string;
+            group: string;
+            inputs: components["schemas"]["PinResponse"][];
+            outputs: components["schemas"]["PinResponse"][];
+            settings: components["schemas"]["SettingResponse"][];
+            pinsFromGraph: null | string;
+        };
+        NodePosition: {
+            /** Format: double */
+            x: number | string;
+            /** Format: double */
+            y: number | string;
+        };
+        PinResponse: {
+            name: string;
+            type: string;
+        };
         PreviewCandle: {
             /** Format: int64 */
             openTime: number | string;
@@ -117,6 +224,16 @@ export interface components {
             detail?: null | string;
             instance?: null | string;
         };
+        RenameSignalRequest: {
+            to: null | string;
+        };
+        ReplaceSignalRequest: {
+            description: null | string;
+            graph: null | components["schemas"]["JsonElement"];
+            layout: null | {
+                [key: string]: components["schemas"]["NodePosition"];
+            };
+        };
         RequestError: {
             code: string;
             reason: string;
@@ -131,6 +248,30 @@ export interface components {
         RequestWire: {
             from: string;
             to: string;
+        };
+        SettingResponse: {
+            name: string;
+            values: string[];
+            default: null | string;
+        };
+        SignalListItem: {
+            name: string;
+            description: null | string;
+            error: null | string;
+        };
+        SignalResponse: {
+            name: string;
+            description: null | string;
+            graph: components["schemas"]["JsonElement"];
+            layout: {
+                [key: string]: components["schemas"]["NodePosition"];
+            };
+        };
+        ValidateGraphRequest: {
+            graph: null | components["schemas"]["JsonElement"];
+        };
+        ValidationResponse: {
+            errors: components["schemas"]["RequestError"][];
         };
     };
     responses: never;
@@ -196,6 +337,28 @@ export interface operations {
             };
         };
     };
+    ListNodeKinds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["NodeKindResponse"][];
+                    "application/json": components["schemas"]["NodeKindResponse"][];
+                    "text/json": components["schemas"]["NodeKindResponse"][];
+                };
+            };
+        };
+    };
     PreviewSignal: {
         parameters: {
             query?: never;
@@ -242,6 +405,298 @@ export interface operations {
                     "text/plain": components["schemas"]["ProblemDetails"];
                     "application/json": components["schemas"]["ProblemDetails"];
                     "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListSignals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["SignalListItem"][];
+                    "application/json": components["schemas"]["SignalListItem"][];
+                    "text/json": components["schemas"]["SignalListItem"][];
+                };
+            };
+        };
+    };
+    CreateSignal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSignalRequest"];
+                "text/json": components["schemas"]["CreateSignalRequest"];
+                "application/*+json": components["schemas"]["CreateSignalRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["SignalResponse"];
+                    "application/json": components["schemas"]["SignalResponse"];
+                    "text/json": components["schemas"]["SignalResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    GetSignal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["SignalResponse"];
+                    "application/json": components["schemas"]["SignalResponse"];
+                    "text/json": components["schemas"]["SignalResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    ReplaceSignal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceSignalRequest"];
+                "text/json": components["schemas"]["ReplaceSignalRequest"];
+                "application/*+json": components["schemas"]["ReplaceSignalRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["SignalResponse"];
+                    "application/json": components["schemas"]["SignalResponse"];
+                    "text/json": components["schemas"]["SignalResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteSignal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RenameSignal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameSignalRequest"];
+                "text/json": components["schemas"]["RenameSignalRequest"];
+                "application/*+json": components["schemas"]["RenameSignalRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["SignalResponse"];
+                    "application/json": components["schemas"]["SignalResponse"];
+                    "text/json": components["schemas"]["SignalResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    ValidateSignalGraph: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ValidateGraphRequest"];
+                "text/json": components["schemas"]["ValidateGraphRequest"];
+                "application/*+json": components["schemas"]["ValidateGraphRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ValidationResponse"];
+                    "application/json": components["schemas"]["ValidationResponse"];
+                    "text/json": components["schemas"]["ValidationResponse"];
                 };
             };
         };
