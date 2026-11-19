@@ -3,8 +3,8 @@ using ProfitFox.Bench.Hypotheses;
 using ProfitFox.Bench.Ledger;
 using ProfitFox.Bench.MarketData;
 using ProfitFox.Bench.MarketData.History;
+using ProfitFox.Bench.Signals;
 using ProfitFox.Bench.Verdicts;
-using ProfitFox.Engine.Strategy.Execution;
 
 namespace ProfitFox.Bench.Runs;
 
@@ -147,7 +147,7 @@ public sealed class HypothesisRunner(
             ? await history.Funding(pair.Id, Periods.DataStart, design.PeriodEnd, cancellation)
             : await history.FundingThrough(pair.Id, Periods.DataStart, design.PeriodEnd, cancellation);
 
-        List<DateTimeOffset> events = Events(pair, hypothesis, candles, funding, design);
+        List<DateTimeOffset> events = [.. PairEvents.Of(hypothesis.Signal, hypothesis.Timeframe, pair.Symbol, candles.Items, funding.Items).Where(design.InPeriod)];
         if (events.Count == 0)
         {
             return new PairData(pair, candles, funding, [], []);
@@ -173,35 +173,5 @@ public sealed class HypothesisRunner(
         }
 
         return new PairData(pair, candles, funding, spans, rows);
-    }
-
-    // The signal over every candle with trades up to the end of the period, with the last payment paid by each close; the
-    // events of the period, in time order.
-    private static List<DateTimeOffset> Events(
-        Instrument pair,
-        Hypothesis hypothesis,
-        HistoryRead<HistoryCandle> candles,
-        HistoryRead<HistoryPayment> funding,
-        RunDesign design)
-    {
-        var executor = new SignalExecutor(hypothesis.Signal);
-        FundingPayment[] payments = [.. funding.Items.Select(payment => payment.ToFundingPayment()).OrderBy(payment => payment.Time)];
-        int paid = 0;
-        List<DateTimeOffset> events = [];
-        foreach (HistoryCandle candle in candles.Items.Where(candle => candle.HasTrades))
-        {
-            ClosedCandle closed = candle.ToClosedCandle(hypothesis.Timeframe);
-            while (paid < payments.Length && payments[paid].Time <= closed.CloseTime)
-            {
-                paid++;
-            }
-
-            if (executor.Step(pair.Symbol, closed, paid > 0 ? payments[paid - 1] : null) is { } found && design.InPeriod(found.Moment))
-            {
-                events.Add(found.Moment);
-            }
-        }
-
-        return events;
     }
 }
