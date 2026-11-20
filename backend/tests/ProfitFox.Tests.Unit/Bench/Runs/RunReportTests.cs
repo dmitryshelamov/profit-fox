@@ -24,6 +24,8 @@ public sealed class RunReportTests
         string text = RunReport.Text(Exploration(), Entry(RunStatus.InsufficientData, verdict), verdict, Rows(), Pseudo, blocks: null, pairs: 500, pairsWithEvents: 2);
 
         Assert.That(text, Does.Contain(RunReport.SurvivorsWarning));
+        Assert.That(text, Does.Contain("| Версия гипотезы | 1 |"));
+        Assert.That(text, Does.Contain("| Версия движка | 1 |"));
         Assert.That(text, Does.Contain("**Данных мало**: 2 blocks, need 20."));
         Assert.That(text, Does.Contain("Исходы событий не читались"));
         Assert.That(text, Does.Not.Contain("Средние по учтённым событиям"));
@@ -52,7 +54,8 @@ public sealed class RunReportTests
             Time = Utc(2026, 11, 18, 12),
             Hypothesis = "H0001",
             Hash = H0001.Hash,
-            Commit = "c0ffee",
+            Version = 1,
+            EngineVersion = 1,
             Period = "exploration",
             Status = status,
             DataHash = "d4",

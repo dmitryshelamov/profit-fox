@@ -9,7 +9,7 @@ namespace ProfitFox.Tests.Unit.Bench.Runs;
 /// </summary>
 internal static class Designs
 {
-    public static readonly Hypothesis H0001 = HypothesisReaderTests.Read(HypothesisReaderTests.H0001Folder);
+    public static readonly Hypothesis H0001 = HypothesisReader.Parse(HypothesisReaderTests.H0001Text);
 
     public static RunDesign Exploration(Hypothesis? hypothesis = null)
     {

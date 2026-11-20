@@ -11,7 +11,16 @@ public sealed class FakeCandleFeed(FakeMarketData data) : CandleFeed.CandleFeedB
 {
     public override async Task History(CandleHistoryRequest request, IServerStreamWriter<CandleHistoryItem> responseStream, ServerCallContext context)
     {
-        data.CandleRequests.Add(request);
+        lock (data.CandleRequests)
+        {
+            data.CandleRequests.Add(request);
+        }
+
+        if (data.BeforeCandles is { } before)
+        {
+            await before(request, context.CancellationToken);
+        }
+
         if (data.Failure is { } failure)
         {
             throw new RpcException(new Status(failure, "the fake service is stopping"));

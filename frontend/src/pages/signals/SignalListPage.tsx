@@ -7,6 +7,9 @@ import { listSignals, type SignalListItem, written } from '@/api/signals';
 import { draftKey, moveDraft, removeDraft } from '@/modules/graph-editor/drafts/drafts';
 import { buttonClass, fieldClass } from '@/modules/graph-editor/ui/Card';
 
+import { SectionNav } from '../runs/SectionNav';
+import { RunControls } from './RunControls';
+
 /**
  * The section «Сигналы» (spec signal-constructor «Список сигналов», «Создание, переименование, копирование и
  * удаление»): the saved signals in the order of their name, a file that does not read with its error, and the
@@ -24,6 +27,7 @@ export function SignalListPage() {
     <main className="mx-auto flex max-w-4xl flex-col gap-6 p-6 text-sm">
       <header className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Сигналы</h1>
+        <SectionNav />
         <button
           type="button"
           className={`${buttonClass} border-amber-500 px-3 py-1.5 text-sm`}
@@ -38,9 +42,7 @@ export function SignalListPage() {
       <section aria-label="Сохранённые сигналы" className="flex flex-col gap-2">
         {signals.isPending && <p className="text-zinc-400">Загрузка…</p>}
         {signals.error && <p className="text-red-300">{signals.error.message}</p>}
-        {signals.data?.length === 0 && (
-          <p className="text-zinc-400">Сигналов нет. Сохранённые сигналы лежат в bench/signals/.</p>
-        )}
+        {signals.data?.length === 0 && <p className="text-zinc-400">Сигналов нет.</p>}
         <ul className="flex flex-col divide-y divide-zinc-800 rounded border border-zinc-800">
           {signals.data?.map((signal) => (
             <SignalRow key={signal.name} signal={signal} />
@@ -56,7 +58,11 @@ export function SignalListPage() {
         {hypotheses.error && <p className="text-red-300">{hypotheses.error.message}</p>}
         <ul className="flex flex-col divide-y divide-zinc-800 rounded border border-zinc-800">
           {hypotheses.data?.map((hypothesis) => (
-            <li key={hypothesis.id} className="flex items-center gap-3 px-3 py-2">
+            <li
+              key={hypothesis.id}
+              aria-label={`Гипотеза ${hypothesis.id}`}
+              className="flex items-start gap-3 px-3 py-2"
+            >
               {hypothesis.signal ? (
                 <Link
                   to="/hypotheses/$id"
@@ -73,7 +79,9 @@ export function SignalListPage() {
               {hypothesis.timeframe && (
                 <span className="text-zinc-500">{hypothesis.timeframe}</span>
               )}
+              <span className="text-zinc-500">версия {String(hypothesis.version)}</span>
               {hypothesis.error && <span className="text-xs text-red-300">{hypothesis.error}</span>}
+              <RunControls hypothesis={hypothesis} />
             </li>
           ))}
         </ul>
@@ -162,6 +170,7 @@ function SignalRow({ signal }: { readonly signal: SignalListItem }) {
         >
           {signal.name}
         </Link>
+        <span className="text-zinc-500">версия {String(signal.version)}</span>
         {signal.description && <span className="text-zinc-400">{signal.description}</span>}
         <span className="ml-auto flex gap-2">
           <button

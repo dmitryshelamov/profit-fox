@@ -12,6 +12,6 @@ public static class SignalResponses
     public static SignalResponse Of(SignalDocument signal)
     {
         using JsonDocument graph = JsonDocument.Parse(StrategyGraph.Write(signal.Graph));
-        return new SignalResponse(signal.Name, signal.Description, graph.RootElement.Clone(), signal.Layout);
+        return new SignalResponse(signal.Name, signal.Description, signal.Version, graph.RootElement.Clone(), signal.Layout);
     }
 }

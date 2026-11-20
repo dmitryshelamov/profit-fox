@@ -9,7 +9,7 @@ git show a3dd091:bench/parity/check.py > check.py
 uv run --project ../profit-fox-bench python check.py <выгрузка> bench/hypotheses/H0001-funding-short-4h
 ```
 
-Выгрузку по-прежнему пишут `bench parity` и `bench run --parity-dump`.
+Выгрузку писали `bench parity` и `bench run --parity-dump`; в службе стенда их нет (изменение `add-bench-service`).
 
 ## 1. Вслепую, до вердикта — 2026-11-18
 

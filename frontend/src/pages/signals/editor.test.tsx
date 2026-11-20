@@ -232,3 +232,25 @@ describe('a new signal', () => {
     expect(created!.graph).toEqual(h0001Graph());
   });
 });
+
+describe('the version of a signal', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  // Scenario «Версии сигнала»: the next version after a save with a new threshold.
+  it('shows the next version after a save with a new threshold', async () => {
+    openFundingHigh();
+    expect(await screen.findByText('версия 1')).toBeInTheDocument();
+
+    await findNode('Параметры', 'p');
+    await userEvent.click(screen.getByRole('button', { name: 'Параметры' }));
+    const value = card('Параметры').getByRole('textbox', { name: 'Значение параметра' });
+    await userEvent.clear(value);
+    await userEvent.type(value, '0.001');
+    fireEvent.blur(value);
+    await waitFor(() => expect(saveButton()).toBeEnabled(), { timeout: 2000 });
+    await userEvent.click(saveButton());
+
+    expect(await screen.findByText('версия 2')).toBeInTheDocument();
+    expect(screen.queryByText('версия 1')).toBeNull();
+  });
+});

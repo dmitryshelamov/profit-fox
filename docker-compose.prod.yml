@@ -1,0 +1,83 @@
+# Production of the bench on soyo-02 (192.168.8.213). deploy/deploy.sh runs it for one version, never by hand:
+#   BENCH_VERSION=<N> docker compose -f docker-compose.prod.yml --env-file ~/profit-fox-bench/.env.prod up -d
+# The API with the page and both Workers run the images of version N, built from a commit of release/0.1.0. The only secret
+# comes from .env.prod on the server (mode 600, never committed): BENCH_DB_PASSWORD (hex, so it needs no escaping in the
+# connection string). Every other setting is the one of appsettings.json. The bench of soyo-02 is its own: its database, its
+# Workers and its ledger are not shared with the Mac.
+name: profit-fox-bench
+
+services:
+  # The port is not published: only the API and the Workers use the database.
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    mem_limit: 1g
+    environment:
+      POSTGRES_DB: bench
+      POSTGRES_USER: bench
+      POSTGRES_PASSWORD: ${BENCH_DB_PASSWORD:?}
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "bench", "-d", "bench"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Migrates the database and imports bench/ of git into an empty one on start. The page and /api are open on the LAN of
+  # soyo-02 without authorization, as the other services of profit-fox are.
+  bench:
+    image: ghcr.io/dmitryshelamov/profit-fox-bench:${BENCH_VERSION:?}
+    restart: unless-stopped
+    mem_limit: 512m
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://0.0.0.0:5240
+      ConnectionStrings__Bench: Host=db;Port=5432;Database=bench;Username=bench;Password=${BENCH_DB_PASSWORD:?}
+      MarketData__GrpcUrl: http://192.168.8.213:5237
+      MarketData__RestUrl: http://192.168.8.213:5236/
+    ports:
+      - "5240:5240"
+    # Unhealthy while the database does not answer; the start period covers the migrations.
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://127.0.0.1:5240/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 3
+
+  # Two Workers count the runs of the queue; they start after the API has migrated the database.
+  worker-1:
+    image: ghcr.io/dmitryshelamov/profit-fox-bench-worker:${BENCH_VERSION:?}
+    restart: unless-stopped
+    mem_limit: 1g
+    depends_on:
+      bench:
+        condition: service_healthy
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      ConnectionStrings__Bench: Host=db;Port=5432;Database=bench;Username=bench;Password=${BENCH_DB_PASSWORD:?}
+      MarketData__GrpcUrl: http://192.168.8.213:5237
+      MarketData__RestUrl: http://192.168.8.213:5236/
+      Worker__Name: soyo-02-1
+
+  worker-2:
+    image: ghcr.io/dmitryshelamov/profit-fox-bench-worker:${BENCH_VERSION:?}
+    restart: unless-stopped
+    mem_limit: 1g
+    depends_on:
+      bench:
+        condition: service_healthy
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      ConnectionStrings__Bench: Host=db;Port=5432;Database=bench;Username=bench;Password=${BENCH_DB_PASSWORD:?}
+      MarketData__GrpcUrl: http://192.168.8.213:5237
+      MarketData__RestUrl: http://192.168.8.213:5236/
+      Worker__Name: soyo-02-2
+
+volumes:
+  db:
+    name: profit-fox-bench-db

@@ -11,7 +11,7 @@ using ProfitFox.Engine.Strategy.Graph.Reading;
 namespace ProfitFox.Bench.Domain.Hypotheses;
 
 /// <summary>
-///     Checks the text of <c>bench/hypotheses/H&lt;NNNN&gt;-&lt;name&gt;/hypothesis.json</c> before any history is read
+///     Checks the text of <c>hypothesis.json</c> before any history is read
 ///     (spec hypothesis-bench). Every problem is reported at once; unknown fields are problems too. Reading the file is
 ///     the job of the hypothesis store.
 /// </summary>
@@ -24,10 +24,20 @@ public static partial class HypothesisReader
     private static readonly string[] CostFields = ["takerFee", "slippage", "funding"];
 
     /// <summary>
-    ///     The hypothesis of the text of its file, in a folder named after it.
+    ///     The text with <c>\n</c> line ends: the hash of a hypothesis is the hash of this text, so a file saved on Windows has
+    ///     the hash of the same file saved elsewhere.
     /// </summary>
-    public static Hypothesis Parse(string folder, string text)
+    public static string Normalize(string text)
     {
+        return text.Replace("\r\n", "\n", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    ///     The hypothesis of the <paramref name="text" /> of its file, as version <paramref name="version" /> of its id.
+    /// </summary>
+    public static Hypothesis Parse(string text, int version = 1)
+    {
+        const string unknown = "hypothesis";
         List<string> errors = [];
         JsonDocument document;
         try
@@ -36,7 +46,7 @@ public static partial class HypothesisReader
         }
         catch (JsonException exception)
         {
-            throw new HypothesisException(folder, [$"not JSON: {exception.Message}"]);
+            throw new HypothesisException(unknown, [$"not JSON: {exception.Message}"]);
         }
 
         using (document)
@@ -44,7 +54,7 @@ public static partial class HypothesisReader
             JsonElement root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
             {
-                throw new HypothesisException(folder, ["the file must be a JSON object"]);
+                throw new HypothesisException(unknown, ["the file must be a JSON object"]);
             }
 
             Unknown(root, Fields, "", errors);
@@ -52,10 +62,6 @@ public static partial class HypothesisReader
             if (id.Length > 0 && !IdPattern().IsMatch(id))
             {
                 errors.Add("id must be H followed by four digits");
-            }
-            else if (id.Length > 0 && !Path.GetFileName(Path.TrimEndingDirectorySeparator(folder)).StartsWith($"{id}-", StringComparison.Ordinal))
-            {
-                errors.Add($"the folder must be named {id}-<name>");
             }
 
             string name = Text(root, "name", errors) ?? "";
@@ -126,11 +132,11 @@ public static partial class HypothesisReader
 
             if (errors.Count > 0)
             {
-                throw new HypothesisException(folder, errors);
+                throw new HypothesisException(IdPattern().IsMatch(id) ? id : unknown, errors);
             }
 
             string hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
-            return new Hypothesis(folder, id, name, statement, created, timeframe, block, randoms, measure, minEffect, costs, signal!, plan!, hash);
+            return new Hypothesis(id, version, name, statement, created, timeframe, block, randoms, measure, minEffect, costs, signal!, plan!, hash);
         }
     }
 

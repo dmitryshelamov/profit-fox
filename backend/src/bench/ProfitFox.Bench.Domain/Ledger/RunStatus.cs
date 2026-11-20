@@ -15,6 +15,11 @@ public static class RunStatus
     public const string Failed = "failed";
 
     /// <summary>
+    ///     A run that was started and then cancelled; it is not a verdict and not final.
+    /// </summary>
+    public const string Cancelled = "cancelled";
+
+    /// <summary>
     ///     A blind run for the check against the Python bench: no event outcomes, no verdict.
     /// </summary>
     public const string Parity = "parity";

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using ProfitFox.Bench.Application.Signals;
 using ProfitFox.Bench.Domain.Signals;
 using ProfitFox.Engine.Strategy.Graph;
 using ProfitFox.Engine.Strategy.Graph.Model;
@@ -9,44 +10,61 @@ using ProfitFox.Engine.Strategy.Graph.Reading;
 namespace ProfitFox.Bench.Infrastructure.Signals;
 
 /// <summary>
-///     The JSON of a signal file: <c>name</c>, <c>description</c>, <c>graph</c> and <c>layout</c>. The graph is written by
-///     the engine, so moving a node never changes a byte of it.
+///     The JSON of a signal: the file of the repository that the import reads (<c>name</c>, <c>description</c>, <c>graph</c>
+///     and <c>layout</c>) and the graph and layout the database keeps. The graph is written by the engine, so moving a node
+///     never changes a byte of it.
 /// </summary>
 internal static class SignalJson
 {
     private static readonly string[] Fields = ["name", "description", "graph", "layout"];
 
-    public static string Write(SignalDocument signal)
+    /// <summary>
+    ///     The graph of a signal as the engine writes it: this is what the version of a signal keeps.
+    /// </summary>
+    public static string WriteGraph(SignalDocument signal)
+    {
+        return StrategyGraph.Write(signal.Graph);
+    }
+
+    /// <summary>
+    ///     The <c>layout</c> object of a signal: each node id maps to <c>{ "x": number, "y": number }</c>, in the order of the
+    ///     ids.
+    /// </summary>
+    public static string WriteLayout(SignalDocument signal)
     {
         using var stream = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
+        using (var writer = new Utf8JsonWriter(stream))
         {
             writer.WriteStartObject();
-            writer.WriteString("name", signal.Name);
-            if (signal.Description is { } description)
+            foreach ((string id, NodePosition position) in signal.Layout.OrderBy(position => position.Key, StringComparer.Ordinal))
             {
-                writer.WriteString("description", description);
+                writer.WriteStartObject(id);
+                writer.WriteNumber("x", position.X);
+                writer.WriteNumber("y", position.Y);
+                writer.WriteEndObject();
             }
 
-            writer.WritePropertyName("graph");
-            StrategyGraph.Write(writer, signal.Graph);
-            writer.WriteStartObject("layout");
-            foreach (NodeDefinition node in signal.Graph.Nodes)
-            {
-                if (signal.Layout.TryGetValue(node.Id, out NodePosition? position))
-                {
-                    writer.WriteStartObject(node.Id);
-                    writer.WriteNumber("x", position.X);
-                    writer.WriteNumber("y", position.Y);
-                    writer.WriteEndObject();
-                }
-            }
-
-            writer.WriteEndObject();
             writer.WriteEndObject();
         }
 
-        return Encoding.UTF8.GetString(stream.ToArray()) + "\n";
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    /// <summary>
+    ///     The signal the store kept, or the errors that stop it: its graph no longer reads as a signal, or its layout is not
+    ///     one.
+    /// </summary>
+    public static SignalRead ReadStored(string name, string? description, string graph, string layout, int version)
+    {
+        using JsonDocument graphDocument = JsonDocument.Parse(graph);
+        ReadResult<Signal> read = StrategyGraph.ReadSignal(graphDocument.RootElement);
+        List<string> errors = [.. read.Errors.Select(error => $"graph: {error}")];
+        Dictionary<string, NodePosition> positions = [];
+        using JsonDocument layoutDocument = JsonDocument.Parse(layout);
+        errors.AddRange(ReadLayout(layoutDocument.RootElement, positions));
+        return errors.Count == 0 && read.Value is not null
+            ? new SignalRead(new SignalDocument(name, description, read.Value.Graph, positions, version), [])
+            : new SignalRead(null, errors);
     }
 
     /// <summary>

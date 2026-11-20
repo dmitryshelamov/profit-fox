@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
@@ -9,12 +9,12 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\ProfitFox.Bench.Application\ProfitFox.Bench.Application.csproj"/>
-        <ProjectReference Include="..\ProfitFox.Bench.Infrastructure\ProfitFox.Bench.Infrastructure.csproj"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.13"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.13"/>
     </ItemGroup>
 
     <ItemGroup>
-        <None Include="appsettings.json" CopyToOutputDirectory="PreserveNewest"/>
+        <Content Include="appsettings.json" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
 
 </Project>

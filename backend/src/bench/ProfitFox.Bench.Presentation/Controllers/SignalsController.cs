@@ -10,8 +10,8 @@ using ProfitFox.Engine.Strategy.Graph.Reading;
 namespace ProfitFox.Bench.Presentation.Controllers;
 
 /// <summary>
-///     <c>/api/signals</c> (spec signal-constructor): the saved signals of <c>bench/signals</c> and the check of a graph
-///     without history. A graph is saved only when it reads as a signal; a refused request leaves the files as they were.
+///     <c>/api/signals</c> (spec signal-constructor): the saved signals of the bench and the check of a graph without
+///     history. A graph is saved only when it reads as a signal; a refused request leaves the signals as they were.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
@@ -21,32 +21,33 @@ public class SignalsController(SignalLibrary library) : ControllerBase
 
     [HttpGet(Name = "ListSignals")]
     [ProducesResponseType<SignalListItem[]>(StatusCodes.Status200OK)]
-    public ActionResult<SignalListItem[]> List()
+    public async Task<ActionResult<SignalListItem[]>> List(CancellationToken cancellation)
     {
-        return library.List().Select(entry => new SignalListItem(entry.Name, entry.Description, entry.Error)).ToArray();
+        return (await library.List(cancellation)).Select(entry => new SignalListItem(entry.Name, entry.Description, entry.Version, entry.Error)).ToArray();
     }
 
     [HttpGet("{name}", Name = "GetSignal")]
     [ProducesResponseType<SignalResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ErrorResponse>(StatusCodes.Status422UnprocessableEntity)]
-    public ActionResult<SignalResponse> Get(string name)
+    public async Task<ActionResult<SignalResponse>> Get(string name, CancellationToken cancellation)
     {
-        return Answer(() => SignalResponses.Of(library.Read(name)));
+        return await Answer(async () => SignalResponses.Of(await library.Read(name, cancellation)));
     }
 
     [HttpPost(Name = "CreateSignal")]
     [ProducesResponseType<SignalResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType<ErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ErrorResponse>(StatusCodes.Status409Conflict)]
-    public ActionResult<SignalResponse> Create(CreateSignalRequest request)
+    public async Task<ActionResult<SignalResponse>> Create(CreateSignalRequest request, CancellationToken cancellation)
     {
         if (request.Graph is not { } graph)
         {
             return MissingGraph();
         }
 
-        ActionResult<SignalResponse> answer = Answer(() => SignalResponses.Of(library.Create(request.Name ?? "", request.Description, graph, request.Layout ?? NoLayout)));
+        ActionResult<SignalResponse> answer = await Answer(async () =>
+            SignalResponses.Of(await library.Create(request.Name ?? "", request.Description, graph, request.Layout ?? NoLayout, cancellation)));
         return answer.Value is { } created ? CreatedAtRoute("GetSignal", new { name = created.Name }, created) : answer;
     }
 
@@ -54,14 +55,14 @@ public class SignalsController(SignalLibrary library) : ControllerBase
     [ProducesResponseType<SignalResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    public ActionResult<SignalResponse> Replace(string name, ReplaceSignalRequest request)
+    public async Task<ActionResult<SignalResponse>> Replace(string name, ReplaceSignalRequest request, CancellationToken cancellation)
     {
         if (request.Graph is not { } graph)
         {
             return MissingGraph();
         }
 
-        return Answer(() => SignalResponses.Of(library.Replace(name, request.Description, graph, request.Layout ?? NoLayout)));
+        return await Answer(async () => SignalResponses.Of(await library.Replace(name, request.Description, graph, request.Layout ?? NoLayout, cancellation)));
     }
 
     [HttpPost("{name}/rename", Name = "RenameSignal")]
@@ -69,19 +70,19 @@ public class SignalsController(SignalLibrary library) : ControllerBase
     [ProducesResponseType<ErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ErrorResponse>(StatusCodes.Status409Conflict)]
-    public ActionResult<SignalResponse> Rename(string name, RenameSignalRequest request)
+    public async Task<ActionResult<SignalResponse>> Rename(string name, RenameSignalRequest request, CancellationToken cancellation)
     {
-        return Answer(() => SignalResponses.Of(library.Rename(name, request.To ?? "")));
+        return await Answer(async () => SignalResponses.Of(await library.Rename(name, request.To ?? "", cancellation)));
     }
 
     [HttpDelete("{name}", Name = "DeleteSignal")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    public ActionResult Delete(string name)
+    public async Task<ActionResult> Delete(string name, CancellationToken cancellation)
     {
-        ActionResult<bool> answer = Answer(() =>
+        ActionResult<bool> answer = await Answer(async () =>
         {
-            library.Delete(name);
+            await library.Delete(name, cancellation);
             return true;
         });
         return answer.Result ?? NoContent();
@@ -100,11 +101,11 @@ public class SignalsController(SignalLibrary library) : ControllerBase
         return new ValidationResponse([.. read.Errors.Select(RequestErrors.Of)]);
     }
 
-    private ActionResult<T> Answer<T>(Func<T> act)
+    private async Task<ActionResult<T>> Answer<T>(Func<Task<T>> act)
     {
         try
         {
-            return act();
+            return await act();
         }
         catch (SignalLibraryException exception)
         {

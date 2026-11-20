@@ -13,7 +13,7 @@ export interface paths {
         };
         get: operations["ListHypotheses"];
         put?: never;
-        post?: never;
+        post: operations["AddHypothesis"];
         delete?: never;
         options?: never;
         head?: never;
@@ -62,6 +62,54 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["PreviewSignal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListRuns"];
+        put?: never;
+        post: operations["EnqueueRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CancelRun"];
         delete?: never;
         options?: never;
         head?: never;
@@ -136,6 +184,13 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        CreateRunRequest: {
+            hypothesis: null | string;
+            /** Format: int32 */
+            version: null | number | string;
+            period: null | string;
+            kind: null | string;
+        };
         CreateSignalRequest: {
             name: null | string;
             description: null | string;
@@ -147,12 +202,21 @@ export interface components {
         ErrorResponse: {
             errors: components["schemas"]["RequestError"][];
         };
+        HypothesisAddedResponse: {
+            id: string;
+            name: string;
+            /** Format: int32 */
+            version: number | string;
+        };
         HypothesisResponse: {
             id: string;
+            /** Format: int32 */
+            version: number | string;
             name: string;
             timeframe: null | string;
             signal: null | components["schemas"]["JsonElement"];
             error: null | string;
+            runs: components["schemas"]["RunAvailabilityResponse"][];
         };
         InstrumentResponse: {
             id: string;
@@ -249,6 +313,75 @@ export interface components {
             from: string;
             to: string;
         };
+        RunAvailabilityResponse: {
+            period: string;
+            kind: string;
+            canRun: boolean;
+            reason: null | string;
+            runId: null | string;
+        };
+        RunConflictResponse: {
+            reason: string;
+            runId: null | string;
+        };
+        RunResponse: {
+            id: string;
+            hypothesis: string;
+            /** Format: int32 */
+            version: number | string;
+            period: string;
+            kind: string;
+            state: string;
+            /** Format: date-time */
+            queuedAt: null | string;
+            /** Format: date-time */
+            startedAt: null | string;
+            /** Format: date-time */
+            finishedAt: null | string;
+            worker: null | string;
+            /** Format: int32 */
+            pairsDone: number | string;
+            /** Format: int32 */
+            pairsTotal: null | number | string;
+            /** Format: int32 */
+            lostLeases: number | string;
+            cancelRequested: boolean;
+            result: null | components["schemas"]["RunResultResponse"];
+        };
+        RunResultResponse: {
+            /** Format: date-time */
+            time: string;
+            status: string;
+            reason: null | string;
+            hash: string;
+            /** Format: int32 */
+            version: number | string;
+            /** Format: int32 */
+            engineVersion: number | string;
+            dataHash: null | string;
+            /** Format: int32 */
+            attempts: null | number | string;
+            /** Format: double */
+            requiredT: null | number | string;
+            /** Format: double */
+            power: null | number | string;
+            /** Format: int32 */
+            blocks: null | number | string;
+            /** Format: int32 */
+            events: null | number | string;
+            /** Format: double */
+            t: null | number | string;
+            /** Format: double */
+            mean: null | number | string;
+            /** Format: double */
+            firstHalfMean: null | number | string;
+            /** Format: double */
+            secondHalfMean: null | number | string;
+            /** Format: double */
+            readSeconds: null | number | string;
+            corrects: null | string;
+            report: null | string;
+        };
         SettingResponse: {
             name: string;
             values: string[];
@@ -257,11 +390,15 @@ export interface components {
         SignalListItem: {
             name: string;
             description: null | string;
+            /** Format: int32 */
+            version: number | string;
             error: null | string;
         };
         SignalResponse: {
             name: string;
             description: null | string;
+            /** Format: int32 */
+            version: number | string;
             graph: components["schemas"]["JsonElement"];
             layout: {
                 [key: string]: components["schemas"]["NodePosition"];
@@ -300,6 +437,48 @@ export interface operations {
                     "text/plain": components["schemas"]["HypothesisResponse"][];
                     "application/json": components["schemas"]["HypothesisResponse"][];
                     "text/json": components["schemas"]["HypothesisResponse"][];
+                };
+            };
+        };
+    };
+    AddHypothesis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "text/plain": null | string;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HypothesisAddedResponse"];
+                };
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HypothesisAddedResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -405,6 +584,180 @@ export interface operations {
                     "text/plain": components["schemas"]["ProblemDetails"];
                     "application/json": components["schemas"]["ProblemDetails"];
                     "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListRuns: {
+        parameters: {
+            query?: {
+                active?: boolean;
+                limit?: number | string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["RunResponse"][];
+                    "application/json": components["schemas"]["RunResponse"][];
+                    "text/json": components["schemas"]["RunResponse"][];
+                };
+            };
+        };
+    };
+    EnqueueRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRunRequest"];
+                "text/json": components["schemas"]["CreateRunRequest"];
+                "application/*+json": components["schemas"]["CreateRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["RunResponse"];
+                    "application/json": components["schemas"]["RunResponse"];
+                    "text/json": components["schemas"]["RunResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["RunConflictResponse"];
+                    "application/json": components["schemas"]["RunConflictResponse"];
+                    "text/json": components["schemas"]["RunConflictResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    GetRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["RunResponse"];
+                    "application/json": components["schemas"]["RunResponse"];
+                    "text/json": components["schemas"]["RunResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CancelRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["RunConflictResponse"];
+                    "application/json": components["schemas"]["RunConflictResponse"];
+                    "text/json": components["schemas"]["RunConflictResponse"];
                 };
             };
         };

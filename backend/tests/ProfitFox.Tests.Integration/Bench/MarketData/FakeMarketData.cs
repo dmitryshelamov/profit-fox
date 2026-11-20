@@ -6,7 +6,7 @@ namespace ProfitFox.Tests.Integration.Bench.MarketData;
 
 /// <summary>
 ///     What the fake market-data service answers: a coverage of the whole window from <see cref="CoveredFrom" />, 4h or 1m
-///     candles in it, a payment every 8 hours, or an error when <see cref="Failure" /> is set. It records the requests.
+///     candles in it, a payment every 8 hours, an error when <see cref="Failure" /> is set, or a hold when <see cref="BeforeCandles" /> is set. It records the requests.
 /// </summary>
 public sealed class FakeMarketData
 {
@@ -17,6 +17,12 @@ public sealed class FakeMarketData
     public List<FundingPaymentHistoryRequest> FundingRequests { get; } = [];
 
     public StatusCode? Failure { get; set; }
+
+    /// <summary>
+    ///     Awaited by every candle request after it is recorded and before it is answered, with the token of the call: a test
+    ///     holds a run on a pair with it, and the hold ends when the run drops the call.
+    /// </summary>
+    public Func<CandleHistoryRequest, CancellationToken, Task>? BeforeCandles { get; set; }
 
     /// <summary>
     ///     Where the history ends, if anywhere: a shorter history keeps the tests fast.

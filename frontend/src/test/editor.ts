@@ -10,7 +10,7 @@ export function openFundingHigh(routes: Record<string, FakeRoute> = {}) {
     ...baseRoutes(),
     'GET /api/signals/funding-high': () => json(savedFundingHigh()),
     'PUT /api/signals/funding-high': async (request) =>
-      json({ name: 'funding-high', ...(await request.json()) }),
+      json({ name: 'funding-high', version: 2, ...(await request.json()) }),
     ...routes,
   });
   return { requests, ...renderApp('/signals/funding-high') };

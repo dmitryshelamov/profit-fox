@@ -8,6 +8,8 @@ import {
 } from '@tanstack/react-router';
 
 import { HypothesisPage } from '@/pages/hypotheses/HypothesisPage';
+import { RunPage } from '@/pages/runs/RunPage';
+import { RunsPage } from '@/pages/runs/RunsPage';
 import { NewSignalPage, SavedSignalPage } from '@/pages/signals/SignalEditorPage';
 import { SignalListPage } from '@/pages/signals/SignalListPage';
 
@@ -57,12 +59,29 @@ const hypothesisRoute = createRoute({
   },
 });
 
+const runsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/runs',
+  component: RunsPage,
+});
+
+const runRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/runs/$id',
+  component: function RunRoute() {
+    const { id } = runRoute.useParams();
+    return <RunPage id={id} />;
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   signalsRoute,
   newSignalRoute,
   signalRoute,
   hypothesisRoute,
+  runsRoute,
+  runRoute,
 ]);
 
 /** The routes of the constructor; a test passes a memory history. */

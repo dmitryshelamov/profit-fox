@@ -1,59 +1,88 @@
-using ProfitFox.Bench.Domain.Runs;
-
 namespace ProfitFox.Bench.Cli;
 
 /// <summary>
-///     The command line of <c>bench</c> (spec hypothesis-bench):
-///     <c>bench run &lt;folder&gt; [--period exploration|holdout|new-data] [--parity-dump &lt;folder&gt;]</c> and
-///     <c>bench parity &lt;folder&gt; --out &lt;folder&gt;</c>.
+///     A command line split into the words of the command, its arguments and its options. <c>--wait</c> is the only flag; every
+///     other option takes a value.
 /// </summary>
-public static class CommandLine
+internal sealed class CommandLine
 {
-    public const string Usage =
-        """
-        usage: bench run <hypothesis folder> [--period exploration|holdout|new-data] [--parity-dump <folder>]
-               bench parity <hypothesis folder> --out <folder>
-        """;
+    private static readonly HashSet<string> Flags = ["--wait"];
+    private static readonly HashSet<string> Valued = ["--bench", "--version", "--period"];
 
-    public static BenchCommand? Parse(IReadOnlyList<string> args, out string? error)
+    private readonly Dictionary<string, string> _options = [];
+
+    private CommandLine(IReadOnlyList<string> words)
     {
-        error = null;
-        if (args.Count < 2 || args[0] is not ("run" or "parity"))
+        Words = words;
+    }
+
+    /// <summary>
+    ///     The words that are not options, in order: the command and its arguments.
+    /// </summary>
+    public IReadOnlyList<string> Words { get; }
+
+    public bool Has(string option)
+    {
+        return _options.ContainsKey(option);
+    }
+
+    public string? Value(string option)
+    {
+        return _options.GetValueOrDefault(option);
+    }
+
+    /// <summary>
+    ///     The value of <c>--version</c>, null when it is missing.
+    /// </summary>
+    public int? Version()
+    {
+        string? text = Value("--version");
+        if (text is null)
         {
-            error = "a command and a hypothesis folder are needed";
             return null;
         }
 
-        bool parity = args[0] == "parity";
-        Period period = Period.Exploration;
-        string? dump = null;
-        for (int index = 2; index < args.Count; index++)
+        return int.TryParse(text, out int version) && version > 0 ? version : throw new UsageException($"--version wants a positive number, not '{text}'.");
+    }
+
+    /// <summary>
+    ///     Refuses every option the command does not take.
+    /// </summary>
+    public void Allow(params string[] options)
+    {
+        foreach (string option in _options.Keys.Where(option => option != "--bench" && !options.Contains(option)))
         {
-            string option = args[index];
-            string? value = index + 1 < args.Count ? args[index + 1] : null;
-            switch (option)
+            throw new UsageException($"{Words[0]} does not take {option}.");
+        }
+    }
+
+    public static CommandLine Parse(IReadOnlyList<string> args)
+    {
+        List<string> words = [];
+        var line = new CommandLine(words);
+        for (int i = 0; i < args.Count; i++)
+        {
+            string arg = args[i];
+            if (Flags.Contains(arg))
             {
-                case "--period" when !parity && value is not null && Periods.TryParse(value, out Period parsed):
-                    period = parsed;
-                    index++;
-                    break;
-                case "--parity-dump" when !parity && value is not null:
-                case "--out" when parity && value is not null:
-                    dump = value;
-                    index++;
-                    break;
-                default:
-                    error = $"unknown or incomplete option {option}";
-                    return null;
+                line._options[arg] = "";
+            }
+            else if (Valued.Contains(arg))
+            {
+                line._options[arg] = i + 1 < args.Count && !args[i + 1].StartsWith("--", StringComparison.Ordinal)
+                    ? args[++i]
+                    : throw new UsageException($"{arg} wants a value.");
+            }
+            else if (arg.StartsWith("--", StringComparison.Ordinal))
+            {
+                throw new UsageException($"unknown option {arg}.");
+            }
+            else
+            {
+                words.Add(arg);
             }
         }
 
-        if (parity && dump is null)
-        {
-            error = "bench parity needs --out <folder>";
-            return null;
-        }
-
-        return new BenchCommand(args[1], period, parity, dump);
+        return line.Words.Count == 0 ? throw new UsageException("no command.") : line;
     }
 }

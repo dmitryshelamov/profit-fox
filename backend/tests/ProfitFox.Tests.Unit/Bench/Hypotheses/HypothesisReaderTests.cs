@@ -1,24 +1,22 @@
 using System.Text.Json.Nodes;
-using ProfitFox.Bench.Application.Hypotheses;
 using ProfitFox.Bench.Domain.Hypotheses;
-using ProfitFox.Bench.Infrastructure.Hypotheses;
 using ProfitFox.Engine.Simulation.Trades;
 
 namespace ProfitFox.Tests.Unit.Bench.Hypotheses;
 
 /// <summary>
-///     Spec hypothesis-bench: the hypothesis file, its checks and its hash (task 7.1).
+///     Spec hypothesis-bench: the hypothesis text, its checks and its hash (task 7.1).
 /// </summary>
 public sealed class HypothesisReaderTests
 {
     public static readonly string H0001Folder = Path.Combine(Repository.Root, "bench", "hypotheses", "H0001-funding-short-4h");
 
-    private static readonly string H0001Text = File.ReadAllText(Path.Combine(H0001Folder, HypothesisFiles.FileName));
+    public static readonly string H0001Text = File.ReadAllText(Path.Combine(H0001Folder, "hypothesis.json"));
 
     [Test]
     public void H0001_is_read_from_the_repository()
     {
-        Hypothesis hypothesis = Read(H0001Folder);
+        Hypothesis hypothesis = HypothesisReader.Parse(H0001Text);
 
         Assert.That(hypothesis.Id, Is.EqualTo("H0001"));
         Assert.That(hypothesis.Timeframe, Is.EqualTo(TimeSpan.FromHours(4)));
@@ -28,6 +26,27 @@ public sealed class HypothesisReaderTests
         Assert.That(hypothesis.Costs, Is.EqualTo(TradeCosts.Default));
         Assert.That(hypothesis.Signal.Output, Is.EqualTo("entry"));
         Assert.That(hypothesis.Hash, Has.Length.EqualTo(64));
+        Assert.That(hypothesis.Version, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void The_hash_of_H0001_is_the_one_of_the_ledger()
+    {
+        Assert.That(HypothesisReader.Parse(H0001Text).Hash, Does.StartWith("5591d11a"));
+    }
+
+    [Test]
+    public void The_version_is_the_one_given_to_the_reader()
+    {
+        Assert.That(HypothesisReader.Parse(H0001Text, version: 3).Version, Is.EqualTo(3));
+    }
+
+    [Test]
+    public void An_id_that_is_not_H_and_four_digits_is_refused()
+    {
+        HypothesisException error = Refused(file => file["id"] = "X1");
+
+        Assert.That(error.Errors, Is.EqualTo(new[] { "id must be H followed by four digits" }));
     }
 
     [Test]
@@ -69,43 +88,20 @@ public sealed class HypothesisReaderTests
     }
 
     [Test]
-    public void The_folder_is_named_after_the_hypothesis()
-    {
-        Assert.That(() => HypothesisReader.Parse("/tmp/H0002-other", H0001Text), Throws.InstanceOf<HypothesisException>()
-            .With.Property(nameof(HypothesisException.Errors)).EqualTo(new[] { "the folder must be named H0001-<name>" }));
-    }
-
-    [Test]
     public void Any_change_of_the_file_changes_the_hash_but_line_endings_do_not()
     {
-        string hash = HypothesisReader.Parse(H0001Folder, H0001Text).Hash;
-        string changed = HypothesisReader.Parse(H0001Folder, H0001Text.Replace("0.0005", "0.001", StringComparison.Ordinal)).Hash;
-        string windows = Read(Write(H0001Text.Replace("\n", "\r\n", StringComparison.Ordinal))).Hash;
+        string hash = HypothesisReader.Parse(H0001Text).Hash;
+        string changed = HypothesisReader.Parse(H0001Text.Replace("0.0005", "0.001", StringComparison.Ordinal)).Hash;
+        string windows = HypothesisReader.Parse(HypothesisReader.Normalize(H0001Text.Replace("\n", "\r\n", StringComparison.Ordinal))).Hash;
 
         Assert.That(changed, Is.Not.EqualTo(hash));
         Assert.That(windows, Is.EqualTo(hash));
-    }
-
-    /// <summary>
-    ///     The hypothesis of a folder, read from its file as a run reads it.
-    /// </summary>
-    public static Hypothesis Read(string folder)
-    {
-        return new HypothesisCatalog(new HypothesisFiles(Path.GetDirectoryName(folder)!)).Read(folder);
     }
 
     private static HypothesisException Refused(Action<JsonObject> change)
     {
         JsonObject file = JsonNode.Parse(H0001Text)!.AsObject();
         change(file);
-        return Assert.Throws<HypothesisException>(() => HypothesisReader.Parse(H0001Folder, file.ToJsonString()))!;
-    }
-
-    private static string Write(string text)
-    {
-        string folder = Path.Combine(Path.GetTempPath(), $"profit-fox-{Guid.NewGuid():N}", "H0001-funding-short-4h");
-        Directory.CreateDirectory(folder);
-        File.WriteAllText(Path.Combine(folder, HypothesisFiles.FileName), text);
-        return folder;
+        return Assert.Throws<HypothesisException>(() => HypothesisReader.Parse(file.ToJsonString()))!;
     }
 }

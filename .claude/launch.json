@@ -2,10 +2,21 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "bench-db",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "up", "bench-db"],
+      "port": 5435
+    },
+    {
       "name": "bench-api",
       "runtimeExecutable": "dotnet",
       "runtimeArgs": ["run", "--project", "backend/src/bench/ProfitFox.Bench.Presentation"],
       "port": 5240
+    },
+    {
+      "name": "bench-worker",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "backend/src/bench/ProfitFox.Bench.Worker"]
     },
     {
       "name": "frontend",

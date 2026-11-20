@@ -2,19 +2,20 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Dapper;
+using Npgsql;
 using ProfitFox.Bench.Application.Hypotheses;
 using ProfitFox.Bench.Application.Runs;
 using ProfitFox.Bench.Domain.Runs;
 using ProfitFox.Bench.Infrastructure.Hypotheses;
 using ProfitFox.Bench.Infrastructure.Ledger;
 using ProfitFox.Bench.Infrastructure.MarketData;
-using ProfitFox.Bench.Infrastructure.Runs;
 using ProfitFox.Bench.Presentation.Errors;
 using ProfitFox.Bench.Presentation.Hypotheses;
 using ProfitFox.Bench.Presentation.Instruments;
 using ProfitFox.Bench.Presentation.Preview;
+using ProfitFox.Tests.Integration.Bench.Database;
 using ProfitFox.Tests.Integration.Bench.MarketData;
-using ProfitFox.Tests.Integration.Bench.Runs;
 
 namespace ProfitFox.Tests.Integration.Bench.Presentation;
 
@@ -26,32 +27,27 @@ namespace ProfitFox.Tests.Integration.Bench.Presentation;
 public sealed class PreviewTests
 {
     private static readonly JsonSerializerOptions Json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-    private string _root = "";
-    private string _bench = "";
+    private static HypothesisCatalog Catalog => new HypothesisCatalog(new HypothesisStore(BenchDatabase.DataSource));
 
     [SetUp]
-    public void CreateBench()
+    public async Task CreateBench()
     {
         FakeMarketData.CoveredUntil = FakeMarketData.CoveredFrom.AddDays(28);
-        _root = Path.Combine(Path.GetTempPath(), $"profit-fox-preview-{Guid.NewGuid():N}");
-        _bench = Path.Combine(_root, "bench");
-        string h0001 = Path.Combine(_bench, "hypotheses", "H0001-funding-short-4h");
-        Directory.CreateDirectory(h0001);
-        File.WriteAllText(Path.Combine(h0001, HypothesisFiles.FileName), H0001File());
+        await BenchDatabase.Reset();
+        await Catalog.Add(H0001File(), CancellationToken.None);
     }
 
     [TearDown]
     public void RemoveBench()
     {
         FakeMarketData.CoveredUntil = null;
-        Directory.Delete(_root, recursive: true);
     }
 
     [Test]
     public async Task The_pairs_are_those_of_the_bench()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(market, _bench);
+        await using BenchPresentationServer api = await BenchPresentationServer.Start(market);
 
         InstrumentResponse[]? pairs = await api.Http.GetFromJsonAsync<InstrumentResponse[]>("/api/instruments", Json);
 
@@ -61,21 +57,25 @@ public sealed class PreviewTests
     [Test]
     public async Task The_hypotheses_are_listed_with_their_signal_or_their_error()
     {
-        string broken = Path.Combine(_bench, "hypotheses", "H0002-x");
-        Directory.CreateDirectory(broken);
+        // A text that cannot be loaded, as one the engine no longer reads would be: it goes in below the store.
         JsonObject file = JsonNode.Parse(H0001File())!.AsObject();
         file["id"] = "H0002";
         file["name"] = "x";
         file.Remove("signal");
-        File.WriteAllText(Path.Combine(broken, HypothesisFiles.FileName), file.ToJsonString());
+        await using (NpgsqlConnection connection = await BenchDatabase.DataSource.OpenConnectionAsync())
+        {
+            await connection.ExecuteAsync(
+                "INSERT INTO hypothesis_versions (hypothesis_id, version, hash, text) VALUES ('H0002', 1, 'broken', @Text)",
+                new { Text = file.ToJsonString() });
+        }
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(market, _bench);
+        await using BenchPresentationServer api = await BenchPresentationServer.Start(market);
 
         HypothesisResponse[]? hypotheses = await api.Http.GetFromJsonAsync<HypothesisResponse[]>("/api/hypotheses", Json);
 
         Assert.That(hypotheses!.Select(hypothesis => hypothesis.Id), Is.EqualTo(new[] { "H0001", "H0002" }));
         HypothesisResponse h0001 = hypotheses![0];
-        Assert.That((h0001.Name, h0001.Timeframe, h0001.Error), Is.EqualTo(("funding-short-4h", "4h", (string?)null)));
+        Assert.That((h0001.Name, h0001.Version, h0001.Timeframe, h0001.Error), Is.EqualTo(("funding-short-4h", 1, "4h", (string?)null)));
         Assert.That(h0001.Signal!.Value.GetProperty("nodes").GetArrayLength(), Is.EqualTo(5));
         HypothesisResponse h0002 = hypotheses[1];
         Assert.That(h0002.Name, Is.EqualTo("x"));
@@ -87,7 +87,7 @@ public sealed class PreviewTests
     public async Task The_preview_of_H0001_gives_the_events_of_a_bench_run()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(market, _bench);
+        await using BenchPresentationServer api = await BenchPresentationServer.Start(market);
 
         PreviewResponse preview = await Ok(await Preview(api, "BTCUSDT", "4h", Signal()));
 
@@ -107,7 +107,7 @@ public sealed class PreviewTests
         JsonObject signal = Signal();
         signal["parameters"]![0]!["value"] = 1;
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(market, _bench);
+        await using BenchPresentationServer api = await BenchPresentationServer.Start(market);
 
         PreviewResponse preview = await Ok(await Preview(api, "ETHUSDT", "4h", signal));
 
@@ -120,7 +120,7 @@ public sealed class PreviewTests
     {
         FakeMarketData.CoveredUntil = null;
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(market, _bench);
+        await using BenchPresentationServer api = await BenchPresentationServer.Start(market);
 
         PreviewResponse preview = await Ok(await Preview(api, "BTCUSDT", "4h", Signal()));
 
@@ -139,7 +139,7 @@ public sealed class PreviewTests
         JsonObject signal = Signal();
         signal["wires"]![0]!["to"] = "hgh.a";
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(market, _bench);
+        await using BenchPresentationServer api = await BenchPresentationServer.Start(market);
 
         ErrorResponse refused = await BadRequest(await Preview(api, "BTCUSDT", "4h", signal));
 
@@ -152,7 +152,7 @@ public sealed class PreviewTests
     public async Task An_unknown_pair_and_timeframe_are_refused_before_any_read()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(market, _bench);
+        await using BenchPresentationServer api = await BenchPresentationServer.Start(market);
 
         ErrorResponse refused = await BadRequest(await Preview(api, "NOSUCHUSDT", "2h", Signal()));
 
@@ -165,12 +165,12 @@ public sealed class PreviewTests
     public async Task The_preview_leaves_no_trace_in_the_bench()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(market, _bench);
+        await using BenchPresentationServer api = await BenchPresentationServer.Start(market);
 
         await Ok(await Preview(api, "SOLUSDT", "4h", Signal()));
 
-        Assert.That(File.Exists(Path.Combine(_bench, "ledger.jsonl")), Is.False);
-        Assert.That(Directory.Exists(Path.Combine(_bench, "reports")), Is.False);
+        await using NpgsqlConnection connection = await BenchDatabase.DataSource.OpenConnectionAsync();
+        Assert.That(await connection.ExecuteScalarAsync<int>("SELECT (SELECT count(*) FROM ledger) + (SELECT count(*) FROM reports) + (SELECT count(*) FROM runs)"), Is.Zero);
     }
 
     private static Task<HttpResponseMessage> Preview(BenchPresentationServer api, string instrument, string timeframe, JsonObject signal)
@@ -190,23 +190,16 @@ public sealed class PreviewTests
         return (await response.Content.ReadFromJsonAsync<ErrorResponse>(Json))!;
     }
 
-    // A parity run of H0001 on the same fake history, in a bench folder of its own.
-    private async Task<RunResult> RunParity(MarketDataServer market)
+    // A parity run of H0001 on the same fake history.
+    private static async Task<RunResult> RunParity(MarketDataServer market)
     {
-        string bench = Path.Combine(_root, "run", "bench");
-        string hypothesis = Path.Combine(bench, "hypotheses", "H0001-funding-short-4h");
-        Directory.CreateDirectory(hypothesis);
-        File.WriteAllText(Path.Combine(hypothesis, HypothesisFiles.FileName), H0001File());
         var runner = new HypothesisRunner(
-            new HypothesisCatalog(new HypothesisFiles(Path.Combine(bench, "hypotheses"))),
+            Catalog,
             new GrpcHistorySource(market.Channel),
             new InstrumentCatalog(market.Http),
-            new FakeRepository(),
-            new LedgerFile(Path.Combine(bench, "ledger.jsonl")),
-            new ReportFiles(bench),
-            new ParityDumpFiles(),
+            new RunLedger(BenchDatabase.DataSource),
             TextWriter.Null);
-        var options = new RunOptions(hypothesis, Period.Exploration, Parity: true, Path.Combine(_root, "dump"), new DateTimeOffset(2026, 11, 18, 0, 0, 0, TimeSpan.Zero));
+        var options = new RunOptions("H0001", Version: null, Period.Exploration, Parity: true, new DateTimeOffset(2026, 11, 18, 0, 0, 0, TimeSpan.Zero));
         return await runner.Run(options, CancellationToken.None);
     }
 
@@ -217,12 +210,6 @@ public sealed class PreviewTests
 
     private static string H0001File()
     {
-        DirectoryInfo? folder = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
-        while (folder is not null && !Path.Exists(Path.Combine(folder.FullName, ".git")))
-        {
-            folder = folder.Parent;
-        }
-
-        return File.ReadAllText(Path.Combine(folder!.FullName, "bench", "hypotheses", "H0001-funding-short-4h", HypothesisFiles.FileName));
+        return BenchRepository.H0001Text();
     }
 }

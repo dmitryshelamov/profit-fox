@@ -9,21 +9,27 @@ namespace ProfitFox.Bench.Application.Signals;
 /// <summary>
 ///     The saved signals of the constructor (spec signal-constructor), kept by <see cref="ISignalStore" />. A graph is
 ///     written only when it reads as a signal, and a name only when it follows <see cref="SignalNames" />; a refused
-///     request leaves the store as it was. The library writes signals and never commits them.
+///     request leaves the store as it was.
 /// </summary>
 public sealed class SignalLibrary(ISignalStore store)
 {
     /// <summary>
     ///     Every saved signal in the order of its name; one that does not read stays in the list with its errors.
     /// </summary>
-    public IReadOnlyList<SignalEntry> List()
+    public async Task<IReadOnlyList<SignalEntry>> List(CancellationToken cancellation)
     {
-        return [.. store.Names().Order(StringComparer.Ordinal).Select(Entry)];
+        List<SignalEntry> entries = [];
+        foreach (string name in (await store.Names(cancellation)).Order(StringComparer.Ordinal))
+        {
+            entries.Add(await Entry(name, cancellation));
+        }
+
+        return entries;
     }
 
-    public SignalDocument Read(string name)
+    public async Task<SignalDocument> Read(string name, CancellationToken cancellation)
     {
-        if (!SignalNames.IsValid(name) || store.Read(name) is not { } read)
+        if (!SignalNames.IsValid(name) || await store.Read(name, cancellation) is not { } read)
         {
             throw NotFound(name);
         }
@@ -34,36 +40,43 @@ public sealed class SignalLibrary(ISignalStore store)
     /// <summary>
     ///     Writes a new signal; a name that is taken is refused.
     /// </summary>
-    public SignalDocument Create(string name, string? description, JsonElement graph, IReadOnlyDictionary<string, NodePosition> layout)
+    public async Task<SignalDocument> Create(
+        string name,
+        string? description,
+        JsonElement graph,
+        IReadOnlyDictionary<string, NodePosition> layout,
+        CancellationToken cancellation)
     {
         SignalDocument signal = Checked(name, description, graph, layout);
-        if (store.Exists(name))
+        if (await store.Exists(name, cancellation))
         {
             throw Taken(name);
         }
 
-        store.Write(signal);
-        return signal;
+        return await store.Create(signal, cancellation);
     }
 
     /// <summary>
-    ///     Replaces a saved signal; it must be there.
+    ///     Replaces a saved signal; it must be there. A graph that differs by content makes the next version.
     /// </summary>
-    public SignalDocument Replace(string name, string? description, JsonElement graph, IReadOnlyDictionary<string, NodePosition> layout)
+    public async Task<SignalDocument> Replace(
+        string name,
+        string? description,
+        JsonElement graph,
+        IReadOnlyDictionary<string, NodePosition> layout,
+        CancellationToken cancellation)
     {
-        if (!SignalNames.IsValid(name) || !store.Exists(name))
+        if (!SignalNames.IsValid(name) || !await store.Exists(name, cancellation))
         {
             throw NotFound(name);
         }
 
-        SignalDocument signal = Checked(name, description, graph, layout);
-        store.Write(signal);
-        return signal;
+        return await store.Replace(Checked(name, description, graph, layout), cancellation);
     }
 
-    public SignalDocument Rename(string name, string to)
+    public async Task<SignalDocument> Rename(string name, string to, CancellationToken cancellation)
     {
-        SignalDocument signal = Read(name);
+        SignalDocument signal = await Read(name, cancellation);
         if (!SignalNames.IsValid(to))
         {
             throw new SignalLibraryException(SignalProblem.Invalid, $"{to} is not a signal name", [NameError(to)]);
@@ -74,37 +87,35 @@ public sealed class SignalLibrary(ISignalStore store)
             return signal;
         }
 
-        if (store.Exists(to))
+        if (await store.Exists(to, cancellation))
         {
             throw Taken(to);
         }
 
-        SignalDocument renamed = signal with { Name = to };
-        store.Write(renamed);
-        store.Delete(name);
-        return renamed;
+        await store.Rename(name, to, cancellation);
+        return signal with { Name = to };
     }
 
-    public void Delete(string name)
+    public async Task Delete(string name, CancellationToken cancellation)
     {
-        if (!SignalNames.IsValid(name) || !store.Exists(name))
+        if (!SignalNames.IsValid(name) || !await store.Exists(name, cancellation))
         {
             throw NotFound(name);
         }
 
-        store.Delete(name);
+        await store.Delete(name, cancellation);
     }
 
-    private SignalEntry Entry(string name)
+    private async Task<SignalEntry> Entry(string name, CancellationToken cancellation)
     {
         try
         {
-            SignalDocument signal = Read(name);
-            return new SignalEntry(signal.Name, signal.Description, Error: null);
+            SignalDocument signal = await Read(name, cancellation);
+            return new SignalEntry(signal.Name, signal.Description, signal.Version, Error: null);
         }
         catch (SignalLibraryException exception)
         {
-            return new SignalEntry(name, Description: null, exception.Message);
+            return new SignalEntry(name, Description: null, Version: 0, exception.Message);
         }
     }
 

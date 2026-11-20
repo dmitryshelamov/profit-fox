@@ -62,7 +62,7 @@ Bench.Presentation (Web)          Bench.Worker (Worker SDK)
 Bench.Cli (Exe) — только HttpClient к Presentation, без ссылок на проекты стенда
 ```
 
-- **Presentation** при старте мигрирует базу (FluentMigrator), затем делает перенос из git (решение 8). Он отдаёт REST,
+- **Presentation** при старте мигрирует базу (FluentMigrator), без переноса из git (решение 8). Он отдаёт REST,
   предпросмотр с кэшем 5 пар и, если есть `wwwroot`, собранный фронтенд (`UseStaticFiles` + `MapFallbackToFile`). Прогоны
   он не считает.
 - **Worker** — новый проект по образцу `ProfitFox.Worker` v2: `Host.CreateApplicationBuilder`, по фоновой службе на вид
@@ -80,7 +80,7 @@ Bench.Cli (Exe) — только HttpClient к Presentation, без ссылок
 | `signals` | `id uuid` | `name` (уникально), `description`, `layout jsonb`, `version` | строка меняется; удаление каскадом |
 | `signal_versions` | `(signal_id, version)` | `graph jsonb`, `created_at` | только вставка |
 | `runs` | `id` (32 hex, как `runId` журнала) | `hypothesis_id`, `version`, `period`, `kind` (`verdict` \| `parity`), `status` (`queued` \| `running` \| `finished`), `queued_at`, `started_at`, `finished_at`, `lease_owner`, `leased_until`, `lost_leases`, `cancel_requested`, `pairs_done`, `pairs_total` | очередь и ход |
-| `ledger` | `run_id` | поля `LedgerEntry`, плюс `version` и `engine_version` (null у перенесённых строк), `commit` (null у новых) | триггер `BEFORE UPDATE OR DELETE` бросает ошибку |
+| `ledger` | `run_id` | поля `LedgerEntry`, плюс `version` и `engine_version`; коммита нет | триггер `BEFORE UPDATE OR DELETE` бросает ошибку |
 | `reports` | `run_id` → `ledger` | `text` | тот же триггер |
 
 - **Уникальность.** Частичный уникальный индекс `runs (hypothesis_id, version, period, kind) WHERE status <> 'finished'`
@@ -148,8 +148,6 @@ Bench.Cli (Exe) — только HttpClient к Presentation, без ссылок
   - проверка «другой хэш» уходит: другой хэш — это другая версия;
   - окончательность и отложенный период — по версии;
   - `Attempts` считает разные пары `(id, version)` с окончательным статусом.
-- **Перенесённая строка** `f3659dd4` без `version` относится к версии, чей хэш совпадает с её `hash`. Перенос это
-  проверяет: строка с хэшем, которого нет ни у одной версии, отклоняет перенос.
 - **`POST /api/hypotheses`** принимает текст `hypothesis.json` телом `text/plain`, чтобы хэш считался по присланным
   байтам, а не по пересобранному JSON. Ответы:
   - `201` и номер новой версии;
@@ -180,18 +178,16 @@ Bench.Cli (Exe) — только HttpClient к Presentation, без ссылок
 - Переименование меняет `name` у той же строки `signals`, копия — новая строка с версией 1.
 - API сигналов отдаёт `version`. Черновик в браузере ключуется именем, как сейчас.
 
-### 8. Перенос из git
+### 8. Без переноса из git
 
-- Папка — `Bench:ImportFolder`:
-  - локально по умолчанию `bench/` репозитория;
-  - в образе — `/app/bench-import`, его Dockerfile копирует из `bench/` на коммите сборки.
-- **Перенос — одна транзакция** после миграций, только если `hypothesis_versions`, `ledger` и `signals` пусты:
-  - гипотезы папок — версии 1 с текстом файла;
-  - строки `ledger.jsonl` как есть, без `engine_version`;
-  - отчёты — по имени файла `*-<первые 8 знаков runId>.md`;
-  - сигналы `bench/signals/*.json`, которые читаются, — версии 1. Нечитаемые пропускаются с ошибкой в журнале запуска.
-- **Ошибка в гипотезе или в строке журнала** откатывает весь перенос, и Presentation не стартует. Полупустая база тихо
-  обнулила бы число попыток.
+- **Решение владельца 2026-11-20:** база стенда начинается пустой. Из `bench/` ничего не переносится, у каждой строки
+  журнала есть прогон в `runs`, версия гипотезы и номер версии движка.
+- **H0001** загружают как любую гипотезу: `bench hypotheses add bench/hypotheses/H0001-funding-short-4h/hypothesis.json`.
+  Текст тот же, поэтому версия 1 получает тот же хэш `5591d11a…`.
+- **Строка `f3659dd4`** остаётся только в `bench/ledger.jsonl`. Это сверка, а сверки в число попыток N не идут, так что
+  N от её отсутствия не меняется.
+- **Альтернатива** — перенос при первом старте с пустой базой. Отклонена: механизм ради одной гипотезы и одной сверки, и
+  пропущенная папка тихо оставляла бы базу без истории навсегда.
 
 ### 9. REST
 
@@ -231,19 +227,20 @@ Bench.Cli (Exe) — только HttpClient к Presentation, без ссылок
 
 ### 12. Локальный стенд и тесты
 
-- **`docker-compose.yml`** в корне — только `bench-db` (Postgres 17, `127.0.0.1:5433`, том `profit-fox-bench-dev-db`).
+- **`docker-compose.yml`** в корне — только `bench-db` (Postgres 17, `127.0.0.1:5435`, том `profit-fox-bench-dev-db`). Порт 5433
+  на Маке занят локальной базой market-data.
 - **`appsettings.Development.json`** Presentation и Worker содержат строку подключения к нему. Пароль локальной базы — не
   секрет.
 - **`.claude/launch.json`** получает `bench-db` (`docker compose up bench-db`) и `bench-worker` (`dotnet run` Worker'а).
   Второй Worker — тот же `dotnet run` во втором терминале с `Worker__Name=mac-2`.
-- **Интеграционные тесты** поднимают Postgres через Testcontainers.PostgreSql, по одной базе на фикстуру, и сбрасывают
-  таблицы между тестами. Тесты аренды идут на двух экземплярах службы Worker'а в одном процессе.
+- **Интеграционные тесты** поднимают Postgres через Testcontainers.PostgreSql, один контейнер на сборку тестов, и сбрасывают
+  таблицы перед каждым тестом. Тесты аренды идут на двух экземплярах службы Worker'а в одном процессе.
 
 ### 13. Деплой на soyo-02
 
 - **Образы** собирает `deploy.yml` на `ubuntu-latest`:
   - `ghcr.io/dmitryshelamov/profit-fox-bench:<N>` — Dockerfile Presentation: стадия node собирает `frontend/` в
-    `wwwroot`, плюс `bench/` в `/app/bench-import`;
+    `wwwroot`;
   - `ghcr.io/dmitryshelamov/profit-fox-bench-worker:<N>`.
 - **`ci.yml`** — `dotnet build`, `dotnet test`, `npm ci`, `lint`, `test`, `build` фронтенда, `shellcheck` и тест
   `deploy.sh`. Срабатывает на push в `release/0.1.0`, на pull request и вручную.
@@ -284,7 +281,7 @@ Bench.Cli (Exe) — только HttpClient к Presentation, без ссылок
 ## Migration Plan
 
 1. Код и тесты по группам `tasks.md` в `release/0.1.0`. Коммиты — по слову владельца.
-2. Локально: `docker compose up bench-db`, Presentation (перенос H0001 и `f3659dd4`), Worker, затем сверка H0001 из
+2. Локально: `docker compose up bench-db`, Presentation, Worker, загрузка H0001 через CLI, затем сверка H0001 из
    интерфейса. Её хэш данных сравнивается с v14 `04ca021b…` с поправкой на рост истории.
 3. Шаги владельца по слову:
    - раннер `soyo-03-profit-fox-bench`;

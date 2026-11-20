@@ -13,7 +13,15 @@ public sealed record LedgerEntry
 
     public required string Hash { get; init; }
 
-    public required string Commit { get; init; }
+    /// <summary>
+    ///     The version of the hypothesis the run was on.
+    /// </summary>
+    public required int Version { get; init; }
+
+    /// <summary>
+    ///     The version of the engine the run was computed with.
+    /// </summary>
+    public required int EngineVersion { get; init; }
 
     public required string Period { get; init; }
 

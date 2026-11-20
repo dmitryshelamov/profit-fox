@@ -46,6 +46,7 @@ export function SavedSignalPage({ name }: { readonly name: string }) {
 
       const found = answer.data!;
       return {
+        version: Number(found.version),
         content: {
           description: found.description ?? '',
           document: { graph: found.graph as unknown as Graph, layout: toLayout(found.layout) },
@@ -72,7 +73,13 @@ export function SavedSignalPage({ name }: { readonly name: string }) {
   }
 
   return (
-    <SignalEditor key={name} saved={{ name }} catalog={catalog.data} start={signal.data.content!} />
+    <SignalEditor
+      key={name}
+      saved={{ name }}
+      startVersion={signal.data.version}
+      catalog={catalog.data}
+      start={signal.data.content!}
+    />
   );
 }
 
@@ -112,10 +119,12 @@ export function NewSignalPage({ draftId }: { readonly draftId: string }) {
 function SignalEditor({
   saved,
   draftId,
+  startVersion,
   catalog,
   start,
 }: {
   readonly saved: { readonly name: string } | null;
+  readonly startVersion?: number;
   readonly draftId?: string;
   readonly catalog: readonly NodeKind[];
   readonly start: Content;
@@ -125,6 +134,7 @@ function SignalEditor({
   const key = saved ? draftKey(saved) : draftKey({ newId: draftId! });
   const [file, setFile] = useState<Content | null>(saved ? start : null);
   const [content, setContent] = useState<Content>(start);
+  const [version, setVersion] = useState(startVersion);
   const [question, setQuestion] = useState(() => {
     if (!saved) {
       return null;
@@ -195,7 +205,10 @@ function SignalEditor({
       removeDraft(key);
       await queries.invalidateQueries({ queryKey: ['signals'] });
       if (saved) {
-        queries.setQueryData(['signal', saved.name], { content });
+        const next = (outcome.value as { version?: number | string }).version;
+        const nextVersion = next === undefined ? version : Number(next);
+        queries.setQueryData(['signal', saved.name], { content, version: nextVersion });
+        setVersion(nextVersion);
         setFile(content);
       } else {
         const created = outcome.value as { name: string };
@@ -227,6 +240,9 @@ function SignalEditor({
               ← Сигналы
             </Link>
             <span className="font-mono font-semibold">{saved?.name ?? 'Новый сигнал'}</span>
+            {saved && version !== undefined && (
+              <span className="text-xs text-zinc-400">версия {version}</span>
+            )}
             <input
               aria-label="Описание"
               className={`${fieldClass} w-64 font-sans`}

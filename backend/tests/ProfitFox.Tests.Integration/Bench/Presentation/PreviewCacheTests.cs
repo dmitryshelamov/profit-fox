@@ -4,8 +4,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using ProfitFox.Bench.Application.Preview;
 using ProfitFox.Bench.Domain.MarketData;
-using ProfitFox.Bench.Infrastructure.Hypotheses;
 using ProfitFox.Bench.Presentation.Preview;
+using ProfitFox.Tests.Integration.Bench.Database;
 using ProfitFox.Tests.Integration.Bench.MarketData;
 
 namespace ProfitFox.Tests.Integration.Bench.Presentation;
@@ -35,7 +35,7 @@ public sealed class PreviewCacheTests
     public async Task A_second_preview_of_the_pair_reads_no_history_and_uses_the_new_graph()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(market, Path.GetTempPath());
+        await using BenchPresentationServer api = await BenchPresentationServer.Start(market);
 
         PreviewResponse first = await Ok(await Preview(api, "BTCUSDT", "4h", Signal()));
         int candles = market.Data.CandleRequests.Count;
@@ -57,7 +57,7 @@ public sealed class PreviewCacheTests
     public async Task The_sixth_pair_and_timeframe_pushes_out_the_first()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(market, Path.GetTempPath());
+        await using BenchPresentationServer api = await BenchPresentationServer.Start(market);
         (string Pair, string Timeframe)[] reads =
         [
             ("BTCUSDT", "4h"), ("ETHUSDT", "4h"), ("SOLUSDT", "4h"), ("BTCUSDT", "1d"), ("ETHUSDT", "1d"), ("SOLUSDT", "1d")
@@ -155,13 +155,6 @@ public sealed class PreviewCacheTests
 
     private static JsonObject Signal()
     {
-        DirectoryInfo? folder = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
-        while (folder is not null && !Path.Exists(Path.Combine(folder.FullName, ".git")))
-        {
-            folder = folder.Parent;
-        }
-
-        string file = File.ReadAllText(Path.Combine(folder!.FullName, "bench", "hypotheses", "H0001-funding-short-4h", HypothesisFiles.FileName));
-        return JsonNode.Parse(file)!["signal"]!.AsObject().DeepClone().AsObject();
+        return JsonNode.Parse(BenchRepository.H0001Text())!["signal"]!.AsObject().DeepClone().AsObject();
     }
 }

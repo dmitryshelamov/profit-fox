@@ -1,0 +1,17 @@
+# Build context of the bench images is the repository root: keep out what the Dockerfiles do not need.
+**/.git
+**/.github
+**/.idea
+**/.vs
+**/.claude
+**/.DS_Store
+**/node_modules
+**/bin
+**/obj
+**/dist
+**/TestResults
+openspec
+deploy
+docker-compose*.yml
+.env
+.env.*

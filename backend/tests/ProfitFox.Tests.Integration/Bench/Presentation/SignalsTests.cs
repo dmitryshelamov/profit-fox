@@ -2,34 +2,32 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using ProfitFox.Bench.Infrastructure.Hypotheses;
+using Dapper;
+using Npgsql;
 using ProfitFox.Bench.Presentation.Errors;
 using ProfitFox.Bench.Presentation.Signals;
+using ProfitFox.Tests.Integration.Bench.Database;
 using ProfitFox.Tests.Integration.Bench.MarketData;
 
 namespace ProfitFox.Tests.Integration.Bench.Presentation;
 
 /// <summary>
-///     Spec signal-constructor end to end (tasks 3.2 and 3.3): the signals of a temporary <c>bench/signals</c> and the
+///     Spec signal-constructor end to end (tasks 3.2 and 3.3): the signals of the bench database through the API and the
 ///     check of a graph without history.
 /// </summary>
 [NonParallelizable]
 public sealed class SignalsTests
 {
     private static readonly JsonSerializerOptions Json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-    private string _bench = "";
-    private string _signals = "";
     private MarketDataServer _market = null!;
     private BenchPresentationServer _api = null!;
 
     [SetUp]
     public async Task Start()
     {
-        _bench = Path.Combine(Path.GetTempPath(), $"profit-fox-signals-{Guid.NewGuid():N}", "bench");
-        _signals = Path.Combine(_bench, "signals");
-        Directory.CreateDirectory(_bench);
+        await BenchDatabase.Reset();
         _market = await MarketDataServer.Start();
-        _api = await BenchPresentationServer.Start(_market, _bench);
+        _api = await BenchPresentationServer.Start(_market);
     }
 
     [TearDown]
@@ -37,38 +35,33 @@ public sealed class SignalsTests
     {
         await _api.DisposeAsync();
         await _market.DisposeAsync();
-        Directory.Delete(Path.GetDirectoryName(_bench)!, recursive: true);
     }
 
     [Test]
-    public async Task A_created_signal_is_a_file_with_its_name_and_the_graph_of_H0001()
+    public async Task A_created_signal_keeps_its_name_and_the_graph_of_H0001_as_version_1()
     {
         HttpResponseMessage created = await Create("funding-high", Signal(), new JsonObject { ["rate"] = new JsonObject { ["x"] = 0, ["y"] = 120 } });
 
         Assert.That(created.StatusCode, Is.EqualTo(HttpStatusCode.Created), await created.Content.ReadAsStringAsync());
         Assert.That(created.Headers.Location!.ToString(), Does.EndWith("/api/signals/funding-high"));
-        JsonNode file = JsonNode.Parse(File.ReadAllText(Path.Combine(_signals, "funding-high.json")))!;
-        Assert.That(file["name"]!.GetValue<string>(), Is.EqualTo("funding-high"));
-        Assert.That(JsonNode.DeepEquals(file["graph"], Signal()), Is.True);
         SignalResponse read = (await _api.Http.GetFromJsonAsync<SignalResponse>("/api/signals/funding-high", Json))!;
+        Assert.That((read.Name, read.Version), Is.EqualTo(("funding-high", 1)));
         Assert.That(read.Layout["rate"].Y, Is.EqualTo(120));
         Assert.That(JsonNode.DeepEquals(JsonNode.Parse(read.Graph.GetRawText()), Signal()), Is.True);
     }
 
     [Test]
-    public async Task The_list_is_in_name_order_and_keeps_a_broken_file()
+    public async Task The_list_is_in_name_order_with_the_latest_versions()
     {
         await Create("funding-high", Signal());
         await Create("candle-drop", Signal());
-        File.WriteAllText(Path.Combine(_signals, "broken.json"), """{ "name": "broken", "layout": {} }""");
+        JsonObject higher = Signal();
+        higher["parameters"]![0]!["value"] = 0.001;
+        await _api.Http.PutAsJsonAsync("/api/signals/funding-high", new JsonObject { ["graph"] = higher, ["layout"] = new JsonObject() }, Json);
 
         SignalListItem[] list = (await _api.Http.GetFromJsonAsync<SignalListItem[]>("/api/signals", Json))!;
 
-        Assert.That(list.Select(item => item.Name), Is.EqualTo(new[] { "broken", "candle-drop", "funding-high" }));
-        Assert.That(list[0].Error, Does.Contain("graph"));
-        HttpResponseMessage broken = await _api.Http.GetAsync("/api/signals/broken");
-        Assert.That(broken.StatusCode, Is.EqualTo(HttpStatusCode.UnprocessableEntity));
-        Assert.That((await broken.Content.ReadFromJsonAsync<ErrorResponse>(Json))!.Errors.Single().Reason, Does.Contain("graph"));
+        Assert.That(list.Select(item => (item.Name, item.Version, item.Error)), Is.EqualTo(new[] { ("candle-drop", 1, (string?)null), ("funding-high", 2, null) }));
     }
 
     [Test]
@@ -82,21 +75,22 @@ public sealed class SignalsTests
         Assert.That(refused.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
         ErrorResponse errors = (await refused.Content.ReadFromJsonAsync<ErrorResponse>(Json))!;
         Assert.That(errors.Errors.Select(error => (error.Field, error.Node, error.Pin)), Is.EquivalentTo(new[] { ("name", (string?)null, (string?)null), (null, "high", "b") }));
-        Assert.That(Directory.Exists(_signals), Is.False);
+        Assert.That(await Count("signals"), Is.Zero);
     }
 
     [Test]
-    public async Task A_replace_with_errors_leaves_the_file()
+    public async Task A_replace_with_errors_leaves_the_signal_and_its_version()
     {
         await Create("funding-high", Signal());
-        string before = File.ReadAllText(Path.Combine(_signals, "funding-high.json"));
+        string before = await _api.Http.GetStringAsync("/api/signals/funding-high");
         JsonObject signal = Signal();
         signal["wires"]!.AsArray().RemoveAt(1);
 
         HttpResponseMessage refused = await _api.Http.PutAsJsonAsync("/api/signals/funding-high", new JsonObject { ["graph"] = signal, ["layout"] = new JsonObject() }, Json);
 
         Assert.That(refused.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
-        Assert.That(File.ReadAllText(Path.Combine(_signals, "funding-high.json")), Is.EqualTo(before));
+        Assert.That(await _api.Http.GetStringAsync("/api/signals/funding-high"), Is.EqualTo(before));
+        Assert.That(await Count("signal_versions"), Is.EqualTo(1));
         HttpResponseMessage missing = await _api.Http.PutAsJsonAsync("/api/signals/nothing", new JsonObject { ["graph"] = Signal() }, Json);
         Assert.That(missing.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
     }
@@ -113,21 +107,27 @@ public sealed class SignalsTests
         Assert.That(again.StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
         Assert.That(rename.StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
         Assert.That((await rename.Content.ReadFromJsonAsync<ErrorResponse>(Json))!.Errors.Single().Field, Is.EqualTo("name"));
-        Assert.That(Directory.GetFiles(_signals).Select(Path.GetFileName).Order(), Is.EqualTo(new[] { "funding-high.json", "price-drop.json" }));
+        Assert.That(await Count("signals"), Is.EqualTo(2));
     }
 
     [Test]
-    public async Task Rename_and_delete()
+    public async Task Rename_keeps_the_versions_and_delete_removes_them()
     {
         await Create("price-drop", Signal());
+        JsonObject higher = Signal();
+        higher["parameters"]![0]!["value"] = 0.001;
+        await _api.Http.PutAsJsonAsync("/api/signals/price-drop", new JsonObject { ["graph"] = higher, ["layout"] = new JsonObject() }, Json);
 
         HttpResponseMessage renamed = await _api.Http.PostAsJsonAsync("/api/signals/price-drop/rename", new { to = "price-fall" }, Json);
+        int versions = await Count("signal_versions");
         HttpResponseMessage deleted = await _api.Http.DeleteAsync("/api/signals/price-fall");
 
         Assert.That(renamed.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That((await renamed.Content.ReadFromJsonAsync<SignalResponse>(Json))!.Name, Is.EqualTo("price-fall"));
+        SignalResponse signal = (await renamed.Content.ReadFromJsonAsync<SignalResponse>(Json))!;
+        Assert.That((signal.Name, signal.Version), Is.EqualTo(("price-fall", 2)));
+        Assert.That(versions, Is.EqualTo(2));
         Assert.That(deleted.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
-        Assert.That(Directory.GetFiles(_signals), Is.Empty);
+        Assert.That((await Count("signals"), await Count("signal_versions")), Is.EqualTo((0, 0)));
         Assert.That((await _api.Http.DeleteAsync("/api/signals/price-fall")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
     }
 
@@ -164,15 +164,14 @@ public sealed class SignalsTests
         return _api.Http.PostAsJsonAsync("/api/signals", new JsonObject { ["name"] = name, ["graph"] = graph, ["layout"] = layout ?? new JsonObject() }, Json);
     }
 
+    private static async Task<int> Count(string table)
+    {
+        await using NpgsqlConnection connection = await BenchDatabase.DataSource.OpenConnectionAsync();
+        return await connection.ExecuteScalarAsync<int>($"SELECT count(*) FROM {table}");
+    }
+
     private static JsonObject Signal()
     {
-        DirectoryInfo? folder = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
-        while (folder is not null && !Path.Exists(Path.Combine(folder.FullName, ".git")))
-        {
-            folder = folder.Parent;
-        }
-
-        string file = File.ReadAllText(Path.Combine(folder!.FullName, "bench", "hypotheses", "H0001-funding-short-4h", HypothesisFiles.FileName));
-        return JsonNode.Parse(file)!["signal"]!.AsObject().DeepClone().AsObject();
+        return JsonNode.Parse(BenchRepository.H0001Text())!["signal"]!.AsObject().DeepClone().AsObject();
     }
 }

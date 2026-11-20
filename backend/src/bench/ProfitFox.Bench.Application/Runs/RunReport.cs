@@ -8,8 +8,8 @@ using ProfitFox.Engine.Simulation.Trades;
 namespace ProfitFox.Bench.Application.Runs;
 
 /// <summary>
-///     The markdown report of a run (spec hypothesis-bench); <see cref="IRunReports" /> keeps it. The outcomes of events
-///     appear only when the verdict read them.
+///     The markdown report of a run (spec hypothesis-bench); the ledger keeps it with the line of the run. The outcomes of
+///     events appear only when the verdict read them.
 /// </summary>
 public static class RunReport
 {
@@ -39,7 +39,8 @@ public static class RunReport
         Line(text, $"|---|---|");
         Line(text, $"| Период | {design.PeriodStart:yyyy-MM-dd} — {design.PeriodEnd.AddDays(-1):yyyy-MM-dd} |");
         Line(text, $"| Прогон | `{entry.RunId}`, {entry.Time:yyyy-MM-dd HH:mm} UTC |");
-        Line(text, $"| Коммит | `{entry.Commit}` |");
+        Line(text, $"| Версия гипотезы | {design.Hypothesis.Version} |");
+        Line(text, $"| Версия движка | {entry.EngineVersion} |");
         Line(text, $"| Хэш гипотезы | `{entry.Hash}` |");
         Line(text, $"| Хэш данных | `{entry.DataHash}` |");
         Line(text, $"| Пар в наборе / с событиями | {pairs} / {pairsWithEvents} |");

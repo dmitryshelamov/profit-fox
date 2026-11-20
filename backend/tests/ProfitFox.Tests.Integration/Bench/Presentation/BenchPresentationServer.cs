@@ -5,12 +5,13 @@ using Microsoft.Extensions.DependencyInjection;
 using ProfitFox.Bench.Application.MarketData;
 using ProfitFox.Bench.Infrastructure.MarketData;
 using ProfitFox.Bench.Presentation;
+using ProfitFox.Tests.Integration.Bench.Database;
 using ProfitFox.Tests.Integration.Bench.MarketData;
 
 namespace ProfitFox.Tests.Integration.Bench.Presentation;
 
 /// <summary>
-///     The bench API in the test process, reading history from the fake market-data service.
+///     The bench API in the test process, over the test database and reading history from the fake market-data service.
 /// </summary>
 public sealed class BenchPresentationServer : IAsyncDisposable
 {
@@ -24,15 +25,32 @@ public sealed class BenchPresentationServer : IAsyncDisposable
         Http = app.GetTestClient();
     }
 
-    public static async Task<BenchPresentationServer> Start(MarketDataServer market, string benchFolder)
+    /// <summary>
+    ///     Starts the API over the migrated test database, as the tests that fill the database themselves want it.
+    /// </summary>
+    public static Task<BenchPresentationServer> Start(MarketDataServer market)
     {
-        WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
+        return Start(market, new BenchStart());
+    }
+
+    /// <summary>
+    ///     Starts the API as <see cref="Program" /> does: when <see cref="BenchStart.Migrate" /> is set it migrates before
+    ///     it serves.
+    /// </summary>
+    public static async Task<BenchPresentationServer> Start(MarketDataServer market, BenchStart start)
+    {
+        WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing", WebRootPath = start.WebRoot });
         builder.WebHost.UseTestServer();
         builder.Services.AddSingleton<IHistorySource>(new GrpcHistorySource(market.Channel));
         builder.Services.AddSingleton<IInstrumentCatalog>(new InstrumentCatalog(market.Http));
-        builder.Services.AddBenchPresentation(new BenchFolder(benchFolder));
+        builder.Services.AddBenchPresentation(start.ConnectionString ?? BenchDatabase.ConnectionString);
         WebApplication app = builder.Build();
-        app.MapControllers();
+        if (start.Migrate)
+        {
+            app.PrepareBench();
+        }
+
+        app.MapBench();
         await app.StartAsync();
         return new BenchPresentationServer(app);
     }

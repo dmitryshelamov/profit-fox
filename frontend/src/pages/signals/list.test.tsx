@@ -22,9 +22,9 @@ describe('the section «Сигналы»', () => {
       ...baseRoutes(),
       'GET /api/signals': () =>
         json([
-          { name: 'broken', description: null, error: 'graph is required' },
-          { name: 'candle-drop', description: 'свеча', error: null },
-          { name: 'funding-high', description: null, error: null },
+          { name: 'broken', description: null, version: 1, error: 'graph is required' },
+          { name: 'candle-drop', description: 'свеча', version: 1, error: null },
+          { name: 'funding-high', description: null, version: 1, error: null },
         ]),
     });
     renderApp('/signals');
@@ -36,6 +36,7 @@ describe('the section «Сигналы»', () => {
         .getAllByRole('listitem')
         .map((item) => item.getAttribute('aria-label')),
     ).toEqual(['Сигнал broken', 'Сигнал candle-drop', 'Сигнал funding-high']);
+    expect(within(list).getAllByText('версия 1')).toHaveLength(3);
     expect(within(list).getByText(/Файл не читается: graph is required/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /H0001 funding-short-4h/ })).toHaveAttribute(
       'href',
@@ -47,7 +48,8 @@ describe('the section «Сигналы»', () => {
   it('deletes a signal only after the confirmation', async () => {
     const requests = fakeApi({
       ...baseRoutes(),
-      'GET /api/signals': () => json([{ name: 'price-drop', description: null, error: null }]),
+      'GET /api/signals': () =>
+        json([{ name: 'price-drop', description: null, version: 1, error: null }]),
       'DELETE /api/signals/price-drop': () => new Response(null, { status: 204 }),
     });
     const confirm = vi
@@ -71,7 +73,8 @@ describe('the section «Сигналы»', () => {
   it('shows a taken name on rename', async () => {
     fakeApi({
       ...baseRoutes(),
-      'GET /api/signals': () => json([{ name: 'price-drop', description: null, error: null }]),
+      'GET /api/signals': () =>
+        json([{ name: 'price-drop', description: null, version: 1, error: null }]),
       'POST /api/signals/price-drop/rename': () =>
         json(
           {
@@ -103,7 +106,8 @@ describe('the section «Сигналы»', () => {
     };
     const requests = fakeApi({
       ...baseRoutes(),
-      'GET /api/signals': () => json([{ name: 'price-drop', description: 'd', error: null }]),
+      'GET /api/signals': () =>
+        json([{ name: 'price-drop', description: 'd', version: 1, error: null }]),
       'GET /api/signals/price-drop': () => json(source),
       'POST /api/signals': () => json({ ...source, name: 'price-drop-copy' }, 201),
     });

@@ -1,146 +1,157 @@
+using Dapper;
+using Npgsql;
 using ProfitFox.Bench.Application.Hypotheses;
 using ProfitFox.Bench.Application.MarketData;
 using ProfitFox.Bench.Application.Runs;
-using ProfitFox.Bench.Cli;
 using ProfitFox.Bench.Domain.Ledger;
 using ProfitFox.Bench.Domain.Runs;
 using ProfitFox.Bench.Domain.Verdicts;
 using ProfitFox.Bench.Infrastructure.Hypotheses;
 using ProfitFox.Bench.Infrastructure.Ledger;
 using ProfitFox.Bench.Infrastructure.MarketData;
-using ProfitFox.Bench.Infrastructure.Runs;
 using ProfitFox.Engine.Simulation.Trades;
+using ProfitFox.Tests.Integration.Bench.Database;
 using ProfitFox.Tests.Integration.Bench.MarketData;
 
 namespace ProfitFox.Tests.Integration.Bench.Runs;
 
 /// <summary>
-///     Spec hypothesis-bench end to end (task 7.6): H0001 on four weeks of history of a fake market-data service gives a
-///     line in the ledger, a report and a verdict; a parity run writes its dump without event outcomes.
+///     Spec hypothesis-bench end to end: H0001 on four weeks of history of a fake market-data service, over the bench
+///     database, gives a line in the ledger, a report and a verdict; a parity run never computes the outcomes of events; a
+///     refusal of the ledger comes before any history is read.
 /// </summary>
 [NonParallelizable]
 public sealed class HypothesisRunTests
 {
     private static readonly DateTimeOffset Today = new DateTimeOffset(2026, 11, 18, 0, 0, 0, TimeSpan.Zero);
-    private string _bench = "";
-    private string _hypothesis = "";
+    private readonly HypothesisCatalog _hypotheses = new HypothesisCatalog(new HypothesisStore(BenchDatabase.DataSource));
+    private readonly RunLedger _ledger = new RunLedger(BenchDatabase.DataSource);
 
     [SetUp]
-    public void CreateBench()
+    public async Task CreateBench()
     {
         FakeMarketData.CoveredUntil = FakeMarketData.CoveredFrom.AddDays(28);
-        _bench = Path.Combine(Path.GetTempPath(), $"profit-fox-bench-{Guid.NewGuid():N}", "bench");
-        _hypothesis = Path.Combine(_bench, "hypotheses", "H0001-funding-short-4h");
-        Directory.CreateDirectory(_hypothesis);
-        File.Copy(Path.Combine(Root(), "bench", "hypotheses", "H0001-funding-short-4h", HypothesisFiles.FileName), Path.Combine(_hypothesis, HypothesisFiles.FileName));
+        await BenchDatabase.Reset();
+        await _hypotheses.Add(BenchRepository.H0001Text(), CancellationToken.None);
     }
 
     [TearDown]
-    public void RemoveBench()
+    public void Uncover()
     {
         FakeMarketData.CoveredUntil = null;
-        Directory.Delete(Path.GetDirectoryName(_bench)!, recursive: true);
     }
 
     [Test]
-    public async Task A_run_gives_a_ledger_line_a_report_and_a_verdict()
+    public async Task A_run_gives_a_ledger_line_a_report_and_a_verdict_together()
     {
         await using MarketDataServer server = await MarketDataServer.Start();
 
-        RunResult result = await Runner(server, new FakeRepository()).Run(Options(parity: false, KeptDump("run")), CancellationToken.None);
+        RunResult result = await Runner(server).Run(Options(parity: false), CancellationToken.None);
 
         Assert.That(result.Verdict!.Kind, Is.EqualTo(VerdictKind.InsufficientData), "four weekly blocks are fewer than 20");
         Assert.That(result.Rows, Has.Count.GreaterThan(50));
         Assert.That(result.Rows.Select(row => row.Instrument).Distinct(), Is.EquivalentTo(new[] { "BTCUSDT", "ETHUSDT", "SOLUSDT" }));
         Assert.That(result.Rows, Has.All.Matches<EventRow>(row => row.Moment.Hour == 8));
-        LedgerEntry entry = new LedgerFile(Path.Combine(_bench, "ledger.jsonl")).Entries().Single();
+        LedgerEntry entry = (await _ledger.Entries(CancellationToken.None)).Single();
+        Assert.That(entry.RunId, Is.EqualTo(result.Entry.RunId));
         Assert.That(entry.Status, Is.EqualTo(RunStatus.InsufficientData));
+        Assert.That(entry.Version, Is.EqualTo(1));
+        Assert.That(entry.EngineVersion, Is.EqualTo(EngineVersion.Number));
+        Assert.That(entry.Attempts, Is.EqualTo(1));
         Assert.That(entry.DataHash, Has.Length.EqualTo(64));
-        Assert.That(File.ReadAllText(result.ReportPath), Does.Contain("Данных мало").And.Contain("Исходы событий не читались"));
+        string report = await Report(entry.RunId);
+        Assert.That(report, Is.EqualTo(result.Report));
+        Assert.That(report, Does.Contain("Данных мало").And.Contain("Исходы событий не читались").And.Not.Contain("Коммит"));
     }
 
     [Test]
     public async Task A_parity_run_never_computes_the_outcomes_of_events()
     {
         await using MarketDataServer server = await MarketDataServer.Start();
-        string dump = KeptDump("parity") ?? Path.Combine(_bench, "..", "dump");
 
-        RunResult result = await Runner(server, new FakeRepository()).Run(Options(parity: true, dump), CancellationToken.None);
+        RunResult result = await Runner(server).Run(Options(parity: true), CancellationToken.None);
 
         Assert.That(result.Verdict, Is.Null);
         Assert.That(result.Rows, Has.All.Matches<EventRow>(row => row.Outcome is null && row.Event is null));
         Assert.That(result.Rows.SelectMany(row => row.Randoms), Has.Some.Matches<RandomTrade>(trade => trade.Outcome.Status == TradeStatus.Ok));
-        Assert.That(File.Exists(Path.Combine(dump, "randoms.csv.gz")), Is.True);
-        Assert.That(File.Exists(Path.Combine(dump, "event_outcomes.csv.gz")), Is.False);
-        Assert.That(new LedgerFile(Path.Combine(_bench, "ledger.jsonl")).Entries().Single().Status, Is.EqualTo(RunStatus.Parity));
+        Assert.That((await _ledger.Entries(CancellationToken.None)).Single().Status, Is.EqualTo(RunStatus.Parity));
+        Assert.That(await Report(result.Entry.RunId), Does.Contain("сверочный прогон"));
     }
 
     [Test]
-    public async Task Uncommitted_changes_stop_the_run_before_any_history_is_read()
+    public async Task A_run_the_ledger_refuses_reads_no_history_and_leaves_no_line()
     {
         await using MarketDataServer server = await MarketDataServer.Start();
-        var repository = new FakeRepository();
-        repository.Changes.Add("backend/src/engine/ProfitFox.Engine.Strategy/Nodes/Data/FundingRateNode.cs");
+        await Write(Line("H0001", RunStatus.Rejected, version: 1));
 
-        Assert.That(() => Runner(server, repository).Run(Options(parity: false, dump: null), CancellationToken.None), Throws.InstanceOf<UncommittedChangesException>());
+        Assert.That(() => Runner(server).Run(Options(parity: false), CancellationToken.None), Throws.InstanceOf<LedgerException>().With.Message.Contains("already has the verdict"));
+
         Assert.That(server.Data.CandleRequests, Is.Empty);
-        Assert.That(File.Exists(Path.Combine(_bench, "ledger.jsonl")), Is.False);
+        Assert.That(await _ledger.Entries(CancellationToken.None), Has.Count.EqualTo(1));
     }
 
     [Test]
-    public async Task A_run_that_fails_on_the_way_leaves_a_failed_line()
+    public async Task A_new_version_after_a_verdict_runs_as_the_second_attempt()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        await Write(Line("H0001", RunStatus.Rejected, version: 1));
+        HypothesisAdded second = await _hypotheses.Add(BenchRepository.H0001Text().Replace("0.0005", "0.001", StringComparison.Ordinal), CancellationToken.None);
+
+        RunResult result = await Runner(server).Run(Options(parity: false) with { Version = second.Hypothesis.Version }, CancellationToken.None);
+
+        Assert.That(second.Hypothesis.Version, Is.EqualTo(2));
+        Assert.That((result.Entry.Version, result.Entry.Attempts), Is.EqualTo((2, 2)));
+        Assert.That(result.Entry.Hash, Is.EqualTo(second.Hypothesis.Hash));
+    }
+
+    [Test]
+    public async Task A_run_that_fails_on_the_way_leaves_a_failed_line_without_a_report()
     {
         await using MarketDataServer server = await MarketDataServer.Start();
         server.Data.Failure = Grpc.Core.StatusCode.Unavailable;
 
-        Assert.That(() => Runner(server, new FakeRepository()).Run(Options(parity: false, dump: null), CancellationToken.None), Throws.InstanceOf<HistoryUnavailableException>());
-        Assert.That(new LedgerFile(Path.Combine(_bench, "ledger.jsonl")).Entries().Single().Status, Is.EqualTo(RunStatus.Failed));
+        Assert.That(() => Runner(server).Run(Options(parity: false), CancellationToken.None), Throws.InstanceOf<HistoryUnavailableException>());
+
+        LedgerEntry entry = (await _ledger.Entries(CancellationToken.None)).Single();
+        Assert.That((entry.Status, entry.Version, entry.EngineVersion), Is.EqualTo((RunStatus.Failed, 1, EngineVersion.Number)));
+        Assert.That(entry.Reason, Is.Not.Empty);
+        await using NpgsqlConnection connection = await BenchDatabase.DataSource.OpenConnectionAsync();
+        Assert.That(await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM reports"), Is.Zero);
     }
 
-    [Test]
-    public void The_command_line_is_parsed()
+    private HypothesisRunner Runner(MarketDataServer server)
     {
-        Assert.That(CommandLine.Parse(["run", "bench/hypotheses/H0001-funding-short-4h"], out _),
-            Is.EqualTo(new BenchCommand("bench/hypotheses/H0001-funding-short-4h", Period.Exploration, false, null)));
-        Assert.That(CommandLine.Parse(["run", "h", "--period", "holdout", "--parity-dump", "/tmp/d"], out _), Is.EqualTo(new BenchCommand("h", Period.Holdout, false, "/tmp/d")));
-        Assert.That(CommandLine.Parse(["parity", "h", "--out", "/tmp/p"], out _), Is.EqualTo(new BenchCommand("h", Period.Exploration, true, "/tmp/p")));
-        Assert.That(CommandLine.Parse(["parity", "h"], out string? error), Is.Null);
-        Assert.That(error, Does.Contain("--out"));
-        Assert.That(CommandLine.Parse(["run", "h", "--period", "later"], out _), Is.Null);
+        return new HypothesisRunner(_hypotheses, new GrpcHistorySource(server.Channel), new InstrumentCatalog(server.Http), _ledger, TextWriter.Null);
     }
 
-    // PROFIT_FOX_KEEP_DUMP=<folder> keeps the dumps of these runs there, to look at them.
-    private static string? KeptDump(string name)
+    private static RunOptions Options(bool parity)
     {
-        return Environment.GetEnvironmentVariable("PROFIT_FOX_KEEP_DUMP") is { Length: > 0 } folder ? Path.Combine(folder, name) : null;
+        return new RunOptions("H0001", Version: null, Period.Exploration, parity, Today);
     }
 
-    private HypothesisRunner Runner(MarketDataServer server, IRepository repository)
+    private Task Write(LedgerEntry entry)
     {
-        return new HypothesisRunner(
-            new HypothesisCatalog(new HypothesisFiles(Path.Combine(_bench, "hypotheses"))),
-            new GrpcHistorySource(server.Channel),
-            new InstrumentCatalog(server.Http),
-            repository,
-            new LedgerFile(Path.Combine(_bench, "ledger.jsonl")),
-            new ReportFiles(_bench),
-            new ParityDumpFiles(),
-            TextWriter.Null);
+        return _ledger.Decide(_ => new Decision(entry, Report: null), CancellationToken.None);
     }
 
-    private RunOptions Options(bool parity, string? dump)
+    private static LedgerEntry Line(string hypothesis, string status, int version)
     {
-        return new RunOptions(_hypothesis, Period.Exploration, parity, dump, Today);
-    }
-
-    private static string Root()
-    {
-        DirectoryInfo? folder = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
-        while (folder is not null && !Path.Exists(Path.Combine(folder.FullName, ".git")))
+        return new LedgerEntry
         {
-            folder = folder.Parent;
-        }
+            RunId = Guid.NewGuid().ToString("N"),
+            Time = DateTimeOffset.UtcNow,
+            Hypothesis = hypothesis,
+            Hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            Version = version,
+            EngineVersion = EngineVersion.Number,
+            Period = "exploration",
+            Status = status
+        };
+    }
 
-        return folder!.FullName;
+    private static async Task<string> Report(string runId)
+    {
+        await using NpgsqlConnection connection = await BenchDatabase.DataSource.OpenConnectionAsync();
+        return await connection.ExecuteScalarAsync<string>("SELECT text FROM reports WHERE run_id = @RunId", new { RunId = runId }) ?? "";
     }
 }
