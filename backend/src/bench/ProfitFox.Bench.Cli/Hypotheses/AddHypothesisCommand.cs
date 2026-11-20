@@ -1,6 +1,7 @@
 using System.Net;
+using ProfitFox.Bench.Cli.Api;
 
-namespace ProfitFox.Bench.Cli;
+namespace ProfitFox.Bench.Cli.Hypotheses;
 
 /// <summary>
 ///     <c>bench hypotheses add</c>: loads a <c>hypothesis.json</c> into the bench as a new version, or finds the version that has
@@ -8,13 +9,8 @@ namespace ProfitFox.Bench.Cli;
 /// </summary>
 internal sealed class AddHypothesisCommand(BenchClient client, TextWriter output, TextWriter error)
 {
-    public async Task<int> Execute(CommandLine line, CancellationToken cancellation)
+    public async Task<int> Execute(string file, CancellationToken cancellation)
     {
-        if (line.Words is not [_, "add", var file])
-        {
-            throw new UsageException("hypotheses wants: add <file>.");
-        }
-
         if (!File.Exists(file))
         {
             await error.WriteLineAsync($"there is no file {file}.");

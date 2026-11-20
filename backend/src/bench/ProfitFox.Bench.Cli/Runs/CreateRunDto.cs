@@ -1,4 +1,4 @@
-namespace ProfitFox.Bench.Cli;
+namespace ProfitFox.Bench.Cli.Runs;
 
 /// <summary>
 ///     A run to put in the queue, as the bench API takes it.

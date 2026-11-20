@@ -1,7 +1,9 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using ProfitFox.Bench.Cli.Hypotheses;
+using ProfitFox.Bench.Cli.Runs;
 
-namespace ProfitFox.Bench.Cli;
+namespace ProfitFox.Bench.Cli.Api;
 
 /// <summary>
 ///     The calls of the commands to the bench API. A refusal (any answer that is not a success) is not an exception: the answer

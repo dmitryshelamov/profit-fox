@@ -1,6 +1,7 @@
 using System.Globalization;
+using ProfitFox.Bench.Cli.Api;
 
-namespace ProfitFox.Bench.Cli;
+namespace ProfitFox.Bench.Cli.Runs;
 
 /// <summary>
 ///     <c>bench runs</c>: the runs that wait and go, then the last finished ones.
@@ -9,13 +10,8 @@ internal sealed class RunsCommand(BenchClient client, TextWriter output, TextWri
 {
     private const int FinishedLimit = 20;
 
-    public async Task<int> Execute(CommandLine line, CancellationToken cancellation)
+    public async Task<int> Execute(CancellationToken cancellation)
     {
-        if (line.Words.Count != 1)
-        {
-            throw new UsageException("runs takes no arguments.");
-        }
-
         Answer<RunDto[]> active = await client.Active(cancellation);
         Answer<RunDto[]> finished = await client.Finished(FinishedLimit, cancellation);
         if (active.Value is not { } going || finished.Value is not { } ended)

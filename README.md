@@ -84,7 +84,7 @@ dotnet run --project backend/src/bench/ProfitFox.Bench.Cli -- run H0001 --wait
 - `cancel <id прогона>` — снять из очереди или остановить;
 - `hypotheses add <файл>` — загрузить гипотезу или её новую версию (текст `hypothesis.json`).
 
-Адрес стенда — `--bench <адрес>`, иначе `Bench:Url` в `appsettings.json` CLI или переменная `Bench__Url`, по умолчанию
+Справка — `bench --help` и `bench <команда> --help`. Адрес стенда — `--bench <адрес>`, иначе `Bench:Url` в `appsettings.json` CLI или переменная `Bench__Url`, по умолчанию
 `http://localhost:5240`.
 
 H0001 на 828 парах с soyo-02 считается около 15 минут.

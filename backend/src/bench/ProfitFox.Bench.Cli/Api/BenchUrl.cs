@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Configuration;
 
-namespace ProfitFox.Bench.Cli;
+namespace ProfitFox.Bench.Cli.Api;
 
 /// <summary>
 ///     Where the bench service is: <c>--bench</c>, else <c>Bench:Url</c> of the <c>appsettings.json</c> next to the binary or of the

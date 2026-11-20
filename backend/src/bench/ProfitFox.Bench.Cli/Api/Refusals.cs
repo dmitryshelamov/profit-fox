@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace ProfitFox.Bench.Cli;
+namespace ProfitFox.Bench.Cli.Api;
 
 /// <summary>
 ///     Reads why the bench API refused a request from the three shapes of its answers: a conflict (<c>reason</c>), a list of

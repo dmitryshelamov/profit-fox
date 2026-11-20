@@ -1,6 +1,6 @@
 using System.Net;
 
-namespace ProfitFox.Bench.Cli;
+namespace ProfitFox.Bench.Cli.Api;
 
 /// <summary>
 ///     What the bench API answered: <see cref="Value" /> when the answer is a success, else the <see cref="Reason" /> of the

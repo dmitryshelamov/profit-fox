@@ -1,25 +1,22 @@
-namespace ProfitFox.Bench.Cli;
+using ProfitFox.Bench.Cli.Api;
+
+namespace ProfitFox.Bench.Cli.Runs;
 
 /// <summary>
 ///     <c>bench cancel</c>: takes a waiting run out of the queue or asks the Worker to stop a run that goes.
 /// </summary>
 internal sealed class CancelCommand(BenchClient client, TextWriter output, TextWriter error)
 {
-    public async Task<int> Execute(CommandLine line, CancellationToken cancellation)
+    public async Task<int> Execute(string run, CancellationToken cancellation)
     {
-        if (line.Words.Count != 2)
-        {
-            throw new UsageException("cancel wants one run id.");
-        }
-
-        Answer<object> answer = await client.Cancel(line.Words[1], cancellation);
+        Answer<object> answer = await client.Cancel(run, cancellation);
         if (answer.Refused)
         {
             await error.WriteLineAsync($"not cancelled: {answer.Reason}");
             return 1;
         }
 
-        await output.WriteLineAsync($"cancelling run {line.Words[1]}");
+        await output.WriteLineAsync($"cancelling run {run}");
         return 0;
     }
 }

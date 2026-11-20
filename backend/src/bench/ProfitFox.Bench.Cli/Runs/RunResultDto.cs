@@ -1,4 +1,4 @@
-namespace ProfitFox.Bench.Cli;
+namespace ProfitFox.Bench.Cli.Runs;
 
 /// <summary>
 ///     The line of the ledger of a run that ended, as the bench API tells it.

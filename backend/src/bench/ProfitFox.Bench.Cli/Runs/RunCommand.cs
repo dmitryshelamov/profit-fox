@@ -1,6 +1,7 @@
 using System.Globalization;
+using ProfitFox.Bench.Cli.Api;
 
-namespace ProfitFox.Bench.Cli;
+namespace ProfitFox.Bench.Cli.Runs;
 
 /// <summary>
 ///     <c>bench run</c> and <c>bench parity</c>: puts a run in the queue and prints its id; with <c>--wait</c> follows it to its end
@@ -8,20 +9,9 @@ namespace ProfitFox.Bench.Cli;
 /// </summary>
 internal sealed class RunCommand(BenchClient client, TextWriter output, TextWriter error, TimeSpan pollInterval)
 {
-    public async Task<int> Execute(CommandLine line, bool parity, CancellationToken cancellation)
+    public async Task<int> Execute(string hypothesis, int? version, string period, bool wait, bool parity, CancellationToken cancellation)
     {
-        if (line.Words.Count != 2)
-        {
-            throw new UsageException($"{line.Words[0]} wants one hypothesis id.");
-        }
-
-        string period = parity ? "exploration" : line.Value("--period") ?? "exploration";
-        if (period is not ("exploration" or "holdout" or "new-data"))
-        {
-            throw new UsageException($"the period is exploration, holdout or new-data, not '{period}'.");
-        }
-
-        Answer<RunDto> queued = await client.Enqueue(new CreateRunDto(line.Words[1], line.Version(), period, parity ? "parity" : "verdict"), cancellation);
+        Answer<RunDto> queued = await client.Enqueue(new CreateRunDto(hypothesis, version, period, parity ? "parity" : "verdict"), cancellation);
         if (queued.Value is not { } run)
         {
             await error.WriteLineAsync($"refused: {queued.Reason}");
@@ -29,7 +19,7 @@ internal sealed class RunCommand(BenchClient client, TextWriter output, TextWrit
         }
 
         await output.WriteLineAsync($"queued {run.Kind} run {run.Id} of {run.Hypothesis} v{run.Version} on {run.Period}");
-        return line.Has("--wait") ? await Wait(run, cancellation) : 0;
+        return wait ? await Wait(run, cancellation) : 0;
     }
 
     private async Task<int> Wait(RunDto queued, CancellationToken cancellation)

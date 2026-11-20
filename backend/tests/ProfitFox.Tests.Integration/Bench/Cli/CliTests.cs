@@ -162,6 +162,7 @@ public sealed class CliTests
     [TestCase("run H0001 --period yesterday")]
     [TestCase("run H0001 --version")]
     [TestCase("run H0001 --version zero")]
+    [TestCase("run H0001 --version 0")]
     [TestCase("run H0001 --nonsense")]
     [TestCase("parity H0001 --period holdout")]
     [TestCase("runs now")]
@@ -173,8 +174,18 @@ public sealed class CliTests
         Result result = await Command(line.Split(' ', StringSplitOptions.RemoveEmptyEntries));
 
         Assert.That(result.Code, Is.EqualTo(2));
-        Assert.That(result.Error, Does.Contain("usage:").And.Contain("bench run <hypothesis>"));
+        Assert.That(result.Error, Does.Contain("Usage:").And.Contain("bench"));
         Assert.That(result.Output, Is.Empty);
+    }
+
+    [Test]
+    public async Task The_help_of_a_command_goes_to_the_output_and_exits_with_0()
+    {
+        Result result = await Command("run", "--help");
+
+        Assert.That(result.Code, Is.EqualTo(0));
+        Assert.That(result.Output, Does.Contain("bench run <hypothesis>").And.Contain("--period"));
+        Assert.That(result.Error, Is.Empty);
     }
 
     [Test]

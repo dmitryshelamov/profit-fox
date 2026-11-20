@@ -87,7 +87,7 @@
 
 ## 5. CLI
 
-- [x] 5.1 Переписать `ProfitFox.Bench.Cli` в клиент REST (решение 10), без ссылок на проекты стенда. Проверить
+- [x] 5.1 Переписать `ProfitFox.Bench.Cli` в клиент REST на System.CommandLine (решение 10), без ссылок на проекты стенда. Проверить
   интеграционными тестами против тестового Presentation:
   - «Прогон с ожиданием», «Прогон без ожидания», «Отказ при постановке», «Прогон упал»;
   - `bench hypotheses add` с новой версией;
@@ -117,7 +117,7 @@
 - [x] 8.1 Dockerfile'ы `ProfitFox.Bench.Presentation` (node-стадия фронтенда) и
   `ProfitFox.Bench.Worker`. Проверить: оба образа собираются локально, контейнер `bench` отдаёт `/` и `/health` на
   локальной базе.
-- [ ] 8.2 `.github/workflows/ci.yml` (решение 13). Проверить: CI зелёный на push в `release/0.1.0` (push — по слову
+- [x] 8.2 `.github/workflows/ci.yml` (решение 13). Проверить: CI зелёный на push в `release/0.1.0` (push — по слову
   владельца).
 - [x] 8.3 `deploy/deploy.sh` с `deploy.test.sh`, `docker-compose.prod.yml`, `.github/workflows/deploy.yml` (решение 13).
   README: раздел «Production» со шагами владельца. Проверить: `shellcheck` и `deploy.test.sh` зелёные, а

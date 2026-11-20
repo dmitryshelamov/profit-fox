@@ -1,4 +1,4 @@
-namespace ProfitFox.Bench.Cli;
+namespace ProfitFox.Bench.Cli.Runs;
 
 /// <summary>
 ///     A run as the bench API tells it: only the fields the commands print.
