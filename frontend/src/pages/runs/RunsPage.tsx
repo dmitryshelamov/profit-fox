@@ -2,11 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useEffect } from 'react';
 
-import { cancelRun, listActiveRuns, listFinishedRuns } from '@/api/runs';
+import { cancelRun, listFinishedRuns } from '@/api/runs';
 import { buttonClass } from '@/modules/graph-editor/ui/Card';
 
-import { fixed, kindLabel, periodLabel, pollMs, runProgress, statusLabel } from './labels';
-import { SectionNav } from './SectionNav';
+import { fixed, kindLabel, periodLabel, runProgress, statusLabel } from './labels';
+import { useActiveRuns } from './useActiveRuns';
 
 /**
  * The section «Прогоны» (spec bench-run-queue «Страница «Прогоны»»): the runs that wait and go with their progress and
@@ -14,11 +14,7 @@ import { SectionNav } from './SectionNav';
  */
 export function RunsPage() {
   const queries = useQueryClient();
-  const active = useQuery({
-    queryKey: ['runs', 'active'],
-    queryFn: listActiveRuns,
-    refetchInterval: (query) => (query.state.data?.length ? pollMs : false),
-  });
+  const active = useActiveRuns();
   const finished = useQuery({
     queryKey: ['runs', 'finished'],
     queryFn: () => listFinishedRuns(),
@@ -41,7 +37,6 @@ export function RunsPage() {
     <main className="mx-auto flex max-w-5xl flex-col gap-6 p-6 text-sm">
       <header className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Прогоны</h1>
-        <SectionNav />
       </header>
 
       <section aria-label="Ждут и идут" className="flex flex-col gap-2">

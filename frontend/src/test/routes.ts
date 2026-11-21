@@ -75,6 +75,8 @@ export function baseRoutes(): Record<string, FakeRoute> {
         },
       ]),
     'GET /api/signals': () => json([]),
+    // The header asks for the queue on every page under it.
+    'GET /api/runs': () => json([]),
     'POST /api/signals/validate': checkLikeServer,
   };
 }

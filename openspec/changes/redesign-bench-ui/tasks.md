@@ -41,15 +41,15 @@
 
 ## 3. Тема, общие детали и шапка
 
-- [ ] 3.1 Пакеты `@fontsource-variable/inter` и `@fontsource-variable/jetbrains-mono` (наборы `latin` и `cyrillic`),
+- [x] 3.1 Пакеты `@fontsource-variable/inter` и `@fontsource-variable/jetbrains-mono` (наборы `latin` и `cyrillic`),
   токены темы в `src/index.css` по таблице design.md, решение 2. Проверить: `npm run build` проходит, в собранном CSS
   есть оба семейства и все токены таблицы; размер `dist` записан в «Замеры» рядом с базой.
-- [ ] 3.2 Детали `src/shared/ui`: `Button`, `Badge`, `RunStatusBadge`, `TextField`, `SelectField`, `Segmented`, `Tabs`,
+- [x] 3.2 Детали `src/shared/ui`: `Button`, `Badge`, `RunStatusBadge`, `TextField`, `SelectField`, `Segmented`, `Tabs`,
   `Menu`, `Dialog`, `Table` (design.md, решение 4); подмена `showModal` и `close` в `src/test/setup.ts`. Проверить
   тестами: `Menu` открывается кнопкой, закрывается по Escape и клику мимо и возвращает фокус на кнопку; `Dialog`
   закрывается по Escape без действия; `Segmented` и `Tabs` переключаются стрелками и кликом; `RunStatusBadge` — сценарии
   spec `bench-ui` «Цвет статуса прогона» по `data-tone` для всех шести статусов журнала, идущего и ждущего.
-- [ ] 3.3 `AppShell` маршрутом-обёрткой для `/signals`, `/strategies`, `/runs`, `/runs/$id`; индикатор очереди на ключе
+- [x] 3.3 `AppShell` маршрутом-обёрткой для `/signals`, `/strategies`, `/runs`, `/runs/$id`; индикатор очереди на ключе
   запроса списка ждущих и идущих; `SectionNav` удалён (design.md, решение 5). Проверить тестами сценарии spec `bench-ui`
   «Общая шапка» («Текущий раздел» по `aria-current`, «Редактор без шапки») и «Состояние очереди в шапке» («Идёт и
   ждёт», «Очередь пуста», «API не отвечает»); на странице «Прогоны» запрос очереди уходит один, а не два.
@@ -164,6 +164,23 @@
   может быть `null`, а в ответе при `null` его нет — как у прежних полей (`JsonIgnoreCondition.WhenWritingNull`);
   страница читает отсутствие как «не запускалась».
 
+- 3.1. У пакетов `@fontsource-variable` нет отдельных файлов стилей по наборам (только `index.css` и `wght.css` со всеми
+  наборами), поэтому в `src/main.tsx` подключается свой `src/fonts.css`: четыре `@font-face` с файлами пакетов
+  `*-latin-wght-normal.woff2` и `*-cyrillic-wght-normal.woff2` и их диапазонами `unicode-range`. В сборку попадают
+  только эти четыре файла; семейства называются `Inter Variable` и `JetBrains Mono Variable`.
+- 3.1. Проверка «в собранном CSS есть оба семейства и все токены» сделана и руками по `dist`, и тестом
+  `src/theme.test.ts` (токены таблицы решения 2 в `index.css`, `@theme static`, файлы шрифтов). Тест читает файлы с
+  диска: vitest отдаёт пустой текст вместо импортированного CSS.
+- 3.2. Кроме `Button` из `shared/ui/Button.tsx` вынесена функция классов `buttonLook(variant)` — для ссылки, которая
+  выглядит кнопкой («Открыть гипотезу»). Вид кнопки тесты читают по `data-variant`. У `Menu` стрелки вверх и вниз
+  переводят фокус между пунктами; у `Dialog` без `onClose` Escape ничего не делает (вопрос о черновике ждёт кнопку).
+- 3.2. Фон под диалогом — `app` с прозрачностью (`backdrop:bg-app/70`), отдельного токена нет.
+- 3.3. Запрос очереди — общий `pages/runs/useActiveRuns.ts`; страница «Прогоны» теперь тоже переспрашивает пустую очередь
+  раз в 30 с (раньше не переспрашивала совсем). Знак и имя продукта в шапке — не ссылка. Пока первый ответ не пришёл,
+  на месте чисел «Загрузка…»; «Стенд не отвечает» появляется после одной повторной попытки запроса (общая настройка
+  `retry: 1`), то есть примерно через секунду после отказа. В `test/routes.ts` в общие маршруты добавлен
+  `GET /api/runs` с пустой очередью: его теперь спрашивает шапка на каждой странице под ней.
+
 ## База
 
 Снято на `aa1a17b` (ветка `feat/redesign-bench-ui` от `feat/add-strategy-constructor`, PR #20 ещё не слит) в облачном
@@ -190,6 +207,11 @@
 - 2.5. SHA-256 `schema.d.ts`: `c67cc65bf18eeeb71d076c6a0c6dca76f6183128a9309d0345f09ee3dc77cfc0`; отличие от базы — 11
   добавленных строк, удалённых нет. SHA-256 `EngineVersions.json`:
   `f94ec0a7a01577bf6151c1db94412b6e5371f3b5f9bbec4ef49165facef954b9` — равен базе.
+- 3.1. `frontend/dist` после группы 3: 927 937 байт в 7 файлах против 798 456 байт базы — добавились четыре файла
+  шрифтов (119.5 кБ:
+  Inter latin 48.25, Inter cyrillic 18.74, JetBrains Mono latin 40.40, JetBrains Mono cyrillic 12.10). В собранном CSS
+  есть `Inter Variable`, `JetBrains Mono Variable` и все 30 токенов цвета таблицы решения 2.
+- 3.3. Тесты фронтенда после группы 3: 144 в 15 файлах (база 82 в 12), все зелёные.
 
 ## Workflow follow-up
 

@@ -8,7 +8,6 @@ import { buttonClass } from '@/modules/graph-editor/ui/Card';
 import { DocumentRow, type ListType } from '@/pages/documents/DocumentRow';
 import { openStrategyOfSignal } from '@/pages/strategies/fromSignal';
 
-import { SectionNav } from '../runs/SectionNav';
 import { RunControls } from './RunControls';
 
 /**
@@ -28,7 +27,6 @@ export function SignalListPage() {
     <main className="mx-auto flex max-w-4xl flex-col gap-6 p-6 text-sm">
       <header className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Сигналы</h1>
-        <SectionNav />
         <button
           type="button"
           className={`${buttonClass} border-amber-500 px-3 py-1.5 text-sm`}

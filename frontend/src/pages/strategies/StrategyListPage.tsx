@@ -8,8 +8,6 @@ import { strategyDraftKey } from '@/modules/graph-editor/drafts/drafts';
 import { buttonClass } from '@/modules/graph-editor/ui/Card';
 import { DocumentRow, type ListType } from '@/pages/documents/DocumentRow';
 
-import { SectionNav } from '../runs/SectionNav';
-
 /** The row of a saved strategy: its words and the requests of `/api/strategies`. */
 const strategyList: ListType = {
   label: 'Стратегия',
@@ -58,7 +56,6 @@ export function StrategyListPage() {
     <main className="mx-auto flex max-w-4xl flex-col gap-6 p-6 text-sm">
       <header className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Стратегии</h1>
-        <SectionNav />
         <button
           type="button"
           className={`${buttonClass} border-amber-500 px-3 py-1.5 text-sm`}

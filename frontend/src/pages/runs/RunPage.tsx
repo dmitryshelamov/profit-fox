@@ -5,7 +5,6 @@ import { getRun, type Run, type RunResult } from '@/api/runs';
 
 import { fixed, kindLabel, periodLabel, pollMs, runProgress, statusLabel, utc } from './labels';
 import { Markdown } from './Markdown';
-import { SectionNav } from './SectionNav';
 
 /**
  * One run (spec bench-run-queue «Страница прогона»): the line of the ledger and the report; a run without a report shows
@@ -25,7 +24,6 @@ export function RunPage({ id }: { readonly id: string }) {
         <Link to="/runs" className="text-zinc-400 hover:text-zinc-100">
           ← Прогоны
         </Link>
-        <SectionNav />
       </header>
       {run.isPending && <p className="text-zinc-400">Загрузка…</p>}
       {run.error && <p className="text-red-300">{run.error.message}</p>}

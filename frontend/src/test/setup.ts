@@ -51,6 +51,14 @@ Object.defineProperties(HTMLElement.prototype, {
   },
 });
 
+// jsdom does not implement the modal state of <dialog>: opening and closing set and clear its `open` attribute.
+HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+  this.setAttribute('open', '');
+};
+HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+  this.removeAttribute('open');
+};
+
 // jsdom has no canvas, so the chart library is replaced by a series that keeps the data it was given.
 vi.mock('lightweight-charts', async () => {
   const { drawn } = await import('./chart');

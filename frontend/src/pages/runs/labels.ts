@@ -18,6 +18,9 @@ const statuses: Record<string, string> = {
   parity: 'Сверка',
   failed: 'Упала',
   cancelled: 'Отменён',
+  // Where a run of the queue is, for the badge of a run that has no line yet.
+  running: 'Идёт',
+  queued: 'В очереди',
 };
 
 export const periodOrder = ['exploration', 'holdout', 'new-data'] as const;
