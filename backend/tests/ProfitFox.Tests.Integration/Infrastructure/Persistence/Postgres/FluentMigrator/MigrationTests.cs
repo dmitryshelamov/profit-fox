@@ -1,5 +1,7 @@
 using Dapper;
 
+using FluentMigrator.Runner;
+
 using Microsoft.Extensions.DependencyInjection;
 
 using Npgsql;
@@ -9,12 +11,15 @@ using ProfitFox.Infrastructure.Persistence.Postgres.FluentMigrator;
 namespace ProfitFox.Tests.Integration.Infrastructure.Persistence.Postgres.FluentMigrator;
 
 /// <summary>
-///     The first migration of the bench database (design add-bench-service, decision 2) and what it makes the database
-///     refuse: a change of the ledger or of a report, and a second waiting run of one version, period and kind.
+///     The migrations of the bench database (design add-bench-service, decision 2; change add-strategy-constructor, task 3.1)
+///     and what they make the database refuse: a change of the ledger or of a report, and a second waiting run of one
+///     version, period and kind.
 /// </summary>
 public sealed class MigrationTests
 {
-    private static readonly string[] Tables = ["hypothesis_versions", "ledger", "reports", "runs", "signal_versions", "signals"];
+    private static readonly string[] BenchTables = ["hypothesis_versions", "ledger", "reports", "runs", "signal_versions", "signals"];
+
+    private static readonly string[] Tables = [.. BenchTables.Concat(["strategies", "strategy_signals", "strategy_versions"]).Order(StringComparer.Ordinal)];
 
     [SetUp]
     public async Task Empty()
@@ -32,9 +37,53 @@ public sealed class MigrationTests
             services.MigrateBench();
         }
 
+        Assert.That(await TablesOf(connectionString), Is.EqualTo(Tables));
+    }
+
+    [Test]
+    public async Task After_the_start_the_strategy_tables_are_there_and_the_database_has_two_migrations()
+    {
+        string connectionString = await BenchDatabase.NewDatabase();
+
+        await BenchDatabase.Migrated(connectionString).DisposeAsync();
+
         await using var connection = new NpgsqlConnection(connectionString);
-        string[] tables = [.. await connection.QueryAsync<string>("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name <> 'VersionInfo' ORDER BY table_name")];
-        Assert.That(tables, Is.EqualTo(Tables));
+        long[] versions = [.. await connection.QueryAsync<long>("SELECT \"Version\" FROM \"VersionInfo\" ORDER BY \"Version\"")];
+        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L }));
+        Assert.That(await TablesOf(connectionString), Is.SupersetOf(new[] { "strategies", "strategy_versions", "strategy_signals" }));
+    }
+
+    [Test]
+    public async Task Down_of_the_strategy_migration_removes_only_its_tables()
+    {
+        string connectionString = await BenchDatabase.NewDatabase();
+
+        await using (ServiceProvider services = BenchDatabase.Migrated(connectionString))
+        {
+            using IServiceScope scope = services.CreateScope();
+            scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateDown(202611200001);
+        }
+
+        Assert.That(await TablesOf(connectionString), Is.EqualTo(BenchTables));
+    }
+
+    [Test]
+    public async Task A_version_of_a_strategy_keeps_the_version_of_the_signal_it_points_at()
+    {
+        await Execute("INSERT INTO signals (id, name, layout, version) VALUES ('00000000-0000-0000-0000-000000000001', 'funding-high', '{}', 1)");
+        await Execute("INSERT INTO signal_versions (signal_id, version, graph) VALUES ('00000000-0000-0000-0000-000000000001', 1, '{}')");
+        await Execute("INSERT INTO strategies (id, name, layout, version) VALUES ('00000000-0000-0000-0000-000000000002', 'funding-short', '{}', 1)");
+        await Execute("INSERT INTO strategy_versions (strategy_id, version, graph) VALUES ('00000000-0000-0000-0000-000000000002', 1, '{}')");
+        await Execute("INSERT INTO strategy_signals (strategy_id, version, node, signal_id, signal_version) VALUES ('00000000-0000-0000-0000-000000000002', 1, 's', '00000000-0000-0000-0000-000000000001', 1)");
+
+        Assert.That(() => Execute("DELETE FROM signals"), Throws.InstanceOf<PostgresException>().With.Property(nameof(PostgresException.SqlState)).EqualTo("23503"));
+        Assert.That(
+            () => Execute("INSERT INTO strategy_signals (strategy_id, version, node, signal_id, signal_version) VALUES ('00000000-0000-0000-0000-000000000002', 1, 't', '00000000-0000-0000-0000-000000000001', 2)"),
+            Throws.InstanceOf<PostgresException>().With.Property(nameof(PostgresException.SqlState)).EqualTo("23503"), "no such version");
+
+        await Execute("DELETE FROM strategies");
+        await Execute("DELETE FROM signals");
+        Assert.That(await Scalar<int>("SELECT count(*) FROM signal_versions"), Is.Zero, "deleting the strategy lifts the refusal");
     }
 
     [Test]
@@ -84,6 +133,12 @@ public sealed class MigrationTests
         await Execute("INSERT INTO runs (id, hypothesis_id, version, period, kind, status) VALUES ('d', 'H0001', 1, 'exploration', 'verdict', 'queued')");
 
         Assert.That(await Scalar<int>("SELECT count(*) FROM runs"), Is.EqualTo(4));
+    }
+
+    private static async Task<string[]> TablesOf(string connectionString)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        return [.. await connection.QueryAsync<string>("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name <> 'VersionInfo' ORDER BY table_name")];
     }
 
     private static Task AddHypothesis()

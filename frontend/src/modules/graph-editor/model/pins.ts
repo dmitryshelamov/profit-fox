@@ -1,4 +1,5 @@
-import type { Graph, GraphNode, NodeKind, Pin, PinType } from './types';
+import { signalInfo } from './signals';
+import type { Catalog, Graph, GraphNode, NodeKind, Pin, PinType } from './types';
 
 /** The kind of a node in the catalog. */
 export function kindOf(node: GraphNode, catalog: readonly NodeKind[]): NodeKind | undefined {
@@ -7,14 +8,23 @@ export function kindOf(node: GraphNode, catalog: readonly NodeKind[]): NodeKind 
 
 /**
  * The pins of a node: from the catalog, or, for `parameters` and `outputs`, from the graph — a parameter is an output
- * of `parameters`, an output of the graph is an input of `outputs`.
+ * of `parameters`, an output of the graph is an input of `outputs` — or, for `signal`, from the version of the signal
+ * the node points at: an input per parameter, which takes the value of the parameter when nothing is given to it.
  */
 export function pinsOf(
   node: GraphNode,
-  catalog: readonly NodeKind[],
+  catalog: Catalog,
   graph: Graph,
 ): { inputs: Pin[]; outputs: Pin[] } {
   const kind = kindOf(node, catalog);
+  if (kind?.pinsFromGraph === 'signal') {
+    const parameters = signalInfo(node, catalog)?.parameters ?? [];
+    return {
+      inputs: parameters.map(({ name, type, value }) => ({ name, type, fallback: value })),
+      outputs: (kind.outputs ?? []).map((pin) => ({ name: pin.name, type: pin.type as PinType })),
+    };
+  }
+
   if (kind?.pinsFromGraph === 'parameters') {
     return { inputs: [], outputs: graph.parameters.map(({ name, type }) => ({ name, type })) };
   }
@@ -32,7 +42,7 @@ export function pinsOf(
 /** The type of a pin reference `node.pin` on the given side, if the node and the pin exist. */
 export function typeOf(
   graph: Graph,
-  catalog: readonly NodeKind[],
+  catalog: Catalog,
   reference: string,
   side: 'inputs' | 'outputs',
 ): PinType | undefined {

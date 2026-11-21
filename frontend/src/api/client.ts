@@ -8,6 +8,8 @@ export type Instrument = Schemas['InstrumentResponse'];
 export type Preview = Schemas['PreviewResponse'];
 export type PreviewCandle = Schemas['PreviewCandle'];
 export type PreviewEvent = Schemas['PreviewEvent'];
+export type StrategyPreview = Schemas['StrategyPreviewResponse'];
+export type PreviewOrder = Schemas['PreviewOrder'];
 export type RequestError = Schemas['RequestError'];
 
 /**

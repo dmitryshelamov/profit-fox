@@ -1,6 +1,8 @@
+using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.Services.Nodes.Data;
 using ProfitFox.Domain.Services.Nodes.Logic;
 using ProfitFox.Domain.Services.Nodes.Position;
+using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
 using ProfitFox.Domain.ValueObjects.Nodes;
 
@@ -26,6 +28,7 @@ public static class NodeCatalog
     public const string StopLoss = "stop-loss";
     public const string TakeProfit = "take-profit";
     public const string CloseAfter = "close-after";
+    public const string Signal = "signal";
 
     /// <summary>
     ///     The setting of <c>enter</c> that holds its side, and the sides.
@@ -43,6 +46,15 @@ public static class NodeCatalog
 
     public const string Distance = "distance";
     public const string After = "after";
+
+    /// <summary>
+    ///     The settings of <c>signal</c> — the id of a saved signal and the number of its version — and its only output
+    ///     (spec strategy-graph «Узел сигнала»).
+    /// </summary>
+    public const string SignalSetting = "signal";
+
+    public const string VersionSetting = "version";
+    public const string Event = "event";
 
     /// <summary>
     ///     The operations of <c>compare</c>.
@@ -106,18 +118,43 @@ public static class NodeCatalog
             },
             new NodeKind(StopLoss, [new PinDeclaration(Distance, PinType.Number)], [], [], _ => new PositionNode()) { AllowedInSignal = false },
             new NodeKind(TakeProfit, [new PinDeclaration(Distance, PinType.Number)], [], [], _ => new PositionNode()) { AllowedInSignal = false },
-            new NodeKind(CloseAfter, [new PinDeclaration(After, PinType.Duration)], [], [], _ => new PositionNode()) { AllowedInSignal = false }
+            new NodeKind(CloseAfter, [new PinDeclaration(After, PinType.Duration)], [], [], _ => new PositionNode()) { AllowedInSignal = false },
+            new NodeKind(
+                Signal,
+                (node, _, signals) => SignalInputs(node, signals),
+                (_, _, _) => [new PinDeclaration(Event, PinType.Event)],
+                [
+                    new SettingDeclaration(SignalSetting, [], Default: null) { Free = true },
+                    new SettingDeclaration(VersionSetting, [], Default: null) { Free = true }
+                ],
+                (node, _) => throw new InvalidOperationException($"The signal node {node.Id} is expanded before the graph runs."))
+            {
+                AllowedInSignal = false,
+                CheckFreeSetting = SignalNodes.CheckSetting
+            }
         }
         .ToDictionary(kind => kind.Name, StringComparer.Ordinal);
 
     /// <summary>
     ///     Every kind, in the order the catalog declares them: the kinds of a signal first, then the position nodes of a
-    ///     strategy. The constructor of signals offers those with <see cref="NodeKind.AllowedInSignal" />.
+    ///     strategy and its <c>signal</c> node. The constructor of signals offers those with
+    ///     <see cref="NodeKind.AllowedInSignal" />.
     /// </summary>
     public static IReadOnlyList<NodeKind> All { get; } = [.. Kinds.Values];
 
     public static NodeKind? Find(string name)
     {
         return Kinds.GetValueOrDefault(name);
+    }
+
+    // The parameters of the version the node points at; none when there is no node, no reference or no such version.
+    private static IReadOnlyList<PinDeclaration> SignalInputs(NodeDefinition? node, SignalSet signals)
+    {
+        if (node is null || !SignalNodes.TryReference(node, out SignalReference reference) || signals.Find(reference).Signal is not { } signal)
+        {
+            return [];
+        }
+
+        return [.. signal.Graph.Parameters.Select(parameter => new PinDeclaration(parameter.Name, parameter.Type))];
     }
 }

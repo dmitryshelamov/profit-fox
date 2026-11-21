@@ -21,6 +21,11 @@ internal sealed class FakeHistorySource : IHistorySource
     public TimeRange? Hole { get; init; }
 
     /// <summary>
+    ///     The rate of the payment at a moment; 0.0001 when not given.
+    /// </summary>
+    public Func<DateTimeOffset, string>? Rate { get; init; }
+
+    /// <summary>
     ///     Candles opened at these moments have no trades.
     /// </summary>
     public HashSet<DateTimeOffset> Quiet { get; } = [];
@@ -51,7 +56,7 @@ internal sealed class FakeHistorySource : IHistorySource
         {
             if (Coverage.Covers(coverage, time, time.AddTicks(1)))
             {
-                payments.Add(new HistoryPayment(time, "0.0001"));
+                payments.Add(new HistoryPayment(time, Rate?.Invoke(time) ?? "0.0001"));
             }
         }
 

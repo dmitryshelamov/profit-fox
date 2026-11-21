@@ -17,5 +17,11 @@ public enum SignalProblem
     /// <summary>
     ///     The file is there but is not a signal.
     /// </summary>
-    Unreadable
+    Unreadable,
+
+    /// <summary>
+    ///     A version of a saved strategy points at the signal, so it is not deleted (spec signal-constructor «Сигнал, на
+    ///     который ссылается стратегия»).
+    /// </summary>
+    InUse
 }

@@ -26,6 +26,7 @@ import {
   setInputValue,
 } from '../model/operations';
 import { typeOf } from '../model/pins';
+import { addSignalNode, type SignalEntry } from '../model/signals';
 import type { GraphDocument, NodeKind } from '../model/types';
 import { canConnect } from '../model/wires';
 import { type GraphEnvironment, GraphEnvironmentContext } from './GraphContext';
@@ -34,6 +35,9 @@ import { pinColors } from './pinColors';
 
 /** The drag-and-drop type of a kind dragged from the palette: its name. */
 export const paletteMime = 'application/x-profit-fox-node';
+
+/** The type of the data a saved signal carries when it is dragged from the palette. */
+export const signalMime = 'application/x-profit-fox-signal';
 
 const nodeTypes = { graph: GraphNodeView };
 
@@ -44,7 +48,7 @@ export interface GraphCanvasProps {
   readonly issues: readonly Issue[];
   readonly readOnly: boolean;
   readonly selected: string | undefined;
-  readonly onChange: (document: GraphDocument) => void;
+  readonly onChange: (document: GraphDocument, urgent?: boolean) => void;
   readonly onSelect: (node: string | undefined) => void;
   readonly onInit?: (instance: ReactFlowInstance<GraphFlowNode, GraphFlowEdge>) => void;
 }
@@ -107,6 +111,16 @@ export function GraphCanvas({
   const reference = (connection: Connection | GraphFlowEdge) => wireOf(connection);
 
   function drop(event: DragEvent) {
+    const signal = event.dataTransfer.getData(signalMime);
+    if (signal !== '' && instance && !readOnly) {
+      event.preventDefault();
+      const position = instance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      const added = addSignalNode(document, catalog, JSON.parse(signal) as SignalEntry, position);
+      onChange(added.document, true);
+      onSelect(added.id);
+      return;
+    }
+
     const name = event.dataTransfer.getData(paletteMime);
     const kind = catalog.find((candidate) => candidate.kind === name);
     if (!kind || !instance || readOnly) {

@@ -24,6 +24,15 @@ internal static class BenchServices
     public static ISender Sender => Shared.Value.GetRequiredService<ISender>();
 
     /// <summary>
+    ///     A service of the shared services, such as a repository, for the tests of the store itself.
+    /// </summary>
+    public static T Get<T>()
+        where T : notnull
+    {
+        return Shared.Value.GetRequiredService<T>();
+    }
+
+    /// <summary>
     ///     The services over <paramref name="connectionString" /> (the test database when null), reading history from
     ///     <paramref name="market" /> when it is given.
     /// </summary>

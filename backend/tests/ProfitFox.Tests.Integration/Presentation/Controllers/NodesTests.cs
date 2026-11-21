@@ -9,7 +9,8 @@ using ProfitFox.Tests.Integration.MarketData;
 namespace ProfitFox.Tests.Integration.Presentation.Controllers;
 
 /// <summary>
-///     Spec signal-constructor «Каталог узлов» (task 3.1; change add-strategy-graph, task 4.5).
+///     Spec signal-constructor «Каталог узлов» (task 3.1; change add-strategy-graph, task 4.5) and spec strategy-constructor
+///     «Каталог узлов стратегии» (change add-strategy-constructor, task 4.4).
 /// </summary>
 [NonParallelizable]
 public sealed class NodesTests
@@ -67,10 +68,39 @@ public sealed class NodesTests
         Assert.That(kinds.Single(kind => kind.Kind == "first-time").Outputs, Is.EqualTo(new[] { new PinResponse("event", "event") }));
     }
 
-    private static async Task<NodeKindResponse[]> Catalog()
+    [Test]
+    public async Task The_position_nodes_in_the_catalog_of_a_strategy()
+    {
+        NodeKindResponse[] kinds = await Catalog("/api/nodes/strategy");
+
+        Assert.That(kinds.Select(kind => kind.Kind), Is.SupersetOf(new[] { "enter", "stop-loss", "take-profit", "close-after", "signal" }));
+        Assert.That(kinds.Select(kind => kind.Kind), Has.None.EqualTo("outputs"));
+        Assert.That(kinds.Select(kind => kind.Kind), Is.EqualTo(NodeCatalog.All.Where(kind => kind.Name != "outputs").Select(kind => kind.Name)));
+        NodeKindResponse signal = kinds.Single(kind => kind.Kind == "signal");
+        Assert.That((signal.Title, signal.Group, signal.PinsFromGraph), Is.EqualTo(("Сигнал", "Сигналы", (string?)"signal")));
+        Assert.That(signal.Inputs, Is.Empty);
+        Assert.That(signal.Outputs, Is.EqualTo(new[] { new PinResponse("event", "event") }));
+        Assert.That(signal.Settings, Is.EqualTo(new[] { new SettingResponse("signal", [], null), new SettingResponse("version", [], null) }).Using<SettingResponse>(Same));
+    }
+
+    [Test]
+    public async Task The_catalog_of_a_signal_stays_as_it_was()
+    {
+        NodeKindResponse[] kinds = await Catalog();
+
+        Assert.That(kinds.Select(kind => kind.Kind), Has.None.AnyOf("enter", "stop-loss", "take-profit", "close-after", "signal"));
+        Assert.That(kinds.Select(kind => kind.Kind), Is.EqualTo(new[] { "parameters", "candle", "funding-rate", "compare", "previous", "and", "or", "not", "first-time", "outputs" }));
+    }
+
+    private static async Task<NodeKindResponse[]> Catalog(string path = "/api/nodes")
     {
         await using MarketDataServer market = await MarketDataServer.Start();
         await using var api = new BenchTestApplication(market);
-        return (await api.Http.GetFromJsonAsync<NodeKindResponse[]>("/api/nodes", Json))!;
+        return (await api.Http.GetFromJsonAsync<NodeKindResponse[]>(path, Json))!;
+    }
+
+    private static bool Same(SettingResponse a, SettingResponse b)
+    {
+        return a.Name == b.Name && a.Values.SequenceEqual(b.Values) && a.Default == b.Default;
     }
 }

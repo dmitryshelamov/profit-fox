@@ -1,11 +1,10 @@
-using System.Globalization;
-using System.Text;
 using System.Text.Json;
 
 using ProfitFox.Domain.Entities.Signals;
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Signals;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Converters;
 
 namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Signals.Converters;
 
@@ -26,44 +25,25 @@ internal static class SignalJson
         return StrategyGraph.Write(signal.Graph);
     }
 
-    /// <summary>
-    ///     The <c>layout</c> object of a signal: each node id maps to <c>{ "x": number, "y": number }</c>, in the order of the
-    ///     ids.
-    /// </summary>
     public static string WriteLayout(SignalDocument signal)
     {
-        using var stream = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(stream))
-        {
-            writer.WriteStartObject();
-            foreach ((string id, NodePosition position) in signal.Layout.OrderBy(position => position.Key, StringComparer.Ordinal))
-            {
-                writer.WriteStartObject(id);
-                writer.WriteNumber("x", position.X);
-                writer.WriteNumber("y", position.Y);
-                writer.WriteEndObject();
-            }
-
-            writer.WriteEndObject();
-        }
-
-        return Encoding.UTF8.GetString(stream.ToArray());
+        return LayoutJson.Write(signal.Layout);
     }
 
     /// <summary>
     ///     The signal the store kept, or the errors that stop it: its graph no longer reads as a signal, or its layout is not
     ///     one.
     /// </summary>
-    public static SignalRead ReadStored(string name, string? description, string graph, string layout, int version)
+    public static SignalRead ReadStored(Guid id, string name, string? description, string graph, string layout, int version)
     {
         using var graphDocument = JsonDocument.Parse(graph);
         ReadResult<Signal> read = StrategyGraph.ReadSignal(graphDocument.RootElement);
         List<string> errors = [.. read.Errors.Select(error => $"graph: {error}")];
         Dictionary<string, NodePosition> positions = [];
         using var layoutDocument = JsonDocument.Parse(layout);
-        errors.AddRange(ReadLayout(layoutDocument.RootElement, positions));
+        errors.AddRange(LayoutJson.Read(layoutDocument.RootElement, positions));
         return errors.Count == 0 && read.Value is not null
-            ? new SignalRead(SignalDocument.Restore(name, description, read.Value.Graph, positions, version), [])
+            ? new SignalRead(SignalDocument.Restore(id, name, description, read.Value.Graph, positions, version), [])
             : new SignalRead(null, errors);
     }
 
@@ -132,7 +112,7 @@ internal static class SignalJson
             Dictionary<string, NodePosition> layout = [];
             if (root.TryGetProperty("layout", out JsonElement layoutElement))
             {
-                errors.AddRange(ReadLayout(layoutElement, layout));
+                errors.AddRange(LayoutJson.Read(layoutElement, layout));
             }
             else
             {
@@ -143,34 +123,5 @@ internal static class SignalJson
                 ? (SignalDocument.Create(name, description, graph, layout), [])
                 : (null, errors);
         }
-    }
-
-    /// <summary>
-    ///     The positions of a <c>layout</c> object: each node id maps to <c>{ "x": number, "y": number }</c>.
-    /// </summary>
-    public static IReadOnlyList<string> ReadLayout(JsonElement element, Dictionary<string, NodePosition> layout)
-    {
-        if (element.ValueKind != JsonValueKind.Object)
-        {
-            return ["layout must be an object"];
-        }
-
-        List<string> errors = [];
-        foreach (JsonProperty node in element.EnumerateObject())
-        {
-            if (node.Value.ValueKind == JsonValueKind.Object
-                && node.Value.TryGetProperty("x", out JsonElement x) && x.TryGetDouble(out double left)
-                && node.Value.TryGetProperty("y", out JsonElement y) && y.TryGetDouble(out double top)
-                && double.IsFinite(left) && double.IsFinite(top))
-            {
-                layout[node.Name] = new NodePosition(left, top);
-            }
-            else
-            {
-                errors.Add(string.Create(CultureInfo.InvariantCulture, $"layout.{node.Name} must be {{ x, y }} with numbers"));
-            }
-        }
-
-        return errors;
     }
 }

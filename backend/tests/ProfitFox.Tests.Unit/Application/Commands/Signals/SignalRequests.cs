@@ -8,6 +8,7 @@ using ProfitFox.Application.Commands.Signals.ReplaceSignal;
 using ProfitFox.Application.Contracts.Signals;
 using ProfitFox.Application.Queries.Signals;
 using ProfitFox.Domain.ValueObjects.Signals;
+using ProfitFox.Tests.Unit.Application.Commands.Strategies;
 using ProfitFox.Tests.Unit.Domain.Services.Hypotheses;
 
 namespace ProfitFox.Tests.Unit.Application.Commands.Signals;
@@ -20,7 +21,17 @@ internal sealed class SignalRequests
 {
     public static readonly Dictionary<string, NodePosition> NoLayout = [];
 
-    private readonly MemorySignalRepository _signals = new MemorySignalRepository();
+    private readonly MemorySignalRepository _signals;
+    private readonly MemoryStrategyRepository _strategies;
+
+    /// <summary>
+    ///     The requests over their own repositories, or over those the strategy requests of a test share.
+    /// </summary>
+    public SignalRequests(MemorySignalRepository? signals = null, MemoryStrategyRepository? strategies = null)
+    {
+        _signals = signals ?? new MemorySignalRepository();
+        _strategies = strategies ?? new MemoryStrategyRepository();
+    }
 
     public Task<SignalInternal> Create(string name, string? description, JsonElement graph, IReadOnlyDictionary<string, NodePosition> layout, CancellationToken cancellationToken)
     {
@@ -39,7 +50,7 @@ internal sealed class SignalRequests
 
     public Task Delete(string name, CancellationToken cancellationToken)
     {
-        return new DeleteSignalCommandHandler(_signals).Handle(new DeleteSignalCommand(name), cancellationToken);
+        return new DeleteSignalCommandHandler(_signals, _strategies).Handle(new DeleteSignalCommand(name), cancellationToken);
     }
 
     public Task<SignalInternal> Read(string name, CancellationToken cancellationToken)

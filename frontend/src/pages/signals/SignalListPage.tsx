@@ -1,11 +1,12 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { useState } from 'react';
 
-import { api, type RequestError, unwrap } from '@/api/client';
+import { api, unwrap } from '@/api/client';
 import { listSignals, type SignalListItem, written } from '@/api/signals';
-import { draftKey, moveDraft, removeDraft } from '@/modules/graph-editor/drafts/drafts';
-import { buttonClass, fieldClass } from '@/modules/graph-editor/ui/Card';
+import { draftKey } from '@/modules/graph-editor/drafts/drafts';
+import { buttonClass } from '@/modules/graph-editor/ui/Card';
+import { DocumentRow, type ListType } from '@/pages/documents/DocumentRow';
+import { openStrategyOfSignal } from '@/pages/strategies/fromSignal';
 
 import { SectionNav } from '../runs/SectionNav';
 import { RunControls } from './RunControls';
@@ -90,139 +91,75 @@ export function SignalListPage() {
   );
 }
 
-type Mode = { readonly kind: 'rename' | 'copy'; readonly name: string } | null;
+/** The row of a saved signal: its words and the requests of `/api/signals`. */
+const signalList: ListType = {
+  label: 'Сигнал',
+  queryKey: 'signal',
+  listKey: 'signals',
+  draftKey,
+  link: (name) => (
+    <Link to="/signals/$name" params={{ name }} className="font-mono hover:text-amber-300">
+      {name}
+    </Link>
+  ),
+  rename: async (name, to) =>
+    written(
+      await api.POST('/api/signals/{name}/rename', { params: { path: { name } }, body: { to } }),
+    ),
+  copy: async (name, to) => {
+    const source = unwrap(await api.GET('/api/signals/{name}', { params: { path: { name } } }));
+    return written(
+      await api.POST('/api/signals', {
+        body: {
+          name: to,
+          description: source.description,
+          graph: source.graph,
+          layout: source.layout,
+        },
+      }),
+    );
+  },
+  // A signal a strategy points at is not deleted (spec signal-constructor «Сигнал, на который ссылается стратегия»).
+  remove: async (name) => {
+    const answer = await api.DELETE('/api/signals/{name}', { params: { path: { name } } });
+    if (answer.response.status === 409 && answer.error && 'strategies' in answer.error) {
+      return [
+        {
+          code: 'SignalInUse',
+          reason: `Сигнал используют стратегии: ${(answer.error.strategies as string[]).join(', ')}`,
+        },
+      ];
+    }
+
+    return [];
+  },
+  deleteQuestion: (name) => `Удалить сигнал ${name}? Незакоммиченный файл не вернуть.`,
+};
 
 function SignalRow({ signal }: { readonly signal: SignalListItem }) {
-  const queries = useQueryClient();
-  const [mode, setMode] = useState<Mode>(null);
-  const [errors, setErrors] = useState<readonly RequestError[]>([]);
-
-  const refresh = () => queries.invalidateQueries({ queryKey: ['signals'] });
-
-  const submit = async () => {
-    if (mode === null) {
-      return;
-    }
-
-    setErrors([]);
-    try {
-      if (mode.kind === 'rename') {
-        const outcome = await written(
-          await api.POST('/api/signals/{name}/rename', {
-            params: { path: { name: signal.name } },
-            body: { to: mode.name },
-          }),
-        );
-        if (!outcome.ok) {
-          setErrors(outcome.errors);
-          return;
-        }
-
-        moveDraft(draftKey({ name: signal.name }), draftKey({ name: mode.name }));
-        queries.removeQueries({ queryKey: ['signal', signal.name] });
-      } else {
-        const source = unwrap(
-          await api.GET('/api/signals/{name}', { params: { path: { name: signal.name } } }),
-        );
-        const outcome = await written(
-          await api.POST('/api/signals', {
-            body: {
-              name: mode.name,
-              description: source.description,
-              graph: source.graph,
-              layout: source.layout,
-            },
-          }),
-        );
-        if (!outcome.ok) {
-          setErrors(outcome.errors);
-          return;
-        }
-      }
-
-      setMode(null);
-      await refresh();
-    } catch (problem) {
-      setErrors([
-        { code: 'Failed', reason: problem instanceof Error ? problem.message : String(problem) },
-      ]);
-    }
-  };
-
-  const remove = async () => {
-    if (!window.confirm(`Удалить сигнал ${signal.name}? Незакоммиченный файл не вернуть.`)) {
-      return;
-    }
-
-    await api.DELETE('/api/signals/{name}', { params: { path: { name: signal.name } } });
-    removeDraft(draftKey({ name: signal.name }));
-    queries.removeQueries({ queryKey: ['signal', signal.name] });
-    await refresh();
-  };
-
+  const navigate = useNavigate();
   return (
-    <li aria-label={`Сигнал ${signal.name}`} className="flex flex-col gap-2 px-3 py-2">
-      <div className="flex items-center gap-3">
-        <Link
-          to="/signals/$name"
-          params={{ name: signal.name }}
-          className="font-mono hover:text-amber-300"
-        >
-          {signal.name}
-        </Link>
-        <span className="text-zinc-500">версия {String(signal.version)}</span>
-        {signal.description && <span className="text-zinc-400">{signal.description}</span>}
-        <span className="ml-auto flex gap-2">
+    <DocumentRow
+      type={signalList}
+      line={signal}
+      actions={
+        !signal.error &&
+        signal.id && (
           <button
             type="button"
             className={buttonClass}
-            onClick={() => setMode({ kind: 'rename', name: signal.name })}
+            onClick={() =>
+              void openStrategyOfSignal(navigate, {
+                id: signal.id!,
+                name: signal.name,
+                version: Number(signal.version),
+              })
+            }
           >
-            Переименовать
+            Создать стратегию
           </button>
-          {!signal.error && (
-            <button
-              type="button"
-              className={buttonClass}
-              onClick={() => setMode({ kind: 'copy', name: `${signal.name}-copy` })}
-            >
-              Копировать
-            </button>
-          )}
-          <button type="button" className={buttonClass} onClick={remove}>
-            Удалить
-          </button>
-        </span>
-      </div>
-      {signal.error && <p className="text-xs text-red-300">Файл не читается: {signal.error}</p>}
-      {mode && (
-        <form
-          className="flex items-center gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submit();
-          }}
-        >
-          <input
-            aria-label={mode.kind === 'rename' ? 'Новое имя' : 'Имя копии'}
-            className={`${fieldClass} w-64`}
-            value={mode.name}
-            autoFocus
-            onChange={(event) => setMode({ ...mode, name: event.target.value.trim() })}
-          />
-          <button type="submit" className={buttonClass} disabled={mode.name === ''}>
-            {mode.kind === 'rename' ? 'Переименовать' : 'Скопировать'}
-          </button>
-          <button type="button" className={buttonClass} onClick={() => setMode(null)}>
-            Отмена
-          </button>
-          {errors.length > 0 && (
-            <span className="text-xs text-red-300">
-              {errors.map((error) => error.reason).join('; ')}
-            </span>
-          )}
-        </form>
-      )}
-    </li>
+        )
+      }
+    />
   );
 }

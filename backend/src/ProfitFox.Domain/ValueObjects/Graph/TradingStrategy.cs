@@ -8,11 +8,21 @@ namespace ProfitFox.Domain.ValueObjects.Graph;
 
 /// <summary>
 ///     A checked strategy (spec strategy-graph «Стратегия»): a graph without declared outputs that has at least one
-///     <c>enter</c> node, exactly one <c>close-after</c> and at most one <c>stop-loss</c> and one <c>take-profit</c>. The
-///     name is not <c>Strategy</c>: that is the namespace.
+///     <c>enter</c> node, exactly one <c>close-after</c> and at most one <c>stop-loss</c> and one <c>take-profit</c>. It
+///     keeps the graph twice (change add-strategy-constructor, design.md, decision 3): as written, with its <c>signal</c>
+///     nodes, and expanded, which the executor runs. The name is not <c>Strategy</c>: that is the namespace.
 /// </summary>
 public sealed class TradingStrategy
 {
+    /// <summary>
+    ///     The graph as written: with its <c>signal</c> nodes, not expanded.
+    /// </summary>
+    public GraphDefinition Source { get; }
+
+    /// <summary>
+    ///     The graph the executor runs: each <c>signal</c> node replaced with the nodes of its version. Without
+    ///     <c>signal</c> nodes it is <see cref="Source" /> itself.
+    /// </summary>
     public GraphDefinition Graph { get; }
 
     /// <summary>
@@ -21,7 +31,13 @@ public sealed class TradingStrategy
     public IReadOnlyList<StrategyEntry> Entries { get; }
 
     internal TradingStrategy(GraphDefinition graph)
+        : this(graph, graph)
     {
+    }
+
+    internal TradingStrategy(GraphDefinition source, GraphDefinition graph)
+    {
+        Source = source;
         Graph = graph;
         Entries = [.. graph.Nodes.Where(node => node.Kind == NodeCatalog.Enter).Select(node => new StrategyEntry(node.Id, Side(node)))];
     }

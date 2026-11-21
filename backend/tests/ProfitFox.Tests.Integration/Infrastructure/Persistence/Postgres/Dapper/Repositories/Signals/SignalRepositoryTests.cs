@@ -183,7 +183,8 @@ public sealed class SignalRepositoryTests
 
         IReadOnlyList<SignalEntryInternal> list = await _signals.List(_none);
 
-        Assert.That(list, Is.EqualTo(new[] { new SignalEntryInternal("candle-drop", "свеча", 1, Error: null), new SignalEntryInternal("funding-high", null, 2, Error: null) }));
+        Assert.That(list.Select(entry => entry with { Id = null }), Is.EqualTo(new[] { new SignalEntryInternal("candle-drop", "свеча", 1, Error: null), new SignalEntryInternal("funding-high", null, 2, Error: null) }));
+        Assert.That(list.Select(entry => entry.Id), Has.None.Null);
     }
 
     [Test]

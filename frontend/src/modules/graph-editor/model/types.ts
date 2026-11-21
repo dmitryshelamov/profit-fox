@@ -59,4 +59,33 @@ export type NodeKind = Schemas['NodeKindResponse'];
 export interface Pin {
   readonly name: string;
   readonly type: PinType;
+  /** The value an input of a signal node takes without a wire and a value: that of the parameter of its version. */
+  readonly fallback?: GraphValue;
 }
+
+/** A parameter of a version of a saved signal, which is an input of a signal node on that version. */
+export interface SignalParameter {
+  readonly name: string;
+  readonly type: PinType;
+  readonly value: GraphValue;
+  readonly minimum?: number | null;
+  readonly maximum?: number | null;
+}
+
+/**
+ * What the editor knows of a version of a saved signal (change add-strategy-constructor, design.md, decision 7): the
+ * current name and latest version of the signal, and the parameters of the version — undefined while they load.
+ */
+export interface SignalVersionInfo {
+  readonly name: string | null;
+  readonly latestVersion: number | null;
+  readonly parameters?: readonly SignalParameter[];
+}
+
+/**
+ * The node catalog as the editor uses it. A strategy also carries what it knows of the versions of signals its signal
+ * nodes point at, keyed by `<signal id>@<version>`: the pins of a signal node come from there.
+ */
+export type Catalog = readonly NodeKind[] & {
+  readonly signalVersions?: ReadonlyMap<string, SignalVersionInfo>;
+};

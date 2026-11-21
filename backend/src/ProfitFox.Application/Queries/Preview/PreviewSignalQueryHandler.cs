@@ -4,9 +4,7 @@ using ProfitFox.Application.Contracts.MarketData.Converters;
 using ProfitFox.Application.Contracts.Preview;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.MarketData;
-using ProfitFox.Application.Queries.MarketData;
 using ProfitFox.Domain.Services.Graph;
-using ProfitFox.Domain.Services.MarketData;
 using ProfitFox.Domain.Services.Runs;
 using ProfitFox.Domain.Services.Signals;
 using ProfitFox.Domain.ValueObjects.Graph;
@@ -64,7 +62,7 @@ internal sealed class PreviewSignalQueryHandler(IHistorySource source, IInstrume
             return new PreviewOutcomeInternal(Preview: null, errors);
         }
 
-        PreviewHistory history = await cache.Get(pair.Id, timeframe, () => Read(pair.Id, timeframe), cancellationToken);
+        PreviewHistory history = await cache.Get(pair.Id, timeframe, () => PreviewHistory.ReadAsync(source, pair.Id, timeframe), cancellationToken);
         HistoryRead<HistoryCandle> candles = history.Candles;
         HistoryRead<HistoryPayment> funding = history.Funding;
         IReadOnlyList<DateTimeOffset> events = PairEvents.Of(signal, timeframe, pair.Symbol, candles.Items, funding.Items);
@@ -77,15 +75,5 @@ internal sealed class PreviewSignalQueryHandler(IHistorySource source, IInstrume
             events,
             Periods.ExplorationEnd);
         return new PreviewOutcomeInternal(preview, Errors: []);
-    }
-
-    // The whole of exploration, as a run of exploration reads it. The hash is not needed, but the reader wants one.
-    private async Task<PreviewHistory> Read(string instrument, TimeSpan timeframe)
-    {
-        using var hash = new HistoryHash();
-        var history = new MarketHistory(source, Periods.ExplorationEnd, hash);
-        HistoryRead<HistoryCandle> candles = await history.Candles(instrument, timeframe, Periods.DataStart, Periods.ExplorationEnd, CancellationToken.None);
-        HistoryRead<HistoryPayment> funding = await history.FundingThrough(instrument, Periods.DataStart, Periods.ExplorationEnd, CancellationToken.None);
-        return new PreviewHistory(candles, funding);
     }
 }

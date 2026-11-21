@@ -7,6 +7,7 @@ import type { DocumentRules } from '../document';
 import type { GraphFlowEdge, GraphFlowNode } from '../model/flow';
 import { issuesOf } from '../model/issues';
 import { addNode, relayout } from '../model/operations';
+import { addSignalNode, type SignalEntry } from '../model/signals';
 import type { Graph, GraphDocument, NodeKind } from '../model/types';
 import { buttonClass } from './Card';
 import { ErrorsCard } from './ErrorsCard';
@@ -17,6 +18,15 @@ import { Palette } from './Palette';
 import { ParametersCard } from './ParametersCard';
 
 type Sheet = 'errors' | 'parameters' | 'json';
+
+/**
+ * What the editor of a strategy adds for its signal nodes: the saved signals of the palette, and the update of a node
+ * to the latest version of its signal, which the page makes because it reads the new version.
+ */
+export interface SignalTools {
+  readonly palette: readonly SignalEntry[];
+  readonly onUpdate: (node: string) => void;
+}
 
 /**
  * The editor of a graph on a full-screen canvas with floating bars, as in profit-fox-v2: top left the title, top right
@@ -33,6 +43,7 @@ export function GraphEditor({
   readOnly,
   actions,
   bottom,
+  signals,
   onChange,
 }: {
   readonly title: ReactNode;
@@ -44,7 +55,9 @@ export function GraphEditor({
   readonly readOnly: boolean;
   readonly actions?: ReactNode;
   readonly bottom?: ReactNode;
-  readonly onChange: (document: GraphDocument) => void;
+  readonly signals?: SignalTools;
+  /** <c>urgent</c>: the change added or updated a signal node, whose pins come with the next check. */
+  readonly onChange: (document: GraphDocument, urgent?: boolean) => void;
 }) {
   const [selected, setSelected] = useState<string>();
   const [sheet, setSheet] = useState<Sheet>();
@@ -62,16 +75,21 @@ export function GraphEditor({
     setSheet((current) => (current === next ? undefined : next));
   };
 
-  const add = (kind: NodeKind) => {
-    const center = flow.current?.screenToFlowPosition({
-      x: window.innerWidth / 2,
-      y: window.innerHeight / 3,
-    }) ?? {
+  const center = () =>
+    flow.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 3 }) ?? {
       x: 0,
       y: 0,
     };
-    const added = addNode(document, catalog, kind, center);
+
+  const add = (kind: NodeKind) => {
+    const added = addNode(document, catalog, kind, center());
     onChange(added.document);
+    select(added.id);
+  };
+
+  const addSignal = (signal: SignalEntry) => {
+    const added = addSignalNode(document, catalog, signal, center());
+    onChange(added.document, true);
     select(added.id);
   };
 
@@ -134,7 +152,16 @@ export function GraphEditor({
             </div>
           </div>
           <div className="flex min-h-0 flex-1 items-start justify-between gap-3">
-            {readOnly ? <span /> : <Palette kinds={rules.palette(catalog)} onAdd={add} />}
+            {readOnly ? (
+              <span />
+            ) : (
+              <Palette
+                kinds={rules.palette(catalog)}
+                signals={signals?.palette}
+                onAdd={add}
+                onAddSignal={addSignal}
+              />
+            )}
             {selected !== undefined && (
               <NodeCard
                 key={selected}
@@ -146,6 +173,7 @@ export function GraphEditor({
                 node={selected}
                 onChange={onChange}
                 onSelect={select}
+                onUpdateSignal={signals?.onUpdate}
               />
             )}
             {sheet === 'errors' && (

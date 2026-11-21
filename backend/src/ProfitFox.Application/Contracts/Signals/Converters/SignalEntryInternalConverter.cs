@@ -9,6 +9,6 @@ public static class SignalEntryInternalConverter
     /// </summary>
     public static SignalEntryInternal ToEntryInternal(this SignalDocument signal)
     {
-        return new SignalEntryInternal(signal.Name, signal.Description, signal.Version, Error: null);
+        return new SignalEntryInternal(signal.Name, signal.Description, signal.Version, Error: null) { Id = signal.Id };
     }
 }

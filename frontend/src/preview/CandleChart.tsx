@@ -89,10 +89,10 @@ export function CandleChart({
     current.markers.setMarkers(
       marks.map((mark) => ({
         time: mark.time as UTCTimestamp,
-        position: 'aboveBar' as const,
-        shape: 'arrowDown' as const,
-        color: '#facc15',
-        text: '⚡',
+        position: mark.position ?? ('aboveBar' as const),
+        shape: mark.shape ?? ('arrowDown' as const),
+        color: mark.color ?? '#facc15',
+        text: mark.text ?? '⚡',
       })),
     );
     current.chart.timeScale().fitContent();

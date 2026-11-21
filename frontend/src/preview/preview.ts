@@ -29,10 +29,17 @@ export function formatUtcDay(ms: number | string): string {
   return new Date(Number(ms)).toISOString().slice(0, 10);
 }
 
-/** Where the chart puts the mark of an event: on the candle that closes at its moment. */
+/**
+ * Where the chart puts the mark of an event: on the candle that closes at its moment. A mark of a strategy also says
+ * how it looks: an entry arrow by its side, an exit dot.
+ */
 export interface EventMark {
   readonly time: number;
   readonly moment: number;
+  readonly position?: 'aboveBar' | 'belowBar' | 'inBar';
+  readonly shape?: 'arrowDown' | 'arrowUp' | 'circle';
+  readonly color?: string;
+  readonly text?: string;
 }
 
 /** The marks of the events, on the open time of the candle each event closed, in seconds as the chart counts time. */

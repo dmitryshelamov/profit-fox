@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
 
 import type { DocumentRules } from '../document';
@@ -12,7 +13,8 @@ import {
   setSetting,
 } from '../model/operations';
 import { kindOf, pinsOf } from '../model/pins';
-import type { GraphDocument, NodeKind, Pin } from '../model/types';
+import { referenceOf, signalInfo } from '../model/signals';
+import type { Catalog, GraphDocument, Pin } from '../model/types';
 import { formatValue, parseValue } from '../model/values';
 import { canConnect } from '../model/wires';
 import { buttonClass, Card, fieldClass } from './Card';
@@ -30,15 +32,17 @@ export function NodeCard({
   node: id,
   onChange,
   onSelect,
+  onUpdateSignal,
 }: {
   readonly document: GraphDocument;
-  readonly catalog: readonly NodeKind[];
+  readonly catalog: Catalog;
   readonly rules: DocumentRules;
   readonly issues: readonly Issue[];
   readonly readOnly: boolean;
   readonly node: string;
   readonly onChange: (document: GraphDocument) => void;
   readonly onSelect: (node: string | undefined) => void;
+  readonly onUpdateSignal?: (node: string) => void;
 }) {
   const node = findNode(document.graph, id);
   const [name, setName] = useState(id);
@@ -48,7 +52,11 @@ export function NodeCard({
 
   const kind = kindOf(node, catalog);
   const pins = pinsOf(node, catalog, document.graph);
-  const title = kind?.title ?? node.kind;
+  // A signal node goes by the name of its signal, as on the canvas.
+  const title =
+    (node.kind === 'signal' ? signalInfo(node, catalog)?.name : undefined) ??
+    kind?.title ??
+    node.kind;
   const taken = name !== id && document.graph.nodes.some((candidate) => candidate.id === name);
   const own = issues.filter((issue) => issue.node === id);
 
@@ -79,27 +87,39 @@ export function NodeCard({
         {taken && <span className="text-xs text-red-400">Id {name} уже занят.</span>}
       </label>
 
-      {kind?.settings.map((setting) => (
-        <label key={setting.name} className="flex flex-col gap-1">
-          {setting.name}
-          <select
-            aria-label={`Настройка ${setting.name}`}
-            className={fieldClass}
-            value={node.settings?.[setting.name] ?? ''}
-            disabled={readOnly}
-            onChange={(event) =>
-              onChange(setSetting(document, id, setting.name, event.target.value))
-            }
-          >
-            {node.settings?.[setting.name] === undefined && <option value="">—</option>}
-            {setting.values.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
-        </label>
-      ))}
+      {node.kind === 'signal' && (
+        <SignalOfNode
+          node={id}
+          reference={referenceOf(node)}
+          info={signalInfo(node, catalog)}
+          readOnly={readOnly}
+          onUpdate={onUpdateSignal}
+        />
+      )}
+
+      {kind?.settings
+        .filter((setting) => setting.values.length > 0)
+        .map((setting) => (
+          <label key={setting.name} className="flex flex-col gap-1">
+            {setting.name}
+            <select
+              aria-label={`Настройка ${setting.name}`}
+              className={fieldClass}
+              value={node.settings?.[setting.name] ?? ''}
+              disabled={readOnly}
+              onChange={(event) =>
+                onChange(setSetting(document, id, setting.name, event.target.value))
+              }
+            >
+              {node.settings?.[setting.name] === undefined && <option value="">—</option>}
+              {setting.values.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
 
       {pins.inputs.map((pin) => (
         <InputSource
@@ -139,6 +159,53 @@ export function NodeCard({
   );
 }
 
+/**
+ * The signal a node points at (spec strategy-constructor «Узел сигнала на холсте», «Обновление версии сигнала в
+ * узле»): its name and version, the update to a newer version, and the way to its editor.
+ */
+function SignalOfNode({
+  node,
+  reference,
+  info,
+  readOnly,
+  onUpdate,
+}: {
+  readonly node: string;
+  readonly reference: { readonly signal: string; readonly version: number } | undefined;
+  readonly info: ReturnType<typeof signalInfo>;
+  readonly readOnly: boolean;
+  readonly onUpdate?: (node: string) => void;
+}) {
+  const latest = info?.latestVersion ?? null;
+  return (
+    <section aria-label="Сигнал узла" className="flex flex-col gap-1">
+      <span>
+        Сигнал <span className="font-mono">{info?.name ?? (info ? 'не найден' : 'загрузка')}</span>
+      </span>
+      <span className="text-xs text-zinc-400">версия {reference?.version ?? '—'}</span>
+      {reference && latest !== null && latest > reference.version && (
+        <button
+          type="button"
+          className={buttonClass}
+          disabled={readOnly || onUpdate === undefined}
+          onClick={() => onUpdate?.(node)}
+        >
+          Обновить до версии {latest}
+        </button>
+      )}
+      {info?.name && (
+        <Link
+          to="/signals/$name"
+          params={{ name: info.name }}
+          className="text-xs text-amber-300 hover:text-amber-200"
+        >
+          Открыть сигнал
+        </Link>
+      )}
+    </section>
+  );
+}
+
 /** Where an input takes its value: a compatible output, or a value written on it. */
 function InputSource({
   document,
@@ -149,7 +216,7 @@ function InputSource({
   onChange,
 }: {
   readonly document: GraphDocument;
-  readonly catalog: readonly NodeKind[];
+  readonly catalog: Catalog;
   readonly node: string;
   readonly pin: Pin;
   readonly readOnly: boolean;
@@ -193,6 +260,7 @@ function InputSource({
           className={fieldClass}
           defaultValue={formatValue(value)}
           key={formatValue(value)}
+          placeholder={pin.fallback === undefined ? undefined : formatValue(pin.fallback)}
           readOnly={readOnly}
           onBlur={(event) => {
             const parsed = parseValue(event.target.value, pin.type);

@@ -40,10 +40,12 @@ public static class SignalDocumentGenerator
         string? description = null,
         GraphDefinition? graph = null,
         IReadOnlyDictionary<string, NodePosition>? layout = null,
-        int version = 1)
+        int version = 1,
+        Guid? id = null)
     {
         GraphDefinition definition = graph ?? GenerateGraph();
         return SignalDocument.Restore(
+            id ?? Guid.NewGuid(),
             name,
             description,
             definition,
@@ -52,11 +54,11 @@ public static class SignalDocumentGenerator
     }
 
     /// <summary>
-    ///     The signal graph of H0001 as the engine reads it.
+    ///     The signal graph of H0001 as the engine reads it, with its threshold.
     /// </summary>
-    public static GraphDefinition GenerateGraph()
+    public static GraphDefinition GenerateGraph(decimal threshold = 0.0005m)
     {
-        using var document = JsonDocument.Parse(FundingHigh);
+        using var document = JsonDocument.Parse(FundingHigh.Replace("0.0005", threshold.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal));
         return StrategyGraph.ReadSignal(document.RootElement).Value!.Graph;
     }
 }

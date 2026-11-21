@@ -10,5 +10,11 @@ export const pinColors: Record<PinType, string> = {
 
 /** The color of the header of a node, by its group in the palette. */
 export function headerColor(group: string | undefined): string {
-  return group === 'Данные' ? '#0e7490' : group === 'Граф' ? '#52525b' : '#6d28d9';
+  return group === 'Данные'
+    ? '#0e7490'
+    : group === 'Граф'
+      ? '#52525b'
+      : group === 'Сигналы'
+        ? '#b45309'
+        : '#6d28d9';
 }
