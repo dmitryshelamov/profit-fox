@@ -6,7 +6,6 @@ import { api, ApiError, type RequestError } from '@/api/client';
 import { listNodeKinds, written } from '@/api/signals';
 import { signalRules } from '@/modules/graph-editor/document';
 import type { Graph } from '@/modules/graph-editor/model/types';
-import { buttonClass } from '@/modules/graph-editor/ui/Card';
 import {
   type Content,
   DocumentEditor,
@@ -17,6 +16,7 @@ import {
 } from '@/pages/documents/DocumentEditor';
 import { openStrategyOfSignal } from '@/pages/strategies/fromSignal';
 import { PreviewPanel } from '@/preview/PreviewPanel';
+import { Button } from '@/shared/ui/Button';
 
 export { draftDelayMs } from '@/pages/documents/DocumentEditor';
 
@@ -102,13 +102,11 @@ export function SavedSignalPage({ name }: { readonly name: string }) {
       start={signal.data.content!}
       actions={
         id && (
-          <button
-            type="button"
-            className={buttonClass}
+          <Button
             onClick={() => void openStrategyOfSignal(navigate, { id, name, version: version! })}
           >
             Создать стратегию
-          </button>
+          </Button>
         )
       }
       bottom={({ graph, canRun, rememberAs }) => (

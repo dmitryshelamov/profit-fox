@@ -6,11 +6,13 @@ import {
   Background,
   BackgroundVariant,
   type Connection,
-  Controls,
   type EdgeChange,
   type NodeChange,
+  Panel,
   ReactFlow,
   type ReactFlowInstance,
+  useReactFlow,
+  useViewport,
 } from '@xyflow/react';
 import { type DragEvent, useEffect, useMemo, useState } from 'react';
 
@@ -27,11 +29,11 @@ import {
 } from '../model/operations';
 import { typeOf } from '../model/pins';
 import { addSignalNode, type SignalEntry } from '../model/signals';
-import type { GraphDocument, NodeKind } from '../model/types';
+import type { Catalog, GraphDocument, NodeKind, PinType } from '../model/types';
 import { canConnect } from '../model/wires';
 import { type GraphEnvironment, GraphEnvironmentContext } from './GraphContext';
 import { GraphNodeView } from './GraphNodeView';
-import { pinColors } from './pinColors';
+import { pinLooks, pinTypes, wireStrokes } from './looks';
 
 /** The drag-and-drop type of a kind dragged from the palette: its name. */
 export const paletteMime = 'application/x-profit-fox-node';
@@ -40,6 +42,38 @@ export const paletteMime = 'application/x-profit-fox-node';
 export const signalMime = 'application/x-profit-fox-signal';
 
 const nodeTypes = { graph: GraphNodeView };
+
+/** The whole graph in view, never larger than its real size: a small graph opens at 100 %. */
+export const fitOptions = { maxZoom: 1 };
+
+/**
+ * The wires as the canvas draws them (spec signal-constructor «Цвет группы узла и типа пина»): each of the color of the
+ * type of the output it comes from, a wire with an error of the color of an error. The type is kept in the data of the
+ * edge and told by its class `wire-<type>`.
+ */
+export function coloredWires(
+  edges: readonly GraphFlowEdge[],
+  document: GraphDocument,
+  catalog: Catalog,
+  issues: readonly Issue[],
+): GraphFlowEdge[] {
+  return edges.map((edge): GraphFlowEdge => {
+    const { from } = wireOf(edge);
+    const type: PinType | undefined = typeOf(document.graph, catalog, from, 'outputs');
+    const bad = issues.some(
+      (issue) => issue.wire && `${issue.wire.from}->${issue.wire.to}` === edge.id,
+    );
+    return {
+      ...edge,
+      data: { type, bad },
+      className: `wire-${type ?? 'unknown'}`,
+      style: {
+        stroke: bad ? wireStrokes.bad : type ? pinLooks[type].stroke : wireStrokes.unknown,
+        strokeWidth: 2,
+      },
+    };
+  });
+}
 
 export interface GraphCanvasProps {
   readonly document: GraphDocument;
@@ -79,19 +113,8 @@ export function GraphCanvas({
   );
 
   const colored = useMemo(
-    () =>
-      flow.edges.map((edge): GraphFlowEdge => {
-        const { from } = wireOf(edge);
-        const type = typeOf(document.graph, catalog, from, 'outputs');
-        const bad = issues.some(
-          (issue) => issue.wire && `${issue.wire.from}->${issue.wire.to}` === edge.id,
-        );
-        return {
-          ...edge,
-          style: { stroke: bad ? '#ef4444' : type ? pinColors[type] : '#71717a', strokeWidth: 2 },
-        };
-      }),
-    [flow.edges, document.graph, catalog, issues],
+    () => coloredWires(flow.edges, document, catalog, issues),
+    [flow.edges, document, catalog, issues],
   );
   const [edges, setEdges] = useState(colored);
   useEffect(() => setEdges(colored), [colored]);
@@ -146,9 +169,11 @@ export function GraphCanvas({
           edges={edges}
           nodeTypes={nodeTypes}
           colorMode="dark"
+          className="bg-canvas!"
           minZoom={0.3}
           maxZoom={2}
           fitView
+          fitViewOptions={fitOptions}
           nodesDraggable={!readOnly}
           nodesConnectable={!readOnly}
           deleteKeyCode={readOnly ? null : ['Delete', 'Backspace']}
@@ -204,10 +229,76 @@ export function GraphCanvas({
             onSelect(undefined);
           }}
         >
-          <Background variant={BackgroundVariant.Dots} color="#27272a" gap={24} size={1.6} />
-          <Controls position="bottom-left" showInteractive={false} />
+          <Background
+            variant={BackgroundVariant.Dots}
+            color="var(--color-line)"
+            gap={24}
+            size={1.6}
+          />
+          <Panel position="bottom-left" className="m-4!">
+            <Legend />
+          </Panel>
+          <Panel position="bottom-right" className="m-4!">
+            <ZoomBar />
+          </Panel>
         </ReactFlow>
       </div>
     </GraphEnvironmentContext.Provider>
+  );
+}
+
+const barClass =
+  'flex h-11 items-center rounded-[10px] border border-line bg-panel/95 text-xs shadow-xl';
+
+/** The legend of the canvas: the four types of a value, each with the color of its pins and wires. */
+function Legend() {
+  return (
+    <ul aria-label="Типы значений" className={`${barClass} gap-4 px-3.5 text-muted`}>
+      {pinTypes.map((type) => (
+        <li key={type} data-type={type} className="flex items-center gap-1.5">
+          <span aria-hidden="true" className={`size-2 rounded-full ${pinLooks[type].dot}`} />
+          {pinLooks[type].word}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+const zoomButton =
+  'grid h-full w-9 cursor-pointer place-items-center text-sm text-muted hover:text-text';
+
+/** The scale of the canvas: smaller, the scale in percent, larger, and the whole graph in view. */
+function ZoomBar() {
+  const flow = useReactFlow();
+  const { zoom } = useViewport();
+  return (
+    <div role="toolbar" aria-label="Масштаб" className={`${barClass} px-1`}>
+      <button
+        type="button"
+        aria-label="Уменьшить"
+        className={zoomButton}
+        onClick={() => void flow.zoomOut()}
+      >
+        −
+      </button>
+      <span className="w-12 text-center font-mono text-muted">{Math.round(zoom * 100)}%</span>
+      <button
+        type="button"
+        aria-label="Увеличить"
+        className={zoomButton}
+        onClick={() => void flow.zoomIn()}
+      >
+        +
+      </button>
+      <span aria-hidden="true" className="mx-1 h-5 w-px bg-line" />
+      <button
+        type="button"
+        aria-label="Вписать"
+        className={zoomButton}
+        onClick={() => void flow.fitView(fitOptions)}
+      >
+        ⤢
+      </button>
+    </div>
   );
 }

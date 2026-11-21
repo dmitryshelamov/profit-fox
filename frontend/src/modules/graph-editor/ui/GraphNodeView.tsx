@@ -7,9 +7,13 @@ import { referenceOf, signalInfo } from '../model/signals';
 import type { Pin } from '../model/types';
 import { formatValue, parseValue } from '../model/values';
 import { useGraphEnvironment } from './GraphContext';
-import { headerColor, pinColors } from './pinColors';
+import { groupFill, groupOf, pinLooks } from './looks';
 
-/** A node on the canvas: a header with its title and id, its settings, and a row per pin with a handle for wires. */
+/**
+ * A node on the canvas (spec signal-constructor «Цвет группы узла и типа пина»): a header of the color of its group
+ * with its title and id, its settings, and a row per pin with a handle for wires. A signal node goes by the name of
+ * its signal and wears the badge of its version.
+ */
 export function GraphNodeView({ id, data, selected }: NodeProps<GraphFlowNode>) {
   const environment = useGraphEnvironment();
   const { node } = data;
@@ -20,6 +24,11 @@ export function GraphNodeView({ id, data, selected }: NodeProps<GraphFlowNode>) 
   // A signal node goes by the name of its signal and shows its version, not the id it holds.
   const signal = node.kind === 'signal' ? signalInfo(node, environment.catalog) : undefined;
   const reference = referenceOf(node);
+  const newer =
+    signal?.latestVersion != null && reference && signal.latestVersion > reference.version
+      ? signal.latestVersion
+      : undefined;
+  const loading = node.kind === 'signal' && signal?.parameters === undefined;
   const title =
     node.kind === 'signal'
       ? (signal?.name ?? kind?.title ?? node.kind)
@@ -29,45 +38,62 @@ export function GraphNodeView({ id, data, selected }: NodeProps<GraphFlowNode>) 
     node.kind === 'signal'
       ? [
           ['версия', String(reference?.version ?? '—')],
-          ...(signal?.latestVersion != null && reference && signal.latestVersion > reference.version
-            ? [['есть версия', String(signal.latestVersion)]]
-            : []),
-          ...(signal?.parameters === undefined ? [['пины', 'загрузка']] : []),
+          ...(newer === undefined ? [] : [['есть версия', String(newer)]]),
+          ...(loading ? [['пины', 'загрузка']] : []),
         ]
       : Object.entries(node.settings ?? {});
+  const line = settings.map(([name, value]) => `${name}: ${value}`).join(', ');
+  const group = groupOf(node.kind, kind?.group);
   const outline =
     issues.length > 0
-      ? 'border-2 border-red-500'
+      ? 'border-2 border-err'
       : selected
-        ? 'border-2 border-amber-400'
-        : 'border border-zinc-700';
+        ? 'border-2 border-accent'
+        : 'border border-node-line';
 
   return (
     <div
       role="group"
       aria-label={`${title} ${id}`}
       aria-invalid={issues.length > 0}
-      className={`relative rounded-lg bg-zinc-900 text-xs text-zinc-200 shadow-xl ${outline}`}
+      className={`relative rounded-lg bg-node text-xs text-text shadow-xl ${outline}`}
       style={{ width: nodeWidth }}
     >
       <div
-        className="flex items-center justify-between gap-2 rounded-t-[7px] px-2.5 py-1.5 font-semibold text-white"
-        style={{ background: headerColor(kind?.group) }}
+        data-group={group}
+        className={`flex items-center justify-between gap-2 rounded-t-[7px] px-2.5 py-1.5 font-semibold ${groupFill(group)}`}
       >
-        <span className="truncate">{title}</span>
-        <span className="truncate font-mono text-[11px] font-normal text-white/70">{id}</span>
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate">{title}</span>
+          {node.kind === 'signal' && (
+            <span
+              aria-hidden="true"
+              className="shrink-0 rounded-[10px] bg-on-accent/60 px-1.5 py-px text-[10px] leading-4 font-medium"
+            >
+              сигнал v{reference?.version ?? '—'}
+            </span>
+          )}
+        </span>
+        <span className="truncate font-mono text-[11px] font-normal opacity-70">{id}</span>
       </div>
       {issues.length > 0 && (
         <span
           aria-hidden="true"
-          className="absolute -top-2 -right-2 grid size-[18px] place-items-center rounded-full bg-red-500 text-[11px] font-extrabold text-white"
+          className="absolute -top-2 -right-2 grid size-[18px] place-items-center rounded-full bg-err text-[11px] font-extrabold text-text"
         >
           !
         </span>
       )}
-      {settings.length > 0 && (
-        <div className="mx-2 mt-1 truncate rounded bg-zinc-800 px-1.5 py-0.5 text-[11px] text-zinc-400">
-          {settings.map(([name, value]) => `${name}: ${value}`).join(', ')}
+      {/* The version line of a signal node is read aloud and found by the tests; the eye has the badge of the header. */}
+      {line !== '' && (
+        <div
+          className={
+            node.kind === 'signal' && newer === undefined && !loading
+              ? 'sr-only'
+              : `mx-2 mt-1 truncate rounded bg-canvas/60 px-1.5 py-0.5 font-mono text-[11px] ${newer === undefined ? 'text-muted' : 'text-warn'}`
+          }
+        >
+          {line}
         </div>
       )}
       <div className="py-1">
@@ -87,15 +113,11 @@ export function GraphNodeView({ id, data, selected }: NodeProps<GraphFlowNode>) 
                 <span className="truncate" title={pins.outputs[index].name}>
                   {pins.outputs[index].name}
                 </span>
-                <Handle
-                  type="source"
-                  id={pins.outputs[index].name}
-                  position={Position.Right}
-                  isConnectable={!environment.readOnly}
-                  style={pinStyle(
-                    pins.outputs[index],
-                    environment.connected.has(`${id}.${pins.outputs[index].name}`),
-                  )}
+                <PinHandle
+                  side="source"
+                  pin={pins.outputs[index]}
+                  connected={environment.connected.has(`${id}.${pins.outputs[index].name}`)}
+                  connectable={!environment.readOnly}
                 />
               </span>
             )}
@@ -124,15 +146,15 @@ function Input({
 
   return (
     <span
-      className={`flex min-w-0 items-center gap-2 ${bad ? 'font-semibold text-red-400' : ''}`}
+      className={`flex min-w-0 items-center gap-2 ${bad ? 'font-semibold text-err' : ''}`}
       data-bad={bad}
     >
-      <Handle
-        type="target"
-        id={pin.name}
-        position={Position.Left}
-        isConnectable={!environment.readOnly}
-        style={pinStyle(pin, connected, bad)}
+      <PinHandle
+        side="target"
+        pin={pin}
+        connected={connected}
+        connectable={!environment.readOnly}
+        bad={bad}
       />
       <span className="truncate" title={pin.name}>
         {pin.name}
@@ -140,7 +162,7 @@ function Input({
       {!connected && pin.type !== 'event' && (
         <input
           aria-label={`Значение ${node}.${pin.name}`}
-          className="nodrag h-[18px] w-16 shrink-0 rounded border border-zinc-700 bg-zinc-800 px-1 font-mono text-[11px] text-zinc-100"
+          className="nodrag h-[18px] w-16 shrink-0 rounded border border-node-line bg-canvas/60 px-1 font-mono text-[11px] text-text outline-none placeholder:text-faint focus:border-accent"
           defaultValue={formatValue(value)}
           key={formatValue(value)}
           placeholder={pin.fallback === undefined ? undefined : formatValue(pin.fallback)}
@@ -162,12 +184,35 @@ function Input({
   );
 }
 
-function pinStyle(pin: Pin, connected: boolean, bad = false) {
-  const color = bad ? '#ef4444' : pinColors[pin.type];
-  return {
-    width: 10,
-    height: 10,
-    border: `2px solid ${color}`,
-    background: connected ? color : '#18181b',
-  };
+/**
+ * A pin: a circle of 10 px of the color of its type, filled when a wire is on it and an outline when not. The type and
+ * whether it is connected are told by `data-type` and `data-connected`.
+ */
+function PinHandle({
+  side,
+  pin,
+  connected,
+  connectable,
+  bad = false,
+}: {
+  readonly side: 'source' | 'target';
+  readonly pin: Pin;
+  readonly connected: boolean;
+  readonly connectable: boolean;
+  readonly bad?: boolean;
+}) {
+  const look = pinLooks[pin.type];
+  return (
+    <Handle
+      type={side}
+      id={pin.name}
+      position={side === 'source' ? Position.Right : Position.Left}
+      isConnectable={connectable}
+      data-type={pin.type}
+      data-connected={connected}
+      className={`size-2.5! border-2! ${bad ? 'border-err!' : look.border} ${
+        connected ? (bad ? 'bg-err!' : look.fill) : 'bg-node!'
+      }`}
+    />
+  );
 }

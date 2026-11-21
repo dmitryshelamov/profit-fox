@@ -378,9 +378,10 @@ describe('the editor of a strategy', () => {
     );
     await findNode('funding-high', 'funding-high');
     const enter = await selectNode('Вход', 'enter');
-    await userEvent.selectOptions(
-      within(enter).getByRole('combobox', { name: 'Настройка side' }),
-      'short',
+    await userEvent.click(
+      within(within(enter).getByRole('radiogroup', { name: 'Настройка side' })).getByRole('radio', {
+        name: 'short',
+      }),
     );
     await userEvent.selectOptions(
       within(enter).getByRole('combobox', { name: 'Источник when' }),

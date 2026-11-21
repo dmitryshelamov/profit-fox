@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 
 import { api, type RequestError, unwrap } from '@/api/client';
@@ -7,9 +7,13 @@ import { listNodeKinds, written } from '@/api/signals';
 import { signalRules } from '@/modules/graph-editor/document';
 import { useGraphCheck } from '@/modules/graph-editor/editing/useGraphCheck';
 import type { Graph, GraphDocument } from '@/modules/graph-editor/model/types';
-import { buttonClass, fieldClass } from '@/modules/graph-editor/ui/Card';
+import { BarDivider } from '@/modules/graph-editor/ui/FloatingBar';
 import { GraphEditor } from '@/modules/graph-editor/ui/GraphEditor';
+import { SectionLink } from '@/pages/documents/DocumentEditor';
 import { PreviewPanel } from '@/preview/PreviewPanel';
+import { Badge } from '@/shared/ui/Badge';
+import { Button } from '@/shared/ui/Button';
+import { TextField } from '@/shared/ui/TextField';
 
 /**
  * The signal of a hypothesis of the bench, read only (spec signal-constructor «Гипотеза только для чтения»): no edit,
@@ -63,13 +67,12 @@ export function HypothesisPage({ id }: { readonly id: string }) {
     <ReadOnlyEditor
       title={
         <>
-          <Link to="/signals" className="text-zinc-400 hover:text-zinc-100">
-            ← Сигналы
-          </Link>
+          <SectionLink to="/signals" title="Сигналы" />
+          <BarDivider />
           <span className="font-mono font-semibold">
-            {hypothesis.id} {hypothesis.name}
+            <span className="text-accent">{hypothesis.id}</span> {hypothesis.name}
           </span>
-          <span className="text-xs text-zinc-400">только чтение</span>
+          <Badge tone="muted">только чтение</Badge>
         </>
       }
       document={document}
@@ -84,22 +87,19 @@ export function HypothesisPage({ id }: { readonly id: string }) {
             void copy();
           }}
         >
-          <input
+          <TextField
             aria-label="Имя нового сигнала"
-            className={`${fieldClass} w-44`}
+            mono
+            className="w-44"
             placeholder="имя-сигнала"
             value={name}
             onChange={(event) => setName(event.target.value.trim())}
           />
-          <button
-            type="submit"
-            className={`${buttonClass} border-amber-500`}
-            disabled={name === ''}
-          >
+          <Button type="submit" variant="primary" disabled={name === ''}>
             Скопировать в сигнал
-          </button>
+          </Button>
           {errors.length > 0 && (
-            <span className="text-xs text-red-300">
+            <span role="alert" className="max-w-64 truncate px-1.5 text-xs text-err">
               {errors.map((error) => error.reason).join('; ')}
             </span>
           )}
@@ -150,11 +150,9 @@ function ReadOnlyEditor({
 
 function Message({ text }: { readonly text: string }) {
   return (
-    <main className="flex min-h-screen flex-col items-start gap-3 bg-zinc-950 p-6 text-sm text-zinc-100">
-      <Link to="/signals" className="text-zinc-400 hover:text-zinc-100">
-        ← Сигналы
-      </Link>
-      <p className="text-zinc-300">{text}</p>
+    <main className="flex min-h-screen flex-col items-start gap-3 bg-canvas p-6">
+      <SectionLink to="/signals" title="Сигналы" />
+      <p className="text-muted">{text}</p>
     </main>
   );
 }

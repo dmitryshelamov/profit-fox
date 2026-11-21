@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { useEffect } from 'react';
 
 import { cancelRun, listFinishedRuns } from '@/api/runs';
-import { buttonClass } from '@/modules/graph-editor/ui/Card';
+import { Button } from '@/shared/ui/Button';
 
 import { fixed, kindLabel, periodLabel, runProgress, statusLabel } from './labels';
 import { useActiveRuns } from './useActiveRuns';
@@ -62,14 +62,13 @@ export function RunsPage() {
               <span>{periodLabel(run.period)}</span>
               <span className="text-zinc-400">{kindLabel(run.kind)}</span>
               <span className="text-zinc-400">{runProgress(run)}</span>
-              <button
-                type="button"
-                className={`${buttonClass} ml-auto`}
+              <Button
+                className="ml-auto"
                 disabled={cancel.isPending}
                 onClick={() => cancel.mutate(run.id)}
               >
                 Отменить
-              </button>
+              </Button>
             </li>
           ))}
         </ul>

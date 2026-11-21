@@ -236,7 +236,7 @@ export function setParameters(
   return { ...document, graph: { ...document.graph, parameters, wires } };
 }
 
-/** The layout dropped, so every node gets the place of the layout by depth: «Разложить». */
+/** The layout dropped, so every node gets the place of the layout by depth: «Выстроить». */
 export function relayout(document: GraphDocument): GraphDocument {
   return { ...document, layout: {} };
 }

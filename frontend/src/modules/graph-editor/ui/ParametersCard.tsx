@@ -1,9 +1,13 @@
 import { useState } from 'react';
 
+import { Button } from '@/shared/ui/Button';
+import { SelectField } from '@/shared/ui/SelectField';
+import { TextField } from '@/shared/ui/TextField';
+
 import { setParameters } from '../model/operations';
 import type { GraphDocument, GraphParameter, PinType } from '../model/types';
 import { formatValue, parseValue } from '../model/values';
-import { buttonClass, Card, fieldClass } from './Card';
+import { Card, FieldLabel } from './Card';
 
 const types: readonly PinType[] = ['number', 'boolean', 'duration'];
 
@@ -47,16 +51,16 @@ export function ParametersCard({
 
   return (
     <Card title="Параметры" onClose={onClose}>
-      {parameters.length === 0 && <p className="text-zinc-400">Параметров нет.</p>}
+      {parameters.length === 0 && <p className="text-muted">Параметров нет.</p>}
       {parameters.map((parameter, index) => (
         <fieldset
           key={index}
           aria-label={`Параметр ${parameter.name}`}
-          className="flex flex-col gap-1 rounded border border-zinc-800 p-2"
+          className="flex min-w-0 flex-col gap-1.5 rounded-lg border border-line p-2.5"
         >
-          <input
+          <TextField
             aria-label="Имя параметра"
-            className={fieldClass}
+            mono
             defaultValue={parameter.name}
             key={parameter.name}
             readOnly={readOnly}
@@ -71,9 +75,10 @@ export function ParametersCard({
               }
             }}
           />
-          <select
+          <SelectField
             aria-label="Тип параметра"
-            className={fieldClass}
+            mono
+            className="w-full"
             value={parameter.type}
             disabled={readOnly}
             onChange={(event) => {
@@ -86,7 +91,7 @@ export function ParametersCard({
                 {type}
               </option>
             ))}
-          </select>
+          </SelectField>
           <ValueField
             label="Значение параметра"
             value={parameter.value}
@@ -111,9 +116,10 @@ export function ParametersCard({
             </span>
           )}
           {!readOnly && (
-            <button
-              type="button"
-              className={buttonClass}
+            <Button
+              variant="danger"
+              size="sm"
+              className="self-start"
               onClick={() =>
                 onChange(
                   setParameters(
@@ -124,13 +130,13 @@ export function ParametersCard({
               }
             >
               Удалить параметр
-            </button>
+            </Button>
           )}
         </fieldset>
       ))}
       {!readOnly && (
         <form
-          className="flex gap-2"
+          className="flex flex-col gap-1.5"
           onSubmit={(event) => {
             event.preventDefault();
             if (name !== '' && !taken) {
@@ -141,16 +147,20 @@ export function ParametersCard({
             }
           }}
         >
-          <input
-            aria-label="Имя нового параметра"
-            className={`${fieldClass} flex-1`}
-            placeholder="threshold"
-            value={name}
-            onChange={(event) => setName(event.target.value.trim())}
-          />
-          <button type="submit" className={buttonClass} disabled={name === '' || taken}>
-            Добавить
-          </button>
+          <FieldLabel>Новый параметр</FieldLabel>
+          <span className="flex gap-2">
+            <TextField
+              aria-label="Имя нового параметра"
+              mono
+              className="min-w-0 flex-1"
+              placeholder="threshold"
+              value={name}
+              onChange={(event) => setName(event.target.value.trim())}
+            />
+            <Button type="submit" disabled={name === '' || taken}>
+              Добавить
+            </Button>
+          </span>
         </form>
       )}
     </Card>
@@ -186,9 +196,9 @@ function ValueField({
   readonly onValue: (value: GraphParameter['value'] | undefined) => void;
 }) {
   return (
-    <input
+    <TextField
       aria-label={label}
-      className={fieldClass}
+      mono
       defaultValue={formatValue(value)}
       key={`${type}:${formatValue(value)}`}
       readOnly={readOnly}
@@ -214,10 +224,11 @@ function BoundField({
   readonly onValue: (value: number | undefined) => void;
 }) {
   return (
-    <input
+    <TextField
       aria-label={label}
+      mono
       placeholder={label.toLowerCase()}
-      className={`${fieldClass} w-full`}
+      className="min-w-0 flex-1"
       defaultValue={value === undefined ? '' : String(value)}
       key={String(value)}
       readOnly={readOnly}
