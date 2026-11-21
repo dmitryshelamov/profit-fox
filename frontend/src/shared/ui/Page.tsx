@@ -43,7 +43,7 @@ export function SectionTitle({
   return (
     <div className="flex flex-col gap-1.5">
       <h2 className="flex items-center gap-2.5 text-base font-bold">
-        {title}
+        {title}{' '}
         {count !== undefined && (
           <span className="rounded-[10px] bg-chip px-2 py-0.5 font-mono text-[11px] leading-none font-normal text-muted">
             {count}

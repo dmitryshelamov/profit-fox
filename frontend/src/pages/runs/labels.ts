@@ -58,3 +58,32 @@ export function runProgress(run: Run): string {
   const pairs = `${run.pairsDone} из ${run.pairsTotal ?? '?'} пар`;
   return `${run.worker ?? '?'}: ${pairs}${run.cancelRequested ? ', отменяется' : ''}`;
 }
+
+/** A whole number with its thousands apart, «3 366»; a dash for none. */
+export function grouped(value: number | string | null | undefined): string {
+  return value === null || value === undefined || Number.isNaN(Number(value))
+    ? '—'
+    : String(Math.round(Number(value))).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0');
+}
+
+/** A length of time in seconds as «13 мин 7 с», «4 мин 12 с», «2 ч 5 мин» or «42 с». */
+export function span(seconds: number): string {
+  const whole = Math.max(0, Math.round(seconds));
+  const hours = Math.floor(whole / 3600);
+  const minutes = Math.floor((whole % 3600) / 60);
+  return hours > 0
+    ? `${hours} ч ${minutes} мин`
+    : minutes > 0
+      ? `${minutes} мин ${whole % 60} с`
+      : `${whole} с`;
+}
+
+/** The time of day of a moment of the API in UTC, «00:14». */
+export function clockUtc(moment: string): string {
+  return new Date(moment).toISOString().slice(11, 16);
+}
+
+/** A long id or hash by its first and last 8 signs, `8c33b686…c4bab201`; a short one whole. */
+export function shortened(text: string): string {
+  return text.length > 17 ? `${text.slice(0, 8)}…${text.slice(-8)}` : text;
+}
