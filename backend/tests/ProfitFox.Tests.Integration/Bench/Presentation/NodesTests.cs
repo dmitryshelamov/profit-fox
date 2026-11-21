@@ -7,7 +7,7 @@ using ProfitFox.Tests.Integration.Bench.MarketData;
 namespace ProfitFox.Tests.Integration.Bench.Presentation;
 
 /// <summary>
-///     Spec signal-constructor «Каталог узлов» (task 3.1).
+///     Spec signal-constructor «Каталог узлов» (task 3.1; change add-strategy-graph, task 4.5).
 /// </summary>
 [NonParallelizable]
 public sealed class NodesTests
@@ -32,9 +32,26 @@ public sealed class NodesTests
     {
         NodeKindResponse[] kinds = await Catalog();
 
-        Assert.That(kinds.Select(kind => kind.Kind), Is.EqualTo(NodeCatalog.All.Select(kind => kind.Name)));
+        Assert.That(kinds.Select(kind => kind.Kind), Is.EqualTo(NodeCatalog.All.Where(kind => kind.AllowedInSignal).Select(kind => kind.Name)));
         Assert.That(NodeCatalog.All.Select(kind => NodeTitles.Of(kind.Name)), Has.None.Null, "a kind without words in NodeTitles");
         Assert.That(kinds.Select(kind => kind.Title), Has.None.Empty);
+    }
+
+    [Test]
+    public async Task The_position_nodes_are_not_in_the_catalog_of_a_signal()
+    {
+        NodeKindResponse[] kinds = await Catalog();
+
+        Assert.That(kinds.Select(kind => kind.Kind), Has.None.AnyOf("enter", "stop-loss", "take-profit", "close-after"));
+        Assert.That(kinds, Has.Length.EqualTo(10));
+    }
+
+    [Test]
+    public void The_position_nodes_have_their_words_for_the_constructor_of_strategies()
+    {
+        Assert.That(
+            new[] { "enter", "stop-loss", "take-profit", "close-after" }.Select(NodeTitles.Of),
+            Is.EqualTo(new (string, string)?[] { ("Вход", "Позиция"), ("Стоп", "Позиция"), ("Цель", "Позиция"), ("Закрыть через", "Позиция") }));
     }
 
     [Test]

@@ -4,7 +4,7 @@ namespace ProfitFox.Engine.Strategy.Nodes;
 
 /// <summary>
 ///     A kind of node in the catalog: its pins and settings. The pins of <c>parameters</c> and <c>outputs</c> come from the
-///     graph they are in.
+///     graph they are in. A kind that places orders or holds the position is not allowed in a signal.
 /// </summary>
 public sealed class NodeKind
 {
@@ -15,6 +15,11 @@ public sealed class NodeKind
     public string Name { get; }
 
     public IReadOnlyList<SettingDeclaration> Settings { get; }
+
+    /// <summary>
+    ///     Whether a signal may have the node: a signal reads only the market (spec strategy-graph «Сигнал»).
+    /// </summary>
+    public bool AllowedInSignal { get; internal init; } = true;
 
     internal NodeKind(
         string name,

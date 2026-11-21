@@ -1,6 +1,7 @@
 using ProfitFox.Engine.Strategy.Graph.Model;
 using ProfitFox.Engine.Strategy.Nodes.Data;
 using ProfitFox.Engine.Strategy.Nodes.Logic;
+using ProfitFox.Engine.Strategy.Nodes.Position;
 
 namespace ProfitFox.Engine.Strategy.Nodes;
 
@@ -20,6 +21,27 @@ public static class NodeCatalog
     public const string Not = "not";
     public const string FirstTime = "first-time";
     public const string Outputs = "outputs";
+    public const string Enter = "enter";
+    public const string StopLoss = "stop-loss";
+    public const string TakeProfit = "take-profit";
+    public const string CloseAfter = "close-after";
+
+    /// <summary>
+    ///     The setting of <c>enter</c> that holds its side, and the sides.
+    /// </summary>
+    public const string Side = "side";
+
+    public const string Long = "long";
+    public const string Short = "short";
+
+    /// <summary>
+    ///     The inputs of the position nodes: the event of <c>enter</c>, the distance of <c>stop-loss</c> and
+    ///     <c>take-profit</c> as a fraction of the entry price, the time of <c>close-after</c> from the moment of the order.
+    /// </summary>
+    public const string When = "when";
+
+    public const string Distance = "distance";
+    public const string After = "after";
 
     /// <summary>
     ///     The operations of <c>compare</c>.
@@ -71,12 +93,25 @@ public static class NodeCatalog
                 graph => [.. graph.Outputs.Select(output => new PinDeclaration(output.Name, output.Type))],
                 _ => [],
                 [],
-                (_, _) => new OutputsNode())
+                (_, _) => new OutputsNode()),
+            new NodeKind(
+                Enter,
+                [new PinDeclaration(When, PinType.Event)],
+                [],
+                [new SettingDeclaration(Side, [Long, Short], Default: null)],
+                _ => new PositionNode())
+            {
+                AllowedInSignal = false
+            },
+            new NodeKind(StopLoss, [new PinDeclaration(Distance, PinType.Number)], [], [], _ => new PositionNode()) { AllowedInSignal = false },
+            new NodeKind(TakeProfit, [new PinDeclaration(Distance, PinType.Number)], [], [], _ => new PositionNode()) { AllowedInSignal = false },
+            new NodeKind(CloseAfter, [new PinDeclaration(After, PinType.Duration)], [], [], _ => new PositionNode()) { AllowedInSignal = false }
         }
         .ToDictionary(kind => kind.Name, StringComparer.Ordinal);
 
     /// <summary>
-    ///     Every kind, in the order the catalog declares them: what the constructor offers (change add-signal-constructor).
+    ///     Every kind, in the order the catalog declares them: the kinds of a signal first, then the position nodes of a
+    ///     strategy. The constructor of signals offers those with <see cref="NodeKind.AllowedInSignal" />.
     /// </summary>
     public static IReadOnlyList<NodeKind> All { get; } = [.. Kinds.Values];
 

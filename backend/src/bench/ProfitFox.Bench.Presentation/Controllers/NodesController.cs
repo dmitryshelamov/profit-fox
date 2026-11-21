@@ -4,7 +4,8 @@ using ProfitFox.Bench.Presentation.Nodes;
 namespace ProfitFox.Bench.Presentation.Controllers;
 
 /// <summary>
-///     <c>GET /api/nodes</c> (spec signal-constructor «Каталог узлов»): the kinds the constructor builds its palette from.
+///     <c>GET /api/nodes</c> (spec signal-constructor «Каталог узлов»): the kinds a signal may have, which the constructor builds
+///     its palette from.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]

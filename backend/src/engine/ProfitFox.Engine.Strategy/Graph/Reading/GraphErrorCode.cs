@@ -39,5 +39,11 @@ public enum GraphErrorCode
     OutputsNodeCount,
 
     SignalOutputCount,
-    SignalOutputNotEvent
+    SignalOutputNotEvent,
+    SignalPositionNode,
+
+    StrategyHasOutputs,
+    StrategyEntryMissing,
+    StrategyCloseAfterMissing,
+    StrategyExitRepeated
 }

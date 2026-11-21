@@ -56,6 +56,29 @@ public static class StrategyGraph
         return errors.Count == 0 ? ReadResult<Signal>.Valid(new Signal(graph)) : ReadResult<Signal>.Invalid(errors);
     }
 
+    public static ReadResult<TradingStrategy> ReadStrategy(string json)
+    {
+        return Parse(json, ReadStrategy);
+    }
+
+    /// <summary>
+    ///     A strategy: a graph without outputs that enters a position and closes it (spec strategy-graph «Стратегия»).
+    /// </summary>
+    public static ReadResult<TradingStrategy> ReadStrategy(JsonElement element)
+    {
+        List<GraphError> errors = [];
+        GraphDefinition? graph = GraphJson.Read(element, errors);
+
+        if (graph is null)
+        {
+            return ReadResult<TradingStrategy>.Invalid(errors);
+        }
+
+        errors.AddRange(GraphValidator.ValidateStrategy(graph));
+
+        return errors.Count == 0 ? ReadResult<TradingStrategy>.Valid(new TradingStrategy(graph)) : ReadResult<TradingStrategy>.Invalid(errors);
+    }
+
     public static string Write(GraphDefinition graph)
     {
         return GraphJson.Write(graph);

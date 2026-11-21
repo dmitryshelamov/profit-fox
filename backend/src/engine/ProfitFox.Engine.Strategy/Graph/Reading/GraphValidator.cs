@@ -5,7 +5,7 @@ namespace ProfitFox.Engine.Strategy.Graph.Reading;
 
 /// <summary>
 ///     Checks what a graph of the right form means (spec strategy-graph): parameters, outputs, nodes, their settings and
-///     inputs, wires, cycles. Every error is reported, in the order of the graph.
+///     inputs, wires, cycles; then what makes it a signal or a strategy. Every error is reported, in the order of the graph.
 /// </summary>
 internal static class GraphValidator
 {
@@ -33,6 +33,64 @@ internal static class GraphValidator
         else if (graph.Outputs[0].Type != PinType.Event)
         {
             errors.Add(new GraphError(GraphErrorCode.SignalOutputNotEvent, "The output of a signal is an event.") { Pin = graph.Outputs[0].Name });
+        }
+
+        // A signal reads only the market: the nodes of the position belong to a strategy.
+        foreach (NodeDefinition node in graph.Nodes.Where(node => NodeCatalog.Find(node.Kind) is { AllowedInSignal: false }))
+        {
+            errors.Add(
+                new GraphError(GraphErrorCode.SignalPositionNode, $"A signal places no orders: {node.Kind} belongs to a strategy.")
+                {
+                    Node = node.Id
+                });
+        }
+
+        return errors;
+    }
+
+    /// <summary>
+    ///     A strategy (spec strategy-graph «Стратегия»): no declared outputs and no <c>outputs</c> node, at least one
+    ///     <c>enter</c>, exactly one <c>close-after</c>, at most one <c>stop-loss</c> and one <c>take-profit</c>.
+    /// </summary>
+    public static List<GraphError> ValidateStrategy(GraphDefinition graph)
+    {
+        List<GraphError> errors = Validate(graph);
+
+        if (graph.Outputs.Count > 0)
+        {
+            errors.Add(new GraphError(GraphErrorCode.StrategyHasOutputs, "A strategy has no declared outputs."));
+        }
+        else
+        {
+            foreach (NodeDefinition node in graph.Nodes.Where(node => node.Kind == NodeCatalog.Outputs))
+            {
+                errors.Add(new GraphError(GraphErrorCode.StrategyHasOutputs, $"A strategy has no {NodeCatalog.Outputs} node.") { Node = node.Id });
+            }
+        }
+
+        if (graph.Nodes.All(node => node.Kind != NodeCatalog.Enter))
+        {
+            errors.Add(new GraphError(GraphErrorCode.StrategyEntryMissing, $"A strategy needs an {NodeCatalog.Enter} node."));
+        }
+
+        if (graph.Nodes.All(node => node.Kind != NodeCatalog.CloseAfter))
+        {
+            errors.Add(new GraphError(GraphErrorCode.StrategyCloseAfterMissing, $"A strategy needs one {NodeCatalog.CloseAfter} node."));
+        }
+
+        // The position on a pair is one, so its stop, its target and its time are one each: the first node stays.
+        var exits = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (NodeDefinition node in graph.Nodes.Where(node => node.Kind is NodeCatalog.StopLoss or NodeCatalog.TakeProfit or NodeCatalog.CloseAfter))
+        {
+            if (!exits.Add(node.Kind))
+            {
+                errors.Add(
+                    new GraphError(GraphErrorCode.StrategyExitRepeated, $"A strategy has one {node.Kind} node; this is another.")
+                    {
+                        Node = node.Id
+                    });
+            }
         }
 
         return errors;
