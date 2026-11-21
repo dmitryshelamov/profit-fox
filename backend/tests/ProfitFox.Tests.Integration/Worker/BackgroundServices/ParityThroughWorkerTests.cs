@@ -1,17 +1,18 @@
 using Dapper;
 
+using MediatR;
+
+using Microsoft.Extensions.DependencyInjection;
+
 using Npgsql;
 
-using ProfitFox.Application.Commands.Hypotheses;
-using ProfitFox.Application.Commands.Runs;
+using ProfitFox.Application.Commands.Hypotheses.AddHypothesis;
+using ProfitFox.Application.Commands.Runs.EnqueueRun;
+using ProfitFox.Application.Commands.Runs.ExecuteRun;
 using ProfitFox.Application.Contracts.Runs;
-using ProfitFox.Application.Ports.Runs;
 using ProfitFox.Domain.ValueObjects.Ledger;
 using ProfitFox.Domain.ValueObjects.Runs.Enums;
-using ProfitFox.Infrastructure.Clients.MarketData;
-using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Hypotheses;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger;
-using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Runs;
 using ProfitFox.Tests.Integration.MarketData;
 
 namespace ProfitFox.Tests.Integration.Worker.BackgroundServices;
@@ -40,17 +41,19 @@ public sealed class ParityThroughWorkerTests
     public async Task A_parity_run_of_a_Worker_gives_the_events_the_power_and_the_data_hash_of_a_direct_parity_run()
     {
         await using MarketDataServer server = await MarketDataServer.Start();
-        var ledger = new RunLedger(BenchDatabase.DataSource);
-        var hypotheses = new HypothesisCatalog(new HypothesisStore(BenchDatabase.DataSource));
-        await hypotheses.Add(BenchRepository.H0001Text(), CancellationToken.None);
-        var runner = new HypothesisRunner(hypotheses, new GrpcHistorySource(server.Channel), new InstrumentCatalog(server.Http), ledger, TextWriter.Null);
-        RunResult direct = await runner.Run(new RunOptions("H0001", Version: null, Period.Exploration, Parity: true, new DateTimeOffset(2026, 11, 18, 0, 0, 0, TimeSpan.Zero)), CancellationToken.None);
+        var ledger = new LedgerRepository(BenchDatabase.DataSource);
+        await using ServiceProvider services = BenchServices.Start(server);
+        ISender sender = services.GetRequiredService<ISender>();
+        await sender.Send(new AddHypothesisCommand(BenchRepository.H0001Text()), CancellationToken.None);
+        ExecuteRunResult direct = await sender.Send(
+            new ExecuteRunCommand("H0001", Version: null, Period.Exploration, Parity: true, new DateTimeOffset(2026, 11, 18, 0, 0, 0, TimeSpan.Zero)),
+            CancellationToken.None);
 
         await using WorkerHost worker = await WorkerHost.Start(server, "w-1");
-        RunRecord queued = await new RunScheduler(hypotheses, ledger, new RunQueue(BenchDatabase.DataSource)).Enqueue("H0001", version: null, Period.Exploration, parity: true, CancellationToken.None);
-        await Poll.Until("the parity run", async () => (await ledger.Entries(CancellationToken.None)).Any(line => line.RunId == queued.Id));
+        RunInternal queued = await sender.Send(new EnqueueRunCommand("H0001", Version: null, Period.Exploration, Parity: true), CancellationToken.None);
+        await Poll.Until("the parity run", async () => (await ledger.EntriesAsync(CancellationToken.None)).Any(line => line.RunId == queued.Id));
 
-        LedgerEntry fromWorker = (await ledger.Entries(CancellationToken.None)).Single(line => line.RunId == queued.Id);
+        LedgerEntry fromWorker = (await ledger.EntriesAsync(CancellationToken.None)).Single(line => line.RunId == queued.Id);
         Assert.That(fromWorker.Status, Is.EqualTo(RunStatus.Parity));
         Assert.That(fromWorker.DataHash, Is.EqualTo(direct.Entry.DataHash).And.Length.EqualTo(64));
         Assert.That(

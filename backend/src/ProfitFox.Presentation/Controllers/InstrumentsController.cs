@@ -1,8 +1,10 @@
+using MediatR;
+
 using Microsoft.AspNetCore.Mvc;
 
+using ProfitFox.Application.Contracts.MarketData;
 using ProfitFox.Application.Exceptions;
-using ProfitFox.Application.Ports.MarketData;
-using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Application.Queries.MarketData;
 using ProfitFox.Presentation.Contracts.Instruments;
 
 namespace ProfitFox.Presentation.Controllers;
@@ -12,7 +14,7 @@ namespace ProfitFox.Presentation.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-public class InstrumentsController(IInstrumentCatalog catalog) : ControllerBase
+public class InstrumentsController(ISender sender) : ControllerBase
 {
     [HttpGet(Name = "ListInstruments")]
     [ProducesResponseType<InstrumentResponse[]>(StatusCodes.Status200OK)]
@@ -21,7 +23,7 @@ public class InstrumentsController(IInstrumentCatalog catalog) : ControllerBase
     {
         try
         {
-            IReadOnlyList<Instrument> instruments = await catalog.LinearUsdtPerpetuals(cancellation);
+            IReadOnlyList<InstrumentInternal> instruments = await sender.Send(new GetInstrumentsQuery(), cancellation);
             return instruments.Select(instrument => new InstrumentResponse(instrument.Id, instrument.Symbol)).ToArray();
         }
         catch (HistoryUnavailableException exception)

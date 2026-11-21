@@ -70,7 +70,7 @@ public sealed class NodesTests
     private static async Task<NodeKindResponse[]> Catalog()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(market);
+        await using var api = new BenchTestApplication(market);
         return (await api.Http.GetFromJsonAsync<NodeKindResponse[]>("/api/nodes", Json))!;
     }
 }

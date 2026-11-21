@@ -3,8 +3,7 @@
     <!--
         The dependency rule of the layers: a project lists the projects it may reference directly, and the build fails on any other.
         The SDK adds the references of a referenced project before the check, so a list names them too (Domain under Infrastructure).
-        Tests.Unit tests Domain and Application, and the parsing of the market-data catalog in Infrastructure (InstrumentCatalogTests);
-        Tests.Integration may reference anything, so it has no list.
+        Tests.Unit tests Domain and Application only; Tests.Integration may reference anything, so it has no list.
     -->
     <PropertyGroup Condition="'$(MSBuildProjectName)' == 'ProfitFox.Domain'">
         <CheckLayerReferences>true</CheckLayerReferences>
@@ -37,7 +36,7 @@
     </PropertyGroup>
     <PropertyGroup Condition="'$(MSBuildProjectName)' == 'ProfitFox.Tests.Unit'">
         <CheckLayerReferences>true</CheckLayerReferences>
-        <AllowedLayerReferences>ProfitFox.Application;ProfitFox.Domain;ProfitFox.Infrastructure;ProfitFox.Tests.Shared</AllowedLayerReferences>
+        <AllowedLayerReferences>ProfitFox.Application;ProfitFox.Domain;ProfitFox.Tests.Shared</AllowedLayerReferences>
     </PropertyGroup>
 
     <Target Name="CheckLayerReferences" BeforeTargets="ResolveProjectReferences" Condition="'$(CheckLayerReferences)' == 'true'">

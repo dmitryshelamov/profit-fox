@@ -1,10 +1,12 @@
 using Dapper;
 
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 using Npgsql;
 
 using ProfitFox.Infrastructure.Persistence.Postgres;
+using ProfitFox.Infrastructure.Persistence.Postgres.FluentMigrator;
 
 using Testcontainers.PostgreSql;
 
@@ -54,9 +56,27 @@ public sealed class BenchDatabase
     /// </summary>
     public static ServiceProvider Migrated(string connectionString)
     {
-        ServiceProvider services = new ServiceCollection().AddBenchDatabase(connectionString).BuildServiceProvider();
+        var registrations = new ServiceCollection();
+        PostgresRegistrar.Configure(Settings(connectionString), registrations);
+        ServiceProvider services = registrations.BuildServiceProvider();
         services.MigrateBench();
         return services;
+    }
+
+    /// <summary>
+    ///     The settings of the bench over the database of <paramref name="connectionString" />, with addresses of a market-data
+    ///     service that no test reaches: a test host replaces the market-data service after registration.
+    /// </summary>
+    public static IConfiguration Settings(string connectionString)
+    {
+        return new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:Bench"] = connectionString,
+                ["MarketData:GrpcUrl"] = "http://localhost:1",
+                ["MarketData:RestUrl"] = "http://localhost:2/"
+            })
+            .Build();
     }
 
     /// <summary>
@@ -68,6 +88,17 @@ public sealed class BenchDatabase
         await using NpgsqlConnection connection = await _dataSource.OpenConnectionAsync();
         await connection.ExecuteAsync($"CREATE DATABASE {name}");
         return new NpgsqlConnectionStringBuilder(ConnectionString) { Database = name }.ConnectionString;
+    }
+
+    /// <summary>
+    ///     Removes the database of <paramref name="connectionString" /> made by <see cref="NewDatabase" />, closing the
+    ///     connections it has.
+    /// </summary>
+    public static async Task DropDatabase(string connectionString)
+    {
+        string name = new NpgsqlConnectionStringBuilder(connectionString).Database!;
+        await using NpgsqlConnection connection = await _dataSource.OpenConnectionAsync();
+        await connection.ExecuteAsync($"DROP DATABASE {name} WITH (FORCE)");
     }
 
     /// <summary>

@@ -211,22 +211,47 @@ dotnet run --project backend/src/ProfitFox.Cli -- --bench http://192.168.8.213:5
 потом тему (`Runs`, `Hypotheses`, `Signals`, `Graph`, ...), а пространство имён совпадает с папкой. Ссылки идут только
 внутрь:
 
-- `ProfitFox.Domain` — расчёт и правила без ввода-вывода. `ValueObjects/<тема>` — значения (записи, проверенный граф,
-  сигнал, стратегия, минутный путь), перечисления — в `ValueObjects/<тема>/Enums`; `Services/<тема>` — то, что считает:
+- `ProfitFox.Domain` — расчёт и правила без ввода-вывода. `Entities/<тема>` — сущности: прогон очереди `Run` и сохранённый
+  сигнал `SignalDocument` (закрытый конструктор, `Restore` для репозитория, у сигнала ещё `Create` и `Rename`), их общая база
+  `Entities/Base/AggregateRoot` и `Events/IDomainEvent`, как в образце; перечисления сущности — в `Entities/<тема>/Enums`.
+  `ValueObjects/<тема>` — значения (версия гипотезы `StoredHypothesis`, строка журнала `LedgerEntry`, проверенный граф,
+  сигнал, стратегия, минутный путь), перечисления — в `ValueObjects/<тема>/Enums`. `Repositories` — порты хранения
+  `IHypothesisRepository`, `ISignalRepository`, `IRunRepository`, `ILedgerRepository`. `Services/<тема>` — то, что считает:
   чтение и проверка графа, узлы, исполнение сигнала и стратегии, позиция пары, сделка, случайные входы, правила журнала и
-  вердикта; `Exceptions`. Ни на что не ссылается.
-- `ProfitFox.Application` — сценарии и порты: `Commands/<тема>` (прогон, очередь, библиотека сигналов, гипотезы),
-  `Queries/<тема>` (предпросмотр, доска прогонов, история рынка), `Contracts/<тема>` (что отдают сценарии),
-  `Ports/<тема>` (`IHistorySource`, `IInstrumentCatalog`, `IHypothesisStore`, `ISignalStore`, `IRunLedger`, `IRunQueue` и их
-  записи), `Exceptions`.
-- `ProfitFox.Infrastructure` — адаптеры портов: `Clients/MarketData` (gRPC и REST сервиса данных, его `Protos`) и
-  `Persistence/Postgres` (хранилища в `Dapper/Repositories/<тема>`, миграции в `FluentMigrator/Migrations`).
+  вердикта; `Exceptions`. Ни на что не ссылается. Взять прогон, продлить аренду и отменить — по одному оператору
+  `IRunRepository` со временем базы, а не «прочитал сущность, изменил, сохранил»: очередь обслуживают несколько Worker'ов.
+- `ProfitFox.Application` — команды и запросы MediatR с обработчиками. Команда лежит в `Commands/<тема>/<Имя>/` рядом с
+  обработчиком и результатом (`Runs/EnqueueRun/EnqueueRunCommand`, `EnqueueRunCommandHandler`); общий код обработчиков одной
+  темы — в `Commands/<тема>/Base`. Запрос и его обработчик — рядом в `Queries/<тема>` (`Runs/GetRunQuery`,
+  `GetRunQueryHandler`). Обработчики `internal sealed`, их видит `ProfitFox.Tests.Unit`. `Contracts/<тема>` — то, что
+  отдают запросы и команды и показывает API, с именами `<Имя>Internal` (`RunInternal`, `SignalInternal`) и конвертерами из
+  домена в `Contracts/<тема>/Converters`. `Ports/MarketData` — порты сервиса данных `IHistorySource` и `IInstrumentCatalog`,
+  `Exceptions`.
+- `ProfitFox.Infrastructure` — адаптеры портов и регистрация: `InfrastructureRegistrar.AddInfrastructure` собирает
+  `Mediatr/MediatrRegistrar`, `Clients/MarketData` (gRPC и REST сервиса данных, его `Protos`, `MarketDataRegistrar`) и
+  `Persistence/Postgres` (`PostgresRegistrar`; репозитории `<Имя>Repository` в `Dapper/Repositories/<тема>` со строками
+  `Contracts/<Имя>Db`, SQL в `Queries/<Имя>RepositoryQueries`, переводом строки в домен в `Converters/<Имя>DbConverter`;
+  миграции в `FluentMigrator/Migrations`, их запуск — `FluentMigrator/BenchMigrations`). Репозитории `internal sealed`,
+  их видит `ProfitFox.Tests.Integration`.
 - `ProfitFox.Presentation` (API: `Controllers`, `Contracts/<тема>` с запросами и ответами) и `ProfitFox.Worker`
-  (`BackgroundServices`) — точки входа, они же собирают зависимости.
+  (`BackgroundServices`) — точки входа. Обе зовут `AddInfrastructure`, контроллеры и служба Worker'а зовут Application
+  только через `ISender`; служба шлёт `RunNextCommand` в своей области на каждый шаг. `NodesController` и проверка графа
+  в `SignalsController` зовут чистые функции домена напрямую.
 - `ProfitFox.Cli` (`bench`) — клиент REST, на остальные проекты не ссылается.
 
-Тесты лежат так же, как код, который они проверяют: `ProfitFox.Tests.Unit/Domain/...`, `ProfitFox.Tests.Unit/Application/...`,
-`ProfitFox.Tests.Integration/Infrastructure/...`, `ProfitFox.Tests.Integration/Presentation/...`. Эталоны — в папках
+Из образца не взято: папка транзакций и соединение на область (каждый вызов репозитория и так целый в своей транзакции),
+обработчики запросов с SQL в Infrastructure (на все запросы отвечают репозитории), общий обработчик исключений Presentation
+(тела ошибок разные по маршрутам и записаны в OpenAPI), проверка базы в Infrastructure (`DatabaseHealthCheck` остаётся в
+Presentation), NSubstitute (подделки `MemorySignalRepository` и `FakeHistorySource` держат состояние), имена портов
+`I<Биржа><Что>Client`, перечисления вместо строк статусов, периода и вида прогона, `Guid` как идентификатор,
+`scripts/verify-format.sh` и хук `pre-commit` (design `match-market-data-structure`, решение 8).
+
+Тесты лежат так же, как код, который они проверяют: `ProfitFox.Tests.Unit/Domain/...` и `ProfitFox.Tests.Unit/Application/...`
+(тесты обработчиков — `Commands/<тема>/<Обработчик>Tests`, `Queries/<тема>/<Обработчик>Tests`; `Tests.Unit` ссылается только
+на Domain, Application и `Tests.Shared`), `ProfitFox.Tests.Integration/Infrastructure/...`,
+`ProfitFox.Tests.Integration/Presentation/...`. Интеграционные тесты шлют команды через поставщик служб `AddInfrastructure`
+с поддельным сервисом данных (`BenchServices`). Генераторы сущностей — в
+`ProfitFox.Tests.Shared/Generators/Domain/Entities/<тема>` (`RunGenerator`, `SignalDocumentGenerator`). Эталоны — в папках
 `Fixtures` рядом со своими тестами.
 
 Общие свойства сборки и версии пакетов — в `backend/Directory.Build.props` и `backend/Directory.Packages.props`; `.csproj`

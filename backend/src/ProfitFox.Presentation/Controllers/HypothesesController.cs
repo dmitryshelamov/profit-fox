@@ -1,9 +1,12 @@
+using MediatR;
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 
-using ProfitFox.Application.Commands.Hypotheses;
+using ProfitFox.Application.Commands.Hypotheses.AddHypothesis;
 using ProfitFox.Application.Contracts.Hypotheses;
 using ProfitFox.Application.Contracts.Runs;
+using ProfitFox.Application.Queries.Hypotheses;
 using ProfitFox.Application.Queries.Runs;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.ValueObjects.Hypotheses;
@@ -18,14 +21,14 @@ namespace ProfitFox.Presentation.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-public class HypothesesController(HypothesisCatalog hypotheses, RunBoard board) : ControllerBase
+public class HypothesesController(ISender sender) : ControllerBase
 {
     [HttpGet(Name = "ListHypotheses")]
     [ProducesResponseType<HypothesisResponse[]>(StatusCodes.Status200OK)]
     public async Task<ActionResult<HypothesisResponse[]>> Get(CancellationToken cancellation)
     {
-        IReadOnlyList<HypothesisItem> items = await hypotheses.List(cancellation);
-        IReadOnlyDictionary<string, IReadOnlyList<RunAvailability>> availability = await board.Availability(items, cancellation);
+        IReadOnlyList<HypothesisInternal> items = await sender.Send(new GetHypothesesQuery(), cancellation);
+        IReadOnlyDictionary<string, IReadOnlyList<RunAvailabilityInternal>> availability = await sender.Send(new GetRunAvailabilityQuery(items), cancellation);
         return items
             .Select(item => new HypothesisResponse(
                 item.Id,
@@ -52,8 +55,8 @@ public class HypothesesController(HypothesisCatalog hypotheses, RunBoard board) 
     {
         try
         {
-            HypothesisAdded added = await hypotheses.Add(text ?? "", cancellation);
-            var response = new HypothesisAddedResponse(added.Hypothesis.Id, added.Hypothesis.Name, added.Hypothesis.Version);
+            AddHypothesisResult added = await sender.Send(new AddHypothesisCommand(text ?? ""), cancellation);
+            var response = new HypothesisAddedResponse(added.Id, added.Name, added.Version);
             return added.Created ? StatusCode(StatusCodes.Status201Created, response) : response;
         }
         catch (HypothesisException exception)

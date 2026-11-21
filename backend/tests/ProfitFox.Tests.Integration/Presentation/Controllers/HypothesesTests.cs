@@ -20,14 +20,14 @@ public sealed class HypothesesTests
 {
     private static readonly JsonSerializerOptions Json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
     private MarketDataServer _market = null!;
-    private BenchPresentationServer _api = null!;
+    private BenchTestApplication _api = null!;
 
     [SetUp]
     public async Task Start()
     {
         await BenchDatabase.Reset();
         _market = await MarketDataServer.Start();
-        _api = await BenchPresentationServer.Start(_market);
+        _api = new BenchTestApplication(_market);
     }
 
     [TearDown]

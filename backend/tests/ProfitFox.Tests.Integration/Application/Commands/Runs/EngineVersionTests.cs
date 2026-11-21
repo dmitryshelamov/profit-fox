@@ -5,19 +5,19 @@ using System.Text.Json;
 
 using Dapper;
 
+using MediatR;
+
+using Microsoft.Extensions.DependencyInjection;
+
 using Npgsql;
 
-using ProfitFox.Application.Commands.Hypotheses;
-using ProfitFox.Application.Commands.Runs;
-using ProfitFox.Application.Contracts.Runs;
+using ProfitFox.Application.Commands.Hypotheses.AddHypothesis;
+using ProfitFox.Application.Commands.Runs.ExecuteRun;
 using ProfitFox.Domain.Services.Runs;
 using ProfitFox.Domain.ValueObjects.Runs;
 using ProfitFox.Domain.ValueObjects.Runs.Enums;
 using ProfitFox.Domain.ValueObjects.Trades;
 using ProfitFox.Domain.ValueObjects.Verdicts;
-using ProfitFox.Infrastructure.Clients.MarketData;
-using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Hypotheses;
-using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger;
 using ProfitFox.Tests.Integration.MarketData;
 
 namespace ProfitFox.Tests.Integration.Application.Commands.Runs;
@@ -37,7 +37,6 @@ public sealed class EngineVersionTests
     private static readonly string[] References = ["H0001", Overlapping];
     private static readonly DateTimeOffset Today = new DateTimeOffset(2026, 11, 18, 0, 0, 0, TimeSpan.Zero);
     private static readonly string Fixtures = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures");
-    private readonly HypothesisCatalog _hypotheses = new HypothesisCatalog(new HypothesisStore(BenchDatabase.DataSource));
 
     [SetUp]
     public async Task CreateBench()
@@ -46,7 +45,7 @@ public sealed class EngineVersionTests
         await BenchDatabase.Reset();
         foreach (string reference in References)
         {
-            await _hypotheses.Add(File.ReadAllText(Path.Combine(Fixtures, $"{reference}.json")), CancellationToken.None);
+            await BenchServices.Sender.Send(new AddHypothesisCommand(File.ReadAllText(Path.Combine(Fixtures, $"{reference}.json"))), CancellationToken.None);
         }
     }
 
@@ -104,7 +103,7 @@ public sealed class EngineVersionTests
     [Test]
     public async Task The_second_reference_hypothesis_has_events_skipped_while_a_position_is_open()
     {
-        RunResult result = await Run(Overlapping);
+        ExecuteRunResult result = await Run(Overlapping);
 
         Assert.That(result.Skipped, Is.GreaterThan(0), $"{Overlapping} must overlap: without a skipped event the reference does not cover the rule of one position");
         Assert.That(result.Report, Does.Contain($"| Событий пропущено при открытой позиции | {result.Skipped} |"));
@@ -113,7 +112,7 @@ public sealed class EngineVersionTests
     [Test]
     public async Task The_report_of_H0001_shows_no_skipped_events()
     {
-        RunResult result = await Run("H0001");
+        ExecuteRunResult result = await Run("H0001");
 
         Assert.That(result.Skipped, Is.Zero);
         Assert.That(result.Report, Does.Contain("| Событий пропущено при открытой позиции | 0 |"));
@@ -122,7 +121,7 @@ public sealed class EngineVersionTests
     [Test]
     public async Task The_ledger_line_carries_the_engine_version()
     {
-        RunResult result = await Run("H0001");
+        ExecuteRunResult result = await Run("H0001");
 
         Assert.That(result.Entry.EngineVersion, Is.EqualTo(EngineVersion.Number));
         Assert.That(result.Entry.Version, Is.EqualTo(1));
@@ -131,16 +130,13 @@ public sealed class EngineVersionTests
         Assert.That(report, Does.Contain($"| Версия движка | {EngineVersion.Number} |").And.Contain("| Версия гипотезы | 1 |"));
     }
 
-    private async Task<RunResult> Run(string hypothesis)
+    private static async Task<ExecuteRunResult> Run(string hypothesis)
     {
         await using MarketDataServer server = await MarketDataServer.Start();
-        var runner = new HypothesisRunner(
-            _hypotheses,
-            new GrpcHistorySource(server.Channel),
-            new InstrumentCatalog(server.Http),
-            new RunLedger(BenchDatabase.DataSource),
-            TextWriter.Null);
-        return await runner.Run(new RunOptions(hypothesis, Version: null, Period.Exploration, Parity: false, Today), CancellationToken.None);
+        await using ServiceProvider services = BenchServices.Start(server);
+        return await services.GetRequiredService<ISender>().Send(
+            new ExecuteRunCommand(hypothesis, Version: null, Period.Exploration, Parity: false, Today),
+            CancellationToken.None);
     }
 
     private static bool Same(Dictionary<string, string> first, Dictionary<string, string> second)
@@ -155,7 +151,7 @@ public sealed class EngineVersionTests
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
     }
 
-    private static string Digest(RunResult result)
+    private static string Digest(ExecuteRunResult result)
     {
         var text = new StringBuilder();
         foreach (EventRow row in result.Rows)

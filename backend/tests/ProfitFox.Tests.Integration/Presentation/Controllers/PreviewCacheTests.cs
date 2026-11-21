@@ -35,7 +35,7 @@ public sealed class PreviewCacheTests
     public async Task A_second_preview_of_the_pair_reads_no_history_and_uses_the_new_graph()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(market);
+        await using var api = new BenchTestApplication(market);
 
         PreviewResponse first = await Ok(await Preview(api, "BTCUSDT", "4h", Signal()));
         int candles = market.Data.CandleRequests.Count;
@@ -57,7 +57,7 @@ public sealed class PreviewCacheTests
     public async Task The_sixth_pair_and_timeframe_pushes_out_the_first()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(market);
+        await using var api = new BenchTestApplication(market);
         (string Pair, string Timeframe)[] reads =
         [
             ("BTCUSDT", "4h"), ("ETHUSDT", "4h"), ("SOLUSDT", "4h"), ("BTCUSDT", "1d"), ("ETHUSDT", "1d"), ("SOLUSDT", "1d")
@@ -142,7 +142,7 @@ public sealed class PreviewCacheTests
         return new PreviewHistory(new HistoryRead<HistoryCandle>([], []), new HistoryRead<HistoryPayment>([], []));
     }
 
-    private static Task<HttpResponseMessage> Preview(BenchPresentationServer api, string instrument, string timeframe, JsonObject signal)
+    private static Task<HttpResponseMessage> Preview(BenchTestApplication api, string instrument, string timeframe, JsonObject signal)
     {
         return api.Http.PostAsJsonAsync("/api/preview", new JsonObject { ["instrument"] = instrument, ["timeframe"] = timeframe, ["signal"] = signal }, Json);
     }

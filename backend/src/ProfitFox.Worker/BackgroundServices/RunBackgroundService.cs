@@ -1,6 +1,6 @@
 using Npgsql;
 
-using ProfitFox.Application.Commands.Runs;
+using ProfitFox.Application.Commands.Runs.RunNext;
 using ProfitFox.Infrastructure.Persistence.Postgres;
 using ProfitFox.Worker.Logging;
 
@@ -12,7 +12,7 @@ namespace ProfitFox.Worker.BackgroundServices;
 /// </summary>
 internal sealed class RunBackgroundService(
     NpgsqlDataSource database,
-    RunExecutor executor,
+    IServiceScopeFactory scopes,
     WorkerSettings settings,
     TimeProvider time,
     ILogger<RunBackgroundService> logger) : BackgroundService
@@ -25,17 +25,17 @@ internal sealed class RunBackgroundService(
             await BenchSchema.WaitFor(database, settings.SchemaPollInterval, new LogWriter(logger), stoppingToken);
             while (!stoppingToken.IsCancellationRequested)
             {
-                bool worked = false;
+                RunNextResult result = RunNextResult.NothingToTake;
                 try
                 {
-                    worked = await executor.RunNext(stoppingToken);
+                    result = await scopes.SendAsync(new RunNextCommand(settings), stoppingToken);
                 }
                 catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
                 {
                     logger.LogError(exception, "The Worker could not take or go a run.");
                 }
 
-                if (!worked)
+                if (result == RunNextResult.NothingToTake)
                 {
                     await Task.Delay(settings.PollInterval, time, stoppingToken);
                 }

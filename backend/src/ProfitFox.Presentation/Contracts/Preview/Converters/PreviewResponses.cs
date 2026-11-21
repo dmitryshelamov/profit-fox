@@ -11,7 +11,7 @@ namespace ProfitFox.Presentation.Contracts.Preview.Converters;
 /// </summary>
 public static class PreviewResponses
 {
-    public static PreviewResponse Of(SignalPreviewResult preview)
+    public static PreviewResponse Of(SignalPreviewInternal preview)
     {
         return new PreviewResponse(
             preview.Instrument.Symbol,

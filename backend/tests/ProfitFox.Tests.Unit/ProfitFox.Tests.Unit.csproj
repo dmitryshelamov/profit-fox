@@ -16,7 +16,6 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\ProfitFox.Domain\ProfitFox.Domain.csproj"/>
         <ProjectReference Include="..\..\src\ProfitFox.Application\ProfitFox.Application.csproj"/>
-        <ProjectReference Include="..\..\src\ProfitFox.Infrastructure\ProfitFox.Infrastructure.csproj"/>
         <ProjectReference Include="..\ProfitFox.Tests.Shared\ProfitFox.Tests.Shared.csproj"/>
     </ItemGroup>
 

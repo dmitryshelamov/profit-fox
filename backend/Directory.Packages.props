@@ -4,6 +4,13 @@
         <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     </PropertyGroup>
 
+    <ItemGroup Label="Application">
+        <!-- The commands and queries of the application and their handlers; the version of profit-fox-market-data. -->
+        <PackageVersion Include="MediatR" Version="12.5.0"/>
+        <!-- ILogger for the handlers that write the progress of a run; the version of Microsoft.Extensions.Hosting. -->
+        <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13"/>
+    </ItemGroup>
+
     <ItemGroup Label="ASP.NET Core">
         <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.13"/>
     </ItemGroup>
@@ -36,7 +43,8 @@
 
     <ItemGroup Label="Testing">
         <PackageVersion Include="coverlet.collector" Version="6.0.4"/>
-        <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.10"/>
+        <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.14"/>
+        <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.14"/>
         <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.0"/>
         <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.0"/>
         <PackageVersion Include="NUnit" Version="4.3.2"/>

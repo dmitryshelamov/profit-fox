@@ -1,20 +1,20 @@
 using Dapper;
 
+using MediatR;
+
+using Microsoft.Extensions.DependencyInjection;
+
 using Npgsql;
 
-using ProfitFox.Application.Commands.Hypotheses;
-using ProfitFox.Application.Commands.Runs;
-using ProfitFox.Application.Contracts.Hypotheses;
-using ProfitFox.Application.Contracts.Runs;
+using ProfitFox.Application.Commands.Hypotheses.AddHypothesis;
+using ProfitFox.Application.Commands.Runs.ExecuteRun;
 using ProfitFox.Application.Exceptions;
-using ProfitFox.Application.Ports.Runs;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.ValueObjects.Ledger;
 using ProfitFox.Domain.ValueObjects.Runs;
 using ProfitFox.Domain.ValueObjects.Runs.Enums;
 using ProfitFox.Domain.ValueObjects.Trades.Enums;
 using ProfitFox.Domain.ValueObjects.Verdicts.Enums;
-using ProfitFox.Infrastructure.Clients.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Hypotheses;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger;
 using ProfitFox.Tests.Integration.MarketData;
@@ -30,15 +30,14 @@ namespace ProfitFox.Tests.Integration.Application.Commands.Runs;
 public sealed class HypothesisRunTests
 {
     private static readonly DateTimeOffset Today = new DateTimeOffset(2026, 11, 18, 0, 0, 0, TimeSpan.Zero);
-    private readonly HypothesisCatalog _hypotheses = new HypothesisCatalog(new HypothesisStore(BenchDatabase.DataSource));
-    private readonly RunLedger _ledger = new RunLedger(BenchDatabase.DataSource);
+    private readonly LedgerRepository _ledger = new LedgerRepository(BenchDatabase.DataSource);
 
     [SetUp]
     public async Task CreateBench()
     {
         FakeMarketData.CoveredUntil = FakeMarketData.CoveredFrom.AddDays(28);
         await BenchDatabase.Reset();
-        await _hypotheses.Add(BenchRepository.H0001Text(), CancellationToken.None);
+        await BenchServices.Sender.Send(new AddHypothesisCommand(BenchRepository.H0001Text()), CancellationToken.None);
     }
 
     [TearDown]
@@ -52,13 +51,13 @@ public sealed class HypothesisRunTests
     {
         await using MarketDataServer server = await MarketDataServer.Start();
 
-        RunResult result = await Runner(server).Run(Options(parity: false), CancellationToken.None);
+        ExecuteRunResult result = await Run(server, Options(parity: false));
 
         Assert.That(result.Verdict!.Kind, Is.EqualTo(VerdictKind.InsufficientData), "four weekly blocks are fewer than 20");
         Assert.That(result.Rows, Has.Count.GreaterThan(50));
         Assert.That(result.Rows.Select(row => row.Instrument).Distinct(), Is.EquivalentTo(new[] { "BTCUSDT", "ETHUSDT", "SOLUSDT" }));
         Assert.That(result.Rows, Has.All.Matches<EventRow>(row => row.Moment.Hour == 8));
-        LedgerEntry entry = (await _ledger.Entries(CancellationToken.None)).Single();
+        LedgerEntry entry = (await _ledger.EntriesAsync(CancellationToken.None)).Single();
         Assert.That(entry.RunId, Is.EqualTo(result.Entry.RunId));
         Assert.That(entry.Status, Is.EqualTo(RunStatus.InsufficientData));
         Assert.That(entry.Version, Is.EqualTo(1));
@@ -75,12 +74,12 @@ public sealed class HypothesisRunTests
     {
         await using MarketDataServer server = await MarketDataServer.Start();
 
-        RunResult result = await Runner(server).Run(Options(parity: true), CancellationToken.None);
+        ExecuteRunResult result = await Run(server, Options(parity: true));
 
         Assert.That(result.Verdict, Is.Null);
         Assert.That(result.Rows, Has.All.Matches<EventRow>(row => row.Outcome is null && row.Event is null));
         Assert.That(result.Rows.SelectMany(row => row.Randoms), Has.Some.Matches<RandomTrade>(trade => trade.Outcome.Status == TradeStatus.Ok));
-        Assert.That((await _ledger.Entries(CancellationToken.None)).Single().Status, Is.EqualTo(RunStatus.Parity));
+        Assert.That((await _ledger.EntriesAsync(CancellationToken.None)).Single().Status, Is.EqualTo(RunStatus.Parity));
         Assert.That(await Report(result.Entry.RunId), Does.Contain("сверочный прогон"));
     }
 
@@ -90,10 +89,10 @@ public sealed class HypothesisRunTests
         await using MarketDataServer server = await MarketDataServer.Start();
         await Write(Line("H0001", RunStatus.Rejected, version: 1));
 
-        Assert.That(() => Runner(server).Run(Options(parity: false), CancellationToken.None), Throws.InstanceOf<LedgerException>().With.Message.Contains("already has the verdict"));
+        Assert.That(() => Run(server, Options(parity: false)), Throws.InstanceOf<LedgerException>().With.Message.Contains("already has the verdict"));
 
         Assert.That(server.Data.CandleRequests, Is.Empty);
-        Assert.That(await _ledger.Entries(CancellationToken.None), Has.Count.EqualTo(1));
+        Assert.That(await _ledger.EntriesAsync(CancellationToken.None), Has.Count.EqualTo(1));
     }
 
     [Test]
@@ -101,13 +100,15 @@ public sealed class HypothesisRunTests
     {
         await using MarketDataServer server = await MarketDataServer.Start();
         await Write(Line("H0001", RunStatus.Rejected, version: 1));
-        HypothesisAdded second = await _hypotheses.Add(BenchRepository.H0001Text().Replace("0.0005", "0.001", StringComparison.Ordinal), CancellationToken.None);
+        AddHypothesisResult second = await BenchServices.Sender.Send(
+            new AddHypothesisCommand(BenchRepository.H0001Text().Replace("0.0005", "0.001", StringComparison.Ordinal)),
+            CancellationToken.None);
 
-        RunResult result = await Runner(server).Run(Options(parity: false) with { Version = second.Hypothesis.Version }, CancellationToken.None);
+        ExecuteRunResult result = await Run(server, Options(parity: false) with { Version = second.Version });
 
-        Assert.That(second.Hypothesis.Version, Is.EqualTo(2));
+        Assert.That(second.Version, Is.EqualTo(2));
         Assert.That((result.Entry.Version, result.Entry.Attempts), Is.EqualTo((2, 2)));
-        Assert.That(result.Entry.Hash, Is.EqualTo(second.Hypothesis.Hash));
+        Assert.That(result.Entry.Hash, Is.EqualTo((await new HypothesisRepository(BenchDatabase.DataSource).FindAsync("H0001", second.Version, CancellationToken.None))!.Hash));
     }
 
     [Test]
@@ -116,28 +117,29 @@ public sealed class HypothesisRunTests
         await using MarketDataServer server = await MarketDataServer.Start();
         server.Data.Failure = Grpc.Core.StatusCode.Unavailable;
 
-        Assert.That(() => Runner(server).Run(Options(parity: false), CancellationToken.None), Throws.InstanceOf<HistoryUnavailableException>());
+        Assert.That(() => Run(server, Options(parity: false)), Throws.InstanceOf<HistoryUnavailableException>());
 
-        LedgerEntry entry = (await _ledger.Entries(CancellationToken.None)).Single();
+        LedgerEntry entry = (await _ledger.EntriesAsync(CancellationToken.None)).Single();
         Assert.That((entry.Status, entry.Version, entry.EngineVersion), Is.EqualTo((RunStatus.Failed, 1, EngineVersion.Number)));
         Assert.That(entry.Reason, Is.Not.Empty);
         await using NpgsqlConnection connection = await BenchDatabase.DataSource.OpenConnectionAsync();
         Assert.That(await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM reports"), Is.Zero);
     }
 
-    private HypothesisRunner Runner(MarketDataServer server)
+    private static async Task<ExecuteRunResult> Run(MarketDataServer server, ExecuteRunCommand command)
     {
-        return new HypothesisRunner(_hypotheses, new GrpcHistorySource(server.Channel), new InstrumentCatalog(server.Http), _ledger, TextWriter.Null);
+        await using ServiceProvider services = BenchServices.Start(server);
+        return await services.GetRequiredService<ISender>().Send(command, CancellationToken.None);
     }
 
-    private static RunOptions Options(bool parity)
+    private static ExecuteRunCommand Options(bool parity)
     {
-        return new RunOptions("H0001", Version: null, Period.Exploration, parity, Today);
+        return new ExecuteRunCommand("H0001", Version: null, Period.Exploration, parity, Today);
     }
 
     private Task Write(LedgerEntry entry)
     {
-        return _ledger.Decide(_ => new Decision(entry, Report: null), CancellationToken.None);
+        return _ledger.DecideAsync(_ => new Decision(entry, Report: null), CancellationToken.None);
     }
 
     private static LedgerEntry Line(string hypothesis, string status, int version)

@@ -1,7 +1,13 @@
+using MediatR;
+
 using Microsoft.AspNetCore.Mvc;
 
-using ProfitFox.Application.Commands.Signals;
-using ProfitFox.Application.Exceptions;
+using ProfitFox.Application.Commands.Signals.CreateSignal;
+using ProfitFox.Application.Commands.Signals.DeleteSignal;
+using ProfitFox.Application.Commands.Signals.RenameSignal;
+using ProfitFox.Application.Commands.Signals.ReplaceSignal;
+using ProfitFox.Application.Queries.Signals;
+using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Signals;
@@ -18,7 +24,7 @@ namespace ProfitFox.Presentation.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-public class SignalsController(SignalLibrary library) : ControllerBase
+public class SignalsController(ISender sender) : ControllerBase
 {
     private static readonly Dictionary<string, NodePosition> NoLayout = [];
 
@@ -26,7 +32,7 @@ public class SignalsController(SignalLibrary library) : ControllerBase
     [ProducesResponseType<SignalListItem[]>(StatusCodes.Status200OK)]
     public async Task<ActionResult<SignalListItem[]>> List(CancellationToken cancellation)
     {
-        return (await library.List(cancellation)).Select(entry => new SignalListItem(entry.Name, entry.Description, entry.Version, entry.Error)).ToArray();
+        return (await sender.Send(new GetSignalsQuery(), cancellation)).Select(entry => new SignalListItem(entry.Name, entry.Description, entry.Version, entry.Error)).ToArray();
     }
 
     [HttpGet("{name}", Name = "GetSignal")]
@@ -35,7 +41,7 @@ public class SignalsController(SignalLibrary library) : ControllerBase
     [ProducesResponseType<ErrorResponse>(StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<SignalResponse>> Get(string name, CancellationToken cancellation)
     {
-        return await Answer(async () => SignalResponses.Of(await library.Read(name, cancellation)));
+        return await Answer(async () => SignalResponses.Of(await sender.Send(new GetSignalQuery(name), cancellation)));
     }
 
     [HttpPost(Name = "CreateSignal")]
@@ -50,7 +56,7 @@ public class SignalsController(SignalLibrary library) : ControllerBase
         }
 
         ActionResult<SignalResponse> answer = await Answer(async () =>
-            SignalResponses.Of(await library.Create(request.Name ?? "", request.Description, graph, request.Layout ?? NoLayout, cancellation)));
+            SignalResponses.Of(await sender.Send(new CreateSignalCommand(request.Name ?? "", request.Description, graph, request.Layout ?? NoLayout), cancellation)));
         return answer.Value is { } created ? CreatedAtRoute("GetSignal", new { name = created.Name }, created) : answer;
     }
 
@@ -65,7 +71,7 @@ public class SignalsController(SignalLibrary library) : ControllerBase
             return MissingGraph();
         }
 
-        return await Answer(async () => SignalResponses.Of(await library.Replace(name, request.Description, graph, request.Layout ?? NoLayout, cancellation)));
+        return await Answer(async () => SignalResponses.Of(await sender.Send(new ReplaceSignalCommand(name, request.Description, graph, request.Layout ?? NoLayout), cancellation)));
     }
 
     [HttpPost("{name}/rename", Name = "RenameSignal")]
@@ -75,7 +81,7 @@ public class SignalsController(SignalLibrary library) : ControllerBase
     [ProducesResponseType<ErrorResponse>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<SignalResponse>> Rename(string name, RenameSignalRequest request, CancellationToken cancellation)
     {
-        return await Answer(async () => SignalResponses.Of(await library.Rename(name, request.To ?? "", cancellation)));
+        return await Answer(async () => SignalResponses.Of(await sender.Send(new RenameSignalCommand(name, request.To ?? ""), cancellation)));
     }
 
     [HttpDelete("{name}", Name = "DeleteSignal")]
@@ -85,7 +91,7 @@ public class SignalsController(SignalLibrary library) : ControllerBase
     {
         ActionResult<bool> answer = await Answer(async () =>
         {
-            await library.Delete(name, cancellation);
+            await sender.Send(new DeleteSignalCommand(name), cancellation);
             return true;
         });
         return answer.Result ?? NoContent();

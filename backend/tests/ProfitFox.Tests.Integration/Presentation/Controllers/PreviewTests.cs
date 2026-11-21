@@ -5,16 +5,16 @@ using System.Text.Json.Nodes;
 
 using Dapper;
 
+using MediatR;
+
+using Microsoft.Extensions.DependencyInjection;
+
 using Npgsql;
 
-using ProfitFox.Application.Commands.Hypotheses;
-using ProfitFox.Application.Commands.Runs;
-using ProfitFox.Application.Contracts.Runs;
+using ProfitFox.Application.Commands.Hypotheses.AddHypothesis;
+using ProfitFox.Application.Commands.Runs.ExecuteRun;
 using ProfitFox.Domain.Services.Runs;
 using ProfitFox.Domain.ValueObjects.Runs.Enums;
-using ProfitFox.Infrastructure.Clients.MarketData;
-using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Hypotheses;
-using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger;
 using ProfitFox.Presentation.Contracts.Errors;
 using ProfitFox.Presentation.Contracts.Hypotheses;
 using ProfitFox.Presentation.Contracts.Instruments;
@@ -31,14 +31,13 @@ namespace ProfitFox.Tests.Integration.Presentation.Controllers;
 public sealed class PreviewTests
 {
     private static readonly JsonSerializerOptions Json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-    private static HypothesisCatalog Catalog => new HypothesisCatalog(new HypothesisStore(BenchDatabase.DataSource));
 
     [SetUp]
     public async Task CreateBench()
     {
         FakeMarketData.CoveredUntil = FakeMarketData.CoveredFrom.AddDays(28);
         await BenchDatabase.Reset();
-        await Catalog.Add(H0001File(), CancellationToken.None);
+        await BenchServices.Sender.Send(new AddHypothesisCommand(H0001File()), CancellationToken.None);
     }
 
     [TearDown]
@@ -51,7 +50,7 @@ public sealed class PreviewTests
     public async Task The_pairs_are_those_of_the_bench()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(market);
+        await using var api = new BenchTestApplication(market);
 
         InstrumentResponse[]? pairs = await api.Http.GetFromJsonAsync<InstrumentResponse[]>("/api/instruments", Json);
 
@@ -73,7 +72,7 @@ public sealed class PreviewTests
                 new { Text = file.ToJsonString() });
         }
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(market);
+        await using var api = new BenchTestApplication(market);
 
         HypothesisResponse[]? hypotheses = await api.Http.GetFromJsonAsync<HypothesisResponse[]>("/api/hypotheses", Json);
 
@@ -91,7 +90,7 @@ public sealed class PreviewTests
     public async Task The_preview_of_H0001_gives_the_events_of_a_bench_run()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(market);
+        await using var api = new BenchTestApplication(market);
 
         PreviewResponse preview = await Ok(await Preview(api, "BTCUSDT", "4h", Signal()));
 
@@ -99,7 +98,7 @@ public sealed class PreviewTests
         Assert.That(preview.Coverage.First().From, Is.EqualTo(FakeMarketData.CoveredFrom.ToUnixTimeMilliseconds()));
         Assert.That(preview.PeriodEnd, Is.EqualTo(Periods.ExplorationEnd.ToUnixTimeMilliseconds()));
         Assert.That(preview.Events, Has.Count.EqualTo(28), "every day of the four weeks at 08:00");
-        RunResult run = await RunParity(market);
+        ExecuteRunResult run = await RunParity(market);
         Assert.That(
             preview.Events.Select(item => DateTimeOffset.FromUnixTimeMilliseconds(item.Moment)),
             Is.EqualTo(run.Rows.Where(row => row.Instrument == "BTCUSDT").Select(row => row.Moment).Order()));
@@ -111,7 +110,7 @@ public sealed class PreviewTests
         JsonObject signal = Signal();
         signal["parameters"]![0]!["value"] = 1;
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(market);
+        await using var api = new BenchTestApplication(market);
 
         PreviewResponse preview = await Ok(await Preview(api, "ETHUSDT", "4h", signal));
 
@@ -124,7 +123,7 @@ public sealed class PreviewTests
     {
         FakeMarketData.CoveredUntil = null;
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(market);
+        await using var api = new BenchTestApplication(market);
 
         PreviewResponse preview = await Ok(await Preview(api, "BTCUSDT", "4h", Signal()));
 
@@ -143,7 +142,7 @@ public sealed class PreviewTests
         JsonObject signal = Signal();
         signal["wires"]![0]!["to"] = "hgh.a";
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(market);
+        await using var api = new BenchTestApplication(market);
 
         ErrorResponse refused = await BadRequest(await Preview(api, "BTCUSDT", "4h", signal));
 
@@ -156,7 +155,7 @@ public sealed class PreviewTests
     public async Task An_unknown_pair_and_timeframe_are_refused_before_any_read()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(market);
+        await using var api = new BenchTestApplication(market);
 
         ErrorResponse refused = await BadRequest(await Preview(api, "NOSUCHUSDT", "2h", Signal()));
 
@@ -169,7 +168,7 @@ public sealed class PreviewTests
     public async Task The_preview_leaves_no_trace_in_the_bench()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(market);
+        await using var api = new BenchTestApplication(market);
 
         await Ok(await Preview(api, "SOLUSDT", "4h", Signal()));
 
@@ -177,7 +176,7 @@ public sealed class PreviewTests
         Assert.That(await connection.ExecuteScalarAsync<int>("SELECT (SELECT count(*) FROM ledger) + (SELECT count(*) FROM reports) + (SELECT count(*) FROM runs)"), Is.Zero);
     }
 
-    private static Task<HttpResponseMessage> Preview(BenchPresentationServer api, string instrument, string timeframe, JsonObject signal)
+    private static Task<HttpResponseMessage> Preview(BenchTestApplication api, string instrument, string timeframe, JsonObject signal)
     {
         return api.Http.PostAsJsonAsync("/api/preview", new JsonObject { ["instrument"] = instrument, ["timeframe"] = timeframe, ["signal"] = signal }, Json);
     }
@@ -195,16 +194,11 @@ public sealed class PreviewTests
     }
 
     // A parity run of H0001 on the same fake history.
-    private static async Task<RunResult> RunParity(MarketDataServer market)
+    private static async Task<ExecuteRunResult> RunParity(MarketDataServer market)
     {
-        var runner = new HypothesisRunner(
-            Catalog,
-            new GrpcHistorySource(market.Channel),
-            new InstrumentCatalog(market.Http),
-            new RunLedger(BenchDatabase.DataSource),
-            TextWriter.Null);
-        var options = new RunOptions("H0001", Version: null, Period.Exploration, Parity: true, new DateTimeOffset(2026, 11, 18, 0, 0, 0, TimeSpan.Zero));
-        return await runner.Run(options, CancellationToken.None);
+        await using ServiceProvider services = BenchServices.Start(market);
+        var command = new ExecuteRunCommand("H0001", Version: null, Period.Exploration, Parity: true, new DateTimeOffset(2026, 11, 18, 0, 0, 0, TimeSpan.Zero));
+        return await services.GetRequiredService<ISender>().Send(command, CancellationToken.None);
     }
 
     private static JsonObject Signal()
