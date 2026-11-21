@@ -45,6 +45,11 @@ describe('the theme', () => {
     expect(theme.toLowerCase()).toContain(`--color-${token}: ${color.toLowerCase()};`);
   });
 
+  it('switches the palette of Tailwind off, so only the tokens give a color', () => {
+    expect(theme).toContain('--color-*: initial;');
+    expect(theme.match(/--color-[a-z0-9-]+:/g)).toHaveLength(Object.keys(tokens).length);
+  });
+
   it('emits every token, used or not, and sets the two font families', () => {
     expect(theme).toContain('@theme static');
     expect(theme).toMatch(/--font-sans:\s*'Inter Variable'/);

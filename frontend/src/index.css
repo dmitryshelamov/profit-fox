@@ -6,6 +6,9 @@
  * Tailwind or a hex code. `static` keeps every token in the built CSS, used or not.
  */
 @theme static {
+  /* The palette of Tailwind is switched off: a class of its colors gives none, only the tokens below do. */
+  --color-*: initial;
+
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
   /* The display cut of Inter at every size, as the mockups are set: its text is narrower than the text cut. */
   --font-sans--font-variation-settings: 'opsz' 32;

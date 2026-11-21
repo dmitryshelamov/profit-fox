@@ -21,6 +21,8 @@ const statuses: Record<string, string> = {
   // Where a run of the queue is, for the badge of a run that has no line yet.
   running: 'Идёт',
   queued: 'В очереди',
+  // A run of the queue that has ended and whose line the page has not got.
+  finished: 'Закончен',
 };
 
 export const periodOrder = ['exploration', 'holdout', 'new-data'] as const;
