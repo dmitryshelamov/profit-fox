@@ -1,3 +1,4 @@
 [
-  { "version": 1, "digest": "9873342ddf17fe032606e38c9f7d8afbcbcb45422ce721063dc072b7c0184236" }
+  { "version": 1, "digests": { "H0001": "9873342ddf17fe032606e38c9f7d8afbcbcb45422ce721063dc072b7c0184236" } },
+  { "version": 2, "digests": { "H0001": "9873342ddf17fe032606e38c9f7d8afbcbcb45422ce721063dc072b7c0184236", "H0002": "75e15bac8bb8aa5a0ef198207a7eae57a89b7ae865f444e63d1cff74b7d2f4b7" } }
 ]
