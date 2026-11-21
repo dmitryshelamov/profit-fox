@@ -84,6 +84,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/preview/strategy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["PreviewStrategy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs": {
         parameters: {
             query?: never;
@@ -348,6 +364,14 @@ export interface components {
             /** Format: int64 */
             moment: number | string;
         };
+        PreviewOrder: {
+            /** Format: int64 */
+            moment: number | string;
+            side: string;
+            outcome: string;
+            reason: null | string;
+            trade: null | components["schemas"]["PreviewTrade"];
+        };
         PreviewRange: {
             /** Format: int64 */
             from: number | string;
@@ -367,6 +391,24 @@ export interface components {
             events: components["schemas"]["PreviewEvent"][];
             /** Format: int64 */
             periodEnd: number | string;
+        };
+        PreviewStrategyRequest: {
+            instrument: null | string;
+            timeframe: null | string;
+            strategy: null | components["schemas"]["JsonElement"];
+        };
+        PreviewTrade: {
+            /** Format: int64 */
+            entryTime: number | string;
+            /** Format: double */
+            entryPrice: number | string;
+            /** Format: int64 */
+            exitTime: number | string;
+            /** Format: double */
+            exitPrice: number | string;
+            exitReason: string;
+            /** Format: double */
+            net: number | string;
         };
         ProblemDetails: {
             type?: null | string;
@@ -536,6 +578,17 @@ export interface components {
             /** Format: int32 */
             version: number | string;
             error: null | string;
+        };
+        StrategyPreviewResponse: {
+            instrument: string;
+            timeframe: string;
+            candles: components["schemas"]["PreviewCandle"][];
+            coverage: components["schemas"]["PreviewRange"][];
+            orders: components["schemas"]["PreviewOrder"][];
+            /** Format: int64 */
+            periodEnd: number | string;
+            /** Format: int64 */
+            computedFrom: null | number | string;
         };
         StrategyResponse: {
             name: string;
@@ -732,6 +785,56 @@ export interface operations {
                     "text/plain": components["schemas"]["PreviewResponse"];
                     "application/json": components["schemas"]["PreviewResponse"];
                     "text/json": components["schemas"]["PreviewResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PreviewStrategy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewStrategyRequest"];
+                "text/json": components["schemas"]["PreviewStrategyRequest"];
+                "application/*+json": components["schemas"]["PreviewStrategyRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["StrategyPreviewResponse"];
+                    "application/json": components["schemas"]["StrategyPreviewResponse"];
+                    "text/json": components["schemas"]["StrategyPreviewResponse"];
                 };
             };
             /** @description Bad Request */

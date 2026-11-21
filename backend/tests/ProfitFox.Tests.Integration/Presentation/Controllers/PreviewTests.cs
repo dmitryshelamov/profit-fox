@@ -15,6 +15,7 @@ using ProfitFox.Application.Commands.Hypotheses.AddHypothesis;
 using ProfitFox.Application.Commands.Runs.ExecuteRun;
 using ProfitFox.Domain.Services.Runs;
 using ProfitFox.Domain.ValueObjects.Runs.Enums;
+using ProfitFox.Domain.ValueObjects.Trades.Enums;
 using ProfitFox.Presentation.Contracts.Errors;
 using ProfitFox.Presentation.Contracts.Hypotheses;
 using ProfitFox.Presentation.Contracts.Instruments;
@@ -24,7 +25,8 @@ using ProfitFox.Tests.Integration.MarketData;
 namespace ProfitFox.Tests.Integration.Presentation.Controllers;
 
 /// <summary>
-///     Spec signal-preview end to end (tasks 2.2 and 2.3): the bench API on the fake market-data service. Its payments
+///     Spec signal-preview end to end (tasks 2.2 and 2.3) and spec strategy-preview (change add-strategy-constructor,
+///     task 5.3): the bench API on the fake market-data service. Its payments
 ///     cross 0.05 % once a day at 08:00, so H0001 has an event every day at 08:00.
 /// </summary>
 [NonParallelizable]
@@ -174,6 +176,95 @@ public sealed class PreviewTests
 
         await using NpgsqlConnection connection = await BenchDatabase.DataSource.OpenConnectionAsync();
         Assert.That(await connection.ExecuteScalarAsync<int>("SELECT (SELECT count(*) FROM ledger) + (SELECT count(*) FROM reports) + (SELECT count(*) FROM runs)"), Is.Zero);
+    }
+
+    /// <summary>
+    ///     Spec strategy-preview «Те же сделки, что у стенда» (change add-strategy-constructor, task 5.3).
+    /// </summary>
+    [Test]
+    public async Task The_trades_of_H0001_are_those_of_a_run()
+    {
+        await using MarketDataServer market = await MarketDataServer.Start();
+        await using var api = new BenchTestApplication(market);
+        Guid signal = await SaveSignal(api);
+
+        StrategyPreviewResponse preview = await OkStrategy(await PreviewStrategy(api, "BTCUSDT", "4h", StrategiesTests.Strategy(signal)));
+        ExecuteRunResult run = await RunWithOutcomes(market);
+
+        (long, double, double, double)[] events =
+        [
+            .. run.Rows
+                .Where(row => row.Instrument == "BTCUSDT" && row.Outcome is { Status: TradeStatus.Ok })
+                .OrderBy(row => row.Moment)
+                .Select(row => (row.Moment.ToUnixTimeMilliseconds(), row.Outcome!.EntryPrice!.Value, row.Outcome.ExitPrice!.Value, row.Outcome.Net!.Value))
+        ];
+        Assert.That(events, Has.Length.EqualTo(28));
+        Assert.That(preview.Orders.Select(order => (order.Side, order.Outcome)), Has.All.EqualTo(("short", "opened")));
+        Assert.That(preview.Orders.Select(order => (order.Moment, order.Trade!.EntryPrice, order.Trade.ExitPrice, order.Trade.Net)), Is.EqualTo(events));
+        Assert.That(preview.Orders.Select(order => order.Trade!.ExitReason), Has.All.EqualTo("time"));
+        Assert.That(preview.ComputedFrom, Is.Null);
+    }
+
+    /// <summary>
+    ///     Spec strategy-preview «Предпросмотр стратегии без следов стенда» (change add-strategy-constructor, task 5.3).
+    /// </summary>
+    [Test]
+    public async Task The_journal_after_a_preview_of_a_strategy()
+    {
+        await using MarketDataServer market = await MarketDataServer.Start();
+        await using var api = new BenchTestApplication(market);
+        Guid signal = await SaveSignal(api);
+        HttpResponseMessage saved = await api.Http.PostAsJsonAsync("/api/strategies", new JsonObject { ["name"] = "funding-short", ["graph"] = StrategiesTests.Strategy(signal), ["layout"] = new JsonObject() }, Json);
+        Assert.That(saved.StatusCode, Is.EqualTo(HttpStatusCode.Created));
+
+        await OkStrategy(await PreviewStrategy(api, "SOLUSDT", "4h", StrategiesTests.Strategy(signal, after: "8h")));
+
+        await using NpgsqlConnection connection = await BenchDatabase.DataSource.OpenConnectionAsync();
+        Assert.That(await connection.ExecuteScalarAsync<int>("SELECT (SELECT count(*) FROM ledger) + (SELECT count(*) FROM reports) + (SELECT count(*) FROM runs)"), Is.Zero);
+        Assert.That(await connection.ExecuteScalarAsync<int>("SELECT (SELECT count(*) FROM strategy_versions) + (SELECT count(*) FROM signal_versions)"), Is.EqualTo(2), "nothing saved changed");
+    }
+
+    [Test]
+    public async Task A_strategy_without_close_after_on_an_unknown_pair_is_refused_before_any_read()
+    {
+        await using MarketDataServer market = await MarketDataServer.Start();
+        await using var api = new BenchTestApplication(market);
+        Guid signal = await SaveSignal(api);
+        JsonObject graph = StrategiesTests.Strategy(signal);
+        graph["nodes"]!.AsArray().RemoveAt(2);
+
+        HttpResponseMessage response = await PreviewStrategy(api, "NOSUCHUSDT", "4h", graph);
+
+        ErrorResponse refused = await BadRequest(response);
+        Assert.That(refused.Errors.Select(error => error.Code), Is.EquivalentTo(new[] { "StrategyCloseAfterMissing", "UnknownInstrument" }));
+        Assert.That(market.Data.CandleRequests, Is.Empty);
+        Assert.That(market.Data.FundingRequests, Is.Empty);
+    }
+
+    private static Task<HttpResponseMessage> PreviewStrategy(BenchTestApplication api, string instrument, string timeframe, JsonObject strategy)
+    {
+        return api.Http.PostAsJsonAsync("/api/preview/strategy", new JsonObject { ["instrument"] = instrument, ["timeframe"] = timeframe, ["strategy"] = strategy }, Json);
+    }
+
+    private static async Task<StrategyPreviewResponse> OkStrategy(HttpResponseMessage response)
+    {
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
+        return (await response.Content.ReadFromJsonAsync<StrategyPreviewResponse>(Json))!;
+    }
+
+    // The signal of H0001 saved as funding-high.
+    private static async Task<Guid> SaveSignal(BenchTestApplication api)
+    {
+        HttpResponseMessage created = await api.Http.PostAsJsonAsync("/api/signals", new JsonObject { ["name"] = "funding-high", ["graph"] = Signal(), ["layout"] = new JsonObject() }, Json);
+        return (await created.Content.ReadFromJsonAsync<ProfitFox.Presentation.Contracts.Signals.SignalResponse>(Json))!.Id;
+    }
+
+    // A run of H0001 with the outcomes of its events on the same fake history.
+    private static async Task<ExecuteRunResult> RunWithOutcomes(MarketDataServer market)
+    {
+        await using ServiceProvider services = BenchServices.Start(market);
+        var command = new ExecuteRunCommand("H0001", Version: null, Period.Exploration, Parity: false, new DateTimeOffset(2026, 11, 18, 0, 0, 0, TimeSpan.Zero));
+        return await services.GetRequiredService<ISender>().Send(command, CancellationToken.None);
     }
 
     private static Task<HttpResponseMessage> Preview(BenchTestApplication api, string instrument, string timeframe, JsonObject signal)
