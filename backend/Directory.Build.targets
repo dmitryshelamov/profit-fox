@@ -1,0 +1,51 @@
+<Project>
+
+    <!--
+        The dependency rule of the layers: a project lists the projects it may reference directly, and the build fails on any other.
+        The SDK adds the references of a referenced project before the check, so a list names them too (Domain under Infrastructure).
+        Tests.Unit tests Domain and Application only; Tests.Integration may reference anything, so it has no list.
+    -->
+    <PropertyGroup Condition="'$(MSBuildProjectName)' == 'ProfitFox.Domain'">
+        <CheckLayerReferences>true</CheckLayerReferences>
+        <AllowedLayerReferences></AllowedLayerReferences>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(MSBuildProjectName)' == 'ProfitFox.Application'">
+        <CheckLayerReferences>true</CheckLayerReferences>
+        <AllowedLayerReferences>ProfitFox.Domain</AllowedLayerReferences>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(MSBuildProjectName)' == 'ProfitFox.Infrastructure'">
+        <CheckLayerReferences>true</CheckLayerReferences>
+        <AllowedLayerReferences>ProfitFox.Application;ProfitFox.Domain</AllowedLayerReferences>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(MSBuildProjectName)' == 'ProfitFox.Presentation'">
+        <CheckLayerReferences>true</CheckLayerReferences>
+        <AllowedLayerReferences>ProfitFox.Application;ProfitFox.Domain;ProfitFox.Infrastructure</AllowedLayerReferences>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(MSBuildProjectName)' == 'ProfitFox.Worker'">
+        <CheckLayerReferences>true</CheckLayerReferences>
+        <AllowedLayerReferences>ProfitFox.Application;ProfitFox.Domain;ProfitFox.Infrastructure</AllowedLayerReferences>
+    </PropertyGroup>
+    <!-- The CLI talks to the API over REST only. -->
+    <PropertyGroup Condition="'$(MSBuildProjectName)' == 'ProfitFox.Cli'">
+        <CheckLayerReferences>true</CheckLayerReferences>
+        <AllowedLayerReferences></AllowedLayerReferences>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(MSBuildProjectName)' == 'ProfitFox.Tests.Shared'">
+        <CheckLayerReferences>true</CheckLayerReferences>
+        <AllowedLayerReferences>ProfitFox.Application;ProfitFox.Domain</AllowedLayerReferences>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(MSBuildProjectName)' == 'ProfitFox.Tests.Unit'">
+        <CheckLayerReferences>true</CheckLayerReferences>
+        <AllowedLayerReferences>ProfitFox.Application;ProfitFox.Domain;ProfitFox.Tests.Shared</AllowedLayerReferences>
+    </PropertyGroup>
+
+    <Target Name="CheckLayerReferences" BeforeTargets="ResolveProjectReferences" Condition="'$(CheckLayerReferences)' == 'true'">
+        <ItemGroup>
+            <_LayerReference Include="@(ProjectReference->'%(Filename)')"/>
+            <_ForbiddenLayerReference Include="@(_LayerReference)" Exclude="$(AllowedLayerReferences)"/>
+        </ItemGroup>
+        <Error Condition="'@(_ForbiddenLayerReference)' != ''"
+               Text="$(MSBuildProjectName) may reference only [$(AllowedLayerReferences)], not @(_ForbiddenLayerReference). The allowed references are listed in backend/Directory.Build.targets."/>
+    </Target>
+
+</Project>

@@ -1,0 +1,160 @@
+using ProfitFox.Domain.Services.Graph;
+using ProfitFox.Domain.Services.Nodes.Data;
+using ProfitFox.Domain.Services.Nodes.Logic;
+using ProfitFox.Domain.Services.Nodes.Position;
+using ProfitFox.Domain.ValueObjects.Graph;
+using ProfitFox.Domain.ValueObjects.Graph.Enums;
+using ProfitFox.Domain.ValueObjects.Nodes;
+
+namespace ProfitFox.Domain.Services.Nodes;
+
+/// <summary>
+///     The kinds of nodes a graph may use. A kind that reached the release branch never changes what it computes (spec
+///     strategy-execution): new behaviour is a new kind or a new setting whose default keeps the old one.
+/// </summary>
+public static class NodeCatalog
+{
+    public const string Parameters = "parameters";
+    public const string Candle = "candle";
+    public const string FundingRate = "funding-rate";
+    public const string Compare = "compare";
+    public const string Previous = "previous";
+    public const string And = "and";
+    public const string Or = "or";
+    public const string Not = "not";
+    public const string FirstTime = "first-time";
+    public const string Outputs = "outputs";
+    public const string Enter = "enter";
+    public const string StopLoss = "stop-loss";
+    public const string TakeProfit = "take-profit";
+    public const string CloseAfter = "close-after";
+    public const string Signal = "signal";
+
+    /// <summary>
+    ///     The setting of <c>enter</c> that holds its side, and the sides.
+    /// </summary>
+    public const string Side = "side";
+
+    public const string Long = "long";
+    public const string Short = "short";
+
+    /// <summary>
+    ///     The inputs of the position nodes: the event of <c>enter</c>, the distance of <c>stop-loss</c> and
+    ///     <c>take-profit</c> as a fraction of the entry price, the time of <c>close-after</c> from the moment of the order.
+    /// </summary>
+    public const string When = "when";
+
+    public const string Distance = "distance";
+    public const string After = "after";
+
+    /// <summary>
+    ///     The settings of <c>signal</c> — the id of a saved signal and the number of its version — and its only output
+    ///     (spec strategy-graph «Узел сигнала»).
+    /// </summary>
+    public const string SignalSetting = "signal";
+
+    public const string VersionSetting = "version";
+    public const string Event = "event";
+
+    /// <summary>
+    ///     The operations of <c>compare</c>.
+    /// </summary>
+    public static readonly IReadOnlyList<string> CompareOperations = ["gt", "ge", "lt", "le", "eq", "ne"];
+
+    private static readonly PinDeclaration BooleanA = new PinDeclaration("a", PinType.Boolean);
+    private static readonly PinDeclaration BooleanB = new PinDeclaration("b", PinType.Boolean);
+    private static readonly PinDeclaration BooleanResult = new PinDeclaration("result", PinType.Boolean);
+
+    private static readonly Dictionary<string, NodeKind> Kinds = new[]
+        {
+            new NodeKind(
+                Parameters,
+                _ => [],
+                graph => [.. graph.Parameters.Select(parameter => new PinDeclaration(parameter.Name, parameter.Type))],
+                [],
+                (_, graph) => new ParametersNode(graph)),
+            new NodeKind(
+                Candle,
+                [],
+                [.. new[] { "open", "high", "low", "close", "volume" }.Select(name => new PinDeclaration(name, PinType.Number))],
+                [],
+                _ => new CandleNode()),
+            new NodeKind(FundingRate, [], [new PinDeclaration("value", PinType.Number)], [], _ => new FundingRateNode()),
+            new NodeKind(
+                Compare,
+                [new PinDeclaration("a", PinType.Number), new PinDeclaration("b", PinType.Number)],
+                [BooleanResult],
+                [new SettingDeclaration("operation", CompareOperations, Default: null)],
+                node => new CompareNode(node.Settings["operation"])),
+            new NodeKind(
+                Previous,
+                [new PinDeclaration("value", PinType.Number)],
+                [new PinDeclaration("result", PinType.Number)],
+                [],
+                _ => new PreviousNode()),
+            new NodeKind(And, [BooleanA, BooleanB], [BooleanResult], [], _ => new AndNode()),
+            new NodeKind(Or, [BooleanA, BooleanB], [BooleanResult], [], _ => new OrNode()),
+            new NodeKind(Not, [new PinDeclaration("value", PinType.Boolean)], [BooleanResult], [], _ => new NotNode()),
+            new NodeKind(
+                FirstTime,
+                [new PinDeclaration("value", PinType.Boolean)],
+                [new PinDeclaration("event", PinType.Event)],
+                [],
+                _ => new FirstTimeNode()),
+            new NodeKind(
+                Outputs,
+                graph => [.. graph.Outputs.Select(output => new PinDeclaration(output.Name, output.Type))],
+                _ => [],
+                [],
+                (_, _) => new OutputsNode()),
+            new NodeKind(
+                Enter,
+                [new PinDeclaration(When, PinType.Event)],
+                [],
+                [new SettingDeclaration(Side, [Long, Short], Default: null)],
+                _ => new PositionNode())
+            {
+                AllowedInSignal = false
+            },
+            new NodeKind(StopLoss, [new PinDeclaration(Distance, PinType.Number)], [], [], _ => new PositionNode()) { AllowedInSignal = false },
+            new NodeKind(TakeProfit, [new PinDeclaration(Distance, PinType.Number)], [], [], _ => new PositionNode()) { AllowedInSignal = false },
+            new NodeKind(CloseAfter, [new PinDeclaration(After, PinType.Duration)], [], [], _ => new PositionNode()) { AllowedInSignal = false },
+            new NodeKind(
+                Signal,
+                (node, _, signals) => SignalInputs(node, signals),
+                (_, _, _) => [new PinDeclaration(Event, PinType.Event)],
+                [
+                    new SettingDeclaration(SignalSetting, [], Default: null) { Free = true },
+                    new SettingDeclaration(VersionSetting, [], Default: null) { Free = true }
+                ],
+                (node, _) => throw new InvalidOperationException($"The signal node {node.Id} is expanded before the graph runs."))
+            {
+                AllowedInSignal = false,
+                CheckFreeSetting = SignalNodes.CheckSetting
+            }
+        }
+        .ToDictionary(kind => kind.Name, StringComparer.Ordinal);
+
+    /// <summary>
+    ///     Every kind, in the order the catalog declares them: the kinds of a signal first, then the position nodes of a
+    ///     strategy and its <c>signal</c> node. The constructor of signals offers those with
+    ///     <see cref="NodeKind.AllowedInSignal" />.
+    /// </summary>
+    public static IReadOnlyList<NodeKind> All { get; } = [.. Kinds.Values];
+
+    public static NodeKind? Find(string name)
+    {
+        return Kinds.GetValueOrDefault(name);
+    }
+
+    // The parameters of the version the node points at; none when there is no node, no reference or no such version.
+    private static IReadOnlyList<PinDeclaration> SignalInputs(NodeDefinition? node, SignalSet signals)
+    {
+        if (node is null || !SignalNodes.TryReference(node, out SignalReference reference) || signals.Find(reference).Signal is not { } signal)
+        {
+            return [];
+        }
+
+        return [.. signal.Graph.Parameters.Select(parameter => new PinDeclaration(parameter.Name, parameter.Type))];
+    }
+}

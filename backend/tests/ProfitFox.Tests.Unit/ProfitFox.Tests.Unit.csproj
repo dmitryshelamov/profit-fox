@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+        <PackageReference Include="coverlet.collector"/>
+        <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing"/>
+        <PackageReference Include="Microsoft.NET.Test.Sdk"/>
+        <PackageReference Include="NUnit"/>
+        <PackageReference Include="NUnit.Analyzers"/>
+        <PackageReference Include="NUnit3TestAdapter"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Using Include="NUnit.Framework"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\ProfitFox.Domain\ProfitFox.Domain.csproj"/>
+        <ProjectReference Include="..\..\src\ProfitFox.Application\ProfitFox.Application.csproj"/>
+        <ProjectReference Include="..\ProfitFox.Tests.Shared\ProfitFox.Tests.Shared.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="**\Fixtures\**\*.csv;**\Fixtures\**\*.json" Exclude="bin\**;obj\**" CopyToOutputDirectory="PreserveNewest"/>
+    </ItemGroup>
+
+</Project>
