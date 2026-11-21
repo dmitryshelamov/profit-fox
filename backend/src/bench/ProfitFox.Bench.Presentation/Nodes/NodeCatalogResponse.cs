@@ -4,7 +4,8 @@ using ProfitFox.Engine.Strategy.Nodes;
 namespace ProfitFox.Bench.Presentation.Nodes;
 
 /// <summary>
-///     The node catalog for the constructor, in the order of the engine.
+///     The node catalog for the constructor of signals, in the order of the engine: only the kinds a signal may have
+///     (spec signal-constructor «Каталог узлов»), so the palette has no position nodes.
 /// </summary>
 public static class NodeCatalogResponse
 {
@@ -12,7 +13,7 @@ public static class NodeCatalogResponse
 
     public static IReadOnlyList<NodeKindResponse> Build()
     {
-        return [.. NodeCatalog.All.Select(Kind)];
+        return [.. NodeCatalog.All.Where(kind => kind.AllowedInSignal).Select(Kind)];
     }
 
     private static NodeKindResponse Kind(NodeKind kind)

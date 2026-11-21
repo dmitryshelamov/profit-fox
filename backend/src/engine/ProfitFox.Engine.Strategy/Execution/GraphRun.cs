@@ -77,7 +77,11 @@ public sealed class GraphRun
         return _outputs;
     }
 
-    private PinValue Read(InputSource source)
+    /// <summary>
+    ///     The value an input has now: its written value, or what its wire carried at the last candle; before the first
+    ///     candle a wire carries nothing, which reads as missing.
+    /// </summary>
+    internal PinValue Read(InputSource source)
     {
         return source.Slot >= 0 ? _slots[source.Slot] : source.Value;
     }

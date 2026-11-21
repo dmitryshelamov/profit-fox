@@ -1,15 +1,21 @@
+using System.Text.Json.Nodes;
 using ProfitFox.Bench.Application.Runs;
+using ProfitFox.Bench.Domain.Hypotheses;
 using ProfitFox.Bench.Domain.Ledger;
 using ProfitFox.Bench.Domain.Runs;
+using ProfitFox.Bench.Domain.Strategies;
 using ProfitFox.Bench.Domain.Verdicts;
 using ProfitFox.Engine.Simulation.Trades;
+using ProfitFox.Engine.Strategy.Execution;
+using ProfitFox.Tests.Unit.Bench.Hypotheses;
 
 using static ProfitFox.Tests.Unit.Bench.Runs.Designs;
 
 namespace ProfitFox.Tests.Unit.Bench.Runs;
 
 /// <summary>
-///     Spec hypothesis-bench: the report of a run (task 7.5), on synthetic rows.
+///     Spec hypothesis-bench: the report of a run (task 7.5), on synthetic rows; and the number of events skipped while
+///     the position was open (change add-strategy-graph, task 4.4).
 /// </summary>
 public sealed class RunReportTests
 {
@@ -21,7 +27,7 @@ public sealed class RunReportTests
     {
         Verdict verdict = VerdictRules.Decide(null, [0.0004, -0.0002], 0.003, 1, events: 5);
 
-        string text = RunReport.Text(Exploration(), Entry(RunStatus.InsufficientData, verdict), verdict, Rows(), Pseudo, blocks: null, pairs: 500, pairsWithEvents: 2);
+        string text = RunReport.Text(Exploration(), Entry(RunStatus.InsufficientData, verdict), verdict, Rows(), Pseudo, blocks: null, pairs: 500, pairsWithEvents: 2, skipped: 0);
 
         Assert.That(text, Does.Contain(RunReport.SurvivorsWarning));
         Assert.That(text, Does.Contain("| Версия гипотезы | 1 |"));
@@ -39,11 +45,61 @@ public sealed class RunReportTests
         var verdict = new Verdict(VerdictKind.Rejected, "t 1.20 < 3.00", 1, 3.0, 0.003, 2, 5, 0.9, 0.001, T: 1.2, Mean: 0.002, FirstHalfMean: 0.003, SecondHalfMean: 0.001);
         (long, double, int)[] blocks = [(First, 0.003, 3), (First + 1, 0.001, 2)];
 
-        string text = RunReport.Text(Exploration(), Entry(RunStatus.Rejected, verdict), verdict, Rows(), Pseudo, blocks, pairs: 500, pairsWithEvents: 2);
+        string text = RunReport.Text(Exploration(), Entry(RunStatus.Rejected, verdict), verdict, Rows(), Pseudo, blocks, pairs: 500, pairsWithEvents: 2, skipped: 0);
 
         Assert.That(text, Does.Contain("**Отвергнута**: t 1.20 < 3.00."));
         Assert.That(text, Does.Contain("| События | 0.00700 |"));
         Assert.That(text, Does.Contain("| 2026-01-12 | 2 | 0.00100 |"));
+    }
+
+    [Test]
+    public void A_second_event_inside_the_time_of_the_first_is_one_skipped_event_of_the_report()
+    {
+        // H0001 with a short for a day: the events of Monday 12:00 and 16:00, without a stop and a target.
+        JsonObject file = JsonNode.Parse(HypothesisReaderTests.H0001Text)!.AsObject();
+        file["plan"]!["horizon"] = "1d";
+        RunDesign design = Exploration(HypothesisReader.Parse(file.ToJsonString()));
+        StrategyStep written = new StrategyExecutor(design.Hypothesis.Strategy).BeforeCandles(DateTimeOffset.UnixEpoch);
+        StrategyStep[] orders = [.. new[] { Utc(2026, 1, 5, 12), Utc(2026, 1, 5, 16) }.Select(moment => written with { Moment = moment, Entry = design.Hypothesis.Strategy.Entries[0].Side })];
+        var evaluation = new PairEvaluation("BTCUSDT", new PairSteps(orders, written), design, withEventOutcomes: false);
+        List<EventRow> rows = evaluation.Evaluate(First, Week(design));
+        Verdict verdict = VerdictRules.Decide(null, [0.0004, -0.0002], 0.003, 1, events: 1);
+
+        string text = RunReport.Text(design, Entry(RunStatus.InsufficientData, verdict), verdict, rows, Pseudo, blocks: null, pairs: 500, pairsWithEvents: 1, evaluation.Skipped);
+
+        Assert.That(rows.Select(row => row.Moment), Is.EqualTo(new[] { Utc(2026, 1, 5, 12) }));
+        Assert.That(text, Does.Contain("| Событий пропущено при открытой позиции | 1 |"));
+        Assert.That(text, Does.Contain("| учтены | 1 | 20 |"), "the skipped event is not among the trades, counted or left out");
+    }
+
+    [Test]
+    public void The_report_of_H0001_shows_no_skipped_events()
+    {
+        Verdict verdict = VerdictRules.Decide(null, [0.0004, -0.0002], 0.003, 1, events: 5);
+
+        string text = RunReport.Text(Exploration(), Entry(RunStatus.InsufficientData, verdict), verdict, Rows(), Pseudo, blocks: null, pairs: 500, pairsWithEvents: 2, skipped: 0);
+
+        Assert.That(text, Does.Contain("| Событий пропущено при открытой позиции | 0 |"));
+    }
+
+    [Test]
+    public void An_order_that_gave_no_plan_has_its_row_among_the_trades_left_out()
+    {
+        Verdict verdict = VerdictRules.Decide(null, [0.0004, -0.0002], 0.003, 1, events: 5);
+        EventRow[] rows = [.. Rows(), new EventRow("SOLUSDT", Utc(2026, 1, 6, 8), First, TradeStatus.Plan, null, null, [], 0, null, null)];
+
+        string text = RunReport.Text(Exploration(), Entry(RunStatus.InsufficientData, verdict), verdict, rows, Pseudo, blocks: null, pairs: 500, pairsWithEvents: 3, skipped: 0);
+
+        Assert.That(text, Does.Contain("| недопустимая заявка (`plan`) | 1 | 0 |"));
+        Assert.That(text, Does.Contain("| вне покрытия фандинга (`funding`) | 0 | 0 |"));
+    }
+
+    // The minutes of the first week as a run reads them, at a price of 100.
+    private static MinutePath Week(RunDesign design)
+    {
+        (DateTimeOffset from, DateTimeOffset to) = design.Span(First);
+        double[] price = [.. Enumerable.Repeat(100.0, (int)(to - from).TotalMinutes)];
+        return new MinutePath(from, price, price, price, price, [.. Enumerable.Repeat(true, price.Length)], [], from, to.AddDays(1));
     }
 
     private static LedgerEntry Entry(string status, Verdict verdict)

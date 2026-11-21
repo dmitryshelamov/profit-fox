@@ -7,6 +7,7 @@ using Dapper;
 using Npgsql;
 using ProfitFox.Bench.Application.Runs;
 using ProfitFox.Bench.Domain.Ledger;
+using ProfitFox.Bench.Domain.Runs;
 using ProfitFox.Bench.Infrastructure.Runs;
 using ProfitFox.Bench.Presentation.Errors;
 using ProfitFox.Bench.Presentation.Runs;
@@ -172,10 +173,10 @@ public sealed class RunsTests
 
         RunResultResponse result = finished.Result!;
         Assert.That(result.Status, Is.EqualTo(RunStatus.InsufficientData));
-        Assert.That((result.Version, result.EngineVersion, result.Attempts, result.Blocks), Is.EqualTo((1, 1, 1, 4)));
+        Assert.That((result.Version, result.EngineVersion, result.Attempts, result.Blocks), Is.EqualTo((1, EngineVersion.Number, 1, 4)));
         Assert.That(result.DataHash, Has.Length.EqualTo(64));
         Assert.That(result.Power, Is.Not.Null);
-        Assert.That(result.Report, Does.StartWith("# H0001 funding-short-4h: exploration").And.Contain("| Версия движка | 1 |"));
+        Assert.That(result.Report, Does.StartWith("# H0001 funding-short-4h: exploration").And.Contain($"| Версия движка | {EngineVersion.Number} |"));
         Assert.That(finished.FinishedAt, Is.Not.Null);
         Assert.That((await _api.Http.GetFromJsonAsync<RunResponse[]>("/api/runs?active=true", Json))!, Is.Empty);
 

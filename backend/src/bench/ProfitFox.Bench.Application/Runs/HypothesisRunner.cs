@@ -5,16 +5,17 @@ using ProfitFox.Bench.Domain.Hypotheses;
 using ProfitFox.Bench.Domain.Ledger;
 using ProfitFox.Bench.Domain.MarketData;
 using ProfitFox.Bench.Domain.Runs;
-using ProfitFox.Bench.Domain.Signals;
+using ProfitFox.Bench.Domain.Strategies;
 using ProfitFox.Bench.Domain.Verdicts;
 
 namespace ProfitFox.Bench.Application.Runs;
 
 /// <summary>
 ///     A run of a hypothesis version (spec hypothesis-bench): the version and the ledger are checked before any history is
-///     read; then pair by pair the signal is computed on the candles of the timeframe, the events of the period get their
-///     random entries, and their trades are computed on the minutes of their blocks. Only small rows per event stay in
-///     memory. The verdict looks at the outcomes of the events only after the blind power check; a parity run never computes
+///     read; then pair by pair the strategy of the hypothesis is executed on the candles of the timeframe, and its orders of
+///     the period go through the rule of one position per pair on the minutes of their blocks: an event that opens a cycle
+///     gets its random entries, an event that comes while the position is open is skipped and counted. Only small rows per
+///     event stay in memory. The verdict looks at the outcomes of the events only after the blind power check; a parity run never computes
 ///     them. The attempts, the verdict and the report are made when the ledger decides the run, so a run sees the verdicts of
 ///     the runs that ended before it. Every run ends with a line in the ledger, a failed one included.
 /// </summary>
@@ -116,12 +117,14 @@ public sealed class HypothesisRunner(
         IReadOnlyList<Instrument> pairs = await instruments.LinearUsdtPerpetuals(cancellation);
         List<EventRow> rows = [];
         int pairsWithEvents = 0;
+        int skipped = 0;
         progress?.Begin(pairs.Count);
         foreach (Instrument pair in pairs)
         {
             cancellation.ThrowIfCancellationRequested();
             PairData data = await Pair(pair, design, history, withEventOutcomes: !options.Parity, cancellation);
             rows.AddRange(data.Rows);
+            skipped += data.Skipped;
             pairsWithEvents += data.Rows.Count > 0 ? 1 : 0;
             progress?.Advance();
             if (rows.Count > 0 && pairsWithEvents % 50 == 0 && data.Rows.Count > 0)
@@ -188,12 +191,12 @@ public sealed class HypothesisRunner(
                     };
                 }
 
-                report = RunReport.Text(design, result, verdict, rows, pseudo, blocks, pairs.Count, pairsWithEvents);
+                report = RunReport.Text(design, result, verdict, rows, pseudo, blocks, pairs.Count, pairsWithEvents, skipped);
                 return new Decision(result, report);
             },
             options.Assignment,
             cancellation);
-        return new RunResult(written, verdict, report, rows);
+        return new RunResult(written, verdict, report, rows, skipped);
     }
 
     private static async Task<PairData> Pair(Instrument pair, RunDesign design, MarketHistory history, bool withEventOutcomes, CancellationToken cancellation)
@@ -204,31 +207,18 @@ public sealed class HypothesisRunner(
             ? await history.Funding(pair.Id, Periods.DataStart, design.PeriodEnd, cancellation)
             : await history.FundingThrough(pair.Id, Periods.DataStart, design.PeriodEnd, cancellation);
 
-        List<DateTimeOffset> events = [.. PairEvents.Of(hypothesis.Signal, hypothesis.Timeframe, pair.Symbol, candles.Items, funding.Items).Where(design.InPeriod)];
-        if (events.Count == 0)
-        {
-            return new PairData(pair, candles, funding, [], []);
-        }
-
-        IReadOnlyList<DateTimeOffset[]> randoms = RandomEntries.Draw(pair.Symbol, events, design);
+        PairSteps steps = PairSteps.Of(hypothesis.Strategy, hypothesis.Timeframe, pair.Symbol, candles.Items, funding.Items);
+        var evaluation = new PairEvaluation(pair.Symbol, steps, design, withEventOutcomes);
         List<EventRow> rows = [];
         List<(DateTimeOffset, DateTimeOffset, HistoryRead<HistoryCandle>)> spans = [];
-        foreach (IGrouping<long, int> block in Enumerable.Range(0, events.Count).GroupBy(index => Blocks.Of(events[index], hypothesis.Block)).OrderBy(group => group.Key))
+        foreach (long block in evaluation.Blocks)
         {
-            (DateTimeOffset from, DateTimeOffset to) = design.Span(block.Key);
+            (DateTimeOffset from, DateTimeOffset to) = design.Span(block);
             HistoryRead<HistoryCandle> minutes = await history.Candles(pair.Id, TimeSpan.FromMinutes(1), from, to, cancellation);
             spans.Add((from, to, minutes));
-            int[] indexes = [.. block.OrderBy(index => events[index])];
-            rows.AddRange(PairEvaluation.Evaluate(
-                pair.Symbol,
-                block.Key,
-                MinutePaths.Build(from, to, minutes, funding),
-                [.. indexes.Select(index => events[index])],
-                [.. indexes.Select(index => randoms[index])],
-                design,
-                withEventOutcomes));
+            rows.AddRange(evaluation.Evaluate(block, MinutePaths.Build(from, to, minutes, funding)));
         }
 
-        return new PairData(pair, candles, funding, spans, rows);
+        return new PairData(pair, candles, funding, spans, rows, evaluation.Skipped);
     }
 }

@@ -9,7 +9,8 @@ namespace ProfitFox.Bench.Application.Runs;
 
 /// <summary>
 ///     The markdown report of a run (spec hypothesis-bench); the ledger keeps it with the line of the run. The outcomes of
-///     events appear only when the verdict read them.
+///     events appear only when the verdict read them. The report shows how many events were skipped because the position
+///     of their pair was open: they have no rows, so they are in none of its tables.
 /// </summary>
 public static class RunReport
 {
@@ -26,7 +27,8 @@ public static class RunReport
         IReadOnlyList<(long Block, double Mean, int Events)> pseudo,
         IReadOnlyList<(long Block, double Mean, int Events)>? blocks,
         int pairs,
-        int pairsWithEvents)
+        int pairsWithEvents,
+        int skipped)
     {
         var text = new StringBuilder();
         Line(text, $"# {design.Hypothesis.Id} {design.Hypothesis.Name}: {entry.Period}");
@@ -44,6 +46,7 @@ public static class RunReport
         Line(text, $"| Хэш гипотезы | `{entry.Hash}` |");
         Line(text, $"| Хэш данных | `{entry.DataHash}` |");
         Line(text, $"| Пар в наборе / с событиями | {pairs} / {pairsWithEvents} |");
+        Line(text, $"| Событий пропущено при открытой позиции | {skipped} |");
         Line(text, $"| Чтение истории и расчёт | {entry.ReadSeconds:F0} с |");
         Line(text);
 
@@ -135,7 +138,8 @@ public static class RunReport
             TradeStatus.Ok => "учтены",
             TradeStatus.Coverage => "вне покрытия минут (`coverage`)",
             TradeStatus.NoTrade => "нет сделок в сроке (`no_trade`)",
-            _ => "вне покрытия фандинга (`funding`)"
+            TradeStatus.Funding => "вне покрытия фандинга (`funding`)",
+            _ => "недопустимая заявка (`plan`)"
         };
     }
 
