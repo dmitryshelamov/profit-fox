@@ -3,10 +3,9 @@ using System.Text.Json.Nodes;
 
 using ProfitFox.Cli;
 using ProfitFox.Domain.ValueObjects.Ledger;
-using ProfitFox.Tests.Integration.Database;
 using ProfitFox.Tests.Integration.MarketData;
 using ProfitFox.Tests.Integration.Presentation;
-using ProfitFox.Tests.Integration.Workers;
+using ProfitFox.Tests.Integration.Worker;
 
 namespace ProfitFox.Tests.Integration.Cli;
 
