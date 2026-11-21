@@ -62,6 +62,29 @@ public sealed class PairEvaluationTests
     }
 
     [Test]
+    public void An_event_with_a_trade_left_out_keeps_its_row_and_its_random_entries_and_does_not_hold_the_pair()
+    {
+        RunDesign design = Design(plan => plan["horizon"] = "1d");
+        // A hole in the minutes at 12:30 leaves out the trade of 12:00; the trade of 16:00 starts after it.
+        MinutePath path = PathWithHole(design, Noon.AddMinutes(30), Noon.AddMinutes(31));
+        DateTimeOffset[] events = [Noon, FourPm];
+        var evaluation = new PairEvaluation("BTCUSDT", Steps(design, events), design, withEventOutcomes: true);
+
+        List<EventRow> rows = evaluation.Evaluate(Week, path);
+
+        var randoms = new RandomEntries("BTCUSDT", events, design);
+        IReadOnlyList<DateTimeOffset> candidates = randoms.Candidates(Week);
+        DateTimeOffset[][] expected = [randoms.Draw(candidates), randoms.Draw(candidates)];
+        Assert.That(rows.Select(row => (row.Moment, row.Status)), Is.EqualTo(new[] { (Noon, TradeStatus.Coverage), (FourPm, TradeStatus.Ok) }));
+        Assert.That(evaluation.Skipped, Is.Zero, "a trade left out does not hold the pair, and its event is not a skipped one");
+        Assert.That(rows[0].Event, Is.Null, "an event whose trade is left out is in no statistic");
+        Assert.That(
+            rows.Select(row => row.Randoms.Select(random => random.Entry).ToArray()),
+            Is.EqualTo(expected),
+            "the generator is asked for both events, as under engine version 1");
+    }
+
+    [Test]
     public void The_moment_of_a_skipped_event_is_not_a_random_entry()
     {
         RunDesign design = Design(plan => plan["horizon"] = "1d", randomsPerEvent: 200);
@@ -237,6 +260,17 @@ public sealed class PairEvaluationTests
         }
 
         return new MinutePath(from, open, high, low, close, [.. Enumerable.Repeat(true, length)], [], from, to.AddDays(1));
+    }
+
+    // The minutes of the week at a price of 100, with no history in [from, to).
+    private static MinutePath PathWithHole(RunDesign design, DateTimeOffset holeFrom, DateTimeOffset holeTo)
+    {
+        (DateTimeOffset from, DateTimeOffset to) = design.Span(Week);
+        int length = (int)(to - from).TotalMinutes;
+        double[] Prices() => [.. Enumerable.Repeat(100.0, length)];
+        bool[] covered = [.. Enumerable.Range(0, length).Select(index => from.AddMinutes(index) < holeFrom || from.AddMinutes(index) >= holeTo)];
+
+        return new MinutePath(from, Prices(), Prices(), Prices(), Prices(), covered, [], from, to.AddDays(1));
     }
 
     // Every minute of [from, to) at one price.
