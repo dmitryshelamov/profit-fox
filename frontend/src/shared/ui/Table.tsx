@@ -1,6 +1,9 @@
 import type { HTMLAttributes, ReactNode, TdHTMLAttributes, ThHTMLAttributes } from 'react';
 
-/** A table in a card: a head of column names, rows with a divider, the row under the pointer lit. */
+/**
+ * A table in a card: a head of column names, rows with a divider, the row under the pointer lit. The card does not clip
+ * its content, so the menu of the last row opens over its edge; the corners of the last row are rounded instead.
+ */
 export function Table({
   label,
   className = '',
@@ -11,7 +14,9 @@ export function Table({
   readonly children: ReactNode;
 }) {
   return (
-    <div className={`overflow-hidden rounded-[10px] border border-line bg-panel ${className}`}>
+    <div
+      className={`rounded-[10px] border border-line bg-panel [&_tbody:last-child>tr:last-child>td:first-child]:rounded-bl-[9px] [&_tbody:last-child>tr:last-child>td:last-child]:rounded-br-[9px] ${className}`}
+    >
       <table aria-label={label} className="w-full border-collapse text-left text-[13px]">
         {children}
       </table>
@@ -23,7 +28,7 @@ export function Table({
 export function Th({ className = '', ...rest }: ThHTMLAttributes<HTMLTableCellElement>) {
   return (
     <th
-      className={`h-10 px-5 text-[11px] font-semibold tracking-wide whitespace-nowrap text-muted uppercase ${className}`}
+      className={`h-10 pl-5 text-[11px] font-semibold whitespace-nowrap text-muted uppercase last:pr-5 ${className}`}
       {...rest}
     />
   );
@@ -35,5 +40,5 @@ export function Tr({ className = '', ...rest }: HTMLAttributes<HTMLTableRowEleme
 }
 
 export function Td({ className = '', ...rest }: TdHTMLAttributes<HTMLTableCellElement>) {
-  return <td className={`px-5 ${className}`} {...rest} />;
+  return <td className={`pl-5 last:pr-5 ${className}`} {...rest} />;
 }

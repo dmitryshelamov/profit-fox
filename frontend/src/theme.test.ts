@@ -49,14 +49,15 @@ describe('the theme', () => {
     expect(theme).toContain('@theme static');
     expect(theme).toMatch(/--font-sans:\s*'Inter Variable'/);
     expect(theme).toMatch(/--font-mono:\s*'JetBrains Mono Variable'/);
+    expect(theme).toContain("--font-sans--font-variation-settings: 'opsz' 32;");
   });
 
   // The bench serves its own fonts: only the latin and cyrillic sets, from the packages, no outside address.
   it('takes the fonts from the packages in the latin and cyrillic sets only', () => {
     const files = [...fonts.matchAll(/url\(([^)]+)\)/g)].map((match) => match[1]);
     expect(files.sort()).toEqual([
-      '@fontsource-variable/inter/files/inter-cyrillic-wght-normal.woff2',
-      '@fontsource-variable/inter/files/inter-latin-wght-normal.woff2',
+      '@fontsource-variable/inter/files/inter-cyrillic-opsz-normal.woff2',
+      '@fontsource-variable/inter/files/inter-latin-opsz-normal.woff2',
       '@fontsource-variable/jetbrains-mono/files/jetbrains-mono-cyrillic-wght-normal.woff2',
       '@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2',
     ]);

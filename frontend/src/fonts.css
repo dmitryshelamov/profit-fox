@@ -1,14 +1,15 @@
 /*
  * Inter and JetBrains Mono from the packages @fontsource-variable, in the latin and cyrillic sets only (change
  * redesign-bench-ui, design.md, decision 3). The packages of the variable fonts have no style sheet per set, so the four
- * faces are declared here with the files and the ranges of the packages; the bench serves them itself.
+ * faces are declared here with the files and the ranges of the packages; the bench serves them itself. Inter comes with
+ * its optical size axis: the mockups are set in its display size, which the theme asks for.
  */
 @font-face {
   font-family: 'Inter Variable';
   font-style: normal;
   font-display: swap;
   font-weight: 100 900;
-  src: url(@fontsource-variable/inter/files/inter-cyrillic-wght-normal.woff2)
+  src: url(@fontsource-variable/inter/files/inter-cyrillic-opsz-normal.woff2)
     format('woff2-variations');
   unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
 }
@@ -18,7 +19,7 @@
   font-style: normal;
   font-display: swap;
   font-weight: 100 900;
-  src: url(@fontsource-variable/inter/files/inter-latin-wght-normal.woff2)
+  src: url(@fontsource-variable/inter/files/inter-latin-opsz-normal.woff2)
     format('woff2-variations');
   unicode-range:
     U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,

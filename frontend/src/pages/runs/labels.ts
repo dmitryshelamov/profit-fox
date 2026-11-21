@@ -43,6 +43,12 @@ export function utc(moment: string | null): string {
     : `${new Date(moment).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
 }
 
+/** A moment of the API as «21.11 00:01», day and time in UTC: the short form of a table. */
+export function shortUtc(moment: string): string {
+  const iso = new Date(moment).toISOString();
+  return `${iso.slice(8, 10)}.${iso.slice(5, 7)} ${iso.slice(11, 16)}`;
+}
+
 /** Where a run is: waiting, or going at a Worker with the pairs it has passed. */
 export function runProgress(run: Run): string {
   if (run.state === 'queued') {

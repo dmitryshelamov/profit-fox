@@ -4,16 +4,20 @@ import { useState } from 'react';
 
 import type { Hypothesis } from '@/api/client';
 import { enqueueRun, type RunAvailability } from '@/api/runs';
-import { buttonClass } from '@/modules/graph-editor/ui/Card';
+import { Button } from '@/shared/ui/Button';
+import { SelectField } from '@/shared/ui/SelectField';
 
 import { kindLabel, periodLabel, periodOrder } from '../runs/labels';
 
+// A parity run is blind and reads only exploration (spec hypothesis-bench «Сверочный прогон»).
+const parityPeriod = 'exploration';
+
 /**
- * «Прогнать» with the choice of the period and «Сверка» of one hypothesis (spec bench-run-queue «Кнопки прогона в списке
- * гипотез»). What the ledger rules allow comes from the API; a period that is not allowed is disabled and the reason of
- * the API stands next to the buttons. A queued run opens the section «Прогоны».
+ * The state of «Прогнать» and «Сверка» of one hypothesis (spec bench-run-queue «Кнопки прогона в списке гипотез»).
+ * What the ledger rules allow comes from the API; a queued run opens the section «Прогоны», a refusal stays on the
+ * list with its reason.
  */
-export function RunControls({ hypothesis }: { readonly hypothesis: Hypothesis }) {
+export function useRunLaunch(hypothesis: Hypothesis) {
   const navigate = useNavigate();
   const queries = useQueryClient();
   const available = (period: string, kind: string): RunAvailability | undefined =>
@@ -24,8 +28,6 @@ export function RunControls({ hypothesis }: { readonly hypothesis: Hypothesis })
   const [refusal, setRefusal] = useState<{ reason: string; runId: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
   const period = chosen ?? periodOrder.find(verdictOpen) ?? periodOrder[0];
-  // A parity run is blind and reads only exploration (spec hypothesis-bench «Сверочный прогон»).
-  const parityPeriod = 'exploration';
 
   const reasons = hypothesis.runs
     .filter(
@@ -65,63 +67,106 @@ export function RunControls({ hypothesis }: { readonly hypothesis: Hypothesis })
     }
   };
 
+  return {
+    period,
+    choose: setChosen,
+    verdictOpen,
+    parityOpen: available(parityPeriod, 'parity')?.canRun === true,
+    busy,
+    reasons,
+    refusal,
+    enqueue,
+  };
+}
+
+export type RunLaunch = ReturnType<typeof useRunLaunch>;
+
+/** The choice of the period, «Прогнать» and «Сверка»; a period that is not allowed is disabled. */
+export function RunControls({
+  hypothesis,
+  launch,
+}: {
+  readonly hypothesis: Hypothesis;
+  readonly launch: RunLaunch;
+}) {
   return (
-    <div className="ml-auto flex flex-col items-end gap-1">
-      <div className="flex items-center gap-2">
-        <select
-          aria-label={`Период ${hypothesis.id}`}
-          className={buttonClass}
-          value={period}
-          onChange={(event) => setChosen(event.target.value)}
-        >
-          {periodOrder.map((option) => (
-            <option key={option} value={option} disabled={!verdictOpen(option)}>
-              {periodLabel(option)}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          className={buttonClass}
-          aria-label={`Прогнать ${hypothesis.id}`}
-          disabled={busy || !verdictOpen(period)}
-          onClick={() => void enqueue('verdict')}
-        >
-          Прогнать
-        </button>
-        <button
-          type="button"
-          className={buttonClass}
-          aria-label={`Сверка ${hypothesis.id}`}
-          disabled={busy || available(parityPeriod, 'parity')?.canRun !== true}
-          onClick={() => void enqueue('parity')}
-        >
-          Сверка
-        </button>
-      </div>
+    <div className="flex items-center justify-end gap-2">
+      <SelectField
+        aria-label={`Период ${hypothesis.id}`}
+        className="w-[130px]"
+        value={launch.period}
+        onChange={(event) => launch.choose(event.target.value)}
+      >
+        {periodOrder.map((option) => (
+          <option key={option} value={option} disabled={!launch.verdictOpen(option)}>
+            {periodLabel(option)}
+          </option>
+        ))}
+      </SelectField>
+      <Button
+        aria-label={`Прогнать ${hypothesis.id}`}
+        disabled={launch.busy || !launch.verdictOpen(launch.period)}
+        onClick={() => void launch.enqueue('verdict')}
+      >
+        Прогнать
+      </Button>
+      <Button
+        aria-label={`Сверка ${hypothesis.id}`}
+        disabled={launch.busy || !launch.parityOpen}
+        onClick={() => void launch.enqueue('parity')}
+      >
+        Сверка
+      </Button>
+    </div>
+  );
+}
+
+/** Why a period is closed, by the words of the API, and the refusal of the last queueing; nothing when there is neither. */
+export function RunNotes({
+  hypothesis,
+  launch,
+}: {
+  readonly hypothesis: Hypothesis;
+  readonly launch: RunLaunch;
+}) {
+  const { reasons, refusal } = launch;
+  if (reasons.length === 0 && refusal === null) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5 text-xs">
       {reasons.length > 0 && (
-        <ul aria-label={`Почему нельзя ${hypothesis.id}`} className="text-xs text-zinc-400">
+        <ul
+          aria-label={`Почему нельзя ${hypothesis.id}`}
+          className="flex flex-col gap-1 text-muted"
+        >
           {reasons.map((run) => (
-            <li key={`${run.period}-${run.kind}`} className="text-right">
-              {periodLabel(run.period)}, {kindLabel(run.kind)}: {run.reason}
-              {run.runId && (
-                <>
-                  {' '}
-                  <Link
-                    to="/runs/$id"
-                    params={{ id: run.runId }}
-                    className="text-amber-300 hover:underline"
-                  >
-                    прогон
-                  </Link>
-                </>
-              )}
+            <li key={`${run.period}-${run.kind}`} className="flex items-baseline gap-2">
+              <span aria-hidden="true" className="text-faint">
+                ⓘ
+              </span>
+              <span>
+                {periodLabel(run.period)}, {kindLabel(run.kind)}: {run.reason}
+                {run.runId && (
+                  <>
+                    {' '}
+                    <Link
+                      to="/runs/$id"
+                      params={{ id: run.runId }}
+                      className="text-accent hover:underline"
+                    >
+                      прогон
+                    </Link>
+                  </>
+                )}
+              </span>
             </li>
           ))}
         </ul>
       )}
       {refusal && (
-        <p role="alert" className="text-xs text-red-300">
+        <p role="alert" className="text-err">
           {refusal.reason}
           {refusal.runId && (
             <>
@@ -129,7 +174,7 @@ export function RunControls({ hypothesis }: { readonly hypothesis: Hypothesis })
               <Link
                 to="/runs/$id"
                 params={{ id: refusal.runId }}
-                className="text-amber-300 hover:underline"
+                className="text-accent hover:underline"
               >
                 прогон
               </Link>

@@ -41,10 +41,95 @@ describe('the section «Стратегии»', () => {
     });
     renderApp('/strategies');
 
-    const first = await screen.findByRole('listitem', { name: 'Стратегия funding-short' });
+    const first = await screen.findByRole('row', { name: 'Стратегия funding-short' });
     expect(within(first).getByText('версия 2')).toBeInTheDocument();
-    const second = screen.getByRole('listitem', { name: 'Стратегия price-drop-long' });
+    const second = screen.getByRole('row', { name: 'Стратегия price-drop-long' });
     expect(within(second).getByText('версия 1')).toBeInTheDocument();
+  });
+
+  // Spec strategy-constructor «Сигналы и выходы стратегии в списке»: «Сигнал и срок», «Стоп и цель», «Стратегия без
+  // сигналов»; «Отметка новой версии сигнала в списке стратегий»: «Есть версия новее».
+  it('shows the signals of the latest version, a newer version of a signal and the exits', async () => {
+    const requests = routes({
+      'GET /api/strategies': () =>
+        json([
+          {
+            name: 'breakout-long',
+            description: null,
+            version: 7,
+            error: null,
+            signals: [],
+            exits: ['stop-loss', 'take-profit'],
+          },
+          {
+            name: 'breakout-trail',
+            description: null,
+            version: 1,
+            error: null,
+            signals: [{ name: 'volume-breakout', version: 3, latestVersion: 4 }],
+            exits: ['close-after'],
+          },
+          {
+            name: 'funding-short',
+            description: null,
+            version: 2,
+            error: null,
+            signals: [{ name: 'funding-high', version: 1, latestVersion: 1 }],
+            exits: ['close-after'],
+          },
+          { name: 'plain', description: null, version: 1, error: null, signals: [], exits: [] },
+        ]),
+    });
+    renderApp('/strategies');
+
+    const funding = within(await screen.findByRole('row', { name: 'Стратегия funding-short' }));
+    expect(funding.getByRole('link', { name: 'funding-high v1' })).toHaveAttribute(
+      'href',
+      '/signals/funding-high',
+    );
+    expect(funding.getByText('срок')).toBeInTheDocument();
+    expect(funding.queryByText(/^есть v/)).toBeNull();
+
+    const trail = within(screen.getByRole('row', { name: 'Стратегия breakout-trail' }));
+    expect(trail.getByRole('link', { name: 'volume-breakout v3' })).toBeInTheDocument();
+    expect(trail.getByText('есть v4')).toHaveAttribute('data-tone', 'warn');
+
+    const long = within(screen.getByRole('row', { name: 'Стратегия breakout-long' }));
+    expect(long.getByText('стоп · цель')).toBeInTheDocument();
+    expect(long.getAllByText('—')).toHaveLength(1);
+
+    expect(
+      within(screen.getByRole('row', { name: 'Стратегия plain' })).getAllByText('—'),
+    ).toHaveLength(2);
+    expect(
+      screen
+        .getAllByRole('columnheader')
+        .map((cell) => cell.textContent)
+        .slice(0, 5),
+    ).toEqual(['Имя', 'Описание', 'Версия', 'Сигналы', 'Выход']);
+    // The list only shows the newer version: nothing is written.
+    expect(requests.every((request) => request.method === 'GET')).toBe(true);
+  });
+
+  // Spec bench-ui «Поиск в списке».
+  it('searches the strategies by a part of the name', async () => {
+    routes({
+      'GET /api/strategies': () =>
+        json([
+          { name: 'breakout-long', description: null, version: 7, error: null },
+          { name: 'funding-short', description: null, version: 2, error: null },
+        ]),
+    });
+    renderApp('/strategies');
+    await screen.findByRole('row', { name: 'Стратегия funding-short' });
+
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Найти по имени' }), 'Break');
+
+    expect(
+      screen
+        .getAllByRole('row', { name: /^Стратегия / })
+        .map((row) => row.getAttribute('aria-label')),
+    ).toEqual(['Стратегия breakout-long']);
   });
 
   // Scenario «Занятое имя».
@@ -64,14 +149,17 @@ describe('the section «Стратегии»', () => {
     });
     renderApp('/strategies');
 
-    const row = await screen.findByRole('listitem', { name: 'Стратегия price-drop-long' });
-    await userEvent.click(within(row).getByRole('button', { name: 'Переименовать' }));
-    const field = within(row).getByRole('textbox', { name: 'Новое имя' });
+    const row = await screen.findByRole('row', { name: 'Стратегия price-drop-long' });
+    await userEvent.click(within(row).getByRole('button', { name: 'Действия price-drop-long' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Переименовать' }));
+    const dialog = screen.getByRole('dialog', { name: 'Переименовать стратегию price-drop-long' });
+    const field = within(dialog).getByRole('textbox', { name: 'Новое имя' });
     await userEvent.clear(field);
     await userEvent.type(field, 'funding-short');
-    await userEvent.click(within(row).getAllByRole('button', { name: 'Переименовать' }).at(-1)!);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Переименовать' }));
 
-    expect(await within(row).findByText('the name funding-short is taken')).toBeInTheDocument();
+    expect(await within(dialog).findByText('the name funding-short is taken')).toBeInTheDocument();
+    expect(dialog).toBeVisible();
   });
 
   // Scenario «Удаление».
@@ -87,11 +175,14 @@ describe('the section «Стратегии»', () => {
         return new Response(null, { status: 204 });
       },
     });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderApp('/strategies');
 
-    const row = await screen.findByRole('listitem', { name: 'Стратегия funding-short' });
-    await userEvent.click(within(row).getByRole('button', { name: 'Удалить' }));
+    const row = await screen.findByRole('row', { name: 'Стратегия funding-short' });
+    await userEvent.click(within(row).getByRole('button', { name: 'Действия funding-short' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Удалить' }));
+    const question = screen.getByRole('dialog', { name: 'Удалить стратегию funding-short' });
+    expect(question).toHaveTextContent('Удалить стратегию funding-short со всеми версиями?');
+    await userEvent.click(within(question).getByRole('button', { name: 'Удалить' }));
 
     expect(await screen.findByText(/Стратегий нет/)).toBeInTheDocument();
     expect(requests.filter((request) => request.method === 'DELETE')).toHaveLength(1);
@@ -261,8 +352,9 @@ describe('the editor of a strategy', () => {
     await userEvent.click(within(question).getByRole('button', { name: /Восстановить/ }));
     expect(screen.getByRole('textbox', { name: 'Описание' })).toHaveValue('черновик стратегии');
 
-    history.push('/signals/funding-high');
+    // The question about leaving the unsaved strategy is answered before the way out is taken.
     vi.spyOn(window, 'confirm').mockReturnValue(true);
+    history.push('/signals/funding-high');
     const signalQuestion = await screen.findByRole('dialog');
     await userEvent.click(within(signalQuestion).getByRole('button', { name: /Восстановить/ }));
     expect(screen.getByRole('textbox', { name: 'Описание' })).toHaveValue('черновик сигнала');
@@ -376,7 +468,7 @@ describe('a strategy of a signal', () => {
     });
     const { history } = renderApp('/signals');
 
-    const row = await screen.findByRole('listitem', { name: 'Сигнал funding-high' });
+    const row = await screen.findByRole('row', { name: 'Сигнал funding-high' });
     await userEvent.click(within(row).getByRole('button', { name: 'Создать стратегию' }));
 
     await waitFor(() => expect(history.location.pathname).toMatch(/^\/strategies\/new\/.+/));

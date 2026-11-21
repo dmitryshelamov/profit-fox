@@ -7,6 +7,8 @@
  */
 @theme static {
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  /* The display cut of Inter at every size, as the mockups are set: its text is narrower than the text cut. */
+  --font-sans--font-variation-settings: 'opsz' 32;
   --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
 
   --color-app: #14161b;

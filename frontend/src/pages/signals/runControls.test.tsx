@@ -9,7 +9,7 @@ describe('the buttons of a run in the list of hypotheses', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   async function row() {
-    return screen.findByRole('listitem', { name: 'Гипотеза H0001' });
+    return screen.findByRole('rowgroup', { name: 'Гипотеза H0001' });
   }
 
   // Scenario «Отложенный без разведки».
