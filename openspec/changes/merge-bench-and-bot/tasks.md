@@ -73,13 +73,13 @@
 
 ## 6. Итоговая проверка
 
-- [ ] 6.1 Поиск по репозиторию, кроме `openspec/changes` и каталогов сборки: строк `ProfitFox.Bench`, `ProfitFox.Engine`,
+- [x] 6.1 Поиск по репозиторию, кроме `openspec/changes` и каталогов сборки: строк `ProfitFox.Bench`, `ProfitFox.Engine`,
   `ProfitFox.Bot`, `src/bench`, `src/engine`, `src/bot` нет. Проверить: поиск пуст.
-- [ ] 6.2 Результаты расчёта прежние: `EngineVersion.Number` равен 2, `EngineVersions.json` совпадает с версией из
+- [x] 6.2 Результаты расчёта прежние: `EngineVersion.Number` равен 2, `EngineVersions.json` совпадает с версией из
   `release/0.1.0` байт в байт, `EngineVersionTests` и `H0001ParityTests` зелёные.
-- [ ] 6.3 API прежнее: запустить API и выполнить `npm --prefix frontend run generate:api`. Проверить: `schema.d.ts` не
+- [x] 6.3 API прежнее: запустить API и выполнить `npm --prefix frontend run generate:api`. Проверить: `schema.d.ts` не
   изменился (контрольная сумма из раздела «База»); `npm --prefix frontend run typecheck`, `lint` и `test` зелёные.
-- [ ] 6.4 `dotnet build ProfitFox.slnx --configuration Release` и `dotnet test ProfitFox.slnx` из `backend/`. Проверить:
+- [x] 6.4 `dotnet build ProfitFox.slnx --configuration Release` и `dotnet test ProfitFox.slnx` из `backend/`. Проверить:
   всё зелёное, число тестов равно базе, предупреждений сборки не больше базы; проверка однострочных `<summary>` из
   `ci.yml` проходит.
 
@@ -109,3 +109,49 @@
   `/health` ответил `200 Healthy`. Таблица версий после запуска прежней сборки — одна строка:
   `202611200001 | 2026-11-21 05:13:06.270258 | CreateBenchTablesMigration`. Это база контейнера, созданная пустой в этой
   сессии, а не база Мака с журналом прогонов.
+
+## Открыто после применения
+
+Все задачи групп 1–6 отмечены: проверка каждой прошла в облачном контейнере. Итог против раздела «База»: unit — 251,
+интеграционные — 162, предупреждений сборки 0 (было 2, оба ушли с шаблоном бота), контрольная сумма `schema.d.ts` та же.
+Ниже — то, что осталось за владельцем, и решения, принятые при применении там, где tasks.md и design.md молчали.
+
+Осталось проверить на машинах владельца:
+
+- **Стенд на Маке (решения 7 и 9).** Задачи 1.1 и 2.3 выполнены на базе контейнера: она создана пустой в этой сессии,
+  мигрирована прежней сборкой, и новая сборка оставила её таблицу версий как была. Базы Мака с журналом прогонов в
+  контейнере нет. На Маке остаётся один запуск: `docker compose up -d --wait bench-db`,
+  `dotnet run --project backend/src/ProfitFox.Presentation`, `/health` отвечает успехом, в таблице `VersionInfo` та же одна
+  строка `202611200001`.
+- **Сборка образов без подмен.** Обычный `docker build` в контейнере падает на `dotnet restore`: исходящий трафик идёт через
+  прокси сессии, который переподписывает TLS, а образы `mcr.microsoft.com/dotnet/sdk` и `node` его сертификату не доверяют.
+  Оба `Dockerfile` собраны без правок самих файлов: `docker build` с `--network host`, `--build-arg HTTPS_PROXY=…` и
+  `--build-context <базовый образ>=docker-image://<тот же образ плюс сертификат прокси>` для четырёх базовых образов. Образы
+  собрались, `ProfitFox.Presentation.dll`, `wwwroot/index.html` и `ProfitFox.Worker.dll` на месте, а `docker-compose.prod.yml`
+  на этих образах под локальными метками `profit-fox:1` и `profit-fox-worker:1` поднял `db`, `api`, `worker-1`, `worker-2`;
+  `/health` и страница ответили `200`. Первая сборка без подмен — в `deploy.yml` после push в `release/0.1.0`.
+
+Решения при применении:
+
+- **Строка `profit-fox-bench` вне деплоя (проверка задачи 5.1).** В `docker-compose.prod.yml`, `deploy/*.sh`, `deploy.yml` и
+  `README.md` её нет; в `docker-compose.yml` она только в именах стенда Мака и в комментарии о них. Ещё пять вхождений
+  оставлены намеренно: комментарии тестов `H0001ParityTests`, `OutcomeParityTests`, `VerdictRulesTests` и
+  `bench/parity/README.md` называют так репозиторий прежнего Python-стенда (коммит `13bd168`), а не продовые имена из
+  решения 8. Проверка 5.1 прочитана как проверка файлов деплоя. Если владелец читает её по всему репозиторию, эти пять
+  мест — отдельное решение: комментарии тестов и каталог `bench/` это изменение не правит.
+- **`BenchDatabase.cs` лежит в `Tests.Integration/Database/`, а его пространство имён — `ProfitFox.Tests.Integration`.** Это
+  `[SetUpFixture]` NUnit, который поднимает один контейнер Postgres на всю сборку тестов; он действует на своё
+  пространство имён и вложенные. С пространством имён `…Integration.Database` 99 интеграционных тестов из 162 падали без
+  базы. Прежнее пространство имён `…Integration.Bench` потеряло уровень `Bench`, как и остальные. Другой выход — оставить
+  файл в корне проекта тестов, но таблица решения 5 называет папку `Database/`.
+- **Папки эталонов, которых нет в таблице решения 5.** `Tests.Unit/Bench/Fixtures/Verdict` переехала в
+  `Tests.Unit/Fixtures/Verdict` по строке `Bench/<папка>`; `Tests.Unit/Engine/Simulation/Fixtures/Outcomes` — в
+  `Tests.Unit/Trades/Fixtures/Outcomes` вместе со своим тестом `OutcomeParityTests`. Помощник `Paths.cs` остался в
+  `Tests.Unit/Trades`; `EntryPlanTests` и `PairPositionTests` в `Tests.Unit/Positions` получили `using` на него.
+- **`CompiledNode.cs` и `PinDeclaration.cs`** в коммите группы 3 видны как удаление и добавление, а не переименование: в
+  файлах три строки, и смена строки `namespace` опускает сходство ниже порога git. Остальной текст совпадает.
+- **`README.md`.** Имена проектов в первом абзаце и пути в разделе «Настройки» приведены к новым вместе с командами
+  раздела «Стенд на Маке» (задача 2.2): иначе поиск задачи 6.1 не пуст.
+- **`add-bench-service`.** В `tasks.md` изменена одна строка задачи 8.4 (`~/profit-fox/.env.prod`); в формулировке 8.5 имён из
+  таблицы решения 8 нет. `design.md` и `proposal.md` этого изменения по-прежнему называют `profit-fox-bench`: по условию
+  они не правятся.
