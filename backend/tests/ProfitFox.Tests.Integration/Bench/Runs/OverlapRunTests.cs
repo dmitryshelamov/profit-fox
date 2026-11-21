@@ -7,7 +7,7 @@ using ProfitFox.Domain.Runs;
 using ProfitFox.Infrastructure.Hypotheses;
 using ProfitFox.Infrastructure.Ledger;
 using ProfitFox.Infrastructure.MarketData;
-using ProfitFox.Engine.Simulation.Trades;
+using ProfitFox.Domain.Trades;
 using ProfitFox.Tests.Integration.Bench.MarketData;
 
 namespace ProfitFox.Tests.Integration.Bench.Runs;

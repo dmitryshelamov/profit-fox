@@ -1,5 +1,5 @@
 using System.Globalization;
-using ProfitFox.Engine.Strategy.Execution;
+using ProfitFox.Domain.Execution;
 
 namespace ProfitFox.Domain.MarketData;
 

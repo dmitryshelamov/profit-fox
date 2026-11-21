@@ -3,12 +3,12 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using ProfitFox.Engine.Simulation.Positions;
-using ProfitFox.Engine.Simulation.Trades;
-using ProfitFox.Engine.Strategy.Execution;
-using ProfitFox.Engine.Strategy.Graph;
-using ProfitFox.Engine.Strategy.Graph.Model;
-using ProfitFox.Engine.Strategy.Graph.Reading;
+using ProfitFox.Domain.Positions;
+using ProfitFox.Domain.Trades;
+using ProfitFox.Domain.Execution;
+using ProfitFox.Domain.Graph;
+using ProfitFox.Domain.Graph.Model;
+using ProfitFox.Domain.Graph.Reading;
 
 namespace ProfitFox.Domain.Hypotheses;
 

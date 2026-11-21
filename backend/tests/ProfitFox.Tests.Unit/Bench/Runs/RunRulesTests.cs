@@ -1,6 +1,6 @@
 using ProfitFox.Domain.Hypotheses;
 using ProfitFox.Domain.Runs;
-using ProfitFox.Engine.Simulation.Trades;
+using ProfitFox.Domain.Trades;
 
 using static ProfitFox.Tests.Unit.Bench.Runs.Designs;
 

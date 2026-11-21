@@ -1,5 +1,5 @@
 using System.Globalization;
-using ProfitFox.Engine.Simulation.Trades;
+using ProfitFox.Domain.Trades;
 
 namespace ProfitFox.Tests.Unit.Engine.Simulation;
 

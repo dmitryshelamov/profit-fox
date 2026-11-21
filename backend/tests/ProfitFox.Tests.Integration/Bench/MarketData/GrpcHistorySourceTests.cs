@@ -4,7 +4,7 @@ using ProfitFox.Application.MarketData;
 using ProfitFox.Domain.MarketData;
 using ProfitFox.Infrastructure.MarketData;
 using ProfitFox.Infrastructure.MarketData.Protos;
-using ProfitFox.Engine.Strategy.Execution;
+using ProfitFox.Domain.Execution;
 using TimeRange = ProfitFox.Domain.MarketData.TimeRange;
 
 namespace ProfitFox.Tests.Integration.Bench.MarketData;

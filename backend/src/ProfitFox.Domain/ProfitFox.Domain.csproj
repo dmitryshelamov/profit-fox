@@ -6,9 +6,4 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
-    <ItemGroup>
-        <ProjectReference Include="..\engine\ProfitFox.Engine.Strategy\ProfitFox.Engine.Strategy.csproj"/>
-        <ProjectReference Include="..\engine\ProfitFox.Engine.Simulation\ProfitFox.Engine.Simulation.csproj"/>
-    </ItemGroup>
-
 </Project>

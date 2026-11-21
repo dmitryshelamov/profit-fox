@@ -1,5 +1,5 @@
-using ProfitFox.Engine.Strategy.Execution;
-using ProfitFox.Engine.Strategy.Graph;
+using ProfitFox.Domain.Execution;
+using ProfitFox.Domain.Graph;
 using ProfitFox.Tests.Unit.Engine.Strategy.Graph;
 
 namespace ProfitFox.Tests.Unit.Engine.Strategy.Execution;

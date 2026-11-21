@@ -1,4 +1,4 @@
-using ProfitFox.Engine.Strategy.Graph.Model;
+using ProfitFox.Domain.Graph.Model;
 
 namespace ProfitFox.Domain.Signals;
 

@@ -5,7 +5,7 @@ using Npgsql;
 using ProfitFox.Application.Signals;
 using ProfitFox.Domain.Signals;
 using ProfitFox.Infrastructure.Signals;
-using ProfitFox.Engine.Strategy.Graph;
+using ProfitFox.Domain.Graph;
 
 namespace ProfitFox.Tests.Integration.Bench.Database;
 

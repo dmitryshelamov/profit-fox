@@ -1,7 +1,7 @@
 using ProfitFox.Domain.MarketData;
 using ProfitFox.Domain.Signals;
-using ProfitFox.Engine.Strategy.Execution;
-using ProfitFox.Engine.Strategy.Graph;
+using ProfitFox.Domain.Execution;
+using ProfitFox.Domain.Graph;
 
 namespace ProfitFox.Domain.Strategies;
 

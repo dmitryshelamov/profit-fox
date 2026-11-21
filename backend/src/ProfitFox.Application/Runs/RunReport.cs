@@ -3,7 +3,7 @@ using System.Text;
 using ProfitFox.Domain.Ledger;
 using ProfitFox.Domain.Runs;
 using ProfitFox.Domain.Verdicts;
-using ProfitFox.Engine.Simulation.Trades;
+using ProfitFox.Domain.Trades;
 
 namespace ProfitFox.Application.Runs;
 

@@ -1,5 +1,5 @@
-using ProfitFox.Engine.Strategy.Graph.Model;
-using ProfitFox.Engine.Strategy.Nodes;
+using ProfitFox.Domain.Graph.Model;
+using ProfitFox.Domain.Nodes;
 
 namespace ProfitFox.Presentation.Nodes;
 

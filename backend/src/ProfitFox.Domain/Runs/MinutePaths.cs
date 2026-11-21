@@ -1,6 +1,6 @@
 using System.Globalization;
 using ProfitFox.Domain.MarketData;
-using ProfitFox.Engine.Simulation.Trades;
+using ProfitFox.Domain.Trades;
 
 namespace ProfitFox.Domain.Runs;
 

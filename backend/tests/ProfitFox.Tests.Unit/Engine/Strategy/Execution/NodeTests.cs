@@ -1,4 +1,4 @@
-using ProfitFox.Engine.Strategy.Execution;
+using ProfitFox.Domain.Execution;
 
 namespace ProfitFox.Tests.Unit.Engine.Strategy.Execution;
 

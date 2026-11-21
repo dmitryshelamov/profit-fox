@@ -1,7 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using ProfitFox.Presentation.Nodes;
-using ProfitFox.Engine.Strategy.Nodes;
+using ProfitFox.Domain.Nodes;
 using ProfitFox.Tests.Integration.Bench.MarketData;
 
 namespace ProfitFox.Tests.Integration.Bench.Presentation;

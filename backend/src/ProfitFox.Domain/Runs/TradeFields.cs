@@ -1,5 +1,5 @@
 using ProfitFox.Domain.Hypotheses;
-using ProfitFox.Engine.Simulation.Trades;
+using ProfitFox.Domain.Trades;
 
 namespace ProfitFox.Domain.Runs;
 

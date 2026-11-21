@@ -1,4 +1,4 @@
-using ProfitFox.Engine.Strategy.Nodes;
+using ProfitFox.Domain.Nodes;
 
 namespace ProfitFox.Presentation.Nodes;
 

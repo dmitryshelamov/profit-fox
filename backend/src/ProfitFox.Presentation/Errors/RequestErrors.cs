@@ -1,5 +1,5 @@
 using ProfitFox.Application.Preview;
-using ProfitFox.Engine.Strategy.Graph.Reading;
+using ProfitFox.Domain.Graph.Reading;
 
 namespace ProfitFox.Presentation.Errors;
 

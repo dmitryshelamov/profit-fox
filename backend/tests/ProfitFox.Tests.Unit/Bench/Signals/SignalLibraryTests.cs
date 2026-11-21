@@ -2,7 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using ProfitFox.Application.Signals;
 using ProfitFox.Domain.Signals;
-using ProfitFox.Engine.Strategy.Graph.Reading;
+using ProfitFox.Domain.Graph.Reading;
 using ProfitFox.Tests.Unit.Bench.Hypotheses;
 
 namespace ProfitFox.Tests.Unit.Bench.Signals;

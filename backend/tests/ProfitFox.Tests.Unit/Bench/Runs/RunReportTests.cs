@@ -5,8 +5,8 @@ using ProfitFox.Domain.Ledger;
 using ProfitFox.Domain.Runs;
 using ProfitFox.Domain.Strategies;
 using ProfitFox.Domain.Verdicts;
-using ProfitFox.Engine.Simulation.Trades;
-using ProfitFox.Engine.Strategy.Execution;
+using ProfitFox.Domain.Trades;
+using ProfitFox.Domain.Execution;
 using ProfitFox.Tests.Unit.Bench.Hypotheses;
 
 using static ProfitFox.Tests.Unit.Bench.Runs.Designs;

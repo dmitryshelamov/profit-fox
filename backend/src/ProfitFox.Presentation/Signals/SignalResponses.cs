@@ -1,6 +1,6 @@
 using System.Text.Json;
 using ProfitFox.Domain.Signals;
-using ProfitFox.Engine.Strategy.Graph;
+using ProfitFox.Domain.Graph;
 
 namespace ProfitFox.Presentation.Signals;
 

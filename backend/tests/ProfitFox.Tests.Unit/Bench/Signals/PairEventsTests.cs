@@ -1,6 +1,6 @@
 using ProfitFox.Domain.MarketData;
 using ProfitFox.Domain.Signals;
-using ProfitFox.Engine.Strategy.Graph;
+using ProfitFox.Domain.Graph;
 using ProfitFox.Tests.Unit.Engine.Strategy.Graph;
 
 using static ProfitFox.Tests.Unit.Bench.Runs.Designs;

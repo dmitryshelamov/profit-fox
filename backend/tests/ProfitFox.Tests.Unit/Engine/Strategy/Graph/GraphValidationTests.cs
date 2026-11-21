@@ -1,9 +1,9 @@
 using System.Text.Json.Nodes;
 
-using ProfitFox.Engine.Strategy.Graph;
-using ProfitFox.Engine.Strategy.Graph.Model;
-using ProfitFox.Engine.Strategy.Graph.Reading;
-using ProfitFox.Engine.Strategy.Nodes;
+using ProfitFox.Domain.Graph;
+using ProfitFox.Domain.Graph.Model;
+using ProfitFox.Domain.Graph.Reading;
+using ProfitFox.Domain.Nodes;
 
 namespace ProfitFox.Tests.Unit.Engine.Strategy.Graph;
 

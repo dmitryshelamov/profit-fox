@@ -1,4 +1,4 @@
-using ProfitFox.Engine.Strategy.Graph.Reading;
+using ProfitFox.Domain.Graph.Reading;
 
 namespace ProfitFox.Application.Signals;
 
