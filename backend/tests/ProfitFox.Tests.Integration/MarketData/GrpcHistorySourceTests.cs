@@ -6,8 +6,8 @@ using ProfitFox.Application.Queries.MarketData;
 using ProfitFox.Domain.Services.MarketData;
 using ProfitFox.Domain.ValueObjects.Execution;
 using ProfitFox.Domain.ValueObjects.MarketData;
-using ProfitFox.Infrastructure.MarketData;
-using ProfitFox.Infrastructure.MarketData.Protos;
+using ProfitFox.Infrastructure.Clients.MarketData;
+using ProfitFox.Infrastructure.Clients.MarketData.Protos;
 
 using TimeRange = ProfitFox.Domain.ValueObjects.MarketData.TimeRange;
 

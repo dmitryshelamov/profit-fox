@@ -5,8 +5,10 @@ using Npgsql;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.Runs;
 using ProfitFox.Domain.ValueObjects.Ledger;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger.Contracts;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger.Queries;
 
-namespace ProfitFox.Infrastructure.Ledger;
+namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger;
 
 /// <summary>
 ///     The ledger of runs in the tables <c>ledger</c> and <c>reports</c> (spec hypothesis-bench «Журнал прогонов»): rows

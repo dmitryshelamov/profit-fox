@@ -10,7 +10,7 @@ using ProfitFox.Application.Contracts.Signals;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.ValueObjects.Signals;
-using ProfitFox.Infrastructure.Signals;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Signals;
 
 namespace ProfitFox.Tests.Integration.Database;
 

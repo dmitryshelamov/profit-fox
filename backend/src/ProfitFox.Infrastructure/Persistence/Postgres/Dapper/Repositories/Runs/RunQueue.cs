@@ -4,8 +4,9 @@ using Npgsql;
 
 using ProfitFox.Application.Ports.Runs;
 using ProfitFox.Domain.Exceptions;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Runs.Contracts;
 
-namespace ProfitFox.Infrastructure.Runs;
+namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Runs;
 
 /// <summary>
 ///     The queue of runs in the table <c>runs</c> (design add-bench-service, decision 3). A Worker takes a run with one

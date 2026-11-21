@@ -3,8 +3,9 @@ using Dapper;
 using Npgsql;
 
 using ProfitFox.Application.Ports.Hypotheses;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Hypotheses.Contracts;
 
-namespace ProfitFox.Infrastructure.Hypotheses;
+namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Hypotheses;
 
 /// <summary>
 ///     The hypotheses in the table <c>hypothesis_versions</c> (spec hypothesis-bench «Заморозка гипотезы»): a row per version,

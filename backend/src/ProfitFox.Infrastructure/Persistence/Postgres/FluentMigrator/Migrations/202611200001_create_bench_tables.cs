@@ -1,6 +1,6 @@
 using FluentMigrator;
 
-namespace ProfitFox.Infrastructure.Persistence.Migrations;
+namespace ProfitFox.Infrastructure.Persistence.Postgres.FluentMigrator.Migrations;
 
 [Migration(202611200001)]
 public sealed class CreateBenchTablesMigration : Migration

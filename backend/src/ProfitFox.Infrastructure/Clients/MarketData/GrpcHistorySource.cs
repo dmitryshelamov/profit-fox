@@ -6,11 +6,11 @@ using Grpc.Net.Client;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.ValueObjects.MarketData;
-using ProfitFox.Infrastructure.MarketData.Protos;
+using ProfitFox.Infrastructure.Clients.MarketData.Protos;
 
 using TimeRange = ProfitFox.Domain.ValueObjects.MarketData.TimeRange;
 
-namespace ProfitFox.Infrastructure.MarketData;
+namespace ProfitFox.Infrastructure.Clients.MarketData;
 
 /// <summary>
 ///     History from the <c>History</c> streams of the market-data service (spec market-history), one instrument a call.

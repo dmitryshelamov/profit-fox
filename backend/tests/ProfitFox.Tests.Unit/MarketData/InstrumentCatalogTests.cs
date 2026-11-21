@@ -1,5 +1,5 @@
 using ProfitFox.Domain.ValueObjects.MarketData;
-using ProfitFox.Infrastructure.MarketData;
+using ProfitFox.Infrastructure.Clients.MarketData;
 
 namespace ProfitFox.Tests.Unit.MarketData;
 

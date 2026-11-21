@@ -6,7 +6,7 @@ using ProfitFox.Application.Ports.Runs;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Services.Ledger;
 using ProfitFox.Domain.ValueObjects.Ledger;
-using ProfitFox.Infrastructure.Ledger;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger;
 
 namespace ProfitFox.Tests.Integration.Database;
 

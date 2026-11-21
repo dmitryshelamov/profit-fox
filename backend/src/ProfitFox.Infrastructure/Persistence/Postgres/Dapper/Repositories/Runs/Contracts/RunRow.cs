@@ -1,4 +1,4 @@
-namespace ProfitFox.Infrastructure.Runs;
+namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Runs.Contracts;
 
 /// <summary>
 ///     A row of <c>runs</c>.

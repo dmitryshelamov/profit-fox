@@ -17,7 +17,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Protobuf Include="MarketData\Protos\*.proto" GrpcServices="Both" ProtoRoot="MarketData\Protos"/>
+        <Protobuf Include="Clients\MarketData\Protos\*.proto" GrpcServices="Both" ProtoRoot="Clients\MarketData\Protos"/>
     </ItemGroup>
 
 </Project>

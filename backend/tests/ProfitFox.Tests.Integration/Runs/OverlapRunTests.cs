@@ -9,9 +9,9 @@ using ProfitFox.Domain.ValueObjects.Ledger;
 using ProfitFox.Domain.ValueObjects.Runs;
 using ProfitFox.Domain.ValueObjects.Runs.Enums;
 using ProfitFox.Domain.ValueObjects.Trades.Enums;
-using ProfitFox.Infrastructure.Hypotheses;
-using ProfitFox.Infrastructure.Ledger;
-using ProfitFox.Infrastructure.MarketData;
+using ProfitFox.Infrastructure.Clients.MarketData;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Hypotheses;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger;
 using ProfitFox.Tests.Integration.MarketData;
 
 namespace ProfitFox.Tests.Integration.Runs;

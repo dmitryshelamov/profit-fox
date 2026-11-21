@@ -4,7 +4,7 @@ using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
-namespace ProfitFox.Infrastructure.MarketData;
+namespace ProfitFox.Infrastructure.Clients.MarketData;
 
 /// <summary>
 ///     The set of pairs of the bench (spec market-history): linear Bybit perpetual contracts quoted in USDT that are listed

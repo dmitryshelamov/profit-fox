@@ -5,7 +5,7 @@ using ProfitFox.Application.Commands.Runs;
 using ProfitFox.Application.Commands.Signals;
 using ProfitFox.Application.Queries.Preview;
 using ProfitFox.Application.Queries.Runs;
-using ProfitFox.Infrastructure.Persistence;
+using ProfitFox.Infrastructure.Persistence.Postgres;
 using ProfitFox.Presentation.Hypotheses;
 
 namespace ProfitFox.Presentation;

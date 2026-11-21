@@ -1,4 +1,4 @@
-namespace ProfitFox.Infrastructure.Ledger;
+namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger.Contracts;
 
 /// <summary>
 ///     A row of <c>ledger</c>.

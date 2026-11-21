@@ -2,7 +2,7 @@ using Google.Protobuf.WellKnownTypes;
 
 using Grpc.Core;
 
-using ProfitFox.Infrastructure.MarketData.Protos;
+using ProfitFox.Infrastructure.Clients.MarketData.Protos;
 
 namespace ProfitFox.Tests.Integration.MarketData;
 

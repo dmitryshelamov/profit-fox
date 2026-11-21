@@ -4,7 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 using ProfitFox.Application.Ports.MarketData;
-using ProfitFox.Infrastructure.MarketData;
+using ProfitFox.Infrastructure.Clients.MarketData;
 using ProfitFox.Tests.Integration.MarketData;
 
 namespace ProfitFox.Tests.Integration.Workers;

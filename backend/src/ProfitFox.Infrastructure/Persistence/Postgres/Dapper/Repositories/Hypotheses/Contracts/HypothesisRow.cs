@@ -1,4 +1,4 @@
-namespace ProfitFox.Infrastructure.Hypotheses;
+namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Hypotheses.Contracts;
 
 /// <summary>
 ///     A row of <c>hypothesis_versions</c>.

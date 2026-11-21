@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 
 using ProfitFox.Application.Ports.MarketData;
-using ProfitFox.Infrastructure.MarketData;
+using ProfitFox.Infrastructure.Clients.MarketData;
 using ProfitFox.Presentation;
 using ProfitFox.Tests.Integration.MarketData;
 

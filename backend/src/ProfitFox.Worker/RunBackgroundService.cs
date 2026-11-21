@@ -1,7 +1,7 @@
 using Npgsql;
 
 using ProfitFox.Application.Commands.Runs;
-using ProfitFox.Infrastructure.Persistence;
+using ProfitFox.Infrastructure.Persistence.Postgres;
 
 namespace ProfitFox.Worker;
 

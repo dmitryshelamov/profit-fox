@@ -7,12 +7,12 @@ using Npgsql;
 using ProfitFox.Application.Ports.Hypotheses;
 using ProfitFox.Application.Ports.Runs;
 using ProfitFox.Application.Ports.Signals;
-using ProfitFox.Infrastructure.Hypotheses;
-using ProfitFox.Infrastructure.Ledger;
-using ProfitFox.Infrastructure.Runs;
-using ProfitFox.Infrastructure.Signals;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Hypotheses;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Runs;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Signals;
 
-namespace ProfitFox.Infrastructure.Persistence;
+namespace ProfitFox.Infrastructure.Persistence.Postgres;
 
 /// <summary>
 ///     The database of the bench: its stores, its migrations. The market-data service is not part of it.

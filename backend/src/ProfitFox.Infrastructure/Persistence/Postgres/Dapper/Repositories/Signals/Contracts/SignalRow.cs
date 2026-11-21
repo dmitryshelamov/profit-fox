@@ -1,4 +1,4 @@
-namespace ProfitFox.Infrastructure.Signals;
+namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Signals.Contracts;
 
 /// <summary>
 ///     A row of <c>signals</c> with the graph of its latest version.

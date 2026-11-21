@@ -12,9 +12,9 @@ using ProfitFox.Application.Commands.Runs;
 using ProfitFox.Application.Contracts.Runs;
 using ProfitFox.Domain.Services.Runs;
 using ProfitFox.Domain.ValueObjects.Runs.Enums;
-using ProfitFox.Infrastructure.Hypotheses;
-using ProfitFox.Infrastructure.Ledger;
-using ProfitFox.Infrastructure.MarketData;
+using ProfitFox.Infrastructure.Clients.MarketData;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Hypotheses;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger;
 using ProfitFox.Presentation.Errors;
 using ProfitFox.Presentation.Hypotheses;
 using ProfitFox.Presentation.Instruments;
@@ -131,10 +131,10 @@ public sealed class PreviewTests
 
         DateTimeOffset end = Periods.ExplorationEnd;
         Assert.That(DateTimeOffset.FromUnixTimeMilliseconds(preview.Candles[^1].OpenTime), Is.EqualTo(end.AddHours(-4)), "the last candle closes at the end");
-        Assert.That(market.Data.CandleRequests, Has.All.Matches<ProfitFox.Infrastructure.MarketData.Protos.CandleHistoryRequest>(request => request.To.ToDateTimeOffset() <= end));
+        Assert.That(market.Data.CandleRequests, Has.All.Matches<ProfitFox.Infrastructure.Clients.MarketData.Protos.CandleHistoryRequest>(request => request.To.ToDateTimeOffset() <= end));
         Assert.That(
             market.Data.FundingRequests,
-            Has.All.Matches<ProfitFox.Infrastructure.MarketData.Protos.FundingPaymentHistoryRequest>(request => request.To.ToDateTimeOffset() <= end.AddSeconds(1)),
+            Has.All.Matches<ProfitFox.Infrastructure.Clients.MarketData.Protos.FundingPaymentHistoryRequest>(request => request.To.ToDateTimeOffset() <= end.AddSeconds(1)),
             "the payment exactly at the end is read, as by a run of exploration");
     }
 

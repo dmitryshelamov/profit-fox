@@ -1,7 +1,7 @@
 using Grpc.Net.Client;
 
 using ProfitFox.Application.Ports.MarketData;
-using ProfitFox.Infrastructure.MarketData;
+using ProfitFox.Infrastructure.Clients.MarketData;
 
 namespace ProfitFox.Presentation;
 

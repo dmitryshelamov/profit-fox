@@ -5,8 +5,10 @@ using Npgsql;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.Signals;
 using ProfitFox.Domain.ValueObjects.Signals;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Signals.Contracts;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Signals.Converters;
 
-namespace ProfitFox.Infrastructure.Signals;
+namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Signals;
 
 /// <summary>
 ///     The saved signals in the tables <c>signals</c> and <c>signal_versions</c> (spec signal-constructor «Версии

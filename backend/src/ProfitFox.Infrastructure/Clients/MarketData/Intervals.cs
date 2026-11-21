@@ -1,6 +1,6 @@
-using ProfitFox.Infrastructure.MarketData.Protos;
+using ProfitFox.Infrastructure.Clients.MarketData.Protos;
 
-namespace ProfitFox.Infrastructure.MarketData;
+namespace ProfitFox.Infrastructure.Clients.MarketData;
 
 /// <summary>
 ///     The candle intervals of the market-data service.

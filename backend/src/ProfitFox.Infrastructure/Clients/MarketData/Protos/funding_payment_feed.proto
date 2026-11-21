@@ -7,7 +7,7 @@ package profitfox.marketdata.v1;
 import "google/protobuf/timestamp.proto";
 import "candle_feed.proto";
 
-option csharp_namespace = "ProfitFox.Infrastructure.MarketData.Protos";
+option csharp_namespace = "ProfitFox.Infrastructure.Clients.MarketData.Protos";
 
 // The funding payments of the catalog as the exchange makes them.
 service FundingPaymentFeed {

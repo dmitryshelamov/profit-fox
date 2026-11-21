@@ -4,8 +4,8 @@ using ProfitFox.Application.Commands.Hypotheses;
 using ProfitFox.Application.Commands.Runs;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.Ports.Runs;
-using ProfitFox.Infrastructure.MarketData;
-using ProfitFox.Infrastructure.Persistence;
+using ProfitFox.Infrastructure.Clients.MarketData;
+using ProfitFox.Infrastructure.Persistence.Postgres;
 
 namespace ProfitFox.Worker;
 

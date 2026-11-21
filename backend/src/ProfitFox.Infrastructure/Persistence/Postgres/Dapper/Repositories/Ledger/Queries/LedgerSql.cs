@@ -1,6 +1,7 @@
 using ProfitFox.Domain.ValueObjects.Ledger;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger.Contracts;
 
-namespace ProfitFox.Infrastructure.Ledger;
+namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger.Queries;
 
 /// <summary>
 ///     The statements on <c>ledger</c> and <c>reports</c> that the ledger uses, and the two ways between a

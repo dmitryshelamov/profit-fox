@@ -7,7 +7,7 @@ using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Signals;
 
-namespace ProfitFox.Infrastructure.Signals;
+namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Signals.Converters;
 
 /// <summary>
 ///     The JSON of a signal: the file of the repository that the import reads (<c>name</c>, <c>description</c>, <c>graph</c>

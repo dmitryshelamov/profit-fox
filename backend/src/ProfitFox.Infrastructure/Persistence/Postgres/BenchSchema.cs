@@ -4,7 +4,7 @@ using FluentMigrator;
 
 using Npgsql;
 
-namespace ProfitFox.Infrastructure.Persistence;
+namespace ProfitFox.Infrastructure.Persistence.Postgres;
 
 /// <summary>
 ///     The version of the schema of the bench database: the one these binaries need, and the one the database has. A Worker

@@ -11,7 +11,7 @@ using Npgsql;
 using ProfitFox.Application.Ports.Runs;
 using ProfitFox.Domain.ValueObjects.Ledger;
 using ProfitFox.Domain.ValueObjects.Runs;
-using ProfitFox.Infrastructure.Runs;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Runs;
 using ProfitFox.Presentation.Errors;
 using ProfitFox.Presentation.Runs;
 using ProfitFox.Tests.Integration.Database;
