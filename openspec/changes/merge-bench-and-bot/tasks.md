@@ -60,14 +60,14 @@
 
 ## 5. Продовые имена
 
-- [ ] 5.1 `docker-compose.prod.yml`, `deploy/deploy.sh`, `deploy/deploy.test.sh` и `.github/workflows/deploy.yml` — по таблице
+- [x] 5.1 `docker-compose.prod.yml`, `deploy/deploy.sh`, `deploy/deploy.test.sh` и `.github/workflows/deploy.yml` — по таблице
   design.md, решение 8; раскладка служб и `DEPLOY_PROTOCOL` прежние. `docker-compose.yml` для разработки — только
   комментарий (решение 9). Проверить:
   - `shellcheck deploy/*.sh` и `bash deploy/deploy.test.sh` проходят;
   - `PROFIT_FOX_VERSION=1 PROFIT_FOX_DB_PASSWORD=x docker compose -f docker-compose.prod.yml config` завершается успешно и
     показывает образы `profit-fox:1` и `profit-fox-worker:1`;
   - строка `profit-fox-bench` остаётся только в `docker-compose.yml` и в комментарии о стенде Мака.
-- [ ] 5.2 Раздел «Production» и «Разовые шаги владельца» в `README.md` — новые имена образов, каталога, ключа, переменных.
+- [x] 5.2 Раздел «Production» и «Разовые шаги владельца» в `README.md` — новые имена образов, каталога, ключа, переменных.
   Формулировки открытых задач 8.4 и 8.5 в `openspec/changes/add-bench-service/tasks.md` — те же новые имена, отметки задач
   не менять. Проверить: в обоих файлах нет имён из левого столбца таблицы решения 8, кроме стенда Мака.
 

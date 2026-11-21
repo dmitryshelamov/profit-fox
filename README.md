@@ -123,12 +123,12 @@ npm --prefix frontend run generate:api
 ## Production (soyo-02)
 
 На soyo-02 (`192.168.8.213`) работает свой стенд, не связанный со стендом на Маке: свои база, Worker'ы и журнал. Описание —
-`docker-compose.prod.yml`, проект `profit-fox-bench` в `~/profit-fox-bench`:
+`docker-compose.prod.yml`, проект `profit-fox` в `~/profit-fox`:
 
-- `db` — Postgres 17 (том `profit-fox-bench-db`, порт наружу не открыт, 1 ГБ);
-- `bench` — API со страницей, образ `ghcr.io/dmitryshelamov/profit-fox-bench:<N>`, порт `5240`, 512 МБ. При старте
+- `db` — Postgres 17 (том `profit-fox-db`, порт наружу не открыт, 1 ГБ);
+- `api` — API со страницей, образ `ghcr.io/dmitryshelamov/profit-fox:<N>`, порт `5240`, 512 МБ. При старте
   мигрирует базу; новая база пуста;
-- `worker-1`, `worker-2` — образ `ghcr.io/dmitryshelamov/profit-fox-bench-worker:<N>`, имена `soyo-02-1` и `soyo-02-2`, по 1 ГБ.
+- `worker-1`, `worker-2` — образ `ghcr.io/dmitryshelamov/profit-fox-worker:<N>`, имена `soyo-02-1` и `soyo-02-2`, по 1 ГБ.
   Берут данные у сервиса данных на этой же машине (`5237`, `5236`).
 
 Страница — `http://192.168.8.213:5240/`. Без авторизации, как остальные службы в локальной сети.
@@ -142,14 +142,14 @@ npm --prefix frontend run generate:api
 3. Задача `deploy` ждёт Approve владельца в окружении `production`, затем раннер на soyo-03 по SSH вызывает на soyo-02
    `deploy <N> 1`.
 4. Ключ может запустить только `deploy.sh`. Тот берёт коммит тега `vN` на GitHub, принимает его лишь из `release/0.1.0`,
-   проверяет метку коммита у обоих образов и поднимает: `db` (ждёт готовности), `bench` (ждёт `/health` до 120 с), затем
-   `worker-1` и `worker-2`. В конце пишет `~/profit-fox-bench/current` и чистит старые образы. Том базы никогда не удаляется.
+   проверяет метку коммита у обоих образов и поднимает: `db` (ждёт готовности), `api` (ждёт `/health` до 120 с), затем
+   `worker-1` и `worker-2`. В конце пишет `~/profit-fox/current` и чистит старые образы. Том базы никогда не удаляется.
 
 ### Откат
 
 Тот же деплой прежнего номера: в GitHub, Actions, Deploy, «Run workflow» на ветке `release/0.1.0`, поле `version` — прежнее
 `N`; затем Approve. Миграции идут только вперёд: до первой новой версии схемы откат кода безопасен, после неё откат —
-отдельное решение. Текущая версия — `~/profit-fox-bench/current` на soyo-02.
+отдельное решение. Текущая версия — `~/profit-fox/current` на soyo-02.
 
 ### Разовые шаги владельца
 
@@ -160,20 +160,20 @@ npm --prefix frontend run generate:api
 3. Ключ деплоя. На soyo-03 под пользователем раннера:
 
    ```bash
-   ssh-keygen -t ed25519 -N '' -f ~/.ssh/profit-fox-bench-deploy
+   ssh-keygen -t ed25519 -N '' -f ~/.ssh/profit-fox-deploy
    ```
 
    и адрес soyo-02 в `~/.ssh/known_hosts`. На soyo-02 в `~/.ssh/authorized_keys` одной строкой, где `<ключ>` — содержимое
-   `profit-fox-bench-deploy.pub`:
+   `profit-fox-deploy.pub`:
 
    ```text
-   command="~/profit-fox-bench/deploy.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty,from="192.168.8.142" <ключ>
+   command="~/profit-fox/deploy.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty,from="192.168.8.142" <ключ>
    ```
 
-4. На soyo-02: `~/profit-fox-bench/.env.prod` с правами `600` и одной строкой `BENCH_DB_PASSWORD=<hex>` (например,
-   `openssl rand -hex 24`); `deploy/deploy.sh` из репозитория скопировать как `~/profit-fox-bench/deploy.sh` с правом
+4. На soyo-02: `~/profit-fox/.env.prod` с правами `600` и одной строкой `PROFIT_FOX_DB_PASSWORD=<hex>` (например,
+   `openssl rand -hex 24`); `deploy/deploy.sh` из репозитория скопировать как `~/profit-fox/deploy.sh` с правом
    исполнения. Нужны `curl`, `jq` и `docker`.
-5. Пакеты `profit-fox-bench` и `profit-fox-bench-worker` в GHCR сделать публичными после первой публикации: сервер тянет их
+5. Пакеты `profit-fox` и `profit-fox-worker` в GHCR сделать публичными после первой публикации: сервер тянет их
    без входа.
 6. В `~/profit-fox-market-data/config/market-data.json` на soyo-02 задать `HistoryRead:MaxConcurrentReads` = 3: два Worker'а и
    предпросмотр стенда делят чтения истории сервиса данных.
