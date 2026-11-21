@@ -1,7 +1,9 @@
-using Grpc.Net.Client;
+using System.Text.Json.Serialization;
 
-using ProfitFox.Application.Ports.MarketData;
-using ProfitFox.Infrastructure.Clients.MarketData;
+using ProfitFox.Infrastructure;
+using ProfitFox.Infrastructure.Persistence.Postgres.FluentMigrator;
+using ProfitFox.Presentation.Formatters;
+using ProfitFox.Presentation.HealthChecks;
 
 namespace ProfitFox.Presentation;
 
@@ -15,32 +17,52 @@ public class Program
     public static async Task Main(string[] args)
     {
         WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
-        var grpc = new Uri(Setting(builder.Configuration, "MarketData:GrpcUrl"));
-        var rest = new Uri(Setting(builder.Configuration, "MarketData:RestUrl"));
-        string connectionString = Setting(builder.Configuration, "ConnectionStrings:Bench");
 
-        builder.Services.AddSingleton(_ => GrpcChannel.ForAddress(grpc, new GrpcChannelOptions { MaxReceiveMessageSize = 64 * 1024 * 1024 }));
-        builder.Services.AddSingleton<IHistorySource>(services => new GrpcHistorySource(services.GetRequiredService<GrpcChannel>()));
-        builder.Services.AddSingleton<IInstrumentCatalog>(_ => new InstrumentCatalog(new HttpClient { BaseAddress = rest, Timeout = TimeSpan.FromMinutes(1) }));
-        builder.Services.AddBenchPresentation(connectionString);
+        builder.Services.AddInfrastructure(builder.Configuration);
+
+        builder.Services.AddRouting(options => options.LowercaseUrls = true);
+        builder.Services
+            .AddControllers(options => options.InputFormatters.Insert(0, new PlainTextInputFormatter()))
+            .AddJsonOptions(options =>
+            {
+                options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+                options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+            });
+
+        // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+        builder.Services.AddOpenApi();
+
+        // /health answers 200 while the database answers.
+        builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
         WebApplication app = builder.Build();
-        app.PrepareBench();
+
+        // A new database stays empty, and hypotheses are added through the API. A failure stops the start.
+        app.Services.MigrateBench();
 
         if (app.Environment.IsDevelopment())
         {
             app.MapOpenApi();
         }
 
-        app.MapBench();
+        // The built frontend, when the service has a wwwroot folder, with its pages falling back to index.html.
+        bool hasFrontend = app.Environment.WebRootPath is { Length: > 0 } webRoot && Directory.Exists(webRoot);
+        if (hasFrontend)
+        {
+            // Routing is put before the files by hand: the implicit one would pick the fallback endpoint first, and the files would never be served.
+            app.UseDefaultFiles();
+            app.UseStaticFiles();
+            app.UseRouting();
+        }
+
+        app.MapControllers();
+        app.MapHealthChecks("/health");
+        if (hasFrontend)
+        {
+            // The fallback leaves /api and /health alone, so an unknown route there stays a 404.
+            app.MapFallbackToFile("{*path:regex(^(?!api(/|$)|health$).*$)}", "index.html");
+        }
 
         await app.RunAsync();
-    }
-
-    private static string Setting(IConfiguration configuration, string key)
-    {
-        return configuration[key] is { Length: > 0 } value
-            ? value
-            : throw new InvalidOperationException($"The setting {key} is not set.");
     }
 }

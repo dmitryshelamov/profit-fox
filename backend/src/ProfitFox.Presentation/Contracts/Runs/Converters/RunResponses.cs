@@ -1,6 +1,5 @@
 using ProfitFox.Application.Contracts.Runs;
-using ProfitFox.Application.Ports.Runs;
-using ProfitFox.Domain.ValueObjects.Ledger;
+using ProfitFox.Domain.ValueObjects.Runs;
 
 namespace ProfitFox.Presentation.Contracts.Runs.Converters;
 
@@ -12,7 +11,7 @@ public static class RunResponses
     /// <summary>
     ///     A run of the queue that waits or goes, or one just queued.
     /// </summary>
-    public static RunResponse Of(RunRecord run)
+    public static RunResponse Of(RunInternal run)
     {
         return Of(run, entry: null, report: null);
     }
@@ -20,21 +19,21 @@ public static class RunResponses
     /// <summary>
     ///     A line of the list of finished runs, without its report.
     /// </summary>
-    public static RunResponse Of(FinishedRun finished)
+    public static RunResponse Of(FinishedRunInternal finished)
     {
-        LedgerEntry entry = finished.Entry;
+        LedgerEntryInternal entry = finished.Entry;
         return Finished(entry, finished.Parity, report: null);
     }
 
     /// <summary>
     ///     One run with its row in the queue and, once it ended, its line and report in the ledger.
     /// </summary>
-    public static RunResponse Of(RunDetails details)
+    public static RunResponse Of(RunDetailsInternal details)
     {
         return Of(details.Run, details.Entry, details.Report);
     }
 
-    private static RunResponse Of(RunRecord run, LedgerEntry? entry, string? report)
+    private static RunResponse Of(RunInternal run, LedgerEntryInternal? entry, string? report)
     {
         return new RunResponse(
             run.Id,
@@ -54,7 +53,7 @@ public static class RunResponses
             entry is null ? null : Result(entry, report));
     }
 
-    private static RunResponse Finished(LedgerEntry entry, bool parity, string? report)
+    private static RunResponse Finished(LedgerEntryInternal entry, bool parity, string? report)
     {
         return new RunResponse(
             entry.RunId,
@@ -74,7 +73,7 @@ public static class RunResponses
             Result(entry, report));
     }
 
-    private static RunResultResponse Result(LedgerEntry entry, string? report)
+    private static RunResultResponse Result(LedgerEntryInternal entry, string? report)
     {
         return new RunResultResponse(
             entry.Time,

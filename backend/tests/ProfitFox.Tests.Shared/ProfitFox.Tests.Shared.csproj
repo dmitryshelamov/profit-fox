@@ -1,3 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\ProfitFox.Application\ProfitFox.Application.csproj"/>
+    </ItemGroup>
+
 </Project>

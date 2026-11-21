@@ -1,16 +1,17 @@
 using Dapper;
 
+using MediatR;
+
+using Microsoft.Extensions.DependencyInjection;
+
 using Npgsql;
 
-using ProfitFox.Application.Commands.Hypotheses;
-using ProfitFox.Application.Commands.Runs;
-using ProfitFox.Application.Contracts.Runs;
+using ProfitFox.Application.Commands.Hypotheses.AddHypothesis;
+using ProfitFox.Application.Commands.Runs.ExecuteRun;
 using ProfitFox.Domain.ValueObjects.Ledger;
 using ProfitFox.Domain.ValueObjects.Runs;
 using ProfitFox.Domain.ValueObjects.Runs.Enums;
 using ProfitFox.Domain.ValueObjects.Trades.Enums;
-using ProfitFox.Infrastructure.Clients.MarketData;
-using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Hypotheses;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger;
 using ProfitFox.Tests.Integration.MarketData;
 
@@ -35,15 +36,14 @@ public sealed class OverlapRunTests
 
     private static readonly DateTimeOffset Today = new DateTimeOffset(2026, 11, 18, 0, 0, 0, TimeSpan.Zero);
     private static readonly string Fixtures = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures");
-    private readonly HypothesisCatalog _hypotheses = new HypothesisCatalog(new HypothesisStore(BenchDatabase.DataSource));
-    private readonly RunLedger _ledger = new RunLedger(BenchDatabase.DataSource);
+    private readonly LedgerRepository _ledger = new LedgerRepository(BenchDatabase.DataSource);
 
     [SetUp]
     public async Task CreateBench()
     {
         FakeMarketData.CoveredUntil = FakeMarketData.CoveredFrom.AddDays(28);
         await BenchDatabase.Reset();
-        await _hypotheses.Add(File.ReadAllText(Path.Combine(Fixtures, "H0002.json")), CancellationToken.None);
+        await BenchServices.Sender.Send(new AddHypothesisCommand(File.ReadAllText(Path.Combine(Fixtures, "H0002.json"))), CancellationToken.None);
     }
 
     [TearDown]
@@ -57,9 +57,9 @@ public sealed class OverlapRunTests
     {
         await using MarketDataServer server = await MarketDataServer.Start();
 
-        RunResult result = await Runner(server).Run(Options(parity: true), CancellationToken.None);
+        ExecuteRunResult result = await Run(server, Options(parity: true));
 
-        LedgerEntry entry = (await _ledger.Entries(CancellationToken.None)).Single();
+        LedgerEntry entry = (await _ledger.EntriesAsync(CancellationToken.None)).Single();
         Assert.That(entry.Status, Is.EqualTo(RunStatus.Parity));
         Assert.That(result.Skipped, Is.EqualTo(Pairs * SkippedPerPair));
         Assert.That(result.Rows, Has.Count.EqualTo(Pairs * (OpenedPerPair + LeftOutPerPair)), "a skipped event has no row");
@@ -82,9 +82,9 @@ public sealed class OverlapRunTests
     public async Task A_run_with_a_verdict_skips_the_same_events_as_the_parity_run()
     {
         await using MarketDataServer server = await MarketDataServer.Start();
-        RunResult parity = await Runner(server).Run(Options(parity: true), CancellationToken.None);
+        ExecuteRunResult parity = await Run(server, Options(parity: true));
 
-        RunResult run = await Runner(server).Run(Options(parity: false), CancellationToken.None);
+        ExecuteRunResult run = await Run(server, Options(parity: false));
 
         Assert.That(run.Skipped, Is.EqualTo(parity.Skipped));
         Assert.That(run.Rows.Select(row => (row.Instrument, row.Moment, row.Status)), Is.EqualTo(parity.Rows.Select(row => (row.Instrument, row.Moment, row.Status))));
@@ -94,14 +94,15 @@ public sealed class OverlapRunTests
         Assert.That(run.Rows.Where(row => row.Status == TradeStatus.Ok), Has.All.Matches<EventRow>(row => row.Outcome!.ExitTime == row.Moment.AddDays(2)));
     }
 
-    private HypothesisRunner Runner(MarketDataServer server)
+    private static async Task<ExecuteRunResult> Run(MarketDataServer server, ExecuteRunCommand command)
     {
-        return new HypothesisRunner(_hypotheses, new GrpcHistorySource(server.Channel), new InstrumentCatalog(server.Http), _ledger, TextWriter.Null);
+        await using ServiceProvider services = BenchServices.Start(server);
+        return await services.GetRequiredService<ISender>().Send(command, CancellationToken.None);
     }
 
-    private static RunOptions Options(bool parity)
+    private static ExecuteRunCommand Options(bool parity)
     {
-        return new RunOptions("H0002", Version: null, Period.Exploration, parity, Today);
+        return new ExecuteRunCommand("H0002", Version: null, Period.Exploration, parity, Today);
     }
 
     private static async Task<string> Report(string runId)

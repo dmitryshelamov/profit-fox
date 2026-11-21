@@ -8,7 +8,7 @@ namespace ProfitFox.Presentation.Contracts.Errors.Converters;
 /// </summary>
 public static class RequestErrors
 {
-    public static RequestError Of(PreviewError error)
+    public static RequestError Of(PreviewErrorInternal error)
     {
         return error.Graph is { } graph ? Of(graph) : new RequestError(error.Code, error.Reason) { Field = error.Field };
     }

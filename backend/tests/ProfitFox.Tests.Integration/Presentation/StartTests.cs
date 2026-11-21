@@ -39,7 +39,7 @@ public sealed class StartTests
     public async Task A_start_on_an_empty_database_migrates_it_and_serves_no_hypotheses()
     {
         string empty = await BenchDatabase.NewDatabase();
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(_market, new BenchStart(empty, Migrate: true));
+        await using var api = new BenchTestApplication(_market, new BenchStart(empty));
 
         HypothesisResponse[] hypotheses = (await api.Http.GetFromJsonAsync<HypothesisResponse[]>("/api/hypotheses", Json))!;
 
@@ -50,8 +50,12 @@ public sealed class StartTests
     [Test]
     public async Task Health_is_not_ok_while_the_database_does_not_answer()
     {
-        const string nowhere = "Host=127.0.0.1;Port=1;Username=x;Password=x;Database=x;Timeout=2";
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(_market, new BenchStart(nowhere));
+        // The API migrates its database at start, so the database goes away after the start.
+        string database = await BenchDatabase.NewDatabase();
+        await using var api = new BenchTestApplication(_market, new BenchStart(database));
+        Assert.That((await api.Http.GetAsync("/health")).StatusCode, Is.EqualTo(HttpStatusCode.OK), "the API has started");
+
+        await BenchDatabase.DropDatabase(database);
 
         Assert.That((await api.Http.GetAsync("/health")).StatusCode, Is.EqualTo(HttpStatusCode.ServiceUnavailable));
     }
@@ -62,7 +66,7 @@ public sealed class StartTests
         Directory.CreateDirectory(Path.Combine(_webRoot, "assets"));
         await File.WriteAllTextAsync(Path.Combine(_webRoot, "index.html"), "<html>bench</html>");
         await File.WriteAllTextAsync(Path.Combine(_webRoot, "assets", "app.js"), "console.log(1)");
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(_market, new BenchStart(WebRoot: _webRoot));
+        await using var api = new BenchTestApplication(_market, new BenchStart(WebRoot: _webRoot));
 
         Assert.That(await api.Http.GetStringAsync("/"), Is.EqualTo("<html>bench</html>"));
         Assert.That(await api.Http.GetStringAsync("/runs/abc"), Is.EqualTo("<html>bench</html>"), "a page of the frontend");
@@ -75,7 +79,7 @@ public sealed class StartTests
     [Test]
     public async Task Without_a_wwwroot_folder_nothing_but_the_api_is_served()
     {
-        await using BenchPresentationServer api = await BenchPresentationServer.Start(_market);
+        await using var api = new BenchTestApplication(_market);
 
         Assert.That((await api.Http.GetAsync("/")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
         Assert.That((await api.Http.GetAsync("/runs/abc")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));

@@ -2,7 +2,6 @@ using Dapper;
 
 using Npgsql;
 
-using ProfitFox.Application.Ports.Runs;
 using ProfitFox.Domain.ValueObjects.Ledger;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger;
 
@@ -35,7 +34,7 @@ internal static class LedgerLines
         await connection.ExecuteAsync(
             "INSERT INTO runs (id, hypothesis_id, version, period, kind, status, finished_at) VALUES (@RunId, @Hypothesis, @Version, @Period, @Kind, 'finished', now())",
             new { entry.RunId, entry.Hypothesis, entry.Version, entry.Period, Kind = status == RunStatus.Parity ? "parity" : "verdict" });
-        await new RunLedger(BenchDatabase.DataSource).Decide(_ => new Decision(entry, Report: "# report"), CancellationToken.None);
+        await new LedgerRepository(BenchDatabase.DataSource).DecideAsync(_ => new Decision(entry, Report: "# report"), CancellationToken.None);
         return entry;
     }
 }

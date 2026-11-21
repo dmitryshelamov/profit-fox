@@ -1,3 +1,5 @@
+using MediatR;
+
 using Microsoft.AspNetCore.Mvc;
 
 using ProfitFox.Application.Contracts.Preview;
@@ -15,7 +17,7 @@ namespace ProfitFox.Presentation.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-public class PreviewController(SignalPreview preview) : ControllerBase
+public class PreviewController(ISender sender) : ControllerBase
 {
     [HttpPost(Name = "PreviewSignal")]
     [ProducesResponseType<PreviewResponse>(StatusCodes.Status200OK)]
@@ -25,7 +27,7 @@ public class PreviewController(SignalPreview preview) : ControllerBase
     {
         try
         {
-            PreviewOutcome outcome = await preview.Run(new PreviewQuery(request.Instrument, request.Timeframe, request.Signal), cancellation);
+            PreviewOutcomeInternal outcome = await sender.Send(new PreviewSignalQuery(request.Instrument, request.Timeframe, request.Signal), cancellation);
             return outcome.Preview is { } found
                 ? PreviewResponses.Of(found)
                 : BadRequest(new ErrorResponse([.. outcome.Errors.Select(RequestErrors.Of)]));

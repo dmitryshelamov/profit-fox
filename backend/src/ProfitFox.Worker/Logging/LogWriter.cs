@@ -3,17 +3,12 @@ using System.Text;
 namespace ProfitFox.Worker.Logging;
 
 /// <summary>
-///     A <see cref="TextWriter" /> that gives every line it is written to the log: the runner and the executor of the
-///     application write their progress to a writer.
+///     A <see cref="TextWriter" /> that gives every line it is written to the log: the wait for the schema of the database
+///     writes to a writer.
 /// </summary>
 internal sealed class LogWriter(ILogger logger) : TextWriter
 {
     public override Encoding Encoding => Encoding.UTF8;
-
-    public static LogWriter Of<T>(IServiceProvider services)
-    {
-        return new LogWriter(services.GetRequiredService<ILoggerFactory>().CreateLogger<T>());
-    }
 
     public override void Write(char value)
     {

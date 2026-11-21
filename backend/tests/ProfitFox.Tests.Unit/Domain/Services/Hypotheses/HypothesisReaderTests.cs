@@ -54,6 +54,24 @@ public sealed class HypothesisReaderTests
     }
 
     [Test]
+    public void A_stored_text_of_another_hypothesis_is_refused()
+    {
+        var stored = new StoredHypothesis("H0002", Version: 4, "hash", H0001Text, DateTimeOffset.UnixEpoch);
+
+        HypothesisException error = Assert.Throws<HypothesisException>(() => HypothesisReader.Parse(stored))!;
+
+        Assert.That(error.Errors, Is.EqualTo(new[] { "the text is of H0001" }));
+    }
+
+    [Test]
+    public void A_stored_version_is_read_as_that_version()
+    {
+        var stored = new StoredHypothesis("H0001", Version: 4, "hash", H0001Text, DateTimeOffset.UnixEpoch);
+
+        Assert.That(HypothesisReader.Parse(stored).Version, Is.EqualTo(4));
+    }
+
+    [Test]
     public void An_id_that_is_not_H_and_four_digits_is_refused()
     {
         HypothesisException error = Refused(file => file["id"] = "X1");

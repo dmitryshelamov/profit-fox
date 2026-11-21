@@ -17,7 +17,7 @@ public static class BenchSchema
     /// <summary>
     ///     The version of the latest migration of these binaries.
     /// </summary>
-    public static long Expected { get; } = typeof(BenchInfrastructure).Assembly
+    public static long Expected { get; } = typeof(PostgresRegistrar).Assembly
         .GetTypes()
         .Select(type => type.GetCustomAttribute<MigrationAttribute>()?.Version ?? 0)
         .Max();

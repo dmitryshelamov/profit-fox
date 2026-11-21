@@ -1,11 +1,16 @@
+using MediatR;
+
 using Microsoft.AspNetCore.Mvc;
 
-using ProfitFox.Application.Commands.Runs;
+using ProfitFox.Application.Commands.Runs.CancelRun;
+using ProfitFox.Application.Commands.Runs.EnqueueRun;
+using ProfitFox.Application.Contracts.Runs;
 using ProfitFox.Application.Exceptions;
-using ProfitFox.Application.Ports.Runs;
 using ProfitFox.Application.Queries.Runs;
+using ProfitFox.Domain.Entities.Runs.Enums;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Services.Runs;
+using ProfitFox.Domain.ValueObjects.Runs;
 using ProfitFox.Domain.ValueObjects.Runs.Enums;
 using ProfitFox.Presentation.Contracts.Errors;
 using ProfitFox.Presentation.Contracts.Runs;
@@ -19,7 +24,7 @@ namespace ProfitFox.Presentation.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-public class RunsController(RunScheduler scheduler, RunBoard board) : ControllerBase
+public class RunsController(ISender sender) : ControllerBase
 {
     private const int DefaultLimit = 20;
     private const int MaxLimit = 200;
@@ -59,7 +64,7 @@ public class RunsController(RunScheduler scheduler, RunBoard board) : Controller
 
         try
         {
-            RunRecord run = await scheduler.Enqueue(request.Hypothesis!, request.Version, period, request.Kind == RunKinds.Parity, cancellation);
+            RunInternal run = await sender.Send(new EnqueueRunCommand(request.Hypothesis!, request.Version, period, request.Kind == RunKinds.Parity), cancellation);
             return CreatedAtRoute("GetRun", new { id = run.Id }, RunResponses.Of(run));
         }
         catch (HypothesisNotFoundException exception)
@@ -86,10 +91,10 @@ public class RunsController(RunScheduler scheduler, RunBoard board) : Controller
     {
         if (active)
         {
-            return (await board.Active(cancellation)).Select(RunResponses.Of).ToArray();
+            return (await sender.Send(new GetActiveRunsQuery(), cancellation)).Select(RunResponses.Of).ToArray();
         }
 
-        return (await board.Finished(Math.Clamp(limit ?? DefaultLimit, 1, MaxLimit), cancellation)).Select(RunResponses.Of).ToArray();
+        return (await sender.Send(new GetFinishedRunsQuery(Math.Clamp(limit ?? DefaultLimit, 1, MaxLimit)), cancellation)).Select(RunResponses.Of).ToArray();
     }
 
     /// <summary>
@@ -100,7 +105,7 @@ public class RunsController(RunScheduler scheduler, RunBoard board) : Controller
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<RunResponse>> Get(string id, CancellationToken cancellation)
     {
-        return await board.Find(id, cancellation) is { } details
+        return await sender.Send(new GetRunQuery(id), cancellation) is { } details
             ? RunResponses.Of(details)
             : Problem($"There is no run {id}.", statusCode: StatusCodes.Status404NotFound);
     }
@@ -115,7 +120,7 @@ public class RunsController(RunScheduler scheduler, RunBoard board) : Controller
     [ProducesResponseType<RunConflictResponse>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult> Cancel(string id, CancellationToken cancellation)
     {
-        CancelOutcome outcome = await scheduler.Cancel(id, cancellation);
+        CancelOutcome outcome = await sender.Send(new CancelRunCommand(id), cancellation);
         return outcome switch
         {
             CancelOutcome.Removed or CancelOutcome.Requested => NoContent(),

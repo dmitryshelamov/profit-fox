@@ -8,7 +8,7 @@ using Dapper;
 
 using Npgsql;
 
-using ProfitFox.Application.Ports.Runs;
+using ProfitFox.Domain.Entities.Runs;
 using ProfitFox.Domain.ValueObjects.Ledger;
 using ProfitFox.Domain.ValueObjects.Runs;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Runs;
@@ -28,7 +28,7 @@ public sealed class RunsTests
 {
     private static readonly JsonSerializerOptions Json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
     private MarketDataServer _market = null!;
-    private BenchPresentationServer _api = null!;
+    private BenchTestApplication _api = null!;
 
     [SetUp]
     public async Task Start()
@@ -36,7 +36,7 @@ public sealed class RunsTests
         FakeMarketData.CoveredUntil = FakeMarketData.CoveredFrom.AddDays(28);
         await BenchDatabase.Reset();
         _market = await MarketDataServer.Start();
-        _api = await BenchPresentationServer.Start(_market);
+        _api = new BenchTestApplication(_market);
         await _api.Http.PostAsync("/api/hypotheses", new StringContent(BenchRepository.H0001Text(), Encoding.UTF8, "text/plain"));
     }
 
@@ -66,9 +66,9 @@ public sealed class RunsTests
     {
         RunResponse first = await Queued("H0001", "exploration", "parity");
         RunResponse second = await Queued("H0001", "exploration", "verdict");
-        var queue = new RunQueue(BenchDatabase.DataSource);
-        RunRecord taken = (await queue.Claim("w-1", TimeSpan.FromMinutes(1), CancellationToken.None))!;
-        await queue.Renew(taken.Id, "w-1", TimeSpan.FromMinutes(1), pairsDone: 414, pairsTotal: 828, CancellationToken.None);
+        var queue = new RunRepository(BenchDatabase.DataSource);
+        Run taken = (await queue.ClaimAsync("w-1", TimeSpan.FromMinutes(1), CancellationToken.None))!;
+        await queue.RenewAsync(taken.Id, "w-1", TimeSpan.FromMinutes(1), pairsDone: 414, pairsTotal: 828, CancellationToken.None);
 
         RunResponse[] active = (await _api.Http.GetFromJsonAsync<RunResponse[]>("/api/runs?active=true", Json))!;
 
@@ -148,7 +148,7 @@ public sealed class RunsTests
     public async Task A_run_that_goes_is_asked_to_stop_with_204()
     {
         RunResponse queued = await Queued("H0001", "exploration", "verdict");
-        await new RunQueue(BenchDatabase.DataSource).Claim("w-1", TimeSpan.FromMinutes(1), CancellationToken.None);
+        await new RunRepository(BenchDatabase.DataSource).ClaimAsync("w-1", TimeSpan.FromMinutes(1), CancellationToken.None);
 
         HttpResponseMessage cancelled = await _api.Http.PostAsync($"/api/runs/{queued.Id}/cancel", content: null);
 

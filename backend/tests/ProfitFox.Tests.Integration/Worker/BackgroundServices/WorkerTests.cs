@@ -1,17 +1,21 @@
 using Dapper;
 
+using MediatR;
+
+using Microsoft.Extensions.DependencyInjection;
+
 using Npgsql;
 
-using ProfitFox.Application.Commands.Hypotheses;
-using ProfitFox.Application.Commands.Runs;
-using ProfitFox.Application.Ports.Runs;
+using ProfitFox.Application.Commands.Hypotheses.AddHypothesis;
+using ProfitFox.Application.Commands.Runs.CancelRun;
+using ProfitFox.Application.Commands.Runs.EnqueueRun;
+using ProfitFox.Application.Contracts.Runs;
+using ProfitFox.Domain.Entities.Runs.Enums;
 using ProfitFox.Domain.ValueObjects.Ledger;
 using ProfitFox.Domain.ValueObjects.Runs;
 using ProfitFox.Domain.ValueObjects.Runs.Enums;
 using ProfitFox.Infrastructure.Persistence.Postgres;
-using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Hypotheses;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger;
-using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Runs;
 using ProfitFox.Tests.Integration.MarketData;
 
 namespace ProfitFox.Tests.Integration.Worker.BackgroundServices;
@@ -23,10 +27,9 @@ namespace ProfitFox.Tests.Integration.Worker.BackgroundServices;
 [NonParallelizable]
 public sealed class WorkerTests
 {
-    private readonly RunLedger _ledger = new RunLedger(BenchDatabase.DataSource);
+    private readonly LedgerRepository _ledger = new LedgerRepository(BenchDatabase.DataSource);
     private readonly List<WorkerHost> _workers = [];
     private MarketDataServer _server = null!;
-    private RunScheduler _scheduler = null!;
 
     [SetUp]
     public async Task CreateBench()
@@ -34,9 +37,7 @@ public sealed class WorkerTests
         FakeMarketData.CoveredUntil = FakeMarketData.CoveredFrom.AddDays(28);
         await BenchDatabase.Reset();
         _server = await MarketDataServer.Start();
-        var hypotheses = new HypothesisCatalog(new HypothesisStore(BenchDatabase.DataSource));
-        await hypotheses.Add(BenchRepository.H0001Text(), CancellationToken.None);
-        _scheduler = new RunScheduler(hypotheses, _ledger, new RunQueue(BenchDatabase.DataSource));
+        await BenchServices.Sender.Send(new AddHypothesisCommand(BenchRepository.H0001Text()), CancellationToken.None);
     }
 
     [TearDown]
@@ -55,11 +56,11 @@ public sealed class WorkerTests
     public async Task A_queued_run_is_computed_to_its_line_and_report_by_a_Worker()
     {
         await StartWorker("w-1");
-        RunRecord run = await Enqueue();
+        RunInternal run = await Enqueue();
 
         await Finished(run.Id);
 
-        LedgerEntry line = (await _ledger.Entries(CancellationToken.None)).Single();
+        LedgerEntry line = (await _ledger.EntriesAsync(CancellationToken.None)).Single();
         Assert.That((line.RunId, line.Status, line.Version, line.EngineVersion), Is.EqualTo((run.Id, RunStatus.InsufficientData, 1, EngineVersion.Number)));
         Assert.That(await Scalar<string>("SELECT text FROM reports WHERE run_id = @Id", run.Id), Does.Contain("Данных мало"));
         Assert.That((await Snapshot(run.Id)).LostLeases, Is.Zero);
@@ -70,7 +71,7 @@ public sealed class WorkerTests
     {
         (Task reached, Action release) = Hold("eth");
         await StartWorker("w-mid");
-        RunRecord run = await Enqueue();
+        RunInternal run = await Enqueue();
         await reached;
 
         // The renewal writes the progress at least every 10 s in production, here every half second.
@@ -88,7 +89,7 @@ public sealed class WorkerTests
     {
         (Task reached, Action _) = Hold("eth");
         WorkerHost first = await StartWorker("w-1");
-        RunRecord run = await Enqueue();
+        RunInternal run = await Enqueue();
         await reached;
         await first.DisposeAsync();
         _workers.Remove(first);
@@ -102,7 +103,7 @@ public sealed class WorkerTests
 
         RunSnapshot taken = await Snapshot(run.Id);
         Assert.That((taken.LeaseOwner, taken.LostLeases), Is.EqualTo(("w-2", 1)));
-        LedgerEntry line = (await _ledger.Entries(CancellationToken.None)).Single();
+        LedgerEntry line = (await _ledger.EntriesAsync(CancellationToken.None)).Single();
         Assert.That((line.RunId, line.Status), Is.EqualTo((run.Id, RunStatus.InsufficientData)), "the interrupted run ends with its verdict, not with failed");
         Assert.That(BtcReads(), Is.GreaterThan(btcReads), "the run starts again with the first pair");
     }
@@ -110,13 +111,13 @@ public sealed class WorkerTests
     [Test]
     public async Task A_run_that_lost_its_lease_the_third_time_is_failed_and_not_computed()
     {
-        RunRecord run = await Enqueue();
+        RunInternal run = await Enqueue();
         await Execute("UPDATE runs SET status = 'running', lease_owner = 'dead', leased_until = now() - interval '1 second', lost_leases = 2 WHERE id = @Id", run.Id);
 
         await StartWorker("w-1");
         await Finished(run.Id);
 
-        LedgerEntry line = (await _ledger.Entries(CancellationToken.None)).Single();
+        LedgerEntry line = (await _ledger.EntriesAsync(CancellationToken.None)).Single();
         Assert.That((line.RunId, line.Status, line.Reason), Is.EqualTo((run.Id, RunStatus.Failed, "прерван 3 раза")));
         Assert.That(await Count("reports"), Is.Zero);
         Assert.That(_server.Data.CandleRequests, Is.Empty, "the run is not computed");
@@ -127,13 +128,13 @@ public sealed class WorkerTests
     [Test]
     public async Task A_run_that_lost_its_lease_twice_is_still_computed()
     {
-        RunRecord run = await Enqueue();
+        RunInternal run = await Enqueue();
         await Execute("UPDATE runs SET status = 'running', lease_owner = 'dead', leased_until = now() - interval '1 second', lost_leases = 1 WHERE id = @Id", run.Id);
 
         await StartWorker("w-1");
         await Finished(run.Id);
 
-        Assert.That((await _ledger.Entries(CancellationToken.None)).Single().Status, Is.EqualTo(RunStatus.InsufficientData));
+        Assert.That((await _ledger.EntriesAsync(CancellationToken.None)).Single().Status, Is.EqualTo(RunStatus.InsufficientData));
         Assert.That((await Snapshot(run.Id)).LostLeases, Is.EqualTo(2));
     }
 
@@ -142,11 +143,11 @@ public sealed class WorkerTests
     {
         _server.Data.Failure = Grpc.Core.StatusCode.Unavailable;
         await StartWorker("w-1");
-        RunRecord run = await Enqueue();
+        RunInternal run = await Enqueue();
 
         await Finished(run.Id);
 
-        LedgerEntry line = (await _ledger.Entries(CancellationToken.None)).Single();
+        LedgerEntry line = (await _ledger.EntriesAsync(CancellationToken.None)).Single();
         Assert.That((line.RunId, line.Status), Is.EqualTo((run.Id, RunStatus.Failed)));
         Assert.That(line.Reason, Does.Contain("market-data"));
         Assert.That(await Count("reports"), Is.Zero);
@@ -156,9 +157,9 @@ public sealed class WorkerTests
         Assert.That((await Snapshot(run.Id)).LostLeases, Is.Zero);
 
         _server.Data.Failure = null;
-        RunRecord again = await Enqueue();
+        RunInternal again = await Enqueue();
         await Finished(again.Id);
-        Assert.That((await _ledger.Entries(CancellationToken.None)).Select(entry => entry.Status), Is.EqualTo(new[] { RunStatus.Failed, RunStatus.InsufficientData }));
+        Assert.That((await _ledger.EntriesAsync(CancellationToken.None)).Select(entry => entry.Status), Is.EqualTo(new[] { RunStatus.Failed, RunStatus.InsufficientData }));
     }
 
     [Test]
@@ -166,15 +167,15 @@ public sealed class WorkerTests
     {
         (Task reached, Action _) = Hold("eth");
         await StartWorker("w-1");
-        RunRecord run = await Enqueue();
+        RunInternal run = await Enqueue();
         await reached;
         await Poll.Until("the first pair", async () => (await Snapshot(run.Id)).PairsDone == 1);
 
-        CancelOutcome outcome = await _scheduler.Cancel(run.Id, CancellationToken.None);
+        CancelOutcome outcome = await BenchServices.Sender.Send(new CancelRunCommand(run.Id), CancellationToken.None);
         TimeSpan stopped = await Poll.Until("the cancelled line", async () => await Count("ledger") == 1);
 
         Assert.That(outcome, Is.EqualTo(CancelOutcome.Requested));
-        LedgerEntry line = (await _ledger.Entries(CancellationToken.None)).Single();
+        LedgerEntry line = (await _ledger.EntriesAsync(CancellationToken.None)).Single();
         Assert.That((line.RunId, line.Status), Is.EqualTo((run.Id, RunStatus.Cancelled)));
         Assert.That(line.Reason, Does.Contain("пройдено 1 пар из 3"));
         Assert.That(stopped, Is.LessThan(WorkerHost.Renewal + TimeSpan.FromSeconds(3)), "a renewal and a little more; production has 10 s for a renewal and 15 s in all");
@@ -183,19 +184,19 @@ public sealed class WorkerTests
 
         _server.Data.BeforeCandles = null;
         await Finished((await Enqueue()).Id);
-        Assert.That((await _ledger.Entries(CancellationToken.None)).Select(entry => entry.Status), Is.EqualTo(new[] { RunStatus.Cancelled, RunStatus.InsufficientData }), "a cancelled run is not final");
+        Assert.That((await _ledger.EntriesAsync(CancellationToken.None)).Select(entry => entry.Status), Is.EqualTo(new[] { RunStatus.Cancelled, RunStatus.InsufficientData }), "a cancelled run is not final");
     }
 
     [Test]
     public async Task A_run_cancelled_while_its_Worker_was_dead_ends_cancelled_without_being_computed()
     {
-        RunRecord run = await Enqueue();
+        RunInternal run = await Enqueue();
         await Execute("UPDATE runs SET status = 'running', lease_owner = 'dead', leased_until = now() - interval '1 second', cancel_requested = true WHERE id = @Id", run.Id);
 
         await StartWorker("w-1");
         await Finished(run.Id);
 
-        Assert.That((await _ledger.Entries(CancellationToken.None)).Single().Status, Is.EqualTo(RunStatus.Cancelled));
+        Assert.That((await _ledger.EntriesAsync(CancellationToken.None)).Single().Status, Is.EqualTo(RunStatus.Cancelled));
         Assert.That(_server.Data.CandleRequests, Is.Empty);
     }
 
@@ -215,8 +216,8 @@ public sealed class WorkerTests
         };
         await StartWorker("w-1");
         await StartWorker("w-2");
-        RunRecord verdict = await Enqueue();
-        RunRecord parity = await Enqueue(parity: true);
+        RunInternal verdict = await Enqueue();
+        RunInternal parity = await Enqueue(parity: true);
 
         await bothArrived.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
@@ -224,7 +225,7 @@ public sealed class WorkerTests
         Assert.That(owners, Is.EquivalentTo(new[] { "w-1", "w-2" }));
         await Finished(verdict.Id);
         await Finished(parity.Id);
-        Assert.That((await _ledger.Entries(CancellationToken.None)).Select(entry => entry.Status), Is.EquivalentTo(new[] { RunStatus.InsufficientData, RunStatus.Parity }));
+        Assert.That((await _ledger.EntriesAsync(CancellationToken.None)).Select(entry => entry.Status), Is.EquivalentTo(new[] { RunStatus.InsufficientData, RunStatus.Parity }));
     }
 
     [Test]
@@ -232,8 +233,8 @@ public sealed class WorkerTests
     {
         (Task reached, Action release) = Hold("btc");
         await StartWorker("w-1");
-        RunRecord first = await Enqueue();
-        RunRecord second = await Enqueue(parity: true);
+        RunInternal first = await Enqueue();
+        RunInternal second = await Enqueue(parity: true);
         await reached;
 
         await Task.Delay(700);
@@ -251,7 +252,7 @@ public sealed class WorkerTests
     {
         (Task reached, Action release) = Hold("eth");
         await StartWorker("w-1");
-        RunRecord run = await Enqueue();
+        RunInternal run = await Enqueue();
         await reached;
         await Execute("UPDATE runs SET lease_owner = 'w-other', leased_until = now() + interval '1 hour' WHERE id = @Id", run.Id);
 
@@ -268,7 +269,7 @@ public sealed class WorkerTests
     [Test]
     public async Task A_queued_run_the_ledger_now_refuses_ends_with_a_failed_line()
     {
-        RunRecord run = await Enqueue();
+        RunInternal run = await Enqueue();
         var verdict = new LedgerEntry
         {
             RunId = Guid.NewGuid().ToString("N"),
@@ -280,12 +281,12 @@ public sealed class WorkerTests
             Period = "exploration",
             Status = RunStatus.Rejected
         };
-        await _ledger.Decide(_ => new Decision(verdict, Report: null), CancellationToken.None);
+        await _ledger.DecideAsync(_ => new Decision(verdict, Report: null), CancellationToken.None);
 
         await StartWorker("w-1");
         await Finished(run.Id);
 
-        LedgerEntry[] lines = [.. await _ledger.Entries(CancellationToken.None)];
+        LedgerEntry[] lines = [.. await _ledger.EntriesAsync(CancellationToken.None)];
         Assert.That(lines.Select(line => line.Status), Is.EqualTo(new[] { RunStatus.Rejected, RunStatus.Failed }));
         Assert.That(lines[1].Reason, Does.Contain("already has the verdict"));
         Assert.That(_server.Data.CandleRequests, Is.Empty, "no history is read for a refused run");
@@ -304,17 +305,17 @@ public sealed class WorkerTests
         {
         }
 
-        var hypotheses = new HypothesisCatalog(new HypothesisStore(database));
-        await hypotheses.Add(BenchRepository.H0001Text(), CancellationToken.None);
-        var scheduler = new RunScheduler(hypotheses, new RunLedger(database), new RunQueue(database));
-        RunRecord run = await scheduler.Enqueue("H0001", version: null, Period.Exploration, parity: false, CancellationToken.None);
+        await using ServiceProvider services = BenchServices.Start(connectionString: connectionString);
+        ISender sender = services.GetRequiredService<ISender>();
+        await sender.Send(new AddHypothesisCommand(BenchRepository.H0001Text()), CancellationToken.None);
+        RunInternal run = await sender.Send(new EnqueueRunCommand("H0001", Version: null, Period.Exploration, Parity: false), CancellationToken.None);
 
-        await Poll.Until("the line of the run", async () => (await new RunLedger(database).Entries(CancellationToken.None)).Any(line => line.RunId == run.Id));
+        await Poll.Until("the line of the run", async () => (await new LedgerRepository(database).EntriesAsync(CancellationToken.None)).Any(line => line.RunId == run.Id));
     }
 
-    private Task<RunRecord> Enqueue(bool parity = false)
+    private static Task<RunInternal> Enqueue(bool parity = false)
     {
-        return _scheduler.Enqueue("H0001", version: null, Period.Exploration, parity, CancellationToken.None);
+        return BenchServices.Sender.Send(new EnqueueRunCommand("H0001", Version: null, Period.Exploration, parity), CancellationToken.None);
     }
 
     private async Task<WorkerHost> StartWorker(string name, string? connectionString = null)

@@ -41,6 +41,16 @@ public static partial class HypothesisReader
     }
 
     /// <summary>
+    ///     The hypothesis of a stored version: its text as that version, which must be a text of the stored id.
+    /// </summary>
+    /// <exception cref="HypothesisException">The text cannot be run, or it is the text of another hypothesis.</exception>
+    public static Hypothesis Parse(StoredHypothesis stored)
+    {
+        Hypothesis hypothesis = Parse(stored.Text, stored.Version);
+        return hypothesis.Id == stored.Id ? hypothesis : throw new HypothesisException(stored.Id, [$"the text is of {hypothesis.Id}"]);
+    }
+
+    /// <summary>
     ///     The hypothesis of the <paramref name="text" /> of its file, as version <paramref name="version" /> of its id.
     /// </summary>
     public static Hypothesis Parse(string text, int version = 1)

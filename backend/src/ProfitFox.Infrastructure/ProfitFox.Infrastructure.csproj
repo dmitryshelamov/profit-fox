@@ -17,6 +17,10 @@
     </ItemGroup>
 
     <ItemGroup>
+        <InternalsVisibleTo Include="ProfitFox.Tests.Integration"/>
+    </ItemGroup>
+
+    <ItemGroup>
         <Protobuf Include="Clients\MarketData\Protos\*.proto" GrpcServices="Both" ProtoRoot="Clients\MarketData\Protos"/>
     </ItemGroup>
 

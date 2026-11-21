@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 
-using ProfitFox.Application.Ports.Signals;
+using ProfitFox.Domain.Entities.Signals;
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Signals;
@@ -63,7 +63,7 @@ internal static class SignalJson
         using var layoutDocument = JsonDocument.Parse(layout);
         errors.AddRange(ReadLayout(layoutDocument.RootElement, positions));
         return errors.Count == 0 && read.Value is not null
-            ? new SignalRead(new SignalDocument(name, description, read.Value.Graph, positions, version), [])
+            ? new SignalRead(SignalDocument.Restore(name, description, read.Value.Graph, positions, version), [])
             : new SignalRead(null, errors);
     }
 
@@ -140,7 +140,7 @@ internal static class SignalJson
             }
 
             return errors.Count == 0 && name is not null && graph is not null
-                ? (new SignalDocument(name, description, graph, layout), [])
+                ? (SignalDocument.Create(name, description, graph, layout), [])
                 : (null, errors);
         }
     }

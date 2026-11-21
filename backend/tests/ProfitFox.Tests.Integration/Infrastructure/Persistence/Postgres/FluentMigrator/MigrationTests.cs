@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 using Npgsql;
 
-using ProfitFox.Infrastructure.Persistence.Postgres;
+using ProfitFox.Infrastructure.Persistence.Postgres.FluentMigrator;
 
 namespace ProfitFox.Tests.Integration.Infrastructure.Persistence.Postgres.FluentMigrator;
 

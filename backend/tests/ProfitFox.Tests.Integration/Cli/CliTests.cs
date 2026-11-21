@@ -18,7 +18,7 @@ public sealed class CliTests
 {
     private static readonly TimeSpan Poll = TimeSpan.FromMilliseconds(50);
     private MarketDataServer _market = null!;
-    private BenchPresentationServer _api = null!;
+    private BenchTestApplication _api = null!;
     private string _folder = null!;
 
     [SetUp]
@@ -27,7 +27,7 @@ public sealed class CliTests
         FakeMarketData.CoveredUntil = FakeMarketData.CoveredFrom.AddDays(28);
         await BenchDatabase.Reset();
         _market = await MarketDataServer.Start();
-        _api = await BenchPresentationServer.Start(_market);
+        _api = new BenchTestApplication(_market);
         _folder = Directory.CreateTempSubdirectory("bench-cli").FullName;
     }
 
