@@ -1,5 +1,5 @@
-using ProfitFox.Domain.MarketData;
 using ProfitFox.Domain.Execution;
+using ProfitFox.Domain.MarketData;
 
 namespace ProfitFox.Domain.Signals;
 
@@ -18,7 +18,7 @@ public static class PairCandles
         int paid = 0;
         foreach (HistoryCandle candle in candles.Where(candle => candle.HasTrades))
         {
-            ClosedCandle closed = candle.ToClosedCandle(timeframe);
+            var closed = candle.ToClosedCandle(timeframe);
             while (paid < payments.Length && payments[paid].Time <= closed.CloseTime)
             {
                 paid++;

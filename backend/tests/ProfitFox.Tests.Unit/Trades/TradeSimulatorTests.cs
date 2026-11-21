@@ -155,7 +155,7 @@ public sealed class TradeSimulatorTests
     public void A_horizon_past_the_known_funding_leaves_the_trade_out_even_if_it_exits_earlier()
     {
         // Funding is known up to minute 15; the stop at minute 1 ends the trade long before, the 20-minute horizon does not.
-        MinutePath path = new MinutePath(
+        var path = new MinutePath(
             Paths.Start,
             [.. Enumerable.Repeat(100.0, 22)],
             [.. Enumerable.Repeat(100.0, 22)],

@@ -2,8 +2,11 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+
 using Dapper;
+
 using Npgsql;
+
 using ProfitFox.Presentation.Errors;
 using ProfitFox.Presentation.Signals;
 using ProfitFox.Tests.Integration.Database;

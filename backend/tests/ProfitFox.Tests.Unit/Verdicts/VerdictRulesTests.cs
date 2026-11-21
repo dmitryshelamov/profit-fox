@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+
 using ProfitFox.Domain.Verdicts;
 
 namespace ProfitFox.Tests.Unit.Verdicts;
@@ -69,7 +70,7 @@ public sealed class VerdictRulesTests
     [Test]
     public void Every_decision_equals_the_Python_one()
     {
-        using JsonDocument document = JsonDocument.Parse(File.ReadAllText(Path.Combine(Folder, "decisions.json")));
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(Folder, "decisions.json")));
         int count = 0;
         foreach (JsonElement item in document.RootElement.EnumerateArray())
         {

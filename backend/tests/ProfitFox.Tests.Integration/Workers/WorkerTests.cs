@@ -1,5 +1,7 @@
 using Dapper;
+
 using Npgsql;
+
 using ProfitFox.Application.Hypotheses;
 using ProfitFox.Application.Runs;
 using ProfitFox.Domain.Ledger;
@@ -266,7 +268,7 @@ public sealed class WorkerTests
     public async Task A_queued_run_the_ledger_now_refuses_ends_with_a_failed_line()
     {
         RunRecord run = await Enqueue();
-        LedgerEntry verdict = new LedgerEntry
+        var verdict = new LedgerEntry
         {
             RunId = Guid.NewGuid().ToString("N"),
             Time = DateTimeOffset.UtcNow,
@@ -292,7 +294,7 @@ public sealed class WorkerTests
     public async Task A_Worker_waits_for_the_schema_and_goes_a_run_once_the_database_has_it()
     {
         string connectionString = await BenchDatabase.NewDatabase();
-        await using NpgsqlDataSource database = NpgsqlDataSource.Create(connectionString);
+        await using var database = NpgsqlDataSource.Create(connectionString);
         await StartWorker("w-1", connectionString);
         await Task.Delay(700);
         Assert.That(await BenchSchema.Current(database, CancellationToken.None), Is.Zero, "the API has not migrated yet");

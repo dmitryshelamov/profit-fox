@@ -1,4 +1,5 @@
 using System.Net;
+
 using ProfitFox.Cli.Api;
 
 namespace ProfitFox.Cli.Hypotheses;

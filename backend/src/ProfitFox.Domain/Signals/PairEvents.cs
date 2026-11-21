@@ -1,6 +1,6 @@
-using ProfitFox.Domain.MarketData;
 using ProfitFox.Domain.Execution;
 using ProfitFox.Domain.Graph;
+using ProfitFox.Domain.MarketData;
 
 namespace ProfitFox.Domain.Signals;
 

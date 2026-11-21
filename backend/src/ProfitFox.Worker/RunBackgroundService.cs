@@ -1,4 +1,5 @@
 using Npgsql;
+
 using ProfitFox.Application.Runs;
 using ProfitFox.Infrastructure.Persistence;
 

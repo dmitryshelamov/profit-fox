@@ -415,7 +415,7 @@ internal static class GraphValidator
 
     private static void CheckCycles(GraphDefinition graph, Dictionary<string, (NodeDefinition Node, NodeKind Kind)> nodes, List<GraphError> errors)
     {
-        Dictionary<string, List<string>> next = nodes.Keys.ToDictionary(id => id, _ => new List<string>(), StringComparer.Ordinal);
+        var next = nodes.Keys.ToDictionary(id => id, _ => new List<string>(), StringComparer.Ordinal);
 
         foreach (WireDefinition wire in graph.Wires.Where(wire => nodes.ContainsKey(wire.From.Node) && nodes.ContainsKey(wire.To.Node)))
         {
@@ -447,7 +447,7 @@ internal static class GraphValidator
             {
                 if (state.GetValueOrDefault(target) == 1)
                 {
-                    List<string> cycle = path.Skip(path.IndexOf(target)).ToList();
+                    var cycle = path.Skip(path.IndexOf(target)).ToList();
                     errors.Add(
                         new GraphError(GraphErrorCode.Cycle, $"The wires go round through {string.Join(", ", cycle)}.")
                         {

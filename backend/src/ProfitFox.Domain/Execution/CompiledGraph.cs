@@ -36,7 +36,7 @@ internal sealed class CompiledGraph
     /// </summary>
     public static CompiledGraph Compile(GraphDefinition graph)
     {
-        Dictionary<string, NodeDefinition> byId = graph.Nodes.ToDictionary(node => node.Id, StringComparer.Ordinal);
+        var byId = graph.Nodes.ToDictionary(node => node.Id, StringComparer.Ordinal);
         List<NodeDefinition> order = Order(graph, byId);
 
         var slots = new Dictionary<PinReference, int>();
@@ -48,7 +48,7 @@ internal sealed class CompiledGraph
             }
         }
 
-        Dictionary<PinReference, PinReference> wires = graph.Wires.ToDictionary(wire => wire.To, wire => wire.From);
+        var wires = graph.Wires.ToDictionary(wire => wire.To, wire => wire.From);
         List<CompiledNode> nodes = [];
         List<InputSource> outputs = [];
         foreach (NodeDefinition node in order)
@@ -83,15 +83,15 @@ internal sealed class CompiledGraph
     // Kahn's order; among nodes that are ready, the one written first goes first, so the order is the same on every run.
     private static List<NodeDefinition> Order(GraphDefinition graph, Dictionary<string, NodeDefinition> byId)
     {
-        Dictionary<string, int> waiting = graph.Nodes.ToDictionary(node => node.Id, _ => 0, StringComparer.Ordinal);
-        Dictionary<string, List<string>> next = graph.Nodes.ToDictionary(node => node.Id, _ => new List<string>(), StringComparer.Ordinal);
+        var waiting = graph.Nodes.ToDictionary(node => node.Id, _ => 0, StringComparer.Ordinal);
+        var next = graph.Nodes.ToDictionary(node => node.Id, _ => new List<string>(), StringComparer.Ordinal);
         foreach (WireDefinition wire in graph.Wires)
         {
             waiting[wire.To.Node]++;
             next[wire.From.Node].Add(wire.To.Node);
         }
 
-        Dictionary<string, int> position = graph.Nodes.Select((node, index) => (node.Id, index)).ToDictionary(pair => pair.Id, pair => pair.index, StringComparer.Ordinal);
+        var position = graph.Nodes.Select((node, index) => (node.Id, index)).ToDictionary(pair => pair.Id, pair => pair.index, StringComparer.Ordinal);
         var ready = new SortedSet<int>(graph.Nodes.Where(node => waiting[node.Id] == 0).Select(node => position[node.Id]));
         List<NodeDefinition> order = [];
         while (ready.Count > 0)

@@ -1,6 +1,7 @@
 using System.Text.Json;
-using ProfitFox.Domain.Signals;
+
 using ProfitFox.Domain.Graph;
+using ProfitFox.Domain.Signals;
 
 namespace ProfitFox.Presentation.Signals;
 
@@ -11,7 +12,7 @@ public static class SignalResponses
 {
     public static SignalResponse Of(SignalDocument signal)
     {
-        using JsonDocument graph = JsonDocument.Parse(StrategyGraph.Write(signal.Graph));
+        using var graph = JsonDocument.Parse(StrategyGraph.Write(signal.Graph));
         return new SignalResponse(signal.Name, signal.Description, signal.Version, graph.RootElement.Clone(), signal.Layout);
     }
 }

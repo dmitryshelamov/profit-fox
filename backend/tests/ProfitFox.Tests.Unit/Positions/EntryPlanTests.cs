@@ -1,13 +1,14 @@
-using ProfitFox.Tests.Unit.Trades;
 using System.Globalization;
 using System.Text.Json.Nodes;
+
+using ProfitFox.Domain.Execution;
+using ProfitFox.Domain.Graph;
 using ProfitFox.Domain.Hypotheses;
 using ProfitFox.Domain.Positions;
 using ProfitFox.Domain.Trades;
-using ProfitFox.Domain.Execution;
-using ProfitFox.Domain.Graph;
-using ProfitFox.Tests.Unit.Hypotheses;
 using ProfitFox.Tests.Unit.Graph;
+using ProfitFox.Tests.Unit.Hypotheses;
+using ProfitFox.Tests.Unit.Trades;
 
 namespace ProfitFox.Tests.Unit.Positions;
 

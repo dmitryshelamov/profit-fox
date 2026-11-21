@@ -1,10 +1,12 @@
 using Grpc.Core;
 using Grpc.Net.Client;
+
 using ProfitFox.Application.MarketData;
+using ProfitFox.Domain.Execution;
 using ProfitFox.Domain.MarketData;
 using ProfitFox.Infrastructure.MarketData;
 using ProfitFox.Infrastructure.MarketData.Protos;
-using ProfitFox.Domain.Execution;
+
 using TimeRange = ProfitFox.Domain.MarketData.TimeRange;
 
 namespace ProfitFox.Tests.Integration.MarketData;
@@ -59,7 +61,7 @@ public sealed class GrpcHistorySourceTests
     [Test]
     public void A_service_that_does_not_answer_is_history_unavailable()
     {
-        using GrpcChannel channel = GrpcChannel.ForAddress("http://127.0.0.1:9");
+        using var channel = GrpcChannel.ForAddress("http://127.0.0.1:9");
         var source = new GrpcHistorySource(channel);
 
         Assert.That(

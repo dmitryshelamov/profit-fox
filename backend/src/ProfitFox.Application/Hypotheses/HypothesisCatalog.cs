@@ -1,4 +1,5 @@
 using System.Text.Json;
+
 using ProfitFox.Domain.Hypotheses;
 
 namespace ProfitFox.Application.Hypotheses;
@@ -55,7 +56,7 @@ public sealed class HypothesisCatalog(IHypothesisStore store)
         try
         {
             Hypothesis hypothesis = Parse(stored);
-            using JsonDocument file = JsonDocument.Parse(stored.Text);
+            using var file = JsonDocument.Parse(stored.Text);
             JsonElement signal = file.RootElement.GetProperty("signal").Clone();
             return new HypothesisItem(hypothesis.Id, hypothesis.Version, hypothesis.Name, hypothesis.Timeframe, signal, Error: null);
         }
@@ -69,7 +70,7 @@ public sealed class HypothesisCatalog(IHypothesisStore store)
     {
         try
         {
-            using JsonDocument file = JsonDocument.Parse(text);
+            using var file = JsonDocument.Parse(text);
             return file.RootElement.TryGetProperty("name", out JsonElement name) && name.ValueKind == JsonValueKind.String ? name.GetString() ?? "" : "";
         }
         catch (JsonException)

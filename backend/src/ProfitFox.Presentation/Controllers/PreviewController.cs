@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+
 using ProfitFox.Application.MarketData;
 using ProfitFox.Application.Preview;
 using ProfitFox.Presentation.Errors;

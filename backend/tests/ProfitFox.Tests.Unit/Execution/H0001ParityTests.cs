@@ -1,4 +1,5 @@
 using System.Globalization;
+
 using ProfitFox.Domain.Execution;
 using ProfitFox.Domain.Graph;
 using ProfitFox.Tests.Unit.Graph;
@@ -18,7 +19,7 @@ public sealed class H0001ParityTests
     [Test]
     public void The_graph_gives_the_events_of_event_py()
     {
-        Dictionary<string, List<FundingPayment>> payments = Rows("funding.csv")
+        var payments = Rows("funding.csv")
             .GroupBy(row => row[0], StringComparer.Ordinal)
             .ToDictionary(
                 group => group.Key,

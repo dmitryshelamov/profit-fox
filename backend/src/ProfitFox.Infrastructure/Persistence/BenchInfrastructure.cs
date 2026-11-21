@@ -1,6 +1,9 @@
 using FluentMigrator.Runner;
+
 using Microsoft.Extensions.DependencyInjection;
+
 using Npgsql;
+
 using ProfitFox.Application.Hypotheses;
 using ProfitFox.Application.Runs;
 using ProfitFox.Application.Signals;

@@ -107,7 +107,7 @@ public static class VerdictRules
         double first = values[..half].Average();
         double second = values[half..].Average();
         double t = TStatistic(values);
-        Verdict result = new Verdict(VerdictKind.Rejected, "", attempts, tNeeded, minEffect, values.Length, events, power, sd, t, values.Average(), first, second);
+        var result = new Verdict(VerdictKind.Rejected, "", attempts, tNeeded, minEffect, values.Length, events, power, sd, t, values.Average(), first, second);
         if (t < tNeeded)
         {
             return result with { Reason = string.Create(CultureInfo.InvariantCulture, $"t {t:F2} < {tNeeded:F2}") };

@@ -1,10 +1,11 @@
 using System.Text.Json.Nodes;
-using ProfitFox.Domain.Hypotheses;
-using ProfitFox.Domain.Positions;
-using ProfitFox.Domain.Trades;
+
 using ProfitFox.Domain.Execution;
 using ProfitFox.Domain.Graph;
 using ProfitFox.Domain.Graph.Model;
+using ProfitFox.Domain.Hypotheses;
+using ProfitFox.Domain.Positions;
+using ProfitFox.Domain.Trades;
 using ProfitFox.Tests.Unit.Graph;
 
 namespace ProfitFox.Tests.Unit.Hypotheses;

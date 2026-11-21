@@ -1,6 +1,6 @@
 using ProfitFox.Application.MarketData;
-using ProfitFox.Domain.MarketData;
 using ProfitFox.Domain.Execution;
+using ProfitFox.Domain.MarketData;
 
 namespace ProfitFox.Tests.Unit.MarketData;
 

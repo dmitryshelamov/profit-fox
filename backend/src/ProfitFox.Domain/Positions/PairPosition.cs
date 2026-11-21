@@ -1,5 +1,5 @@
-using ProfitFox.Domain.Trades;
 using ProfitFox.Domain.Execution;
+using ProfitFox.Domain.Trades;
 
 namespace ProfitFox.Domain.Positions;
 
@@ -34,7 +34,7 @@ public sealed class PairPosition
             return null;
         }
 
-        Cycle cycle = Cycle.Open(path, order, side, costs, withOutcome);
+        var cycle = Cycle.Open(path, order, side, costs, withOutcome);
         if (cycle.Opened)
         {
             BusyUntil = cycle.ExitTime;

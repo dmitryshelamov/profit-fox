@@ -1,5 +1,7 @@
 using Dapper;
+
 using Npgsql;
+
 using ProfitFox.Application.Signals;
 using ProfitFox.Domain.Signals;
 

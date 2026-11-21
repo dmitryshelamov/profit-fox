@@ -1,4 +1,5 @@
 using System.Diagnostics;
+
 using ProfitFox.Application.Hypotheses;
 using ProfitFox.Application.MarketData;
 using ProfitFox.Domain.Hypotheses;
@@ -207,7 +208,7 @@ public sealed class HypothesisRunner(
             ? await history.Funding(pair.Id, Periods.DataStart, design.PeriodEnd, cancellation)
             : await history.FundingThrough(pair.Id, Periods.DataStart, design.PeriodEnd, cancellation);
 
-        PairSteps steps = PairSteps.Of(hypothesis.Strategy, hypothesis.Timeframe, pair.Symbol, candles.Items, funding.Items);
+        var steps = PairSteps.Of(hypothesis.Strategy, hypothesis.Timeframe, pair.Symbol, candles.Items, funding.Items);
         var evaluation = new PairEvaluation(pair.Symbol, steps, design, withEventOutcomes);
         List<EventRow> rows = [];
         List<(DateTimeOffset, DateTimeOffset, HistoryRead<HistoryCandle>)> spans = [];

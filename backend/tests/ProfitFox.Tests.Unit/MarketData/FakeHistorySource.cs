@@ -1,4 +1,5 @@
 using System.Globalization;
+
 using ProfitFox.Application.MarketData;
 using ProfitFox.Domain.MarketData;
 

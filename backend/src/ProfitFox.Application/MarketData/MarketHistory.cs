@@ -1,5 +1,5 @@
-using ProfitFox.Domain.MarketData;
 using ProfitFox.Domain.Execution;
+using ProfitFox.Domain.MarketData;
 
 namespace ProfitFox.Application.MarketData;
 
@@ -13,7 +13,9 @@ public sealed class MarketHistory
     private readonly DateTimeOffset _readUntil;
     private readonly HistoryHash _hash;
 
+    /// <param name="source">Where the history is read from.</param>
     /// <param name="readUntil">The end of the period of the run; nothing after it is read.</param>
+    /// <param name="hash">The hash of the run every read is added to.</param>
     public MarketHistory(IHistorySource source, DateTimeOffset readUntil, HistoryHash hash)
     {
         _source = source;

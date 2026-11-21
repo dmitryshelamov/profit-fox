@@ -1,4 +1,5 @@
 using System.Text.Json;
+
 using ProfitFox.Domain.Signals;
 
 namespace ProfitFox.Presentation.Signals;

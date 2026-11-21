@@ -32,7 +32,7 @@ public sealed class PreviewHistoryCache
     /// </summary>
     public Task<PreviewHistory> Get(string instrument, TimeSpan timeframe, Func<Task<PreviewHistory>> read, CancellationToken cancellation)
     {
-        var key = (instrument, timeframe);
+        (string instrument, TimeSpan timeframe) key = (instrument, timeframe);
         Task<PreviewHistory> history;
         lock (_lock)
         {

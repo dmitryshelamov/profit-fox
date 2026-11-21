@@ -1,5 +1,7 @@
 using Google.Protobuf.WellKnownTypes;
+
 using Grpc.Core;
+
 using ProfitFox.Infrastructure.MarketData.Protos;
 
 namespace ProfitFox.Tests.Integration.MarketData;
@@ -20,7 +22,7 @@ public sealed class FakeFundingFeed(FakeMarketData data) : FundingPaymentFeed.Fu
         await responseStream.WriteAsync(new FundingPaymentHistoryItem { Coverage = coverage });
         foreach (ProfitFox.Infrastructure.MarketData.Protos.TimeRange range in coverage.Ranges)
         {
-            for (DateTimeOffset time = range.From.ToDateTimeOffset(); time < range.Until.ToDateTimeOffset(); time += TimeSpan.FromHours(8))
+            for (var time = range.From.ToDateTimeOffset(); time < range.Until.ToDateTimeOffset(); time += TimeSpan.FromHours(8))
             {
                 var payment = new FundingPaymentUpdate { InstrumentId = instrument, Time = Timestamp.FromDateTimeOffset(time), FundingRate = FakeMarketData.RateAt(time) };
                 await responseStream.WriteAsync(new FundingPaymentHistoryItem { Payment = payment });

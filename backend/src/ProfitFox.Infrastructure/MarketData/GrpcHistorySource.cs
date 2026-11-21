@@ -1,9 +1,12 @@
 using Google.Protobuf.WellKnownTypes;
+
 using Grpc.Core;
 using Grpc.Net.Client;
+
 using ProfitFox.Application.MarketData;
 using ProfitFox.Domain.MarketData;
 using ProfitFox.Infrastructure.MarketData.Protos;
+
 using TimeRange = ProfitFox.Domain.MarketData.TimeRange;
 
 namespace ProfitFox.Infrastructure.MarketData;

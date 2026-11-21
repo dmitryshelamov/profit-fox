@@ -1,8 +1,8 @@
+using ProfitFox.Domain.Execution;
+using ProfitFox.Domain.Graph;
 using ProfitFox.Domain.MarketData;
 using ProfitFox.Domain.Signals;
 using ProfitFox.Domain.Strategies;
-using ProfitFox.Domain.Execution;
-using ProfitFox.Domain.Graph;
 using ProfitFox.Tests.Unit.Graph;
 
 using static ProfitFox.Tests.Unit.Runs.Designs;
@@ -26,7 +26,7 @@ public sealed class PairStepsTests
         HistoryCandle[] candles = [Traded(Utc(2026, 1, 5, 0)), Untraded(Utc(2026, 1, 5, 4)), Traded(Utc(2026, 1, 5, 8)), Traded(Utc(2026, 1, 5, 12))];
         HistoryPayment[] funding = [new HistoryPayment(Utc(2026, 1, 5, 0), "0.0001"), new HistoryPayment(Utc(2026, 1, 5, 6), "0.001")];
 
-        PairSteps steps = PairSteps.Of(H0001, FourHours, "BTCUSDT", candles, funding);
+        var steps = PairSteps.Of(H0001, FourHours, "BTCUSDT", candles, funding);
 
         Assert.That(steps.Orders, Is.EqualTo(new[] { new StrategyStep(Utc(2026, 1, 5, 12), EntrySide.Short, FourHours, ExitDistance.None, ExitDistance.None) }));
         Assert.That(steps.Orders.Select(order => order.Moment), Is.EqualTo(PairEvents.Of(Signal, FourHours, "BTCUSDT", candles, funding)));
@@ -38,7 +38,7 @@ public sealed class PairStepsTests
         TradingStrategy strategy = StrategyGraph.ReadStrategy(StopFromTheClose).Value!;
         HistoryCandle[] candles = [Traded(Utc(2026, 1, 5, 0), "0.01"), Untraded(Utc(2026, 1, 5, 4)), Traded(Utc(2026, 1, 5, 8), "0.03")];
 
-        PairSteps steps = PairSteps.Of(strategy, FourHours, "BTCUSDT", candles, []);
+        var steps = PairSteps.Of(strategy, FourHours, "BTCUSDT", candles, []);
 
         Assert.That(steps.Orders.Select(order => order.Moment), Is.EqualTo(new[] { Utc(2026, 1, 5, 12) }));
         Assert.That(steps.At(Utc(2026, 1, 5, 4)), Is.EqualTo(new StrategyStep(Utc(2026, 1, 5, 4), Entry: null, FourHours, ExitDistance.Of(0.01m), ExitDistance.None)));
@@ -52,7 +52,7 @@ public sealed class PairStepsTests
     {
         TradingStrategy strategy = StrategyGraph.ReadStrategy(StopFromTheClose).Value!;
 
-        PairSteps steps = PairSteps.Of(strategy, FourHours, "BTCUSDT", [Traded(Utc(2026, 1, 5, 4), "0.01")], []);
+        var steps = PairSteps.Of(strategy, FourHours, "BTCUSDT", [Traded(Utc(2026, 1, 5, 4), "0.01")], []);
 
         Assert.That(steps.At(Utc(2026, 1, 5, 4)), Is.EqualTo(new StrategyStep(Utc(2026, 1, 5, 4), Entry: null, FourHours, ExitDistance.Of(null), ExitDistance.None)));
         Assert.That(PairSteps.Of(H0001, FourHours, "BTCUSDT", [], []).At(Utc(2026, 1, 5, 0)).After, Is.EqualTo(FourHours));

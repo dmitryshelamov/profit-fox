@@ -1,5 +1,7 @@
 using System.Reflection;
+
 using FluentMigrator;
+
 using Npgsql;
 
 namespace ProfitFox.Infrastructure.Persistence;

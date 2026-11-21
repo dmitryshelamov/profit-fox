@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+
 using ProfitFox.Application.Hypotheses;
 using ProfitFox.Application.Runs;
 using ProfitFox.Domain.Hypotheses;

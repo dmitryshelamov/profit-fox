@@ -1,4 +1,5 @@
 using System.Globalization;
+
 using ProfitFox.Domain.Trades;
 
 namespace ProfitFox.Tests.Unit.Trades;

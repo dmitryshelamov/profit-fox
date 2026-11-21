@@ -1,8 +1,9 @@
 using System.Text.Json;
-using ProfitFox.Domain.Signals;
+
 using ProfitFox.Domain.Graph;
 using ProfitFox.Domain.Graph.Model;
 using ProfitFox.Domain.Graph.Reading;
+using ProfitFox.Domain.Signals;
 
 namespace ProfitFox.Application.Signals;
 
@@ -136,7 +137,7 @@ public sealed class SignalLibrary(ISignalStore store)
 
         GraphDefinition definition = read.Value.Graph;
         var ids = definition.Nodes.Select(node => node.Id).ToHashSet(StringComparer.Ordinal);
-        Dictionary<string, NodePosition> kept = layout.Where(position => ids.Contains(position.Key)).ToDictionary(StringComparer.Ordinal);
+        var kept = layout.Where(position => ids.Contains(position.Key)).ToDictionary(StringComparer.Ordinal);
         return new SignalDocument(name, string.IsNullOrWhiteSpace(description) ? null : description, definition, kept);
     }
 

@@ -1,4 +1,5 @@
 using System.Text.Json;
+
 using ProfitFox.Application.MarketData;
 using ProfitFox.Domain.MarketData;
 
@@ -31,7 +32,7 @@ public sealed class InstrumentCatalog(HttpClient http) : IInstrumentCatalog
     /// </summary>
     public static IReadOnlyList<Instrument> Parse(string json)
     {
-        using JsonDocument document = JsonDocument.Parse(json);
+        using var document = JsonDocument.Parse(json);
         List<Instrument> instruments = [];
         foreach (JsonElement item in document.RootElement.EnumerateArray())
         {

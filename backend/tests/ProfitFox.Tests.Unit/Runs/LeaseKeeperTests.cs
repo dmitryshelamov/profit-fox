@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
+
 using ProfitFox.Application.Runs;
 
 namespace ProfitFox.Tests.Unit.Runs;

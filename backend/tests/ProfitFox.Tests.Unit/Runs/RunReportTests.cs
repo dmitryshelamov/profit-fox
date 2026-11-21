@@ -1,12 +1,13 @@
 using System.Text.Json.Nodes;
+
 using ProfitFox.Application.Runs;
+using ProfitFox.Domain.Execution;
 using ProfitFox.Domain.Hypotheses;
 using ProfitFox.Domain.Ledger;
 using ProfitFox.Domain.Runs;
 using ProfitFox.Domain.Strategies;
-using ProfitFox.Domain.Verdicts;
 using ProfitFox.Domain.Trades;
-using ProfitFox.Domain.Execution;
+using ProfitFox.Domain.Verdicts;
 using ProfitFox.Tests.Unit.Hypotheses;
 
 using static ProfitFox.Tests.Unit.Runs.Designs;
@@ -130,7 +131,7 @@ public sealed class RunReportTests
     {
         var fields = new TradeFields(0.007, 0.008, 0.0011, 0.001, 0.0011, 0.007);
         var random = new TradeFields(0.001, 0.002, 0.0011, 0.001, 0.0001, 0.001);
-        TradeOutcome excluded = TradeOutcome.Excluded(TradeStatus.Coverage);
+        var excluded = TradeOutcome.Excluded(TradeStatus.Coverage);
         return
         [
             new EventRow("BTCUSDT", Utc(2026, 1, 5, 8), First, TradeStatus.Ok, null, fields, [new RandomTrade(Utc(2026, 1, 6), excluded)], 2, random, 0.0004),

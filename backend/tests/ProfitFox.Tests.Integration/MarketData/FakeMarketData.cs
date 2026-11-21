@@ -1,5 +1,7 @@
 using Google.Protobuf.WellKnownTypes;
+
 using Grpc.Core;
+
 using ProfitFox.Infrastructure.MarketData.Protos;
 
 namespace ProfitFox.Tests.Integration.MarketData;

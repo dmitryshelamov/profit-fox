@@ -1,4 +1,5 @@
 using Grpc.Net.Client;
+
 using ProfitFox.Application.Hypotheses;
 using ProfitFox.Application.MarketData;
 using ProfitFox.Application.Runs;
@@ -26,8 +27,8 @@ public static class Program
     /// </summary>
     public static void Configure(HostApplicationBuilder builder)
     {
-        Uri grpc = new Uri(Setting(builder.Configuration, "MarketData:GrpcUrl"));
-        Uri rest = new Uri(Setting(builder.Configuration, "MarketData:RestUrl"));
+        var grpc = new Uri(Setting(builder.Configuration, "MarketData:GrpcUrl"));
+        var rest = new Uri(Setting(builder.Configuration, "MarketData:RestUrl"));
         string connectionString = Setting(builder.Configuration, "ConnectionStrings:Bench");
         IServiceCollection services = builder.Services;
 

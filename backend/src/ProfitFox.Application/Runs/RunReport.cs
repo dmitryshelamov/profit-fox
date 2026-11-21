@@ -1,9 +1,10 @@
 using System.Globalization;
 using System.Text;
+
 using ProfitFox.Domain.Ledger;
 using ProfitFox.Domain.Runs;
-using ProfitFox.Domain.Verdicts;
 using ProfitFox.Domain.Trades;
+using ProfitFox.Domain.Verdicts;
 
 namespace ProfitFox.Application.Runs;
 

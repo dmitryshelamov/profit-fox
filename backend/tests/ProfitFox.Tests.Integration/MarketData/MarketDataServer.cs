@@ -1,4 +1,5 @@
 using Grpc.Net.Client;
+
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -63,7 +64,7 @@ public sealed class MarketDataServer : IAsyncDisposable
                     });
                 }))
             .StartAsync();
-        GrpcChannel channel = GrpcChannel.ForAddress(
+        var channel = GrpcChannel.ForAddress(
             "http://localhost",
             new GrpcChannelOptions { HttpHandler = host.GetTestServer().CreateHandler() });
         return new MarketDataServer(host, channel, data);

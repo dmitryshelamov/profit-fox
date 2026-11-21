@@ -1,11 +1,14 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+
 using Dapper;
+
 using Npgsql;
+
 using ProfitFox.Application.Signals;
+using ProfitFox.Domain.Graph;
 using ProfitFox.Domain.Signals;
 using ProfitFox.Infrastructure.Signals;
-using ProfitFox.Domain.Graph;
 
 namespace ProfitFox.Tests.Integration.Database;
 

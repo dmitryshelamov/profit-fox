@@ -1,4 +1,5 @@
 using Grpc.Net.Client;
+
 using ProfitFox.Application.MarketData;
 using ProfitFox.Infrastructure.MarketData;
 
@@ -14,8 +15,8 @@ public class Program
     public static async Task Main(string[] args)
     {
         WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
-        Uri grpc = new Uri(Setting(builder.Configuration, "MarketData:GrpcUrl"));
-        Uri rest = new Uri(Setting(builder.Configuration, "MarketData:RestUrl"));
+        var grpc = new Uri(Setting(builder.Configuration, "MarketData:GrpcUrl"));
+        var rest = new Uri(Setting(builder.Configuration, "MarketData:RestUrl"));
         string connectionString = Setting(builder.Configuration, "ConnectionStrings:Bench");
 
         builder.Services.AddSingleton(_ => GrpcChannel.ForAddress(grpc, new GrpcChannelOptions { MaxReceiveMessageSize = 64 * 1024 * 1024 }));

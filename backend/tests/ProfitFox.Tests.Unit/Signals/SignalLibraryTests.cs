@@ -1,8 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+
 using ProfitFox.Application.Signals;
-using ProfitFox.Domain.Signals;
 using ProfitFox.Domain.Graph.Reading;
+using ProfitFox.Domain.Signals;
 using ProfitFox.Tests.Unit.Hypotheses;
 
 namespace ProfitFox.Tests.Unit.Signals;

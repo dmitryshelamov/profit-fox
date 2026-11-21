@@ -1,11 +1,12 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+
 using ProfitFox.Application.Signals;
-using ProfitFox.Domain.Signals;
 using ProfitFox.Domain.Graph;
 using ProfitFox.Domain.Graph.Model;
 using ProfitFox.Domain.Graph.Reading;
+using ProfitFox.Domain.Signals;
 
 namespace ProfitFox.Infrastructure.Signals;
 
@@ -56,11 +57,11 @@ internal static class SignalJson
     /// </summary>
     public static SignalRead ReadStored(string name, string? description, string graph, string layout, int version)
     {
-        using JsonDocument graphDocument = JsonDocument.Parse(graph);
+        using var graphDocument = JsonDocument.Parse(graph);
         ReadResult<Signal> read = StrategyGraph.ReadSignal(graphDocument.RootElement);
         List<string> errors = [.. read.Errors.Select(error => $"graph: {error}")];
         Dictionary<string, NodePosition> positions = [];
-        using JsonDocument layoutDocument = JsonDocument.Parse(layout);
+        using var layoutDocument = JsonDocument.Parse(layout);
         errors.AddRange(ReadLayout(layoutDocument.RootElement, positions));
         return errors.Count == 0 && read.Value is not null
             ? new SignalRead(new SignalDocument(name, description, read.Value.Graph, positions, version), [])

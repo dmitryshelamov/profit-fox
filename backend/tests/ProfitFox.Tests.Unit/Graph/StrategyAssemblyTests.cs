@@ -17,7 +17,7 @@ public sealed class StrategyAssemblyTests
     {
         Signal signal = StrategyGraph.ReadSignal(Graphs.H0001).Value!;
 
-        TradingStrategy strategy = TradingStrategy.FromSignal(signal, EntrySide.Short, FourHours);
+        var strategy = TradingStrategy.FromSignal(signal, EntrySide.Short, FourHours);
 
         string written = StrategyGraph.Write(strategy.Graph);
         Assert.That(written, Is.EqualTo(StrategyGraph.Write(StrategyGraph.Read(Graphs.H0001Strategy).Value!)));
@@ -30,7 +30,7 @@ public sealed class StrategyAssemblyTests
     {
         Signal signal = StrategyGraph.ReadSignal(Graphs.H0001).Value!;
 
-        TradingStrategy strategy = TradingStrategy.FromSignal(signal, EntrySide.Long, TimeSpan.FromDays(1), stop: 0.02m, target: 0.04m);
+        var strategy = TradingStrategy.FromSignal(signal, EntrySide.Long, TimeSpan.FromDays(1), stop: 0.02m, target: 0.04m);
 
         Assert.That(
             strategy.Graph.Nodes.Select(node => (node.Id, node.Kind)),
@@ -58,7 +58,7 @@ public sealed class StrategyAssemblyTests
     {
         Signal signal = StrategyGraph.ReadSignal(Graphs.H0001).Value!;
 
-        TradingStrategy strategy = TradingStrategy.FromSignal(signal, EntrySide.Short, FourHours, stop: 0.02m);
+        var strategy = TradingStrategy.FromSignal(signal, EntrySide.Short, FourHours, stop: 0.02m);
 
         Assert.That(strategy.Graph.Nodes.Select(node => node.Kind), Does.Contain("stop-loss").And.Not.Contain("take-profit"));
     }
@@ -77,7 +77,7 @@ public sealed class StrategyAssemblyTests
         ReadResult<Signal> signal = StrategyGraph.ReadSignal(json);
         Assert.That(signal.Errors, Is.Empty, "the renamed signal must pass the checks");
 
-        TradingStrategy strategy = TradingStrategy.FromSignal(signal.Value!, EntrySide.Short, FourHours, stop: 0.02m);
+        var strategy = TradingStrategy.FromSignal(signal.Value!, EntrySide.Short, FourHours, stop: 0.02m);
 
         Assert.That(
             strategy.Graph.Nodes.Select(node => (node.Id, node.Kind)),

@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+
 using ProfitFox.Cli.Hypotheses;
 using ProfitFox.Cli.Runs;
 

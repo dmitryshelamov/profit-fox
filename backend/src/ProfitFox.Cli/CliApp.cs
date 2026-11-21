@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.CommandLine.Help;
+
 using ProfitFox.Cli.Api;
 using ProfitFox.Cli.Hypotheses;
 using ProfitFox.Cli.Runs;

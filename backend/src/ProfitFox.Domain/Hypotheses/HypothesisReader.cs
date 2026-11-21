@@ -3,12 +3,13 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using ProfitFox.Domain.Positions;
-using ProfitFox.Domain.Trades;
+
 using ProfitFox.Domain.Execution;
 using ProfitFox.Domain.Graph;
 using ProfitFox.Domain.Graph.Model;
 using ProfitFox.Domain.Graph.Reading;
+using ProfitFox.Domain.Positions;
+using ProfitFox.Domain.Trades;
 
 namespace ProfitFox.Domain.Hypotheses;
 
@@ -237,7 +238,7 @@ public static partial class HypothesisReader
     private static TradingStrategy? StrategyOf(Signal signal, TradePlan plan, decimal? stop, decimal? target, List<string> errors)
     {
         EntrySide side = plan.Side == TradeSide.Long ? EntrySide.Long : EntrySide.Short;
-        TradingStrategy strategy = TradingStrategy.FromSignal(signal, side, plan.Horizon, stop, target);
+        var strategy = TradingStrategy.FromSignal(signal, side, plan.Horizon, stop, target);
         StrategyStep written = new StrategyExecutor(strategy).BeforeCandles(DateTimeOffset.UnixEpoch);
         if (EntryPlan.Of(written, side) != plan)
         {

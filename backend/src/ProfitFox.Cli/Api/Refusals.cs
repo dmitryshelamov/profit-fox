@@ -14,7 +14,7 @@ internal static class Refusals
         List<string> reasons = [];
         try
         {
-            using JsonDocument document = JsonDocument.Parse(body);
+            using var document = JsonDocument.Parse(body);
             JsonElement root = document.RootElement;
             if (root.ValueKind == JsonValueKind.Object)
             {

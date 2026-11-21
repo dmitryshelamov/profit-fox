@@ -1,7 +1,7 @@
-using ProfitFox.Domain.Positions;
-using ProfitFox.Domain.Trades;
 using ProfitFox.Domain.Execution;
 using ProfitFox.Domain.Graph;
+using ProfitFox.Domain.Positions;
+using ProfitFox.Domain.Trades;
 using ProfitFox.Tests.Unit.Graph;
 using ProfitFox.Tests.Unit.Trades;
 
@@ -143,7 +143,7 @@ public sealed class PairPositionTests
     public void A_trade_left_out_for_no_trades_or_for_funding_does_not_hold_the_position()
     {
         MinutePath quiet = new Paths().Quiet(4 * Hour).Flat(100, 3 * Day).Build();
-        MinutePath noFunding = new MinutePath(
+        var noFunding = new MinutePath(
             Paths.Start,
             [.. Enumerable.Repeat(100.0, Day)],
             [.. Enumerable.Repeat(100.0, Day)],
@@ -201,7 +201,7 @@ public sealed class PairPositionTests
         StrategyStep step = executor.Step("BTCUSDT", candle, new FundingPayment(FourPm, 0.0001m));
         MinutePath path = new Paths().Flat(100, 9 * Hour).Flat(98, 3 * Day).Build();
 
-        Cycle cycle = Cycle.Open(path, step, EntrySide.Short, Costs);
+        var cycle = Cycle.Open(path, step, EntrySide.Short, Costs);
 
         Assert.That(step.Entry, Is.Null);
         Assert.That(step.Moment, Is.EqualTo(EightPm));
@@ -217,7 +217,7 @@ public sealed class PairPositionTests
         var position = new PairPosition();
         Cycle? ofOrder = position.Enter(path, Order(Noon, EntrySide.Long, OneDay), Costs);
 
-        Cycle outside = Cycle.Open(path, new StrategyStep(FourPm, Entry: null, OneDay, ExitDistance.None, ExitDistance.None), EntrySide.Long, Costs);
+        var outside = Cycle.Open(path, new StrategyStep(FourPm, Entry: null, OneDay, ExitDistance.None, ExitDistance.None), EntrySide.Long, Costs);
 
         Assert.That(outside.Status, Is.EqualTo(TradeStatus.Ok), "it is opened though the cycle of the order runs");
         Assert.That(outside.Outcome, Is.EqualTo(TradeSimulator.Simulate(path, FourPm, new TradePlan(TradeSide.Long, OneDay), Costs)));
@@ -232,7 +232,7 @@ public sealed class PairPositionTests
         MinutePath path = new Paths().Flat(100, 3 * Day).Build();
         var step = new StrategyStep(Noon, Entry: null, OneDay, ExitDistance.Of(null), ExitDistance.None);
 
-        Cycle cycle = Cycle.Open(path, step, EntrySide.Long, Costs);
+        var cycle = Cycle.Open(path, step, EntrySide.Long, Costs);
 
         Assert.That(cycle.Status, Is.EqualTo(TradeStatus.Plan));
         Assert.That(cycle.Opened, Is.False);

@@ -1,4 +1,5 @@
 using System.Globalization;
+
 using ProfitFox.Cli.Api;
 
 namespace ProfitFox.Cli.Runs;

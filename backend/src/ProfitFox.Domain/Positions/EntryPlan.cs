@@ -1,7 +1,8 @@
 using System.Globalization;
-using ProfitFox.Domain.Trades;
+
 using ProfitFox.Domain.Execution;
 using ProfitFox.Domain.Graph;
+using ProfitFox.Domain.Trades;
 
 namespace ProfitFox.Domain.Positions;
 

@@ -1,5 +1,7 @@
 using Dapper;
+
 using Npgsql;
+
 using ProfitFox.Application.Hypotheses;
 using ProfitFox.Application.Runs;
 using ProfitFox.Domain.Ledger;

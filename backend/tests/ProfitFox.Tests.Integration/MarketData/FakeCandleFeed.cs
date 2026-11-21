@@ -1,5 +1,7 @@
 using Google.Protobuf.WellKnownTypes;
+
 using Grpc.Core;
+
 using ProfitFox.Infrastructure.MarketData.Protos;
 
 namespace ProfitFox.Tests.Integration.MarketData;
@@ -32,7 +34,7 @@ public sealed class FakeCandleFeed(FakeMarketData data) : CandleFeed.CandleFeedB
         TimeSpan step = request.Interval == CandleInterval.FourHours ? TimeSpan.FromHours(4) : TimeSpan.FromMinutes(1);
         foreach (ProfitFox.Infrastructure.MarketData.Protos.TimeRange range in coverage.Ranges)
         {
-            for (DateTimeOffset open = range.From.ToDateTimeOffset(); open < range.Until.ToDateTimeOffset(); open += step)
+            for (var open = range.From.ToDateTimeOffset(); open < range.Until.ToDateTimeOffset(); open += step)
             {
                 var candle = new CandleUpdate
                 {

@@ -1,4 +1,5 @@
 using System.Globalization;
+
 using ProfitFox.Domain.Execution;
 using ProfitFox.Domain.Graph;
 using ProfitFox.Tests.Unit.Graph;
@@ -69,7 +70,7 @@ public sealed class H0001StrategyParityTests
     // The bars of the fixture in its order, each with the last payment of its pair paid by its close.
     private static List<(string Instrument, ClosedCandle Candle, FundingPayment? Funding)> History()
     {
-        Dictionary<string, List<FundingPayment>> payments = Rows("funding.csv")
+        var payments = Rows("funding.csv")
             .GroupBy(row => row[0], StringComparer.Ordinal)
             .ToDictionary(
                 group => group.Key,

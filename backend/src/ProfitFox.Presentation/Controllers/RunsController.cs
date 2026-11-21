@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+
 using ProfitFox.Application.Hypotheses;
 using ProfitFox.Application.Runs;
 using ProfitFox.Domain.Hypotheses;

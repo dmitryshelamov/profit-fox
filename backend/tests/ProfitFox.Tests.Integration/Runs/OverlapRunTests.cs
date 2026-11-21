@@ -1,13 +1,15 @@
 using Dapper;
+
 using Npgsql;
+
 using ProfitFox.Application.Hypotheses;
 using ProfitFox.Application.Runs;
 using ProfitFox.Domain.Ledger;
 using ProfitFox.Domain.Runs;
+using ProfitFox.Domain.Trades;
 using ProfitFox.Infrastructure.Hypotheses;
 using ProfitFox.Infrastructure.Ledger;
 using ProfitFox.Infrastructure.MarketData;
-using ProfitFox.Domain.Trades;
 using ProfitFox.Tests.Integration.MarketData;
 
 namespace ProfitFox.Tests.Integration.Runs;
