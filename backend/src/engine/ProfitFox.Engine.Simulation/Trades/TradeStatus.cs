@@ -20,5 +20,11 @@ public enum TradeStatus
     /// <summary>
     ///     The horizon leaves the coverage of funding payments.
     /// </summary>
-    Funding
+    Funding,
+
+    /// <summary>
+    ///     The entry order gave no trade plan: its time, stop or target is missing or not allowed (spec strategy-position
+    ///     «Недопустимая заявка»).
+    /// </summary>
+    Plan
 }

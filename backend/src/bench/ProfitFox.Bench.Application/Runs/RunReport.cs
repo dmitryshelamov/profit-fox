@@ -135,7 +135,8 @@ public static class RunReport
             TradeStatus.Ok => "учтены",
             TradeStatus.Coverage => "вне покрытия минут (`coverage`)",
             TradeStatus.NoTrade => "нет сделок в сроке (`no_trade`)",
-            _ => "вне покрытия фандинга (`funding`)"
+            TradeStatus.Funding => "вне покрытия фандинга (`funding`)",
+            _ => "недопустимая заявка (`plan`)"
         };
     }
 
