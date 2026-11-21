@@ -1,5 +1,6 @@
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Services.Ledger;
+using ProfitFox.Domain.ValueObjects.Hypotheses;
 using ProfitFox.Domain.ValueObjects.Ledger;
 using ProfitFox.Domain.ValueObjects.Runs;
 
@@ -17,6 +18,12 @@ public interface ILedgerRepository
     ///     The latest <paramref name="limit" /> lines, the newest first, each with the kind of its run.
     /// </summary>
     Task<IReadOnlyList<FinishedRun>> RecentAsync(int limit, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     For each of <paramref name="versions" /> that has lines, the line with the latest time, with the kind of its run, by
+    ///     one read; of lines of one time, the one written last. A version without lines gives nothing.
+    /// </summary>
+    Task<IReadOnlyList<FinishedRun>> LastAsync(IReadOnlyCollection<HypothesisVersion> versions, CancellationToken cancellationToken);
 
     /// <summary>
     ///     The line of the run <paramref name="runId" /> with its report; null when the ledger has no line of it.

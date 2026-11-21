@@ -152,6 +152,26 @@ public sealed class StrategiesTests
         Assert.That(_market.Data.FundingRequests, Is.Empty);
     }
 
+    [Test]
+    public async Task The_list_gives_the_signals_and_the_exits_of_the_latest_version()
+    {
+        Guid signal = await CreateSignal("funding-high");
+        await Create("funding-short", Strategy(signal));
+        JsonObject changed = JsonNode.Parse(BenchRepository.H0001Text())!["signal"]!.AsObject().DeepClone().AsObject();
+        changed["parameters"]![0]!["value"] = 0.001;
+        await _api.Http.PutAsJsonAsync("/api/signals/funding-high", new JsonObject { ["graph"] = changed, ["layout"] = new JsonObject() }, Json);
+
+        StrategyListItem item = (await _api.Http.GetFromJsonAsync<StrategyListItem[]>("/api/strategies", Json))!.Single();
+        JsonObject raw = JsonNode.Parse(await _api.Http.GetStringAsync("/api/strategies"))!.AsArray().Single()!.AsObject();
+
+        Assert.That(item.Signals, Is.EqualTo(new[] { new StrategySignalItem("funding-high", Version: 1, LatestVersion: 2) }));
+        Assert.That(item.Exits, Is.EqualTo(new[] { "close-after" }));
+        Assert.That(raw["signals"]!.ToJsonString(), Is.EqualTo("""[{"name":"funding-high","version":1,"latestVersion":2}]"""));
+        Assert.That(raw["exits"]!.ToJsonString(), Is.EqualTo("""["close-after"]"""));
+        StrategyResponse read = (await _api.Http.GetFromJsonAsync<StrategyResponse>("/api/strategies/funding-short", Json))!;
+        Assert.That(read.Signals.Single().Version, Is.EqualTo(1), "the list does not move the reference");
+    }
+
     private async Task<Guid> CreateSignal(string name)
     {
         JsonObject graph = JsonNode.Parse(BenchRepository.H0001Text())!["signal"]!.AsObject().DeepClone().AsObject();

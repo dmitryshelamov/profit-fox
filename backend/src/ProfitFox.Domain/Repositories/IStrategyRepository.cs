@@ -53,4 +53,10 @@ public interface IStrategyRepository
     ///     The names of the strategies any version of which points at the signal <paramref name="signal" />, in name order.
     /// </summary>
     Task<IReadOnlyList<string>> UsingSignalAsync(Guid signal, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     The same for every signal by one read: by the id of a signal, the names of the strategies any version of which
+    ///     points at it, in name order. A signal no strategy points at is not in the answer.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, IReadOnlyList<string>>> UsingSignalsAsync(CancellationToken cancellationToken);
 }

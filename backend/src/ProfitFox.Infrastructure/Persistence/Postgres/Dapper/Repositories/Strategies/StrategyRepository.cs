@@ -114,6 +114,15 @@ internal sealed class StrategyRepository(NpgsqlDataSource database) : IStrategyR
         return [.. await connection.QueryAsync<string>(StrategyRepositoryQueries.UsingSignal(signal, cancellationToken))];
     }
 
+    public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<string>>> UsingSignalsAsync(CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        IEnumerable<SignalStrategyDb> rows = await connection.QueryAsync<SignalStrategyDb>(StrategyRepositoryQueries.UsingSignals(cancellationToken));
+        return rows
+            .GroupBy(row => row.Signal, row => row.Name)
+            .ToDictionary(group => group.Key, IReadOnlyList<string> (group) => [.. group]);
+    }
+
     // The version and the rows of its signal nodes; a signal deleted since the checks fails the save as a whole.
     private static async Task AddVersion(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid id, int version, StrategyDocument strategy, CancellationToken cancellationToken)
     {

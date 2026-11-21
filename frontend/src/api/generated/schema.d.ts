@@ -321,6 +321,7 @@ export interface components {
             signal: null | components["schemas"]["JsonElement"];
             error: null | string;
             runs: components["schemas"]["RunAvailabilityResponse"][];
+            lastRun: null | components["schemas"]["RunResponse"];
         };
         InstrumentResponse: {
             id: string;
@@ -539,6 +540,7 @@ export interface components {
             error: null | string;
             /** Format: uuid */
             id: null | string;
+            strategies: string[];
         };
         SignalParameterResponse: {
             name: string;
@@ -578,6 +580,8 @@ export interface components {
             /** Format: int32 */
             version: number | string;
             error: null | string;
+            signals: components["schemas"]["StrategySignalItem"][];
+            exits: string[];
         };
         StrategyPreviewResponse: {
             instrument: string;
@@ -600,6 +604,13 @@ export interface components {
                 [key: string]: components["schemas"]["NodePosition"];
             };
             signals: components["schemas"]["SignalUseResponse"][];
+        };
+        StrategySignalItem: {
+            name: string;
+            /** Format: int32 */
+            version: number | string;
+            /** Format: int32 */
+            latestVersion: number | string;
         };
         StrategyValidationResponse: {
             errors: components["schemas"]["RequestError"][];

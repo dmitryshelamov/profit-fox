@@ -8,7 +8,7 @@
 
 ## 1. База
 
-- [ ] 1.1 Ветка `feat/redesign-bench-ui` от `release/0.1.0`, если PR #20 (`feat/add-strategy-constructor`) уже слит,
+- [x] 1.1 Ветка `feat/redesign-bench-ui` от `release/0.1.0`, если PR #20 (`feat/add-strategy-constructor`) уже слит,
   иначе от `feat/add-strategy-constructor`. Снять и записать в раздел «База» этого файла: число unit- и интеграционных
   тестов бэкенда и тестов фронтенда, число предупреждений сборки `Release`, SHA-256 документа `/openapi/v1.json`,
   `frontend/src/api/generated/schema.d.ts` и `EngineVersions.json`, размер `frontend/dist` после `npm run build`.
@@ -16,24 +16,24 @@
 
 ## 2. Поля API
 
-- [ ] 2.1 Чтение «стратегии по всем сигналам» в `IStrategyRepository` и `StrategyRepository` (design.md, решение 7);
+- [x] 2.1 Чтение «стратегии по всем сигналам» в `IStrategyRepository` и `StrategyRepository` (design.md, решение 7);
   тот же ответ у репозитория в памяти для unit-тестов. Проверить интеграционным тестом на Postgres: стратегия со
   ссылкой в версии 1 и без ссылки в версии 2 названа у сигнала; сигнал без ссылок в ответе отсутствует или с пустым
   списком; имена в порядке имени.
-- [ ] 2.2 `SignalEntryInternal.Strategies`, `GetSignalsQueryHandler`, `SignalListItem.strategies`. Проверить
+- [x] 2.2 `SignalEntryInternal.Strategies`, `GetSignalsQueryHandler`, `SignalListItem.strategies`. Проверить
   unit-тестами обработчика сценарии spec `signal-constructor` «Стратегии сигнала в списке»: «Сигнал со стратегией»,
   «Ссылка только в прежней версии стратегии», «Сигнал без ссылок», и что у записи с ошибкой список пуст; репозиторий
   стратегий в тесте вызван один раз на весь список.
-- [ ] 2.3 `StrategyEntryInternal.Signals` и `Exits`, `GetStrategiesQueryHandler`, `StrategyListItem.signals` и `exits`.
+- [x] 2.3 `StrategyEntryInternal.Signals` и `Exits`, `GetStrategiesQueryHandler`, `StrategyListItem.signals` и `exits`.
   Проверить unit-тестами сценарии spec `strategy-constructor` «Сигналы и выходы стратегии в списке» («Сигнал и срок»,
   «Стоп и цель», «Два узла одного сигнала», «Стратегия без сигналов») и «Отметка новой версии сигнала в списке
   стратегий» (версия ссылки 3, последняя 4); версии сигналов прочитаны одним вызовом на весь список; у стратегии с
   ошибкой оба списка пусты.
-- [ ] 2.4 Чтение «последний законченный прогон по гипотезам с версиями» в `ILedgerRepository`, запрос
+- [x] 2.4 Чтение «последний законченный прогон по гипотезам с версиями» в `ILedgerRepository`, запрос
   `GetLastRunsQuery`, поле `lastRun` в `HypothesisResponse`. Проверить unit-тестами обработчика сценарии spec
   `bench-run-queue` «Последний прогон гипотезы»: «Законченный прогон», «Прогон в очереди важнее законченного», «Новая
   версия без прогонов»; интеграционным тестом репозитория — из двух строк журнала одной гипотезы отдана поздняя.
-- [ ] 2.5 Интеграционные тесты контроллеров: `GET /api/signals` отдаёт `strategies`, `GET /api/strategies` — `signals`
+- [x] 2.5 Интеграционные тесты контроллеров: `GET /api/signals` отдаёт `strategies`, `GET /api/strategies` — `signals`
   и `exits`, `GET /api/hypotheses` — `lastRun` без поля отчёта. Пересобрать `schema.d.ts` (`npm run generate:api`).
   Проверить: в документе OpenAPI относительно базы только добавления — те же пути, прежние схемы отличаются лишь новыми
   полями `strategies`, `signals`, `exits`, `lastRun` и схемой записи сигнала стратегии; новый SHA-256 документа и
@@ -140,9 +140,56 @@
 
 Сюда записывается всё, что при применении разошлось с design.md.
 
+- 1.1. Применение шло в облачном контейнере. Docker Hub отвечал `429 Too Many Requests`, поэтому образ `postgres:17`
+  взят с зеркала `mirror.gcr.io/library/postgres:17` и помечен локально как `postgres:17` (тот же образ, 17.12);
+  интеграционные тесты запускались с `TESTCONTAINERS_RYUK_DISABLED=true` (образ Ryuk с Docker Hub не скачать). Код
+  тестов и `BenchDatabase` не менялись.
+- 2.1. Чтение называется `IStrategyRepository.UsingSignalsAsync`; сигнал без ссылок в ответе отсутствует (не пустой
+  список). Порядок имён — `ORDER BY s.name` базы, как у прежнего `UsingSignalAsync`.
+- 2.2. `GetSignalsQueryHandler` получил в конструкторе `IStrategyRepository`. При пустом списке сигналов репозиторий
+  стратегий не вызывается совсем.
+- 2.3. `GetStrategiesQueryHandler` получил в конструкторе `ISignalRepository`. Запись сигнала стратегии — новые
+  `StrategySignalInternal` и `StrategySignalItem` (имя, версия ссылки, последняя версия). Ссылка на сигнал, которого нет
+  в библиотеке, в `Signals` не попадает (имени нет); база такого не допускает — используемый сигнал не удаляется. Если
+  в списке нет ни одной ссылки, `ReadVersionsAsync` не вызывается.
+- 2.4. Чтение журнала — `ILedgerRepository.LastAsync(versions)` с новым значением `HypothesisVersion(Id, Version)`;
+  из строк с одним временем отдаётся записанная последней (`time DESC, seq DESC`). Ответ запроса `GetLastRunsQuery` —
+  `LastRunInternal(Active, Finished)`: задано одно из двух, гипотезы без прогонов в ответе нет. Для unit-тестов
+  обработчика добавлены репозитории в памяти `MemoryRunRepository` и `MemoryLedgerRepository` (раньше их не было): они
+  умеют только читать, шаги Worker'а и решения бросают `NotSupportedException`.
+- 2.4. Интеграционный тест журнала (`LastRunsTests`) сначала сохраняет версии гипотез: строка `runs`, по которой
+  определяется вид прогона, ссылается на версию гипотезы внешним ключом.
+- 2.5. `schema.d.ts` пересобран не руками: API запущен в контейнере на Postgres в Docker, документ снят с
+  `http://127.0.0.1:5240/openapi/v1.json`, файл собран `openapi-typescript` из него. `lastRun` в схеме обязателен и
+  может быть `null`, а в ответе при `null` его нет — как у прежних полей (`JsonIgnoreCondition.WhenWritingNull`);
+  страница читает отсутствие как «не запускалась».
+
 ## База
 
+Снято на `aa1a17b` (ветка `feat/redesign-bench-ui` от `feat/add-strategy-constructor`, PR #20 ещё не слит) в облачном
+контейнере: .NET SDK 10.0.115, Node 22, Postgres 17 в Docker (Testcontainers).
+
+- Тесты бэкенда: unit — 332, интеграционные — 195, все зелёные. Тесты фронтенда: 82 в 12 файлах, все зелёные.
+- Сборка `Release` (`dotnet build ProfitFox.slnx --configuration Release`): 0 предупреждений, 0 ошибок.
+- SHA-256 `/openapi/v1.json`: `49df7b34f3f939fd4f0b0f9ebf7b3f3aa8313aff0a22c8cc1ce5fd9b955feb14` (17 путей, 42 схемы). Документ
+  снят с API, запущенного в `Development` на `http://127.0.0.1:5240`: адрес попадает в поле `servers` документа, поэтому
+  хэш сравним только с документом, снятым с того же адреса. `schema.d.ts`, собранный из этого документа, совпал с
+  файлом в репозитории байт в байт.
+- SHA-256 `frontend/src/api/generated/schema.d.ts`: `cb8c8b3f04327d9a27d75c3d4358deee5683a1ee5a4ee74bbda679862b0afeb2`.
+- SHA-256 `EngineVersions.json`: `f94ec0a7a01577bf6151c1db94412b6e5371f3b5f9bbec4ef49165facef954b9`.
+- `frontend/dist` после `npm run build`: 798 456 байт в 3 файлах (CSS 31.53 kB, JS 766.49 kB, `index.html` 0.42 kB).
+
 ## Замеры
+
+- 2.5. Тесты бэкенда после группы 2: unit — 352 (+20), интеграционные — 208 (+13), все зелёные на Postgres 17 в Docker.
+  Сборка `Release`: 0 предупреждений. Проверка однострочных `<summary>` пуста.
+- 2.5. SHA-256 `/openapi/v1.json` (с того же адреса, что база): `59151f14cf4d34ba54548759576f47d7c7f8580408ee822b6e238a687d6cd9ff`.
+  Относительно базы: те же 17 путей без изменений; схем 43 — добавлена одна, `StrategySignalItem`; у `SignalListItem`
+  добавлено поле `strategies`, у `StrategyListItem` — `signals` и `exits`, у `HypothesisResponse` — `lastRun`; прочие
+  поля и схемы не изменились.
+- 2.5. SHA-256 `schema.d.ts`: `c67cc65bf18eeeb71d076c6a0c6dca76f6183128a9309d0345f09ee3dc77cfc0`; отличие от базы — 11
+  добавленных строк, удалённых нет. SHA-256 `EngineVersions.json`:
+  `f94ec0a7a01577bf6151c1db94412b6e5371f3b5f9bbec4ef49165facef954b9` — равен базе.
 
 ## Workflow follow-up
 

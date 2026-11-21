@@ -26,6 +26,14 @@ public static class RunResponses
     }
 
     /// <summary>
+    ///     The last run of a hypothesis: the run of the queue, or the line of the run that ended last, without its report.
+    /// </summary>
+    public static RunResponse Of(LastRunInternal last)
+    {
+        return last.Active is { } active ? Of(active) : Of(last.Finished!);
+    }
+
+    /// <summary>
     ///     One run with its row in the queue and, once it ended, its line and report in the ledger.
     /// </summary>
     public static RunResponse Of(RunDetailsInternal details)
