@@ -112,7 +112,7 @@
   (сравнить списки `dotnet test --list-tests` с учётом переименований задач 4.1, 5.3 и 6.1); проверка однострочных
   `<summary>` из `ci.yml` пуста.
 - [x] 7.2 Сверка API с базой; `npm run build`, `npm run lint`, `npm test` во `frontend/` зелёные.
-- [ ] 7.3 Образы: `docker build` по `backend/src/ProfitFox.Presentation/Dockerfile` и `backend/src/ProfitFox.Worker/Dockerfile`
+- [x] 7.3 Образы: `docker build` по `backend/src/ProfitFox.Presentation/Dockerfile` и `backend/src/ProfitFox.Worker/Dockerfile`
   из корня проходит.
 - [ ] 7.4 Вживую на dev-запуске (`bench-db`, `bench-api`, `bench-worker`, `frontend` из `.claude/launch.json`, сервис
   данных — тот, что в настройках разработки): открыть список гипотез, сделать предпросмотр сигнала, поставить прогон и дождаться
