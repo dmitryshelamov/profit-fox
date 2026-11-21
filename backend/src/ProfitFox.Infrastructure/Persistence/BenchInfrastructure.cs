@@ -4,9 +4,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 using Npgsql;
 
-using ProfitFox.Application.Hypotheses;
-using ProfitFox.Application.Runs;
-using ProfitFox.Application.Signals;
+using ProfitFox.Application.Ports.Hypotheses;
+using ProfitFox.Application.Ports.Runs;
+using ProfitFox.Application.Ports.Signals;
 using ProfitFox.Infrastructure.Hypotheses;
 using ProfitFox.Infrastructure.Ledger;
 using ProfitFox.Infrastructure.Runs;

@@ -1,7 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 
-using ProfitFox.Application.MarketData;
-using ProfitFox.Application.Preview;
+using ProfitFox.Application.Contracts.Preview;
+using ProfitFox.Application.Exceptions;
+using ProfitFox.Application.Queries.Preview;
 using ProfitFox.Presentation.Errors;
 using ProfitFox.Presentation.Preview;
 

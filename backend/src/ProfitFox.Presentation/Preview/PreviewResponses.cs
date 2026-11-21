@@ -1,6 +1,6 @@
 using System.Globalization;
 
-using ProfitFox.Application.Preview;
+using ProfitFox.Application.Contracts.Preview;
 using ProfitFox.Domain.ValueObjects.Hypotheses;
 using ProfitFox.Domain.ValueObjects.MarketData;
 

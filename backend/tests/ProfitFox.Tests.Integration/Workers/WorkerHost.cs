@@ -3,7 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-using ProfitFox.Application.MarketData;
+using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Infrastructure.MarketData;
 using ProfitFox.Tests.Integration.MarketData;
 

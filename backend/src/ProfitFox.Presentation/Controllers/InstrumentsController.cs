@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 
-using ProfitFox.Application.MarketData;
+using ProfitFox.Application.Exceptions;
+using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Presentation.Instruments;
 

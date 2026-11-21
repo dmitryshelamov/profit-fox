@@ -1,6 +1,6 @@
 using System.Globalization;
 
-using ProfitFox.Application.MarketData;
+using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.Services.MarketData;
 using ProfitFox.Domain.ValueObjects.MarketData;
 

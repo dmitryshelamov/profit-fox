@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
 
-using ProfitFox.Application.Runs;
+using ProfitFox.Application.Commands.Runs;
 using ProfitFox.Domain.Services.Execution;
 using ProfitFox.Domain.Services.Hypotheses;
 using ProfitFox.Domain.Services.Runs;

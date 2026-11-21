@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 
-using ProfitFox.Application.Hypotheses;
-using ProfitFox.Application.Runs;
+using ProfitFox.Application.Commands.Hypotheses;
+using ProfitFox.Application.Contracts.Hypotheses;
+using ProfitFox.Application.Contracts.Runs;
+using ProfitFox.Application.Queries.Runs;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.ValueObjects.Hypotheses;
 using ProfitFox.Presentation.Errors;

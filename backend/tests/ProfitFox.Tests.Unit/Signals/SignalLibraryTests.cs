@@ -1,7 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-using ProfitFox.Application.Signals;
+using ProfitFox.Application.Commands.Signals;
+using ProfitFox.Application.Contracts.Signals;
+using ProfitFox.Application.Exceptions;
 using ProfitFox.Domain.Services.Signals;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
 using ProfitFox.Domain.ValueObjects.Signals;

@@ -2,7 +2,7 @@ using Dapper;
 
 using Npgsql;
 
-using ProfitFox.Application.Runs;
+using ProfitFox.Application.Ports.Runs;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Services.Ledger;
 using ProfitFox.Domain.ValueObjects.Ledger;

@@ -3,7 +3,8 @@ using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Grpc.Net.Client;
 
-using ProfitFox.Application.MarketData;
+using ProfitFox.Application.Exceptions;
+using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.MarketData.Protos;
 

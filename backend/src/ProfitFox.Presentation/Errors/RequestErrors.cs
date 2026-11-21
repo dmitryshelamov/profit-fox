@@ -1,4 +1,4 @@
-using ProfitFox.Application.Preview;
+using ProfitFox.Application.Contracts.Preview;
 using ProfitFox.Domain.ValueObjects.Graph;
 
 namespace ProfitFox.Presentation.Errors;

@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 
-using ProfitFox.Application.Signals;
+using ProfitFox.Application.Ports.Signals;
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Signals;

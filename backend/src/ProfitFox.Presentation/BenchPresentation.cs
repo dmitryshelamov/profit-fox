@@ -1,9 +1,10 @@
 using System.Text.Json.Serialization;
 
-using ProfitFox.Application.Hypotheses;
-using ProfitFox.Application.Preview;
-using ProfitFox.Application.Runs;
-using ProfitFox.Application.Signals;
+using ProfitFox.Application.Commands.Hypotheses;
+using ProfitFox.Application.Commands.Runs;
+using ProfitFox.Application.Commands.Signals;
+using ProfitFox.Application.Queries.Preview;
+using ProfitFox.Application.Queries.Runs;
 using ProfitFox.Infrastructure.Persistence;
 using ProfitFox.Presentation.Hypotheses;
 

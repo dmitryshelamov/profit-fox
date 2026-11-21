@@ -1,7 +1,8 @@
 using Grpc.Core;
 using Grpc.Net.Client;
 
-using ProfitFox.Application.MarketData;
+using ProfitFox.Application.Exceptions;
+using ProfitFox.Application.Queries.MarketData;
 using ProfitFox.Domain.Services.MarketData;
 using ProfitFox.Domain.ValueObjects.Execution;
 using ProfitFox.Domain.ValueObjects.MarketData;

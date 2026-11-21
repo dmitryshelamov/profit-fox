@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 
-using ProfitFox.Application.Runs;
+using ProfitFox.Application.Commands.Runs;
 
 namespace ProfitFox.Tests.Unit.Runs;
 

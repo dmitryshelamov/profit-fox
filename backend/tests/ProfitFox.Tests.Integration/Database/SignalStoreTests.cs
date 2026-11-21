@@ -5,7 +5,9 @@ using Dapper;
 
 using Npgsql;
 
-using ProfitFox.Application.Signals;
+using ProfitFox.Application.Commands.Signals;
+using ProfitFox.Application.Contracts.Signals;
+using ProfitFox.Application.Exceptions;
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.ValueObjects.Signals;
 using ProfitFox.Infrastructure.Signals;

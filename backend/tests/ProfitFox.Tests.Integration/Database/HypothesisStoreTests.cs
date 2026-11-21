@@ -1,4 +1,5 @@
-using ProfitFox.Application.Hypotheses;
+using ProfitFox.Application.Commands.Hypotheses;
+using ProfitFox.Application.Contracts.Hypotheses;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.ValueObjects.Hypotheses;
 using ProfitFox.Infrastructure.Hypotheses;

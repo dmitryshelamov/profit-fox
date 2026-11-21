@@ -3,7 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-using ProfitFox.Application.Preview;
+using ProfitFox.Application.Queries.Preview;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Presentation.Preview;
 using ProfitFox.Tests.Integration.Database;

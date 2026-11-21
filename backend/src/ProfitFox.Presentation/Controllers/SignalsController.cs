@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 
-using ProfitFox.Application.Signals;
+using ProfitFox.Application.Commands.Signals;
+using ProfitFox.Application.Exceptions;
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Signals;

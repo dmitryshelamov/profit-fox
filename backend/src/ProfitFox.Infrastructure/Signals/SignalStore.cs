@@ -2,7 +2,8 @@ using Dapper;
 
 using Npgsql;
 
-using ProfitFox.Application.Signals;
+using ProfitFox.Application.Exceptions;
+using ProfitFox.Application.Ports.Signals;
 using ProfitFox.Domain.ValueObjects.Signals;
 
 namespace ProfitFox.Infrastructure.Signals;

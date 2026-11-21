@@ -1,6 +1,6 @@
 using Npgsql;
 
-using ProfitFox.Application.Runs;
+using ProfitFox.Application.Commands.Runs;
 using ProfitFox.Infrastructure.Persistence;
 
 namespace ProfitFox.Worker;

@@ -1,8 +1,9 @@
 using Grpc.Net.Client;
 
-using ProfitFox.Application.Hypotheses;
-using ProfitFox.Application.MarketData;
-using ProfitFox.Application.Runs;
+using ProfitFox.Application.Commands.Hypotheses;
+using ProfitFox.Application.Commands.Runs;
+using ProfitFox.Application.Ports.MarketData;
+using ProfitFox.Application.Ports.Runs;
 using ProfitFox.Infrastructure.MarketData;
 using ProfitFox.Infrastructure.Persistence;
 

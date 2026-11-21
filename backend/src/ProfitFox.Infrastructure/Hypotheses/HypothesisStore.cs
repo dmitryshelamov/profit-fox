@@ -2,7 +2,7 @@ using Dapper;
 
 using Npgsql;
 
-using ProfitFox.Application.Hypotheses;
+using ProfitFox.Application.Ports.Hypotheses;
 
 namespace ProfitFox.Infrastructure.Hypotheses;
 

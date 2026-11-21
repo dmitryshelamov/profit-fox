@@ -1,6 +1,7 @@
 using System.Text.Json;
 
-using ProfitFox.Application.MarketData;
+using ProfitFox.Application.Exceptions;
+using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Infrastructure.MarketData;

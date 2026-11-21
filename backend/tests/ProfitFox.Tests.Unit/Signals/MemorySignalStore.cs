@@ -1,4 +1,4 @@
-using ProfitFox.Application.Signals;
+using ProfitFox.Application.Ports.Signals;
 using ProfitFox.Domain.ValueObjects.Signals;
 
 namespace ProfitFox.Tests.Unit.Signals;

@@ -8,7 +8,7 @@ using Dapper;
 
 using Npgsql;
 
-using ProfitFox.Application.Runs;
+using ProfitFox.Application.Ports.Runs;
 using ProfitFox.Domain.ValueObjects.Ledger;
 using ProfitFox.Domain.ValueObjects.Runs;
 using ProfitFox.Infrastructure.Runs;
