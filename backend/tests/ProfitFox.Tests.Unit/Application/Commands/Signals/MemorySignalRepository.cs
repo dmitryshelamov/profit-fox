@@ -1,5 +1,6 @@
 using ProfitFox.Domain.Entities.Signals;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Signals;
 
 namespace ProfitFox.Tests.Unit.Application.Commands.Signals;
@@ -25,6 +26,23 @@ public sealed class MemorySignalRepository : ISignalRepository
     public Task<SignalRead?> ReadAsync(string name, CancellationToken cancellationToken)
     {
         return Task.FromResult(_signals.TryGetValue(name, out SignalDocument? signal) ? new SignalRead(signal, []) : null);
+    }
+
+    /// <summary>
+    ///     Only the latest version of each signal is kept, so only it is found.
+    /// </summary>
+    public Task<IReadOnlyList<SignalVersion>> ReadVersionsAsync(IReadOnlyCollection<SignalReference> references, CancellationToken cancellationToken)
+    {
+        List<SignalVersion> versions = [];
+        foreach (SignalReference reference in references)
+        {
+            if (_signals.Values.FirstOrDefault(signal => signal.Id == reference.Signal) is { } signal)
+            {
+                versions.Add(new SignalVersion(reference, signal.Name, signal.Version, reference.Version == signal.Version ? signal.Graph : null));
+            }
+        }
+
+        return Task.FromResult<IReadOnlyList<SignalVersion>>(versions);
     }
 
     public Task<SignalDocument> CreateAsync(SignalDocument signal, CancellationToken cancellationToken)

@@ -34,16 +34,16 @@
 
 ## 3. Хранение стратегий
 
-- [ ] 3.1 Миграция `202611210001_create_strategy_tables`: `strategies`, `strategy_versions`, `strategy_signals` с
+- [x] 3.1 Миграция `202611210001_create_strategy_tables`: `strategies`, `strategy_versions`, `strategy_signals` с
   ключами из design.md, решение 4. Проверить интеграционным тестом на Postgres: после старта три таблицы есть, в
   `VersionInfo` две строки, `Down` убирает только новые таблицы.
-- [ ] 3.2 Сущность `StrategyDocument`, `IStrategyRepository`, `StrategyRepository` (`Contracts`, `Converters`,
+- [x] 3.2 Сущность `StrategyDocument`, `IStrategyRepository`, `StrategyRepository` (`Contracts`, `Converters`,
   `Queries`), регистрация в `PostgresRegistrar`; у `SignalDocument` — `Id`, у `ISignalRepository` — чтение версий по
   списку ссылок. Генераторы `StrategyDocumentGenerator` в `Tests.Shared`. Проверить интеграционными тестами
   `StrategyRepositoryTests`: сценарии spec `strategy-constructor` «Правка срока», «Только перемещение», сохранение
   версий при переименовании, удаление с версиями, строки `strategy_signals` по узлам сигнала каждой версии; чтение
   версий сигнала отдаёт имя и номер последней версии.
-- [ ] 3.3 Запрет удаления используемого сигнала: `UsingSignalAsync` и перевод нарушения внешнего ключа в отказ.
+- [x] 3.3 Запрет удаления используемого сигнала: `UsingSignalAsync` и перевод нарушения внешнего ключа в отказ.
   Проверить интеграционными тестами сценарии spec `signal-constructor` «Удаление используемого сигнала» (на уровне
   репозитория), «Ссылка только в прежней версии стратегии», «Удаление после удаления стратегии»; и что удаление,
   пришедшее одновременно с сохранением стратегии, не оставляет стратегию со ссылкой на удалённый сигнал.
@@ -146,6 +146,21 @@
 - 2.3. Порядок проводов — по решению 3: провода стратегии первыми, затем внутренние. В сценарии spec «Раскрытие
   стратегии H0001» провода перечислены в другом порядке; сценарий порядка не называет, тест проверяет порядок design.md.
   Провод, заменивший провод параметра, стоит среди внутренних на месте этого провода.
+- 3.1. В миграцию добавлен индекс `strategy_signals_signal_ix (signal_id, signal_version)`, которого нет в решении 4: по
+  нему база проверяет `RESTRICT` при удалении версий сигнала и отвечает `UsingSignalAsync`.
+- 3.2. Идентификатор сигнала теперь задаёт сущность: `SignalDocument.Create` берёт новый `Guid`, `Restore` получает `id`
+  первым параметром, `SignalRepository.CreateAsync` пишет `signal.Id` (раньше идентификатор придумывал репозиторий).
+- 3.2. Отказы библиотеки стратегий — своё исключение `StrategyLibraryException` с `StrategyProblem` (`Invalid`,
+  `NotFound`, `NameTaken`, `Unreadable`), по образцу `SignalLibraryException`; в design.md оно не названо.
+- 3.2. `StrategyRepository` читает граф версии только по форме (`StrategyGraph.ReadForm`): смысл графа стратегии зависит
+  от сохранённых сигналов, его проверяет Application. Ошибка формы или `layout` даёт `StrategyRead` с ошибками.
+- 3.2. Общий код с сигналами: отбор `layout` по узлам графа — `Domain/Services/Graph/GraphLayout`, JSON `layout` —
+  `Infrastructure/.../Dapper/Converters/LayoutJson` (из `SignalJson` вынесен, не скопирован).
+- 3.3. Имена стратегий в отказе удаления сигнала (`SignalProblem.InUse`, свойство `Strategies`) `SignalRepository`
+  читает сам, после нарушения внешнего ключа, — так в отказ попадает и стратегия, сохранённая мгновением раньше.
+- 3.3. Сохранение стратегии, у которой сигнал удалили между проверкой и записью, `StrategyRepository` отклоняет
+  `StrategyLibraryException(Invalid)` только с текстом, без ошибки по узлу: узел в нарушении ключа не назван. Обычный
+  случай «Ссылка на удалённый сигнал» ловит проверка графа до записи — ошибкой `UnknownSignal` по узлу (группа 4).
 
 ## База
 

@@ -10,6 +10,7 @@ using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Hypothes
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Runs;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Signals;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Strategies;
 
 namespace ProfitFox.Infrastructure.Persistence.Postgres;
 
@@ -29,6 +30,7 @@ internal static class PostgresRegistrar
         services.AddSingleton<ILedgerRepository, LedgerRepository>();
         services.AddSingleton<IRunRepository, RunRepository>();
         services.AddSingleton<ISignalRepository, SignalRepository>();
+        services.AddSingleton<IStrategyRepository, StrategyRepository>();
         services
             .AddFluentMigratorCore()
             .ConfigureRunner(runner => runner

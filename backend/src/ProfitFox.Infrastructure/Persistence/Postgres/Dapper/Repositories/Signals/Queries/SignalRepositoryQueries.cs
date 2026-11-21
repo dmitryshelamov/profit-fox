@@ -3,6 +3,7 @@ using System.Data;
 using Dapper;
 
 using ProfitFox.Domain.Entities.Signals;
+using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Signals.Converters;
 
 namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Signals.Queries;
@@ -38,6 +39,24 @@ internal static class SignalRepositoryQueries
     private const string DeleteSql = "DELETE FROM signals WHERE name = @Name";
 
     private const string InsertVersionSql = "INSERT INTO signal_versions (signal_id, version, graph) VALUES (@Id, @Version, @Graph::jsonb)";
+
+    private const string VersionsSql =
+        """
+        SELECT r.id AS "Signal", r.version AS "Version", s.name AS "Name", s.version AS "LatestVersion", v.graph::text AS "Graph"
+        FROM unnest(@Ids::uuid[], @Versions::integer[]) AS r (id, version)
+        JOIN signals s ON s.id = r.id
+        LEFT JOIN signal_versions v ON v.signal_id = r.id AND v.version = r.version
+        """;
+
+    private const string StrategiesSql =
+        """
+        SELECT DISTINCT t.name
+        FROM signals s
+        JOIN strategy_signals x ON x.signal_id = s.id
+        JOIN strategies t ON t.id = x.strategy_id
+        WHERE s.name = @Name
+        ORDER BY t.name
+        """;
 
     public static CommandDefinition Names(CancellationToken cancellationToken)
     {
@@ -109,5 +128,25 @@ internal static class SignalRepositoryQueries
             new { Id = id, Version = version, Graph = SignalJson.WriteGraph(signal) },
             transaction,
             cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    ///     A row for each reference whose signal is saved: its name and latest version, and the graph of the version when
+    ///     there is one.
+    /// </summary>
+    public static CommandDefinition Versions(IReadOnlyCollection<SignalReference> references, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            VersionsSql,
+            new { Ids = references.Select(reference => reference.Signal).ToArray(), Versions = references.Select(reference => reference.Version).ToArray() },
+            cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    ///     The names of the strategies that point at a version of the signal <paramref name="name" />, in name order.
+    /// </summary>
+    public static CommandDefinition Strategies(string name, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(StrategiesSql, new { Name = name }, cancellationToken: cancellationToken);
     }
 }

@@ -1,5 +1,6 @@
 using ProfitFox.Domain.Entities.Signals;
 using ProfitFox.Domain.Exceptions;
+using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Signals;
 
 namespace ProfitFox.Domain.Repositories;
@@ -23,6 +24,13 @@ public interface ISignalRepository
     Task<SignalRead?> ReadAsync(string name, CancellationToken cancellationToken);
 
     /// <summary>
+    ///     The versions the references point at, by one read: one for each reference whose signal is saved, with the current
+    ///     name and the latest version of the signal; its graph is null when there is no such version or its text does not
+    ///     read. A reference to a signal that is not saved gives nothing.
+    /// </summary>
+    Task<IReadOnlyList<SignalVersion>> ReadVersionsAsync(IReadOnlyCollection<SignalReference> references, CancellationToken cancellationToken);
+
+    /// <summary>
     ///     Keeps a signal that is not saved yet as its version 1.
     /// </summary>
     /// <exception cref="SignalLibraryException">The name is taken, also when it was taken a moment ago.</exception>
@@ -44,5 +52,9 @@ public interface ISignalRepository
     /// <summary>
     ///     Removes the signal with its versions.
     /// </summary>
+    /// <exception cref="SignalLibraryException">
+    ///     A version of a saved strategy points at the signal, also one saved a moment ago: <see cref="SignalProblem.InUse" />
+    ///     with the names of the strategies.
+    /// </exception>
     Task DeleteAsync(string name, CancellationToken cancellationToken);
 }

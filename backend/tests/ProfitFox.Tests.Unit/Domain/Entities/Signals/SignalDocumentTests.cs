@@ -53,7 +53,7 @@ public sealed class SignalDocumentTests
     {
         GraphDefinition graph = SignalDocumentGenerator.GenerateGraph();
 
-        var signal = SignalDocument.Restore("funding-high", description: null, graph, Layout, version: 7);
+        var signal = SignalDocument.Restore(Guid.NewGuid(), "funding-high", description: null, graph, Layout, version: 7);
 
         Assert.Multiple(() =>
         {

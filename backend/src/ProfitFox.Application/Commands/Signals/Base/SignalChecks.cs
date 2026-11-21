@@ -51,9 +51,7 @@ internal static class SignalChecks
         }
 
         GraphDefinition definition = read.Value.Graph;
-        var ids = definition.Nodes.Select(node => node.Id).ToHashSet(StringComparer.Ordinal);
-        var kept = layout.Where(position => ids.Contains(position.Key)).ToDictionary(StringComparer.Ordinal);
-        return SignalDocument.Create(name, string.IsNullOrWhiteSpace(description) ? null : description, definition, kept);
+        return SignalDocument.Create(name, string.IsNullOrWhiteSpace(description) ? null : description, definition, GraphLayout.Of(definition, layout));
     }
 
     public static GraphError NameError(string name)
