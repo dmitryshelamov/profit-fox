@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 
-using ProfitFox.Presentation.Hypotheses;
+using ProfitFox.Presentation.Contracts.Hypotheses;
 using ProfitFox.Tests.Integration.MarketData;
 
 namespace ProfitFox.Tests.Integration.Presentation;

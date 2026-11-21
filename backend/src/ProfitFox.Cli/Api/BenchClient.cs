@@ -1,8 +1,8 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 
-using ProfitFox.Cli.Hypotheses;
-using ProfitFox.Cli.Runs;
+using ProfitFox.Cli.Contracts.Hypotheses;
+using ProfitFox.Cli.Contracts.Runs;
 
 namespace ProfitFox.Cli.Api;
 

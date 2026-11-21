@@ -15,10 +15,10 @@ using ProfitFox.Domain.ValueObjects.Runs.Enums;
 using ProfitFox.Infrastructure.Clients.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Hypotheses;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger;
-using ProfitFox.Presentation.Errors;
-using ProfitFox.Presentation.Hypotheses;
-using ProfitFox.Presentation.Instruments;
-using ProfitFox.Presentation.Preview;
+using ProfitFox.Presentation.Contracts.Errors;
+using ProfitFox.Presentation.Contracts.Hypotheses;
+using ProfitFox.Presentation.Contracts.Instruments;
+using ProfitFox.Presentation.Contracts.Preview;
 using ProfitFox.Tests.Integration.Database;
 using ProfitFox.Tests.Integration.MarketData;
 

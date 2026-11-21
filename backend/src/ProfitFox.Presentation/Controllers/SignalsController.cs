@@ -5,8 +5,10 @@ using ProfitFox.Application.Exceptions;
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Signals;
-using ProfitFox.Presentation.Errors;
-using ProfitFox.Presentation.Signals;
+using ProfitFox.Presentation.Contracts.Errors;
+using ProfitFox.Presentation.Contracts.Errors.Converters;
+using ProfitFox.Presentation.Contracts.Signals;
+using ProfitFox.Presentation.Contracts.Signals.Converters;
 
 namespace ProfitFox.Presentation.Controllers;
 

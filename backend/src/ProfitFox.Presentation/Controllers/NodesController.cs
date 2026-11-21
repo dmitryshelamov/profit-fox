@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 
-using ProfitFox.Presentation.Nodes;
+using ProfitFox.Presentation.Contracts.Nodes;
+using ProfitFox.Presentation.Contracts.Nodes.Converters;
 
 namespace ProfitFox.Presentation.Controllers;
 

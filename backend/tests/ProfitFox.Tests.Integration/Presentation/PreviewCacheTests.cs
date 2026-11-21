@@ -5,7 +5,7 @@ using System.Text.Json.Nodes;
 
 using ProfitFox.Application.Queries.Preview;
 using ProfitFox.Domain.ValueObjects.MarketData;
-using ProfitFox.Presentation.Preview;
+using ProfitFox.Presentation.Contracts.Preview;
 using ProfitFox.Tests.Integration.Database;
 using ProfitFox.Tests.Integration.MarketData;
 

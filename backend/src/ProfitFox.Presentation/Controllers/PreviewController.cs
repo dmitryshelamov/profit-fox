@@ -3,8 +3,10 @@ using Microsoft.AspNetCore.Mvc;
 using ProfitFox.Application.Contracts.Preview;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Queries.Preview;
-using ProfitFox.Presentation.Errors;
-using ProfitFox.Presentation.Preview;
+using ProfitFox.Presentation.Contracts.Errors;
+using ProfitFox.Presentation.Contracts.Errors.Converters;
+using ProfitFox.Presentation.Contracts.Preview;
+using ProfitFox.Presentation.Contracts.Preview.Converters;
 
 namespace ProfitFox.Presentation.Controllers;
 

@@ -7,8 +7,8 @@ using Dapper;
 
 using Npgsql;
 
-using ProfitFox.Presentation.Errors;
-using ProfitFox.Presentation.Signals;
+using ProfitFox.Presentation.Contracts.Errors;
+using ProfitFox.Presentation.Contracts.Signals;
 using ProfitFox.Tests.Integration.Database;
 using ProfitFox.Tests.Integration.MarketData;
 

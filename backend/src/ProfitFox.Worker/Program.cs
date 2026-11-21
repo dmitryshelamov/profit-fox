@@ -6,6 +6,8 @@ using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.Ports.Runs;
 using ProfitFox.Infrastructure.Clients.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres;
+using ProfitFox.Worker.BackgroundServices;
+using ProfitFox.Worker.Logging;
 
 namespace ProfitFox.Worker;
 

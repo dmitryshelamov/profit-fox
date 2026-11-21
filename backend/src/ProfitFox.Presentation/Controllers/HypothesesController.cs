@@ -7,8 +7,8 @@ using ProfitFox.Application.Contracts.Runs;
 using ProfitFox.Application.Queries.Runs;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.ValueObjects.Hypotheses;
-using ProfitFox.Presentation.Errors;
-using ProfitFox.Presentation.Hypotheses;
+using ProfitFox.Presentation.Contracts.Errors;
+using ProfitFox.Presentation.Contracts.Hypotheses;
 
 namespace ProfitFox.Presentation.Controllers;
 

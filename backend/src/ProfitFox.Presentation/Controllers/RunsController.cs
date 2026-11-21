@@ -7,8 +7,9 @@ using ProfitFox.Application.Queries.Runs;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Services.Runs;
 using ProfitFox.Domain.ValueObjects.Runs.Enums;
-using ProfitFox.Presentation.Errors;
-using ProfitFox.Presentation.Runs;
+using ProfitFox.Presentation.Contracts.Errors;
+using ProfitFox.Presentation.Contracts.Runs;
+using ProfitFox.Presentation.Contracts.Runs.Converters;
 
 namespace ProfitFox.Presentation.Controllers;
 

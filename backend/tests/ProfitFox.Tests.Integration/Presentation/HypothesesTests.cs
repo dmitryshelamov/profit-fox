@@ -5,9 +5,9 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 
 using ProfitFox.Domain.ValueObjects.Ledger;
-using ProfitFox.Presentation.Errors;
-using ProfitFox.Presentation.Hypotheses;
-using ProfitFox.Presentation.Runs;
+using ProfitFox.Presentation.Contracts.Errors;
+using ProfitFox.Presentation.Contracts.Hypotheses;
+using ProfitFox.Presentation.Contracts.Runs;
 using ProfitFox.Tests.Integration.Database;
 using ProfitFox.Tests.Integration.MarketData;
 

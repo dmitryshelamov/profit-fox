@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.ValueObjects.MarketData;
-using ProfitFox.Presentation.Instruments;
+using ProfitFox.Presentation.Contracts.Instruments;
 
 namespace ProfitFox.Presentation.Controllers;
 
