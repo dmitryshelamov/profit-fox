@@ -52,6 +52,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/nodes/strategy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListStrategyNodeKinds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/preview": {
         parameters: {
             query?: never;
@@ -180,6 +196,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/strategies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListStrategies"];
+        put?: never;
+        post: operations["CreateStrategy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/strategies/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetStrategy"];
+        put: operations["ReplaceStrategy"];
+        post?: never;
+        delete: operations["DeleteStrategy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/strategies/{name}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["RenameStrategy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/strategies/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ValidateStrategyGraph"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -192,6 +272,14 @@ export interface components {
             kind: null | string;
         };
         CreateSignalRequest: {
+            name: null | string;
+            description: null | string;
+            graph: null | components["schemas"]["JsonElement"];
+            layout: null | {
+                [key: string]: components["schemas"]["NodePosition"];
+            };
+        };
+        CreateStrategyRequest: {
             name: null | string;
             description: null | string;
             graph: null | components["schemas"]["JsonElement"];
@@ -291,7 +379,17 @@ export interface components {
         RenameSignalRequest: {
             to: null | string;
         };
+        RenameStrategyRequest: {
+            to: null | string;
+        };
         ReplaceSignalRequest: {
+            description: null | string;
+            graph: null | components["schemas"]["JsonElement"];
+            layout: null | {
+                [key: string]: components["schemas"]["NodePosition"];
+            };
+        };
+        ReplaceStrategyRequest: {
             description: null | string;
             graph: null | components["schemas"]["JsonElement"];
             layout: null | {
@@ -387,12 +485,27 @@ export interface components {
             values: string[];
             default: null | string;
         };
+        SignalInUseResponse: {
+            errors: components["schemas"]["RequestError"][];
+            strategies: string[];
+        };
         SignalListItem: {
             name: string;
             description: null | string;
             /** Format: int32 */
             version: number | string;
             error: null | string;
+            /** Format: uuid */
+            id: null | string;
+        };
+        SignalParameterResponse: {
+            name: string;
+            type: string;
+            value: components["schemas"]["JsonElement"];
+            /** Format: double */
+            minimum: null | number | string;
+            /** Format: double */
+            maximum: null | number | string;
         };
         SignalResponse: {
             name: string;
@@ -403,6 +516,41 @@ export interface components {
             layout: {
                 [key: string]: components["schemas"]["NodePosition"];
             };
+            /** Format: uuid */
+            id: string;
+        };
+        SignalUseResponse: {
+            node: string;
+            /** Format: uuid */
+            signal: string;
+            name: null | string;
+            /** Format: int32 */
+            version: number | string;
+            /** Format: int32 */
+            latestVersion: null | number | string;
+            parameters: components["schemas"]["SignalParameterResponse"][];
+        };
+        StrategyListItem: {
+            name: string;
+            description: null | string;
+            /** Format: int32 */
+            version: number | string;
+            error: null | string;
+        };
+        StrategyResponse: {
+            name: string;
+            description: null | string;
+            /** Format: int32 */
+            version: number | string;
+            graph: components["schemas"]["JsonElement"];
+            layout: {
+                [key: string]: components["schemas"]["NodePosition"];
+            };
+            signals: components["schemas"]["SignalUseResponse"][];
+        };
+        StrategyValidationResponse: {
+            errors: components["schemas"]["RequestError"][];
+            signals: components["schemas"]["SignalUseResponse"][];
         };
         ValidateGraphRequest: {
             graph: null | components["schemas"]["JsonElement"];
@@ -517,6 +665,28 @@ export interface operations {
         };
     };
     ListNodeKinds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["NodeKindResponse"][];
+                    "application/json": components["schemas"]["NodeKindResponse"][];
+                    "text/json": components["schemas"]["NodeKindResponse"][];
+                };
+            };
+        };
+    };
+    ListStrategyNodeKinds: {
         parameters: {
             query?: never;
             header?: never;
@@ -961,6 +1131,17 @@ export interface operations {
                     "text/json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["SignalInUseResponse"];
+                    "application/json": components["schemas"]["SignalInUseResponse"];
+                    "text/json": components["schemas"]["SignalInUseResponse"];
+                };
+            };
         };
     };
     RenameSignal: {
@@ -1050,6 +1231,298 @@ export interface operations {
                     "text/plain": components["schemas"]["ValidationResponse"];
                     "application/json": components["schemas"]["ValidationResponse"];
                     "text/json": components["schemas"]["ValidationResponse"];
+                };
+            };
+        };
+    };
+    ListStrategies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["StrategyListItem"][];
+                    "application/json": components["schemas"]["StrategyListItem"][];
+                    "text/json": components["schemas"]["StrategyListItem"][];
+                };
+            };
+        };
+    };
+    CreateStrategy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStrategyRequest"];
+                "text/json": components["schemas"]["CreateStrategyRequest"];
+                "application/*+json": components["schemas"]["CreateStrategyRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["StrategyResponse"];
+                    "application/json": components["schemas"]["StrategyResponse"];
+                    "text/json": components["schemas"]["StrategyResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    GetStrategy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["StrategyResponse"];
+                    "application/json": components["schemas"]["StrategyResponse"];
+                    "text/json": components["schemas"]["StrategyResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    ReplaceStrategy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceStrategyRequest"];
+                "text/json": components["schemas"]["ReplaceStrategyRequest"];
+                "application/*+json": components["schemas"]["ReplaceStrategyRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["StrategyResponse"];
+                    "application/json": components["schemas"]["StrategyResponse"];
+                    "text/json": components["schemas"]["StrategyResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteStrategy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RenameStrategy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameStrategyRequest"];
+                "text/json": components["schemas"]["RenameStrategyRequest"];
+                "application/*+json": components["schemas"]["RenameStrategyRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["StrategyResponse"];
+                    "application/json": components["schemas"]["StrategyResponse"];
+                    "text/json": components["schemas"]["StrategyResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    ValidateStrategyGraph: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ValidateGraphRequest"];
+                "text/json": components["schemas"]["ValidateGraphRequest"];
+                "application/*+json": components["schemas"]["ValidateGraphRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["StrategyValidationResponse"];
+                    "application/json": components["schemas"]["StrategyValidationResponse"];
+                    "text/json": components["schemas"]["StrategyValidationResponse"];
                 };
             };
         };

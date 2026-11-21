@@ -20,7 +20,7 @@ public sealed class SignalInternalConverterTests
     [Test]
     public void A_signal_in_the_list_keeps_its_name_description_and_version()
     {
-        Assert.That(Signal.ToEntryInternal(), Is.EqualTo(new SignalEntryInternal("funding-high", "описание", Version: 3, Error: null)));
+        Assert.That(Signal.ToEntryInternal(), Is.EqualTo(new SignalEntryInternal("funding-high", "описание", Version: 3, Error: null) { Id = Signal.Id }));
     }
 
     [Test]
@@ -30,6 +30,7 @@ public sealed class SignalInternalConverterTests
 
         Assert.Multiple(() =>
         {
+            Assert.That(converted.Id, Is.EqualTo(Signal.Id));
             Assert.That(converted.Name, Is.EqualTo("funding-high"));
             Assert.That(converted.Description, Is.EqualTo("описание"));
             Assert.That(converted.Graph, Is.SameAs(Signal.Graph));

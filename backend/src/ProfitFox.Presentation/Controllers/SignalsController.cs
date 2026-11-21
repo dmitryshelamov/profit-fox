@@ -32,7 +32,7 @@ public class SignalsController(ISender sender) : ControllerBase
     [ProducesResponseType<SignalListItem[]>(StatusCodes.Status200OK)]
     public async Task<ActionResult<SignalListItem[]>> List(CancellationToken cancellation)
     {
-        return (await sender.Send(new GetSignalsQuery(), cancellation)).Select(entry => new SignalListItem(entry.Name, entry.Description, entry.Version, entry.Error)).ToArray();
+        return (await sender.Send(new GetSignalsQuery(), cancellation)).Select(entry => new SignalListItem(entry.Name, entry.Description, entry.Version, entry.Error, entry.Id)).ToArray();
     }
 
     [HttpGet("{name}", Name = "GetSignal")]
@@ -87,6 +87,7 @@ public class SignalsController(ISender sender) : ControllerBase
     [HttpDelete("{name}", Name = "DeleteSignal")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<SignalInUseResponse>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult> Delete(string name, CancellationToken cancellation)
     {
         ActionResult<bool> answer = await Answer(async () =>
@@ -124,6 +125,7 @@ public class SignalsController(ISender sender) : ControllerBase
                 SignalProblem.NotFound => Problem(exception.Message, statusCode: StatusCodes.Status404NotFound),
                 SignalProblem.NameTaken => Conflict(new ErrorResponse([new RequestError("NameTaken", exception.Message) { Field = "name" }])),
                 SignalProblem.Unreadable => UnprocessableEntity(new ErrorResponse([new RequestError("UnreadableSignal", exception.Message)])),
+                SignalProblem.InUse => Conflict(new SignalInUseResponse([new RequestError("SignalInUse", exception.Message)], exception.Strategies)),
                 _ => throw new InvalidOperationException($"Unknown problem {exception.Problem}.", exception)
             };
         }

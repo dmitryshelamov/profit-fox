@@ -6,8 +6,9 @@ using ProfitFox.Domain.ValueObjects.Nodes;
 namespace ProfitFox.Presentation.Contracts.Nodes.Converters;
 
 /// <summary>
-///     The node catalog for the constructor of signals, in the order of the engine: only the kinds a signal may have
-///     (spec signal-constructor «Каталог узлов»), so the palette has no position nodes.
+///     The node catalogs of the constructors, in the order of the engine. The catalog of a signal has only the kinds a signal
+///     may have (spec signal-constructor «Каталог узлов»), so its palette has no position nodes; the catalog of a strategy has
+///     every kind but <c>outputs</c> (spec strategy-constructor «Каталог узлов стратегии»).
 /// </summary>
 public static class NodeCatalogResponse
 {
@@ -18,6 +19,11 @@ public static class NodeCatalogResponse
         return [.. NodeCatalog.All.Where(kind => kind.AllowedInSignal).Select(Kind)];
     }
 
+    public static IReadOnlyList<NodeKindResponse> BuildStrategy()
+    {
+        return [.. NodeCatalog.All.Where(kind => kind.Name != NodeCatalog.Outputs).Select(Kind)];
+    }
+
     private static NodeKindResponse Kind(NodeKind kind)
     {
         (string title, string group) = NodeTitles.Of(kind.Name) ?? (kind.Name, NodeTitles.Logic);
@@ -25,6 +31,7 @@ public static class NodeCatalogResponse
         {
             NodeCatalog.Parameters => "parameters",
             NodeCatalog.Outputs => "outputs",
+            NodeCatalog.Signal => "signal",
             _ => null
         };
         return new NodeKindResponse(

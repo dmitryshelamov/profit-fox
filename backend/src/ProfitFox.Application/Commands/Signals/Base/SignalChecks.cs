@@ -1,12 +1,12 @@
 using System.Text.Json;
 
+using ProfitFox.Application.Commands.Base;
 using ProfitFox.Domain.Entities.Signals;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.Services.Signals;
 using ProfitFox.Domain.ValueObjects.Graph;
-using ProfitFox.Domain.ValueObjects.Graph.Enums;
 using ProfitFox.Domain.ValueObjects.Signals;
 
 namespace ProfitFox.Application.Commands.Signals.Base;
@@ -56,17 +56,20 @@ internal static class SignalChecks
 
     public static GraphError NameError(string name)
     {
-        return new GraphError(
-            GraphErrorCode.InvalidField,
-            $"{name} is not a signal name: lower-case latin letters and digits joined by single dashes, at most {SignalNames.MaxLength} characters")
-        {
-            Field = "name"
-        };
+        return DocumentNames.Error(name, "signal");
     }
 
     public static SignalLibraryException NotFound(string name)
     {
         return new SignalLibraryException(SignalProblem.NotFound, $"there is no signal {name}");
+    }
+
+    public static SignalLibraryException InUse(string name, IReadOnlyList<string> strategies)
+    {
+        return new SignalLibraryException(
+            SignalProblem.InUse,
+            $"the signal {name} is used by the strategies {string.Join(", ", strategies)}",
+            strategies: strategies);
     }
 
     public static SignalLibraryException Taken(string name)

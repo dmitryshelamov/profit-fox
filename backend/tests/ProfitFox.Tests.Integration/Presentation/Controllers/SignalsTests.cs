@@ -9,6 +9,7 @@ using Npgsql;
 
 using ProfitFox.Presentation.Contracts.Errors;
 using ProfitFox.Presentation.Contracts.Signals;
+using ProfitFox.Presentation.Contracts.Strategies;
 using ProfitFox.Tests.Integration.MarketData;
 
 namespace ProfitFox.Tests.Integration.Presentation.Controllers;
@@ -152,6 +153,82 @@ public sealed class SignalsTests
         ValidationResponse checkedGraph = await Validate(Signal());
 
         Assert.That(checkedGraph.Errors, Is.Empty);
+    }
+
+    [Test]
+    public async Task The_id_after_a_rename()
+    {
+        SignalResponse created = (await (await Create("funding-high", Signal())).Content.ReadFromJsonAsync<SignalResponse>(Json))!;
+        JsonObject higher = Signal();
+        higher["parameters"]![0]!["value"] = 0.001;
+        await _api.Http.PutAsJsonAsync("/api/signals/funding-high", new JsonObject { ["graph"] = higher, ["layout"] = new JsonObject() }, Json);
+
+        HttpResponseMessage renamed = await _api.Http.PostAsJsonAsync("/api/signals/funding-high/rename", new { to = "funding-spike" }, Json);
+
+        Assert.That((await renamed.Content.ReadFromJsonAsync<SignalResponse>(Json))!.Id, Is.EqualTo(created.Id));
+        Assert.That((await _api.Http.GetFromJsonAsync<SignalResponse>("/api/signals/funding-spike", Json))!.Id, Is.EqualTo(created.Id));
+        Assert.That((await _api.Http.GetFromJsonAsync<SignalListItem[]>("/api/signals", Json))!.Single().Id, Is.EqualTo(created.Id));
+        Assert.That(created.Id, Is.Not.EqualTo(Guid.Empty));
+    }
+
+    [Test]
+    public async Task The_id_of_a_copy()
+    {
+        SignalResponse original = (await (await Create("funding-high", Signal())).Content.ReadFromJsonAsync<SignalResponse>(Json))!;
+
+        SignalResponse copy = (await (await Create("funding-copy", JsonNode.Parse(original.Graph.GetRawText())!.AsObject())).Content.ReadFromJsonAsync<SignalResponse>(Json))!;
+
+        Assert.That(copy.Id, Is.Not.EqualTo(original.Id));
+    }
+
+    [Test]
+    public async Task Renaming_a_signal_in_use()
+    {
+        SignalResponse signal = (await (await Create("funding-high", Signal())).Content.ReadFromJsonAsync<SignalResponse>(Json))!;
+        await CreateStrategy("funding-short", signal.Id);
+
+        HttpResponseMessage renamed = await _api.Http.PostAsJsonAsync("/api/signals/funding-high/rename", new { to = "funding-spike" }, Json);
+        HttpResponseMessage strategy = await _api.Http.GetAsync("/api/strategies/funding-short");
+
+        Assert.That(renamed.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(strategy.StatusCode, Is.EqualTo(HttpStatusCode.OK), await strategy.Content.ReadAsStringAsync());
+        StrategyResponse read = (await strategy.Content.ReadFromJsonAsync<StrategyResponse>(Json))!;
+        Assert.That((read.Version, read.Signals.Single().Name), Is.EqualTo((1, "funding-spike")));
+        StrategyValidationResponse checkedGraph = await ValidateStrategy(JsonNode.Parse(read.Graph.GetRawText())!.AsObject());
+        Assert.That(checkedGraph.Errors, Is.Empty);
+    }
+
+    [Test]
+    public async Task Deleting_a_signal_in_use()
+    {
+        SignalResponse signal = (await (await Create("funding-high", Signal())).Content.ReadFromJsonAsync<SignalResponse>(Json))!;
+        await CreateStrategy("funding-short", signal.Id);
+
+        HttpResponseMessage deleted = await _api.Http.DeleteAsync("/api/signals/funding-high");
+
+        Assert.That(deleted.StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
+        SignalInUseResponse refusal = (await deleted.Content.ReadFromJsonAsync<SignalInUseResponse>(Json))!;
+        Assert.That((refusal.Errors.Single().Code, refusal.Strategies), Is.EqualTo(("SignalInUse", new[] { "funding-short" })).Using<(string, IReadOnlyList<string>)>((a, b) => a.Item1 == b.Item1 && a.Item2.SequenceEqual(b.Item2)));
+        Assert.That((await _api.Http.GetAsync("/api/signals/funding-high")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+        Assert.That((await _api.Http.DeleteAsync("/api/strategies/funding-short")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+        Assert.That((await _api.Http.DeleteAsync("/api/signals/funding-high")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent), "deleting the strategy lifts the refusal");
+    }
+
+    private async Task CreateStrategy(string name, Guid signal)
+    {
+        HttpResponseMessage created = await _api.Http.PostAsJsonAsync(
+            "/api/strategies",
+            new JsonObject { ["name"] = name, ["graph"] = StrategiesTests.Strategy(signal), ["layout"] = new JsonObject() },
+            Json);
+        Assert.That(created.StatusCode, Is.EqualTo(HttpStatusCode.Created), await created.Content.ReadAsStringAsync());
+    }
+
+    private async Task<StrategyValidationResponse> ValidateStrategy(JsonObject graph)
+    {
+        HttpResponseMessage response = await _api.Http.PostAsJsonAsync("/api/strategies/validate", new JsonObject { ["graph"] = graph }, Json);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        return (await response.Content.ReadFromJsonAsync<StrategyValidationResponse>(Json))!;
     }
 
     private async Task<ValidationResponse> Validate(JsonObject graph)
