@@ -1,20 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-    <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
-        <LangVersion>latest</LangVersion>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
-        <IsPackable>false</IsPackable>
-    </PropertyGroup>
-
     <ItemGroup>
-        <PackageReference Include="coverlet.collector" Version="6.0.4"/>
-        <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.0"/>
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.0"/>
-        <PackageReference Include="NUnit" Version="4.3.2"/>
-        <PackageReference Include="NUnit.Analyzers" Version="4.7.0"/>
-        <PackageReference Include="NUnit3TestAdapter" Version="5.0.0"/>
+        <PackageReference Include="coverlet.collector"/>
+        <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing"/>
+        <PackageReference Include="Microsoft.NET.Test.Sdk"/>
+        <PackageReference Include="NUnit"/>
+        <PackageReference Include="NUnit.Analyzers"/>
+        <PackageReference Include="NUnit3TestAdapter"/>
     </ItemGroup>
 
     <ItemGroup>
@@ -22,11 +14,9 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\engine\ProfitFox.Engine.Strategy\ProfitFox.Engine.Strategy.csproj"/>
-        <ProjectReference Include="..\..\src\engine\ProfitFox.Engine.Simulation\ProfitFox.Engine.Simulation.csproj"/>
-        <ProjectReference Include="..\..\src\bench\ProfitFox.Bench.Domain\ProfitFox.Bench.Domain.csproj"/>
-        <ProjectReference Include="..\..\src\bench\ProfitFox.Bench.Application\ProfitFox.Bench.Application.csproj"/>
-        <ProjectReference Include="..\..\src\bench\ProfitFox.Bench.Infrastructure\ProfitFox.Bench.Infrastructure.csproj"/>
+        <ProjectReference Include="..\..\src\ProfitFox.Domain\ProfitFox.Domain.csproj"/>
+        <ProjectReference Include="..\..\src\ProfitFox.Application\ProfitFox.Application.csproj"/>
+        <ProjectReference Include="..\..\src\ProfitFox.Infrastructure\ProfitFox.Infrastructure.csproj"/>
         <ProjectReference Include="..\ProfitFox.Tests.Shared\ProfitFox.Tests.Shared.csproj"/>
     </ItemGroup>
 

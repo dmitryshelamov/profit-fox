@@ -2,8 +2,8 @@
 
 ## Стенд гипотез
 
-Стенд — это служба: одна база Postgres, API `ProfitFox.Bench.Presentation` для фронтенда и CLI, и от одного до N
-процессов `ProfitFox.Bench.Worker`, которые считают прогоны из очереди в базе. Стенды на разных машинах (Мак, soyo-02)
+Стенд — это служба: одна база Postgres, API `ProfitFox.Presentation` для фронтенда и CLI, и от одного до N
+процессов `ProfitFox.Worker`, которые считают прогоны из очереди в базе. Стенды на разных машинах (Мак, soyo-02)
 никак не связаны: у каждого своя база, свои Worker'ы и свой журнал. Спецификации — `openspec/specs/hypothesis-bench`,
 `bench-run-queue`, `signal-constructor`, `signal-preview`.
 
@@ -24,25 +24,25 @@
 2. API на `http://localhost:5240`. При старте мигрирует базу:
 
    ```bash
-   dotnet run --project backend/src/bench/ProfitFox.Bench.Presentation
+   dotnet run --project backend/src/ProfitFox.Presentation
    ```
 
 3. Worker:
 
    ```bash
-   dotnet run --project backend/src/bench/ProfitFox.Bench.Worker
+   dotnet run --project backend/src/ProfitFox.Worker
    ```
 
    Второй Worker — тот же запуск в другом терминале с другим именем:
 
    ```bash
-   Worker__Name=mac-2 dotnet run --project backend/src/bench/ProfitFox.Bench.Worker
+   Worker__Name=mac-2 dotnet run --project backend/src/ProfitFox.Worker
    ```
 
 4. H0001 в базу (один раз на новую базу; повторная загрузка того же текста новой версии не даёт):
 
    ```bash
-   dotnet run --project backend/src/bench/ProfitFox.Bench.Cli -- hypotheses add bench/hypotheses/H0001-funding-short-4h/hypothesis.json
+   dotnet run --project backend/src/ProfitFox.Cli -- hypotheses add bench/hypotheses/H0001-funding-short-4h/hypothesis.json
    ```
 
 5. Страница — Vite на `http://localhost:5173`, запросы `/api` уходят на API:
@@ -73,7 +73,7 @@ docker compose down -v
 То же из командной строки:
 
 ```bash
-dotnet run --project backend/src/bench/ProfitFox.Bench.Cli -- run H0001 --wait
+dotnet run --project backend/src/ProfitFox.Cli -- run H0001 --wait
 ```
 
 Команды `bench`:
@@ -105,8 +105,8 @@ H0001 на 828 парах с soyo-02 считается около 15 минут
 
 ### Настройки
 
-API (`backend/src/bench/ProfitFox.Bench.Presentation/appsettings.json`) и Worker
-(`backend/src/bench/ProfitFox.Bench.Worker/appsettings.json`):
+API (`backend/src/ProfitFox.Presentation/appsettings.json`) и Worker
+(`backend/src/ProfitFox.Worker/appsettings.json`):
 
 - `ConnectionStrings:Bench` — база стенда; для Мака она в `appsettings.Development.json`;
 - `MarketData:GrpcUrl`, `MarketData:RestUrl` — адреса сервиса данных;
@@ -123,12 +123,12 @@ npm --prefix frontend run generate:api
 ## Production (soyo-02)
 
 На soyo-02 (`192.168.8.213`) работает свой стенд, не связанный со стендом на Маке: свои база, Worker'ы и журнал. Описание —
-`docker-compose.prod.yml`, проект `profit-fox-bench` в `~/profit-fox-bench`:
+`docker-compose.prod.yml`, проект `profit-fox` в `~/profit-fox`:
 
-- `db` — Postgres 17 (том `profit-fox-bench-db`, порт наружу не открыт, 1 ГБ);
-- `bench` — API со страницей, образ `ghcr.io/dmitryshelamov/profit-fox-bench:<N>`, порт `5240`, 512 МБ. При старте
+- `db` — Postgres 17 (том `profit-fox-db`, порт наружу не открыт, 1 ГБ);
+- `api` — API со страницей, образ `ghcr.io/dmitryshelamov/profit-fox:<N>`, порт `5240`, 512 МБ. При старте
   мигрирует базу; новая база пуста;
-- `worker-1`, `worker-2` — образ `ghcr.io/dmitryshelamov/profit-fox-bench-worker:<N>`, имена `soyo-02-1` и `soyo-02-2`, по 1 ГБ.
+- `worker-1`, `worker-2` — образ `ghcr.io/dmitryshelamov/profit-fox-worker:<N>`, имена `soyo-02-1` и `soyo-02-2`, по 1 ГБ.
   Берут данные у сервиса данных на этой же машине (`5237`, `5236`).
 
 Страница — `http://192.168.8.213:5240/`. Без авторизации, как остальные службы в локальной сети.
@@ -142,14 +142,14 @@ npm --prefix frontend run generate:api
 3. Задача `deploy` ждёт Approve владельца в окружении `production`, затем раннер на soyo-03 по SSH вызывает на soyo-02
    `deploy <N> 1`.
 4. Ключ может запустить только `deploy.sh`. Тот берёт коммит тега `vN` на GitHub, принимает его лишь из `release/0.1.0`,
-   проверяет метку коммита у обоих образов и поднимает: `db` (ждёт готовности), `bench` (ждёт `/health` до 120 с), затем
-   `worker-1` и `worker-2`. В конце пишет `~/profit-fox-bench/current` и чистит старые образы. Том базы никогда не удаляется.
+   проверяет метку коммита у обоих образов и поднимает: `db` (ждёт готовности), `api` (ждёт `/health` до 120 с), затем
+   `worker-1` и `worker-2`. В конце пишет `~/profit-fox/current` и чистит старые образы. Том базы никогда не удаляется.
 
 ### Откат
 
 Тот же деплой прежнего номера: в GitHub, Actions, Deploy, «Run workflow» на ветке `release/0.1.0`, поле `version` — прежнее
 `N`; затем Approve. Миграции идут только вперёд: до первой новой версии схемы откат кода безопасен, после неё откат —
-отдельное решение. Текущая версия — `~/profit-fox-bench/current` на soyo-02.
+отдельное решение. Текущая версия — `~/profit-fox/current` на soyo-02.
 
 ### Разовые шаги владельца
 
@@ -160,20 +160,20 @@ npm --prefix frontend run generate:api
 3. Ключ деплоя. На soyo-03 под пользователем раннера:
 
    ```bash
-   ssh-keygen -t ed25519 -N '' -f ~/.ssh/profit-fox-bench-deploy
+   ssh-keygen -t ed25519 -N '' -f ~/.ssh/profit-fox-deploy
    ```
 
    и адрес soyo-02 в `~/.ssh/known_hosts`. На soyo-02 в `~/.ssh/authorized_keys` одной строкой, где `<ключ>` — содержимое
-   `profit-fox-bench-deploy.pub`:
+   `profit-fox-deploy.pub`:
 
    ```text
-   command="~/profit-fox-bench/deploy.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty,from="192.168.8.142" <ключ>
+   command="~/profit-fox/deploy.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty,from="192.168.8.142" <ключ>
    ```
 
-4. На soyo-02: `~/profit-fox-bench/.env.prod` с правами `600` и одной строкой `BENCH_DB_PASSWORD=<hex>` (например,
-   `openssl rand -hex 24`); `deploy/deploy.sh` из репозитория скопировать как `~/profit-fox-bench/deploy.sh` с правом
+4. На soyo-02: `~/profit-fox/.env.prod` с правами `600` и одной строкой `PROFIT_FOX_DB_PASSWORD=<hex>` (например,
+   `openssl rand -hex 24`); `deploy/deploy.sh` из репозитория скопировать как `~/profit-fox/deploy.sh` с правом
    исполнения. Нужны `curl`, `jq` и `docker`.
-5. Пакеты `profit-fox-bench` и `profit-fox-bench-worker` в GHCR сделать публичными после первой публикации: сервер тянет их
+5. Пакеты `profit-fox` и `profit-fox-worker` в GHCR сделать публичными после первой публикации: сервер тянет их
    без входа.
 6. В `~/profit-fox-market-data/config/market-data.json` на soyo-02 задать `HistoryRead:MaxConcurrentReads` = 3: два Worker'а и
    предпросмотр стенда делят чтения истории сервиса данных.
@@ -181,7 +181,7 @@ npm --prefix frontend run generate:api
 Проверка первого деплоя: страница открывается, H0001 загружается с Мака
 
 ```bash
-dotnet run --project backend/src/bench/ProfitFox.Bench.Cli -- --bench http://192.168.8.213:5240 hypotheses add bench/hypotheses/H0001-funding-short-4h/hypothesis.json
+dotnet run --project backend/src/ProfitFox.Cli -- --bench http://192.168.8.213:5240 hypotheses add bench/hypotheses/H0001-funding-short-4h/hypothesis.json
 ```
 
 и её сверка заканчивается строкой `parity`.
@@ -204,19 +204,41 @@ dotnet run --project backend/src/bench/ProfitFox.Bench.Cli -- --bench http://192
 памяти историю последних 5 пар с таймфреймом, поэтому повторный предпросмотр той же пары, в том числе с другим графом,
 идёт доли секунды.
 
-## Слои стенда
+## Слои
 
-Стенд в `backend/src/bench` разделён на слои, как зона бота. Ссылки идут только внутрь:
+Стенд и бот — одно приложение с одним набором слоёв в `backend/src`; отдельных зон `bench`, `engine` и `bot` больше нет.
+Раскладка та же, что в `profit-fox-market-data` (его `docs/conventions.md`): внутри слоя папка называет сначала вид типа,
+потом тему (`Runs`, `Hypotheses`, `Signals`, `Graph`, ...), а пространство имён совпадает с папкой. Ссылки идут только
+внутрь:
 
-- `ProfitFox.Bench.Domain` — правила без ввода-вывода: гипотеза, периоды, случайные входы, вердикт, правила журнала,
-  номер версии движка, события сигнала, шаги стратегии на паре. Ссылается только на движок.
-- `ProfitFox.Bench.Application` — сценарии (прогон, очередь, предпросмотр, библиотека сигналов, список гипотез) и порты:
-  `IHistorySource`, `IInstrumentCatalog`, `IHypothesisStore`, `ISignalStore`, `IRunLedger`, `IRunQueue`.
-- `ProfitFox.Bench.Infrastructure` — адаптеры портов: gRPC и REST сервиса данных, база (Npgsql, Dapper,
-  FluentMigrator).
-- `ProfitFox.Bench.Presentation` (API) и `ProfitFox.Bench.Worker` — точки входа, они же собирают зависимости.
-- `ProfitFox.Bench.Cli` (`bench`) — клиент REST, на проекты стенда не ссылается.
+- `ProfitFox.Domain` — расчёт и правила без ввода-вывода. `ValueObjects/<тема>` — значения (записи, проверенный граф,
+  сигнал, стратегия, минутный путь), перечисления — в `ValueObjects/<тема>/Enums`; `Services/<тема>` — то, что считает:
+  чтение и проверка графа, узлы, исполнение сигнала и стратегии, позиция пары, сделка, случайные входы, правила журнала и
+  вердикта; `Exceptions`. Ни на что не ссылается.
+- `ProfitFox.Application` — сценарии и порты: `Commands/<тема>` (прогон, очередь, библиотека сигналов, гипотезы),
+  `Queries/<тема>` (предпросмотр, доска прогонов, история рынка), `Contracts/<тема>` (что отдают сценарии),
+  `Ports/<тема>` (`IHistorySource`, `IInstrumentCatalog`, `IHypothesisStore`, `ISignalStore`, `IRunLedger`, `IRunQueue` и их
+  записи), `Exceptions`.
+- `ProfitFox.Infrastructure` — адаптеры портов: `Clients/MarketData` (gRPC и REST сервиса данных, его `Protos`) и
+  `Persistence/Postgres` (хранилища в `Dapper/Repositories/<тема>`, миграции в `FluentMigrator/Migrations`).
+- `ProfitFox.Presentation` (API: `Controllers`, `Contracts/<тема>` с запросами и ответами) и `ProfitFox.Worker`
+  (`BackgroundServices`) — точки входа, они же собирают зависимости.
+- `ProfitFox.Cli` (`bench`) — клиент REST, на остальные проекты не ссылается.
 
-Номер версии движка (`EngineVersion.Number`) поднимают вместе с любым изменением событий, исходов или вердикта. Эталонный
-тест `EngineVersionTests` считает две гипотезы, H0001 и H0002 с наложением событий, и падает, если результат любой из них
-изменился, а номер нет. Интеграционным тестам нужен Docker.
+Тесты лежат так же, как код, который они проверяют: `ProfitFox.Tests.Unit/Domain/...`, `ProfitFox.Tests.Unit/Application/...`,
+`ProfitFox.Tests.Integration/Infrastructure/...`, `ProfitFox.Tests.Integration/Presentation/...`. Эталоны — в папках
+`Fixtures` рядом со своими тестами.
+
+Общие свойства сборки и версии пакетов — в `backend/Directory.Build.props` и `backend/Directory.Packages.props`; `.csproj`
+перечисляют только свои пакеты и ссылки. `backend/Directory.Build.targets` держит правило ссылок слоёв: проект может
+ссылаться только на перечисленные там проекты, иначе сборка падает. Стиль кода — `.editorconfig` в корне и
+`backend/.globalconfig`; нарушение правила с уровнем `error` роняет обычную сборку.
+
+Внутренности расчёта (`internal`: `CompiledGraph`, `CompiledNode`, `InputSource`, `NodeContext`, `Node` и узлы
+`Services/Nodes`, `GraphJson`, `GraphValidator`, `StrategyRun`) закрыты от остальных слоёв компилятором. Остальной код Domain
+пользуется теми же открытыми входами, что и другие слои: `StrategyGraph`, `SignalExecutor`, `StrategyExecutor`,
+`TradeSimulator`, `PairPosition`, `Cycle`, `EntryPlan`.
+
+«Версия движка» — номер версии расчёта, а не проекта: `EngineVersion.Number`. Его поднимают вместе с любым изменением
+событий, исходов или вердикта. Эталонный тест `EngineVersionTests` считает две гипотезы, H0001 и H0002 с наложением
+событий, и падает, если результат любой из них изменился, а номер нет. Интеграционным тестам нужен Docker.

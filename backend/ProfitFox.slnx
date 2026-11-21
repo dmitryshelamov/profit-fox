@@ -1,26 +1,19 @@
 <Solution>
     <Folder Name="/common/">
+        <File Path="..\.editorconfig" />
         <File Path="..\.gitignore" />
+        <File Path=".globalconfig" />
+        <File Path="Directory.Build.props" />
+        <File Path="Directory.Build.targets" />
+        <File Path="Directory.Packages.props" />
     </Folder>
-    <Folder Name="/src/" />
-    <Folder Name="/src/bench/">
-        <Project Path="src/bench/ProfitFox.Bench.Presentation/ProfitFox.Bench.Presentation.csproj" />
-        <Project Path="src/bench/ProfitFox.Bench.Cli/ProfitFox.Bench.Cli.csproj" />
-        <Project Path="src/bench/ProfitFox.Bench.Application/ProfitFox.Bench.Application.csproj" />
-        <Project Path="src/bench/ProfitFox.Bench.Domain/ProfitFox.Bench.Domain.csproj" />
-        <Project Path="src/bench/ProfitFox.Bench.Infrastructure/ProfitFox.Bench.Infrastructure.csproj" />
-        <Project Path="src/bench/ProfitFox.Bench.Worker/ProfitFox.Bench.Worker.csproj" />
-    </Folder>
-    <Folder Name="/src/engine/">
-        <Project Path="src/engine/ProfitFox.Engine.Simulation/ProfitFox.Engine.Simulation.csproj" />
-        <Project Path="src/engine/ProfitFox.Engine.Strategy/ProfitFox.Engine.Strategy.csproj" />
-    </Folder>
-    <Folder Name="/src/bot/">
-        <Project Path="src/bot/ProfitFox.Bot.Application/ProfitFox.Bot.Application.csproj" />
-        <Project Path="src/bot/ProfitFox.Bot.Domain/ProfitFox.Bot.Domain.csproj" />
-        <Project Path="src/bot/ProfitFox.Bot.Infrastructure/ProfitFox.Bot.Infrastructure.csproj" />
-        <Project Path="src/bot/ProfitFox.Bot.Presentation/ProfitFox.Bot.Presentation.csproj" />
-        <Project Path="src/bot/ProfitFox.Bot.Worker/ProfitFox.Bot.Worker.csproj" />
+    <Folder Name="/src/">
+        <Project Path="src/ProfitFox.Presentation/ProfitFox.Presentation.csproj" />
+        <Project Path="src/ProfitFox.Cli/ProfitFox.Cli.csproj" />
+        <Project Path="src/ProfitFox.Application/ProfitFox.Application.csproj" />
+        <Project Path="src/ProfitFox.Domain/ProfitFox.Domain.csproj" />
+        <Project Path="src/ProfitFox.Infrastructure/ProfitFox.Infrastructure.csproj" />
+        <Project Path="src/ProfitFox.Worker/ProfitFox.Worker.csproj" />
     </Folder>
     <Folder Name="/tests/">
         <Project Path="tests/ProfitFox.Tests.Integration/ProfitFox.Tests.Integration.csproj" />

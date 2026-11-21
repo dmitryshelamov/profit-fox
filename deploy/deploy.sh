@@ -4,14 +4,14 @@
 # The deploy key in ~/.ssh/authorized_keys runs only this script (a forced command), so the request comes in
 # SSH_ORIGINAL_COMMAND as "deploy <N> <protocol>". The script trusts nothing else the caller sends: it takes the commit
 # of tag vN from GitHub, accepts it only from release/0.1.0 and runs only images built from that commit.
-# Installed by hand as ~/profit-fox-bench/deploy.sh (README, "Production (soyo-02)"); it needs curl, jq and docker.
+# Installed by hand as ~/profit-fox/deploy.sh (README, "Production (soyo-02)"); it needs curl, jq and docker.
 # It never runs `docker compose down -v`: the volume of the database is the only store of the bench.
 
 # Raised when the command changes; deploy.yml passes the same number, so an outdated copy on the server refuses.
 DEPLOY_PROTOCOL=1
 REPOSITORY=dmitryshelamov/profit-fox
 BRANCH=release/0.1.0
-ROOT="$HOME/profit-fox-bench"
+ROOT="$HOME/profit-fox"
 
 parse_command() {
   local pattern='^deploy ([1-9][0-9]*) ([1-9][0-9]*)$'
@@ -77,20 +77,20 @@ main() {
     "https://raw.githubusercontent.com/$REPOSITORY/$commit/docker-compose.prod.yml"
 
   compose() {
-    BENCH_VERSION="$version" docker compose --file "$release/docker-compose.prod.yml" \
+    PROFIT_FOX_VERSION="$version" docker compose --file "$release/docker-compose.prod.yml" \
       --env-file "$ROOT/.env.prod" "$@"
   }
 
   compose pull --quiet
   # An image pushed under an existing number from another commit does not run.
-  for name in profit-fox-bench profit-fox-bench-worker; do
+  for name in profit-fox profit-fox-worker; do
     image="ghcr.io/dmitryshelamov/$name:$version"
     revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image")"
     [[ "$revision" == "$commit" ]] || fail "$image is built from '$revision', not from $commit"
   done
 
   compose up --detach --wait db
-  compose up --detach --no-deps bench
+  compose up --detach --no-deps api
   wait_for_health || fail "version $version did not answer /health in 120 s"
   compose up --detach --no-deps worker-1 worker-2
 

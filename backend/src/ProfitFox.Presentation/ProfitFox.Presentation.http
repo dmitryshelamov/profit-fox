@@ -1,0 +1,87 @@
+@ProfitFox.Presentation_HostAddress = http://localhost:5240
+
+GET {{ProfitFox.Presentation_HostAddress}}/api/instruments
+Accept: application/json
+
+###
+
+GET {{ProfitFox.Presentation_HostAddress}}/health
+
+###
+
+GET {{ProfitFox.Presentation_HostAddress}}/api/hypotheses
+Accept: application/json
+
+###
+
+# Loads the text of a hypothesis.json as a new version (201), or finds the version that has this text (200).
+# The body is sent as it is, so its hash is the hash of these bytes.
+POST {{ProfitFox.Presentation_HostAddress}}/api/hypotheses
+Content-Type: text/plain
+
+< ../../../bench/hypotheses/H0001-funding-short-4h/hypothesis.json
+
+###
+
+# Puts a run in the queue: period is exploration, holdout or new-data, kind is verdict or parity; version is optional.
+POST {{ProfitFox.Presentation_HostAddress}}/api/runs
+Content-Type: application/json
+
+{
+  "hypothesis": "H0001",
+  "period": "exploration",
+  "kind": "parity"
+}
+
+###
+
+# The runs that wait and go, in the order of the queue.
+GET {{ProfitFox.Presentation_HostAddress}}/api/runs?active=true
+Accept: application/json
+
+###
+
+# The latest runs that ended, the newest first.
+GET {{ProfitFox.Presentation_HostAddress}}/api/runs?active=false&limit=20
+Accept: application/json
+
+###
+
+# One run with its progress, its line of the ledger and its report.
+GET {{ProfitFox.Presentation_HostAddress}}/api/runs/f3659dd4ab7b437a945c9d2fd180b7dd
+Accept: application/json
+
+###
+
+# Takes a waiting run out of the queue, or asks the Worker of a going run to stop (204).
+POST {{ProfitFox.Presentation_HostAddress}}/api/runs/f3659dd4ab7b437a945c9d2fd180b7dd/cancel
+
+###
+
+POST {{ProfitFox.Presentation_HostAddress}}/api/preview
+Content-Type: application/json
+
+{
+  "instrument": "PRLUSDT",
+  "timeframe": "4h",
+  "signal": {
+    "formatVersion": 1,
+    "parameters": [{ "name": "threshold", "type": "number", "value": 0.0005 }],
+    "outputs": [{ "name": "entry", "type": "event" }],
+    "nodes": [
+      { "id": "p", "kind": "parameters" },
+      { "id": "rate", "kind": "funding-rate" },
+      { "id": "high", "kind": "compare", "settings": { "operation": "ge" } },
+      { "id": "first", "kind": "first-time" },
+      { "id": "out", "kind": "outputs" }
+    ],
+    "wires": [
+      { "from": "rate.value", "to": "high.a" },
+      { "from": "p.threshold", "to": "high.b" },
+      { "from": "high.result", "to": "first.value" },
+      { "from": "first.event", "to": "out.entry" }
+    ]
+  }
+}
+
+###

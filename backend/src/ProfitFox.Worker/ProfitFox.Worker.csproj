@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Hosting"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\ProfitFox.Application\ProfitFox.Application.csproj"/>
+        <ProjectReference Include="..\ProfitFox.Infrastructure\ProfitFox.Infrastructure.csproj"/>
+    </ItemGroup>
+
+</Project>

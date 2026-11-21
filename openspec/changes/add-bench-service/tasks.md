@@ -127,7 +127,7 @@
     умолчанию, а сейчас это `main` с первым коммитом;
   - раннер на soyo-03 для `dmitryshelamov/profit-fox`;
   - окружение `production` только для `release/0.1.0`;
-  - ключ деплоя с принудительной командой, `~/profit-fox-bench/.env.prod` и `deploy.sh` на soyo-02;
+  - ключ деплоя с принудительной командой, `~/profit-fox/.env.prod` и `deploy.sh` на soyo-02;
   - `HistoryRead:MaxConcurrentReads` = 3 в `config/market-data.json`.
 - [ ] 8.5 Первый деплой `v1` по Approve владельца. Проверить:
   - `http://192.168.8.213:5240/` открывает «Сигналы»; H0001 загружена через `bench --bench http://192.168.8.213:5240 hypotheses add`;

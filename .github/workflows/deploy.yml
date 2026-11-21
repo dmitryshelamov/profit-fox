@@ -91,8 +91,8 @@ jobs:
               .
             docker push "$image"
           }
-          build profit-fox-bench backend/src/bench/ProfitFox.Bench.Presentation/Dockerfile
-          build profit-fox-bench-worker backend/src/bench/ProfitFox.Bench.Worker/Dockerfile
+          build profit-fox backend/src/ProfitFox.Presentation/Dockerfile
+          build profit-fox-worker backend/src/ProfitFox.Worker/Dockerfile
 
   # The images of the version are in GHCR. Checked here, so the runner on soyo-03 needs neither Docker nor a token.
   image:
@@ -118,7 +118,7 @@ jobs:
         id: check
         run: |
           [[ "$VERSION" =~ ^[1-9][0-9]*$ ]] || { echo "Not a version: $VERSION"; exit 1; }
-          for name in profit-fox-bench profit-fox-bench-worker; do
+          for name in profit-fox profit-fox-worker; do
             docker manifest inspect "ghcr.io/dmitryshelamov/$name:$VERSION" >/dev/null ||
               { echo "ghcr.io/dmitryshelamov/$name:$VERSION is not published"; exit 1; }
           done
@@ -139,5 +139,5 @@ jobs:
       # The key can only run deploy.sh on soyo-02; the key and known_hosts live in the runner's home, not in GitHub.
       - name: Deploy
         run: >-
-          ssh -i ~/.ssh/profit-fox-bench-deploy -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes
+          ssh -i ~/.ssh/profit-fox-deploy -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes
           soyo@192.168.8.213 deploy "$VERSION" "$DEPLOY_PROTOCOL"

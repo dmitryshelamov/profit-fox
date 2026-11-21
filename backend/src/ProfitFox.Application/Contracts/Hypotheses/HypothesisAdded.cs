@@ -1,0 +1,9 @@
+using ProfitFox.Domain.ValueObjects.Hypotheses;
+
+namespace ProfitFox.Application.Contracts.Hypotheses;
+
+/// <summary>
+///     The answer to a loaded text (spec hypothesis-bench «Заморозка гипотезы»): the hypothesis with the version of the
+///     text, and whether the text made that version or was already it.
+/// </summary>
+public sealed record HypothesisAdded(Hypothesis Hypothesis, bool Created);

@@ -9,7 +9,7 @@ internal static class Repository
 
     private static string Find()
     {
-        DirectoryInfo? folder = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
+        var folder = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
         while (folder is not null && !Path.Exists(Path.Combine(folder.FullName, ".git")))
         {
             folder = folder.Parent;
