@@ -1,0 +1,48 @@
+<Project>
+
+    <PropertyGroup>
+        <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    </PropertyGroup>
+
+    <ItemGroup Label="ASP.NET Core">
+        <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.13"/>
+    </ItemGroup>
+
+    <ItemGroup Label="Hosting">
+        <!-- The host of the Worker. -->
+        <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.13"/>
+    </ItemGroup>
+
+    <ItemGroup Label="CLI">
+        <PackageVersion Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.13"/>
+        <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.13"/>
+        <PackageVersion Include="System.CommandLine" Version="2.0.15"/>
+    </ItemGroup>
+
+    <ItemGroup Label="Infrastructure">
+        <PackageVersion Include="Dapper" Version="2.1.89"/>
+        <PackageVersion Include="FluentMigrator.Runner.Postgres" Version="8.0.1"/>
+        <PackageVersion Include="Npgsql" Version="10.0.3"/>
+    </ItemGroup>
+
+    <ItemGroup Label="gRPC">
+        <!-- The client of the market-data service and the tools that generate it from its .proto files. -->
+        <PackageVersion Include="Google.Protobuf" Version="3.36.2"/>
+        <PackageVersion Include="Grpc.Net.Client" Version="2.85.0"/>
+        <PackageVersion Include="Grpc.Tools" Version="2.85.0"/>
+        <!-- The fake market-data service of the integration tests. -->
+        <PackageVersion Include="Grpc.AspNetCore" Version="2.85.0"/>
+    </ItemGroup>
+
+    <ItemGroup Label="Testing">
+        <PackageVersion Include="coverlet.collector" Version="6.0.4"/>
+        <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.10"/>
+        <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.0"/>
+        <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.0"/>
+        <PackageVersion Include="NUnit" Version="4.3.2"/>
+        <PackageVersion Include="NUnit.Analyzers" Version="4.7.0"/>
+        <PackageVersion Include="NUnit3TestAdapter" Version="5.0.0"/>
+        <PackageVersion Include="Testcontainers.PostgreSql" Version="4.16.0"/>
+    </ItemGroup>
+
+</Project>
