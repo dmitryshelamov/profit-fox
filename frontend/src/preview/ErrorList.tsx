@@ -7,12 +7,12 @@ export function ErrorList({ errors }: { readonly errors: readonly RequestError[]
   return (
     <ul
       aria-label="Ошибки"
-      className="space-y-1 rounded border border-red-900 bg-red-950/40 p-3 text-sm"
+      className="flex flex-col gap-1 rounded-lg border border-err-bg bg-err-bg/60 p-3 text-xs"
     >
       {errors.map((error, index) => (
         <li key={index}>
-          <span className="font-mono text-red-300">{placeOf(error)}</span>
-          <span className="text-zinc-400"> · {error.code} · </span>
+          <span className="font-mono text-err">{placeOf(error)}</span>
+          <span className="text-muted"> · {error.code} · </span>
           <span>{error.reason}</span>
         </li>
       ))}

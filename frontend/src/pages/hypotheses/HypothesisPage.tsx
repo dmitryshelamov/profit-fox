@@ -140,6 +140,7 @@ function ReadOnlyEditor({
         <PreviewPanel
           graph={document.graph}
           canRun={check.checked && check.errors.length === 0}
+          hasErrors={check.checked && check.errors.length > 0}
           rememberAs={rememberAs}
           defaultTimeframe={timeframe}
         />

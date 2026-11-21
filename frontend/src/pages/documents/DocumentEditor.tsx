@@ -89,6 +89,8 @@ export function DocumentEditor({
   readonly bottom?: (state: {
     readonly graph: Graph;
     readonly canRun: boolean;
+    /** The check found errors: the preview says why it cannot run. */
+    readonly hasErrors: boolean;
     readonly rememberAs: string;
   }) => ReactNode;
 }) {
@@ -324,6 +326,7 @@ export function DocumentEditor({
         bottom={bottom?.({
           graph: content.document.graph,
           canRun: check.checked && check.errors.length === 0,
+          hasErrors: check.checked && check.errors.length > 0,
           rememberAs: saved?.name ?? `new:${draftId}`,
         })}
       />

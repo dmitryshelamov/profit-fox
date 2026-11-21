@@ -73,6 +73,12 @@ vi.mock('lightweight-charts', async () => {
         }),
       })),
       remove: vi.fn(),
+      subscribeClick: vi.fn((handler: (param: { time?: number }) => void) => {
+        drawn.click = handler;
+      }),
+      unsubscribeClick: vi.fn(() => {
+        drawn.click = null;
+      }),
       timeScale: () => ({
         fitContent: vi.fn(),
         setVisibleRange: vi.fn((range: { from: number; to: number }) => {

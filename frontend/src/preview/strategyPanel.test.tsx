@@ -1,12 +1,14 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { drawn } from '@/test/chart';
+import { clickChart, drawn } from '@/test/chart';
 import { findNode, selectNode } from '@/test/editor';
 import { bodiesOf, fakeApi, json } from '@/test/fakeApi';
 import { renderApp } from '@/test/renderApp';
 import { baseRoutes } from '@/test/routes';
 import { savedFundingShort, strategyRoutes } from '@/test/strategies';
+
+import { chartColors } from './CandleChart';
 
 const hour = 3_600_000;
 const hour4 = 4 * hour;
@@ -80,6 +82,12 @@ async function show() {
   await userEvent.click(screen.getByRole('button', { name: 'Показать' }));
 }
 
+/** The list of orders: the tab «Заявки» of the result, which opens on «Сделки». */
+async function ordersTable() {
+  await userEvent.click(await screen.findByRole('tab', { name: /^Заявки/ }));
+  return screen.getByRole('table', { name: 'Заявки' });
+}
+
 describe('the preview panel of a strategy', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -93,7 +101,7 @@ describe('the preview panel of a strategy', () => {
 
     await show();
 
-    const orders = await screen.findByRole('table', { name: 'Заявки' });
+    const orders = await ordersTable();
     const opened = within(orders).getByRole('row', { name: 'Заявка 2026-04-16 04:00' });
     expect(within(opened).getByText('шорт')).toBeInTheDocument();
     expect(within(opened).getByText('срок, -0.21 %')).toBeInTheDocument();
@@ -102,7 +110,8 @@ describe('the preview panel of a strategy', () => {
       expect.objectContaining({ time: (first + hour4) / 1000, shape: 'circle', text: 'выход' }),
     ]);
     const panel = within(screen.getByRole('region', { name: 'Предпросмотр' }));
-    expect(panel.getByText(/заявок 3 · сделок 1/)).toBeInTheDocument();
+    expect(panel.getByRole('status', { name: 'Результат' })).toHaveTextContent('Заявок 3');
+    expect(panel.getByRole('status', { name: 'Результат' })).toHaveTextContent('Сделок 1');
     expect(panel.getByText(/Сделки посчитаны с 2026-04-13/)).toBeInTheDocument();
     const [body] = (await bodiesOf(requests, 'POST', '/api/preview/strategy')) as {
       instrument: string;
@@ -127,7 +136,7 @@ describe('the preview panel of a strategy', () => {
 
     await show();
 
-    const orders = await screen.findByRole('table', { name: 'Заявки' });
+    const orders = await ordersTable();
     expect(within(orders).getByRole('row', { name: 'Заявка 2026-04-16 06:00' })).toHaveTextContent(
       'пропущена: позиция открыта',
     );
@@ -142,7 +151,7 @@ describe('the preview panel of a strategy', () => {
     openFundingShort();
     await findNode('funding-high', 's');
     await show();
-    await screen.findByRole('table', { name: 'Заявки' });
+    await ordersTable();
     expect(screen.queryByText('Граф изменён, нажмите Показать')).toBeNull();
 
     const closeAfter = await selectNode('Закрыть через', 'close-after');
@@ -154,5 +163,244 @@ describe('the preview panel of a strategy', () => {
     expect(await screen.findByText('Граф изменён, нажмите Показать')).toBeInTheDocument();
     expect(screen.getByRole('table', { name: 'Заявки' })).toBeInTheDocument();
     expect(drawn.markers).toHaveLength(2);
+  });
+});
+
+const day = 24 * hour;
+const october = Date.UTC(2025, 9, 5, 8); // an order at 2025-10-05 08:00 UTC
+
+/** An order of a short at `moment`; `net` opens a trade that ends `held` later with that result after costs. */
+function order(moment: number, net: number | null, outcome = 'opened', held = hour4) {
+  return {
+    moment,
+    side: 'short',
+    outcome: net === null ? outcome : 'opened',
+    reason: null as string | null,
+    trade:
+      net === null
+        ? null
+        : {
+            entryTime: moment,
+            entryPrice: 1.5,
+            exitTime: moment + held,
+            exitPrice: 1.5,
+            exitReason: 'time',
+            net,
+          },
+  };
+}
+
+/** Opens `funding-short` and previews it with these orders on candles of 4h from 2025-10-05 00:00. */
+async function previewOrders(orders: ReturnType<typeof order>[]) {
+  const requests = fakeApi({
+    ...baseRoutes(),
+    ...strategyRoutes(),
+    'GET /api/strategies/funding-short': () => json(savedFundingShort(1)),
+    'POST /api/preview/strategy': () =>
+      json({
+        ...strategyPreview(),
+        candles: Array.from({ length: 12 }, (_, index) => ({
+          openTime: october - 2 * hour4 + index * hour4,
+          open: 1,
+          high: 2,
+          low: 0.5,
+          close: 1.5,
+          volume: 10,
+        })),
+        orders,
+        computedFrom: null,
+      }),
+  });
+  renderApp('/strategies/funding-short');
+  await findNode('funding-high', 's');
+  await show();
+  await screen.findByRole('tablist', { name: 'Результат' });
+  return requests;
+}
+
+const selectedRows = (table: HTMLElement) =>
+  within(table)
+    .getAllByRole('row')
+    .filter((row) => row.getAttribute('aria-selected') === 'true')
+    .map((row) => row.getAttribute('aria-label'));
+
+// Spec strategy-constructor «Вкладки предпросмотра стратегии».
+describe('the tabs of the preview of a strategy', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  // Scenario «Сделки и пропущенная заявка».
+  it('opens on «Сделки» with the trades, and lists every order with its outcome on «Заявки»', async () => {
+    const requests = await previewOrders([
+      order(october, -0.0098),
+      order(october + hour, null, 'skipped'),
+      order(october + day, 0.0123, 'opened', 2 * hour4 + 30 * 60_000),
+    ]);
+
+    const trades = screen.getByRole('tab', { name: 'Сделки 2' });
+    const orders = screen.getByRole('tab', { name: 'Заявки 3' });
+    expect(trades).toHaveAttribute('aria-selected', 'true');
+    const table = screen.getByRole('table', { name: 'Сделки' });
+    expect(
+      within(table)
+        .getAllByRole('columnheader')
+        .map((cell) => cell.textContent),
+    ).toEqual(['Вход, UTC', 'Сторона', 'Выход', 'Результат']);
+    const rows = within(table).getAllByRole('row', { name: /^Сделка / });
+    expect(rows.map((row) => row.getAttribute('aria-label'))).toEqual([
+      'Сделка 2025-10-05 08:00',
+      'Сделка 2025-10-06 08:00',
+    ]);
+    expect(within(rows[0]!).getByText('шорт')).toHaveAttribute('data-tone', 'err');
+    expect(rows[0]).toHaveTextContent('по сроку · 4h');
+    expect(within(rows[0]!).getByText('-0.98 %')).toHaveAttribute('data-tone', 'err');
+    expect(rows[1]).toHaveTextContent('по сроку · 8h 30m');
+    expect(within(rows[1]!).getByText('+1.23 %')).toHaveAttribute('data-tone', 'ok');
+    expect(screen.queryByRole('table', { name: 'Заявки' })).toBeNull();
+
+    await userEvent.click(orders);
+
+    expect(orders).toHaveAttribute('aria-selected', 'true');
+    const list = screen.getByRole('table', { name: 'Заявки' });
+    expect(within(list).getAllByRole('row', { name: /^Заявка / })).toHaveLength(3);
+    expect(within(list).getByRole('row', { name: 'Заявка 2025-10-05 09:00' })).toHaveTextContent(
+      'пропущена: позиция открыта',
+    );
+    // The choice of a tab does not run the preview again.
+    expect(await bodiesOf(requests, 'POST', '/api/preview/strategy')).toHaveLength(1);
+  });
+
+  // Scenario «Сделок нет».
+  it('says that there are no trades, and still lists the orders with their reasons', async () => {
+    await previewOrders([
+      order(october, null, 'skipped'),
+      { ...order(october + day, null, 'excluded'), reason: 'coverage' },
+    ]);
+
+    expect(screen.getByRole('tab', { name: 'Сделки 0' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('Сделок нет.')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Заявки 2' }));
+
+    const list = screen.getByRole('table', { name: 'Заявки' });
+    expect(within(list).getByRole('row', { name: 'Заявка 2025-10-05 08:00' })).toHaveTextContent(
+      'пропущена: позиция открыта',
+    );
+    expect(within(list).getByRole('row', { name: 'Заявка 2025-10-06 08:00' })).toHaveTextContent(
+      'без сделки: нет минутной истории',
+    );
+  });
+});
+
+// Spec strategy-constructor «Сумма результатов предпросмотра стратегии».
+describe('the numbers of the preview of a strategy', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  const result = () =>
+    within(screen.getByRole('region', { name: 'Предпросмотр' })).getByRole('status', {
+      name: 'Результат',
+    });
+
+  // Scenario «Две убыточные сделки».
+  it('shows the orders, the trades and the sum of the results in the color of a loss', async () => {
+    await previewOrders([order(october, -0.0098), order(october + day, -0.0056)]);
+
+    expect(result()).toHaveTextContent('Заявок 2');
+    expect(result()).toHaveTextContent('Сделок 2');
+    expect(result()).toHaveTextContent('Итог -1.54 %');
+    expect(within(result()).getByText('-1.54 %')).toHaveAttribute('data-tone', 'err');
+  });
+
+  it('shows a positive sum with its sign in the color of a profit', async () => {
+    await previewOrders([order(october, -0.0098), order(october + day, 0.02)]);
+
+    expect(within(result()).getByText('+1.02 %')).toHaveAttribute('data-tone', 'ok');
+  });
+
+  // Scenario «Без сделок».
+  it('shows no sum without trades', async () => {
+    await previewOrders([order(october, null, 'skipped')]);
+
+    expect(result()).toHaveTextContent('Заявок 1');
+    expect(result()).toHaveTextContent('Сделок 0');
+    expect(result()).not.toHaveTextContent('Итог');
+  });
+});
+
+// Spec strategy-constructor «Метка сделки выбирает строку».
+describe('the mark of a trade on the chart', () => {
+  const scrolled = vi.fn();
+
+  beforeEach(() => {
+    scrolled.mockClear();
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled(this.getAttribute('aria-label'));
+    };
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  // Scenario «Клик по метке выхода при открытой вкладке «Заявки»».
+  it('opens «Сделки» and selects the row of the trade whose exit mark is clicked', async () => {
+    await previewOrders([order(october, -0.0098), order(october + day, -0.0056)]);
+    await userEvent.click(screen.getByRole('tab', { name: 'Заявки 2' }));
+    expect(screen.queryByRole('table', { name: 'Сделки' })).toBeNull();
+
+    // The trade of 08:00 ends at 12:00: its exit is on the candle that opens at 08:00.
+    act(() => clickChart(october / 1000));
+
+    expect(screen.getByRole('tab', { name: 'Сделки 2' })).toHaveAttribute('aria-selected', 'true');
+    const table = screen.getByRole('table', { name: 'Сделки' });
+    expect(selectedRows(table)).toEqual(['Сделка 2025-10-05 08:00']);
+    await waitFor(() => expect(scrolled).toHaveBeenLastCalledWith('Сделка 2025-10-05 08:00'));
+    // The marks of the chosen trade are drawn in the color of the choice, the others keep theirs.
+    const colors = (drawn.markers as { time: number; color: string }[]).map((mark) => mark.color);
+    expect(colors.slice(0, 2)).toEqual([chartColors.selected, chartColors.selected]);
+    expect(colors.slice(2)).toEqual([chartColors.short, chartColors.exit]);
+  });
+
+  it('moves the selection to the trade of another mark, and a click on a candle without a mark keeps it', async () => {
+    await previewOrders([order(october, -0.0098), order(october + day, -0.0056)]);
+
+    act(() => clickChart((october - hour4) / 1000));
+    const table = screen.getByRole('table', { name: 'Сделки' });
+    expect(selectedRows(table)).toEqual(['Сделка 2025-10-05 08:00']);
+
+    act(() => clickChart((october + day - hour4) / 1000));
+    expect(selectedRows(table)).toEqual(['Сделка 2025-10-06 08:00']);
+
+    act(() => clickChart((october + 3 * hour4) / 1000));
+    expect(selectedRows(table)).toEqual(['Сделка 2025-10-06 08:00']);
+  });
+
+  it('chooses the trade of the entry when an entry and an exit of two trades are on one candle', async () => {
+    // The first trade ends at 12:00, and the second is opened by the order of 12:00: both marks are on the candle of 08:00.
+    await previewOrders([order(october, -0.0098), order(october + hour4, -0.0056)]);
+
+    act(() => clickChart(october / 1000));
+
+    expect(selectedRows(screen.getByRole('table', { name: 'Сделки' }))).toEqual([
+      'Сделка 2025-10-05 12:00',
+    ]);
+  });
+
+  it('still shows a trade on the chart by a click on its row, and selects it', async () => {
+    await previewOrders([order(october, -0.0098), order(october + day, -0.0056)]);
+    const table = screen.getByRole('table', { name: 'Сделки' });
+
+    await userEvent.click(within(table).getByRole('button', { name: '2025-10-06 08:00' }));
+
+    expect(selectedRows(table)).toEqual(['Сделка 2025-10-06 08:00']);
+    const entry = (october + day - hour4) / 1000;
+    expect(drawn.range!.from).toBeLessThan(entry);
+    expect(drawn.range!.to).toBeGreaterThan(entry);
   });
 });

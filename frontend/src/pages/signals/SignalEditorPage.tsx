@@ -109,8 +109,8 @@ export function SavedSignalPage({ name }: { readonly name: string }) {
           </Button>
         )
       }
-      bottom={({ graph, canRun, rememberAs }) => (
-        <PreviewPanel graph={graph} canRun={canRun} rememberAs={rememberAs} />
+      bottom={({ graph, canRun, hasErrors, rememberAs }) => (
+        <PreviewPanel graph={graph} canRun={canRun} hasErrors={hasErrors} rememberAs={rememberAs} />
       )}
     />
   );
@@ -137,8 +137,8 @@ export function NewSignalPage({ draftId }: { readonly draftId: string }) {
       draftId={draftId}
       catalog={catalog.data}
       start={start}
-      bottom={({ graph, canRun, rememberAs }) => (
-        <PreviewPanel graph={graph} canRun={canRun} rememberAs={rememberAs} />
+      bottom={({ graph, canRun, hasErrors, rememberAs }) => (
+        <PreviewPanel graph={graph} canRun={canRun} hasErrors={hasErrors} rememberAs={rememberAs} />
       )}
     />
   );

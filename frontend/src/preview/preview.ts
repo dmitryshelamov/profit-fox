@@ -31,15 +31,23 @@ export function formatUtcDay(ms: number | string): string {
 
 /**
  * Where the chart puts the mark of an event: on the candle that closes at its moment. A mark of a strategy also says
- * how it looks: an entry arrow by its side, an exit dot.
+ * what it is — the entry of a short or of a long, or an exit, which the chart colors — how it looks, and which order
+ * opened its trade.
  */
 export interface EventMark {
   readonly time: number;
   readonly moment: number;
   readonly position?: 'aboveBar' | 'belowBar' | 'inBar';
   readonly shape?: 'arrowDown' | 'arrowUp' | 'circle';
-  readonly color?: string;
+  readonly tone?: 'short' | 'long' | 'exit';
   readonly text?: string;
+  /** The moment of the order of the trade the mark belongs to. */
+  readonly order?: number;
+}
+
+/** What a mark selects in the lists: the order of its trade, or the event itself. */
+export function keyOf(mark: EventMark): number {
+  return mark.order ?? mark.moment;
 }
 
 /** The marks of the events, on the open time of the candle each event closed, in seconds as the chart counts time. */

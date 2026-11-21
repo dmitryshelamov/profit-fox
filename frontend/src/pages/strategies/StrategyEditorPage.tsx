@@ -131,10 +131,12 @@ export function NewStrategyPage({ draftId }: { readonly draftId: string }) {
 function bottom({
   graph,
   canRun,
+  hasErrors,
   rememberAs,
 }: {
   graph: Graph;
   canRun: boolean;
+  hasErrors: boolean;
   rememberAs: string;
 }) {
   return (
@@ -142,6 +144,7 @@ function bottom({
       kind="strategy"
       graph={graph}
       canRun={canRun}
+      hasErrors={hasErrors}
       rememberAs={`strategy:${rememberAs}`}
     />
   );
