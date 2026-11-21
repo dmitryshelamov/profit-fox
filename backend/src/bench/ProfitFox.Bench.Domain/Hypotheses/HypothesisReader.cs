@@ -3,7 +3,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using ProfitFox.Engine.Simulation.Positions;
 using ProfitFox.Engine.Simulation.Trades;
+using ProfitFox.Engine.Strategy.Execution;
 using ProfitFox.Engine.Strategy.Graph;
 using ProfitFox.Engine.Strategy.Graph.Model;
 using ProfitFox.Engine.Strategy.Graph.Reading;
@@ -114,7 +116,7 @@ public static partial class HypothesisReader
             }
 
             TradeCosts costs = Costs(root, errors);
-            TradePlan? plan = Plan(root, errors);
+            TradePlan? plan = Plan(root, errors, out decimal? stop, out decimal? target);
             Signal? signal = SignalOf(root, errors);
 
             if (plan is not null)
@@ -130,13 +132,14 @@ public static partial class HypothesisReader
                 }
             }
 
+            TradingStrategy? strategy = errors.Count == 0 ? StrategyOf(signal!, plan!, stop, target, errors) : null;
             if (errors.Count > 0)
             {
                 throw new HypothesisException(IdPattern().IsMatch(id) ? id : unknown, errors);
             }
 
             string hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
-            return new Hypothesis(id, version, name, statement, created, timeframe, block, randoms, measure, minEffect, costs, signal!, plan!, hash);
+            return new Hypothesis(id, version, name, statement, created, timeframe, block, randoms, measure, minEffect, costs, signal!, plan!, strategy!, hash);
         }
     }
 
@@ -182,8 +185,12 @@ public static partial class HypothesisReader
         return new TradeCosts(fee, slippage, funding);
     }
 
-    private static TradePlan? Plan(JsonElement root, List<string> errors)
+    // The plan as before, and its stop and target as the decimals of the text: they go into the graph of the strategy without
+    // passing through double.
+    private static TradePlan? Plan(JsonElement root, List<string> errors, out decimal? stopDecimal, out decimal? targetDecimal)
     {
+        stopDecimal = null;
+        targetDecimal = null;
         if (!root.TryGetProperty("plan", out JsonElement plan) || plan.ValueKind != JsonValueKind.Object)
         {
             errors.Add("plan must be an object");
@@ -206,6 +213,8 @@ public static partial class HypothesisReader
 
         double? stop = plan.TryGetProperty("stop", out _) ? Number(plan, "stop", errors, "plan.") : null;
         double? target = plan.TryGetProperty("target", out _) ? Number(plan, "target", errors, "plan.") : null;
+        stopDecimal = Decimal(plan, "stop");
+        targetDecimal = Decimal(plan, "target");
         if (side is null || horizon is null)
         {
             return null;
@@ -220,6 +229,30 @@ public static partial class HypothesisReader
             errors.Add($"plan.{exception.ParamName}: {exception.Message.Split(" (Parameter")[0]}");
             return null;
         }
+    }
+
+    // The strategy a run executes (change add-strategy-graph, design.md, decision 8): the event of the signal enters on the
+    // side of the plan and closes after its horizon, with its stop and target. The entries of the strategy must give the plan
+    // of the text exactly; a number a decimal cannot hold would give another, so the hypothesis is refused.
+    private static TradingStrategy? StrategyOf(Signal signal, TradePlan plan, decimal? stop, decimal? target, List<string> errors)
+    {
+        EntrySide side = plan.Side == TradeSide.Long ? EntrySide.Long : EntrySide.Short;
+        TradingStrategy strategy = TradingStrategy.FromSignal(signal, side, plan.Horizon, stop, target);
+        StrategyStep written = new StrategyExecutor(strategy).BeforeCandles(DateTimeOffset.UnixEpoch);
+        if (EntryPlan.Of(written, side) != plan)
+        {
+            errors.Add("plan: stop and target must be decimal numbers a graph can hold, of at most 28 digits");
+            return null;
+        }
+
+        return strategy;
+    }
+
+    private static decimal? Decimal(JsonElement element, string name)
+    {
+        return element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out decimal number)
+            ? number
+            : null;
     }
 
     private static Signal? SignalOf(JsonElement root, List<string> errors)

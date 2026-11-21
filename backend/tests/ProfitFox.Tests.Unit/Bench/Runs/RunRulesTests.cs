@@ -44,9 +44,9 @@ public sealed class RunRulesTests
     {
         DateTimeOffset[] events = [Utc(2026, 1, 5, 8), Utc(2026, 1, 5, 16), Utc(2026, 1, 14, 4)];
 
-        IReadOnlyList<DateTimeOffset[]> first = RandomEntries.Draw("BTCUSDT", events, Exploration());
-        IReadOnlyList<DateTimeOffset[]> second = RandomEntries.Draw("BTCUSDT", events, Exploration());
-        IReadOnlyList<DateTimeOffset[]> other = RandomEntries.Draw("ETHUSDT", events, Exploration());
+        IReadOnlyList<DateTimeOffset[]> first = Draw("BTCUSDT", events);
+        IReadOnlyList<DateTimeOffset[]> second = Draw("BTCUSDT", events);
+        IReadOnlyList<DateTimeOffset[]> other = Draw("ETHUSDT", events);
 
         Assert.That(second, Is.EqualTo(first));
         Assert.That(other, Is.Not.EqualTo(first));
@@ -57,7 +57,7 @@ public sealed class RunRulesTests
     {
         DateTimeOffset[] events = [Utc(2026, 1, 5, 8), Utc(2026, 1, 5, 16)];
 
-        IReadOnlyList<DateTimeOffset[]> entries = RandomEntries.Draw("BTCUSDT", events, Exploration());
+        IReadOnlyList<DateTimeOffset[]> entries = Draw("BTCUSDT", events);
 
         DateTimeOffset[] all = [.. entries.SelectMany(entry => entry)];
         Assert.That(entries.Select(entry => entry.Length), Is.EqualTo(new[] { 20, 20 }));
@@ -71,7 +71,7 @@ public sealed class RunRulesTests
     {
         DateTimeOffset[] events = [Utc(2026, 5, 13, 8)];
 
-        DateTimeOffset[] entries = RandomEntries.Draw("BTCUSDT", events, Exploration())[0];
+        DateTimeOffset[] entries = Draw("BTCUSDT", events)[0];
 
         Assert.That(entries, Has.All.LessThanOrEqualTo(Utc(2026, 5, 15, 20)));
     }
@@ -92,6 +92,23 @@ public sealed class RunRulesTests
         IReadOnlyList<(long Block, double Mean, int Events)> means = Evidence.BlockMeans(rows);
 
         Assert.That(means.Select(mean => (mean.Block, Math.Round(mean.Mean, 12), mean.Events)), Is.EqualTo(new[] { (7L, 0.001, 2), (8L, 0.003, 1) }));
+    }
+
+    // The random entries of every event of a pair on exploration: block by block, event by event, from one generator.
+    private static IReadOnlyList<DateTimeOffset[]> Draw(string symbol, DateTimeOffset[] events)
+    {
+        var randoms = new RandomEntries(symbol, events, Exploration());
+        var entries = new DateTimeOffset[events.Length][];
+        foreach (IGrouping<long, int> block in Enumerable.Range(0, events.Length).GroupBy(index => Blocks.Of(events[index], TimeBlock.Week)).OrderBy(group => group.Key))
+        {
+            IReadOnlyList<DateTimeOffset> candidates = randoms.Candidates(block.Key);
+            foreach (int index in block.OrderBy(index => events[index]))
+            {
+                entries[index] = randoms.Draw(candidates);
+            }
+        }
+
+        return entries;
     }
 
     private static EventRow Row(long block, double eventY, double[] randomYs, int? randomValid = null, string instrument = "BTCUSDT")
