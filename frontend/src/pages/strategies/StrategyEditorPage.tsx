@@ -15,6 +15,7 @@ import {
   Problem,
   toLayout,
 } from '@/pages/documents/DocumentEditor';
+import { PreviewPanel } from '@/preview/PreviewPanel';
 
 const section = { to: '/strategies', title: 'Стратегии' } as const;
 
@@ -95,6 +96,7 @@ export function SavedStrategyPage({ name }: { readonly name: string }) {
       catalog={catalog.data}
       start={strategy.data.content!}
       startSignals={strategy.data.signals}
+      bottom={bottom}
     />
   );
 }
@@ -120,6 +122,27 @@ export function NewStrategyPage({ draftId }: { readonly draftId: string }) {
       draftId={draftId}
       catalog={catalog.data}
       start={start}
+      bottom={bottom}
+    />
+  );
+}
+
+/** The preview of the strategy on a pair at the bottom of the editor. */
+function bottom({
+  graph,
+  canRun,
+  rememberAs,
+}: {
+  graph: Graph;
+  canRun: boolean;
+  rememberAs: string;
+}) {
+  return (
+    <PreviewPanel
+      kind="strategy"
+      graph={graph}
+      canRun={canRun}
+      rememberAs={`strategy:${rememberAs}`}
     />
   );
 }
