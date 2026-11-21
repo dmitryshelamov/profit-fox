@@ -84,7 +84,7 @@
 
 ## 6. Итоговая проверка
 
-- [ ] 6.1 `dotnet build ProfitFox.slnx --configuration Release` и `dotnet test ProfitFox.slnx` из `backend/`,
+- [x] 6.1 `dotnet build ProfitFox.slnx --configuration Release` и `dotnet test ProfitFox.slnx` из `backend/`,
   `npm --prefix frontend run typecheck`. Проверить: всё зелёное, предупреждений сборки не прибавилось.
 
 ## Workflow follow-up
