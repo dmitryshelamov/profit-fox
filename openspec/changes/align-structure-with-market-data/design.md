@@ -52,7 +52,7 @@ Files and code style, Tests), `backend/Directory.Build.props`, `Directory.Packag
 | `backend/Directory.Packages.props` | `ManagePackageVersionsCentrally` и версии всех пакетов по группам; версии — ровно нынешние |
 | `backend/Directory.Build.targets` | правило ссылок слоёв (решение 2), текст цели — из образца |
 | `backend/.globalconfig` | `IDE0005` (лишний `using`) — ошибка сборки, как в образце |
-| `.editorconfig` в корне | копия образца; в первой строке и в комментарии про `dotnet format` имя репозитория и решения — `profit-fox` и `ProfitFox.slnx` |
+| `.editorconfig` в корне | копия образца; меняются три комментария: имя репозитория в первой строке, `ProfitFox.slnx` в строке про `dotnet format` (и что CI его пока не запускает) и строка про `scripts/verify-format.sh`, которого здесь нет |
 
 `.globalconfig` лежит в `backend/`, а не в корне: так в образце, и SDK находит его вверх от каждого проекта. `.editorconfig`
 — в корне, как в образце.
@@ -60,6 +60,12 @@ Files and code style, Tests), `backend/Directory.Build.props`, `Directory.Packag
 Из каждого `.csproj` уходят `TargetFramework`, `LangVersion`, `ImplicitUsings`, `Nullable`, `IsPackable` и атрибуты `Version` у
 `PackageReference`; пустые `PropertyGroup` удаляются. Остаются свойства, которые есть только у проекта: `OutputType` и
 `AssemblyName` `bench` у `ProfitFox.Cli`, `IncludeAssets`/`PrivateAssets` у `Grpc.Tools`, `Protobuf`, `Content`, `None`.
+
+`GenerateDocumentationFile` нужен ради `IDE0005`, но в .NET 10 пакет `Microsoft.AspNetCore.OpenApi` с ним переносит
+XML-комментарии в документ OpenAPI: `schema.d.ts` получил бы 81 строку описаний (найдено при применении, задача 9.3). Чтобы
+API осталось прежним, `ProfitFox.Presentation.csproj` убирает из анализаторов его генератор
+`Microsoft.AspNetCore.OpenApi.SourceGenerators` (цель `LeaveOutOpenApiXmlComments`). Включить описания в документ — решение
+владельца на потом.
 
 Версии пакетов — без изменений, ни одного нового пакета:
 
@@ -75,15 +81,15 @@ Files and code style, Tests), `backend/Directory.Build.props`, `Directory.Packag
 Решение остаётся `ProfitFox.slnx`. Новые файлы добавляются в его папку `/common/` рядом с `.gitignore`, чтобы их было видно в
 Rider.
 
-### 2. Правило ссылок слоёв: списки равны нынешним ссылкам
+### 2. Правило ссылок слоёв: списки равны нынешним ссылкам с транзитивными
 
 | Проект | Может ссылаться на |
 |---|---|
 | `ProfitFox.Domain` | ни на что |
 | `ProfitFox.Application` | `ProfitFox.Domain` |
 | `ProfitFox.Infrastructure` | `ProfitFox.Application`, `ProfitFox.Domain` |
-| `ProfitFox.Presentation` | `ProfitFox.Application`, `ProfitFox.Infrastructure` |
-| `ProfitFox.Worker` | `ProfitFox.Application`, `ProfitFox.Infrastructure` |
+| `ProfitFox.Presentation` | `ProfitFox.Application`, `ProfitFox.Domain`, `ProfitFox.Infrastructure` |
+| `ProfitFox.Worker` | `ProfitFox.Application`, `ProfitFox.Domain`, `ProfitFox.Infrastructure` |
 | `ProfitFox.Cli` | ни на что |
 | `ProfitFox.Tests.Shared` | `ProfitFox.Application`, `ProfitFox.Domain` (как в образце; сейчас ни на что не ссылается) |
 | `ProfitFox.Tests.Unit` | `ProfitFox.Application`, `ProfitFox.Domain`, `ProfitFox.Infrastructure`, `ProfitFox.Tests.Shared` |
@@ -92,8 +98,13 @@ Rider.
 Расхождение с образцом: там `Tests.Unit` на Infrastructure не ссылается. Здесь ссылка есть (`InstrumentCatalogTests`), а
 переносить тесты между проектами работа не должна, поэтому ссылка разрешена и записана в «Открыто после применения».
 
-Правило проверяется на деле: лишняя ссылка Domain → Application должна уронить сборку сообщением правила; ссылка
-откатывается.
+SDK добавляет к `ProjectReference` ссылки проектов, на которые проект ссылается, ещё до проверки, поэтому список называет и
+их: так и в образце Infrastructure перечисляет Domain, на который ссылается через Application. У Presentation и Worker
+прямых ссылок на Domain нет, а транзитивная есть; без Domain в списке их сборка падает (найдено при применении).
+
+Правило проверяется на деле: лишняя ссылка Domain → Cli роняет сборку сообщением правила; ссылка откатывается. Ссылка
+Domain → Application, названная в задании, для проверки не годится: она даёт цикл, и MSBuild падает раньше правила
+(`MSB4006`).
 
 ### 3. Замечания анализаторов правятся, если не трогают логику
 
@@ -106,8 +117,10 @@ Rider.
 | `IDE0008` явный тип вместо `var` | 1 | `PreviewHistoryCache`: `var` переписывается на явный тип |
 | `CS1573` у параметра нет тега `<param>` | 2 | в документацию конструктора `MarketHistory` добавляются теги `<param>` для `source` и `hash` |
 
-Правки идут отдельным коммитом после файлов сборки и до переноса папок, чтобы дифф переноса оставался чистым. Файлы правок
-`IDE0007`/`IDE0008` перечисляются в сообщении коммита и в «Открыто после применения». Если при применении появится правило,
+Правки сделаны `dotnet format style --diagnostics IDE0005 IDE0007 IDE0008`; он же отсортировал `using` и разделил их группы
+пустой строкой по `dotnet_separate_import_directive_groups` образца — это правка только строк `using`. Правки идут
+отдельной группой до файлов сборки: так каждая группа собирается без предупреждений (с файлами сборки, но без правок, были бы
+два `CS1573`). Файлы правок `IDE0007`/`IDE0008` перечислены в «Открыто после применения». Если при применении появится правило,
 которое требует менять логику или открытые имена, код не правится: правило для этого места выключается с комментарием и
 записывается в «Открыто после применения».
 
@@ -379,7 +392,8 @@ Rider.
   `System.*` первыми, затем по алфавиту, одной группой, как сейчас; `using static` — последними.
 - Полное имя типа в коде меняется вместе с пространством имён. Таких строк восемь, все в тестах: `FakeCandleFeed`,
   `FakeFundingFeed`, `PreviewTests` ×2 (`…Protos.*`), `CliTests`, `HypothesesTests`, `RunsTests` (`HypothesisReader`),
-  `RunReportTests` (`TimeBlock`).
+  `RunReportTests` (`TimeBlock`). Цель псевдонима `using TimeRange = …` в `GrpcHistorySource` и `GrpcHistorySourceTests`
+  меняется так же; это строки `using`.
 - Если после слияния тем имя стало неоднозначным, это чинится `using`-псевдонимом или полным именем в месте использования;
   типы и папки ради этого не переименовываются.
 

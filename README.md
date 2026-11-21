@@ -207,22 +207,37 @@ dotnet run --project backend/src/ProfitFox.Cli -- --bench http://192.168.8.213:5
 ## Слои
 
 Стенд и бот — одно приложение с одним набором слоёв в `backend/src`; отдельных зон `bench`, `engine` и `bot` больше нет.
-Стенд — раздел внутри слоёв: папки `Hypotheses`, `Runs`, `Verdicts`, `Ledger` и его страницы. Ссылки идут только внутрь:
+Раскладка та же, что в `profit-fox-market-data` (его `docs/conventions.md`): внутри слоя папка называет сначала вид типа,
+потом тему (`Runs`, `Hypotheses`, `Signals`, `Graph`, ...), а пространство имён совпадает с папкой. Ссылки идут только
+внутрь:
 
-- `ProfitFox.Domain` — расчёт и правила без ввода-вывода. Расчёт лежит в папках `Graph` (граф и его чтение), `Nodes` (узлы),
-  `Execution` (исполнение сигнала и стратегии), `Trades` (сделка) и `Positions` (позиция пары). Правила стенда — гипотеза,
-  периоды, случайные входы, вердикт, правила журнала, номер версии движка, события сигнала, шаги стратегии на паре. Ни на
-  что не ссылается.
-- `ProfitFox.Application` — сценарии (прогон, очередь, предпросмотр, библиотека сигналов, список гипотез) и порты:
-  `IHistorySource`, `IInstrumentCatalog`, `IHypothesisStore`, `ISignalStore`, `IRunLedger`, `IRunQueue`.
-- `ProfitFox.Infrastructure` — адаптеры портов: gRPC и REST сервиса данных, база (Npgsql, Dapper,
-  FluentMigrator).
-- `ProfitFox.Presentation` (API) и `ProfitFox.Worker` — точки входа, они же собирают зависимости.
+- `ProfitFox.Domain` — расчёт и правила без ввода-вывода. `ValueObjects/<тема>` — значения (записи, проверенный граф,
+  сигнал, стратегия, минутный путь), перечисления — в `ValueObjects/<тема>/Enums`; `Services/<тема>` — то, что считает:
+  чтение и проверка графа, узлы, исполнение сигнала и стратегии, позиция пары, сделка, случайные входы, правила журнала и
+  вердикта; `Exceptions`. Ни на что не ссылается.
+- `ProfitFox.Application` — сценарии и порты: `Commands/<тема>` (прогон, очередь, библиотека сигналов, гипотезы),
+  `Queries/<тема>` (предпросмотр, доска прогонов, история рынка), `Contracts/<тема>` (что отдают сценарии),
+  `Ports/<тема>` (`IHistorySource`, `IInstrumentCatalog`, `IHypothesisStore`, `ISignalStore`, `IRunLedger`, `IRunQueue` и их
+  записи), `Exceptions`.
+- `ProfitFox.Infrastructure` — адаптеры портов: `Clients/MarketData` (gRPC и REST сервиса данных, его `Protos`) и
+  `Persistence/Postgres` (хранилища в `Dapper/Repositories/<тема>`, миграции в `FluentMigrator/Migrations`).
+- `ProfitFox.Presentation` (API: `Controllers`, `Contracts/<тема>` с запросами и ответами) и `ProfitFox.Worker`
+  (`BackgroundServices`) — точки входа, они же собирают зависимости.
 - `ProfitFox.Cli` (`bench`) — клиент REST, на остальные проекты не ссылается.
 
-Внутренности расчёта (`internal` в папках `Graph`, `Nodes`, `Execution`, `Trades`, `Positions`) закрыты от остальных слоёв
-компилятором. Остальной код Domain пользуется теми же открытыми входами, что и другие слои: `StrategyGraph`,
-`SignalExecutor`, `StrategyExecutor`, `TradeSimulator`, `PairPosition`, `Cycle`, `EntryPlan`.
+Тесты лежат так же, как код, который они проверяют: `ProfitFox.Tests.Unit/Domain/...`, `ProfitFox.Tests.Unit/Application/...`,
+`ProfitFox.Tests.Integration/Infrastructure/...`, `ProfitFox.Tests.Integration/Presentation/...`. Эталоны — в папках
+`Fixtures` рядом со своими тестами.
+
+Общие свойства сборки и версии пакетов — в `backend/Directory.Build.props` и `backend/Directory.Packages.props`; `.csproj`
+перечисляют только свои пакеты и ссылки. `backend/Directory.Build.targets` держит правило ссылок слоёв: проект может
+ссылаться только на перечисленные там проекты, иначе сборка падает. Стиль кода — `.editorconfig` в корне и
+`backend/.globalconfig`; нарушение правила с уровнем `error` роняет обычную сборку.
+
+Внутренности расчёта (`internal`: `CompiledGraph`, `CompiledNode`, `InputSource`, `NodeContext`, `Node` и узлы
+`Services/Nodes`, `GraphJson`, `GraphValidator`, `StrategyRun`) закрыты от остальных слоёв компилятором. Остальной код Domain
+пользуется теми же открытыми входами, что и другие слои: `StrategyGraph`, `SignalExecutor`, `StrategyExecutor`,
+`TradeSimulator`, `PairPosition`, `Cycle`, `EntryPlan`.
 
 «Версия движка» — номер версии расчёта, а не проекта: `EngineVersion.Number`. Его поднимают вместе с любым изменением
 событий, исходов или вердикта. Эталонный тест `EngineVersionTests` считает две гипотезы, H0001 и H0002 с наложением

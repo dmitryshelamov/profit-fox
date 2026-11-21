@@ -9,4 +9,14 @@
         <PackageReference Include="Microsoft.AspNetCore.OpenApi"/>
     </ItemGroup>
 
+    <!--
+        Directory.Build.props turns on the documentation file for the code style checks, and with it the OpenAPI package would
+        copy the XML comments into the OpenAPI document. The document stays as it was: its generator of XML comments is left out.
+    -->
+    <Target Name="LeaveOutOpenApiXmlComments" BeforeTargets="CoreCompile">
+        <ItemGroup>
+            <Analyzer Remove="@(Analyzer)" Condition="'%(Filename)' == 'Microsoft.AspNetCore.OpenApi.SourceGenerators'"/>
+        </ItemGroup>
+    </Target>
+
 </Project>
