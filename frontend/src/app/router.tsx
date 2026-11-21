@@ -12,6 +12,8 @@ import { RunPage } from '@/pages/runs/RunPage';
 import { RunsPage } from '@/pages/runs/RunsPage';
 import { NewSignalPage, SavedSignalPage } from '@/pages/signals/SignalEditorPage';
 import { SignalListPage } from '@/pages/signals/SignalListPage';
+import { NewStrategyPage, SavedStrategyPage } from '@/pages/strategies/StrategyEditorPage';
+import { StrategyListPage } from '@/pages/strategies/StrategyListPage';
 
 const rootRoute = createRootRoute({
   component: Outlet,
@@ -50,6 +52,30 @@ const signalRoute = createRoute({
   },
 });
 
+const strategiesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/strategies',
+  component: StrategyListPage,
+});
+
+const newStrategyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/strategies/new/$draftId',
+  component: function NewStrategyRoute() {
+    const { draftId } = newStrategyRoute.useParams();
+    return <NewStrategyPage draftId={draftId} />;
+  },
+});
+
+const strategyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/strategies/$name',
+  component: function StrategyRoute() {
+    const { name } = strategyRoute.useParams();
+    return <SavedStrategyPage name={name} />;
+  },
+});
+
 const hypothesisRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/hypotheses/$id',
@@ -79,6 +105,9 @@ const routeTree = rootRoute.addChildren([
   signalsRoute,
   newSignalRoute,
   signalRoute,
+  strategiesRoute,
+  newStrategyRoute,
+  strategyRoute,
   hypothesisRoute,
   runsRoute,
   runRoute,

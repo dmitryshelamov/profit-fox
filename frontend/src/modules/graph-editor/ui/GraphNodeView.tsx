@@ -3,6 +3,7 @@ import { Handle, type NodeProps, Position } from '@xyflow/react';
 import type { GraphFlowNode } from '../model/flow';
 import { nodeWidth } from '../model/layout';
 import { kindOf, pinsOf } from '../model/pins';
+import { referenceOf, signalInfo } from '../model/signals';
 import type { Pin } from '../model/types';
 import { formatValue, parseValue } from '../model/values';
 import { useGraphEnvironment } from './GraphContext';
@@ -16,9 +17,24 @@ export function GraphNodeView({ id, data, selected }: NodeProps<GraphFlowNode>) 
   const pins = pinsOf(node, environment.catalog, environment.graph);
   const issues = environment.issues.filter((issue) => issue.node === id);
   const badPins = new Set(issues.map((issue) => issue.pin));
-  const title = kind?.title ?? node.kind;
+  // A signal node goes by the name of its signal and shows its version, not the id it holds.
+  const signal = node.kind === 'signal' ? signalInfo(node, environment.catalog) : undefined;
+  const reference = referenceOf(node);
+  const title =
+    node.kind === 'signal'
+      ? (signal?.name ?? kind?.title ?? node.kind)
+      : (kind?.title ?? node.kind);
   const rows = Math.max(pins.inputs.length, pins.outputs.length, 1);
-  const settings = Object.entries(node.settings ?? {});
+  const settings =
+    node.kind === 'signal'
+      ? [
+          ['версия', String(reference?.version ?? '—')],
+          ...(signal?.latestVersion != null && reference && signal.latestVersion > reference.version
+            ? [['есть версия', String(signal.latestVersion)]]
+            : []),
+          ...(signal?.parameters === undefined ? [['пины', 'загрузка']] : []),
+        ]
+      : Object.entries(node.settings ?? {});
   const outline =
     issues.length > 0
       ? 'border-2 border-red-500'
@@ -127,6 +143,7 @@ function Input({
           className="nodrag h-[18px] w-16 shrink-0 rounded border border-zinc-700 bg-zinc-800 px-1 font-mono text-[11px] text-zinc-100"
           defaultValue={formatValue(value)}
           key={formatValue(value)}
+          placeholder={pin.fallback === undefined ? undefined : formatValue(pin.fallback)}
           readOnly={environment.readOnly}
           onBlur={(event) => {
             const parsed = parseValue(event.target.value, pin.type);
