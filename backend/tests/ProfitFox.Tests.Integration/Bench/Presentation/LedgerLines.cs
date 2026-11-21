@@ -1,8 +1,8 @@
 using Dapper;
 using Npgsql;
-using ProfitFox.Bench.Application.Runs;
-using ProfitFox.Bench.Domain.Ledger;
-using ProfitFox.Bench.Infrastructure.Ledger;
+using ProfitFox.Application.Runs;
+using ProfitFox.Domain.Ledger;
+using ProfitFox.Infrastructure.Ledger;
 
 namespace ProfitFox.Tests.Integration.Bench.Presentation;
 

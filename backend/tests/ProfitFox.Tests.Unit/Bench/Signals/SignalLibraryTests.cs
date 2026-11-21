@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using ProfitFox.Bench.Application.Signals;
-using ProfitFox.Bench.Domain.Signals;
+using ProfitFox.Application.Signals;
+using ProfitFox.Domain.Signals;
 using ProfitFox.Engine.Strategy.Graph.Reading;
 using ProfitFox.Tests.Unit.Bench.Hypotheses;
 

@@ -2,8 +2,8 @@
 
 ## Стенд гипотез
 
-Стенд — это служба: одна база Postgres, API `ProfitFox.Bench.Presentation` для фронтенда и CLI, и от одного до N
-процессов `ProfitFox.Bench.Worker`, которые считают прогоны из очереди в базе. Стенды на разных машинах (Мак, soyo-02)
+Стенд — это служба: одна база Postgres, API `ProfitFox.Presentation` для фронтенда и CLI, и от одного до N
+процессов `ProfitFox.Worker`, которые считают прогоны из очереди в базе. Стенды на разных машинах (Мак, soyo-02)
 никак не связаны: у каждого своя база, свои Worker'ы и свой журнал. Спецификации — `openspec/specs/hypothesis-bench`,
 `bench-run-queue`, `signal-constructor`, `signal-preview`.
 
@@ -24,25 +24,25 @@
 2. API на `http://localhost:5240`. При старте мигрирует базу:
 
    ```bash
-   dotnet run --project backend/src/bench/ProfitFox.Bench.Presentation
+   dotnet run --project backend/src/ProfitFox.Presentation
    ```
 
 3. Worker:
 
    ```bash
-   dotnet run --project backend/src/bench/ProfitFox.Bench.Worker
+   dotnet run --project backend/src/ProfitFox.Worker
    ```
 
    Второй Worker — тот же запуск в другом терминале с другим именем:
 
    ```bash
-   Worker__Name=mac-2 dotnet run --project backend/src/bench/ProfitFox.Bench.Worker
+   Worker__Name=mac-2 dotnet run --project backend/src/ProfitFox.Worker
    ```
 
 4. H0001 в базу (один раз на новую базу; повторная загрузка того же текста новой версии не даёт):
 
    ```bash
-   dotnet run --project backend/src/bench/ProfitFox.Bench.Cli -- hypotheses add bench/hypotheses/H0001-funding-short-4h/hypothesis.json
+   dotnet run --project backend/src/ProfitFox.Cli -- hypotheses add bench/hypotheses/H0001-funding-short-4h/hypothesis.json
    ```
 
 5. Страница — Vite на `http://localhost:5173`, запросы `/api` уходят на API:
@@ -73,7 +73,7 @@ docker compose down -v
 То же из командной строки:
 
 ```bash
-dotnet run --project backend/src/bench/ProfitFox.Bench.Cli -- run H0001 --wait
+dotnet run --project backend/src/ProfitFox.Cli -- run H0001 --wait
 ```
 
 Команды `bench`:
@@ -105,8 +105,8 @@ H0001 на 828 парах с soyo-02 считается около 15 минут
 
 ### Настройки
 
-API (`backend/src/bench/ProfitFox.Bench.Presentation/appsettings.json`) и Worker
-(`backend/src/bench/ProfitFox.Bench.Worker/appsettings.json`):
+API (`backend/src/ProfitFox.Presentation/appsettings.json`) и Worker
+(`backend/src/ProfitFox.Worker/appsettings.json`):
 
 - `ConnectionStrings:Bench` — база стенда; для Мака она в `appsettings.Development.json`;
 - `MarketData:GrpcUrl`, `MarketData:RestUrl` — адреса сервиса данных;
@@ -181,7 +181,7 @@ npm --prefix frontend run generate:api
 Проверка первого деплоя: страница открывается, H0001 загружается с Мака
 
 ```bash
-dotnet run --project backend/src/bench/ProfitFox.Bench.Cli -- --bench http://192.168.8.213:5240 hypotheses add bench/hypotheses/H0001-funding-short-4h/hypothesis.json
+dotnet run --project backend/src/ProfitFox.Cli -- --bench http://192.168.8.213:5240 hypotheses add bench/hypotheses/H0001-funding-short-4h/hypothesis.json
 ```
 
 и её сверка заканчивается строкой `parity`.

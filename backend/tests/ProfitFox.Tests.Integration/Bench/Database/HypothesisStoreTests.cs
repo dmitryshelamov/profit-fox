@@ -1,6 +1,6 @@
-using ProfitFox.Bench.Application.Hypotheses;
-using ProfitFox.Bench.Domain.Hypotheses;
-using ProfitFox.Bench.Infrastructure.Hypotheses;
+using ProfitFox.Application.Hypotheses;
+using ProfitFox.Domain.Hypotheses;
+using ProfitFox.Infrastructure.Hypotheses;
 
 namespace ProfitFox.Tests.Integration.Bench.Database;
 

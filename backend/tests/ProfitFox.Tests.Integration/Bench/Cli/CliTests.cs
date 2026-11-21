@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text.Json.Nodes;
-using ProfitFox.Bench.Cli;
-using ProfitFox.Bench.Domain.Ledger;
+using ProfitFox.Cli;
+using ProfitFox.Domain.Ledger;
 using ProfitFox.Tests.Integration.Bench.Database;
 using ProfitFox.Tests.Integration.Bench.MarketData;
 using ProfitFox.Tests.Integration.Bench.Presentation;
@@ -227,7 +227,7 @@ public sealed class CliTests
 
     private static string HypothesisHash(string text)
     {
-        return ProfitFox.Bench.Domain.Hypotheses.HypothesisReader.Parse(ProfitFox.Bench.Domain.Hypotheses.HypothesisReader.Normalize(text)).Hash;
+        return ProfitFox.Domain.Hypotheses.HypothesisReader.Parse(ProfitFox.Domain.Hypotheses.HypothesisReader.Normalize(text)).Hash;
     }
 
     private sealed record Result(int Code, string Output, string Error);

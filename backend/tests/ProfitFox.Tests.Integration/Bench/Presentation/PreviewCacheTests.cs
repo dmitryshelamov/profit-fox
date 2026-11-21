@@ -2,9 +2,9 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using ProfitFox.Bench.Application.Preview;
-using ProfitFox.Bench.Domain.MarketData;
-using ProfitFox.Bench.Presentation.Preview;
+using ProfitFox.Application.Preview;
+using ProfitFox.Domain.MarketData;
+using ProfitFox.Presentation.Preview;
 using ProfitFox.Tests.Integration.Bench.Database;
 using ProfitFox.Tests.Integration.Bench.MarketData;
 

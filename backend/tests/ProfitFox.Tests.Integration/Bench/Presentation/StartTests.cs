@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using ProfitFox.Bench.Presentation.Hypotheses;
+using ProfitFox.Presentation.Hypotheses;
 using ProfitFox.Tests.Integration.Bench.Database;
 using ProfitFox.Tests.Integration.Bench.MarketData;
 

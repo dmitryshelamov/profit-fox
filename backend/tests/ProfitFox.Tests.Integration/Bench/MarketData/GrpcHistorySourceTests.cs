@@ -1,11 +1,11 @@
 using Grpc.Core;
 using Grpc.Net.Client;
-using ProfitFox.Bench.Application.MarketData;
-using ProfitFox.Bench.Domain.MarketData;
-using ProfitFox.Bench.Infrastructure.MarketData;
-using ProfitFox.Bench.Infrastructure.MarketData.Protos;
+using ProfitFox.Application.MarketData;
+using ProfitFox.Domain.MarketData;
+using ProfitFox.Infrastructure.MarketData;
+using ProfitFox.Infrastructure.MarketData.Protos;
 using ProfitFox.Engine.Strategy.Execution;
-using TimeRange = ProfitFox.Bench.Domain.MarketData.TimeRange;
+using TimeRange = ProfitFox.Domain.MarketData.TimeRange;
 
 namespace ProfitFox.Tests.Integration.Bench.MarketData;
 

@@ -1,6 +1,6 @@
 using System.Globalization;
-using ProfitFox.Bench.Application.MarketData;
-using ProfitFox.Bench.Domain.MarketData;
+using ProfitFox.Application.MarketData;
+using ProfitFox.Domain.MarketData;
 
 namespace ProfitFox.Tests.Unit.Bench.MarketData;
 

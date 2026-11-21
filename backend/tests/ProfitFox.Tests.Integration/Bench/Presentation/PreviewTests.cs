@@ -4,16 +4,16 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Dapper;
 using Npgsql;
-using ProfitFox.Bench.Application.Hypotheses;
-using ProfitFox.Bench.Application.Runs;
-using ProfitFox.Bench.Domain.Runs;
-using ProfitFox.Bench.Infrastructure.Hypotheses;
-using ProfitFox.Bench.Infrastructure.Ledger;
-using ProfitFox.Bench.Infrastructure.MarketData;
-using ProfitFox.Bench.Presentation.Errors;
-using ProfitFox.Bench.Presentation.Hypotheses;
-using ProfitFox.Bench.Presentation.Instruments;
-using ProfitFox.Bench.Presentation.Preview;
+using ProfitFox.Application.Hypotheses;
+using ProfitFox.Application.Runs;
+using ProfitFox.Domain.Runs;
+using ProfitFox.Infrastructure.Hypotheses;
+using ProfitFox.Infrastructure.Ledger;
+using ProfitFox.Infrastructure.MarketData;
+using ProfitFox.Presentation.Errors;
+using ProfitFox.Presentation.Hypotheses;
+using ProfitFox.Presentation.Instruments;
+using ProfitFox.Presentation.Preview;
 using ProfitFox.Tests.Integration.Bench.Database;
 using ProfitFox.Tests.Integration.Bench.MarketData;
 
@@ -126,10 +126,10 @@ public sealed class PreviewTests
 
         DateTimeOffset end = Periods.ExplorationEnd;
         Assert.That(DateTimeOffset.FromUnixTimeMilliseconds(preview.Candles[^1].OpenTime), Is.EqualTo(end.AddHours(-4)), "the last candle closes at the end");
-        Assert.That(market.Data.CandleRequests, Has.All.Matches<ProfitFox.Bench.Infrastructure.MarketData.Protos.CandleHistoryRequest>(request => request.To.ToDateTimeOffset() <= end));
+        Assert.That(market.Data.CandleRequests, Has.All.Matches<ProfitFox.Infrastructure.MarketData.Protos.CandleHistoryRequest>(request => request.To.ToDateTimeOffset() <= end));
         Assert.That(
             market.Data.FundingRequests,
-            Has.All.Matches<ProfitFox.Bench.Infrastructure.MarketData.Protos.FundingPaymentHistoryRequest>(request => request.To.ToDateTimeOffset() <= end.AddSeconds(1)),
+            Has.All.Matches<ProfitFox.Infrastructure.MarketData.Protos.FundingPaymentHistoryRequest>(request => request.To.ToDateTimeOffset() <= end.AddSeconds(1)),
             "the payment exactly at the end is read, as by a run of exploration");
     }
 

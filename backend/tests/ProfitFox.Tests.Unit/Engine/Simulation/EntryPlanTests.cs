@@ -1,6 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
-using ProfitFox.Bench.Domain.Hypotheses;
+using ProfitFox.Domain.Hypotheses;
 using ProfitFox.Engine.Simulation.Positions;
 using ProfitFox.Engine.Simulation.Trades;
 using ProfitFox.Engine.Strategy.Execution;

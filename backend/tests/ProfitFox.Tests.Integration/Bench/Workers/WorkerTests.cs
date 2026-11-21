@@ -1,13 +1,13 @@
 using Dapper;
 using Npgsql;
-using ProfitFox.Bench.Application.Hypotheses;
-using ProfitFox.Bench.Application.Runs;
-using ProfitFox.Bench.Domain.Ledger;
-using ProfitFox.Bench.Domain.Runs;
-using ProfitFox.Bench.Infrastructure.Hypotheses;
-using ProfitFox.Bench.Infrastructure.Ledger;
-using ProfitFox.Bench.Infrastructure.Persistence;
-using ProfitFox.Bench.Infrastructure.Runs;
+using ProfitFox.Application.Hypotheses;
+using ProfitFox.Application.Runs;
+using ProfitFox.Domain.Ledger;
+using ProfitFox.Domain.Runs;
+using ProfitFox.Infrastructure.Hypotheses;
+using ProfitFox.Infrastructure.Ledger;
+using ProfitFox.Infrastructure.Persistence;
+using ProfitFox.Infrastructure.Runs;
 using ProfitFox.Tests.Integration.Bench.Database;
 using ProfitFox.Tests.Integration.Bench.MarketData;
 

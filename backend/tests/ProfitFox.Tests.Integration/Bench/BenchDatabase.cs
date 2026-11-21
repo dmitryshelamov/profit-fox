@@ -1,7 +1,7 @@
 using Dapper;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
-using ProfitFox.Bench.Infrastructure.Persistence;
+using ProfitFox.Infrastructure.Persistence;
 using Testcontainers.PostgreSql;
 
 namespace ProfitFox.Tests.Integration.Bench;

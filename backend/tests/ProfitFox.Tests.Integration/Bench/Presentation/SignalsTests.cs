@@ -4,8 +4,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Dapper;
 using Npgsql;
-using ProfitFox.Bench.Presentation.Errors;
-using ProfitFox.Bench.Presentation.Signals;
+using ProfitFox.Presentation.Errors;
+using ProfitFox.Presentation.Signals;
 using ProfitFox.Tests.Integration.Bench.Database;
 using ProfitFox.Tests.Integration.Bench.MarketData;
 

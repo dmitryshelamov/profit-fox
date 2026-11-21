@@ -10,13 +10,13 @@
     {
       "name": "bench-api",
       "runtimeExecutable": "dotnet",
-      "runtimeArgs": ["run", "--project", "backend/src/bench/ProfitFox.Bench.Presentation"],
+      "runtimeArgs": ["run", "--project", "backend/src/ProfitFox.Presentation"],
       "port": 5240
     },
     {
       "name": "bench-worker",
       "runtimeExecutable": "dotnet",
-      "runtimeArgs": ["run", "--project", "backend/src/bench/ProfitFox.Bench.Worker"]
+      "runtimeArgs": ["run", "--project", "backend/src/ProfitFox.Worker"]
     },
     {
       "name": "frontend",

@@ -20,17 +20,17 @@
 
 ## 2. Одна зона
 
-- [ ] 2.1 Перенести шесть проектов `backend/src/bench/ProfitFox.Bench.*` в `backend/src/ProfitFox.*` по таблице design.md,
+- [x] 2.1 Перенести шесть проектов `backend/src/bench/ProfitFox.Bench.*` в `backend/src/ProfitFox.*` по таблице design.md,
   решение 3: каталоги, файлы проектов, ссылки между проектами и из тестов, `ProfitFox.slnx` (одна папка `/src/`),
   пространства имён в коде и в тестах, `csharp_namespace` в `.proto`. Сборка CLI остаётся `bench`. Проверить: сборка и все
   тесты зелёные, число тестов равно базе; `git diff -M --stat` показывает переименования файлов, а не удаления с
   добавлениями.
-- [ ] 2.2 Привести к новым путям оба `Dockerfile` (пути `dotnet publish`, имя сборки в `ENTRYPOINT`), `.claude/launch.json`
+- [x] 2.2 Привести к новым путям оба `Dockerfile` (пути `dotnet publish`, имя сборки в `ENTRYPOINT`), `.claude/launch.json`
   (пути проектов; имена конфигураций прежние) и команды раздела «Стенд на Маке» в `README.md`. Проверить:
   `docker build --file backend/src/ProfitFox.Presentation/Dockerfile .` и
   `docker build --file backend/src/ProfitFox.Worker/Dockerfile .` из корня репозитория собираются; каждая команда
   `dotnet run --project …` из `README.md` указывает на существующий проект.
-- [ ] 2.3 Проверить запуск на прежней базе (design.md, решения 7 и 9): на базе из 1.1, мигрированной прежней сборкой,
+- [x] 2.3 Проверить запуск на прежней базе (design.md, решения 7 и 9): на базе из 1.1, мигрированной прежней сборкой,
   запустить API из `backend/src/ProfitFox.Presentation`. Проверить: `/health` отвечает успехом, а версия схемы в таблице
   версий та же, что до запуска, и новых строк в ней нет. Миграцию пустой базы покрывают интеграционные тесты базы.
 

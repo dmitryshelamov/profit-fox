@@ -1,5 +1,5 @@
-using ProfitFox.Bench.Domain.Hypotheses;
-using ProfitFox.Bench.Domain.Runs;
+using ProfitFox.Domain.Hypotheses;
+using ProfitFox.Domain.Runs;
 using ProfitFox.Engine.Simulation.Trades;
 
 using static ProfitFox.Tests.Unit.Bench.Runs.Designs;

@@ -1,4 +1,4 @@
-using ProfitFox.Bench.Domain.Ledger;
+using ProfitFox.Domain.Ledger;
 
 namespace ProfitFox.Tests.Unit.Bench.Ledger;
 

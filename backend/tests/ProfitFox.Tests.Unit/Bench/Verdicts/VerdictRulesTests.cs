@@ -1,6 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
-using ProfitFox.Bench.Domain.Verdicts;
+using ProfitFox.Domain.Verdicts;
 
 namespace ProfitFox.Tests.Unit.Bench.Verdicts;
 

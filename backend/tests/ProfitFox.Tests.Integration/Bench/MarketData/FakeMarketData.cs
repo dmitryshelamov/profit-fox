@@ -1,6 +1,6 @@
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
-using ProfitFox.Bench.Infrastructure.MarketData.Protos;
+using ProfitFox.Infrastructure.MarketData.Protos;
 
 namespace ProfitFox.Tests.Integration.Bench.MarketData;
 

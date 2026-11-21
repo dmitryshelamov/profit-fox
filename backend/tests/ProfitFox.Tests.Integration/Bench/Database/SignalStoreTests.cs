@@ -2,9 +2,9 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Dapper;
 using Npgsql;
-using ProfitFox.Bench.Application.Signals;
-using ProfitFox.Bench.Domain.Signals;
-using ProfitFox.Bench.Infrastructure.Signals;
+using ProfitFox.Application.Signals;
+using ProfitFox.Domain.Signals;
+using ProfitFox.Infrastructure.Signals;
 using ProfitFox.Engine.Strategy.Graph;
 
 namespace ProfitFox.Tests.Integration.Bench.Database;

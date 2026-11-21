@@ -1,5 +1,5 @@
-using ProfitFox.Bench.Application.Signals;
-using ProfitFox.Bench.Domain.Signals;
+using ProfitFox.Application.Signals;
+using ProfitFox.Domain.Signals;
 
 namespace ProfitFox.Tests.Unit.Bench.Signals;
 

@@ -3,10 +3,10 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using ProfitFox.Bench.Domain.Ledger;
-using ProfitFox.Bench.Presentation.Errors;
-using ProfitFox.Bench.Presentation.Hypotheses;
-using ProfitFox.Bench.Presentation.Runs;
+using ProfitFox.Domain.Ledger;
+using ProfitFox.Presentation.Errors;
+using ProfitFox.Presentation.Hypotheses;
+using ProfitFox.Presentation.Runs;
 using ProfitFox.Tests.Integration.Bench.Database;
 using ProfitFox.Tests.Integration.Bench.MarketData;
 
@@ -179,6 +179,6 @@ public sealed class HypothesesTests
 
     private static string HashOf(string text)
     {
-        return ProfitFox.Bench.Domain.Hypotheses.HypothesisReader.Parse(ProfitFox.Bench.Domain.Hypotheses.HypothesisReader.Normalize(text)).Hash;
+        return ProfitFox.Domain.Hypotheses.HypothesisReader.Parse(ProfitFox.Domain.Hypotheses.HypothesisReader.Normalize(text)).Hash;
     }
 }

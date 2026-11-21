@@ -1,0 +1,8 @@
+using ProfitFox.Domain.Signals;
+
+namespace ProfitFox.Application.Signals;
+
+/// <summary>
+///     A saved signal as the store read it: the signal, or every error that stops it.
+/// </summary>
+public sealed record SignalRead(SignalDocument? Signal, IReadOnlyList<string> Errors);

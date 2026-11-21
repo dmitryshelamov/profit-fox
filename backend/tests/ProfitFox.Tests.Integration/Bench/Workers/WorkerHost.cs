@@ -2,14 +2,14 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using ProfitFox.Bench.Application.MarketData;
-using ProfitFox.Bench.Infrastructure.MarketData;
+using ProfitFox.Application.MarketData;
+using ProfitFox.Infrastructure.MarketData;
 using ProfitFox.Tests.Integration.Bench.MarketData;
 
 namespace ProfitFox.Tests.Integration.Bench.Workers;
 
 /// <summary>
-///     A Worker of the bench in the test process: the services of <c>ProfitFox.Bench.Worker</c> over the test database and the
+///     A Worker of the bench in the test process: the services of <c>ProfitFox.Worker</c> over the test database and the
 ///     fake market-data service, with a lease of 2 seconds renewed twice a second so that a test does not wait for 30.
 /// </summary>
 internal sealed class WorkerHost : IAsyncDisposable
@@ -48,7 +48,7 @@ internal sealed class WorkerHost : IAsyncDisposable
             ["Worker:PollInterval"] = "00:00:00.1",
             ["Worker:SchemaPollInterval"] = "00:00:00.2"
         });
-        ProfitFox.Bench.Worker.Program.Configure(builder);
+        ProfitFox.Worker.Program.Configure(builder);
         builder.Services.AddSingleton<IHistorySource>(new GrpcHistorySource(server.Channel));
         builder.Services.AddSingleton<IInstrumentCatalog>(new InstrumentCatalog(server.Http));
         IHost host = builder.Build();

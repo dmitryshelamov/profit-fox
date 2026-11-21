@@ -5,12 +5,12 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Dapper;
 using Npgsql;
-using ProfitFox.Bench.Application.Runs;
-using ProfitFox.Bench.Domain.Ledger;
-using ProfitFox.Bench.Domain.Runs;
-using ProfitFox.Bench.Infrastructure.Runs;
-using ProfitFox.Bench.Presentation.Errors;
-using ProfitFox.Bench.Presentation.Runs;
+using ProfitFox.Application.Runs;
+using ProfitFox.Domain.Ledger;
+using ProfitFox.Domain.Runs;
+using ProfitFox.Infrastructure.Runs;
+using ProfitFox.Presentation.Errors;
+using ProfitFox.Presentation.Runs;
 using ProfitFox.Tests.Integration.Bench.Database;
 using ProfitFox.Tests.Integration.Bench.MarketData;
 using ProfitFox.Tests.Integration.Bench.Workers;
@@ -244,6 +244,6 @@ public sealed class RunsTests
 
     private static string HashOfH0001()
     {
-        return ProfitFox.Bench.Domain.Hypotheses.HypothesisReader.Parse(ProfitFox.Bench.Domain.Hypotheses.HypothesisReader.Normalize(BenchRepository.H0001Text())).Hash;
+        return ProfitFox.Domain.Hypotheses.HypothesisReader.Parse(ProfitFox.Domain.Hypotheses.HypothesisReader.Normalize(BenchRepository.H0001Text())).Hash;
     }
 }
