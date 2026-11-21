@@ -15,13 +15,6 @@
         <Project Path="src/engine/ProfitFox.Engine.Simulation/ProfitFox.Engine.Simulation.csproj" />
         <Project Path="src/engine/ProfitFox.Engine.Strategy/ProfitFox.Engine.Strategy.csproj" />
     </Folder>
-    <Folder Name="/src/bot/">
-        <Project Path="src/bot/ProfitFox.Bot.Application/ProfitFox.Bot.Application.csproj" />
-        <Project Path="src/bot/ProfitFox.Bot.Domain/ProfitFox.Bot.Domain.csproj" />
-        <Project Path="src/bot/ProfitFox.Bot.Infrastructure/ProfitFox.Bot.Infrastructure.csproj" />
-        <Project Path="src/bot/ProfitFox.Bot.Presentation/ProfitFox.Bot.Presentation.csproj" />
-        <Project Path="src/bot/ProfitFox.Bot.Worker/ProfitFox.Bot.Worker.csproj" />
-    </Folder>
     <Folder Name="/tests/">
         <Project Path="tests/ProfitFox.Tests.Integration/ProfitFox.Tests.Integration.csproj" />
         <Project Path="tests/ProfitFox.Tests.Shared/ProfitFox.Tests.Shared.csproj" />

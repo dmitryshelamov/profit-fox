@@ -7,14 +7,14 @@
 
 ## 1. База для сравнения и удаление шаблонов бота
 
-- [ ] 1.1 Проверить, что изменение начато от `release/0.1.0` со слитым `add-strategy-graph`:
+- [x] 1.1 Проверить, что изменение начато от `release/0.1.0` со слитым `add-strategy-graph`:
   `git merge-base --is-ancestor d8b2e08 HEAD` завершается успешно. Записать в конец этого файла раздел «База» с числами до
   правок: сколько unit- и интеграционных тестов прошло, сколько предупреждений у
   `dotnet build ProfitFox.slnx --configuration Release`, контрольная сумма
   `frontend/src/api/generated/schema.d.ts`. Поднять базу разработки `docker compose up -d --wait bench-db` и один раз
   запустить API до правок, чтобы база была мигрирована прежней сборкой. Проверить: раздел есть, все тесты зелёные,
   `/health` отвечает успехом.
-- [ ] 1.2 Удалить пять проектов `backend/src/bot/ProfitFox.Bot.*` и папку решения `/src/bot/` из `ProfitFox.slnx`.
+- [x] 1.2 Удалить пять проектов `backend/src/bot/ProfitFox.Bot.*` и папку решения `/src/bot/` из `ProfitFox.slnx`.
   Проверить: сборка и все тесты зелёные, число тестов равно базе, предупреждений сборки не больше базы, каталога
   `backend/src/bot` нет.
 
@@ -90,3 +90,22 @@
   под новыми.
 - Отдельные изменения позже: выбор машины для API и базы с выносом Worker'ов; переименование типов и ключей настроек с
   `Bench` в имени.
+
+## База
+
+Снято 2026-11-21 на коммите `9ec96fd` (`release/0.1.0` на `8a8b748` плюс предложение этого изменения), до правок. Среда —
+облачный контейнер Linux, .NET SDK 10.0.115, Docker 29.10.0; не Мак владельца.
+
+- `git merge-base --is-ancestor d8b2e08 HEAD` — успех.
+- `dotnet test ProfitFox.slnx` из `backend/`: unit — 251 прошёл из 251, интеграционные — 162 прошли из 162, упавших и
+  пропущенных нет.
+- `dotnet build ProfitFox.slnx --configuration Release`: 2 предупреждения, 0 ошибок. Оба предупреждения — `NU1903` о пакете
+  `Microsoft.OpenApi` 2.0.0 в шаблоне `ProfitFox.Bot.Presentation`; в остальных проектах предупреждений нет.
+- Проверка однострочных `<summary>` из `ci.yml`: совпадений нет.
+- SHA-256 файла `frontend/src/api/generated/schema.d.ts`:
+  `56f993fcfd20a65f52df17cb56bfe0460173333c55cfba7913250153a631a3c5`. `npm --prefix frontend run generate:api` на прежней
+  сборке даёт тот же файл.
+- База разработки: `docker compose up -d --wait bench-db`, затем `dotnet run --project src/bench/ProfitFox.Bench.Presentation`.
+  `/health` ответил `200 Healthy`. Таблица версий после запуска прежней сборки — одна строка:
+  `202611200001 | 2026-11-21 05:13:06.270258 | CreateBenchTablesMigration`. Это база контейнера, созданная пустой в этой
+  сессии, а не база Мака с журналом прогонов.
