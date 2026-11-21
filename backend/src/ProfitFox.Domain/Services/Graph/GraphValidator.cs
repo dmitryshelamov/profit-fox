@@ -8,15 +8,27 @@ namespace ProfitFox.Domain.Services.Graph;
 /// <summary>
 ///     Checks what a graph of the right form means (spec strategy-graph): parameters, outputs, nodes, their settings and
 ///     inputs, wires, cycles; then what makes it a signal or a strategy. Every error is reported, in the order of the graph.
+///     The pins of a <c>signal</c> node come from the set of saved signals the check is given; a graph checked without a
+///     set has no saved signals, so each of its <c>signal</c> nodes is an unknown signal.
 /// </summary>
 internal static class GraphValidator
 {
     public static List<GraphError> Validate(GraphDefinition graph)
     {
+        return Validate(graph, SignalSet.Empty);
+    }
+
+    /// <summary>
+    ///     <paramref name="signals" /> null: the <c>signal</c> nodes are not looked up, for a signal, which refuses them by
+    ///     their kind.
+    /// </summary>
+    public static List<GraphError> Validate(GraphDefinition graph, SignalSet? signals)
+    {
         List<GraphError> errors = [];
         CheckParameters(graph, errors);
         CheckOutputs(graph, errors);
-        Dictionary<string, (NodeDefinition Node, NodeKind Kind)> nodes = CheckNodes(graph, errors);
+        Dictionary<string, CheckedNode> nodes = CheckNodes(graph, signals, errors);
+        CheckExpandedIds(graph, nodes, errors);
         HashSet<PinReference> wired = CheckWires(graph, nodes, errors);
         CheckMissingInputs(graph, nodes, wired, errors);
         CheckCycles(graph, nodes, errors);
@@ -26,7 +38,7 @@ internal static class GraphValidator
 
     public static List<GraphError> ValidateSignal(GraphDefinition graph)
     {
-        List<GraphError> errors = Validate(graph);
+        List<GraphError> errors = Validate(graph, signals: null);
 
         if (graph.Outputs.Count != 1)
         {
@@ -37,14 +49,19 @@ internal static class GraphValidator
             errors.Add(new GraphError(GraphErrorCode.SignalOutputNotEvent, "The output of a signal is an event.") { Pin = graph.Outputs[0].Name });
         }
 
-        // A signal reads only the market: the nodes of the position belong to a strategy.
+        // A signal reads only the market: the nodes of the position belong to a strategy, and so do other signals.
         foreach (NodeDefinition node in graph.Nodes.Where(node => NodeCatalog.Find(node.Kind) is { AllowedInSignal: false }))
         {
             errors.Add(
-                new GraphError(GraphErrorCode.SignalPositionNode, $"A signal places no orders: {node.Kind} belongs to a strategy.")
-                {
-                    Node = node.Id
-                });
+                node.Kind == NodeCatalog.Signal
+                    ? new GraphError(GraphErrorCode.SignalInSignal, "A signal does not point at other signals: a signal node belongs to a strategy.")
+                    {
+                        Node = node.Id
+                    }
+                    : new GraphError(GraphErrorCode.SignalPositionNode, $"A signal places no orders: {node.Kind} belongs to a strategy.")
+                    {
+                        Node = node.Id
+                    });
         }
 
         return errors;
@@ -56,7 +73,16 @@ internal static class GraphValidator
     /// </summary>
     public static List<GraphError> ValidateStrategy(GraphDefinition graph)
     {
-        List<GraphError> errors = Validate(graph);
+        return ValidateStrategy(graph, SignalSet.Empty);
+    }
+
+    /// <summary>
+    ///     A strategy whose <c>signal</c> nodes point at versions of <paramref name="signals" /> (change
+    ///     add-strategy-constructor, design.md, decision 2).
+    /// </summary>
+    public static List<GraphError> ValidateStrategy(GraphDefinition graph, SignalSet signals)
+    {
+        List<GraphError> errors = Validate(graph, signals);
 
         if (graph.Outputs.Count > 0)
         {
@@ -186,10 +212,10 @@ internal static class GraphValidator
         }
     }
 
-    // The nodes that can be checked further: a valid id, the first with that id, and a known kind.
-    private static Dictionary<string, (NodeDefinition Node, NodeKind Kind)> CheckNodes(GraphDefinition graph, List<GraphError> errors)
+    // The nodes that can be checked further: a valid id, the first with that id, and a known kind; each with its pins.
+    private static Dictionary<string, CheckedNode> CheckNodes(GraphDefinition graph, SignalSet? signals, List<GraphError> errors)
     {
-        var nodes = new Dictionary<string, (NodeDefinition, NodeKind)>(StringComparer.Ordinal);
+        var nodes = new Dictionary<string, CheckedNode>(StringComparer.Ordinal);
         var ids = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (NodeDefinition node in graph.Nodes)
@@ -218,16 +244,75 @@ internal static class GraphValidator
                 continue;
             }
 
-            CheckSettings(node, kind, errors);
-            CheckValues(graph, node, kind, errors);
-            nodes[node.Id] = (node, kind);
+            bool settingsRight = CheckSettings(node, kind, errors);
+            CheckedNode checkedNode = node.Kind == NodeCatalog.Signal
+                ? CheckSignal(graph, node, kind, settingsRight, signals, errors)
+                : new CheckedNode(node, kind, kind.Inputs(node, graph, SignalSet.Empty), kind.Outputs(node, graph, SignalSet.Empty), Signal: null);
+            CheckValues(checkedNode, errors);
+            nodes[node.Id] = checkedNode;
         }
 
         return nodes;
     }
 
-    private static void CheckSettings(NodeDefinition node, NodeKind kind, List<GraphError> errors)
+    // A signal node whose version is found has the parameters of the version as inputs; one that is not found has its
+    // own error and inputs nobody knows, which are then not checked.
+    private static CheckedNode CheckSignal(
+        GraphDefinition graph,
+        NodeDefinition node,
+        NodeKind kind,
+        bool settingsRight,
+        SignalSet? signals,
+        List<GraphError> errors)
     {
+        IReadOnlyList<PinDeclaration> outputs = kind.Outputs(node, graph, SignalSet.Empty);
+        if (!settingsRight || signals is null || !SignalNodes.TryReference(node, out SignalReference reference))
+        {
+            return new CheckedNode(node, kind, Inputs: null, outputs, Signal: null);
+        }
+
+        SignalLookup found = signals.Find(reference);
+        if (found.Signal is null)
+        {
+            errors.Add(
+                new GraphError(found.Problem ?? GraphErrorCode.UnknownSignal, found.Reason ?? "The signal is not found.")
+                {
+                    Node = node.Id,
+                    Setting = found.Name is null ? NodeCatalog.SignalSetting : NodeCatalog.VersionSetting
+                });
+
+            return new CheckedNode(node, kind, Inputs: null, outputs, Signal: null);
+        }
+
+        return new CheckedNode(node, kind, kind.Inputs(node, graph, signals), outputs, found.Signal);
+    }
+
+    // The ids an expansion gives its nodes (<signal node>/<node>) must be free in the graph and among other expansions.
+    private static void CheckExpandedIds(GraphDefinition graph, Dictionary<string, CheckedNode> nodes, List<GraphError> errors)
+    {
+        var taken = new HashSet<string>(graph.Nodes.Select(node => node.Id), StringComparer.Ordinal);
+        foreach (NodeDefinition definition in graph.Nodes)
+        {
+            if (!nodes.TryGetValue(definition.Id, out CheckedNode? node) || !ReferenceEquals(node.Node, definition) || node.Signal is null)
+            {
+                continue;
+            }
+
+            foreach (string id in SignalExpansion.ExpandedIds(definition.Id, node.Signal).Where(id => !taken.Add(id)))
+            {
+                errors.Add(
+                    new GraphError(GraphErrorCode.ExpandedIdTaken, $"The id {id} an expanded node of the signal gets is taken.")
+                    {
+                        Node = definition.Id
+                    });
+            }
+        }
+    }
+
+    // Whether every setting of the node is known and right.
+    private static bool CheckSettings(NodeDefinition node, NodeKind kind, List<GraphError> errors)
+    {
+        int before = errors.Count;
         foreach (string name in node.Settings.Keys.Where(name => kind.Settings.All(setting => setting.Name != name)))
         {
             errors.Add(new GraphError(GraphErrorCode.UnknownSetting, $"{kind.Name} has no setting {name}.") { Node = node.Id, Setting = name });
@@ -247,6 +332,13 @@ internal static class GraphValidator
                         });
                 }
             }
+            else if (setting.Free)
+            {
+                if (kind.CheckFreeSetting(setting.Name, value) is { } reason)
+                {
+                    errors.Add(new GraphError(GraphErrorCode.InvalidSetting, reason) { Node = node.Id, Setting = setting.Name });
+                }
+            }
             else if (!setting.Values.Contains(value, StringComparer.Ordinal))
             {
                 errors.Add(
@@ -259,23 +351,28 @@ internal static class GraphValidator
                     });
             }
         }
+
+        return errors.Count == before;
     }
 
-    private static void CheckValues(GraphDefinition graph, NodeDefinition node, NodeKind kind, List<GraphError> errors)
+    private static void CheckValues(CheckedNode node, List<GraphError> errors)
     {
-        IReadOnlyList<PinDeclaration> inputs = kind.Inputs(graph);
+        if (node.Inputs is not { } inputs)
+        {
+            return;
+        }
 
-        foreach ((string name, GraphValue value) in node.Inputs)
+        foreach ((string name, GraphValue value) in node.Node.Inputs)
         {
             PinDeclaration? input = inputs.FirstOrDefault(pin => pin.Name == name);
 
             if (input is null)
             {
-                errors.Add(new GraphError(GraphErrorCode.UnknownInput, $"{kind.Name} has no input {name}.") { Node = node.Id, Pin = name });
+                errors.Add(new GraphError(GraphErrorCode.UnknownInput, $"{node.Kind.Name} has no input {name}.") { Node = node.Node.Id, Pin = name });
             }
             else if (input.Type == PinType.Event)
             {
-                errors.Add(new GraphError(GraphErrorCode.ValueNotAllowed, "An event input takes a wire, not a value.") { Node = node.Id, Pin = name });
+                errors.Add(new GraphError(GraphErrorCode.ValueNotAllowed, "An event input takes a wire, not a value.") { Node = node.Node.Id, Pin = name });
             }
             else if (input.Type != value.Type)
             {
@@ -284,17 +381,43 @@ internal static class GraphValidator
                         GraphErrorCode.ValueTypeMismatch,
                         $"The value is {PinTypes.Name(value.Type)}, the input is {PinTypes.Name(input.Type)}.")
                     {
-                        Node = node.Id,
+                        Node = node.Node.Id,
                         Pin = name
                     });
             }
+            else if (node.Signal is not null)
+            {
+                CheckBounds(node, name, value, errors);
+            }
         }
+    }
+
+    // A value written on an input of a signal node stays within the bounds of the parameter of its version (spec
+    // strategy-graph «Границы параметра на входе узла сигнала»).
+    private static void CheckBounds(CheckedNode node, string name, GraphValue value, List<GraphError> errors)
+    {
+        ParameterDefinition parameter = node.Signal!.Graph.Parameters.First(parameter => parameter.Name == name);
+        decimal number = value.Number;
+        bool inside = (parameter.Minimum is not { } minimum || number >= minimum) && (parameter.Maximum is not { } maximum || number <= maximum);
+        if (value.Type != PinType.Number || inside)
+        {
+            return;
+        }
+
+        errors.Add(
+            new GraphError(
+                GraphErrorCode.ParameterOutOfBounds,
+                $"The value {value.Number} is outside [{parameter.Minimum?.ToString() ?? "..."}, {parameter.Maximum?.ToString() ?? "..."}].")
+            {
+                Node = node.Node.Id,
+                Pin = name
+            });
     }
 
     // The inputs that have a wire.
     private static HashSet<PinReference> CheckWires(
         GraphDefinition graph,
-        Dictionary<string, (NodeDefinition Node, NodeKind Kind)> nodes,
+        Dictionary<string, CheckedNode> nodes,
         List<GraphError> errors)
     {
         var wired = new HashSet<PinReference>();
@@ -302,8 +425,8 @@ internal static class GraphValidator
 
         foreach (WireDefinition wire in graph.Wires)
         {
-            PinDeclaration? from = Pin(wire.From, output: true, graph, nodes, allIds, wire, errors);
-            PinDeclaration? to = Pin(wire.To, output: false, graph, nodes, allIds, wire, errors);
+            PinDeclaration? from = Pin(wire.From, output: true, nodes, allIds, wire, errors);
+            PinDeclaration? to = Pin(wire.To, output: false, nodes, allIds, wire, errors);
 
             if (from is null || to is null)
             {
@@ -349,13 +472,12 @@ internal static class GraphValidator
     private static PinDeclaration? Pin(
         PinReference reference,
         bool output,
-        GraphDefinition graph,
-        Dictionary<string, (NodeDefinition Node, NodeKind Kind)> nodes,
+        Dictionary<string, CheckedNode> nodes,
         HashSet<string> allIds,
         WireDefinition wire,
         List<GraphError> errors)
     {
-        if (!nodes.TryGetValue(reference.Node, out (NodeDefinition Node, NodeKind Kind) node))
+        if (!nodes.TryGetValue(reference.Node, out CheckedNode? node))
         {
             // A node with its own error (unknown kind, repeated id) is not reported again for each of its wires.
             if (!allIds.Contains(reference.Node))
@@ -366,7 +488,13 @@ internal static class GraphValidator
             return null;
         }
 
-        IReadOnlyList<PinDeclaration> pins = output ? node.Kind.Outputs(graph) : node.Kind.Inputs(graph);
+        IReadOnlyList<PinDeclaration>? pins = output ? node.Outputs : node.Inputs;
+        if (pins is null)
+        {
+            // The inputs of a signal node that is not found are not known: its own error says why.
+            return null;
+        }
+
         PinDeclaration? pin = pins.FirstOrDefault(candidate => candidate.Name == reference.Pin);
 
         if (pin is null)
@@ -387,18 +515,19 @@ internal static class GraphValidator
 
     private static void CheckMissingInputs(
         GraphDefinition graph,
-        Dictionary<string, (NodeDefinition Node, NodeKind Kind)> nodes,
+        Dictionary<string, CheckedNode> nodes,
         HashSet<PinReference> wired,
         List<GraphError> errors)
     {
         foreach (NodeDefinition definition in graph.Nodes)
         {
-            if (!nodes.TryGetValue(definition.Id, out (NodeDefinition Node, NodeKind Kind) node) || !ReferenceEquals(node.Node, definition))
+            // An input of a signal node without a wire or a value takes the value of the parameter of the version.
+            if (!nodes.TryGetValue(definition.Id, out CheckedNode? node) || !ReferenceEquals(node.Node, definition) || node.Kind.Name == NodeCatalog.Signal)
             {
                 continue;
             }
 
-            foreach (PinDeclaration input in node.Kind.Inputs(graph))
+            foreach (PinDeclaration input in node.Inputs!)
             {
                 if (!wired.Contains(new PinReference(definition.Id, input.Name)) && !definition.Inputs.ContainsKey(input.Name))
                 {
@@ -415,7 +544,7 @@ internal static class GraphValidator
         }
     }
 
-    private static void CheckCycles(GraphDefinition graph, Dictionary<string, (NodeDefinition Node, NodeKind Kind)> nodes, List<GraphError> errors)
+    private static void CheckCycles(GraphDefinition graph, Dictionary<string, CheckedNode> nodes, List<GraphError> errors)
     {
         var next = nodes.Keys.ToDictionary(id => id, _ => new List<string>(), StringComparer.Ordinal);
 
@@ -467,4 +596,12 @@ internal static class GraphValidator
             state[id] = 2;
         }
     }
+
+    // A node that is checked further, with its pins; the inputs are null when nobody knows them.
+    private sealed record CheckedNode(
+        NodeDefinition Node,
+        NodeKind Kind,
+        IReadOnlyList<PinDeclaration>? Inputs,
+        IReadOnlyList<PinDeclaration> Outputs,
+        Signal? Signal);
 }
