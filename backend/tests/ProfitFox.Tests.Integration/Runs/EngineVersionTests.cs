@@ -9,9 +9,11 @@ using Npgsql;
 
 using ProfitFox.Application.Hypotheses;
 using ProfitFox.Application.Runs;
-using ProfitFox.Domain.Runs;
-using ProfitFox.Domain.Trades;
-using ProfitFox.Domain.Verdicts;
+using ProfitFox.Domain.Services.Runs;
+using ProfitFox.Domain.ValueObjects.Runs;
+using ProfitFox.Domain.ValueObjects.Runs.Enums;
+using ProfitFox.Domain.ValueObjects.Trades;
+using ProfitFox.Domain.ValueObjects.Verdicts;
 using ProfitFox.Infrastructure.Hypotheses;
 using ProfitFox.Infrastructure.Ledger;
 using ProfitFox.Infrastructure.MarketData;

@@ -1,10 +1,11 @@
 using ProfitFox.Application.MarketData;
-using ProfitFox.Domain.Graph;
-using ProfitFox.Domain.Graph.Reading;
-using ProfitFox.Domain.Hypotheses;
-using ProfitFox.Domain.MarketData;
-using ProfitFox.Domain.Runs;
-using ProfitFox.Domain.Signals;
+using ProfitFox.Domain.Services.Graph;
+using ProfitFox.Domain.Services.MarketData;
+using ProfitFox.Domain.Services.Runs;
+using ProfitFox.Domain.Services.Signals;
+using ProfitFox.Domain.ValueObjects.Graph;
+using ProfitFox.Domain.ValueObjects.Hypotheses;
+using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Application.Preview;
 

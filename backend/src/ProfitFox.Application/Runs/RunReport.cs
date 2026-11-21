@@ -1,10 +1,11 @@
 using System.Globalization;
 using System.Text;
 
-using ProfitFox.Domain.Ledger;
-using ProfitFox.Domain.Runs;
-using ProfitFox.Domain.Trades;
-using ProfitFox.Domain.Verdicts;
+using ProfitFox.Domain.Services.Runs;
+using ProfitFox.Domain.ValueObjects.Ledger;
+using ProfitFox.Domain.ValueObjects.Runs;
+using ProfitFox.Domain.ValueObjects.Trades.Enums;
+using ProfitFox.Domain.ValueObjects.Verdicts;
 
 namespace ProfitFox.Application.Runs;
 

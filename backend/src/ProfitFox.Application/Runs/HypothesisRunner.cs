@@ -2,12 +2,18 @@ using System.Diagnostics;
 
 using ProfitFox.Application.Hypotheses;
 using ProfitFox.Application.MarketData;
-using ProfitFox.Domain.Hypotheses;
-using ProfitFox.Domain.Ledger;
-using ProfitFox.Domain.MarketData;
-using ProfitFox.Domain.Runs;
-using ProfitFox.Domain.Strategies;
-using ProfitFox.Domain.Verdicts;
+using ProfitFox.Domain.Services.Ledger;
+using ProfitFox.Domain.Services.MarketData;
+using ProfitFox.Domain.Services.Runs;
+using ProfitFox.Domain.Services.Strategies;
+using ProfitFox.Domain.Services.Verdicts;
+using ProfitFox.Domain.ValueObjects.Hypotheses;
+using ProfitFox.Domain.ValueObjects.Ledger;
+using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Domain.ValueObjects.Runs;
+using ProfitFox.Domain.ValueObjects.Runs.Enums;
+using ProfitFox.Domain.ValueObjects.Verdicts;
+using ProfitFox.Domain.ValueObjects.Verdicts.Enums;
 
 namespace ProfitFox.Application.Runs;
 

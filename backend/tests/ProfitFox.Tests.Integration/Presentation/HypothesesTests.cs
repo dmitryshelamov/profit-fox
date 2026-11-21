@@ -4,7 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-using ProfitFox.Domain.Ledger;
+using ProfitFox.Domain.ValueObjects.Ledger;
 using ProfitFox.Presentation.Errors;
 using ProfitFox.Presentation.Hypotheses;
 using ProfitFox.Presentation.Runs;
@@ -180,6 +180,6 @@ public sealed class HypothesesTests
 
     private static string HashOf(string text)
     {
-        return ProfitFox.Domain.Hypotheses.HypothesisReader.Parse(ProfitFox.Domain.Hypotheses.HypothesisReader.Normalize(text)).Hash;
+        return ProfitFox.Domain.Services.Hypotheses.HypothesisReader.Parse(ProfitFox.Domain.Services.Hypotheses.HypothesisReader.Normalize(text)).Hash;
     }
 }

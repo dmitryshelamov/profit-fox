@@ -1,11 +1,17 @@
 using System.Text.Json.Nodes;
 
-using ProfitFox.Domain.Execution;
-using ProfitFox.Domain.Graph;
-using ProfitFox.Domain.Graph.Model;
-using ProfitFox.Domain.Hypotheses;
-using ProfitFox.Domain.Positions;
-using ProfitFox.Domain.Trades;
+using ProfitFox.Domain.Exceptions;
+using ProfitFox.Domain.Services.Execution;
+using ProfitFox.Domain.Services.Graph;
+using ProfitFox.Domain.Services.Hypotheses;
+using ProfitFox.Domain.Services.Positions;
+using ProfitFox.Domain.ValueObjects.Execution;
+using ProfitFox.Domain.ValueObjects.Graph;
+using ProfitFox.Domain.ValueObjects.Graph.Enums;
+using ProfitFox.Domain.ValueObjects.Hypotheses;
+using ProfitFox.Domain.ValueObjects.Hypotheses.Enums;
+using ProfitFox.Domain.ValueObjects.Trades;
+using ProfitFox.Domain.ValueObjects.Trades.Enums;
 using ProfitFox.Tests.Unit.Graph;
 
 namespace ProfitFox.Tests.Unit.Hypotheses;

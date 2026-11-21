@@ -1,6 +1,8 @@
 using System.Text.Json;
 
-using ProfitFox.Domain.Hypotheses;
+using ProfitFox.Domain.Exceptions;
+using ProfitFox.Domain.Services.Hypotheses;
+using ProfitFox.Domain.ValueObjects.Hypotheses;
 
 namespace ProfitFox.Application.Hypotheses;
 

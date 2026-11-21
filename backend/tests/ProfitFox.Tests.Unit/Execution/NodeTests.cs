@@ -1,4 +1,4 @@
-using ProfitFox.Domain.Execution;
+using ProfitFox.Domain.ValueObjects.Execution;
 
 namespace ProfitFox.Tests.Unit.Execution;
 

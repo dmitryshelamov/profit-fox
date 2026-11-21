@@ -1,5 +1,5 @@
-using ProfitFox.Domain.MarketData;
-using ProfitFox.Domain.Runs;
+using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Domain.ValueObjects.Runs;
 
 namespace ProfitFox.Application.Runs;
 

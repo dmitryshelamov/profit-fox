@@ -1,4 +1,4 @@
-using ProfitFox.Domain.Runs;
+using ProfitFox.Domain.ValueObjects.Runs.Enums;
 
 namespace ProfitFox.Application.Runs;
 

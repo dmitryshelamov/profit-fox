@@ -1,4 +1,4 @@
-using ProfitFox.Domain.MarketData;
+using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Application.MarketData;
 

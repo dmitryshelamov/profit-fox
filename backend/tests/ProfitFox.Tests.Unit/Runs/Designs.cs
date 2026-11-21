@@ -1,5 +1,8 @@
-using ProfitFox.Domain.Hypotheses;
-using ProfitFox.Domain.Runs;
+using ProfitFox.Domain.Services.Hypotheses;
+using ProfitFox.Domain.Services.Runs;
+using ProfitFox.Domain.ValueObjects.Hypotheses;
+using ProfitFox.Domain.ValueObjects.Runs;
+using ProfitFox.Domain.ValueObjects.Runs.Enums;
 using ProfitFox.Tests.Unit.Hypotheses;
 
 namespace ProfitFox.Tests.Unit.Runs;

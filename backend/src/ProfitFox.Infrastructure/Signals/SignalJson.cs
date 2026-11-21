@@ -3,10 +3,9 @@ using System.Text;
 using System.Text.Json;
 
 using ProfitFox.Application.Signals;
-using ProfitFox.Domain.Graph;
-using ProfitFox.Domain.Graph.Model;
-using ProfitFox.Domain.Graph.Reading;
-using ProfitFox.Domain.Signals;
+using ProfitFox.Domain.Services.Graph;
+using ProfitFox.Domain.ValueObjects.Graph;
+using ProfitFox.Domain.ValueObjects.Signals;
 
 namespace ProfitFox.Infrastructure.Signals;
 

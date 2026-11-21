@@ -1,6 +1,7 @@
-using ProfitFox.Domain.Graph;
-using ProfitFox.Domain.MarketData;
-using ProfitFox.Domain.Signals;
+using ProfitFox.Domain.Services.Graph;
+using ProfitFox.Domain.Services.Signals;
+using ProfitFox.Domain.ValueObjects.Graph;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Tests.Unit.Graph;
 
 using static ProfitFox.Tests.Unit.Runs.Designs;

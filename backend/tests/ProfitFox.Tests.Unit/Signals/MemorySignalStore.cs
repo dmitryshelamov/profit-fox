@@ -1,5 +1,5 @@
 using ProfitFox.Application.Signals;
-using ProfitFox.Domain.Signals;
+using ProfitFox.Domain.ValueObjects.Signals;
 
 namespace ProfitFox.Tests.Unit.Signals;
 

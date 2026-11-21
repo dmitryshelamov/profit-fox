@@ -1,4 +1,4 @@
-using ProfitFox.Domain.Trades;
+using ProfitFox.Domain.ValueObjects.Trades;
 
 namespace ProfitFox.Tests.Unit.Trades;
 

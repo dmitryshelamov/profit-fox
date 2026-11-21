@@ -1,6 +1,8 @@
-using ProfitFox.Domain.Hypotheses;
-using ProfitFox.Domain.Runs;
-using ProfitFox.Domain.Trades;
+using ProfitFox.Domain.Services.Runs;
+using ProfitFox.Domain.ValueObjects.Hypotheses.Enums;
+using ProfitFox.Domain.ValueObjects.Runs;
+using ProfitFox.Domain.ValueObjects.Runs.Enums;
+using ProfitFox.Domain.ValueObjects.Trades.Enums;
 
 using static ProfitFox.Tests.Unit.Runs.Designs;
 

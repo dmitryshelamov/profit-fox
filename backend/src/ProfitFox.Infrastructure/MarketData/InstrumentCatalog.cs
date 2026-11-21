@@ -1,7 +1,7 @@
 using System.Text.Json;
 
 using ProfitFox.Application.MarketData;
-using ProfitFox.Domain.MarketData;
+using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Infrastructure.MarketData;
 

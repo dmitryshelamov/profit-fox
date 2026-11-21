@@ -1,6 +1,6 @@
-using ProfitFox.Domain.Ledger;
-using ProfitFox.Domain.Runs;
-using ProfitFox.Domain.Verdicts;
+using ProfitFox.Domain.ValueObjects.Ledger;
+using ProfitFox.Domain.ValueObjects.Runs;
+using ProfitFox.Domain.ValueObjects.Verdicts;
 
 namespace ProfitFox.Application.Runs;
 

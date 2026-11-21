@@ -1,5 +1,6 @@
-using ProfitFox.Domain.Execution;
-using ProfitFox.Domain.MarketData;
+using ProfitFox.Domain.Services.MarketData;
+using ProfitFox.Domain.ValueObjects.Execution;
+using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Application.MarketData;
 

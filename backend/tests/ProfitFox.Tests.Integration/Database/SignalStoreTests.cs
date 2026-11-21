@@ -6,8 +6,8 @@ using Dapper;
 using Npgsql;
 
 using ProfitFox.Application.Signals;
-using ProfitFox.Domain.Graph;
-using ProfitFox.Domain.Signals;
+using ProfitFox.Domain.Services.Graph;
+using ProfitFox.Domain.ValueObjects.Signals;
 using ProfitFox.Infrastructure.Signals;
 
 namespace ProfitFox.Tests.Integration.Database;

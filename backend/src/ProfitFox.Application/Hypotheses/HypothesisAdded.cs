@@ -1,4 +1,4 @@
-using ProfitFox.Domain.Hypotheses;
+using ProfitFox.Domain.ValueObjects.Hypotheses;
 
 namespace ProfitFox.Application.Hypotheses;
 

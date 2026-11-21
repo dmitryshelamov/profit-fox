@@ -2,9 +2,9 @@ using Microsoft.AspNetCore.Mvc;
 
 using ProfitFox.Application.Hypotheses;
 using ProfitFox.Application.Runs;
-using ProfitFox.Domain.Hypotheses;
-using ProfitFox.Domain.Ledger;
-using ProfitFox.Domain.Runs;
+using ProfitFox.Domain.Exceptions;
+using ProfitFox.Domain.Services.Runs;
+using ProfitFox.Domain.ValueObjects.Runs.Enums;
 using ProfitFox.Presentation.Errors;
 using ProfitFox.Presentation.Runs;
 

@@ -4,10 +4,10 @@ using Grpc.Core;
 using Grpc.Net.Client;
 
 using ProfitFox.Application.MarketData;
-using ProfitFox.Domain.MarketData;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.MarketData.Protos;
 
-using TimeRange = ProfitFox.Domain.MarketData.TimeRange;
+using TimeRange = ProfitFox.Domain.ValueObjects.MarketData.TimeRange;
 
 namespace ProfitFox.Infrastructure.MarketData;
 

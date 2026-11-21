@@ -1,4 +1,4 @@
-using ProfitFox.Domain.Hypotheses;
+using ProfitFox.Domain.Exceptions;
 
 namespace ProfitFox.Application.Hypotheses;
 

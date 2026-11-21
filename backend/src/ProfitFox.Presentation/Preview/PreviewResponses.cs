@@ -1,8 +1,8 @@
 using System.Globalization;
 
 using ProfitFox.Application.Preview;
-using ProfitFox.Domain.Hypotheses;
-using ProfitFox.Domain.MarketData;
+using ProfitFox.Domain.ValueObjects.Hypotheses;
+using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Presentation.Preview;
 

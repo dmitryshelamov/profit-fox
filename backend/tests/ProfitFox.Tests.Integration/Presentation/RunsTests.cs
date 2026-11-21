@@ -9,8 +9,8 @@ using Dapper;
 using Npgsql;
 
 using ProfitFox.Application.Runs;
-using ProfitFox.Domain.Ledger;
-using ProfitFox.Domain.Runs;
+using ProfitFox.Domain.ValueObjects.Ledger;
+using ProfitFox.Domain.ValueObjects.Runs;
 using ProfitFox.Infrastructure.Runs;
 using ProfitFox.Presentation.Errors;
 using ProfitFox.Presentation.Runs;
@@ -247,6 +247,6 @@ public sealed class RunsTests
 
     private static string HashOfH0001()
     {
-        return ProfitFox.Domain.Hypotheses.HypothesisReader.Parse(ProfitFox.Domain.Hypotheses.HypothesisReader.Normalize(BenchRepository.H0001Text())).Hash;
+        return ProfitFox.Domain.Services.Hypotheses.HypothesisReader.Parse(ProfitFox.Domain.Services.Hypotheses.HypothesisReader.Normalize(BenchRepository.H0001Text())).Hash;
     }
 }

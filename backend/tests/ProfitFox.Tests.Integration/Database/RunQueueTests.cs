@@ -4,8 +4,10 @@ using Npgsql;
 
 using ProfitFox.Application.Hypotheses;
 using ProfitFox.Application.Runs;
-using ProfitFox.Domain.Ledger;
-using ProfitFox.Domain.Runs;
+using ProfitFox.Domain.Exceptions;
+using ProfitFox.Domain.ValueObjects.Ledger;
+using ProfitFox.Domain.ValueObjects.Runs;
+using ProfitFox.Domain.ValueObjects.Runs.Enums;
 using ProfitFox.Infrastructure.Hypotheses;
 using ProfitFox.Infrastructure.Ledger;
 using ProfitFox.Infrastructure.Runs;

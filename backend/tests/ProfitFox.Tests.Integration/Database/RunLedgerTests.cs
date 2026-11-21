@@ -3,7 +3,9 @@ using Dapper;
 using Npgsql;
 
 using ProfitFox.Application.Runs;
-using ProfitFox.Domain.Ledger;
+using ProfitFox.Domain.Exceptions;
+using ProfitFox.Domain.Services.Ledger;
+using ProfitFox.Domain.ValueObjects.Ledger;
 using ProfitFox.Infrastructure.Ledger;
 
 namespace ProfitFox.Tests.Integration.Database;

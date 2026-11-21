@@ -1,5 +1,6 @@
 using ProfitFox.Application.Hypotheses;
-using ProfitFox.Domain.Hypotheses;
+using ProfitFox.Domain.Exceptions;
+using ProfitFox.Domain.ValueObjects.Hypotheses;
 using ProfitFox.Infrastructure.Hypotheses;
 
 namespace ProfitFox.Tests.Integration.Database;

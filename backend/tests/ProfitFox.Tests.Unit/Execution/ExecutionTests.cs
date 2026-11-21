@@ -1,5 +1,7 @@
-using ProfitFox.Domain.Execution;
-using ProfitFox.Domain.Graph;
+using ProfitFox.Domain.Services.Execution;
+using ProfitFox.Domain.Services.Graph;
+using ProfitFox.Domain.ValueObjects.Execution;
+using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Tests.Unit.Graph;
 
 namespace ProfitFox.Tests.Unit.Execution;

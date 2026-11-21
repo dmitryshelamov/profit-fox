@@ -1,4 +1,6 @@
-using ProfitFox.Domain.Trades;
+using ProfitFox.Domain.Services.Trades;
+using ProfitFox.Domain.ValueObjects.Trades;
+using ProfitFox.Domain.ValueObjects.Trades.Enums;
 
 namespace ProfitFox.Tests.Unit.Trades;
 

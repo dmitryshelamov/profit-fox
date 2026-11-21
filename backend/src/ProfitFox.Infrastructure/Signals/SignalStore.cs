@@ -3,7 +3,7 @@ using Dapper;
 using Npgsql;
 
 using ProfitFox.Application.Signals;
-using ProfitFox.Domain.Signals;
+using ProfitFox.Domain.ValueObjects.Signals;
 
 namespace ProfitFox.Infrastructure.Signals;
 

@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Text.Json;
 
-using ProfitFox.Domain.Verdicts;
+using ProfitFox.Domain.Services.Verdicts;
+using ProfitFox.Domain.ValueObjects.Verdicts;
+using ProfitFox.Domain.ValueObjects.Verdicts.Enums;
 
 namespace ProfitFox.Tests.Unit.Verdicts;
 

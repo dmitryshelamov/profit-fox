@@ -1,4 +1,4 @@
-using ProfitFox.Domain.Signals;
+using ProfitFox.Domain.ValueObjects.Signals;
 
 namespace ProfitFox.Application.Signals;
 

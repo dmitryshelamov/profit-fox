@@ -1,5 +1,7 @@
-using ProfitFox.Domain.Graph.Model;
-using ProfitFox.Domain.Nodes;
+using ProfitFox.Domain.Services.Nodes;
+using ProfitFox.Domain.ValueObjects.Graph;
+using ProfitFox.Domain.ValueObjects.Graph.Enums;
+using ProfitFox.Domain.ValueObjects.Nodes;
 
 namespace ProfitFox.Tests.Unit.Nodes;
 

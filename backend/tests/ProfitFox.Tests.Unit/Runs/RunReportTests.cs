@@ -1,13 +1,18 @@
 using System.Text.Json.Nodes;
 
 using ProfitFox.Application.Runs;
-using ProfitFox.Domain.Execution;
-using ProfitFox.Domain.Hypotheses;
-using ProfitFox.Domain.Ledger;
-using ProfitFox.Domain.Runs;
-using ProfitFox.Domain.Strategies;
-using ProfitFox.Domain.Trades;
-using ProfitFox.Domain.Verdicts;
+using ProfitFox.Domain.Services.Execution;
+using ProfitFox.Domain.Services.Hypotheses;
+using ProfitFox.Domain.Services.Runs;
+using ProfitFox.Domain.Services.Strategies;
+using ProfitFox.Domain.Services.Verdicts;
+using ProfitFox.Domain.ValueObjects.Execution;
+using ProfitFox.Domain.ValueObjects.Ledger;
+using ProfitFox.Domain.ValueObjects.Runs;
+using ProfitFox.Domain.ValueObjects.Trades;
+using ProfitFox.Domain.ValueObjects.Trades.Enums;
+using ProfitFox.Domain.ValueObjects.Verdicts;
+using ProfitFox.Domain.ValueObjects.Verdicts.Enums;
 using ProfitFox.Tests.Unit.Hypotheses;
 
 using static ProfitFox.Tests.Unit.Runs.Designs;
@@ -20,7 +25,7 @@ namespace ProfitFox.Tests.Unit.Runs;
 /// </summary>
 public sealed class RunReportTests
 {
-    private static readonly long First = Blocks.Of(Utc(2026, 1, 5), ProfitFox.Domain.Hypotheses.TimeBlock.Week);
+    private static readonly long First = Blocks.Of(Utc(2026, 1, 5), ProfitFox.Domain.ValueObjects.Hypotheses.Enums.TimeBlock.Week);
     private static readonly (long Block, double Mean, int Events)[] Pseudo = [(First, 0.0004, 3), (First + 1, -0.0002, 2)];
 
     [Test]

@@ -1,6 +1,6 @@
-using ProfitFox.Domain.Graph;
-using ProfitFox.Domain.Graph.Model;
-using ProfitFox.Domain.Graph.Reading;
+using ProfitFox.Domain.Services.Graph;
+using ProfitFox.Domain.ValueObjects.Graph;
+using ProfitFox.Domain.ValueObjects.Graph.Enums;
 
 namespace ProfitFox.Tests.Unit.Graph;
 

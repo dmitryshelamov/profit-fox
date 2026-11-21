@@ -1,5 +1,5 @@
 using ProfitFox.Application.Runs;
-using ProfitFox.Domain.Ledger;
+using ProfitFox.Domain.ValueObjects.Ledger;
 
 namespace ProfitFox.Presentation.Runs;
 
