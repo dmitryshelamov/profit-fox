@@ -19,6 +19,9 @@ import { IdeaBadges } from './IdeaBadges';
 /** How often «Рынок» reads the snapshot again (design.md, decision 13). */
 export const marketRefreshMs = 15_000;
 
+/** A snapshot older than this is stale (spec market-overview «Снимок устарел»). */
+export const staleMs = 3 * 60_000;
+
 /** A rate of funding at or above this share, by its size, is lit. */
 export const highRate = 0.0003;
 
@@ -161,6 +164,15 @@ export function MarketPage({
             {pairs.data ? `${Number(pairs.data.total)} пар` : ''}
           </span>
         </div>
+        {pairs.data?.updatedAt != null && Date.now() - Number(pairs.data.updatedAt) > staleMs && (
+          <p
+            role="alert"
+            aria-label="Снимок устарел"
+            className="rounded-md border border-warn/40 bg-warn-bg px-4 py-2.5 text-warn"
+          >
+            Данные устарели: снимок не обновлялся с {clockText(pairs.data.updatedAt)}.
+          </p>
+        )}
         {pairs.error instanceof ListRefused ? (
           <p role="alert" className="text-err">
             {pairs.error.message}

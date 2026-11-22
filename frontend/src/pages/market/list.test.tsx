@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { fakeApi, json } from '@/test/fakeApi';
-import { marketList, marketQueries } from '@/test/market';
+import { marketList, marketQueries, pair } from '@/test/market';
 import { renderApp } from '@/test/renderApp';
 import { baseRoutes } from '@/test/routes';
 
@@ -125,5 +125,96 @@ describe('the pages of a list', () => {
     expect(pages).toHaveTextContent('801–831 из 831');
     expect(within(pages).getByRole('button', { name: 'Следующая страница' })).toBeDisabled();
     expect(within(pages).getByRole('button', { name: 'Предыдущая страница' })).toBeEnabled();
+  });
+});
+
+// Spec market-overview «Раздел «Рынок»» (change add-ideas-and-market, task 14.1).
+describe('the section «Рынок»', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const page =
+    (items: unknown[], updatedAt = Date.now()) =>
+    () =>
+      json({ items, total: items.length, page: 1, pageSize: 50, filterGone: false, updatedAt });
+
+  // Scenario «Строка пары».
+  it('shows the price, a green rise and a green badge of a long idea', async () => {
+    fakeApi({
+      ...routes(),
+      'GET /api/market/pairs': page([
+        pair('SOLUSDT', {
+          price: 238.42,
+          change24h: 0.0437,
+          ideas: [{ strategy: 'breakout-long', timeframe: '1h', side: 'long' }],
+        }),
+      ]),
+    });
+    renderApp('/market');
+
+    const row = within(await screen.findByRole('row', { name: 'SOLUSDT' }));
+    expect(row.getByText('238.42')).toBeInTheDocument();
+    expect(row.getByText('+4.37 %')).toHaveClass('text-ok');
+    expect(row.getByText('▲ breakout-long 1h')).toHaveAttribute('data-tone', 'ok');
+  });
+
+  // Scenario «Две идеи».
+  it('shows the badge of the first idea and «+1»', async () => {
+    fakeApi({
+      ...routes(),
+      'GET /api/market/pairs': page([
+        pair('XRPUSDT', {
+          change24h: -0.01,
+          fundingRate: 0.000412,
+          ideas: [
+            { strategy: 'funding-short', timeframe: '1h', side: 'short' },
+            { strategy: 'funding-short', timeframe: '4h', side: 'short' },
+          ],
+        }),
+      ]),
+    });
+    renderApp('/market');
+
+    const row = within(await screen.findByRole('row', { name: 'XRPUSDT' }));
+    expect(row.getByText('▼ funding-short 1h')).toHaveAttribute('data-tone', 'err');
+    expect(row.getByText('+1')).toBeInTheDocument();
+    expect(row.getByText('-1.00 %')).toHaveClass('text-err');
+    expect(row.getByText('0.0412 %')).toHaveClass('text-warn');
+  });
+
+  // Scenario «Клик по паре».
+  it('opens the page of the pair on a click on its row', async () => {
+    fakeApi({
+      ...routes(),
+      'GET /api/market/pairs': page([pair('SOLUSDT')]),
+      'GET /api/market/pairs/SOLUSDT': () => json(pair('SOLUSDT')),
+    });
+    const { history } = renderApp('/market');
+
+    await userEvent.click(await screen.findByRole('row', { name: 'SOLUSDT' }));
+
+    await waitFor(() => expect(history.location.pathname).toBe('/market/SOLUSDT'));
+  });
+
+  // Scenario «Снимок устарел».
+  it('warns that the data are stale when the snapshot is older than three minutes', async () => {
+    const updated = Date.now() - 4 * 60_000;
+    fakeApi({ ...routes(), 'GET /api/market/pairs': page([pair('SOLUSDT')], updated) });
+    renderApp('/market');
+
+    const warning = await screen.findByRole('alert', { name: 'Снимок устарел' });
+    expect(warning).toHaveTextContent(
+      `Данные устарели: снимок не обновлялся с ${new Date(updated).toISOString().slice(11, 19)} UTC`,
+    );
+  });
+
+  it('does not warn about a fresh snapshot and shows when it was taken', async () => {
+    fakeApi({
+      ...routes(),
+      'GET /api/market/pairs': page([pair('SOLUSDT')], Date.UTC(2099, 0, 1, 14, 32, 5)),
+    });
+    renderApp('/market');
+
+    expect(await screen.findByText('обновлено 14:32:05 UTC')).toBeInTheDocument();
+    expect(screen.queryByRole('alert', { name: 'Снимок устарел' })).toBeNull();
   });
 });

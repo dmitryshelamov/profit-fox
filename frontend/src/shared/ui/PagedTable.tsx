@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect, useRef } from 'react';
 
 import { Table, Td, Th } from './Table';
 
@@ -45,6 +45,7 @@ export function PagedTable<Row>({
   rowLabel,
   onSort,
   onOpen,
+  selected = null,
 }: {
   readonly label: string;
   readonly columns: readonly PagedColumn<Row>[];
@@ -54,7 +55,17 @@ export function PagedTable<Row>({
   readonly rowLabel?: (row: Row) => string;
   readonly onSort: (sort: ListSort) => void;
   readonly onOpen?: (row: Row) => void;
+  /** The key of the chosen row: lit, and scrolled into view when it changes. */
+  readonly selected?: string | null;
 }) {
+  const body = useRef<HTMLTableSectionElement>(null);
+  useEffect(() => {
+    if (selected) {
+      const row = body.current?.querySelector<HTMLElement>(`[data-key="${CSS.escape(selected)}"]`);
+      row?.scrollIntoView?.({ block: 'nearest' });
+    }
+  }, [selected, rows]);
+
   return (
     <Table label={label}>
       <thead>
@@ -86,12 +97,14 @@ export function PagedTable<Row>({
           })}
         </tr>
       </thead>
-      <tbody>
+      <tbody ref={body}>
         {rows.map((row) => (
           <tr
             key={rowKey(row)}
+            data-key={rowKey(row)}
             aria-label={rowLabel?.(row)}
-            className={`h-11 border-t border-line hover:bg-panel-2 ${onOpen ? 'cursor-pointer' : ''}`}
+            aria-selected={selected === null ? undefined : selected === rowKey(row)}
+            className={`h-11 border-t border-line hover:bg-panel-2 ${onOpen ? 'cursor-pointer' : ''} ${selected === rowKey(row) ? 'bg-accent/10' : ''}`}
             onClick={onOpen ? () => onOpen(row) : undefined}
           >
             {columns.map((column) => (
