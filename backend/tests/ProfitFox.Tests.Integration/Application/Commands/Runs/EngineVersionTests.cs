@@ -1,76 +1,90 @@
-using System.Globalization;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
-
-using Dapper;
-
-using MediatR;
 
 using Microsoft.Extensions.DependencyInjection;
 
-using Npgsql;
-
-using ProfitFox.Application.Commands.Hypotheses.AddHypothesis;
-using ProfitFox.Application.Commands.Runs.ExecuteRun;
-using ProfitFox.Domain.Services.Runs;
+using ProfitFox.Application.Commands.Backtests.ExecuteBacktest;
+using ProfitFox.Application.Ports.MarketData;
+using ProfitFox.Application.Queries.MarketData;
+using ProfitFox.Domain.Services.Backtests;
+using ProfitFox.Domain.Services.Graph;
+using ProfitFox.Domain.Services.MarketData;
+using ProfitFox.Domain.ValueObjects.Backtests;
+using ProfitFox.Domain.ValueObjects.Graph;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Runs;
-using ProfitFox.Domain.ValueObjects.Runs.Enums;
-using ProfitFox.Domain.ValueObjects.Trades;
-using ProfitFox.Domain.ValueObjects.Verdicts;
+using ProfitFox.Domain.ValueObjects.Strategies.Enums;
+using ProfitFox.Tests.Integration.Application.Commands.Backtests;
 using ProfitFox.Tests.Integration.MarketData;
 
 namespace ProfitFox.Tests.Integration.Application.Commands.Runs;
 
 /// <summary>
-///     Spec hypothesis-bench «Номер версии движка» and «Эталонные гипотезы версии движка»: each reference hypothesis on the
-///     synthetic history of the fake market-data service gives the same digest of events, outcomes, block means and verdict
-///     numbers as the file <c>EngineVersions.json</c> records for <see cref="EngineVersion.Number" />. A change of the
-///     results of any of them needs a new number and a new entry. The reference hypotheses are H0001 and H0002, which is
-///     H0001 with a short for two days: its events come once a day, so every second one comes while the position is open
-///     (change add-strategy-graph, design.md, decision 9).
+///     Spec strategy-backtest «Номер версии движка» and «Эталонные стратегии версии движка» (change add-strategy-backtest,
+///     task 8.1): each reference strategy, a category of ideas, on the synthetic history of the fake market-data service —
+///     four weeks of three pairs, history up to 2026-05-16 — gives the digest of its orders and trades, random entries,
+///     weekly means and the numbers of its set that <c>EngineVersions.json</c> records for <see cref="EngineVersion.Number" />.
+///     A change of the results of any of them needs a new number and a new entry. The references are the strategies of
+///     H0001 and H0002 (<c>Fixtures/H0001.strategy.json</c>, <c>H0002.strategy.json</c>): H0002 holds the position for two
+///     days, so every second order comes while it is open. <c>EngineTransition.json</c> keeps what engine version 2 gave
+///     the hypotheses H0001 and H0002: with the hash of the hypothesis as the seed the strategies give the same trades of
+///     orders and of random entries.
 /// </summary>
 [NonParallelizable]
 public sealed class EngineVersionTests
 {
     private const string Overlapping = "H0002";
     private static readonly string[] References = ["H0001", Overlapping];
-    private static readonly DateTimeOffset Today = new DateTimeOffset(2026, 11, 18, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset End = new DateTimeOffset(2026, 5, 16, 0, 0, 0, TimeSpan.Zero);
     private static readonly string Fixtures = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures");
+    private static readonly JsonSerializerOptions Json = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
     [SetUp]
-    public async Task CreateBench()
+    public void ShortenHistory()
     {
         FakeMarketData.CoveredUntil = FakeMarketData.CoveredFrom.AddDays(28);
-        await BenchDatabase.Reset();
-        foreach (string reference in References)
-        {
-            await BenchServices.Sender.Send(new AddHypothesisCommand(File.ReadAllText(Path.Combine(Fixtures, $"{reference}.json"))), CancellationToken.None);
-        }
     }
 
     [TearDown]
-    public void RemoveBench()
+    public void RestoreHistory()
     {
         FakeMarketData.CoveredUntil = null;
     }
 
     [Test]
-    public async Task The_results_of_the_reference_hypotheses_are_those_recorded_for_the_engine_version()
+    public async Task The_results_of_the_reference_strategies_are_those_recorded_for_the_engine_version()
     {
         var digests = new SortedDictionary<string, string>(StringComparer.Ordinal);
         foreach (string reference in References)
         {
-            digests[reference] = Digest(await Run(reference));
+            (IReadOnlyList<EventRow> rows, SetNumbers numbers) = await Run(reference, seed: null);
+            digests[reference] = EngineDigests.Of(rows, numbers);
         }
 
         EngineEntry? current = Recorded().SingleOrDefault(entry => entry.Version == EngineVersion.Number);
         string next = $"{{ \"version\": {EngineVersion.Number + 1}, \"digests\": {{ {string.Join(", ", digests.Select(digest => $"\"{digest.Key}\": \"{digest.Value}\""))} }} }}";
-        Assert.That(current, Is.Not.Null, $"EngineVersions.json has no entry for engine version {EngineVersion.Number}");
+        Assert.That(current, Is.Not.Null, $"EngineVersions.json has no entry for engine version {EngineVersion.Number}: {next}");
         Assert.That(
             digests,
             Is.EqualTo(current!.Digests),
-            $"The results of a reference hypothesis changed, or one has no digest: raise EngineVersion.Number and add {next} to EngineVersions.json.");
+            $"The results of a reference strategy changed, or one has no digest: raise EngineVersion.Number and add {next} to EngineVersions.json.");
+    }
+
+    [Test]
+    public async Task With_the_hash_of_the_hypothesis_as_the_seed_the_strategies_give_the_trades_of_engine_version_2()
+    {
+        Dictionary<string, Transition> recorded = JsonSerializer.Deserialize<Dictionary<string, Transition>>(File.ReadAllText(Path.Combine(Fixtures, "EngineTransition.json")), Json)!;
+        foreach (string reference in References)
+        {
+            Transition version2 = recorded[reference];
+
+            (IReadOnlyList<EventRow> rows, _) = await Run(reference, version2.Seed);
+            (IReadOnlyList<EventRow> own, _) = await Run(reference, seed: null);
+
+            Assert.That(EngineDigests.Orders(rows), Is.EqualTo(version2.Orders), $"the trades of the orders of {reference}");
+            Assert.That(EngineDigests.Randoms(rows), Is.EqualTo(version2.Randoms), $"the random entries of {reference} and their trades");
+            Assert.That(EngineDigests.Orders(own), Is.EqualTo(version2.Orders), "the orders do not depend on the seed");
+            Assert.That(EngineDigests.Randoms(own), Is.Not.EqualTo(version2.Randoms), "the seed of the graph draws other random entries");
+        }
     }
 
     [Test]
@@ -78,7 +92,7 @@ public sealed class EngineVersionTests
     {
         EngineEntry[] recorded = Recorded();
 
-        // Two versions differ when at least one digest differs; a hypothesis only one of them has a digest of is a difference.
+        // Two versions differ when at least one digest differs; a reference only one of them has a digest of is a difference.
         IEnumerable<(int, int)> same =
             from first in recorded
             from second in recorded
@@ -90,53 +104,60 @@ public sealed class EngineVersionTests
     }
 
     [Test]
-    public void H0001_gives_under_engine_version_2_the_results_of_version_1()
+    public void The_entries_of_versions_1_and_2_stay()
     {
         EngineEntry[] recorded = Recorded();
 
-        // Version 2 skips an event that comes while a position is open; the events of H0001 do not overlap.
-        Assert.That(EngineVersion.Number, Is.GreaterThanOrEqualTo(2));
+        Assert.That(EngineVersion.Number, Is.EqualTo(3));
+        Assert.That(recorded.Select(entry => entry.Version), Is.EqualTo(new[] { 1, 2, 3 }));
         Assert.That(recorded.Single(entry => entry.Version == 2).Digests["H0001"], Is.EqualTo(recorded.Single(entry => entry.Version == 1).Digests["H0001"]));
-        Assert.That(recorded.Single(entry => entry.Version == 1).Digests.Keys, Is.EqualTo(new[] { "H0001" }), "version 1 of the second reference was never computed");
+        Assert.That(recorded.Single(entry => entry.Version == 1).Digests.Keys, Is.EqualTo(new[] { "H0001" }));
     }
 
     [Test]
-    public async Task The_second_reference_hypothesis_has_events_skipped_while_a_position_is_open()
+    public async Task The_second_reference_strategy_has_orders_skipped_while_a_position_is_open()
     {
-        ExecuteRunResult result = await Run(Overlapping);
+        (_, SetNumbers numbers) = await Run(Overlapping, seed: null);
 
-        Assert.That(result.Skipped, Is.GreaterThan(0), $"{Overlapping} must overlap: without a skipped event the reference does not cover the rule of one position");
-        Assert.That(result.Report, Does.Contain($"| Событий пропущено при открытой позиции | {result.Skipped} |"));
+        Assert.That(numbers.Skipped, Is.GreaterThan(0), $"{Overlapping} must overlap: without a skipped order the reference does not cover the rule of one position");
     }
 
     [Test]
-    public async Task The_report_of_H0001_shows_no_skipped_events()
+    public async Task H0001_has_no_skipped_orders()
     {
-        ExecuteRunResult result = await Run("H0001");
+        (_, SetNumbers numbers) = await Run("H0001", seed: null);
 
-        Assert.That(result.Skipped, Is.Zero);
-        Assert.That(result.Report, Does.Contain("| Событий пропущено при открытой позиции | 0 |"));
+        Assert.That(numbers.Skipped, Is.Zero);
+        Assert.That(numbers.Trades, Is.GreaterThan(0));
     }
 
-    [Test]
-    public async Task The_ledger_line_carries_the_engine_version()
+    // The strategy of the reference as a backtest of one set on 4h over every pair, the pairs in the order of the catalog;
+    // with a seed, the draw of random entries takes it instead of that of the graph.
+    private static async Task<(IReadOnlyList<EventRow> Rows, SetNumbers Numbers)> Run(string reference, string? seed)
     {
-        ExecuteRunResult result = await Run("H0001");
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(Fixtures, $"{reference}.strategy.json")));
+        GraphDefinition graph = StrategyGraph.ReadForm(document.RootElement).Value!;
+        var settings = new BacktestSettings([], [TimeSpan.FromHours(4)], HistoryPeriod.DataStart, End, Pairs: null, 0.00055, 0.0002);
+        BacktestPlan plan = BacktestPlans.Of(graph, StrategyKind.Idea, settings, BacktestGrid.Of(settings)).Single();
+        if (seed is not null)
+        {
+            plan = plan with { Design = plan.Design with { Seed = seed } };
+        }
 
-        Assert.That(result.Entry.EngineVersion, Is.EqualTo(EngineVersion.Number));
-        Assert.That(result.Entry.Version, Is.EqualTo(1));
-        await using NpgsqlConnection connection = await BenchDatabase.DataSource.OpenConnectionAsync();
-        string report = await connection.ExecuteScalarAsync<string>("SELECT text FROM reports WHERE run_id = @RunId", new { result.Entry.RunId }) ?? "";
-        Assert.That(report, Does.Contain($"| Версия движка | {EngineVersion.Number} |").And.Contain("| Версия гипотезы | 1 |"));
-    }
-
-    private static async Task<ExecuteRunResult> Run(string hypothesis)
-    {
         await using MarketDataServer server = await MarketDataServer.Start();
         await using ServiceProvider services = BenchServices.Start(server);
-        return await services.GetRequiredService<ISender>().Send(
-            new ExecuteRunCommand(hypothesis, Version: null, Period.Exploration, Parity: false, Today),
-            CancellationToken.None);
+        using var hash = new HistoryHash();
+        var history = new MarketHistory(services.GetRequiredService<IHistorySource>(), End, hash);
+        List<EventRow> rows = [];
+        SetNumbers numbers = SetNumbers.Zero;
+        foreach (Instrument pair in await services.GetRequiredService<IInstrumentCatalog>().LinearUsdtPerpetuals(CancellationToken.None))
+        {
+            PairSetResult result = (await PairBacktestRun.RunAsync(history, pair, StrategyKind.Idea, [plan], CancellationToken.None)).Single();
+            rows.AddRange(result.Rows);
+            numbers += result.Numbers;
+        }
+
+        return (rows, numbers);
     }
 
     private static bool Same(Dictionary<string, string> first, Dictionary<string, string> second)
@@ -146,67 +167,12 @@ public sealed class EngineVersionTests
 
     private static EngineEntry[] Recorded()
     {
-        return JsonSerializer.Deserialize<EngineEntry[]>(
-            File.ReadAllText(Path.Combine(Fixtures, "EngineVersions.json")),
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+        return JsonSerializer.Deserialize<EngineEntry[]>(File.ReadAllText(Path.Combine(Fixtures, "EngineVersions.json")), Json)!;
     }
 
-    private static string Digest(ExecuteRunResult result)
-    {
-        var text = new StringBuilder();
-        foreach (EventRow row in result.Rows)
-        {
-            Line(text, "event", row.Instrument, row.Moment.ToUnixTimeMilliseconds(), row.Block, row.Status, row.RandomValid, row.PseudoDifference);
-            Fields(text, "event-fields", row.Event);
-            Fields(text, "random-mean", row.RandomMean);
-            Outcome(text, "event-outcome", row.Outcome);
-            foreach (RandomTrade random in row.Randoms)
-            {
-                Line(text, "random", random.Entry.ToUnixTimeMilliseconds());
-                Outcome(text, "random-outcome", random.Outcome);
-            }
-        }
-
-        foreach ((long block, double mean, int events) in Evidence.PseudoBlockMeans(result.Rows))
-        {
-            Line(text, "pseudo-block", block, mean, events);
-        }
-
-        foreach ((long block, double mean, int events) in Evidence.BlockMeans(result.Rows))
-        {
-            Line(text, "block", block, mean, events);
-        }
-
-        Verdict verdict = result.Verdict!;
-        Line(text, "verdict", verdict.Kind, verdict.Attempts, verdict.RequiredT, verdict.Blocks, verdict.Events, verdict.Power, verdict.PseudoSd,
-            verdict.T, verdict.Mean, verdict.FirstHalfMean, verdict.SecondHalfMean);
-        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString())));
-    }
-
-    private static void Fields(StringBuilder text, string name, TradeFields? fields)
-    {
-        Line(text, name, fields?.Y, fields?.Gross, fields?.Fees, fields?.Slippage, fields?.Funding, fields?.Net);
-    }
-
-    private static void Outcome(StringBuilder text, string name, TradeOutcome? outcome)
-    {
-        Line(text, name, outcome?.Status, outcome?.ExitReason, outcome?.Ambiguous, outcome?.EntryTime?.ToUnixTimeMilliseconds(),
-            outcome?.ExitTime?.ToUnixTimeMilliseconds(), outcome?.EntryPrice, outcome?.ExitPrice, outcome?.Gross, outcome?.Fees,
-            outcome?.Slippage, outcome?.Funding, outcome?.Net, outcome?.R);
-    }
-
-    // Numbers are cut to 12 significant digits so that the last bit of a platform's math does not change the digest.
-    private static void Line(StringBuilder text, params object?[] values)
-    {
-        text.AppendJoin(';', values.Select(value => value switch
-        {
-            null => "-",
-            double number => number.ToString("G12", CultureInfo.InvariantCulture),
-            _ => Convert.ToString(value, CultureInfo.InvariantCulture)
-        }));
-        text.Append('\n');
-    }
-
-    // The digests of an engine version by the id of the reference hypothesis.
+    // The digests of an engine version by the name of the reference.
     private sealed record EngineEntry(int Version, Dictionary<string, string> Digests);
+
+    // What engine version 2 gave a hypothesis: the hash of its text, the digest of the trades of its orders and that of its random entries.
+    private sealed record Transition(string Seed, string Orders, string Randoms);
 }
