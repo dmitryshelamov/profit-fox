@@ -1,5 +1,6 @@
 /// <reference types="node" />
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 // Vitest gives an empty text for an imported style sheet, so the two files are read from the disk.
 const read = (file: string) => readFileSync(new URL(file, import.meta.url), 'utf8');
@@ -33,11 +34,14 @@ const tokens: Record<string, string> = {
   'pin-boolean': '#E5534B',
   'pin-duration': '#A78BFA',
   'pin-event': '#F5B84A',
+  'pin-order': '#4FC3D9',
+  'pin-position': '#E879B9',
   'group-graph': '#4A5060',
   'group-data': '#2E6E93',
   'group-logic': '#5B49C9',
   'group-position': '#2F8F6B',
   'group-signal': '#B0591A',
+  'group-math': '#8C6B2E',
 };
 
 describe('the theme', () => {
@@ -48,6 +52,30 @@ describe('the theme', () => {
   it('switches the palette of Tailwind off, so only the tokens give a color', () => {
     expect(theme).toContain('--color-*: initial;');
     expect(theme.match(/--color-[a-z0-9-]+:/g)).toHaveLength(Object.keys(tokens).length);
+    expect(Object.keys(tokens)).toHaveLength(33);
+  });
+
+  // Change add-position-node, task 8.2: no color outside the theme. The table of the chart, which draws on a canvas and
+  // takes colors as values, repeats tokens of the theme; any other hexadecimal color is an error.
+  it('has no hexadecimal color outside the theme but the tokens the chart repeats', () => {
+    const source = join(process.cwd(), 'src');
+    const files = readdirSync(source, { recursive: true, encoding: 'utf8' }).filter(
+      (file) =>
+        /\.(tsx?|css)$/.test(file) &&
+        !/\.test\.tsx?$/.test(file) &&
+        file !== 'index.css' &&
+        !file.includes('generated'),
+    );
+    const known = new Set(Object.values(tokens).map((color) => color.toLowerCase()));
+    const foreign = files.flatMap((file) =>
+      [...readFileSync(join(source, file), 'utf8').matchAll(/#[0-9a-fA-F]{3,8}\b/g)]
+        .map((match) => match[0].toLowerCase())
+        .filter((color) => !known.has(color))
+        .map((color) => `${file}: ${color}`),
+    );
+
+    expect(files.length).toBeGreaterThan(50);
+    expect(foreign).toEqual([]);
   });
 
   it('emits every token, used or not, and sets the two font families', () => {

@@ -172,7 +172,8 @@ export function updateSignalVersion(
 
 /**
  * The draft of a new strategy from a saved signal (spec strategy-constructor «Стратегия из сигнала»): the node of the
- * signal on its latest version, an `enter` whose `when` takes its event and a `close-after`; no side and no time.
+ * signal on its latest version, an `enter` of 100 USDT whose `when` takes its event, the `position` and a
+ * `close-after`, wired by the orders and the position; no side and no time.
  */
 export function strategyOfSignal(signal: SignalEntry): GraphDocument {
   return {
@@ -186,10 +187,16 @@ export function strategyOfSignal(signal: SignalEntry): GraphDocument {
           kind: 'signal',
           settings: { signal: signal.id, version: String(signal.version) },
         },
-        { id: 'enter', kind: 'enter' },
+        { id: 'enter', kind: 'enter', inputs: { size: 100 } },
+        { id: 'position', kind: 'position' },
         { id: 'close-after', kind: 'close-after' },
       ],
-      wires: [{ from: `${signal.name}.event`, to: 'enter.when' }],
+      wires: [
+        { from: `${signal.name}.event`, to: 'enter.when' },
+        { from: 'enter.order', to: 'position.orders' },
+        { from: 'position.position', to: 'close-after.position' },
+        { from: 'close-after.order', to: 'position.orders' },
+      ],
     },
     layout: {},
   };

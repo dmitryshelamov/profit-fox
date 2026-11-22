@@ -129,7 +129,7 @@ describe('a signal node', () => {
 
 describe('the strategy of a signal', () => {
   // Scenario «Стратегия из сигнала funding-high».
-  it('is the node of the signal, an enter on its event and a close-after, without a side and a time', () => {
+  it('is the node of the signal, an enter on its event, the position and a close-after, without a side and a time', () => {
     expect(strategyOfSignal({ id: fundingHighId, name: 'funding-high', version: 2 }).graph).toEqual(
       {
         formatVersion: 1,
@@ -137,10 +137,16 @@ describe('the strategy of a signal', () => {
         outputs: [],
         nodes: [
           { id: 'funding-high', kind: 'signal', settings: { signal: fundingHighId, version: '2' } },
-          { id: 'enter', kind: 'enter' },
+          { id: 'enter', kind: 'enter', inputs: { size: 100 } },
+          { id: 'position', kind: 'position' },
           { id: 'close-after', kind: 'close-after' },
         ],
-        wires: [{ from: 'funding-high.event', to: 'enter.when' }],
+        wires: [
+          { from: 'funding-high.event', to: 'enter.when' },
+          { from: 'enter.order', to: 'position.orders' },
+          { from: 'position.position', to: 'close-after.position' },
+          { from: 'close-after.order', to: 'position.orders' },
+        ],
       },
     );
   });

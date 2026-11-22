@@ -127,7 +127,8 @@ describe('the colors of the canvas', () => {
     expect(wire('first.event->out.entry').data).toEqual({ type: 'event', bad: false });
     expect(wire('first.event->out.entry').style?.stroke).toBe(pinLooks.event.stroke);
     expect(wire('rate.value->high.a').style?.stroke).toBe(pinLooks.number.stroke);
-    expect(new Set(Object.values(pinLooks).map((look) => look.stroke)).size).toBe(4);
+    // Six types, each its own color: an order and the position came with change add-position-node.
+    expect(new Set(Object.values(pinLooks).map((look) => look.stroke)).size).toBe(6);
   });
 
   it('colors a wire with an error as an error, whatever its type', () => {
@@ -282,7 +283,8 @@ describe('the search in the palette', () => {
     const region = await palette();
     const field = within(region).getByRole('searchbox', { name: 'Найти узел' });
     expect(field).toHaveFocus();
-    expect(groupsOf(region)).toEqual(['Граф', 'Данные', 'Логика']);
+    // The numbers are in the palette of a signal (spec signal-constructor «Арифметические узлы в каталоге сигнала»).
+    expect(groupsOf(region)).toEqual(['Граф', 'Данные', 'Логика', 'Числа']);
 
     await userEvent.type(field, 'срав');
 
@@ -295,7 +297,7 @@ describe('the search in the palette', () => {
     expect(within(region).getByRole('button', { name: 'Сравнить' })).toBeInTheDocument();
 
     await userEvent.clear(field);
-    expect(groupsOf(region)).toEqual(['Граф', 'Данные', 'Логика']);
+    expect(groupsOf(region)).toEqual(['Граф', 'Данные', 'Логика', 'Числа']);
   });
 
   it('finds a kind by its kind as the graph writes it', async () => {

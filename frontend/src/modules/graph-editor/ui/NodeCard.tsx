@@ -19,7 +19,7 @@ import {
 } from '../model/operations';
 import { kindOf, pinsOf } from '../model/pins';
 import { referenceOf, signalInfo } from '../model/signals';
-import type { Catalog, GraphDocument, Pin } from '../model/types';
+import { type Catalog, type GraphDocument, type Pin, wireOnly } from '../model/types';
 import { formatValue, parseValue } from '../model/values';
 import { canConnect } from '../model/wires';
 import { Card, FieldLabel } from './Card';
@@ -152,17 +152,29 @@ export function NodeCard({
           </div>
         ))}
 
-      {pins.inputs.map((pin) => (
-        <InputSource
-          key={pin.name}
-          document={document}
-          catalog={catalog}
-          node={id}
-          pin={pin}
-          readOnly={readOnly}
-          onChange={onChange}
-        />
-      ))}
+      {pins.inputs.map((pin) =>
+        pin.many ? (
+          <ManyInput
+            key={pin.name}
+            document={document}
+            catalog={catalog}
+            node={id}
+            pin={pin}
+            readOnly={readOnly}
+            onChange={onChange}
+          />
+        ) : (
+          <InputSource
+            key={pin.name}
+            document={document}
+            catalog={catalog}
+            node={id}
+            pin={pin}
+            readOnly={readOnly}
+            onChange={onChange}
+          />
+        ),
+      )}
 
       {own.length > 0 && (
         <ul
@@ -247,6 +259,98 @@ function SignalOfNode({
   );
 }
 
+/** The name of a pin with the dot and the word of its type, as an input of the card is headed. */
+function PinLabel({ pin }: { readonly pin: Pin }) {
+  return (
+    <FieldLabel>
+      {pin.name}
+      <span className="flex items-center gap-1.5 font-normal tracking-normal text-faint normal-case">
+        <span aria-hidden="true" className={`size-1.5 rounded-full ${pinLooks[pin.type].dot}`} />
+        {pinLooks[pin.type].word}
+      </span>
+    </FieldLabel>
+  );
+}
+
+/**
+ * An input that takes several wires, the orders of the position (spec strategy-constructor «Несколько проводов в позицию
+ * на холсте»): the orders wired into it in a list, each with its removal, and a list to add one more.
+ */
+function ManyInput({
+  document,
+  catalog,
+  node,
+  pin,
+  readOnly,
+  onChange,
+}: {
+  readonly document: GraphDocument;
+  readonly catalog: Catalog;
+  readonly node: string;
+  readonly pin: Pin;
+  readonly readOnly: boolean;
+  readonly onChange: (document: GraphDocument) => void;
+}) {
+  const to = `${node}.${pin.name}`;
+  const wired = document.graph.wires.filter((wire) => wire.to === to);
+  const sources = document.graph.nodes.flatMap((candidate) =>
+    pinsOf(candidate, catalog, document.graph)
+      .outputs.map((output) => `${candidate.id}.${output.name}`)
+      .filter(
+        (from) =>
+          canConnect(document.graph, catalog, from, to) &&
+          !wired.some((wire) => wire.from === from),
+      ),
+  );
+
+  return (
+    <fieldset className="flex min-w-0 flex-col gap-1.5">
+      <legend className="mb-1.5">
+        <PinLabel pin={pin} />
+      </legend>
+      <ul aria-label={`Провода ${pin.name}`} className="flex flex-col gap-1">
+        {wired.map((wire) => (
+          <li
+            key={wire.from}
+            className="flex items-center justify-between gap-2 rounded-md bg-panel-2 px-2.5 py-1"
+          >
+            <span className="truncate font-mono text-xs">{wire.from}</span>
+            <Button
+              size="sm"
+              aria-label={`Убрать ${wire.from}`}
+              disabled={readOnly}
+              onClick={() => onChange(disconnect(document, wire.from, wire.to))}
+            >
+              Убрать
+            </Button>
+          </li>
+        ))}
+        {wired.length === 0 && <li className="text-xs text-muted">не подключён</li>}
+      </ul>
+      {!readOnly && sources.length > 0 && (
+        <SelectField
+          aria-label={`Добавить ${pin.name}`}
+          mono
+          className="w-full"
+          value=""
+          onChange={(event) => {
+            if (event.target.value !== '') {
+              onChange(connect(document, event.target.value, to, catalog));
+            }
+          }}
+        >
+          <option value="">добавить провод</option>
+          {sources.map((from) => (
+            <option key={from} value={from}>
+              {from}
+            </option>
+          ))}
+        </SelectField>
+      )}
+    </fieldset>
+  );
+}
+
 /** Where an input takes its value: a compatible output, or a value written on it. */
 function InputSource({
   document,
@@ -275,16 +379,7 @@ function InputSource({
   return (
     <fieldset className="flex min-w-0 flex-col gap-1.5">
       <legend className="mb-1.5">
-        <FieldLabel>
-          {pin.name}
-          <span className="flex items-center gap-1.5 font-normal tracking-normal text-faint normal-case">
-            <span
-              aria-hidden="true"
-              className={`size-1.5 rounded-full ${pinLooks[pin.type].dot}`}
-            />
-            {pinLooks[pin.type].word}
-          </span>
-        </FieldLabel>
+        <PinLabel pin={pin} />
       </legend>
       <SelectField
         aria-label={`Источник ${pin.name}`}
@@ -295,17 +390,17 @@ function InputSource({
         onChange={(event) => {
           const from = event.target.value;
           const unwired = wire ? disconnect(document, wire.from, wire.to) : document;
-          onChange(from === '' ? unwired : connect(unwired, from, to));
+          onChange(from === '' ? unwired : connect(unwired, from, to, catalog));
         }}
       >
-        <option value="">{pin.type === 'event' ? 'не подключён' : 'значение'}</option>
+        <option value="">{wireOnly(pin.type) ? 'не подключён' : 'значение'}</option>
         {sources.map((from) => (
           <option key={from} value={from}>
             {from}
           </option>
         ))}
       </SelectField>
-      {!wire && pin.type !== 'event' && (
+      {!wire && !wireOnly(pin.type) && (
         <TextField
           aria-label={`Значение ${pin.name}`}
           mono

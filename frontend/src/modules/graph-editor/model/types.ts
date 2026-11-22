@@ -1,7 +1,10 @@
 import type { Schemas } from '@/api/client';
 
-/** The type of a pin (spec strategy-graph «Типы пинов»). */
-export type PinType = 'number' | 'boolean' | 'duration' | 'event';
+/**
+ * The type of a pin (spec strategy-graph «Типы пинов»): a value, an event, or, in a strategy, an order that goes into
+ * the position and the position an exit node reads.
+ */
+export type PinType = 'number' | 'boolean' | 'duration' | 'event' | 'order' | 'position';
 
 /** A written value: a number, a boolean, or a duration as the format writes it, `4h`. */
 export type GraphValue = number | boolean | string;
@@ -61,6 +64,13 @@ export interface Pin {
   readonly type: PinType;
   /** The value an input of a signal node takes without a wire and a value: that of the parameter of its version. */
   readonly fallback?: GraphValue;
+  /** Whether the input takes several wires: the orders of the position (spec strategy-graph «Вход с несколькими проводами»). */
+  readonly many?: boolean;
+}
+
+/** Whether a pin of the type takes a wire and never a written value. */
+export function wireOnly(type: PinType): boolean {
+  return type === 'event' || type === 'order' || type === 'position';
 }
 
 /** A parameter of a version of a saved signal, which is an input of a signal node on that version. */

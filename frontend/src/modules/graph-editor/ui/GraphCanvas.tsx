@@ -5,8 +5,10 @@ import {
   applyNodeChanges,
   Background,
   BackgroundVariant,
+  BaseEdge,
   type Connection,
   type EdgeChange,
+  type EdgeProps,
   type NodeChange,
   Panel,
   ReactFlow,
@@ -33,7 +35,7 @@ import type { Catalog, GraphDocument, NodeKind, PinType } from '../model/types';
 import { canConnect } from '../model/wires';
 import { type GraphEnvironment, GraphEnvironmentContext } from './GraphContext';
 import { GraphNodeView } from './GraphNodeView';
-import { pinLooks, pinTypes, wireStrokes } from './looks';
+import { legendTypes, pinLooks, wireStrokes } from './looks';
 
 /** The drag-and-drop type of a kind dragged from the palette: its name. */
 export const paletteMime = 'application/x-profit-fox-node';
@@ -42,6 +44,20 @@ export const paletteMime = 'application/x-profit-fox-node';
 export const signalMime = 'application/x-profit-fox-signal';
 
 const nodeTypes = { graph: GraphNodeView };
+
+const edgeTypes = { back: BackWire };
+
+/**
+ * A wire back into the position (spec strategy-constructor «Провод-возврат и расстановка»): an arc over the nodes from
+ * the order on the right to the orders of the position on the left, not a curve through them.
+ */
+function BackWire({ id, sourceX, sourceY, targetX, targetY, style, markerEnd }: EdgeProps) {
+  const lift =
+    Math.max(80, Math.abs(sourceX - targetX) / 3) + Math.max(0, Math.abs(sourceY - targetY) / 2);
+  const top = Math.min(sourceY, targetY) - lift;
+  const path = `M ${sourceX},${sourceY} C ${sourceX + 120},${top} ${targetX - 120},${top} ${targetX},${targetY}`;
+  return <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />;
+}
 
 /** The whole graph in view, never larger than its real size: a small graph opens at 100 %. */
 export const fitOptions = { maxZoom: 1 };
@@ -66,7 +82,7 @@ export function coloredWires(
     return {
       ...edge,
       data: { type, bad },
-      className: `wire-${type ?? 'unknown'}`,
+      className: `wire-${type ?? 'unknown'}${edge.type === 'back' ? ' wire-back' : ''}`,
       style: {
         stroke: bad ? wireStrokes.bad : type ? pinLooks[type].stroke : wireStrokes.unknown,
         strokeWidth: 2,
@@ -168,6 +184,7 @@ export function GraphCanvas({
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           colorMode="dark"
           className="bg-canvas!"
           minZoom={0.3}
@@ -208,7 +225,7 @@ export function GraphCanvas({
           }}
           onConnect={(connection) => {
             const { from, to } = reference(connection);
-            onChange(connect(document, from, to));
+            onChange(connect(document, from, to, catalog));
           }}
           onBeforeDelete={async ({ nodes: deleting, edges: deletingEdges }) => ({
             nodes: deleting.filter((node) => rules.canRemove(node.data.node)),
@@ -236,7 +253,7 @@ export function GraphCanvas({
             size={1.6}
           />
           <Panel position="bottom-left" className="m-4!">
-            <Legend />
+            <Legend types={legendTypes(catalog)} />
           </Panel>
           <Panel position="bottom-right" className="m-4!">
             <ZoomBar />
@@ -250,11 +267,11 @@ export function GraphCanvas({
 const barClass =
   'flex h-11 items-center rounded-[10px] border border-line bg-panel/95 text-xs shadow-xl';
 
-/** The legend of the canvas: the four types of a value, each with the color of its pins and wires. */
-function Legend() {
+/** The legend of the canvas: the types of the pins of the catalog, each with the color of its pins and wires. */
+function Legend({ types }: { readonly types: readonly PinType[] }) {
   return (
     <ul aria-label="Типы значений" className={`${barClass} gap-4 px-3.5 text-muted`}>
-      {pinTypes.map((type) => (
+      {types.map((type) => (
         <li key={type} data-type={type} className="flex items-center gap-1.5">
           <span aria-hidden="true" className={`size-2 rounded-full ${pinLooks[type].dot}`} />
           {pinLooks[type].word}

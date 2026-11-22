@@ -30,16 +30,21 @@ describe('the rules of a signal', () => {
 
 describe('the rules of a strategy', () => {
   // Scenario «Новая стратегия».
-  it('start with an enter and a close-after without a side and a time', () => {
+  it('start with an enter of 100 USDT, the position and a close-after, wired, without a side and a time', () => {
     expect(strategyRules.start()).toEqual({
       formatVersion: 1,
       parameters: [],
       outputs: [],
       nodes: [
-        { id: 'enter', kind: 'enter' },
+        { id: 'enter', kind: 'enter', inputs: { size: 100 } },
+        { id: 'position', kind: 'position' },
         { id: 'close-after', kind: 'close-after' },
       ],
-      wires: [],
+      wires: [
+        { from: 'enter.order', to: 'position.orders' },
+        { from: 'position.position', to: 'close-after.position' },
+        { from: 'close-after.order', to: 'position.orders' },
+      ],
     });
   });
 

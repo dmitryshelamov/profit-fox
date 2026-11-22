@@ -15,6 +15,8 @@ const exitWords: Record<string, string> = {
   'stop-loss': 'стоп',
   'take-profit': 'цель',
   'close-after': 'срок',
+  'close-position': 'закрытие',
+  'limit-order': 'лимитка',
 };
 
 /** The table of the saved strategies: its words, its columns and the requests of `/api/strategies`. */

@@ -16,6 +16,8 @@ const startValue: Record<PinType, GraphParameter['value']> = {
   boolean: false,
   duration: '1h',
   event: 0,
+  order: 0,
+  position: 0,
 };
 
 /**

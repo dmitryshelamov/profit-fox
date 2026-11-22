@@ -34,9 +34,25 @@ export function pinsOf(
   }
 
   return {
-    inputs: (kind?.inputs ?? []).map((pin) => ({ name: pin.name, type: pin.type as PinType })),
+    inputs: (kind?.inputs ?? []).map((pin) =>
+      pin.many
+        ? { name: pin.name, type: pin.type as PinType, many: true }
+        : { name: pin.name, type: pin.type as PinType },
+    ),
     outputs: (kind?.outputs ?? []).map((pin) => ({ name: pin.name, type: pin.type as PinType })),
   };
+}
+
+/** Whether the input `node.pin` takes several wires. */
+export function takesMany(graph: Graph, catalog: Catalog, reference: string): boolean {
+  const dot = reference.indexOf('.');
+  const node = graph.nodes.find((candidate) => candidate.id === reference.slice(0, dot));
+  return (
+    node !== undefined &&
+    pinsOf(node, catalog, graph).inputs.some(
+      (pin) => pin.name === reference.slice(dot + 1) && pin.many === true,
+    )
+  );
 }
 
 /** The type of a pin reference `node.pin` on the given side, if the node and the pin exist. */

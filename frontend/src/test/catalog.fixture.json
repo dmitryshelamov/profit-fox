@@ -176,6 +176,72 @@
     "settings": []
   },
   {
+    "kind": "add",
+    "title": "Сложить",
+    "group": "Числа",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "subtract",
+    "title": "Вычесть",
+    "group": "Числа",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "multiply",
+    "title": "Умножить",
+    "group": "Числа",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
     "kind": "outputs",
     "title": "Выходы",
     "group": "Граф",

@@ -39,11 +39,14 @@
   --color-pin-boolean: #e5534b;
   --color-pin-duration: #a78bfa;
   --color-pin-event: #f5b84a;
+  --color-pin-order: #4fc3d9;
+  --color-pin-position: #e879b9;
   --color-group-graph: #4a5060;
   --color-group-data: #2e6e93;
   --color-group-logic: #5b49c9;
   --color-group-position: #2f8f6b;
   --color-group-signal: #b0591a;
+  --color-group-math: #8c6b2e;
 }
 
 html,

@@ -407,8 +407,10 @@ describe('the editor of a strategy', () => {
       graph: ReturnType<typeof fundingShort>;
     }[];
     expect(created!.name).toBe('funding-short');
+    // Saved with the node of the position and the wires of the orders and of the position (change add-position-node).
     expect(created!.graph.nodes).toEqual([
-      { id: 'enter', kind: 'enter', settings: { side: 'short' } },
+      { id: 'enter', kind: 'enter', inputs: { size: 100 }, settings: { side: 'short' } },
+      { id: 'position', kind: 'position' },
       { id: 'close-after', kind: 'close-after', inputs: { after: '4h' } },
       {
         id: 'funding-high',
@@ -416,7 +418,12 @@ describe('the editor of a strategy', () => {
         settings: { signal: fundingHighId, version: String(fundingHigh.latest) },
       },
     ]);
-    expect(created!.graph.wires).toEqual([{ from: 'funding-high.event', to: 'enter.when' }]);
+    expect(created!.graph.wires).toEqual([
+      { from: 'enter.order', to: 'position.orders' },
+      { from: 'position.position', to: 'close-after.position' },
+      { from: 'close-after.order', to: 'position.orders' },
+      { from: 'funding-high.event', to: 'enter.when' },
+    ]);
   });
 });
 
