@@ -375,6 +375,21 @@ describe('the page of a run', () => {
     expect(screen.queryByRole('region', { name: 'Наборы' })).toBeNull();
   });
 
+  it('opens a run that goes as the API sends it, without the fields that have no value yet', async () => {
+    const going = backtest({
+      id: 'r6',
+      state: 'running',
+      startedAt: '2026-11-21T00:10:01Z',
+      worker: 'Mac-1',
+    });
+    routes({ 'GET /api/backtests/r6': () => json(withoutNulls(going)) });
+    renderApp('/runs/r6');
+
+    expect(await screen.findByText('Поставлен')).toBeInTheDocument();
+    expect(screen.getByText('Закончен').parentElement).toHaveTextContent('—');
+    expect(screen.queryByText(/Invalid time value/)).toBeNull();
+  });
+
   it('says that a run waits, and leads from a run of the rest of history to its source', async () => {
     routes({
       'GET /api/backtests/r5': () =>
@@ -389,6 +404,21 @@ describe('the page of a run', () => {
     );
   });
 });
+
+/** A body as the API writes it: a field without a value is left out, not written as `null`. */
+function withoutNulls(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(withoutNulls);
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, field]) => field !== null)
+        .map(([name, field]) => [name, withoutNulls(field)]),
+    );
+  }
+  return value;
+}
 
 /** The pairs of set 4 of `doneSix`. */
 const pairsOfFour = {

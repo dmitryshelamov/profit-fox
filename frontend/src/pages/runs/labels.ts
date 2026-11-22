@@ -21,9 +21,12 @@ export function fixed(value: number | string | null | undefined, digits: number)
     : Number(value).toFixed(digits);
 }
 
-/** A moment of the API as «2026-11-20 08:07 UTC»; the app shows UTC everywhere. */
-export function utc(moment: string | null): string {
-  return moment === null
+/**
+ * A moment of the API as «2026-11-20 08:07 UTC»; the app shows UTC everywhere. The API leaves out a field without a
+ * value, so a moment a run has not reached yet comes as nothing at all.
+ */
+export function utc(moment: string | null | undefined): string {
+  return moment === null || moment === undefined
     ? '—'
     : `${new Date(moment).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
 }
