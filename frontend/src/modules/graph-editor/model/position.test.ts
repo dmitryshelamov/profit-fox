@@ -36,15 +36,61 @@ function fundingShortWithPosition(): Graph {
 
 describe('the orders of the position on the canvas', () => {
   // Scenario «Вторая заявка в позицию».
-  it('adds a second wire into the orders of the position', () => {
-    const document: GraphDocument = { graph: fundingShortWithPosition(), layout: {} };
+  it('adds a second wire into the orders of the position, and not a wire that is already there', () => {
+    const graph = fundingShortWithPosition();
+    const document: GraphDocument = {
+      graph: {
+        ...graph,
+        wires: graph.wires.filter((wire) => wire.from !== 'close-after.order'),
+      },
+      layout: {},
+    };
+    const intoOrders = (edited: GraphDocument) =>
+      edited.graph.wires.filter((wire) => wire.to === 'position.orders');
+    expect(intoOrders(document)).toEqual([{ from: 'enter.order', to: 'position.orders' }]);
 
     const added = connect(document, 'close-after.order', 'position.orders', strategyCatalog);
 
-    expect(added.graph.wires.filter((wire) => wire.to === 'position.orders')).toHaveLength(2);
+    expect(intoOrders(added)).toEqual([
+      { from: 'enter.order', to: 'position.orders' },
+      { from: 'close-after.order', to: 'position.orders' },
+    ]);
+    const again = connect(added, 'close-after.order', 'position.orders', strategyCatalog);
+    expect(intoOrders(again)).toHaveLength(2);
+  });
+
+  it('still replaces the wire of an input that takes one', () => {
+    const document: GraphDocument = { graph: fundingShortWithPosition(), layout: {} };
+
     const replaced = connect(document, 'enter.order', 'close-after.position', strategyCatalog);
+
     expect(replaced.graph.wires.filter((wire) => wire.to === 'close-after.position')).toEqual([
       { from: 'enter.order', to: 'close-after.position' },
+    ]);
+  });
+
+  // Change add-position-node, task 12.2: a wire and a value on one input is `WireAndValue`, which the canvas cannot fix.
+  it('drops a value written on the orders of the position when a wire comes', () => {
+    const graph = fundingShortWithPosition();
+    const document: GraphDocument = {
+      graph: {
+        ...graph,
+        nodes: graph.nodes.map((node) =>
+          node.id === 'position' ? { ...node, inputs: { orders: 'x' } } : node,
+        ),
+        wires: graph.wires.filter((wire) => wire.to !== 'position.orders'),
+      },
+      layout: {},
+    };
+
+    const first = connect(document, 'enter.order', 'position.orders', strategyCatalog);
+
+    expect(first.graph.nodes.find((node) => node.id === 'position')).toEqual({
+      id: 'position',
+      kind: 'position',
+    });
+    expect(first.graph.wires.filter((wire) => wire.to === 'position.orders')).toEqual([
+      { from: 'enter.order', to: 'position.orders' },
     ]);
   });
 

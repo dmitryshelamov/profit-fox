@@ -4,7 +4,7 @@ import type { GraphFlowNode } from '../model/flow';
 import { widthOf } from '../model/layout';
 import { kindOf, pinsOf } from '../model/pins';
 import { referenceOf, signalInfo } from '../model/signals';
-import type { Pin } from '../model/types';
+import { type Pin, wireOnly } from '../model/types';
 import { formatValue, parseValue } from '../model/values';
 import { useGraphEnvironment } from './GraphContext';
 import { groupFill, groupOf, pinLooks } from './looks';
@@ -128,7 +128,10 @@ export function GraphNodeView({ id, data, selected }: NodeProps<GraphFlowNode>) 
   );
 }
 
-/** An input pin: its handle, its name and, without a wire, the field of its value. An event takes no value. */
+/**
+ * An input pin: its handle, its name and, without a wire, the field of its value. An event, an order and the position
+ * come by a wire only and have no field.
+ */
 function Input({
   node,
   pin,
@@ -159,7 +162,7 @@ function Input({
       <span className="truncate" title={pin.name}>
         {pin.name}
       </span>
-      {!connected && pin.type !== 'event' && (
+      {!connected && !wireOnly(pin.type) && (
         <input
           aria-label={`Значение ${node}.${pin.name}`}
           className="nodrag h-[18px] w-16 shrink-0 rounded border border-node-line bg-canvas/60 px-1 font-mono text-[11px] text-text outline-none placeholder:text-faint focus:border-accent"

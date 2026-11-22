@@ -233,6 +233,53 @@ describe('the editor of a strategy', () => {
     expect(saveButton()).toBeDisabled();
   });
 
+  // Change add-position-node, task 12.2: an order and the position come by a wire only.
+  it('shows no value field on the canvas at an input of an order or of the position', async () => {
+    const graph = fundingShort();
+    routes({
+      'GET /api/strategies/funding-short': () =>
+        json(
+          savedFundingShort(1, {
+            ...graph,
+            nodes: [...graph.nodes, { id: 'position', kind: 'position' }],
+          }),
+        ),
+    });
+    renderApp('/strategies/funding-short');
+
+    const position = await findNode('Позиция', 'position');
+    const closeAfter = await findNode('Закрыть через', 'close-after');
+    // By the label, not by the role: React Flow hides a node while it measures it, and a hidden field has no role.
+    expect(within(closeAfter).getByLabelText('Значение close-after.after')).toHaveValue('4h');
+    expect(within(closeAfter).getByText('position')).toBeInTheDocument();
+    expect(within(closeAfter).queryByLabelText('Значение close-after.position')).toBeNull();
+    expect(within(position).getByText('orders')).toBeInTheDocument();
+    expect(within(position).queryByLabelText('Значение position.orders')).toBeNull();
+  });
+
+  // Spec strategy-constructor «Несколько проводов в позицию на холсте»: the card of the position lists its wires.
+  it('takes one wire away from the orders of the position by its «Убрать»', async () => {
+    routes();
+    renderApp('/strategies/new/abc');
+
+    const position = await selectNode('Позиция', 'position');
+    const wires = () =>
+      within(within(position).getByRole('list', { name: 'Провода orders' }))
+        .getAllByRole('listitem')
+        .map((item) => item.textContent);
+    expect(wires()).toEqual(['enter.orderУбрать', 'close-after.orderУбрать']);
+
+    await userEvent.click(within(position).getByRole('button', { name: 'Убрать enter.order' }));
+
+    expect(wires()).toEqual(['close-after.orderУбрать']);
+    // The removed order can be wired again, the other one is still wired.
+    expect(
+      within(within(position).getByRole('combobox', { name: 'Добавить orders' }))
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['добавить провод', 'enter.order']);
+  });
+
   // Scenario «Сигналы в палитре».
   it('offers the saved signals in the palette', async () => {
     routes({
