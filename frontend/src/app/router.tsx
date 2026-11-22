@@ -88,18 +88,35 @@ const strategyRoute = createRoute({
   },
 });
 
+/** The version a form of a run names by `?version=`; none for the latest. */
+const versionSearch = (search: Record<string, unknown>): { version?: number } => {
+  const version = Number(search.version);
+  return Number.isInteger(version) && version > 0 ? { version } : {};
+};
+
 /** The form of a run of a strategy, under the header; `?version=` names the version, the latest without it. */
 const runFormRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/strategies/$name/run',
-  validateSearch: (search: Record<string, unknown>): { version?: number } => {
-    const version = Number(search.version);
-    return Number.isInteger(version) && version > 0 ? { version } : {};
-  },
+  validateSearch: versionSearch,
   component: function RunFormRoute() {
     const { name } = runFormRoute.useParams();
     const { version } = runFormRoute.useSearch();
     return <RunFormPage name={name} version={version} />;
+  },
+});
+
+/**
+ * The form of a run of the strategy named `new` (task 12.8): without this route `/strategies/new/run` is the editor of a
+ * new draft whose id is `run`, since a written segment ranks above a parameter.
+ */
+const newNamedRunFormRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/strategies/new/run',
+  validateSearch: versionSearch,
+  component: function NewNamedRunFormRoute() {
+    const { version } = newNamedRunFormRoute.useSearch();
+    return <RunFormPage name="new" version={version} />;
   },
 });
 
@@ -133,6 +150,7 @@ const routeTree = rootRoute.addChildren([
     signalsRoute,
     strategiesRoute,
     runFormRoute,
+    newNamedRunFormRoute,
     runsRoute,
     runRoute,
     setRoute,

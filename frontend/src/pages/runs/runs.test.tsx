@@ -702,6 +702,18 @@ describe('the form of a run', () => {
     expect(await bodiesOf(requests, 'POST', '/api/backtests')).toHaveLength(0);
   });
 
+  // Task 12.8: the form of a strategy named `new` is not the editor of a new draft with the id `run`.
+  it('opens the form of a strategy named new', async () => {
+    routes({
+      'GET /api/strategies/new/versions/3': () => json(strategyVersion('idea', 'new')),
+    });
+    renderApp('/strategies/new/run?version=3');
+
+    const form = within(await screen.findByRole('form', { name: 'Запуск прогона' }));
+    expect(form.getByRole('heading', { name: 'Прогон new' })).toBeInTheDocument();
+    expect(form.getByText('версия 3')).toBeInTheDocument();
+  });
+
   // Scenario «Отказ остаётся в форме».
   it('keeps a refusal and the values in the form', async () => {
     routes({
