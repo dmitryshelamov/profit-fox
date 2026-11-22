@@ -83,6 +83,7 @@ export function DocumentTable<Line extends DocumentLine>({
   problem,
   action,
   empty,
+  tail,
 }: {
   readonly type: ListType<Line>;
   readonly title: string;
@@ -96,6 +97,8 @@ export function DocumentTable<Line extends DocumentLine>({
   readonly action: ReactNode;
   /** What stands in place of the table when nothing is saved. */
   readonly empty: ReactNode;
+  /** Rows after the documents that are not documents, as the built-in label of the signals. */
+  readonly tail?: ReactNode;
 }) {
   const queries = useQueryClient();
   const [search, setSearch] = useState('');
@@ -271,6 +274,7 @@ export function DocumentTable<Line extends DocumentLine>({
                 </Td>
               </Tr>
             ))}
+            {tail}
           </tbody>
         </Table>
       )}

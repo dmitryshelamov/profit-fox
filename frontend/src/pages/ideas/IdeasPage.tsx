@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
   getScannerState,
@@ -10,6 +10,8 @@ import {
   summarizeIdeas,
 } from '@/api/ideas';
 import { listStrategies } from '@/api/strategies';
+import { FilterRow } from '@/modules/filters/FilterRow';
+import { useChosenFilter } from '@/modules/filters/useChosenFilter';
 import { buttonLook } from '@/shared/ui/Button';
 import { Page, PageTitle } from '@/shared/ui/Page';
 import { PagedTable } from '@/shared/ui/PagedTable';
@@ -49,6 +51,14 @@ export function IdeasPage({
   const strategies = useQuery({ queryKey: ['strategies'], queryFn: listStrategies });
   const [openChoices, setOpenChoices] = useState<IdeaChoices>({});
   const [closedChoices, setClosedChoices] = useState<IdeaChoices>({ period: 7 });
+  const filter = useChosenFilter('ideas');
+  const [gone, setGone] = useState(false);
+  useEffect(() => {
+    if (gone) {
+      filter.choose(null);
+      setGone(false);
+    }
+  }, [gone, filter]);
   const open = Number(state.data?.open ?? 0);
   const closed = Number(state.data?.closed ?? 0);
   const enabled = (strategies.data ?? []).some((strategy) => strategy.ideas?.enabled === true);
@@ -94,8 +104,18 @@ export function IdeasPage({
             ]}
             onChange={(next) => onPlace(next, 1)}
           />
+          <FilterRow
+            place="ideas"
+            chosen={filter.chosen}
+            onChoose={(id) => {
+              filter.choose(id);
+              onPlace(tab, 1);
+            }}
+          />
           {tab === 'open' ? (
             <OpenIdeas
+              filter={filter.chosen}
+              onGone={() => setGone(true)}
               choices={openChoices}
               page={page}
               onChoices={(choices) => {
@@ -107,6 +127,8 @@ export function IdeasPage({
             />
           ) : (
             <Journal
+              filter={filter.chosen}
+              onGone={() => setGone(true)}
               choices={closedChoices}
               page={page}
               onChoices={(choices) => {
@@ -124,6 +146,8 @@ export function IdeasPage({
 }
 
 interface ListProps {
+  readonly filter: string | null;
+  readonly onGone: () => void;
   readonly choices: IdeaChoices;
   readonly page: number;
   readonly onChoices: (choices: IdeaChoices) => void;
@@ -131,14 +155,26 @@ interface ListProps {
   readonly onOpen: (idea: Idea) => void;
 }
 
-function OpenIdeas({ choices, page, onChoices, onPage, onOpen }: ListProps) {
+function OpenIdeas({ filter, onGone, choices, page, onChoices, onPage, onOpen }: ListProps) {
   const list = useListSettings('ideas-open', { field: 'moment', descending: true });
   const ideas = useQuery({
-    queryKey: ['ideas', 'open', list.sort, page, list.pageSize, choices],
-    queryFn: () => listIdeas('open', { sort: list.sort, page, pageSize: list.pageSize }, choices),
+    queryKey: ['ideas', 'open', list.sort, page, list.pageSize, choices, filter],
+    queryFn: () =>
+      listIdeas(
+        'open',
+        { sort: list.sort, page, pageSize: list.pageSize, filter: filter ?? undefined },
+        choices,
+      ),
     placeholderData: keepPreviousData,
     refetchInterval: ideasRefreshMs,
   });
+
+  const gone = ideas.data?.filterGone === true;
+  useEffect(() => {
+    if (gone) {
+      onGone();
+    }
+  }, [gone, onGone]);
 
   return (
     <>
@@ -184,25 +220,49 @@ function OpenIdeas({ choices, page, onChoices, onPage, onOpen }: ListProps) {
   );
 }
 
-function Journal({ choices, page, onChoices, onPage, onOpen }: ListProps) {
+function Journal({ filter, onGone, choices, page, onChoices, onPage, onOpen }: ListProps) {
   const list = useListSettings('ideas-journal', { field: 'exitTime', descending: true });
   const summaryList = useListSettings('ideas-summary', { field: 'ideas', descending: true });
   const [summaryPage, setSummaryPage] = useState(1);
   const ideas = useQuery({
-    queryKey: ['ideas', 'closed', list.sort, page, list.pageSize, choices],
-    queryFn: () => listIdeas('closed', { sort: list.sort, page, pageSize: list.pageSize }, choices),
+    queryKey: ['ideas', 'closed', list.sort, page, list.pageSize, choices, filter],
+    queryFn: () =>
+      listIdeas(
+        'closed',
+        { sort: list.sort, page, pageSize: list.pageSize, filter: filter ?? undefined },
+        choices,
+      ),
     placeholderData: keepPreviousData,
   });
   const summary = useQuery({
-    queryKey: ['ideas', 'summary', summaryList.sort, summaryPage, summaryList.pageSize, choices],
+    queryKey: [
+      'ideas',
+      'summary',
+      summaryList.sort,
+      summaryPage,
+      summaryList.pageSize,
+      choices,
+      filter,
+    ],
     queryFn: () =>
       summarizeIdeas(
-        { sort: summaryList.sort, page: summaryPage, pageSize: summaryList.pageSize },
+        {
+          sort: summaryList.sort,
+          page: summaryPage,
+          pageSize: summaryList.pageSize,
+          filter: filter ?? undefined,
+        },
         choices,
       ),
     placeholderData: keepPreviousData,
   });
   const problem = ideas.error ?? summary.error;
+  const gone = ideas.data?.filterGone === true;
+  useEffect(() => {
+    if (gone) {
+      onGone();
+    }
+  }, [gone, onGone]);
 
   return (
     <>

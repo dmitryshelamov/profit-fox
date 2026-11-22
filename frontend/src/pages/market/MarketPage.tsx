@@ -1,10 +1,12 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { ListRefused } from '@/api/lists';
 import { listMarketPairs, type MarketPair } from '@/api/market';
 import { listStrategies } from '@/api/strategies';
+import { FilterRow } from '@/modules/filters/FilterRow';
+import { useChosenFilter } from '@/modules/filters/useChosenFilter';
 import { timeframes } from '@/preview/preview';
 import { Page, PageTitle } from '@/shared/ui/Page';
 import { type PagedColumn, PagedTable } from '@/shared/ui/PagedTable';
@@ -90,13 +92,23 @@ export function MarketPage({
   const [timeframe, setTimeframe] = useState('');
   const [ideasOnly, setIdeasOnly] = useState(false);
   const choices = { search, strategy, timeframe, ideasOnly };
+  const filter = useChosenFilter('market');
+  const chosen = filter.chosen ?? undefined;
   const pairs = useQuery({
-    queryKey: ['market', list.sort, page, list.pageSize, choices],
-    queryFn: () => listMarketPairs({ sort: list.sort, page, pageSize: list.pageSize }, choices),
+    queryKey: ['market', list.sort, page, list.pageSize, choices, chosen],
+    queryFn: () =>
+      listMarketPairs({ sort: list.sort, page, pageSize: list.pageSize, filter: chosen }, choices),
     placeholderData: keepPreviousData,
     refetchInterval: marketRefreshMs,
   });
   const strategies = useQuery({ queryKey: ['strategies'], queryFn: listStrategies });
+  // A filter deleted elsewhere is dropped by the list: it is taken off here too (spec «Фильтр удалили в другой вкладке»).
+  const gone = pairs.data?.filterGone === true;
+  useEffect(() => {
+    if (gone) {
+      filter.choose(null);
+    }
+  }, [gone, filter]);
   const choose =
     <T,>(set: (value: T) => void) =>
     (value: T) => {
@@ -164,6 +176,14 @@ export function MarketPage({
             {pairs.data ? `${Number(pairs.data.total)} пар` : ''}
           </span>
         </div>
+        <FilterRow
+          place="market"
+          chosen={filter.chosen}
+          onChoose={(id) => {
+            filter.choose(id);
+            onPage(1);
+          }}
+        />
         {pairs.data?.updatedAt != null && Date.now() - Number(pairs.data.updatedAt) > staleMs && (
           <p
             role="alert"
