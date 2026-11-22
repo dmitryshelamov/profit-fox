@@ -87,7 +87,7 @@ internal static class BacktestRepositoryQueries
         """
         UPDATE backtests
         SET status = 'done', finished_at = now(), engine_version = @EngineVersion, data_hash = @DataHash,
-            read_seconds = @ReadSeconds, compute_seconds = @ComputeSeconds, reason = NULL
+            read_seconds = @ReadSeconds, compute_seconds = @ComputeSeconds, reason = NULL, pairs_done = @Pairs, pairs_total = @Pairs
         WHERE id = @RunId
         """;
 
@@ -222,7 +222,7 @@ internal static class BacktestRepositoryQueries
     {
         return new CommandDefinition(
             DoneSql,
-            new { assignment.RunId, outcome.EngineVersion, outcome.DataHash, outcome.ReadSeconds, outcome.ComputeSeconds },
+            new { assignment.RunId, outcome.EngineVersion, outcome.DataHash, outcome.ReadSeconds, outcome.ComputeSeconds, outcome.Pairs },
             transaction,
             cancellationToken: cancellationToken);
     }

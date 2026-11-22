@@ -42,7 +42,8 @@ public class StrategiesController(ISender sender) : ControllerBase
                 entry.Error,
                 [.. entry.Signals.Select(signal => new StrategySignalItem(signal.Name, signal.Version, signal.LatestVersion))],
                 entry.Exits,
-                entry.Kind is { } kind ? StrategyKinds.Name(kind) : null))
+                entry.Kind is { } kind ? StrategyKinds.Name(kind) : null,
+                entry.LastRun is { } last ? new StrategyLastRunResponse(last.Id, last.Status, last.Version) : null))
             .ToArray();
     }
 

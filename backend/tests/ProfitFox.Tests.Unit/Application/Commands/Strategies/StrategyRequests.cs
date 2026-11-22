@@ -10,6 +10,7 @@ using ProfitFox.Application.Queries.Strategies;
 using ProfitFox.Domain.Entities.Signals;
 using ProfitFox.Domain.ValueObjects.Signals;
 using ProfitFox.Tests.Shared.Generators.Domain.Entities.Signals;
+using ProfitFox.Tests.Unit.Application.Commands.Backtests;
 using ProfitFox.Tests.Unit.Application.Commands.Signals;
 
 namespace ProfitFox.Tests.Unit.Application.Commands.Strategies;
@@ -25,6 +26,8 @@ internal sealed class StrategyRequests
     public MemorySignalRepository SignalStore { get; } = new MemorySignalRepository();
 
     public MemoryStrategyRepository Store { get; } = new MemoryStrategyRepository();
+
+    public MemoryBacktestRepository Backtests { get; } = new MemoryBacktestRepository();
 
     /// <summary>
     ///     The signal requests over the same repositories.
@@ -67,7 +70,7 @@ internal sealed class StrategyRequests
 
     public Task<IReadOnlyList<StrategyEntryInternal>> List(CancellationToken cancellationToken)
     {
-        return new GetStrategiesQueryHandler(Store, SignalStore).Handle(new GetStrategiesQuery(), cancellationToken);
+        return new GetStrategiesQueryHandler(Store, SignalStore, Backtests).Handle(new GetStrategiesQuery(), cancellationToken);
     }
 
     public Task<StrategyCheckInternal> Check(JsonElement graph, CancellationToken cancellationToken)

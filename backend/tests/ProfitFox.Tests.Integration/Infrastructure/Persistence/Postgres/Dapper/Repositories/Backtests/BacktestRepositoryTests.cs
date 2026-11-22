@@ -204,7 +204,8 @@ public sealed class BacktestRepositoryTests
             EngineVersion: 2,
             DataHash: "hash",
             ReadSeconds: 12.5,
-            ComputeSeconds: 1.5);
+            ComputeSeconds: 1.5,
+            Pairs: 828);
     }
 
     private static SetSummary Numbers(double amount)
