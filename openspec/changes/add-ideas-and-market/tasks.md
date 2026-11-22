@@ -221,7 +221,7 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 ## 17. Сквозная проверка
 
-- [ ] 17.1 Сборка Release без предупреждений, все тесты бэкенда и фронтенда, `typecheck`, `lint`, `format:check`,
+- [x] 17.1 Сборка Release без предупреждений, все тесты бэкенда и фронтенда, `typecheck`, `lint`, `format:check`,
   `build`, `openspec validate add-ideas-and-market --strict`. Проверить: числа в «Базе», SHA-256 `EngineVersions.json`
   прежний.
 - [ ] 17.2 Вживую на dev-запуске с настоящим сервисом данных, окно 1440×900 — у основной сессии: включить
@@ -544,6 +544,14 @@ OpenSpec CLI 2.1.0.
 - **Группа 16, документы и развёртывание.** Сборка `Release`: 0 предупреждений; тесты бэкенда unit 597,
   интеграционные 259, все зелёные; тесты фронтенда 335 в 23 файлах, все зелёные; `typecheck`, `lint`, `format:check`,
   `build` зелёные. `bash deploy/deploy.test.sh` — `all passed`.
+
+- **17.1, сквозная проверка** (после группы 16, коммит `900519d`). Сборка `dotnet build ProfitFox.slnx --configuration
+  Release`: 0 предупреждений, 0 ошибок. Тесты бэкенда: unit 597, интеграционные 259 — все зелёные. Тесты фронтенда: 335
+  в 23 файлах — все зелёные; `typecheck`, `lint`, `format:check`, `build` зелёные. `openspec validate
+  add-ideas-and-market --strict` — `valid` (строка INFO про дельту `strategy-backtest`, как в 1.2). SHA-256
+  `Fixtures/EngineVersions.json` — прежний `1f7ae3ab13b0f59f7d325c6b91e455781cb9a396e15a8e18a5889f4616335884`;
+  `EngineVersion.Number = 3`; файлы защищённых тестов с базы `61b0584` не менялись. SHA-256 `/openapi/v1.json` — как в
+  11.7: API после группы 11 не менялся.
 
 ## Замеры
 
