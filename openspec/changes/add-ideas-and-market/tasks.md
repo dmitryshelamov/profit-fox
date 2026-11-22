@@ -71,18 +71,18 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 ## 5. Живые ленты и книга рынка
 
-- [ ] 5.1 Скопировать из сервиса данных `funding_rate_feed.proto` и `open_interest_feed.proto`; сверить
+- [x] 5.1 Скопировать из сервиса данных `funding_rate_feed.proto` и `open_interest_feed.proto`; сверить
   `candle_feed.proto` и `funding_payment_feed.proto` с его текущими. Проверить: сборка зелёная, а отличия прежних proto,
   если есть, записаны в «Открыто после применения».
-- [ ] 5.2 Поддельный сервис данных в тестах отдаёт `Subscribe` четырёх лент: догон по `since`, повтор свечи, обрыв,
+- [x] 5.2 Поддельный сервис данных в тестах отдаёт `Subscribe` четырёх лент: догон по `since`, повтор свечи, обрыв,
   `RESOURCE_EXHAUSTED`, отказ догона дальше 24 часов. Проверить тестом самого поддельного сервиса на каждый случай.
-- [ ] 5.3 Порт `IMarketFeed` и `GrpcMarketFeed`: фильтр по каталогу бессрочных USDT-пар, очередь чтения, повторная
+- [x] 5.3 Порт `IMarketFeed` и `GrpcMarketFeed`: фильтр по каталогу бессрочных USDT-пар, очередь чтения, повторная
   подписка с `since`, замена повторной свечи, сообщение о разрыве дольше 24 часов. Проверить тестами
   `GrpcMarketFeedTests`: сценарии spec `market-live-feed` «Живые ленты сервиса данных» и «Догон после разрыва».
-- [ ] 5.4 Порт `IRecentHistory` и `RestRecentHistory`: свечи таймфрейма, выплаты фандинга и точки OI пары через REST
+- [x] 5.4 Порт `IRecentHistory` и `RestRecentHistory`: свечи таймфрейма, выплаты фандинга и точки OI пары через REST
   сервиса данных, ответ `202` — «история загружается». Проверить тестами на поддельном REST: сценарии spec
   `market-live-feed` «История для прогрева».
-- [ ] 5.5 `MarketBook`: минуты за 24 часа, свеча таймфрейма из минут, момент закрытия свечи по часам и ленте, поздняя
+- [x] 5.5 `MarketBook`: минуты за 24 часа, свеча таймфрейма из минут, момент закрытия свечи по часам и ленте, поздняя
   минута, окна «час, четыре часа, сутки назад». Проверить тестами `MarketBookTests` с `FakeTimeProvider`: сценарии spec
   `market-live-feed` «Свеча таймфрейма из минут», «Момент закрытия свечи», «Поздняя минута» и `market-overview` «Снимок
   рынка».
@@ -294,6 +294,31 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   `MarketHistory`): вместе со свечами читается и её фандинг. Свеча названной пары без сделок считается отсутствующей,
   как своя свеча без сделок.
 
+- **5.1, proto без сверки.** Сервиса данных в облачной сессии нет, поэтому `funding_rate_feed.proto` и
+  `open_interest_feed.proto` написаны по образцу `candle_feed.proto` и `funding_payment_feed.proto` и решению 2 design.md,
+  а не скопированы: сервисы `FundingRateFeed.Subscribe` и `OpenInterestFeed.Subscribe`, запросы с `since`, сообщения
+  `FundingRateUpdate` (`instrument_id` 1, `time` 2, `funding_rate` 3) и `OpenInterestUpdate` (`instrument_id` 1,
+  `time` 2, `open_interest` 3 — монеты). **Основной сессии:** сверить оба файла с файлами сервиса и заменить их копией
+  (имена служб, сообщений, номера полей); сверить и прежние `candle_feed.proto`, `funding_payment_feed.proto` с их
+  текущими версиями — здесь не сверялись.
+- **5.3, порт живых лент.** `IMarketFeed.Subscribe(MarketSubscription)` отдаёт один поток событий четырёх лент:
+  `LiveMinute`, `LivePoint` (выплата, ставка, OI), `FeedGap` (дыра длиннее догона) и `MarketPairs` (набор пар, первым и
+  при каждой смене); типы — в `Application/Ports/MarketData/Feed`. Повторная подписка минут, ставок и OI — с последнего
+  полученного времени минус 5 минут, выплат — минус 2 часа (сервис шлёт выплаты часа не по порядку). Настройки клиента
+  — `MarketFeedSettings` (пауза перед повтором 1 с, каталог раз в час). Замена повторной свечи делается в `MarketBook`:
+  лента передаёт обе.
+- **5.4, REST недавней истории — угадан.** Формы запросов сервиса в design.md нет, выбраны: `GET
+  api/instruments/{id}/candles?interval=1h&to=<UTC>&limit=N` → `{ "loading": false, "candles": [{ "openTime", "open",
+  "high", "low", "close", "volume", "turnover", "buyVolume" }] }` (закрытые к `to` свечи, старые первыми); `GET
+  api/instruments/{id}/funding-payments?from=&to=` → `{ "payments": [{ "time", "fundingRate" }] }`; `GET
+  api/instruments/{id}/open-interest?interval=&to=&limit=` → `{ "points": [{ "time", "openInterest" }] }`; `202` или
+  `"loading": true` — история загружается. **Основной сессии:** сверить с REST сервиса данных и поправить
+  `RestRecentHistory` и поддельный REST (`Tests.Integration/MarketData/FakeRecentHistory.cs`).
+- **5.5, книга.** `MarketBook` (`Application/Services/Market`) держит минуты 25 часов (сутки и минута до окна суток),
+  выплаты 48 часов. Изменение — доля, не проценты: `0.01` = `+1 %`. Пара считается моложе окна, если у неё нет минуты,
+  открытой не позже начала окна; первые минуты после старта сканера изменение и оборот за 24 часа поэтому пусты.
+  Снимок пары — `Domain/ValueObjects/Market/MarketPair`.
+
 ## База
 
 Снято в облачной сессии применения на `61b0584` (ветка `feat/add-ideas-and-market`), .NET SDK 10.0.115, Node 22,
@@ -325,6 +350,11 @@ OpenSpec CLI 2.1.0.
   `PairCandleNodeTests` 6, `PairStepsTests` 2), интеграционные 212 (+5: `ExecuteBacktestTests` 1, `BacktestsTests` 1,
   `PreviewTests` 2, `NodesTests` 1), все зелёные; `EngineVersionTests` и защищённые тесты зелёные без правок. Тесты
   фронтенда: 273 в 18 файлах (+1), все зелёные; `typecheck`, `lint`, `format:check`, `build` зелёные.
+
+- **Группа 5, живые ленты и книга.** Сборка `Release`: 0 предупреждений. Тесты бэкенда: unit 535 (+15
+  `MarketBookTests`), интеграционные 228 (+16: `FakeLiveFeedTests` 7, `GrpcMarketFeedTests` 6, `RestRecentHistoryTests`
+  3), все зелёные. Фронтенд не менялся. Тестовый сервер ASP.NET не доносит до клиента статус потока, у которого были
+  только заголовки, поэтому тесты обрыва и `RESOURCE_EXHAUSTED` сначала шлют одно сообщение.
 
 ## Замеры
 

@@ -22,6 +22,47 @@ public sealed class FakeMarketData
     public StatusCode? Failure { get; set; }
 
     /// <summary>
+    ///     The live feeds (change add-ideas-and-market, task 5.2): minute candles, funding payments, funding rates and open
+    ///     interest, each with its stored items and its subscribers.
+    /// </summary>
+    public FakeLiveFeed<CandleUpdate> Minutes { get; } = new FakeLiveFeed<CandleUpdate>(candle => candle.OpenTime.ToDateTimeOffset());
+
+    public FakeLiveFeed<FundingPaymentUpdate> Payments { get; } = new FakeLiveFeed<FundingPaymentUpdate>(payment => payment.Time.ToDateTimeOffset());
+
+    public FakeLiveFeed<FundingRateUpdate> Rates { get; } = new FakeLiveFeed<FundingRateUpdate>(rate => rate.Time.ToDateTimeOffset());
+
+    public FakeLiveFeed<OpenInterestUpdate> OpenInterest { get; } = new FakeLiveFeed<OpenInterestUpdate>(point => point.Time.ToDateTimeOffset());
+
+    /// <summary>
+    ///     The catalog the service lists now: <see cref="MarketDataServer.Catalog" /> unless a test changes it.
+    /// </summary>
+    public string Catalog { get; set; } = MarketDataServer.Catalog;
+
+    /// <summary>
+    ///     The requests to the REST of recent history, as «candles btc 1h», «funding btc», «open-interest btc 1h».
+    /// </summary>
+    public List<string> RestRequests { get; } = [];
+
+    /// <summary>
+    ///     The ids of the instruments whose history the service is still loading: its REST answers <c>202</c> for them.
+    /// </summary>
+    public HashSet<string> Loading { get; } = [];
+
+    /// <summary>
+    ///     The clock of the live feeds, set on all four at once.
+    /// </summary>
+    public TimeProvider FeedTime
+    {
+        set
+        {
+            Minutes.Time = value;
+            Payments.Time = value;
+            Rates.Time = value;
+            OpenInterest.Time = value;
+        }
+    }
+
+    /// <summary>
     ///     The close of every candle of an instrument by its id, when it is not the usual one (change add-ideas-and-market):
     ///     a test changes the history of a pair with it.
     /// </summary>

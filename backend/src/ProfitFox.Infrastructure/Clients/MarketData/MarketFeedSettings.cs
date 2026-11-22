@@ -1,0 +1,26 @@
+namespace ProfitFox.Infrastructure.Clients.MarketData;
+
+/// <summary>
+///     How <see cref="GrpcMarketFeed" /> keeps its subscriptions (change add-ideas-and-market, design.md, decision 2): the
+///     pause before it subscribes again, how often it reads the catalog of pairs, how far back the service catches up and
+///     how far before the last item it got a new subscription starts.
+/// </summary>
+public sealed record MarketFeedSettings
+{
+    public TimeSpan RetryDelay { get; init; } = TimeSpan.FromSeconds(1);
+
+    public TimeSpan CatalogRefresh { get; init; } = TimeSpan.FromHours(1);
+
+    public TimeSpan CatchUp { get; init; } = TimeSpan.FromHours(24);
+
+    /// <summary>
+    ///     A new subscription of minutes, rates and open interest starts this long before the last item it got.
+    /// </summary>
+    public TimeSpan Overlap { get; init; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    ///     A new subscription of payments starts this long before the newest payment it got: the service tells the payments
+    ///     of one hour minutes apart and not in the order of their times.
+    /// </summary>
+    public TimeSpan PaymentOverlap { get; init; } = TimeSpan.FromHours(2);
+}

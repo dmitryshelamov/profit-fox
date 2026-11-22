@@ -12,6 +12,15 @@ namespace ProfitFox.Tests.Integration.MarketData;
 /// </summary>
 public sealed class FakeCandleFeed(FakeMarketData data) : CandleFeed.CandleFeedBase
 {
+    /// <summary>
+    ///     The live minutes (change add-ideas-and-market, task 5.2): every exchange's, from <c>since</c>, with the forming ones
+    ///     when asked.
+    /// </summary>
+    public override Task Subscribe(SubscribeRequest request, IServerStreamWriter<CandleUpdate> responseStream, ServerCallContext context)
+    {
+        return data.Minutes.Serve(request.Since?.ToDateTimeOffset(), request.Forming, responseStream, context);
+    }
+
     public override async Task History(CandleHistoryRequest request, IServerStreamWriter<CandleHistoryItem> responseStream, ServerCallContext context)
     {
         lock (data.CandleRequests)

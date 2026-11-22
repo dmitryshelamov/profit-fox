@@ -41,6 +41,8 @@ internal sealed class BenchTestApplication(MarketDataServer market, BenchStart? 
         {
             services.AddSingleton<IHistorySource>(new GrpcHistorySource(market.Channel));
             services.AddSingleton<IInstrumentCatalog>(new InstrumentCatalog(market.Http));
+            services.AddSingleton<IRecentHistory>(new RestRecentHistory(market.Http));
+            services.AddSingleton<IMarketFeed>(provider => new GrpcMarketFeed(market.Channel, new InstrumentCatalog(market.Http), provider.GetService<TimeProvider>() ?? TimeProvider.System, new MarketFeedSettings { RetryDelay = TimeSpan.FromMilliseconds(50) }));
             if (time is not null)
             {
                 market.Data.Time = time;

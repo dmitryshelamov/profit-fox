@@ -53,6 +53,8 @@ internal sealed class WorkerHost : IAsyncDisposable
         builder.Services.AddSingleton<IHistorySource>(new GrpcHistorySource(server.Channel));
         builder.Services.AddSingleton(Repeats.WithoutPauses);
         builder.Services.AddSingleton<IInstrumentCatalog>(new InstrumentCatalog(server.Http));
+        builder.Services.AddSingleton<IRecentHistory>(new RestRecentHistory(server.Http));
+        builder.Services.AddSingleton<IMarketFeed>(provider => new GrpcMarketFeed(server.Channel, new InstrumentCatalog(server.Http), provider.GetService<TimeProvider>() ?? TimeProvider.System, new MarketFeedSettings { RetryDelay = TimeSpan.FromMilliseconds(50) }));
         IHost host = builder.Build();
         await host.StartAsync();
         return new WorkerHost(host, name);

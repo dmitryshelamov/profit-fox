@@ -12,6 +12,14 @@ namespace ProfitFox.Tests.Integration.MarketData;
 /// </summary>
 public sealed class FakeFundingFeed(FakeMarketData data) : FundingPaymentFeed.FundingPaymentFeedBase
 {
+    /// <summary>
+    ///     The live payments (change add-ideas-and-market, task 5.2).
+    /// </summary>
+    public override Task Subscribe(SubscribeFundingPaymentRequest request, IServerStreamWriter<FundingPaymentUpdate> responseStream, ServerCallContext context)
+    {
+        return data.Payments.Serve(request.Since?.ToDateTimeOffset(), forming: false, responseStream, context);
+    }
+
     public override async Task History(
         FundingPaymentHistoryRequest request,
         IServerStreamWriter<FundingPaymentHistoryItem> responseStream,
