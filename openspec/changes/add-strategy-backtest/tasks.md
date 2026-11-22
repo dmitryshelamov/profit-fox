@@ -423,6 +423,15 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   Проверка однострочных `<summary>` из `ci.yml` пуста. `openspec validate add-strategy-backtest --strict` проходит на
   CLI 2.1.0. Поиск `hypothes` (без учёта регистра) и `2026-05-15` по `frontend/src` пуст.
 
+- **Группа 12, замечания проверки** (облачная сессия, 2026-11-22, .NET SDK 10.0.115, Node 22). Сборка `dotnet build
+  ProfitFox.slnx --configuration Release`: 0 предупреждений, 0 ошибок. Тесты бэкенда (`--configuration Release`): unit
+  480, интеграционные 187 (Postgres в Docker, `TESTCONTAINERS_RYUK_DISABLED=true`), все зелёные. Тесты фронтенда: 268 в
+  18 файлах, все зелёные; `typecheck`, `lint`, `format:check` и `build` зелёные (основной кусок 820 kB, замечание
+  прежнее). Проверка однострочных `<summary>` из `ci.yml` пуста. `openspec validate add-strategy-backtest --strict`
+  проходит на CLI 2.1.0. SHA-256 `/openapi/v1.json` (API ветки в `Development`) —
+  `ff59cbf7c1ed3f5f97358570273569b4b6443a11ea9d6247a78ee8b55454e4c7`, как в 8.5: контракт API не менялся, `schema.d.ts`
+  не пересобирался. SHA-256 `EngineVersions.json` — прежний, `EngineVersion.Number = 3`.
+
 ## Workflow follow-up
 
 - Коммиты, отправка ветки и PR — по слову владельца на каждый шаг.
