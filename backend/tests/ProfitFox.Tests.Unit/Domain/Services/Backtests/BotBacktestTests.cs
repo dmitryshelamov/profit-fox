@@ -1,6 +1,7 @@
 using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.Positions;
 using ProfitFox.Domain.ValueObjects.Strategies.Enums;
+using ProfitFox.Domain.ValueObjects.Trades.Enums;
 using ProfitFox.Tests.Unit.Domain.Services.Graph;
 
 using static ProfitFox.Tests.Unit.Domain.Services.Backtests.BacktestHistory;
@@ -60,6 +61,30 @@ public sealed class BotBacktestTests
         Assert.That(result.Rows, Is.Empty);
         Assert.That(result.Numbers.Differences, Is.Empty);
         Assert.That(result.Numbers.Difference(), Is.Null);
+    }
+
+    /// <summary>
+    ///     Task 12.3: a cycle that a hole in the minutes breaks is neither a trade nor open; it is without a trade on
+    ///     coverage, as an order of a category of ideas whose minutes have a hole.
+    /// </summary>
+    [Test]
+    public async Task A_cycle_broken_by_a_hole_after_the_entry_is_without_a_trade_on_coverage()
+    {
+        // The ladder buys at 01:00; the hole at 06:00 breaks that cycle.
+        var history = new BacktestHistory
+        {
+            End = Monday.AddDays(1),
+            Price = time => time >= Monday.AddDays(1).AddMinutes(-2) ? 102 : 100,
+            Hole = (Monday.AddHours(6), Monday.AddHours(7))
+        };
+
+        PairSetResult result = (await history.Run(StrategyKind.Bot, history.Plans(Graphs.Ladder, StrategyKind.Bot, [], Hour))).Single();
+
+        IReadOnlyList<CycleOutcome> cycles = result.Cycles!.Cycles;
+        Assert.That(cycles.Count(cycle => cycle.Status == TradeStatus.Coverage), Is.EqualTo(1));
+        int ordersOnCoverage = result.Cycles.Orders.Count(order => order.Exclusion == OrderExclusion.Coverage);
+        Assert.That(result.Numbers.Excluded.Coverage, Is.EqualTo(1 + ordersOnCoverage), "the broken cycle by its reason");
+        Assert.That(result.Numbers.Trades + result.Numbers.OpenCycles + 1, Is.EqualTo(cycles.Count), "every cycle is counted once");
     }
 
     private static BacktestHistory Day()

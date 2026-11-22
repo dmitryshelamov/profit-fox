@@ -50,12 +50,14 @@ public static class PairNumbers
 
     /// <summary>
     ///     A strategy for a bot: a trade is a closed cycle, its result the fraction of the largest money put in; a cycle open
-    ///     at the end of history is counted apart with its estimate; orders by their outcome. It has no random entries.
+    ///     at the end of history is counted apart with its estimate; a cycle left out, such as one a hole in the minutes broke,
+    ///     is without a trade by its reason (task 12.3); orders by their outcome. It has no random entries.
     /// </summary>
     public static SetNumbers Of(PositionResult result)
     {
         CycleOutcome[] closed = [.. result.Cycles.Where(cycle => cycle is { Open: false, Status: TradeStatus.Ok })];
         CycleOutcome[] open = [.. result.Cycles.Where(cycle => cycle.Open)];
+        CycleOutcome[] left = [.. result.Cycles.Where(cycle => cycle is { Open: false } && cycle.Status != TradeStatus.Ok)];
         OrderOutcome[] excluded = [.. result.Orders.Where(order => order.Result == OrderResult.Excluded)];
         return new SetNumbers
         {
@@ -66,10 +68,10 @@ public static class PairNumbers
             Amount = closed.Sum(cycle => cycle.NetAmount!.Value),
             Wins = closed.Count(cycle => cycle.Net > 0),
             Excluded = new Exclusions(
-                excluded.Count(order => order.Exclusion == OrderExclusion.Plan),
-                excluded.Count(order => order.Exclusion == OrderExclusion.Coverage),
-                excluded.Count(order => order.Exclusion == OrderExclusion.Funding),
-                excluded.Count(order => order.Exclusion == OrderExclusion.NoTrade),
+                excluded.Count(order => order.Exclusion == OrderExclusion.Plan) + left.Count(cycle => cycle.Status == TradeStatus.Plan),
+                excluded.Count(order => order.Exclusion == OrderExclusion.Coverage) + left.Count(cycle => cycle.Status == TradeStatus.Coverage),
+                excluded.Count(order => order.Exclusion == OrderExclusion.Funding) + left.Count(cycle => cycle.Status == TradeStatus.Funding),
+                excluded.Count(order => order.Exclusion == OrderExclusion.NoTrade) + left.Count(cycle => cycle.Status == TradeStatus.NoTrade),
                 excluded.Count(order => order.Exclusion == OrderExclusion.Period)),
             Skipped = result.Orders.Count(order => order.Result == OrderResult.Skipped),
             OpenCycles = open.Length,
