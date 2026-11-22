@@ -56,7 +56,7 @@ export function OrderList({
             <td className="px-4 font-mono text-xs">{order.node ?? '—'}</td>
             <td className="px-4">{sides[order.side] ?? order.side}</td>
             <td className="px-4 text-right font-mono text-xs">
-              {order.price === null ? '—' : priceText(Number(order.price))}
+              {order.price == null ? '—' : priceText(Number(order.price))}
             </td>
             <td className="px-4 text-xs">{outcomeOf(order, cycles, openers.has(order))}</td>
           </ListRow>

@@ -42,7 +42,7 @@ export function TradeList({
       <tbody>
         {cycles.map((shown) => {
           const { cycle, key } = shown;
-          const net = cycle.net === null ? null : Number(cycle.net);
+          const net = cycle.net == null ? null : Number(cycle.net);
           const tone = net !== null && net < 0 ? 'err' : 'ok';
           return (
             <ListRow

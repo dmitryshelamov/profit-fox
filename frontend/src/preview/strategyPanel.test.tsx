@@ -651,3 +651,56 @@ describe('the cycles of a ladder in the preview', () => {
     );
   });
 });
+
+/** An answer as the API writes it: a field without a value is left out, not written as null. */
+function asWritten<T>(value: T): T {
+  return JSON.parse(
+    JSON.stringify(value, (_key, field: unknown) => (field === null ? undefined : field)),
+  ) as T;
+}
+
+// Found by the live check of change add-position-node: the API leaves a null field out of its answer.
+describe('an answer of the preview without its empty fields', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  it('lists the trade of a plan, marks it and sums it', async () => {
+    await previewOrders(
+      [],
+      asWritten(withCycles([order(october, -0.0021), order(october + hour, null, 'skipped')])),
+    );
+
+    const result = within(screen.getByRole('region', { name: 'Предпросмотр' })).getByRole(
+      'status',
+      { name: 'Результат' },
+    );
+    expect(result).toHaveTextContent('Сделок 1');
+    expect(result).toHaveTextContent('Итог -0.21 %');
+    expect(screen.getByRole('table', { name: 'Сделки' })).toHaveTextContent('по сроку · 4h');
+    expect(drawn.markers).toHaveLength(2);
+
+    const orders = await ordersTable();
+    const skipped = within(orders).getByRole('row', { name: 'Заявка 2025-10-05 09:00' });
+    expect(skipped).toHaveTextContent('пропущена: позиция открыта');
+    expect(skipped).not.toHaveTextContent('NaN');
+  });
+
+  it('lists the cycles of a ladder with the open one', async () => {
+    await previewOrders([], asWritten(ladderAnswer()));
+
+    const table = screen.getByRole('table', { name: 'Сделки' });
+    expect(within(table).getByRole('row', { name: 'Сделка 2025-10-05 08:00' })).toHaveTextContent(
+      '+4.50 USDT',
+    );
+    const open = within(table).getByRole('row', { name: 'Сделка 2025-10-05 17:01' });
+    expect(open).toHaveTextContent('открыт');
+    expect(open).not.toHaveTextContent('NaN');
+    expect(
+      within(screen.getByRole('region', { name: 'Предпросмотр' })).getByRole('status', {
+        name: 'Результат',
+      }),
+    ).toHaveTextContent('Итог +1.50 % · +4.50 USDT');
+  });
+});

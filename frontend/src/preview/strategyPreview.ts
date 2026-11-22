@@ -11,10 +11,13 @@ export interface ShownCycle {
 /**
  * The cycles to show (spec strategy-constructor «Вкладки предпросмотра стратегии»): those not left out on a hole in the
  * history, each keyed by the moment of the order that opened it — or of its first fill when no order names it.
+ *
+ * The API leaves out a field without a value where the schema writes null, so every such field of an order and of a
+ * cycle is compared with `== null` here and in the lists.
  */
 export function cyclesOf(preview: Pick<StrategyPreview, 'orders' | 'cycles'>): ShownCycle[] {
   return preview.cycles.flatMap((cycle, index): ShownCycle[] => {
-    if (cycle.exclusion !== null) {
+    if (cycle.exclusion != null) {
       return [];
     }
 
@@ -97,7 +100,7 @@ export function openersOf(orders: readonly PreviewOrder[]): Set<PreviewOrder> {
   const seen = new Set<number>();
   return new Set(
     orders.filter((order) => {
-      if (order.outcome !== 'filled' || order.cycle === null || seen.has(Number(order.cycle))) {
+      if (order.outcome !== 'filled' || order.cycle == null || seen.has(Number(order.cycle))) {
         return false;
       }
 
@@ -117,14 +120,14 @@ export function outcomeOf(
   opened: boolean,
 ): string {
   if (order.outcome === 'filled') {
-    const cycle = order.cycle === null ? undefined : cycles[Number(order.cycle)];
+    const cycle = order.cycle == null ? undefined : cycles[Number(order.cycle)];
     if (cycle !== undefined && opened) {
-      return cycle.open || cycle.net === null
+      return cycle.open || cycle.net == null
         ? 'исполнена, цикл открыт'
         : `${reasons[cycle.exitReason ?? ''] ?? cycle.exitReason ?? '—'}, ${percent(Number(cycle.net))}`;
     }
 
-    return `исполнена${order.cycle === null ? '' : `, цикл ${Number(order.cycle) + 1}`}`;
+    return `исполнена${order.cycle == null ? '' : `, цикл ${Number(order.cycle) + 1}`}`;
   }
 
   if (order.outcome === 'skipped') {
@@ -159,7 +162,7 @@ export function priceText(price: number): string {
  * «Сумма результатов предпросмотра стратегии»): an open cycle is not in it.
  */
 export function totalOf(cycles: readonly ShownCycle[]): { net: number; amount: number } | null {
-  const closed = cycles.filter(({ cycle }) => !cycle.open && cycle.net !== null);
+  const closed = cycles.filter(({ cycle }) => !cycle.open && cycle.net != null);
   return closed.length === 0
     ? null
     : {
@@ -185,7 +188,7 @@ export function exitOf(cycle: PreviewCycle): string {
 
   const entry = cycle.fills[0];
   const exit = cycle.fills[cycle.fills.length - 1];
-  if (!entry || !exit || cycle.exitReason === null) {
+  if (!entry || !exit || cycle.exitReason == null) {
     return '—';
   }
 
