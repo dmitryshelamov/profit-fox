@@ -2,8 +2,8 @@ using System.CommandLine;
 using System.CommandLine.Help;
 
 using ProfitFox.Cli.Api;
-using ProfitFox.Cli.Commands.Hypotheses;
 using ProfitFox.Cli.Commands.Runs;
+using ProfitFox.Cli.Contracts.Backtests;
 
 namespace ProfitFox.Cli;
 
@@ -15,11 +15,9 @@ namespace ProfitFox.Cli;
 public static class CliApp
 {
     /// <summary>
-    ///     How often <c>--wait</c> asks the bench about the run.
+    ///     How often <c>--wait</c> asks the bench about the backtest.
     /// </summary>
     public static readonly TimeSpan DefaultPollInterval = TimeSpan.FromSeconds(5);
-
-    private static readonly string[] Periods = ["exploration", "holdout", "new-data"];
 
     /// <summary>
     ///     Runs one command.
@@ -28,7 +26,7 @@ public static class CliApp
     /// <param name="output">Where results and the help go.</param>
     /// <param name="error">Where refusals and mistakes go, with the help of a wrong command line.</param>
     /// <param name="http">The client to talk to the bench with; made from <c>--bench</c> or <c>Bench:Url</c> when null.</param>
-    /// <param name="pollInterval">How often <c>--wait</c> asks about the run; <see cref="DefaultPollInterval" /> when null.</param>
+    /// <param name="pollInterval">How often <c>--wait</c> asks about the backtest; <see cref="DefaultPollInterval" /> when null.</param>
     /// <param name="cancellation">Stops the command.</param>
     /// <returns>The exit code.</returns>
     public static async Task<int> Run(
@@ -53,14 +51,10 @@ public static class CliApp
             Recursive = true
         };
 
-        var root = new Command("bench", "The client of the hypothesis bench service.") { bench, new HelpOption { Recursive = true } };
-        root.Subcommands.Add(Run(parity: false, (hypothesis, version, period, wait, token) =>
-            new RunCommand(Client(), output, error, interval).Execute(hypothesis, version, period, wait, parity: false, token)));
-        root.Subcommands.Add(Run(parity: true, (hypothesis, version, _, wait, token) =>
-            new RunCommand(Client(), output, error, interval).Execute(hypothesis, version, "exploration", wait, parity: true, token)));
+        var root = new Command("bench", "The client of the bench service: backtests of saved strategies.") { bench, new HelpOption { Recursive = true } };
+        root.Subcommands.Add(Run((request, wait, token) => new RunCommand(Client(), output, error, interval).Execute(request, wait, token)));
         root.Subcommands.Add(Runs(token => new RunsCommand(Client(), output, error).Execute(token)));
         root.Subcommands.Add(Cancel((run, token) => new CancelCommand(Client(), output, error).Execute(run, token)));
-        root.Subcommands.Add(Hypotheses((file, token) => new AddHypothesisCommand(Client(), output, error).Execute(file, token)));
 
         ParseResult parse = root.Parse(args);
         if (parse.Errors.Count > 0)
@@ -98,12 +92,14 @@ public static class CliApp
     }
 
     /// <summary>
-    ///     <c>bench run</c> with a verdict, or <c>bench parity</c>, a blind run on exploration only.
+    ///     <c>bench run</c> (change add-strategy-backtest, design.md, decision 11): a strategy by name and, as wanted, its
+    ///     version, timeframes and pairs by commas, values of parameters as <c>name=v1,v2</c> as many times as there are
+    ///     parameters, and the start and the end of history. What the values mean is checked by the bench.
     /// </summary>
-    private static Command Run(bool parity, Func<string, int?, string, bool, CancellationToken, Task<int>> execute)
+    private static Command Run(Func<CreateBacktestDto, bool, CancellationToken, Task<int>> execute)
     {
-        var hypothesis = new Argument<string>("hypothesis") { Description = "The id of the hypothesis, e.g. H0001" };
-        var version = new Option<int?>("--version") { Description = "The version of the hypothesis, by default its latest", HelpName = "N" };
+        var strategy = new Argument<string>("strategy") { Description = "The name of the strategy, e.g. funding-short" };
+        var version = new Option<int?>("--version") { Description = "The version of the strategy, by default its latest", HelpName = "N" };
         version.Validators.Add(result =>
         {
             // A value that is not a number is refused by the parser itself; reading it here would throw.
@@ -112,38 +108,70 @@ public static class CliApp
                 result.AddError("--version wants a positive number.");
             }
         });
-        var period = new Option<string>("--period") { Description = "The period of the run", DefaultValueFactory = _ => "exploration" };
-        period.AcceptOnlyFromAmong(Periods);
-        var wait = new Option<bool>("--wait") { Description = "Follow the run to its end and print the verdict" };
+        var timeframe = new Option<string?>("--timeframe") { Description = "The timeframes by commas, of 1h, 4h and 1d; by default 4h", HelpName = "1h,4h" };
+        var parameter = new Option<string[]>("--param") { Description = "Values of a parameter, as name=v1,v2; once for each parameter", HelpName = "name=v1,v2" };
+        parameter.Validators.Add(result =>
+        {
+            foreach (string token in result.Tokens.Select(token => token.Value).Where(token => !Values(token, out _, out _)))
+            {
+                result.AddError($"--param wants name=v1,v2, not {token}.");
+            }
+        });
+        var from = new Option<string?>("--from") { Description = "The start of history, a date UTC such as 2025-01-01", HelpName = "date" };
+        var until = new Option<string?>("--until") { Description = "The end of history, not included; by default the start of today UTC", HelpName = "date" };
+        var pairs = new Option<string?>("--pairs") { Description = "The pairs by commas; by default every listed pair", HelpName = "A,B" };
+        var wait = new Option<bool>("--wait") { Description = "Follow the backtest to its end and print the table of its sets" };
 
-        Command command = parity
-            ? new Command("parity", "Queues a blind parity run of a hypothesis on exploration.") { hypothesis, version, wait }
-            : new Command("run", "Queues a run of a hypothesis with a verdict.") { hypothesis, version, period, wait };
+        var command = new Command("run", "Queues a backtest of a strategy.") { strategy, version, timeframe, parameter, from, until, pairs, wait };
         command.SetAction((result, token) =>
-            execute(result.GetRequiredValue(hypothesis), result.GetValue(version), result.GetValue(period) ?? "exploration", result.GetValue(wait), token));
+        {
+            Dictionary<string, string[]> values = [];
+            foreach (string text in result.GetValue(parameter) ?? [])
+            {
+                Values(text, out string name, out string[] list);
+                values[name] = list;
+            }
+
+            var request = new CreateBacktestDto(
+                result.GetRequiredValue(strategy),
+                result.GetValue(version),
+                values.Count == 0 ? null : values,
+                List(result.GetValue(timeframe)),
+                result.GetValue(from),
+                result.GetValue(until),
+                List(result.GetValue(pairs)));
+            return execute(request, result.GetValue(wait), token);
+        });
         return command;
+    }
+
+    // name=v1,v2: the name and its values, each value without its spaces.
+    private static bool Values(string text, out string name, out string[] values)
+    {
+        int equals = text.IndexOf('=', StringComparison.Ordinal);
+        name = equals > 0 ? text[..equals].Trim() : "";
+        values = equals > 0 ? List(text[(equals + 1)..]) ?? [] : [];
+        return name.Length > 0 && values.Length > 0;
+    }
+
+    private static string[]? List(string? text)
+    {
+        string[] items = text is null ? [] : [.. text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
+        return items.Length == 0 ? null : items;
     }
 
     private static Command Runs(Func<CancellationToken, Task<int>> execute)
     {
-        var command = new Command("runs", "Prints the runs that wait and go, then the last finished ones.");
+        var command = new Command("runs", "Prints the backtests that wait and go, then the last ones that ended.");
         command.SetAction((_, token) => execute(token));
         return command;
     }
 
     private static Command Cancel(Func<string, CancellationToken, Task<int>> execute)
     {
-        var run = new Argument<string>("run") { Description = "The id of the run" };
-        var command = new Command("cancel", "Takes a waiting run out of the queue or stops a run that goes.") { run };
+        var run = new Argument<string>("backtest") { Description = "The id of the backtest" };
+        var command = new Command("cancel", "Takes a waiting backtest out of the queue or stops one that goes.") { run };
         command.SetAction((result, token) => execute(result.GetRequiredValue(run), token));
         return command;
-    }
-
-    private static Command Hypotheses(Func<string, CancellationToken, Task<int>> execute)
-    {
-        var file = new Argument<string>("file") { Description = "The hypothesis.json to load" };
-        var add = new Command("add", "Loads a hypothesis or its new version from the text of a hypothesis.json.") { file };
-        add.SetAction((result, token) => execute(result.GetRequiredValue(file), token));
-        return new Command("hypotheses", "The hypotheses of the bench.") { add };
     }
 }

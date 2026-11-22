@@ -2,23 +2,19 @@ using System.Text.Json.Nodes;
 
 using ProfitFox.Domain.Services.Execution;
 using ProfitFox.Domain.Services.Graph;
-using ProfitFox.Domain.Services.Hypotheses;
 using ProfitFox.Domain.Services.Positions;
 using ProfitFox.Domain.Services.Strategies;
 using ProfitFox.Domain.ValueObjects.Execution;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
-using ProfitFox.Domain.ValueObjects.Hypotheses;
 using ProfitFox.Tests.Unit.Domain.Services.Execution;
 using ProfitFox.Tests.Unit.Domain.Services.Graph;
-using ProfitFox.Tests.Unit.Domain.Services.Hypotheses;
 
 namespace ProfitFox.Tests.Unit.Domain.Services.Strategies;
 
 /// <summary>
 ///     Change add-position-node, tasks 5.1 and 5.2: a strategy by plan (spec strategy-position «Стратегия по плану»), the
-///     size of the entry its run reads, a cycle outside the graph only for it («Открытие вне графа»), and the strategy of a
-///     hypothesis (spec hypothesis-bench «Гипотеза исполняется как стратегия»).
+///     size of the entry its run reads, and a cycle outside the graph only for it («Открытие вне графа»).
 /// </summary>
 public sealed class ByPlanTests
 {
@@ -121,20 +117,6 @@ public sealed class ByPlanTests
         var steps = PairSteps.Of(Read(Graphs.Ladder), TimeSpan.FromHours(4), "BTCUSDT", [], []);
 
         Assert.That(() => steps.At(History.Start), Throws.InvalidOperationException.With.Message.Contains("by plan"));
-    }
-
-    [Test]
-    public void The_strategy_of_H0001_has_the_position_its_hash_stays_and_it_is_by_plan()
-    {
-        Hypothesis hypothesis = HypothesisReader.Parse(HypothesisReaderTests.H0001Text);
-        GraphDefinition graph = hypothesis.Strategy.Graph;
-
-        Assert.That(hypothesis.Hash, Does.StartWith("5591d11a"), "the text and its hash do not change");
-        Assert.That(graph.Nodes.Select(node => node.Kind), Does.Contain("position").And.Contain("enter").And.Contain("close-after"));
-        Assert.That(graph.Nodes.Select(node => node.Kind), Has.None.AnyOf("stop-loss", "take-profit"));
-        Assert.That(graph.Nodes.Single(node => node.Kind == "enter").Inputs["size"], Is.EqualTo(GraphValue.FromNumber(100)));
-        Assert.That(StrategyGraph.ReadStrategy(StrategyGraph.Write(graph)).Errors, Is.Empty);
-        Assert.That(hypothesis.Strategy.ByPlan, Is.True);
     }
 
     private static TradingStrategy Read(string json)

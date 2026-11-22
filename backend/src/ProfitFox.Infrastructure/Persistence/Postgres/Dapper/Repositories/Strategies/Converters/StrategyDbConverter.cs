@@ -5,6 +5,7 @@ using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Signals;
 using ProfitFox.Domain.ValueObjects.Strategies;
+using ProfitFox.Domain.ValueObjects.Strategies.Enums;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Converters;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Strategies.Contracts;
 
@@ -46,7 +47,9 @@ internal static class StrategyDbConverter
     ///     The strategy of a row with the graph of its latest version, or the errors that stop it: its graph does not have the
     ///     form of a graph, or its layout is not one. The meaning of the graph is checked by the application, which knows the
     ///     saved signals. A graph saved before change add-position-node is read lifted (<see cref="StrategyUpgrade" />); the
-    ///     row is not rewritten, and the strategy says that it was raised.
+    ///     row is not rewritten, and the strategy says that it was raised. A row without a kind was saved before strategies
+    ///     had one: the strategy takes the kind of the lifted graph of its latest version (change add-strategy-backtest,
+    ///     design.md, decision 1; task 12.7), which a row of an older version brings beside its own.
     /// </summary>
     public static StrategyRead ToDomain(StrategyDb row)
     {
@@ -62,6 +65,19 @@ internal static class StrategyDbConverter
         }
 
         bool raised = StrategyUpgrade.IsFormer(stored);
-        return new StrategyRead(StrategyDocument.Restore(row.Id, row.Name, row.Description, StrategyUpgrade.Raise(stored), positions, row.Version, raised), []);
+        StrategyKind? kind = StrategyKinds.TryParse(row.Kind, out StrategyKind written) ? written : LatestKind(row.LatestGraph);
+        return new StrategyRead(StrategyDocument.Restore(row.Id, row.Name, row.Description, StrategyUpgrade.Raise(stored), positions, row.Version, raised, kind), []);
+    }
+
+    // The kind of the lifted graph of the latest version, or none to take the kind of the graph read.
+    private static StrategyKind? LatestKind(string? latest)
+    {
+        if (latest is null)
+        {
+            return null;
+        }
+
+        using var document = JsonDocument.Parse(latest);
+        return StrategyGraph.ReadForm(document.RootElement).Value is { } graph ? StrategyKindRules.Of(StrategyUpgrade.Raise(graph)) : null;
     }
 }

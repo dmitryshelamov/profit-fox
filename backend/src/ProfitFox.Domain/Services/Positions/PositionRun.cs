@@ -572,7 +572,7 @@ public sealed class PositionRun
         return new Exits(afterValid && stopValid && targetValid, stop, target, after);
     }
 
-    // A decimal of the graph goes through its text, as in EntryPlan, so it becomes the double of the plan of a hypothesis.
+    // A decimal of the graph goes through its text, as in EntryPlan, so it becomes the double its text gives.
     private (bool Valid, double? Value) Fraction(InputSource? source)
     {
         if (source is not { } input)

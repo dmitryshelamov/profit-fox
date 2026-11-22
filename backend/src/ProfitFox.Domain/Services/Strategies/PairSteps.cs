@@ -7,10 +7,9 @@ using ProfitFox.Domain.ValueObjects.MarketData;
 namespace ProfitFox.Domain.Services.Strategies;
 
 /// <summary>
-///     The steps of a strategy on one pair, as a run of the bench sees them (spec hypothesis-bench «Гипотеза исполняется
-///     как стратегия»): the executor gets the candles a signal gets (<see cref="PairCandles" />), so the orders of the
-///     strategy of a hypothesis come at the events of its signal. Every order is kept, in time order; a run takes those
-///     whose trade fits its period.
+///     The steps of a strategy on one pair, as a backtest sees them (spec strategy-backtest «Сделки набора»): the executor
+///     gets the candles a signal gets (<see cref="PairCandles" />), so the orders of a strategy come at the events of its
+///     signal. Every order is kept, in time order; a backtest takes those whose trade fits its history.
 /// </summary>
 public sealed class PairSteps
 {
@@ -51,6 +50,27 @@ public sealed class PairSteps
         }
 
         return new PairSteps(steps, executor.BeforeCandles(DateTimeOffset.UnixEpoch), strategy.ByPlan);
+    }
+
+    /// <summary>
+    ///     The longest time the steps in [<paramref name="from" />, <paramref name="to" />) give, with the step that holds at
+    ///     <paramref name="from" />: what a cycle opened in that part of time, by an order or outside the graph, may last.
+    ///     Zero when no step gives a time.
+    /// </summary>
+    public TimeSpan Longest(DateTimeOffset from, DateTimeOffset to)
+    {
+        int first = Array.BinarySearch(_moments, from);
+        first = first < 0 ? ~first : first;
+        TimeSpan longest = (first > 0 ? _steps[first - 1] : _beforeCandles).After ?? TimeSpan.Zero;
+        for (int index = first; index < _steps.Length && _moments[index] < to; index++)
+        {
+            if (_steps[index].After is { } after && after > longest)
+            {
+                longest = after;
+            }
+        }
+
+        return longest;
     }
 
     /// <summary>

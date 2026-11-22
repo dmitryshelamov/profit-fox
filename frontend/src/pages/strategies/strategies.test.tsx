@@ -1,14 +1,17 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+import { strategyDraftKey } from '@/modules/graph-editor/drafts/drafts';
 import { card, checked, findNode, saveButton, selectNode } from '@/test/editor';
 import { bodiesOf, fakeApi, json } from '@/test/fakeApi';
 import { renderApp } from '@/test/renderApp';
 import { baseRoutes, savedFundingHigh } from '@/test/routes';
+import { backtest } from '@/test/runs';
 import {
   fundingHigh,
   fundingHighId,
   fundingShort,
+  newStrategy,
   savedFundingShort,
   strategyRoutes,
 } from '@/test/strategies';
@@ -105,8 +108,8 @@ describe('the section «Стратегии»', () => {
       screen
         .getAllByRole('columnheader')
         .map((cell) => cell.textContent)
-        .slice(0, 5),
-    ).toEqual(['Имя', 'Описание', 'Версия', 'Сигналы', 'Выход']);
+        .slice(0, 7),
+    ).toEqual(['Имя', 'Описание', 'Версия', 'Вид', 'Сигналы', 'Выход', 'Последний прогон']);
     // The list only shows the newer version: nothing is written.
     expect(requests.every((request) => request.method === 'GET')).toBe(true);
   });
@@ -188,21 +191,175 @@ describe('the section «Стратегии»', () => {
     expect(requests.filter((request) => request.method === 'DELETE')).toHaveLength(1);
   });
 
-  // Scenario «Новая стратегия».
-  it('opens a new strategy of an enter and a close-after that is not in the list', async () => {
+  // Scenario «Новая стратегия»; spec strategy-constructor «Вид при создании стратегии».
+  it('asks for the kind and opens a new strategy of ideas of an enter and a close-after that is not in the list', async () => {
     const requests = routes();
     renderApp('/strategies');
 
     await userEvent.click(await screen.findByRole('button', { name: 'Новая стратегия' }));
+    const dialog = screen.getByRole('dialog', { name: 'Вид новой стратегии' });
+    expect(within(dialog).getByText(/случайным входом/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/лесенки/)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: /категория идей/ }));
 
     expect(await findNode('Вход', 'enter')).toBeInTheDocument();
     expect(await findNode('Закрыть через', 'close-after')).toBeInTheDocument();
+    expect(screen.getByLabelText('Вид')).toHaveTextContent('категория идей');
+    await checked();
     expect(
       requests.some(
         (request) =>
           request.method === 'POST' && new URL(request.url).pathname === '/api/strategies',
       ),
     ).toBe(false);
+    const checks = (await bodiesOf(requests, 'POST', '/api/strategies/validate')) as {
+      kind?: string;
+    }[];
+    expect(checks.at(-1)!.kind).toBe('idea');
+  });
+
+  // Scenario «Выбор вида».
+  it('opens a new strategy of a bot of the position alone, with its kind in the plaque and in the draft', async () => {
+    const requests = routes();
+    const { history } = renderApp('/strategies');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Новая стратегия' }));
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Вид новой стратегии' })).getByRole('button', {
+        name: /для бота/,
+      }),
+    );
+
+    expect(await findNode('Позиция', 'position')).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Вход enter' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Закрыть через close-after' })).toBeNull();
+    expect(screen.getByLabelText('Вид')).toHaveTextContent('для бота');
+    const draftId = history.location.pathname.split('/').at(-1)!;
+    expect(JSON.parse(localStorage.getItem(strategyDraftKey({ newId: draftId }))!).kind).toBe(
+      'bot',
+    );
+    expect(
+      requests
+        .filter((request) => new URL(request.url).pathname === '/api/nodes/strategy')
+        .map((request) => new URL(request.url).searchParams.get('kind')),
+    ).toEqual(['bot']);
+  });
+
+  // Scenario «Вид в строке списка».
+  it('says the kind of each strategy in its row', async () => {
+    routes({
+      'GET /api/strategies': () =>
+        json([
+          { ...listItem('funding-short'), kind: 'idea' },
+          { ...listItem('ladder'), kind: 'bot' },
+        ]),
+    });
+    renderApp('/strategies');
+
+    const funding = within(await screen.findByRole('row', { name: 'Стратегия funding-short' }));
+    expect(funding.getByText('идеи')).toBeInTheDocument();
+    const ladder = within(screen.getByRole('row', { name: 'Стратегия ladder' }));
+    expect(ladder.getByText('бот')).toBeInTheDocument();
+  });
+
+  // Scenario «Копия лесенки».
+  it('copies a strategy with its kind', async () => {
+    const requests = routes({
+      'GET /api/strategies': () => json([{ ...listItem('ladder'), kind: 'bot' }]),
+      'GET /api/strategies/ladder': () =>
+        json({ ...savedFundingShort(1), name: 'ladder', kind: 'bot' }),
+      'POST /api/strategies': async (request) =>
+        json({ ...(await request.json()), version: 1, signals: [] }, 201),
+    });
+    renderApp('/strategies');
+
+    const row = await screen.findByRole('row', { name: 'Стратегия ladder' });
+    await userEvent.click(within(row).getByRole('button', { name: 'Действия ladder' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Копировать' }));
+    const dialog = screen.getByRole('dialog', { name: 'Копировать стратегию ladder' });
+    const field = within(dialog).getByRole('textbox', { name: 'Имя копии' });
+    await userEvent.clear(field);
+    await userEvent.type(field, 'ladder-2');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Скопировать' }));
+
+    await waitFor(async () =>
+      expect(await bodiesOf(requests, 'POST', '/api/strategies')).toHaveLength(1),
+    );
+    const [copy] = (await bodiesOf(requests, 'POST', '/api/strategies')) as {
+      name: string;
+      kind: string;
+    }[];
+    expect(copy).toMatchObject({ name: 'ladder-2', kind: 'bot' });
+  });
+});
+
+/** A line of the list of strategies without signals, exits and runs. */
+function listItem(name: string, version = 1) {
+  return { name, description: null, version, error: null, signals: [], exits: [] };
+}
+
+describe('the kind of a strategy in the editor', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  // Scenario «Лимитная заявка в категории идей».
+  it('offers no market order, limit order and close of the position to a strategy of ideas', async () => {
+    const requests = routes({
+      'GET /api/strategies/funding-short': () => json(savedFundingShort(1)),
+    });
+    renderApp('/strategies/funding-short');
+    await findNode('Вход', 'enter');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Палитра узлов' }));
+
+    const position = within(screen.getByRole('group', { name: 'Позиция' }));
+    expect(position.getByRole('button', { name: 'Стоп' })).toBeInTheDocument();
+    for (const title of ['Рыночная заявка', 'Лимитная заявка', 'Закрыть позицию']) {
+      expect(position.queryByRole('button', { name: title })).toBeNull();
+    }
+    expect(screen.getByLabelText('Вид')).toHaveTextContent('категория идей');
+    expect(
+      requests
+        .filter((request) => new URL(request.url).pathname === '/api/nodes/strategy')
+        .map((request) => new URL(request.url).searchParams.get('kind')),
+    ).toEqual(['idea']);
+  });
+
+  it('offers the orders and the close of the position to a strategy of a bot', async () => {
+    routes();
+    renderApp(newStrategy('bot'));
+    await findNode('Позиция', 'position');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Палитра узлов' }));
+
+    const position = within(screen.getByRole('group', { name: 'Позиция' }));
+    for (const title of ['Рыночная заявка', 'Лимитная заявка', 'Закрыть позицию']) {
+      expect(position.getByRole('button', { name: title })).toBeInTheDocument();
+    }
+  });
+
+  it('saves a new strategy with its kind and a saved one with the kind it has', async () => {
+    const requests = routes({
+      'GET /api/strategies/funding-short': () => json(savedFundingShort(1)),
+      'PUT /api/strategies/funding-short': async (request) =>
+        json({ ...savedFundingShort(1), version: 2, graph: (await request.json()).graph }),
+    });
+    renderApp('/strategies/funding-short');
+    await findNode('Вход', 'enter');
+    const description = screen.getByRole('textbox', { name: 'Описание' });
+    await userEvent.type(description, 'шорт');
+    await waitFor(() => expect(saveButton()).toBeEnabled(), { timeout: 2000 });
+    await userEvent.click(saveButton());
+
+    await waitFor(async () =>
+      expect(await bodiesOf(requests, 'PUT', '/api/strategies/funding-short')).toHaveLength(1),
+    );
+    const [saved] = (await bodiesOf(requests, 'PUT', '/api/strategies/funding-short')) as {
+      kind: string;
+    }[];
+    expect(saved!.kind).toBe('idea');
   });
 });
 
@@ -560,6 +717,12 @@ describe('a strategy of a signal', () => {
     await waitFor(() => expect(history.location.pathname).toMatch(/^\/strategies\/new\/.+/));
     const node = await findNode('funding-high', 'funding-high');
     expect(within(node).getByText(/^версия: 2/)).toBeInTheDocument();
+    // Scenario «Стратегия из сигнала»: the draft is of ideas.
+    const draftId = history.location.pathname.split('/').at(-1)!;
+    expect(JSON.parse(localStorage.getItem(strategyDraftKey({ newId: draftId }))!).kind).toBe(
+      'idea',
+    );
+    expect(screen.getByLabelText('Вид')).toHaveTextContent('категория идей');
     expect(await findNode('Вход', 'enter')).toBeInTheDocument();
     expect(await findNode('Закрыть через', 'close-after')).toBeInTheDocument();
     const enter = await selectNode('Вход', 'enter');
@@ -594,5 +757,139 @@ describe('a strategy of a signal', () => {
 
     await waitFor(() => expect(history.location.pathname).toMatch(/^\/strategies\/new\/.+/));
     expect(await findNode('funding-high', 'funding-high')).toBeInTheDocument();
+  });
+});
+
+// Spec strategy-constructor «Кнопка «Прогнать»» and «Последний прогон стратегии».
+describe('the runs of a strategy', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  const version3 = () => ({ ...savedFundingShort(1), version: 3 });
+
+  // Scenario «Прогон из редактора».
+  it('opens the form of a run of the saved version from the editor', async () => {
+    routes({
+      'GET /api/strategies/funding-short': () => json(version3()),
+      'GET /api/strategies/funding-short/versions/3': () => json(version3()),
+    });
+    const { history } = renderApp('/strategies/funding-short');
+    await findNode('Вход', 'enter');
+    await checked();
+
+    const run = screen.getByRole('button', { name: 'Прогнать' });
+    await waitFor(() => expect(run).toBeEnabled());
+    await userEvent.click(run);
+
+    await waitFor(() => expect(history.location.pathname).toBe('/strategies/funding-short/run'));
+    expect(history.location.search).toBe('?version=3');
+    const form = within(await screen.findByRole('form', { name: 'Запуск прогона' }));
+    expect(form.getByRole('heading', { name: 'Прогон funding-short' })).toBeInTheDocument();
+    expect(form.getByText('версия 3')).toBeInTheDocument();
+  });
+
+  // Scenario «Несохранённые правки».
+  it('is not run with an edit that is not saved, and says why', async () => {
+    routes({ 'GET /api/strategies/funding-short': () => json(version3()) });
+    renderApp('/strategies/funding-short');
+    const closeAfter = await selectNode('Закрыть через', 'close-after');
+    await checked();
+    expect(screen.getByRole('button', { name: 'Прогнать' })).toBeEnabled();
+
+    const after = within(closeAfter).getByRole('textbox', { name: 'Значение after' });
+    await userEvent.clear(after);
+    await userEvent.type(after, '8h');
+    fireEvent.blur(after);
+
+    const run = screen.getByRole('button', { name: 'Прогнать' });
+    await waitFor(() => expect(run).toBeDisabled());
+    expect(run).toHaveAttribute('title', 'сначала сохраните стратегию');
+    expect(run).toHaveAccessibleDescription('сначала сохраните стратегию');
+  });
+
+  it('is not run before the first save', async () => {
+    routes();
+    renderApp(newStrategy('idea'));
+    await findNode('Вход', 'enter');
+
+    // Task 12.10: the name stays «Прогнать», the reason is its description.
+    const run = screen.getByRole('button', { name: 'Прогнать' });
+    expect(run).toBeDisabled();
+    expect(run).toHaveAccessibleName('Прогнать');
+    expect(run).toHaveAccessibleDescription('сначала сохраните стратегию');
+    expect(run).toHaveAttribute('title', 'сначала сохраните стратегию');
+  });
+
+  // Scenario «Прогон из списка».
+  it('opens the form of a run of the latest version from the menu of a row', async () => {
+    const ladder = { ...savedFundingShort(1), name: 'ladder', version: 2, kind: 'bot' };
+    routes({
+      'GET /api/strategies': () => json([{ ...listItem('ladder', 2), kind: 'bot' }]),
+      'GET /api/strategies/ladder/versions/2': () => json(ladder),
+    });
+    const { history } = renderApp('/strategies');
+
+    const row = await screen.findByRole('row', { name: 'Стратегия ladder' });
+    await userEvent.click(within(row).getByRole('button', { name: 'Действия ladder' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Прогнать' }));
+
+    await waitFor(() => expect(history.location.pathname).toBe('/strategies/ladder/run'));
+    expect(history.location.search).toBe('?version=2');
+    const form = within(await screen.findByRole('form', { name: 'Запуск прогона' }));
+    expect(form.getByRole('heading', { name: 'Прогон ladder' })).toBeInTheDocument();
+    expect(form.getByLabelText('Вид')).toHaveTextContent('для бота');
+  });
+
+  // Task 12.6, spec bench-ui «Одно состояние на трёх страницах»: the last run follows the queue the header asks for.
+  it('shows the last run going once the queue says it goes, while the page is open', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let state = 'queued';
+    routes({
+      'GET /api/strategies': () =>
+        json([{ ...listItem('funding-short', 3), lastRun: { id: 'b1', state, version: 3 } }]),
+      'GET /api/backtests': (request) =>
+        json(
+          new URL(request.url).searchParams.get('active') === 'true'
+            ? [backtest({ id: 'b1', state })]
+            : [],
+        ),
+    });
+    renderApp('/strategies');
+
+    const row = within(await screen.findByRole('row', { name: 'Стратегия funding-short' }));
+    expect(row.getByText('В очереди')).toBeInTheDocument();
+    state = 'running';
+    await act(() => vi.advanceTimersByTimeAsync(3100));
+
+    await waitFor(() => expect(row.getByText('Идёт')).toHaveAttribute('data-tone', 'run'));
+  });
+
+  // Scenarios «Законченный прогон», «Прогон в очереди важнее законченного» and «Стратегия без прогонов».
+  it('shows the last run in the row by its state and version, or that there was none', async () => {
+    routes({
+      'GET /api/strategies': () =>
+        json([
+          { ...listItem('funding-short', 3), lastRun: { id: 'b1', state: 'done', version: 3 } },
+          { ...listItem('ladder'), kind: 'bot' },
+          { ...listItem('price-drop', 2), lastRun: { id: 'b2', state: 'queued', version: 2 } },
+        ]),
+    });
+    renderApp('/strategies');
+
+    const funding = within(await screen.findByRole('row', { name: 'Стратегия funding-short' }));
+    expect(funding.getByText('Готов')).toHaveAttribute('data-tone', 'ok');
+    const link = funding.getByRole('link', { name: 'Прогон b1' });
+    expect(link).toHaveAttribute('href', '/runs/b1');
+    expect(within(link).getByText('v3')).toBeInTheDocument();
+
+    const drop = within(screen.getByRole('row', { name: 'Стратегия price-drop' }));
+    expect(drop.getByText('В очереди')).toHaveAttribute('data-tone', 'neutral');
+
+    const ladder = within(screen.getByRole('row', { name: 'Стратегия ladder' }));
+    expect(ladder.getByText('не запускалась')).toBeInTheDocument();
+    expect(ladder.queryByRole('link', { name: /^Прогон / })).toBeNull();
   });
 });

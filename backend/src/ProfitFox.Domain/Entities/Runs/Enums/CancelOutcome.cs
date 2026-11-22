@@ -6,12 +6,12 @@ namespace ProfitFox.Domain.Entities.Runs.Enums;
 public enum CancelOutcome
 {
     /// <summary>
-    ///     The run was waiting and is gone from the queue, with no trace in the ledger.
+    ///     The backtest was waiting and is gone from the queue, with no trace.
     /// </summary>
     Removed,
 
     /// <summary>
-    ///     The run is going; its Worker stops it at the next renewal and the ledger gets a <c>cancelled</c> line.
+    ///     The backtest is going; its Worker stops it at the next renewal and it ends <c>cancelled</c>.
     /// </summary>
     Requested,
 

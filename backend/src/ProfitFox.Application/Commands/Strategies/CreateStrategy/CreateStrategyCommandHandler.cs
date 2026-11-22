@@ -16,7 +16,7 @@ internal sealed class CreateStrategyCommandHandler(IStrategyRepository strategie
     public async Task<StrategyInternal> Handle(CreateStrategyCommand request, CancellationToken cancellationToken)
     {
         (StrategyDocument strategy, IReadOnlyList<SignalUseInternal> uses) =
-            await StrategyChecks.CheckedAsync(signals, request.Name, request.Description, request.Graph, request.Layout, cancellationToken);
+            await StrategyChecks.CheckedAsync(signals, request.Name, request.Description, request.Graph, request.Layout, request.Kind, cancellationToken);
         if (await strategies.ExistsAsync(request.Name, cancellationToken))
         {
             throw StrategyChecks.Taken(request.Name);

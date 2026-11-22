@@ -10,9 +10,10 @@ using ProfitFox.Application.Contracts.Strategies;
 using ProfitFox.Application.Queries.Strategies;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.ValueObjects.Signals;
+using ProfitFox.Domain.ValueObjects.Strategies;
+using ProfitFox.Domain.ValueObjects.Strategies.Enums;
 using ProfitFox.Presentation.Contracts.Errors;
 using ProfitFox.Presentation.Contracts.Errors.Converters;
-using ProfitFox.Presentation.Contracts.Signals;
 using ProfitFox.Presentation.Contracts.Strategies;
 using ProfitFox.Presentation.Contracts.Strategies.Converters;
 
@@ -21,7 +22,7 @@ namespace ProfitFox.Presentation.Controllers;
 /// <summary>
 ///     <c>/api/strategies</c> (spec strategy-constructor): the saved strategies and the check of a graph as a strategy
 ///     without history; the routes mirror those of the signals. A graph is saved only when it reads as a strategy with the
-///     saved signals it points at; a refused request leaves the strategies as they were.
+///     saved signals it points at and by the rules of its kind; a refused request leaves the strategies as they were.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
@@ -40,7 +41,9 @@ public class StrategiesController(ISender sender) : ControllerBase
                 entry.Version,
                 entry.Error,
                 [.. entry.Signals.Select(signal => new StrategySignalItem(signal.Name, signal.Version, signal.LatestVersion))],
-                entry.Exits))
+                entry.Exits,
+                entry.Kind is { } kind ? StrategyKinds.Name(kind) : null,
+                entry.LastRun is { } last ? new StrategyLastRunResponse(last.Id, last.Status, last.Version) : null))
             .ToArray();
     }
 
@@ -51,6 +54,18 @@ public class StrategiesController(ISender sender) : ControllerBase
     public async Task<ActionResult<StrategyResponse>> Get(string name, CancellationToken cancellation)
     {
         return await Answer(async () => StrategyResponses.Of(await sender.Send(new GetStrategyQuery(name), cancellation)));
+    }
+
+    /// <summary>
+    ///     The version <c>version</c> of the strategy: what the form of a backtest is of.
+    /// </summary>
+    [HttpGet("{name}/versions/{version:int}", Name = "GetStrategyVersion")]
+    [ProducesResponseType<StrategyResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<StrategyResponse>> GetVersion(string name, int version, CancellationToken cancellation)
+    {
+        return await Answer(async () => StrategyResponses.Of(await sender.Send(new GetStrategyVersionQuery(name, version), cancellation)));
     }
 
     [HttpPost(Name = "CreateStrategy")]
@@ -64,8 +79,13 @@ public class StrategiesController(ISender sender) : ControllerBase
             return MissingGraph();
         }
 
+        if (!Kind(request.Kind, out StrategyKind? kind))
+        {
+            return InvalidKind(request.Kind);
+        }
+
         ActionResult<StrategyResponse> answer = await Answer(async () =>
-            StrategyResponses.Of(await sender.Send(new CreateStrategyCommand(request.Name ?? "", request.Description, graph, request.Layout ?? NoLayout), cancellation)));
+            StrategyResponses.Of(await sender.Send(new CreateStrategyCommand(request.Name ?? "", request.Description, graph, request.Layout ?? NoLayout, kind), cancellation)));
         return answer.Value is { } created ? CreatedAtRoute("GetStrategy", new { name = created.Name }, created) : answer;
     }
 
@@ -80,8 +100,13 @@ public class StrategiesController(ISender sender) : ControllerBase
             return MissingGraph();
         }
 
+        if (!Kind(request.Kind, out StrategyKind? kind))
+        {
+            return InvalidKind(request.Kind);
+        }
+
         return await Answer(async () =>
-            StrategyResponses.Of(await sender.Send(new ReplaceStrategyCommand(name, request.Description, graph, request.Layout ?? NoLayout), cancellation)));
+            StrategyResponses.Of(await sender.Send(new ReplaceStrategyCommand(name, request.Description, graph, request.Layout ?? NoLayout, kind), cancellation)));
     }
 
     [HttpPost("{name}/rename", Name = "RenameStrategy")]
@@ -109,14 +134,25 @@ public class StrategiesController(ISender sender) : ControllerBase
 
     [HttpPost("validate", Name = "ValidateStrategyGraph")]
     [ProducesResponseType<StrategyValidationResponse>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<StrategyValidationResponse>> Validate(ValidateGraphRequest request, CancellationToken cancellation)
+    public async Task<ActionResult<StrategyValidationResponse>> Validate(ValidateStrategyGraphRequest request, CancellationToken cancellation)
     {
-        if (request.Graph is not { } graph)
+        List<RequestError> errors = [];
+        if (request.Graph is null)
         {
-            return new StrategyValidationResponse([new RequestError("MissingField", "the graph is required") { Field = "graph" }], []);
+            errors.Add(new RequestError("MissingField", "the graph is required") { Field = "graph" });
         }
 
-        StrategyCheckInternal check = await sender.Send(new CheckStrategyGraphQuery(graph), cancellation);
+        if (!Kind(request.Kind, out StrategyKind? kind))
+        {
+            errors.Add(RequestErrors.Of(StrategyKinds.Invalid(request.Kind)));
+        }
+
+        if (request.Graph is not { } graph || errors.Count > 0)
+        {
+            return new StrategyValidationResponse(errors, []);
+        }
+
+        StrategyCheckInternal check = await sender.Send(new CheckStrategyGraphQuery(graph, kind ?? StrategyKind.Bot), cancellation);
         return new StrategyValidationResponse([.. check.Errors.Select(RequestErrors.Of)], [.. check.Signals.Select(StrategyResponses.Of)]);
     }
 
@@ -145,6 +181,29 @@ public class StrategiesController(ISender sender) : ControllerBase
         return exception.Errors.Count > 0
             ? [.. exception.Errors.Select(RequestErrors.Of)]
             : [new RequestError("UnknownSignal", exception.Message)];
+    }
+
+    // The kind of a request: none, or one of bot and idea.
+    private static bool Kind(string? name, out StrategyKind? kind)
+    {
+        kind = null;
+        if (name is null)
+        {
+            return true;
+        }
+
+        if (!StrategyKinds.TryParse(name, out StrategyKind parsed))
+        {
+            return false;
+        }
+
+        kind = parsed;
+        return true;
+    }
+
+    private BadRequestObjectResult InvalidKind(string? name)
+    {
+        return BadRequest(new ErrorResponse([RequestErrors.Of(StrategyKinds.Invalid(name))]));
     }
 
     private BadRequestObjectResult MissingGraph()

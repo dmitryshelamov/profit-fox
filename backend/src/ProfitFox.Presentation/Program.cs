@@ -2,13 +2,12 @@ using System.Text.Json.Serialization;
 
 using ProfitFox.Infrastructure;
 using ProfitFox.Infrastructure.Persistence.Postgres.FluentMigrator;
-using ProfitFox.Presentation.Formatters;
 using ProfitFox.Presentation.HealthChecks;
 
 namespace ProfitFox.Presentation;
 
 /// <summary>
-///     The web API of the bench: the hypotheses, the queue of runs, the signal preview and the signal constructor for the page
+///     The web API of the bench: the signals and strategies, the queue of backtests and the previews for the page
 ///     of the frontend, and the frontend itself when it is built into <c>wwwroot</c>, over the database of the bench. At start
 ///     it migrates the database, which starts empty. History is read from the market-data service.
 /// </summary>
@@ -22,7 +21,7 @@ public class Program
 
         builder.Services.AddRouting(options => options.LowercaseUrls = true);
         builder.Services
-            .AddControllers(options => options.InputFormatters.Insert(0, new PlainTextInputFormatter()))
+            .AddControllers()
             .AddJsonOptions(options =>
             {
                 options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
@@ -37,7 +36,7 @@ public class Program
 
         WebApplication app = builder.Build();
 
-        // A new database stays empty, and hypotheses are added through the API. A failure stops the start.
+        // A new database stays empty, and signals and strategies are added through the API. A failure stops the start.
         app.Services.MigrateBench();
 
         if (app.Environment.IsDevelopment())

@@ -2,8 +2,9 @@ namespace ProfitFox.Application.Queries.Preview;
 
 /// <summary>
 ///     The history of the last few pairs and timeframes the preview read, in memory only (spec signal-preview «Повторный
-///     предпросмотр без чтения истории»). History of exploration does not change, so an entry never goes stale; the
-///     least recently used one goes when a new one comes. Requests for the same key share one read; a failed read is
+///     предпросмотр без чтения истории»). An entry is of a pair, a timeframe and an end of exploration: covered history does
+///     not change, so an entry never goes stale, and after midnight the new end makes a new entry (change
+///     add-strategy-backtest, design.md, decision 8). The least recently used one goes when a new one comes. Requests for the same key share one read; a failed read is
 ///     forgotten, so the next request reads again.
 /// </summary>
 public sealed class PreviewHistoryCache
@@ -11,7 +12,7 @@ public sealed class PreviewHistoryCache
     public const int DefaultCapacity = 5;
 
     private readonly int _capacity;
-    private readonly Dictionary<(string Instrument, TimeSpan Timeframe), LinkedListNode<Entry>> _entries = [];
+    private readonly Dictionary<(string Instrument, TimeSpan Timeframe, DateTimeOffset End), LinkedListNode<Entry>> _entries = [];
     private readonly LinkedList<Entry> _order = [];
     private readonly Lock _lock = new Lock();
 
@@ -27,12 +28,12 @@ public sealed class PreviewHistoryCache
     }
 
     /// <summary>
-    ///     The history of <paramref name="instrument" /> on <paramref name="timeframe" />: from memory, or from
-    ///     <paramref name="read" />, which runs to its end even when the caller that started it gives up.
+    ///     The history of <paramref name="instrument" /> on <paramref name="timeframe" /> up to <paramref name="end" />: from
+    ///     memory, or from <paramref name="read" />, which runs to its end even when the caller that started it gives up.
     /// </summary>
-    public Task<PreviewHistory> Get(string instrument, TimeSpan timeframe, Func<Task<PreviewHistory>> read, CancellationToken cancellation)
+    public Task<PreviewHistory> Get(string instrument, TimeSpan timeframe, DateTimeOffset end, Func<Task<PreviewHistory>> read, CancellationToken cancellation)
     {
-        (string instrument, TimeSpan timeframe) key = (instrument, timeframe);
+        (string instrument, TimeSpan timeframe, DateTimeOffset end) key = (instrument, timeframe, end);
         Task<PreviewHistory> history;
         lock (_lock)
         {
@@ -77,5 +78,5 @@ public sealed class PreviewHistoryCache
         }
     }
 
-    private sealed record Entry((string Instrument, TimeSpan Timeframe) Key, Task<PreviewHistory> History);
+    private sealed record Entry((string Instrument, TimeSpan Timeframe, DateTimeOffset End) Key, Task<PreviewHistory> History);
 }

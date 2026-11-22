@@ -51,6 +51,7 @@ internal sealed class WorkerHost : IAsyncDisposable
         });
         ProfitFox.Worker.Program.Configure(builder);
         builder.Services.AddSingleton<IHistorySource>(new GrpcHistorySource(server.Channel));
+        builder.Services.AddSingleton(Repeats.WithoutPauses);
         builder.Services.AddSingleton<IInstrumentCatalog>(new InstrumentCatalog(server.Http));
         IHost host = builder.Build();
         await host.StartAsync();

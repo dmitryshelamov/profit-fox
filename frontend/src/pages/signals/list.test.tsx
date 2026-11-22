@@ -67,10 +67,7 @@ describe('the section «Сигналы»', () => {
       'data-tone',
       'err',
     );
-    expect(screen.getByRole('link', { name: /H0001 funding-short-4h/ })).toHaveAttribute(
-      'href',
-      '/hypotheses/H0001',
-    );
+    expect(screen.queryByRole('region', { name: 'Гипотезы' })).toBeNull();
   });
 
   // Scenario «Удаление»; spec bench-ui «Меню строки», scenario «Отмена удаления».

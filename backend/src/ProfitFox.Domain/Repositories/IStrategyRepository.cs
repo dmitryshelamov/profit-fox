@@ -1,6 +1,7 @@
 using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.ValueObjects.Strategies;
+using ProfitFox.Domain.ValueObjects.Strategies.Enums;
 
 namespace ProfitFox.Domain.Repositories;
 
@@ -24,6 +25,12 @@ public interface IStrategyRepository
     Task<StrategyRead?> ReadAsync(string name, CancellationToken cancellationToken);
 
     /// <summary>
+    ///     The version <paramref name="version" /> of the saved strategy, or the errors that stop it from reading; null when
+    ///     there is no such strategy or no such version (change add-strategy-backtest, design.md, decision 9).
+    /// </summary>
+    Task<StrategyRead?> ReadVersionAsync(string name, int version, CancellationToken cancellationToken);
+
+    /// <summary>
     ///     Keeps a strategy that is not saved yet as its version 1, with the versions of signals its graph points at.
     /// </summary>
     /// <exception cref="StrategyLibraryException">
@@ -33,16 +40,20 @@ public interface IStrategyRepository
 
     /// <summary>
     ///     Keeps a saved strategy: a graph that differs from the latest version by content makes the next version, otherwise
-    ///     only the layout and the description change. Gives the strategy as kept.
+    ///     only the layout and the description change. Gives the strategy as kept. The kind is written with it: the kind of a
+    ///     saved strategy does not change.
     /// </summary>
-    /// <exception cref="StrategyLibraryException">There is no such strategy, or a signal its graph points at was deleted a moment ago.</exception>
+    /// <exception cref="StrategyLibraryException">
+    ///     There is no such strategy, its kind is another, or a signal its graph points at was deleted a moment ago.
+    /// </exception>
     Task<StrategyDocument> ReplaceAsync(StrategyDocument strategy, CancellationToken cancellationToken);
 
     /// <summary>
-    ///     Gives the strategy another name and keeps its versions.
+    ///     Gives the strategy another name and keeps its versions. A strategy saved before it had a kind gets
+    ///     <paramref name="kind" /> written; a written kind stays.
     /// </summary>
     /// <exception cref="StrategyLibraryException">There is no such strategy, or the new name is taken.</exception>
-    Task RenameAsync(string name, string to, CancellationToken cancellationToken);
+    Task RenameAsync(string name, string to, StrategyKind kind, CancellationToken cancellationToken);
 
     /// <summary>
     ///     Removes the strategy with its versions.

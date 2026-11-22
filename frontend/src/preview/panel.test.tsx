@@ -24,7 +24,7 @@ function previewOf(events: number[]) {
     })),
     coverage: [{ from: Date.UTC(2023, 10, 18), to: Date.UTC(2026, 4, 16) }],
     events: events.map((moment) => ({ moment })),
-    periodEnd: Date.UTC(2026, 4, 16),
+    periodEnd: Date.UTC(2026, 10, 22),
   };
 }
 
@@ -56,7 +56,7 @@ describe('the preview panel', () => {
 
     const panel = within(screen.getByRole('region', { name: 'Предпросмотр' }));
     expect(await panel.findByRole('button', { name: '2026-04-16 04:00' })).toBeInTheDocument();
-    expect(panel.getByText(/Разведка до 2026-05-15 включительно/)).toHaveTextContent(
+    expect(panel.getByText(/История до 2026-11-21 включительно/)).toHaveTextContent(
       'история пары с 2026-04-16',
     );
     const [body] = (await bodiesOf(requests, 'POST', '/api/preview')) as {

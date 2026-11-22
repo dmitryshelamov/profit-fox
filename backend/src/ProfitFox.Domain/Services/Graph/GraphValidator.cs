@@ -2,6 +2,7 @@ using ProfitFox.Domain.Services.Nodes;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
 using ProfitFox.Domain.ValueObjects.Nodes;
+using ProfitFox.Domain.ValueObjects.Strategies.Enums;
 
 namespace ProfitFox.Domain.Services.Graph;
 
@@ -83,6 +84,23 @@ internal static class GraphValidator
     ///     add-strategy-constructor, design.md, decision 2).
     /// </summary>
     public static List<GraphError> ValidateStrategy(GraphDefinition graph, SignalSet signals)
+    {
+        return ValidateStrategy(graph, signals, StrategyKind.Bot);
+    }
+
+    /// <summary>
+    ///     A strategy of <paramref name="kind" /> (spec strategy-graph «Вид стратегии»): the checks of a strategy, then
+    ///     the rules of its kind (<see cref="StrategyKindRules" />), each broken rule an error of its own.
+    /// </summary>
+    public static List<GraphError> ValidateStrategy(GraphDefinition graph, SignalSet signals, StrategyKind kind)
+    {
+        List<GraphError> errors = ValidateAnyStrategy(graph, signals);
+        errors.AddRange(StrategyKindRules.Check(graph, kind));
+        return errors;
+    }
+
+    // The checks every strategy passes, whatever its kind.
+    private static List<GraphError> ValidateAnyStrategy(GraphDefinition graph, SignalSet signals)
     {
         List<GraphError> errors = Validate(graph, signals);
 
@@ -181,7 +199,10 @@ internal static class GraphValidator
         return kind == NodeCatalog.Position && pin == NodeCatalog.Orders;
     }
 
-    private static void CheckParameters(GraphDefinition graph, List<GraphError> errors)
+    /// <summary>
+    ///     The checks of the parameters of a graph only: names, types, bounds and the values within them.
+    /// </summary>
+    public static void CheckParameters(GraphDefinition graph, List<GraphError> errors)
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
 

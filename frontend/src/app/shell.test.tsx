@@ -5,29 +5,22 @@ import { openFundingHigh } from '@/test/editor';
 import { fakeApi, json } from '@/test/fakeApi';
 import { renderApp } from '@/test/renderApp';
 import { baseRoutes } from '@/test/routes';
+import { backtest } from '@/test/runs';
 
-const run = {
-  hypothesis: 'H0001',
-  version: 1,
-  period: 'exploration',
-  kind: 'verdict',
-  queuedAt: '2026-11-21T00:10:00Z',
-  startedAt: null,
-  finishedAt: null,
-  worker: null,
-  pairsDone: 0,
-  pairsTotal: null,
-  lostLeases: 0,
-  cancelRequested: false,
-  result: null,
-};
-const going = { ...run, id: 'r1', state: 'running', worker: 'soyo-02', pairsDone: 3 };
-const waiting = { ...run, id: 'r2', state: 'queued', kind: 'parity' };
+const going = backtest({
+  id: 'r1',
+  state: 'running',
+  startedAt: '2026-11-21T00:11:00Z',
+  worker: 'soyo-02',
+  pairsDone: 3,
+  pairsTotal: 828,
+});
+const waiting = backtest({ id: 'r2' });
 
 const activeRequests = (requests: readonly Request[]) =>
   requests.filter((request) => {
     const url = new URL(request.url);
-    return url.pathname === '/api/runs' && url.searchParams.get('active') === 'true';
+    return url.pathname === '/api/backtests' && url.searchParams.get('active') === 'true';
   });
 
 // Spec bench-ui «Общая шапка».
@@ -37,8 +30,8 @@ describe('the header', () => {
   // Scenario «Текущий раздел».
   it('has the three sections and marks «Прогоны» as current on the page of a run', async () => {
     fakeApi({
-      'GET /api/runs': () => json([]),
-      'GET /api/runs/r5': () => json({ ...going, id: 'r5' }),
+      'GET /api/backtests': () => json([]),
+      'GET /api/backtests/r5': () => json({ ...going, id: 'r5' }),
     });
     renderApp('/runs/r5');
 
@@ -66,7 +59,7 @@ describe('the header', () => {
     fakeApi({
       ...baseRoutes(),
       'GET /api/strategies': () => json([]),
-      'GET /api/runs': () => json([]),
+      'GET /api/backtests': () => json([]),
     });
     renderApp(path);
 
@@ -98,7 +91,7 @@ describe('the state of the queue in the header', () => {
 
   // Scenario «Идёт и ждёт».
   it('says how many runs go and wait, and opens «Прогоны» by a click on these words', async () => {
-    fakeApi({ ...baseRoutes(), 'GET /api/runs': () => json([going, waiting]) });
+    fakeApi({ ...baseRoutes(), 'GET /api/backtests': () => json([going, waiting]) });
     const { history } = renderApp('/signals');
 
     const state = await screen.findByRole('link', { name: 'Идёт 1 · ждёт 1' });
@@ -115,7 +108,7 @@ describe('the state of the queue in the header', () => {
     [[going], 'Идёт 1'],
     [[waiting, { ...waiting, id: 'r3' }], 'Ждёт 2'],
   ])('names only what there is', async (runs, words) => {
-    fakeApi({ ...baseRoutes(), 'GET /api/runs': () => json(runs) });
+    fakeApi({ ...baseRoutes(), 'GET /api/backtests': () => json(runs) });
     renderApp('/signals');
 
     expect(await screen.findByRole('link', { name: words })).toBeInTheDocument();
@@ -123,7 +116,7 @@ describe('the state of the queue in the header', () => {
 
   // Scenario «Очередь пуста».
   it('says that the queue is empty', async () => {
-    fakeApi({ ...baseRoutes(), 'GET /api/runs': () => json([]) });
+    fakeApi({ ...baseRoutes(), 'GET /api/backtests': () => json([]) });
     renderApp('/signals');
 
     expect(await screen.findByRole('link', { name: 'Очередь пуста' })).toHaveAttribute(
@@ -136,7 +129,7 @@ describe('the state of the queue in the header', () => {
   it('says that the bench does not answer instead of the numbers', async () => {
     fakeApi({
       ...baseRoutes(),
-      'GET /api/runs': () => json({ status: 500, title: 'the database is down' }, 500),
+      'GET /api/backtests': () => json({ status: 500, title: 'the database is down' }, 500),
     });
     renderApp('/signals');
 
@@ -147,20 +140,20 @@ describe('the state of the queue in the header', () => {
 
   it('asks for the queue once on the page «Прогоны», for the header and the list together', async () => {
     const requests = fakeApi({
-      'GET /api/runs': (request) =>
+      'GET /api/backtests': (request) =>
         json(new URL(request.url).searchParams.get('active') === 'true' ? [going, waiting] : []),
     });
     renderApp('/runs');
 
     await screen.findByRole('link', { name: 'Идёт 1 · ждёт 1' });
-    await screen.findByRole('listitem', { name: 'Прогон H0001 r1' });
+    await screen.findByRole('listitem', { name: 'Прогон funding-short r1' });
     expect(activeRequests(requests)).toHaveLength(1);
   });
 
   it('follows the queue without a reload: every 3 s while runs are there, every 30 s when it is empty', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     let runs: unknown[] = [going];
-    const requests = fakeApi({ ...baseRoutes(), 'GET /api/runs': () => json(runs) });
+    const requests = fakeApi({ ...baseRoutes(), 'GET /api/backtests': () => json(runs) });
     renderApp('/signals');
     await screen.findByRole('link', { name: 'Идёт 1' });
 

@@ -1,3 +1,5 @@
+import { type StrategyKind, strategyRulesOf } from '@/modules/graph-editor/document';
+import { strategyDraftKey, writeDraft } from '@/modules/graph-editor/drafts/drafts';
 import type { NodeKind } from '@/modules/graph-editor/model/types';
 
 import { type FakeRoute, json } from './fakeApi';
@@ -6,6 +8,27 @@ import strategyCatalogFile from './strategyCatalog.fixture.json';
 
 /** The node catalog of a strategy as the bench API serves it (`GET /api/nodes/strategy`); the JSON leaves out nulls. */
 export const strategyCatalog = strategyCatalogFile as unknown as NodeKind[];
+
+/** The nodes a strategy of ideas cannot have (spec strategy-graph «Вид стратегии»). */
+export const notOfIdeas = ['market-order', 'limit-order', 'close-position'];
+
+/** The catalog of a strategy of a kind, as `GET /api/nodes/strategy?kind=` gives it. */
+export function catalogOf(kind: string | null): NodeKind[] {
+  return kind === 'idea'
+    ? strategyCatalog.filter((node) => !notOfIdeas.includes(node.kind))
+    : strategyCatalog;
+}
+
+/** Writes the draft of a new strategy of a kind, as the dialog of «Новая стратегия» does, and gives its path. */
+export function newStrategy(kind: StrategyKind, draftId = 'abc'): string {
+  writeDraft(strategyDraftKey({ newId: draftId }), {
+    description: '',
+    graph: strategyRulesOf(kind).start(),
+    layout: {},
+    kind,
+  });
+  return `/strategies/new/${draftId}`;
+}
 
 /** The id of the saved signal `funding-high`. */
 export const fundingHighId = '0b6f8d4e-3c2a-4f51-9d7e-2a1b3c4d5e6f';
@@ -132,7 +155,8 @@ export function strategyRoutes(
   signals: readonly TestSignal[] = [fundingHigh],
 ): Record<string, FakeRoute> {
   return {
-    'GET /api/nodes/strategy': () => json(strategyCatalog),
+    'GET /api/nodes/strategy': (request) =>
+      json(catalogOf(new URL(request.url).searchParams.get('kind'))),
     'GET /api/strategies': () => json([]),
     'POST /api/strategies/validate': checkStrategyLikeServer(signals),
     'GET /api/signals': () =>
@@ -191,5 +215,6 @@ export function savedFundingShort(
     layout: {},
     signals: usesOf(graph.nodes, [fundingHigh]),
     raised: false,
+    kind: 'idea',
   };
 }

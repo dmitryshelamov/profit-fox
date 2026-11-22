@@ -1,0 +1,83 @@
+{
+  "formatVersion": 1,
+  "parameters": [
+    {
+      "name": "threshold",
+      "type": "number",
+      "value": 0.0005
+    }
+  ],
+  "outputs": [],
+  "nodes": [
+    {
+      "id": "p",
+      "kind": "parameters"
+    },
+    {
+      "id": "rate",
+      "kind": "funding-rate"
+    },
+    {
+      "id": "high",
+      "kind": "compare",
+      "settings": {
+        "operation": "ge"
+      }
+    },
+    {
+      "id": "first",
+      "kind": "first-time"
+    },
+    {
+      "id": "enter",
+      "kind": "enter",
+      "settings": {
+        "side": "short"
+      },
+      "inputs": {
+        "size": 100
+      }
+    },
+    {
+      "id": "position",
+      "kind": "position"
+    },
+    {
+      "id": "close-after",
+      "kind": "close-after",
+      "inputs": {
+        "after": "4h"
+      }
+    }
+  ],
+  "wires": [
+    {
+      "from": "rate.value",
+      "to": "high.a"
+    },
+    {
+      "from": "p.threshold",
+      "to": "high.b"
+    },
+    {
+      "from": "high.result",
+      "to": "first.value"
+    },
+    {
+      "from": "first.event",
+      "to": "enter.when"
+    },
+    {
+      "from": "enter.order",
+      "to": "position.orders"
+    },
+    {
+      "from": "position.position",
+      "to": "close-after.position"
+    },
+    {
+      "from": "close-after.order",
+      "to": "position.orders"
+    }
+  ]
+}

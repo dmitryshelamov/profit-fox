@@ -9,7 +9,7 @@ using ProfitFox.Application.Contracts.Signals;
 using ProfitFox.Application.Queries.Signals;
 using ProfitFox.Domain.ValueObjects.Signals;
 using ProfitFox.Tests.Unit.Application.Commands.Strategies;
-using ProfitFox.Tests.Unit.Domain.Services.Hypotheses;
+using ProfitFox.Tests.Unit.Domain.Services.Graph;
 
 namespace ProfitFox.Tests.Unit.Application.Commands.Signals;
 
@@ -65,7 +65,7 @@ internal sealed class SignalRequests
 
     public static JsonNode H0001GraphNode()
     {
-        return JsonNode.Parse(HypothesisReaderTests.H0001Text)!["signal"]!.DeepClone();
+        return JsonNode.Parse(Graphs.H0001)!;
     }
 
     public static JsonElement H0001Graph()

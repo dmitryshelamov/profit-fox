@@ -104,13 +104,28 @@ public sealed class GrpcHistorySource(GrpcChannel channel) : IHistorySource
         {
             await read();
         }
-        catch (RpcException exception) when (exception.StatusCode is StatusCode.Unavailable or StatusCode.DeadlineExceeded or StatusCode.Internal)
+        // Any answer of the service but a cancelled call is a failure of the service: a refusal of the window
+        // (InvalidArgument) as well as an outage (task 12.1). An outage, a deadline, an internal error and a broken stream
+        // are a read the service dropped, which a backtest repeats (task 12.12); a refusal is not.
+        catch (RpcException exception) when (exception.StatusCode is not StatusCode.Cancelled)
         {
-            throw new HistoryUnavailableException($"The market-data service did not give the history: {exception.Status.Detail}", exception);
+            throw new HistoryUnavailableException(
+                $"The market-data service did not give the history: {exception.Status.Detail}",
+                exception,
+                dropped: Dropped(exception.StatusCode));
         }
         catch (HttpRequestException exception)
         {
-            throw new HistoryUnavailableException("The market-data service did not answer.", exception);
+            throw new HistoryUnavailableException("The market-data service did not answer.", exception, dropped: true);
         }
+        catch (IOException exception)
+        {
+            throw new HistoryUnavailableException($"The market-data service broke the stream: {exception.Message}", exception, dropped: true);
+        }
+    }
+
+    private static bool Dropped(StatusCode code)
+    {
+        return code is StatusCode.Unavailable or StatusCode.DeadlineExceeded or StatusCode.Internal;
     }
 }

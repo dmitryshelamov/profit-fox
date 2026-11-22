@@ -3,33 +3,16 @@ import type { Run } from '@/api/runs';
 /** How often a page asks again while a run waits or goes. */
 export const pollMs = 3000;
 
-const periods: Record<string, string> = {
-  exploration: 'разведка',
-  holdout: 'отложенный',
-  'new-data': 'новые данные',
-};
-
-const kinds: Record<string, string> = { verdict: 'с вердиктом', parity: 'сверка' };
-
-const statuses: Record<string, string> = {
-  passed: 'Прошла',
-  rejected: 'Отвергнута',
-  insufficient_data: 'Данных мало',
-  parity: 'Сверка',
-  failed: 'Упала',
-  cancelled: 'Отменён',
-  // Where a run of the queue is, for the badge of a run that has no line yet.
-  running: 'Идёт',
+/** The states of a run in the words of the bench (spec bench-ui «Цвет состояния прогона»). */
+const states: Record<string, string> = {
   queued: 'В очереди',
-  // A run of the queue that has ended and whose line the page has not got.
-  finished: 'Закончен',
+  running: 'Идёт',
+  done: 'Готов',
+  failed: 'Упал',
+  cancelled: 'Отменён',
 };
 
-export const periodOrder = ['exploration', 'holdout', 'new-data'] as const;
-
-export const periodLabel = (period: string) => periods[period] ?? period;
-export const kindLabel = (kind: string) => kinds[kind] ?? kind;
-export const statusLabel = (status: string) => statuses[status] ?? status;
+export const stateLabel = (state: string) => states[state] ?? state;
 
 /** A number of the API (a JSON number, or a string for a non-finite one) with a fixed count of digits; a dash for none. */
 export function fixed(value: number | string | null | undefined, digits: number): string {
@@ -38,9 +21,12 @@ export function fixed(value: number | string | null | undefined, digits: number)
     : Number(value).toFixed(digits);
 }
 
-/** A moment of the API as «2026-11-20 08:07 UTC»; the app shows UTC everywhere. */
-export function utc(moment: string | null): string {
-  return moment === null
+/**
+ * A moment of the API as «2026-11-20 08:07 UTC»; the app shows UTC everywhere. The API leaves out a field without a
+ * value, so a moment a run has not reached yet comes as nothing at all.
+ */
+export function utc(moment: string | null | undefined): string {
+  return moment === null || moment === undefined
     ? '—'
     : `${new Date(moment).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
 }
@@ -57,8 +43,7 @@ export function runProgress(run: Run): string {
     return 'ждёт';
   }
 
-  const pairs = `${run.pairsDone} из ${run.pairsTotal ?? '?'} пар`;
-  return `${run.worker ?? '?'}: ${pairs}${run.cancelRequested ? ', отменяется' : ''}`;
+  return `${run.worker ?? '?'}: ${run.pairsDone} из ${run.pairsTotal ?? '?'} пар`;
 }
 
 /** A whole number with its thousands apart, «3 366»; a dash for none. */
@@ -88,4 +73,41 @@ export function clockUtc(moment: string): string {
 /** A long id or hash by its first and last 8 signs, `8c33b686…c4bab201`; a short one whole. */
 export function shortened(text: string): string {
   return text.length > 17 ? `${text.slice(0, 8)}…${text.slice(-8)}` : text;
+}
+
+/** The history of a run, «2023-01-01 — 2026-06-01»: its start and its end, which is not in it. */
+export function historyWords(run: Run): string {
+  return `${run.settings.start} — ${run.settings.end}`;
+}
+
+/** The pairs of a run: all of them, or the list; a long list by its first pairs and their count. */
+export function pairsWords(run: Run): string {
+  const pairs = run.settings.pairs;
+  if (pairs === null || pairs === undefined) {
+    return 'все пары';
+  }
+
+  return pairs.length > 3
+    ? `${pairs.slice(0, 3).join(', ')} и ещё ${pairs.length - 3}`
+    : pairs.join(', ');
+}
+
+/** A share as a percent with two digits and its sign, `+0.12 %`; a dash for none. */
+export function signedPercent(value: number | string | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '—';
+  }
+
+  const percent = Number(value) * 100;
+  return `${percent >= 0 ? '+' : ''}${percent.toFixed(2)} %`;
+}
+
+/** An amount of USDT with two digits and its sign, `-1.54`; a dash for none. */
+export function signedUsdt(value: number | string | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '—';
+  }
+
+  const amount = Number(value);
+  return `${amount >= 0 ? '+' : ''}${amount.toFixed(2)}`;
 }

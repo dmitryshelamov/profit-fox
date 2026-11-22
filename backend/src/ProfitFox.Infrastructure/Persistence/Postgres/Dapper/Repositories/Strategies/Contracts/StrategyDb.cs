@@ -16,4 +16,15 @@ internal sealed record StrategyDb
     public int Version { get; init; }
 
     public string Graph { get; init; } = "{}";
+
+    /// <summary>
+    ///     <c>bot</c> or <c>idea</c>; null for a strategy saved before it had a kind.
+    /// </summary>
+    public string? Kind { get; init; }
+
+    /// <summary>
+    ///     The graph of the latest version when the row is of another version and has no kind: the strategy takes the kind
+    ///     of the latest version (task 12.7); null otherwise.
+    /// </summary>
+    public string? LatestGraph { get; init; }
 }

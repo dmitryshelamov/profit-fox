@@ -14,6 +14,7 @@ public enum GraphErrorCode
     InvalidField,
 
     DuplicateParameter,
+    UnknownParameter,
     ParameterTypeMismatch,
     InvalidParameterBounds,
     ParameterOutOfBounds,
@@ -49,6 +50,10 @@ public enum GraphErrorCode
     StrategyPositionMissing,
     StrategyPositionRepeated,
     StrategyOrderUnwired,
+
+    StrategyKindNodeNotAllowed,
+    StrategyKindNeedsTime,
+    StrategyKindReadsPosition,
 
     UnknownSignal,
     UnreadableSignal,

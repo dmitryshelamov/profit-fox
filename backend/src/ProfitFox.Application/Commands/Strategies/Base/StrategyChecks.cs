@@ -10,6 +10,7 @@ using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.Services.Signals;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Signals;
+using ProfitFox.Domain.ValueObjects.Strategies.Enums;
 
 namespace ProfitFox.Application.Commands.Strategies.Base;
 
@@ -24,7 +25,16 @@ internal static class StrategyChecks
     ///     The graph checked as a strategy. The references are read from its form first; a graph of the wrong form has only the
     ///     errors of its form.
     /// </summary>
-    public static async Task<StrategyGraphCheck> CheckAsync(ISignalRepository signals, JsonElement graph, CancellationToken cancellationToken)
+    public static Task<StrategyGraphCheck> CheckAsync(ISignalRepository signals, JsonElement graph, CancellationToken cancellationToken)
+    {
+        return CheckAsync(signals, graph, StrategyKind.Bot, cancellationToken);
+    }
+
+    /// <summary>
+    ///     The graph checked as a strategy of <paramref name="kind" />: the checks of a strategy and the rules of the kind
+    ///     (spec strategy-graph «Вид стратегии»).
+    /// </summary>
+    public static async Task<StrategyGraphCheck> CheckAsync(ISignalRepository signals, JsonElement graph, StrategyKind kind, CancellationToken cancellationToken)
     {
         ReadResult<GraphDefinition> form = StrategyGraph.ReadForm(graph);
         if (form.Value is not { } definition)
@@ -33,7 +43,7 @@ internal static class StrategyChecks
         }
 
         SignalSet set = await SignalsOf(signals, definition, cancellationToken);
-        ReadResult<TradingStrategy> read = StrategyGraph.ReadStrategy(graph, set);
+        ReadResult<TradingStrategy> read = StrategyGraph.ReadStrategy(graph, set, kind);
         return new StrategyGraphCheck(definition, read.Errors, definition.ToSignalUses(set), read.Value);
     }
 
@@ -47,6 +57,8 @@ internal static class StrategyChecks
 
     /// <summary>
     ///     The strategy of a request, with the positions of the nodes of its graph only, and what its signal nodes point at.
+    ///     The graph is checked by the rules of <paramref name="kind" />; without a kind the strategy takes the kind of its
+    ///     graph, as one saved before strategies had kinds does.
     /// </summary>
     /// <exception cref="StrategyLibraryException">The name is not allowed or the graph has errors.</exception>
     public static async Task<(StrategyDocument Strategy, IReadOnlyList<SignalUseInternal> Signals)> CheckedAsync(
@@ -55,6 +67,7 @@ internal static class StrategyChecks
         string? description,
         JsonElement graph,
         IReadOnlyDictionary<string, NodePosition> layout,
+        StrategyKind? kind,
         CancellationToken cancellationToken)
     {
         List<GraphError> errors = [];
@@ -63,7 +76,8 @@ internal static class StrategyChecks
             errors.Add(NameError(name));
         }
 
-        StrategyGraphCheck check = await CheckAsync(signals, graph, cancellationToken);
+        StrategyKind checkedKind = kind ?? (StrategyGraph.ReadForm(graph).Value is { } form ? StrategyKindRules.Of(StrategyUpgrade.Raise(form)) : StrategyKind.Bot);
+        StrategyGraphCheck check = await CheckAsync(signals, graph, checkedKind, cancellationToken);
         errors.AddRange(check.Errors);
         if (errors.Count > 0 || check.Graph is null)
         {
@@ -74,7 +88,8 @@ internal static class StrategyChecks
             name,
             string.IsNullOrWhiteSpace(description) ? null : description,
             check.Graph,
-            GraphLayout.Of(check.Graph, layout));
+            GraphLayout.Of(check.Graph, layout),
+            checkedKind);
         return (strategy, check.Signals);
     }
 

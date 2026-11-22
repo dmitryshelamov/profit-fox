@@ -6,6 +6,7 @@ using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Tests.Unit.Domain.Services.Graph;
+using ProfitFox.Tests.Unit.Domain.Services.Runs;
 
 using static ProfitFox.Tests.Unit.Domain.Services.Runs.Designs;
 
@@ -20,7 +21,7 @@ public sealed class PairStepsTests
 {
     private static readonly TimeSpan FourHours = TimeSpan.FromHours(4);
     private static readonly Signal Signal = StrategyGraph.ReadSignal(Graphs.H0001).Value!;
-    private static readonly TradingStrategy H0001 = TradingStrategy.FromSignal(Signal, EntrySide.Short, FourHours);
+    private static readonly TradingStrategy H0001 = Designs.H0001;
 
     [Test]
     public void The_orders_come_at_the_events_of_the_signal_and_a_candle_without_trades_is_not_given_to_the_strategy()

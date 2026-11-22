@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 
-using ProfitFox.Application.Commands.Hypotheses.AddHypothesis;
+using ProfitFox.Application.Commands.Backtests.EnqueueBacktest;
 
 namespace ProfitFox.Infrastructure.Mediatr;
 
@@ -12,6 +12,6 @@ internal static class MediatrRegistrar
     /// </summary>
     internal static void Configure(IServiceCollection services)
     {
-        services.AddMediatR(configuration => configuration.RegisterServicesFromAssembly(typeof(AddHypothesisCommand).Assembly));
+        services.AddMediatR(configuration => configuration.RegisterServicesFromAssembly(typeof(EnqueueBacktestCommand).Assembly));
     }
 }

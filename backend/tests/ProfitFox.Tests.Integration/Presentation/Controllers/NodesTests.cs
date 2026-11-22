@@ -110,6 +110,35 @@ public sealed class NodesTests
         Assert.That(signal.Settings, Is.EqualTo(new[] { new SettingResponse("signal", [], null), new SettingResponse("version", [], null) }).Using<SettingResponse>(Same));
     }
 
+    /// <summary>
+    ///     Change add-strategy-backtest, task 2.3: spec strategy-constructor «Вид в списке и в редакторе» («Лимитная заявка
+    ///     в категории идей»): the catalog of a category of ideas has no node of an order by a condition; that of a strategy
+    ///     for a bot has every kind of a strategy.
+    /// </summary>
+    [Test]
+    public async Task The_catalog_of_a_kind_of_strategy()
+    {
+        string[] idea = [.. (await Catalog("/api/nodes/strategy?kind=idea")).Select(kind => kind.Kind)];
+        string[] bot = [.. (await Catalog("/api/nodes/strategy?kind=bot")).Select(kind => kind.Kind)];
+        string[] all = [.. (await Catalog("/api/nodes/strategy")).Select(kind => kind.Kind)];
+
+        Assert.That(idea, Has.None.AnyOf("market-order", "limit-order", "close-position"));
+        Assert.That(idea, Is.SupersetOf(new[] { "enter", "position", "stop-loss", "take-profit", "close-after", "signal" }));
+        Assert.That(idea, Is.EqualTo(all.Except(["market-order", "limit-order", "close-position"])));
+        Assert.That(bot, Is.EqualTo(all));
+    }
+
+    [Test]
+    public async Task An_unknown_kind_of_the_catalog_is_refused()
+    {
+        await using MarketDataServer market = await MarketDataServer.Start();
+        await using var api = new BenchTestApplication(market);
+
+        HttpResponseMessage response = await api.Http.GetAsync("/api/nodes/strategy?kind=plan");
+
+        Assert.That(response.StatusCode, Is.EqualTo(System.Net.HttpStatusCode.BadRequest));
+    }
+
     [Test]
     public async Task The_catalog_of_a_signal_has_no_position_nodes_and_gains_the_arithmetic()
     {

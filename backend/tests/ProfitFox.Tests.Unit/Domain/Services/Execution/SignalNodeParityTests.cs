@@ -22,7 +22,7 @@ public sealed class SignalNodeParityTests
     [Test]
     public void H0001_through_a_signal_node()
     {
-        var hypothesis = TradingStrategy.FromSignal(StrategyGraph.ReadSignal(Graphs.H0001).Value!, EntrySide.Short, TimeSpan.FromHours(4));
+        TradingStrategy hypothesis = Runs.Designs.H0001;
         TradingStrategy throughNode = StrategyGraph.ReadStrategy(SignalLibrary.Strategy(), SignalLibrary.Set).Value!;
         var expected = new StrategyExecutor(hypothesis);
         var actual = new StrategyExecutor(throughNode);

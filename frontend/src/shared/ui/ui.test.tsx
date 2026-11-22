@@ -245,33 +245,30 @@ describe('Tabs', () => {
   });
 });
 
-// Spec bench-ui «Цвет статуса прогона»: the word is always there, the color goes by the tone.
+// Spec bench-ui «Цвет состояния прогона»: the word is always there, the color goes by the tone.
 describe('RunStatusBadge', () => {
   it.each([
-    ['passed', 'Прошла', 'ok'],
-    ['insufficient_data', 'Данных мало', 'warn'],
-    ['failed', 'Упала', 'err'],
-    ['rejected', 'Отвергнута', 'neutral'],
-    ['parity', 'Сверка', 'neutral'],
-    ['cancelled', 'Отменён', 'neutral'],
+    ['done', 'Готов', 'ok'],
+    ['failed', 'Упал', 'err'],
     ['running', 'Идёт', 'run'],
+    ['cancelled', 'Отменён', 'neutral'],
     ['queued', 'В очереди', 'neutral'],
-  ])('shows %s as «%s» in the tone %s', (status, word, tone) => {
-    render(<RunStatusBadge status={status} />);
+  ])('shows %s as «%s» in the tone %s', (state, word, tone) => {
+    render(<RunStatusBadge state={state} />);
 
     expect(screen.getByText(word)).toHaveAttribute('data-tone', tone);
   });
 
-  // Scenario «Упавший и отвергнутый прогоны».
-  it('tells a failed run from a rejected one by the tone, each with its word', () => {
+  // Scenario «Упавший и готовый прогоны».
+  it('tells a failed run from a done one by the tone, each with its word', () => {
     render(
       <>
-        <RunStatusBadge status="failed" />
-        <RunStatusBadge status="rejected" />
+        <RunStatusBadge state="failed" />
+        <RunStatusBadge state="done" />
       </>,
     );
 
-    expect(screen.getByText('Упала')).toHaveAttribute('data-tone', 'err');
-    expect(screen.getByText('Отвергнута')).toHaveAttribute('data-tone', 'neutral');
+    expect(screen.getByText('Упал')).toHaveAttribute('data-tone', 'err');
+    expect(screen.getByText('Готов')).toHaveAttribute('data-tone', 'ok');
   });
 });

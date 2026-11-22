@@ -1,18 +1,17 @@
-using ProfitFox.Domain.ValueObjects.Hypotheses.Enums;
 using ProfitFox.Domain.ValueObjects.Trades;
 
 namespace ProfitFox.Domain.ValueObjects.Runs;
 
 /// <summary>
-///     The result of a trade or a mean of several in the measure of the hypothesis (<see cref="Y" />) and its parts, as
-///     fractions of the trade amount.
+///     The result of a trade or a mean of several (<see cref="Y" />, the result after costs) and its parts, as fractions of
+///     the trade amount.
 /// </summary>
 public sealed record TradeFields(double Y, double Gross, double Fees, double Slippage, double Funding, double Net)
 {
-    public static TradeFields Of(TradeOutcome outcome, Measure measure)
+    public static TradeFields Of(TradeOutcome outcome)
     {
         return new TradeFields(
-            measure == Measure.R ? outcome.R!.Value : outcome.Net!.Value,
+            outcome.Net!.Value,
             outcome.Gross!.Value,
             outcome.Fees!.Value,
             outcome.Slippage!.Value,

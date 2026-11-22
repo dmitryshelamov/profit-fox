@@ -19,7 +19,9 @@ public sealed class MigrationTests
 {
     private static readonly string[] BenchTables = ["hypothesis_versions", "ledger", "reports", "runs", "signal_versions", "signals"];
 
-    private static readonly string[] Tables = [.. BenchTables.Concat(["strategies", "strategy_signals", "strategy_versions"]).Order(StringComparer.Ordinal)];
+    private static readonly string[] StrategyTables = [.. BenchTables.Concat(["strategies", "strategy_signals", "strategy_versions"]).Order(StringComparer.Ordinal)];
+
+    private static readonly string[] Tables = [.. StrategyTables.Concat(["backtest_set_pairs", "backtest_sets", "backtests"]).Order(StringComparer.Ordinal)];
 
     [SetUp]
     public async Task Empty()
@@ -41,7 +43,7 @@ public sealed class MigrationTests
     }
 
     [Test]
-    public async Task After_the_start_the_strategy_tables_are_there_and_the_database_has_two_migrations()
+    public async Task After_the_start_the_strategy_tables_are_there_and_the_database_has_every_migration()
     {
         string connectionString = await BenchDatabase.NewDatabase();
 
@@ -49,7 +51,7 @@ public sealed class MigrationTests
 
         await using var connection = new NpgsqlConnection(connectionString);
         long[] versions = [.. await connection.QueryAsync<long>("SELECT \"Version\" FROM \"VersionInfo\" ORDER BY \"Version\"")];
-        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L }));
+        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L }));
         Assert.That(await TablesOf(connectionString), Is.SupersetOf(new[] { "strategies", "strategy_versions", "strategy_signals" }));
     }
 
@@ -65,6 +67,62 @@ public sealed class MigrationTests
         }
 
         Assert.That(await TablesOf(connectionString), Is.EqualTo(BenchTables));
+    }
+
+    [Test]
+    public async Task The_kind_of_a_strategy_is_a_column_that_may_be_empty_and_down_removes_only_it()
+    {
+        string connectionString = await BenchDatabase.NewDatabase();
+
+        await using (ServiceProvider services = BenchDatabase.Migrated(connectionString))
+        {
+            await using var connection = new NpgsqlConnection(connectionString);
+            string nullable = await connection.ExecuteScalarAsync<string>(
+                "SELECT is_nullable FROM information_schema.columns WHERE table_name = 'strategies' AND column_name = 'kind'") ?? "";
+            Assert.That(nullable, Is.EqualTo("YES"), "a strategy saved before kinds keeps an empty kind");
+
+            using IServiceScope scope = services.CreateScope();
+            scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateDown(202611210001);
+        }
+
+        await using var after = new NpgsqlConnection(connectionString);
+        Assert.That(await after.ExecuteScalarAsync<int>("SELECT count(*) FROM information_schema.columns WHERE table_name = 'strategies' AND column_name = 'kind'"), Is.Zero);
+        Assert.That(await TablesOf(connectionString), Is.EqualTo(StrategyTables));
+    }
+
+    /// <summary>
+    ///     Change add-strategy-backtest, task 6.1: the tables of backtests on a database of the version before them, which keeps
+    ///     its rows and the columns of its tables, and the schema a Worker waits for is the new one.
+    /// </summary>
+    [Test]
+    public async Task The_backtest_tables_come_on_the_former_database_and_leave_its_tables_as_they_were()
+    {
+        string connectionString = await BenchDatabase.NewDatabase();
+        await using (ServiceProvider services = BenchDatabase.Migrated(connectionString))
+        {
+            using IServiceScope scope = services.CreateScope();
+            scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateDown(202611220001);
+        }
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.ExecuteAsync("INSERT INTO hypothesis_versions (hypothesis_id, version, hash, text) VALUES ('H0001', 1, 'hash', '{}')");
+        await connection.ExecuteAsync("INSERT INTO runs (id, hypothesis_id, version, period, kind, status) VALUES ('a', 'H0001', 1, 'exploration', 'verdict', 'finished')");
+        string[] before = await ColumnsOf(connection, StrategyTables);
+        Assert.That(await TablesOf(connectionString), Is.EqualTo(StrategyTables));
+
+        await BenchDatabase.Migrated(connectionString).DisposeAsync();
+
+        Assert.That(await TablesOf(connectionString), Is.EqualTo(Tables));
+        Assert.That(await ColumnsOf(connection, StrategyTables), Is.EqualTo(before), "the former tables keep their columns");
+        Assert.That(await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM runs"), Is.EqualTo(1), "and their rows");
+        Assert.That(ProfitFox.Infrastructure.Persistence.Postgres.BenchSchema.Expected, Is.EqualTo(202611220002L));
+    }
+
+    private static async Task<string[]> ColumnsOf(NpgsqlConnection connection, string[] tables)
+    {
+        return [.. await connection.QueryAsync<string>(
+            "SELECT table_name || '.' || column_name || ':' || data_type || ':' || is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = ANY(@Tables) ORDER BY table_name, ordinal_position",
+            new { Tables = tables })];
     }
 
     [Test]

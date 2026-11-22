@@ -1,8 +1,4 @@
-using System.Net;
-using System.Text.Json.Nodes;
-
 using ProfitFox.Cli;
-using ProfitFox.Domain.ValueObjects.Ledger;
 using ProfitFox.Tests.Integration.MarketData;
 using ProfitFox.Tests.Integration.Presentation;
 using ProfitFox.Tests.Integration.Worker;
@@ -10,8 +6,9 @@ using ProfitFox.Tests.Integration.Worker;
 namespace ProfitFox.Tests.Integration.Cli;
 
 /// <summary>
-///     The <c>bench</c> command line tool against the bench API in the test process (task 5.1, spec bench-run-queue «Команды
-///     CLI»): the commands, what they print and the exit codes. Runs are counted by a Worker in the test process.
+///     The <c>bench</c> command line tool against the bench API in the test process (spec bench-run-queue «Команды CLI»;
+///     change add-strategy-backtest, task 8.4): the commands, what they print and the exit codes. Backtests are computed by a
+///     Worker in the test process.
 /// </summary>
 [NonParallelizable]
 public sealed class CliTests
@@ -19,7 +16,6 @@ public sealed class CliTests
     private static readonly TimeSpan Poll = TimeSpan.FromMilliseconds(50);
     private MarketDataServer _market = null!;
     private BenchTestApplication _api = null!;
-    private string _folder = null!;
 
     [SetUp]
     public async Task Start()
@@ -28,7 +24,6 @@ public sealed class CliTests
         await BenchDatabase.Reset();
         _market = await MarketDataServer.Start();
         _api = new BenchTestApplication(_market);
-        _folder = Directory.CreateTempSubdirectory("bench-cli").FullName;
     }
 
     [TearDown]
@@ -37,138 +32,109 @@ public sealed class CliTests
         await _api.DisposeAsync();
         await _market.DisposeAsync();
         FakeMarketData.CoveredUntil = null;
-        Directory.Delete(_folder, recursive: true);
     }
 
     [Test]
-    public async Task A_run_with_wait_prints_the_verdict_with_its_reason_and_the_run_page_and_exits_with_0()
+    public async Task A_run_with_wait_prints_the_table_of_the_sets_and_the_run_page_and_exits_with_0()
     {
-        await AddH0001();
+        await SaveFundingShort();
         await using WorkerHost worker = await WorkerHost.Start(_market, "w-1");
 
-        Result result = await Command("run", "H0001", "--wait");
+        Result result = await Command("run", "funding-short", "--timeframe", "4h", "--param", "threshold=0.0005,0.001", "--wait");
 
         Assert.That(result.Code, Is.Zero, result.Error);
         string id = QueuedId(result.Output);
-        Assert.That(result.Output, Does.Contain("insufficient_data:").And.Contain("power ").And.Contain($"run page: /runs/{id}"));
+        Assert.That(result.Output, Does.Contain($"queued backtest {id} of funding-short v1: 2 sets"));
+        Assert.That(result.Output, Does.Contain("set  timeframe  values  trades  mean  sum USDT  wins  difference  t"));
+        Assert.That(result.Output, Does.Contain("1  4h  threshold=0.0005  ").And.Contain("2  4h  threshold=0.001  0  -  0  -  -  -"));
+        Assert.That(result.Output, Does.Contain($"run page: /runs/{id}"));
         Assert.That(result.Error, Is.Empty);
         Result runs = await Command("runs");
         Assert.That(runs.Code, Is.Zero);
-        Assert.That(runs.Output, Does.Contain("active:").And.Contain("finished (last 20):").And.Contain($"{id}  H0001 v1  exploration  insufficient_data"));
+        Assert.That(runs.Output, Does.Contain("active:").And.Contain("finished (last 20):").And.Contain($"{id}  funding-short v1  done  2023-01-01.."));
     }
 
     [Test]
-    public async Task A_run_without_wait_prints_the_id_of_the_queued_run_and_exits_with_0_at_once()
+    public async Task A_run_without_wait_prints_the_id_of_the_queued_backtest_and_exits_with_0_at_once()
     {
-        await AddH0001();
+        await SaveFundingShort();
 
-        Result result = await Command("run", "H0001", "--period", "exploration");
+        Result result = await Command("run", "funding-short", "--timeframe", "4h", "--from", "2026-01-05", "--until", Backtests.End, "--pairs", "BTCUSDT,ETHUSDT");
 
         Assert.That(result.Code, Is.Zero, result.Error);
         string id = QueuedId(result.Output);
         Assert.That(result.Output, Does.Not.Contain("run page"));
         Result runs = await Command("runs");
-        Assert.That(runs.Output, Does.Contain($"{id}  H0001 v1  exploration  verdict  queued  -  0"));
+        Assert.That(runs.Output, Does.Contain($"{id}  funding-short v1  idea  1 sets  queued  -  0"));
+        BacktestResponseOf read = await Read(id);
+        Assert.That((read.Start, read.End, read.Pairs), Is.EqualTo(("2026-01-05", Backtests.End, "BTCUSDT,ETHUSDT")));
     }
 
     [Test]
-    public async Task A_parity_run_is_queued_on_exploration_and_a_queued_run_is_cancelled()
+    public async Task A_queued_backtest_is_cancelled_and_a_second_cancel_is_refused()
     {
-        await AddH0001();
+        await SaveFundingShort();
 
-        Result queued = await Command("parity", "H0001");
+        Result queued = await Command("run", "funding-short");
         string id = QueuedId(queued.Output);
         Result cancelled = await Command("cancel", id);
         Result again = await Command("cancel", id);
 
-        Assert.That(queued.Output, Does.Contain("parity run").And.Contain("on exploration"));
         Assert.That(cancelled.Code, Is.Zero, cancelled.Error);
+        Assert.That(cancelled.Output, Does.Contain($"cancelling backtest {id}"));
         Assert.That(again.Code, Is.EqualTo(1));
-        Assert.That(again.Error, Does.Contain("not cancelled").And.Contain($"There is no run {id}"));
+        Assert.That(again.Error, Does.Contain("not cancelled").And.Contain($"There is no backtest {id}"));
     }
 
     [Test]
-    public async Task A_run_the_ledger_refuses_prints_the_reason_and_exits_with_1()
+    public async Task A_run_on_a_wrong_timeframe_prints_the_reason_of_the_refusal_and_exits_with_1()
     {
-        await AddH0001();
-        await LedgerLines.Write("H0001", 1, HypothesisHash(BenchRepository.H0001Text()), "exploration", RunStatus.Rejected);
+        await SaveFundingShort();
 
-        Result result = await Command("run", "H0001");
+        Result result = await Command("run", "funding-short", "--timeframe", "5m");
 
         Assert.That(result.Code, Is.EqualTo(1));
-        Assert.That(result.Error, Does.StartWith("refused: ").And.Contain("H0001"));
+        Assert.That(result.Error, Does.StartWith("refused: ").And.Contain("5m"));
         Assert.That(result.Output, Is.Empty);
         Assert.That((await Command("runs")).Output, Does.Not.Contain("queued"));
     }
 
     [Test]
-    public async Task An_unknown_hypothesis_is_refused_with_1()
+    public async Task An_unknown_strategy_is_refused_with_1()
     {
-        Result result = await Command("run", "H9999");
+        Result result = await Command("run", "price-drop-long");
 
         Assert.That(result.Code, Is.EqualTo(1));
-        Assert.That(result.Error, Does.StartWith("refused: ").And.Contain("H9999"));
+        Assert.That(result.Error, Does.StartWith("refused: ").And.Contain("price-drop-long"));
     }
 
     [Test]
-    public async Task A_run_that_failed_prints_the_status_and_the_reason_and_exits_with_1()
+    public async Task A_run_that_failed_prints_the_state_and_the_reason_and_exits_with_1()
     {
-        await AddH0001();
+        await SaveFundingShort();
         _market.Data.Failure = Grpc.Core.StatusCode.Unavailable;
         await using WorkerHost worker = await WorkerHost.Start(_market, "w-1");
 
-        Result result = await Command("run", "H0001", "--wait");
+        Result result = await Command("run", "funding-short", "--wait");
 
         Assert.That(result.Code, Is.EqualTo(1));
-        Assert.That(result.Output, Does.Contain("failed: ").And.Contain("market-data").And.Contain($"run page: /runs/{QueuedId(result.Output)}"));
-    }
-
-    [Test]
-    public async Task A_hypothesis_file_is_loaded_as_a_version_and_the_same_file_again_finds_it()
-    {
-        string first = Path.Combine(_folder, "first.json");
-        string second = Path.Combine(_folder, "second.json");
-        await File.WriteAllTextAsync(first, BenchRepository.H0001Text());
-        JsonObject changed = JsonNode.Parse(BenchRepository.H0001Text())!.AsObject();
-        changed["name"] = changed["name"]!.GetValue<string>() + "-b";
-        await File.WriteAllTextAsync(second, changed.ToJsonString());
-
-        Result created = await Command("hypotheses", "add", first);
-        Result found = await Command("hypotheses", "add", first);
-        Result next = await Command("hypotheses", "add", second);
-
-        Assert.That(created.Output.Trim(), Is.EqualTo("H0001 version 1 created"));
-        Assert.That(found.Output.Trim(), Is.EqualTo("H0001 already exists as version 1"));
-        Assert.That(next.Output.Trim(), Is.EqualTo("H0001 version 2 created"));
-        Assert.That(new[] { created.Code, found.Code, next.Code }, Is.All.Zero);
-    }
-
-    [Test]
-    public async Task A_hypothesis_file_with_errors_prints_them_and_exits_with_1()
-    {
-        string file = Path.Combine(_folder, "broken.json");
-        await File.WriteAllTextAsync(file, "{ \"id\": \"H0002\" }");
-
-        Result result = await Command("hypotheses", "add", file);
-
-        Assert.That(result.Code, Is.EqualTo(1));
-        Assert.That(result.Error, Does.StartWith("refused: ").And.Length.GreaterThan("refused: \n".Length));
-        Assert.That((await Command("hypotheses", "add", Path.Combine(_folder, "missing.json"))).Code, Is.EqualTo(1));
+        Assert.That(result.Output, Does.Contain("failed: история недоступна").And.Contain($"run page: /runs/{QueuedId(result.Output)}"));
     }
 
     [TestCase("")]
     [TestCase("frobnicate")]
     [TestCase("run")]
-    [TestCase("run H0001 --period yesterday")]
-    [TestCase("run H0001 --version")]
-    [TestCase("run H0001 --version zero")]
-    [TestCase("run H0001 --version 0")]
-    [TestCase("run H0001 --nonsense")]
-    [TestCase("parity H0001 --period holdout")]
+    [TestCase("run funding-short --version")]
+    [TestCase("run funding-short --version zero")]
+    [TestCase("run funding-short --version 0")]
+    [TestCase("run funding-short --nonsense")]
+    [TestCase("run funding-short --param threshold")]
+    [TestCase("run funding-short --param =0.001")]
+    [TestCase("run funding-short --param threshold=")]
     [TestCase("runs now")]
     [TestCase("cancel")]
-    [TestCase("hypotheses")]
-    [TestCase("hypotheses add")]
+    [TestCase("parity funding-short")]
+    [TestCase("hypotheses add H0001.json")]
     public async Task A_wrong_command_line_prints_the_usage_and_exits_with_2(string line)
     {
         Result result = await Command(line.Split(' ', StringSplitOptions.RemoveEmptyEntries));
@@ -184,7 +150,7 @@ public sealed class CliTests
         Result result = await Command("run", "--help");
 
         Assert.That(result.Code, Is.EqualTo(0));
-        Assert.That(result.Output, Does.Contain("bench run <hypothesis>").And.Contain("--period"));
+        Assert.That(result.Output, Does.Contain("bench run <strategy>").And.Contain("--timeframe").And.Contain("--param").And.Contain("--until"));
         Assert.That(result.Error, Is.Empty);
     }
 
@@ -213,22 +179,24 @@ public sealed class CliTests
         return new Result(code, output.ToString(), error.ToString());
     }
 
-    private async Task AddH0001()
+    private async Task SaveFundingShort()
     {
-        HttpResponseMessage added = await _api.Http.PostAsync("/api/hypotheses", new StringContent(BenchRepository.H0001Text(), System.Text.Encoding.UTF8, "text/plain"));
-        Assert.That(added.StatusCode, Is.EqualTo(HttpStatusCode.Created));
+        await Backtests.SaveStrategy(_api.Http, "funding-short", Backtests.FundingShort(), "idea");
+    }
+
+    private async Task<BacktestResponseOf> Read(string id)
+    {
+        ProfitFox.Presentation.Contracts.Backtests.BacktestResponse backtest = await Backtests.Read(_api.Http, id);
+        return new BacktestResponseOf(backtest.Settings.Start, backtest.Settings.End, string.Join(",", backtest.Settings.Pairs ?? []));
     }
 
     private static string QueuedId(string output)
     {
         string line = output.Split(Environment.NewLine).First(text => text.StartsWith("queued ", StringComparison.Ordinal));
-        return line.Split(' ')[3];
-    }
-
-    private static string HypothesisHash(string text)
-    {
-        return ProfitFox.Domain.Services.Hypotheses.HypothesisReader.Parse(ProfitFox.Domain.Services.Hypotheses.HypothesisReader.Normalize(text)).Hash;
+        return line.Split(' ')[2];
     }
 
     private sealed record Result(int Code, string Output, string Error);
+
+    private sealed record BacktestResponseOf(string Start, string End, string Pairs);
 }

@@ -2,13 +2,19 @@ namespace ProfitFox.Presentation.Contracts.Errors;
 
 /// <summary>
 ///     A problem with a request and where it is (spec signal-preview «Ошибки запроса»): a graph error keeps the code and
-///     the place of the graph reader; a problem with the pair or the timeframe names its <see cref="Field" />.
+///     the place of the graph reader; a problem with the pair or the timeframe names its <see cref="Field" />, and one with a
+///     pair of a list the <see cref="Pair" /> too.
 /// </summary>
 public sealed record RequestError(string Code, string Reason)
 {
     public string? Field { get; init; }
 
     public string? Parameter { get; init; }
+
+    /// <summary>
+    ///     The symbol of a pair the problem is with.
+    /// </summary>
+    public string? Pair { get; init; }
 
     public string? Node { get; init; }
 

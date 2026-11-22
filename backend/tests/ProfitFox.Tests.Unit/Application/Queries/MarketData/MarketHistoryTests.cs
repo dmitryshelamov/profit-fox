@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Time.Testing;
+
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Queries.MarketData;
 using ProfitFox.Domain.Services.MarketData;
@@ -7,7 +9,7 @@ using ProfitFox.Domain.ValueObjects.MarketData;
 namespace ProfitFox.Tests.Unit.Application.Queries.MarketData;
 
 /// <summary>
-///     Spec market-history: candles of the signal, coverage, the end of the period and the hash.
+///     Spec market-history: candles of the signal, coverage, the end of the period, the current day and the hash.
 /// </summary>
 public sealed class MarketHistoryTests
 {
@@ -54,6 +56,69 @@ public sealed class MarketHistoryTests
     }
 
     [Test]
+    public async Task The_payment_at_an_end_of_the_period_before_today_is_read()
+    {
+        var source = new FakeHistorySource();
+        var history = new MarketHistory(source, PeriodEnd, new HistoryHash(), new FakeTimeProvider(PeriodEnd.AddDays(1)));
+
+        await history.FundingThrough("btc", Start, PeriodEnd, CancellationToken.None);
+
+        Assert.That(source.Reads, Is.EqualTo(new[] { ("funding", Start, PeriodEnd.AddSeconds(1)) }));
+    }
+
+    /// <summary>
+    ///     Task 12.1: the market-data service holds past days only, so the funding of an end of the period that is the start
+    ///     of the current UTC day is read up to it.
+    /// </summary>
+    [Test]
+    public async Task The_funding_through_the_start_of_today_is_read_up_to_it()
+    {
+        var source = new FakeHistorySource();
+        var history = new MarketHistory(source, PeriodEnd, new HistoryHash(), new FakeTimeProvider(PeriodEnd.AddHours(15.5)));
+
+        HistoryRead<HistoryPayment> read = await history.FundingThrough("btc", Start, PeriodEnd, CancellationToken.None);
+
+        Assert.That(source.Reads, Is.EqualTo(new[] { ("funding", Start, PeriodEnd) }));
+        Assert.That(read.Coverage[^1].Until, Is.EqualTo(PeriodEnd), "the payment at the end is not known");
+    }
+
+    /// <summary>
+    ///     Task 12.13: the current day is the one of the moment the history is made; a clock that passes midnight later does
+    ///     not change what the history reads.
+    /// </summary>
+    [Test]
+    public async Task The_current_day_is_taken_when_the_history_is_made()
+    {
+        var source = new FakeHistorySource();
+        var time = new FakeTimeProvider(PeriodEnd.AddHours(-1));
+        var history = new MarketHistory(source, PeriodEnd, new HistoryHash(), time);
+        time.Advance(TimeSpan.FromHours(2));
+
+        await history.FundingThrough("btc", Start, PeriodEnd.AddDays(-1), CancellationToken.None);
+        await history.FundingThrough("btc", Start, PeriodEnd.AddDays(-1), CancellationToken.None);
+
+        Assert.That(source.Reads, Is.EqualTo(new[] { ("funding", Start, PeriodEnd.AddDays(-1)), ("funding", Start, PeriodEnd.AddDays(-1)) }));
+        Assert.That(
+            () => history.Candles("btc", FourHours, PeriodEnd.AddDays(-1), PeriodEnd, CancellationToken.None),
+            Throws.InstanceOf<PeriodBoundaryException>());
+    }
+
+    [Test]
+    public void A_window_after_the_start_of_today_is_refused()
+    {
+        var source = new FakeHistorySource();
+        var history = new MarketHistory(source, PeriodEnd, new HistoryHash(), new FakeTimeProvider(PeriodEnd.AddDays(-1).AddHours(9)));
+
+        Assert.That(
+            () => history.Candles("btc", FourHours, PeriodEnd.AddDays(-2), PeriodEnd, CancellationToken.None),
+            Throws.InstanceOf<PeriodBoundaryException>());
+        Assert.That(
+            () => history.FundingThrough("btc", Start, PeriodEnd, CancellationToken.None),
+            Throws.InstanceOf<PeriodBoundaryException>());
+        Assert.That(source.Reads, Is.Empty);
+    }
+
+    [Test]
     public async Task Only_the_window_asked_for_is_read()
     {
         var source = new FakeHistorySource();
@@ -88,7 +153,7 @@ public sealed class MarketHistoryTests
     private static async Task<string> Hash(FakeHistorySource source)
     {
         using var hash = new HistoryHash();
-        var history = new MarketHistory(source, PeriodEnd, hash);
+        var history = new MarketHistory(source, PeriodEnd, hash, TimeProvider.System);
         await history.Candles("btc", FourHours, Start.AddHours(4), Start.AddDays(2), CancellationToken.None);
         await history.Candles("btc", TimeSpan.FromMinutes(1), Start.AddHours(5), Start.AddHours(7), CancellationToken.None);
         await history.Funding("btc", Start, Start.AddDays(2), CancellationToken.None);
@@ -97,6 +162,6 @@ public sealed class MarketHistoryTests
 
     private static MarketHistory History(FakeHistorySource source)
     {
-        return new MarketHistory(source, PeriodEnd, new HistoryHash());
+        return new MarketHistory(source, PeriodEnd, new HistoryHash(), TimeProvider.System);
     }
 }

@@ -74,7 +74,7 @@ jobs:
         run: docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin <<<"$GH_TOKEN"
 
       # An image of this number that is already in GHCR stays as it is. The context is the repository root: the API image
-      # needs frontend/ and bench/ besides backend/.
+      # needs frontend/ besides backend/.
       - name: Build and push the images
         env:
           VERSION: ${{ steps.version.outputs.version }}

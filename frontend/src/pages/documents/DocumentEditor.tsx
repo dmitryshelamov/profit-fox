@@ -41,6 +41,16 @@ export interface SaveBody {
   readonly layout: never;
 }
 
+/** Where the document stands, for the actions of its editor. */
+export interface EditorState {
+  /** The document differs from what the store keeps, or has no first save yet. */
+  readonly dirty: boolean;
+  /** The last check found errors. */
+  readonly hasErrors: boolean;
+  /** The version the store keeps; none before the first save. */
+  readonly version?: number;
+}
+
 /**
  * The differences of the editors of a signal and of a strategy: their rules, their words, their routes and the
  * requests that save them. Everything else — the canvas, the check, the draft, the question about it, the name of the
@@ -76,6 +86,7 @@ export function DocumentEditor({
   catalog,
   start,
   startSignals = [],
+  plaque,
   actions,
   bottom,
 }: {
@@ -89,7 +100,10 @@ export function DocumentEditor({
   readonly start: Content;
   /** What the signal nodes of a saved strategy point at, as its read gave it. */
   readonly startSignals?: readonly SignalUse[];
-  readonly actions?: ReactNode;
+  /** What the plaque of the document shows after its name and version, as the kind of a strategy. */
+  readonly plaque?: ReactNode;
+  /** What stands after «Сохранить»; it may depend on where the document stands. */
+  readonly actions?: ReactNode | ((state: EditorState) => ReactNode);
   readonly bottom?: (state: {
     readonly graph: Graph;
     readonly canRun: boolean;
@@ -125,7 +139,7 @@ export function DocumentEditor({
   const [name, setName] = useState('');
   const [saveErrors, setSaveErrors] = useState<readonly RequestError[]>([]);
   const [saving, setSaving] = useState(false);
-  const check = useGraphCheck(content.document.graph, rules.checkPath, urgent);
+  const check = useGraphCheck(content.document.graph, rules.checkPath, urgent, rules.strategyKind);
   const signals = useSignalNodes(rules.kind === 'strategy', catalog, startSignals, check.signals);
 
   // Edited: the content differs from what was read. Dirty: it differs from what the store keeps, which a document
@@ -181,11 +195,15 @@ export function DocumentEditor({
       if (file !== null && sameContent(content, file)) {
         removeDraft(key);
       } else {
-        writeDraft(key, { description: content.description, ...content.document });
+        writeDraft(key, {
+          description: content.description,
+          ...content.document,
+          ...(rules.strategyKind === undefined ? {} : { kind: rules.strategyKind }),
+        });
       }
     }, draftDelayMs);
     return () => clearTimeout(timer);
-  }, [content, file, key, question]);
+  }, [content, file, key, question, rules.strategyKind]);
 
   // The way from a new document to its saved page right after the first save is not leaving it.
   const savedAway = useRef(false);
@@ -268,6 +286,7 @@ export function DocumentEditor({
             <BarDivider />
             <span className="shrink-0 font-mono font-semibold">{saved?.name ?? type.newTitle}</span>
             {saved && version !== undefined && <VersionBadge version={version} />}
+            {plaque}
             <BarDivider />
             <label className="flex min-w-0 items-center gap-2">
               <input
@@ -326,7 +345,13 @@ export function DocumentEditor({
             >
               {saving ? 'Сохраняю…' : 'Сохранить'}
             </Button>
-            {actions}
+            {typeof actions === 'function'
+              ? actions({
+                  dirty,
+                  hasErrors: check.checked && check.errors.length > 0,
+                  version: saved ? version : undefined,
+                })
+              : actions}
             {otherErrors.length > 0 && (
               <span role="alert" className="max-w-64 truncate px-1.5 text-xs text-err">
                 {otherErrors.map((error) => error.reason).join('; ')}

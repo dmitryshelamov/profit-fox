@@ -3,7 +3,7 @@ using ProfitFox.Cli.Api;
 namespace ProfitFox.Cli.Commands.Runs;
 
 /// <summary>
-///     <c>bench cancel</c>: takes a waiting run out of the queue or asks the Worker to stop a run that goes.
+///     <c>bench cancel</c>: takes a waiting backtest out of the queue or asks the Worker to stop one that goes.
 /// </summary>
 internal sealed class CancelCommand(BenchClient client, TextWriter output, TextWriter error)
 {
@@ -16,7 +16,7 @@ internal sealed class CancelCommand(BenchClient client, TextWriter output, TextW
             return 1;
         }
 
-        await output.WriteLineAsync($"cancelling run {run}");
+        await output.WriteLineAsync($"cancelling backtest {run}");
         return 0;
     }
 }

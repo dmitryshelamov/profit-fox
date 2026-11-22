@@ -1,6 +1,6 @@
 import type { PreviewCandle, PreviewEvent, RequestError } from '@/api/client';
 
-/** The timeframes of a signal, as the hypothesis files write them. */
+/** The timeframes of a signal, as the API writes them. */
 export const timeframes = ['1h', '4h', '1d'] as const;
 
 const timeframeMs: Record<string, number> = {
@@ -19,12 +19,12 @@ export function lengthOf(timeframe: string): number {
   return length;
 }
 
-/** A moment of the bench as UTC, `2026-05-15 20:00`: the reports and the specs write time this way. */
+/** A moment of the bench as UTC, `2026-06-01 20:00`: the pages and the specs write time this way. */
 export function formatUtc(ms: number | string): string {
   return new Date(Number(ms)).toISOString().slice(0, 16).replace('T', ' ');
 }
 
-/** A day of the bench as UTC, `2026-05-15`. */
+/** A day of the bench as UTC, `2026-06-01`. */
 export function formatUtcDay(ms: number | string): string {
   return new Date(Number(ms)).toISOString().slice(0, 10);
 }
@@ -79,7 +79,7 @@ export function closeAt(
   return candle === undefined ? null : Number(candle.close);
 }
 
-/** Where in the request a problem is: a wire, a pin, a setting, a node, a parameter or a field. */
+/** Where in the request a problem is: a wire, a pin, a setting, a node, a parameter, a pair or a field. */
 export function placeOf(error: RequestError): string {
   if (error.wire) {
     return `провод ${error.wire.from} → ${error.wire.to}`;
@@ -103,6 +103,10 @@ export function placeOf(error: RequestError): string {
 
   if (error.parameter) {
     return `параметр ${error.parameter}`;
+  }
+
+  if (error.pair) {
+    return `пара ${error.pair}`;
   }
 
   return error.field ?? 'граф';

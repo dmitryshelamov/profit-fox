@@ -34,7 +34,7 @@ public static class EntryPlan
     }
 
     // A graph counts in decimal, a plan in double. The fraction goes through its decimal text, so it becomes the double
-    // the same text gives in the plan of a hypothesis (change add-strategy-graph, design.md, decision 3): the direct
+    // the same text gives (change add-strategy-graph, design.md, decision 3): the direct
     // conversion differs in the last bit for fractions of many digits, 0.498964597192726048 for one.
     private static double? Fraction(ExitDistance distance)
     {

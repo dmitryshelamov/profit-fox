@@ -3,19 +3,22 @@ import { Link } from '@tanstack/react-router';
 import { useEffect } from 'react';
 
 import { cancelRun, listFinishedRuns, type Run } from '@/api/runs';
+import { strategyKindOf } from '@/modules/graph-editor/document';
+import { wordsOf } from '@/pages/strategies/kinds';
 import { Button } from '@/shared/ui/Button';
 import { Page, PageTitle, SectionTitle } from '@/shared/ui/Page';
-import { RunStatusBadge, statusOfRun } from '@/shared/ui/RunStatusBadge';
+import { RunStatusBadge } from '@/shared/ui/RunStatusBadge';
 import { Table, Td, Th } from '@/shared/ui/Table';
 
-import { clockUtc, fixed, kindLabel, periodLabel, shortUtc, span } from './labels';
+import { clockUtc, fixed, historyWords, pairsWords, shortUtc, signedUsdt, span } from './labels';
 import { useActiveRuns } from './useActiveRuns';
 
 /**
- * The section «Прогоны» (spec bench-run-queue «Страница «Прогоны»»): the runs that wait and go — a run that goes with
- * the bar of its progress («Ход идущего прогона полосой») — each with «Отменить», and below the finished ones, whose
- * row opens the page of the run («Строка законченного прогона»). The page asks again every 3 s while it shows a run
- * that has not ended.
+ * The section «Прогоны» (spec bench-run-queue «Страница «Прогоны»»): the runs that wait and go — the strategy with its
+ * version and kind, the timeframes, the sets, the pairs, the Worker and the bar of its progress («Ход идущего прогона
+ * полосой») — each with «Отменить», and below the finished ones with their state, history, sets, the sum of the best
+ * set and the time of the computation, whose row opens the page of the run («Строка законченного прогона»). The page
+ * asks again every 3 s while it shows a run that has not ended.
  */
 export function RunsPage() {
   const queries = useQueryClient();
@@ -45,7 +48,7 @@ export function RunsPage() {
     <Page>
       <PageTitle
         title="Прогоны"
-        hint="Проверки гипотез на данных стенда. Запускаются из списка гипотез."
+        hint="Прогоны стратегий на данных стенда. Запускаются из списка стратегий и из редактора."
       />
 
       <section aria-label="Ждут и идут" className="flex flex-col gap-4">
@@ -59,22 +62,30 @@ export function RunsPage() {
             {active.data.map((run) => (
               <li
                 key={run.id}
-                aria-label={`Прогон ${run.hypothesis} ${run.id}`}
+                aria-label={`Прогон ${run.strategy.name} ${run.id}`}
                 className="grid min-h-[86px] grid-cols-[180px_220px_1fr_210px_auto] items-center gap-5 border-t border-line px-5 py-3.5 first:border-t-0"
               >
-                <Link
-                  to="/runs/$id"
-                  params={{ id: run.id }}
-                  className="flex items-baseline gap-2.5 font-mono font-medium hover:underline"
-                >
-                  <span className="text-accent">{run.hypothesis}</span>
-                  <span className="text-muted">v{String(run.version)}</span>
-                </Link>
-                <div className="flex flex-col items-start gap-2">
-                  <span>
-                    {periodLabel(run.period)} · {kindLabel(run.kind)}
+                <div className="flex flex-col items-start gap-1.5">
+                  <Link
+                    to="/runs/$id"
+                    params={{ id: run.id }}
+                    className="flex items-baseline gap-2.5 font-mono font-medium hover:underline"
+                  >
+                    <span className="text-accent">{run.strategy.name}</span>
+                    <span className="text-muted">v{String(run.strategy.version)}</span>
+                  </Link>
+                  <span className="text-xs text-muted">
+                    {wordsOf(strategyKindOf(run.strategy.kind)).title}
                   </span>
-                  <RunStatusBadge status={statusOfRun(run)} />
+                </div>
+                <div className="flex flex-col items-start gap-2">
+                  <span className="text-xs">
+                    <span className="font-mono">{run.settings.timeframes.join(', ')}</span>
+                    {' · '}наборов {String(run.setCount)}
+                    {' · '}
+                    {pairsWords(run)}
+                  </span>
+                  <RunStatusBadge state={run.state} />
                 </div>
                 {run.state === 'running' ? (
                   <Progress run={run} />
@@ -114,14 +125,13 @@ export function RunsPage() {
             <Table>
               <thead>
                 <tr>
-                  <Th className="w-[100px]">Гипотеза</Th>
-                  <Th className="w-[90px]">Период</Th>
-                  <Th className="w-[110px]">Вид</Th>
-                  <Th className="w-[125px]">Статус</Th>
-                  <Th>Вердикт</Th>
-                  <Th className="w-[40px] text-right font-mono normal-case!">t</Th>
-                  <Th className="w-[80px] text-right">Мощность</Th>
-                  <Th className="w-[70px] text-right">Время</Th>
+                  <Th className="w-[180px]">Стратегия</Th>
+                  <Th className="w-[110px]">Состояние</Th>
+                  <Th className="w-[200px]">История</Th>
+                  <Th className="w-[70px] text-right">Наборов</Th>
+                  <Th className="w-[110px] text-right">Лучшая сумма</Th>
+                  <Th>Причина</Th>
+                  <Th className="w-[70px] text-right">Расчёт</Th>
                   <Th className="w-[100px] text-right">Закончен</Th>
                   <Th className="w-6">
                     <span className="sr-only">Открыть</span>
@@ -135,8 +145,8 @@ export function RunsPage() {
               </tbody>
             </Table>
             <p className="-mt-1.5 text-xs text-faint">
-              Строка целиком открывает отчёт прогона. Длинный текст ошибки обрезается, полный — в
-              отчёте.
+              Строка целиком открывает страницу прогона. Длинный текст ошибки обрезается, полный —
+              на странице прогона.
             </p>
           </>
         )}
@@ -178,7 +188,6 @@ function Progress({ run }: { readonly run: Run }) {
       </div>
       <span className="text-xs text-muted">
         {total === null ? `${done} пар` : `${done} из ${total} пар · ${percent ?? 0} %`}
-        {run.cancelRequested ? ' · отменяется' : ''}
       </span>
     </div>
   );
@@ -190,12 +199,10 @@ function Progress({ run }: { readonly run: Run }) {
  * handler on the row. The reason takes one line; the whole of it is the hint of the row.
  */
 function FinishedRow({ run }: { readonly run: Run }) {
-  const result = run.result;
-  const reason = result?.reason ?? '';
-  const power = result?.power === null || result?.power === undefined ? null : Number(result.power);
+  const reason = run.reason ?? '';
   return (
     <tr
-      aria-label={`Законченный ${run.hypothesis} ${run.id}`}
+      aria-label={`Законченный ${run.strategy.name} ${run.id}`}
       title={reason === '' ? undefined : reason}
       className="relative h-13 border-t border-line hover:bg-panel-2"
     >
@@ -205,33 +212,28 @@ function FinishedRow({ run }: { readonly run: Run }) {
           params={{ id: run.id }}
           className="flex items-baseline gap-2.5 outline-none after:absolute after:inset-0 after:content-[''] focus-visible:after:rounded-md focus-visible:after:outline focus-visible:after:outline-accent"
         >
-          <span className="text-accent">{run.hypothesis}</span>
-          <span className="text-muted">v{String(run.version)}</span>
+          <span className="text-accent">{run.strategy.name}</span>
+          <span className="text-muted">v{String(run.strategy.version)}</span>
         </Link>
       </Td>
-      <Td>{periodLabel(run.period)}</Td>
-      <Td className="text-muted">{kindLabel(run.kind)}</Td>
-      <Td>{result ? <RunStatusBadge status={statusOfRun(run)} /> : '—'}</Td>
+      <Td>
+        <RunStatusBadge state={run.state} />
+      </Td>
+      <Td className="font-mono text-xs">{historyWords(run)}</Td>
+      <Td className="text-right font-mono">{String(run.setCount)}</Td>
+      <Td className="text-right font-mono">{signedUsdt(run.bestAmount)}</Td>
       <Td className="max-w-0">
-        <span
-          className={`block truncate ${result?.status === 'failed' ? 'text-err' : result?.status === 'insufficient_data' || result?.status === 'passed' || result?.status === 'rejected' ? 'font-mono text-xs' : ''}`}
-        >
+        <span className={`block truncate ${run.state === 'failed' ? 'text-err' : 'text-muted'}`}>
           {reason}
         </span>
       </Td>
-      <Td className="text-right font-mono">{fixed(result?.t, 2)}</Td>
-      <Td
-        className={`text-right font-mono ${power !== null && power < 0.8 && result?.status === 'insufficient_data' ? 'text-warn' : ''}`}
-      >
-        {fixed(result?.power, 2)}
-      </Td>
       <Td className="text-right font-mono">
-        {result?.readSeconds === null || result?.readSeconds === undefined
+        {run.computeSeconds === null || run.computeSeconds === undefined
           ? '—'
-          : `${fixed(result.readSeconds, 0)} с`}
+          : `${fixed(run.computeSeconds, 0)} с`}
       </Td>
       <Td className="text-right font-mono text-xs text-muted">
-        {result ? shortUtc(result.time) : '—'}
+        {run.finishedAt ? shortUtc(run.finishedAt) : '—'}
       </Td>
       <Td className="text-faint">
         <span aria-hidden="true">›</span>

@@ -1,0 +1,12 @@
+{
+  "H0001": {
+    "seed": "5591d11ad4f58bd94c74f86b8af3ae9be5cb1a28086039687c8d385d4fa2a84f",
+    "orders": "ebb8bb07f2040afe12ccb6b37eaa79163781022b9109457a4e0fdc4b8118978a",
+    "randoms": "2dafb215b1c76f199c024b6ffce105fe0b75cef8cf871b420a723476228e0c9f"
+  },
+  "H0002": {
+    "seed": "1560020091ffa5a8ee75532d1af744463fe0e3db3960bd45397e6d64edb7a4c7",
+    "orders": "bcb6538a8d20599d6e70b415418f86090cf086d794959e82f67ea477437ffbe7",
+    "randoms": "5dbd611e37fd3075e4ceaaa0461c24faab7b15ab89ae7d642fcbe5f14ca24f59"
+  }
+}

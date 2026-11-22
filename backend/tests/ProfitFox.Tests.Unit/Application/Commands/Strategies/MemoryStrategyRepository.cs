@@ -3,6 +3,7 @@ using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Strategies;
+using ProfitFox.Domain.ValueObjects.Strategies.Enums;
 
 namespace ProfitFox.Tests.Unit.Application.Commands.Strategies;
 
@@ -50,6 +51,19 @@ public sealed class MemoryStrategyRepository : IStrategyRepository
         return Task.FromResult(_strategies.TryGetValue(name, out StrategyDocument? strategy) ? new StrategyRead(strategy, []) : null);
     }
 
+    // The graphs are kept in the order they were saved, so version n is the n-th graph.
+    public Task<StrategyRead?> ReadVersionAsync(string name, int version, CancellationToken cancellationToken)
+    {
+        if (!_strategies.TryGetValue(name, out StrategyDocument? strategy) || version < 1 || version > _graphs[strategy.Id].Count)
+        {
+            return Task.FromResult<StrategyRead?>(null);
+        }
+
+        GraphDefinition graph = _graphs[strategy.Id][version - 1];
+        var read = StrategyDocument.Restore(strategy.Id, strategy.Name, strategy.Description, graph, strategy.Layout, version, kind: strategy.Kind);
+        return Task.FromResult<StrategyRead?>(new StrategyRead(read, []));
+    }
+
     public Task<StrategyDocument> CreateAsync(StrategyDocument strategy, CancellationToken cancellationToken)
     {
         _strategies.Add(strategy.Name, strategy);
@@ -60,13 +74,13 @@ public sealed class MemoryStrategyRepository : IStrategyRepository
     public Task<StrategyDocument> ReplaceAsync(StrategyDocument strategy, CancellationToken cancellationToken)
     {
         StrategyDocument current = _strategies[strategy.Name];
-        var kept = StrategyDocument.Restore(current.Id, strategy.Name, strategy.Description, strategy.Graph, strategy.Layout, current.Version);
+        var kept = StrategyDocument.Restore(current.Id, strategy.Name, strategy.Description, strategy.Graph, strategy.Layout, current.Version, kind: strategy.Kind);
         _strategies[strategy.Name] = kept;
         _graphs[current.Id].Add(strategy.Graph);
         return Task.FromResult(kept);
     }
 
-    public Task RenameAsync(string name, string to, CancellationToken cancellationToken)
+    public Task RenameAsync(string name, string to, StrategyKind kind, CancellationToken cancellationToken)
     {
         StrategyDocument strategy = _strategies[name];
         strategy.Rename(to);

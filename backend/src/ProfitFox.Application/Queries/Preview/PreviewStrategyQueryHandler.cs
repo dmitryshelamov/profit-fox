@@ -11,7 +11,6 @@ using ProfitFox.Domain.Services.MarketData;
 using ProfitFox.Domain.Services.Runs;
 using ProfitFox.Domain.Services.Strategies;
 using ProfitFox.Domain.ValueObjects.Graph;
-using ProfitFox.Domain.ValueObjects.Hypotheses;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Positions;
 using ProfitFox.Domain.ValueObjects.Strategies;
@@ -24,10 +23,15 @@ namespace ProfitFox.Application.Queries.Preview;
 ///     add-position-node, decision 9). The request is checked whole before any history is read: the timeframe, the graph
 ///     with the signals it points at, the fees, the pair. The candles of the timeframe and the funding come from the memory
 ///     the preview of a signal shares. A strategy by plan reads the minutes of its weeks with orders only; a strategy with
-///     orders reads those of the last weeks of exploration. Nothing is read past the end of exploration, nothing goes to
-///     the ledger, the reports or the queue, and no saved strategy or signal changes.
+///     orders reads those of the last weeks of exploration. Nothing is read past the end of exploration, the start of the
+///     current UTC day; nothing goes to the queue, and no saved strategy or signal changes.
 /// </summary>
-internal sealed class PreviewStrategyQueryHandler(IHistorySource source, IInstrumentCatalog catalog, PreviewHistoryCache cache, ISignalRepository signals)
+internal sealed class PreviewStrategyQueryHandler(
+    IHistorySource source,
+    IInstrumentCatalog catalog,
+    PreviewHistoryCache cache,
+    ISignalRepository signals,
+    TimeProvider time)
     : IRequestHandler<PreviewStrategyQuery, StrategyPreviewOutcomeInternal>
 {
     /// <exception cref="HistoryUnavailableException">The market-data service did not give the pairs or the history.</exception>
@@ -83,12 +87,13 @@ internal sealed class PreviewStrategyQueryHandler(IHistorySource source, IInstru
             return new StrategyPreviewOutcomeInternal(Preview: null, errors);
         }
 
-        PreviewHistory history = await cache.Get(pair.Id, timeframe, () => PreviewHistory.ReadAsync(source, pair.Id, timeframe), cancellationToken);
+        DateTimeOffset end = PreviewPeriod.End(time.GetUtcNow());
+        PreviewHistory history = await cache.Get(pair.Id, timeframe, end, () => PreviewHistory.ReadAsync(source, pair.Id, timeframe, end, time), cancellationToken);
         using var hash = new HistoryHash();
-        var reader = new MarketHistory(source, Periods.ExplorationEnd, hash);
+        var reader = new MarketHistory(source, end, hash, time);
         (IReadOnlyList<OrderOutcome> outcomes, IReadOnlyList<CycleOutcome> cycles, DateTimeOffset? computedFrom) = strategy.ByPlan
-            ? await ByPlan(strategy, timeframe, pair, history, reader, costs, cancellationToken)
-            : await WithOrders(strategy, timeframe, pair, history, reader, costs, cancellationToken);
+            ? await ByPlan(strategy, timeframe, pair, history, reader, end, costs, cancellationToken)
+            : await WithOrders(strategy, timeframe, pair, history, reader, end, costs, cancellationToken);
 
         var preview = new StrategyPreviewInternal(
             pair.ToInternal(),
@@ -97,7 +102,7 @@ internal sealed class PreviewStrategyQueryHandler(IHistorySource source, IInstru
             history.Candles.Coverage,
             outcomes,
             cycles,
-            Periods.ExplorationEnd,
+            end,
             computedFrom);
         return new StrategyPreviewOutcomeInternal(preview, Errors: []);
     }
@@ -110,11 +115,12 @@ internal sealed class PreviewStrategyQueryHandler(IHistorySource source, IInstru
         Instrument pair,
         PreviewHistory history,
         MarketHistory reader,
+        DateTimeOffset end,
         TradeCosts costs,
         CancellationToken cancellationToken)
     {
         var steps = PairSteps.Of(strategy, timeframe, pair.Symbol, history.Candles.Items, history.Funding.Items);
-        var orders = new PairOrders(steps, Periods.DataStart, Periods.ExplorationEnd, costs);
+        var orders = new PairOrders(steps, HistoryPeriod.DataStart, end, costs);
         foreach (long week in orders.Weeks)
         {
             (DateTimeOffset from, DateTimeOffset to) = orders.Span(week);
@@ -132,10 +138,11 @@ internal sealed class PreviewStrategyQueryHandler(IHistorySource source, IInstru
         Instrument pair,
         PreviewHistory history,
         MarketHistory reader,
+        DateTimeOffset end,
         TradeCosts costs,
         CancellationToken cancellationToken)
     {
-        (DateTimeOffset from, DateTimeOffset to) = PairCycles.Window(Periods.DataStart, Periods.ExplorationEnd);
+        (DateTimeOffset from, DateTimeOffset to) = PairCycles.Window(HistoryPeriod.DataStart, end);
         HistoryRead<HistoryCandle> minutes = await reader.Candles(pair.Id, TimeSpan.FromMinutes(1), from, to, cancellationToken);
         PositionResult result = PairCycles.Of(
             strategy,

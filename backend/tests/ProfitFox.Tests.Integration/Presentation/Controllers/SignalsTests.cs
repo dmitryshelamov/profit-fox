@@ -268,6 +268,6 @@ public sealed class SignalsTests
 
     private static JsonObject Signal()
     {
-        return JsonNode.Parse(BenchRepository.H0001Text())!["signal"]!.AsObject().DeepClone().AsObject();
+        return ReferenceSignals.H0001();
     }
 }

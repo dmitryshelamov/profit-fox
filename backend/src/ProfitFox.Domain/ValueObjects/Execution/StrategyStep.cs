@@ -12,8 +12,7 @@ namespace ProfitFox.Domain.ValueObjects.Execution;
 public sealed record StrategyStep(DateTimeOffset Moment, EntrySide? Entry, TimeSpan? After, ExitDistance Stop, ExitDistance Target)
 {
     /// <summary>
-    ///     The size of the entry of the strategy of a hypothesis and of a strategy lifted from the form before change
-    ///     add-position-node.
+    ///     The size of the entry of a strategy lifted from the form before change add-position-node.
     /// </summary>
     public const decimal DefaultSize = 100m;
 

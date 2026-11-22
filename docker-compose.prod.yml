@@ -24,8 +24,8 @@ services:
       timeout: 5s
       retries: 20
 
-  # Migrates the database and imports bench/ of git into an empty one on start. The page and /api are open on the LAN of
-  # soyo-02 without authorization, as the other services of profit-fox are.
+  # Migrates the database on start. The page and /api are open on the LAN of soyo-02 without authorization, as the other
+  # services of profit-fox are.
   api:
     image: ghcr.io/dmitryshelamov/profit-fox:${PROFIT_FOX_VERSION:?}
     restart: unless-stopped
