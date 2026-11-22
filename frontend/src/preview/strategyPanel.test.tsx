@@ -748,6 +748,57 @@ describe('the cycles of a ladder in the preview', () => {
   });
 });
 
+// Change add-position-node, task 12.7: a fill in the first minute of a candle was put on the candle before it.
+describe('the candle of a mark of a strategy', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  /** The marks of the chart as `<day> <open time of the candle> <text>`, on candles of 4h. */
+  const marks = () =>
+    (drawn.markers as { time: number; text: string }[]).map(
+      (mark) =>
+        `${new Date(mark.time * 1000).toISOString().slice(8, 16).replace('T', ' ')} ${mark.text}`,
+    );
+
+  it('is the candle each fill of a ladder falls in', async () => {
+    await previewOrders([], asWritten(ladderAnswer()));
+
+    expect(marks()).toEqual([
+      // The market order of 08:00 is filled in the first minute of the candle of 08:00.
+      '05 08:00 лонг',
+      '05 08:00 докупка',
+      '05 12:00 докупка',
+      '05 16:00 выход',
+      '05 16:00 лонг',
+    ]);
+  });
+
+  it('is the candle that closed for the entry of an enter and for an exit by time, and the next one for a stop', async () => {
+    const stopped = order(october, -0.0098);
+    await previewOrders(
+      [],
+      asWritten(
+        withCycles([
+          { ...stopped, trade: { ...stopped.trade!, exitReason: 'stop' } },
+          order(october + day, -0.0056),
+        ]),
+      ),
+    );
+
+    expect(marks()).toEqual([
+      // An enter is placed at the close of 08:00: its entry is on the candle that closed then.
+      '05 04:00 шорт',
+      // The stop of 12:00 is hit in the first minute of the candle of 12:00.
+      '05 12:00 выход',
+      '06 04:00 шорт',
+      // The time of the second cycle is out at 12:00, the close of the candle of 08:00.
+      '06 08:00 выход',
+    ]);
+  });
+});
+
 /** An answer as the API writes it: a field without a value is left out, not written as null. */
 function asWritten<T>(value: T): T {
   return JSON.parse(
