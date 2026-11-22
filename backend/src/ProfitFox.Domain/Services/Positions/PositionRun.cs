@@ -38,6 +38,11 @@ namespace ProfitFox.Domain.Services.Positions;
 ///             the end of the history. An order of <c>enter</c> that met no minute with trades within its time gives no trade.
 ///         </item>
 ///         <item>An order whose cycle would end by its time after the end of the history gives no cycle: the reason is the period.</item>
+///         <item>
+///             An order of <c>market-order</c> or <c>limit-order</c> that cannot open a cycle — by the values of the exit
+///             nodes or by the period — is refused at most once of a node in a candle, however many minutes it would fill in.
+///         </item>
+///         <item>An order of <c>close-position</c> is of the position it was placed at: it is taken off when that position closes.</item>
 ///         <item>A minute the history does not know, while a cycle is open or an order stands, leaves the cycle out on coverage.</item>
 ///     </list>
 /// </summary>
@@ -56,6 +61,7 @@ public sealed class PositionRun
     private readonly Dictionary<string, Held> _standing = new(StringComparer.Ordinal);
     private readonly List<CycleOutcome?> _cycles = [];
     private readonly Dictionary<string, DateTimeOffset> _entered = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DateTimeOffset> _refused = new(StringComparer.Ordinal);
     private readonly List<OrderOutcome> _orders = [];
     private readonly long _from;
     private readonly DateTimeOffset _end;
@@ -321,7 +327,7 @@ public sealed class PositionRun
 
             if (!held.Exits.Valid)
             {
-                _orders.Add(Outcome(held.Kind, time, order.Node, order.Side, OrderResult.Excluded, OrderExclusion.Plan, null, null, null));
+                Refuse(held, time, OrderExclusion.Plan);
                 return;
             }
 
@@ -330,7 +336,7 @@ public sealed class PositionRun
             DateTimeOffset? until = held.Exits.After is { } after ? (held.Kind == OrderKind.Enter ? order.Placed : time) + after : null;
             if (until > _end)
             {
-                _orders.Add(Outcome(held.Kind, time, order.Node, order.Side, OrderResult.Excluded, OrderExclusion.Period, null, null, null));
+                Refuse(held, time, OrderExclusion.Period);
                 return;
             }
 
@@ -375,6 +381,20 @@ public sealed class PositionRun
         }
     }
 
+    // An order that would have opened a cycle and cannot (spec strategy-position «Недопустимые выходы у заявки по условию»):
+    // while the reason stays, the node places the same order after every refusal, so one refusal of a node is written in
+    // a candle and the rest of them are not.
+    private void Refuse(Held held, DateTimeOffset time, OrderExclusion reason)
+    {
+        if (_refused.TryGetValue(held.Order.Node, out DateTimeOffset candle) && candle == _close)
+        {
+            return;
+        }
+
+        _refused[held.Order.Node] = _close;
+        _orders.Add(Outcome(held.Kind, time, held.Order.Node, held.Order.Side, OrderResult.Excluded, reason, null, null, null));
+    }
+
     // The stop, the target and the time close the whole position and take off the other orders.
     private void Close(CycleRun cycle, DateTimeOffset time, double raw, double fill, CycleExit reason, string? node)
     {
@@ -407,10 +427,16 @@ public sealed class PositionRun
         return true;
     }
 
+    // The cycle closed. An order of close-position not filled yet was of this position (spec strategy-execution «Закрытие
+    // позиции по условию»): it is taken off, so it does not close the next cycle.
     private void Finished(CycleRun cycle)
     {
         _cycles[^1] = cycle.Outcome();
         _cycle = null;
+        foreach (string node in _standing.Where(standing => standing.Value.Kind == OrderKind.ClosePosition).Select(standing => standing.Key).ToList())
+        {
+            _standing.Remove(node);
+        }
     }
 
     private void Hole()

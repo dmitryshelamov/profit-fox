@@ -602,6 +602,64 @@ public sealed class PositionRunTests
         Assert.That(result.Orders.Single(), Is.EqualTo(new OrderOutcome(Paths.At(60), "enter", OrderSide.Long, OrderResult.Excluded, OrderExclusion.NoTrade, null, null, null)));
     }
 
+    [Test]
+    public void A_market_order_that_cannot_open_a_cycle_is_refused_once_in_a_candle()
+    {
+        // Spec strategy-position «Недопустимые выходы у заявки по условию», «Стоп вне границ у входа по условию»: the
+        // condition is true with the position closed all along, the stop is 1.2. Two hourly candles, 120 minutes.
+        string json = WithPosition(
+            $$"""{{EntryNodes}}, { "id": "stop", "kind": "stop-loss", "inputs": { "distance": 1.2 } }""",
+            $$"""{{EntryWires}}, { "from": "position.position", "to": "stop.position" }, {{Into("stop")}}""");
+
+        PositionResult result = Run(json, new Paths().Flat(100, 120).Build(withFunding: false), hours: 1);
+
+        Assert.That(result.Cycles, Is.Empty);
+        Assert.That(result.Orders, Is.EqualTo(new[]
+        {
+            new OrderOutcome(Paths.At(0), "entry", OrderSide.Buy, OrderResult.Excluded, OrderExclusion.Plan, null, null, null),
+            new OrderOutcome(Paths.At(60), "entry", OrderSide.Buy, OrderResult.Excluded, OrderExclusion.Plan, null, null, null)
+        }), "one refusal of the node in each candle, not one in each minute");
+    }
+
+    [Test]
+    public void A_market_order_whose_cycle_would_end_after_the_end_is_refused_once_in_a_candle()
+    {
+        PositionResult result = Run(TimedEntry("4h"), new Paths().Flat(100, 120).Build(withFunding: false), hours: 1);
+
+        Assert.That(result.Cycles, Is.Empty);
+        Assert.That(result.Orders.Select(order => (order.Moment, order.Exclusion)), Is.EqualTo(new[]
+        {
+            (Paths.At(0), (OrderExclusion?)OrderExclusion.Period), (Paths.At(60), OrderExclusion.Period)
+        }));
+    }
+
+    [Test]
+    public void An_order_of_close_position_is_taken_off_when_the_position_closed_another_way()
+    {
+        // Spec strategy-execution «Закрытие позиции по условию», «Позиция закрылась раньше заявки». At 12:05 the averaging
+        // buy fills, the computation after it places the order of close-position (more than 150 USDT is put in), and the
+        // sale at 101, left as it was, closes the position in the same minute. The next cycle opens at 12:06.
+        string json = WithPosition(
+            $$"""
+              {{EntryNodes}},
+              { "id": "buy", "kind": "limit-order", "settings": { "side": "buy", "sizeIn": "amount" }, "inputs": { "price": 99, "size": 100 } },
+              { "id": "sell", "kind": "limit-order", "settings": { "side": "sell", "sizeIn": "amount" }, "inputs": { "price": 101, "size": 100000 } },
+              { "id": "much", "kind": "compare", "settings": { "operation": "gt" }, "inputs": { "b": 150 } },
+              { "id": "out", "kind": "close-position" }
+              """,
+            $$"""
+              {{EntryWires}}, { "from": "position.open", "to": "buy.when" }, {{Into("buy")}}, { "from": "position.open", "to": "sell.when" }, {{Into("sell")}},
+              { "from": "position.invested", "to": "much.a" }, { "from": "much.result", "to": "out.when" }, {{Into("out")}}
+              """);
+
+        PositionResult result = Run(json, new Paths().Flat(100, 5).Minute(100, 101.2, 98.9, 100).Flat(100, 54).Build(withFunding: false), hours: 0);
+
+        Assert.That(result.Cycles[0].Fills.Select(fill => (fill.Moment, fill.Node)), Is.EqualTo(new[] { (Paths.At(0), "entry"), (Paths.At(5), "buy"), (Paths.At(5), "sell") }));
+        Assert.That(result.Cycles[1].Fills.Select(fill => (fill.Moment, fill.Node)), Is.EqualTo(new[] { (Paths.At(6), "entry") }), "the order of the first cycle does not close the second");
+        Assert.That(result.Cycles[1].Open, Is.True);
+        Assert.That(result.Orders.Where(order => order.Node == "out"), Is.Empty);
+    }
+
     // Buys 100 USDT by the market while there is no position; the cycle closes by its time.
     private static string TimedEntry(string after)
     {
