@@ -483,6 +483,17 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   проходит на CLI 2.1.0. SHA-256 `/openapi/v1.json` (API ветки в `Development`) —
   `ff59cbf7c1ed3f5f97358570273569b4b6443a11ea9d6247a78ee8b55454e4c7`, как в 8.5: контракт API не менялся, `schema.d.ts`
   не пересобирался. SHA-256 `EngineVersions.json` — прежний, `EngineVersion.Number = 3`.
+- **12.12–12.13, повтор чтения и сутки прогона** (облачная сессия, 2026-11-22, .NET SDK 10.0.115, Node 22). Сборка
+  `dotnet build ProfitFox.slnx --configuration Release`: 0 предупреждений, 0 ошибок. Тесты бэкенда (`--configuration
+  Release`): unit 487 (+7: шесть у `RepeatingHistorySourceTests`, один у `MarketHistoryTests`), интеграционные 197
+  (+10: три и один у `ExecuteBacktestTests`, шесть у `GrpcHistorySourceTests`; Postgres в Docker,
+  `TESTCONTAINERS_RYUK_DISABLED=true`), все зелёные. Каждый новый тест прогона, кроме теста отказа в окне, падал до
+  своей правки: с двумя обрывами прогон падал, при обрыве всегда был один запрос вместо четырёх, через полночь `funding`
+  было 1 вместо 3. Фронтенд не менялся. Проверка однострочных `<summary>` из `ci.yml` пуста. `openspec validate
+  add-strategy-backtest --strict` проходит на CLI 2.1.0. SHA-256 `/openapi/v1.json` (API ветки в `Development`) —
+  `ff59cbf7c1ed3f5f97358570273569b4b6443a11ea9d6247a78ee8b55454e4c7`, как в 8.5. SHA-256 `EngineVersions.json` —
+  `1f7ae3ab13b0f59f7d325c6b91e455781cb9a396e15a8e18a5889f4616335884`, файл тот же, что на `e46b720` (в «Базе» записан
+  хэш до записи версии 3 из 8.1); `EngineVersion.Number = 3`.
 
 ## Workflow follow-up
 
