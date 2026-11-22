@@ -143,6 +143,42 @@ public sealed class PositionRunTests
     }
 
     [Test]
+    public void An_entry_while_the_position_is_open_is_skipped_whatever_its_plan()
+    {
+        // Spec strategy-position «Одна позиция на пару», as for a strategy by plan: the events of 13:00 and 17:00, the time
+        // is a day. The size is 100 less the money put in: 100 with the position closed and 0, not allowed, while it is open.
+        const string json =
+            """
+            {
+              "formatVersion": 1,
+              "nodes": [
+                { "id": "c", "kind": "candle" },
+                { "id": "above", "kind": "compare", "settings": { "operation": "gt" }, "inputs": { "b": 100 } },
+                { "id": "first", "kind": "first-time" },
+                { "id": "position", "kind": "position" },
+                { "id": "left", "kind": "subtract", "inputs": { "a": 100 } },
+                { "id": "enter", "kind": "enter", "settings": { "side": "long" } },
+                { "id": "close-after", "kind": "close-after", "inputs": { "after": "1d" } }
+              ],
+              "wires": [
+                { "from": "c.close", "to": "above.a" }, { "from": "above.result", "to": "first.value" }, { "from": "first.event", "to": "enter.when" },
+                { "from": "position.invested", "to": "left.b" }, { "from": "left.result", "to": "enter.size" },
+                { "from": "enter.order", "to": "position.orders" },
+                { "from": "position.position", "to": "close-after.position" }, { "from": "close-after.order", "to": "position.orders" }
+              ]
+            }
+            """;
+
+        PositionResult result = Run(json, new Paths().Flat(100, 31 * 60).Build(withFunding: false), hours: 30, close: TwoEvents);
+
+        Assert.That(result.Orders, Is.EqualTo(new[]
+        {
+            new OrderOutcome(Paths.At(60), "enter", OrderSide.Long, OrderResult.Filled, null, 100, 100, 0),
+            new OrderOutcome(Paths.At(5 * 60), "enter", OrderSide.Long, OrderResult.Skipped, null, null, null, null)
+        }));
+    }
+
+    [Test]
     public void A_market_order_waits_for_a_minute_with_trades_and_gives_no_second_order_meanwhile()
     {
         string json = WithPosition(

@@ -34,6 +34,18 @@ public sealed class PositionNodeTests
         Assert.That(x.Number, Is.EqualTo(decimal.Parse(result, System.Globalization.CultureInfo.InvariantCulture)));
     }
 
+    [TestCase("multiply", "79000000000000000000000000000", "10")]
+    [TestCase("add", "79000000000000000000000000000", "79000000000000000000000000000")]
+    [TestCase("subtract", "-79000000000000000000000000000", "79000000000000000000000000000")]
+    public void A_result_too_large_for_a_decimal_is_missing(string kind, string a, string b)
+    {
+        string json = History.WithOutput("number", "x.result", $$"""{ "id": "x", "kind": "{{kind}}", "inputs": { "a": {{a}}, "b": {{b}} } }""");
+
+        PinValue x = History.Run(json, History.Closes(1))[0][0];
+
+        Assert.That(x.IsMissing, Is.True, "a decimal holds up to 7.9e28; past it there is no value, not an exception");
+    }
+
     [Test]
     public void A_missing_input_gives_a_missing_result()
     {

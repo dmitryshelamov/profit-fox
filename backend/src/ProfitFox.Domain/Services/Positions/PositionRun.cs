@@ -503,13 +503,15 @@ public sealed class PositionRun
                         // The cycle would end after the end of the history (spec strategy-preview «Только разведка»).
                         _orders.Add(Outcome(node.Kind, moment, node.Id, node.Side, OrderResult.Excluded, OrderExclusion.Period, null, null, null));
                     }
+                    else if (_cycle is not null)
+                    {
+                        // Skipped whatever its plan, as the order of a strategy by plan (spec strategy-position «Одна
+                        // позиция на пару»): the position is looked at before the values of the order.
+                        _orders.Add(Outcome(node.Kind, moment, node.Id, node.Side, OrderResult.Skipped, null, null, null, null));
+                    }
                     else if (size is not > 0 || !exits.Valid)
                     {
                         _orders.Add(Outcome(node.Kind, moment, node.Id, node.Side, OrderResult.Excluded, OrderExclusion.Plan, null, null, null));
-                    }
-                    else if (_cycle is not null)
-                    {
-                        _orders.Add(Outcome(node.Kind, moment, node.Id, node.Side, OrderResult.Skipped, null, null, null, null));
                     }
                     else
                     {
