@@ -375,6 +375,39 @@ describe('the tabs of the preview of a strategy', () => {
       'без сделки: нет минутной истории',
     );
   });
+
+  // Scenario «Цикл, исключённый дырой в истории».
+  it('says that there is no minute history at the order whose cycle a hole in the history left out', async () => {
+    const answer = withCycles([order(october, -0.0098)]);
+    const [cycle] = answer.cycles as { fills: unknown[] }[];
+    // The cycle as the API writes it: its entry, no exit and no result.
+    await previewOrders(
+      [],
+      asWritten({
+        ...answer,
+        cycles: [
+          {
+            ...cycle,
+            fills: cycle!.fills.slice(0, 1),
+            exitReason: null,
+            net: null,
+            netAmount: null,
+            exclusion: 'coverage',
+          },
+        ],
+      }),
+    );
+
+    expect(screen.getByRole('tab', { name: 'Сделки 0' })).toHaveAttribute('aria-selected', 'true');
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Заявки 1' }));
+
+    const row = within(screen.getByRole('table', { name: 'Заявки' })).getByRole('row', {
+      name: 'Заявка 2025-10-05 08:00',
+    });
+    expect(row).toHaveTextContent('исполнена, нет минутной истории');
+    expect(row).not.toHaveTextContent('цикл открыт');
+  });
 });
 
 // Spec strategy-constructor «Сумма результатов предпросмотра стратегии».

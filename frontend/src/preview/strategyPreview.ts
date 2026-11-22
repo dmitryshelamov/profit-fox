@@ -111,8 +111,8 @@ export function openersOf(orders: readonly PreviewOrder[]): Set<PreviewOrder> {
 }
 
 /**
- * What became of an order, in words: for an order that opened a cycle, how the cycle ended and its result; for another
- * fill, its cycle; skipped, without a trade and why, or not computed.
+ * What became of an order, in words: for an order that opened a cycle, how the cycle ended and its result — or why the
+ * cycle was left out; for another fill, its cycle; skipped, without a trade and why, or not computed.
  */
 export function outcomeOf(
   order: PreviewOrder,
@@ -122,6 +122,11 @@ export function outcomeOf(
   if (order.outcome === 'filled') {
     const cycle = order.cycle == null ? undefined : cycles[Number(order.cycle)];
     if (cycle !== undefined && opened) {
+      // A cycle left out on a hole in the history has no result and is not open: the order says why it has none.
+      if (cycle.exclusion != null) {
+        return `исполнена, ${exclusions[cycle.exclusion] ?? cycle.exclusion}`;
+      }
+
       return cycle.open || cycle.net == null
         ? 'исполнена, цикл открыт'
         : `${reasons[cycle.exitReason ?? ''] ?? cycle.exitReason ?? '—'}, ${percent(Number(cycle.net))}`;
