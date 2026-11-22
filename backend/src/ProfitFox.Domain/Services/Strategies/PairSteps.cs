@@ -17,6 +17,7 @@ public sealed class PairSteps
     private readonly StrategyStep[] _steps;
     private readonly DateTimeOffset[] _moments;
     private readonly StrategyStep _beforeCandles;
+    private readonly bool _byPlan;
 
     /// <summary>
     ///     The steps with an entry order, in time order.
@@ -26,8 +27,9 @@ public sealed class PairSteps
     /// <summary>
     ///     The steps of a pair in time order, and what the strategy gives before its first candle.
     /// </summary>
-    public PairSteps(IReadOnlyList<StrategyStep> steps, StrategyStep beforeCandles)
+    public PairSteps(IReadOnlyList<StrategyStep> steps, StrategyStep beforeCandles, bool byPlan = true)
     {
+        _byPlan = byPlan;
         _steps = [.. steps];
         _moments = [.. steps.Select(step => step.Moment)];
         _beforeCandles = beforeCandles;
@@ -48,7 +50,7 @@ public sealed class PairSteps
             steps.Add(executor.Step(symbol, closed, lastFunding));
         }
 
-        return new PairSteps(steps, executor.BeforeCandles(DateTimeOffset.UnixEpoch));
+        return new PairSteps(steps, executor.BeforeCandles(DateTimeOffset.UnixEpoch), strategy.ByPlan);
     }
 
     /// <summary>
@@ -58,8 +60,14 @@ public sealed class PairSteps
     ///     history, a moment before the first candle. The values are then those of the last candle closed by the moment:
     ///     the graph was not computed since. Before the first candle only the values written in the graph are known.
     /// </summary>
+    /// <exception cref="InvalidOperationException">The strategy has orders: only a cycle of a strategy by plan opens outside the graph.</exception>
     public StrategyStep At(DateTimeOffset moment)
     {
+        if (!_byPlan)
+        {
+            throw new InvalidOperationException("Only a cycle of a strategy by plan opens outside the graph; this strategy has orders.");
+        }
+
         int index = Array.BinarySearch(_moments, moment);
         if (index < 0)
         {

@@ -31,6 +31,14 @@ public sealed class TradingStrategy
     /// </summary>
     public IReadOnlyList<StrategyEntry> Entries { get; }
 
+    /// <summary>
+    ///     Whether the strategy is by plan (spec strategy-position «Стратегия по плану»): it has a <c>close-after</c>, no
+    ///     <c>market-order</c>, <c>limit-order</c> or <c>close-position</c>, and no wire from the state of the position. Only
+    ///     its <c>enter</c> opens the position and only the time, the stop and the target close it, so its graph is computed
+    ///     ahead of the minutes; any other strategy is a strategy with orders.
+    /// </summary>
+    public bool ByPlan { get; }
+
     internal TradingStrategy(GraphDefinition graph)
         : this(graph, graph)
     {
@@ -41,6 +49,15 @@ public sealed class TradingStrategy
         Source = source;
         Graph = graph;
         Entries = [.. graph.Nodes.Where(node => node.Kind == NodeCatalog.Enter).Select(node => new StrategyEntry(node.Id, Side(node)))];
+        ByPlan = IsByPlan(graph);
+    }
+
+    private static bool IsByPlan(GraphDefinition graph)
+    {
+        var positions = new HashSet<string>(graph.Nodes.Where(node => node.Kind == NodeCatalog.Position).Select(node => node.Id), StringComparer.Ordinal);
+        return graph.Nodes.Any(node => node.Kind == NodeCatalog.CloseAfter)
+               && graph.Nodes.All(node => node.Kind is not (NodeCatalog.MarketOrder or NodeCatalog.LimitOrder or NodeCatalog.ClosePosition))
+               && graph.Wires.All(wire => !positions.Contains(wire.From.Node) || wire.From.Pin == NodeCatalog.PositionPin);
     }
 
     /// <summary>
