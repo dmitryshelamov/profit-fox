@@ -41,18 +41,24 @@ internal sealed class PreviewSignalQueryHandler(IHistorySource source, IInstrume
         }
 
         Instrument? pair = null;
+        IReadOnlyList<Instrument> pairs = [];
         if (query.Instrument is not { Length: > 0 } symbol)
         {
             errors.Add(new PreviewErrorInternal("MissingField", "the pair is required") { Field = "instrument" });
         }
         else
         {
-            IReadOnlyList<Instrument> pairs = await catalog.LinearUsdtPerpetuals(cancellationToken);
+            pairs = await catalog.LinearUsdtPerpetuals(cancellationToken);
             pair = pairs.FirstOrDefault(candidate => candidate.Symbol == symbol);
             if (pair is null)
             {
                 errors.Add(new PreviewErrorInternal("UnknownInstrument", $"{symbol} is not a listed linear USDT perpetual") { Field = "instrument" });
             }
+        }
+
+        if (signal is not null && pair is not null)
+        {
+            errors.AddRange(StrategyGraph.CheckNamedPairs(signal.Graph, [.. pairs.Select(listed => listed.Symbol)]).Select(PreviewErrorInternal.Of));
         }
 
         if (errors.Count > 0 || signal is null || pair is null)
@@ -64,7 +70,16 @@ internal sealed class PreviewSignalQueryHandler(IHistorySource source, IInstrume
         PreviewHistory history = await cache.Get(pair.Id, timeframe, end, () => PreviewHistory.ReadAsync(source, pair.Id, timeframe, end, time), cancellationToken);
         HistoryRead<HistoryCandle> candles = history.Candles;
         HistoryRead<HistoryPayment> funding = history.Funding;
-        IReadOnlyList<DateTimeOffset> events = PairEvents.Of(signal, timeframe, pair.Symbol, candles.Items, funding.Items);
+        IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>? named = await PreviewHistory.NamedAsync(
+            StrategyGraph.NamedPairs(signal.Graph),
+            pairs,
+            cache,
+            source,
+            timeframe,
+            end,
+            time,
+            cancellationToken);
+        IReadOnlyList<DateTimeOffset> events = PairEvents.Of(signal, timeframe, pair.Symbol, candles.Items, funding.Items, named);
 
         var preview = new SignalPreviewInternal(
             pair.ToInternal(),

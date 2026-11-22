@@ -21,6 +21,12 @@ public sealed class FakeMarketData
 
     public StatusCode? Failure { get; set; }
 
+    /// <summary>
+    ///     The close of every candle of an instrument by its id, when it is not the usual one (change add-ideas-and-market):
+    ///     a test changes the history of a pair with it.
+    /// </summary>
+    public Dictionary<string, string> Closes { get; } = [];
+
     private int _drops;
 
     /// <summary>

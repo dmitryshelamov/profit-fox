@@ -58,5 +58,10 @@ public enum GraphErrorCode
     UnknownSignal,
     UnreadableSignal,
     SignalInSignal,
-    ExpandedIdTaken
+    ExpandedIdTaken,
+
+    /// <summary>
+    ///     A node <c>pair-candle</c> names a pair that is not among the listed pairs (change add-ideas-and-market).
+    /// </summary>
+    UnknownPair
 }

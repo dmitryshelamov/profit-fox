@@ -43,6 +43,11 @@ public sealed class FakeCandleFeed(FakeMarketData data) : CandleFeed.CandleFeedB
                 CandleUpdate candle = request.Interval == CandleInterval.FourHours
                     ? Minute(instrument, open, open.Hour == 8 ? "0" : "12.5", "6")
                     : Built(instrument, open, step, range.Until.ToDateTimeOffset());
+                if (data.Closes.TryGetValue(instrument, out string? close))
+                {
+                    candle.Close = close;
+                }
+
                 await responseStream.WriteAsync(new CandleHistoryItem { Candle = candle });
                 if (drop)
                 {

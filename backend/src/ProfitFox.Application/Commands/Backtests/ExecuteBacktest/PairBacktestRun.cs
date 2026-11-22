@@ -19,12 +19,14 @@ public static class PairBacktestRun
     /// <param name="kind">The kind of the strategy.</param>
     /// <param name="plans">The sets; they share the end of history.</param>
     /// <param name="cancellationToken">Stops the reads and the calculation.</param>
+    /// <param name="named">The candles of the pairs the graph names, read once for the backtest (<see cref="NamedAsync" />).</param>
     public static async Task<IReadOnlyList<PairSetResult>> RunAsync(
         MarketHistory history,
         Instrument pair,
         StrategyKind kind,
         IReadOnlyList<BacktestPlan> plans,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<TimeSpan, IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>>? named = null)
     {
         if (plans.Count == 0)
         {
@@ -46,6 +48,41 @@ public static class PairBacktestRun
             candles,
             funding,
             (from, to, token) => history.Candles(pair.Id, TimeSpan.FromMinutes(1), from, to, token),
-            cancellationToken);
+            cancellationToken,
+            named);
+    }
+
+    /// <summary>
+    ///     The candles of the pairs the graph names, of each timeframe of the sets, read once for the whole backtest and added
+    ///     to its hash (change add-ideas-and-market, spec market-history «Свечи названной пары»); null when the graph names
+    ///     none. A named pair that is no longer listed has no candles.
+    /// </summary>
+    public static async Task<IReadOnlyDictionary<TimeSpan, IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>>?> NamedAsync(
+        MarketHistory history,
+        IReadOnlyList<string> named,
+        IReadOnlyList<Instrument> listed,
+        IReadOnlyList<BacktestPlan> plans,
+        CancellationToken cancellationToken)
+    {
+        if (named.Count == 0 || plans.Count == 0)
+        {
+            return null;
+        }
+
+        DateTimeOffset end = plans[0].Design.End;
+        Instrument[] pairs = [.. listed.Where(pair => named.Contains(pair.Symbol, StringComparer.Ordinal)).OrderBy(pair => pair.Symbol, StringComparer.Ordinal)];
+        var candles = new Dictionary<TimeSpan, IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>>();
+        foreach (TimeSpan timeframe in plans.Select(plan => plan.Design.Timeframe).Distinct())
+        {
+            var byPair = new Dictionary<string, IReadOnlyList<HistoryCandle>>(StringComparer.Ordinal);
+            foreach (Instrument pair in pairs)
+            {
+                byPair[pair.Symbol] = (await history.Candles(pair.Id, timeframe, HistoryPeriod.DataStart, end, cancellationToken)).Items;
+            }
+
+            candles[timeframe] = byPair;
+        }
+
+        return candles;
     }
 }

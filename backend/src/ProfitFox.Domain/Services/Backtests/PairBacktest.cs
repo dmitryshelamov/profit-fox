@@ -30,6 +30,10 @@ public static class PairBacktest
     /// <param name="funding">The funding of the pair over the same time, with the payment at the end.</param>
     /// <param name="minutes">Reads the minutes of the pair.</param>
     /// <param name="cancellationToken">Stops the calculation between weeks and candles.</param>
+    /// <param name="named">
+    ///     The candles of the pairs the graph names by timeframe and symbol (change add-ideas-and-market); null when it names
+    ///     none.
+    /// </param>
     /// <exception cref="OperationCanceledException">The token was cancelled.</exception>
     public static async Task<IReadOnlyList<PairSetResult>> RunAsync(
         string symbol,
@@ -38,7 +42,8 @@ public static class PairBacktest
         IReadOnlyDictionary<TimeSpan, IReadOnlyList<HistoryCandle>> candles,
         HistoryRead<HistoryPayment> funding,
         MinuteReader minutes,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<TimeSpan, IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>>? named = null)
     {
         if (sets.Count == 0)
         {
@@ -46,8 +51,15 @@ public static class PairBacktest
         }
 
         return kind == StrategyKind.Idea
-            ? await Ideas(symbol, sets, candles, funding, minutes, cancellationToken)
-            : await Bot(sets, candles, funding, minutes, cancellationToken);
+            ? await Ideas(symbol, sets, candles, funding, minutes, named, cancellationToken)
+            : await Bot(sets, candles, funding, minutes, named, cancellationToken);
+    }
+
+    private static IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>? Named(
+        IReadOnlyDictionary<TimeSpan, IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>>? named,
+        TimeSpan timeframe)
+    {
+        return named is not null && named.TryGetValue(timeframe, out IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>? pairs) ? pairs : null;
     }
 
     private static async Task<IReadOnlyList<PairSetResult>> Ideas(
@@ -56,13 +68,14 @@ public static class PairBacktest
         IReadOnlyDictionary<TimeSpan, IReadOnlyList<HistoryCandle>> candles,
         HistoryRead<HistoryPayment> funding,
         MinuteReader minutes,
+        IReadOnlyDictionary<TimeSpan, IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>>? named,
         CancellationToken cancellationToken)
     {
         PairEvaluation[] evaluations =
         [
             .. sets.Select(set => new PairEvaluation(
                 symbol,
-                PairSteps.Of(set.Strategy, set.Design.Timeframe, symbol, candles[set.Design.Timeframe], funding.Items),
+                PairSteps.Of(set.Strategy, set.Design.Timeframe, symbol, candles[set.Design.Timeframe], funding.Items, Named(named, set.Design.Timeframe)),
                 set.Design))
         ];
         List<EventRow>[] rows = [.. sets.Select(_ => new List<EventRow>())];
@@ -89,6 +102,7 @@ public static class PairBacktest
         IReadOnlyDictionary<TimeSpan, IReadOnlyList<HistoryCandle>> candles,
         HistoryRead<HistoryPayment> funding,
         MinuteReader minutes,
+        IReadOnlyDictionary<TimeSpan, IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>>? named,
         CancellationToken cancellationToken)
     {
         BacktestDesign design = sets[0].Design;
@@ -97,7 +111,7 @@ public static class PairBacktest
         foreach (BacktestPlan set in sets)
         {
             TradeCosts costs = set.Design.Costs;
-            PositionResult result = PairCycles.Of(set.Strategy, set.Design.Timeframe, candles[set.Design.Timeframe], funding.Items, path, design.Start, design.End, costs, cancellationToken);
+            PositionResult result = PairCycles.Of(set.Strategy, set.Design.Timeframe, candles[set.Design.Timeframe], funding.Items, path, design.Start, design.End, costs, cancellationToken, Named(named, set.Design.Timeframe));
             results.Add(new PairSetResult(set.Set, PairNumbers.Of(result), Rows: [], result));
         }
 

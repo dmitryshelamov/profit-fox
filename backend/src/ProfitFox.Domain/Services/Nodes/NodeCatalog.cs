@@ -18,6 +18,12 @@ public static class NodeCatalog
     public const string Parameters = "parameters";
     public const string Candle = "candle";
     public const string FundingRate = "funding-rate";
+    public const string PairCandle = "pair-candle";
+
+    /// <summary>
+    ///     The setting of <c>pair-candle</c> that names the pair (change add-ideas-and-market).
+    /// </summary>
+    public const string Symbol = "symbol";
     public const string Compare = "compare";
     public const string Previous = "previous";
     public const string And = "and";
@@ -135,6 +141,15 @@ public static class NodeCatalog
                 _ => new CandleNode()),
             new NodeKind(FundingRate, [], [new PinDeclaration("value", PinType.Number)], [], _ => new FundingRateNode()),
             new NodeKind(
+                PairCandle,
+                [],
+                [.. new[] { "open", "high", "low", "close", "volume" }.Select(name => new PinDeclaration(name, PinType.Number))],
+                [new SettingDeclaration(Symbol, [], Default: null) { Free = true }],
+                node => new PairCandleNode(node.Settings[Symbol]))
+            {
+                CheckFreeSetting = CheckSymbol
+            },
+            new NodeKind(
                 Compare,
                 [new PinDeclaration("a", PinType.Number), new PinDeclaration("b", PinType.Number)],
                 [BooleanResult],
@@ -239,6 +254,15 @@ public static class NodeCatalog
     public static NodeKind? Find(string name)
     {
         return Kinds.GetValueOrDefault(name);
+    }
+
+    // A symbol of a pair: capital letters and digits, as the exchange writes it (BTCUSDT, 1000PEPEUSDT). Whether the pair
+    // trades is checked where the catalog of pairs is known.
+    private static string? CheckSymbol(string name, string value)
+    {
+        return value.Length > 0 && value.All(letter => letter is >= 'A' and <= 'Z' or >= '0' and <= '9')
+            ? null
+            : $"{name} names a pair in capital letters and digits, as BTCUSDT, not «{value}».";
     }
 
     // The output of the node: value of the boolean type for a version whose output is a boolean (change

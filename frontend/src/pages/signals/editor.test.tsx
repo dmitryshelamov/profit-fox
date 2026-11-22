@@ -106,6 +106,39 @@ describe('the editor of a signal', () => {
     expect(graph.wires.some((wire) => wire.to === 'out.entry')).toBe(false);
   });
 
+  // Change add-ideas-and-market, task 4.4: the pair of a node «Свеча пары» is chosen from the hint of the traded pairs.
+  it('chooses the pair of a candle of another pair from the hint, and the pair goes into the graph', async () => {
+    openFundingHigh();
+    await findNode('Параметры', 'p');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Палитра узлов' }));
+    await userEvent.click(
+      within(screen.getByRole('region', { name: 'Палитра' })).getByRole('button', {
+        name: 'Свеча пары',
+      }),
+    );
+    const node = await selectNode('Свеча пары', 'pair-candle-1');
+    const symbol = within(node).getByRole('combobox', { name: 'Настройка symbol' });
+    const hint = document.getElementById(symbol.getAttribute('list')!)!;
+    await waitFor(() =>
+      expect([...hint.querySelectorAll('option')].map((option) => option.value)).toEqual([
+        'BTCUSDT',
+        'PRLUSDT',
+      ]),
+    );
+
+    await userEvent.type(symbol, 'btcusdt{Enter}');
+
+    expect(symbol).toHaveValue('BTCUSDT');
+    await userEvent.click(screen.getByRole('button', { name: 'JSON' }));
+    const graph = JSON.parse((card('JSON').getByRole('textbox') as HTMLTextAreaElement).value) as {
+      nodes: { id: string; settings?: Record<string, string> }[];
+    };
+    expect(graph.nodes.find((item) => item.id === 'pair-candle-1')!.settings).toEqual({
+      symbol: 'BTCUSDT',
+    });
+  });
+
   // Scenario «Вставка графа».
   it('replaces the graph with pasted JSON, and keeps it when the JSON does not read', async () => {
     openFundingHigh();

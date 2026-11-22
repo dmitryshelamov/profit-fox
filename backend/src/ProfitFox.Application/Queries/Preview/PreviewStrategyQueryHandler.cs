@@ -7,6 +7,7 @@ using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.Queries.MarketData;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.Services.MarketData;
 using ProfitFox.Domain.Services.Runs;
 using ProfitFox.Domain.Services.Strategies;
@@ -68,18 +69,24 @@ internal sealed class PreviewStrategyQueryHandler(
         }
 
         Instrument? pair = null;
+        IReadOnlyList<Instrument> pairs = [];
         if (query.Instrument is not { Length: > 0 } symbol)
         {
             errors.Add(new PreviewErrorInternal("MissingField", "the pair is required") { Field = "instrument" });
         }
         else
         {
-            IReadOnlyList<Instrument> pairs = await catalog.LinearUsdtPerpetuals(cancellationToken);
+            pairs = await catalog.LinearUsdtPerpetuals(cancellationToken);
             pair = pairs.FirstOrDefault(candidate => candidate.Symbol == symbol);
             if (pair is null)
             {
                 errors.Add(new PreviewErrorInternal("UnknownInstrument", $"{symbol} is not a listed linear USDT perpetual") { Field = "instrument" });
             }
+        }
+
+        if (strategy is not null && pair is not null)
+        {
+            errors.AddRange(StrategyGraph.CheckNamedPairs(strategy.Graph, [.. pairs.Select(listed => listed.Symbol)]).Select(PreviewErrorInternal.Of));
         }
 
         if (errors.Count > 0 || strategy is null || pair is null)
@@ -89,11 +96,20 @@ internal sealed class PreviewStrategyQueryHandler(
 
         DateTimeOffset end = PreviewPeriod.End(time.GetUtcNow());
         PreviewHistory history = await cache.Get(pair.Id, timeframe, end, () => PreviewHistory.ReadAsync(source, pair.Id, timeframe, end, time), cancellationToken);
+        IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>? named = await PreviewHistory.NamedAsync(
+            StrategyGraph.NamedPairs(strategy.Graph),
+            pairs,
+            cache,
+            source,
+            timeframe,
+            end,
+            time,
+            cancellationToken);
         using var hash = new HistoryHash();
         var reader = new MarketHistory(source, end, hash, time);
         (IReadOnlyList<OrderOutcome> outcomes, IReadOnlyList<CycleOutcome> cycles, DateTimeOffset? computedFrom) = strategy.ByPlan
-            ? await ByPlan(strategy, timeframe, pair, history, reader, end, costs, cancellationToken)
-            : await WithOrders(strategy, timeframe, pair, history, reader, end, costs, cancellationToken);
+            ? await ByPlan(strategy, timeframe, pair, history, named, reader, end, costs, cancellationToken)
+            : await WithOrders(strategy, timeframe, pair, history, named, reader, end, costs, cancellationToken);
 
         var preview = new StrategyPreviewInternal(
             pair.ToInternal(),
@@ -114,12 +130,13 @@ internal sealed class PreviewStrategyQueryHandler(
         TimeSpan timeframe,
         Instrument pair,
         PreviewHistory history,
+        IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>? named,
         MarketHistory reader,
         DateTimeOffset end,
         TradeCosts costs,
         CancellationToken cancellationToken)
     {
-        var steps = PairSteps.Of(strategy, timeframe, pair.Symbol, history.Candles.Items, history.Funding.Items);
+        var steps = PairSteps.Of(strategy, timeframe, pair.Symbol, history.Candles.Items, history.Funding.Items, named);
         var orders = new PairOrders(steps, HistoryPeriod.DataStart, end, costs);
         foreach (long week in orders.Weeks)
         {
@@ -137,6 +154,7 @@ internal sealed class PreviewStrategyQueryHandler(
         TimeSpan timeframe,
         Instrument pair,
         PreviewHistory history,
+        IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>? named,
         MarketHistory reader,
         DateTimeOffset end,
         TradeCosts costs,
@@ -153,7 +171,8 @@ internal sealed class PreviewStrategyQueryHandler(
             from,
             to,
             costs,
-            cancellationToken);
+            cancellationToken,
+            named);
         return (result.Orders, result.Cycles, from);
     }
 

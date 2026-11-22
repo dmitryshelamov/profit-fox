@@ -1,6 +1,8 @@
+import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
+import { api, unwrap } from '@/api/client';
 import { Button } from '@/shared/ui/Button';
 import { Segmented } from '@/shared/ui/Segmented';
 import { SelectField } from '@/shared/ui/SelectField';
@@ -151,6 +153,14 @@ export function NodeCard({
             )}
           </div>
         ))}
+
+      {kind?.kind === 'pair-candle' && (
+        <SymbolSetting
+          value={node.settings?.symbol}
+          readOnly={readOnly}
+          onChange={(symbol) => onChange(setSetting(document, id, 'symbol', symbol))}
+        />
+      )}
 
       {pins.inputs.map((pin) =>
         pin.many ? (
@@ -417,5 +427,61 @@ function InputSource({
         />
       )}
     </fieldset>
+  );
+}
+
+/**
+ * The setting `symbol` of a node «Свеча пары» (change add-ideas-and-market): the pair as the exchange writes it, with
+ * the traded pairs as a hint, like the choice of a pair in the preview. The pair goes into the graph on Enter or when the
+ * field is left.
+ */
+function SymbolSetting({
+  value,
+  readOnly,
+  onChange,
+}: {
+  readonly value: string | undefined;
+  readonly readOnly: boolean;
+  readonly onChange: (symbol: string) => void;
+}) {
+  const list = useId();
+  const [text, setText] = useState(value ?? '');
+  const instruments = useQuery({
+    queryKey: ['instruments'],
+    queryFn: async () => unwrap(await api.GET('/api/instruments')),
+    staleTime: 60_000,
+  });
+  const commit = () => {
+    if (text !== (value ?? '')) {
+      onChange(text);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <FieldLabel>symbol</FieldLabel>
+      <TextField
+        aria-label="Настройка symbol"
+        mono
+        className="w-full"
+        list={list}
+        placeholder="BTCUSDT"
+        value={text}
+        readOnly={readOnly}
+        onChange={(event) => setText(event.target.value.toUpperCase())}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            commit();
+          }
+        }}
+      />
+      <datalist id={list}>
+        {instruments.data?.map((item) => (
+          <option key={item.id} value={item.symbol} />
+        ))}
+      </datalist>
+    </div>
   );
 }

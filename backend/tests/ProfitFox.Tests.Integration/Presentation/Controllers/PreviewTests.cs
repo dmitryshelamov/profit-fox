@@ -190,6 +190,45 @@ public sealed class PreviewTests
         Assert.That(market.Data.CandleRequests, Is.Empty);
     }
 
+    /// <summary>
+    ///     Change add-ideas-and-market, task 4.3: spec market-history «Неизвестная пара» in both previews, before any read.
+    /// </summary>
+    [Test]
+    public async Task A_named_pair_not_listed_is_refused_with_an_error_of_the_node_before_any_read()
+    {
+        await using MarketDataServer market = await MarketDataServer.Start();
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
+        JsonObject signal = Signal();
+        signal["nodes"]!.AsArray().Add(JsonNode.Parse("""{ "id": "btc", "kind": "pair-candle", "settings": { "symbol": "NOSUCHUSDT" } }"""));
+
+        ErrorResponse ofSignal = await BadRequest(await Preview(api, "ETHUSDT", "4h", signal));
+        HttpResponseMessage ofStrategy = await PreviewStrategy(api, "ETHUSDT", "4h", Backtests.FundingShortWithPair("NOSUCHUSDT"));
+
+        Assert.That(ofSignal.Errors.Select(error => (error.Code, error.Node, error.Setting)), Is.EqualTo(new[] { ("UnknownPair", (string?)"btc", (string?)"symbol") }));
+        Assert.That(ofStrategy.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        ErrorResponse strategyErrors = (await ofStrategy.Content.ReadFromJsonAsync<ErrorResponse>(Json))!;
+        Assert.That(strategyErrors.Errors.Select(error => (error.Code, error.Node)), Is.EqualTo(new[] { ("UnknownPair", (string?)"btc") }));
+        Assert.That(market.Data.CandleRequests, Is.Empty);
+    }
+
+    /// <summary>
+    ///     Change add-ideas-and-market, task 4.3: the preview of a strategy that names BTCUSDT reads its candles of the
+    ///     timeframe and gives the orders of funding-short on another pair.
+    /// </summary>
+    [Test]
+    public async Task A_strategy_preview_reads_the_candles_of_the_named_pair()
+    {
+        await using MarketDataServer market = await MarketDataServer.Start();
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
+
+        StrategyPreviewResponse preview = await OkStrategy(await PreviewStrategy(api, "ETHUSDT", "4h", Backtests.FundingShortWithPair("BTCUSDT")));
+
+        Assert.That(preview.Orders, Has.Count.EqualTo(28));
+        Assert.That(
+            market.Data.CandleRequests.Where(request => request.InstrumentIds.Single() == "btc").Select(request => request.Interval),
+            Is.EqualTo(new[] { ProfitFox.Infrastructure.Clients.MarketData.Protos.CandleInterval.FourHours }));
+    }
+
     [Test]
     public async Task The_preview_leaves_no_trace_in_the_bench()
     {

@@ -21,6 +21,7 @@ public sealed class GraphRun
     private readonly PinValue[] _outputs;
     private ClosedCandle? _lastCandle;
     private FundingPayment? _lastFunding;
+    private IReadOnlyDictionary<string, ClosedCandle>? _lastPairs;
 
     public GraphRun(GraphDefinition graph)
         : this(Compile(graph))
@@ -40,10 +41,15 @@ public sealed class GraphRun
     /// <summary>
     ///     Computes the graph at the close of <paramref name="candle" /> and gives its declared outputs in their order.
     ///     <paramref name="lastFunding" /> is the last payment paid by that close, or null before the first one;
-    ///     <paramref name="position" /> is the state of the position at the close, closed when not given. The memory of the
-    ///     nodes moves to this candle. The returned list is reused by the next call.
+    ///     <paramref name="position" /> is the state of the position at the close, closed when not given;
+    ///     <paramref name="pairs" /> are the closed candles of the pairs the graph names (<c>pair-candle</c>), by symbol,
+    ///     none when not given. The memory of the nodes moves to this candle. The returned list is reused by the next call.
     /// </summary>
-    public IReadOnlyList<PinValue> Step(ClosedCandle candle, FundingPayment? lastFunding, PositionState? position = null)
+    public IReadOnlyList<PinValue> Step(
+        ClosedCandle candle,
+        FundingPayment? lastFunding,
+        PositionState? position = null,
+        IReadOnlyDictionary<string, ClosedCandle>? pairs = null)
     {
         if (candle.CloseTime <= _lastCandle?.CloseTime)
         {
@@ -59,7 +65,8 @@ public sealed class GraphRun
 
         _lastCandle = candle;
         _lastFunding = lastFunding;
-        return Compute(new NodeContext(candle, lastFunding, candle.CloseTime, position ?? PositionState.Closed, Commit: true));
+        _lastPairs = pairs;
+        return Compute(new NodeContext(candle, lastFunding, candle.CloseTime, position ?? PositionState.Closed, Commit: true, pairs));
     }
 
     /// <summary>
@@ -79,7 +86,7 @@ public sealed class GraphRun
             throw new ArgumentException($"A fill at {moment:O} comes after the close {candle.CloseTime:O}.", nameof(moment));
         }
 
-        return Compute(new NodeContext(candle, _lastFunding, moment, position, Commit: false));
+        return Compute(new NodeContext(candle, _lastFunding, moment, position, Commit: false, _lastPairs));
     }
 
     private IReadOnlyList<PinValue> Compute(NodeContext context)

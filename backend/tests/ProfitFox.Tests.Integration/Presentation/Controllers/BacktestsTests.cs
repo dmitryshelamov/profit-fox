@@ -93,6 +93,22 @@ public sealed class BacktestsTests
         Assert.That(await Scalar<int>("SELECT count(*) FROM backtests"), Is.Zero);
     }
 
+    /// <summary>
+    ///     Change add-ideas-and-market, task 4.3: spec market-history «Неизвестная пара».
+    /// </summary>
+    [Test]
+    public async Task A_strategy_that_names_a_pair_not_listed_is_not_queued_with_an_error_of_the_node()
+    {
+        await SaveStrategy(Http, "funding-short", FundingShortWithPair("NOSUCHUSDT"), "idea");
+
+        HttpResponseMessage refused = await Post(Http, new JsonObject { ["strategy"] = "funding-short", ["end"] = End });
+
+        Assert.That(refused.StatusCode, Is.EqualTo(HttpStatusCode.UnprocessableEntity), await refused.Content.ReadAsStringAsync());
+        ErrorResponse errors = (await refused.Content.ReadFromJsonAsync<ErrorResponse>(Json))!;
+        Assert.That(errors.Errors.Select(error => (error.Code, error.Node, error.Setting)), Is.EqualTo(new[] { ("UnknownPair", (string?)"btc", (string?)"symbol") }));
+        Assert.That(await Scalar<int>("SELECT count(*) FROM backtests"), Is.Zero);
+    }
+
     [Test]
     public async Task A_version_saved_after_the_backtest_does_not_change_it_nor_does_deleting_the_strategy()
     {

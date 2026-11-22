@@ -103,11 +103,11 @@ public sealed class PositionRun
     ///     close closes its cycle, then the graph is computed at the close and the orders of its nodes are taken. Candles go
     ///     in the order of their close.
     /// </summary>
-    public void Step(ClosedCandle candle, FundingPayment? lastFunding)
+    public void Step(ClosedCandle candle, FundingPayment? lastFunding, IReadOnlyDictionary<string, ClosedCandle>? pairs = null)
     {
         Advance(candle.CloseTime);
         Expire(candle.CloseTime);
-        _run.Step(candle, lastFunding, State());
+        _run.Step(candle, lastFunding, State(), pairs);
         _close = candle.CloseTime;
         if (_path.MinuteIndex(candle.CloseTime) < _from)
         {

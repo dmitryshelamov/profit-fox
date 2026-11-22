@@ -25,11 +25,11 @@ public sealed class SignalExecutor
     ///     value turns true after false or missing (spec signal-preview «Предпросмотр сигнала-состояния»). Candles of one pair
     ///     go in the order of their close; pairs may be mixed in any order.
     /// </summary>
-    public SignalEvent? Step(string instrument, ClosedCandle candle, FundingPayment? lastFunding)
+    public SignalEvent? Step(string instrument, ClosedCandle candle, FundingPayment? lastFunding, IReadOnlyDictionary<string, ClosedCandle>? pairs = null)
     {
         PairRun run = Run(instrument);
         bool? before = run.Last;
-        bool? value = Advance(run, candle, lastFunding);
+        bool? value = Advance(run, candle, lastFunding, pairs);
         bool happened = _state ? value == true && before != true : value == true;
         return happened ? new SignalEvent(instrument, candle.CloseTime) : null;
     }
@@ -38,9 +38,9 @@ public sealed class SignalExecutor
     ///     The value of the output of the pair at the close of <paramref name="candle" /> (spec strategy-execution «Выход
     ///     сигнала-состояния»): true, false or missing for a signal-state, whether the event happened for a signal of an event.
     /// </summary>
-    public bool? Value(string instrument, ClosedCandle candle, FundingPayment? lastFunding)
+    public bool? Value(string instrument, ClosedCandle candle, FundingPayment? lastFunding, IReadOnlyDictionary<string, ClosedCandle>? pairs = null)
     {
-        return Advance(Run(instrument), candle, lastFunding);
+        return Advance(Run(instrument), candle, lastFunding, pairs);
     }
 
     private PairRun Run(string instrument)
@@ -54,9 +54,9 @@ public sealed class SignalExecutor
         return run;
     }
 
-    private static bool? Advance(PairRun run, ClosedCandle candle, FundingPayment? lastFunding)
+    private static bool? Advance(PairRun run, ClosedCandle candle, FundingPayment? lastFunding, IReadOnlyDictionary<string, ClosedCandle>? pairs)
     {
-        PinValue output = run.Graph.Step(candle, lastFunding)[0];
+        PinValue output = run.Graph.Step(candle, lastFunding, position: null, pairs)[0];
         run.Last = output.Boolean;
         return output.Boolean;
     }
