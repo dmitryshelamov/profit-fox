@@ -34,9 +34,10 @@ internal static class BenchServices
 
     /// <summary>
     ///     The services over <paramref name="connectionString" /> (the test database when null), reading history from
-    ///     <paramref name="market" /> when it is given.
+    ///     <paramref name="market" /> when it is given; with <paramref name="time" /> the clock of the services and of the fake
+    ///     service is that one.
     /// </summary>
-    public static ServiceProvider Start(MarketDataServer? market = null, string? connectionString = null)
+    public static ServiceProvider Start(MarketDataServer? market = null, string? connectionString = null, TimeProvider? time = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -45,6 +46,15 @@ internal static class BenchServices
         {
             services.AddSingleton<IHistorySource>(new GrpcHistorySource(market.Channel));
             services.AddSingleton<IInstrumentCatalog>(new InstrumentCatalog(market.Http));
+        }
+
+        if (time is not null)
+        {
+            services.AddSingleton(time);
+            if (market is not null)
+            {
+                market.Data.Time = time;
+            }
         }
 
         return services.BuildServiceProvider();

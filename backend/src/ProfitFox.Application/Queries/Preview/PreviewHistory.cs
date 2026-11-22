@@ -13,13 +13,13 @@ namespace ProfitFox.Application.Queries.Preview;
 public sealed record PreviewHistory(HistoryRead<HistoryCandle> Candles, HistoryRead<HistoryPayment> Funding)
 {
     /// <summary>
-    ///     History from the start of the data to <paramref name="end" />, as a backtest with that end reads it. The hash is
-    ///     not needed, but the reader wants one.
+    ///     History from the start of the data to <paramref name="end" />, as a backtest with that end reads it on the clock
+    ///     <paramref name="time" />. The hash is not needed, but the reader wants one.
     /// </summary>
-    public static async Task<PreviewHistory> ReadAsync(IHistorySource source, string instrument, TimeSpan timeframe, DateTimeOffset end)
+    public static async Task<PreviewHistory> ReadAsync(IHistorySource source, string instrument, TimeSpan timeframe, DateTimeOffset end, TimeProvider time)
     {
         using var hash = new HistoryHash();
-        var history = new MarketHistory(source, end, hash);
+        var history = new MarketHistory(source, end, hash, time);
         HistoryRead<HistoryCandle> candles = await history.Candles(instrument, timeframe, HistoryPeriod.DataStart, end, CancellationToken.None);
         HistoryRead<HistoryPayment> funding = await history.FundingThrough(instrument, HistoryPeriod.DataStart, end, CancellationToken.None);
         return new PreviewHistory(candles, funding);

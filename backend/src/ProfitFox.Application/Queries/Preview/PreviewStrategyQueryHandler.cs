@@ -88,9 +88,9 @@ internal sealed class PreviewStrategyQueryHandler(
         }
 
         DateTimeOffset end = PreviewPeriod.End(time.GetUtcNow());
-        PreviewHistory history = await cache.Get(pair.Id, timeframe, end, () => PreviewHistory.ReadAsync(source, pair.Id, timeframe, end), cancellationToken);
+        PreviewHistory history = await cache.Get(pair.Id, timeframe, end, () => PreviewHistory.ReadAsync(source, pair.Id, timeframe, end, time), cancellationToken);
         using var hash = new HistoryHash();
-        var reader = new MarketHistory(source, end, hash);
+        var reader = new MarketHistory(source, end, hash, time);
         (IReadOnlyList<OrderOutcome> outcomes, IReadOnlyList<CycleOutcome> cycles, DateTimeOffset? computedFrom) = strategy.ByPlan
             ? await ByPlan(strategy, timeframe, pair, history, reader, end, costs, cancellationToken)
             : await WithOrders(strategy, timeframe, pair, history, reader, end, costs, cancellationToken);

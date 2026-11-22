@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using Grpc.Core;
 
 using MediatR;
@@ -7,7 +9,9 @@ using Microsoft.Extensions.DependencyInjection;
 using ProfitFox.Application.Commands.Backtests.ExecuteBacktest;
 using ProfitFox.Domain.Entities.Backtests;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.ValueObjects.Backtests;
+using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Runs;
 using ProfitFox.Infrastructure.Clients.MarketData.Protos;
 using ProfitFox.Tests.Integration.MarketData;
@@ -96,7 +100,48 @@ public sealed class ExecuteBacktestTests
         Assert.That(failed.Sets.Single().Numbers, Is.Null, "a failed backtest has no result");
     }
 
-    private static Backtest Generate(IReadOnlyList<string>? thresholds = null)
+    /// <summary>
+    ///     Task 12.1: the market-data service holds past days only. With the end of history at the start of the current day the
+    ///     funding is read up to it and not past it; a trade that ends exactly there is left out on funding, because the
+    ///     payment at its end is not known yet, and every trade that ends before it is as with a later clock.
+    /// </summary>
+    [Test]
+    public async Task A_backtest_up_to_today_reads_no_funding_of_today_and_leaves_the_trade_that_ends_there_out_on_funding()
+    {
+        // The strategy enters at 08:00 every day for 16 hours: its trade of the last day ends exactly at the end of history.
+        Backtest later = await Execute(Generate(after: "16h"), new FixedTime(End.AddDays(1).AddHours(9)));
+        _server.Data.FundingRequests.Clear();
+
+        Backtest today = await Execute(Generate(after: "16h"), new FixedTime(End.AddHours(9)));
+
+        Assert.That(today.Status, Is.EqualTo(BacktestState.Done), today.Reason);
+        Assert.That(_server.Data.FundingRequests.Select(request => request.To.ToDateTimeOffset()), Has.All.LessThanOrEqualTo(End));
+        SetSummary before = later.Sets.Single().Numbers!;
+        SetSummary now = today.Sets.Single().Numbers!;
+        Assert.That(before.Excluded.Funding, Is.Zero, "with a later clock the payment at the end is known");
+        Assert.That(now.Excluded.Funding, Is.EqualTo(3), "the trade of the last day of each of the three pairs");
+        Assert.That(now.Trades, Is.EqualTo(before.Trades - 3));
+    }
+
+    private async Task<Backtest> Execute(Backtest backtest, TimeProvider time)
+    {
+        await using ServiceProvider services = BenchServices.Start(_server, time: time);
+        IBacktestRepository backtests = services.GetRequiredService<IBacktestRepository>();
+        await backtests.EnqueueAsync(backtest, CancellationToken.None);
+        Backtest claimed = (await backtests.ClaimAsync("w-1", Lease, CancellationToken.None))!;
+        try
+        {
+            await services.GetRequiredService<ISender>().Send(new ExecuteBacktestCommand(claimed, new RunAssignment(claimed.Id, "w-1")));
+        }
+        catch (Exception exception) when (exception is not AssertionException)
+        {
+            // The backtest is failed with its reason; the test reads it.
+        }
+
+        return (await backtests.FindAsync(claimed.Id, CancellationToken.None))!;
+    }
+
+    private static Backtest Generate(IReadOnlyList<string>? thresholds = null, string? after = null)
     {
         Backtest backtest = BacktestGenerator.Generate(thresholds: thresholds);
         BacktestSettings settings = backtest.Settings with { End = End };
@@ -107,11 +152,18 @@ public sealed class ExecuteBacktestTests
             StrategyName = backtest.StrategyName,
             StrategyVersion = backtest.StrategyVersion,
             Kind = backtest.Kind,
-            Graph = backtest.Graph,
+            Graph = after is null ? backtest.Graph : Graph(after),
             Settings = settings,
             Sets = backtest.Sets,
             SetCount = backtest.SetCount
         };
+    }
+
+    // The graph of funding-short with the time of close-after.
+    private static GraphDefinition Graph(string after)
+    {
+        using var document = JsonDocument.Parse(BacktestGenerator.FundingShort.Replace("\"after\": \"4h\"", $"\"after\": \"{after}\"", StringComparison.Ordinal));
+        return StrategyGraph.ReadForm(document.RootElement).Value!;
     }
 
     private async Task<Backtest> Claimed(Backtest backtest)

@@ -8,22 +8,26 @@ namespace ProfitFox.Application.Queries.MarketData;
 
 /// <summary>
 ///     History as a run sees it (spec market-history): read straight from the market-data service, never after the end
-///     of the period, with every read added to the hash of the run.
+///     of the period and never after the start of the current UTC day, which the service does not hold yet, with every read
+///     added to the hash of the run.
 /// </summary>
 public sealed class MarketHistory
 {
     private readonly IHistorySource _source;
     private readonly DateTimeOffset _readUntil;
     private readonly HistoryHash _hash;
+    private readonly TimeProvider _time;
 
     /// <param name="source">Where the history is read from.</param>
     /// <param name="readUntil">The end of the period of the run; nothing after it is read.</param>
     /// <param name="hash">The hash of the run every read is added to.</param>
-    public MarketHistory(IHistorySource source, DateTimeOffset readUntil, HistoryHash hash)
+    /// <param name="time">The clock that gives the current UTC day; nothing of it is read.</param>
+    public MarketHistory(IHistorySource source, DateTimeOffset readUntil, HistoryHash hash, TimeProvider time)
     {
         _source = source;
         _readUntil = readUntil;
         _hash = hash;
+        _time = time;
     }
 
     /// <summary>
@@ -73,7 +77,9 @@ public sealed class MarketHistory
     /// <summary>
     ///     Funding payments at times in [<paramref name="from" />, <paramref name="through" />]: a payment exactly at the end
     ///     of the period belongs to the trades that end there. The coverage reaches past <paramref name="through" /> when the
-    ///     payment there is known.
+    ///     payment there is known. When <paramref name="through" /> is the start of the current UTC day the payment there is
+    ///     not read: the service holds past days only, so the coverage ends at <paramref name="through" /> and a trade that
+    ///     ends there is left out on funding (task 12.1).
     /// </summary>
     public async Task<HistoryRead<HistoryPayment>> FundingThrough(
         string instrumentId,
@@ -82,7 +88,8 @@ public sealed class MarketHistory
         CancellationToken cancellation)
     {
         CheckWindow(from, through);
-        DateTimeOffset to = through + TimeSpan.FromSeconds(1);
+        DateTimeOffset today = HistoryPeriod.Today(_time.GetUtcNow());
+        DateTimeOffset to = through < today ? through + TimeSpan.FromSeconds(1) : through;
         HistoryRead<HistoryPayment> read = await _source.ReadFunding(instrumentId, from, to, cancellation);
         read = read with { Coverage = Coverage.Trim(read.Coverage, from, to) };
         _hash.Add(instrumentId, read);
@@ -99,6 +106,12 @@ public sealed class MarketHistory
         if (to > _readUntil)
         {
             throw new PeriodBoundaryException($"The window ends at {to:O}, after the end of the period {_readUntil:O}.");
+        }
+
+        DateTimeOffset today = HistoryPeriod.Today(_time.GetUtcNow());
+        if (to > today)
+        {
+            throw new PeriodBoundaryException($"The window ends at {to:O}, after the start of the current UTC day {today:O}.");
         }
     }
 }

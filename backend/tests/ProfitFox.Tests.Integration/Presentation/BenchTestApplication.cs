@@ -14,7 +14,7 @@ namespace ProfitFox.Tests.Integration.Presentation;
 ///     The bench API in memory for a test, as <see cref="Program" /> starts it: the Testing environment, the database of
 ///     <paramref name="start" /> (the migrated test database by default), which it migrates at start, and history read from the
 ///     fake market-data service <paramref name="market" />, so no request reaches the real one; with <paramref name="time" />
-///     the clock of the API is that one.
+///     the clock of the API and of the fake service is that one.
 /// </summary>
 internal sealed class BenchTestApplication(MarketDataServer market, BenchStart? start = null, TimeProvider? time = null) : WebApplicationFactory<Program>
 {
@@ -43,6 +43,7 @@ internal sealed class BenchTestApplication(MarketDataServer market, BenchStart? 
             services.AddSingleton<IInstrumentCatalog>(new InstrumentCatalog(market.Http));
             if (time is not null)
             {
+                market.Data.Time = time;
                 services.AddSingleton(time);
             }
         });

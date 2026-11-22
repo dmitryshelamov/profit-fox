@@ -97,8 +97,8 @@ public sealed class PreviewTests
         Assert.That(market.Data.CandleRequests, Has.All.Matches<ProfitFox.Infrastructure.Clients.MarketData.Protos.CandleHistoryRequest>(request => request.To.ToDateTimeOffset() <= end));
         Assert.That(
             market.Data.FundingRequests,
-            Has.All.Matches<ProfitFox.Infrastructure.Clients.MarketData.Protos.FundingPaymentHistoryRequest>(request => request.To.ToDateTimeOffset() <= end.AddSeconds(1)),
-            "the payment exactly at the end is read, as by a run of exploration");
+            Has.All.Matches<ProfitFox.Infrastructure.Clients.MarketData.Protos.FundingPaymentHistoryRequest>(request => request.To.ToDateTimeOffset() <= end),
+            "the end of exploration is the start of the current day, which the service does not hold yet (task 12.1)");
     }
 
     /// <summary>
@@ -119,7 +119,47 @@ public sealed class PreviewTests
         Assert.That(preview.Candles.Select(candle => DateTimeOffset.FromUnixTimeMilliseconds(candle.OpenTime) + TimeSpan.FromHours(4)), Has.All.LessThanOrEqualTo(today));
         Assert.That(preview.Candles, Has.Count.GreaterThan(1500), "history up to the start of the day");
         Assert.That(market.Data.CandleRequests.Select(request => request.To.ToDateTimeOffset()), Has.All.LessThanOrEqualTo(today));
-        Assert.That(market.Data.FundingRequests.Select(request => request.To.ToDateTimeOffset()), Has.All.LessThanOrEqualTo(today.AddSeconds(1)));
+        Assert.That(market.Data.FundingRequests.Select(request => request.To.ToDateTimeOffset()), Has.All.LessThanOrEqualTo(today));
+    }
+
+    /// <summary>
+    ///     Task 12.1: the preview of a strategy on the clock of a day of history reads up to the start of that day and
+    ///     nothing of the day, which the market-data service does not hold yet.
+    /// </summary>
+    [Test]
+    public async Task A_strategy_is_previewed_up_to_the_start_of_the_current_day()
+    {
+        FakeMarketData.CoveredUntil = null;
+        var today = new DateTimeOffset(2026, 11, 22, 0, 0, 0, TimeSpan.Zero);
+        await using MarketDataServer market = await MarketDataServer.Start();
+        await using var api = new BenchTestApplication(market, time: new FixedTime(today.AddHours(15.5)));
+        Guid signal = await SaveSignal(api);
+
+        StrategyPreviewResponse preview = await OkStrategy(await PreviewStrategy(api, "BTCUSDT", "4h", StrategiesTests.Strategy(signal)));
+
+        Assert.That(preview.PeriodEnd, Is.EqualTo(today.ToUnixTimeMilliseconds()));
+        Assert.That(preview.Orders, Is.Not.Empty);
+        Assert.That(market.Data.CandleRequests.Select(request => request.To.ToDateTimeOffset()), Has.All.LessThanOrEqualTo(today));
+        Assert.That(market.Data.FundingRequests.Select(request => request.To.ToDateTimeOffset()), Has.All.LessThanOrEqualTo(today));
+    }
+
+    /// <summary>
+    ///     Task 12.1: a refusal of the market-data service, such as the one of a window it does not hold, is a failure of the
+    ///     service the preview reads, not of the bench.
+    /// </summary>
+    [Test]
+    public async Task A_refusal_of_the_service_answers_bad_gateway_in_both_previews()
+    {
+        await using MarketDataServer market = await MarketDataServer.Start();
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
+        Guid signal = await SaveSignal(api);
+        market.Data.Failure = Grpc.Core.StatusCode.InvalidArgument;
+
+        HttpResponseMessage ofSignal = await Preview(api, "BTCUSDT", "4h", Signal());
+        HttpResponseMessage ofStrategy = await PreviewStrategy(api, "ETHUSDT", "4h", StrategiesTests.Strategy(signal));
+
+        Assert.That(ofSignal.StatusCode, Is.EqualTo(HttpStatusCode.BadGateway), await ofSignal.Content.ReadAsStringAsync());
+        Assert.That(ofStrategy.StatusCode, Is.EqualTo(HttpStatusCode.BadGateway), await ofStrategy.Content.ReadAsStringAsync());
     }
 
     [Test]

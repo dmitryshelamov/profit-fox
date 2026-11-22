@@ -7,7 +7,8 @@ using ProfitFox.Infrastructure.Clients.MarketData.Protos;
 namespace ProfitFox.Tests.Integration.MarketData;
 
 /// <summary>
-///     The candle feed of the fake market-data service: coverage first, then 4h or 1m candles; the 08:00 ones have no trades.
+///     The candle feed of the fake market-data service: coverage first, then 4h or 1m candles; the 08:00 ones have no trades. A
+///     window that ends after the start of the current day is refused.
 /// </summary>
 public sealed class FakeCandleFeed(FakeMarketData data) : CandleFeed.CandleFeedBase
 {
@@ -27,6 +28,8 @@ public sealed class FakeCandleFeed(FakeMarketData data) : CandleFeed.CandleFeedB
         {
             throw new RpcException(new Status(failure, "the fake service is stopping"));
         }
+
+        data.CheckPastDays(request.To);
 
         string instrument = request.InstrumentIds.Single();
         InstrumentCoverage coverage = FakeMarketData.CoverageOf(instrument, request.From, request.To);

@@ -8,6 +8,7 @@ namespace ProfitFox.Tests.Integration.MarketData;
 
 /// <summary>
 ///     The funding feed of the fake market-data service: coverage first, then a payment every 8 hours with the rates of <see cref="FakeMarketData.RateAt" />.
+///     A window that ends after the start of the current day is refused.
 /// </summary>
 public sealed class FakeFundingFeed(FakeMarketData data) : FundingPaymentFeed.FundingPaymentFeedBase
 {
@@ -17,6 +18,7 @@ public sealed class FakeFundingFeed(FakeMarketData data) : FundingPaymentFeed.Fu
         ServerCallContext context)
     {
         data.FundingRequests.Add(request);
+        data.CheckPastDays(request.To);
         string instrument = request.InstrumentIds.Single();
         InstrumentCoverage coverage = FakeMarketData.CoverageOf(instrument, request.From, request.To);
         await responseStream.WriteAsync(new FundingPaymentHistoryItem { Coverage = coverage });

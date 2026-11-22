@@ -9,6 +9,7 @@ namespace ProfitFox.Tests.Integration.MarketData;
 /// <summary>
 ///     What the fake market-data service answers: a coverage of the whole window from <see cref="CoveredFrom" />, 4h or 1m
 ///     candles in it, a payment every 8 hours, an error when <see cref="Failure" /> is set, or a hold when <see cref="BeforeCandles" /> is set. It records the requests.
+///     As the real service, it holds past days only and refuses a window that ends after the start of the current UTC day of <see cref="Time" />.
 /// </summary>
 public sealed class FakeMarketData
 {
@@ -19,6 +20,11 @@ public sealed class FakeMarketData
     public List<FundingPaymentHistoryRequest> FundingRequests { get; } = [];
 
     public StatusCode? Failure { get; set; }
+
+    /// <summary>
+    ///     The clock of the test: the current UTC day by it is not held yet. The API of a test sets it to its own clock.
+    /// </summary>
+    public TimeProvider Time { get; set; } = TimeProvider.System;
 
     /// <summary>
     ///     Awaited by every candle request after it is recorded and before it is answered, with the token of the call: a test
@@ -39,6 +45,20 @@ public sealed class FakeMarketData
     {
         long payment = (long)((time - CoveredFrom).TotalHours / 8);
         return payment % 3 == 1 ? "0.0006" : "0.0001";
+    }
+
+    /// <summary>
+    ///     Refuses, as the real service does, a window that ends after the start of the current UTC day: that day is not
+    ///     held yet.
+    /// </summary>
+    public void CheckPastDays(Timestamp to)
+    {
+        DateTimeOffset now = Time.GetUtcNow();
+        var today = new DateTimeOffset(now.Year, now.Month, now.Day, 0, 0, 0, TimeSpan.Zero);
+        if (to.ToDateTimeOffset() > today)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, $"the window must end at {today:yyyy-MM-ddTHH:mm} or before"));
+        }
     }
 
     public static InstrumentCoverage CoverageOf(string instrument, Timestamp from, Timestamp to)

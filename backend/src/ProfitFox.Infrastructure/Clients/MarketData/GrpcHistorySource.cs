@@ -104,7 +104,9 @@ public sealed class GrpcHistorySource(GrpcChannel channel) : IHistorySource
         {
             await read();
         }
-        catch (RpcException exception) when (exception.StatusCode is StatusCode.Unavailable or StatusCode.DeadlineExceeded or StatusCode.Internal)
+        // Any answer of the service but a cancelled call is a failure of the service: a refusal of the window
+        // (InvalidArgument) as well as an outage (task 12.1).
+        catch (RpcException exception) when (exception.StatusCode is not StatusCode.Cancelled)
         {
             throw new HistoryUnavailableException($"The market-data service did not give the history: {exception.Status.Detail}", exception);
         }

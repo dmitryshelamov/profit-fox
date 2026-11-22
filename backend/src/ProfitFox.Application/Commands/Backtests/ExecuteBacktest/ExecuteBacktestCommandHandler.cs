@@ -29,6 +29,7 @@ internal sealed class ExecuteBacktestCommandHandler(
     IHistorySource source,
     IInstrumentCatalog instruments,
     IBacktestRepository backtests,
+    TimeProvider time,
     ILogger<ExecuteBacktestCommandHandler> logger) : IRequestHandler<ExecuteBacktestCommand, ExecuteBacktestResult>
 {
     /// <exception cref="OperationCanceledException">The backtest was cancelled or the Worker is shut down; nothing is written.</exception>
@@ -54,7 +55,7 @@ internal sealed class ExecuteBacktestCommandHandler(
         var clock = Stopwatch.StartNew();
         var timed = new TimedHistorySource(source);
         using var hash = new HistoryHash();
-        var history = new MarketHistory(timed, settings.End, hash);
+        var history = new MarketHistory(timed, settings.End, hash, time);
         IReadOnlyList<BacktestPlan> plans = BacktestPlans.Of(backtest.Graph, backtest.Kind, settings, [.. backtest.Sets.Select(set => set.Set)]);
         Instrument[] pairs = [.. Pairs(await instruments.LinearUsdtPerpetuals(cancellationToken), settings.Pairs)];
         SetNumbers[] totals = [.. plans.Select(_ => SetNumbers.Zero)];

@@ -20,7 +20,8 @@ namespace ProfitFox.Tests.Integration.Application.Commands.Backtests;
 /// <summary>
 ///     A reference strategy of <c>Fixtures</c> — H0001 or H0002 — as a backtest of one set on 4h over every pair of the
 ///     fake market-data service, the pairs in the order of the catalog, up to the end of exploration of the references,
-///     2026-05-16, with what the backtest computes for each order kept.
+///     2026-05-16, with what the backtest computes for each order kept. The current day is that of the clock of the fake
+///     service.
 /// </summary>
 internal static class ReferenceBacktests
 {
@@ -45,7 +46,7 @@ internal static class ReferenceBacktests
 
         await using ServiceProvider services = BenchServices.Start(server);
         using var hash = new HistoryHash();
-        var history = new MarketHistory(services.GetRequiredService<IHistorySource>(), End, hash);
+        var history = new MarketHistory(services.GetRequiredService<IHistorySource>(), End, hash, server.Data.Time);
         List<EventRow> rows = [];
         SetNumbers numbers = SetNumbers.Zero;
         foreach (Instrument pair in await services.GetRequiredService<IInstrumentCatalog>().LinearUsdtPerpetuals(CancellationToken.None))
