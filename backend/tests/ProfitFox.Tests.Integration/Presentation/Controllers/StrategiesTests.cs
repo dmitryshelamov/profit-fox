@@ -3,10 +3,16 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
+using Dapper;
+
+using Npgsql;
+
+using ProfitFox.Domain.Repositories;
 using ProfitFox.Presentation.Contracts.Errors;
 using ProfitFox.Presentation.Contracts.Signals;
 using ProfitFox.Presentation.Contracts.Strategies;
 using ProfitFox.Tests.Integration.MarketData;
+using ProfitFox.Tests.Shared.Generators.Domain.Entities.Strategies;
 
 namespace ProfitFox.Tests.Integration.Presentation.Controllers;
 
@@ -191,6 +197,68 @@ public sealed class StrategiesTests
         Assert.That(raw["exits"]!.ToJsonString(), Is.EqualTo("""["close-after"]"""));
         StrategyResponse read = (await _api.Http.GetFromJsonAsync<StrategyResponse>("/api/strategies/funding-short", Json))!;
         Assert.That(read.Signals.Single().Version, Is.EqualTo(1), "the list does not move the reference");
+    }
+
+    /// <summary>
+    ///     Change add-position-node, task 6.1: spec strategy-constructor «Подъём графа прежнего вида» and «Подъём не
+    ///     переписывает версии» on the database.
+    /// </summary>
+    [Test]
+    public async Task A_strategy_of_the_former_form_is_read_raised_and_its_versions_stay_until_it_is_saved()
+    {
+        Guid signal = await CreateSignal("funding-high");
+        await BenchServices.Get<IStrategyRepository>().CreateAsync(
+            StrategyDocumentGenerator.Generate(signal, graph: StrategyDocumentGenerator.GenerateGraph(signal, legacy: true)),
+            CancellationToken.None);
+        string stored = await StoredGraph(version: 1);
+
+        StrategyResponse read = (await _api.Http.GetFromJsonAsync<StrategyResponse>("/api/strategies/funding-short", Json))!;
+
+        JsonObject graph = JsonNode.Parse(read.Graph.GetRawText())!.AsObject();
+        Assert.That(graph["nodes"]!.AsArray().Select(node => (string)node!["kind"]!), Does.Contain("position"));
+        Assert.That(graph["wires"]!.AsArray().Select(wire => $"{wire!["from"]} -> {wire["to"]}"), Is.SupersetOf(new[]
+        {
+            "enter.order -> position.orders", "position.position -> close-after.position", "close-after.order -> position.orders"
+        }));
+        Assert.That((double)graph["nodes"]!.AsArray().Single(node => (string)node!["id"]! == "enter")!["inputs"]!["size"]!, Is.EqualTo(100));
+        HttpResponseMessage check = await _api.Http.PostAsJsonAsync("/api/strategies/validate", new JsonObject { ["graph"] = graph.DeepClone() }, Json);
+        Assert.That((await check.Content.ReadFromJsonAsync<StrategyValidationResponse>(Json))!.Errors, Is.Empty);
+        Assert.That(read.Version, Is.EqualTo(1));
+        Assert.That(await Versions(), Is.EqualTo(1), "reading raises nothing in the store");
+        Assert.That(await StoredGraph(version: 1), Is.EqualTo(stored).And.Not.Contains("position"));
+
+        HttpResponseMessage saved = await _api.Http.PutAsJsonAsync("/api/strategies/funding-short", new JsonObject { ["graph"] = graph, ["layout"] = new JsonObject() }, Json);
+
+        Assert.That(saved.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That((await saved.Content.ReadFromJsonAsync<StrategyResponse>(Json))!.Version, Is.EqualTo(2), "the raised graph is a new version");
+        Assert.That(await Versions(), Is.EqualTo(2));
+        Assert.That(await StoredGraph(version: 1), Is.EqualTo(stored), "the former version is not changed");
+        Assert.That(await StoredGraph(version: 2), Does.Contain("position.orders"));
+    }
+
+    [Test]
+    public async Task A_graph_of_the_former_form_sent_to_the_check_is_not_raised()
+    {
+        Guid signal = await CreateSignal("funding-high");
+        string former = ProfitFox.Domain.Services.Graph.StrategyGraph.Write(StrategyDocumentGenerator.GenerateGraph(signal, legacy: true));
+
+        HttpResponseMessage check = await _api.Http.PostAsJsonAsync("/api/strategies/validate", new JsonObject { ["graph"] = JsonNode.Parse(former) }, Json);
+
+        StrategyValidationResponse response = (await check.Content.ReadFromJsonAsync<StrategyValidationResponse>(Json))!;
+        Assert.That(response.Errors.Select(error => error.Code), Does.Contain("StrategyPositionMissing"));
+        Assert.That(response.Errors.Single(error => error.Code == "StrategyPositionMissing").Reason, Does.Contain("узел позиции"));
+    }
+
+    private static async Task<int> Versions()
+    {
+        await using NpgsqlConnection connection = await BenchDatabase.DataSource.OpenConnectionAsync();
+        return await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM strategy_versions");
+    }
+
+    private static async Task<string> StoredGraph(int version)
+    {
+        await using NpgsqlConnection connection = await BenchDatabase.DataSource.OpenConnectionAsync();
+        return await connection.ExecuteScalarAsync<string>("SELECT graph::text FROM strategy_versions WHERE version = @Version", new { Version = version }) ?? "";
     }
 
     private async Task<Guid> CreateSignal(string name)

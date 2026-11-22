@@ -133,6 +133,51 @@ public sealed class StrategyLinksTests
     }
 
     // Kept as written, without the checks of a strategy: the list reads the graph of the latest version only by its form.
+    /// <summary>
+    ///     Change add-position-node, task 6.2: the ladder enters by a market order and closes by limit orders; its exits are
+    ///     the limit order only.
+    /// </summary>
+    [Test]
+    public async Task The_ladder()
+    {
+        await Save("ladder", Form(Domain.Services.Graph.Graphs.Ladder));
+
+        StrategyEntryInternal entry = (await _strategies.List(_none)).Single();
+
+        Assert.That(entry.Exits, Is.EqualTo(new[] { "limit-order" }));
+    }
+
+    [Test]
+    public async Task Every_exit_once_in_the_order_stop_target_time_close_limit()
+    {
+        string json = Domain.Services.Graph.Graphs.Raised(
+            """
+            {
+              "formatVersion": 1,
+              "nodes": [
+                { "id": "sell", "kind": "limit-order", "settings": { "side": "sell", "sizeIn": "amount" }, "inputs": { "when": true, "price": 101, "size": 100 } },
+                { "id": "out", "kind": "close-position", "inputs": { "when": false } },
+                { "id": "close-after", "kind": "close-after", "inputs": { "after": "4h" } },
+                { "id": "sell-again", "kind": "limit-order", "settings": { "side": "sell", "sizeIn": "amount" }, "inputs": { "when": true, "price": 102, "size": 100 } },
+                { "id": "target", "kind": "take-profit", "inputs": { "distance": 0.02 } },
+                { "id": "stop", "kind": "stop-loss", "inputs": { "distance": 0.01 } },
+                { "id": "entry", "kind": "market-order", "settings": { "side": "buy", "sizeIn": "amount" }, "inputs": { "when": true, "size": 100 } }
+              ]
+            }
+            """);
+        await Save("everything", Form(json));
+
+        StrategyEntryInternal entry = (await _strategies.List(_none)).Single();
+
+        Assert.That(entry.Exits, Is.EqualTo(new[] { "stop-loss", "take-profit", "close-after", "close-position", "limit-order" }), "no market-order: it is the entry");
+    }
+
+    private static GraphDefinition Form(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        return StrategyGraph.ReadForm(document.RootElement).Value!;
+    }
+
     private Task Save(string name, GraphDefinition graph)
     {
         return _strategies.Store.CreateAsync(StrategyDocumentGenerator.Generate(Guid.Empty, name, graph: graph), _none);
