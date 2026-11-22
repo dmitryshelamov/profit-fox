@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ProfitFox.Application.Commands.Backtests.ExecuteBacktest;
 using ProfitFox.Application.Queries.Preview;
 using ProfitFox.Application.Services.Ideas;
+using ProfitFox.Application.Services.Market;
 using ProfitFox.Infrastructure.Clients.MarketData;
 using ProfitFox.Infrastructure.Mediatr;
 using ProfitFox.Infrastructure.Persistence.Postgres;
@@ -28,6 +29,7 @@ public static class InfrastructureRegistrar
         services.AddSingleton(new ScannerSettings());
         services.AddSingleton(new IdeasSettings());
         services.AddTransient<IdeaLibrary>();
+        services.AddSingleton<LiveCandleHub>();
 
         MarketDataRegistrar.Configure(configuration, services);
 

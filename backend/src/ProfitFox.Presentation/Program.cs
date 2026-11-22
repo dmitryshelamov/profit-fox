@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 
+using ProfitFox.Application.Services.Ideas;
 using ProfitFox.Infrastructure;
 using ProfitFox.Infrastructure.Persistence.Postgres.FluentMigrator;
 using ProfitFox.Presentation.HealthChecks;
@@ -18,6 +19,9 @@ public class Program
         WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
         builder.Services.AddInfrastructure(builder.Configuration);
+
+        // The thresholds of «⚡ всплеск» the list of signals shows (change add-ideas-and-market): those the Worker takes.
+        builder.Services.AddSingleton(builder.Configuration.GetSection("Ideas").Get<IdeasSettings>() ?? new IdeasSettings());
 
         builder.Services.AddRouting(options => options.LowercaseUrls = true);
         builder.Services

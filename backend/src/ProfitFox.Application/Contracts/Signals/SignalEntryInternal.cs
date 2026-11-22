@@ -1,3 +1,5 @@
+using ProfitFox.Domain.ValueObjects.Ideas;
+
 namespace ProfitFox.Application.Contracts.Signals;
 
 /// <summary>
@@ -16,4 +18,9 @@ public sealed record SignalEntryInternal(string Name, string? Description, int V
     ///     (change add-ideas-and-market).
     /// </summary>
     public string? Output { get; init; }
+
+    /// <summary>
+    ///     The label of the signal (change add-ideas-and-market); null when it never had one.
+    /// </summary>
+    public SignalLabel? Label { get; init; }
 }

@@ -1,5 +1,6 @@
 using ProfitFox.Application.Contracts.Backtests;
 using ProfitFox.Domain.ValueObjects.Strategies.Enums;
+using ProfitFox.Domain.ValueObjects.Ideas;
 
 namespace ProfitFox.Application.Contracts.Strategies;
 
@@ -24,4 +25,10 @@ public sealed record StrategyEntryInternal(string Name, string? Description, int
     public IReadOnlyList<StrategySignalInternal> Signals { get; init; } = [];
 
     public IReadOnlyList<string> Exits { get; init; } = [];
+
+    /// <summary>
+    ///     Whether the strategy gives ideas and on which timeframes (change add-ideas-and-market); null when it never had them
+    ///     set.
+    /// </summary>
+    public StrategyIdeas? Ideas { get; init; }
 }

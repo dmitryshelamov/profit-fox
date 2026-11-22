@@ -10,7 +10,7 @@ public static class RequestErrors
 {
     public static RequestError Of(PreviewErrorInternal error)
     {
-        return error.Graph is { } graph ? Of(graph) : new RequestError(error.Code, error.Reason) { Field = error.Field };
+        return error.Graph is { } graph ? Of(graph) : new RequestError(error.Code, error.Reason) { Field = error.Field, Condition = error.Condition };
     }
 
     public static RequestError Of(GraphError error)

@@ -157,21 +157,21 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 ## 11. API
 
-- [ ] 11.1 `PUT /api/strategies/{name}/ideas` и включение в ответе списка стратегий; `PUT /api/signals/{name}/label` и
+- [x] 11.1 `PUT /api/strategies/{name}/ideas` и включение в ответе списка стратегий; `PUT /api/signals/{name}/label` и
   метка в ответе списка сигналов. Проверить тестами контроллеров: сценарии spec `strategy-ideas` «Включение идей у
   стратегии» и `idea-labels` «Метка сигнала».
-- [ ] 11.2 `GET /api/ideas`, `GET /api/ideas/summary`, `GET /api/ideas/state`. Проверить тестами контроллера: сценарии
+- [x] 11.2 `GET /api/ideas`, `GET /api/ideas/summary`, `GET /api/ideas/state`. Проверить тестами контроллера: сценарии
   spec `strategy-ideas` «Список идей» и «Сводка журнала».
-- [ ] 11.3 `GET /api/market/pairs`, `GET /api/market/pairs/{symbol}`, `GET /api/market/pairs/{symbol}/ideas`. Проверить
+- [x] 11.3 `GET /api/market/pairs`, `GET /api/market/pairs/{symbol}`, `GET /api/market/pairs/{symbol}/ideas`. Проверить
   тестами контроллера: сценарии spec `market-overview` «Список пар рынка», «Страница пары» и «Идеи пары».
-- [ ] 11.4 Свечи, OI и выплаты фандинга пары страницами назад через `IRecentHistory`. Проверить тестами на поддельном
+- [x] 11.4 Свечи, OI и выплаты фандинга пары страницами назад через `IRecentHistory`. Проверить тестами на поддельном
   REST: сценарии spec `market-overview` «График пары» и «OI и фандинг под графиком».
-- [ ] 11.5 `LiveCandleHub` и поток `GET /api/market/pairs/{symbol}/live`: подписка с незакрытыми свечами только при
+- [x] 11.5 `LiveCandleHub` и поток `GET /api/market/pairs/{symbol}/live`: подписка с незакрытыми свечами только при
   слушателях, свеча таймфрейма из минут, не чаще раза в секунду. Проверить тестами: сценарии spec `market-overview`
   «Живая свеча».
-- [ ] 11.6 `GET`, `POST`, `PUT`, `DELETE /api/filters`, `GET /api/filters/fields`, `POST /api/filters/count`. Проверить
+- [x] 11.6 `GET`, `POST`, `PUT`, `DELETE /api/filters`, `GET /api/filters/fields`, `POST /api/filters/count`. Проверить
   тестами контроллера: ошибки сценариев spec `saved-filters` приходят с местом — имя или номер условия.
-- [ ] 11.7 Пересобрать типы фронтенда: `npm run generate:api`. Проверить: `schema.d.ts` несёт новые запросы, SHA-256
+- [x] 11.7 Пересобрать типы фронтенда: `npm run generate:api`. Проверить: `schema.d.ts` несёт новые запросы, SHA-256
   `/openapi/v1.json` записан в «Базе», прежние пути в нём не изменились, кроме приёма `5m` и `15m`.
 
 ## 12. Фронтенд: общие части
@@ -386,6 +386,27 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   Название фильтра — до 40 знаков. Место хранится словами `market`, `ideas`, `both`.
 - **10.3, «Фильтр не этого места».** Проверка места фильтра — в запросах списков приложения (группа 11), там же её тест.
 
+- **11.1–11.3, пути API.** Списки — `GET /api/ideas?state=open|closed`, `GET /api/ideas/summary`,
+  `GET /api/ideas/state`, `GET /api/market/pairs`, `GET /api/market/pairs/{symbol}`,
+  `GET /api/market/pairs/{symbol}/ideas`; параметры страниц у всех `sort`, `direction` (`asc`/`desc`), `page`,
+  `pageSize` (50, 100, 200), `filter` (id сохранённого фильтра). Время в ответах — миллисекунды с 1970 года, как у
+  предпросмотра. Ошибки запроса — `422` с местом (`field`, у условия ещё `condition` — номер с нуля), как в `/api/backtests`.
+  Пара вне набора — `404`; пара из набора без строки снимка отдаётся с пустыми значениями. Сохранённый фильтр, которого
+  уже нет, снимается, и ответ несёт `filterGone: true`, а не ошибку: так строка фильтров узнаёт об удалении в другой
+  вкладке.
+- **11.2, состояние сканера.** `GET /api/ideas/state` отдаёт держателя аренды, `live`, `idleSeconds` (сколько аренда
+  истекла), `liveSince`, `warmed`, `pairs`, число открытых и закрытых идей и пороги «⚡ всплеск» по таймфреймам. Пороги
+  API берёт из секции `Ideas` своей конфигурации, как Worker.
+- **11.4, график пары.** Один запрос `GET /api/market/pairs/{symbol}/chart?timeframe&before` отдаёт страницу из 500
+  закрытых свечей до `before` (без него — до сейчас) вместе с точками OI и выплатами фандинга того же отрезка: так панели
+  под графиком двигаются со свечами без второго запроса. Пока сервис данных догружает пару — `loading: true` без свечей.
+- **11.5, живая свеча.** `GET /api/market/pairs/{symbol}/live?timeframe` — `text/event-stream`: событие `candle` с
+  `LiveCandleResponse`. `LiveCandleHub` — одиночка процесса API: одна подписка на минуты ленты с незакрытыми, пока есть
+  хоть один слушатель; закрытые минуты окна читаются из REST один раз при подключении страницы.
+- **11.7, типы API.** Прежние пути и операции `schema.d.ts` не изменились; у схем `RequestError`, `SignalListItem` и
+  `StrategyListItem` добавились поля `condition`, `label` и `ideas`. Приём `5m` и `15m` не меняет схемы: таймфрейм —
+  строка.
+
 ## База
 
 Снято в облачной сессии применения на `61b0584` (ветка `feat/add-ideas-and-market`), .NET SDK 10.0.115, Node 22,
@@ -441,6 +462,11 @@ OpenSpec CLI 2.1.0.
 
 - **Группа 10, списки и фильтры.** Сборка `Release`: 0 предупреждений. Тесты бэкенда: unit 592 (+12: `ListFieldsTests`
   4, `FilterRulesTests` 8), интеграционные 249 (+8 `ListRepositoryTests`), все зелёные.
+
+- **Группа 11, API.** Сборка `Release`: 0 предупреждений. Тесты бэкенда: unit 597 (+5 `LiveCandleHubTests`),
+  интеграционные 259 (+10 `IdeasApiTests`), все зелёные. Тесты фронтенда: 273 в 18 файлах, все зелёные; `typecheck`,
+  `lint`, `format:check`, `build` зелёные. SHA-256 `/openapi/v1.json` (API в `Development` на `http://localhost:5240`):
+  `76e763255754163b76e0b61235535aec673e8c5c155f797a21b8bc1fb2589cd7`.
 
 ## Замеры
 

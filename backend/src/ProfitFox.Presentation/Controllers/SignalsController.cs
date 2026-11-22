@@ -6,13 +6,18 @@ using ProfitFox.Application.Commands.Signals.CreateSignal;
 using ProfitFox.Application.Commands.Signals.DeleteSignal;
 using ProfitFox.Application.Commands.Signals.RenameSignal;
 using ProfitFox.Application.Commands.Signals.ReplaceSignal;
+using ProfitFox.Application.Commands.Signals.SetSignalLabel;
+using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Queries.Signals;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.ValueObjects.Graph;
+using ProfitFox.Domain.ValueObjects.Ideas;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Signals;
 using ProfitFox.Presentation.Contracts.Errors;
 using ProfitFox.Presentation.Contracts.Errors.Converters;
+using ProfitFox.Presentation.Contracts.Ideas;
 using ProfitFox.Presentation.Contracts.Signals;
 using ProfitFox.Presentation.Contracts.Signals.Converters;
 
@@ -32,7 +37,7 @@ public class SignalsController(ISender sender) : ControllerBase
     [ProducesResponseType<SignalListItem[]>(StatusCodes.Status200OK)]
     public async Task<ActionResult<SignalListItem[]>> List(CancellationToken cancellation)
     {
-        return (await sender.Send(new GetSignalsQuery(), cancellation)).Select(entry => new SignalListItem(entry.Name, entry.Description, entry.Version, entry.Error, entry.Id, entry.Strategies, entry.Output)).ToArray();
+        return (await sender.Send(new GetSignalsQuery(), cancellation)).Select(entry => new SignalListItem(entry.Name, entry.Description, entry.Version, entry.Error, entry.Id, entry.Strategies, entry.Output, entry.Label is { } label ? LabelOf(label) : null)).ToArray();
     }
 
     [HttpGet("{name}", Name = "GetSignal")]
@@ -129,6 +134,31 @@ public class SignalsController(ISender sender) : ControllerBase
                 _ => throw new InvalidOperationException($"Unknown problem {exception.Problem}.", exception)
             };
         }
+    }
+
+    /// <summary>
+    ///     Sets the label the signal puts on ideas (change add-ideas-and-market, spec idea-labels «Метка сигнала»): a text of 1
+    ///     to 12 characters not taken by another label that is on, a timeframe of the five, and named pairs that are listed.
+    /// </summary>
+    [HttpPut("{name}/label", Name = "SetSignalLabel")]
+    [ProducesResponseType<SignalLabelResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<SignalLabelResponse>> SetLabel(string name, SignalLabelRequest request, CancellationToken cancellation)
+    {
+        try
+        {
+            return await Answer(async () => LabelOf(await sender.Send(new SetSignalLabelCommand(name, request.Enabled, request.Text, request.Timeframe), cancellation)));
+        }
+        catch (IdeasRequestException exception)
+        {
+            return UnprocessableEntity(new ErrorResponse([.. exception.Errors.Select(RequestErrors.Of)]));
+        }
+    }
+
+    private static SignalLabelResponse LabelOf(SignalLabel label)
+    {
+        return new SignalLabelResponse(label.Enabled, label.Text, Timeframes.Name(label.Timeframe));
     }
 
     private BadRequestObjectResult MissingGraph()
