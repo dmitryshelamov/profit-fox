@@ -253,4 +253,27 @@ describe('the graph a strategy starts with', () => {
     expect(graph.nodes[1]).toEqual({ id: 'enter', kind: 'enter', inputs: { size: 100 } });
     expect(graph.wires).toEqual([{ from: 'funding-high.event', to: 'enter.when' }, ...wires]);
   });
+
+  // Change add-position-node, task 12.7: a signal named `position` gave two nodes with one id.
+  it.each(['position', 'enter', 'close-after'])(
+    'of a signal named %s gives the node of the signal a free id, and its wires go where they went',
+    (name) => {
+      const { graph } = strategyOfSignal({ id: 'id-1', name, version: 3 });
+
+      expect(graph.nodes.map((node) => node.id)).toEqual([
+        `${name}-1`,
+        'enter',
+        'position',
+        'close-after',
+      ]);
+      expect(graph.nodes.map((node) => node.kind)).toEqual([
+        'signal',
+        'enter',
+        'position',
+        'close-after',
+      ]);
+      expect(graph.nodes[0]!.settings).toEqual({ signal: 'id-1', version: '3' });
+      expect(graph.wires).toEqual([{ from: `${name}-1.event`, to: 'enter.when' }, ...wires]);
+    },
+  );
 });

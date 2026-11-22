@@ -173,31 +173,38 @@ export function updateSignalVersion(
 /**
  * The draft of a new strategy from a saved signal (spec strategy-constructor «Стратегия из сигнала»): the node of the
  * signal on its latest version, an `enter` of 100 USDT whose `when` takes its event, the `position` and a
- * `close-after`, wired by the orders and the position; no side and no time.
+ * `close-after`, wired by the orders and the position; no side and no time. The node of the signal goes by the name of
+ * the signal, or by a free id when the signal is named as one of the other nodes: `position` gives `position-1`.
  */
 export function strategyOfSignal(signal: SignalEntry): GraphDocument {
-  return {
+  const rest: GraphDocument = {
     graph: {
       formatVersion: 1,
       parameters: [],
       outputs: [],
       nodes: [
-        {
-          id: signal.name,
-          kind: 'signal',
-          settings: { signal: signal.id, version: String(signal.version) },
-        },
         { id: 'enter', kind: 'enter', inputs: { size: 100 } },
         { id: 'position', kind: 'position' },
         { id: 'close-after', kind: 'close-after' },
       ],
       wires: [
-        { from: `${signal.name}.event`, to: 'enter.when' },
         { from: 'enter.order', to: 'position.orders' },
         { from: 'position.position', to: 'close-after.position' },
         { from: 'close-after.order', to: 'position.orders' },
       ],
     },
     layout: {},
+  };
+  const id = signalNodeId(rest, signal.name);
+  return {
+    ...rest,
+    graph: {
+      ...rest.graph,
+      nodes: [
+        { id, kind: 'signal', settings: { signal: signal.id, version: String(signal.version) } },
+        ...rest.graph.nodes,
+      ],
+      wires: [{ from: `${id}.event`, to: 'enter.when' }, ...rest.graph.wires],
+    },
   };
 }
