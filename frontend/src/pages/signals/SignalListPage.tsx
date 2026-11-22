@@ -72,7 +72,7 @@ export function SignalListPage() {
         empty={<p className="text-muted">Сигналов нет.</p>}
       />
 
-      <section aria-label="Гипотезы" className="flex flex-col gap-4">
+      <section aria-label="Гипотезы" className="flex flex-col gap-3">
         <SectionTitle
           title="Гипотезы стенда"
           hint="Сигнал гипотезы открывается только для чтения. Его можно скопировать в свой сигнал."
@@ -231,7 +231,7 @@ const signalList: ListType<SignalListItem> = {
 
     return [];
   },
-  deleteQuestion: (name) => `Удалить сигнал ${name}? Незакоммиченный файл не вернуть.`,
+  deleteQuestion: (name) => `Удалить сигнал ${name} со всеми версиями?`,
 };
 
 /** «Создать стратегию» of a saved signal that reads: a new strategy with the signal as its node. */

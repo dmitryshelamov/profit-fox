@@ -1,7 +1,7 @@
 import { Handle, type NodeProps, Position } from '@xyflow/react';
 
 import type { GraphFlowNode } from '../model/flow';
-import { nodeWidth } from '../model/layout';
+import { widthOf } from '../model/layout';
 import { kindOf, pinsOf } from '../model/pins';
 import { referenceOf, signalInfo } from '../model/signals';
 import type { Pin } from '../model/types';
@@ -57,7 +57,7 @@ export function GraphNodeView({ id, data, selected }: NodeProps<GraphFlowNode>) 
       aria-label={`${title} ${id}`}
       aria-invalid={issues.length > 0}
       className={`relative rounded-lg bg-node text-xs text-text shadow-xl ${outline}`}
-      style={{ width: nodeWidth }}
+      style={{ width: widthOf(node) }}
     >
       <div
         data-group={group}

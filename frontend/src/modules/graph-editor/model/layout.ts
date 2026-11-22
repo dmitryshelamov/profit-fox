@@ -5,6 +5,13 @@ import type { Graph, GraphNode, Layout, NodeKind } from './types';
 /** The width of a node on the canvas: fixed, so the layout knows it without measuring. */
 export const nodeWidth = 200;
 
+/** A signal node is wider: its header holds the name of the signal, the badge of its version and the id of the node. */
+export const signalNodeWidth = 260;
+
+export function widthOf(node: Pick<GraphNode, 'kind'>): number {
+  return node.kind === 'signal' ? signalNodeWidth : nodeWidth;
+}
+
 const columnGap = 80;
 const rowGap = 40;
 const headerHeight = 31;
@@ -15,16 +22,29 @@ const pinRowHeight = 24;
 /**
  * Places every node in columns left to right (spec signal-constructor «Расположение узлов отдельно от графа»): the
  * column of a node is its depth, the longest path of wires to it from the nodes without incoming wires; in a column
- * nodes stand one under another in the order of the graph. The same graph always gets the same places.
+ * nodes stand one under another in the order of the graph. A column is as wide as its widest node, so the gap between
+ * columns is the same everywhere. The same graph always gets the same places.
  */
 export function layoutGraph(graph: Graph, catalog: readonly NodeKind[]): Layout {
   const depths = depthsOf(graph);
+  const widths: number[] = [];
+  for (const node of graph.nodes) {
+    const depth = depths.get(node.id) ?? 0;
+    widths[depth] = Math.max(widths[depth] ?? 0, widthOf(node));
+  }
+
+  const lefts: number[] = [];
+  for (let depth = 0, left = 0; depth < widths.length; depth += 1) {
+    lefts[depth] = left;
+    left += (widths[depth] ?? nodeWidth) + columnGap;
+  }
+
   const filled = new Map<number, number>();
   const places: Record<string, { x: number; y: number }> = {};
   for (const node of graph.nodes) {
     const depth = depths.get(node.id) ?? 0;
     const top = filled.get(depth) ?? 0;
-    places[node.id] = { x: depth * (nodeWidth + columnGap), y: top };
+    places[node.id] = { x: lefts[depth] ?? 0, y: top };
     filled.set(depth, top + nodeHeight(node, catalog, graph) + rowGap);
   }
 

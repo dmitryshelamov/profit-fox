@@ -1,10 +1,11 @@
 import { catalog, h0001Graph } from '@/test/fixtures';
+import { fundingShort, strategyCatalog } from '@/test/strategies';
 
 import { canonical, differences, sameDocument } from './compare';
 import { toFlow, wireOf } from './flow';
 import { asGraph } from './graph';
 import { issuesOf } from './issues';
-import { layoutGraph, nodeWidth } from './layout';
+import { layoutGraph, nodeWidth, signalNodeWidth, widthOf } from './layout';
 import {
   addNode,
   connect,
@@ -15,7 +16,7 @@ import {
   setInputValue,
   setParameters,
 } from './operations';
-import type { GraphDocument } from './types';
+import type { Graph, GraphDocument } from './types';
 import { parseValue } from './values';
 import { canConnect } from './wires';
 
@@ -43,6 +44,19 @@ describe('the graph on the canvas', () => {
     const last = Math.max(...Object.values(places).map((place) => place.x));
     expect(places.out!.x).toBe(last);
     expect(layoutGraph(h0001Graph(), catalog)).toEqual(places);
+  });
+
+  // A signal node is wider: its header holds the name of the signal, the badge of its version and its id.
+  it('gives the column of a signal node its width, so the next column keeps its distance', () => {
+    const graph = fundingShort() as unknown as Graph;
+    const places = layoutGraph(graph, strategyCatalog);
+
+    expect(widthOf(graph.nodes[0]!)).toBe(signalNodeWidth);
+    expect(widthOf(graph.nodes[1]!)).toBe(nodeWidth);
+    expect(signalNodeWidth).toBeGreaterThan(nodeWidth);
+    // `enter` stands one column to the right of the signal; `close-after`, without wires, under the signal.
+    expect(places.enter!.x - places.s!.x).toBe(signalNodeWidth + 80);
+    expect(places['close-after']!.x).toBe(places.s!.x);
   });
 
   it('does not loop on a cycle of an invalid graph', () => {

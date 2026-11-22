@@ -44,7 +44,11 @@ interface Shown {
   readonly graph: string;
 }
 
-const heightKey = 'profit-fox:preview-height';
+// The key was `profit-fox:preview-height` while the panel wrote its height on every opening; a height under this key
+// is one the user chose by dragging.
+const heightKey = 'profit-fox:preview-panel-height';
+/** The height of the panel until the user drags it: on a screen 900 px high the canvas keeps 580 px. */
+const defaultHeight = 320;
 const openKey = 'profit-fox:preview-open';
 
 type ListTab = 'trades' | 'orders';
@@ -91,7 +95,7 @@ export function PreviewPanel({
     readStored(choiceKey, { instrument: '', timeframe: defaultTimeframe }),
   );
   const [open, setOpen] = useState(() => readStored(openKey, true));
-  const [height, setHeight] = useState(() => readStored(heightKey, 360));
+  const [height, setHeight] = useState(() => readStored(heightKey, defaultHeight));
   const [shown, setShown] = useState<Shown | null>(null);
   const [errors, setErrors] = useState<readonly RequestError[]>([]);
   const [focus, setFocus] = useState<ChartRange | null>(null);
@@ -101,7 +105,6 @@ export function PreviewPanel({
 
   useEffect(() => writeStored(choiceKey, choice), [choiceKey, choice]);
   useEffect(() => writeStored(openKey, open), [open]);
-  useEffect(() => writeStored(heightKey, height), [height]);
 
   const preview = useMutation({
     mutationFn: async (body: {
@@ -209,11 +212,15 @@ export function PreviewPanel({
   const resize = (event: ReactPointerEvent) => {
     const top = event.clientY;
     const from = height;
-    const move = (moved: PointerEvent) =>
-      setHeight(Math.min(Math.max(from + top - moved.clientY, 160), 900));
+    let dragged = from;
+    const move = (moved: PointerEvent) => {
+      dragged = Math.min(Math.max(from + top - moved.clientY, 160), 900);
+      setHeight(dragged);
+    };
     const stop = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', stop);
+      writeStored(heightKey, dragged);
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', stop);

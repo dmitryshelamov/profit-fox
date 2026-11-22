@@ -89,9 +89,7 @@ describe('the section «Сигналы»', () => {
 
     await choose(await rowOf('price-drop'), 'Удалить');
     const question = screen.getByRole('dialog', { name: 'Удалить сигнал price-drop' });
-    expect(question).toHaveTextContent(
-      'Удалить сигнал price-drop? Незакоммиченный файл не вернуть.',
-    );
+    expect(question).toHaveTextContent('Удалить сигнал price-drop со всеми версиями?');
     await userEvent.click(within(question).getByRole('button', { name: 'Отмена' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(deletes(requests)).toHaveLength(0);

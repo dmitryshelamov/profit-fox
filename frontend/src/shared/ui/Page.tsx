@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 /** The body of a page under the header: a column 1100 px wide in the middle. */
 export function Page({ children }: { readonly children: ReactNode }) {
   return (
-    <main className="mx-auto flex w-full max-w-[1148px] flex-col gap-10 px-6 pt-9 pb-16">
+    <main className="mx-auto flex w-full max-w-[1148px] flex-col gap-10 px-6 pt-8 pb-16">
       {children}
     </main>
   );
@@ -21,7 +21,7 @@ export function PageTitle({
 }) {
   return (
     <header className="flex items-start justify-between gap-6">
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         <h1 className="text-[22px] leading-7 font-bold">{title}</h1>
         {hint !== undefined && <p className="text-muted">{hint}</p>}
       </div>
@@ -41,7 +41,7 @@ export function SectionTitle({
   readonly count?: number;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
       <h2 className="flex items-center gap-2.5 text-base font-bold">
         {title}{' '}
         {count !== undefined && (

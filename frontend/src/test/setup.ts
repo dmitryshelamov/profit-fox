@@ -65,6 +65,7 @@ vi.mock('lightweight-charts', async () => {
   return {
     CandlestickSeries: 'Candlestick',
     ColorType: { Solid: 'solid' },
+    TickMarkType: { Year: 0, Month: 1, DayOfMonth: 2, Time: 3, TimeWithSeconds: 4 },
     createChart: vi.fn(() => ({
       addSeries: vi.fn(() => ({
         setData: vi.fn((data: unknown[]) => {

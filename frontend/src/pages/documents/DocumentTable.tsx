@@ -186,7 +186,7 @@ export function DocumentTable<Line extends DocumentLine>({
   ];
 
   return (
-    <section aria-label={label} className="flex flex-col gap-6">
+    <section aria-label={label} className="flex flex-col gap-5">
       <PageTitle title={title} hint={hint}>
         <TextField
           aria-label="Найти по имени"
