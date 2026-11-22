@@ -414,7 +414,8 @@ public sealed class PositionRun
     // at the moment the time ran out, and takes off the other orders; true when the cycle closed.
     private bool Expire(DateTimeOffset now)
     {
-        if (_standing.Count > 0)
+        // Only a strategy with a node close-after has a time: the ladder has none and is spared the look at its orders.
+        if (_after is not null && _standing.Count > 0)
         {
             foreach (Held held in _standing.Values.Where(held => held.Kind == OrderKind.Enter && held.Exits.After is { } after && held.Order.Placed + after <= now).ToList())
             {
