@@ -21,7 +21,11 @@ public sealed class MigrationTests
 
     private static readonly string[] StrategyTables = [.. BenchTables.Concat(["strategies", "strategy_signals", "strategy_versions"]).Order(StringComparer.Ordinal)];
 
-    private static readonly string[] Tables = [.. StrategyTables.Concat(["backtest_set_pairs", "backtest_sets", "backtests"]).Order(StringComparer.Ordinal)];
+    private static readonly string[] BacktestTables = [.. StrategyTables.Concat(["backtest_set_pairs", "backtest_sets", "backtests"]).Order(StringComparer.Ordinal)];
+
+    private static readonly string[] IdeaTables = ["ideas", "market_pairs", "saved_filters", "scanner_lease", "signal_labels", "strategy_ideas"];
+
+    private static readonly string[] Tables = [.. BacktestTables.Concat(IdeaTables).Order(StringComparer.Ordinal)];
 
     [SetUp]
     public async Task Empty()
@@ -51,7 +55,7 @@ public sealed class MigrationTests
 
         await using var connection = new NpgsqlConnection(connectionString);
         long[] versions = [.. await connection.QueryAsync<long>("SELECT \"Version\" FROM \"VersionInfo\" ORDER BY \"Version\"")];
-        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L }));
+        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L }));
         Assert.That(await TablesOf(connectionString), Is.SupersetOf(new[] { "strategies", "strategy_versions", "strategy_signals" }));
     }
 
@@ -115,7 +119,35 @@ public sealed class MigrationTests
         Assert.That(await TablesOf(connectionString), Is.EqualTo(Tables));
         Assert.That(await ColumnsOf(connection, StrategyTables), Is.EqualTo(before), "the former tables keep their columns");
         Assert.That(await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM runs"), Is.EqualTo(1), "and their rows");
-        Assert.That(ProfitFox.Infrastructure.Persistence.Postgres.BenchSchema.Expected, Is.EqualTo(202611220002L));
+        Assert.That(ProfitFox.Infrastructure.Persistence.Postgres.BenchSchema.Expected, Is.GreaterThanOrEqualTo(202611220002L));
+    }
+
+    /// <summary>
+    ///     Change add-ideas-and-market, task 6.1: the tables of ideas come on the database of the backtests, keep its tables as
+    ///     they were, and go back with Down; the schema a Worker waits for is theirs.
+    /// </summary>
+    [Test]
+    public async Task The_idea_tables_come_and_go_back()
+    {
+        string connectionString = await BenchDatabase.NewDatabase();
+        await using (ServiceProvider services = BenchDatabase.Migrated(connectionString))
+        {
+            using IServiceScope scope = services.CreateScope();
+            scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateDown(202611220002);
+        }
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        string[] before = await ColumnsOf(connection, BacktestTables);
+        Assert.That(await TablesOf(connectionString), Is.EqualTo(BacktestTables));
+
+        await BenchDatabase.Migrated(connectionString).DisposeAsync();
+
+        Assert.That(await TablesOf(connectionString), Is.EqualTo(Tables));
+        Assert.That(await ColumnsOf(connection, BacktestTables), Is.EqualTo(before));
+        Assert.That(
+            await connection.QueryAsync<string>("SELECT indexname FROM pg_indexes WHERE tablename = 'ideas' ORDER BY indexname"),
+            Is.EqualTo(new[] { "ideas_one_open_ux", "ideas_pk", "ideas_state_moment_ix", "ideas_strategy_timeframe_ix", "ideas_symbol_moment_ix" }));
+        Assert.That(ProfitFox.Infrastructure.Persistence.Postgres.BenchSchema.Expected, Is.EqualTo(202611230001L));
     }
 
     private static async Task<string[]> ColumnsOf(NpgsqlConnection connection, string[] tables)
