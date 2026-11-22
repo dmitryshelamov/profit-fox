@@ -54,6 +54,27 @@ public sealed class PairSteps
     }
 
     /// <summary>
+    ///     The longest time the steps in [<paramref name="from" />, <paramref name="to" />) give, with the step that holds at
+    ///     <paramref name="from" />: what a cycle opened in that part of time, by an order or outside the graph, may last.
+    ///     Zero when no step gives a time.
+    /// </summary>
+    public TimeSpan Longest(DateTimeOffset from, DateTimeOffset to)
+    {
+        int first = Array.BinarySearch(_moments, from);
+        first = first < 0 ? ~first : first;
+        TimeSpan longest = (first > 0 ? _steps[first - 1] : _beforeCandles).After ?? TimeSpan.Zero;
+        for (int index = first; index < _steps.Length && _moments[index] < to; index++)
+        {
+            if (_steps[index].After is { } after && after > longest)
+            {
+                longest = after;
+            }
+        }
+
+        return longest;
+    }
+
+    /// <summary>
     ///     The step a cycle is opened outside the graph with at <paramref name="moment" /> (spec strategy-position «Открытие
     ///     вне графа»): no order, and the values the exit nodes have at this moment. A random entry falls on a close of the
     ///     grid of the timeframe, where the pair may have no computed candle — a candle without trades, a hole in the

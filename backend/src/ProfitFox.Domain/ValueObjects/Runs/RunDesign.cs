@@ -1,5 +1,6 @@
 using ProfitFox.Domain.Services.Hypotheses;
 using ProfitFox.Domain.Services.Runs;
+using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.Hypotheses;
 using ProfitFox.Domain.ValueObjects.Runs.Enums;
 
@@ -17,6 +18,21 @@ public sealed record RunDesign(Hypothesis Hypothesis, Period Period, DateTimeOff
     public DateTimeOffset LastEntry => PeriodEnd - Hypothesis.Plan.Horizon;
 
     public TimeSpan BlockLength => HypothesisReader.Length(Hypothesis.Block);
+
+    /// <summary>
+    ///     The design of a backtest the run of the hypothesis is computed with (change add-strategy-backtest, task 4.1): the
+    ///     period as its history, the timeframe, block, random entries, measure and costs of the hypothesis, and its hash as
+    ///     the seed. The time of each order is that of its step, which is the horizon of the plan.
+    /// </summary>
+    public BacktestDesign ToBacktest()
+    {
+        return new BacktestDesign(PeriodStart, PeriodEnd, Hypothesis.Timeframe, Hypothesis.Hash, Hypothesis.Costs)
+        {
+            Block = Hypothesis.Block,
+            Randoms = Hypothesis.RandomsPerEvent,
+            Measure = Hypothesis.Measure
+        };
+    }
 
     public bool InPeriod(DateTimeOffset moment)
     {

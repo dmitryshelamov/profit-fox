@@ -21,6 +21,11 @@ public sealed record EventRow(
     double? PseudoDifference)
 {
     /// <summary>
+    ///     The result of the cycle of the order in USDT; null when its result is not computed.
+    /// </summary>
+    public double? NetAmount { get; init; }
+
+    /// <summary>
     ///     The event counts: its trade is not left out and it has at least two valid random entries.
     /// </summary>
     public bool Usable => Status == TradeStatus.Ok && RandomValid >= 2;

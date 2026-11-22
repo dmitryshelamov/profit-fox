@@ -110,6 +110,16 @@ public static class StrategyGraph
     }
 
     /// <summary>
+    ///     A strategy of <paramref name="kind" /> from a graph already read, without <c>signal</c> nodes: the expanded graph a
+    ///     backtest keeps, with the values of a set (change add-strategy-backtest, design.md, decision 3).
+    /// </summary>
+    public static ReadResult<TradingStrategy> ReadStrategy(GraphDefinition graph, StrategyKind kind)
+    {
+        List<GraphError> errors = GraphValidator.ValidateStrategy(graph, SignalSet.Empty, kind);
+        return errors.Count == 0 ? ReadResult<TradingStrategy>.Valid(Expand(graph, SignalSet.Empty)) : ReadResult<TradingStrategy>.Invalid(errors);
+    }
+
+    /// <summary>
     ///     The graph as the JSON writes it, with only the errors of its form: what the application reads the references of
     ///     <c>signal</c> nodes from before it checks the meaning.
     /// </summary>
