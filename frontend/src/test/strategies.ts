@@ -190,5 +190,6 @@ export function savedFundingShort(
     graph,
     layout: {},
     signals: usesOf(graph.nodes, [fundingHigh]),
+    raised: false,
   };
 }

@@ -60,6 +60,8 @@ export function SavedStrategyPage({ name }: { readonly name: string }) {
       const found = answer.data!;
       return {
         version: Number(found.version),
+        // The store keeps the form before the node of the position; this graph is that one raised on reading.
+        raised: found.raised === true,
         signals: found.signals as SignalUse[],
         content: {
           description: found.description ?? '',
@@ -93,6 +95,7 @@ export function SavedStrategyPage({ name }: { readonly name: string }) {
       type={strategyType}
       saved={{ name }}
       startVersion={strategy.data.version}
+      raised={strategy.data.raised}
       catalog={catalog.data}
       start={strategy.data.content!}
       startSignals={strategy.data.signals}

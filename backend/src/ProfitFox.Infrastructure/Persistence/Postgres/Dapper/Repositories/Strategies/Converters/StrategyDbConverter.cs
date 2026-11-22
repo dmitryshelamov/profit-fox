@@ -46,7 +46,7 @@ internal static class StrategyDbConverter
     ///     The strategy of a row with the graph of its latest version, or the errors that stop it: its graph does not have the
     ///     form of a graph, or its layout is not one. The meaning of the graph is checked by the application, which knows the
     ///     saved signals. A graph saved before change add-position-node is read lifted (<see cref="StrategyUpgrade" />); the
-    ///     row is not rewritten.
+    ///     row is not rewritten, and the strategy says that it was raised.
     /// </summary>
     public static StrategyRead ToDomain(StrategyDb row)
     {
@@ -56,8 +56,12 @@ internal static class StrategyDbConverter
         Dictionary<string, NodePosition> positions = [];
         using var layoutDocument = JsonDocument.Parse(row.Layout);
         errors.AddRange(LayoutJson.Read(layoutDocument.RootElement, positions));
-        return errors.Count == 0 && read.Value is not null
-            ? new StrategyRead(StrategyDocument.Restore(row.Id, row.Name, row.Description, StrategyUpgrade.Raise(read.Value), positions, row.Version), [])
-            : new StrategyRead(null, errors);
+        if (errors.Count > 0 || read.Value is not { } stored)
+        {
+            return new StrategyRead(null, errors);
+        }
+
+        bool raised = StrategyUpgrade.IsFormer(stored);
+        return new StrategyRead(StrategyDocument.Restore(row.Id, row.Name, row.Description, StrategyUpgrade.Raise(stored), positions, row.Version, raised), []);
     }
 }

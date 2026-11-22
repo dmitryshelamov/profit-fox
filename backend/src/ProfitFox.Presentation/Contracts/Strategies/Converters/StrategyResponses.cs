@@ -21,7 +21,8 @@ public static class StrategyResponses
             strategy.Version,
             graph.RootElement.Clone(),
             strategy.Layout,
-            [.. strategy.Signals.Select(Of)]);
+            [.. strategy.Signals.Select(Of)],
+            strategy.Raised);
     }
 
     public static SignalUseResponse Of(SignalUseInternal use)

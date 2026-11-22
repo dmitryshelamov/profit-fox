@@ -17,11 +17,20 @@ namespace ProfitFox.Domain.Services.Graph;
 public static class StrategyUpgrade
 {
     /// <summary>
+    ///     Whether the graph has the form before change add-position-node, the one <see cref="Raise" /> lifts: it has no
+    ///     node <c>position</c>.
+    /// </summary>
+    public static bool IsFormer(GraphDefinition graph)
+    {
+        return graph.Nodes.All(node => node.Kind != NodeCatalog.Position);
+    }
+
+    /// <summary>
     ///     The graph lifted; a graph that has a node <c>position</c> is returned as it is.
     /// </summary>
     public static GraphDefinition Raise(GraphDefinition graph)
     {
-        if (graph.Nodes.Any(node => node.Kind == NodeCatalog.Position))
+        if (!IsFormer(graph))
         {
             return graph;
         }

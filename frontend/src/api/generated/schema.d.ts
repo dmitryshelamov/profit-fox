@@ -632,6 +632,8 @@ export interface components {
                 [key: string]: components["schemas"]["NodePosition"];
             };
             signals: components["schemas"]["SignalUseResponse"][];
+            /** @default false */
+            raised: boolean;
         };
         StrategySignalItem: {
             name: string;

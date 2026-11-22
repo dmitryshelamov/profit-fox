@@ -314,6 +314,72 @@ describe('the editor of a strategy', () => {
     await waitFor(() => expect(screen.getAllByText('версия 2')).toHaveLength(2));
   });
 
+  // Change add-position-node, task 12.3; spec strategy-constructor «Сохранение поднятой стратегии». The API read the
+  // stored graph of the former form raised and says so; the editor offers to save it as it is.
+  it('opens a strategy read raised as not saved and saves the raised graph without an edit', async () => {
+    const former = fundingShort();
+    const raised = {
+      ...former,
+      nodes: [
+        former.nodes[0]!,
+        { ...former.nodes[1]!, inputs: { size: 100 } },
+        former.nodes[2]!,
+        { id: 'position', kind: 'position' },
+      ],
+      wires: [
+        ...former.wires,
+        { from: 'enter.order', to: 'position.orders' },
+        { from: 'position.position', to: 'close-after.position' },
+        { from: 'close-after.order', to: 'position.orders' },
+      ],
+    };
+    const requests = routes({
+      'GET /api/strategies/funding-short': () =>
+        json({ ...savedFundingShort(1, raised), raised: true }),
+      'PUT /api/strategies/funding-short': async (request) =>
+        json({
+          ...savedFundingShort(1, raised),
+          version: 2,
+          graph: (await request.json()).graph,
+          raised: false,
+        }),
+    });
+    renderApp('/strategies/funding-short');
+    await findNode('Позиция', 'position');
+
+    await waitFor(() => expect(saveButton()).toBeEnabled(), { timeout: 2000 });
+    const state = screen.getByRole('status', { name: 'Состояние' });
+    expect(state).toHaveTextContent('не сохранено');
+    // Nothing was edited: there is nothing to discard and no draft to keep.
+    expect(screen.getByRole('button', { name: 'Отбросить' })).toBeDisabled();
+    await userEvent.click(saveButton());
+
+    await waitFor(async () =>
+      expect(await bodiesOf(requests, 'PUT', '/api/strategies/funding-short')).toHaveLength(1),
+    );
+    const [saved] = (await bodiesOf(requests, 'PUT', '/api/strategies/funding-short')) as {
+      graph: typeof raised;
+    }[];
+    expect(saved!.graph.nodes).toEqual(raised.nodes);
+    expect(saved!.graph.wires).toEqual(raised.wires);
+    await waitFor(() => expect(state).toHaveTextContent('сохранено'));
+    expect(state).not.toHaveTextContent('не сохранено');
+    expect(saveButton()).toBeDisabled();
+    expect(screen.getByText('версия 2')).toBeInTheDocument();
+  });
+
+  it('opens a strategy stored in the new form as saved', async () => {
+    routes({
+      'GET /api/strategies/funding-short': () => json({ ...savedFundingShort(1), raised: false }),
+    });
+    renderApp('/strategies/funding-short');
+    await findNode('Вход', 'enter');
+    await checked();
+
+    expect(screen.getByRole('status', { name: 'Состояние' })).toHaveTextContent(/^сохранено$/);
+    expect(saveButton()).toBeDisabled();
+  });
+
   // Scenario «Черновики с одним именем».
   it('offers the draft of the strategy, not that of the signal of the same name', async () => {
     const strategy = {

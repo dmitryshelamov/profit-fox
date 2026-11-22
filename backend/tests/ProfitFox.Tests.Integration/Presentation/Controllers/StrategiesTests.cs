@@ -236,6 +236,41 @@ public sealed class StrategiesTests
         Assert.That(await StoredGraph(version: 2), Does.Contain("position.orders"));
     }
 
+    /// <summary>
+    ///     Change add-position-node, task 12.3: the answer says that the stored graph was raised on reading, so the editor can
+    ///     offer to save it (spec strategy-constructor «Сохранение поднятой стратегии»); once it is saved in the new form the
+    ///     answer says so no more.
+    /// </summary>
+    [Test]
+    public async Task A_strategy_read_raised_says_so_until_it_is_saved_in_the_new_form()
+    {
+        Guid signal = await CreateSignal("funding-high");
+        await BenchServices.Get<IStrategyRepository>().CreateAsync(
+            StrategyDocumentGenerator.Generate(signal, graph: StrategyDocumentGenerator.GenerateGraph(signal, legacy: true)),
+            CancellationToken.None);
+
+        JsonObject read = (await _api.Http.GetFromJsonAsync<JsonObject>("/api/strategies/funding-short", Json))!;
+
+        Assert.That((bool?)read["raised"], Is.True, "the stored graph has no node position: what is read is not what is stored");
+
+        HttpResponseMessage saved = await _api.Http.PutAsJsonAsync("/api/strategies/funding-short", new JsonObject { ["graph"] = read["graph"]!.DeepClone(), ["layout"] = new JsonObject() }, Json);
+
+        Assert.That(saved.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That((bool?)(await saved.Content.ReadFromJsonAsync<JsonObject>(Json))!["raised"], Is.False);
+        Assert.That((bool?)(await _api.Http.GetFromJsonAsync<JsonObject>("/api/strategies/funding-short", Json))!["raised"], Is.False, "the new version is stored in the new form");
+    }
+
+    [Test]
+    public async Task A_strategy_stored_in_the_new_form_is_not_raised()
+    {
+        Guid signal = await CreateSignal("funding-high");
+        await BenchServices.Get<IStrategyRepository>().CreateAsync(StrategyDocumentGenerator.Generate(signal), CancellationToken.None);
+
+        JsonObject read = (await _api.Http.GetFromJsonAsync<JsonObject>("/api/strategies/funding-short", Json))!;
+
+        Assert.That((bool?)read["raised"], Is.False);
+    }
+
     [Test]
     public async Task A_graph_of_the_former_form_sent_to_the_check_is_not_raised()
     {
