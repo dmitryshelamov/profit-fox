@@ -149,7 +149,7 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 ## 11. Сквозная проверка
 
-- [ ] 11.1 Сборка `Release` без предупреждений; все тесты бэкенда и фронтенда зелёные; `typecheck`, `lint`,
+- [x] 11.1 Сборка `Release` без предупреждений; все тесты бэкенда и фронтенда зелёные; `typecheck`, `lint`,
   `format:check` и `build` зелёные; проверка однострочных `<summary>` из `ci.yml` пуста; `openspec validate
   add-strategy-backtest --strict` проходит. Итог и числа тестов записать в «Замеры».
 - [ ] 11.2 Образ: `docker build` по `backend/src/ProfitFox.Presentation/Dockerfile` из корня проходит.
@@ -266,6 +266,19 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   красным до коммита группы 10: прежние страницы прогонов и гипотез читали удалённые типы. Коммит группы 9 сам по себе
   не собирается — маршрут формы и страницы прогонов приходят в группе 10.
 
+- **11.2, образ — не отмечена.** `docker build` по `backend/src/ProfitFox.Presentation/Dockerfile` из корня не проходит:
+  строка `COPY bench/ /source/bench/` копирует папку `bench/`, которую удалила задача 8.3, и сборка падает с
+  `"/bench": not found`. Dockerfile репозитория по условию применения не правился, поэтому задача остаётся открытой.
+  Проверено на временных копиях Dockerfile вне репозитория, где добавлено только доверие к сертификату прокси сессии и
+  apt по HTTPS (прокси сессии не пропускает HTTP): с этой строкой сборка падает там же, без неё проходит целиком —
+  `npm ci`, сборка фронтенда с проверкой типов, `dotnet publish` без предупреждений, слой с `curl`. Предложение: убрать
+  из Dockerfile строку `COPY bench/` с её комментарием (фикстуры тестов фронтенда теперь в `frontend/src/test`) и
+  поправить устаревшие слова о `bench/` в шапке Dockerfile, в `.github/workflows/deploy.yml` («the API image needs
+  frontend/ and bench/») и в `docker-compose.prod.yml` («imports bench/ of git»: импорта при старте больше нет).
+
+- **11.3–11.4, живая проверка и замер.** Не делались: задачи у основной сессии на dev-стенде, в облачной сессии
+  применения их не было по условию. Снимков в `screens/` и чисел замера нет.
+
 ## База
 
 Снято в облачной сессии применения на `acee454` (ветка `feat/add-strategy-backtest`, срезана с `release/0.1.0` на
@@ -308,6 +321,13 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   документе нет `/api/hypotheses` и `/api/runs`; есть `/api/backtests` с наборами, остатком и отменой и
   `/api/strategies/{name}/versions/{version}`.
 - **Группа 8, тесты бэкенда:** unit 475, интеграционные 181, все зелёные; сборка `Release` без предупреждений.
+
+- **11.1, сквозная проверка.** Сборка `dotnet build ProfitFox.slnx --configuration Release`: 0 предупреждений, 0
+  ошибок. Тесты бэкенда: unit 475, интеграционные 181 (Postgres в Docker, `TESTCONTAINERS_RYUK_DISABLED=true`), все
+  зелёные. Тесты фронтенда: 260 в 18 файлах, все зелёные; `typecheck`, `lint`, `format:check` и `build` зелёные
+  (`build` пишет, что основной кусок больше 500 kB: 819 kB против 810 kB на `acee454`, замечание было и до изменения).
+  Проверка однострочных `<summary>` из `ci.yml` пуста. `openspec validate add-strategy-backtest --strict` проходит на
+  CLI 2.1.0. Поиск `hypothes` (без учёта регистра) и `2026-05-15` по `frontend/src` пуст.
 
 ## Workflow follow-up
 
