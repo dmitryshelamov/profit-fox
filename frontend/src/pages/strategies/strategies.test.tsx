@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { strategyDraftKey } from '@/modules/graph-editor/drafts/drafts';
@@ -6,6 +6,7 @@ import { card, checked, findNode, saveButton, selectNode } from '@/test/editor';
 import { bodiesOf, fakeApi, json } from '@/test/fakeApi';
 import { renderApp } from '@/test/renderApp';
 import { baseRoutes, savedFundingHigh } from '@/test/routes';
+import { backtest } from '@/test/runs';
 import {
   fundingHigh,
   fundingHighId,
@@ -762,6 +763,7 @@ describe('a strategy of a signal', () => {
 // Spec strategy-constructor «Кнопка «Прогнать»» and «Последний прогон стратегии».
 describe('the runs of a strategy', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     localStorage.clear();
   });
@@ -836,6 +838,30 @@ describe('the runs of a strategy', () => {
     const form = within(await screen.findByRole('form', { name: 'Запуск прогона' }));
     expect(form.getByRole('heading', { name: 'Прогон ladder' })).toBeInTheDocument();
     expect(form.getByLabelText('Вид')).toHaveTextContent('для бота');
+  });
+
+  // Task 12.6, spec bench-ui «Одно состояние на трёх страницах»: the last run follows the queue the header asks for.
+  it('shows the last run going once the queue says it goes, while the page is open', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let state = 'queued';
+    routes({
+      'GET /api/strategies': () =>
+        json([{ ...listItem('funding-short', 3), lastRun: { id: 'b1', state, version: 3 } }]),
+      'GET /api/backtests': (request) =>
+        json(
+          new URL(request.url).searchParams.get('active') === 'true'
+            ? [backtest({ id: 'b1', state })]
+            : [],
+        ),
+    });
+    renderApp('/strategies');
+
+    const row = within(await screen.findByRole('row', { name: 'Стратегия funding-short' }));
+    expect(row.getByText('В очереди')).toBeInTheDocument();
+    state = 'running';
+    await act(() => vi.advanceTimersByTimeAsync(3100));
+
+    await waitFor(() => expect(row.getByText('Идёт')).toHaveAttribute('data-tone', 'run'));
   });
 
   // Scenarios «Законченный прогон», «Прогон в очереди важнее законченного» and «Стратегия без прогонов».

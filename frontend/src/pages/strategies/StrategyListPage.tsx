@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { api, unwrap } from '@/api/client';
 import { written } from '@/api/signals';
@@ -12,6 +12,7 @@ import {
 } from '@/modules/graph-editor/document';
 import { strategyDraftKey, writeDraft } from '@/modules/graph-editor/drafts/drafts';
 import { DocumentTable, type ListType } from '@/pages/documents/DocumentTable';
+import { useActiveRuns } from '@/pages/runs/useActiveRuns';
 import { Badge } from '@/shared/ui/Badge';
 import { Button, buttonLook } from '@/shared/ui/Button';
 import { Dialog } from '@/shared/ui/Dialog';
@@ -166,6 +167,27 @@ async function openNewStrategy(navigate: ReturnType<typeof useNavigate>, kind: S
 }
 
 /**
+ * The last run of a strategy follows the queue the header already asks for (task 12.6, spec bench-ui «Одно состояние на
+ * трёх страницах»): a run that was queued, taken by a Worker or ended changes the queue, and the list is asked again.
+ */
+function useLastRunsFollowTheQueue(refetch: () => Promise<unknown>) {
+  const active = useActiveRuns();
+  const queue = active.data?.map((run) => `${run.id}:${run.state}`).join(',');
+  const seen = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (queue === undefined) {
+      return;
+    }
+
+    if (seen.current !== undefined && seen.current !== queue) {
+      void refetch();
+    }
+
+    seen.current = queue;
+  }, [queue, refetch]);
+}
+
+/**
  * The section «Стратегии» (spec strategy-constructor «Список стратегий», «Создание, переименование, копирование и
  * удаление стратегии», «Сигналы и выходы стратегии в списке», «Вид при создании стратегии»): the saved strategies in
  * the order of their name with their kinds, latest versions, signals, exits and last runs, one that does not read
@@ -175,6 +197,7 @@ export function StrategyListPage() {
   const navigate = useNavigate();
   const strategyList = useMemo(() => strategyListOf(navigate), [navigate]);
   const strategies = useQuery({ queryKey: ['strategies'], queryFn: listStrategies });
+  useLastRunsFollowTheQueue(strategies.refetch);
   const [choosing, setChoosing] = useState(false);
   const create = (
     <Button variant="primary" onClick={() => setChoosing(true)}>
