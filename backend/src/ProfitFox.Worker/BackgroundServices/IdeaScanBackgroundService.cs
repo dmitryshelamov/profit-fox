@@ -48,7 +48,12 @@ internal sealed class IdeaScanBackgroundService(
 
                 if (taken)
                 {
-                    await Scan(stoppingToken);
+                    // A scanner that failed — the market-data service does not answer — starts again after a renewal of
+                    // the lease, not at once: the lease still holds, and the log gets one error per pause.
+                    if (!await Scan(stoppingToken))
+                    {
+                        await Task.Delay(worker.LeaseRenewal, time, stoppingToken);
+                    }
                 }
                 else
                 {
@@ -73,8 +78,8 @@ internal sealed class IdeaScanBackgroundService(
         }
     }
 
-    // The scanner while the lease holds.
-    private async Task Scan(CancellationToken stoppingToken)
+    // The scanner while the lease holds; false when it failed.
+    private async Task<bool> Scan(CancellationToken stoppingToken)
     {
         using var work = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         using var done = new CancellationTokenSource();
@@ -83,13 +88,17 @@ internal sealed class IdeaScanBackgroundService(
         {
             logger.LogInformation("Worker {Name} keeps the live data.", worker.Name);
             await scopes.SendAsync(new RunScannerCommand(worker.Name), work.Token);
+            return true;
         }
         catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
         {
-            if (exception is not OperationCanceledException)
+            if (exception is OperationCanceledException)
             {
-                logger.LogError(exception, "The scanner of ideas stopped.");
+                return true;
             }
+
+            logger.LogError(exception, "The scanner of ideas stopped.");
+            return false;
         }
         finally
         {
