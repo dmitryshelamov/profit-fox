@@ -145,12 +145,12 @@ function strategyPreview() {
   };
 }
 
-function openFundingShort() {
+function openFundingShort(preview: object = strategyPreview()) {
   const requests = fakeApi({
     ...baseRoutes(),
     ...strategyRoutes(),
     'GET /api/strategies/funding-short': () => json(savedFundingShort(1)),
-    'POST /api/preview/strategy': () => json(strategyPreview()),
+    'POST /api/preview/strategy': () => json(preview),
   });
   renderApp('/strategies/funding-short');
   return requests;
@@ -245,6 +245,45 @@ describe('the preview panel of a strategy', () => {
     expect(await screen.findByText('Граф изменён, нажмите Показать')).toBeInTheDocument();
     expect(screen.getByRole('table', { name: 'Заявки' })).toBeInTheDocument();
     expect(drawn.markers).toHaveLength(2);
+  });
+});
+
+// Change add-position-node, task 12.6: the marks of the last weeks ran into a blot on the chart of the whole history.
+describe('the part of the chart a preview of a strategy opens on', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  it('is the weeks the trades are computed for, with a little before them', async () => {
+    const preview = strategyPreview();
+    openFundingShort(asWritten(preview));
+    await findNode('funding-high', 's');
+    drawn.range = null;
+
+    await show();
+    await screen.findByRole('tablist', { name: 'Результат' });
+
+    const from = preview.computedFrom / 1000;
+    expect(drawn.view).toBe('range');
+    expect(drawn.range!.to).toBe(preview.periodEnd / 1000);
+    expect(drawn.range!.from).toBeLessThan(from);
+    expect(drawn.range!.from).toBeGreaterThan(from - (3 * 24 * hour) / 1000);
+    // The whole history is still on the chart, to scroll back to.
+    expect(drawn.candles).toHaveLength(4);
+  });
+
+  it('is the whole history when the trades are computed for all of it', async () => {
+    openFundingShort(asWritten({ ...strategyPreview(), computedFrom: null }));
+    await findNode('funding-high', 's');
+    drawn.range = null;
+
+    await show();
+    await screen.findByRole('tablist', { name: 'Результат' });
+
+    expect(drawn.candles).toHaveLength(4);
+    expect(drawn.view).toBe('content');
+    expect(drawn.range).toBeNull();
   });
 });
 

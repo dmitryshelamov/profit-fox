@@ -78,6 +78,23 @@ function markOf(fill: PreviewFill, short: boolean, key: number, length: number):
   }
 }
 
+/**
+ * The part of the chart a preview opens on when its trades are computed only since `computedFrom`, the last weeks of
+ * exploration: from a little before that moment — a twentieth of the range — to the end of exploration, in seconds as
+ * the chart counts time. Null when the trades are computed for all of exploration: the chart then shows all of it.
+ */
+export function computedRange(
+  preview: Pick<StrategyPreview, 'computedFrom' | 'periodEnd'>,
+): { from: number; to: number } | null {
+  if (preview.computedFrom == null) {
+    return null;
+  }
+
+  const from = Number(preview.computedFrom);
+  const to = Number(preview.periodEnd);
+  return { from: (from - (to - from) / 20) / 1000, to: to / 1000 };
+}
+
 const reasons: Record<string, string> = {
   stop: 'стоп',
   target: 'цель',

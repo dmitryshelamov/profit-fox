@@ -30,7 +30,7 @@ import {
   timeframes,
 } from './preview';
 import { readStored, writeStored } from './stored';
-import { cyclesOf, percent, totalOf, tradeMarks, usdt } from './strategyPreview';
+import { computedRange, cyclesOf, percent, totalOf, tradeMarks, usdt } from './strategyPreview';
 import { TradeList } from './TradeList';
 
 /** What came back: the events of a signal, or the orders and trades of a strategy. */
@@ -66,7 +66,7 @@ type ListTab = 'trades' | 'orders';
  * chart read it and change it («Метка события выбирает строку», «Метка сделки выбирает строку»): a click on a row
  * shows it on the chart, a click on a mark selects its row. A strategy lists its result on two tabs, «Сделки» and
  * «Заявки» («Вкладки предпросмотра стратегии»), and says since when the trades are computed when they are not for all
- * of exploration.
+ * of exploration; its chart then opens on the weeks they are computed for, not on the whole history.
  */
 export function PreviewPanel({
   graph,
@@ -211,6 +211,7 @@ export function PreviewPanel({
     [shownResult],
   );
   const total = totalOf(cycles);
+  const opening = shownResult?.kind === 'strategy' ? computedRange(shownResult.preview) : null;
 
   const resize = (event: ReactPointerEvent) => {
     const top = event.clientY;
@@ -352,6 +353,7 @@ export function PreviewPanel({
               <CandleChart
                 candles={result?.candles ?? []}
                 marks={marks}
+                opening={opening}
                 focus={focus}
                 selected={selected}
                 onPick={pickMark}
