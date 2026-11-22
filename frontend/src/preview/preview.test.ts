@@ -1,10 +1,24 @@
 import { describe, expect, it } from 'vitest';
 
-import { closeAt, formatUtc, historyStart, marksOf, placeOf } from './preview';
+import {
+  closeAt,
+  formatUtc,
+  historyStart,
+  lengthOf,
+  marksOf,
+  placeOf,
+  timeframes,
+} from './preview';
 
 const utc = (text: string) => Date.parse(`${text}Z`);
 
 describe('the helpers of the preview', () => {
+  // Change add-ideas-and-market, task 2.5: five timeframes and their lengths.
+  it('knows five timeframes and their lengths', () => {
+    expect(timeframes).toEqual(['5m', '15m', '1h', '4h', '1d']);
+    expect(timeframes.map(lengthOf)).toEqual([300_000, 900_000, 3_600_000, 14_400_000, 86_400_000]);
+  });
+
   it('puts the mark of an event on the candle that closed at its moment', () => {
     const marks = marksOf([{ moment: utc('2026-01-04T12:00') }], '4h');
 

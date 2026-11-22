@@ -75,7 +75,8 @@ dotnet run --project backend/src/ProfitFox.Cli -- run funding-short --timeframe 
 Команды `bench`:
 
 - `run <стратегия> [--version N] [--timeframe 1h,4h] [--param имя=v1,v2]… [--from дата] [--until дата] [--pairs A,B]
-  [--wait]` — прогон стратегии; с `--wait` печатает таблицу наборов;
+  [--wait]` — прогон стратегии; `--timeframe` — таймфреймы через запятую из `5m`, `15m`, `1h`, `4h`, `1d`, по умолчанию
+  `4h`; с `--wait` печатает таблицу наборов;
 - `runs` — очередь и последние прогоны;
 - `cancel <id прогона>` — снять из очереди или остановить.
 

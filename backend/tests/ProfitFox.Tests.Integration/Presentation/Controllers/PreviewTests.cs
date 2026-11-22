@@ -183,7 +183,7 @@ public sealed class PreviewTests
         await using MarketDataServer market = await MarketDataServer.Start();
         await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
 
-        ErrorResponse refused = await BadRequest(await Preview(api, "NOSUCHUSDT", "2h", Signal()));
+        ErrorResponse refused = await BadRequest(await Preview(api, "NOSUCHUSDT", "2m", Signal()));
 
         Assert.That(refused.Errors.Select(error => (error.Code, error.Field)),
             Is.EquivalentTo(new[] { ("InvalidTimeframe", (string?)"timeframe"), ("UnknownInstrument", "instrument") }));
@@ -200,6 +200,52 @@ public sealed class PreviewTests
 
         await using NpgsqlConnection connection = await BenchDatabase.DataSource.OpenConnectionAsync();
         Assert.That(await connection.ExecuteScalarAsync<int>("SELECT (SELECT count(*) FROM backtests) + (SELECT count(*) FROM strategies) + (SELECT count(*) FROM signals)"), Is.Zero);
+    }
+
+    /// <summary>
+    ///     Change add-ideas-and-market, task 2.3: spec signal-preview «Сигнал на 15m».
+    /// </summary>
+    [Test]
+    public async Task A_signal_on_15m_gives_candles_of_15m_and_events_at_their_close()
+    {
+        await using MarketDataServer market = await MarketDataServer.Start();
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
+
+        PreviewResponse preview = await Ok(await Preview(api, "BTCUSDT", "15m", Signal()));
+
+        Assert.That(preview.Timeframe, Is.EqualTo("15m"));
+        long step = (long)TimeSpan.FromMinutes(15).TotalMilliseconds;
+        Assert.That(preview.Candles.Zip(preview.Candles.Skip(1)).Select(pair => (pair.Second.OpenTime - pair.First.OpenTime) % step), Has.All.Zero);
+        Assert.That(preview.Candles.Zip(preview.Candles.Skip(1)).Any(pair => pair.Second.OpenTime - pair.First.OpenTime == step), Is.True);
+        Assert.That(preview.Events, Has.Count.EqualTo(28), "every day of the four weeks at 08:00");
+        var closes = new HashSet<long>(preview.Candles.Select(candle => candle.OpenTime + step));
+        Assert.That(preview.Events.Select(item => item.Moment), Has.All.Matches<long>(moment => moment % step == 0));
+        Assert.That(
+            preview.Events.Select(item => DateTimeOffset.FromUnixTimeMilliseconds(item.Moment).TimeOfDay),
+            Has.All.EqualTo(TimeSpan.FromHours(8)),
+            "the payment of 08:00 is known at the close of the 15m candle 07:45");
+        Assert.That(closes.Contains(preview.Events[0].Moment), Is.True);
+        Assert.That(market.Data.CandleRequests.Select(request => request.Interval), Has.All.EqualTo(ProfitFox.Infrastructure.Clients.MarketData.Protos.CandleInterval.FifteenMinutes));
+    }
+
+    /// <summary>
+    ///     Change add-ideas-and-market, task 2.3: spec strategy-preview «Стратегия на 5m».
+    /// </summary>
+    [Test]
+    public async Task A_strategy_on_5m_gives_candles_of_5m_and_orders_at_their_close()
+    {
+        await using MarketDataServer market = await MarketDataServer.Start();
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
+        Guid signal = await SaveSignal(api);
+
+        StrategyPreviewResponse preview = await OkStrategy(await PreviewStrategy(api, "BTCUSDT", "5m", StrategiesTests.Strategy(signal)));
+
+        Assert.That(preview.Timeframe, Is.EqualTo("5m"));
+        long step = (long)TimeSpan.FromMinutes(5).TotalMilliseconds;
+        Assert.That(preview.Candles.Zip(preview.Candles.Skip(1)).Select(pair => (pair.Second.OpenTime - pair.First.OpenTime) % step), Has.All.Zero);
+        Assert.That(preview.Orders, Has.Count.EqualTo(28));
+        Assert.That(preview.Orders.Select(order => order.Moment % step), Has.All.Zero);
+        Assert.That(preview.Orders.Select(order => DateTimeOffset.FromUnixTimeMilliseconds(order.Moment).TimeOfDay), Has.All.EqualTo(TimeSpan.FromHours(8)));
     }
 
     /// <summary>

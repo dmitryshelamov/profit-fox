@@ -2,6 +2,8 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 
+import { timeframes } from '@/preview/preview';
+
 import { Dialog } from './Dialog';
 import { Menu } from './Menu';
 import { RunStatusBadge } from './RunStatusBadge';
@@ -169,7 +171,7 @@ describe('Segmented', () => {
       <Segmented
         label="Таймфрейм"
         value={value}
-        options={['1h', '4h', '1d'].map((item) => ({ value: item, label: item }))}
+        options={timeframes.map((item) => ({ value: item, label: item }))}
         onChange={setValue}
       />
     );
@@ -198,7 +200,7 @@ describe('Segmented', () => {
     expect(checked()).toEqual(['1d']);
     expect(screen.getByRole('radio', { name: '1d' })).toHaveFocus();
     await userEvent.keyboard('{ArrowRight}');
-    expect(checked()).toEqual(['1h']);
+    expect(checked()).toEqual(['5m']);
     await userEvent.keyboard('{ArrowLeft}');
     expect(checked()).toEqual(['1d']);
   });

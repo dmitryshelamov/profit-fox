@@ -186,6 +186,8 @@ describe('the header of the preview panel', () => {
     await findNode('Параметры', 'p');
     const timeframe = within(screen.getByRole('radiogroup', { name: 'Таймфрейм' }));
     expect(timeframe.getAllByRole('radio').map((radio) => radio.textContent)).toEqual([
+      '5m',
+      '15m',
       '1h',
       '4h',
       '1d',

@@ -66,6 +66,33 @@ public sealed class BacktestsTests
         Assert.That((await Http.GetFromJsonAsync<BacktestResponse[]>("/api/backtests", Json))!.Select(item => item.Id), Is.EqualTo(new[] { backtest.Id }));
     }
 
+    /// <summary>
+    ///     Change add-ideas-and-market, task 2.1: spec strategy-backtest «Прогон на 15m» and «Две ошибки сразу».
+    /// </summary>
+    [Test]
+    public async Task A_backtest_on_15m_and_1h_is_queued_with_two_sets()
+    {
+        await SaveStrategy(Http, "funding-short", FundingShort(), "idea");
+
+        BacktestResponse backtest = await Queued(Http, new JsonObject { ["strategy"] = "funding-short", ["timeframes"] = new JsonArray("15m", "1h"), ["end"] = End });
+
+        Assert.That(backtest.Sets.Select(set => set.Timeframe), Is.EqualTo(new[] { "15m", "1h" }));
+        Assert.That((await Read(Http, backtest.Id)).Settings.Timeframes, Is.EqualTo(new[] { "15m", "1h" }));
+    }
+
+    [Test]
+    public async Task A_timeframe_of_2m_and_an_unknown_pair_are_refused_together()
+    {
+        await SaveStrategy(Http, "funding-short", FundingShort(), "idea");
+
+        HttpResponseMessage refused = await Post(Http, new JsonObject { ["strategy"] = "funding-short", ["timeframes"] = new JsonArray("2m"), ["pairs"] = new JsonArray("FOOUSDT") });
+
+        Assert.That(refused.StatusCode, Is.EqualTo(HttpStatusCode.UnprocessableEntity));
+        ErrorResponse errors = (await refused.Content.ReadFromJsonAsync<ErrorResponse>(Json))!;
+        Assert.That(errors.Errors.Select(error => error.Code), Is.EqualTo(new[] { "InvalidTimeframe", "UnknownInstrument" }));
+        Assert.That(await Scalar<int>("SELECT count(*) FROM backtests"), Is.Zero);
+    }
+
     [Test]
     public async Task A_version_saved_after_the_backtest_does_not_change_it_nor_does_deleting_the_strategy()
     {
@@ -109,7 +136,7 @@ public sealed class BacktestsTests
                 kind: ProfitFox.Domain.ValueObjects.Strategies.Enums.StrategyKind.Idea),
             CancellationToken.None);
 
-        HttpResponseMessage refused = await Post(Http, new JsonObject { ["strategy"] = "funding-short", ["timeframes"] = new JsonArray("5m") });
+        HttpResponseMessage refused = await Post(Http, new JsonObject { ["strategy"] = "funding-short", ["timeframes"] = new JsonArray("2m") });
 
         Assert.That(refused.StatusCode, Is.EqualTo(HttpStatusCode.UnprocessableEntity));
         ErrorResponse errors = (await refused.Content.ReadFromJsonAsync<ErrorResponse>(Json))!;

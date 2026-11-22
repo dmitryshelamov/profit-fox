@@ -134,7 +134,7 @@ public static class BacktestRules
         {
             if (!Timeframes.TryParse(name, out TimeSpan timeframe))
             {
-                errors.Add(new BacktestError(BacktestError.InvalidTimeframe, $"таймфрейм {name} не из 1h, 4h, 1d") { Field = "timeframes" });
+                errors.Add(new BacktestError(BacktestError.InvalidTimeframe, $"таймфрейм {name} не из {Timeframes.Listed}") { Field = "timeframes" });
             }
             else if (!timeframes.Contains(timeframe))
             {

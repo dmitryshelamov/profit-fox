@@ -41,7 +41,7 @@ internal sealed class PreviewStrategyQueryHandler(
         List<PreviewErrorInternal> errors = [];
         if (!Timeframes.TryParse(query.Timeframe, out TimeSpan timeframe))
         {
-            errors.Add(new PreviewErrorInternal("InvalidTimeframe", "the timeframe is 1h, 4h or 1d") { Field = "timeframe" });
+            errors.Add(new PreviewErrorInternal("InvalidTimeframe", $"the timeframe is one of {Timeframes.Listed}") { Field = "timeframe" });
         }
 
         TradingStrategy? strategy = null;

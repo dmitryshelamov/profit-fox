@@ -108,7 +108,7 @@ public static class CliApp
                 result.AddError("--version wants a positive number.");
             }
         });
-        var timeframe = new Option<string?>("--timeframe") { Description = "The timeframes by commas, of 1h, 4h and 1d; by default 4h", HelpName = "1h,4h" };
+        var timeframe = new Option<string?>("--timeframe") { Description = "The timeframes by commas, of 5m, 15m, 1h, 4h and 1d; by default 4h", HelpName = "1h,4h" };
         var parameter = new Option<string[]>("--param") { Description = "Values of a parameter, as name=v1,v2; once for each parameter", HelpName = "name=v1,v2" };
         parameter.Validators.Add(result =>
         {
