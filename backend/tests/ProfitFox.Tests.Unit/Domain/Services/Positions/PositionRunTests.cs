@@ -322,6 +322,71 @@ public sealed class PositionRunTests
     }
 
     [Test]
+    public void An_entry_and_an_exit_by_limit_orders_in_one_minute_make_the_cycle_ambiguous()
+    {
+        // Spec strategy-position «Порядок исполнений в минуте», «Вход и выход в одной минуте»: no position, a buy at 99 and a
+        // sale at 101 whose prices do not change.
+        string json = WithPosition(
+            """
+            { "id": "buy", "kind": "limit-order", "settings": { "side": "buy", "sizeIn": "amount" }, "inputs": { "when": true, "price": 99, "size": 100 } },
+            { "id": "sell", "kind": "limit-order", "settings": { "side": "sell", "sizeIn": "amount" }, "inputs": { "when": true, "price": 101, "size": 1000 } }
+            """,
+            $$"""{{Into("buy")}}, {{Into("sell")}}""");
+
+        PositionResult result = Run(json, new Paths().Flat(100, 5).Minute(100, 101.2, 98.9, 100).Flat(100, 54).Build(withFunding: false), hours: 0);
+
+        CycleOutcome cycle = result.Cycles.Single();
+        Assert.That(cycle.Fills.Select(fill => (fill.Moment, fill.Action, fill.Price)), Is.EqualTo(new[]
+        {
+            (Paths.At(5), FillAction.Entry, 99.0), (Paths.At(5), FillAction.Exit, 101.0)
+        }), "the buy opens the cycle and the sale, left as it was, closes it in the same minute");
+        Assert.That(cycle.Ambiguous, Is.True);
+    }
+
+    [Test]
+    public void A_limit_entry_and_the_target_in_one_minute_make_the_cycle_ambiguous()
+    {
+        // Spec strategy-position «Порядок исполнений в минуте», «Лимитный вход и цель в одной минуте».
+        string json = WithPosition(
+            """
+            { "id": "closed", "kind": "not" },
+            { "id": "buy", "kind": "limit-order", "settings": { "side": "buy", "sizeIn": "amount" }, "inputs": { "price": 99, "size": 100 } },
+            { "id": "target", "kind": "take-profit", "inputs": { "distance": 0.01 } }
+            """,
+            $$"""
+              { "from": "position.open", "to": "closed.value" }, { "from": "closed.result", "to": "buy.when" }, {{Into("buy")}},
+              { "from": "position.position", "to": "target.position" }, {{Into("target")}}
+              """);
+
+        PositionResult result = Run(json, new Paths().Flat(100, 5).Minute(100, 100.5, 98.9, 100).Flat(100, 54).Build(withFunding: false), hours: 0);
+
+        CycleOutcome cycle = result.Cycles[0];
+        Assert.That((cycle.ExitReason, cycle.Fills[^1].Moment, cycle.Fills[^1].Price), Is.EqualTo((CycleExit.Target, Paths.At(5), 99 * 1.01)));
+        Assert.That(cycle.Ambiguous, Is.True);
+    }
+
+    [Test]
+    public void A_market_entry_and_the_stop_in_one_minute_are_not_ambiguous_as_in_the_trade_of_a_plan()
+    {
+        // The entry by the market is at the open of the minute, so what follows in the minute follows it: the rule of a trade
+        // of a plan (spec trade-plan-outcome), where only the stop and the target together are ambiguous.
+        string json = WithPosition(
+            $$"""{{EntryNodes}}, { "id": "close-after", "kind": "close-after", "inputs": { "after": "4h" } }, { "id": "stop", "kind": "stop-loss", "inputs": { "distance": 0.01 } }""",
+            $$"""
+              {{EntryWires}}, { "from": "position.position", "to": "close-after.position" }, {{Into("close-after")}},
+              { "from": "position.position", "to": "stop.position" }, {{Into("stop")}}
+              """);
+        MinutePath path = new Paths().Minute(100, 100.2, 98, 99).Flat(99, 5 * 60 - 1).Build(withFunding: false);
+
+        PositionResult result = Run(json, path, hours: 4);
+
+        CycleOutcome cycle = result.Cycles[0];
+        TradeOutcome plan = CycleRun.Simulate(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromHours(4), stop: 0.01), Free, amount: 100).ToTrade();
+        Assert.That((cycle.ExitReason, cycle.Ambiguous), Is.EqualTo((CycleExit.Stop, false)));
+        Assert.That(CycleRunTests.Text(cycle.ToTrade()), Is.EqualTo(CycleRunTests.Text(plan)));
+    }
+
+    [Test]
     public void An_averaging_buy_increases_the_position_and_opens_no_new_cycle()
     {
         PositionResult result = Run(Graphs.Ladder, new Paths().Flat(100, 10).Minute(99.5, 99.6, 98.9, 99.2).Flat(99.2, 49).Build(withFunding: false), hours: 0);

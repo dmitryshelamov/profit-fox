@@ -25,6 +25,11 @@ namespace ProfitFox.Domain.Services.Positions;
 ///             decreases it and the target; with the position closed a buy goes before a sale. After each the graph is
 ///             computed again; an order it leaves as it was can fill in the same minute.
 ///         </item>
+///         <item>
+///             A cycle is ambiguous when orders of different actions could fill in one of its minutes. This is looked at
+///             before each fill of the minute, with what the fills of limit orders already did to the cycle in it: a fill by
+///             the market is at the open and so before the rest, as the entry of a trade of a plan.
+///         </item>
 ///         <item>The stop, the target and the time close the whole position and take off the other orders.</item>
 ///         <item>
 ///             The time of a cycle an order of <c>enter</c> opened runs from the moment of the order, that of a cycle a
@@ -59,6 +64,8 @@ public sealed class PositionRun
     private double _lastClose = double.NaN;
     private bool _computed;
     private bool _afterHole;
+    private bool _limitIncrease;
+    private bool _limitDecrease;
     private DateTimeOffset _close;
 
     public PositionRun(TradingStrategy strategy, MinutePath path, TradeCosts costs, DateTimeOffset from, DateTimeOffset? end = null)
@@ -177,8 +184,9 @@ public sealed class PositionRun
 
         double high = _path.High(index);
         double low = _path.Low(index);
-        bool ambiguous = Ambiguous(minute, open, high, low);
-        for (int fills = 0; Fill(minute, time, open, high, low, ambiguous); fills++)
+        _limitIncrease = false;
+        _limitDecrease = false;
+        for (int fills = 0; Fill(minute, time, open, high, low); fills++)
         {
             if (fills >= MaxFillsInMinute)
             {
@@ -189,30 +197,36 @@ public sealed class PositionRun
         _lastClose = _path.Close(index);
     }
 
-    // Whether orders of different actions could fill in the minute: an increase, a decrease, the stop, or the stop and the target.
-    private bool Ambiguous(long minute, double open, double high, double low)
+    // Whether orders of different actions could fill in the minute of the open cycle (spec strategy-position «Порядок
+    // исполнений в минуте»): an increase and a decrease, or the stop and anything else, the target among the decreases as
+    // in the trade of a plan. What could fill is what can fill now and what the fills of limit orders did to the cycle
+    // earlier in this minute: a limit order fills somewhere inside the minute, a market order at its open. An order of
+    // enter does nothing to an open position.
+    private bool Ambiguous(Candidate[] candidates)
     {
-        Candidate[] candidates = [.. Candidates(minute, high, low)];
         bool stop = candidates.Any(candidate => candidate.Kind == CandidateKind.Stop);
         bool target = candidates.Any(candidate => candidate.Kind == CandidateKind.Target);
-        bool increase = candidates.Any(candidate => candidate.Kind == CandidateKind.Order && Increases(candidate.Held!));
-        bool decrease = target || candidates.Any(candidate => candidate.Kind == CandidateKind.Order && !Increases(candidate.Held!));
+        Held[] orders = [.. candidates.Where(candidate => candidate.Kind == CandidateKind.Order && candidate.Held!.Kind != OrderKind.Enter).Select(candidate => candidate.Held!)];
+        bool increase = _limitIncrease || orders.Any(Increases);
+        bool decrease = _limitDecrease || target || orders.Any(order => !Increases(order));
         return (stop && (increase || decrease)) || (increase && decrease);
     }
 
     // The first fill of the minute in the worst order, done; false when nothing more fills.
-    private bool Fill(long minute, DateTimeOffset time, double open, double high, double low, bool ambiguous)
+    private bool Fill(long minute, DateTimeOffset time, double open, double high, double low)
     {
-        Candidate? next = Candidates(minute, high, low).OrderBy(Priority).Cast<Candidate?>().FirstOrDefault();
-        if (next is not { } candidate)
+        Candidate[] candidates = [.. Candidates(minute, high, low)];
+        if (candidates.Length == 0)
         {
             return false;
         }
 
-        if (_cycle is { } cycle && ambiguous)
+        if (_cycle is { } cycle && Ambiguous(candidates))
         {
             cycle.Ambiguous = true;
         }
+
+        Candidate candidate = candidates.OrderBy(Priority).First();
 
         switch (candidate.Kind)
         {
@@ -231,7 +245,7 @@ public sealed class PositionRun
                 break;
             }
             default:
-                Order(candidate.Held!, time, open, ambiguous);
+                Order(candidate.Held!, time, open);
                 break;
         }
 
@@ -292,7 +306,7 @@ public sealed class PositionRun
         return _cycle is { } cycle && held.Order.Side == (cycle.IsLong ? FillSide.Buy : FillSide.Sell);
     }
 
-    private void Order(Held held, DateTimeOffset time, double open, bool ambiguous)
+    private void Order(Held held, DateTimeOffset time, double open)
     {
         StandingOrder order = held.Order;
         _standing.Remove(order.Node);
@@ -323,7 +337,8 @@ public sealed class PositionRun
             double amount = order.SizeInQuantity ? order.Size * fill : order.Size;
             EntrySide side = order.Side == FillSide.Buy ? EntrySide.Long : EntrySide.Short;
             _cycle = CycleRun.Open(_path, _costs, side, time, raw, fill, amount, order.Node, held.Exits.Stop, held.Exits.Target, until, maker: held.Kind == OrderKind.Limit);
-            _cycle.Ambiguous = ambiguous;
+            _limitIncrease = held.Kind == OrderKind.Limit;
+            _limitDecrease = false;
             _cycles.Add(null);
             _orders.Add(Outcome(held.Kind, time, order.Node, order.Side, OrderResult.Filled, null, fill, amount, _cycles.Count - 1));
             return;
@@ -339,6 +354,7 @@ public sealed class PositionRun
         {
             double amount = order.SizeInQuantity ? order.Size * fill : order.Size;
             cycle.Increase(time, raw, fill, amount, order.Node, maker: held.Kind == OrderKind.Limit);
+            _limitIncrease |= held.Kind == OrderKind.Limit;
             _orders.Add(Outcome(held.Kind, time, order.Node, order.Side, OrderResult.Filled, null, fill, amount, _cycles.Count - 1));
             return;
         }
@@ -351,6 +367,7 @@ public sealed class PositionRun
             _ => CycleExit.MarketOrder
         };
         double sold = cycle.Reduce(time, raw, fill, quantity, reason, order.Node, maker: held.Kind == OrderKind.Limit);
+        _limitDecrease |= held.Kind == OrderKind.Limit;
         _orders.Add(Outcome(held.Kind, time, order.Node, order.Side, OrderResult.Filled, null, fill, sold * fill, _cycles.Count - 1));
         if (cycle.Closed)
         {
