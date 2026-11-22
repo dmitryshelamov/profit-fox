@@ -234,7 +234,7 @@ public sealed class IdeaScanWorkerTests
     {
         DateTimeOffset close = start.AddMinutes(5);
         await Push(start, 5, close: 101);
-        await Until(time, close.AddSeconds(15), () => Scalar<int>("SELECT count(*) FROM ideas").ContinueWith(count => count.Result.ToString(System.Globalization.CultureInfo.InvariantCulture)), "1");
+        await Until(time, close.AddSeconds(15), async () => (await Scalar<int>("SELECT count(*) FROM ideas")).ToString(System.Globalization.CultureInfo.InvariantCulture), "1");
         return close;
     }
 
