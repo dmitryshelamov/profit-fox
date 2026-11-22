@@ -1,3 +1,4 @@
+import type { StrategyKind } from '../document';
 import type { Graph, Layout } from '../model/types';
 
 /** An unsaved edit of a signal or a strategy in the browser (spec signal-constructor «Черновик в браузере»). */
@@ -6,6 +7,8 @@ export interface Draft {
   readonly description: string;
   readonly graph: Graph;
   readonly layout: Layout;
+  /** The kind of a new strategy, chosen before its editor opens. */
+  readonly kind?: StrategyKind;
 }
 
 const prefix = 'profit-fox:draft:';

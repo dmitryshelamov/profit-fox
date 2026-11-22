@@ -51,6 +51,8 @@ export interface ListType<Line extends DocumentLine = DocumentLine> {
   readonly columns: readonly DocumentColumn<Line>[];
   /** What stands before the menu of a row, as «Создать стратегию» of a signal. */
   readonly actions?: (line: Line) => ReactNode;
+  /** The items of the menu of a row before rename, copy and delete, as «Прогнать» of a strategy. */
+  readonly menu?: (line: Line) => MenuItem[];
   readonly rename: (name: string, to: string) => Promise<Written<unknown>>;
   /** Saves a copy under a new name: its description, graph and layout read from the source. */
   readonly copy: (name: string, to: string) => Promise<Written<unknown>>;
@@ -173,6 +175,7 @@ export function DocumentTable<Line extends DocumentLine>({
     ...(line.error
       ? []
       : [
+          ...(type.menu?.(line) ?? []),
           {
             label: 'Переименовать',
             onSelect: () => ask({ kind: 'rename', line: line.name, name: line.name }),

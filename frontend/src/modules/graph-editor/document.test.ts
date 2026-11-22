@@ -1,7 +1,7 @@
 import { catalog } from '@/test/fixtures';
 import { strategyCatalog } from '@/test/strategies';
 
-import { signalRules, strategyRules } from './document';
+import { signalRules, strategyRules, strategyRulesOf } from './document';
 
 describe('the rules of a signal', () => {
   // Scenario «Новый сигнал».
@@ -46,6 +46,19 @@ describe('the rules of a strategy', () => {
         { from: 'close-after.order', to: 'position.orders' },
       ],
     });
+  });
+
+  // Scenario «Выбор вида».
+  it('start a strategy of a bot with the position alone', () => {
+    expect(strategyRulesOf('bot').start()).toEqual({
+      formatVersion: 1,
+      parameters: [],
+      outputs: [],
+      nodes: [{ id: 'position', kind: 'position' }],
+      wires: [],
+    });
+    expect(strategyRulesOf('bot').strategyKind).toBe('bot');
+    expect(strategyRules.strategyKind).toBe('idea');
   });
 
   it('offer the catalog of a strategy without outputs, the saved signals coming apart', () => {

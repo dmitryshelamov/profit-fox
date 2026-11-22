@@ -6,7 +6,7 @@ import { bodiesOf, fakeApi, json } from '@/test/fakeApi';
 import ladderFile from '@/test/ladder.fixture.json';
 import { renderApp } from '@/test/renderApp';
 import { baseRoutes } from '@/test/routes';
-import { strategyRoutes } from '@/test/strategies';
+import { newStrategy, strategyRoutes } from '@/test/strategies';
 
 interface Wire {
   readonly from: string;
@@ -15,6 +15,7 @@ interface Wire {
 
 interface Saved {
   readonly name: string;
+  readonly kind: string;
   readonly graph: {
     readonly parameters: readonly { name: string; value: unknown }[];
     readonly nodes: readonly { id: string; kind: string; settings?: Record<string, string> }[];
@@ -100,14 +101,9 @@ describe('the ladder on the canvas', () => {
       'POST /api/strategies': async (request) =>
         json({ ...(await request.json()), version: 1, signals: [] }, 201),
     });
-    renderApp('/strategies/new/abc');
-    for (const [title, id] of [
-      ['Вход', 'enter'],
-      ['Закрыть через', 'close-after'],
-    ] as const) {
-      await selectNode(title, id);
-      await userEvent.click(screen.getByRole('button', { name: 'Удалить узел' }));
-    }
+    // A ladder is a strategy of a bot: it starts with the position alone.
+    renderApp(newStrategy('bot'));
+    await selectNode('Позиция', 'position');
 
     await userEvent.click(screen.getByRole('button', { name: 'Параметры' }));
     for (const name of ['priceRiseForSell', 'priceDropForBuy', 'limitPerOrder', 'limitDeposit']) {
@@ -202,6 +198,7 @@ describe('the ladder on the canvas', () => {
     );
     const [saved] = (await bodiesOf(requests, 'POST', '/api/strategies')) as Saved[];
     expect(saved!.name).toBe('ladder');
+    expect(saved!.kind).toBe('bot');
     expect(saved!.graph.nodes).toHaveLength(13);
     expect(saved!.graph.parameters.map(({ name, value: number }) => [name, number])).toEqual(
       ladderFile.parameters.map(({ name, value: number }) => [name, number]),

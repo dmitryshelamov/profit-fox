@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { api, type RequestError } from '@/api/client';
 
+import type { StrategyKind } from '../document';
 import type { SignalUse } from '../model/signals';
 import type { Graph } from '../model/types';
 
@@ -23,11 +24,13 @@ export interface GraphCheck {
  * The server's check of a graph without history (spec signal-constructor «Ошибки на холсте»): 0.4 s after the last
  * edit, the request of an older edit is aborted, and an answer that comes back for an older edit is never shown. A
  * graph given as <paramref name="urgent" /> — a signal just added or updated — goes at once, so the node gets its pins.
+ * The graph of a strategy goes with its kind and is checked by the rules of that kind.
  */
 export function useGraphCheck(
   graph: Graph,
   path: '/api/signals/validate' | '/api/strategies/validate' = '/api/signals/validate',
   urgent: Graph | null = null,
+  kind?: StrategyKind,
 ): GraphCheck {
   const [state, setState] = useState<{
     graph: Graph | null;
@@ -49,7 +52,7 @@ export function useGraphCheck(
       async () => {
         try {
           const answer = await api.POST(path, {
-            body: { graph: graph as never },
+            body: { graph: graph as never, ...(kind === undefined ? {} : { kind }) },
             signal: controller.signal,
           });
           if (latest.current !== graph) {
@@ -78,7 +81,7 @@ export function useGraphCheck(
       clearTimeout(timer);
       controller.abort();
     };
-  }, [graph, path, urgent]);
+  }, [graph, path, urgent, kind]);
 
   const current = state.graph === graph;
   return {
