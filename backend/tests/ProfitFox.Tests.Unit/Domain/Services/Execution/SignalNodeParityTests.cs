@@ -56,7 +56,7 @@ public sealed class SignalNodeParityTests
                           "wires": [{ "from": "low.event", "to": "long.when" }, { "from": "high.event", "to": "short.when" }]
                         }
                         """;
-        ReadResult<TradingStrategy> result = StrategyGraph.ReadStrategy(json, SignalLibrary.Set);
+        ReadResult<TradingStrategy> result = StrategyGraph.ReadStrategy(Graphs.Raised(json), SignalLibrary.Set);
         Assert.That(result.Errors, Is.Empty);
         var strategy = new StrategyExecutor(result.Value!);
         var low = new SignalExecutor(Signal(0.0005m));

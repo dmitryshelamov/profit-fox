@@ -14,12 +14,13 @@ namespace ProfitFox.Domain.Services.Positions;
 public static class EntryPlan
 {
     /// <summary>
-    ///     The plan, or null — the refusal <c>plan</c> — when the time is missing, shorter than a minute or not whole
-    ///     minutes, or when a stop or a target of the strategy is missing or not strictly between 0 and 1.
+    ///     The plan, or null — the refusal <c>plan</c> — when the size of the entry is missing or not above zero, when the time
+    ///     is missing, shorter than a minute or not whole minutes, or when a stop or a target of the strategy is missing or
+    ///     not strictly between 0 and 1.
     /// </summary>
     public static TradePlan? Of(StrategyStep step, EntrySide side)
     {
-        if (step.After is not { } after || Missing(step.Stop) || Missing(step.Target))
+        if (step.Size is not > 0 || step.After is not { } after || Missing(step.Stop) || Missing(step.Target))
         {
             return null;
         }

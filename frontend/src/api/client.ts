@@ -10,6 +10,8 @@ export type PreviewCandle = Schemas['PreviewCandle'];
 export type PreviewEvent = Schemas['PreviewEvent'];
 export type StrategyPreview = Schemas['StrategyPreviewResponse'];
 export type PreviewOrder = Schemas['PreviewOrder'];
+export type PreviewCycle = Schemas['PreviewCycle'];
+export type PreviewFill = Schemas['PreviewFill'];
 export type RequestError = Schemas['RequestError'];
 
 /**

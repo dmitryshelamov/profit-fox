@@ -6,7 +6,7 @@ public static class StrategyInternalConverter
 {
     public static StrategyInternal ToInternal(this StrategyDocument strategy, IReadOnlyList<SignalUseInternal> signals)
     {
-        return new StrategyInternal(strategy.Name, strategy.Description, strategy.Graph, strategy.Layout, strategy.Version, signals);
+        return new StrategyInternal(strategy.Name, strategy.Description, strategy.Graph, strategy.Layout, strategy.Version, signals, strategy.Raised);
     }
 
     /// <summary>

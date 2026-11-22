@@ -26,6 +26,12 @@ internal sealed class FakeHistorySource : IHistorySource
     public Func<DateTimeOffset, string>? Rate { get; init; }
 
     /// <summary>
+    ///     The price of a candle opened at a moment: open, high, low and close; when not given every price is
+    ///     100 + the hours since <see cref="CoveredFrom" /> / 4.
+    /// </summary>
+    public Func<DateTimeOffset, (double Open, double High, double Low, double Close)>? Price { get; init; }
+
+    /// <summary>
     ///     Candles opened at these moments have no trades.
     /// </summary>
     public HashSet<DateTimeOffset> Quiet { get; } = [];
@@ -39,8 +45,9 @@ internal sealed class FakeHistorySource : IHistorySource
         {
             if (Coverage.Covers(coverage, open, open + interval))
             {
-                string price = (100 + (open - CoveredFrom).TotalHours / 4).ToString(CultureInfo.InvariantCulture);
-                candles.Add(new HistoryCandle(open, price, price, price, price, Quiet.Contains(open) ? "0" : "12.5", Turnover: null, BuyVolume: "6"));
+                double flat = 100 + (open - CoveredFrom).TotalHours / 4;
+                (double o, double h, double l, double c) = Price?.Invoke(open) ?? (flat, flat, flat, flat);
+                candles.Add(new HistoryCandle(open, Text(o), Text(h), Text(l), Text(c), Quiet.Contains(open) ? "0" : "12.5", Turnover: null, BuyVolume: "6"));
             }
         }
 
@@ -61,6 +68,11 @@ internal sealed class FakeHistorySource : IHistorySource
         }
 
         return Task.FromResult(new HistoryRead<HistoryPayment>(coverage, payments));
+    }
+
+    private static string Text(double price)
+    {
+        return price.ToString(CultureInfo.InvariantCulture);
     }
 
     private IReadOnlyList<TimeRange> Covered(DateTimeOffset from, DateTimeOffset to)

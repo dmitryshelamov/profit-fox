@@ -46,6 +46,6 @@ public static class NodeCatalogResponse
 
     private static PinResponse Pin(PinDeclaration pin)
     {
-        return new PinResponse(pin.Name, PinTypes.Name(pin.Type));
+        return new PinResponse(pin.Name, PinTypes.Name(pin.Type)) { Many = pin.Many };
     }
 }

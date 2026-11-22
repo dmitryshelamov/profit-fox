@@ -18,7 +18,7 @@ public sealed class StrategyValidationTests
         ReadResult<TradingStrategy> result = StrategyGraph.ReadStrategy(Graphs.H0001Strategy);
 
         Assert.That(result.Errors, Is.Empty);
-        Assert.That(result.Value!.Graph.Nodes.Select(node => node.Id), Is.EqualTo(new[] { "p", "rate", "high", "first", "enter", "close-after" }));
+        Assert.That(result.Value!.Graph.Nodes.Select(node => node.Id), Is.EqualTo(new[] { "p", "rate", "high", "first", "enter", "position", "close-after" }));
     }
 
     [Test]
@@ -26,25 +26,24 @@ public sealed class StrategyValidationTests
     {
         string json = Graphs.ChangedStrategy(graph =>
         {
-            graph.RemoveWire("enter.when");
-            graph.RemoveNode("enter");
+            graph.RemoveNodeAndWires("enter");
         });
 
         GraphError error = Errors(json).Single();
 
         Assert.That(error.Code, Is.EqualTo(GraphErrorCode.StrategyEntryMissing));
-        Assert.That(error.Reason, Does.Contain("enter"));
+        Assert.That(error.Reason, Does.Contain("узел входа"));
     }
 
     [Test]
-    public void A_strategy_without_a_close_after_node_is_refused()
+    public void A_strategy_without_any_exit_is_refused()
     {
-        string json = Graphs.ChangedStrategy(graph => graph.RemoveNode("close-after"));
+        string json = Graphs.ChangedStrategy(graph => graph.RemoveNodeAndWires("close-after"));
 
         GraphError error = Errors(json).Single();
 
-        Assert.That(error.Code, Is.EqualTo(GraphErrorCode.StrategyCloseAfterMissing));
-        Assert.That(error.Reason, Does.Contain("one close-after"));
+        Assert.That(error.Code, Is.EqualTo(GraphErrorCode.StrategyExitMissing));
+        Assert.That(error.Reason, Does.Contain("нужен выход"));
     }
 
     [Test]
@@ -52,8 +51,8 @@ public sealed class StrategyValidationTests
     {
         string json = Graphs.ChangedStrategy(graph =>
         {
-            graph.AddNode("stop", "stop-loss", "distance", JsonNode.Parse("0.02")!);
-            graph.AddNode("stop-again", "stop-loss", "distance", JsonNode.Parse("0.03")!);
+            graph.AddExit("stop", "stop-loss", "distance", JsonNode.Parse("0.02")!);
+            graph.AddExit("stop-again", "stop-loss", "distance", JsonNode.Parse("0.03")!);
         });
 
         GraphError error = Errors(json).Single();
@@ -67,9 +66,9 @@ public sealed class StrategyValidationTests
     {
         string json = Graphs.ChangedStrategy(graph =>
         {
-            graph.AddNode("target", "take-profit", "distance", JsonNode.Parse("0.04")!);
-            graph.AddNode("target-again", "take-profit", "distance", JsonNode.Parse("0.05")!);
-            graph.AddNode("later", "close-after", "after", "1d");
+            graph.AddExit("target", "take-profit", "distance", JsonNode.Parse("0.04")!);
+            graph.AddExit("target-again", "take-profit", "distance", JsonNode.Parse("0.05")!);
+            graph.AddExit("later", "close-after", "after", "1d");
         });
 
         List<GraphError> errors = Errors(json);
@@ -169,10 +168,11 @@ public sealed class StrategyValidationTests
         string json = Graphs.ChangedStrategy(graph =>
         {
             graph.RemoveWire("high.b");
-            graph.RemoveNode("close-after");
-            graph.AddNode("stop", "stop-loss", "distance", JsonNode.Parse("0.02")!);
-            graph.AddNode("stop-again", "stop-loss", "distance", JsonNode.Parse("0.03")!);
+            graph.RemoveNodeAndWires("close-after");
+            graph.AddExit("stop", "stop-loss", "distance", JsonNode.Parse("0.02")!);
+            graph.AddExit("stop-again", "stop-loss", "distance", JsonNode.Parse("0.03")!);
             graph.AddNode("out", "outputs");
+            graph.RemoveWire("enter.order", "position.orders");
         });
 
         List<GraphError> errors = Errors(json);
@@ -184,7 +184,7 @@ public sealed class StrategyValidationTests
                 {
                     GraphErrorCode.MissingInput,
                     GraphErrorCode.StrategyHasOutputs,
-                    GraphErrorCode.StrategyCloseAfterMissing,
+                    GraphErrorCode.StrategyOrderUnwired,
                     GraphErrorCode.StrategyExitRepeated
                 }));
     }
@@ -200,7 +200,7 @@ public sealed class StrategyValidationTests
     {
         string json = Graphs.Changed(graph =>
         {
-            graph.AddEnter("enter", "short");
+            graph.AddEnter("enter", "short", intoPosition: false);
             graph.AddWire("first.event", "enter.when");
         });
 
@@ -220,9 +220,9 @@ public sealed class StrategyValidationTests
     {
         string json = Graphs.Changed(graph => graph.AddNode("exit", kind, input, JsonNode.Parse(value)!));
 
-        GraphError error = StrategyGraph.ReadSignal(json).Errors.Single();
+        GraphError error = StrategyGraph.ReadSignal(json).Errors.Single(error => error.Code != GraphErrorCode.MissingInput);
 
-        Assert.That((error.Code, error.Node), Is.EqualTo((GraphErrorCode.SignalPositionNode, "exit")));
+        Assert.That((error.Code, error.Node), Is.EqualTo((GraphErrorCode.SignalPositionNode, "exit")), "and its position has no wire");
     }
 
     private static List<GraphError> Errors(string json)

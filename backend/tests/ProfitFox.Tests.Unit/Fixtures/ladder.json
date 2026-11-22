@@ -1,0 +1,51 @@
+{
+  "formatVersion": 1,
+  "parameters": [
+    { "name": "priceRiseForSell", "type": "number", "value": 0.01 },
+    { "name": "priceDropForBuy", "type": "number", "value": 0.01 },
+    { "name": "limitPerOrder", "type": "number", "value": 100 },
+    { "name": "limitDeposit", "type": "number", "value": 1000 }
+  ],
+  "outputs": [],
+  "nodes": [
+    { "id": "p", "kind": "parameters" },
+    { "id": "position", "kind": "position" },
+    { "id": "closed", "kind": "not" },
+    { "id": "entry", "kind": "market-order", "settings": { "side": "buy", "sizeIn": "amount" } },
+    { "id": "rise", "kind": "add", "inputs": { "a": 1 } },
+    { "id": "sell-price", "kind": "multiply" },
+    { "id": "sell", "kind": "limit-order", "settings": { "side": "sell", "sizeIn": "quantity" } },
+    { "id": "drop", "kind": "subtract", "inputs": { "a": 1 } },
+    { "id": "buy-price", "kind": "multiply" },
+    { "id": "next-invested", "kind": "add" },
+    { "id": "fits", "kind": "compare", "settings": { "operation": "le" } },
+    { "id": "may-buy", "kind": "and" },
+    { "id": "buy", "kind": "limit-order", "settings": { "side": "buy", "sizeIn": "amount" } }
+  ],
+  "wires": [
+    { "from": "position.open", "to": "closed.value" },
+    { "from": "closed.result", "to": "entry.when" },
+    { "from": "p.limitPerOrder", "to": "entry.size" },
+    { "from": "entry.order", "to": "position.orders" },
+    { "from": "p.priceRiseForSell", "to": "rise.b" },
+    { "from": "position.averagePrice", "to": "sell-price.a" },
+    { "from": "rise.result", "to": "sell-price.b" },
+    { "from": "position.open", "to": "sell.when" },
+    { "from": "sell-price.result", "to": "sell.price" },
+    { "from": "position.quantity", "to": "sell.size" },
+    { "from": "sell.order", "to": "position.orders" },
+    { "from": "p.priceDropForBuy", "to": "drop.b" },
+    { "from": "position.lastEntryPrice", "to": "buy-price.a" },
+    { "from": "drop.result", "to": "buy-price.b" },
+    { "from": "position.invested", "to": "next-invested.a" },
+    { "from": "p.limitPerOrder", "to": "next-invested.b" },
+    { "from": "next-invested.result", "to": "fits.a" },
+    { "from": "p.limitDeposit", "to": "fits.b" },
+    { "from": "position.open", "to": "may-buy.a" },
+    { "from": "fits.result", "to": "may-buy.b" },
+    { "from": "may-buy.result", "to": "buy.when" },
+    { "from": "buy-price.result", "to": "buy.price" },
+    { "from": "p.limitPerOrder", "to": "buy.size" },
+    { "from": "buy.order", "to": "position.orders" }
+  ]
+}

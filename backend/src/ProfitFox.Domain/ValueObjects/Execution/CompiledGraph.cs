@@ -1,3 +1,4 @@
+using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.Services.Nodes;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Nodes;
@@ -49,7 +50,8 @@ internal sealed class CompiledGraph
             }
         }
 
-        var wires = graph.Wires.ToDictionary(wire => wire.To, wire => wire.From);
+        // An input that takes several wires (the orders of the position) has no single source and is not read.
+        var wires = graph.Wires.GroupBy(wire => wire.To).Where(group => group.Count() == 1).ToDictionary(group => group.Key, group => group.Single().From);
         List<CompiledNode> nodes = [];
         List<InputSource> outputs = [];
         foreach (NodeDefinition node in order)
@@ -73,20 +75,21 @@ internal sealed class CompiledGraph
         Dictionary<PinReference, PinReference> wires,
         Dictionary<PinReference, int> slots)
     {
-        if (wires.TryGetValue(new PinReference(node.Id, input.Name), out PinReference? from))
+        if (!input.Many && wires.TryGetValue(new PinReference(node.Id, input.Name), out PinReference? from))
         {
             return new InputSource(slots[from], Value: default);
         }
 
-        return new InputSource(Slot: -1, PinValue.From(node.Inputs[input.Name]));
+        return input.WireOnly ? new InputSource(Slot: -1, PinValue.Missing(input.Type)) : new InputSource(Slot: -1, PinValue.From(node.Inputs[input.Name]));
     }
 
     // Kahn's order; among nodes that are ready, the one written first goes first, so the order is the same on every run.
+    // A wire into the orders of the position sets no order: the position is computed before the nodes that read it.
     private static List<NodeDefinition> Order(GraphDefinition graph, Dictionary<string, NodeDefinition> byId)
     {
         var waiting = graph.Nodes.ToDictionary(node => node.Id, _ => 0, StringComparer.Ordinal);
         var next = graph.Nodes.ToDictionary(node => node.Id, _ => new List<string>(), StringComparer.Ordinal);
-        foreach (WireDefinition wire in graph.Wires)
+        foreach (WireDefinition wire in graph.Wires.Where(wire => !GraphValidator.IsFeedback(byId[wire.To.Node].Kind, wire.To.Pin)))
         {
             waiting[wire.To.Node]++;
             next[wire.From.Node].Add(wire.To.Node);

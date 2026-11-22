@@ -64,13 +64,15 @@ export interface DocumentType {
 
 /**
  * The editor of one document: the canvas, the check, the draft in the browser, saving, and the bottom panel. A saved
- * document opened with a draft that differs from it asks to restore or discard it.
+ * document opened with a draft that differs from it asks to restore or discard it. A saved document read `raised` is
+ * not what the store keeps: it opens as not saved, and saving it as it is makes its next version.
  */
 export function DocumentEditor({
   type,
   saved,
   draftId,
   startVersion,
+  raised = false,
   catalog,
   start,
   startSignals = [],
@@ -80,6 +82,8 @@ export function DocumentEditor({
   readonly type: DocumentType;
   readonly saved: { readonly name: string } | null;
   readonly startVersion?: number;
+  /** The store keeps the graph in a former form; `start` is that graph raised on reading. */
+  readonly raised?: boolean;
   readonly draftId?: string;
   readonly catalog: readonly NodeKind[];
   readonly start: Content;
@@ -102,6 +106,7 @@ export function DocumentEditor({
   const [content, setContent] = useState<Content>(start);
   const [urgent, setUrgent] = useState<Graph | null>(null);
   const [version, setVersion] = useState(startVersion);
+  const [stored, setStored] = useState(!raised);
   const [question, setQuestion] = useState(() => {
     if (!saved) {
       return null;
@@ -123,7 +128,10 @@ export function DocumentEditor({
   const check = useGraphCheck(content.document.graph, rules.checkPath, urgent);
   const signals = useSignalNodes(rules.kind === 'strategy', catalog, startSignals, check.signals);
 
-  const dirty = file === null ? true : !sameContent(content, file);
+  // Edited: the content differs from what was read. Dirty: it differs from what the store keeps, which a document
+  // read raised does before any edit. Leaving such a document loses nothing, so only an edit asks before leaving.
+  const edited = file === null ? true : !sameContent(content, file);
+  const dirty = edited || !stored;
   const canSave = dirty && check.checked && check.errors.length === 0 && !saving;
 
   const change = (document: GraphDocument, isUrgent?: boolean) => {
@@ -183,10 +191,10 @@ export function DocumentEditor({
   const savedAway = useRef(false);
   useBlocker({
     shouldBlockFn: () =>
-      dirty &&
+      edited &&
       !savedAway.current &&
       !window.confirm('Есть несохранённые правки. Уйти? Черновик останется в браузере.'),
-    enableBeforeUnload: () => dirty && !savedAway.current,
+    enableBeforeUnload: () => edited && !savedAway.current,
   });
 
   const save = async (as?: string) => {
@@ -215,9 +223,12 @@ export function DocumentEditor({
           ...current,
           content,
           version: nextVersion,
+          // What was read raised is stored in the new form now.
+          ...(current && 'raised' in current ? { raised: false } : {}),
         }));
         setVersion(nextVersion);
         setFile(content);
+        setStored(true);
       } else {
         const created = outcome.value as { name: string };
         queries.removeQueries({ queryKey: [type.queryKey, created.name] });
@@ -299,7 +310,7 @@ export function DocumentEditor({
             {file !== null && (
               <Button
                 variant="plain"
-                disabled={!dirty}
+                disabled={!edited}
                 onClick={() => {
                   setContent(file);
                   removeDraft(key);

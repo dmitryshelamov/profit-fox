@@ -17,7 +17,10 @@ namespace ProfitFox.Application.Queries.Strategies;
 /// </summary>
 internal sealed class GetStrategiesQueryHandler(IStrategyRepository strategies, ISignalRepository signals) : IRequestHandler<GetStrategiesQuery, IReadOnlyList<StrategyEntryInternal>>
 {
-    private static readonly string[] ExitKinds = [NodeCatalog.StopLoss, NodeCatalog.TakeProfit, NodeCatalog.CloseAfter];
+    // The kinds that close a position, in the order of the list: stop, target, time, close by a condition, limit order. A
+    // market order is how a strategy without a signal enters, so it is not an exit here (change add-position-node, task 6.2).
+    private static readonly string[] ExitKinds =
+        [NodeCatalog.StopLoss, NodeCatalog.TakeProfit, NodeCatalog.CloseAfter, NodeCatalog.ClosePosition, NodeCatalog.LimitOrder];
 
     public async Task<IReadOnlyList<StrategyEntryInternal>> Handle(GetStrategiesQuery request, CancellationToken cancellationToken)
     {

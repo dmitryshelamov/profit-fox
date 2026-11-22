@@ -47,7 +47,7 @@ public class PreviewController(ISender sender) : ControllerBase
     {
         try
         {
-            StrategyPreviewOutcomeInternal outcome = await sender.Send(new PreviewStrategyQuery(request.Instrument, request.Timeframe, request.Strategy), cancellation);
+            StrategyPreviewOutcomeInternal outcome = await sender.Send(new PreviewStrategyQuery(request.Instrument, request.Timeframe, request.Strategy, request.TakerFee, request.MakerFee), cancellation);
             return outcome.Preview is { } found
                 ? PreviewResponses.Of(found)
                 : BadRequest(new ErrorResponse([.. outcome.Errors.Select(RequestErrors.Of)]));

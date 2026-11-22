@@ -1,4 +1,4 @@
-using ProfitFox.Domain.Services.Trades;
+using ProfitFox.Domain.Services.Positions;
 using ProfitFox.Domain.ValueObjects.Trades;
 using ProfitFox.Domain.ValueObjects.Trades.Enums;
 
@@ -6,6 +6,8 @@ namespace ProfitFox.Tests.Unit.Domain.Services.Trades;
 
 /// <summary>
 ///     Spec trade-plan-outcome: the plan, the entry, stop and target, the exit by the horizon, costs and trades left out.
+///     The trade is counted by <see cref="CycleRun" />, the one calculation of a cycle that replaced the trade simulator
+///     (change add-position-node, task 5.4); the expectations are those the simulator was held to.
 /// </summary>
 public sealed class TradeSimulatorTests
 {
@@ -31,7 +33,7 @@ public sealed class TradeSimulatorTests
     {
         MinutePath path = new Paths().Quiet().Minute(100, 100, 100, 100).Flat(100, 10).Build();
 
-        TradeOutcome outcome = TradeSimulator.Simulate(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(5)), Costs);
+        TradeOutcome outcome = CycleRun.Simulate(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(5)), Costs, amount: 100).ToTrade();
 
         Assert.That(outcome.EntryTime, Is.EqualTo(Paths.At(1)));
         Assert.That(outcome.EntryPrice, Is.EqualTo(100.05).Within(1e-12));
@@ -43,7 +45,7 @@ public sealed class TradeSimulatorTests
         double entryOpen = 100 / (1 + Slippage);
         MinutePath path = new Paths().Minute(entryOpen, entryOpen, entryOpen, entryOpen).Minute(98, 98, 97, 97.5).Flat(97.5, 10).Build();
 
-        TradeOutcome outcome = TradeSimulator.Simulate(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(10), stop: 0.01), Costs);
+        TradeOutcome outcome = CycleRun.Simulate(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(10), stop: 0.01), Costs, amount: 100).ToTrade();
 
         Assert.That(outcome.ExitReason, Is.EqualTo(ExitReason.Stop));
         Assert.That(outcome.ExitPrice, Is.EqualTo(98 * (1 - Slippage)).Within(1e-12));
@@ -55,11 +57,12 @@ public sealed class TradeSimulatorTests
     {
         MinutePath path = new Paths().Flat(100, 1).Minute(100, 103, 97, 100).Flat(100, 10).Build();
 
-        TradeOutcome outcome = TradeSimulator.Simulate(
+        TradeOutcome outcome = CycleRun.Simulate(
             path,
             Paths.Start,
             new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(10), stop: 0.01, target: 0.01),
-            NoSlippage);
+            NoSlippage,
+            amount: 100).ToTrade();
 
         Assert.That(outcome.ExitReason, Is.EqualTo(ExitReason.Stop));
         Assert.That(outcome.Ambiguous, Is.True);
@@ -71,7 +74,7 @@ public sealed class TradeSimulatorTests
     {
         MinutePath path = new Paths().Flat(100, 1).Minute(103, 104, 102.5, 103.5).Flat(103.5, 10).Build();
 
-        TradeOutcome outcome = TradeSimulator.Simulate(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(10), target: 0.01), Costs);
+        TradeOutcome outcome = CycleRun.Simulate(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(10), target: 0.01), Costs, amount: 100).ToTrade();
 
         Assert.That(outcome.ExitReason, Is.EqualTo(ExitReason.Target));
         Assert.That(outcome.ExitPrice, Is.EqualTo(100 * (1 + Slippage) * 1.01).Within(1e-12));
@@ -82,7 +85,7 @@ public sealed class TradeSimulatorTests
     {
         MinutePath path = new Paths().Quiet().Flat(100, 237).Minute(101, 101, 101, 101.5).Quiet().Flat(90, 10).Build();
 
-        TradeOutcome outcome = TradeSimulator.Simulate(path, Paths.Start, new TradePlan(TradeSide.Short, TimeSpan.FromHours(4)), Costs);
+        TradeOutcome outcome = CycleRun.Simulate(path, Paths.Start, new TradePlan(TradeSide.Short, TimeSpan.FromHours(4)), Costs, amount: 100).ToTrade();
 
         Assert.That(outcome.EntryTime, Is.EqualTo(Paths.At(1)));
         Assert.That(outcome.ExitTime, Is.EqualTo(Paths.At(240)));
@@ -95,7 +98,7 @@ public sealed class TradeSimulatorTests
     {
         MinutePath path = new Paths().Flat(100, 30).Payment(10, 0.001).Build();
 
-        TradeOutcome outcome = TradeSimulator.Simulate(path, Paths.Start, new TradePlan(TradeSide.Short, TimeSpan.FromMinutes(20)), NoSlippage);
+        TradeOutcome outcome = CycleRun.Simulate(path, Paths.Start, new TradePlan(TradeSide.Short, TimeSpan.FromMinutes(20)), NoSlippage, amount: 100).ToTrade();
 
         Assert.That(outcome.Funding, Is.EqualTo(0.001).Within(1e-15));
         Assert.That(outcome.Net, Is.EqualTo(-2 * 0.00055 + 0.001).Within(1e-15));
@@ -106,7 +109,7 @@ public sealed class TradeSimulatorTests
     {
         MinutePath path = new Paths().Flat(100, 30).Payment(0, 0.01).Payment(20, 0.001).Build();
 
-        TradeOutcome outcome = TradeSimulator.Simulate(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(20)), NoSlippage);
+        TradeOutcome outcome = CycleRun.Simulate(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(20)), NoSlippage, amount: 100).ToTrade();
 
         Assert.That(outcome.Funding, Is.EqualTo(-0.001).Within(1e-15));
     }
@@ -116,7 +119,7 @@ public sealed class TradeSimulatorTests
     {
         MinutePath path = new Paths().Flat(100, 5).Flat(110, 10).Build();
 
-        TradeOutcome outcome = TradeSimulator.Simulate(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(10)), NoSlippage);
+        TradeOutcome outcome = CycleRun.Simulate(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(10)), NoSlippage, amount: 100).ToTrade();
 
         Assert.That(outcome.Gross, Is.EqualTo(0.1).Within(1e-12));
         Assert.That(outcome.Fees, Is.EqualTo(0.00055 * (1 + 1.1)).Within(1e-12));
@@ -127,7 +130,7 @@ public sealed class TradeSimulatorTests
     {
         MinutePath path = new Paths().Flat(100, 30).Build();
 
-        TradeOutcome outcome = TradeSimulator.Simulate(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(10)), Costs);
+        TradeOutcome outcome = CycleRun.Simulate(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(10)), Costs, amount: 100).ToTrade();
 
         Assert.That(outcome.R, Is.Null);
         Assert.That(outcome.Net, Is.Not.Null);
@@ -138,7 +141,7 @@ public sealed class TradeSimulatorTests
     {
         MinutePath path = new Paths().Flat(100, 5).Unknown().Flat(100, 10).Build();
 
-        TradeOutcome outcome = TradeSimulator.Simulate(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(10)), Costs);
+        TradeOutcome outcome = CycleRun.Simulate(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(10)), Costs, amount: 100).ToTrade();
 
         Assert.That(outcome, Is.EqualTo(TradeOutcome.Excluded(TradeStatus.Coverage)));
     }
@@ -148,7 +151,7 @@ public sealed class TradeSimulatorTests
     {
         MinutePath path = new Paths().Quiet(10).Build();
 
-        TradeOutcome outcome = TradeSimulator.Simulate(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(10)), Costs);
+        TradeOutcome outcome = CycleRun.Simulate(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(10)), Costs, amount: 100).ToTrade();
 
         Assert.That(outcome.Status, Is.EqualTo(TradeStatus.NoTrade));
     }
@@ -168,7 +171,7 @@ public sealed class TradeSimulatorTests
             Paths.Start,
             Paths.At(15));
 
-        TradeOutcome outcome = TradeSimulator.Simulate(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(20), stop: 0.05), Costs);
+        TradeOutcome outcome = CycleRun.Simulate(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(20), stop: 0.05), Costs, amount: 100).ToTrade();
 
         Assert.That(outcome.Status, Is.EqualTo(TradeStatus.Funding));
     }
@@ -178,7 +181,7 @@ public sealed class TradeSimulatorTests
     {
         MinutePath path = new Paths().Flat(100, 30).Payment(10, 0.01).Build(withFunding: false);
 
-        TradeOutcome outcome = TradeSimulator.Simulate(path, Paths.Start, new TradePlan(TradeSide.Short, TimeSpan.FromMinutes(20)), Costs);
+        TradeOutcome outcome = CycleRun.Simulate(path, Paths.Start, new TradePlan(TradeSide.Short, TimeSpan.FromMinutes(20)), Costs, amount: 100).ToTrade();
 
         Assert.That(outcome.Funding, Is.EqualTo(0));
     }

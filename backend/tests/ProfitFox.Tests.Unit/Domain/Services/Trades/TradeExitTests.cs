@@ -1,4 +1,4 @@
-using ProfitFox.Domain.Services.Trades;
+using ProfitFox.Domain.Services.Positions;
 using ProfitFox.Domain.ValueObjects.Trades;
 using ProfitFox.Domain.ValueObjects.Trades.Enums;
 
@@ -7,7 +7,8 @@ namespace ProfitFox.Tests.Unit.Domain.Services.Trades;
 /// <summary>
 ///     Change add-strategy-graph, design.md, decision 6 (task 3.2): the moment a trade ends, known without computing its
 ///     result. On every case of <see cref="TradeSimulatorTests" /> the moment and the status are those of
-///     <see cref="TradeSimulator.Simulate" />.
+///     <see cref="CycleRun.Simulate" />, the calculation of a cycle that replaced the trade simulator (change
+///     add-position-node, task 5.4).
 /// </summary>
 public sealed class TradeExitTests
 {
@@ -99,9 +100,9 @@ public sealed class TradeExitTests
     [TestCaseSource(nameof(Cases))]
     public void The_exit_is_at_the_moment_and_with_the_status_of_the_simulated_trade(MinutePath path, TradePlan plan, TradeCosts costs)
     {
-        TradeOutcome outcome = TradeSimulator.Simulate(path, Paths.Start, plan, costs);
+        TradeOutcome outcome = CycleRun.Simulate(path, Paths.Start, plan, costs, amount: 100).ToTrade();
 
-        TradeExit exit = TradeSimulator.Exit(path, Paths.Start, plan, costs);
+        TradeExit exit = CycleRun.Exit(path, Paths.Start, plan, costs);
 
         Assert.That(exit, Is.EqualTo(new TradeExit(outcome.Status, outcome.ExitTime)));
         Assert.That(exit.Time is null, Is.EqualTo(outcome.Status != TradeStatus.Ok), "a trade left out has no exit");
@@ -112,7 +113,7 @@ public sealed class TradeExitTests
     {
         (ExitReason Reason, TradeStatus Status)[] ends =
         [
-            .. Cases().Select(data => TradeSimulator.Simulate((MinutePath)data.Arguments[0]!, Paths.Start, (TradePlan)data.Arguments[1]!, (TradeCosts)data.Arguments[2]!))
+            .. Cases().Select(data => CycleRun.Simulate((MinutePath)data.Arguments[0]!, Paths.Start, (TradePlan)data.Arguments[1]!, (TradeCosts)data.Arguments[2]!, amount: 100).ToTrade())
                 .Select(outcome => (outcome.ExitReason, outcome.Status))
         ];
 
@@ -125,8 +126,8 @@ public sealed class TradeExitTests
     {
         MinutePath path = new Paths().Flat(100, 7).Minute(100, 100, 97, 97).Flat(97, 20).Build();
 
-        TradeExit stopped = TradeSimulator.Exit(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(20), stop: 0.02), Costs);
-        TradeExit timed = TradeSimulator.Exit(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(20)), Costs);
+        TradeExit stopped = CycleRun.Exit(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(20), stop: 0.02), Costs);
+        TradeExit timed = CycleRun.Exit(path, Paths.Start, new TradePlan(TradeSide.Long, TimeSpan.FromMinutes(20)), Costs);
 
         Assert.That(stopped, Is.EqualTo(new TradeExit(TradeStatus.Ok, Paths.At(7))));
         Assert.That(timed, Is.EqualTo(new TradeExit(TradeStatus.Ok, Paths.At(20))));

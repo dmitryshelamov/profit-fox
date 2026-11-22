@@ -1,6 +1,7 @@
 import { nodeOf } from './graph';
 import { pinsOf } from './pins';
 import type { Graph, GraphNode, Layout, NodeKind } from './types';
+import { backWires } from './wires';
 
 /** The width of a node on the canvas: fixed, so the layout knows it without measuring. */
 export const nodeWidth = 200;
@@ -26,7 +27,7 @@ const pinRowHeight = 24;
  * columns is the same everywhere. The same graph always gets the same places.
  */
 export function layoutGraph(graph: Graph, catalog: readonly NodeKind[]): Layout {
-  const depths = depthsOf(graph);
+  const depths = depthsOf(graph, backWires(graph, catalog));
   const widths: number[] = [];
   for (const node of graph.nodes) {
     const depth = depths.get(node.id) ?? 0;
@@ -64,10 +65,15 @@ export function nodeHeight(node: GraphNode, catalog: readonly NodeKind[], graph:
   return headerHeight + settings + pinsPadding + rows * pinRowHeight;
 }
 
-/** The depth of each node: a wire back into the path being walked (a cycle of an invalid graph) adds none. */
-export function depthsOf(graph: Graph): Map<string, number> {
+/**
+ * The depth of each node: a wire back into the path being walked (a cycle of an invalid graph) adds none, and the wires
+ * back into the position (`back`, by the ids of their edges) are left out.
+ */
+export function depthsOf(graph: Graph, back: ReadonlySet<string> = new Set()): Map<string, number> {
   const sources = new Map<string, string[]>();
-  for (const wire of graph.wires) {
+  for (const wire of graph.wires.filter(
+    (candidate) => !back.has(`${candidate.from}->${candidate.to}`),
+  )) {
     const target = nodeOf(wire.to);
     sources.set(target, [...(sources.get(target) ?? []), nodeOf(wire.from)]);
   }

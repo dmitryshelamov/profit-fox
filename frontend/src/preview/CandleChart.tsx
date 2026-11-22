@@ -51,7 +51,8 @@ export interface ChartRange {
 }
 
 /**
- * The candles of the pair with a mark on each candle that closed at an event; the chart counts time in UTC. A
+ * The candles of the pair with a mark on each candle that closed at an event; the chart counts time in UTC. New
+ * candles open on all of their history, or on `opening` when it is given; the rest of the history is a scroll away. A
  * `focus` shows that part of the chart, as a click on an event asks. A click on a candle that has a mark gives the
  * mark to `onPick` — the entry of a trade when a candle has both an entry and an exit — and the marks of `selected`
  * are drawn in the color of the choice; a click on a candle without a mark does nothing.
@@ -59,6 +60,7 @@ export interface ChartRange {
 export function CandleChart({
   candles,
   marks,
+  opening = null,
   focus,
   selected = null,
   onPick,
@@ -66,6 +68,8 @@ export function CandleChart({
 }: {
   readonly candles: readonly PreviewCandle[];
   readonly marks: readonly EventMark[];
+  /** The part of the chart new candles open on; without it they open on all of their history. */
+  readonly opening?: ChartRange | null;
   readonly focus?: ChartRange | null;
   /** The key of the selected event or trade, as `keyOf` gives it. */
   readonly selected?: number | null;
@@ -74,9 +78,10 @@ export function CandleChart({
 }) {
   const container = useRef<HTMLDivElement>(null);
   const drawn = useRef<Drawn | null>(null);
-  // The click handler of the chart is set once; it reads the marks and the listener of the last render.
-  const latest = useRef({ marks, onPick });
-  latest.current = { marks, onPick };
+  // The click handler of the chart is set once; it reads the marks and the listener of the last render. So do new
+  // candles read where to open.
+  const latest = useRef({ marks, onPick, opening });
+  latest.current = { marks, onPick, opening };
 
   useEffect(() => {
     if (container.current === null) {
@@ -140,7 +145,14 @@ export function CandleChart({
         close: Number(candle.close),
       })),
     );
-    current.chart.timeScale().fitContent();
+    const { opening: range } = latest.current;
+    if (range && candles.length > 0) {
+      current.chart
+        .timeScale()
+        .setVisibleRange({ from: range.from as UTCTimestamp, to: range.to as UTCTimestamp });
+    } else {
+      current.chart.timeScale().fitContent();
+    }
   }, [candles]);
 
   // A new selection only recolors the marks: the part of the chart in view stays.

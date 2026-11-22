@@ -5,7 +5,6 @@ using ProfitFox.Domain.Services.Hypotheses;
 using ProfitFox.Domain.Services.Positions;
 using ProfitFox.Domain.Services.Runs;
 using ProfitFox.Domain.Services.Strategies;
-using ProfitFox.Domain.Services.Trades;
 using ProfitFox.Domain.ValueObjects.Execution;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
 using ProfitFox.Domain.ValueObjects.Hypotheses.Enums;
@@ -122,7 +121,7 @@ public sealed class PairEvaluationTests
         Assert.That((row.Outcome!.EntryTime, row.Outcome.ExitTime), Is.EqualTo(((DateTimeOffset?)Noon, (DateTimeOffset?)Noon.AddDays(1))), "the cycle of the event runs from 12:00 to 12:00");
         Assert.That(random.Outcome.Status, Is.EqualTo(TradeStatus.Ok));
         Assert.That((random.Outcome.EntryTime, random.Outcome.ExitTime), Is.EqualTo(((DateTimeOffset?)EightPm, (DateTimeOffset?)EightPm.AddDays(1))));
-        Assert.That(random.Outcome, Is.EqualTo(TradeSimulator.Simulate(path, EightPm, design.Hypothesis.Plan, design.Hypothesis.Costs)));
+        Assert.That(random.Outcome, Is.EqualTo(CycleRun.Simulate(path, EightPm, design.Hypothesis.Plan, design.Hypothesis.Costs, amount: 100).ToTrade()));
     }
 
     [Test]
@@ -145,12 +144,12 @@ public sealed class PairEvaluationTests
         var plan = new TradePlan(TradeSide.Short, TimeSpan.FromDays(1), stop: 0.02, target: 0.04);
         Assert.That(design.Hypothesis.Plan, Is.EqualTo(plan));
         Assert.That(EntryPlan.Of(steps.Orders.Single(), EntrySide.Short), Is.EqualTo(plan), "the order carries a stop of exactly 0.02 and a target of exactly 0.04");
-        Assert.That(row.Outcome, Is.EqualTo(TradeSimulator.Simulate(path, Noon, plan, design.Hypothesis.Costs)));
+        Assert.That(row.Outcome, Is.EqualTo(CycleRun.Simulate(path, Noon, plan, design.Hypothesis.Costs, amount: 100).ToTrade()));
         Assert.That(row.Randoms, Has.Count.EqualTo(20));
         Assert.That(row.Randoms.Select(random => EntryPlan.Of(steps.At(random.Entry), EntrySide.Short)), Has.All.EqualTo(plan));
         Assert.That(
             row.Randoms.Select(random => random.Outcome),
-            Is.EqualTo(row.Randoms.Select(random => TradeSimulator.Simulate(path, random.Entry, plan, design.Hypothesis.Costs))));
+            Is.EqualTo(row.Randoms.Select(random => CycleRun.Simulate(path, random.Entry, plan, design.Hypothesis.Costs, amount: 100).ToTrade())));
         Assert.That(row.Randoms.Select(random => random.Outcome.ExitReason).Distinct(), Has.Some.EqualTo(ExitReason.Target).Or.Some.EqualTo(ExitReason.Stop));
     }
 

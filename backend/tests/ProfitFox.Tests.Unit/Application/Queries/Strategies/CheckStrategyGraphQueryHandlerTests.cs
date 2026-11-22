@@ -66,13 +66,13 @@ public sealed class CheckStrategyGraphQueryHandlerTests
     {
         SignalDocument signal = await _strategies.SaveSignal(version: 2);
         JsonObject graph = StrategyRequests.Strategy(signal.Id, version: 7);
-        graph["nodes"]!.AsArray().RemoveAt(2);
+        StrategyRequests.RemoveCloseAfter(graph);
 
         StrategyCheckInternal check = await _strategies.Check(StrategyRequests.Element(graph), _none);
 
         Assert.That(check.Errors.Select(error => (error.Code, error.Node)), Is.EquivalentTo(new[]
         {
-            (GraphErrorCode.UnknownSignal, (string?)"s"), (GraphErrorCode.StrategyCloseAfterMissing, null)
+            (GraphErrorCode.UnknownSignal, (string?)"s"), (GraphErrorCode.StrategyExitMissing, null)
         }));
         SignalUseInternal use = check.Signals.Single();
         Assert.That((use.Name, use.Version, use.LatestVersion, use.Parameters.Count), Is.EqualTo(("funding-high", 7, (int?)2, 0)));

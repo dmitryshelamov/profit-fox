@@ -1,6 +1,8 @@
 import { nodeOf, pinOf } from './graph';
 import { placesOf } from './layout';
+import { takesMany } from './pins';
 import type {
+  Catalog,
   GraphDocument,
   GraphNode,
   GraphParameter,
@@ -96,11 +98,21 @@ export function removeNode(
 
 /**
  * Wires an output to an input. A wire already on the input is replaced, and the value written on the input goes:
- * an input takes one wire, and a wire and a value at once is an error of the format.
+ * an input takes one wire, and a wire and a value at once is an error of the format. An input that takes several wires,
+ * as the catalog says, gets one more (spec strategy-constructor «Несколько проводов в позицию на холсте») — a wire it
+ * already has is not added again — and loses its written value as any other.
  */
-export function connect(document: GraphDocument, from: string, to: string): GraphDocument {
+export function connect(
+  document: GraphDocument,
+  from: string,
+  to: string,
+  catalog?: Catalog,
+): GraphDocument {
   const target = nodeOf(to);
   const pin = pinOf(to);
+  const { wires } = document.graph;
+  const many = catalog !== undefined && takesMany(document.graph, catalog, to);
+  const kept = many ? wires : wires.filter((wire) => wire.to !== to);
   return {
     ...document,
     graph: {
@@ -108,7 +120,9 @@ export function connect(document: GraphDocument, from: string, to: string): Grap
       nodes: document.graph.nodes.map((node) =>
         node.id === target ? withoutInput(node, pin) : node,
       ),
-      wires: [...document.graph.wires.filter((wire) => wire.to !== to), { from, to }],
+      wires: kept.some((wire) => wire.from === from && wire.to === to)
+        ? kept
+        : [...kept, { from, to }],
     },
   };
 }

@@ -31,7 +31,7 @@ internal static class SignalLibrary
 
     /// <summary>
     ///     The strategy of H0001 written with a signal node: <c>s</c> on <paramref name="version" /> of <c>funding-high</c>, a
-    ///     short <c>enter</c> on <c>s.event</c> and a <c>close-after</c> of 4h.
+    ///     short <c>enter</c> of 100 USDT on <c>s.event</c>, the position and a <c>close-after</c> of 4h.
     /// </summary>
     public static string Strategy(int version = 1)
     {
@@ -40,10 +40,16 @@ internal static class SignalLibrary
                    "formatVersion": 1,
                    "nodes": [
                      { "id": "s", "kind": "signal", "settings": { "signal": "{{FundingHigh}}", "version": "{{version}}" } },
-                     { "id": "enter", "kind": "enter", "settings": { "side": "short" } },
+                     { "id": "enter", "kind": "enter", "settings": { "side": "short" }, "inputs": { "size": 100 } },
+                     { "id": "position", "kind": "position" },
                      { "id": "close-after", "kind": "close-after", "inputs": { "after": "4h" } }
                    ],
-                   "wires": [{ "from": "s.event", "to": "enter.when" }]
+                   "wires": [
+                     { "from": "s.event", "to": "enter.when" },
+                     { "from": "enter.order", "to": "position.orders" },
+                     { "from": "position.position", "to": "close-after.position" },
+                     { "from": "close-after.order", "to": "position.orders" }
+                   ]
                  }
                  """;
     }

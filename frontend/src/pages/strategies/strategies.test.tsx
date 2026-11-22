@@ -233,6 +233,53 @@ describe('the editor of a strategy', () => {
     expect(saveButton()).toBeDisabled();
   });
 
+  // Change add-position-node, task 12.2: an order and the position come by a wire only.
+  it('shows no value field on the canvas at an input of an order or of the position', async () => {
+    const graph = fundingShort();
+    routes({
+      'GET /api/strategies/funding-short': () =>
+        json(
+          savedFundingShort(1, {
+            ...graph,
+            nodes: [...graph.nodes, { id: 'position', kind: 'position' }],
+          }),
+        ),
+    });
+    renderApp('/strategies/funding-short');
+
+    const position = await findNode('Позиция', 'position');
+    const closeAfter = await findNode('Закрыть через', 'close-after');
+    // By the label, not by the role: React Flow hides a node while it measures it, and a hidden field has no role.
+    expect(within(closeAfter).getByLabelText('Значение close-after.after')).toHaveValue('4h');
+    expect(within(closeAfter).getByText('position')).toBeInTheDocument();
+    expect(within(closeAfter).queryByLabelText('Значение close-after.position')).toBeNull();
+    expect(within(position).getByText('orders')).toBeInTheDocument();
+    expect(within(position).queryByLabelText('Значение position.orders')).toBeNull();
+  });
+
+  // Spec strategy-constructor «Несколько проводов в позицию на холсте»: the card of the position lists its wires.
+  it('takes one wire away from the orders of the position by its «Убрать»', async () => {
+    routes();
+    renderApp('/strategies/new/abc');
+
+    const position = await selectNode('Позиция', 'position');
+    const wires = () =>
+      within(within(position).getByRole('list', { name: 'Провода orders' }))
+        .getAllByRole('listitem')
+        .map((item) => item.textContent);
+    expect(wires()).toEqual(['enter.orderУбрать', 'close-after.orderУбрать']);
+
+    await userEvent.click(within(position).getByRole('button', { name: 'Убрать enter.order' }));
+
+    expect(wires()).toEqual(['close-after.orderУбрать']);
+    // The removed order can be wired again, the other one is still wired.
+    expect(
+      within(within(position).getByRole('combobox', { name: 'Добавить orders' }))
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['добавить провод', 'enter.order']);
+  });
+
   // Scenario «Сигналы в палитре».
   it('offers the saved signals in the palette', async () => {
     routes({
@@ -312,6 +359,72 @@ describe('the editor of a strategy', () => {
     expect(saved!.graph.nodes[0]!.settings).toEqual({ signal: fundingHighId, version: '2' });
     // The title of the editor and the card of the node both say version 2 now.
     await waitFor(() => expect(screen.getAllByText('версия 2')).toHaveLength(2));
+  });
+
+  // Change add-position-node, task 12.3; spec strategy-constructor «Сохранение поднятой стратегии». The API read the
+  // stored graph of the former form raised and says so; the editor offers to save it as it is.
+  it('opens a strategy read raised as not saved and saves the raised graph without an edit', async () => {
+    const former = fundingShort();
+    const raised = {
+      ...former,
+      nodes: [
+        former.nodes[0]!,
+        { ...former.nodes[1]!, inputs: { size: 100 } },
+        former.nodes[2]!,
+        { id: 'position', kind: 'position' },
+      ],
+      wires: [
+        ...former.wires,
+        { from: 'enter.order', to: 'position.orders' },
+        { from: 'position.position', to: 'close-after.position' },
+        { from: 'close-after.order', to: 'position.orders' },
+      ],
+    };
+    const requests = routes({
+      'GET /api/strategies/funding-short': () =>
+        json({ ...savedFundingShort(1, raised), raised: true }),
+      'PUT /api/strategies/funding-short': async (request) =>
+        json({
+          ...savedFundingShort(1, raised),
+          version: 2,
+          graph: (await request.json()).graph,
+          raised: false,
+        }),
+    });
+    renderApp('/strategies/funding-short');
+    await findNode('Позиция', 'position');
+
+    await waitFor(() => expect(saveButton()).toBeEnabled(), { timeout: 2000 });
+    const state = screen.getByRole('status', { name: 'Состояние' });
+    expect(state).toHaveTextContent('не сохранено');
+    // Nothing was edited: there is nothing to discard and no draft to keep.
+    expect(screen.getByRole('button', { name: 'Отбросить' })).toBeDisabled();
+    await userEvent.click(saveButton());
+
+    await waitFor(async () =>
+      expect(await bodiesOf(requests, 'PUT', '/api/strategies/funding-short')).toHaveLength(1),
+    );
+    const [saved] = (await bodiesOf(requests, 'PUT', '/api/strategies/funding-short')) as {
+      graph: typeof raised;
+    }[];
+    expect(saved!.graph.nodes).toEqual(raised.nodes);
+    expect(saved!.graph.wires).toEqual(raised.wires);
+    await waitFor(() => expect(state).toHaveTextContent('сохранено'));
+    expect(state).not.toHaveTextContent('не сохранено');
+    expect(saveButton()).toBeDisabled();
+    expect(screen.getByText('версия 2')).toBeInTheDocument();
+  });
+
+  it('opens a strategy stored in the new form as saved', async () => {
+    routes({
+      'GET /api/strategies/funding-short': () => json({ ...savedFundingShort(1), raised: false }),
+    });
+    renderApp('/strategies/funding-short');
+    await findNode('Вход', 'enter');
+    await checked();
+
+    expect(screen.getByRole('status', { name: 'Состояние' })).toHaveTextContent(/^сохранено$/);
+    expect(saveButton()).toBeDisabled();
   });
 
   // Scenario «Черновики с одним именем».
@@ -407,8 +520,10 @@ describe('the editor of a strategy', () => {
       graph: ReturnType<typeof fundingShort>;
     }[];
     expect(created!.name).toBe('funding-short');
+    // Saved with the node of the position and the wires of the orders and of the position (change add-position-node).
     expect(created!.graph.nodes).toEqual([
-      { id: 'enter', kind: 'enter', settings: { side: 'short' } },
+      { id: 'enter', kind: 'enter', inputs: { size: 100 }, settings: { side: 'short' } },
+      { id: 'position', kind: 'position' },
       { id: 'close-after', kind: 'close-after', inputs: { after: '4h' } },
       {
         id: 'funding-high',
@@ -416,7 +531,12 @@ describe('the editor of a strategy', () => {
         settings: { signal: fundingHighId, version: String(fundingHigh.latest) },
       },
     ]);
-    expect(created!.graph.wires).toEqual([{ from: 'funding-high.event', to: 'enter.when' }]);
+    expect(created!.graph.wires).toEqual([
+      { from: 'enter.order', to: 'position.orders' },
+      { from: 'position.position', to: 'close-after.position' },
+      { from: 'close-after.order', to: 'position.orders' },
+      { from: 'funding-high.event', to: 'enter.when' },
+    ]);
   });
 });
 

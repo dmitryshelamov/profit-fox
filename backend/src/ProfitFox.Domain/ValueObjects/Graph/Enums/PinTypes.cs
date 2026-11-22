@@ -13,6 +13,8 @@ public static class PinTypes
             PinType.Boolean => "boolean",
             PinType.Duration => "duration",
             PinType.Event => "event",
+            PinType.Order => "order",
+            PinType.Position => "position",
             _ => throw new ArgumentOutOfRangeException(nameof(type), type, message: null)
         };
     }
@@ -35,6 +37,14 @@ public static class PinTypes
                 return true;
             case "event":
                 type = PinType.Event;
+
+                return true;
+            case "order":
+                type = PinType.Order;
+
+                return true;
+            case "position":
+                type = PinType.Position;
 
                 return true;
             default:

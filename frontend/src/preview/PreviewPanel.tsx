@@ -30,7 +30,7 @@ import {
   timeframes,
 } from './preview';
 import { readStored, writeStored } from './stored';
-import { percent, totalOf, tradeMarks, tradesOf } from './strategyPreview';
+import { computedRange, cyclesOf, percent, totalOf, tradeMarks, usdt } from './strategyPreview';
 import { TradeList } from './TradeList';
 
 /** What came back: the events of a signal, or the orders and trades of a strategy. */
@@ -66,7 +66,7 @@ type ListTab = 'trades' | 'orders';
  * chart read it and change it («Метка события выбирает строку», «Метка сделки выбирает строку»): a click on a row
  * shows it on the chart, a click on a mark selects its row. A strategy lists its result on two tabs, «Сделки» and
  * «Заявки» («Вкладки предпросмотра стратегии»), and says since when the trades are computed when they are not for all
- * of exploration.
+ * of exploration; its chart then opens on the weeks they are computed for, not on the whole history.
  */
 export function PreviewPanel({
   graph,
@@ -184,7 +184,7 @@ export function PreviewPanel({
       shownResult === undefined
         ? []
         : shownResult.kind === 'strategy'
-          ? tradeMarks(shownResult.preview.orders, shownResult.preview.timeframe)
+          ? tradeMarks(shownResult.preview)
           : marksOf(shownResult.preview.events, shownResult.preview.timeframe),
     [shownResult],
   );
@@ -206,8 +206,12 @@ export function PreviewPanel({
   const start = result ? historyStart(result.candles) : null;
   const stale = shown !== null && shown.graph !== canonical(graph);
   const orders = shownResult?.kind === 'strategy' ? shownResult.preview.orders : [];
-  const trades = tradesOf(orders);
-  const total = totalOf(orders);
+  const cycles = useMemo(
+    () => (shownResult?.kind === 'strategy' ? cyclesOf(shownResult.preview) : []),
+    [shownResult],
+  );
+  const total = totalOf(cycles);
+  const opening = shownResult?.kind === 'strategy' ? computedRange(shownResult.preview) : null;
 
   const resize = (event: ReactPointerEvent) => {
     const top = event.clientY;
@@ -301,10 +305,12 @@ export function PreviewPanel({
             {shownResult.kind === 'strategy' ? (
               <>
                 <Stat name="Заявок">{orders.length}</Stat>
-                <Stat name="Сделок">{trades.length}</Stat>
+                <Stat name="Сделок">{cycles.length}</Stat>
                 {total !== null && (
-                  <Stat name="Итог" tone={total < 0 ? 'err' : 'ok'}>
-                    {percent(total)}
+                  <Stat name="Итог">
+                    <Signed amount={total.net}>{percent(total.net)}</Signed>
+                    {' · '}
+                    <Signed amount={total.amount}>{usdt(total.amount)}</Signed>
                   </Stat>
                 )}
               </>
@@ -349,6 +355,7 @@ export function PreviewPanel({
               <CandleChart
                 candles={result?.candles ?? []}
                 marks={marks}
+                opening={opening}
                 focus={focus}
                 selected={selected}
                 onPick={pickMark}
@@ -378,7 +385,7 @@ export function PreviewPanel({
                   className="shrink-0 border-b border-line px-4"
                   value={tab}
                   tabs={[
-                    { value: 'trades', label: 'Сделки', count: trades.length },
+                    { value: 'trades', label: 'Сделки', count: cycles.length },
                     { value: 'orders', label: 'Заявки', count: orders.length },
                   ]}
                   onChange={setTab}
@@ -386,14 +393,15 @@ export function PreviewPanel({
                 <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto">
                   {tab === 'trades' ? (
                     <TradeList
-                      orders={orders}
+                      cycles={cycles}
                       selected={selected}
                       markClicks={markClicks}
-                      onPick={(order) => pick(Number(order.moment), shownResult.preview.timeframe)}
+                      onPick={(cycle) => pick(cycle.key, shownResult.preview.timeframe)}
                     />
                   ) : (
                     <OrderList
                       orders={orders}
+                      cycles={shownResult.preview.cycles}
                       selected={selected}
                       markClicks={markClicks}
                       onPick={(order) => pick(Number(order.moment), shownResult.preview.timeframe)}
@@ -409,25 +417,24 @@ export function PreviewPanel({
   );
 }
 
-/** A number of the result in the header of the panel: its name and the number, in mono; a sum is colored by its sign. */
-function Stat({
-  name,
-  tone,
-  children,
-}: {
-  readonly name: string;
-  readonly tone?: 'ok' | 'err';
-  readonly children: ReactNode;
-}) {
+/** A number of the result in the header of the panel: its name and the number, in mono. */
+function Stat({ name, children }: { readonly name: string; readonly children: ReactNode }) {
   return (
     <span className="flex items-baseline gap-2 text-xs text-muted">
-      {name}{' '}
-      <span
-        data-tone={tone}
-        className={`font-mono text-[13px] font-semibold ${tone === 'err' ? 'text-err' : tone === 'ok' ? 'text-ok' : 'text-text'}`}
-      >
-        {children}
-      </span>
+      {name} <span className="font-mono text-[13px] font-semibold text-text">{children}</span>
+    </span>
+  );
+}
+
+/**
+ * A part of the sum in the color of its own sign, told by `data-tone`: the sum of the fractions and the sum of USDT of
+ * cycles of different sizes can have different signs.
+ */
+function Signed({ amount, children }: { readonly amount: number; readonly children: ReactNode }) {
+  const tone = amount < 0 ? 'err' : 'ok';
+  return (
+    <span data-tone={tone} className={tone === 'err' ? 'text-err' : 'text-ok'}>
+      {children}
     </span>
   );
 }

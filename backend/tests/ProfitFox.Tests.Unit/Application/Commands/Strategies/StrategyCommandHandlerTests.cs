@@ -33,7 +33,7 @@ public sealed class StrategyCommandHandlerTests
         StrategyInternal read = await _strategies.Read("funding-short", _none);
 
         Assert.That((created.Name, read.Version), Is.EqualTo(("funding-short", 1)));
-        Assert.That(read.Graph.Nodes.Select(node => node.Kind), Is.EqualTo(new[] { "signal", "enter", "close-after" }));
+        Assert.That(read.Graph.Nodes.Select(node => node.Kind), Is.EqualTo(new[] { "signal", "enter", "close-after", "position" }));
         Assert.That(read.Signals.Single(), Is.EqualTo(created.Signals.Single()));
         Assert.That((read.Signals.Single().Node, read.Signals.Single().Name), Is.EqualTo(("s", "funding-high")));
     }
@@ -64,13 +64,13 @@ public sealed class StrategyCommandHandlerTests
     {
         await _strategies.Create("funding-short", Graph(), _none);
         JsonObject graph = StrategyRequests.Strategy(_signal.Id);
-        graph["nodes"]!.AsArray().RemoveAt(2);
+        StrategyRequests.RemoveCloseAfter(graph);
 
         StrategyLibraryException error = Assert.ThrowsAsync<StrategyLibraryException>(() => _strategies.Replace("funding-short", StrategyRequests.Element(graph), _none))!;
 
         Assert.That(error.Problem, Is.EqualTo(StrategyProblem.Invalid));
-        Assert.That(error.Errors.Single().Code, Is.EqualTo(GraphErrorCode.StrategyCloseAfterMissing));
-        Assert.That((await _strategies.Read("funding-short", _none)).Graph.Nodes, Has.Count.EqualTo(3), "the saved strategy stays");
+        Assert.That(error.Errors.Single().Code, Is.EqualTo(GraphErrorCode.StrategyExitMissing));
+        Assert.That((await _strategies.Read("funding-short", _none)).Graph.Nodes, Has.Count.EqualTo(4), "the saved strategy stays");
     }
 
     [Test]

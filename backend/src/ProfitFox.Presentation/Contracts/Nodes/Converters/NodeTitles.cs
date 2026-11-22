@@ -11,6 +11,7 @@ public static class NodeTitles
 {
     public const string Data = "Данные";
     public const string Logic = "Логика";
+    public const string Numbers = "Числа";
     public const string Graph = "Граф";
     public const string Position = "Позиция";
     public const string Signals = "Сигналы";
@@ -27,7 +28,14 @@ public static class NodeTitles
         [NodeCatalog.Or] = ("Или", Logic),
         [NodeCatalog.Not] = ("Не", Logic),
         [NodeCatalog.FirstTime] = ("Впервые", Logic),
+        [NodeCatalog.Add] = ("Сложить", Numbers),
+        [NodeCatalog.Subtract] = ("Вычесть", Numbers),
+        [NodeCatalog.Multiply] = ("Умножить", Numbers),
+        [NodeCatalog.Position] = ("Позиция", Position),
         [NodeCatalog.Enter] = ("Вход", Position),
+        [NodeCatalog.MarketOrder] = ("Рыночная заявка", Position),
+        [NodeCatalog.LimitOrder] = ("Лимитная заявка", Position),
+        [NodeCatalog.ClosePosition] = ("Закрыть позицию", Position),
         [NodeCatalog.StopLoss] = ("Стоп", Position),
         [NodeCatalog.TakeProfit] = ("Цель", Position),
         [NodeCatalog.CloseAfter] = ("Закрыть через", Position),

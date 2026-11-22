@@ -1,7 +1,6 @@
 using ProfitFox.Domain.Services.Execution;
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.Services.Positions;
-using ProfitFox.Domain.Services.Trades;
 using ProfitFox.Domain.ValueObjects.Execution;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
 using ProfitFox.Domain.ValueObjects.Positions;
@@ -38,7 +37,7 @@ public sealed class PairPositionTests
 
         Cycle? cycle = position.Enter(path, Order(Noon, EntrySide.Short, FourHours), Costs);
 
-        TradeOutcome trade = TradeSimulator.Simulate(path, Noon, new TradePlan(TradeSide.Short, FourHours), Costs);
+        TradeOutcome trade = CycleRun.Simulate(path, Noon, new TradePlan(TradeSide.Short, FourHours), Costs, amount: 100).ToTrade();
         Assert.That(cycle, Is.Not.Null);
         Assert.That(cycle!.Status, Is.EqualTo(TradeStatus.Ok));
         Assert.That(cycle.Plan, Is.EqualTo(new TradePlan(TradeSide.Short, FourHours)));
@@ -58,7 +57,7 @@ public sealed class PairPositionTests
 
         Assert.That(cycle!.ExitTime, Is.EqualTo(Paths.At(7)));
         Assert.That(cycle.Outcome!.ExitReason, Is.EqualTo(ExitReason.Stop));
-        Assert.That(cycle.Outcome, Is.EqualTo(TradeSimulator.Simulate(path, Noon, new TradePlan(TradeSide.Long, OneDay, stop: 0.02), Costs)));
+        Assert.That(cycle.Outcome, Is.EqualTo(CycleRun.Simulate(path, Noon, new TradePlan(TradeSide.Long, OneDay, stop: 0.02), Costs, amount: 100).ToTrade()));
     }
 
     [Test]
@@ -211,7 +210,7 @@ public sealed class PairPositionTests
         Assert.That(step.Entry, Is.Null);
         Assert.That(step.Moment, Is.EqualTo(EightPm));
         Assert.That(cycle.Status, Is.EqualTo(TradeStatus.Ok));
-        Assert.That(cycle.Outcome, Is.EqualTo(TradeSimulator.Simulate(path, EightPm, new TradePlan(TradeSide.Short, FourHours), Costs)));
+        Assert.That(cycle.Outcome, Is.EqualTo(CycleRun.Simulate(path, EightPm, new TradePlan(TradeSide.Short, FourHours), Costs, amount: 100).ToTrade()));
         Assert.That(cycle.ExitTime, Is.EqualTo(EightPm + FourHours));
     }
 
@@ -225,7 +224,7 @@ public sealed class PairPositionTests
         var outside = Cycle.Open(path, new StrategyStep(FourPm, Entry: null, OneDay, ExitDistance.None, ExitDistance.None), EntrySide.Long, Costs);
 
         Assert.That(outside.Status, Is.EqualTo(TradeStatus.Ok), "it is opened though the cycle of the order runs");
-        Assert.That(outside.Outcome, Is.EqualTo(TradeSimulator.Simulate(path, FourPm, new TradePlan(TradeSide.Long, OneDay), Costs)));
+        Assert.That(outside.Outcome, Is.EqualTo(CycleRun.Simulate(path, FourPm, new TradePlan(TradeSide.Long, OneDay), Costs, amount: 100).ToTrade()));
         Assert.That(ofOrder!.ExitTime, Is.EqualTo(NoonTomorrow));
         Assert.That(position.BusyUntil, Is.EqualTo(NoonTomorrow), "the cycle of the order did not change");
         Assert.That(position.Enter(path, Order(EightPm, EntrySide.Long, OneDay), Costs), Is.Null, "and still holds the pair");

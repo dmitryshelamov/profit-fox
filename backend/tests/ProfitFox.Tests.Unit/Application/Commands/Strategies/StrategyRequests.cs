@@ -77,7 +77,8 @@ internal sealed class StrategyRequests
 
     /// <summary>
     ///     <c>funding-short</c>: the node <c>s</c> on <paramref name="version" /> of <paramref name="signal" />, a short
-    ///     <c>enter</c> on its event and a <c>close-after</c> of 4h.
+    ///     <c>enter</c> of 100 USDT on its event, a <c>close-after</c> of 4h and the position, wired by orders and the
+    ///     position.
     /// </summary>
     public static JsonObject Strategy(Guid signal, int version = 1)
     {
@@ -87,12 +88,33 @@ internal sealed class StrategyRequests
                 "formatVersion": 1,
                 "nodes": [
                   { "id": "s", "kind": "signal", "settings": { "signal": "{{signal}}", "version": "{{version}}" } },
-                  { "id": "enter", "kind": "enter", "settings": { "side": "short" } },
-                  { "id": "close-after", "kind": "close-after", "inputs": { "after": "4h" } }
+                  { "id": "enter", "kind": "enter", "settings": { "side": "short" }, "inputs": { "size": 100 } },
+                  { "id": "close-after", "kind": "close-after", "inputs": { "after": "4h" } },
+                  { "id": "position", "kind": "position" }
                 ],
-                "wires": [{ "from": "s.event", "to": "enter.when" }]
+                "wires": [
+                  { "from": "s.event", "to": "enter.when" },
+                  { "from": "enter.order", "to": "position.orders" },
+                  { "from": "position.position", "to": "close-after.position" },
+                  { "from": "close-after.order", "to": "position.orders" }
+                ]
               }
               """)!.AsObject();
+    }
+
+    /// <summary>
+    ///     The strategy without its <c>close-after</c> and the wires of it: a strategy without an exit.
+    /// </summary>
+    public static void RemoveCloseAfter(JsonObject graph)
+    {
+        JsonArray nodes = graph["nodes"]!.AsArray();
+        nodes.Remove(nodes.Single(node => (string)node!["id"]! == "close-after"));
+        JsonArray wires = graph["wires"]!.AsArray();
+        foreach (JsonNode? wire in wires.Where(wire => ((string)wire!["from"]!).StartsWith("close-after.", StringComparison.Ordinal)
+                                                       || ((string)wire["to"]!).StartsWith("close-after.", StringComparison.Ordinal)).ToList())
+        {
+            wires.Remove(wire);
+        }
     }
 
     public static JsonElement Element(JsonNode node)

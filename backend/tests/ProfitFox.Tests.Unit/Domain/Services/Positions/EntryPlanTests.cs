@@ -135,8 +135,8 @@ public sealed class EntryPlanTests
     {
         return Graphs.ChangedStrategy(graph =>
         {
-            graph.AddNode("stop-loss", "stop-loss", "distance", JsonNode.Parse(fraction)!);
-            graph.AddNode("take-profit", "take-profit", "distance", JsonNode.Parse(fraction)!);
+            graph.AddExit("stop-loss", "stop-loss", "distance", JsonNode.Parse(fraction)!);
+            graph.AddExit("take-profit", "take-profit", "distance", JsonNode.Parse(fraction)!);
         });
     }
 

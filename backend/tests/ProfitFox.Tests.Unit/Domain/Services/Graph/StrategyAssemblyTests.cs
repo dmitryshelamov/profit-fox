@@ -5,8 +5,8 @@ using ProfitFox.Domain.ValueObjects.Graph.Enums;
 namespace ProfitFox.Tests.Unit.Domain.Services.Graph;
 
 /// <summary>
-///     Change add-strategy-graph, design.md, decision 8 (task 1.4): a strategy put together from a signal and the values
-///     of a trade plan.
+///     Change add-strategy-graph, design.md, decision 8 (task 1.4), and change add-position-node, decision 10 (task 5.2): a
+///     strategy put together from a signal and the values of a trade plan, with the position and the size 100.
 /// </summary>
 public sealed class StrategyAssemblyTests
 {
@@ -42,10 +42,26 @@ public sealed class StrategyAssemblyTests
                     ("high", "compare"),
                     ("first", "first-time"),
                     ("enter", "enter"),
+                    ("position", "position"),
                     ("close-after", "close-after"),
                     ("stop-loss", "stop-loss"),
                     ("take-profit", "take-profit")
                 }));
+        Assert.That(
+            strategy.Graph.Wires.Skip(4).Select(wire => $"{wire.From} -> {wire.To}"),
+            Is.EqualTo(
+                new[]
+                {
+                    "enter.order -> position.orders",
+                    "position.position -> close-after.position",
+                    "close-after.order -> position.orders",
+                    "position.position -> stop-loss.position",
+                    "stop-loss.order -> position.orders",
+                    "position.position -> take-profit.position",
+                    "take-profit.order -> position.orders"
+                }),
+            "each exit reads the position and gives its order to it");
+        Assert.That(Node(strategy, "enter").Inputs["size"], Is.EqualTo(GraphValue.FromNumber(100m)));
         Assert.That(Node(strategy, "enter").Settings["side"], Is.EqualTo("long"));
         Assert.That(Node(strategy, "close-after").Inputs["after"], Is.EqualTo(GraphValue.FromDuration(TimeSpan.FromDays(1))));
         Assert.That(Node(strategy, "stop-loss").Inputs["distance"], Is.EqualTo(GraphValue.FromNumber(0.02m)));
@@ -89,10 +105,11 @@ public sealed class StrategyAssemblyTests
                     ("enter-1", "compare"),
                     ("enter", "first-time"),
                     ("enter-2", "enter"),
+                    ("position", "position"),
                     ("close-after-1", "close-after"),
                     ("stop-loss", "stop-loss")
                 }));
-        Assert.That(strategy.Graph.Wires[^1], Is.EqualTo(new WireDefinition(new PinReference("enter", "event"), new PinReference("enter-2", "when"))));
+        Assert.That(strategy.Graph.Wires[3], Is.EqualTo(new WireDefinition(new PinReference("enter", "event"), new PinReference("enter-2", "when"))));
         Assert.That(strategy.Entries, Is.EqualTo(new[] { new StrategyEntry("enter-2", EntrySide.Short) }));
     }
 

@@ -42,7 +42,7 @@ public sealed class StrategyRepositoryTests
         StrategyDocument read = Read(await _strategies.ReadAsync("funding-short", _none));
 
         Assert.That((created.Version, read.Version, read.Name, read.Description, read.Id), Is.EqualTo((1, 1, "funding-short", "Шорт на фандинге", created.Id)));
-        Assert.That(read.Graph.Nodes.Select(node => node.Kind), Is.EqualTo(new[] { "signal", "enter", "close-after" }));
+        Assert.That(read.Graph.Nodes.Select(node => node.Kind), Is.EqualTo(new[] { "signal", "enter", "close-after", "position" }));
         Assert.That(read.Graph.Nodes[0].Settings["signal"], Is.EqualTo(signal.Id.ToString()));
         Assert.That(read.Layout["enter"], Is.EqualTo(new NodePosition(100, 0)));
     }

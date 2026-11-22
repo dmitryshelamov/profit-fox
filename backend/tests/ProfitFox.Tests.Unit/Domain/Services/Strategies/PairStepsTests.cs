@@ -30,14 +30,14 @@ public sealed class PairStepsTests
 
         var steps = PairSteps.Of(H0001, FourHours, "BTCUSDT", candles, funding);
 
-        Assert.That(steps.Orders, Is.EqualTo(new[] { new StrategyStep(Utc(2026, 1, 5, 12), EntrySide.Short, FourHours, ExitDistance.None, ExitDistance.None) }));
+        Assert.That(steps.Orders, Is.EqualTo(new[] { new StrategyStep(Utc(2026, 1, 5, 12), EntrySide.Short, FourHours, ExitDistance.None, ExitDistance.None) { Node = "enter" } }));
         Assert.That(steps.Orders.Select(order => order.Moment), Is.EqualTo(PairEvents.Of(Signal, FourHours, "BTCUSDT", candles, funding)));
     }
 
     [Test]
     public void A_moment_gets_the_values_of_the_last_candle_closed_by_it_and_no_order()
     {
-        TradingStrategy strategy = StrategyGraph.ReadStrategy(StopFromTheClose).Value!;
+        TradingStrategy strategy = StrategyGraph.ReadStrategy(Graphs.Raised(StopFromTheClose)).Value!;
         HistoryCandle[] candles = [Traded(Utc(2026, 1, 5, 0), "0.01"), Untraded(Utc(2026, 1, 5, 4)), Traded(Utc(2026, 1, 5, 8), "0.03")];
 
         var steps = PairSteps.Of(strategy, FourHours, "BTCUSDT", candles, []);
@@ -45,14 +45,14 @@ public sealed class PairStepsTests
         Assert.That(steps.Orders.Select(order => order.Moment), Is.EqualTo(new[] { Utc(2026, 1, 5, 12) }));
         Assert.That(steps.At(Utc(2026, 1, 5, 4)), Is.EqualTo(new StrategyStep(Utc(2026, 1, 5, 4), Entry: null, FourHours, ExitDistance.Of(0.01m), ExitDistance.None)));
         Assert.That(steps.At(Utc(2026, 1, 5, 8)).Stop, Is.EqualTo(ExitDistance.Of(0.01m)), "the candle closed at 08:00 had no trades: the strategy was not computed");
-        Assert.That(steps.At(Utc(2026, 1, 5, 12)), Is.EqualTo(steps.Orders[0] with { Entry = null }), "a cycle outside the graph is not the order of the candle");
+        Assert.That(steps.At(Utc(2026, 1, 5, 12)), Is.EqualTo(steps.Orders[0] with { Entry = null, Node = null }), "a cycle outside the graph is not the order of the candle");
         Assert.That(steps.At(Utc(2026, 1, 5, 16)), Is.EqualTo(new StrategyStep(Utc(2026, 1, 5, 16), Entry: null, FourHours, ExitDistance.Of(0.03m), ExitDistance.None)));
     }
 
     [Test]
     public void Before_the_first_candle_only_the_written_values_are_known()
     {
-        TradingStrategy strategy = StrategyGraph.ReadStrategy(StopFromTheClose).Value!;
+        TradingStrategy strategy = StrategyGraph.ReadStrategy(Graphs.Raised(StopFromTheClose)).Value!;
 
         var steps = PairSteps.Of(strategy, FourHours, "BTCUSDT", [Traded(Utc(2026, 1, 5, 4), "0.01")], []);
 

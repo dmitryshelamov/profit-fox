@@ -1,4 +1,4 @@
-import type { PinType } from '../model/types';
+import type { NodeKind, PinType } from '../model/types';
 
 /**
  * The colors of the canvas in one table (change redesign-bench-ui, design.md, decision 8): a pin and the wire from it
@@ -45,21 +45,55 @@ export const pinLooks: Record<PinType, PinLook> = {
     dot: 'bg-pin-event',
     stroke: 'var(--color-pin-event)',
   },
+  order: {
+    word: 'заявка',
+    border: 'border-pin-order!',
+    fill: 'bg-pin-order!',
+    dot: 'bg-pin-order',
+    stroke: 'var(--color-pin-order)',
+  },
+  position: {
+    word: 'позиция',
+    border: 'border-pin-position!',
+    fill: 'bg-pin-position!',
+    dot: 'bg-pin-position',
+    stroke: 'var(--color-pin-position)',
+  },
 };
 
 /** The types in the order of the legend. */
-export const pinTypes: readonly PinType[] = ['number', 'boolean', 'duration', 'event'];
+export const pinTypes: readonly PinType[] = [
+  'number',
+  'boolean',
+  'duration',
+  'event',
+  'order',
+  'position',
+];
+
+/**
+ * The types the legend of an editor names (spec strategy-constructor «Типы заявки и позиции на холсте») by the
+ * pins of its catalog: the four types of a value and an event always, an order and the position when the catalog has
+ * them — four for a signal, six for a strategy.
+ */
+export function legendTypes(catalog: readonly NodeKind[]): PinType[] {
+  const used = new Set(
+    catalog.flatMap((kind) => [...kind.inputs, ...kind.outputs].map((pin) => pin.type)),
+  );
+  return pinTypes.filter((type) => (type !== 'order' && type !== 'position') || used.has(type));
+}
 
 /** The color of a wire with an error and of one whose type is not known. */
 export const wireStrokes = { bad: 'var(--color-err)', unknown: 'var(--color-faint)' };
 
 /** The groups of the catalog the theme has a color for. */
-export type GroupKey = 'graph' | 'data' | 'logic' | 'position' | 'signal';
+export type GroupKey = 'graph' | 'data' | 'logic' | 'math' | 'position' | 'signal';
 
 const groupKeys: Record<string, GroupKey> = {
   Граф: 'graph',
   Данные: 'data',
   Логика: 'logic',
+  Числа: 'math',
   Позиция: 'position',
   Сигналы: 'signal',
 };
@@ -68,6 +102,7 @@ const groupFills: Record<GroupKey, string> = {
   graph: 'bg-group-graph',
   data: 'bg-group-data',
   logic: 'bg-group-logic',
+  math: 'bg-group-math',
   position: 'bg-group-position',
   signal: 'bg-group-signal',
 };

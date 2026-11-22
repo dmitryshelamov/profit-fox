@@ -176,6 +176,115 @@
     "settings": []
   },
   {
+    "kind": "add",
+    "title": "Сложить",
+    "group": "Числа",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "subtract",
+    "title": "Вычесть",
+    "group": "Числа",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "multiply",
+    "title": "Умножить",
+    "group": "Числа",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "position",
+    "title": "Позиция",
+    "group": "Позиция",
+    "inputs": [
+      {
+        "name": "orders",
+        "type": "order",
+        "many": true
+      }
+    ],
+    "outputs": [
+      {
+        "name": "position",
+        "type": "position"
+      },
+      {
+        "name": "open",
+        "type": "boolean"
+      },
+      {
+        "name": "quantity",
+        "type": "number"
+      },
+      {
+        "name": "averagePrice",
+        "type": "number"
+      },
+      {
+        "name": "lastEntryPrice",
+        "type": "number"
+      },
+      {
+        "name": "invested",
+        "type": "number"
+      },
+      {
+        "name": "sinceLastEntry",
+        "type": "duration"
+      }
+    ],
+    "settings": []
+  },
+  {
     "kind": "enter",
     "title": "Вход",
     "group": "Позиция",
@@ -183,9 +292,18 @@
       {
         "name": "when",
         "type": "event"
+      },
+      {
+        "name": "size",
+        "type": "number"
       }
     ],
-    "outputs": [],
+    "outputs": [
+      {
+        "name": "order",
+        "type": "order"
+      }
+    ],
     "settings": [
       {
         "name": "side",
@@ -194,16 +312,109 @@
     ]
   },
   {
+    "kind": "market-order",
+    "title": "Рыночная заявка",
+    "group": "Позиция",
+    "inputs": [
+      {
+        "name": "when",
+        "type": "boolean"
+      },
+      {
+        "name": "size",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "order",
+        "type": "order"
+      }
+    ],
+    "settings": [
+      {
+        "name": "side",
+        "values": ["buy", "sell"]
+      },
+      {
+        "name": "sizeIn",
+        "values": ["amount", "quantity"]
+      }
+    ]
+  },
+  {
+    "kind": "limit-order",
+    "title": "Лимитная заявка",
+    "group": "Позиция",
+    "inputs": [
+      {
+        "name": "when",
+        "type": "boolean"
+      },
+      {
+        "name": "price",
+        "type": "number"
+      },
+      {
+        "name": "size",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "order",
+        "type": "order"
+      }
+    ],
+    "settings": [
+      {
+        "name": "side",
+        "values": ["buy", "sell"]
+      },
+      {
+        "name": "sizeIn",
+        "values": ["amount", "quantity"]
+      }
+    ]
+  },
+  {
+    "kind": "close-position",
+    "title": "Закрыть позицию",
+    "group": "Позиция",
+    "inputs": [
+      {
+        "name": "when",
+        "type": "boolean"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "order",
+        "type": "order"
+      }
+    ],
+    "settings": []
+  },
+  {
     "kind": "stop-loss",
     "title": "Стоп",
     "group": "Позиция",
     "inputs": [
       {
+        "name": "position",
+        "type": "position"
+      },
+      {
         "name": "distance",
         "type": "number"
       }
     ],
-    "outputs": [],
+    "outputs": [
+      {
+        "name": "order",
+        "type": "order"
+      }
+    ],
     "settings": []
   },
   {
@@ -212,11 +423,20 @@
     "group": "Позиция",
     "inputs": [
       {
+        "name": "position",
+        "type": "position"
+      },
+      {
         "name": "distance",
         "type": "number"
       }
     ],
-    "outputs": [],
+    "outputs": [
+      {
+        "name": "order",
+        "type": "order"
+      }
+    ],
     "settings": []
   },
   {
@@ -225,11 +445,20 @@
     "group": "Позиция",
     "inputs": [
       {
+        "name": "position",
+        "type": "position"
+      },
+      {
         "name": "after",
         "type": "duration"
       }
     ],
-    "outputs": [],
+    "outputs": [
+      {
+        "name": "order",
+        "type": "order"
+      }
+    ],
     "settings": []
   },
   {

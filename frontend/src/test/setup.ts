@@ -81,9 +81,12 @@ vi.mock('lightweight-charts', async () => {
         drawn.click = null;
       }),
       timeScale: () => ({
-        fitContent: vi.fn(),
+        fitContent: vi.fn(() => {
+          drawn.view = 'content';
+        }),
         setVisibleRange: vi.fn((range: { from: number; to: number }) => {
           drawn.range = range;
+          drawn.view = 'range';
         }),
       }),
     })),

@@ -7,8 +7,9 @@ using ProfitFox.Domain.ValueObjects.Graph.Enums;
 namespace ProfitFox.Domain.ValueObjects.Graph;
 
 /// <summary>
-///     A checked strategy (spec strategy-graph «Стратегия»): a graph without declared outputs that has at least one
-///     <c>enter</c> node, exactly one <c>close-after</c> and at most one <c>stop-loss</c> and one <c>take-profit</c>. It
+///     A checked strategy (spec strategy-graph «Стратегия», «Узел позиции в стратегии»): a graph without declared outputs
+///     with one node <c>position</c>, a node that opens it and one that closes it, every order wired into it, and at most
+///     one <c>stop-loss</c>, one <c>take-profit</c> and one <c>close-after</c>. It
 ///     keeps the graph twice (change add-strategy-constructor, design.md, decision 3): as written, with its <c>signal</c>
 ///     nodes, and expanded, which the executor runs. The name is not <c>Strategy</c>: that is the namespace.
 /// </summary>
@@ -30,6 +31,14 @@ public sealed class TradingStrategy
     /// </summary>
     public IReadOnlyList<StrategyEntry> Entries { get; }
 
+    /// <summary>
+    ///     Whether the strategy is by plan (spec strategy-position «Стратегия по плану»): it has a <c>close-after</c>, no
+    ///     <c>market-order</c>, <c>limit-order</c> or <c>close-position</c>, and no wire from the state of the position. Only
+    ///     its <c>enter</c> opens the position and only the time, the stop and the target close it, so its graph is computed
+    ///     ahead of the minutes; any other strategy is a strategy with orders.
+    /// </summary>
+    public bool ByPlan { get; }
+
     internal TradingStrategy(GraphDefinition graph)
         : this(graph, graph)
     {
@@ -40,13 +49,30 @@ public sealed class TradingStrategy
         Source = source;
         Graph = graph;
         Entries = [.. graph.Nodes.Where(node => node.Kind == NodeCatalog.Enter).Select(node => new StrategyEntry(node.Id, Side(node)))];
+        ByPlan = IsByPlan(graph);
+    }
+
+    private static bool IsByPlan(GraphDefinition graph)
+    {
+        var positions = new HashSet<string>(graph.Nodes.Where(node => node.Kind == NodeCatalog.Position).Select(node => node.Id), StringComparer.Ordinal);
+        return graph.Nodes.Any(node => node.Kind == NodeCatalog.CloseAfter)
+               && graph.Nodes.All(node => node.Kind is not (NodeCatalog.MarketOrder or NodeCatalog.LimitOrder or NodeCatalog.ClosePosition))
+               && graph.Wires.All(wire => !positions.Contains(wire.From.Node) || wire.From.Pin == NodeCatalog.PositionPin);
     }
 
     /// <summary>
-    ///     The strategy of a signal and the values of a trade plan (change add-strategy-graph, design.md, decision 8): the
-    ///     event of the signal goes into an <c>enter</c> node of the side instead of the output, <c>close-after</c> gets the
-    ///     time, and <c>stop-loss</c> and <c>take-profit</c> are added when given. A new node is named by its kind, with a
-    ///     number when the signal has the id. The signal is not changed.
+    ///     The size of the entry of the strategy of a hypothesis, in USDT (change add-position-node, design.md, decision
+    ///     10): a hypothesis is counted in fractions, so the size does not change its result.
+    /// </summary>
+    public const decimal HypothesisEntrySize = 100m;
+
+    /// <summary>
+    ///     The strategy of a signal and the values of a trade plan (change add-strategy-graph, design.md, decision 8; change
+    ///     add-position-node, decision 10): the event of the signal goes into an <c>enter</c> node of the side and of the
+    ///     size <see cref="HypothesisEntrySize" /> instead of the output, the order of the entry into a node
+    ///     <c>position</c>, <c>close-after</c> gets the time, and <c>stop-loss</c> and <c>take-profit</c> are added when
+    ///     given; each exit node reads the position and gives its order to it. A new node is named by its kind, with a number
+    ///     when the signal has the id. The signal is not changed.
     /// </summary>
     public static TradingStrategy FromSignal(Signal signal, EntrySide side, TimeSpan after, decimal? stop = null, decimal? target = null)
     {
@@ -61,22 +87,39 @@ public sealed class TradingStrategy
         var ids = new HashSet<string>(nodes.Select(node => node.Id), StringComparer.Ordinal);
 
         string enter = FreeId(NodeCatalog.Enter, ids);
-        nodes.Add(new NodeDefinition(enter, NodeCatalog.Enter, Settings(NodeCatalog.Side, side == EntrySide.Long ? NodeCatalog.Long : NodeCatalog.Short), Inputs()));
-        nodes.Add(Exit(NodeCatalog.CloseAfter, NodeCatalog.After, GraphValue.FromDuration(after), ids));
+        nodes.Add(
+            new NodeDefinition(
+                enter,
+                NodeCatalog.Enter,
+                Settings(NodeCatalog.Side, side == EntrySide.Long ? NodeCatalog.Long : NodeCatalog.Short),
+                Inputs(NodeCatalog.Size, GraphValue.FromNumber(HypothesisEntrySize))));
+        string position = FreeId(NodeCatalog.Position, ids);
+        nodes.Add(new NodeDefinition(position, NodeCatalog.Position, Settings(), Inputs()));
+        List<NodeDefinition> exits = [Exit(NodeCatalog.CloseAfter, NodeCatalog.After, GraphValue.FromDuration(after), ids)];
 
         if (stop is { } stopDistance)
         {
-            nodes.Add(Exit(NodeCatalog.StopLoss, NodeCatalog.Distance, GraphValue.FromNumber(stopDistance), ids));
+            exits.Add(Exit(NodeCatalog.StopLoss, NodeCatalog.Distance, GraphValue.FromNumber(stopDistance), ids));
         }
 
         if (target is { } targetDistance)
         {
-            nodes.Add(Exit(NodeCatalog.TakeProfit, NodeCatalog.Distance, GraphValue.FromNumber(targetDistance), ids));
+            exits.Add(Exit(NodeCatalog.TakeProfit, NodeCatalog.Distance, GraphValue.FromNumber(targetDistance), ids));
         }
 
-        // The wire that went into the output of the signal goes into the entry, at the same place among the wires.
+        nodes.AddRange(exits);
+
+        // The wire that went into the output of the signal goes into the entry, at the same place among the wires; then
+        // the order of the entry into the position, and for each exit the position into it and its order back.
         var entry = new PinReference(enter, NodeCatalog.When);
+        var orders = new PinReference(position, NodeCatalog.Orders);
         List<WireDefinition> wires = [.. graph.Wires.Select(wire => wire.To.Node == outputs.Id ? new WireDefinition(wire.From, entry) : wire)];
+        wires.Add(new WireDefinition(new PinReference(enter, NodeCatalog.Order), orders));
+        foreach (NodeDefinition exit in exits)
+        {
+            wires.Add(new WireDefinition(new PinReference(position, NodeCatalog.PositionPin), new PinReference(exit.Id, NodeCatalog.PositionPin)));
+            wires.Add(new WireDefinition(new PinReference(exit.Id, NodeCatalog.Order), orders));
+        }
         var strategy = new GraphDefinition(graph.Parameters, [], nodes, wires);
 
         List<GraphError> errors = GraphValidator.ValidateStrategy(strategy);
