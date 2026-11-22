@@ -17,7 +17,7 @@ namespace ProfitFox.Domain.Services.Positions;
 ///     A strategy with orders on one pair (change add-position-node, design.md, decision 6): the graph at every close and
 ///     again after every fill, the orders of its nodes, their fills minute by minute, and the cycles of the position, whose
 ///     fills and result <see cref="CycleRun" /> keeps. The graph runs on every candle from the first; orders are taken from
-///     <c>from</c> on, where the position is closed.
+///     <c>from</c> on, where the position is closed, and nothing is known after <c>end</c>, where the computed history ends.
 ///     <list type="number">
 ///         <item>An order placed at a close takes part from the minute of the close; one placed after a fill, from the next.</item>
 ///         <item>
@@ -26,6 +26,13 @@ namespace ProfitFox.Domain.Services.Positions;
 ///             computed again; an order it leaves as it was can fill in the same minute.
 ///         </item>
 ///         <item>The stop, the target and the time close the whole position and take off the other orders.</item>
+///         <item>
+///             The time of a cycle an order of <c>enter</c> opened runs from the moment of the order, that of a cycle a
+///             <c>market-order</c> or a <c>limit-order</c> opened from the fill that opened it. A time that ran out closes the
+///             cycle before anything else at that moment: before the graph of a close, before a hole in the history, and at
+///             the end of the history. An order of <c>enter</c> that met no minute with trades within its time gives no trade.
+///         </item>
+///         <item>An order whose cycle would end by its time after the end of the history gives no cycle: the reason is the period.</item>
 ///         <item>A minute the history does not know, while a cycle is open or an order stands, leaves the cycle out on coverage.</item>
 ///     </list>
 /// </summary>
@@ -46,6 +53,7 @@ public sealed class PositionRun
     private readonly Dictionary<string, DateTimeOffset> _entered = new(StringComparer.Ordinal);
     private readonly List<OrderOutcome> _orders = [];
     private readonly long _from;
+    private readonly DateTimeOffset _end;
     private CycleRun? _cycle;
     private long _minute;
     private double _lastClose = double.NaN;
@@ -53,9 +61,10 @@ public sealed class PositionRun
     private bool _afterHole;
     private DateTimeOffset _close;
 
-    public PositionRun(TradingStrategy strategy, MinutePath path, TradeCosts costs, DateTimeOffset from)
+    public PositionRun(TradingStrategy strategy, MinutePath path, TradeCosts costs, DateTimeOffset from, DateTimeOffset? end = null)
     {
         _path = path;
+        _end = end ?? path.Start + TimeSpan.FromMinutes(path.Minutes);
         _costs = costs;
         var graph = CompiledGraph.Compile(strategy.Graph);
         _run = new GraphRun(graph);
@@ -74,12 +83,14 @@ public sealed class PositionRun
     public IReadOnlyList<StandingOrder> Standing => [.. _nodes.Where(node => _standing.ContainsKey(node.Id)).Select(node => _standing[node.Id].Order)];
 
     /// <summary>
-    ///     The candle closed: the minutes up to its close are walked with the orders that stood, then the graph is computed
-    ///     at the close and the orders of its nodes are taken. Candles go in the order of their close.
+    ///     The candle closed: the minutes up to its close are walked with the orders that stood, a time that ran out at the
+    ///     close closes its cycle, then the graph is computed at the close and the orders of its nodes are taken. Candles go
+    ///     in the order of their close.
     /// </summary>
     public void Step(ClosedCandle candle, FundingPayment? lastFunding)
     {
         Advance(candle.CloseTime);
+        Expire(candle.CloseTime);
         _run.Step(candle, lastFunding, State());
         _close = candle.CloseTime;
         if (_path.MinuteIndex(candle.CloseTime) < _from)
@@ -104,12 +115,13 @@ public sealed class PositionRun
     }
 
     /// <summary>
-    ///     The minutes before <paramref name="end" /> walked; a cycle still open is an estimate at the last close, and an
-    ///     entry order still waiting gave no cycle before the end.
+    ///     The minutes before <paramref name="end" /> walked; a cycle whose time ran out at the end is closed by it, a cycle
+    ///     still open is an estimate at the last close, and an entry order still waiting gave no cycle before the end.
     /// </summary>
     public PositionResult Finish(DateTimeOffset end)
     {
         Advance(end);
+        Expire(end);
         if (_cycle is { } open)
         {
             _cycles[^1] = open.Estimate(end, _lastClose);
@@ -128,6 +140,14 @@ public sealed class PositionRun
     private void Minute(long minute)
     {
         DateTimeOffset time = _path.Start + TimeSpan.FromMinutes(minute);
+
+        // The time is looked at before the hole (spec strategy-position «Срок у края истории»). The orders of the graph
+        // computed at this moment take part from this minute, as those of a close.
+        if (Expire(time))
+        {
+            Again(time, minute);
+        }
+
         bool covered = minute >= 0 && minute < _path.Minutes && _path.Covered((int)minute);
         if (!covered)
         {
@@ -147,13 +167,6 @@ public sealed class PositionRun
             {
                 Again(time, minute + 1);
             }
-        }
-
-        if (_cycle is { Until: { } until } cycle && time >= until)
-        {
-            double fill = _lastClose * (1 - Sign(cycle) * _costs.Slippage);
-            Close(cycle, until, _lastClose, fill, CycleExit.Time, node: null);
-            Again(time, minute + 1);
         }
 
         double open = _path.Open(index);
@@ -298,9 +311,17 @@ public sealed class PositionRun
                 return;
             }
 
+            // The time runs from the moment of an order of enter and from the fill of the other orders (spec
+            // strategy-position «Стоп, цель и срок при нескольких входах»).
+            DateTimeOffset? until = held.Exits.After is { } after ? (held.Kind == OrderKind.Enter ? order.Placed : time) + after : null;
+            if (until > _end)
+            {
+                _orders.Add(Outcome(held.Kind, time, order.Node, order.Side, OrderResult.Excluded, OrderExclusion.Period, null, null, null));
+                return;
+            }
+
             double amount = order.SizeInQuantity ? order.Size * fill : order.Size;
             EntrySide side = order.Side == FillSide.Buy ? EntrySide.Long : EntrySide.Short;
-            DateTimeOffset? until = held.Exits.After is { } after ? order.Placed + after : null;
             _cycle = CycleRun.Open(_path, _costs, side, time, raw, fill, amount, order.Node, held.Exits.Stop, held.Exits.Target, until, maker: held.Kind == OrderKind.Limit);
             _cycle.Ambiguous = ambiguous;
             _cycles.Add(null);
@@ -343,6 +364,30 @@ public sealed class PositionRun
         cycle.Close(time, raw, fill, reason, node);
         Finished(cycle);
         CancelAll();
+    }
+
+    // What ran out by now. An order of enter that met no minute with trades within its time gives no trade, as the trade
+    // of a plan (spec trade-plan-outcome). The time of the cycle closes it at the close of the last minute with trades,
+    // at the moment the time ran out, and takes off the other orders; true when the cycle closed.
+    private bool Expire(DateTimeOffset now)
+    {
+        if (_standing.Count > 0)
+        {
+            foreach (Held held in _standing.Values.Where(held => held.Kind == OrderKind.Enter && held.Exits.After is { } after && held.Order.Placed + after <= now).ToList())
+            {
+                _standing.Remove(held.Order.Node);
+                _orders.Add(Outcome(held.Kind, held.Order.Placed, held.Order.Node, held.Order.Side, OrderResult.Excluded, OrderExclusion.NoTrade, null, null, null));
+            }
+        }
+
+        if (_cycle is not { Until: { } until } cycle || until > now)
+        {
+            return false;
+        }
+
+        double fill = _lastClose * (1 - Sign(cycle) * _costs.Slippage);
+        Close(cycle, until, _lastClose, fill, CycleExit.Time, node: null);
+        return true;
     }
 
     private void Finished(CycleRun cycle)
@@ -404,7 +449,12 @@ public sealed class PositionRun
                     _entered[node.Id] = _close;
 
                     decimal? size = _run.Read(node.Size!.Value).Number;
-                    if (size is not > 0 || !exits.Valid)
+                    if (exits.After is { } after && moment + after > _end)
+                    {
+                        // The cycle would end after the end of the history (spec strategy-preview «Только разведка»).
+                        _orders.Add(Outcome(node.Kind, moment, node.Id, node.Side, OrderResult.Excluded, OrderExclusion.Period, null, null, null));
+                    }
+                    else if (size is not > 0 || !exits.Valid)
                     {
                         _orders.Add(Outcome(node.Kind, moment, node.Id, node.Side, OrderResult.Excluded, OrderExclusion.Plan, null, null, null));
                     }

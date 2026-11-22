@@ -34,17 +34,18 @@ internal static class PositionRuns
 
     /// <summary>
     ///     The strategy on the path, the candles closing at 12:00 and every hour after it up to <paramref name="hours" />,
-    ///     finished at the end of the last hour.
+    ///     finished at the end of the last hour, which is the end of the computed history.
     /// </summary>
     public static PositionResult Run(string json, MinutePath path, int hours, TradeCosts? costs = null, Func<int, decimal>? close = null)
     {
-        var run = new PositionRun(Strategy(json), path, costs ?? Free, Paths.Start);
+        DateTimeOffset end = Paths.Start + TimeSpan.FromHours(hours + 1);
+        var run = new PositionRun(Strategy(json), path, costs ?? Free, Paths.Start, end);
         for (int hour = 0; hour <= hours; hour++)
         {
             run.Step(Hour(hour, close?.Invoke(hour) ?? 100), lastFunding: null);
         }
 
-        return run.Finish(Paths.Start + TimeSpan.FromHours(hours + 1));
+        return run.Finish(end);
     }
 
     /// <summary>

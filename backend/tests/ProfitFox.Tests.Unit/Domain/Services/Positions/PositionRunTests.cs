@@ -429,6 +429,122 @@ public sealed class PositionRunTests
         Assert.That(result.Cycles[1].Status, Is.EqualTo(TradeStatus.Ok));
     }
 
+    [Test]
+    public void The_time_closes_the_cycle_before_the_graph_of_the_close_it_ran_out_at()
+    {
+        // Spec strategy-position «Одна позиция на пару», «Вход в момент закрытия у стратегии с заявками»: events at 13:00 and
+        // 17:00, the time is 4h.
+        PositionResult result = Run(Graphs.Raised(SignalOnTheSecondCandle("long", "4h")), new Paths().Flat(100, 10 * 60).Build(withFunding: false), hours: 9, close: TwoEvents);
+
+        Assert.That(result.Orders.Select(order => (order.Moment, order.Result)), Is.EqualTo(new[] { (Paths.At(60), OrderResult.Filled), (Paths.At(5 * 60), OrderResult.Filled) }),
+            "the order of 17:00 is not skipped: the cycle of 13:00 is closed by then");
+        Assert.That(result.Cycles.Select(cycle => (cycle.Fills[0].Moment, cycle.Fills[^1].Moment, cycle.ExitReason)), Is.EqualTo(new[]
+        {
+            (Paths.At(60), Paths.At(5 * 60), CycleExit.Time), (Paths.At(5 * 60), Paths.At(9 * 60), CycleExit.Time)
+        }));
+    }
+
+    [Test]
+    public void A_time_that_runs_out_at_the_end_of_the_history_closes_the_cycle()
+    {
+        // Spec strategy-position «Срок у края истории», «Срок кончается в конце истории».
+        PositionResult result = Run(TimedEntry("4h"), new Paths().Flat(100, 3 * 60).Flat(101, 60).Build(withFunding: false), hours: 3);
+
+        CycleOutcome cycle = result.Cycles.Single();
+        Assert.That((cycle.Open, cycle.ExitReason, cycle.Fills[^1].Moment, cycle.Fills[^1].Price), Is.EqualTo((false, CycleExit.Time, Paths.At(4 * 60), 101.0)));
+    }
+
+    [Test]
+    public void A_time_that_runs_out_where_a_hole_starts_closes_the_cycle()
+    {
+        // Spec strategy-position «Срок у края истории», «Дыра начинается в момент срока».
+        Paths paths = new Paths().Flat(100, 4 * 60);
+        for (int minute = 0; minute < 60; minute++)
+        {
+            paths.Unknown();
+        }
+
+        PositionResult result = Run(TimedEntry("4h"), paths.Flat(100, 60).Build(withFunding: false), hours: 5);
+
+        CycleOutcome cycle = result.Cycles[0];
+        Assert.That((cycle.Status, cycle.ExitReason, cycle.Fills[^1].Moment), Is.EqualTo((TradeStatus.Ok, CycleExit.Time, Paths.At(4 * 60))));
+    }
+
+    [Test]
+    public void A_limit_order_whose_cycle_would_end_after_the_end_of_the_history_gives_no_cycle()
+    {
+        // Spec strategy-preview «Только разведка», «Срок за концом разведки у стратегии с заявками»: the time is a day, the
+        // price is reached two hours before the end.
+        string json = WithPosition(
+            """
+            { "id": "buy", "kind": "limit-order", "settings": { "side": "buy", "sizeIn": "amount" }, "inputs": { "when": true, "price": 99, "size": 100 } },
+            { "id": "close-after", "kind": "close-after", "inputs": { "after": "1d" } }
+            """,
+            $$"""{{Into("buy")}}, { "from": "position.position", "to": "close-after.position" }, {{Into("close-after")}}""");
+
+        PositionResult result = Run(json, new Paths().Flat(100, 24 * 60).Minute(99.5, 99.6, 98.9, 99.2).Flat(99.2, 2 * 60 - 1).Build(withFunding: false), hours: 25);
+
+        Assert.That(result.Cycles, Is.Empty);
+        Assert.That(result.Orders.Single(), Is.EqualTo(new OrderOutcome(Paths.At(24 * 60), "buy", OrderSide.Buy, OrderResult.Excluded, OrderExclusion.Period, null, null, null)));
+    }
+
+    [Test]
+    public void An_entry_of_a_signal_whose_time_ends_after_the_end_of_the_history_gives_no_cycle()
+    {
+        PositionResult result = Run(Graphs.Raised(SignalOnTheSecondCandle("long", "4h")), new Paths().Flat(100, 4 * 60).Build(withFunding: false), hours: 3, close: Rising);
+
+        Assert.That(result.Cycles, Is.Empty);
+        Assert.That(result.Orders.Single(), Is.EqualTo(new OrderOutcome(Paths.At(60), "enter", OrderSide.Long, OrderResult.Excluded, OrderExclusion.Period, null, null, null)));
+    }
+
+    [Test]
+    public void The_time_of_a_cycle_a_limit_order_opened_runs_from_its_fill()
+    {
+        // Spec strategy-position «Стоп, цель и срок при нескольких входах», «Срок лимитного входа»: placed at 12:00 of the
+        // first day, filled at 15:00 of the third, closed at 15:00 of the fourth. Funding is paid at 18:00 of the second day
+        // (before the entry), at 00:00 of the fourth (inside the cycle) and after its exit.
+        string json = WithPosition(
+            """
+            { "id": "closed", "kind": "not" },
+            { "id": "buy", "kind": "limit-order", "settings": { "side": "buy", "sizeIn": "amount" }, "inputs": { "price": 99, "size": 100 } },
+            { "id": "close-after", "kind": "close-after", "inputs": { "after": "1d" } }
+            """,
+            $$"""
+              { "from": "position.open", "to": "closed.value" }, { "from": "closed.result", "to": "buy.when" }, {{Into("buy")}},
+              { "from": "position.position", "to": "close-after.position" }, {{Into("close-after")}}
+              """);
+        MinutePath path = new Paths().Flat(100, 51 * 60).Minute(99.5, 99.6, 98.9, 99.2).Flat(99.2, 25 * 60 - 1)
+            .Payment(30 * 60, 0.0001).Payment(60 * 60, 0.0003).Payment(75 * 60 + 30, 0.0005).Build();
+        var costs = new TradeCosts(TakerFee: 0, Slippage: 0, Funding: true, MakerFee: 0);
+
+        PositionResult result = Run(json, path, hours: 75, costs);
+
+        CycleOutcome cycle = result.Cycles[0];
+        Assert.That(cycle.Fills.Select(fill => (fill.Moment, fill.Action)), Is.EqualTo(new[] { (Paths.At(51 * 60), FillAction.Entry), (Paths.At(75 * 60), FillAction.Exit) }),
+            "the exit is a day after the fill, never before it");
+        Assert.That(cycle.ExitReason, Is.EqualTo(CycleExit.Time));
+        Assert.That(cycle.Funding, Is.EqualTo(-0.0003 * 99.2 / 99).Within(1e-15), "the long pays the one payment between its entry and its exit");
+    }
+
+    [Test]
+    public void An_entry_of_a_signal_that_met_no_minute_with_trades_within_its_time_gives_no_trade()
+    {
+        // Spec strategy-position «Стоп, цель и срок при нескольких входах», «Вход не исполнился за срок»: the order of 13:00
+        // with the time 4h, no trades before 17:00.
+        PositionResult result = Run(Graphs.Raised(SignalOnTheSecondCandle("long", "4h")), new Paths().Flat(100, 60).Quiet(4 * 60).Flat(100, 5 * 60).Build(withFunding: false), hours: 9, close: Rising);
+
+        Assert.That(result.Cycles, Is.Empty);
+        Assert.That(result.Orders.Single(), Is.EqualTo(new OrderOutcome(Paths.At(60), "enter", OrderSide.Long, OrderResult.Excluded, OrderExclusion.NoTrade, null, null, null)));
+    }
+
+    // Buys 100 USDT by the market while there is no position; the cycle closes by its time.
+    private static string TimedEntry(string after)
+    {
+        return WithPosition(
+            $$"""{{EntryNodes}}, { "id": "close-after", "kind": "close-after", "inputs": { "after": "{{after}}" } }""",
+            $$"""{{EntryWires}}, { "from": "position.position", "to": "close-after.position" }, {{Into("close-after")}}""");
+    }
+
     // close > 100 for the first time: the closes 100, 101 give the event at 13:00; the entry and its close-after.
     private static string SignalOnTheSecondCandle(string side, string after)
     {
@@ -452,6 +568,12 @@ public sealed class PositionRunTests
     private static decimal Rising(int hour)
     {
         return 100 + hour;
+    }
+
+    // Above 100 at 13:00 and at 17:00 only: two events of the signal.
+    private static decimal TwoEvents(int hour)
+    {
+        return hour is 1 or 5 ? 101 : 100;
     }
 
     private static string LimitBuy(string inputs, string wires, string nodes = "", string nodeWires = "")

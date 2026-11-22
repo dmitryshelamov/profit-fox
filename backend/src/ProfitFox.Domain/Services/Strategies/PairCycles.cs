@@ -41,7 +41,7 @@ public static class PairCycles
         DateTimeOffset end,
         TradeCosts costs)
     {
-        var run = new PositionRun(strategy, path, costs, from);
+        var run = new PositionRun(strategy, path, costs, from, end);
         foreach ((ClosedCandle candle, FundingPayment? lastFunding) in PairCandles.Closed(timeframe, candles, funding))
         {
             if (candle.CloseTime > end)
