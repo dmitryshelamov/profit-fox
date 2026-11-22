@@ -127,7 +127,7 @@
 
 `buttonClass` и `fieldClass` из `graph-editor/ui/Card.tsx` удаляются, их места переходят на `Button` и поля.
 `RunStatusBadge` берёт слова из `pages/runs/labels.ts`; тона: `passed` → `ok`, `insufficient_data` → `warn`, `failed` →
-`err`, `running` → `run`, остальное → `neutral`, ждущий → `muted`.
+`err`, `running` → `run`, остальное, и ждущий тоже, → `neutral` (spec `bench-ui` «Цвет статуса прогона»).
 
 `<dialog>` в jsdom не умеет `showModal()`: в `src/test/setup.ts` добавляется подмена `showModal` и `close`, которая
 ставит и снимает атрибут `open`.
