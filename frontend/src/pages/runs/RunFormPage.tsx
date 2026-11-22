@@ -30,6 +30,25 @@ export function todayUtc(now: Date = new Date()): string {
   return now.toISOString().slice(0, 10);
 }
 
+/**
+ * A fee as its field writes it, read as a number with a comma or a point; `null` for an empty field and `NaN` for one
+ * that is not a number (task 12.2): neither goes to the server.
+ */
+export function feeOf(text: string): number | null {
+  const trimmed = text.trim().replace(',', '.');
+  return trimmed === '' ? null : Number(trimmed);
+}
+
+/** Why a fee of the form keeps the run back, or `null` when it is a number. */
+function feeReason(text: string, whose: string): string | null {
+  const fee = feeOf(text);
+  if (fee === null) {
+    return `укажите комиссию ${whose}`;
+  }
+
+  return Number.isFinite(fee) ? null : `комиссия ${whose} — не число`;
+}
+
 /** A value of a parameter of the graph as its field writes it. */
 function written(value: unknown): string {
   return typeof value === 'string' ? value : JSON.stringify(value);
@@ -121,7 +140,7 @@ function RunForm({ strategy }: { readonly strategy: StrategyResponse }) {
         ? 'добавьте хотя бы одну пару'
         : sets > maxSets
           ? `наборов больше ${maxSets}`
-          : null;
+          : (feeReason(taker, 'тейкера') ?? feeReason(maker, 'мейкера'));
 
   const addPair = () => {
     const symbol = pair.trim().toUpperCase();
@@ -153,8 +172,8 @@ function RunForm({ strategy }: { readonly strategy: StrategyResponse }) {
         ...(start === '' ? {} : { start }),
         ...(end === '' ? {} : { end }),
         pairs: allPairs ? null : [...pairs],
-        takerFee: Number(taker),
-        makerFee: Number(maker),
+        takerFee: feeOf(taker)!,
+        makerFee: feeOf(maker)!,
       });
       if (!outcome.ok) {
         setErrors(outcome.errors);

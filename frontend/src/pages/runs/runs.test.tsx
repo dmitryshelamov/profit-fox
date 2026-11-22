@@ -633,6 +633,52 @@ describe('the form of a run', () => {
     expect(run).toBeEnabled();
   });
 
+  // Task 12.2: a fee written with a comma is read as with a point.
+  it('reads a fee written with a comma as with a point', async () => {
+    const requests = routes({
+      'GET /api/strategies/funding-short/versions/3': () => json(strategyVersion()),
+      'POST /api/backtests': () => json({ errors: [] }, 422),
+    });
+    renderApp('/strategies/funding-short/run?version=3');
+
+    const taker = await screen.findByRole('textbox', { name: 'Комиссия тейкера' });
+    await userEvent.clear(taker);
+    await userEvent.type(taker, '0,0006');
+    await userEvent.click(form().getByRole('button', { name: 'Поставить в очередь' }));
+
+    await waitFor(async () =>
+      expect(await bodiesOf(requests, 'POST', '/api/backtests')).toHaveLength(1),
+    );
+    const [body] = (await bodiesOf(requests, 'POST', '/api/backtests')) as Record<
+      string,
+      unknown
+    >[];
+    expect(body).toMatchObject({ takerFee: 0.0006, makerFee: 0.0002 });
+  });
+
+  // Task 12.2: an empty fee or one that is not a number does not go as 0 or null; it is a reason not to run.
+  it('is not run with an empty fee or a fee that is not a number', async () => {
+    const requests = routes({
+      'GET /api/strategies/funding-short/versions/3': () => json(strategyVersion()),
+      'POST /api/backtests': () => json({ errors: [] }, 422),
+    });
+    renderApp('/strategies/funding-short/run?version=3');
+
+    const maker = await screen.findByRole('textbox', { name: 'Комиссия мейкера' });
+    const run = form().getByRole('button', { name: 'Поставить в очередь' });
+    await userEvent.clear(maker);
+
+    expect(run).toBeDisabled();
+    expect(run).toHaveAttribute('title', 'укажите комиссию мейкера');
+
+    await userEvent.type(maker, 'abc');
+
+    expect(run).toBeDisabled();
+    expect(run).toHaveAttribute('title', 'комиссия мейкера — не число');
+    await userEvent.click(run);
+    expect(await bodiesOf(requests, 'POST', '/api/backtests')).toHaveLength(0);
+  });
+
   // Scenario «Отказ остаётся в форме».
   it('keeps a refusal and the values in the form', async () => {
     routes({
