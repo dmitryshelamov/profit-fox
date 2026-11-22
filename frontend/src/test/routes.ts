@@ -1,15 +1,5 @@
 import { type FakeRoute, json } from './fakeApi';
-import { catalog, h0001, h0001Graph } from './fixtures';
-
-/** The six entries of `runs` of a hypothesis; `refused` maps «period/kind» to the reason of the refusal. */
-export function runsOf(refused: Record<string, string> = {}) {
-  return ['exploration', 'holdout', 'new-data'].flatMap((period) =>
-    ['verdict', 'parity'].map((kind) => {
-      const reason = refused[`${period}/${kind}`] ?? null;
-      return { period, kind, canRun: reason === null, reason, runId: null };
-    }),
-  );
-}
+import { catalog, h0001Graph } from './fixtures';
 
 /** A check like the server's for the cases the tests need: an input of `compare` without a wire or a value. */
 export function checkLikeServer(request: Request): Promise<Response> {
@@ -57,26 +47,9 @@ export function baseRoutes(): Record<string, FakeRoute> {
         { id: '1', symbol: 'BTCUSDT' },
         { id: '2', symbol: 'PRLUSDT' },
       ]),
-    'GET /api/hypotheses': () =>
-      json([
-        {
-          id: 'H0001',
-          version: 1,
-          name: 'funding-short-4h',
-          timeframe: '4h',
-          signal: h0001.signal,
-          error: null,
-          runs: runsOf({
-            'holdout/verdict': 'the holdout opens after «passed» in the exploration',
-            'holdout/parity': 'the holdout opens after «passed» in the exploration',
-            'new-data/verdict': 'the new data opens after «passed» in the holdout',
-            'new-data/parity': 'the new data opens after «passed» in the holdout',
-          }),
-        },
-      ]),
     'GET /api/signals': () => json([]),
     // The header asks for the queue on every page under it.
-    'GET /api/runs': () => json([]),
+    'GET /api/backtests': () => json([]),
     'POST /api/signals/validate': checkLikeServer,
   };
 }

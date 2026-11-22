@@ -324,17 +324,16 @@ export function PreviewPanel({
             Граф изменён, нажмите Показать
           </span>
         )}
-        <span className="ml-auto text-xs text-muted">
-          Разведка до 2026-05-15 включительно
-          {result && (
-            <>
-              {' · '}
-              {result.instrument} {result.timeframe}
-              {' · '}
-              {start === null ? 'истории нет' : `история пары с ${formatUtcDay(start)}`}
-            </>
-          )}
-        </span>
+        {/* The end of the history of the preview is the start of the current UTC day, as the API gives it. */}
+        {result && (
+          <span className="ml-auto text-xs text-muted">
+            История до {formatUtcDay(Number(result.periodEnd) - 1)} включительно
+            {' · '}
+            {result.instrument} {result.timeframe}
+            {' · '}
+            {start === null ? 'истории нет' : `история пары с ${formatUtcDay(start)}`}
+          </span>
+        )}
         {shownResult?.kind === 'strategy' && shownResult.preview.computedFrom != null && (
           <span className="w-full text-xs text-warn">
             Сделки посчитаны с {formatUtcDay(shownResult.preview.computedFrom)}: минутная история

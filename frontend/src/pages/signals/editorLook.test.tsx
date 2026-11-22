@@ -76,21 +76,6 @@ describe('the bars of the editor', () => {
     );
     expect(scale.getByText(/^\d+%$/)).toBeInTheDocument();
   });
-
-  it('keeps only the search and the fit for a hypothesis, which is read only', async () => {
-    fakeApi(baseRoutes());
-    renderApp('/hypotheses/H0001');
-    await findNode('Сравнить', 'high');
-
-    const tools = within(screen.getByRole('toolbar', { name: 'Инструменты' }));
-    expect(tools.getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(
-      ['Найти узел на холсте', 'Вписать в экран'],
-    );
-    const primary = [...document.querySelectorAll('[data-variant="primary"]')].filter(
-      (button) => !screen.getByRole('region', { name: 'Предпросмотр' }).contains(button),
-    );
-    expect(primary.map((button) => button.textContent)).toEqual(['Скопировать в сигнал']);
-  });
 });
 
 // Spec signal-constructor «Цвет группы узла и типа пина».

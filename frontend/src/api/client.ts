@@ -3,7 +3,6 @@ import createClient from 'openapi-fetch';
 import type { components, paths } from './generated/schema';
 
 export type Schemas = components['schemas'];
-export type Hypothesis = Schemas['HypothesisResponse'];
 export type Instrument = Schemas['InstrumentResponse'];
 export type Preview = Schemas['PreviewResponse'];
 export type PreviewCandle = Schemas['PreviewCandle'];
