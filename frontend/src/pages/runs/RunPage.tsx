@@ -4,6 +4,7 @@ import { type ReactNode, useState } from 'react';
 
 import { api, unwrap } from '@/api/client';
 import { getRun, type Run, type RunResult } from '@/api/runs';
+import { copyText } from '@/shared/copyText';
 import { Badge, type BadgeTone } from '@/shared/ui/Badge';
 import { buttonLook } from '@/shared/ui/Button';
 import { Page } from '@/shared/ui/Page';
@@ -309,7 +310,7 @@ function Fact({
   readonly copy?: string;
   readonly children: ReactNode;
 }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<boolean | null>(null);
   return (
     <div className="flex h-10 items-center justify-between gap-3 border-t border-line px-5">
       <dt className="shrink-0 text-muted">{name}</dt>
@@ -319,16 +320,20 @@ function Fact({
           <button
             type="button"
             aria-label={`Скопировать: ${name}`}
-            title={copied ? 'Скопировано' : 'Скопировать'}
-            className={`cursor-pointer ${copied ? 'text-ok' : 'text-faint hover:text-text'}`}
+            title={
+              copied === null ? 'Скопировать' : copied ? 'Скопировано' : 'Не удалось скопировать'
+            }
+            className={`cursor-pointer ${
+              copied === null ? 'text-faint hover:text-text' : copied ? 'text-ok' : 'text-err'
+            }`}
             onClick={() => {
-              void navigator.clipboard.writeText(copy).then(() => {
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1500);
+              void copyText(copy).then((done) => {
+                setCopied(done);
+                setTimeout(() => setCopied(null), 1500);
               });
             }}
           >
-            <span aria-hidden="true">{copied ? '✓' : '⧉'}</span>
+            <span aria-hidden="true">{copied === null ? '⧉' : copied ? '✓' : '✕'}</span>
           </button>
         )}
       </dd>

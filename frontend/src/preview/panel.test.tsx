@@ -304,4 +304,16 @@ describe('the mark of an event on the chart', () => {
     act(() => clickChart((october - 365 * 24 * 3_600_000) / 1000));
     expect(selected(table)).toEqual(['Событие 2025-10-05 08:00']);
   });
+
+  it('brings the row into view again by a second click on the same mark', async () => {
+    await fortyEvents();
+    act(() => clickChart((october - hour4) / 1000));
+    await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(1));
+
+    // The list was scrolled away from the selected row; the mark is clicked once more.
+    act(() => clickChart((october - hour4) / 1000));
+
+    await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(2));
+    expect(scrolled).toHaveBeenLastCalledWith('Событие 2025-10-05 08:00');
+  });
 });

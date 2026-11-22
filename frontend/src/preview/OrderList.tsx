@@ -12,11 +12,14 @@ import { outcomeOf } from './strategyPreview';
 export function OrderList({
   orders,
   selected,
+  markClicks,
   onPick,
 }: {
   readonly orders: readonly PreviewOrder[];
   /** The moment of the selected order. */
   readonly selected: number | null;
+  /** How many times a mark of the chart was clicked: each click brings the selected row into view. */
+  readonly markClicks: number;
   readonly onPick: (order: PreviewOrder) => void;
 }) {
   if (orders.length === 0) {
@@ -32,6 +35,7 @@ export function OrderList({
             key={order.moment}
             label={`Заявка ${formatUtc(order.moment)}`}
             selected={Number(order.moment) === selected}
+            markClicks={markClicks}
             dim={order.outcome !== 'opened'}
           >
             <td className="px-4">

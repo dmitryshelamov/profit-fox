@@ -24,16 +24,20 @@ export function ListHead({
 
 /**
  * A row of a list of the preview. The selected row is marked by `aria-selected` and by a bar of the accent color, and
- * comes into view when it becomes selected — by a click on its mark on the chart, when it may be far down the list.
+ * comes into view when it becomes selected — by a click on its mark on the chart, when it may be far down the list —
+ * and again with every further click on a mark (`markClicks`), after the list was scrolled away from it.
  */
 export function ListRow({
   label,
   selected,
+  markClicks,
   dim = false,
   children,
 }: {
   readonly label: string;
   readonly selected: boolean;
+  /** How many times a mark of the chart was clicked. */
+  readonly markClicks: number;
   readonly dim?: boolean;
   readonly children: ReactNode;
 }) {
@@ -42,7 +46,7 @@ export function ListRow({
     if (selected) {
       row.current?.scrollIntoView?.({ block: 'nearest' });
     }
-  }, [selected]);
+  }, [selected, markClicks]);
 
   return (
     <tr

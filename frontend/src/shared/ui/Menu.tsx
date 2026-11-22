@@ -9,7 +9,8 @@ export interface MenuItem {
 
 /**
  * The menu of a row: the button «⋯» and the list of its actions. Escape and a click outside close it without an
- * action, and the focus returns to the button; the arrows move between the items.
+ * action; the arrows move between the items. The focus returns to the button unless the click outside gave it to
+ * something else — a field, or the menu of another row.
  */
 export function Menu({
   label,
@@ -31,8 +32,13 @@ export function Menu({
     const away = (event: MouseEvent) => {
       if (!root.current?.contains(event.target as Node)) {
         setOpen(false);
-        // After the click has moved the focus to what was clicked.
-        setTimeout(() => button.current?.focus());
+        // After the click has moved the focus to what was clicked: it stays there, and only a focus left nowhere
+        // by the closed menu returns to the button.
+        setTimeout(() => {
+          if (document.activeElement === null || document.activeElement === document.body) {
+            button.current?.focus();
+          }
+        });
       }
     };
     document.addEventListener('click', away);

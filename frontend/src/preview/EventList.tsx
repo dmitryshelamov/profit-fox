@@ -13,6 +13,7 @@ export function EventList({
   candles,
   timeframe,
   selected,
+  markClicks,
   onPick,
 }: {
   readonly marks: readonly EventMark[];
@@ -20,6 +21,8 @@ export function EventList({
   readonly timeframe: string;
   /** The moment of the selected event. */
   readonly selected: number | null;
+  /** How many times a mark of the chart was clicked: each click brings the selected row into view. */
+  readonly markClicks: number;
   readonly onPick: (mark: EventMark) => void;
 }) {
   if (marks.length === 0) {
@@ -35,6 +38,7 @@ export function EventList({
             key={mark.moment}
             label={`Событие ${formatUtc(mark.moment)}`}
             selected={mark.moment === selected}
+            markClicks={markClicks}
           >
             <td className="px-4">
               <MomentButton moment={formatUtc(mark.moment)} onClick={() => onPick(mark)} />

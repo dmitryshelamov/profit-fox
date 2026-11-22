@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 
 import { fakeApi, json } from '@/test/fakeApi';
 import { h0001 } from '@/test/fixtures';
@@ -62,7 +62,10 @@ function hypotheses(lastRun?: object) {
 
 // Spec bench-run-queue «Последний прогон гипотезы».
 describe('the last run of a hypothesis in the table of hypotheses', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
 
   const row = async () => within(await screen.findByRole('rowgroup', { name: 'Гипотеза H0001' }));
 
@@ -86,7 +89,7 @@ describe('the last run of a hypothesis in the table of hypotheses', () => {
     renderApp('/signals');
 
     const hypothesis = await row();
-    expect(hypothesis.getByText('В очереди')).toHaveAttribute('data-tone', 'muted');
+    expect(hypothesis.getByText('В очереди')).toHaveAttribute('data-tone', 'neutral');
     expect(hypothesis.getByRole('link', { name: /В очереди/ })).toHaveAttribute('href', '/runs/r7');
   });
 
@@ -98,6 +101,40 @@ describe('the last run of a hypothesis in the table of hypotheses', () => {
     const hypothesis = await row();
     expect(hypothesis.getByText('не запускалась')).toBeInTheDocument();
     expect(hypothesis.queryByRole('link', { name: /прогон/i })).toBeNull();
+  });
+
+  // Spec bench-ui «Цвет статуса прогона», scenario «Один статус на двух страницах»: the row follows the queue.
+  it('shows the status of a run that ended while the page is open', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const running = { ...queued, state: 'running', startedAt: '2026-11-21T00:11:00Z' };
+    let ended = false;
+    fakeApi({
+      ...hypotheses(),
+      'GET /api/hypotheses': () =>
+        json([
+          {
+            id: 'H0001',
+            version: 1,
+            name: 'funding-short-4h',
+            timeframe: '4h',
+            signal: h0001.signal,
+            error: null,
+            runs: runsOf(),
+            lastRun: ended ? finished : running,
+          },
+        ]),
+      'GET /api/runs': () => json(ended ? [] : [running]),
+    });
+    renderApp('/signals');
+
+    const hypothesis = await row();
+    expect(hypothesis.getByText('Идёт')).toHaveAttribute('data-tone', 'run');
+
+    ended = true;
+    await act(() => vi.advanceTimersByTimeAsync(3100));
+
+    expect(await hypothesis.findByText('Данных мало')).toBeInTheDocument();
+    expect(hypothesis.queryByText('Идёт')).toBeNull();
   });
 
   it('lays the hypothesis out in the columns of the table', async () => {

@@ -13,11 +13,14 @@ import { exitOf, percent, tradesOf } from './strategyPreview';
 export function TradeList({
   orders,
   selected,
+  markClicks,
   onPick,
 }: {
   readonly orders: readonly PreviewOrder[];
   /** The moment of the order of the selected trade. */
   readonly selected: number | null;
+  /** How many times a mark of the chart was clicked: each click brings the selected row into view. */
+  readonly markClicks: number;
   readonly onPick: (order: PreviewOrder) => void;
 }) {
   const trades = tradesOf(orders);
@@ -36,6 +39,7 @@ export function TradeList({
               key={order.moment}
               label={`Сделка ${formatUtc(order.moment)}`}
               selected={Number(order.moment) === selected}
+              markClicks={markClicks}
             >
               <td className="px-4">
                 <MomentButton moment={formatUtc(order.moment)} onClick={() => onPick(order)} />

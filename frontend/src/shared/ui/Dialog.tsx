@@ -1,8 +1,9 @@
-import { type ReactNode, useEffect, useRef } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 
 /**
  * A modal dialog on `<dialog>` and `showModal()`: the page under it does not take the focus. Escape closes it through
- * `onClose` without an action; a dialog without `onClose` waits for one of its buttons.
+ * `onClose` without an action; a dialog without `onClose` waits for one of its buttons. When it leaves the screen the
+ * focus returns to what had it before the dialog opened, if that is still on the page.
  */
 export function Dialog({
   label,
@@ -19,12 +20,23 @@ export function Dialog({
   readonly children: ReactNode;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  // Read while rendering: by the time an effect runs, `autoFocus` has already moved the focus into the dialog.
+  const [opener] = useState(() => document.activeElement);
 
   useEffect(() => {
     const element = dialog.current;
     if (element === null) {
       return;
     }
+
+    // The dialog is taken off the page, not closed, so the browser does not return the focus by itself. Strict mode
+    // runs this cleanup with the dialog still on the page; then there is nothing to return.
+    const giveFocusBack = () => {
+      const nowhere = document.activeElement === null || document.activeElement === document.body;
+      if (!element.isConnected && nowhere && opener instanceof HTMLElement && opener.isConnected) {
+        opener.focus();
+      }
+    };
 
     if (!element.open) {
       element.showModal();
@@ -34,7 +46,9 @@ export function Dialog({
     if (!element.contains(document.activeElement)) {
       element.focus();
     }
-  }, []);
+
+    return giveFocusBack;
+  }, [opener]);
 
   return (
     <dialog

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
+import { useEffect, useRef } from 'react';
 
 import { api, type Hypothesis, unwrap } from '@/api/client';
 import { listSignals, type SignalListItem, written } from '@/api/signals';
@@ -14,6 +15,7 @@ import { Table, Td, Th } from '@/shared/ui/Table';
 import { VersionBadge } from '@/shared/ui/VersionBadge';
 
 import { kindLabel, periodLabel, shortUtc } from '../runs/labels';
+import { useActiveRuns } from '../runs/useActiveRuns';
 import { RunControls, RunNotes, useRunLaunch } from './RunControls';
 
 /**
@@ -28,6 +30,24 @@ export function SignalListPage() {
     queryKey: ['hypotheses'],
     queryFn: async () => unwrap(await api.GET('/api/hypotheses')),
   });
+
+  // The last run of a hypothesis follows the queue the header already asks for: a run that was queued, taken by a
+  // Worker or ended changes it, and the reasons a period is closed with it.
+  const active = useActiveRuns();
+  const queue = active.data?.map((run) => `${run.id}:${run.state}`).join(',');
+  const seenQueue = useRef<string | undefined>(undefined);
+  const refetchHypotheses = hypotheses.refetch;
+  useEffect(() => {
+    if (queue === undefined) {
+      return;
+    }
+
+    if (seenQueue.current !== undefined && seenQueue.current !== queue) {
+      void refetchHypotheses();
+    }
+
+    seenQueue.current = queue;
+  }, [queue, refetchHypotheses]);
 
   return (
     <Page>

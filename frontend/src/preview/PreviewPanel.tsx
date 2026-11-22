@@ -96,6 +96,7 @@ export function PreviewPanel({
   const [errors, setErrors] = useState<readonly RequestError[]>([]);
   const [focus, setFocus] = useState<ChartRange | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
+  const [markClicks, setMarkClicks] = useState(0);
   const [tab, setTab] = useState<ListTab>('trades');
 
   useEffect(() => writeStored(choiceKey, choice), [choiceKey, choice]);
@@ -194,6 +195,7 @@ export function PreviewPanel({
   /** A click on a mark of the chart selects its row; the row of a trade is on the tab «Сделки». */
   const pickMark = (mark: EventMark) => {
     setSelected(keyOf(mark));
+    setMarkClicks((clicks) => clicks + 1);
     if (mark.order !== undefined) {
       setTab('trades');
     }
@@ -357,6 +359,7 @@ export function PreviewPanel({
                   candles={shownResult.preview.candles}
                   timeframe={shownResult.preview.timeframe}
                   selected={selected}
+                  markClicks={markClicks}
                   onPick={(mark) => pick(mark.moment, shownResult.preview.timeframe)}
                 />
               </div>
@@ -378,12 +381,14 @@ export function PreviewPanel({
                     <TradeList
                       orders={orders}
                       selected={selected}
+                      markClicks={markClicks}
                       onPick={(order) => pick(Number(order.moment), shownResult.preview.timeframe)}
                     />
                   ) : (
                     <OrderList
                       orders={orders}
                       selected={selected}
+                      markClicks={markClicks}
                       onPick={(order) => pick(Number(order.moment), shownResult.preview.timeframe)}
                     />
                   )}

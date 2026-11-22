@@ -75,6 +75,41 @@ describe('Menu', () => {
     expect(onSelect).toHaveBeenCalledExactlyOnceWith('delete');
     expect(screen.queryByRole('menu')).toBeNull();
   });
+  it('leaves the focus where a click outside put it', async () => {
+    render(
+      <>
+        <Menu label="Действия price-drop" items={[{ label: 'Удалить', onSelect: vi.fn() }]} />
+        <input type="search" aria-label="Найти по имени" />
+      </>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Действия price-drop' }));
+
+    await userEvent.click(screen.getByRole('searchbox', { name: 'Найти по имени' }));
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(screen.getByRole('searchbox', { name: 'Найти по имени' })).toHaveFocus();
+  });
+
+  it('gives way to the menu of another row, which keeps its keys', async () => {
+    render(
+      <>
+        <Menu label="Действия price-drop" items={[{ label: 'Удалить', onSelect: vi.fn() }]} />
+        <Menu label="Действия funding-high" items={[{ label: 'Копировать', onSelect: vi.fn() }]} />
+      </>,
+    );
+    const other = screen.getByRole('button', { name: 'Действия funding-high' });
+    await userEvent.click(screen.getByRole('button', { name: 'Действия price-drop' }));
+
+    await userEvent.click(other);
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(screen.getAllByRole('menu')).toHaveLength(1);
+    expect(screen.getByRole('menuitem', { name: 'Копировать' })).toHaveFocus();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(other).toHaveFocus();
+  });
 });
 
 describe('Dialog', () => {
@@ -95,6 +130,35 @@ describe('Dialog', () => {
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onDelete).not.toHaveBeenCalled();
+  });
+
+  it('gives the focus back to what opened it', async () => {
+    function Host() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>
+            Открыть
+          </button>
+          {open && (
+            <Dialog label="Вопрос" onClose={() => setOpen(false)}>
+              <button type="button" autoFocus>
+                Да
+              </button>
+            </Dialog>
+          )}
+        </>
+      );
+    }
+    render(<Host />);
+    const opener = screen.getByRole('button', { name: 'Открыть' });
+    await userEvent.click(opener);
+    expect(screen.getByRole('dialog')).toContainElement(document.activeElement as HTMLElement);
+
+    await userEvent.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(opener).toHaveFocus();
   });
 });
 
@@ -191,7 +255,7 @@ describe('RunStatusBadge', () => {
     ['parity', 'Сверка', 'neutral'],
     ['cancelled', 'Отменён', 'neutral'],
     ['running', 'Идёт', 'run'],
-    ['queued', 'В очереди', 'muted'],
+    ['queued', 'В очереди', 'neutral'],
   ])('shows %s as «%s» in the tone %s', (status, word, tone) => {
     render(<RunStatusBadge status={status} />);
 

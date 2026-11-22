@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { fakeApi, json } from '@/test/fakeApi';
@@ -267,7 +267,7 @@ describe('the progress of a run that goes', () => {
 
     const next = within(await screen.findByRole('listitem', { name: 'Прогон H0001 r2' }));
     expect(next.queryByRole('progressbar')).toBeNull();
-    expect(next.getByText('В очереди')).toHaveAttribute('data-tone', 'muted');
+    expect(next.getByText('В очереди')).toHaveAttribute('data-tone', 'neutral');
     expect(next.getByText('ждёт, начнётся после текущего')).toBeInTheDocument();
     expect(next.getByText('разведка · сверка')).toBeInTheDocument();
     const last = within(screen.getByRole('listitem', { name: 'Прогон H0001 r3' }));
@@ -507,7 +507,11 @@ describe('the numbers of the verdict above the report', () => {
 
 // Spec bench-run-queue «Хэши прогона копируются».
 describe('the hashes of a run', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    // jsdom has no `execCommand`; a test that gave it one takes it away.
+    Reflect.deleteProperty(document, 'execCommand');
+  });
 
   // Scenario «Копирование хэша данных».
   it('shows a hash by its first and last 8 signs and copies the whole of it', async () => {
@@ -537,6 +541,46 @@ describe('the hashes of a run', () => {
 
     expect(copied).toEqual([dataHash, hash, id]);
     expect(copied[0]).toHaveLength(64);
+  });
+
+  // The bench is served over plain HTTP from an address of the network, where a page has no `navigator.clipboard`.
+  it('copies without the clipboard of a secure page, and says when it could not', async () => {
+    const dataHash = '8c33b68603417c3865a5914ad872af25a83b7ab3b505ab25f645b0d6c4bab201';
+    const id = '74dec6c8b1a04f6e9d2c3b4aa3a386d4';
+    fakeApi({
+      [`GET /api/runs/${id}`]: () =>
+        json({ ...base, id, state: 'finished', result: { ...line, dataHash } }),
+    });
+    vi.stubGlobal('navigator', { userAgent: navigator.userAgent });
+    const copied: string[] = [];
+    let works = true;
+    document.execCommand = vi.fn((command: string) => {
+      if (command === 'copy' && works) {
+        copied.push((document.activeElement as HTMLTextAreaElement).value);
+      }
+
+      return works;
+    });
+    renderApp(`/runs/${id}`);
+    const details = within(await screen.findByRole('region', { name: 'Детали' }));
+    const button = details.getByRole('button', { name: 'Скопировать: Хэш данных' });
+
+    fireEvent.click(button);
+
+    await waitFor(() => expect(button).toHaveAttribute('title', 'Скопировано'));
+    expect(copied).toEqual([dataHash]);
+    expect(document.querySelector('textarea')).toBeNull();
+
+    works = false;
+    fireEvent.click(details.getByRole('button', { name: 'Скопировать: Прогон' }));
+
+    await waitFor(() =>
+      expect(details.getByRole('button', { name: 'Скопировать: Прогон' })).toHaveAttribute(
+        'title',
+        'Не удалось скопировать',
+      ),
+    );
+    expect(copied).toEqual([dataHash]);
   });
 });
 

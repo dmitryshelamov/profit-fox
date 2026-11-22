@@ -183,7 +183,9 @@ export function GraphEditor({
             </FloatingBar>
           </div>
           <div className="flex min-h-0 flex-1 items-start justify-between gap-3">
-            <div className="flex max-h-full min-h-0 items-start gap-2">
+            {/* A height of its own, not only a limit: the palette's `max-h-full` counts from it, so a long palette
+                scrolls inside the canvas instead of running under the preview panel. */}
+            <div className="flex h-full min-h-0 items-start gap-2">
               <div
                 role="toolbar"
                 aria-label="Инструменты"

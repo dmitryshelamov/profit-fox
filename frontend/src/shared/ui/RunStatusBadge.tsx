@@ -8,7 +8,6 @@ const tones: Record<string, BadgeTone> = {
   insufficient_data: 'warn',
   failed: 'err',
   running: 'run',
-  queued: 'muted',
 };
 
 /** What the badge of a run shows: the status of its line in the ledger, or where it is in the queue. */
