@@ -199,7 +199,10 @@ internal static class GraphValidator
         return kind == NodeCatalog.Position && pin == NodeCatalog.Orders;
     }
 
-    private static void CheckParameters(GraphDefinition graph, List<GraphError> errors)
+    /// <summary>
+    ///     The checks of the parameters of a graph only: names, types, bounds and the values within them.
+    /// </summary>
+    public static void CheckParameters(GraphDefinition graph, List<GraphError> errors)
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
 

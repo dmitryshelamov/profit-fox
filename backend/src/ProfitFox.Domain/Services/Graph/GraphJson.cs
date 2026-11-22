@@ -294,20 +294,39 @@ internal static class GraphJson
     // A number, a boolean or a duration; the type it must have is checked against the pin or the parameter later.
     private static GraphValue? ReadValue(JsonElement element, string path, List<GraphError> errors)
     {
+        if (TryReadValue(element, out GraphValue value))
+        {
+            return value;
+        }
+
+        errors.Add(Invalid(path, "A value is a number, true, false or a duration such as 4h."));
+
+        return null;
+    }
+
+    /// <summary>
+    ///     A value as the JSON of a graph writes it: a number, <c>true</c> or <c>false</c>, or a duration such as
+    ///     <c>"4h"</c>. Whether its type is that of the pin or the parameter is checked later.
+    /// </summary>
+    public static bool TryReadValue(JsonElement element, out GraphValue value)
+    {
         switch (element.ValueKind)
         {
             case JsonValueKind.Number when element.TryGetDecimal(out decimal number):
-                return GraphValue.FromNumber(number);
+                value = GraphValue.FromNumber(number);
+                return true;
             case JsonValueKind.True:
-                return GraphValue.FromBoolean(true);
+                value = GraphValue.FromBoolean(true);
+                return true;
             case JsonValueKind.False:
-                return GraphValue.FromBoolean(false);
+                value = GraphValue.FromBoolean(false);
+                return true;
             case JsonValueKind.String when Durations.TryParse(element.GetString()!, out TimeSpan duration):
-                return GraphValue.FromDuration(duration);
+                value = GraphValue.FromDuration(duration);
+                return true;
             default:
-                errors.Add(Invalid(path, "A value is a number, true, false or a duration such as 4h."));
-
-                return null;
+                value = default;
+                return false;
         }
     }
 
