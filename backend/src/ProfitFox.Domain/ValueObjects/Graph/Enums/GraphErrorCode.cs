@@ -50,6 +50,10 @@ public enum GraphErrorCode
     StrategyPositionRepeated,
     StrategyOrderUnwired,
 
+    StrategyKindNodeNotAllowed,
+    StrategyKindNeedsTime,
+    StrategyKindReadsPosition,
+
     UnknownSignal,
     UnreadableSignal,
     SignalInSignal,

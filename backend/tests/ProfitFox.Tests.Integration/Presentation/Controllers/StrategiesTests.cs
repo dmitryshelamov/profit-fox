@@ -284,6 +284,92 @@ public sealed class StrategiesTests
         Assert.That(response.Errors.Single(error => error.Code == "StrategyPositionMissing").Reason, Does.Contain("узел позиции"));
     }
 
+    /// <summary>
+    ///     Change add-strategy-backtest, task 2.3: spec strategy-constructor «Вид в списке и в редакторе» through the API —
+    ///     the kind in the answer and in the list, and the graph checked by the rules of the kind.
+    /// </summary>
+    [Test]
+    public async Task The_kind_comes_in_the_strategy_and_in_the_list()
+    {
+        Guid signal = await CreateSignal("funding-high");
+        await Create("funding-short", Strategy(signal), kind: "idea");
+        await Create("ladder", Ladder(), kind: "bot");
+
+        StrategyResponse read = (await _api.Http.GetFromJsonAsync<StrategyResponse>("/api/strategies/funding-short", Json))!;
+        JsonArray list = JsonNode.Parse(await _api.Http.GetStringAsync("/api/strategies"))!.AsArray();
+
+        Assert.That(read.Kind, Is.EqualTo("idea"));
+        Assert.That(list.Select(item => ((string)item!["name"]!, (string?)item["kind"])), Is.EqualTo(new[] { ("funding-short", (string?)"idea"), ("ladder", "bot") }));
+    }
+
+    [Test]
+    public async Task A_category_of_ideas_saved_with_a_limit_order_is_refused_on_that_node()
+    {
+        Guid signal = await CreateSignal("funding-high");
+        await Create("funding-short", Strategy(signal), kind: "idea");
+        JsonObject graph = Strategy(signal);
+        graph["nodes"]!.AsArray().Add(JsonNode.Parse(
+            """{ "id": "take", "kind": "limit-order", "settings": { "side": "buy", "sizeIn": "amount" }, "inputs": { "when": true, "size": 100, "price": 90 } }"""));
+        graph["wires"]!.AsArray().Add(JsonNode.Parse("""{ "from": "take.order", "to": "position.orders" }"""));
+
+        HttpResponseMessage refused = await _api.Http.PutAsJsonAsync("/api/strategies/funding-short", new JsonObject { ["graph"] = graph, ["layout"] = new JsonObject() }, Json);
+
+        Assert.That(refused.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        ErrorResponse errors = (await refused.Content.ReadFromJsonAsync<ErrorResponse>(Json))!;
+        Assert.That(errors.Errors.Select(error => (error.Code, error.Node)), Is.EqualTo(new[] { ("StrategyKindNodeNotAllowed", (string?)"take") }));
+        Assert.That((await _api.Http.GetFromJsonAsync<StrategyResponse>("/api/strategies/funding-short", Json))!.Version, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task A_save_with_another_kind_and_an_unknown_kind_are_refused()
+    {
+        Guid signal = await CreateSignal("funding-high");
+        await Create("funding-short", Strategy(signal), kind: "idea");
+
+        HttpResponseMessage changed = await _api.Http.PutAsJsonAsync(
+            "/api/strategies/funding-short",
+            new JsonObject { ["graph"] = Strategy(signal, after: "8h"), ["layout"] = new JsonObject(), ["kind"] = "bot" },
+            Json);
+        HttpResponseMessage unknown = await Create("price-drop-long", Strategy(signal), kind: "plan");
+
+        Assert.That(changed.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        Assert.That((await changed.Content.ReadFromJsonAsync<ErrorResponse>(Json))!.Errors.Single().Field, Is.EqualTo("kind"));
+        Assert.That((await _api.Http.GetFromJsonAsync<StrategyResponse>("/api/strategies/funding-short", Json))!.Kind, Is.EqualTo("idea"));
+        Assert.That(unknown.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        Assert.That((await unknown.Content.ReadFromJsonAsync<ErrorResponse>(Json))!.Errors.Single().Field, Is.EqualTo("kind"));
+    }
+
+    [Test]
+    public async Task The_check_takes_the_kind()
+    {
+        JsonObject ladder = Ladder();
+
+        StrategyValidationResponse asIdea = await Check(ladder, "idea");
+        StrategyValidationResponse asBot = await Check(ladder, "bot");
+        StrategyValidationResponse unsaid = await Check(ladder, kind: null);
+
+        Assert.That(asIdea.Errors.Select(error => error.Code), Does.Contain("StrategyKindNodeNotAllowed").And.Contain("StrategyKindNeedsTime").And.Contain("StrategyKindReadsPosition"));
+        Assert.That(asBot.Errors, Is.Empty);
+        Assert.That(unsaid.Errors, Is.Empty, "without a kind the rules of a strategy for a bot");
+    }
+
+    private async Task<StrategyValidationResponse> Check(JsonObject graph, string? kind)
+    {
+        var body = new JsonObject { ["graph"] = graph.DeepClone() };
+        if (kind is not null)
+        {
+            body["kind"] = kind;
+        }
+
+        HttpResponseMessage response = await _api.Http.PostAsJsonAsync("/api/strategies/validate", body, Json);
+        return (await response.Content.ReadFromJsonAsync<StrategyValidationResponse>(Json))!;
+    }
+
+    private static JsonObject Ladder()
+    {
+        return JsonNode.Parse(File.ReadAllText(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "ladder.json")))!.AsObject();
+    }
+
     private static async Task<int> Versions()
     {
         await using NpgsqlConnection connection = await BenchDatabase.DataSource.OpenConnectionAsync();
@@ -303,8 +389,14 @@ public sealed class StrategiesTests
         return (await created.Content.ReadFromJsonAsync<SignalResponse>(Json))!.Id;
     }
 
-    private Task<HttpResponseMessage> Create(string name, JsonObject graph)
+    private Task<HttpResponseMessage> Create(string name, JsonObject graph, string? kind = null)
     {
-        return _api.Http.PostAsJsonAsync("/api/strategies", new JsonObject { ["name"] = name, ["graph"] = graph, ["layout"] = new JsonObject() }, Json);
+        var body = new JsonObject { ["name"] = name, ["graph"] = graph, ["layout"] = new JsonObject() };
+        if (kind is not null)
+        {
+            body["kind"] = kind;
+        }
+
+        return _api.Http.PostAsJsonAsync("/api/strategies", body, Json);
     }
 }

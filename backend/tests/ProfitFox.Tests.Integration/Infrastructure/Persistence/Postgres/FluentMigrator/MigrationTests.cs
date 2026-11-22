@@ -41,7 +41,7 @@ public sealed class MigrationTests
     }
 
     [Test]
-    public async Task After_the_start_the_strategy_tables_are_there_and_the_database_has_two_migrations()
+    public async Task After_the_start_the_strategy_tables_are_there_and_the_database_has_every_migration()
     {
         string connectionString = await BenchDatabase.NewDatabase();
 
@@ -49,7 +49,7 @@ public sealed class MigrationTests
 
         await using var connection = new NpgsqlConnection(connectionString);
         long[] versions = [.. await connection.QueryAsync<long>("SELECT \"Version\" FROM \"VersionInfo\" ORDER BY \"Version\"")];
-        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L }));
+        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L }));
         Assert.That(await TablesOf(connectionString), Is.SupersetOf(new[] { "strategies", "strategy_versions", "strategy_signals" }));
     }
 
@@ -65,6 +65,27 @@ public sealed class MigrationTests
         }
 
         Assert.That(await TablesOf(connectionString), Is.EqualTo(BenchTables));
+    }
+
+    [Test]
+    public async Task The_kind_of_a_strategy_is_a_column_that_may_be_empty_and_down_removes_only_it()
+    {
+        string connectionString = await BenchDatabase.NewDatabase();
+
+        await using (ServiceProvider services = BenchDatabase.Migrated(connectionString))
+        {
+            await using var connection = new NpgsqlConnection(connectionString);
+            string nullable = await connection.ExecuteScalarAsync<string>(
+                "SELECT is_nullable FROM information_schema.columns WHERE table_name = 'strategies' AND column_name = 'kind'") ?? "";
+            Assert.That(nullable, Is.EqualTo("YES"), "a strategy saved before kinds keeps an empty kind");
+
+            using IServiceScope scope = services.CreateScope();
+            scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateDown(202611210001);
+        }
+
+        await using var after = new NpgsqlConnection(connectionString);
+        Assert.That(await after.ExecuteScalarAsync<int>("SELECT count(*) FROM information_schema.columns WHERE table_name = 'strategies' AND column_name = 'kind'"), Is.Zero);
+        Assert.That(await TablesOf(connectionString), Is.EqualTo(Tables));
     }
 
     [Test]

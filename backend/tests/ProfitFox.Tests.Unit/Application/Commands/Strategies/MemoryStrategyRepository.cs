@@ -3,6 +3,7 @@ using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Strategies;
+using ProfitFox.Domain.ValueObjects.Strategies.Enums;
 
 namespace ProfitFox.Tests.Unit.Application.Commands.Strategies;
 
@@ -60,13 +61,13 @@ public sealed class MemoryStrategyRepository : IStrategyRepository
     public Task<StrategyDocument> ReplaceAsync(StrategyDocument strategy, CancellationToken cancellationToken)
     {
         StrategyDocument current = _strategies[strategy.Name];
-        var kept = StrategyDocument.Restore(current.Id, strategy.Name, strategy.Description, strategy.Graph, strategy.Layout, current.Version);
+        var kept = StrategyDocument.Restore(current.Id, strategy.Name, strategy.Description, strategy.Graph, strategy.Layout, current.Version, kind: strategy.Kind);
         _strategies[strategy.Name] = kept;
         _graphs[current.Id].Add(strategy.Graph);
         return Task.FromResult(kept);
     }
 
-    public Task RenameAsync(string name, string to, CancellationToken cancellationToken)
+    public Task RenameAsync(string name, string to, StrategyKind kind, CancellationToken cancellationToken)
     {
         StrategyDocument strategy = _strategies[name];
         strategy.Rename(to);

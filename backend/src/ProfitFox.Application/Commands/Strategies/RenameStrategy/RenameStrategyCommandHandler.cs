@@ -29,7 +29,7 @@ internal sealed class RenameStrategyCommandHandler(IStrategyRepository strategie
                 throw StrategyChecks.Taken(request.To);
             }
 
-            await strategies.RenameAsync(request.Name, request.To, cancellationToken);
+            await strategies.RenameAsync(request.Name, request.To, strategy.Kind, cancellationToken);
             strategy.Rename(request.To);
         }
 

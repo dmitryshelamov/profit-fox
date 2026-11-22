@@ -4,7 +4,7 @@ namespace ProfitFox.Presentation.Contracts.Strategies;
 ///     A strategy in the list (spec strategy-constructor «Список стратегий»): its name, description and latest version, or
 ///     why it does not read, the signals of its latest version and the kinds of the exit nodes of that version —
 ///     <c>stop-loss</c>, <c>take-profit</c>, <c>close-after</c> (spec strategy-constructor «Сигналы и выходы стратегии в
-///     списке»).
+///     списке»), and its kind, <c>bot</c> or <c>idea</c>; null for a strategy that does not read.
 /// </summary>
 public sealed record StrategyListItem(
     string Name,
@@ -12,4 +12,5 @@ public sealed record StrategyListItem(
     int Version,
     string? Error,
     IReadOnlyList<StrategySignalItem> Signals,
-    IReadOnlyList<string> Exits);
+    IReadOnlyList<string> Exits,
+    string? Kind = null);

@@ -9,6 +9,7 @@ using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Signals;
 using ProfitFox.Domain.ValueObjects.Strategies;
+using ProfitFox.Domain.ValueObjects.Strategies.Enums;
 using ProfitFox.Tests.Shared.Generators.Domain.Entities.Signals;
 using ProfitFox.Tests.Shared.Generators.Domain.Entities.Strategies;
 
@@ -91,7 +92,7 @@ public sealed class StrategyRepositoryTests
             () => _strategies.CreateAsync(StrategyDocumentGenerator.Generate(Guid.Empty, graph: StrategyDocumentGenerator.GenerateGraph(signal: null)), _none),
             Throws.InstanceOf<StrategyLibraryException>().With.Property(nameof(StrategyLibraryException.Problem)).EqualTo(StrategyProblem.NameTaken));
         Assert.That(
-            () => _strategies.RenameAsync("price-drop-long", "funding-short", _none),
+            () => _strategies.RenameAsync("price-drop-long", "funding-short", StrategyKind.Idea, _none),
             Throws.InstanceOf<StrategyLibraryException>().With.Property(nameof(StrategyLibraryException.Problem)).EqualTo(StrategyProblem.NameTaken));
         Assert.That(await Count("strategies"), Is.EqualTo(2));
     }
@@ -102,7 +103,7 @@ public sealed class StrategyRepositoryTests
         StrategyDocument strategy = await _strategies.CreateAsync(StrategyDocumentGenerator.Generate(Guid.Empty, graph: StrategyDocumentGenerator.GenerateGraph(signal: null)), _none);
         await _strategies.ReplaceAsync(StrategyDocumentGenerator.Generate(Guid.Empty, graph: StrategyDocumentGenerator.GenerateGraph(signal: null, after: "8h")), _none);
 
-        await _strategies.RenameAsync("funding-short", "funding-short-8h", _none);
+        await _strategies.RenameAsync("funding-short", "funding-short-8h", StrategyKind.Idea, _none);
 
         StrategyDocument renamed = Read(await _strategies.ReadAsync("funding-short-8h", _none));
         Assert.That((renamed.Id, renamed.Version), Is.EqualTo((strategy.Id, 2)));

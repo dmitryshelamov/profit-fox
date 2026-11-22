@@ -1,3 +1,5 @@
+using ProfitFox.Domain.ValueObjects.Strategies.Enums;
+
 namespace ProfitFox.Application.Contracts.Strategies;
 
 /// <summary>
@@ -8,6 +10,11 @@ namespace ProfitFox.Application.Contracts.Strategies;
 /// </summary>
 public sealed record StrategyEntryInternal(string Name, string? Description, int Version, string? Error)
 {
+    /// <summary>
+    ///     The kind of the strategy; null for one that does not read.
+    /// </summary>
+    public StrategyKind? Kind { get; init; }
+
     public IReadOnlyList<StrategySignalInternal> Signals { get; init; } = [];
 
     public IReadOnlyList<string> Exits { get; init; } = [];

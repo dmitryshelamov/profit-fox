@@ -16,4 +16,9 @@ internal sealed record StrategyDb
     public int Version { get; init; }
 
     public string Graph { get; init; } = "{}";
+
+    /// <summary>
+    ///     <c>bot</c> or <c>idea</c>; null for a strategy saved before it had a kind.
+    /// </summary>
+    public string? Kind { get; init; }
 }

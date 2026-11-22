@@ -69,7 +69,8 @@ public sealed class StrategyCommandHandlerTests
         StrategyLibraryException error = Assert.ThrowsAsync<StrategyLibraryException>(() => _strategies.Replace("funding-short", StrategyRequests.Element(graph), _none))!;
 
         Assert.That(error.Problem, Is.EqualTo(StrategyProblem.Invalid));
-        Assert.That(error.Errors.Single().Code, Is.EqualTo(GraphErrorCode.StrategyExitMissing));
+        // The strategy was created without a kind and took that of its graph, a category of ideas, whose rule of a time is broken too.
+        Assert.That(error.Errors.Select(item => item.Code), Is.EqualTo(new[] { GraphErrorCode.StrategyExitMissing, GraphErrorCode.StrategyKindNeedsTime }));
         Assert.That((await _strategies.Read("funding-short", _none)).Graph.Nodes, Has.Count.EqualTo(4), "the saved strategy stays");
     }
 

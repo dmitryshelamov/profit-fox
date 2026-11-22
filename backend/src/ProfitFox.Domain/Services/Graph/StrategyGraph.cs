@@ -2,6 +2,7 @@ using System.Text.Json;
 
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
+using ProfitFox.Domain.ValueObjects.Strategies.Enums;
 
 namespace ProfitFox.Domain.Services.Graph;
 
@@ -81,6 +82,20 @@ public static class StrategyGraph
     /// </summary>
     public static ReadResult<TradingStrategy> ReadStrategy(JsonElement element, SignalSet signals)
     {
+        return ReadStrategy(element, signals, StrategyKind.Bot);
+    }
+
+    public static ReadResult<TradingStrategy> ReadStrategy(string json, StrategyKind kind)
+    {
+        return Parse(json, element => ReadStrategy(element, SignalSet.Empty, kind));
+    }
+
+    /// <summary>
+    ///     A strategy of <paramref name="kind" />: the checks of a strategy and the rules of the kind (spec strategy-graph
+    ///     «Вид стратегии»).
+    /// </summary>
+    public static ReadResult<TradingStrategy> ReadStrategy(JsonElement element, SignalSet signals, StrategyKind kind)
+    {
         List<GraphError> errors = [];
         GraphDefinition? graph = GraphJson.Read(element, errors);
 
@@ -89,7 +104,7 @@ public static class StrategyGraph
             return ReadResult<TradingStrategy>.Invalid(errors);
         }
 
-        errors.AddRange(GraphValidator.ValidateStrategy(graph, signals));
+        errors.AddRange(GraphValidator.ValidateStrategy(graph, signals, kind));
 
         return errors.Count == 0 ? ReadResult<TradingStrategy>.Valid(Expand(graph, signals)) : ReadResult<TradingStrategy>.Invalid(errors);
     }

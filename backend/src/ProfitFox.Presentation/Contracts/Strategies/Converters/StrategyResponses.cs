@@ -4,6 +4,7 @@ using ProfitFox.Application.Contracts.Strategies;
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
+using ProfitFox.Domain.ValueObjects.Strategies;
 
 namespace ProfitFox.Presentation.Contracts.Strategies.Converters;
 
@@ -22,7 +23,8 @@ public static class StrategyResponses
             graph.RootElement.Clone(),
             strategy.Layout,
             [.. strategy.Signals.Select(Of)],
-            strategy.Raised);
+            strategy.Raised,
+            StrategyKinds.Name(strategy.Kind));
     }
 
     public static SignalUseResponse Of(SignalUseInternal use)

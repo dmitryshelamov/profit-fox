@@ -4,13 +4,14 @@ using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Signals;
+using ProfitFox.Domain.ValueObjects.Strategies.Enums;
 
 namespace ProfitFox.Tests.Shared.Generators.Domain.Entities.Strategies;
 
 /// <summary>
 ///     A saved strategy: <c>funding-short</c> — a signal node <c>s</c>, a short <c>enter</c> of 100 USDT on its event, a
 ///     <c>close-after</c> of 4h and the node <c>position</c> wired with them — with a position on the canvas for each
-///     node, version 1, unless the test gives what it checks.
+///     node, version 1, of the kind of its graph, unless the test gives what it checks.
 /// </summary>
 public static class StrategyDocumentGenerator
 {
@@ -21,7 +22,8 @@ public static class StrategyDocumentGenerator
         GraphDefinition? graph = null,
         IReadOnlyDictionary<string, NodePosition>? layout = null,
         int version = 1,
-        Guid? id = null)
+        Guid? id = null,
+        StrategyKind? kind = null)
     {
         GraphDefinition definition = graph ?? GenerateGraph(signal);
         return StrategyDocument.Restore(
@@ -30,7 +32,8 @@ public static class StrategyDocumentGenerator
             description,
             definition,
             layout ?? definition.Nodes.Select((node, index) => (node.Id, Position: new NodePosition(index * 100, Y: 0))).ToDictionary(StringComparer.Ordinal),
-            version);
+            version,
+            kind: kind);
     }
 
     /// <summary>
