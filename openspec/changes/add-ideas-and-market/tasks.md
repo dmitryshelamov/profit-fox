@@ -176,9 +176,9 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 ## 12. Фронтенд: общие части
 
-- [ ] 12.1 Шапка с пятью разделами, маршруты `/ideas`, `/market`, `/market/$symbol`. Проверить тестом маршрутов:
+- [x] 12.1 Шапка с пятью разделами, маршруты `/ideas`, `/market`, `/market/$symbol`. Проверить тестом маршрутов:
   сценарии spec `bench-ui` «Общая шапка».
-- [ ] 12.2 `PagedTable` с заголовком сортировки и `Pager` в `src/shared/ui`; выбор сортировки и размер страницы в
+- [x] 12.2 `PagedTable` с заголовком сортировки и `Pager` в `src/shared/ui`; выбор сортировки и размер страницы в
   `localStorage`, страница в адресе. Проверить тестами: все сценарии spec `bench-ui` «Сортировка по колонке» и «Страницы
   списка».
 
@@ -408,6 +408,11 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   `StrategyListItem` добавились поля `condition`, `label` и `ideas`. Приём `5m` и `15m` не меняет схемы: таймфрейм —
   строка.
 
+- **12.2, общие части списков.** `src/shared/ui/PagedTable.tsx` (`nextSort`, `ListSort`), `Pager.tsx` (`pageSizes`),
+  `useListSettings.ts` (сортировка и размер страницы в `localStorage` под ключами `profit-fox.list.<таблица>.sort` и
+  `.pageSize`; `pageSearch` — номер страницы в адресе как `?page=`, первая страница без него). Сортировки нет только у
+  колонки с `unsorted`. Пустой список отдаёт «0–0 из 0» и «1 из 1».
+
 ## База
 
 Снято в облачной сессии применения на `61b0584` (ветка `feat/add-ideas-and-market`), .NET SDK 10.0.115, Node 22,
@@ -469,6 +474,11 @@ OpenSpec CLI 2.1.0.
   интеграционные 259 (+10 `IdeasApiTests`), все зелёные. Тесты фронтенда: 273 в 18 файлах, все зелёные; `typecheck`,
   `lint`, `format:check`, `build` зелёные. SHA-256 `/openapi/v1.json` (API в `Development` на `http://localhost:5240`):
   `76e763255754163b76e0b61235535aec673e8c5c155f797a21b8bc1fb2589cd7`.
+
+- **Группа 12, общие части фронтенда.** Сборка `Release`: 0 предупреждений; тесты бэкенда unit 597, интеграционные 259,
+  все зелёные. Тесты фронтенда: 283 в 19 файлах (+10: `list.test.tsx` 7, `shell.test.tsx` +3 случая разделов), все
+  зелёные; `typecheck`, `lint`, `format:check`, `build` зелёные. Ожидание теста шапки «три раздела» стало «пять» по
+  изменённому сценарию «Текущий раздел».
 
 ## Замеры
 

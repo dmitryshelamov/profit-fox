@@ -8,6 +8,9 @@ import {
 } from '@tanstack/react-router';
 
 import { AppShell } from '@/app/AppShell';
+import { IdeasPage } from '@/pages/ideas/IdeasPage';
+import { MarketPage } from '@/pages/market/MarketPage';
+import { PairPage } from '@/pages/market/PairPage';
 import { RunFormPage } from '@/pages/runs/RunFormPage';
 import { RunPage } from '@/pages/runs/RunPage';
 import { RunsPage } from '@/pages/runs/RunsPage';
@@ -16,6 +19,7 @@ import { NewSignalPage, SavedSignalPage } from '@/pages/signals/SignalEditorPage
 import { SignalListPage } from '@/pages/signals/SignalListPage';
 import { NewStrategyPage, SavedStrategyPage } from '@/pages/strategies/StrategyEditorPage';
 import { StrategyListPage } from '@/pages/strategies/StrategyListPage';
+import { pageSearch } from '@/shared/ui/useListSettings';
 
 const rootRoute = createRootRoute({
   component: Outlet,
@@ -144,6 +148,40 @@ const setRoute = createRoute({
   },
 });
 
+/** «Идеи», under the header (change add-ideas-and-market). */
+const ideasRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/ideas',
+  component: IdeasPage,
+});
+
+/** «Рынок»: the page of the list stands in the address (spec bench-ui «Страницы списка»). */
+const marketRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/market',
+  validateSearch: pageSearch,
+  component: function MarketRoute() {
+    const { page } = marketRoute.useSearch();
+    const navigate = marketRoute.useNavigate();
+    return (
+      <MarketPage
+        page={page ?? 1}
+        onPage={(next) => void navigate({ search: next > 1 ? { page: next } : {} })}
+      />
+    );
+  },
+});
+
+/** The page of a pair, under the header with «Рынок» current. */
+const pairRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/market/$symbol',
+  component: function PairRoute() {
+    const { symbol } = pairRoute.useParams();
+    return <PairPage symbol={symbol} />;
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   shellRoute.addChildren([
@@ -154,6 +192,9 @@ const routeTree = rootRoute.addChildren([
     runsRoute,
     runRoute,
     setRoute,
+    ideasRoute,
+    marketRoute,
+    pairRoute,
   ]),
   newSignalRoute,
   signalRoute,
