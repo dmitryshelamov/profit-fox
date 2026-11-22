@@ -5,7 +5,6 @@ using ProfitFox.Application.Contracts.Preview;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.Services.Graph;
-using ProfitFox.Domain.Services.Runs;
 using ProfitFox.Domain.Services.Signals;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Hypotheses;
@@ -14,11 +13,11 @@ using ProfitFox.Domain.ValueObjects.MarketData;
 namespace ProfitFox.Application.Queries.Preview;
 
 /// <summary>
-///     The events are computed like those of a bench run. The request is checked whole before any history is read; history
-///     after the end of exploration is never read; nothing goes to the ledger or the reports. The history of the last pairs
+///     The events are computed like the orders of a backtest. The request is checked whole before any history is read;
+///     history after the end of exploration, the start of the current UTC day, is never read; nothing is written. The history of the last pairs
 ///     stays in memory, so a second preview of the same pair and timeframe does not read it again.
 /// </summary>
-internal sealed class PreviewSignalQueryHandler(IHistorySource source, IInstrumentCatalog catalog, PreviewHistoryCache cache)
+internal sealed class PreviewSignalQueryHandler(IHistorySource source, IInstrumentCatalog catalog, PreviewHistoryCache cache, TimeProvider time)
     : IRequestHandler<PreviewSignalQuery, PreviewOutcomeInternal>
 {
     /// <exception cref="HistoryUnavailableException">The market-data service did not give the pairs or the history.</exception>
@@ -62,7 +61,8 @@ internal sealed class PreviewSignalQueryHandler(IHistorySource source, IInstrume
             return new PreviewOutcomeInternal(Preview: null, errors);
         }
 
-        PreviewHistory history = await cache.Get(pair.Id, timeframe, () => PreviewHistory.ReadAsync(source, pair.Id, timeframe), cancellationToken);
+        DateTimeOffset end = PreviewPeriod.End(time.GetUtcNow());
+        PreviewHistory history = await cache.Get(pair.Id, timeframe, end, () => PreviewHistory.ReadAsync(source, pair.Id, timeframe, end), cancellationToken);
         HistoryRead<HistoryCandle> candles = history.Candles;
         HistoryRead<HistoryPayment> funding = history.Funding;
         IReadOnlyList<DateTimeOffset> events = PairEvents.Of(signal, timeframe, pair.Symbol, candles.Items, funding.Items);
@@ -73,7 +73,7 @@ internal sealed class PreviewSignalQueryHandler(IHistorySource source, IInstrume
             [.. candles.Items.Where(candle => candle.HasTrades)],
             candles.Coverage,
             events,
-            Periods.ExplorationEnd);
+            end);
         return new PreviewOutcomeInternal(preview, Errors: []);
     }
 }

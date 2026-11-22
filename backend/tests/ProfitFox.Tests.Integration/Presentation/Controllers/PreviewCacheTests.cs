@@ -35,7 +35,7 @@ public sealed class PreviewCacheTests
     public async Task A_second_preview_of_the_pair_reads_no_history_and_uses_the_new_graph()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using var api = new BenchTestApplication(market);
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
 
         PreviewResponse first = await Ok(await Preview(api, "BTCUSDT", "4h", Signal()));
         int candles = market.Data.CandleRequests.Count;
@@ -57,7 +57,7 @@ public sealed class PreviewCacheTests
     public async Task The_sixth_pair_and_timeframe_pushes_out_the_first()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using var api = new BenchTestApplication(market);
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
         (string Pair, string Timeframe)[] reads =
         [
             ("BTCUSDT", "4h"), ("ETHUSDT", "4h"), ("SOLUSDT", "4h"), ("BTCUSDT", "1d"), ("ETHUSDT", "1d"), ("SOLUSDT", "1d")
@@ -75,6 +75,28 @@ public sealed class PreviewCacheTests
         Assert.That(market.Data.CandleRequests, Has.Count.GreaterThan(before), "the first one was pushed out");
     }
 
+    /// <summary>
+    ///     Change add-strategy-backtest, task 8.2 (design.md, decision 8): the key of the memory has the end of exploration,
+    ///     so after midnight the history is read again.
+    /// </summary>
+    [Test]
+    public async Task Another_end_of_exploration_is_another_entry()
+    {
+        var cache = new PreviewHistoryCache();
+        int reads = 0;
+        Func<Task<PreviewHistory>> read = () =>
+        {
+            Interlocked.Increment(ref reads);
+            return Task.FromResult(Empty());
+        };
+
+        await cache.Get("btc", TimeSpan.FromHours(4), FixedTime.ExplorationEnd, read, CancellationToken.None);
+        await cache.Get("btc", TimeSpan.FromHours(4), FixedTime.ExplorationEnd, read, CancellationToken.None);
+        await cache.Get("btc", TimeSpan.FromHours(4), FixedTime.ExplorationEnd.AddDays(1), read, CancellationToken.None);
+
+        Assert.That(reads, Is.EqualTo(2));
+    }
+
     [Test]
     public async Task Requests_for_one_key_share_one_read()
     {
@@ -88,8 +110,8 @@ public sealed class PreviewCacheTests
             return Empty();
         };
 
-        Task<PreviewHistory> first = cache.Get("btc", TimeSpan.FromHours(4), read, CancellationToken.None);
-        Task<PreviewHistory> second = cache.Get("btc", TimeSpan.FromHours(4), read, CancellationToken.None);
+        Task<PreviewHistory> first = cache.Get("btc", TimeSpan.FromHours(4), FixedTime.ExplorationEnd, read, CancellationToken.None);
+        Task<PreviewHistory> second = cache.Get("btc", TimeSpan.FromHours(4), FixedTime.ExplorationEnd, read, CancellationToken.None);
         gate.SetResult();
 
         Assert.That(await second, Is.SameAs(await first));
@@ -102,12 +124,12 @@ public sealed class PreviewCacheTests
         var cache = new PreviewHistoryCache();
         int reads = 0;
 
-        Assert.ThrowsAsync<HttpRequestException>(() => cache.Get("btc", TimeSpan.FromHours(4), () =>
+        Assert.ThrowsAsync<HttpRequestException>(() => cache.Get("btc", TimeSpan.FromHours(4), FixedTime.ExplorationEnd, () =>
         {
             reads++;
             throw new HttpRequestException("down");
         }, CancellationToken.None));
-        PreviewHistory history = await cache.Get("btc", TimeSpan.FromHours(4), () =>
+        PreviewHistory history = await cache.Get("btc", TimeSpan.FromHours(4), FixedTime.ExplorationEnd, () =>
         {
             reads++;
             return Task.FromResult(Empty());
@@ -123,7 +145,7 @@ public sealed class PreviewCacheTests
         var cache = new PreviewHistoryCache();
         var gate = new TaskCompletionSource();
         using var giveUp = new CancellationTokenSource();
-        Task<PreviewHistory> first = cache.Get("btc", TimeSpan.FromHours(4), async () =>
+        Task<PreviewHistory> first = cache.Get("btc", TimeSpan.FromHours(4), FixedTime.ExplorationEnd, async () =>
         {
             await gate.Task;
             return Empty();
@@ -133,7 +155,7 @@ public sealed class PreviewCacheTests
         Assert.ThrowsAsync<TaskCanceledException>(() => first);
         gate.SetResult();
 
-        PreviewHistory history = await cache.Get("btc", TimeSpan.FromHours(4), () => throw new InvalidOperationException("read again"), CancellationToken.None);
+        PreviewHistory history = await cache.Get("btc", TimeSpan.FromHours(4), FixedTime.ExplorationEnd, () => throw new InvalidOperationException("read again"), CancellationToken.None);
         Assert.That(history, Is.Not.Null);
     }
 

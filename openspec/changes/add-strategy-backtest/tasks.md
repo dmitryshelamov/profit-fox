@@ -110,7 +110,7 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   `EngineVersion.Number = 3`, запись версии 3 в `EngineVersions.json`, записи 1 и 2 на месте. Проверить сценарии spec
   `strategy-backtest` «Номер версии движка» и «Эталонные стратегии версии движка»; тест падает, если в `PairPosition`
   пропускать заявку позже.
-- [ ] 8.2 `PreviewPeriod.End` вместо `Periods.ExplorationEnd` в обоих предпросмотрах, конец разведки в ключе
+- [x] 8.2 `PreviewPeriod.End` вместо `Periods.ExplorationEnd` в обоих предпросмотрах, конец разведки в ключе
   `PreviewHistoryCache`. Проверить тестами сценарии spec `signal-preview` «Только разведка» и spec `strategy-preview`
   «Только разведка» («Конец разведки сегодня»); прежние тесты предпросмотра задают время через `TimeProvider`.
 - [ ] 8.3 Удалить по списку design.md, решение 6: гипотезы, правила журнала и вердикта, прежний прогон, периоды,
@@ -219,6 +219,10 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   пар в `pairs_done` и `pairs_total`: продление аренды, которое пишет ход, могло не успеть после последней пары. Отказ
   сервиса данных пишется причиной «история недоступна: …». `GET /api/backtests/{id}/sets/{n}` отдаёт набор вместе с
   парами.
+
+- **8.2, конец разведки.** `PreviewPeriod.End(now)` живёт в Application (`Queries/Preview`) и отдаёт
+  `HistoryPeriod.Today(now)`; `now` — из `TimeProvider`. Прежние тесты предпросмотра идут с часами на `2026-05-16 09:00`
+  UTC (`FixedTime.Exploration` в интеграционных, `FakeTimeProvider` в unit), поэтому их ожидания прежние.
 
 ## База
 

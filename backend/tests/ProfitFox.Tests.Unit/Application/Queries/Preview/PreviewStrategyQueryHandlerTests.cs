@@ -1,11 +1,12 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
+using Microsoft.Extensions.Time.Testing;
+
 using ProfitFox.Application.Contracts.Preview;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.Queries.Preview;
 using ProfitFox.Domain.Entities.Signals;
-using ProfitFox.Domain.Services.Runs;
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.Services.Signals;
 using ProfitFox.Domain.ValueObjects.MarketData;
@@ -27,17 +28,22 @@ namespace ProfitFox.Tests.Unit.Application.Queries.Preview;
 public sealed class PreviewStrategyQueryHandlerTests
 {
     private static readonly Instrument Pair = new Instrument("instrument-1", "BTCUSDT");
+
+    // The end of exploration of the previews before change add-strategy-backtest; the clock of the tests is on that day.
+    private static readonly DateTimeOffset ExplorationEnd = new DateTimeOffset(2026, 5, 16, 0, 0, 0, TimeSpan.Zero);
     private readonly CancellationToken _none = CancellationToken.None;
     private FakeHistorySource _history = null!;
     private PreviewHistoryCache _cache = null!;
     private MemorySignalRepository _signals = null!;
     private SignalDocument _signal = null!;
+    private TimeProvider _time = null!;
 
     [SetUp]
     public async Task Create()
     {
         _history = new FakeHistorySource { Rate = time => time.Hour == 8 && time.DayOfYear % 5 == 0 ? "0.0006" : "0.0001" };
         _cache = new PreviewHistoryCache();
+        _time = new FakeTimeProvider(ExplorationEnd.AddHours(9));
         _signals = new MemorySignalRepository();
         _signal = await _signals.CreateAsync(SignalDocumentGenerator.Generate(), _none);
     }
@@ -51,8 +57,8 @@ public sealed class PreviewStrategyQueryHandlerTests
             StrategyGraph.ReadSignal(StrategyGraph.Write(_signal.Graph)).Value!,
             TimeSpan.FromHours(4),
             Pair.Symbol,
-            (await _history.ReadCandles(Pair.Id, TimeSpan.FromHours(4), Periods.DataStart, Periods.ExplorationEnd, _none)).Items,
-            (await _history.ReadFunding(Pair.Id, Periods.DataStart, Periods.ExplorationEnd, _none)).Items);
+            (await _history.ReadCandles(Pair.Id, TimeSpan.FromHours(4), HistoryPeriod.DataStart, ExplorationEnd, _none)).Items,
+            (await _history.ReadFunding(Pair.Id, HistoryPeriod.DataStart, ExplorationEnd, _none)).Items);
         Assert.That(events, Has.Count.GreaterThan(5));
         Assert.That(preview.Orders.Select(order => order.Moment), Is.EqualTo(events), "an order at every event of the signal");
         Assert.That(preview.Orders.Select(order => order.Side), Has.All.EqualTo(OrderSide.Short));
@@ -67,8 +73,8 @@ public sealed class PreviewStrategyQueryHandlerTests
         Assert.That(computed.Select(order => order.Result), Has.All.EqualTo(OrderResult.Opened));
         Assert.That(computed.Select(order => order.Trade!.ExitTime - order.Moment), Has.All.EqualTo((TimeSpan?)TimeSpan.FromHours(4)));
         Assert.That(preview.Candles, Is.Not.Empty);
-        Assert.That(preview.Candles[^1].OpenTime, Is.LessThan(Periods.ExplorationEnd));
-        Assert.That(preview.PeriodEnd, Is.EqualTo(Periods.ExplorationEnd));
+        Assert.That(preview.Candles[^1].OpenTime, Is.LessThan(ExplorationEnd));
+        Assert.That(preview.PeriodEnd, Is.EqualTo(ExplorationEnd));
     }
 
     [Test]
@@ -77,9 +83,26 @@ public sealed class PreviewStrategyQueryHandlerTests
         await Preview(StrategyRequests.Strategy(_signal.Id));
 
         Assert.That(_history.Reads.Count(read => read.Feed == "candles"), Is.GreaterThan(1), "the minutes of the weeks are read");
-        Assert.That(_history.Reads.Where(read => read.Feed == "candles").Select(read => read.To), Has.All.LessThanOrEqualTo(Periods.ExplorationEnd));
+        Assert.That(_history.Reads.Where(read => read.Feed == "candles").Select(read => read.To), Has.All.LessThanOrEqualTo(ExplorationEnd));
         // A payment exactly at the end belongs to the trades that end there, as in the preview of a signal and the runs.
-        Assert.That(_history.Reads.Where(read => read.Feed == "funding").Select(read => read.To), Has.All.LessThanOrEqualTo(Periods.ExplorationEnd.AddSeconds(1)));
+        Assert.That(_history.Reads.Where(read => read.Feed == "funding").Select(read => read.To), Has.All.LessThanOrEqualTo(ExplorationEnd.AddSeconds(1)));
+    }
+
+    /// <summary>
+    ///     Change add-strategy-backtest, task 8.2: spec strategy-preview «Только разведка» («Конец разведки сегодня»).
+    /// </summary>
+    [Test]
+    public async Task The_end_of_exploration_is_the_start_of_the_current_UTC_day()
+    {
+        var today = new DateTimeOffset(2026, 11, 22, 0, 0, 0, TimeSpan.Zero);
+        _time = new FakeTimeProvider(today.AddHours(15.5));
+
+        StrategyPreviewInternal preview = (await Preview(StrategyRequests.Strategy(_signal.Id))).Preview!;
+
+        Assert.That(preview.PeriodEnd, Is.EqualTo(today));
+        Assert.That(preview.Candles[^1].OpenTime + TimeSpan.FromHours(4), Is.EqualTo(today), "the last candle closes at the start of the day");
+        Assert.That(_history.Reads.Where(read => read.Feed == "candles").Select(read => read.To), Has.All.LessThanOrEqualTo(today));
+        Assert.That(_history.Reads.Where(read => read.Feed == "funding").Select(read => read.To), Has.All.LessThanOrEqualTo(today.AddSeconds(1)));
     }
 
     [Test]
@@ -110,7 +133,7 @@ public sealed class PreviewStrategyQueryHandlerTests
     [Test]
     public async Task A_wrong_timeframe_and_no_graph_come_in_one_answer()
     {
-        StrategyPreviewOutcomeInternal outcome = await new PreviewStrategyQueryHandler(_history, new Catalog(), _cache, _signals)
+        StrategyPreviewOutcomeInternal outcome = await new PreviewStrategyQueryHandler(_history, new Catalog(), _cache, _signals, _time)
             .Handle(new PreviewStrategyQuery(Pair.Symbol, "2h", Strategy: null), _none);
 
         Assert.That(outcome.Errors.Select(error => error.Field), Is.EquivalentTo(new[] { "timeframe", "strategy" }));
@@ -187,14 +210,14 @@ public sealed class PreviewStrategyQueryHandlerTests
     [Test]
     public async Task The_ladder_over_the_last_eight_weeks_of_exploration()
     {
-        DateTimeOffset window = Periods.ExplorationEnd - TimeSpan.FromDays(56);
+        DateTimeOffset window = ExplorationEnd - TimeSpan.FromDays(56);
         _history = new FakeHistorySource { Price = open => Ladder(open, window) };
 
         StrategyPreviewInternal preview = (await Preview(JsonNode.Parse(Domain.Services.Graph.Graphs.Ladder)!.AsObject())).Preview!;
 
         Assert.That(preview.ComputedFrom, Is.EqualTo(window));
         Assert.That(preview.Orders.Select(order => order.Moment), Has.All.GreaterThanOrEqualTo(window), "no order before the window");
-        Assert.That(_history.Reads.Where(read => read.Feed == "candles").Select(read => read.To), Has.All.LessThanOrEqualTo(Periods.ExplorationEnd));
+        Assert.That(_history.Reads.Where(read => read.Feed == "candles").Select(read => read.To), Has.All.LessThanOrEqualTo(ExplorationEnd));
         Assert.That(_history.Reads.Where(read => read.Feed == "candles" && read.To - read.From <= TimeSpan.FromDays(60)).Select(read => read.From), Has.All.EqualTo(window));
 
         CycleOutcome first = preview.Cycles[0];
@@ -219,7 +242,7 @@ public sealed class PreviewStrategyQueryHandlerTests
     [Test]
     public async Task The_fees_of_a_preview_are_those_of_Bybit_unless_the_request_gives_them()
     {
-        DateTimeOffset window = Periods.ExplorationEnd - TimeSpan.FromDays(56);
+        DateTimeOffset window = ExplorationEnd - TimeSpan.FromDays(56);
         _history = new FakeHistorySource { Price = open => Ladder(open, window) };
         JsonObject ladder = JsonNode.Parse(Domain.Services.Graph.Graphs.Ladder)!.AsObject();
 
@@ -249,12 +272,12 @@ public sealed class PreviewStrategyQueryHandlerTests
             return (99, 99.2, 98.5, 98.8);
         }
 
-        if (open >= window.AddHours(3) && open < Periods.ExplorationEnd - TimeSpan.FromDays(1))
+        if (open >= window.AddHours(3) && open < ExplorationEnd - TimeSpan.FromDays(1))
         {
             return (101, 101, 101, 101);
         }
 
-        if (open >= Periods.ExplorationEnd - TimeSpan.FromDays(1))
+        if (open >= ExplorationEnd - TimeSpan.FromDays(1))
         {
             return (100.5, 100.5, 100.5, 100.5);
         }
@@ -265,7 +288,7 @@ public sealed class PreviewStrategyQueryHandlerTests
     private Task<StrategyPreviewOutcomeInternal> Preview(JsonObject graph, string instrument = "BTCUSDT", double? takerFee = null, double? makerFee = null)
     {
         JsonElement element = StrategyRequests.Element(graph);
-        return new PreviewStrategyQueryHandler(_history, new Catalog(), _cache, _signals).Handle(new PreviewStrategyQuery(instrument, "4h", element, takerFee, makerFee), _none);
+        return new PreviewStrategyQueryHandler(_history, new Catalog(), _cache, _signals, _time).Handle(new PreviewStrategyQuery(instrument, "4h", element, takerFee, makerFee), _none);
     }
 
     private sealed class Catalog : IInstrumentCatalog

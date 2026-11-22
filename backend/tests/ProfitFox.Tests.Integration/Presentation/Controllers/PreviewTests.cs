@@ -13,7 +13,6 @@ using Npgsql;
 
 using ProfitFox.Application.Commands.Hypotheses.AddHypothesis;
 using ProfitFox.Application.Commands.Runs.ExecuteRun;
-using ProfitFox.Domain.Services.Runs;
 using ProfitFox.Domain.ValueObjects.Runs.Enums;
 using ProfitFox.Domain.ValueObjects.Trades.Enums;
 using ProfitFox.Presentation.Contracts.Errors;
@@ -52,7 +51,7 @@ public sealed class PreviewTests
     public async Task The_pairs_are_those_of_the_bench()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using var api = new BenchTestApplication(market);
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
 
         InstrumentResponse[]? pairs = await api.Http.GetFromJsonAsync<InstrumentResponse[]>("/api/instruments", Json);
 
@@ -74,7 +73,7 @@ public sealed class PreviewTests
                 new { Text = file.ToJsonString() });
         }
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using var api = new BenchTestApplication(market);
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
 
         HypothesisResponse[]? hypotheses = await api.Http.GetFromJsonAsync<HypothesisResponse[]>("/api/hypotheses", Json);
 
@@ -92,13 +91,13 @@ public sealed class PreviewTests
     public async Task The_preview_of_H0001_gives_the_events_of_a_bench_run()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using var api = new BenchTestApplication(market);
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
 
         PreviewResponse preview = await Ok(await Preview(api, "BTCUSDT", "4h", Signal()));
 
         Assert.That(preview.Candles, Has.Count.GreaterThan(100));
         Assert.That(preview.Coverage.First().From, Is.EqualTo(FakeMarketData.CoveredFrom.ToUnixTimeMilliseconds()));
-        Assert.That(preview.PeriodEnd, Is.EqualTo(Periods.ExplorationEnd.ToUnixTimeMilliseconds()));
+        Assert.That(preview.PeriodEnd, Is.EqualTo(FixedTime.ExplorationEnd.ToUnixTimeMilliseconds()));
         Assert.That(preview.Events, Has.Count.EqualTo(28), "every day of the four weeks at 08:00");
         ExecuteRunResult run = await RunParity(market);
         Assert.That(
@@ -112,7 +111,7 @@ public sealed class PreviewTests
         JsonObject signal = Signal();
         signal["parameters"]![0]!["value"] = 1;
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using var api = new BenchTestApplication(market);
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
 
         PreviewResponse preview = await Ok(await Preview(api, "ETHUSDT", "4h", signal));
 
@@ -125,11 +124,11 @@ public sealed class PreviewTests
     {
         FakeMarketData.CoveredUntil = null;
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using var api = new BenchTestApplication(market);
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
 
         PreviewResponse preview = await Ok(await Preview(api, "BTCUSDT", "4h", Signal()));
 
-        DateTimeOffset end = Periods.ExplorationEnd;
+        DateTimeOffset end = FixedTime.ExplorationEnd;
         Assert.That(DateTimeOffset.FromUnixTimeMilliseconds(preview.Candles[^1].OpenTime), Is.EqualTo(end.AddHours(-4)), "the last candle closes at the end");
         Assert.That(market.Data.CandleRequests, Has.All.Matches<ProfitFox.Infrastructure.Clients.MarketData.Protos.CandleHistoryRequest>(request => request.To.ToDateTimeOffset() <= end));
         Assert.That(
@@ -138,13 +137,34 @@ public sealed class PreviewTests
             "the payment exactly at the end is read, as by a run of exploration");
     }
 
+    /// <summary>
+    ///     Change add-strategy-backtest, task 8.2: spec signal-preview «Только разведка» («Свечи отложенного периода») — the end
+    ///     of exploration is the start of the current UTC day.
+    /// </summary>
+    [Test]
+    public async Task The_candles_of_the_current_day_are_not_in_the_preview_and_not_read()
+    {
+        FakeMarketData.CoveredUntil = null;
+        var today = new DateTimeOffset(2026, 11, 22, 0, 0, 0, TimeSpan.Zero);
+        await using MarketDataServer market = await MarketDataServer.Start();
+        await using var api = new BenchTestApplication(market, time: new FixedTime(today.AddHours(15.5)));
+
+        PreviewResponse preview = await Ok(await Preview(api, "BTCUSDT", "4h", Signal()));
+
+        Assert.That(preview.PeriodEnd, Is.EqualTo(today.ToUnixTimeMilliseconds()));
+        Assert.That(preview.Candles.Select(candle => DateTimeOffset.FromUnixTimeMilliseconds(candle.OpenTime) + TimeSpan.FromHours(4)), Has.All.LessThanOrEqualTo(today));
+        Assert.That(preview.Candles, Has.Count.GreaterThan(1500), "history up to the start of the day");
+        Assert.That(market.Data.CandleRequests.Select(request => request.To.ToDateTimeOffset()), Has.All.LessThanOrEqualTo(today));
+        Assert.That(market.Data.FundingRequests.Select(request => request.To.ToDateTimeOffset()), Has.All.LessThanOrEqualTo(today.AddSeconds(1)));
+    }
+
     [Test]
     public async Task A_wire_to_a_missing_node_is_refused_before_any_read()
     {
         JsonObject signal = Signal();
         signal["wires"]![0]!["to"] = "hgh.a";
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using var api = new BenchTestApplication(market);
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
 
         ErrorResponse refused = await BadRequest(await Preview(api, "BTCUSDT", "4h", signal));
 
@@ -157,7 +177,7 @@ public sealed class PreviewTests
     public async Task An_unknown_pair_and_timeframe_are_refused_before_any_read()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using var api = new BenchTestApplication(market);
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
 
         ErrorResponse refused = await BadRequest(await Preview(api, "NOSUCHUSDT", "2h", Signal()));
 
@@ -170,7 +190,7 @@ public sealed class PreviewTests
     public async Task The_preview_leaves_no_trace_in_the_bench()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using var api = new BenchTestApplication(market);
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
 
         await Ok(await Preview(api, "SOLUSDT", "4h", Signal()));
 
@@ -185,7 +205,7 @@ public sealed class PreviewTests
     public async Task The_trades_of_H0001_are_those_of_a_run()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using var api = new BenchTestApplication(market);
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
         Guid signal = await SaveSignal(api);
 
         StrategyPreviewResponse preview = await OkStrategy(await PreviewStrategy(api, "BTCUSDT", "4h", StrategiesTests.Strategy(signal)));
@@ -217,7 +237,7 @@ public sealed class PreviewTests
     public async Task The_journal_after_a_preview_of_a_strategy()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using var api = new BenchTestApplication(market);
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
         Guid signal = await SaveSignal(api);
         HttpResponseMessage saved = await api.Http.PostAsJsonAsync("/api/strategies", new JsonObject { ["name"] = "funding-short", ["graph"] = StrategiesTests.Strategy(signal), ["layout"] = new JsonObject() }, Json);
         Assert.That(saved.StatusCode, Is.EqualTo(HttpStatusCode.Created));
@@ -233,7 +253,7 @@ public sealed class PreviewTests
     public async Task A_strategy_without_close_after_on_an_unknown_pair_is_refused_before_any_read()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using var api = new BenchTestApplication(market);
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
         Guid signal = await SaveSignal(api);
         JsonObject graph = StrategiesTests.Strategy(signal);
         StrategiesTests.RemoveCloseAfter(graph);
@@ -255,19 +275,19 @@ public sealed class PreviewTests
     {
         FakeMarketData.CoveredUntil = null;
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using var api = new BenchTestApplication(market);
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
         JsonObject ladder = JsonNode.Parse(File.ReadAllText(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "ladder.json")))!.AsObject();
 
         StrategyPreviewResponse preview = await OkStrategy(await PreviewStrategy(api, "BTCUSDT", "4h", ladder));
 
-        long window = (Periods.ExplorationEnd - TimeSpan.FromDays(56)).ToUnixTimeMilliseconds();
+        long window = (FixedTime.ExplorationEnd - TimeSpan.FromDays(56)).ToUnixTimeMilliseconds();
         Assert.That(preview.ComputedFrom, Is.EqualTo(window));
         PreviewOrder entry = preview.Orders.Single();
         Assert.That((entry.Moment, entry.Node, entry.Side, entry.Outcome, entry.Amount, entry.Cycle), Is.EqualTo((window, (string?)"entry", "buy", "filled", (double?)100, (int?)0)));
         PreviewCycle cycle = preview.Cycles.Single();
         Assert.That((cycle.Side, cycle.Open, cycle.ExitReason, cycle.Entries, cycle.Exclusion), Is.EqualTo(("long", true, (string?)null, 1, (string?)null)));
         Assert.That(cycle.Fills.Single(), Is.EqualTo(new PreviewFill(window, "entry", "buy", 100.5 * (1 + 0.0005), 100 / (100.5 * (1 + 0.0005)), 100, "entry")));
-        Assert.That(market.Data.CandleRequests.Select(request => request.To.ToDateTimeOffset()), Has.All.LessThanOrEqualTo(Periods.ExplorationEnd));
+        Assert.That(market.Data.CandleRequests.Select(request => request.To.ToDateTimeOffset()), Has.All.LessThanOrEqualTo(FixedTime.ExplorationEnd));
     }
 
     /// <summary>
@@ -277,7 +297,7 @@ public sealed class PreviewTests
     public async Task A_fee_out_of_its_bounds_is_refused_before_any_read()
     {
         await using MarketDataServer market = await MarketDataServer.Start();
-        await using var api = new BenchTestApplication(market);
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
         Guid signal = await SaveSignal(api);
 
         HttpResponseMessage response = await api.Http.PostAsJsonAsync(
