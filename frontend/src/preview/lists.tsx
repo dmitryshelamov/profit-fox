@@ -1,18 +1,27 @@
 import { type ReactNode, useEffect, useRef } from 'react';
 
-/** The head of a list of the preview: column names of 11 px that stay in place while the list scrolls. */
+/** The sides of a cell of a list whose columns are tight, the first and the last a little off the edge. */
+export const tightCell = 'px-1 first:pl-3 last:pr-2';
+
+/**
+ * The head of a list of the preview: column names of 11 px that stay in place while the list scrolls. A column is its
+ * name, the classes of its cell and what a shortened name stands for. A `tight` head has the sides of `tightCell`.
+ */
 export function ListHead({
   columns,
+  tight = false,
 }: {
-  readonly columns: readonly (readonly [string, string?])[];
+  readonly columns: readonly (readonly [string, string?, string?])[];
+  readonly tight?: boolean;
 }) {
   return (
     <thead className="sticky top-0 z-10 bg-panel text-left">
       <tr>
-        {columns.map(([title, className]) => (
+        {columns.map(([title, className, full]) => (
           <th
             key={title}
-            className={`h-9 border-b border-line px-4 text-[11px] font-semibold whitespace-nowrap text-muted uppercase ${className ?? ''}`}
+            title={full}
+            className={`h-9 border-b border-line ${tight ? tightCell : 'px-4'} text-[11px] font-semibold whitespace-nowrap text-muted uppercase ${className ?? ''}`}
           >
             {title}
           </th>

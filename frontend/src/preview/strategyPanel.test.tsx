@@ -329,7 +329,7 @@ describe('the tabs of the preview of a strategy', () => {
       within(table)
         .getAllByRole('columnheader')
         .map((cell) => cell.textContent),
-    ).toEqual(['Вход, UTC', 'Сторона', 'Входов', 'Вложено', 'Выход', 'Результат']);
+    ).toEqual(['Вход, UTC', 'Сторона', 'Вх.', 'Вложено', 'Выход', 'Результат']);
     const rows = within(table).getAllByRole('row', { name: /^Сделка / });
     expect(rows.map((row) => row.getAttribute('aria-label'))).toEqual([
       'Сделка 2025-10-05 08:00',
@@ -353,6 +353,30 @@ describe('the tabs of the preview of a strategy', () => {
     );
     // The choice of a tab does not run the preview again.
     expect(await bodiesOf(requests, 'POST', '/api/preview/strategy')).toHaveLength(1);
+  });
+
+  // Change add-position-node, task 12.4: the six columns fit the 470 px of the right part of the panel. jsdom lays
+  // nothing out, so this holds what the width rests on; the width itself is measured in a browser.
+  it('keeps the table of trades narrow: tight cells, the moment on one line, a short head of the entries', async () => {
+    await previewOrders([order(october, -0.0098)]);
+
+    const table = screen.getByRole('table', { name: 'Сделки' });
+    const row = within(table).getByRole('row', { name: 'Сделка 2025-10-05 08:00' });
+    const cells = within(row).getAllByRole('cell');
+    for (const cell of [...within(table).getAllByRole('columnheader'), ...cells]) {
+      expect(cell).toHaveClass('px-1');
+      expect(cell).not.toHaveClass('px-4');
+    }
+
+    expect(cells[0]).toHaveClass('whitespace-nowrap', 'text-xs');
+    expect(within(table).getByRole('columnheader', { name: 'Вх.' })).toHaveAttribute(
+      'title',
+      'Входов',
+    );
+    // Only the exit gives way to the others: it breaks before the time the cycle was held, which stays whole.
+    expect(cells[4]).toHaveTextContent('по сроку · 4h');
+    expect(within(cells[4]!).getByText('4h')).toHaveClass('whitespace-nowrap');
+    expect(within(cells[5]!).getByText('-0.98 %').parentElement).toHaveClass('whitespace-nowrap');
   });
 
   // Scenario «Сделок нет».
