@@ -255,8 +255,8 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   минуты, сумма объёмов; минуты часа `08:00` без сделок), но свеча `4h` отдаётся как прежде — объём одной минуты, свеча
   `08:00` без сделок: суммирование из минут дало бы свече `08:00` сделки часов `09:00–11:59` и сдвинуло бы ожидания
   прежних тестов, которые задача велит не менять.
-- **2.4, имя теста.** Задача называет `CliAppTests`; тесты CLI в репозитории — `Tests.Integration/Cli/CliTests.cs`, новые
-  сценарии записаны туда.
+- **2.4, имя теста.** Задача называет `CliAppTests`; тесты CLI в репозитории — `Tests.Integration/Cli/CliTests.cs`,
+  новые сценарии записаны туда.
 - **2.6, проверка на стенде.** Сервис данных недоступен из облака, поэтому команда README с `--timeframe 15m` проверена
   на тестовом стенде с поддельным сервисом данных (`CliTests`, случаи `5m` и `15m`), а не на dev-стенде Мака.
 
@@ -277,13 +277,13 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 - **3.5, объявление выхода.** Тип выхода сигнала выбирается в карточке «Параметры» редактора сигнала (поле «Тип выхода
   сигнала»): отдельной карточки выходов в редакторе нет. Смена типа снимает провод, шедший в выход.
 
-- **4.1, противоречие: «сравнение с ними ложно».** Сценарий spec `strategy-execution` «Свечи названной пары нет» говорит:
-  «выходы узла — отсутствующие значения, и сравнение с ними ложно». Выпущенный узел `compare` при отсутствующем входе
-  даёт отсутствующее значение, а не ложь (основная spec `strategy-execution`, «Отсутствующие значения»: «Сравнение с
-  отсутствующим значением SHALL давать отсутствующее значение»), и выпущенный вид узла менять нельзя. Узел `pair-candle`
-  сделан, все четыре сценария проверены (`PairCandleNodeTests`), но тест второго сценария проверяет то, что даёт движок:
-  сравнение отсутствует, то есть не истинно, и «впервые» после него события не даёт. Задача 4.1 не отмечена: нужно
-  решение — поправить формулировку сценария («сравнение с ними не истинно») или иное.
+- **4.1, противоречие: «сравнение с ними ложно».** Сценарий spec `strategy-execution` «Свечи названной пары нет»
+  говорит: «выходы узла — отсутствующие значения, и сравнение с ними ложно». Выпущенный узел `compare` при отсутствующем
+  входе даёт отсутствующее значение, а не ложь (основная spec `strategy-execution`, «Отсутствующие значения»: «Сравнение
+  с отсутствующим значением SHALL давать отсутствующее значение»), и выпущенный вид узла менять нельзя. Узел
+  `pair-candle` сделан, все четыре сценария проверены (`PairCandleNodeTests`), но тест второго сценария проверяет то,
+  что даёт движок: сравнение отсутствует, то есть не истинно, и «впервые» после него события не даёт. Задача 4.1 не
+  отмечена: нужно решение — поправить формулировку сценария («сравнение с ними не истинно») или иное.
 - **4.1, настройка `symbol`.** Пара пишется заглавными латинскими буквами и цифрами (`BTCUSDT`, `1000PEPEUSDT`); пустая
   или иная строка — `InvalidSetting` по настройке `symbol`, отсутствующая — `MissingSetting`. Название узла — «Свеча
   пары», группа «Данные». Ожидания прежних тестов каталога (`NodeCatalogTests`: перечень видов, пины, свободные
@@ -295,12 +295,12 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   как своя свеча без сделок.
 
 - **5.1, proto без сверки.** Сервиса данных в облачной сессии нет, поэтому `funding_rate_feed.proto` и
-  `open_interest_feed.proto` написаны по образцу `candle_feed.proto` и `funding_payment_feed.proto` и решению 2 design.md,
-  а не скопированы: сервисы `FundingRateFeed.Subscribe` и `OpenInterestFeed.Subscribe`, запросы с `since`, сообщения
-  `FundingRateUpdate` (`instrument_id` 1, `time` 2, `funding_rate` 3) и `OpenInterestUpdate` (`instrument_id` 1,
-  `time` 2, `open_interest` 3 — монеты). **Основной сессии:** сверить оба файла с файлами сервиса и заменить их копией
-  (имена служб, сообщений, номера полей); сверить и прежние `candle_feed.proto`, `funding_payment_feed.proto` с их
-  текущими версиями — здесь не сверялись.
+  `open_interest_feed.proto` написаны по образцу `candle_feed.proto` и `funding_payment_feed.proto` и решению 2
+  design.md, а не скопированы: сервисы `FundingRateFeed.Subscribe` и `OpenInterestFeed.Subscribe`, запросы с `since`,
+  сообщения `FundingRateUpdate` (`instrument_id` 1, `time` 2, `funding_rate` 3) и `OpenInterestUpdate` (`instrument_id`
+  1, `time` 2, `open_interest` 3 — монеты). **Основной сессии:** сверить оба файла с файлами сервиса и заменить их
+  копией (имена служб, сообщений, номера полей); сверить и прежние `candle_feed.proto`, `funding_payment_feed.proto` с
+  их текущими версиями — здесь не сверялись.
 - **5.3, порт живых лент.** `IMarketFeed.Subscribe(MarketSubscription)` отдаёт один поток событий четырёх лент:
   `LiveMinute`, `LivePoint` (выплата, ставка, OI), `FeedGap` (дыра длиннее догона) и `MarketPairs` (набор пар, первым и
   при каждой смене); типы — в `Application/Ports/MarketData/Feed`. Повторная подписка минут, ставок и OI — с последнего
@@ -319,9 +319,9 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   открытой не позже начала окна; первые минуты после старта сканера изменение и оборот за 24 часа поэтому пусты.
   Снимок пары — `Domain/ValueObjects/Market/MarketPair`.
 
-- **6.1, колонки таблиц.** `strategy_ideas` (`strategy_id`, `enabled`, `timeframes text[]`, `updated_at`); `ideas` — план
-  (`side`, `moment`, `size`, `after_minutes`, `until`, `stop`, `target` долями, `candle_close`, `labels text[]`), ход
-  (`entry_raw`, `entry_price`, `entry_time`, `stop_price`, `target_price`, `funding_paid`, `last_close`,
+- **6.1, колонки таблиц.** `strategy_ideas` (`strategy_id`, `enabled`, `timeframes text[]`, `updated_at`); `ideas` —
+  план (`side`, `moment`, `size`, `after_minutes`, `until`, `stop`, `target` долями, `candle_close`, `labels text[]`),
+  ход (`entry_raw`, `entry_price`, `entry_time`, `stop_price`, `target_price`, `funding_paid`, `last_close`,
   `computed_until`, `now_result`, `now_at`), выход (`exit_time`, `exit_reason`, `ambiguous`, `exit_price`, `result`,
   `result_usdt`, `excluded`) и состояние `state`; кроме индексов решения 14 — уникальный частичный индекс
   `ideas_one_open_ux` (`strategy_id`, `symbol`, `timeframe`) `WHERE state = 'open'`: одна открытая идея держится базой и
@@ -372,34 +372,35 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   метки ровно на последней закрытой к моменту идеи свече её таймфрейма и оно истинно. Метки идеи упорядочены по тексту,
   «⚡ всплеск» — последней.
 
-- **10.1, перечни полей.** Имена, типы и единицы полей — в домене (`Domain/Services/Lists/ListFields`: `Market`, `Ideas`,
-  `Summary`, `Filter`), колонки SQL этих имён — только в `Infrastructure/.../Lists/ListColumns`; `ORDER BY` и `WHERE`
-  собираются из них, значения уходят параметрами. Пустое значение идёт последним при любом направлении (`NULLS LAST`),
-  затем по символу. Поиск по части символа — `strpos(upper(...))`, а не `LIKE`: `%` в строке поиска — знак, не шаблон.
-  Поля сортировки списка идей: `symbol`, `strategy`, `timeframe` (по длине), `side`, `labels`, `moment`, `entry`,
-  `stop`, `target`, `left`, `now`, `exitTime`, `exitReason`, `result`, `state`; сводки — `strategy`, `timeframe`,
-  `ideas`, `wins`, `mean`, `sum`; рынка — `symbol`, `price`, `change1h`, `change4h`, `change24h`, `turnover24h`,
-  `openInterest`, `fundingRate`, `ideas`.
+- **10.1, перечни полей.** Имена, типы и единицы полей — в домене (`Domain/Services/Lists/ListFields`: `Market`,
+  `Ideas`, `Summary`, `Filter`), колонки SQL этих имён — только в `Infrastructure/.../Lists/ListColumns`; `ORDER BY` и
+  `WHERE` собираются из них, значения уходят параметрами. Пустое значение идёт последним при любом направлении
+  (`NULLS LAST`), затем по символу. Поиск по части символа — `strpos(upper(...))`, а не `LIKE`: `%` в строке поиска —
+  знак, не шаблон. Поля сортировки списка идей: `symbol`, `strategy`, `timeframe` (по длине), `side`, `labels`,
+  `moment`, `entry`, `stop`, `target`, `left`, `now`, `exitTime`, `exitReason`, `result`, `state`; сводки — `strategy`,
+  `timeframe`, `ideas`, `wins`, `mean`, `sum`; рынка — `symbol`, `price`, `change1h`, `change4h`, `change24h`,
+  `turnover24h`, `openInterest`, `fundingRate`, `ideas`.
 - **10.2, поля фильтра.** Имена полей фильтра: `price`, `change1h`, `change4h`, `change24h`, `turnover24h`,
   `openInterest`, `fundingRate`, `openIdeas` (рынок); `strategy`, `timeframe`, `side`, `label`, `result`, `minutesLeft`,
-  `hasStop` (идея). Проценты и миллионы переводятся в хранимое значение (`0.03` % → `0.0003`), число принимает и запятую.
-  Название фильтра — до 40 знаков. Место хранится словами `market`, `ideas`, `both`.
+  `hasStop` (идея). Проценты и миллионы переводятся в хранимое значение (`0.03` % → `0.0003`), число принимает и
+  запятую. Название фильтра — до 40 знаков. Место хранится словами `market`, `ideas`, `both`.
 - **10.3, «Фильтр не этого места».** Проверка места фильтра — в запросах списков приложения (группа 11), там же её тест.
 
 - **11.1–11.3, пути API.** Списки — `GET /api/ideas?state=open|closed`, `GET /api/ideas/summary`,
   `GET /api/ideas/state`, `GET /api/market/pairs`, `GET /api/market/pairs/{symbol}`,
   `GET /api/market/pairs/{symbol}/ideas`; параметры страниц у всех `sort`, `direction` (`asc`/`desc`), `page`,
   `pageSize` (50, 100, 200), `filter` (id сохранённого фильтра). Время в ответах — миллисекунды с 1970 года, как у
-  предпросмотра. Ошибки запроса — `422` с местом (`field`, у условия ещё `condition` — номер с нуля), как в `/api/backtests`.
-  Пара вне набора — `404`; пара из набора без строки снимка отдаётся с пустыми значениями. Сохранённый фильтр, которого
-  уже нет, снимается, и ответ несёт `filterGone: true`, а не ошибку: так строка фильтров узнаёт об удалении в другой
-  вкладке.
+  предпросмотра. Ошибки запроса — `422` с местом (`field`, у условия ещё `condition` — номер с нуля), как в
+  `/api/backtests`. Пара вне набора — `404`; пара из набора без строки снимка отдаётся с пустыми значениями. Сохранённый
+  фильтр, которого уже нет, снимается, и ответ несёт `filterGone: true`, а не ошибку: так строка фильтров узнаёт об
+  удалении в другой вкладке.
 - **11.2, состояние сканера.** `GET /api/ideas/state` отдаёт держателя аренды, `live`, `idleSeconds` (сколько аренда
   истекла), `liveSince`, `warmed`, `pairs`, число открытых и закрытых идей и пороги «⚡ всплеск» по таймфреймам. Пороги
   API берёт из секции `Ideas` своей конфигурации, как Worker.
 - **11.4, график пары.** Один запрос `GET /api/market/pairs/{symbol}/chart?timeframe&before` отдаёт страницу из 500
-  закрытых свечей до `before` (без него — до сейчас) вместе с точками OI и выплатами фандинга того же отрезка: так панели
-  под графиком двигаются со свечами без второго запроса. Пока сервис данных догружает пару — `loading: true` без свечей.
+  закрытых свечей до `before` (без него — до сейчас) вместе с точками OI и выплатами фандинга того же отрезка: так
+  панели под графиком двигаются со свечами без второго запроса. Пока сервис данных догружает пару — `loading: true` без
+  свечей.
 - **11.5, живая свеча.** `GET /api/market/pairs/{symbol}/live?timeframe` — `text/event-stream`: событие `candle` с
   `LiveCandleResponse`. `LiveCandleHub` — одиночка процесса API: одна подписка на минуты ленты с незакрытыми, пока есть
   хоть один слушатель; закрытые минуты окна читаются из REST один раз при подключении страницы.
@@ -424,8 +425,9 @@ OpenSpec CLI 2.1.0.
 - **Группа 2, таймфреймы** (облачная сессия, 2026-11-22). Сборка `Release`: 0 предупреждений, 0 ошибок. Тесты бэкенда:
   unit 501 (+14: `TimeframesTests` 12, `BacktestRulesTests` 2), интеграционные 205 (+8: `GrpcHistorySourceTests` 2,
   `PreviewTests` 2, `BacktestsTests` 2, `CliTests` 2), все зелёные. Тесты фронтенда: 269 в 18 файлах, все зелёные;
-  `typecheck`, `lint`, `format:check`, `build` зелёные. Прежние тесты с отклоняемым таймфреймом `5m` (`BacktestRulesTests`,
-  `BacktestsTests`, `CliTests`) и `2h` (`PreviewTests`) переведены на `2m`, как в изменённых сценариях спеков.
+  `typecheck`, `lint`, `format:check`, `build` зелёные. Прежние тесты с отклоняемым таймфреймом `5m`
+  (`BacktestRulesTests`, `BacktestsTests`, `CliTests`) и `2h` (`PreviewTests`) переведены на `2m`, как в изменённых
+  сценариях спеков.
 
 - **Группа 3, сигнал-состояние.** Сборка `Release`: 0 предупреждений. Тесты бэкенда: unit 512 (+11:
   `GraphValidationTests` 3, `SignalStateTests` 5, `SignalExpansionTests` 1, `PairEventsTests` 2), интеграционные 207
