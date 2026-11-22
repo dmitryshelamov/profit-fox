@@ -4,7 +4,7 @@ using Dapper;
 
 using ProfitFox.Domain.Entities.Backtests;
 using ProfitFox.Domain.ValueObjects.Backtests;
-using ProfitFox.Domain.ValueObjects.Hypotheses;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Runs;
 using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Backtests.Converters;

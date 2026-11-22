@@ -9,7 +9,7 @@ using static ProfitFox.Tests.Unit.Domain.Services.Runs.Designs;
 namespace ProfitFox.Tests.Unit.Domain.Services.Signals;
 
 /// <summary>
-///     Spec signal-preview «Те же события, что у стенда» (task 1.2): the events of a pair that both the bench run and the
+///     Spec signal-preview «Те же события, что у стенда» (task 1.2): the events of a pair that both a backtest and the
 ///     preview use, on the H0001 signal (funding rate first at or above 0.0005).
 /// </summary>
 public sealed class PairEventsTests
@@ -48,7 +48,7 @@ public sealed class PairEventsTests
         IReadOnlyList<DateTimeOffset> events = PairEvents.Of(H0001, FourHours, "BTCUSDT", candles, funding);
 
         Assert.That(events, Is.EqualTo(new[] { Utc(2026, 5, 16) }));
-        Assert.That(Exploration().InPeriod(Utc(2026, 5, 16)), Is.False, "a run of H0001 leaves this event out");
+        Assert.That(Exploration().Fits(Utc(2026, 5, 16), FourHours), Is.False, "a backtest of H0001 up to 2026-05-16 leaves this order out");
     }
 
     private static HistoryCandle Traded(DateTimeOffset open)

@@ -3,14 +3,12 @@ using System.Text.Json.Nodes;
 
 using ProfitFox.Domain.Services.Execution;
 using ProfitFox.Domain.Services.Graph;
-using ProfitFox.Domain.Services.Hypotheses;
 using ProfitFox.Domain.Services.Positions;
 using ProfitFox.Domain.ValueObjects.Execution;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
 using ProfitFox.Domain.ValueObjects.Trades;
 using ProfitFox.Domain.ValueObjects.Trades.Enums;
 using ProfitFox.Tests.Unit.Domain.Services.Graph;
-using ProfitFox.Tests.Unit.Domain.Services.Hypotheses;
 using ProfitFox.Tests.Unit.Domain.Services.Trades;
 
 namespace ProfitFox.Tests.Unit.Domain.Services.Positions;
@@ -95,9 +93,9 @@ public sealed class EntryPlanTests
     [TestCase("0.0125")]
     [TestCase("0.1")]
     [TestCase("0.333")]
-    public void A_fraction_in_a_graph_gives_the_plan_of_the_same_fraction_in_the_text_of_a_hypothesis(string fraction)
+    public void A_fraction_in_a_graph_gives_the_plan_of_the_same_fraction_as_text(string fraction)
     {
-        TradePlan fromText = HypothesisReader.Parse(HypothesisWith(fraction)).Plan;
+        TradePlan fromText = PlanOf(fraction);
         var executor = new StrategyExecutor(StrategyGraph.ReadStrategy(StrategyWith(fraction)).Value!);
 
         TradePlan? fromGraph = EntryPlan.Of(executor.BeforeCandles(Paths.Start), EntrySide.Short);
@@ -113,7 +111,7 @@ public sealed class EntryPlanTests
     {
         const string fraction = "0.498964597192726048";
         decimal inGraph = decimal.Parse(fraction, CultureInfo.InvariantCulture);
-        TradePlan fromText = HypothesisReader.Parse(HypothesisWith(fraction)).Plan;
+        TradePlan fromText = PlanOf(fraction);
 
         TradePlan? fromGraph = EntryPlan.Of(Step(FourHours, ExitDistance.Of(inGraph), ExitDistance.Of(inGraph)), EntrySide.Short);
 
@@ -121,13 +119,11 @@ public sealed class EntryPlanTests
         Assert.That(fromGraph, Is.EqualTo(fromText));
     }
 
-    // H0001 with the fraction as the stop and the target of its plan.
-    private static string HypothesisWith(string fraction)
+    // The short of 4h with the fraction as its stop and its target, read from the text as a plan always read its numbers.
+    private static TradePlan PlanOf(string fraction)
     {
-        JsonObject file = JsonNode.Parse(HypothesisReaderTests.H0001Text)!.AsObject();
-        file["plan"]!["stop"] = JsonNode.Parse(fraction);
-        file["plan"]!["target"] = JsonNode.Parse(fraction);
-        return file.ToJsonString();
+        double value = double.Parse(fraction, NumberStyles.Float, CultureInfo.InvariantCulture);
+        return new TradePlan(TradeSide.Short, FourHours, value, value);
     }
 
     // The strategy of H0001 with the fraction written on a stop-loss and a take-profit node.

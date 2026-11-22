@@ -2,8 +2,8 @@ using System.Text.Json.Nodes;
 
 using ProfitFox.Domain.Services.Runs;
 using ProfitFox.Domain.ValueObjects.Backtests;
-using ProfitFox.Domain.ValueObjects.Hypotheses.Enums;
 using ProfitFox.Domain.ValueObjects.Runs;
+using ProfitFox.Domain.ValueObjects.Runs.Enums;
 using ProfitFox.Domain.ValueObjects.Strategies.Enums;
 using ProfitFox.Domain.ValueObjects.Trades.Enums;
 using ProfitFox.Tests.Unit.Domain.Services.Graph;

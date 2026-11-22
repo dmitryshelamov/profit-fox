@@ -113,14 +113,14 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 - [x] 8.2 `PreviewPeriod.End` вместо `Periods.ExplorationEnd` в обоих предпросмотрах, конец разведки в ключе
   `PreviewHistoryCache`. Проверить тестами сценарии spec `signal-preview` «Только разведка» и spec `strategy-preview`
   «Только разведка» («Конец разведки сегодня»); прежние тесты предпросмотра задают время через `TimeProvider`.
-- [ ] 8.3 Удалить по списку design.md, решение 6: гипотезы, правила журнала и вердикта, прежний прогон, периоды,
+- [x] 8.3 Удалить по списку design.md, решение 6: гипотезы, правила журнала и вердикта, прежний прогон, периоды,
   `TradingStrategy.FromSignal`, контроллеры гипотез и прогонов, файлы `bench/`. `HypothesisRunTests`, `OverlapRunTests`,
   `ParityThroughWorkerTests`, `WorkerTests` и сверочный тест 5.1 уходят: что они держали, держат тесты групп 4–7 и 8.1.
   Проверить: в `backend/src` нет `Hypothesis`, `LedgerRules`, `VerdictRules`, `Periods`; сборка `Release` без
   предупреждений; в документе OpenAPI нет `/api/hypotheses` и `/api/runs`.
-- [ ] 8.4 CLI: `run` с ключами design.md, решение 11, `runs`, `cancel`; `parity` и `hypotheses add` удалены. Проверить
+- [x] 8.4 CLI: `run` с ключами design.md, решение 11, `runs`, `cancel`; `parity` и `hypotheses add` удалены. Проверить
   тестами сценарии spec `bench-run-queue` «Команды CLI».
-- [ ] 8.5 Пересобрать `schema.d.ts` из запущенного API. Проверить: SHA-256 документа OpenAPI и `schema.d.ts` записаны в
+- [x] 8.5 Пересобрать `schema.d.ts` из запущенного API. Проверить: SHA-256 документа OpenAPI и `schema.d.ts` записаны в
   «Замеры».
 
 ## 9. Фронтенд: вид стратегии
@@ -224,6 +224,21 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   `HistoryPeriod.Today(now)`; `now` — из `TimeProvider`. Прежние тесты предпросмотра идут с часами на `2026-05-16 09:00`
   UTC (`FixedTime.Exploration` в интеграционных, `FakeTimeProvider` в unit), поэтому их ожидания прежние.
 
+- **8.3, удаление.** Сверх списка решения 6 ушли: сущность `Run` с портом `IRunRepository` и прежней очередью Worker'а,
+  `Evidence` (недельные средние считает `SetNumbers`), режим «без исходов» и `PseudoDifference` у `PairEvaluation` (их
+  читала только оценка мощности), `NormalDistribution`, `PlainTextInputFormatter` (текст `hypothesis.json`), фикстуры
+  `H0001.json` и `H0002.json`. `Timeframes` перенесён в `ValueObjects/MarketData`, `TimeBlock` — в
+  `ValueObjects/Runs/Enums`, `RunProgress` — в `Commands/Runs/RunNext`. В защищённых тестах правились только строки
+  `using` (`PairOrdersTests`) и подготовка (`SignalNodeParityTests` читает `Fixtures/H0001.strategy.json` вместо
+  `FromSignal`), ожидания прежние. `StrategyAssemblyTests` ушёл вместе с `FromSignal`; `StrategyFixtureTests` больше не
+  сравнивает файлы с `FromSignal` (сравнение прошло в 5.2) и проверяет, что оба файла — категории идей и H0002
+  отличается от H0001 только сроком. `PreviewTests` сверяют предпросмотр с прогоном стратегии H0001
+  (`ReferenceBacktests`), а не гипотезы. README переписан под прогон стратегий: разделы стенда, CLI, проверки деплоя и
+  слоёв.
+- **8.4–8.5, CLI и API.** `bench run` без `--timeframe` считает `4h` (по умолчанию сервера); `--param` повторяется на
+  каждый параметр; значение `5m` проверяет сервер, CLI печатает его отказ и выходит с кодом 1. Добавлен запрос
+  `GET /api/strategies/{name}/versions/{n}` из таблицы решения 9: ни одна задача его не называла, а форме он нужен.
+
 ## База
 
 Снято в облачной сессии применения на `acee454` (ветка `feat/add-strategy-backtest`, срезана с `release/0.1.0` на
@@ -259,6 +274,13 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   же сделки заявок и случайных входов, с зерном графа — те же сделки заявок и другие случайные входы. Проверка падения:
   `PairPosition.Enter`, пропускающий заявку до `BusyUntil + 4h` вместо `BusyUntil`, роняет эталонный тест на H0002
   (H0001 без наложения не меняется); правка откачена.
+
+- **8.5, документ OpenAPI и типы.** После удаления прежнего прогона (API в `Development`, `http://localhost:5240`):
+  SHA-256 `/openapi/v1.json` — `ff59cbf7c1ed3f5f97358570273569b4b6443a11ea9d6247a78ee8b55454e4c7`, SHA-256
+  `frontend/src/api/generated/schema.d.ts` — `bd5a5e0b05a89d53c781bd0be71028b082e191476379c952669482aaae6f4c0a`. В
+  документе нет `/api/hypotheses` и `/api/runs`; есть `/api/backtests` с наборами, остатком и отменой и
+  `/api/strategies/{name}/versions/{version}`.
+- **Группа 8, тесты бэкенда:** unit 475, интеграционные 181, все зелёные; сборка `Release` без предупреждений.
 
 ## Workflow follow-up
 

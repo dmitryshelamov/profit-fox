@@ -5,8 +5,8 @@ using ProfitFox.Worker.BackgroundServices;
 namespace ProfitFox.Worker;
 
 /// <summary>
-///     Computes the runs of the bench queue (spec bench-run-queue): takes a run of the database with a lease, reads its history
-///     from the market-data service and writes its line in the ledger. Any number of Workers share one database. The API
+///     Computes the backtests of the bench queue (spec bench-run-queue): takes a backtest of the database with a lease, reads
+///     its history from the market-data service and writes its numbers. Any number of Workers share one database. The API
 ///     migrates the database; a Worker waits until it has.
 /// </summary>
 public static class Program

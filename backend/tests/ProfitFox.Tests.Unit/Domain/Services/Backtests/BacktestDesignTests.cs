@@ -3,7 +3,7 @@ using ProfitFox.Domain.Services.Strategies;
 using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.Execution;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
-using ProfitFox.Domain.ValueObjects.Hypotheses.Enums;
+using ProfitFox.Domain.ValueObjects.Runs.Enums;
 using ProfitFox.Domain.ValueObjects.Trades;
 
 namespace ProfitFox.Tests.Unit.Domain.Services.Backtests;

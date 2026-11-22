@@ -4,7 +4,6 @@ using ProfitFox.Domain.Entities.Backtests;
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.Graph;
-using ProfitFox.Domain.ValueObjects.Hypotheses;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies.Enums;
 using ProfitFox.Domain.ValueObjects.Trades;

@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 
-using ProfitFox.Presentation.Contracts.Hypotheses;
+using ProfitFox.Presentation.Contracts.Backtests;
 using ProfitFox.Tests.Integration.MarketData;
 
 namespace ProfitFox.Tests.Integration.Presentation;
@@ -36,14 +36,14 @@ public sealed class StartTests
     }
 
     [Test]
-    public async Task A_start_on_an_empty_database_migrates_it_and_serves_no_hypotheses()
+    public async Task A_start_on_an_empty_database_migrates_it_and_serves_no_backtests()
     {
         string empty = await BenchDatabase.NewDatabase();
         await using var api = new BenchTestApplication(_market, new BenchStart(empty));
 
-        HypothesisResponse[] hypotheses = (await api.Http.GetFromJsonAsync<HypothesisResponse[]>("/api/hypotheses", Json))!;
+        BacktestResponse[] backtests = (await api.Http.GetFromJsonAsync<BacktestResponse[]>("/api/backtests", Json))!;
 
-        Assert.That(hypotheses, Is.Empty);
+        Assert.That(backtests, Is.Empty);
         Assert.That((await api.Http.GetAsync("/health")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
     }
 
@@ -71,7 +71,7 @@ public sealed class StartTests
         Assert.That(await api.Http.GetStringAsync("/"), Is.EqualTo("<html>bench</html>"));
         Assert.That(await api.Http.GetStringAsync("/runs/abc"), Is.EqualTo("<html>bench</html>"), "a page of the frontend");
         Assert.That(await api.Http.GetStringAsync("/assets/app.js"), Is.EqualTo("console.log(1)"));
-        Assert.That((await api.Http.GetAsync("/api/hypotheses")).Content.Headers.ContentType!.MediaType, Is.EqualTo("application/json"));
+        Assert.That((await api.Http.GetAsync("/api/backtests")).Content.Headers.ContentType!.MediaType, Is.EqualTo("application/json"));
         Assert.That((await api.Http.GetAsync("/api/nosuch")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound), "the fallback leaves /api alone");
         Assert.That((await api.Http.GetAsync("/health")).Content.Headers.ContentType!.MediaType, Is.EqualTo("text/plain"));
     }

@@ -7,7 +7,6 @@ using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.Services.Signals;
 using ProfitFox.Domain.ValueObjects.Graph;
-using ProfitFox.Domain.ValueObjects.Hypotheses;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Application.Queries.Preview;

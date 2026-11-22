@@ -11,7 +11,6 @@ using ProfitFox.Domain.Services.MarketData;
 using ProfitFox.Domain.Services.Runs;
 using ProfitFox.Domain.Services.Strategies;
 using ProfitFox.Domain.ValueObjects.Graph;
-using ProfitFox.Domain.ValueObjects.Hypotheses;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Positions;
 using ProfitFox.Domain.ValueObjects.Strategies;

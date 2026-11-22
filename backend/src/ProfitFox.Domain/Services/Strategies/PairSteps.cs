@@ -7,10 +7,9 @@ using ProfitFox.Domain.ValueObjects.MarketData;
 namespace ProfitFox.Domain.Services.Strategies;
 
 /// <summary>
-///     The steps of a strategy on one pair, as a run of the bench sees them (spec hypothesis-bench «Гипотеза исполняется
-///     как стратегия»): the executor gets the candles a signal gets (<see cref="PairCandles" />), so the orders of the
-///     strategy of a hypothesis come at the events of its signal. Every order is kept, in time order; a run takes those
-///     whose trade fits its period.
+///     The steps of a strategy on one pair, as a backtest sees them (spec strategy-backtest «Сделки набора»): the executor
+///     gets the candles a signal gets (<see cref="PairCandles" />), so the orders of a strategy come at the events of its
+///     signal. Every order is kept, in time order; a backtest takes those whose trade fits its history.
 /// </summary>
 public sealed class PairSteps
 {

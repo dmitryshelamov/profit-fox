@@ -197,7 +197,7 @@ public sealed class SignalRepositoryTests
 
     private static JsonNode GraphNode(double threshold = 0.0005)
     {
-        JsonNode graph = JsonNode.Parse(BenchRepository.H0001Text())!["signal"]!.DeepClone();
+        JsonNode graph = ReferenceSignals.H0001();
         graph["parameters"]![0]!["value"] = threshold;
         return graph;
     }

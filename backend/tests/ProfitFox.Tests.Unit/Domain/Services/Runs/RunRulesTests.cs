@@ -1,5 +1,5 @@
 using ProfitFox.Domain.Services.Runs;
-using ProfitFox.Domain.ValueObjects.Hypotheses.Enums;
+using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.Runs;
 using ProfitFox.Domain.ValueObjects.Runs.Enums;
 using ProfitFox.Domain.ValueObjects.Trades.Enums;
@@ -9,25 +9,21 @@ using static ProfitFox.Tests.Unit.Domain.Services.Runs.Designs;
 namespace ProfitFox.Tests.Unit.Domain.Services.Runs;
 
 /// <summary>
-///     Spec hypothesis-bench: periods, blocks, random entries, the events that count and block means (task 7.2).
+///     Spec strategy-backtest «Случайные входы» and «Разница со случайным входом»: weeks, the history of an order, random
+///     entries and the orders that count.
 /// </summary>
 public sealed class RunRulesTests
 {
-    [Test]
-    public void An_event_whose_trade_crosses_the_end_of_the_period_is_left_out()
-    {
-        RunDesign design = Exploration();
-
-        Assert.That(design.InPeriod(Utc(2026, 5, 15, 20)), Is.True, "ends exactly at the end of exploration");
-        Assert.That(design.InPeriod(Utc(2026, 5, 15, 22)), Is.False);
-        Assert.That(design.InPeriod(Utc(2026, 5, 16)), Is.False);
-    }
+    private static readonly TimeSpan FourHours = TimeSpan.FromHours(4);
 
     [Test]
-    public void The_periods_are_fixed_dates()
+    public void An_order_whose_trade_crosses_the_end_of_history_is_left_out()
     {
-        Assert.That(Periods.Span(Period.Holdout, Utc(2026, 11, 18)), Is.EqualTo((Utc(2026, 5, 16), Utc(2026, 11, 16))));
-        Assert.That(Periods.Span(Period.NewData, Utc(2026, 11, 18)), Is.EqualTo((Utc(2026, 11, 16), Utc(2026, 11, 18))));
+        BacktestDesign design = Exploration();
+
+        Assert.That(design.Fits(Utc(2026, 5, 15, 20), FourHours), Is.True, "ends exactly at the end of history");
+        Assert.That(design.Fits(Utc(2026, 5, 15, 22), FourHours), Is.False);
+        Assert.That(design.Fits(Utc(2026, 5, 16), FourHours), Is.False);
     }
 
     [Test]
@@ -55,7 +51,7 @@ public sealed class RunRulesTests
     }
 
     [Test]
-    public void Random_entries_stay_in_the_block_off_the_events_on_candle_closes()
+    public void Random_entries_stay_in_the_week_off_the_orders_on_candle_closes()
     {
         DateTimeOffset[] events = [Utc(2026, 1, 5, 8), Utc(2026, 1, 5, 16)];
 
@@ -69,7 +65,7 @@ public sealed class RunRulesTests
     }
 
     [Test]
-    public void Random_entries_of_the_last_week_end_inside_the_period()
+    public void Random_entries_of_the_last_week_end_inside_history()
     {
         DateTimeOffset[] events = [Utc(2026, 5, 13, 8)];
 
@@ -79,27 +75,18 @@ public sealed class RunRulesTests
     }
 
     [Test]
-    public void An_event_with_too_few_valid_random_entries_does_not_count()
+    public void An_order_with_too_few_valid_random_entries_does_not_count()
     {
-        EventRow row = Row(block: 1, eventY: 0.01, randomYs: [0.0], randomValid: 1);
+        EventRow row = Row(randomValid: 1);
 
         Assert.That(row.Usable, Is.False);
+        Assert.That((row with { RandomValid = 2 }).Usable, Is.True);
     }
 
-    [Test]
-    public void A_block_mean_is_the_mean_of_its_events_of_every_pair()
-    {
-        EventRow[] rows = [Row(block: 7, eventY: 0.005, randomYs: [0.001, 0.001]), Row(block: 7, eventY: 0.0, randomYs: [0.002, 0.002], instrument: "ETHUSDT"), Row(block: 8, eventY: 0.003, randomYs: [0.0, 0.0])];
-
-        IReadOnlyList<(long Block, double Mean, int Events)> means = Evidence.BlockMeans(rows);
-
-        Assert.That(means.Select(mean => (mean.Block, Math.Round(mean.Mean, 12), mean.Events)), Is.EqualTo(new[] { (7L, 0.001, 2), (8L, 0.003, 1) }));
-    }
-
-    // The random entries of every event of a pair on exploration: block by block, event by event, from one generator.
+    // The random entries of every order of a pair on exploration: week by week, order by order, from one generator.
     private static IReadOnlyList<DateTimeOffset[]> Draw(string symbol, DateTimeOffset[] events)
     {
-        var randoms = new RandomEntries(symbol, events, Exploration());
+        var randoms = new RandomEntries(symbol, events, Exploration(), _ => FourHours);
         var entries = new DateTimeOffset[events.Length][];
         foreach (IGrouping<long, int> block in Enumerable.Range(0, events.Length).GroupBy(index => Blocks.Of(events[index], TimeBlock.Week)).OrderBy(group => group.Key))
         {
@@ -113,20 +100,9 @@ public sealed class RunRulesTests
         return entries;
     }
 
-    private static EventRow Row(long block, double eventY, double[] randomYs, int? randomValid = null, string instrument = "BTCUSDT")
+    private static EventRow Row(int randomValid)
     {
-        TradeFields Fields(double y) => new TradeFields(y, y, 0, 0, 0, y);
-        TradeFields[] randoms = [.. randomYs.Select(Fields)];
-        return new EventRow(
-            instrument,
-            Utc(2026, 1, 5),
-            block,
-            TradeStatus.Ok,
-            Outcome: null,
-            Fields(eventY),
-            [],
-            randomValid ?? randoms.Length,
-            TradeFields.Mean(randoms),
-            randoms.Length >= 2 ? randoms[0].Y - randoms.Skip(1).Average(trade => trade.Y) : null);
+        var fields = new TradeFields(0.01, 0.01, 0, 0, 0, 0.01);
+        return new EventRow("BTCUSDT", Utc(2026, 1, 5), 1, TradeStatus.Ok, Outcome: null, fields, [], randomValid, fields);
     }
 }

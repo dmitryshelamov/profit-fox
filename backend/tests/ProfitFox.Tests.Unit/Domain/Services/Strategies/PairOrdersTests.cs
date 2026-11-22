@@ -2,7 +2,7 @@ using ProfitFox.Domain.Services.Runs;
 using ProfitFox.Domain.Services.Strategies;
 using ProfitFox.Domain.ValueObjects.Execution;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
-using ProfitFox.Domain.ValueObjects.Hypotheses.Enums;
+using ProfitFox.Domain.ValueObjects.Runs.Enums;
 using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Domain.ValueObjects.Strategies.Enums;
 using ProfitFox.Domain.ValueObjects.Trades;

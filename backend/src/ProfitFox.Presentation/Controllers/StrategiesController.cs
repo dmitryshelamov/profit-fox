@@ -56,6 +56,18 @@ public class StrategiesController(ISender sender) : ControllerBase
         return await Answer(async () => StrategyResponses.Of(await sender.Send(new GetStrategyQuery(name), cancellation)));
     }
 
+    /// <summary>
+    ///     The version <c>version</c> of the strategy: what the form of a backtest is of.
+    /// </summary>
+    [HttpGet("{name}/versions/{version:int}", Name = "GetStrategyVersion")]
+    [ProducesResponseType<StrategyResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<StrategyResponse>> GetVersion(string name, int version, CancellationToken cancellation)
+    {
+        return await Answer(async () => StrategyResponses.Of(await sender.Send(new GetStrategyVersionQuery(name, version), cancellation)));
+    }
+
     [HttpPost(Name = "CreateStrategy")]
     [ProducesResponseType<StrategyResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType<ErrorResponse>(StatusCodes.Status400BadRequest)]

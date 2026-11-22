@@ -3,8 +3,8 @@ using System.Text.Json;
 namespace ProfitFox.Cli.Api;
 
 /// <summary>
-///     Reads why the bench API refused a request from the three shapes of its answers: a conflict (<c>reason</c>), a list of
-///     errors (<c>errors[].reason</c>) and a problem (<c>detail</c>).
+///     Reads why the bench API refused a request from the shapes of its answers: a list of errors (<c>errors[].reason</c>)
+///     and a problem (<c>detail</c>).
 /// </summary>
 internal static class Refusals
 {
@@ -18,15 +18,7 @@ internal static class Refusals
             JsonElement root = document.RootElement;
             if (root.ValueKind == JsonValueKind.Object)
             {
-                if (root.TryGetProperty("reason", out JsonElement reason) && reason.ValueKind == JsonValueKind.String)
-                {
-                    reasons.Add(reason.GetString()!);
-                    if (root.TryGetProperty("runId", out JsonElement runId) && runId.ValueKind == JsonValueKind.String)
-                    {
-                        reasons.Add($"run {runId.GetString()}");
-                    }
-                }
-                else if (root.TryGetProperty("errors", out JsonElement errors) && errors.ValueKind == JsonValueKind.Array)
+                if (root.TryGetProperty("errors", out JsonElement errors) && errors.ValueKind == JsonValueKind.Array)
                 {
                     reasons.AddRange(errors.EnumerateArray()
                         .Select(error => error.TryGetProperty("reason", out JsonElement text) ? text.GetString() : null)

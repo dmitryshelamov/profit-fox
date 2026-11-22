@@ -184,7 +184,7 @@ public sealed class StrategiesTests
     {
         Guid signal = await CreateSignal("funding-high");
         await Create("funding-short", Strategy(signal));
-        JsonObject changed = JsonNode.Parse(BenchRepository.H0001Text())!["signal"]!.AsObject().DeepClone().AsObject();
+        JsonObject changed = ReferenceSignals.H0001();
         changed["parameters"]![0]!["value"] = 0.001;
         await _api.Http.PutAsJsonAsync("/api/signals/funding-high", new JsonObject { ["graph"] = changed, ["layout"] = new JsonObject() }, Json);
 
@@ -353,6 +353,24 @@ public sealed class StrategiesTests
         Assert.That(unsaid.Errors, Is.Empty, "without a kind the rules of a strategy for a bot");
     }
 
+    /// <summary>
+    ///     Change add-strategy-backtest (design.md, decision 9): a version of a strategy by its number.
+    /// </summary>
+    [Test]
+    public async Task A_version_of_a_strategy_by_its_number()
+    {
+        Guid signal = await CreateSignal("funding-high");
+        await Create("funding-short", Strategy(signal), kind: "idea");
+        await _api.Http.PutAsJsonAsync("/api/strategies/funding-short", new JsonObject { ["graph"] = Strategy(signal, after: "8h"), ["layout"] = new JsonObject() }, Json);
+
+        StrategyResponse first = (await _api.Http.GetFromJsonAsync<StrategyResponse>("/api/strategies/funding-short/versions/1", Json))!;
+        HttpResponseMessage missing = await _api.Http.GetAsync("/api/strategies/funding-short/versions/3");
+
+        Assert.That((first.Version, first.Kind), Is.EqualTo((1, "idea")));
+        Assert.That(first.Graph.GetRawText(), Does.Contain("\"4h\"").And.Not.Contain("\"8h\""));
+        Assert.That(missing.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+    }
+
     private async Task<StrategyValidationResponse> Check(JsonObject graph, string? kind)
     {
         var body = new JsonObject { ["graph"] = graph.DeepClone() };
@@ -384,7 +402,7 @@ public sealed class StrategiesTests
 
     private async Task<Guid> CreateSignal(string name)
     {
-        JsonObject graph = JsonNode.Parse(BenchRepository.H0001Text())!["signal"]!.AsObject().DeepClone().AsObject();
+        JsonObject graph = ReferenceSignals.H0001();
         HttpResponseMessage created = await _api.Http.PostAsJsonAsync("/api/signals", new JsonObject { ["name"] = name, ["graph"] = graph, ["layout"] = new JsonObject() }, Json);
         return (await created.Content.ReadFromJsonAsync<SignalResponse>(Json))!.Id;
     }

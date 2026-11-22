@@ -3,7 +3,7 @@ using System.Text;
 
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.ValueObjects.Graph;
-using ProfitFox.Domain.ValueObjects.Hypotheses;
+using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Domain.Services.Backtests;
 

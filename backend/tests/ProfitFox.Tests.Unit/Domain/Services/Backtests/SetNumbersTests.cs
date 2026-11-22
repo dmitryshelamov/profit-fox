@@ -2,9 +2,9 @@ using ProfitFox.Domain.Services.Backtests;
 using ProfitFox.Domain.Services.Runs;
 using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
-using ProfitFox.Domain.ValueObjects.Hypotheses.Enums;
 using ProfitFox.Domain.ValueObjects.Positions;
 using ProfitFox.Domain.ValueObjects.Runs;
+using ProfitFox.Domain.ValueObjects.Runs.Enums;
 using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Domain.ValueObjects.Strategies.Enums;
 using ProfitFox.Domain.ValueObjects.Trades;
@@ -143,15 +143,15 @@ public sealed class SetNumbersTests
 
     private static EventRow Left(TradeStatus status)
     {
-        return new EventRow("BTCUSDT", Monday, Week, status, TradeOutcome.Excluded(status), Event: null, [], 0, RandomMean: null, PseudoDifference: null);
+        return new EventRow("BTCUSDT", Monday, Week, status, TradeOutcome.Excluded(status), Event: null, [], 0, RandomMean: null);
     }
 
     private static EventRow Row(DateTimeOffset moment, TradeStatus status, double net, int randoms)
     {
         var outcome = new TradeOutcome(status, ExitReason.Time, Ambiguous: false, moment, moment.AddHours(4), 100, 100, net, 0, 0, 0, net, R: null);
-        var fields = TradeFields.Of(outcome, Measure.Net);
+        var fields = TradeFields.Of(outcome);
         TradeFields mean = fields with { Y = 0.001 };
-        return new EventRow("BTCUSDT", moment, Blocks.Of(moment, TimeBlock.Week), status, outcome, fields, [], randoms, randoms > 0 ? mean : null, PseudoDifference: null);
+        return new EventRow("BTCUSDT", moment, Blocks.Of(moment, TimeBlock.Week), status, outcome, fields, [], randoms, randoms > 0 ? mean : null);
     }
 
     private static CycleOutcome Cycle(double net, double amount, bool open = false)

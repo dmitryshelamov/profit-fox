@@ -1,8 +1,8 @@
 using ProfitFox.Domain.Services.Positions;
 using ProfitFox.Domain.Services.Strategies;
+using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.Execution;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
-using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.Positions;
 using ProfitFox.Domain.ValueObjects.Runs;
 using ProfitFox.Domain.ValueObjects.Trades;
@@ -17,27 +17,25 @@ namespace ProfitFox.Domain.Services.Runs;
 ///     comes while the position is open is skipped: it is counted in <see cref="Skipped" />, gets no random entries and no
 ///     row. Every other order gets its random entries from the one generator of the pair, each a cycle opened outside the
 ///     graph on the side of the order with the exit values of its own candle. An order whose time ends after the end of
-///     history is counted in <see cref="PastEnd" /> and is not simulated. Without <c>withEventOutcomes</c> the cycle of an
-///     order is walked only to its end, which the next order needs: its result is never computed.
+///     history is counted in <see cref="PastEnd" /> and is not simulated.
 /// </summary>
 public sealed class PairEvaluation
 {
     private readonly string _instrument;
     private readonly PairSteps _steps;
     private readonly BacktestDesign _design;
-    private readonly bool _withEventOutcomes;
     private readonly ILookup<long, StrategyStep> _orders;
     private readonly RandomEntries _randoms;
     private readonly PairPosition _position = new PairPosition();
     private long? _lastBlock;
 
     /// <summary>
-    ///     The blocks that have events of the pair in the period, in time order.
+    ///     The weeks that have orders of the pair in history, in time order.
     /// </summary>
     public IReadOnlyList<long> Blocks { get; }
 
     /// <summary>
-    ///     The events skipped so far because the position was open.
+    ///     The orders skipped so far because the position was open.
     /// </summary>
     public int Skipped { get; private set; }
 
@@ -47,26 +45,16 @@ public sealed class PairEvaluation
     /// </summary>
     public int PastEnd { get; }
 
-    public PairEvaluation(string instrument, PairSteps steps, BacktestDesign design, bool withEventOutcomes = true)
+    public PairEvaluation(string instrument, PairSteps steps, BacktestDesign design)
     {
         _instrument = instrument;
         _steps = steps;
         _design = design;
-        _withEventOutcomes = withEventOutcomes;
         StrategyStep[] orders = [.. steps.Orders.Where(order => design.Fits(order.Moment, order.After))];
         PastEnd = steps.Orders.Count(order => order.Moment >= design.Start && !design.Fits(order.Moment, order.After));
         _orders = orders.ToLookup(order => Runs.Blocks.Of(order.Moment, design.Block));
         _randoms = new RandomEntries(instrument, orders.Select(order => order.Moment), design, moment => steps.At(moment).After);
         Blocks = [.. _orders.Select(block => block.Key).Order()];
-    }
-
-    /// <summary>
-    ///     The orders of a pair in a run of a hypothesis: its period is the history, and the horizon of its plan is the time
-    ///     of every step.
-    /// </summary>
-    public PairEvaluation(string instrument, PairSteps steps, RunDesign design, bool withEventOutcomes)
-        : this(instrument, steps, design.ToBacktest(), withEventOutcomes)
-    {
     }
 
     /// <summary>
@@ -82,7 +70,7 @@ public sealed class PairEvaluation
     }
 
     /// <summary>
-    ///     The rows of the events of a block on its minute path. Blocks go in the order of time: the position and the
+    ///     The rows of the orders of a block on its minute path. Blocks go in the order of time: the position and the
     ///     generator of random entries pass from one block to the next.
     /// </summary>
     public List<EventRow> Evaluate(long block, MinutePath path)
@@ -98,7 +86,7 @@ public sealed class PairEvaluation
         List<EventRow> rows = [];
         foreach (StrategyStep order in _orders[block].OrderBy(order => order.Moment))
         {
-            if (_position.Enter(path, order, costs, _withEventOutcomes) is not { } cycle)
+            if (_position.Enter(path, order, costs) is not { } cycle)
             {
                 Skipped++;
                 continue;
@@ -106,8 +94,7 @@ public sealed class PairEvaluation
 
             EntrySide side = order.Entry!.Value;
             RandomTrade[] trades = [.. _randoms.Draw(candidates).Select(entry => new RandomTrade(entry, Cycle.Open(path, _steps.At(entry), side, costs).Outcome!))];
-            TradeFields[] valid = [.. trades.Where(trade => trade.Outcome.Status == TradeStatus.Ok).Select(trade => TradeFields.Of(trade.Outcome, _design.Measure))];
-            double? pseudo = valid.Length >= 2 ? valid[0].Y - valid.Skip(1).Average(trade => trade.Y) : null;
+            TradeFields[] valid = [.. trades.Where(trade => trade.Outcome.Status == TradeStatus.Ok).Select(trade => TradeFields.Of(trade.Outcome))];
 
             rows.Add(new EventRow(
                 _instrument,
@@ -115,11 +102,10 @@ public sealed class PairEvaluation
                 block,
                 cycle.Status,
                 cycle.Outcome,
-                cycle.Outcome is { Status: TradeStatus.Ok } ? TradeFields.Of(cycle.Outcome, _design.Measure) : null,
+                cycle.Outcome is { Status: TradeStatus.Ok } ? TradeFields.Of(cycle.Outcome) : null,
                 trades,
                 valid.Length,
-                TradeFields.Mean(valid),
-                pseudo) { NetAmount = cycle.Result?.NetAmount });
+                TradeFields.Mean(valid)) { NetAmount = cycle.Result?.NetAmount });
         }
 
         return rows;

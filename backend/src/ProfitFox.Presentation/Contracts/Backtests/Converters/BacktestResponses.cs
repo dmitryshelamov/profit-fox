@@ -2,7 +2,7 @@ using System.Globalization;
 
 using ProfitFox.Application.Contracts.Backtests;
 using ProfitFox.Domain.ValueObjects.Backtests;
-using ProfitFox.Domain.ValueObjects.Hypotheses;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Presentation.Contracts.Errors;
 

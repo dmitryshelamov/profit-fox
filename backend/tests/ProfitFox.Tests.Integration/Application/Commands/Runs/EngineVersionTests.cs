@@ -1,18 +1,7 @@
 using System.Text.Json;
 
-using Microsoft.Extensions.DependencyInjection;
-
-using ProfitFox.Application.Commands.Backtests.ExecuteBacktest;
-using ProfitFox.Application.Ports.MarketData;
-using ProfitFox.Application.Queries.MarketData;
-using ProfitFox.Domain.Services.Backtests;
-using ProfitFox.Domain.Services.Graph;
-using ProfitFox.Domain.Services.MarketData;
 using ProfitFox.Domain.ValueObjects.Backtests;
-using ProfitFox.Domain.ValueObjects.Graph;
-using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Runs;
-using ProfitFox.Domain.ValueObjects.Strategies.Enums;
 using ProfitFox.Tests.Integration.Application.Commands.Backtests;
 using ProfitFox.Tests.Integration.MarketData;
 
@@ -34,7 +23,6 @@ public sealed class EngineVersionTests
 {
     private const string Overlapping = "H0002";
     private static readonly string[] References = ["H0001", Overlapping];
-    private static readonly DateTimeOffset End = new DateTimeOffset(2026, 5, 16, 0, 0, 0, TimeSpan.Zero);
     private static readonly string Fixtures = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures");
     private static readonly JsonSerializerOptions Json = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
@@ -131,33 +119,10 @@ public sealed class EngineVersionTests
         Assert.That(numbers.Trades, Is.GreaterThan(0));
     }
 
-    // The strategy of the reference as a backtest of one set on 4h over every pair, the pairs in the order of the catalog;
-    // with a seed, the draw of random entries takes it instead of that of the graph.
     private static async Task<(IReadOnlyList<EventRow> Rows, SetNumbers Numbers)> Run(string reference, string? seed)
     {
-        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(Fixtures, $"{reference}.strategy.json")));
-        GraphDefinition graph = StrategyGraph.ReadForm(document.RootElement).Value!;
-        var settings = new BacktestSettings([], [TimeSpan.FromHours(4)], HistoryPeriod.DataStart, End, Pairs: null, 0.00055, 0.0002);
-        BacktestPlan plan = BacktestPlans.Of(graph, StrategyKind.Idea, settings, BacktestGrid.Of(settings)).Single();
-        if (seed is not null)
-        {
-            plan = plan with { Design = plan.Design with { Seed = seed } };
-        }
-
         await using MarketDataServer server = await MarketDataServer.Start();
-        await using ServiceProvider services = BenchServices.Start(server);
-        using var hash = new HistoryHash();
-        var history = new MarketHistory(services.GetRequiredService<IHistorySource>(), End, hash);
-        List<EventRow> rows = [];
-        SetNumbers numbers = SetNumbers.Zero;
-        foreach (Instrument pair in await services.GetRequiredService<IInstrumentCatalog>().LinearUsdtPerpetuals(CancellationToken.None))
-        {
-            PairSetResult result = (await PairBacktestRun.RunAsync(history, pair, StrategyKind.Idea, [plan], CancellationToken.None)).Single();
-            rows.AddRange(result.Rows);
-            numbers += result.Numbers;
-        }
-
-        return (rows, numbers);
+        return await ReferenceBacktests.Run(server, reference, seed);
     }
 
     private static bool Same(Dictionary<string, string> first, Dictionary<string, string> second)

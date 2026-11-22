@@ -2,7 +2,6 @@ using System.Security.Cryptography;
 using System.Text;
 
 using ProfitFox.Domain.ValueObjects.Backtests;
-using ProfitFox.Domain.ValueObjects.Runs;
 
 namespace ProfitFox.Domain.Services.Runs;
 
@@ -34,13 +33,6 @@ public sealed class RandomEntries
         _taken = [.. events];
     }
 
-    /// <summary>
-    ///     The random entries of a run of a hypothesis: every close has the horizon of its plan.
-    /// </summary>
-    public RandomEntries(string symbol, IEnumerable<DateTimeOffset> events, RunDesign design)
-        : this(symbol, events, design.ToBacktest(), _ => design.Hypothesis.Plan.Horizon)
-    {
-    }
 
     /// <summary>
     ///     The closes of the timeframe in the block and in history where the pair had no order, in time order.
@@ -66,7 +58,7 @@ public sealed class RandomEntries
     }
 
     /// <summary>
-    ///     The entries of one event of a block with these candidates; none when the block has no candidate.
+    ///     The entries of one order of a block with these candidates; none when the block has no candidate.
     /// </summary>
     public DateTimeOffset[] Draw(IReadOnlyList<DateTimeOffset> candidates)
     {
