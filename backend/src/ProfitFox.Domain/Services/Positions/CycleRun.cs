@@ -198,8 +198,9 @@ public sealed class CycleRun
     ///     trade-plan-outcome): entry at the open of the first minute with trades, worse by the slippage; the stop and the
     ///     target from the entry minute to the end of the horizon, the stop first; otherwise the close of the last minute
     ///     with trades at the end of the horizon. Coverage of candles and of funding is judged on the whole horizon.
+    ///     <paramref name="node" /> is the node of the order that opened the cycle; null for a cycle opened outside the graph.
     /// </summary>
-    public static CycleOutcome Simulate(MinutePath path, DateTimeOffset moment, TradePlan plan, TradeCosts costs, double amount)
+    public static CycleOutcome Simulate(MinutePath path, DateTimeOffset moment, TradePlan plan, TradeCosts costs, double amount, string? node = null)
     {
         EntrySide side = plan.Side == TradeSide.Long ? EntrySide.Long : EntrySide.Short;
         (TradeStatus status, int start, int entryStep, int lastTraded) = Prepare(path, moment, plan, costs);
@@ -208,7 +209,7 @@ public sealed class CycleRun
             return CycleOutcome.Excluded(status, side);
         }
 
-        CycleRun cycle = Enter(path, moment, plan, costs, amount, start, entryStep);
+        CycleRun cycle = Enter(path, moment, plan, costs, amount, node, start, entryStep);
         (int hitStep, bool stopHit, bool targetHit) = cycle.Walk(start, entryStep, plan.HorizonMinutes);
         CycleExit reason = stopHit ? CycleExit.Stop : targetHit ? CycleExit.Target : CycleExit.Time;
         double exitRaw = reason switch
@@ -237,7 +238,7 @@ public sealed class CycleRun
             return new TradeExit(status, Time: null);
         }
 
-        CycleRun cycle = Enter(path, moment, plan, costs, amount: 1, start, entryStep);
+        CycleRun cycle = Enter(path, moment, plan, costs, amount: 1, node: null, start, entryStep);
         (int hitStep, _, _) = cycle.Walk(start, entryStep, plan.HorizonMinutes);
         return new TradeExit(TradeStatus.Ok, moment + TimeSpan.FromMinutes(hitStep >= 0 ? hitStep : plan.HorizonMinutes));
     }
@@ -272,7 +273,7 @@ public sealed class CycleRun
         return double.IsNaN(open) ? level : isLong ? Math.Min(level, open) : Math.Max(level, open);
     }
 
-    private static CycleRun Enter(MinutePath path, DateTimeOffset moment, TradePlan plan, TradeCosts costs, double amount, int start, int entryStep)
+    private static CycleRun Enter(MinutePath path, DateTimeOffset moment, TradePlan plan, TradeCosts costs, double amount, string? node, int start, int entryStep)
     {
         EntrySide side = plan.Side == TradeSide.Long ? EntrySide.Long : EntrySide.Short;
         double entryRaw = path.Open(start + entryStep);
@@ -285,7 +286,7 @@ public sealed class CycleRun
             entryRaw,
             entryFill,
             amount,
-            node: null,
+            node,
             plan.Stop,
             plan.Target,
             moment + plan.Horizon);

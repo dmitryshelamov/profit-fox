@@ -98,11 +98,10 @@ public sealed class PairOrders
         _lastWeek = week;
         foreach (StrategyStep order in _simulated[week].OrderBy(order => order.Moment))
         {
-            EntrySide side = order.Entry!.Value;
             _outcomes[order.Moment] = _position.Enter(path, order, _costs) switch
             {
                 null => Order(order, OrderResult.Skipped, exclusion: null),
-                { Opened: true } cycle => Opened(order, side, cycle.Outcome!),
+                { Opened: true } cycle => Opened(order, cycle),
                 Cycle cycle => Order(order, OrderResult.Excluded, Exclusion(cycle.Status))
             };
         }
@@ -121,12 +120,13 @@ public sealed class PairOrders
         return [.. _cycles];
     }
 
-    // The cycle of the trade, its size that of the order: the result in USDT is the fraction times it.
-    private OrderOutcome Opened(StrategyStep order, EntrySide side, TradeOutcome trade)
+    // The cycle the order opened, as the calculation of a cycle counted it, and the same cycle as the trade of its plan.
+    private OrderOutcome Opened(StrategyStep order, Cycle cycle)
     {
-        double amount = (double)(order.Size ?? StrategyStep.DefaultSize);
-        _cycles.Add(CycleOutcome.FromTrade(trade, side, amount, order.Node));
-        return Order(order, OrderResult.Filled, exclusion: null) with { Price = trade.EntryPrice, Amount = amount, Cycle = _cycles.Count - 1, Trade = trade };
+        CycleOutcome result = cycle.Result!;
+        CycleFill entry = result.Fills[0];
+        _cycles.Add(result);
+        return Order(order, OrderResult.Filled, exclusion: null) with { Price = entry.Price, Amount = entry.Amount, Cycle = _cycles.Count - 1, Trade = cycle.Outcome };
     }
 
     private static OrderOutcome Order(StrategyStep order, OrderResult result, OrderExclusion? exclusion)
