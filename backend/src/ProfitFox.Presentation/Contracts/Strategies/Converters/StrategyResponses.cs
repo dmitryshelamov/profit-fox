@@ -29,7 +29,7 @@ public static class StrategyResponses
 
     public static SignalUseResponse Of(SignalUseInternal use)
     {
-        return new SignalUseResponse(use.Node, use.Signal, use.Name, use.Version, use.LatestVersion, [.. use.Parameters.Select(Of)]);
+        return new SignalUseResponse(use.Node, use.Signal, use.Name, use.Version, use.LatestVersion, [.. use.Parameters.Select(Of)], use.Output);
     }
 
     private static SignalParameterResponse Of(ParameterDefinition parameter)

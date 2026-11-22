@@ -120,6 +120,7 @@ describe('a signal node', () => {
     expect(versions.get(versionKey(fundingHighId, 1))).toEqual({
       name: 'funding-high',
       latestVersion: 2,
+      output: 'event',
       parameters: [
         { name: 'threshold', type: 'number', value: 0.0005, minimum: null, maximum: null },
       ],

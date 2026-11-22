@@ -85,6 +85,27 @@ describe('the editor of a signal', () => {
     expect(within(await findNode('Параметры', 'p')).getByText('level')).toBeInTheDocument();
   });
 
+  // Change add-ideas-and-market, task 3.5: a signal may declare a boolean output — a state.
+  it('declares the output of the signal a boolean, and drops the wire of the event into it', async () => {
+    openFundingHigh();
+    await findNode('Выходы', 'out');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Параметры' }));
+    const type = card('Параметры').getByRole('combobox', { name: 'Тип выхода сигнала' });
+    expect(type).toHaveValue('event');
+    await userEvent.selectOptions(type, 'boolean');
+
+    await waitFor(() => expect(type).toHaveValue('boolean'));
+    await userEvent.click(screen.getByRole('button', { name: 'JSON' }));
+    const text = (card('JSON').getByRole('textbox') as HTMLTextAreaElement).value;
+    const graph = JSON.parse(text) as {
+      outputs: { name: string; type: string }[];
+      wires: { from: string; to: string }[];
+    };
+    expect(graph.outputs).toEqual([{ name: 'entry', type: 'boolean' }]);
+    expect(graph.wires.some((wire) => wire.to === 'out.entry')).toBe(false);
+  });
+
   // Scenario «Вставка графа».
   it('replaces the graph with pasted JSON, and keeps it when the JSON does not read', async () => {
     openFundingHigh();

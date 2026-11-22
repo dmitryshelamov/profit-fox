@@ -32,7 +32,7 @@ public class SignalsController(ISender sender) : ControllerBase
     [ProducesResponseType<SignalListItem[]>(StatusCodes.Status200OK)]
     public async Task<ActionResult<SignalListItem[]>> List(CancellationToken cancellation)
     {
-        return (await sender.Send(new GetSignalsQuery(), cancellation)).Select(entry => new SignalListItem(entry.Name, entry.Description, entry.Version, entry.Error, entry.Id, entry.Strategies)).ToArray();
+        return (await sender.Send(new GetSignalsQuery(), cancellation)).Select(entry => new SignalListItem(entry.Name, entry.Description, entry.Version, entry.Error, entry.Id, entry.Strategies, entry.Output)).ToArray();
     }
 
     [HttpGet("{name}", Name = "GetSignal")]

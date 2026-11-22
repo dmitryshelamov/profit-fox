@@ -51,6 +51,42 @@ public sealed class PairEventsTests
         Assert.That(Exploration().Fits(Utc(2026, 5, 16), FourHours), Is.False, "a backtest of H0001 up to 2026-05-16 leaves this order out");
     }
 
+    /// <summary>
+    ///     Change add-ideas-and-market, task 3.4: spec signal-preview «Состояние держится три свечи».
+    /// </summary>
+    [Test]
+    public void A_state_held_for_three_candles_is_one_event_at_the_close_of_the_first()
+    {
+        Signal state = StrategyGraph.ReadSignal(Graphs.CloseAbove).Value!;
+        decimal[] closes = [99, 100, 101, 102, 99];
+        HistoryCandle[] candles = [.. closes.Select((close, index) => Closing(Utc(2026, 1, 5, 0).AddHours(4 * index), close))];
+
+        IReadOnlyList<DateTimeOffset> events = PairEvents.Of(state, FourHours, "BTCUSDT", candles, []);
+
+        Assert.That(events, Is.EqualTo(new[] { Utc(2026, 1, 5, 8) }));
+    }
+
+    /// <summary>
+    ///     Change add-ideas-and-market, task 3.4: spec signal-preview «Состояние вернулось».
+    /// </summary>
+    [Test]
+    public void A_state_that_comes_back_is_a_second_event()
+    {
+        Signal state = StrategyGraph.ReadSignal(Graphs.CloseAbove).Value!;
+        decimal[] closes = [101, 99, 101];
+        HistoryCandle[] candles = [.. closes.Select((close, index) => Closing(Utc(2026, 1, 5, 0).AddHours(4 * index), close))];
+
+        IReadOnlyList<DateTimeOffset> events = PairEvents.Of(state, FourHours, "BTCUSDT", candles, []);
+
+        Assert.That(events, Is.EqualTo(new[] { Utc(2026, 1, 5, 4), Utc(2026, 1, 5, 12) }));
+    }
+
+    private static HistoryCandle Closing(DateTimeOffset open, decimal close)
+    {
+        string text = close.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return new HistoryCandle(open, text, text, text, text, "12.5", Turnover: null, BuyVolume: null);
+    }
+
     private static HistoryCandle Traded(DateTimeOffset open)
     {
         return new HistoryCandle(open, "100", "101", "99", "100.5", "12.5", Turnover: null, BuyVolume: null);

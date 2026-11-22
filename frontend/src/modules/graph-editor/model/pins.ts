@@ -18,10 +18,15 @@ export function pinsOf(
 ): { inputs: Pin[]; outputs: Pin[] } {
   const kind = kindOf(node, catalog);
   if (kind?.pinsFromGraph === 'signal') {
-    const parameters = signalInfo(node, catalog)?.parameters ?? [];
+    const info = signalInfo(node, catalog);
+    const parameters = info?.parameters ?? [];
     return {
       inputs: parameters.map(({ name, type, value }) => ({ name, type, fallback: value })),
-      outputs: (kind.outputs ?? []).map((pin) => ({ name: pin.name, type: pin.type as PinType })),
+      // A signal-state has one output `value` of the boolean type (change add-ideas-and-market).
+      outputs:
+        info?.output === 'boolean'
+          ? [{ name: 'value', type: 'boolean' }]
+          : (kind.outputs ?? []).map((pin) => ({ name: pin.name, type: pin.type as PinType })),
     };
   }
 

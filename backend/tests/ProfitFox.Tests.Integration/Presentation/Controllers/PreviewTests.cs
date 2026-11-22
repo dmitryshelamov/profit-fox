@@ -229,6 +229,24 @@ public sealed class PreviewTests
     }
 
     /// <summary>
+    ///     Change add-ideas-and-market, task 3.4: spec signal-preview «Предпросмотр сигнала-состояния» — the state of a high
+    ///     rate holds from the payment of 08:00 to the next one, eight candles of 1h, and gives one event at 08:00 a day.
+    /// </summary>
+    [Test]
+    public async Task A_signal_state_gives_an_event_where_it_turns_true()
+    {
+        await using MarketDataServer market = await MarketDataServer.Start();
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
+
+        PreviewResponse preview = await Ok(await Preview(api, "BTCUSDT", "1h", ReferenceSignals.HighFunding()));
+
+        Assert.That(preview.Events, Has.Count.EqualTo(28), "one a day, not one a candle");
+        Assert.That(
+            preview.Events.Select(item => DateTimeOffset.FromUnixTimeMilliseconds(item.Moment).TimeOfDay),
+            Has.All.EqualTo(TimeSpan.FromHours(8)));
+    }
+
+    /// <summary>
     ///     Change add-ideas-and-market, task 2.3: spec strategy-preview «Стратегия на 5m».
     /// </summary>
     [Test]

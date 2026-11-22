@@ -40,7 +40,12 @@ export function useSignalNodes(
     (): SignalEntry[] =>
       (signals.data ?? [])
         .filter((signal) => !signal.error && signal.id)
-        .map((signal) => ({ id: signal.id!, name: signal.name, version: Number(signal.version) })),
+        .map((signal) => ({
+          id: signal.id!,
+          name: signal.name,
+          version: Number(signal.version),
+          output: signal.output ?? null,
+        })),
     [signals.data],
   );
 
@@ -50,6 +55,7 @@ export function useSignalNodes(
       all.set(versionKey(entry.id, entry.version), {
         name: entry.name,
         latestVersion: entry.version,
+        output: entry.output ?? null,
       });
     }
 

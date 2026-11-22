@@ -20,7 +20,7 @@ public sealed class SignalInternalConverterTests
     [Test]
     public void A_signal_in_the_list_keeps_its_name_description_and_version()
     {
-        Assert.That(Signal.ToEntryInternal(), Is.EqualTo(new SignalEntryInternal("funding-high", "описание", Version: 3, Error: null) { Id = Signal.Id }));
+        Assert.That(Signal.ToEntryInternal(), Is.EqualTo(new SignalEntryInternal("funding-high", "описание", Version: 3, Error: null) { Id = Signal.Id, Output = "event" }));
     }
 
     [Test]

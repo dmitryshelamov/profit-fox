@@ -30,6 +30,53 @@ internal static class Graphs
         """;
 
     /// <summary>
+    ///     A signal-state (change add-ideas-and-market, spec strategy-graph «Сигнал-состояние»): its output <c>holds</c> of the
+    ///     boolean type is true while the close of the candle is at or above the parameter <c>level</c>.
+    /// </summary>
+    public const string CloseAbove =
+        """
+        {
+          "formatVersion": 1,
+          "parameters": [{ "name": "level", "type": "number", "value": 100 }],
+          "outputs": [{ "name": "holds", "type": "boolean" }],
+          "nodes": [
+            { "id": "p", "kind": "parameters" },
+            { "id": "c", "kind": "candle" },
+            { "id": "above", "kind": "compare", "settings": { "operation": "ge" } },
+            { "id": "out", "kind": "outputs" }
+          ],
+          "wires": [
+            { "from": "c.close", "to": "above.a" },
+            { "from": "p.level", "to": "above.b" },
+            { "from": "above.result", "to": "out.holds" }
+          ]
+        }
+        """;
+
+    /// <summary>
+    ///     A signal-state on the funding: true while the rate of the last payment is at or above <c>threshold</c>.
+    /// </summary>
+    public const string FundingAbove =
+        """
+        {
+          "formatVersion": 1,
+          "parameters": [{ "name": "threshold", "type": "number", "value": 0.0005 }],
+          "outputs": [{ "name": "high", "type": "boolean" }],
+          "nodes": [
+            { "id": "p", "kind": "parameters" },
+            { "id": "rate", "kind": "funding-rate" },
+            { "id": "ge", "kind": "compare", "settings": { "operation": "ge" } },
+            { "id": "out", "kind": "outputs" }
+          ],
+          "wires": [
+            { "from": "rate.value", "to": "ge.a" },
+            { "from": "p.threshold", "to": "ge.b" },
+            { "from": "ge.result", "to": "out.high" }
+          ]
+        }
+        """;
+
+    /// <summary>
     ///     The strategy of H0001: its signal with a short entry of 100 USDT on the event, the position and a close after 4h,
     ///     wired by orders and the position (change add-position-node, spec strategy-graph «Стратегия H0001»).
     /// </summary>

@@ -129,6 +129,7 @@ function CreateStrategy({ signal }: { readonly signal: SignalListItem }) {
           id,
           name: signal.name,
           version: Number(signal.version),
+          output: signal.output ?? null,
         })
       }
     >

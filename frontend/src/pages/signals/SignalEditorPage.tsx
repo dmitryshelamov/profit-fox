@@ -103,7 +103,14 @@ export function SavedSignalPage({ name }: { readonly name: string }) {
       actions={
         id && (
           <Button
-            onClick={() => void openStrategyOfSignal(navigate, { id, name, version: version! })}
+            onClick={() =>
+              void openStrategyOfSignal(navigate, {
+                id,
+                name,
+                version: version!,
+                output: signal.data.content!.document.graph.outputs[0]?.type ?? null,
+              })
+            }
           >
             Создать стратегию
           </Button>

@@ -8,6 +8,7 @@ import { renderApp } from '@/test/renderApp';
 import { baseRoutes, savedFundingHigh } from '@/test/routes';
 import { backtest } from '@/test/runs';
 import {
+  btcDrop,
   fundingHigh,
   fundingHighId,
   fundingShort,
@@ -741,6 +742,54 @@ describe('a strategy of a signal', () => {
           request.method === 'POST' && new URL(request.url).pathname === '/api/strategies',
       ),
     ).toBe(false);
+  });
+
+  // Change add-ideas-and-market, task 3.5: scenario «Стратегия из btc-drop-4h».
+  it('puts first-time between a signal-state and the enter', async () => {
+    routes(strategyRoutes([fundingHigh, btcDrop]));
+    const { history } = renderApp('/signals');
+
+    const row = await screen.findByRole('row', { name: 'Сигнал btc-drop-4h' });
+    await userEvent.click(within(row).getByRole('button', { name: 'Создать стратегию' }));
+
+    await waitFor(() => expect(history.location.pathname).toMatch(/^\/strategies\/new\/.+/));
+    const node = await findNode('btc-drop-4h', 'btc-drop-4h');
+    expect(within(node).getByText('value')).toBeInTheDocument();
+    expect(within(node).queryByText('event')).toBeNull();
+    const first = await selectNode('Впервые', 'first');
+    expect(within(first).getByRole('combobox', { name: 'Источник value' })).toHaveValue(
+      'btc-drop-4h.value',
+    );
+    const enter = await selectNode('Вход', 'enter');
+    expect(within(enter).getByRole('combobox', { name: 'Источник when' })).toHaveValue(
+      'first.event',
+    );
+    expect(await findNode('Позиция', 'position')).toBeInTheDocument();
+    expect(await findNode('Закрыть через', 'close-after')).toBeInTheDocument();
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Ошибки 2/ }, { timeout: 2000 }),
+    );
+    expect(card('Ошибки').getByText('узел enter, настройка side')).toBeInTheDocument();
+    expect(card('Ошибки').getByText('close-after.after')).toBeInTheDocument();
+  });
+
+  // Change add-ideas-and-market, task 3.5: scenario «Провод от состояния к входу».
+  it('offers no wire from the value of a signal-state to the when of enter', async () => {
+    routes(strategyRoutes([fundingHigh, btcDrop]));
+    const { history } = renderApp('/signals');
+
+    const row = await screen.findByRole('row', { name: 'Сигнал btc-drop-4h' });
+    await userEvent.click(within(row).getByRole('button', { name: 'Создать стратегию' }));
+    await waitFor(() => expect(history.location.pathname).toMatch(/^\/strategies\/new\/.+/));
+    await findNode('btc-drop-4h', 'btc-drop-4h');
+
+    const enter = await selectNode('Вход', 'enter');
+    const source = within(enter).getByRole('combobox', { name: 'Источник when' });
+    const options = within(source)
+      .getAllByRole('option')
+      .map((option) => option.getAttribute('value'));
+    expect(options).toContain('first.event');
+    expect(options).not.toContain('btc-drop-4h.value');
   });
 
   it('is offered in the row of a saved signal', async () => {

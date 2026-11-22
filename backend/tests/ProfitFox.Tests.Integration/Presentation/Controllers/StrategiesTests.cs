@@ -179,6 +179,28 @@ public sealed class StrategiesTests
         Assert.That(_market.Data.FundingRequests, Is.Empty);
     }
 
+    /// <summary>
+    ///     Change add-ideas-and-market, task 3.3: the signal nodes and the list of signals say the type of the output, so
+    ///     the editor draws <c>value</c> of a signal-state.
+    /// </summary>
+    [Test]
+    public async Task A_signal_state_is_named_by_the_type_of_its_output_in_the_check_and_in_the_list()
+    {
+        Guid events = await CreateSignal("funding-high");
+        Guid state = await CreateSignal("high-funding", ReferenceSignals.HighFunding());
+        JsonObject graph = Strategy(events);
+        graph["nodes"]!.AsArray().Add(JsonNode.Parse($$"""{ "id": "b", "kind": "signal", "settings": { "signal": "{{state}}", "version": "1" } }"""));
+        graph["wires"]!.AsArray().Add(JsonNode.Parse("""{ "from": "b.value", "to": "enter.when" }"""));
+
+        StrategyValidationResponse checkedGraph = await Check(graph, kind: null);
+
+        Assert.That(checkedGraph.Signals.Select(use => (use.Node, use.Output)), Is.EqualTo(new[] { ("s", (string?)"event"), ("b", "boolean") }));
+        RequestError error = checkedGraph.Errors.Single(item => item.Code == "WireTypeMismatch");
+        Assert.That(error.Wire, Is.EqualTo(new RequestWire("b.value", "enter.when")));
+        SignalListItem[] list = (await _api.Http.GetFromJsonAsync<SignalListItem[]>("/api/signals", Json))!;
+        Assert.That(list.Select(item => (item.Name, item.Output)), Is.EqualTo(new[] { ("funding-high", (string?)"event"), ("high-funding", "boolean") }));
+    }
+
     [Test]
     public async Task The_list_gives_the_signals_and_the_exits_of_the_latest_version()
     {
@@ -400,9 +422,9 @@ public sealed class StrategiesTests
         return await connection.ExecuteScalarAsync<string>("SELECT graph::text FROM strategy_versions WHERE version = @Version", new { Version = version }) ?? "";
     }
 
-    private async Task<Guid> CreateSignal(string name)
+    private async Task<Guid> CreateSignal(string name, JsonObject? signal = null)
     {
-        JsonObject graph = ReferenceSignals.H0001();
+        JsonObject graph = signal ?? ReferenceSignals.H0001();
         HttpResponseMessage created = await _api.Http.PostAsJsonAsync("/api/signals", new JsonObject { ["name"] = name, ["graph"] = graph, ["layout"] = new JsonObject() }, Json);
         return (await created.Content.ReadFromJsonAsync<SignalResponse>(Json))!.Id;
     }

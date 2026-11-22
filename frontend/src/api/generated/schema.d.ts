@@ -647,6 +647,7 @@ export interface components {
             /** Format: uuid */
             id: null | string;
             strategies: string[];
+            output: null | string;
         };
         SignalParameterResponse: {
             name: string;
@@ -679,6 +680,7 @@ export interface components {
             /** Format: int32 */
             latestVersion: null | number | string;
             parameters: components["schemas"]["SignalParameterResponse"][];
+            output: null | string;
         };
         StrategyLastRunResponse: {
             id: string;

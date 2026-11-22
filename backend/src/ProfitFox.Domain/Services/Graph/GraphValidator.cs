@@ -45,9 +45,9 @@ internal static class GraphValidator
         {
             errors.Add(new GraphError(GraphErrorCode.SignalOutputCount, $"A signal has exactly one output, not {graph.Outputs.Count}."));
         }
-        else if (graph.Outputs[0].Type != PinType.Event)
+        else if (graph.Outputs[0].Type is not (PinType.Event or PinType.Boolean))
         {
-            errors.Add(new GraphError(GraphErrorCode.SignalOutputNotEvent, "The output of a signal is an event.") { Pin = graph.Outputs[0].Name });
+            errors.Add(new GraphError(GraphErrorCode.SignalOutputNotEvent, "The output of a signal is an event or a boolean.") { Pin = graph.Outputs[0].Name });
         }
 
         // A signal reads only the market: the nodes of the position belong to a strategy, and so do other signals.
@@ -362,7 +362,7 @@ internal static class GraphValidator
             return new CheckedNode(node, kind, Inputs: null, outputs, Signal: null);
         }
 
-        return new CheckedNode(node, kind, kind.Inputs(node, graph, signals), outputs, found.Signal);
+        return new CheckedNode(node, kind, kind.Inputs(node, graph, signals), kind.Outputs(node, graph, signals), found.Signal);
     }
 
     // The ids an expansion gives its nodes (<signal node>/<node>) must be free in the graph and among other expansions.

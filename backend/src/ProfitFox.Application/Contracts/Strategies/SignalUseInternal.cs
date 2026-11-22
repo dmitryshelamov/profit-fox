@@ -14,4 +14,11 @@ public sealed record SignalUseInternal(
     string? Name,
     int Version,
     int? LatestVersion,
-    IReadOnlyList<ParameterDefinition> Parameters);
+    IReadOnlyList<ParameterDefinition> Parameters)
+{
+    /// <summary>
+    ///     The type of the output of the version of the node — <c>event</c> or <c>boolean</c> (change add-ideas-and-market,
+    ///     design.md, decision 7) — or null when the version is not found.
+    /// </summary>
+    public string? Output { get; init; }
+}

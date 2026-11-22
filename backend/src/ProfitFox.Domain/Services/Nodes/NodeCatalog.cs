@@ -93,6 +93,11 @@ public static class NodeCatalog
     public const string Event = "event";
 
     /// <summary>
+    ///     The output of a <c>signal</c> node whose version is a signal-state (change add-ideas-and-market).
+    /// </summary>
+    public const string Value = "value";
+
+    /// <summary>
     ///     The operations of <c>compare</c>.
     /// </summary>
     public static readonly IReadOnlyList<string> CompareOperations = ["gt", "ge", "lt", "le", "eq", "ne"];
@@ -211,7 +216,7 @@ public static class NodeCatalog
             new NodeKind(
                 Signal,
                 (node, _, signals) => SignalInputs(node, signals),
-                (_, _, _) => [new PinDeclaration(Event, PinType.Event)],
+                (node, _, signals) => SignalOutputs(node, signals),
                 [
                     new SettingDeclaration(SignalSetting, [], Default: null) { Free = true },
                     new SettingDeclaration(VersionSetting, [], Default: null) { Free = true }
@@ -234,6 +239,18 @@ public static class NodeCatalog
     public static NodeKind? Find(string name)
     {
         return Kinds.GetValueOrDefault(name);
+    }
+
+    // The output of the node: value of the boolean type for a version whose output is a boolean (change
+    // add-ideas-and-market, design.md, decision 7), event for any other, and for a node whose version is not found.
+    private static IReadOnlyList<PinDeclaration> SignalOutputs(NodeDefinition? node, SignalSet signals)
+    {
+        if (node is not null && SignalNodes.TryReference(node, out SignalReference reference) && signals.Find(reference).Signal is { IsState: true })
+        {
+            return [new PinDeclaration(Value, PinType.Boolean)];
+        }
+
+        return [new PinDeclaration(Event, PinType.Event)];
     }
 
     // The parameters of the version the node points at; none when there is no node, no reference or no such version.

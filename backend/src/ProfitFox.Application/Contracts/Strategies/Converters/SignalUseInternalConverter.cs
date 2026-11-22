@@ -1,5 +1,6 @@
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.ValueObjects.Graph;
+using ProfitFox.Domain.ValueObjects.Graph.Enums;
 
 namespace ProfitFox.Application.Contracts.Strategies.Converters;
 
@@ -26,7 +27,10 @@ public static class SignalUseInternalConverter
                 found.Name,
                 reference.Version,
                 found.LatestVersion,
-                found.Signal?.Graph.Parameters ?? []));
+                found.Signal?.Graph.Parameters ?? [])
+            {
+                Output = found.Signal is { } signal ? PinTypes.Name(signal.OutputType) : null
+            });
         }
 
         return uses;

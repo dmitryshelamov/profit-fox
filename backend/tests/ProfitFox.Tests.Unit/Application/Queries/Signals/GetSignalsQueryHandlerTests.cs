@@ -27,7 +27,7 @@ public sealed class GetSignalsQueryHandlerTests
         IReadOnlyList<SignalEntryInternal> list = await _signals.List(_none);
 
         Assert.That(list.Select(entry => entry.Name), Is.EqualTo(new[] { "candle-drop", "funding-high" }));
-        Assert.That(list[0], Is.EqualTo(new SignalEntryInternal("candle-drop", "свеча", Version: 1, Error: null) { Id = list[0].Id }));
+        Assert.That(list[0], Is.EqualTo(new SignalEntryInternal("candle-drop", "свеча", Version: 1, Error: null) { Id = list[0].Id, Output = "event" }));
         Assert.That(list.Select(entry => entry.Id), Has.None.Null.And.Unique, "a signal that reads has its id");
     }
 }

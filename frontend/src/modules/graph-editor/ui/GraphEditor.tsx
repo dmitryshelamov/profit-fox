@@ -261,6 +261,7 @@ export function GraphEditor({
               <ParametersCard
                 document={document}
                 readOnly={readOnly}
+                signal={rules.kind === 'signal'}
                 onChange={onChange}
                 onClose={() => setSheet(undefined)}
               />
