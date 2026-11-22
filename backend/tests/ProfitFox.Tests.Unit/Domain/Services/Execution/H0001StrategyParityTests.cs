@@ -12,14 +12,19 @@ namespace ProfitFox.Tests.Unit.Domain.Services.Execution;
 /// <summary>
 ///     Spec strategy-execution «Стратегия выдаёт те же события, что её сигнал» (change add-strategy-graph, task 2.2): on
 ///     the history of <see cref="H0001ParityTests" /> the orders of the strategy of H0001 come at the moments of the events
-///     of its signal, and the pairs of the history, which come mixed, do not reach each other.
+///     of its signal, and the pairs of the history, which come mixed, do not reach each other. The strategy is read from
+///     <c>Fixtures/H0001.strategy.json</c>.
 /// </summary>
 public sealed class H0001StrategyParityTests
 {
     private static readonly string Folder = Path.Combine(TestContext.CurrentContext.TestDirectory, "Domain", "Services", "Execution", "Fixtures", "H0001");
 
     private static readonly Signal Signal = StrategyGraph.ReadSignal(Graphs.H0001).Value!;
-    private static readonly TradingStrategy Strategy = TradingStrategy.FromSignal(Signal, EntrySide.Short, TimeSpan.FromHours(4));
+
+    // The strategy of H0001 as its test file keeps it (change add-strategy-backtest, task 5.2).
+    private static readonly TradingStrategy Strategy = StrategyGraph.ReadStrategy(
+        File.ReadAllText(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "H0001.strategy.json")),
+        ProfitFox.Domain.ValueObjects.Strategies.Enums.StrategyKind.Idea).Value!;
 
     [Test]
     public void The_orders_of_the_strategy_come_at_the_events_of_the_signal()
