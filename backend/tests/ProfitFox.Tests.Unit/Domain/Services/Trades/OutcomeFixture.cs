@@ -28,6 +28,35 @@ internal static class OutcomeFixture
         }
     }
 
+    /// <summary>
+    ///     The trades with the minutes and payments of their paths as rows (change add-ideas-and-market, task 7.3): the open
+    ///     time, prices and coverage of each minute, and each payment with its time and rate.
+    /// </summary>
+    public static IEnumerable<(MinutePath Path, DateTimeOffset Entry, TradePlan Plan, IReadOnlyList<(DateTimeOffset Open, double O, double H, double L, double C, bool Covered)> Minutes, IReadOnlyList<(DateTimeOffset Time, double Rate)> Payments)> TradesWithRows()
+    {
+        ILookup<int, string[]> minutes = Rows("minutes.csv").ToLookup(row => int.Parse(row[0], CultureInfo.InvariantCulture));
+        ILookup<int, string[]> funding = Rows("funding.csv").ToLookup(row => int.Parse(row[0], CultureInfo.InvariantCulture));
+        var starts = Rows("paths.csv").ToDictionary(row => int.Parse(row[0], CultureInfo.InvariantCulture), row => Time(row[1]));
+        Dictionary<int, MinutePath> paths = Paths();
+        foreach (string[] row in Rows("trades.csv"))
+        {
+            int number = int.Parse(row[0], CultureInfo.InvariantCulture);
+            var plan = new TradePlan(
+                row[2] == "1" ? TradeSide.Long : TradeSide.Short,
+                TimeSpan.FromMinutes(int.Parse(row[3], CultureInfo.InvariantCulture)),
+                Optional(row[4]),
+                Optional(row[5]));
+            (DateTimeOffset, double, double, double, double, bool)[] rows =
+            [
+                .. minutes[number]
+                    .Select(minute => (starts[number].AddMinutes(int.Parse(minute[1], CultureInfo.InvariantCulture)), Number(minute[2]), Number(minute[3]), Number(minute[4]), Number(minute[5]), minute[6] == "1"))
+                    .OrderBy(minute => minute.Item1)
+            ];
+            (DateTimeOffset, double)[] payments = [.. funding[number].Select(payment => (Time(payment[1]), Number(payment[2]))).OrderBy(payment => payment.Item1)];
+            yield return (paths[number], Time(row[1]), plan, rows, payments);
+        }
+    }
+
     private static Dictionary<int, MinutePath> Paths()
     {
         ILookup<int, string[]> minutes = Rows("minutes.csv").ToLookup(row => int.Parse(row[0], CultureInfo.InvariantCulture));

@@ -49,7 +49,7 @@ internal static class IdeaDbConverter
                 _ => ExitReason.None
             },
             Ambiguous = row.Ambiguous,
-            ExitPrice = row.ExitPrice,
+            ExitRaw = row.ExitPrice,
             Result = row.Result,
             ResultUsdt = row.ResultUsdt,
             Excluded = row.Excluded
@@ -61,7 +61,6 @@ internal static class IdeaDbConverter
     /// </summary>
     public static object Parameters(Idea idea)
     {
-        double side = idea.Side == EntrySide.Long ? 1 : -1;
         return new
         {
             idea.Id,
@@ -83,8 +82,8 @@ internal static class IdeaDbConverter
             idea.EntryRaw,
             idea.EntryPrice,
             idea.EntryTime,
-            StopPrice = idea.EntryPrice is { } entry && idea.Stop is { } stop ? entry * (1 - side * stop) : (double?)null,
-            TargetPrice = idea.EntryPrice is { } price && idea.Target is { } target ? price * (1 + side * target) : (double?)null,
+            idea.StopPrice,
+            idea.TargetPrice,
             idea.FundingPaid,
             idea.LastClose,
             idea.ComputedUntil,
@@ -99,7 +98,7 @@ internal static class IdeaDbConverter
                 _ => null
             },
             idea.Ambiguous,
-            idea.ExitPrice,
+            ExitPrice = idea.ExitRaw,
             idea.Result,
             idea.ResultUsdt,
             idea.Excluded

@@ -87,9 +87,10 @@ public sealed class Idea
     public bool Ambiguous { get; set; }
 
     /// <summary>
-    ///     The price the exit filled at; null before the exit.
+    ///     The price of the exit before the slippage — the level of the stop or of the target, or the close of the last minute
+    ///     with trades; null before the exit.
     /// </summary>
-    public double? ExitPrice { get; set; }
+    public double? ExitRaw { get; set; }
 
     /// <summary>
     ///     The outcome after costs as a fraction and in USDT; null until the idea is closed.
@@ -104,4 +105,19 @@ public sealed class Idea
     public string? Excluded { get; set; }
 
     public DateTimeOffset Until => Moment + After;
+
+    /// <summary>
+    ///     The price the idea shows as its entry: that of the entry, or the close of its candle before it.
+    /// </summary>
+    public double ShownEntry => EntryPrice ?? (double)CandleClose;
+
+    /// <summary>
+    ///     The price of the stop and of the target, counted from the entry (spec strategy-ideas «Цена входа идеи»); null
+    ///     without them or before the entry.
+    /// </summary>
+    public double? StopPrice => EntryPrice is { } entry && Stop is { } stop ? entry * (1 - Direction * stop) : null;
+
+    public double? TargetPrice => EntryPrice is { } entry && Target is { } target ? entry * (1 + Direction * target) : null;
+
+    private double Direction => Side == EntrySide.Long ? 1 : -1;
 }

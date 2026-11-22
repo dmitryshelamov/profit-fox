@@ -48,7 +48,7 @@ public sealed class IdeaRepositoryTests
         idea.State = IdeaState.Closed;
         idea.ExitTime = idea.Moment.AddHours(4);
         idea.ExitReason = ExitReason.Time;
-        idea.ExitPrice = 96000;
+        idea.ExitRaw = 96000;
         idea.Result = 0.0041;
         idea.ResultUsdt = 0.41;
         await _ideas.SaveAsync(idea, CancellationToken.None);
