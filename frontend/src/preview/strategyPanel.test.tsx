@@ -14,6 +14,88 @@ const hour = 3_600_000;
 const hour4 = 4 * hour;
 const first = Date.UTC(2026, 3, 16, 0); // a candle 2026-04-16 00:00 UTC, closed 04:00
 
+interface OldOrder {
+  readonly moment: number;
+  readonly side: string;
+  readonly outcome: string;
+  readonly reason: string | null;
+  readonly trade: {
+    readonly entryTime: number;
+    readonly entryPrice: number;
+    readonly exitTime: number;
+    readonly exitPrice: number;
+    readonly exitReason: string;
+    readonly net: number;
+  } | null;
+}
+
+/**
+ * The orders as the tests write them — each with the trade of its plan — in the answer of change add-position-node: an
+ * order of `enter` of 100 USDT that opened a cycle of an entry and an exit, the others without a cycle.
+ */
+function withCycles(orders: readonly OldOrder[]) {
+  const cycles: unknown[] = [];
+  const answered = orders.map((order) => {
+    if (order.trade === null) {
+      return {
+        moment: order.moment,
+        node: 'enter',
+        side: order.side,
+        outcome: order.outcome,
+        reason: order.reason,
+        price: null,
+        amount: null,
+        cycle: null,
+      };
+    }
+
+    const { trade } = order;
+    const quantity = 100 / trade.entryPrice;
+    cycles.push({
+      side: order.side,
+      fills: [
+        {
+          moment: trade.entryTime,
+          action: 'entry',
+          side: order.side === 'short' ? 'sell' : 'buy',
+          price: trade.entryPrice,
+          quantity,
+          amount: 100,
+          node: 'enter',
+        },
+        {
+          moment: trade.exitTime,
+          action: 'exit',
+          side: order.side === 'short' ? 'buy' : 'sell',
+          price: trade.exitPrice,
+          quantity,
+          amount: quantity * trade.exitPrice,
+          node: null,
+        },
+      ],
+      entries: 1,
+      invested: 100,
+      exitReason: trade.exitReason,
+      ambiguous: false,
+      net: trade.net,
+      netAmount: trade.net * 100,
+      open: false,
+      exclusion: null,
+    });
+    return {
+      moment: order.moment,
+      node: 'enter',
+      side: order.side,
+      outcome: 'filled',
+      reason: null,
+      price: trade.entryPrice,
+      amount: 100,
+      cycle: cycles.length - 1,
+    };
+  });
+  return { orders: answered, cycles };
+}
+
 /** A preview of funding-short: a trade on the first event, a skipped order an hour later and one past the end. */
 function strategyPreview() {
   return {
@@ -28,7 +110,7 @@ function strategyPreview() {
       volume: 10,
     })),
     coverage: [{ from: Date.UTC(2023, 10, 18), to: Date.UTC(2026, 4, 16) }],
-    orders: [
+    ...withCycles([
       {
         moment: first + hour4,
         side: 'short',
@@ -57,7 +139,7 @@ function strategyPreview() {
         reason: 'period',
         trade: null,
       },
-    ],
+    ]),
     periodEnd: Date.UTC(2026, 4, 16),
     computedFrom: Date.UTC(2026, 3, 13),
   };
@@ -170,11 +252,11 @@ const day = 24 * hour;
 const october = Date.UTC(2025, 9, 5, 8); // an order at 2025-10-05 08:00 UTC
 
 /** An order of a short at `moment`; `net` opens a trade that ends `held` later with that result after costs. */
-function order(moment: number, net: number | null, outcome = 'opened', held = hour4) {
+function order(moment: number, net: number | null, outcome = 'opened', held = hour4): OldOrder {
   return {
     moment,
     side: 'short',
-    outcome: net === null ? outcome : 'opened',
+    outcome: net === null ? outcome : 'filled',
     reason: null as string | null,
     trade:
       net === null
@@ -191,7 +273,7 @@ function order(moment: number, net: number | null, outcome = 'opened', held = ho
 }
 
 /** Opens `funding-short` and previews it with these orders on candles of 4h from 2025-10-05 00:00. */
-async function previewOrders(orders: ReturnType<typeof order>[]) {
+async function previewOrders(orders: OldOrder[], answer: object = withCycles(orders)) {
   const requests = fakeApi({
     ...baseRoutes(),
     ...strategyRoutes(),
@@ -207,7 +289,7 @@ async function previewOrders(orders: ReturnType<typeof order>[]) {
           close: 1.5,
           volume: 10,
         })),
-        orders,
+        ...answer,
         computedFrom: null,
       }),
   });
@@ -247,7 +329,7 @@ describe('the tabs of the preview of a strategy', () => {
       within(table)
         .getAllByRole('columnheader')
         .map((cell) => cell.textContent),
-    ).toEqual(['Вход, UTC', 'Сторона', 'Выход', 'Результат']);
+    ).toEqual(['Вход, UTC', 'Сторона', 'Входов', 'Вложено', 'Выход', 'Результат']);
     const rows = within(table).getAllByRole('row', { name: /^Сделка / });
     expect(rows.map((row) => row.getAttribute('aria-label'))).toEqual([
       'Сделка 2025-10-05 08:00',
@@ -255,9 +337,10 @@ describe('the tabs of the preview of a strategy', () => {
     ]);
     expect(within(rows[0]!).getByText('шорт')).toHaveAttribute('data-tone', 'err');
     expect(rows[0]).toHaveTextContent('по сроку · 4h');
-    expect(within(rows[0]!).getByText('-0.98 %')).toHaveAttribute('data-tone', 'err');
+    expect(within(rows[0]!).getByText('-0.98 %').parentElement).toHaveAttribute('data-tone', 'err');
+    expect(rows[0]).toHaveTextContent('-0.98 USDT');
     expect(rows[1]).toHaveTextContent('по сроку · 8h 30m');
-    expect(within(rows[1]!).getByText('+1.23 %')).toHaveAttribute('data-tone', 'ok');
+    expect(within(rows[1]!).getByText('+1.23 %').parentElement).toHaveAttribute('data-tone', 'ok');
     expect(screen.queryByRole('table', { name: 'Заявки' })).toBeNull();
 
     await userEvent.click(orders);
@@ -312,14 +395,14 @@ describe('the numbers of the preview of a strategy', () => {
 
     expect(result()).toHaveTextContent('Заявок 2');
     expect(result()).toHaveTextContent('Сделок 2');
-    expect(result()).toHaveTextContent('Итог -1.54 %');
-    expect(within(result()).getByText('-1.54 %')).toHaveAttribute('data-tone', 'err');
+    expect(result()).toHaveTextContent('Итог -1.54 % · -1.54 USDT');
+    expect(within(result()).getByText('-1.54 % · -1.54 USDT')).toHaveAttribute('data-tone', 'err');
   });
 
   it('shows a positive sum with its sign in the color of a profit', async () => {
     await previewOrders([order(october, -0.0098), order(october + day, 0.02)]);
 
-    expect(within(result()).getByText('+1.02 %')).toHaveAttribute('data-tone', 'ok');
+    expect(within(result()).getByText('+1.02 % · +1.02 USDT')).toHaveAttribute('data-tone', 'ok');
   });
 
   // Scenario «Без сделок».
@@ -402,5 +485,169 @@ describe('the mark of a trade on the chart', () => {
     const entry = (october + day - hour4) / 1000;
     expect(drawn.range!.from).toBeLessThan(entry);
     expect(drawn.range!.to).toBeGreaterThan(entry);
+  });
+});
+
+/**
+ * A ladder: a market entry of 100 USDT at 08:00, two averaging buys of 100 USDT at 10:00 and 13:00 and a sale of the
+ * whole quantity at 17:00; then an entry at 17:01 still open at the end.
+ */
+function ladderAnswer() {
+  const fill = (
+    moment: number,
+    action: string,
+    side: string,
+    price: number,
+    amount: number,
+    node: string,
+  ) => ({
+    moment,
+    action,
+    side,
+    price,
+    quantity: amount / price,
+    amount,
+    node,
+  });
+  return {
+    orders: [
+      {
+        moment: october,
+        node: 'entry',
+        side: 'buy',
+        outcome: 'filled',
+        reason: null,
+        price: 100,
+        amount: 100,
+        cycle: 0,
+      },
+      {
+        moment: october + 2 * hour,
+        node: 'buy',
+        side: 'buy',
+        outcome: 'filled',
+        reason: null,
+        price: 99,
+        amount: 100,
+        cycle: 0,
+      },
+      {
+        moment: october + 5 * hour,
+        node: 'buy',
+        side: 'buy',
+        outcome: 'filled',
+        reason: null,
+        price: 98.01,
+        amount: 100,
+        cycle: 0,
+      },
+      {
+        moment: october + 9 * hour,
+        node: 'sell',
+        side: 'sell',
+        outcome: 'filled',
+        reason: null,
+        price: 100.5,
+        amount: 304.5,
+        cycle: 0,
+      },
+      {
+        moment: october + 9 * hour + 60_000,
+        node: 'entry',
+        side: 'buy',
+        outcome: 'filled',
+        reason: null,
+        price: 100.6,
+        amount: 100,
+        cycle: 1,
+      },
+    ],
+    cycles: [
+      {
+        side: 'long',
+        fills: [
+          fill(october, 'entry', 'buy', 100, 100, 'entry'),
+          fill(october + 2 * hour, 'increase', 'buy', 99, 100, 'buy'),
+          fill(october + 5 * hour, 'increase', 'buy', 98.01, 100, 'buy'),
+          fill(october + 9 * hour, 'exit', 'sell', 100.5, 304.5, 'sell'),
+        ],
+        entries: 3,
+        invested: 300,
+        exitReason: 'limit',
+        ambiguous: false,
+        net: 0.015,
+        netAmount: 4.5,
+        open: false,
+        exclusion: null,
+      },
+      {
+        side: 'long',
+        fills: [fill(october + 9 * hour + 60_000, 'entry', 'buy', 100.6, 100, 'entry')],
+        entries: 1,
+        invested: 100,
+        exitReason: null,
+        ambiguous: false,
+        net: -0.002,
+        netAmount: -0.2,
+        open: true,
+        exclusion: null,
+      },
+    ],
+  };
+}
+
+// Change add-position-node, tasks 9.1–9.3: the cycles of a ladder in the panel.
+describe('the cycles of a ladder in the preview', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  // Scenario «Докупки на графике».
+  it('marks the entry, each averaging buy and the sale of a cycle', async () => {
+    await previewOrders([], ladderAnswer());
+
+    const texts = (drawn.markers as { text: string }[]).map((mark) => mark.text);
+    expect(texts).toEqual(['лонг', 'докупка', 'докупка', 'выход', 'лонг']);
+  });
+
+  // Scenario «Цикл лесенки в списке».
+  it('lists a cycle with its entries, the money put in and its result in percent and USDT', async () => {
+    await previewOrders([], ladderAnswer());
+
+    const table = screen.getByRole('table', { name: 'Сделки' });
+    const row = within(table).getByRole('row', { name: 'Сделка 2025-10-05 08:00' });
+    expect(row).toHaveTextContent('300.00');
+    expect(within(row).getAllByRole('cell')[2]).toHaveTextContent('3');
+    expect(row).toHaveTextContent('лимиткой · 9h');
+    expect(row).toHaveTextContent('+1.50 %');
+    expect(row).toHaveTextContent('+4.50 USDT');
+    expect(within(table).getByRole('row', { name: 'Сделка 2025-10-05 17:01' })).toHaveTextContent(
+      'открыт',
+    );
+  });
+
+  it('sums the closed cycles only, and names the node and the price of every fill', async () => {
+    await previewOrders([], ladderAnswer());
+
+    const result = within(screen.getByRole('region', { name: 'Предпросмотр' })).getByRole(
+      'status',
+      {
+        name: 'Результат',
+      },
+    );
+    expect(result).toHaveTextContent('Сделок 2');
+    expect(result).toHaveTextContent('Итог +1.50 % · +4.50 USDT');
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Заявки 5' }));
+    const list = screen.getByRole('table', { name: 'Заявки' });
+    const buy = within(list).getByRole('row', { name: 'Заявка 2025-10-05 10:00' });
+    expect(buy).toHaveTextContent('buy');
+    expect(buy).toHaveTextContent('покупка');
+    expect(buy).toHaveTextContent('99');
+    expect(buy).toHaveTextContent('исполнена, цикл 1');
+    expect(within(list).getByRole('row', { name: 'Заявка 2025-10-05 08:00' })).toHaveTextContent(
+      'лимитка, +1.50 %',
+    );
   });
 });

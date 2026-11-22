@@ -30,7 +30,7 @@ import {
   timeframes,
 } from './preview';
 import { readStored, writeStored } from './stored';
-import { percent, totalOf, tradeMarks, tradesOf } from './strategyPreview';
+import { cyclesOf, percent, totalOf, tradeMarks, usdt } from './strategyPreview';
 import { TradeList } from './TradeList';
 
 /** What came back: the events of a signal, or the orders and trades of a strategy. */
@@ -184,7 +184,7 @@ export function PreviewPanel({
       shownResult === undefined
         ? []
         : shownResult.kind === 'strategy'
-          ? tradeMarks(shownResult.preview.orders, shownResult.preview.timeframe)
+          ? tradeMarks(shownResult.preview)
           : marksOf(shownResult.preview.events, shownResult.preview.timeframe),
     [shownResult],
   );
@@ -206,8 +206,11 @@ export function PreviewPanel({
   const start = result ? historyStart(result.candles) : null;
   const stale = shown !== null && shown.graph !== canonical(graph);
   const orders = shownResult?.kind === 'strategy' ? shownResult.preview.orders : [];
-  const trades = tradesOf(orders);
-  const total = totalOf(orders);
+  const cycles = useMemo(
+    () => (shownResult?.kind === 'strategy' ? cyclesOf(shownResult.preview) : []),
+    [shownResult],
+  );
+  const total = totalOf(cycles);
 
   const resize = (event: ReactPointerEvent) => {
     const top = event.clientY;
@@ -301,10 +304,10 @@ export function PreviewPanel({
             {shownResult.kind === 'strategy' ? (
               <>
                 <Stat name="Заявок">{orders.length}</Stat>
-                <Stat name="Сделок">{trades.length}</Stat>
+                <Stat name="Сделок">{cycles.length}</Stat>
                 {total !== null && (
-                  <Stat name="Итог" tone={total < 0 ? 'err' : 'ok'}>
-                    {percent(total)}
+                  <Stat name="Итог" tone={total.net < 0 ? 'err' : 'ok'}>
+                    {`${percent(total.net)} · ${usdt(total.amount)}`}
                   </Stat>
                 )}
               </>
@@ -378,7 +381,7 @@ export function PreviewPanel({
                   className="shrink-0 border-b border-line px-4"
                   value={tab}
                   tabs={[
-                    { value: 'trades', label: 'Сделки', count: trades.length },
+                    { value: 'trades', label: 'Сделки', count: cycles.length },
                     { value: 'orders', label: 'Заявки', count: orders.length },
                   ]}
                   onChange={setTab}
@@ -386,14 +389,15 @@ export function PreviewPanel({
                 <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto">
                   {tab === 'trades' ? (
                     <TradeList
-                      orders={orders}
+                      cycles={cycles}
                       selected={selected}
                       markClicks={markClicks}
-                      onPick={(order) => pick(Number(order.moment), shownResult.preview.timeframe)}
+                      onPick={(cycle) => pick(cycle.key, shownResult.preview.timeframe)}
                     />
                   ) : (
                     <OrderList
                       orders={orders}
+                      cycles={shownResult.preview.cycles}
                       selected={selected}
                       markClicks={markClicks}
                       onPick={(order) => pick(Number(order.moment), shownResult.preview.timeframe)}

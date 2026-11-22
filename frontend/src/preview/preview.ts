@@ -38,7 +38,7 @@ export interface EventMark {
   readonly time: number;
   readonly moment: number;
   readonly position?: 'aboveBar' | 'belowBar' | 'inBar';
-  readonly shape?: 'arrowDown' | 'arrowUp' | 'circle';
+  readonly shape?: 'arrowDown' | 'arrowUp' | 'circle' | 'square';
   readonly tone?: 'short' | 'long' | 'exit';
   readonly text?: string;
   /** The moment of the order of the trade the mark belongs to. */
