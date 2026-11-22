@@ -3,6 +3,7 @@ using ProfitFox.Domain.Services.Nodes.Base;
 using ProfitFox.Domain.ValueObjects.Execution;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Nodes;
+using ProfitFox.Domain.ValueObjects.Positions;
 
 namespace ProfitFox.Domain.Services.Execution;
 
@@ -18,7 +19,8 @@ public sealed class GraphRun
     private readonly PinValue[] _inputs;
     private readonly PinValue[] _nodeOutputs;
     private readonly PinValue[] _outputs;
-    private DateTimeOffset? _lastClose;
+    private ClosedCandle? _lastCandle;
+    private FundingPayment? _lastFunding;
 
     public GraphRun(GraphDefinition graph)
         : this(Compile(graph))
@@ -37,14 +39,17 @@ public sealed class GraphRun
 
     /// <summary>
     ///     Computes the graph at the close of <paramref name="candle" /> and gives its declared outputs in their order.
-    ///     <paramref name="lastFunding" /> is the last payment paid by that close, or null before the first one. The returned
-    ///     list is reused by the next call.
+    ///     <paramref name="lastFunding" /> is the last payment paid by that close, or null before the first one;
+    ///     <paramref name="position" /> is the state of the position at the close, closed when not given. The memory of the
+    ///     nodes moves to this candle. The returned list is reused by the next call.
     /// </summary>
-    public IReadOnlyList<PinValue> Step(ClosedCandle candle, FundingPayment? lastFunding)
+    public IReadOnlyList<PinValue> Step(ClosedCandle candle, FundingPayment? lastFunding, PositionState? position = null)
     {
-        if (candle.CloseTime <= _lastClose)
+        if (candle.CloseTime <= _lastCandle?.CloseTime)
         {
-            throw new ArgumentException($"Candles go in the order of their close: {candle.CloseTime:O} is not after {_lastClose:O}.", nameof(candle));
+            throw new ArgumentException(
+                $"Candles go in the order of their close: {candle.CloseTime:O} is not after {_lastCandle.CloseTime:O}.",
+                nameof(candle));
         }
 
         if (lastFunding is not null && lastFunding.Time > candle.CloseTime)
@@ -52,8 +57,33 @@ public sealed class GraphRun
             throw new ArgumentException($"A payment at {lastFunding.Time:O} is not known at the close {candle.CloseTime:O}.", nameof(lastFunding));
         }
 
-        _lastClose = candle.CloseTime;
-        var context = new NodeContext(candle, lastFunding);
+        _lastCandle = candle;
+        _lastFunding = lastFunding;
+        return Compute(new NodeContext(candle, lastFunding, candle.CloseTime, position ?? PositionState.Closed, Commit: true));
+    }
+
+    /// <summary>
+    ///     Computes the graph again after a fill at <paramref name="moment" /> (spec strategy-execution «Пересчёт графа после
+    ///     исполнения»): on the market data of the last closed candle, with the new state of the position, without moving the
+    ///     memory of the nodes — «предыдущее» and «впервые» read what they kept at the last close.
+    /// </summary>
+    public IReadOnlyList<PinValue> Again(PositionState position, DateTimeOffset moment)
+    {
+        if (_lastCandle is not { } candle)
+        {
+            throw new InvalidOperationException("The graph is computed again only after a closed candle.");
+        }
+
+        if (moment < candle.CloseTime)
+        {
+            throw new ArgumentException($"A fill at {moment:O} comes after the close {candle.CloseTime:O}.", nameof(moment));
+        }
+
+        return Compute(new NodeContext(candle, _lastFunding, moment, position, Commit: false));
+    }
+
+    private IReadOnlyList<PinValue> Compute(NodeContext context)
+    {
         for (int index = 0; index < _nodes.Length; index++)
         {
             CompiledNode node = _graph.Nodes[index];
