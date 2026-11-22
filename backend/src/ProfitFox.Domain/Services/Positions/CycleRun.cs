@@ -7,13 +7,17 @@ namespace ProfitFox.Domain.Services.Positions;
 
 /// <summary>
 ///     One cycle of a position on the minute path of a pair (change add-position-node, design.md, decisions 5 and 8): its
-///     fills, the position they leave, and its result. The rules of a trade of a plan (spec trade-plan-outcome) are written
-///     here once: <see cref="Simulate" /> walks a plan of one entry, and the run of a strategy with orders uses the same
-///     minute rules (<see cref="StopHit" />, <see cref="TargetHit" />, <see cref="StopExit" />) and the same accounting.
+///     fills, the position they leave, and its result. This is the one calculation of a cycle: the bench, a cycle opened
+///     outside the graph and the preview count with it, a strategy by plan and a strategy with orders alike. The rules of a
+///     trade of a plan (spec trade-plan-outcome) are written here once: <see cref="Simulate" /> walks a plan of one entry,
+///     and the run of a strategy with orders uses the same minute rules (<see cref="StopHit" />, <see cref="TargetHit" />,
+///     <see cref="StopExit" />) and the same accounting.
 ///     <para>
 ///         The fraction of a cycle is counted from prices, each entry weighted by its amount over the largest money put
 ///         in, and a decrease closes the same share of every entry. A cycle of one entry has the weight 1, and its numbers
-///         are the expressions of <see cref="Trades.TradeSimulator" /> to the last bit.
+///         are the expressions of a trade of a plan: the side times <c>exit / entry − 1</c> before costs and the fee rate
+///         times <c>1 + exit / entry</c>. With them the bench keeps the numbers of the Python bench (<c>outcome.py</c>)
+///         and the digests of its engine version.
 ///     </para>
 /// </summary>
 public sealed class CycleRun
@@ -195,9 +199,17 @@ public sealed class CycleRun
 
     /// <summary>
     ///     The cycle of a plan of one entry of <paramref name="amount" /> USDT from <paramref name="moment" /> (spec
-    ///     trade-plan-outcome): entry at the open of the first minute with trades, worse by the slippage; the stop and the
-    ///     target from the entry minute to the end of the horizon, the stop first; otherwise the close of the last minute
-    ///     with trades at the end of the horizon. Coverage of candles and of funding is judged on the whole horizon.
+    ///     trade-plan-outcome), by the rules of the Python bench (<c>outcome.py</c>), so the two give the same numbers:
+    ///     <list type="bullet">
+    ///         <item>entry at the open of the first minute with trades from the moment of the event, worse by the slippage;</item>
+    ///         <item>the path runs from the entry minute to the end of the horizon, until the stop or the target;</item>
+    ///         <item>stop and target in one minute: the stop counts, the cycle is ambiguous;</item>
+    ///         <item>the stop fills at the worse of its price and the open of the minute, with slippage;</item>
+    ///         <item>the target fills at its price without slippage, also on a gap through it;</item>
+    ///         <item>otherwise the cycle closes at the end of the horizon at the close of its last minute with trades;</item>
+    ///         <item>the fee is taken on both sides, funding on the payments at <c>entry &lt; t ≤ exit</c>;</item>
+    ///         <item>coverage of candles and of funding is judged on the whole horizon, not up to the exit.</item>
+    ///     </list>
     ///     <paramref name="node" /> is the node of the order that opened the cycle; null for a cycle opened outside the graph.
     /// </summary>
     public static CycleOutcome Simulate(MinutePath path, DateTimeOffset moment, TradePlan plan, TradeCosts costs, double amount, string? node = null)
@@ -227,8 +239,10 @@ public sealed class CycleRun
     }
 
     /// <summary>
-    ///     The moment the cycle of a plan ends, without its result: what the bench may know of an event before it is allowed
-    ///     to read its outcome, and what a position needs to know when the pair is free again.
+    ///     The moment the cycle of a plan ends, without its result: the path is walked to the stop, the target or the end of
+    ///     the horizon as in <see cref="Simulate" />, and nothing is computed of what the cycle earned. This is what the bench
+    ///     may know of an event before it is allowed to read its outcome, and what a position needs to know when the pair is
+    ///     free again (spec strategy-position).
     /// </summary>
     public static TradeExit Exit(MinutePath path, DateTimeOffset moment, TradePlan plan, TradeCosts costs)
     {

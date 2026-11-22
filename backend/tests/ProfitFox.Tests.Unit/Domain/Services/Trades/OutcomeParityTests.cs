@@ -1,14 +1,15 @@
 using System.Globalization;
 
-using ProfitFox.Domain.Services.Trades;
+using ProfitFox.Domain.Services.Positions;
 using ProfitFox.Domain.ValueObjects.Trades;
 using ProfitFox.Domain.ValueObjects.Trades.Enums;
 
 namespace ProfitFox.Tests.Unit.Domain.Services.Trades;
 
 /// <summary>
-///     Task 5.2: the outcomes of the C# simulator equal those of <c>simulate</c> of the Python bench on the same synthetic
-///     paths. The fixture (<c>Fixtures/Outcomes</c>, exported from the Python bench <c>profit-fox-bench</c>
+///     Task 5.2: the outcomes of the C# calculation — <see cref="CycleRun" /> since task 5.4 of change add-position-node,
+///     the trade simulator before it — equal those of <c>simulate</c> of the Python bench on the same synthetic paths (spec
+///     strategy-position «Один расчёт цикла», «Эталон Python-стенда»). The fixture (<c>Fixtures/Outcomes</c>, exported from the Python bench <c>profit-fox-bench</c>
 ///     at commit <c>13bd168</c> by a script removed by task 9.1, in commit <c>c1f09c0</c>) has four paths of 3000
 ///     minutes with gaps, minutes without trades, an uncovered stretch, partly known funding and a pair without funding,
 ///     and 1200 trades with their Python outcomes.
@@ -35,7 +36,7 @@ public sealed class OutcomeParityTests
                 Optional(row[4]),
                 Optional(row[5]));
 
-            TradeOutcome outcome = TradeSimulator.Simulate(paths[path], entry, plan, TradeCosts.Default);
+            TradeOutcome outcome = CycleRun.Simulate(paths[path], entry, plan, TradeCosts.Default, amount: 100).ToTrade();
 
             string where = $"path {path} entry {entry:O} {plan.Side} {plan.HorizonMinutes}m stop {row[4]} target {row[5]}";
             Check(where, "status", (int)outcome.Status, int.Parse(row[6], CultureInfo.InvariantCulture), differences);

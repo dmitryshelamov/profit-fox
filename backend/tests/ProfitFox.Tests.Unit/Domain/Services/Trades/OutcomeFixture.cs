@@ -7,8 +7,8 @@ namespace ProfitFox.Tests.Unit.Domain.Services.Trades;
 
 /// <summary>
 ///     The 1200 trades of the Python bench in <c>Fixtures/Outcomes</c> (see <see cref="OutcomeParityTests" />) with their
-///     paths, read the way that test reads them, for the tests of change add-position-node that compare the calculation of
-///     a cycle with the trade simulator.
+///     paths, read the way that test reads them, for the tests of change add-position-node that take a trade of a plan
+///     from them.
 /// </summary>
 internal static class OutcomeFixture
 {

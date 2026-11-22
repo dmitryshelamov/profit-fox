@@ -295,7 +295,7 @@ Presentation), NSubstitute (подделки `MemorySignalRepository` и `FakeHi
 Внутренности расчёта (`internal`: `CompiledGraph`, `CompiledNode`, `InputSource`, `NodeContext`, `Node` и узлы
 `Services/Nodes`, `GraphJson`, `GraphValidator`, `StrategyRun`) закрыты от остальных слоёв компилятором. Остальной код Domain
 пользуется теми же открытыми входами, что и другие слои: `StrategyGraph`, `SignalExecutor`, `StrategyExecutor`,
-`TradeSimulator`, `PairPosition`, `Cycle`, `EntryPlan`.
+`CycleRun`, `PairPosition`, `Cycle`, `EntryPlan`.
 
 «Версия движка» — номер версии расчёта, а не проекта: `EngineVersion.Number`. Его поднимают вместе с любым изменением
 событий, исходов или вердикта. Эталонный тест `EngineVersionTests` считает две гипотезы, H0001 и H0002 с наложением

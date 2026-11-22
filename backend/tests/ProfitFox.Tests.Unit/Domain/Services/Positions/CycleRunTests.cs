@@ -1,7 +1,6 @@
 using System.Globalization;
 
 using ProfitFox.Domain.Services.Positions;
-using ProfitFox.Domain.Services.Trades;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
 using ProfitFox.Domain.ValueObjects.Positions;
 using ProfitFox.Domain.ValueObjects.Trades;
@@ -11,8 +10,10 @@ namespace ProfitFox.Tests.Unit.Domain.Services.Positions;
 
 /// <summary>
 ///     Change add-position-node, tasks 4.1 and 4.2: the accounting of the position of a cycle (spec strategy-position
-///     «Увеличение позиции», «Уменьшение позиции») and the cycle of one entry by the rules of <c>trade-plan-outcome</c>,
-///     which equals the outcome of <see cref="TradeSimulator" /> field by field, bit by bit, while both are in the tree.
+///     «Увеличение позиции», «Уменьшение позиции») and the cycle of one entry by the rules of <c>trade-plan-outcome</c>.
+///     Those rules themselves are checked on <see cref="CycleRun" /> by <see cref="TradeSimulatorTests" />,
+///     <see cref="TradeExitTests" /> and <see cref="OutcomeParityTests" />, the tests of the trade simulator the cycle
+///     replaced (task 5.4).
 /// </summary>
 public sealed class CycleRunTests
 {
@@ -110,14 +111,14 @@ public sealed class CycleRunTests
     public void A_target_pays_the_taker_fee()
     {
         (MinutePath path, DateTimeOffset entry, TradePlan plan) = OutcomeFixture.Trades()
-            .First(trade => TradeSimulator.Simulate(trade.Path, trade.Entry, trade.Plan, TradeCosts.Default).ExitReason == ProfitFox.Domain.ValueObjects.Trades.Enums.ExitReason.Target);
+            .First(trade => CycleRun.Simulate(trade.Path, trade.Entry, trade.Plan, TradeCosts.Default, amount: 100).ExitReason == CycleExit.Target);
 
         CycleOutcome withMaker = CycleRun.Simulate(path, entry, plan, TradeCosts.Default, amount: 100);
         CycleOutcome withoutMaker = CycleRun.Simulate(path, entry, plan, TradeCosts.Default with { MakerFee = 0 }, amount: 100);
 
         Assert.That(withMaker.ExitReason, Is.EqualTo(CycleExit.Target));
         Assert.That(withMaker.Fees, Is.EqualTo(withoutMaker.Fees));
-        Assert.That(withMaker.Fees, Is.EqualTo(TradeSimulator.Simulate(path, entry, plan, TradeCosts.Default).Fees));
+        Assert.That(withMaker.Fees, Is.EqualTo(TradeCosts.Default.TakerFee * (1 + withMaker.Fills[^1].Price / withMaker.Fills[0].Price)), "the taker fee on both sides");
     }
 
     [Test]
@@ -133,24 +134,6 @@ public sealed class CycleRunTests
         Assert.That(cycle.Outcome().Funding * 200, Is.EqualTo(-2 * 0.001 * 100).Within(1e-12), "two coins pay the positive rate on a long");
     }
 
-    [Test]
-    public void Every_trade_of_the_Python_fixture_is_the_same_by_the_cycle_and_by_the_simulator()
-    {
-        int compared = 0;
-        foreach ((MinutePath path, DateTimeOffset entry, TradePlan plan) in OutcomeFixture.Trades())
-        {
-            TradeOutcome expected = TradeSimulator.Simulate(path, entry, plan, TradeCosts.Default);
-            TradeOutcome actual = CycleRun.Simulate(path, entry, plan, TradeCosts.Default, amount: 100).ToTrade();
-            Assert.That(Text(actual), Is.EqualTo(Text(expected)), $"{entry:O} {plan.Side} {plan.HorizonMinutes}m stop {plan.Stop} target {plan.Target}");
-
-            TradeExit exit = CycleRun.Exit(path, entry, plan, TradeCosts.Default);
-            Assert.That(exit, Is.EqualTo(TradeSimulator.Exit(path, entry, plan, TradeCosts.Default)));
-            compared++;
-        }
-
-        Assert.That(compared, Is.EqualTo(1200));
-    }
-
     [TestCase(100.0)]
     [TestCase(37.5)]
     public void The_amount_does_not_change_the_fractions_of_a_cycle_of_one_entry(double amount)
@@ -159,7 +142,7 @@ public sealed class CycleRunTests
 
         CycleOutcome outcome = CycleRun.Simulate(path, entry, plan, TradeCosts.Default, amount);
 
-        Assert.That(Text(outcome.ToTrade()), Is.EqualTo(Text(TradeSimulator.Simulate(path, entry, plan, TradeCosts.Default))));
+        Assert.That(Text(outcome.ToTrade()), Is.EqualTo(Text(CycleRun.Simulate(path, entry, plan, TradeCosts.Default, amount: 1).ToTrade())));
         Assert.That(outcome.NetAmount, Is.EqualTo(outcome.Net * amount));
         Assert.That((outcome.Entries, outcome.MaxInvested, outcome.Fills.Count), Is.EqualTo((1, amount, 2)));
     }
