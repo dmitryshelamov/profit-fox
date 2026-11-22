@@ -84,3 +84,13 @@ export function signTone(value: Value): string {
       ? 'text-ok'
       : 'text-err';
 }
+
+/** An amount with two digits and its sign: `-86.52`. */
+export function signedAmount(value: Value): string {
+  if (none(value)) {
+    return '—';
+  }
+
+  const amount = Number(value);
+  return `${amount >= 0 ? '+' : ''}${amount.toFixed(2)}`;
+}

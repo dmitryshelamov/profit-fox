@@ -10,7 +10,7 @@ import {
 import { AppShell } from '@/app/AppShell';
 import { IdeasPage } from '@/pages/ideas/IdeasPage';
 import { MarketPage } from '@/pages/market/MarketPage';
-import { PairPage } from '@/pages/market/PairPage';
+import { clean, PairPage, pairSearch } from '@/pages/market/PairPage';
 import { RunFormPage } from '@/pages/runs/RunFormPage';
 import { RunPage } from '@/pages/runs/RunPage';
 import { RunsPage } from '@/pages/runs/RunsPage';
@@ -152,7 +152,28 @@ const setRoute = createRoute({
 const ideasRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/ideas',
-  component: IdeasPage,
+  validateSearch: (search: Record<string, unknown>): { tab?: 'journal'; page?: number } => ({
+    ...(search.tab === 'journal' ? { tab: 'journal' as const } : {}),
+    ...pageSearch(search),
+  }),
+  component: function IdeasRoute() {
+    const { tab, page } = ideasRoute.useSearch();
+    const navigate = ideasRoute.useNavigate();
+    return (
+      <IdeasPage
+        tab={tab ?? 'open'}
+        page={page ?? 1}
+        onPlace={(next, number) =>
+          void navigate({
+            search: {
+              ...(next === 'journal' ? { tab: 'journal' as const } : {}),
+              ...(number > 1 ? { page: number } : {}),
+            },
+          })
+        }
+      />
+    );
+  },
 });
 
 /** «Рынок»: the page of the list stands in the address (spec bench-ui «Страницы списка»). */
@@ -176,9 +197,20 @@ const marketRoute = createRoute({
 const pairRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/market/$symbol',
+  validateSearch: pairSearch,
   component: function PairRoute() {
     const { symbol } = pairRoute.useParams();
-    return <PairPage symbol={symbol} />;
+    const search = pairRoute.useSearch();
+    const navigate = pairRoute.useNavigate();
+    return (
+      <PairPage
+        symbol={symbol}
+        timeframe={search.timeframe ?? '1h'}
+        idea={search.idea}
+        page={search.page ?? 1}
+        onSearch={(change) => void navigate({ search: (old) => clean({ ...old, ...change }) })}
+      />
+    );
   },
 });
 

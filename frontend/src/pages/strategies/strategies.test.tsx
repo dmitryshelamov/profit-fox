@@ -109,8 +109,8 @@ describe('the section «Стратегии»', () => {
       screen
         .getAllByRole('columnheader')
         .map((cell) => cell.textContent)
-        .slice(0, 7),
-    ).toEqual(['Имя', 'Описание', 'Версия', 'Вид', 'Сигналы', 'Выход', 'Последний прогон']);
+        .slice(0, 8),
+    ).toEqual(['Имя', 'Описание', 'Версия', 'Вид', 'Сигналы', 'Выход', 'Идеи', 'Последний прогон']);
     // The list only shows the newer version: nothing is written.
     expect(requests.every((request) => request.method === 'GET')).toBe(true);
   });
@@ -940,5 +940,98 @@ describe('the runs of a strategy', () => {
     const ladder = within(screen.getByRole('row', { name: 'Стратегия ladder' }));
     expect(ladder.getByText('не запускалась')).toBeInTheDocument();
     expect(ladder.queryByRole('link', { name: /^Прогон / })).toBeNull();
+  });
+});
+
+// Spec strategy-ideas «Идеи в списке стратегий» (change add-ideas-and-market, task 13.3).
+describe('the ideas of a strategy in the list', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const fundingShort = (ideas?: { enabled: boolean; timeframes: string[] }) => ({
+    ...listItem('funding-short', 4),
+    kind: 'idea',
+    ...(ideas ? { ideas } : {}),
+  });
+
+  // Scenario «Включение из списка».
+  it('turns the ideas on in the window on 1h and 4h and shows them in the row', async () => {
+    let stored = { enabled: false, timeframes: [] as string[] };
+    const requests = routes({
+      'GET /api/strategies': () => json([fundingShort(stored)]),
+      'PUT /api/strategies/funding-short/ideas': async (request) => {
+        stored = (await request.json()) as typeof stored;
+        return json(stored);
+      },
+    });
+    renderApp('/strategies');
+    const row = within(await screen.findByRole('row', { name: 'Стратегия funding-short' }));
+
+    await userEvent.click(row.getByRole('button', { name: 'Таймфреймы идей funding-short' }));
+    const window = within(screen.getByRole('dialog', { name: 'Идеи funding-short' }));
+    await userEvent.click(window.getByRole('button', { name: '4h' }));
+    await userEvent.click(window.getByRole('button', { name: '1h' }));
+    await userEvent.click(window.getByRole('switch', { name: 'Идеи включены' }));
+    await waitFor(() =>
+      expect(window.getByRole('switch', { name: 'Идеи включены' })).toBeChecked(),
+    );
+    await userEvent.click(window.getByRole('button', { name: 'Закрыть' }));
+
+    await waitFor(() =>
+      expect(row.getByRole('switch', { name: 'Идеи funding-short' })).toBeChecked(),
+    );
+    expect(row.getByText('1h')).toBeInTheDocument();
+    expect(row.getByText('4h')).toBeInTheDocument();
+    expect(await bodiesOf(requests, 'PUT', '/api/strategies/funding-short/ideas')).toEqual([
+      { enabled: false, timeframes: ['4h'] },
+      { enabled: false, timeframes: ['1h', '4h'] },
+      { enabled: true, timeframes: ['1h', '4h'] },
+    ]);
+  });
+
+  // Scenarios «Выключенная стратегия» and «Стратегия для бота».
+  it('says «выключена» for a strategy with its ideas off and «не даёт идей» for a bot', async () => {
+    routes({
+      'GET /api/strategies': () =>
+        json([
+          fundingShort({ enabled: false, timeframes: ['1h'] }),
+          { ...listItem('ladder'), kind: 'bot' },
+        ]),
+    });
+    renderApp('/strategies');
+
+    const funding = within(await screen.findByRole('row', { name: 'Стратегия funding-short' }));
+    expect(funding.getByRole('switch', { name: 'Идеи funding-short' })).not.toBeChecked();
+    expect(funding.getByText('выключена')).toBeInTheDocument();
+    const ladder = within(screen.getByRole('row', { name: 'Стратегия ladder' }));
+    expect(ladder.getByText('не даёт идей')).toBeInTheDocument();
+    expect(ladder.queryByRole('switch')).toBeNull();
+  });
+
+  // Scenario «Отказ в окне».
+  it('keeps the window open with the reason when the server refuses', async () => {
+    routes({
+      'GET /api/strategies': () => json([fundingShort({ enabled: false, timeframes: ['1h'] })]),
+      'PUT /api/strategies/funding-short/ideas': () =>
+        json(
+          {
+            errors: [
+              { code: 'UnknownPair', reason: 'пары DOGEUSDT нет среди торгуемых', node: 'doge' },
+            ],
+          },
+          422,
+        ),
+    });
+    renderApp('/strategies');
+    const row = within(await screen.findByRole('row', { name: 'Стратегия funding-short' }));
+
+    await userEvent.click(row.getByRole('button', { name: 'Таймфреймы идей funding-short' }));
+    const window = within(screen.getByRole('dialog', { name: 'Идеи funding-short' }));
+    await userEvent.click(window.getByRole('switch', { name: 'Идеи включены' }));
+
+    expect(await window.findByRole('alert', { name: 'Отказ' })).toHaveTextContent(
+      'пары DOGEUSDT нет среди торгуемых',
+    );
+    expect(screen.getByRole('dialog', { name: 'Идеи funding-short' })).toBeInTheDocument();
+    expect(window.getByRole('switch', { name: 'Идеи включены' })).not.toBeChecked();
   });
 });

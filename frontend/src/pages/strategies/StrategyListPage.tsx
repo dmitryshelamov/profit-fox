@@ -21,6 +21,7 @@ import { RunStatusBadge } from '@/shared/ui/RunStatusBadge';
 import { VersionBadge } from '@/shared/ui/VersionBadge';
 
 import { kinds, wordsOf } from './kinds';
+import { StrategyIdeasCell } from './StrategyIdeas';
 
 /** The kinds of the exit nodes in the words of the list, in the order the API gives them. */
 const exitWords: Record<string, string> = {
@@ -92,6 +93,12 @@ const strategyListOf = (navigate: ReturnType<typeof useNavigate>): ListType<Stra
             {strategy.exits.map((exit) => exitWords[exit] ?? exit).join(' · ')}
           </span>
         ),
+    },
+    // Spec strategy-ideas «Идеи в списке стратегий» (change add-ideas-and-market).
+    {
+      title: 'Идеи',
+      className: 'w-[200px]',
+      cell: (strategy) => <StrategyIdeasCell strategy={strategy} />,
     },
     // Spec strategy-constructor «Последний прогон стратегии»: the state of the run with the version it went on, a link
     // to its page.
