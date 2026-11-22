@@ -11,8 +11,8 @@ using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas.Qu
 namespace ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas;
 
 /// <summary>
-///     The ideas in <c>ideas</c> (change add-ideas-and-market, design.md, decisions 5 and 14). A second open idea of a strategy
-///     on a pair and timeframe is refused by a unique index, so an idea is written once even by two scanners.
+///     The ideas in <c>ideas</c> (change add-ideas-and-market, design.md, decisions 5 and 14). A second idea of a strategy on a
+///     pair, timeframe and candle is refused by a unique index, so an idea is written once even by two scanners.
 /// </summary>
 internal sealed class IdeaRepository(NpgsqlDataSource database) : IIdeaRepository
 {

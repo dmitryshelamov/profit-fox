@@ -9,8 +9,10 @@ namespace ProfitFox.Domain.Repositories;
 public interface IIdeaRepository
 {
     /// <summary>
-    ///     Writes a new idea; false when the strategy already has an open idea on the pair and the timeframe (spec
-    ///     strategy-ideas «Одна открытая идея»).
+    ///     Writes a new idea; false when the idea of the strategy on the pair, the timeframe and the candle is written already,
+    ///     so an idea is written once. That a strategy has one open idea on a pair and timeframe is the rule of the scanner
+    ///     (spec strategy-ideas «Одна открытая идея»): an idea whose exit is at the close of a candle does not stop the order
+    ///     of that candle.
     /// </summary>
     Task<bool> AddAsync(Idea idea, CancellationToken cancellationToken);
 

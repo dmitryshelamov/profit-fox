@@ -59,12 +59,13 @@ public sealed class IdeaRepositoryTests
     }
 
     [Test]
-    public async Task A_second_open_idea_of_a_strategy_on_a_pair_and_timeframe_is_refused()
+    public async Task An_idea_of_a_strategy_on_a_pair_timeframe_and_candle_is_written_once()
     {
         var strategy = Guid.NewGuid();
         Assert.That(await _ideas.AddAsync(IdeaGenerator.Generate(strategy), CancellationToken.None), Is.True);
 
-        Assert.That(await _ideas.AddAsync(IdeaGenerator.Generate(strategy, moment: IdeaGenerator.Noon.AddHours(4)), CancellationToken.None), Is.False);
+        Assert.That(await _ideas.AddAsync(IdeaGenerator.Generate(strategy), CancellationToken.None), Is.False, "the same candle again");
+        Assert.That(await _ideas.AddAsync(IdeaGenerator.Generate(strategy, moment: IdeaGenerator.Noon.AddHours(4)), CancellationToken.None), Is.True, "a later candle");
         Assert.That(await _ideas.AddAsync(IdeaGenerator.Generate(strategy, timeframe: TimeSpan.FromHours(1)), CancellationToken.None), Is.True, "another timeframe");
         Assert.That(await _ideas.AddAsync(IdeaGenerator.Generate(strategy, symbol: "XRPUSDT"), CancellationToken.None), Is.True, "another pair");
     }

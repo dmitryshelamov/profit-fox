@@ -113,6 +113,15 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
     }
 
     /// <summary>
+    ///     The close of the last minute with trades of a pair opened before <paramref name="time" />: the price a payment at
+    ///     that time is counted at, as the minute path of a backtest prices it; null when the book has none.
+    /// </summary>
+    public decimal? CloseBefore(string symbol, DateTimeOffset time)
+    {
+        return _pairs.TryGetValue(symbol, out Pair? pair) ? pair.AtOrBefore(time - OneMinute)?.Close : null;
+    }
+
+    /// <summary>
     ///     The payments of a pair the book keeps, oldest first.
     /// </summary>
     public IReadOnlyList<FundingPayment> Payments(string symbol)

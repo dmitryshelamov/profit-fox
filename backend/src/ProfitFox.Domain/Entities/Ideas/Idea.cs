@@ -44,7 +44,7 @@ public sealed class Idea
     /// </summary>
     public required decimal CandleClose { get; init; }
 
-    public IReadOnlyList<string> Labels { get; init; } = [];
+    public IReadOnlyList<string> Labels { get; set; } = [];
 
     public IdeaState State { get; set; } = IdeaState.Open;
 
@@ -62,6 +62,12 @@ public sealed class Idea
     ///     The sum of rate × price of the payments counted so far (entry &lt; t), as the minute path sums them.
     /// </summary>
     public double FundingPaid { get; set; }
+
+    /// <summary>
+    ///     The time of the last payment counted in <see cref="FundingPaid" />: a payment told again after a restart is not
+    ///     counted twice.
+    /// </summary>
+    public DateTimeOffset? FundingUntil { get; set; }
 
     /// <summary>
     ///     The close of the last minute with trades the idea saw: the price a payment is counted at.

@@ -146,7 +146,7 @@ public sealed class MigrationTests
         Assert.That(await ColumnsOf(connection, BacktestTables), Is.EqualTo(before));
         Assert.That(
             await connection.QueryAsync<string>("SELECT indexname FROM pg_indexes WHERE tablename = 'ideas' ORDER BY indexname"),
-            Is.EqualTo(new[] { "ideas_one_open_ux", "ideas_pk", "ideas_state_moment_ix", "ideas_strategy_timeframe_ix", "ideas_symbol_moment_ix" }));
+            Is.EqualTo(new[] { "ideas_birth_ux", "ideas_pk", "ideas_state_moment_ix", "ideas_strategy_timeframe_ix", "ideas_symbol_moment_ix" }));
         Assert.That(ProfitFox.Infrastructure.Persistence.Postgres.BenchSchema.Expected, Is.EqualTo(202611230001L));
     }
 

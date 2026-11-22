@@ -108,12 +108,14 @@ public static class IdeaCycle
     public static void Payment(Idea idea, DateTimeOffset time, double rate, double price)
     {
         DateTimeOffset end = idea.ExitTime ?? idea.Until;
-        if (idea.State != IdeaState.Open || idea.EntryTime is not { } entry || time <= entry || time > end || double.IsNaN(price))
+        if (idea.State != IdeaState.Open || idea.EntryTime is not { } entry || time <= entry || time > end || time <= idea.FundingUntil
+            || double.IsNaN(price))
         {
             return;
         }
 
         idea.FundingPaid += rate * price;
+        idea.FundingUntil = time;
     }
 
     /// <summary>

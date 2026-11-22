@@ -34,7 +34,11 @@ internal sealed class WorkerHost : IAsyncDisposable
     /// <param name="server">The market-data service the Worker reads history from.</param>
     /// <param name="name">The name the Worker is shown by.</param>
     /// <param name="connectionString">The database; the migrated test database when null.</param>
-    public static async Task<WorkerHost> Start(MarketDataServer server, string name, string? connectionString = null)
+    /// <param name="scanner">
+    ///     Whether the Worker may keep the live data (change add-ideas-and-market): off unless a test of the scanner asks.
+    /// </param>
+    /// <param name="time">The clock of the Worker; that of the system when null.</param>
+    public static async Task<WorkerHost> Start(MarketDataServer server, string name, string? connectionString = null, bool scanner = false, TimeProvider? time = null)
     {
         HostApplicationBuilder builder = Host.CreateApplicationBuilder();
         builder.Logging.ClearProviders();
@@ -47,14 +51,23 @@ internal sealed class WorkerHost : IAsyncDisposable
             ["Worker:LeaseDuration"] = Lease.ToString(),
             ["Worker:LeaseRenewal"] = Renewal.ToString(),
             ["Worker:PollInterval"] = "00:00:00.1",
-            ["Worker:SchemaPollInterval"] = "00:00:00.2"
+            ["Worker:SchemaPollInterval"] = "00:00:00.2",
+            ["Scanner:Enabled"] = scanner ? "true" : "false",
+            ["Scanner:TickInterval"] = "00:00:00.05",
+            ["Scanner:ReconcileInterval"] = "00:00:00.2",
+            ["Scanner:WarmupRetry"] = "00:00:00.2"
         });
         ProfitFox.Worker.Program.Configure(builder);
         builder.Services.AddSingleton<IHistorySource>(new GrpcHistorySource(server.Channel));
         builder.Services.AddSingleton(Repeats.WithoutPauses);
         builder.Services.AddSingleton<IInstrumentCatalog>(new InstrumentCatalog(server.Http));
         builder.Services.AddSingleton<IRecentHistory>(new RestRecentHistory(server.Http));
-        builder.Services.AddSingleton<IMarketFeed>(provider => new GrpcMarketFeed(server.Channel, new InstrumentCatalog(server.Http), provider.GetService<TimeProvider>() ?? TimeProvider.System, new MarketFeedSettings { RetryDelay = TimeSpan.FromMilliseconds(50) }));
+        builder.Services.AddSingleton<IMarketFeed>(_ => new GrpcMarketFeed(server.Channel, new InstrumentCatalog(server.Http), TimeProvider.System, new MarketFeedSettings { RetryDelay = TimeSpan.FromMilliseconds(50) }));
+        if (time is not null)
+        {
+            builder.Services.AddSingleton(time);
+        }
+
         IHost host = builder.Build();
         await host.StartAsync();
         return new WorkerHost(host, name);

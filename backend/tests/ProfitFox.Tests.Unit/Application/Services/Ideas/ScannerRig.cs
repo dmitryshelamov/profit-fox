@@ -1,0 +1,169 @@
+using System.Globalization;
+using System.Text.Json;
+
+using Microsoft.Extensions.Time.Testing;
+
+using ProfitFox.Application.Ports.MarketData.Feed;
+using ProfitFox.Application.Services.Ideas;
+using ProfitFox.Application.Services.Market;
+using ProfitFox.Domain.Entities.Strategies;
+using ProfitFox.Domain.Services.Graph;
+using ProfitFox.Domain.ValueObjects.Ideas;
+using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Domain.ValueObjects.Strategies.Enums;
+using ProfitFox.Tests.Unit.Application.Commands.Signals;
+using ProfitFox.Tests.Unit.Application.Commands.Strategies;
+
+namespace ProfitFox.Tests.Unit.Application.Services.Ideas;
+
+/// <summary>
+///     A scanner of ideas over fakes for the tests of change add-ideas-and-market (group 8): a clock from 10:00:05 of
+///     2026-11-22, the strategies and signals in memory, recent history whose 1h and 4h candles close at 99, and the pairs
+///     <c>BTCUSDT</c>, <c>ETHUSDT</c> and <c>SOLUSDT</c>. The strategy <c>close-up</c> enters long the first time the close of
+///     a candle is above 100, for <c>after</c>.
+/// </summary>
+internal sealed class ScannerRig
+{
+    public static readonly DateTimeOffset Ten = new DateTimeOffset(2026, 11, 22, 10, 0, 0, TimeSpan.Zero);
+
+    public static readonly Instrument[] Pairs = [new Instrument("btc", "BTCUSDT"), new Instrument("eth", "ETHUSDT"), new Instrument("sol", "SOLUSDT")];
+
+    public ScannerRig()
+    {
+        Time = new FakeTimeProvider(Ten.AddSeconds(5));
+        foreach (Instrument pair in Pairs)
+        {
+            History.Candles[pair.Id] = (interval, before) => Warmup(interval, before, "99");
+        }
+
+        Scanner = new IdeaScanner(
+            new MarketBook(Time, TimeSpan.FromSeconds(15)),
+            History,
+            Ideas,
+            Market,
+            new IdeaLibrary(Strategies, Signals, Enabled, Labels),
+            Time,
+            new ScannerSettings(),
+            Burst);
+    }
+
+    public FakeTimeProvider Time { get; }
+
+    public MemoryStrategyRepository Strategies { get; } = new MemoryStrategyRepository();
+
+    public MemorySignalRepository Signals { get; } = new MemorySignalRepository();
+
+    public MemoryStrategyIdeasRepository Enabled { get; } = new MemoryStrategyIdeasRepository();
+
+    public MemorySignalLabelRepository Labels { get; } = new MemorySignalLabelRepository();
+
+    public MemoryIdeaRepository Ideas { get; } = new MemoryIdeaRepository();
+
+    public MemoryMarketPairRepository Market { get; } = new MemoryMarketPairRepository();
+
+    public FakeRecentHistory History { get; } = new FakeRecentHistory();
+
+    public IdeasSettings Burst { get; } = new IdeasSettings();
+
+    public IdeaScanner Scanner { get; }
+
+    /// <summary>
+    ///     The candles of a warm-up: every candle of the interval from two days back with the close <paramref name="close" />.
+    /// </summary>
+    public static IReadOnlyList<HistoryCandle> Warmup(TimeSpan interval, DateTimeOffset before, string close)
+    {
+        List<HistoryCandle> candles = [];
+        for (DateTimeOffset open = Ten.AddDays(-2); open + interval <= before; open += interval)
+        {
+            candles.Add(new HistoryCandle(open, "99", "100", "98", close, "10", Turnover: null, BuyVolume: null));
+        }
+
+        return candles;
+    }
+
+    /// <summary>
+    ///     Saves <c>close-up</c> as <paramref name="name" /> in <paramref name="version" /> and enables it on the timeframes.
+    /// </summary>
+    public async Task<Guid> Enable(string name, string after, int version = 4, Guid? id = null, params TimeSpan[] timeframes)
+    {
+        using var document = JsonDocument.Parse(CloseUp(after));
+        var strategy = StrategyDocument.Restore(id ?? Guid.NewGuid(), name, null, StrategyGraph.ReadForm(document.RootElement).Value!, new Dictionary<string, ProfitFox.Domain.ValueObjects.Signals.NodePosition>(), version, kind: StrategyKind.Idea);
+        await Strategies.DeleteAsync(name, CancellationToken.None);
+        await Strategies.CreateAsync(strategy, CancellationToken.None);
+        await Enabled.SetAsync(new StrategyIdeas(strategy.Id, true, timeframes.Length == 0 ? [TimeSpan.FromHours(1)] : timeframes), CancellationToken.None);
+        return strategy.Id;
+    }
+
+    /// <summary>
+    ///     Starts the scanner on the three pairs and warms them up.
+    /// </summary>
+    public async Task Start()
+    {
+        await Scanner.StartAsync(CancellationToken.None);
+        await Scanner.ApplyAsync(new MarketPairs(Pairs), CancellationToken.None);
+        await Warm();
+    }
+
+    /// <summary>
+    ///     A pass, the warm-up reads it started, and a pass that takes them.
+    /// </summary>
+    public async Task Warm()
+    {
+        await Scanner.TickAsync(CancellationToken.None);
+        await Scanner.WarmupsReadAsync();
+        await Scanner.TickAsync(CancellationToken.None);
+    }
+
+    /// <summary>
+    ///     Closed minutes of a pair from <paramref name="from" />, <paramref name="count" /> of them, each opening at 100 and
+    ///     closing at <paramref name="close" />.
+    /// </summary>
+    public async Task Minutes(string symbol, DateTimeOffset from, int count, decimal close, decimal? low = null, decimal? high = null)
+    {
+        for (int minute = 0; minute < count; minute++)
+        {
+            await Scanner.ApplyAsync(
+                new LiveMinute(symbol, from.AddMinutes(minute), 100, high ?? Math.Max(100, close), low ?? Math.Min(100, close), close, 1, close),
+                CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    ///     The clock moved to <paramref name="now" /> and a pass.
+    /// </summary>
+    public async Task At(DateTimeOffset now)
+    {
+        Time.SetUtcNow(now);
+        await Scanner.TickAsync(CancellationToken.None);
+    }
+
+    private static string CloseUp(string after)
+    {
+        return $$"""
+                 {
+                   "formatVersion": 1,
+                   "nodes": [
+                     { "id": "c", "kind": "candle" },
+                     { "id": "up", "kind": "compare", "settings": { "operation": "gt" }, "inputs": { "b": 100 } },
+                     { "id": "first", "kind": "first-time" },
+                     { "id": "enter", "kind": "enter", "settings": { "side": "long" }, "inputs": { "size": 100 } },
+                     { "id": "position", "kind": "position" },
+                     { "id": "close-after", "kind": "close-after", "inputs": { "after": "{{after}}" } }
+                   ],
+                   "wires": [
+                     { "from": "c.close", "to": "up.a" },
+                     { "from": "up.result", "to": "first.value" },
+                     { "from": "first.event", "to": "enter.when" },
+                     { "from": "enter.order", "to": "position.orders" },
+                     { "from": "position.position", "to": "close-after.position" },
+                     { "from": "close-after.order", "to": "position.orders" }
+                   ]
+                 }
+                 """;
+    }
+
+    public static string Text(decimal value)
+    {
+        return value.ToString(CultureInfo.InvariantCulture);
+    }
+}

@@ -49,6 +49,8 @@ internal sealed class IdeaDb
 
     public double FundingPaid { get; init; }
 
+    public DateTimeOffset? FundingUntil { get; init; }
+
     public double? LastClose { get; init; }
 
     public DateTimeOffset? ComputedUntil { get; init; }

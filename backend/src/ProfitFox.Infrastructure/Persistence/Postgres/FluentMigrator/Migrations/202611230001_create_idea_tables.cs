@@ -7,7 +7,7 @@ public sealed class CreateIdeaTablesMigration : Migration
 {
     // The tables of ideas and of the market (change add-ideas-and-market, design.md, decision 14). Whether a strategy gives
     // ideas and the label of a signal go with their strategy and signal; an idea keeps its strategy by id and name without a
-    // foreign key, so the journal outlives the strategy, and a strategy has at most one open idea on a pair and timeframe.
+    // foreign key, so the journal outlives the strategy, and an idea of a strategy on a pair, timeframe and candle is one.
     // The snapshot of the market is written whole by the scanner, whose lease is one row.
     public override void Up()
     {
@@ -45,6 +45,7 @@ public sealed class CreateIdeaTablesMigration : Migration
                 stop_price double precision NULL,
                 target_price double precision NULL,
                 funding_paid double precision NOT NULL DEFAULT 0,
+                funding_until timestamp with time zone NULL,
                 last_close double precision NULL,
                 computed_until timestamp with time zone NULL,
                 now_result double precision NULL,
@@ -68,7 +69,7 @@ public sealed class CreateIdeaTablesMigration : Migration
 
             CREATE INDEX ideas_strategy_timeframe_ix ON ideas (strategy_id, timeframe);
 
-            CREATE UNIQUE INDEX ideas_one_open_ux ON ideas (strategy_id, symbol, timeframe) WHERE state = 'open';
+            CREATE UNIQUE INDEX ideas_birth_ux ON ideas (strategy_id, symbol, timeframe, moment);
 
             CREATE TABLE signal_labels (
                 signal_id uuid NOT NULL,

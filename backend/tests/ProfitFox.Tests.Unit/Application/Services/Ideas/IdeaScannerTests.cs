@@ -1,0 +1,287 @@
+using ProfitFox.Application.Ports.MarketData.Feed;
+using ProfitFox.Domain.Entities.Ideas;
+using ProfitFox.Domain.Entities.Ideas.Enums;
+using ProfitFox.Domain.ValueObjects.Ideas;
+using ProfitFox.Domain.ValueObjects.Market;
+using ProfitFox.Domain.ValueObjects.Trades.Enums;
+
+using static ProfitFox.Tests.Unit.Application.Services.Ideas.ScannerRig;
+
+namespace ProfitFox.Tests.Unit.Application.Services.Ideas;
+
+/// <summary>
+///     Change add-ideas-and-market, tasks 8.2–8.4, 8.6 and 8.7: the scanner of ideas on fakes — the warm-up, the pass on a
+///     closed candle with the rule of one open idea, the reconciliation of the enabled strategies, the snapshot of the market
+///     and the state of the scanner.
+/// </summary>
+public sealed class IdeaScannerTests
+{
+    private static readonly DateTimeOffset Eleven = Ten.AddHours(1);
+
+    /// <summary>
+    ///     Spec strategy-ideas «Все пары»: every warmed pair with a candle is computed at the close.
+    /// </summary>
+    [Test]
+    public async Task An_enabled_strategy_runs_on_every_warmed_pair_that_has_the_candle()
+    {
+        var rig = new ScannerRig();
+        Guid id = await rig.Enable("close-up", "8h");
+        await rig.Start();
+
+        await rig.Minutes("BTCUSDT", Ten, 60, close: 101);
+        await rig.Minutes("ETHUSDT", Ten, 60, close: 101);
+        await rig.At(Eleven.AddSeconds(15));
+
+        Idea[] ideas = [.. rig.Ideas.Ideas.OrderBy(idea => idea.Symbol, StringComparer.Ordinal)];
+        Assert.That(ideas.Select(idea => (idea.Symbol, idea.Moment, idea.StrategyId, idea.StrategyName, idea.StrategyVersion)), Is.EqualTo(new[]
+        {
+            ("BTCUSDT", Eleven, id, "close-up", 4), ("ETHUSDT", Eleven, id, "close-up", 4)
+        }), "SOLUSDT has no minute in the candle");
+        Assert.That(ideas.Select(idea => idea.CandleClose), Has.All.EqualTo(101m));
+    }
+
+    [Test]
+    public async Task A_candle_is_not_computed_before_its_close_and_the_delay()
+    {
+        var rig = new ScannerRig();
+        await rig.Enable("close-up", "8h");
+        await rig.Start();
+        await rig.Minutes("BTCUSDT", Ten, 60, close: 101);
+
+        await rig.At(Eleven.AddSeconds(10));
+
+        Assert.That(rig.Ideas.Ideas, Is.Empty);
+        await rig.At(Eleven.AddSeconds(15));
+        Assert.That(rig.Ideas.Ideas, Has.Count.EqualTo(1));
+    }
+
+    /// <summary>
+    ///     Spec strategy-ideas «Пара не прогрета»: a pair whose history is loading gives no ideas, and is asked again later.
+    /// </summary>
+    [Test]
+    public async Task A_pair_whose_history_is_loading_gives_no_ideas_until_it_is_warmed()
+    {
+        var rig = new ScannerRig();
+        rig.History.Loading.Add("sol");
+        await rig.Enable("close-up", "8h");
+        await rig.Start();
+
+        await rig.Minutes("BTCUSDT", Ten, 60, close: 101);
+        await rig.Minutes("SOLUSDT", Ten, 60, close: 101);
+        await rig.At(Eleven.AddSeconds(15));
+
+        Assert.That(rig.Ideas.Ideas.Select(idea => idea.Symbol), Is.EqualTo(new[] { "BTCUSDT" }));
+        Assert.That(rig.Scanner.Progress, Is.EqualTo((2, 3)));
+        int asked = rig.History.Asked.Count(item => item == "candles sol");
+        await rig.At(Eleven.AddSeconds(45));
+        Assert.That(rig.History.Asked.Count(item => item == "candles sol"), Is.EqualTo(asked), "not again within the minute");
+
+        rig.History.Loading.Clear();
+        rig.Time.SetUtcNow(Eleven.AddMinutes(1).AddSeconds(15));
+        await rig.Warm();
+        await rig.Minutes("SOLUSDT", Eleven, 60, close: 99);
+        await rig.Minutes("SOLUSDT", Eleven.AddHours(1), 60, close: 101);
+        await rig.At(Eleven.AddHours(2).AddSeconds(15));
+
+        Assert.That(rig.History.Asked.Count(item => item == "candles sol"), Is.EqualTo(asked + 1), "asked again after a minute");
+        Assert.That(rig.Scanner.Progress, Is.EqualTo((3, 3)));
+        Assert.That(rig.Ideas.Ideas.Where(idea => idea.Symbol == "SOLUSDT").Select(idea => idea.Moment), Is.EqualTo(new[] { Eleven.AddHours(2) }));
+    }
+
+    /// <summary>
+    ///     Spec strategy-ideas «Свеча прогрева»: an order of the graph on a candle of the warm-up is no idea.
+    /// </summary>
+    [Test]
+    public async Task An_order_on_a_candle_of_the_warm_up_is_no_idea()
+    {
+        var rig = new ScannerRig();
+        rig.History.Candles["btc"] = (interval, before) =>
+        [
+            .. Warmup(interval, before, "99").Select(candle => candle.OpenTime == Ten.AddDays(-2) ? candle : candle with { Close = candle.OpenTime == Ten.AddDays(-2).AddHours(1) ? "101" : "99" })
+        ];
+        await rig.Enable("close-up", "8h");
+
+        await rig.Start();
+        await rig.At(Ten.AddMinutes(2));
+
+        Assert.That(rig.Ideas.Ideas, Is.Empty);
+    }
+
+    /// <summary>
+    ///     Spec strategy-ideas «Одна открытая идея»: «Вторая заявка в сроке первой», «Другой таймфрейм», «После закрытия».
+    /// </summary>
+    [Test]
+    public async Task A_second_order_in_the_time_of_an_open_idea_is_skipped_on_its_timeframe_only()
+    {
+        var rig = new ScannerRig();
+        await rig.Enable("close-up", "8h", timeframes: [TimeSpan.FromHours(1), TimeSpan.FromHours(4)]);
+        await rig.Start();
+
+        await rig.Minutes("BTCUSDT", Ten, 120, close: 101);
+        await rig.At(Eleven.AddSeconds(15));
+        await rig.At(Eleven.AddHours(1).AddSeconds(15));
+        await rig.Minutes("BTCUSDT", Eleven.AddHours(1), 60, close: 99);
+        await rig.At(Eleven.AddHours(2).AddSeconds(15));
+        await rig.Minutes("BTCUSDT", Eleven.AddHours(2), 60, close: 101);
+        await rig.At(Eleven.AddHours(3).AddSeconds(15));
+
+        Assert.That(
+            rig.Ideas.Ideas.Select(idea => (idea.Timeframe, idea.Moment)),
+            Is.EquivalentTo(new[] { (TimeSpan.FromHours(1), Eleven), (TimeSpan.FromHours(4), Eleven.AddHours(1)) }),
+            "the 1h order of 14:00 comes in the time of the idea of 11:00; the 4h candle of 12:00 is another timeframe");
+    }
+
+    [Test]
+    public async Task An_order_at_the_close_where_the_former_idea_ends_is_a_new_idea()
+    {
+        var rig = new ScannerRig();
+        await rig.Enable("close-up", "2h");
+        await rig.Start();
+
+        await rig.Minutes("BTCUSDT", Ten, 60, close: 101);
+        await rig.At(Eleven.AddSeconds(15));
+        await rig.Minutes("BTCUSDT", Eleven, 60, close: 99);
+        await rig.At(Eleven.AddHours(1).AddSeconds(15));
+        await rig.Minutes("BTCUSDT", Eleven.AddHours(1), 60, close: 101);
+        await rig.At(Eleven.AddHours(2).AddSeconds(15));
+
+        Assert.That(rig.Ideas.Ideas.Select(idea => idea.Moment), Is.EqualTo(new[] { Eleven, Eleven.AddHours(2) }), "the idea of 11:00 ends at 13:00 by its time");
+    }
+
+    /// <summary>
+    ///     Spec strategy-ideas «Новая версия»: the ideas after its warm-up carry the new version, the open idea of the former
+    ///     one goes on by its plan.
+    /// </summary>
+    [Test]
+    public async Task A_new_version_gives_the_ideas_after_its_warm_up_and_the_open_one_of_the_former_goes_on()
+    {
+        var rig = new ScannerRig();
+        Guid id = await rig.Enable("close-up", "8h");
+        await rig.Start();
+        await rig.Minutes("BTCUSDT", Ten, 60, close: 101);
+        await rig.At(Eleven.AddSeconds(15));
+
+        await rig.Enable("close-up", "1h", version: 5, id: id);
+        rig.Time.SetUtcNow(Eleven.AddSeconds(30));
+        await rig.Warm();
+        await rig.Minutes("ETHUSDT", Eleven, 60, close: 101);
+        await rig.Minutes("BTCUSDT", Eleven, 60, close: 102);
+        await rig.At(Eleven.AddHours(1).AddSeconds(15));
+
+        Assert.That(rig.Ideas.Ideas.Select(idea => (idea.Symbol, idea.StrategyVersion, idea.After)), Is.EquivalentTo(new[]
+        {
+            ("BTCUSDT", 4, TimeSpan.FromHours(8)), ("ETHUSDT", 5, TimeSpan.FromHours(1))
+        }));
+        Assert.That(rig.Scanner.Open.Single(idea => idea.Symbol == "BTCUSDT").State, Is.EqualTo(IdeaState.Open));
+    }
+
+    /// <summary>
+    ///     Spec strategy-ideas «Выключение» and «Удаление стратегии»: no new ideas, and the open ones close by their plan.
+    /// </summary>
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task A_strategy_turned_off_or_deleted_gives_no_new_ideas_and_its_open_ones_close(bool deleted)
+    {
+        var rig = new ScannerRig();
+        Guid id = await rig.Enable("close-up", "1h");
+        await rig.Start();
+        await rig.Minutes("BTCUSDT", Ten, 60, close: 101);
+        await rig.At(Eleven.AddSeconds(15));
+
+        if (deleted)
+        {
+            await rig.Strategies.DeleteAsync("close-up", CancellationToken.None);
+            rig.Enabled.Remove(id);
+        }
+        else
+        {
+            await rig.Enabled.SetAsync(new StrategyIdeas(id, false, [TimeSpan.FromHours(1)]), CancellationToken.None);
+        }
+
+        await rig.At(Eleven.AddSeconds(30));
+        await rig.Minutes("BTCUSDT", Eleven, 60, close: 99);
+        await rig.Minutes("ETHUSDT", Eleven, 60, close: 101);
+        await rig.At(Eleven.AddHours(1).AddSeconds(15));
+        await rig.At(Eleven.AddHours(1).AddMinutes(2));
+
+        Idea idea = rig.Ideas.Ideas.Single();
+        Assert.That((idea.Symbol, idea.State, idea.ExitReason, idea.ExitTime), Is.EqualTo(("BTCUSDT", IdeaState.Closed, ExitReason.Time, (DateTimeOffset?)Eleven.AddHours(1))));
+        Assert.That(idea.Result, Is.Not.Null);
+    }
+
+    /// <summary>
+    ///     Spec market-overview «Снимок рынка»: the snapshot of every pair is written after a closed minute, with the time of
+    ///     the next payment.
+    /// </summary>
+    [Test]
+    public async Task The_snapshot_of_the_market_is_written_after_each_closed_minute()
+    {
+        var rig = new ScannerRig();
+        await rig.Start();
+        await rig.Scanner.ApplyAsync(new LivePoint(LivePointKind.FundingPayment, "SOLUSDT", Ten.AddHours(-16), 0.0001m), CancellationToken.None);
+        await rig.Scanner.ApplyAsync(new LivePoint(LivePointKind.FundingPayment, "SOLUSDT", Ten.AddHours(-8), 0.0002m), CancellationToken.None);
+        await rig.Scanner.ApplyAsync(new LivePoint(LivePointKind.OpenInterest, "SOLUSDT", Ten, 24_000), CancellationToken.None);
+        await rig.Minutes("SOLUSDT", Ten, 1, close: 238.42m);
+
+        await rig.At(Ten.AddMinutes(1).AddSeconds(2));
+
+        MarketPair sol = rig.Market.Pairs.Single();
+        Assert.That((sol.Symbol, sol.Price, sol.OpenInterestUsdt, sol.NextFunding), Is.EqualTo(("SOLUSDT", 238.42m, (decimal?)5_722_080m, (DateTimeOffset?)Ten)));
+        Assert.That(rig.Market.Writes, Is.EqualTo(1));
+
+        await rig.At(Ten.AddMinutes(1).AddSeconds(30));
+        Assert.That(rig.Market.Writes, Is.EqualTo(1), "no new minute, no new snapshot");
+        await rig.Minutes("BTCUSDT", Ten.AddMinutes(1), 1, close: 96000);
+        await rig.At(Ten.AddMinutes(2).AddSeconds(2));
+        Assert.That(rig.Market.Pairs.Select(pair => pair.Symbol), Is.EqualTo(new[] { "BTCUSDT", "SOLUSDT" }));
+    }
+
+    /// <summary>
+    ///     Spec strategy-ideas «Состояние сканера в разделе „Идеи“»: how many pairs are warmed, and since when ideas count
+    ///     without a break.
+    /// </summary>
+    [Test]
+    public async Task The_state_of_the_scanner_tells_the_warm_up_and_since_when_it_counts_without_a_break()
+    {
+        var rig = new ScannerRig();
+        rig.History.Loading.Add("eth");
+        await rig.Enable("close-up", "1h");
+        await rig.Start();
+
+        Assert.That(rig.Scanner.Progress, Is.EqualTo((2, 3)));
+        Assert.That(rig.Scanner.LiveSince, Is.Null, "the feed has not caught up");
+
+        await rig.Minutes("BTCUSDT", Ten, 1, close: 100);
+        await rig.At(Ten.AddMinutes(1).AddSeconds(5));
+        Assert.That(rig.Scanner.LiveSince, Is.EqualTo(Ten.AddSeconds(5)), "since the start");
+
+        await rig.Scanner.ApplyAsync(new FeedGap("minutes", Ten.AddMinutes(1), Ten.AddMinutes(30)), CancellationToken.None);
+        Assert.That(rig.Scanner.LiveSince, Is.Null);
+        await rig.Minutes("BTCUSDT", Ten.AddMinutes(30), 1, close: 100);
+        await rig.At(Ten.AddMinutes(31).AddSeconds(5));
+        Assert.That(rig.Scanner.LiveSince, Is.EqualTo(Ten.AddMinutes(31).AddSeconds(5)), "since the end of the hole");
+    }
+
+    /// <summary>
+    ///     Spec strategy-ideas «Исключённая идея»: a hole in the minutes of an open idea or a pair that left the set exclude it.
+    /// </summary>
+    [Test]
+    public async Task A_hole_in_the_live_data_and_a_delisted_pair_exclude_the_open_ideas()
+    {
+        var rig = new ScannerRig();
+        await rig.Enable("close-up", "4h");
+        await rig.Start();
+        await rig.Minutes("BTCUSDT", Ten, 60, close: 101);
+        await rig.Minutes("ETHUSDT", Ten, 60, close: 101);
+        await rig.At(Eleven.AddSeconds(15));
+
+        await rig.Scanner.ApplyAsync(new FeedGap("minutes", Eleven.AddMinutes(5), Eleven.AddHours(48)), CancellationToken.None);
+        await rig.Scanner.ApplyAsync(new MarketPairs([Pairs[1], Pairs[2]]), CancellationToken.None);
+        await rig.At(Eleven.AddMinutes(1));
+
+        Assert.That(rig.Ideas.Ideas.Select(idea => (idea.Symbol, idea.State, idea.Excluded)), Is.EquivalentTo(new[]
+        {
+            ("BTCUSDT", IdeaState.Excluded, (string?)"нет данных"), ("ETHUSDT", IdeaState.Excluded, "нет данных")
+        }));
+    }
+}

@@ -1,4 +1,5 @@
 using ProfitFox.Application.Commands.Runs.RunNext;
+using ProfitFox.Application.Services.Ideas;
 using ProfitFox.Infrastructure;
 using ProfitFox.Worker.BackgroundServices;
 
@@ -28,6 +29,9 @@ public static class Program
 
         services.AddInfrastructure(builder.Configuration);
         services.AddSingleton(builder.Configuration.GetSection("Worker").Get<WorkerSettings>() ?? new WorkerSettings());
+        services.AddSingleton(builder.Configuration.GetSection("Scanner").Get<ScannerSettings>() ?? new ScannerSettings());
+        services.AddSingleton(builder.Configuration.GetSection("Ideas").Get<IdeasSettings>() ?? new IdeasSettings());
         services.AddHostedService<RunBackgroundService>();
+        services.AddHostedService<IdeaScanBackgroundService>();
     }
 }
