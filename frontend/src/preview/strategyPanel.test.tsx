@@ -492,13 +492,35 @@ describe('the numbers of the preview of a strategy', () => {
     expect(result()).toHaveTextContent('Заявок 2');
     expect(result()).toHaveTextContent('Сделок 2');
     expect(result()).toHaveTextContent('Итог -1.54 % · -1.54 USDT');
-    expect(within(result()).getByText('-1.54 % · -1.54 USDT')).toHaveAttribute('data-tone', 'err');
+    expect(within(result()).getByText('-1.54 %')).toHaveAttribute('data-tone', 'err');
+    expect(within(result()).getByText('-1.54 USDT')).toHaveAttribute('data-tone', 'err');
   });
 
   it('shows a positive sum with its sign in the color of a profit', async () => {
     await previewOrders([order(october, -0.0098), order(october + day, 0.02)]);
 
-    expect(within(result()).getByText('+1.02 % · +1.02 USDT')).toHaveAttribute('data-tone', 'ok');
+    expect(result()).toHaveTextContent('Итог +1.02 % · +1.02 USDT');
+    expect(within(result()).getByText('+1.02 %')).toHaveAttribute('data-tone', 'ok');
+    expect(within(result()).getByText('+1.02 USDT')).toHaveAttribute('data-tone', 'ok');
+  });
+
+  // Change add-position-node, task 12.7: the sum of the fractions and the sum of USDT of cycles of different sizes
+  // can have different signs.
+  it('colors the percent and the USDT of the sum each by its own sign', async () => {
+    const answer = withCycles([order(october, 0.02), order(october + day, -0.01)]);
+    const [small, large] = answer.cycles as object[];
+    await previewOrders(
+      [],
+      asWritten({
+        ...answer,
+        // +2 % of 100 USDT and -1 % of 1000 USDT: +1 % in all, and a loss of 8 USDT.
+        cycles: [small, { ...large, invested: 1000, netAmount: -10 }],
+      }),
+    );
+
+    expect(result()).toHaveTextContent('Итог +1.00 % · -8.00 USDT');
+    expect(within(result()).getByText('+1.00 %')).toHaveAttribute('data-tone', 'ok');
+    expect(within(result()).getByText('-8.00 USDT')).toHaveAttribute('data-tone', 'err');
   });
 
   // Scenario «Без сделок».

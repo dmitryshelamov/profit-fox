@@ -307,8 +307,10 @@ export function PreviewPanel({
                 <Stat name="Заявок">{orders.length}</Stat>
                 <Stat name="Сделок">{cycles.length}</Stat>
                 {total !== null && (
-                  <Stat name="Итог" tone={total.net < 0 ? 'err' : 'ok'}>
-                    {`${percent(total.net)} · ${usdt(total.amount)}`}
+                  <Stat name="Итог">
+                    <Signed amount={total.net}>{percent(total.net)}</Signed>
+                    {' · '}
+                    <Signed amount={total.amount}>{usdt(total.amount)}</Signed>
                   </Stat>
                 )}
               </>
@@ -415,25 +417,24 @@ export function PreviewPanel({
   );
 }
 
-/** A number of the result in the header of the panel: its name and the number, in mono; a sum is colored by its sign. */
-function Stat({
-  name,
-  tone,
-  children,
-}: {
-  readonly name: string;
-  readonly tone?: 'ok' | 'err';
-  readonly children: ReactNode;
-}) {
+/** A number of the result in the header of the panel: its name and the number, in mono. */
+function Stat({ name, children }: { readonly name: string; readonly children: ReactNode }) {
   return (
     <span className="flex items-baseline gap-2 text-xs text-muted">
-      {name}{' '}
-      <span
-        data-tone={tone}
-        className={`font-mono text-[13px] font-semibold ${tone === 'err' ? 'text-err' : tone === 'ok' ? 'text-ok' : 'text-text'}`}
-      >
-        {children}
-      </span>
+      {name} <span className="font-mono text-[13px] font-semibold text-text">{children}</span>
+    </span>
+  );
+}
+
+/**
+ * A part of the sum in the color of its own sign, told by `data-tone`: the sum of the fractions and the sum of USDT of
+ * cycles of different sizes can have different signs.
+ */
+function Signed({ amount, children }: { readonly amount: number; readonly children: ReactNode }) {
+  const tone = amount < 0 ? 'err' : 'ok';
+  return (
+    <span data-tone={tone} className={tone === 'err' ? 'text-err' : 'text-ok'}>
+      {children}
     </span>
   );
 }
