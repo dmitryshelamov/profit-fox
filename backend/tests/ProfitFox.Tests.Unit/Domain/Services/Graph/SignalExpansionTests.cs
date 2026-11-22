@@ -17,10 +17,11 @@ public sealed class SignalExpansionTests
     {
         GraphDefinition expanded = Read(SignalLibrary.Strategy()).Graph;
 
-        Assert.That(expanded.Nodes.Select(node => node.Id), Is.EqualTo(new[] { "s/rate", "s/high", "s/first", "enter", "close-after" }));
+        Assert.That(expanded.Nodes.Select(node => node.Id), Is.EqualTo(new[] { "s/rate", "s/high", "s/first", "enter", "position", "close-after" }));
         Assert.That(expanded.Wires.Select(wire => $"{wire.From} -> {wire.To}"), Is.EqualTo(new[]
         {
-            "s/first.event -> enter.when", "s/rate.value -> s/high.a", "s/high.result -> s/first.value"
+            "s/first.event -> enter.when", "enter.order -> position.orders", "position.position -> close-after.position", "close-after.order -> position.orders",
+            "s/rate.value -> s/high.a", "s/high.result -> s/first.value"
         }), "first the wires of the strategy, then the inner wires of the signal in the order of its graph");
         Assert.That(expanded.Nodes.Single(node => node.Id == "s/high").Inputs["b"], Is.EqualTo(GraphValue.FromNumber(0.0005m)));
         Assert.That(expanded.Nodes.Single(node => node.Id == "s/high").Settings["operation"], Is.EqualTo("ge"));
@@ -52,7 +53,8 @@ public sealed class SignalExpansionTests
 
         Assert.That(expanded.Wires.Select(wire => $"{wire.From} -> {wire.To}"), Is.EqualTo(new[]
         {
-            "s/first.event -> enter.when", "s/rate.value -> s/high.a", "p.limit -> s/high.b", "s/high.result -> s/first.value"
+            "s/first.event -> enter.when", "enter.order -> position.orders", "position.position -> close-after.position", "close-after.order -> position.orders",
+            "s/rate.value -> s/high.a", "p.limit -> s/high.b", "s/high.result -> s/first.value"
         }));
         Assert.That(expanded.Nodes.Single(node => node.Id == "s/high").Inputs, Does.Not.ContainKey("b"));
         Assert.That(expanded.Parameters.Single().Name, Is.EqualTo("limit"), "the parameters of the strategy stay");
@@ -90,7 +92,7 @@ public sealed class SignalExpansionTests
         string source = StrategyGraph.Write(strategy.Source);
 
         Assert.That(StrategyGraph.ReadStrategy(StrategyGraph.Write(strategy.Graph)).Errors, Is.Empty);
-        Assert.That(strategy.Source.Nodes.Select(node => node.Kind), Is.EqualTo(new[] { "signal", "enter", "close-after" }));
+        Assert.That(strategy.Source.Nodes.Select(node => node.Kind), Is.EqualTo(new[] { "signal", "enter", "position", "close-after" }));
         Assert.That(source, Is.EqualTo(StrategyGraph.Write(Read(json).Source)), "the same graph expands the same way");
         Assert.That(strategy.Entries, Is.EqualTo(new[] { new StrategyEntry("enter", EntrySide.Short) }));
     }

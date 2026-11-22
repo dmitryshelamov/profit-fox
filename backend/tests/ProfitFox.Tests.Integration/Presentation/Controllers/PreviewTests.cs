@@ -231,12 +231,12 @@ public sealed class PreviewTests
         await using var api = new BenchTestApplication(market);
         Guid signal = await SaveSignal(api);
         JsonObject graph = StrategiesTests.Strategy(signal);
-        graph["nodes"]!.AsArray().RemoveAt(2);
+        StrategiesTests.RemoveCloseAfter(graph);
 
         HttpResponseMessage response = await PreviewStrategy(api, "NOSUCHUSDT", "4h", graph);
 
         ErrorResponse refused = await BadRequest(response);
-        Assert.That(refused.Errors.Select(error => error.Code), Is.EquivalentTo(new[] { "StrategyCloseAfterMissing", "UnknownInstrument" }));
+        Assert.That(refused.Errors.Select(error => error.Code), Is.EquivalentTo(new[] { "StrategyExitMissing", "UnknownInstrument" }));
         Assert.That(market.Data.CandleRequests, Is.Empty);
         Assert.That(market.Data.FundingRequests, Is.Empty);
     }

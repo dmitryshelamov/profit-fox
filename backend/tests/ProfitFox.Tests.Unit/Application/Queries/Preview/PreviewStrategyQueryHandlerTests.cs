@@ -98,12 +98,12 @@ public sealed class PreviewStrategyQueryHandlerTests
     public async Task An_error_of_the_graph_and_an_unknown_pair()
     {
         JsonObject graph = StrategyRequests.Strategy(_signal.Id);
-        graph["nodes"]!.AsArray().RemoveAt(2);
+        StrategyRequests.RemoveCloseAfter(graph);
 
         StrategyPreviewOutcomeInternal outcome = await Preview(graph, instrument: "NOPEUSDT");
 
         Assert.That(outcome.Preview, Is.Null);
-        Assert.That(outcome.Errors.Select(error => error.Code), Is.EquivalentTo(new[] { "StrategyCloseAfterMissing", "UnknownInstrument" }));
+        Assert.That(outcome.Errors.Select(error => error.Code), Is.EquivalentTo(new[] { "StrategyExitMissing", "UnknownInstrument" }));
         Assert.That(_history.Reads, Is.Empty);
     }
 
@@ -122,10 +122,12 @@ public sealed class PreviewStrategyQueryHandlerTests
     {
         JsonObject graph = StrategyRequests.Strategy(_signal.Id);
         graph["nodes"]!.AsArray().Add(JsonNode.Parse("""{ "id": "stop", "kind": "stop-loss", "inputs": { "distance": 0.02 } }"""));
+        graph["wires"]!.AsArray().Add(JsonNode.Parse("""{ "from": "position.position", "to": "stop.position" }"""));
+        graph["wires"]!.AsArray().Add(JsonNode.Parse("""{ "from": "stop.order", "to": "position.orders" }"""));
         await Preview(graph);
         int candles = _history.Reads.Count(read => read.Feed == "candles" && read.To - read.From > TimeSpan.FromDays(30));
         int funding = _history.Reads.Count(read => read.Feed == "funding");
-        graph["nodes"]![3]!["inputs"]!["distance"] = 0.03;
+        graph["nodes"]![4]!["inputs"]!["distance"] = 0.03;
 
         StrategyPreviewInternal second = (await Preview(graph)).Preview!;
 

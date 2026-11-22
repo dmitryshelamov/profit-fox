@@ -27,21 +27,21 @@
 
 ## 2. Граф и каталог
 
-- [ ] 2.1 `PinType.Order` и `PinType.Position` с именами `order` и `position`; `PinDeclaration.Many`. Проверить
+- [x] 2.1 `PinType.Order` и `PinType.Position` с именами `order` и `position`; `PinDeclaration.Many`. Проверить
   тестами сценарии spec `strategy-graph` «Типы пинов» («Заявка не число») и что значение в `inputs` для входа типа
   «заявка» и «позиция» даёт ошибку, как для события.
-- [ ] 2.2 Виды каталога по таблице design.md, решение 3: `position`, `market-order`, `limit-order`, `close-position`,
+- [x] 2.2 Виды каталога по таблице design.md, решение 3: `position`, `market-order`, `limit-order`, `close-position`,
   `add`, `subtract`, `multiply`; у `enter` вход `size` и выход `order`; у `stop-loss`, `take-profit`, `close-after` вход
   `position` и выход `order`. Названия и группы в `NodeTitles`, группа «Числа». Проверить тестами: пины и настройки
   каждого вида; `AllowedInSignal` ложен у видов группы «Позиция» и истинен у арифметики; сценарии spec
   `signal-constructor` «Арифметические узлы в каталоге сигнала».
-- [ ] 2.3 `GraphValidator.CheckWires` и `CheckMissingInputs`: вход `Many` принимает несколько проводов, входу типа
+- [x] 2.3 `GraphValidator.CheckWires` и `CheckMissingInputs`: вход `Many` принимает несколько проводов, входу типа
   «заявка» и «позиция» нужен провод. Проверить тестами сценарии spec `strategy-graph` «Вход с несколькими проводами» и
   «Провода».
-- [ ] 2.4 `GraphValidator.CheckCycles` и `CompiledGraph.Compile` без проводов на `position.orders` (design.md, решение
+- [x] 2.4 `GraphValidator.CheckCycles` и `CompiledGraph.Compile` без проводов на `position.orders` (design.md, решение
   2). Проверить тестами сценарии spec `strategy-graph` «Без циклов» («Цикл», «Цикл через позицию», «Цикл мимо позиции в
   стратегии») и что в порядке расчёта узел позиции стоит раньше узла, читающего его выход.
-- [ ] 2.5 `GraphValidator.ValidateStrategy` по решению 4 с кодами `StrategyPositionMissing`,
+- [x] 2.5 `GraphValidator.ValidateStrategy` по решению 4 с кодами `StrategyPositionMissing`,
   `StrategyPositionRepeated`, `StrategyExitMissing`, `StrategyOrderUnwired`. Проверить тестами сценарии spec
   `strategy-graph` «Стратегия» и «Узел позиции в стратегии»; узел позиции в сигнале отклоняется проверкой сигнала.
 
@@ -191,6 +191,34 @@
   файла из него нет: минутной истории `BTCUSDT` в репозитории нет, автоматический тест против этих чисел не пишется.
 - **7.1.** Слова «эталон задачи 1.2 — те же моменты, цены, причины и доли» заменены ссылкой на живую проверку задачи
   10.3: сверка предпросмотра `funding-short` с эталоном делается там, на dev-стенде.
+
+- **Редакции артефактов во время применения.** Применение началось на `dab42fd`; за время работы на ветку пришли
+  `7709a1d` (узел `market-order`) и `a1e09f6` (один расчёт цикла `CycleRun` вместо `TradeSimulator`). Мои коммиты
+  перенесены поверх них (cherry-pick своих коммитов, без слияния), задачи выполняются по новой редакции. Исключение —
+  задачи, которые противоречат жёстким правилам, с которыми меня запустили: «стратегия по плану считается прежним путём
+  (`StrategyRun` → `EntryPlan` → `PairPosition` → `TradeSimulator`)», «не править `TradeSimulatorTests`», «номер версии
+  движка остаётся `2`». Это новые 5.3 (переключить `Cycle.Open` и `PairPosition` на `CycleRun`), 5.4 (удалить
+  `TradeSimulator`, перевести на `CycleRun` его тесты) и 5.5 (правило номера версии). Они оставлены открытыми для
+  основной сессии; подробности — в записи 5.3–5.5 ниже, когда до них дойдёт очередь.
+- **2.5, сообщения.** Причины новых ошибок проверки стратегии (`StrategyPositionMissing`, `StrategyPositionRepeated`,
+  `StrategyExitMissing`, `StrategyOrderUnwired`, новый текст `StrategyEntryMissing`) написаны по-русски: редактор
+  показывает `code · reason` как есть. Причины прежних ошибок графа остаются английскими, как были; перевод их всех —
+  не это изменение.
+- **2.5, код ошибки.** `StrategyCloseAfterMissing` убран: стратегии больше не нужен срок, а ошибку «нет выхода» даёт
+  новый `StrategyExitMissing`. Тесты, которые ждали прежний код (не закреплённые), ждут новый.
+- **2.5 → 5.2.** `TradingStrategy.FromSignal` переведён на узел `position`, размер `100` и провода уже в группе 2: без
+  этого стратегия гипотезы не проходила бы новую проверку стратегии и падали бы `H0001StrategyParityTests`,
+  `EngineVersionTests` и остальные тесты стенда. Тест порядка узлов и проводов — в `StrategyAssemblyTests`; задача 5.2
+  отмечается в группе 5 после проверки хэша и `ByPlan`.
+- **2.2, `StrategyRun`.** Входы узлов позиции читаются по имени, а не первым входом (у `stop-loss`, `take-profit`,
+  `close-after` первым стал вход `position`); узел `close-after` у стратегии с заявками может отсутствовать — тогда срок
+  отсутствует и заявка `enter` даёт отказ `plan`, пока путь с заявками (группа 4) не подключён к предпросмотру.
+- **2.x, закреплённый тест.** В `SignalNodeParityTests.One_signal_with_two_thresholds` вход теста — граф прежнего вида
+  в тексте теста — обёрнут тестовым помощником `Graphs.Raised`, который добавляет узел `position`, размер `100` и
+  провода. Ожидания теста не тронуты, значения сравниваются те же. Остальные закреплённые тесты не менялись; их входы
+  (`SignalLibrary.Strategy`, `TradingStrategy.FromSignal`) переведены на новый вид вне файлов этих тестов.
+- **2.2, арифметика.** В коммите группы 2 узлы `add`, `subtract`, `multiply` есть в каталоге, но считают «нет
+  значения»; расчёт — задача 3.1 (тест первым).
 
 ## База
 

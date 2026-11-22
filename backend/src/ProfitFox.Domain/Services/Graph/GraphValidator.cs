@@ -68,8 +68,10 @@ internal static class GraphValidator
     }
 
     /// <summary>
-    ///     A strategy (spec strategy-graph «Стратегия»): no declared outputs and no <c>outputs</c> node, at least one
-    ///     <c>enter</c>, exactly one <c>close-after</c>, at most one <c>stop-loss</c> and one <c>take-profit</c>.
+    ///     A strategy (spec strategy-graph «Стратегия», «Узел позиции в стратегии»): no declared outputs and no
+    ///     <c>outputs</c> node, exactly one <c>position</c>, a node that can open the position and one that can close it,
+    ///     every order wired into the position, at most one <c>stop-loss</c>, one <c>take-profit</c> and one
+    ///     <c>close-after</c>.
     /// </summary>
     public static List<GraphError> ValidateStrategy(GraphDefinition graph)
     {
@@ -96,14 +98,23 @@ internal static class GraphValidator
             }
         }
 
-        if (graph.Nodes.All(node => node.Kind != NodeCatalog.Enter))
+        CheckPosition(graph, errors);
+
+        if (!graph.Nodes.Any(node => node.Kind is NodeCatalog.Enter or NodeCatalog.MarketOrder or NodeCatalog.LimitOrder))
         {
-            errors.Add(new GraphError(GraphErrorCode.StrategyEntryMissing, $"A strategy needs an {NodeCatalog.Enter} node."));
+            errors.Add(
+                new GraphError(
+                    GraphErrorCode.StrategyEntryMissing,
+                    $"Стратегии нужен узел входа: {NodeCatalog.Enter}, {NodeCatalog.MarketOrder} или {NodeCatalog.LimitOrder}."));
         }
 
-        if (graph.Nodes.All(node => node.Kind != NodeCatalog.CloseAfter))
+        if (!graph.Nodes.Any(node => node.Kind is NodeCatalog.StopLoss or NodeCatalog.TakeProfit or NodeCatalog.CloseAfter
+                                         or NodeCatalog.ClosePosition or NodeCatalog.MarketOrder or NodeCatalog.LimitOrder))
         {
-            errors.Add(new GraphError(GraphErrorCode.StrategyCloseAfterMissing, $"A strategy needs one {NodeCatalog.CloseAfter} node."));
+            errors.Add(
+                new GraphError(
+                    GraphErrorCode.StrategyExitMissing,
+                    "Стратегии нужен выход: узел, который закрывает позицию, — стоп, цель, срок, закрытие позиции, рыночная или лимитная заявка."));
         }
 
         // The position on a pair is one, so its stop, its target and its time are one each: the first node stays.
@@ -124,6 +135,52 @@ internal static class GraphValidator
         return errors;
     }
 
+    // Exactly one position, and every node with an output of an order wired by it into the position.
+    private static void CheckPosition(GraphDefinition graph, List<GraphError> errors)
+    {
+        NodeDefinition[] positions = [.. graph.Nodes.Where(node => node.Kind == NodeCatalog.Position)];
+        if (positions.Length == 0)
+        {
+            errors.Add(new GraphError(GraphErrorCode.StrategyPositionMissing, "Стратегии нужен узел позиции."));
+        }
+
+        foreach (NodeDefinition node in positions.Skip(1))
+        {
+            errors.Add(new GraphError(GraphErrorCode.StrategyPositionRepeated, "У стратегии один узел позиции; это второй.") { Node = node.Id });
+        }
+
+        var ids = new HashSet<string>(positions.Select(node => node.Id), StringComparer.Ordinal);
+        foreach (NodeDefinition node in graph.Nodes)
+        {
+            if (NodeCatalog.Find(node.Kind) is not { } kind || kind.Outputs(graph).All(pin => pin.Type != PinType.Order))
+            {
+                continue;
+            }
+
+            bool wired = graph.Wires.Any(wire => wire.From.Node == node.Id && wire.From.Pin == NodeCatalog.Order
+                                                 && ids.Contains(wire.To.Node) && wire.To.Pin == NodeCatalog.Orders);
+            if (!wired)
+            {
+                errors.Add(
+                    new GraphError(GraphErrorCode.StrategyOrderUnwired, $"Заявка узла {node.Id} не подключена к позиции: нужен провод на {NodeCatalog.Position}.{NodeCatalog.Orders}.")
+                    {
+                        Node = node.Id,
+                        Pin = NodeCatalog.Order
+                    });
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Whether a wire into this input closes no cycle: the input <c>orders</c> of the node <c>position</c> (change
+    ///     add-position-node, design.md, decision 2). The outputs of the position do not depend on the orders of the same
+    ///     computation, so neither the search for cycles nor the order of computation counts these wires.
+    /// </summary>
+    public static bool IsFeedback(string kind, string pin)
+    {
+        return kind == NodeCatalog.Position && pin == NodeCatalog.Orders;
+    }
+
     private static void CheckParameters(GraphDefinition graph, List<GraphError> errors)
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
@@ -141,13 +198,13 @@ internal static class GraphValidator
                 continue;
             }
 
-            if (parameter.Type == PinType.Event || parameter.Value.Type != parameter.Type)
+            if (parameter.Type is PinType.Event or PinType.Order or PinType.Position || parameter.Value.Type != parameter.Type)
             {
                 errors.Add(
                     new GraphError(
                         GraphErrorCode.ParameterTypeMismatch,
-                        parameter.Type == PinType.Event
-                            ? "A parameter cannot be an event."
+                        parameter.Type is PinType.Event or PinType.Order or PinType.Position
+                            ? $"A parameter cannot be {PinTypes.Name(parameter.Type)}."
                             : $"The value is {PinTypes.Name(parameter.Value.Type)}, the parameter is {PinTypes.Name(parameter.Type)}.")
                     {
                         Parameter = parameter.Name
@@ -370,9 +427,14 @@ internal static class GraphValidator
             {
                 errors.Add(new GraphError(GraphErrorCode.UnknownInput, $"{node.Kind.Name} has no input {name}.") { Node = node.Node.Id, Pin = name });
             }
-            else if (input.Type == PinType.Event)
+            else if (input.WireOnly)
             {
-                errors.Add(new GraphError(GraphErrorCode.ValueNotAllowed, "An event input takes a wire, not a value.") { Node = node.Node.Id, Pin = name });
+                errors.Add(
+                    new GraphError(GraphErrorCode.ValueNotAllowed, $"An input of type {PinTypes.Name(input.Type)} takes a wire, not a value.")
+                    {
+                        Node = node.Node.Id,
+                        Pin = name
+                    });
             }
             else if (input.Type != value.Type)
             {
@@ -444,7 +506,8 @@ internal static class GraphValidator
                     });
             }
 
-            if (!wired.Add(wire.To))
+            bool first = wired.Add(wire.To);
+            if (!first && !to.Many)
             {
                 errors.Add(
                     new GraphError(GraphErrorCode.SecondWire, $"The input {wire.To} already has a wire.")
@@ -454,7 +517,7 @@ internal static class GraphValidator
                         Wire = wire
                     });
             }
-            else if (nodes[wire.To.Node].Node.Inputs.ContainsKey(wire.To.Pin))
+            else if (first && nodes[wire.To.Node].Node.Inputs.ContainsKey(wire.To.Pin))
             {
                 errors.Add(
                     new GraphError(GraphErrorCode.WireAndValue, $"The input {wire.To} has both a wire and a value.")
@@ -534,7 +597,7 @@ internal static class GraphValidator
                     errors.Add(
                         new GraphError(
                             GraphErrorCode.MissingInput,
-                            input.Type == PinType.Event ? "The input needs a wire." : "The input needs a wire or a value.")
+                            input.WireOnly ? "The input needs a wire." : "The input needs a wire or a value.")
                         {
                             Node = definition.Id,
                             Pin = input.Name
@@ -548,7 +611,8 @@ internal static class GraphValidator
     {
         var next = nodes.Keys.ToDictionary(id => id, _ => new List<string>(), StringComparer.Ordinal);
 
-        foreach (WireDefinition wire in graph.Wires.Where(wire => nodes.ContainsKey(wire.From.Node) && nodes.ContainsKey(wire.To.Node)))
+        foreach (WireDefinition wire in graph.Wires.Where(wire => nodes.ContainsKey(wire.From.Node) && nodes.ContainsKey(wire.To.Node)
+                                                                  && !IsFeedback(nodes[wire.To.Node].Kind.Name, wire.To.Pin)))
         {
             next[wire.From.Node].Add(wire.To.Node);
         }

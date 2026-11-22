@@ -274,7 +274,7 @@ public sealed class StrategyExecutionTests
 
     private static string Graph(string parameters, string nodes, string wires)
     {
-        return $$"""
+        return Graphs.Raised($$"""
                  {
                    "formatVersion": 1,
                    "parameters": [{{parameters}}],
@@ -282,7 +282,7 @@ public sealed class StrategyExecutionTests
                    "nodes": [{{nodes}}],
                    "wires": [{{wires}}]
                  }
-                 """;
+                 """);
     }
 
     private static TradingStrategy Strategy(string json)

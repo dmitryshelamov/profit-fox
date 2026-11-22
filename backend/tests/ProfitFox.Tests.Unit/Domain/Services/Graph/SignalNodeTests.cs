@@ -154,14 +154,14 @@ public sealed class SignalNodeTests
         string json = SignalLibrary.ChangedStrategy(graph =>
         {
             graph.Node("enter")["settings"] = new JsonObject();
-            graph.RemoveNode("close-after");
+            graph.RemoveNodeAndWires("close-after");
         }, version: 7);
 
         List<GraphError> errors = Errors(json);
 
         Assert.That(errors.Select(error => error.Code), Is.EquivalentTo(new[]
         {
-            GraphErrorCode.UnknownSignal, GraphErrorCode.MissingSetting, GraphErrorCode.StrategyCloseAfterMissing
+            GraphErrorCode.UnknownSignal, GraphErrorCode.MissingSetting, GraphErrorCode.StrategyExitMissing
         }));
     }
 

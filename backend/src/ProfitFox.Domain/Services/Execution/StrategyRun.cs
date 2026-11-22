@@ -13,17 +13,17 @@ internal sealed class StrategyRun
 {
     private readonly GraphRun _run;
     private readonly (InputSource When, EntrySide Side)[] _entries;
-    private readonly InputSource _after;
+    private readonly InputSource? _after;
     private readonly InputSource? _stop;
     private readonly InputSource? _target;
 
     public StrategyRun(TradingStrategy strategy, CompiledGraph graph)
     {
         _run = new GraphRun(graph);
-        _entries = [.. strategy.Entries.Select(entry => (Input(graph, node => node.Definition.Id == entry.Node)!.Value, entry.Side))];
-        _after = Input(graph, node => node.Definition.Kind == NodeCatalog.CloseAfter)!.Value;
-        _stop = Input(graph, node => node.Definition.Kind == NodeCatalog.StopLoss);
-        _target = Input(graph, node => node.Definition.Kind == NodeCatalog.TakeProfit);
+        _entries = [.. strategy.Entries.Select(entry => (Input(graph, node => node.Definition.Id == entry.Node, NodeCatalog.When)!.Value, entry.Side))];
+        _after = Input(graph, node => node.Definition.Kind == NodeCatalog.CloseAfter, NodeCatalog.After);
+        _stop = Input(graph, node => node.Definition.Kind == NodeCatalog.StopLoss, NodeCatalog.Distance);
+        _target = Input(graph, node => node.Definition.Kind == NodeCatalog.TakeProfit, NodeCatalog.Distance);
     }
 
     public StrategyStep Step(ClosedCandle candle, FundingPayment? lastFunding)
@@ -39,7 +39,7 @@ internal sealed class StrategyRun
     /// </summary>
     public StrategyStep Read(DateTimeOffset moment, EntrySide? entry = null)
     {
-        return new StrategyStep(moment, entry, _run.Read(_after).Duration, Distance(_stop), Distance(_target));
+        return new StrategyStep(moment, entry, _after is { } after ? _run.Read(after).Duration : null, Distance(_stop), Distance(_target));
     }
 
     // Entries of different sides at one candle give no order: the graph did not say which to open.
@@ -70,9 +70,15 @@ internal sealed class StrategyRun
         return source is { } input ? ExitDistance.Of(_run.Read(input).Number) : ExitDistance.None;
     }
 
-    // The only input of the position node that matches, or null when the strategy has no such node.
-    private static InputSource? Input(CompiledGraph graph, Func<CompiledNode, bool> match)
+    // The input of the first node that matches, or null when the strategy has no such node.
+    private static InputSource? Input(CompiledGraph graph, Func<CompiledNode, bool> match, string input)
     {
-        return graph.Nodes.FirstOrDefault(match)?.Inputs[0];
+        if (graph.Nodes.FirstOrDefault(match) is not { } node)
+        {
+            return null;
+        }
+
+        int index = node.Kind.Inputs(graph.Graph).Select(pin => pin.Name).ToList().IndexOf(input);
+        return node.Inputs[index];
     }
 }

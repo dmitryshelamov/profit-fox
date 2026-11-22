@@ -8,8 +8,9 @@ using ProfitFox.Domain.ValueObjects.Signals;
 namespace ProfitFox.Tests.Shared.Generators.Domain.Entities.Strategies;
 
 /// <summary>
-///     A saved strategy: <c>funding-short</c> — a signal node <c>s</c>, a short <c>enter</c> on its event and a
-///     <c>close-after</c> of 4h — with a position for each node, version 1, unless the test gives what it checks.
+///     A saved strategy: <c>funding-short</c> — a signal node <c>s</c>, a short <c>enter</c> of 100 USDT on its event, a
+///     <c>close-after</c> of 4h and the node <c>position</c> wired with them — with a position on the canvas for each
+///     node, version 1, unless the test gives what it checks.
 /// </summary>
 public static class StrategyDocumentGenerator
 {
@@ -35,19 +36,31 @@ public static class StrategyDocumentGenerator
     /// <summary>
     ///     The graph of <c>funding-short</c> as written: its node <c>s</c> points at version <paramref name="signalVersion" />
     ///     of <paramref name="signal" />; without a signal it is the same strategy with the signal of H0001 written out.
+    ///     <paramref name="legacy" /> gives the form saved before change add-position-node: no position, no size, no wires
+    ///     of orders.
     /// </summary>
-    public static GraphDefinition GenerateGraph(Guid? signal, int signalVersion = 1, string after = "4h")
+    public static GraphDefinition GenerateGraph(Guid? signal, int signalVersion = 1, string after = "4h", bool legacy = false)
     {
+        string enter = legacy ? """{ "id": "enter", "kind": "enter", "settings": { "side": "short" } }"""
+            : """{ "id": "enter", "kind": "enter", "settings": { "side": "short" }, "inputs": { "size": 100 } }""";
+        string position = legacy ? "" : """, { "id": "position", "kind": "position" }""";
+        string wires = legacy ? ""
+            : """
+              ,
+                  { "from": "enter.order", "to": "position.orders" },
+                  { "from": "position.position", "to": "close-after.position" },
+                  { "from": "close-after.order", "to": "position.orders" }
+              """;
         string json = signal is { } id
             ? $$"""
                 {
                   "formatVersion": 1,
                   "nodes": [
                     { "id": "s", "kind": "signal", "settings": { "signal": "{{id}}", "version": "{{signalVersion}}" } },
-                    { "id": "enter", "kind": "enter", "settings": { "side": "short" } },
-                    { "id": "close-after", "kind": "close-after", "inputs": { "after": "{{after}}" } }
+                    {{enter}},
+                    { "id": "close-after", "kind": "close-after", "inputs": { "after": "{{after}}" } }{{position}}
                   ],
-                  "wires": [{ "from": "s.event", "to": "enter.when" }]
+                  "wires": [{ "from": "s.event", "to": "enter.when" }{{wires}}]
                 }
                 """
             : $$"""
@@ -57,13 +70,13 @@ public static class StrategyDocumentGenerator
                     { "id": "rate", "kind": "funding-rate" },
                     { "id": "high", "kind": "compare", "settings": { "operation": "ge" }, "inputs": { "b": 0.0005 } },
                     { "id": "first", "kind": "first-time" },
-                    { "id": "enter", "kind": "enter", "settings": { "side": "short" } },
-                    { "id": "close-after", "kind": "close-after", "inputs": { "after": "{{after}}" } }
+                    {{enter}},
+                    { "id": "close-after", "kind": "close-after", "inputs": { "after": "{{after}}" } }{{position}}
                   ],
                   "wires": [
                     { "from": "rate.value", "to": "high.a" },
                     { "from": "high.result", "to": "first.value" },
-                    { "from": "first.event", "to": "enter.when" }
+                    { "from": "first.event", "to": "enter.when" }{{wires}}
                   ]
                 }
                 """;

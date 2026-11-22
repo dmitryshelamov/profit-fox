@@ -1,6 +1,7 @@
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.Services.Nodes.Data;
 using ProfitFox.Domain.Services.Nodes.Logic;
+using ProfitFox.Domain.Services.Nodes.Numbers;
 using ProfitFox.Domain.Services.Nodes.Position;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
@@ -23,8 +24,15 @@ public static class NodeCatalog
     public const string Or = "or";
     public const string Not = "not";
     public const string FirstTime = "first-time";
+    public const string Add = "add";
+    public const string Subtract = "subtract";
+    public const string Multiply = "multiply";
     public const string Outputs = "outputs";
+    public const string Position = "position";
     public const string Enter = "enter";
+    public const string MarketOrder = "market-order";
+    public const string LimitOrder = "limit-order";
+    public const string ClosePosition = "close-position";
     public const string StopLoss = "stop-loss";
     public const string TakeProfit = "take-profit";
     public const string CloseAfter = "close-after";
@@ -37,6 +45,34 @@ public static class NodeCatalog
 
     public const string Long = "long";
     public const string Short = "short";
+
+    /// <summary>
+    ///     The settings of <c>market-order</c> and <c>limit-order</c>: the side of the order and whether its size is an
+    ///     amount in USDT or a quantity of coins (change add-position-node, design.md, decision 3).
+    /// </summary>
+    public const string Buy = "buy";
+
+    public const string Sell = "sell";
+    public const string SizeIn = "sizeIn";
+    public const string Amount = "amount";
+    public const string Quantity = "quantity";
+
+    /// <summary>
+    ///     The pins of orders and of the position: the output <c>order</c> of a node of an order, the input <c>orders</c> of
+    ///     <c>position</c> that takes several wires, its output and the input <c>position</c> of an exit node, and the
+    ///     outputs of the state of the position.
+    /// </summary>
+    public const string Order = "order";
+
+    public const string Orders = "orders";
+    public const string PositionPin = "position";
+    public const string Open = "open";
+    public const string AveragePrice = "averagePrice";
+    public const string LastEntryPrice = "lastEntryPrice";
+    public const string Invested = "invested";
+    public const string SinceLastEntry = "sinceLastEntry";
+    public const string Size = "size";
+    public const string Price = "price";
 
     /// <summary>
     ///     The inputs of the position nodes: the event of <c>enter</c>, the distance of <c>stop-loss</c> and
@@ -64,6 +100,19 @@ public static class NodeCatalog
     private static readonly PinDeclaration BooleanA = new PinDeclaration("a", PinType.Boolean);
     private static readonly PinDeclaration BooleanB = new PinDeclaration("b", PinType.Boolean);
     private static readonly PinDeclaration BooleanResult = new PinDeclaration("result", PinType.Boolean);
+    private static readonly PinDeclaration NumberA = new PinDeclaration("a", PinType.Number);
+    private static readonly PinDeclaration NumberB = new PinDeclaration("b", PinType.Number);
+    private static readonly PinDeclaration NumberResult = new PinDeclaration("result", PinType.Number);
+    private static readonly PinDeclaration OrderOutput = new PinDeclaration(Order, PinType.Order);
+    private static readonly PinDeclaration PositionInput = new PinDeclaration(PositionPin, PinType.Position);
+    private static readonly PinDeclaration SizeInput = new PinDeclaration(Size, PinType.Number);
+    private static readonly PinDeclaration Condition = new PinDeclaration(When, PinType.Boolean);
+
+    private static readonly SettingDeclaration[] OrderSettings =
+    [
+        new SettingDeclaration(Side, [Buy, Sell], Default: null),
+        new SettingDeclaration(SizeIn, [Amount, Quantity], Default: null)
+    ];
 
     private static readonly Dictionary<string, NodeKind> Kinds = new[]
         {
@@ -101,6 +150,9 @@ public static class NodeCatalog
                 [new PinDeclaration("event", PinType.Event)],
                 [],
                 _ => new FirstTimeNode()),
+            new NodeKind(Add, [NumberA, NumberB], [NumberResult], [], _ => new ArithmeticNode((a, b) => a + b)),
+            new NodeKind(Subtract, [NumberA, NumberB], [NumberResult], [], _ => new ArithmeticNode((a, b) => a - b)),
+            new NodeKind(Multiply, [NumberA, NumberB], [NumberResult], [], _ => new ArithmeticNode((a, b) => a * b)),
             new NodeKind(
                 Outputs,
                 graph => [.. graph.Outputs.Select(output => new PinDeclaration(output.Name, output.Type))],
@@ -108,17 +160,54 @@ public static class NodeCatalog
                 [],
                 (_, _) => new OutputsNode()),
             new NodeKind(
-                Enter,
-                [new PinDeclaration(When, PinType.Event)],
+                Position,
+                [new PinDeclaration(Orders, PinType.Order) { Many = true }],
+                [
+                    new PinDeclaration(PositionPin, PinType.Position),
+                    new PinDeclaration(Open, PinType.Boolean),
+                    new PinDeclaration(Quantity, PinType.Number),
+                    new PinDeclaration(AveragePrice, PinType.Number),
+                    new PinDeclaration(LastEntryPrice, PinType.Number),
+                    new PinDeclaration(Invested, PinType.Number),
+                    new PinDeclaration(SinceLastEntry, PinType.Duration)
+                ],
                 [],
+                _ => new PositionStateNode())
+            {
+                AllowedInSignal = false
+            },
+            new NodeKind(
+                Enter,
+                [new PinDeclaration(When, PinType.Event), SizeInput],
+                [OrderOutput],
                 [new SettingDeclaration(Side, [Long, Short], Default: null)],
                 _ => new PositionNode())
             {
                 AllowedInSignal = false
             },
-            new NodeKind(StopLoss, [new PinDeclaration(Distance, PinType.Number)], [], [], _ => new PositionNode()) { AllowedInSignal = false },
-            new NodeKind(TakeProfit, [new PinDeclaration(Distance, PinType.Number)], [], [], _ => new PositionNode()) { AllowedInSignal = false },
-            new NodeKind(CloseAfter, [new PinDeclaration(After, PinType.Duration)], [], [], _ => new PositionNode()) { AllowedInSignal = false },
+            new NodeKind(MarketOrder, [Condition, SizeInput], [OrderOutput], OrderSettings, _ => new PositionNode()) { AllowedInSignal = false },
+            new NodeKind(
+                LimitOrder,
+                [Condition, new PinDeclaration(Price, PinType.Number), SizeInput],
+                [OrderOutput],
+                OrderSettings,
+                _ => new PositionNode())
+            {
+                AllowedInSignal = false
+            },
+            new NodeKind(ClosePosition, [Condition], [OrderOutput], [], _ => new PositionNode()) { AllowedInSignal = false },
+            new NodeKind(StopLoss, [PositionInput, new PinDeclaration(Distance, PinType.Number)], [OrderOutput], [], _ => new PositionNode())
+            {
+                AllowedInSignal = false
+            },
+            new NodeKind(TakeProfit, [PositionInput, new PinDeclaration(Distance, PinType.Number)], [OrderOutput], [], _ => new PositionNode())
+            {
+                AllowedInSignal = false
+            },
+            new NodeKind(CloseAfter, [PositionInput, new PinDeclaration(After, PinType.Duration)], [OrderOutput], [], _ => new PositionNode())
+            {
+                AllowedInSignal = false
+            },
             new NodeKind(
                 Signal,
                 (node, _, signals) => SignalInputs(node, signals),
@@ -136,8 +225,8 @@ public static class NodeCatalog
         .ToDictionary(kind => kind.Name, StringComparer.Ordinal);
 
     /// <summary>
-    ///     Every kind, in the order the catalog declares them: the kinds of a signal first, then the position nodes of a
-    ///     strategy and its <c>signal</c> node. The constructor of signals offers those with
+    ///     Every kind, in the order the catalog declares them: the kinds of a signal first, then the node <c>position</c>
+    ///     and the nodes of orders of a strategy, and its <c>signal</c> node. The constructor of signals offers those with
     ///     <see cref="NodeKind.AllowedInSignal" />.
     /// </summary>
     public static IReadOnlyList<NodeKind> All { get; } = [.. Kinds.Values];

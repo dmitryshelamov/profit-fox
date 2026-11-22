@@ -45,16 +45,37 @@ public sealed class NodesTests
     {
         NodeKindResponse[] kinds = await Catalog();
 
-        Assert.That(kinds.Select(kind => kind.Kind), Has.None.AnyOf("enter", "stop-loss", "take-profit", "close-after"));
-        Assert.That(kinds, Has.Length.EqualTo(10));
+        Assert.That(kinds.Select(kind => kind.Kind), Has.None.AnyOf("enter", "position", "market-order", "limit-order", "close-position", "stop-loss", "take-profit", "close-after"));
+        Assert.That(kinds, Has.Length.EqualTo(13));
     }
 
     [Test]
     public void The_position_nodes_have_their_words_for_the_constructor_of_strategies()
     {
         Assert.That(
-            new[] { "enter", "stop-loss", "take-profit", "close-after" }.Select(NodeTitles.Of),
-            Is.EqualTo(new (string, string)?[] { ("Вход", "Позиция"), ("Стоп", "Позиция"), ("Цель", "Позиция"), ("Закрыть через", "Позиция") }));
+            new[] { "enter", "position", "market-order", "limit-order", "close-position", "stop-loss", "take-profit", "close-after" }.Select(NodeTitles.Of),
+            Is.EqualTo(new (string, string)?[]
+            {
+                ("Вход", "Позиция"), ("Позиция", "Позиция"), ("Рыночная заявка", "Позиция"), ("Лимитная заявка", "Позиция"),
+                ("Закрыть позицию", "Позиция"), ("Стоп", "Позиция"), ("Цель", "Позиция"), ("Закрыть через", "Позиция")
+            }));
+    }
+
+    /// <summary>
+    ///     Spec signal-constructor «Арифметические узлы в каталоге сигнала» (change add-position-node, task 2.2).
+    /// </summary>
+    [Test]
+    public async Task The_arithmetic_is_in_the_catalog_of_a_signal()
+    {
+        NodeKindResponse[] kinds = await Catalog();
+
+        NodeKindResponse multiply = kinds.Single(kind => kind.Kind == "multiply");
+        Assert.That(multiply.Inputs.Select(pin => (pin.Name, pin.Type)), Is.EqualTo(new[] { ("a", "number"), ("b", "number") }));
+        Assert.That(multiply.Outputs.Select(pin => (pin.Name, pin.Type)), Is.EqualTo(new[] { ("result", "number") }));
+        Assert.That((multiply.Title, multiply.Group), Is.EqualTo(("Умножить", "Числа")));
+        Assert.That(
+            kinds.Where(kind => kind.Group == "Числа").Select(kind => (kind.Kind, kind.Title)),
+            Is.EqualTo(new[] { ("add", "Сложить"), ("subtract", "Вычесть"), ("multiply", "Умножить") }));
     }
 
     [Test]
@@ -73,7 +94,7 @@ public sealed class NodesTests
     {
         NodeKindResponse[] kinds = await Catalog("/api/nodes/strategy");
 
-        Assert.That(kinds.Select(kind => kind.Kind), Is.SupersetOf(new[] { "enter", "stop-loss", "take-profit", "close-after", "signal" }));
+        Assert.That(kinds.Select(kind => kind.Kind), Is.SupersetOf(new[] { "enter", "position", "market-order", "limit-order", "close-position", "stop-loss", "take-profit", "close-after", "signal" }));
         Assert.That(kinds.Select(kind => kind.Kind), Has.None.EqualTo("outputs"));
         Assert.That(kinds.Select(kind => kind.Kind), Is.EqualTo(NodeCatalog.All.Where(kind => kind.Name != "outputs").Select(kind => kind.Name)));
         NodeKindResponse signal = kinds.Single(kind => kind.Kind == "signal");
@@ -84,12 +105,14 @@ public sealed class NodesTests
     }
 
     [Test]
-    public async Task The_catalog_of_a_signal_stays_as_it_was()
+    public async Task The_catalog_of_a_signal_has_no_position_nodes_and_gains_the_arithmetic()
     {
         NodeKindResponse[] kinds = await Catalog();
 
-        Assert.That(kinds.Select(kind => kind.Kind), Has.None.AnyOf("enter", "stop-loss", "take-profit", "close-after", "signal"));
-        Assert.That(kinds.Select(kind => kind.Kind), Is.EqualTo(new[] { "parameters", "candle", "funding-rate", "compare", "previous", "and", "or", "not", "first-time", "outputs" }));
+        Assert.That(kinds.Select(kind => kind.Kind), Has.None.AnyOf("enter", "position", "market-order", "limit-order", "close-position", "stop-loss", "take-profit", "close-after", "signal"));
+        Assert.That(
+            kinds.Select(kind => kind.Kind),
+            Is.EqualTo(new[] { "parameters", "candle", "funding-rate", "compare", "previous", "and", "or", "not", "first-time", "add", "subtract", "multiply", "outputs" }));
     }
 
     private static async Task<NodeKindResponse[]> Catalog(string path = "/api/nodes")

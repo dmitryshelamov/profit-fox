@@ -44,8 +44,11 @@ public enum GraphErrorCode
 
     StrategyHasOutputs,
     StrategyEntryMissing,
-    StrategyCloseAfterMissing,
+    StrategyExitMissing,
     StrategyExitRepeated,
+    StrategyPositionMissing,
+    StrategyPositionRepeated,
+    StrategyOrderUnwired,
 
     UnknownSignal,
     UnreadableSignal,
