@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Backtests;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Hypotheses;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Runs;
@@ -26,6 +27,7 @@ internal static class PostgresRegistrar
     {
         string connectionString = InfrastructureRegistrar.Setting(configuration, "ConnectionStrings:Bench");
         services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString));
+        services.AddSingleton<IBacktestRepository, BacktestRepository>();
         services.AddSingleton<IHypothesisRepository, HypothesisRepository>();
         services.AddSingleton<ILedgerRepository, LedgerRepository>();
         services.AddSingleton<IRunRepository, RunRepository>();

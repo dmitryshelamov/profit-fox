@@ -51,6 +51,19 @@ public sealed class MemoryStrategyRepository : IStrategyRepository
         return Task.FromResult(_strategies.TryGetValue(name, out StrategyDocument? strategy) ? new StrategyRead(strategy, []) : null);
     }
 
+    // The graphs are kept in the order they were saved, so version n is the n-th graph.
+    public Task<StrategyRead?> ReadVersionAsync(string name, int version, CancellationToken cancellationToken)
+    {
+        if (!_strategies.TryGetValue(name, out StrategyDocument? strategy) || version < 1 || version > _graphs[strategy.Id].Count)
+        {
+            return Task.FromResult<StrategyRead?>(null);
+        }
+
+        GraphDefinition graph = _graphs[strategy.Id][version - 1];
+        var read = StrategyDocument.Restore(strategy.Id, strategy.Name, strategy.Description, graph, strategy.Layout, version, kind: strategy.Kind);
+        return Task.FromResult<StrategyRead?>(new StrategyRead(read, []));
+    }
+
     public Task<StrategyDocument> CreateAsync(StrategyDocument strategy, CancellationToken cancellationToken)
     {
         _strategies.Add(strategy.Name, strategy);

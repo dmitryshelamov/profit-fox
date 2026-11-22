@@ -29,6 +29,15 @@ internal static class StrategyRepositoryQueries
         WHERE s.name = @Name
         """;
 
+    private const string ReadVersionSql =
+        """
+        SELECT s.id AS "Id", s.name AS "Name", s.description AS "Description", s.layout::text AS "Layout", v.version AS "Version", v.graph::text AS "Graph",
+               s.kind AS "Kind"
+        FROM strategies s
+        JOIN strategy_versions v ON v.strategy_id = s.id AND v.version = @Version
+        WHERE s.name = @Name
+        """;
+
     private const string InsertSql = "INSERT INTO strategies (id, name, description, layout, version, kind) VALUES (@Id, @Name, @Description, @Layout::jsonb, 1, @Kind)";
 
     private const string CurrentSql = """SELECT id AS "Id", version AS "Version", kind AS "Kind" FROM strategies WHERE name = @Name FOR UPDATE""";
@@ -82,6 +91,14 @@ internal static class StrategyRepositoryQueries
     public static CommandDefinition Read(string name, CancellationToken cancellationToken)
     {
         return new CommandDefinition(ReadSql, new { Name = name }, cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    ///     The row of the strategy with the graph of its version <paramref name="version" />.
+    /// </summary>
+    public static CommandDefinition ReadVersion(string name, int version, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(ReadVersionSql, new { Name = name, Version = version }, cancellationToken: cancellationToken);
     }
 
     public static CommandDefinition Insert(Guid id, StrategyDocument strategy, IDbTransaction transaction, CancellationToken cancellationToken)

@@ -44,6 +44,13 @@ internal sealed class StrategyRepository(NpgsqlDataSource database) : IStrategyR
         return row is null ? null : StrategyDbConverter.ToDomain(row);
     }
 
+    public async Task<StrategyRead?> ReadVersionAsync(string name, int version, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        StrategyDb? row = await connection.QuerySingleOrDefaultAsync<StrategyDb>(StrategyRepositoryQueries.ReadVersion(name, version, cancellationToken));
+        return row is null ? null : StrategyDbConverter.ToDomain(row);
+    }
+
     public async Task<StrategyDocument> CreateAsync(StrategyDocument strategy, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);

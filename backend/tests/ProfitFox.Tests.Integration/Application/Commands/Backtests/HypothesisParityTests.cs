@@ -23,7 +23,7 @@ namespace ProfitFox.Tests.Integration.Application.Commands.Backtests;
 /// <summary>
 ///     Change add-strategy-backtest, task 5.1 (design.md, decision 7, step 1): H0001 and H0002 on the reference history of
 ///     engine version 2 — the synthetic history of the fake market-data service, exploration up to 2026-05-16 — by the run
-///     of a hypothesis and by <see cref="PairBacktest" /> with the strategy of the hypothesis, its hash as the seed and its
+///     of a hypothesis and by <see cref="ProfitFox.Domain.Services.Backtests.PairBacktest" /> with the strategy of the hypothesis, its hash as the seed and its
 ///     block and random entries. The orders with their trades, the random entries with their trades and the weekly means
 ///     are equal exactly. The test goes with the run of hypotheses (task 8.3).
 /// </summary>

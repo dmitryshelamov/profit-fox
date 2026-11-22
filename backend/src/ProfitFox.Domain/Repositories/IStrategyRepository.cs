@@ -25,6 +25,12 @@ public interface IStrategyRepository
     Task<StrategyRead?> ReadAsync(string name, CancellationToken cancellationToken);
 
     /// <summary>
+    ///     The version <paramref name="version" /> of the saved strategy, or the errors that stop it from reading; null when
+    ///     there is no such strategy or no such version (change add-strategy-backtest, design.md, decision 9).
+    /// </summary>
+    Task<StrategyRead?> ReadVersionAsync(string name, int version, CancellationToken cancellationToken);
+
+    /// <summary>
     ///     Keeps a strategy that is not saved yet as its version 1, with the versions of signals its graph points at.
     /// </summary>
     /// <exception cref="StrategyLibraryException">

@@ -63,6 +63,31 @@ public sealed class StrategyRepositoryTests
         Assert.That(await AfterOf(strategy.Id, version: 2), Is.EqualTo("8h"));
     }
 
+    /// <summary>
+    ///     Change add-strategy-backtest, task 6.3: a version of a strategy by its number.
+    /// </summary>
+    [Test]
+    public async Task Version_1_reads_after_version_2_is_saved_and_an_unknown_version_is_not_found()
+    {
+        await _strategies.CreateAsync(StrategyDocumentGenerator.Generate(signal: Guid.Empty, graph: StrategyDocumentGenerator.GenerateGraph(signal: null)), _none);
+        await _strategies.ReplaceAsync(StrategyDocumentGenerator.Generate(Guid.Empty, graph: StrategyDocumentGenerator.GenerateGraph(signal: null, after: "8h")), _none);
+
+        StrategyDocument first = Read(await _strategies.ReadVersionAsync("funding-short", 1, _none));
+        StrategyDocument second = Read(await _strategies.ReadVersionAsync("funding-short", 2, _none));
+
+        Assert.That((first.Version, After(first)), Is.EqualTo((1, "4h")));
+        Assert.That((second.Version, After(second)), Is.EqualTo((2, "8h")));
+        Assert.That(first.Kind, Is.EqualTo(second.Kind));
+        Assert.That(await _strategies.ReadVersionAsync("funding-short", 3, _none), Is.Null);
+        Assert.That(await _strategies.ReadVersionAsync("funding-short", 0, _none), Is.Null);
+        Assert.That(await _strategies.ReadVersionAsync("ladder", 1, _none), Is.Null);
+
+        static string After(StrategyDocument strategy)
+        {
+            return Durations.Format(strategy.Graph.Nodes.Single(node => node.Kind == "close-after").Inputs["after"].Duration);
+        }
+    }
+
     [Test]
     public async Task Moving_a_node_changes_only_the_layout_and_adds_no_version()
     {
