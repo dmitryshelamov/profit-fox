@@ -111,6 +111,24 @@ public sealed class PairBacktestTests
         Assert.That(among.Rows.Select(row => row.Outcome), Is.EqualTo(single.Rows.Select(row => row.Outcome)));
     }
 
+    /// <summary>
+    ///     Task 12.4: the same value written another way is the same set, so it draws the same random entries.
+    /// </summary>
+    [Test]
+    public async Task A_value_with_trailing_zeros_draws_the_random_entries_of_the_same_value_without_them()
+    {
+        BacktestHistory plain = new BacktestHistory().High(Monday.AddHours(12)).High(Monday.AddDays(2).AddHours(12)).High(Monday.AddDays(9).AddHours(20));
+        BacktestHistory zeros = new BacktestHistory().High(Monday.AddHours(12)).High(Monday.AddDays(2).AddHours(12)).High(Monday.AddDays(9).AddHours(20));
+        IReadOnlyList<BacktestPlan> written = zeros.Plans(Graphs.H0001Strategy, StrategyKind.Idea, [Thresholds("0.00050")], FourHours);
+
+        PairSetResult bare = (await plain.Run(StrategyKind.Idea, plain.Plans(Graphs.H0001Strategy, StrategyKind.Idea, [Thresholds("0.0005")], FourHours))).Single();
+        PairSetResult padded = (await zeros.Run(StrategyKind.Idea, written)).Single();
+
+        Assert.That(written.Single().Design.Seed, Is.EqualTo(plain.Plans(Graphs.H0001Strategy, StrategyKind.Idea, [Thresholds("0.0005")], FourHours).Single().Design.Seed));
+        Assert.That(padded.Numbers, Is.EqualTo(bare.Numbers).Using<SetNumbers>(Same));
+        Assert.That(padded.Rows.SelectMany(row => row.Randoms.Select(random => random.Entry)), Is.EqualTo(bare.Rows.SelectMany(row => row.Randoms.Select(random => random.Entry))));
+    }
+
     private static ParameterValues Thresholds(params string[] values)
     {
         return new ParameterValues("threshold", values);
