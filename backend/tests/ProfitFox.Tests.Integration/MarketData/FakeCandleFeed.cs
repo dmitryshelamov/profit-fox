@@ -8,7 +8,7 @@ namespace ProfitFox.Tests.Integration.MarketData;
 
 /// <summary>
 ///     The candle feed of the fake market-data service: coverage first, then 4h or 1m candles; the 08:00 ones have no trades. A
-///     window that ends after the start of the current day is refused.
+///     window that ends after the start of the current day is refused; a dropped read breaks off after the first candle.
 /// </summary>
 public sealed class FakeCandleFeed(FakeMarketData data) : CandleFeed.CandleFeedBase
 {
@@ -31,6 +31,7 @@ public sealed class FakeCandleFeed(FakeMarketData data) : CandleFeed.CandleFeedB
 
         data.CheckPastDays(request.To);
 
+        bool drop = data.TakeDrop();
         string instrument = request.InstrumentIds.Single();
         InstrumentCoverage coverage = FakeMarketData.CoverageOf(instrument, request.From, request.To);
         await responseStream.WriteAsync(new CandleHistoryItem { Coverage = coverage });
@@ -53,6 +54,10 @@ public sealed class FakeCandleFeed(FakeMarketData data) : CandleFeed.CandleFeedB
                     Closed = true
                 };
                 await responseStream.WriteAsync(new CandleHistoryItem { Candle = candle });
+                if (drop)
+                {
+                    throw FakeMarketData.Drop(context);
+                }
             }
         }
     }

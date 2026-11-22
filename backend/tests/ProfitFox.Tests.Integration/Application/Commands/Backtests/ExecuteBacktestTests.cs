@@ -101,6 +101,59 @@ public sealed class ExecuteBacktestTests
     }
 
     /// <summary>
+    ///     Task 12.12: a read the service dropped is repeated from scratch. The items of the broken stream are thrown away, so
+    ///     the backtest gives the numbers and the data hash of one whose reads were not dropped.
+    /// </summary>
+    [Test]
+    public async Task A_backtest_whose_first_two_reads_were_dropped_is_done_with_the_numbers_and_the_hash_of_one_without_drops()
+    {
+        BacktestOutcome whole = await Run(Generate());
+        int requests = _server.Data.CandleRequests.Count + _server.Data.FundingRequests.Count;
+        _server.Data.CandleRequests.Clear();
+        _server.Data.FundingRequests.Clear();
+        _server.Data.Drops = 2;
+
+        BacktestOutcome repeated = await Run(Generate());
+
+        Assert.That(_server.Data.Drops, Is.Zero, "both drops were met");
+        Assert.That(_server.Data.CandleRequests.Count + _server.Data.FundingRequests.Count, Is.EqualTo(requests + 2), "each dropped read once more");
+        Assert.That(repeated.DataHash, Is.EqualTo(whole.DataHash));
+        Assert.That(Numbers(repeated), Is.EqualTo(Numbers(whole)));
+    }
+
+    /// <summary>
+    ///     Task 12.12: when the three repeats are used up the backtest fails with history unavailable.
+    /// </summary>
+    [Test]
+    public async Task A_backtest_whose_reads_are_always_dropped_fails_with_history_unavailable_after_three_repeats()
+    {
+        _server.Data.Drops = int.MaxValue;
+
+        Backtest failed = await Execute(Generate(), TimeProvider.System);
+
+        Assert.That(failed.Status, Is.EqualTo(BacktestState.Failed));
+        Assert.That(failed.Reason, Does.StartWith("история недоступна"));
+        Assert.That(failed.Sets.Single().Numbers, Is.Null, "a failed backtest has no result");
+        Assert.That(_server.Data.CandleRequests, Has.Count.EqualTo(4), "the first read and three repeats");
+        Assert.That(_server.Data.FundingRequests, Is.Empty, "nothing is read after the read that failed");
+    }
+
+    /// <summary>
+    ///     Task 12.12: a window the service refuses is not repeated: the answer would be the same.
+    /// </summary>
+    [Test]
+    public async Task A_backtest_whose_window_the_service_refuses_fails_with_history_unavailable_after_one_request()
+    {
+        _server.Data.Failure = StatusCode.InvalidArgument;
+
+        Backtest failed = await Execute(Generate(), TimeProvider.System);
+
+        Assert.That(failed.Status, Is.EqualTo(BacktestState.Failed));
+        Assert.That(failed.Reason, Does.StartWith("история недоступна"));
+        Assert.That(_server.Data.CandleRequests, Has.Count.EqualTo(1));
+    }
+
+    /// <summary>
     ///     Task 12.1: the market-data service holds past days only. With the end of history at the start of the current day the
     ///     funding is read up to it and not past it; a trade that ends exactly there is left out on funding, because the
     ///     payment at its end is not known yet, and every trade that ends before it is as with a later clock.
@@ -164,6 +217,12 @@ public sealed class ExecuteBacktestTests
     {
         using var document = JsonDocument.Parse(BacktestGenerator.FundingShort.Replace("\"after\": \"4h\"", $"\"after\": \"{after}\"", StringComparison.Ordinal));
         return StrategyGraph.ReadForm(document.RootElement).Value!;
+    }
+
+    // The numbers of the sets and of their pairs as text: equal text, equal numbers.
+    private static string Numbers(BacktestOutcome outcome)
+    {
+        return JsonSerializer.Serialize(outcome.Sets.Select(set => new { set.Set, set.Numbers, set.Pairs }));
     }
 
     private async Task<Backtest> Claimed(Backtest backtest)

@@ -21,7 +21,8 @@ namespace ProfitFox.Application.Commands.Backtests.ExecuteBacktest;
 /// <summary>
 ///     A backtest of the queue (change add-strategy-backtest, design.md, decision 4): pair by pair in the order of their
 ///     symbols, every set on the history of the pair read once, never after the end of history and with every read added to
-///     the hash of the backtest. Only the numbers of the sets and of the pairs stay in memory. The backtest ends as done with
+///     the hash of the backtest. A read the market-data service dropped is repeated after the pauses of
+///     <see cref="HistoryRepeats" /> (task 12.12); the time of reading counts the pauses too. Only the numbers of the sets and of the pairs stay in memory. The backtest ends as done with
 ///     them in one step, or as failed with the error when the calculation fails; a cancelled backtest or one whose Worker
 ///     lost the lease writes nothing here.
 /// </summary>
@@ -29,6 +30,7 @@ internal sealed class ExecuteBacktestCommandHandler(
     IHistorySource source,
     IInstrumentCatalog instruments,
     IBacktestRepository backtests,
+    HistoryRepeats repeats,
     TimeProvider time,
     ILogger<ExecuteBacktestCommandHandler> logger) : IRequestHandler<ExecuteBacktestCommand, ExecuteBacktestResult>
 {
@@ -53,7 +55,7 @@ internal sealed class ExecuteBacktestCommandHandler(
         Backtest backtest = request.Backtest;
         BacktestSettings settings = backtest.Settings;
         var clock = Stopwatch.StartNew();
-        var timed = new TimedHistorySource(source);
+        var timed = new TimedHistorySource(new RepeatingHistorySource(source, repeats, time, logger));
         using var hash = new HistoryHash();
         var history = new MarketHistory(timed, settings.End, hash, time);
         IReadOnlyList<BacktestPlan> plans = BacktestPlans.Of(backtest.Graph, backtest.Kind, settings, [.. backtest.Sets.Select(set => set.Set)]);

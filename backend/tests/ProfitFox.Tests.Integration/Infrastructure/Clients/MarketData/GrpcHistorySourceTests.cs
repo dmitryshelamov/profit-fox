@@ -85,7 +85,38 @@ public sealed class GrpcHistorySourceTests
 
         Assert.That(
             () => source.ReadCandles("btc", TimeSpan.FromHours(4), Start, Start.AddDays(1), CancellationToken.None),
-            Throws.InstanceOf<HistoryUnavailableException>());
+            Throws.InstanceOf<HistoryUnavailableException>().With.Property(nameof(HistoryUnavailableException.Dropped)).True);
+    }
+
+    /// <summary>
+    ///     Task 12.12: a read the service dropped or did not take may be repeated; a refusal may not.
+    /// </summary>
+    [TestCase(StatusCode.Unavailable, true)]
+    [TestCase(StatusCode.DeadlineExceeded, true)]
+    [TestCase(StatusCode.Internal, true)]
+    [TestCase(StatusCode.InvalidArgument, false)]
+    [TestCase(StatusCode.NotFound, false)]
+    public async Task A_failure_of_the_service_is_a_dropped_read_by_its_status(StatusCode status, bool dropped)
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        server.Data.Failure = status;
+        var source = new GrpcHistorySource(server.Channel);
+
+        Assert.That(
+            () => source.ReadCandles("btc", TimeSpan.FromHours(4), Start, Start.AddDays(1), CancellationToken.None),
+            Throws.InstanceOf<HistoryUnavailableException>().With.Property(nameof(HistoryUnavailableException.Dropped)).EqualTo(dropped));
+    }
+
+    [Test]
+    public async Task A_broken_stream_is_a_dropped_read()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        server.Data.Drops = 1;
+        var source = new GrpcHistorySource(server.Channel);
+
+        Assert.That(
+            () => source.ReadFunding("btc", Start, Start.AddDays(1), CancellationToken.None),
+            Throws.InstanceOf<HistoryUnavailableException>().With.Property(nameof(HistoryUnavailableException.Dropped)).True);
     }
 
     [Test]
