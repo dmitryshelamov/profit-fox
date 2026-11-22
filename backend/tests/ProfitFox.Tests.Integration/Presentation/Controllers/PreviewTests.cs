@@ -199,9 +199,14 @@ public sealed class PreviewTests
                 .Select(row => (row.Moment.ToUnixTimeMilliseconds(), row.Outcome!.EntryPrice!.Value, row.Outcome.ExitPrice!.Value, row.Outcome.Net!.Value))
         ];
         Assert.That(events, Has.Length.EqualTo(28));
-        Assert.That(preview.Orders.Select(order => (order.Side, order.Outcome)), Has.All.EqualTo(("short", "opened")));
-        Assert.That(preview.Orders.Select(order => (order.Moment, order.Trade!.EntryPrice, order.Trade.ExitPrice, order.Trade.Net)), Is.EqualTo(events));
-        Assert.That(preview.Orders.Select(order => order.Trade!.ExitReason), Has.All.EqualTo("time"));
+        Assert.That(preview.Orders.Select(order => (order.Side, order.Outcome, order.Node)), Has.All.EqualTo(("short", "filled", (string?)"enter")));
+        PreviewCycle[] cycles = [.. preview.Orders.Select(order => preview.Cycles[order.Cycle!.Value])];
+        Assert.That(
+            preview.Orders.Zip(cycles).Select(pair => (pair.First.Moment, pair.Second.Fills[0].Price, pair.Second.Fills[^1].Price, pair.Second.Net!.Value)),
+            Is.EqualTo(events));
+        Assert.That(cycles.Select(cycle => (cycle.ExitReason, cycle.Entries, cycle.Invested, cycle.Fills.Count, cycle.Open)), Has.All.EqualTo(((string?)"time", 1, 100.0, 2, false)));
+        Assert.That(cycles.Select(cycle => cycle.NetAmount), Is.EqualTo(cycles.Select(cycle => cycle.Net * 100)), "the result in USDT of an entry of 100");
+        Assert.That(preview.Orders.Select(order => order.Price), Is.EqualTo(cycles.Select(cycle => (double?)cycle.Fills[0].Price)));
         Assert.That(preview.ComputedFrom, Is.Null);
     }
 
@@ -239,6 +244,50 @@ public sealed class PreviewTests
         Assert.That(refused.Errors.Select(error => error.Code), Is.EquivalentTo(new[] { "StrategyExitMissing", "UnknownInstrument" }));
         Assert.That(market.Data.CandleRequests, Is.Empty);
         Assert.That(market.Data.FundingRequests, Is.Empty);
+    }
+
+    /// <summary>
+    ///     Change add-position-node, task 7.3: the ladder through the API. On the flat history of the fake service it enters
+    ///     at the start of the last eight weeks of exploration and neither buys again nor sells: one cycle, open at the end.
+    /// </summary>
+    [Test]
+    public async Task The_ladder_through_the_api()
+    {
+        FakeMarketData.CoveredUntil = null;
+        await using MarketDataServer market = await MarketDataServer.Start();
+        await using var api = new BenchTestApplication(market);
+        JsonObject ladder = JsonNode.Parse(File.ReadAllText(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "ladder.json")))!.AsObject();
+
+        StrategyPreviewResponse preview = await OkStrategy(await PreviewStrategy(api, "BTCUSDT", "4h", ladder));
+
+        long window = (Periods.ExplorationEnd - TimeSpan.FromDays(56)).ToUnixTimeMilliseconds();
+        Assert.That(preview.ComputedFrom, Is.EqualTo(window));
+        PreviewOrder entry = preview.Orders.Single();
+        Assert.That((entry.Moment, entry.Node, entry.Side, entry.Outcome, entry.Amount, entry.Cycle), Is.EqualTo((window, (string?)"entry", "buy", "filled", (double?)100, (int?)0)));
+        PreviewCycle cycle = preview.Cycles.Single();
+        Assert.That((cycle.Side, cycle.Open, cycle.ExitReason, cycle.Entries, cycle.Exclusion), Is.EqualTo(("long", true, (string?)null, 1, (string?)null)));
+        Assert.That(cycle.Fills.Single(), Is.EqualTo(new PreviewFill(window, "entry", "buy", 100.5 * (1 + 0.0005), 100 / (100.5 * (1 + 0.0005)), 100, "entry")));
+        Assert.That(market.Data.CandleRequests.Select(request => request.To.ToDateTimeOffset()), Has.All.LessThanOrEqualTo(Periods.ExplorationEnd));
+    }
+
+    /// <summary>
+    ///     Spec strategy-preview «Ставки комиссии в запросе» («Ставка вне границ»).
+    /// </summary>
+    [Test]
+    public async Task A_fee_out_of_its_bounds_is_refused_before_any_read()
+    {
+        await using MarketDataServer market = await MarketDataServer.Start();
+        await using var api = new BenchTestApplication(market);
+        Guid signal = await SaveSignal(api);
+
+        HttpResponseMessage response = await api.Http.PostAsJsonAsync(
+            "/api/preview/strategy",
+            new JsonObject { ["instrument"] = "BTCUSDT", ["timeframe"] = "4h", ["strategy"] = StrategiesTests.Strategy(signal), ["takerFee"] = -0.001, ["makerFee"] = 0 },
+            Json);
+
+        ErrorResponse refused = await BadRequest(response);
+        Assert.That(refused.Errors.Select(error => (error.Code, error.Field)), Is.EqualTo(new[] { ("InvalidFee", (string?)"takerFee") }));
+        Assert.That(market.Data.CandleRequests, Is.Empty);
     }
 
     private static Task<HttpResponseMessage> PreviewStrategy(BenchTestApplication api, string instrument, string timeframe, JsonObject strategy)

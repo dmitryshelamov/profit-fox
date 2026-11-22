@@ -167,7 +167,7 @@ public sealed class StrategyExecutionTests
         executor.Step("BTCUSDT", first, new FundingPayment(first.CloseTime, 0.0001m));
         StrategyStep order = executor.Step("BTCUSDT", second, new FundingPayment(second.CloseTime, 0.0006m));
 
-        Assert.That(order, Is.EqualTo(new StrategyStep(second.CloseTime, EntrySide.Short, FourHours, ExitDistance.None, ExitDistance.None)));
+        Assert.That(order, Is.EqualTo(new StrategyStep(second.CloseTime, EntrySide.Short, FourHours, ExitDistance.None, ExitDistance.None) { Node = "enter" }));
         Assert.That(order.Stop.InStrategy, Is.False);
         Assert.That(order.Target.InStrategy, Is.False);
     }

@@ -18,4 +18,9 @@ public sealed record StrategyStep(DateTimeOffset Moment, EntrySide? Entry, TimeS
     public const decimal DefaultSize = 100m;
 
     public decimal? Size { get; init; } = DefaultSize;
+
+    /// <summary>
+    ///     The id of the node <c>enter</c> whose order came at the candle of the step; null when none came or it is not known.
+    /// </summary>
+    public string? Node { get; init; }
 }

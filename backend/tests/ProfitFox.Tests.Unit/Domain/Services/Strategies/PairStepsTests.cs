@@ -30,7 +30,7 @@ public sealed class PairStepsTests
 
         var steps = PairSteps.Of(H0001, FourHours, "BTCUSDT", candles, funding);
 
-        Assert.That(steps.Orders, Is.EqualTo(new[] { new StrategyStep(Utc(2026, 1, 5, 12), EntrySide.Short, FourHours, ExitDistance.None, ExitDistance.None) }));
+        Assert.That(steps.Orders, Is.EqualTo(new[] { new StrategyStep(Utc(2026, 1, 5, 12), EntrySide.Short, FourHours, ExitDistance.None, ExitDistance.None) { Node = "enter" } }));
         Assert.That(steps.Orders.Select(order => order.Moment), Is.EqualTo(PairEvents.Of(Signal, FourHours, "BTCUSDT", candles, funding)));
     }
 
@@ -45,7 +45,7 @@ public sealed class PairStepsTests
         Assert.That(steps.Orders.Select(order => order.Moment), Is.EqualTo(new[] { Utc(2026, 1, 5, 12) }));
         Assert.That(steps.At(Utc(2026, 1, 5, 4)), Is.EqualTo(new StrategyStep(Utc(2026, 1, 5, 4), Entry: null, FourHours, ExitDistance.Of(0.01m), ExitDistance.None)));
         Assert.That(steps.At(Utc(2026, 1, 5, 8)).Stop, Is.EqualTo(ExitDistance.Of(0.01m)), "the candle closed at 08:00 had no trades: the strategy was not computed");
-        Assert.That(steps.At(Utc(2026, 1, 5, 12)), Is.EqualTo(steps.Orders[0] with { Entry = null }), "a cycle outside the graph is not the order of the candle");
+        Assert.That(steps.At(Utc(2026, 1, 5, 12)), Is.EqualTo(steps.Orders[0] with { Entry = null, Node = null }), "a cycle outside the graph is not the order of the candle");
         Assert.That(steps.At(Utc(2026, 1, 5, 16)), Is.EqualTo(new StrategyStep(Utc(2026, 1, 5, 16), Entry: null, FourHours, ExitDistance.Of(0.03m), ExitDistance.None)));
     }
 

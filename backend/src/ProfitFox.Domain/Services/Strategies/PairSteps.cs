@@ -75,6 +75,6 @@ public sealed class PairSteps
         }
 
         StrategyStep step = index >= 0 ? _steps[index] : _beforeCandles;
-        return step.Moment == moment && step.Entry is null ? step : step with { Moment = moment, Entry = null };
+        return step.Moment == moment && step.Entry is null ? step : step with { Moment = moment, Entry = null, Node = null };
     }
 }

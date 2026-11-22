@@ -1,6 +1,7 @@
 using ProfitFox.Domain.Services.Positions;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
 using ProfitFox.Domain.ValueObjects.Positions;
+using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Domain.ValueObjects.Strategies.Enums;
 using ProfitFox.Domain.ValueObjects.Trades;
 using ProfitFox.Domain.ValueObjects.Trades.Enums;
@@ -54,7 +55,7 @@ public sealed class PositionRunTests
         Assert.That(cycle.Side, Is.EqualTo(EntrySide.Long), "a market buy with the position closed opens a long");
         Assert.That(cycle.Fills.Single().Moment, Is.EqualTo(Paths.Start));
         Assert.That(cycle.Open, Is.True);
-        Assert.That(result.Orders.Single(), Is.EqualTo(new PositionOrder(Paths.Start, "entry", FillSide.Buy, OrderResult.Opened, null, 100, 100, 0)));
+        Assert.That(result.Orders.Single(), Is.EqualTo(new OrderOutcome(Paths.Start, "entry", OrderSide.Buy, OrderResult.Filled, null, 100, 100, 0)));
     }
 
     [Test]
@@ -136,7 +137,7 @@ public sealed class PositionRunTests
 
         PositionResult result = Run(json, new Paths().Flat(100, 7 * 60).Build(withFunding: false), hours: 6, close: Rising);
 
-        Assert.That(result.Orders.Single(), Is.EqualTo(new PositionOrder(Paths.At(60), "enter", FillSide.Buy, OrderResult.Excluded, OrderExclusion.Plan, null, null, null)));
+        Assert.That(result.Orders.Single(), Is.EqualTo(new OrderOutcome(Paths.At(60), "enter", OrderSide.Long, OrderResult.Excluded, OrderExclusion.Plan, null, null, null)));
         Assert.That(result.Cycles, Is.Empty);
     }
 

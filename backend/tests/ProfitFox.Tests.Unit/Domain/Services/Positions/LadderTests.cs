@@ -65,8 +65,8 @@ public sealed class LadderTests
         Assert.That(result.Cycles[1].Open, Is.True);
         Assert.That(result.Orders.Select(order => (order.Moment, order.Node, order.Result, order.Cycle)), Is.EqualTo(new[]
         {
-            (Paths.At(0), "entry", OrderResult.Opened, (int?)0), (Paths.At(10), "buy", OrderResult.Opened, 0),
-            (Paths.At(20), "sell", OrderResult.Opened, 0), (Paths.At(21), "entry", OrderResult.Opened, 1)
+            (Paths.At(0), "entry", OrderResult.Filled, (int?)0), (Paths.At(10), "buy", OrderResult.Filled, 0),
+            (Paths.At(20), "sell", OrderResult.Filled, 0), (Paths.At(21), "entry", OrderResult.Filled, 1)
         }));
     }
 

@@ -346,6 +346,7 @@ export interface components {
         PinResponse: {
             name: string;
             type: string;
+            many?: boolean;
         };
         PreviewCandle: {
             /** Format: int64 */
@@ -361,17 +362,52 @@ export interface components {
             /** Format: double */
             volume: number | string;
         };
+        PreviewCycle: {
+            side: string;
+            fills: components["schemas"]["PreviewFill"][];
+            /** Format: int32 */
+            entries: number | string;
+            /** Format: double */
+            invested: number | string;
+            exitReason: null | string;
+            ambiguous: boolean;
+            /** Format: double */
+            net: null | number | string;
+            /** Format: double */
+            netAmount: null | number | string;
+            open: boolean;
+            exclusion: null | string;
+        };
         PreviewEvent: {
             /** Format: int64 */
             moment: number | string;
         };
+        PreviewFill: {
+            /** Format: int64 */
+            moment: number | string;
+            action: string;
+            side: string;
+            /** Format: double */
+            price: number | string;
+            /** Format: double */
+            quantity: number | string;
+            /** Format: double */
+            amount: number | string;
+            node: null | string;
+        };
         PreviewOrder: {
             /** Format: int64 */
             moment: number | string;
+            node: null | string;
             side: string;
             outcome: string;
             reason: null | string;
-            trade: null | components["schemas"]["PreviewTrade"];
+            /** Format: double */
+            price: null | number | string;
+            /** Format: double */
+            amount: null | number | string;
+            /** Format: int32 */
+            cycle: null | number | string;
         };
         PreviewRange: {
             /** Format: int64 */
@@ -397,19 +433,10 @@ export interface components {
             instrument: null | string;
             timeframe: null | string;
             strategy: null | components["schemas"]["JsonElement"];
-        };
-        PreviewTrade: {
-            /** Format: int64 */
-            entryTime: number | string;
             /** Format: double */
-            entryPrice: number | string;
-            /** Format: int64 */
-            exitTime: number | string;
+            takerFee?: null | number | string;
             /** Format: double */
-            exitPrice: number | string;
-            exitReason: string;
-            /** Format: double */
-            net: number | string;
+            makerFee?: null | number | string;
         };
         ProblemDetails: {
             type?: null | string;
@@ -589,6 +616,7 @@ export interface components {
             candles: components["schemas"]["PreviewCandle"][];
             coverage: components["schemas"]["PreviewRange"][];
             orders: components["schemas"]["PreviewOrder"][];
+            cycles: components["schemas"]["PreviewCycle"][];
             /** Format: int64 */
             periodEnd: number | string;
             /** Format: int64 */

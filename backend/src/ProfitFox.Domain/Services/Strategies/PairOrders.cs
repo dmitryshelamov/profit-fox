@@ -37,6 +37,7 @@ public sealed class PairOrders
     private readonly HashSet<long> _computed;
     private readonly PairPosition _position = new PairPosition();
     private readonly Dictionary<DateTimeOffset, OrderOutcome> _outcomes = [];
+    private readonly List<CycleOutcome> _cycles = [];
     private long? _lastWeek;
 
     /// <summary>
@@ -100,11 +101,38 @@ public sealed class PairOrders
             EntrySide side = order.Entry!.Value;
             _outcomes[order.Moment] = _position.Enter(path, order, _costs) switch
             {
-                null => new OrderOutcome(order.Moment, side, OrderResult.Skipped, Exclusion: null, Trade: null),
-                { Opened: true } cycle => new OrderOutcome(order.Moment, side, OrderResult.Opened, Exclusion: null, cycle.Outcome),
-                Cycle cycle => new OrderOutcome(order.Moment, side, OrderResult.Excluded, Exclusion(cycle.Status), Trade: null)
+                null => Order(order, OrderResult.Skipped, exclusion: null),
+                { Opened: true } cycle => Opened(order, side, cycle.Outcome!),
+                Cycle cycle => Order(order, OrderResult.Excluded, Exclusion(cycle.Status))
             };
         }
+    }
+
+    /// <summary>
+    ///     The cycles the orders opened, in the order of time, once every computed week is evaluated.
+    /// </summary>
+    public IReadOnlyList<CycleOutcome> Cycles()
+    {
+        if (Weeks.Count > 0 && _lastWeek != Weeks[^1])
+        {
+            throw new InvalidOperationException("Every computed week is evaluated before the cycles are read.");
+        }
+
+        return [.. _cycles];
+    }
+
+    // The cycle of the trade, its size that of the order: the result in USDT is the fraction times it.
+    private OrderOutcome Opened(StrategyStep order, EntrySide side, TradeOutcome trade)
+    {
+        double amount = (double)(order.Size ?? StrategyStep.DefaultSize);
+        _cycles.Add(CycleOutcome.FromTrade(trade, side, amount, order.Node));
+        return Order(order, OrderResult.Filled, exclusion: null) with { Price = trade.EntryPrice, Amount = amount, Cycle = _cycles.Count - 1, Trade = trade };
+    }
+
+    private static OrderOutcome Order(StrategyStep order, OrderResult result, OrderExclusion? exclusion)
+    {
+        OrderSide side = order.Entry == EntrySide.Long ? OrderSide.Long : OrderSide.Short;
+        return new OrderOutcome(order.Moment, order.Node, side, result, exclusion, Price: null, Amount: null, Cycle: null);
     }
 
     /// <summary>
@@ -127,10 +155,7 @@ public sealed class PairOrders
             return outcome;
         }
 
-        EntrySide side = order.Entry!.Value;
-        return PastEnd(order)
-            ? new OrderOutcome(order.Moment, side, OrderResult.Excluded, OrderExclusion.Period, Trade: null)
-            : new OrderOutcome(order.Moment, side, OrderResult.NotComputed, Exclusion: null, Trade: null);
+        return PastEnd(order) ? Order(order, OrderResult.Excluded, OrderExclusion.Period) : Order(order, OrderResult.NotComputed, exclusion: null);
     }
 
     // The trade of the order would end after the end of what may be read (spec strategy-preview «Только разведка»).

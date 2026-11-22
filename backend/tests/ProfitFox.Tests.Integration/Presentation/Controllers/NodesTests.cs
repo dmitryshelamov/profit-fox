@@ -97,6 +97,12 @@ public sealed class NodesTests
         Assert.That(kinds.Select(kind => kind.Kind), Is.SupersetOf(new[] { "enter", "position", "market-order", "limit-order", "close-position", "stop-loss", "take-profit", "close-after", "signal" }));
         Assert.That(kinds.Select(kind => kind.Kind), Has.None.EqualTo("outputs"));
         Assert.That(kinds.Select(kind => kind.Kind), Is.EqualTo(NodeCatalog.All.Where(kind => kind.Name != "outputs").Select(kind => kind.Name)));
+        NodeKindResponse position = kinds.Single(kind => kind.Kind == "position");
+        Assert.That(position.Inputs.Single(), Is.EqualTo(new PinResponse("orders", "order") { Many = true }), "the input that takes several wires");
+        Assert.That(kinds.SelectMany(kind => kind.Inputs).Count(pin => pin.Many), Is.EqualTo(1));
+        Assert.That(
+            kinds.Single(kind => kind.Kind == "close-after").Inputs,
+            Is.EqualTo(new[] { new PinResponse("position", "position"), new PinResponse("after", "duration") }));
         NodeKindResponse signal = kinds.Single(kind => kind.Kind == "signal");
         Assert.That((signal.Title, signal.Group, signal.PinsFromGraph), Is.EqualTo(("Сигнал", "Сигналы", (string?)"signal")));
         Assert.That(signal.Inputs, Is.Empty);

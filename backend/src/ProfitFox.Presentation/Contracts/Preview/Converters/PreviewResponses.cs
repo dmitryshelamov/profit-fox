@@ -4,9 +4,9 @@ using ProfitFox.Application.Contracts.Preview;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
 using ProfitFox.Domain.ValueObjects.Hypotheses;
 using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Domain.ValueObjects.Positions;
 using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Domain.ValueObjects.Strategies.Enums;
-using ProfitFox.Domain.ValueObjects.Trades;
 using ProfitFox.Domain.ValueObjects.Trades.Enums;
 
 namespace ProfitFox.Presentation.Contracts.Preview.Converters;
@@ -35,6 +35,7 @@ public static class PreviewResponses
             [.. preview.Candles.Select(Candle)],
             [.. preview.Coverage.Select(range => new PreviewRange(Ms(range.From), Ms(range.Until)))],
             [.. preview.Orders.Select(Order)],
+            [.. preview.Cycles.Select(Cycle)],
             Ms(preview.PeriodEnd),
             preview.ComputedFrom is { } from ? Ms(from) : null);
     }
@@ -43,7 +44,7 @@ public static class PreviewResponses
     {
         string outcome = order.Result switch
         {
-            OrderResult.Opened => "opened",
+            OrderResult.Filled => "filled",
             OrderResult.Skipped => "skipped",
             OrderResult.Excluded => "excluded",
             _ => "not-computed"
@@ -57,18 +58,51 @@ public static class PreviewResponses
             OrderExclusion.Funding => "funding",
             _ => "period"
         };
-        return new PreviewOrder(Ms(order.Moment), order.Side == EntrySide.Long ? "long" : "short", outcome, reason, order.Trade is { } trade ? Trade(trade) : null);
+        string side = order.Side switch
+        {
+            OrderSide.Long => "long",
+            OrderSide.Short => "short",
+            OrderSide.Buy => "buy",
+            _ => "sell"
+        };
+        return new PreviewOrder(Ms(order.Moment), order.Node, side, outcome, reason, order.Price, order.Amount, order.Cycle);
     }
 
-    private static PreviewTrade Trade(TradeOutcome trade)
+    private static PreviewCycle Cycle(CycleOutcome cycle)
     {
-        string reason = trade.ExitReason switch
+        string? exit = cycle.ExitReason switch
         {
-            ExitReason.Stop => "stop",
-            ExitReason.Target => "target",
-            _ => "time"
+            CycleExit.Stop => "stop",
+            CycleExit.Target => "target",
+            CycleExit.Time => "time",
+            CycleExit.LimitOrder => "limit",
+            CycleExit.MarketOrder => "market",
+            CycleExit.ClosePosition => "close",
+            _ => null
         };
-        return new PreviewTrade(Ms(trade.EntryTime!.Value), trade.EntryPrice!.Value, Ms(trade.ExitTime!.Value), trade.ExitPrice!.Value, reason, trade.Net!.Value);
+        return new PreviewCycle(
+            cycle.Side == EntrySide.Long ? "long" : "short",
+            [.. cycle.Fills.Select(Fill)],
+            cycle.Entries,
+            cycle.MaxInvested,
+            exit,
+            cycle.Ambiguous,
+            cycle.Net,
+            cycle.NetAmount,
+            cycle.Open,
+            cycle.Status == TradeStatus.Ok ? null : "coverage");
+    }
+
+    private static PreviewFill Fill(CycleFill fill)
+    {
+        string action = fill.Action switch
+        {
+            FillAction.Entry => "entry",
+            FillAction.Increase => "increase",
+            FillAction.Decrease => "decrease",
+            _ => "exit"
+        };
+        return new PreviewFill(Ms(fill.Moment), action, fill.Side == FillSide.Buy ? "buy" : "sell", fill.Price, fill.Quantity, fill.Amount, fill.Node);
     }
 
     private static PreviewCandle Candle(HistoryCandle candle)

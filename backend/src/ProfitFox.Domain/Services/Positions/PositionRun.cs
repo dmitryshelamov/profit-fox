@@ -6,6 +6,7 @@ using ProfitFox.Domain.ValueObjects.Execution;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
 using ProfitFox.Domain.ValueObjects.Positions;
+using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Domain.ValueObjects.Strategies.Enums;
 using ProfitFox.Domain.ValueObjects.Trades;
 using ProfitFox.Domain.ValueObjects.Trades.Enums;
@@ -43,7 +44,7 @@ public sealed class PositionRun
     private readonly Dictionary<string, Held> _standing = new(StringComparer.Ordinal);
     private readonly List<CycleOutcome?> _cycles = [];
     private readonly Dictionary<string, DateTimeOffset> _entered = new(StringComparer.Ordinal);
-    private readonly List<PositionOrder> _orders = [];
+    private readonly List<OrderOutcome> _orders = [];
     private readonly long _from;
     private CycleRun? _cycle;
     private long _minute;
@@ -117,7 +118,7 @@ public sealed class PositionRun
 
         foreach (Held held in _standing.Values.Where(held => held.Kind == OrderKind.Enter))
         {
-            _orders.Add(new PositionOrder(held.Order.Placed, held.Order.Node, held.Order.Side, OrderResult.Excluded, OrderExclusion.Period, null, null, null));
+            _orders.Add(Outcome(held.Kind, held.Order.Placed, held.Order.Node, held.Order.Side, OrderResult.Excluded, OrderExclusion.Period, null, null, null));
         }
 
         _standing.Clear();
@@ -293,7 +294,7 @@ public sealed class PositionRun
 
             if (!held.Exits.Valid)
             {
-                _orders.Add(new PositionOrder(time, order.Node, order.Side, OrderResult.Excluded, OrderExclusion.Plan, null, null, null));
+                _orders.Add(Outcome(held.Kind, time, order.Node, order.Side, OrderResult.Excluded, OrderExclusion.Plan, null, null, null));
                 return;
             }
 
@@ -303,13 +304,13 @@ public sealed class PositionRun
             _cycle = CycleRun.Open(_path, _costs, side, time, raw, fill, amount, order.Node, held.Exits.Stop, held.Exits.Target, until, maker: held.Kind == OrderKind.Limit);
             _cycle.Ambiguous = ambiguous;
             _cycles.Add(null);
-            _orders.Add(new PositionOrder(time, order.Node, order.Side, OrderResult.Opened, null, fill, amount, _cycles.Count - 1));
+            _orders.Add(Outcome(held.Kind, time, order.Node, order.Side, OrderResult.Filled, null, fill, amount, _cycles.Count - 1));
             return;
         }
 
         if (held.Kind == OrderKind.Enter)
         {
-            _orders.Add(new PositionOrder(order.Placed, order.Node, order.Side, OrderResult.Skipped, null, null, null, null));
+            _orders.Add(Outcome(held.Kind, order.Placed, order.Node, order.Side, OrderResult.Skipped, null, null, null, null));
             return;
         }
 
@@ -317,7 +318,7 @@ public sealed class PositionRun
         {
             double amount = order.SizeInQuantity ? order.Size * fill : order.Size;
             cycle.Increase(time, raw, fill, amount, order.Node, maker: held.Kind == OrderKind.Limit);
-            _orders.Add(new PositionOrder(time, order.Node, order.Side, OrderResult.Opened, null, fill, amount, _cycles.Count - 1));
+            _orders.Add(Outcome(held.Kind, time, order.Node, order.Side, OrderResult.Filled, null, fill, amount, _cycles.Count - 1));
             return;
         }
 
@@ -329,7 +330,7 @@ public sealed class PositionRun
             _ => CycleExit.MarketOrder
         };
         double sold = cycle.Reduce(time, raw, fill, quantity, reason, order.Node, maker: held.Kind == OrderKind.Limit);
-        _orders.Add(new PositionOrder(time, order.Node, order.Side, OrderResult.Opened, null, fill, sold * fill, _cycles.Count - 1));
+        _orders.Add(Outcome(held.Kind, time, order.Node, order.Side, OrderResult.Filled, null, fill, sold * fill, _cycles.Count - 1));
         if (cycle.Closed)
         {
             Finished(cycle);
@@ -360,7 +361,7 @@ public sealed class PositionRun
 
         foreach (Held held in _standing.Values.Where(held => held.Kind == OrderKind.Enter))
         {
-            _orders.Add(new PositionOrder(held.Order.Placed, held.Order.Node, held.Order.Side, OrderResult.Excluded, OrderExclusion.Coverage, null, null, null));
+            _orders.Add(Outcome(held.Kind, held.Order.Placed, held.Order.Node, held.Order.Side, OrderResult.Excluded, OrderExclusion.Coverage, null, null, null));
         }
 
         _standing.Clear();
@@ -371,7 +372,7 @@ public sealed class PositionRun
     {
         foreach (Held held in _standing.Values.Where(held => held.Kind == OrderKind.Enter).ToList())
         {
-            _orders.Add(new PositionOrder(held.Order.Placed, held.Order.Node, held.Order.Side, OrderResult.Skipped, null, null, null, null));
+            _orders.Add(Outcome(held.Kind, held.Order.Placed, held.Order.Node, held.Order.Side, OrderResult.Skipped, null, null, null, null));
         }
 
         _standing.Clear();
@@ -405,11 +406,11 @@ public sealed class PositionRun
                     decimal? size = _run.Read(node.Size!.Value).Number;
                     if (size is not > 0 || !exits.Valid)
                     {
-                        _orders.Add(new PositionOrder(moment, node.Id, node.Side, OrderResult.Excluded, OrderExclusion.Plan, null, null, null));
+                        _orders.Add(Outcome(node.Kind, moment, node.Id, node.Side, OrderResult.Excluded, OrderExclusion.Plan, null, null, null));
                     }
                     else if (_cycle is not null)
                     {
-                        _orders.Add(new PositionOrder(moment, node.Id, node.Side, OrderResult.Skipped, null, null, null, null));
+                        _orders.Add(Outcome(node.Kind, moment, node.Id, node.Side, OrderResult.Skipped, null, null, null, null));
                     }
                     else
                     {
@@ -493,6 +494,24 @@ public sealed class PositionRun
         }
 
         return new PositionState((decimal)cycle.Quantity, (decimal)cycle.Invested, (decimal)cycle.AveragePrice, (decimal)cycle.LastEntryPrice, cycle.LastEntryTime);
+    }
+
+    // An order of enter is long or short; a fill of the orders of the other nodes is a buy or a sale.
+    private static OrderOutcome Outcome(
+        OrderKind kind,
+        DateTimeOffset moment,
+        string node,
+        FillSide side,
+        OrderResult result,
+        OrderExclusion? exclusion,
+        double? price,
+        double? amount,
+        int? cycle)
+    {
+        OrderSide orderSide = kind == OrderKind.Enter
+            ? side == FillSide.Buy ? OrderSide.Long : OrderSide.Short
+            : side == FillSide.Buy ? OrderSide.Buy : OrderSide.Sell;
+        return new OrderOutcome(moment, node, orderSide, result, exclusion, price, amount, cycle);
     }
 
     private static double Sign(CycleRun cycle)
