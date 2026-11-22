@@ -176,6 +176,53 @@ public sealed class ExecuteBacktestTests
         Assert.That(now.Trades, Is.EqualTo(before.Trades - 3));
     }
 
+    /// <summary>
+    ///     Task 12.13: the current day of a backtest is taken once, when it starts. A backtest up to today whose clock passes
+    ///     midnight UTC after its first pair treats every pair alike — the trade that ends at the end of history is left out on
+    ///     funding for all three — and gives the numbers of the same backtest on a clock that stays before midnight.
+    /// </summary>
+    [Test]
+    public async Task A_backtest_up_to_today_that_runs_across_midnight_treats_every_pair_as_before_midnight()
+    {
+        Backtest before = await Execute(Generate(after: "16h"), new FixedTime(End.AddHours(23).AddMinutes(59)));
+        var clock = new MidnightClock(End.AddHours(23).AddMinutes(59), End.AddDays(1).AddMinutes(1));
+        _server.Data.BeforeCandles = (request, _) =>
+        {
+            if (request.InstrumentIds.Single() != "btc")
+            {
+                clock.Pass();
+            }
+
+            return Task.CompletedTask;
+        };
+
+        Backtest across = await Execute(Generate(after: "16h"), clock);
+
+        Assert.That(clock.Passed, Is.True, "the clock passed midnight between the pairs");
+        Assert.That(across.Status, Is.EqualTo(BacktestState.Done), across.Reason);
+        Assert.That(across.Sets.Single().Numbers!.Excluded.Funding, Is.EqualTo(3), "the trade of the last day of each of the three pairs");
+        Assert.That(JsonSerializer.Serialize(across.Sets.Single().Numbers), Is.EqualTo(JsonSerializer.Serialize(before.Sets.Single().Numbers)));
+        Assert.That(across.DataHash, Is.EqualTo(before.DataHash));
+    }
+
+    // A clock before midnight until it is passed, after midnight since.
+    private sealed class MidnightClock(DateTimeOffset before, DateTimeOffset after) : TimeProvider
+    {
+        private int _passed;
+
+        public bool Passed => Volatile.Read(ref _passed) == 1;
+
+        public void Pass()
+        {
+            Volatile.Write(ref _passed, 1);
+        }
+
+        public override DateTimeOffset GetUtcNow()
+        {
+            return Passed ? after : before;
+        }
+    }
+
     private async Task<Backtest> Execute(Backtest backtest, TimeProvider time)
     {
         await using ServiceProvider services = BenchServices.Start(_server, time: time);

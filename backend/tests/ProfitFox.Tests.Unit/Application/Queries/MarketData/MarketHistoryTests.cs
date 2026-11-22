@@ -82,6 +82,27 @@ public sealed class MarketHistoryTests
         Assert.That(read.Coverage[^1].Until, Is.EqualTo(PeriodEnd), "the payment at the end is not known");
     }
 
+    /// <summary>
+    ///     Task 12.13: the current day is the one of the moment the history is made; a clock that passes midnight later does
+    ///     not change what the history reads.
+    /// </summary>
+    [Test]
+    public async Task The_current_day_is_taken_when_the_history_is_made()
+    {
+        var source = new FakeHistorySource();
+        var time = new FakeTimeProvider(PeriodEnd.AddHours(-1));
+        var history = new MarketHistory(source, PeriodEnd, new HistoryHash(), time);
+        time.Advance(TimeSpan.FromHours(2));
+
+        await history.FundingThrough("btc", Start, PeriodEnd.AddDays(-1), CancellationToken.None);
+        await history.FundingThrough("btc", Start, PeriodEnd.AddDays(-1), CancellationToken.None);
+
+        Assert.That(source.Reads, Is.EqualTo(new[] { ("funding", Start, PeriodEnd.AddDays(-1)), ("funding", Start, PeriodEnd.AddDays(-1)) }));
+        Assert.That(
+            () => history.Candles("btc", FourHours, PeriodEnd.AddDays(-1), PeriodEnd, CancellationToken.None),
+            Throws.InstanceOf<PeriodBoundaryException>());
+    }
+
     [Test]
     public void A_window_after_the_start_of_today_is_refused()
     {
