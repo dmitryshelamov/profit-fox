@@ -120,6 +120,27 @@ public sealed class BacktestsTests
         Assert.That(await Scalar<int>("SELECT count(*) FROM backtests"), Is.Zero);
     }
 
+    /// <summary>
+    ///     Task 12.9: values written as null are an error of the field, not a failure of the API.
+    /// </summary>
+    [Test]
+    public async Task Values_of_null_are_refused_with_an_error_of_the_field()
+    {
+        await SaveStrategy(Http, "funding-short", FundingShort(), "idea");
+
+        HttpResponseMessage list = await Post(Http, new JsonObject { ["strategy"] = "funding-short", ["values"] = new JsonObject { ["threshold"] = null } });
+        HttpResponseMessage item = await Post(Http, new JsonObject { ["strategy"] = "funding-short", ["values"] = new JsonObject { ["threshold"] = new JsonArray("0.001", null) } });
+
+        foreach (HttpResponseMessage refused in new[] { list, item })
+        {
+            Assert.That(refused.StatusCode, Is.EqualTo(HttpStatusCode.UnprocessableEntity), await refused.Content.ReadAsStringAsync());
+            ErrorResponse errors = (await refused.Content.ReadFromJsonAsync<ErrorResponse>(Json))!;
+            Assert.That(errors.Errors.Select(error => (error.Code, error.Field, error.Parameter)), Is.EqualTo(new[] { ("MissingValue", (string?)"values", (string?)"threshold") }));
+        }
+
+        Assert.That(await Scalar<int>("SELECT count(*) FROM backtests"), Is.Zero);
+    }
+
     [Test]
     public async Task The_settings_come_back_with_the_backtest()
     {

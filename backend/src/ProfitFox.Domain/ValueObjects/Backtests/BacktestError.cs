@@ -18,6 +18,7 @@ public sealed record BacktestError(string Code, string Reason)
     public const string InvalidFee = "InvalidFee";
     public const string TooManySets = "TooManySets";
     public const string NoRest = "NoRest";
+    public const string MissingValue = "MissingValue";
 
     public string? Field { get; init; }
 

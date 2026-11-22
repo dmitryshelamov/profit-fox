@@ -87,7 +87,23 @@ public static class BacktestRules
         List<ParameterValues> values = [];
         foreach (ParameterDefinition parameter in graph.Parameters)
         {
-            if (!asked.TryGetValue(parameter.Name, out IReadOnlyList<string>? texts) || texts.Count == 0)
+            if (!asked.TryGetValue(parameter.Name, out IReadOnlyList<string>? texts))
+            {
+                continue;
+            }
+
+            // The JSON of a request can write null for the list or for a value of it (task 12.9).
+            if (texts is null || texts.Any(text => text is null))
+            {
+                errors.Add(new BacktestError(BacktestError.MissingValue, $"у параметра {parameter.Name} значение null: нужны значения текстом")
+                {
+                    Field = "values",
+                    Parameter = parameter.Name
+                });
+                continue;
+            }
+
+            if (texts.Count == 0)
             {
                 continue;
             }
