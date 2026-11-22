@@ -9,7 +9,7 @@
 
 #### Scenario: Три заявки в позицию
 
-- **WHEN** на вход `orders` узла `position` приходят провода от узла `enter` и от двух узлов `limit-order`
+- **WHEN** на вход `orders` узла `position` приходят провода от узла `market-order` и от двух узлов `limit-order`
 - **THEN** проверка не находит ошибок по этим проводам
 
 #### Scenario: Обычный вход по-прежнему один
@@ -99,9 +99,10 @@
 ### Requirement: Стратегия
 
 Стратегия SHALL быть графом без объявленных выходов и без узла выходов, в котором есть хотя бы один узел, способный
-открыть позицию, — `enter` или `limit-order`, — и хотя бы один, способный её закрыть: `stop-loss`, `take-profit`,
-`close-after`, `close-position` или `limit-order`. Узлов `stop-loss`, `take-profit` и `close-after` SHALL быть не
-больше одного каждого вида. Граф, который этому не отвечает, MUST давать ошибку проверки стратегии.
+открыть позицию, — `enter`, `market-order` или `limit-order`, — и хотя бы один, способный её закрыть: `stop-loss`,
+`take-profit`, `close-after`, `close-position`, `market-order` или `limit-order`. Узлов `stop-loss`, `take-profit` и
+`close-after` SHALL быть не больше одного каждого вида. Граф, который этому не отвечает, MUST давать ошибку проверки
+стратегии.
 
 #### Scenario: Стратегия H0001
 
@@ -111,7 +112,7 @@
 
 #### Scenario: Нет узла входа
 
-- **WHEN** в графе стратегии нет ни узла `enter`, ни узла `limit-order`
+- **WHEN** в графе стратегии нет ни узла `enter`, ни узла `market-order`, ни узла `limit-order`
 - **THEN** проверка сообщает, что стратегии нужен узел входа
 
 #### Scenario: Нет выхода
@@ -121,8 +122,8 @@
 
 #### Scenario: Лесенка без срока
 
-- **WHEN** в графе стратегии узел `enter`, узел `position` и два узла `limit-order` сторон `buy` и `sell`, а узла
-  `close-after` нет
+- **WHEN** в графе стратегии узел `market-order` стороны `buy`, узел `position` и два узла `limit-order` сторон `buy`
+  и `sell`, а узлов `enter` и `close-after` нет
 - **THEN** проверка стратегии не находит ошибок
 
 #### Scenario: Два стопа
