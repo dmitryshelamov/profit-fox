@@ -51,12 +51,21 @@ Object.defineProperties(HTMLElement.prototype, {
   },
 });
 
+// jsdom does not implement the modal state of <dialog>: opening and closing set and clear its `open` attribute.
+HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+  this.setAttribute('open', '');
+};
+HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+  this.removeAttribute('open');
+};
+
 // jsdom has no canvas, so the chart library is replaced by a series that keeps the data it was given.
 vi.mock('lightweight-charts', async () => {
   const { drawn } = await import('./chart');
   return {
     CandlestickSeries: 'Candlestick',
     ColorType: { Solid: 'solid' },
+    TickMarkType: { Year: 0, Month: 1, DayOfMonth: 2, Time: 3, TimeWithSeconds: 4 },
     createChart: vi.fn(() => ({
       addSeries: vi.fn(() => ({
         setData: vi.fn((data: unknown[]) => {
@@ -65,6 +74,12 @@ vi.mock('lightweight-charts', async () => {
         }),
       })),
       remove: vi.fn(),
+      subscribeClick: vi.fn((handler: (param: { time?: number }) => void) => {
+        drawn.click = handler;
+      }),
+      unsubscribeClick: vi.fn(() => {
+        drawn.click = null;
+      }),
       timeScale: () => ({
         fitContent: vi.fn(),
         setVisibleRange: vi.fn((range: { from: number; to: number }) => {

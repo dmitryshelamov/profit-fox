@@ -12,6 +12,20 @@ namespace ProfitFox.Tests.Unit.Application.Commands.Signals;
 public sealed class MemorySignalRepository : ISignalRepository
 {
     private readonly Dictionary<string, SignalDocument> _signals = [];
+    private readonly Dictionary<string, string> _broken = [];
+
+    /// <summary>
+    ///     How many times versions of signals were read.
+    /// </summary>
+    public int VersionReads { get; private set; }
+
+    /// <summary>
+    ///     Makes the saved signal <paramref name="name" /> one that does not read, with <paramref name="error" />.
+    /// </summary>
+    public void Break(string name, string error)
+    {
+        _broken[name] = error;
+    }
 
     public Task<IReadOnlyList<string>> NamesAsync(CancellationToken cancellationToken)
     {
@@ -25,6 +39,11 @@ public sealed class MemorySignalRepository : ISignalRepository
 
     public Task<SignalRead?> ReadAsync(string name, CancellationToken cancellationToken)
     {
+        if (_broken.TryGetValue(name, out string? error))
+        {
+            return Task.FromResult<SignalRead?>(new SignalRead(Signal: null, [error]));
+        }
+
         return Task.FromResult(_signals.TryGetValue(name, out SignalDocument? signal) ? new SignalRead(signal, []) : null);
     }
 
@@ -33,6 +52,7 @@ public sealed class MemorySignalRepository : ISignalRepository
     /// </summary>
     public Task<IReadOnlyList<SignalVersion>> ReadVersionsAsync(IReadOnlyCollection<SignalReference> references, CancellationToken cancellationToken)
     {
+        VersionReads++;
         List<SignalVersion> versions = [];
         foreach (SignalReference reference in references)
         {

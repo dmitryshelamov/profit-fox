@@ -17,9 +17,13 @@ import {
   updateSignalVersion,
 } from '@/modules/graph-editor/model/signals';
 import type { Graph, GraphDocument, Layout, NodeKind } from '@/modules/graph-editor/model/types';
-import { buttonClass, fieldClass } from '@/modules/graph-editor/ui/Card';
 import { DraftQuestion } from '@/modules/graph-editor/ui/DraftQuestion';
+import { BarDivider } from '@/modules/graph-editor/ui/FloatingBar';
 import { GraphEditor } from '@/modules/graph-editor/ui/GraphEditor';
+import { Button } from '@/shared/ui/Button';
+import { Dialog } from '@/shared/ui/Dialog';
+import { TextField } from '@/shared/ui/TextField';
+import { VersionBadge } from '@/shared/ui/VersionBadge';
 
 /** The delay after an edit before the draft is written to the browser. */
 export const draftDelayMs = 300;
@@ -85,6 +89,8 @@ export function DocumentEditor({
   readonly bottom?: (state: {
     readonly graph: Graph;
     readonly canRun: boolean;
+    /** The check found errors: the preview says why it cannot run. */
+    readonly hasErrors: boolean;
     readonly rememberAs: string;
   }) => ReactNode;
 }) {
@@ -232,34 +238,47 @@ export function DocumentEditor({
 
   const nameError = saveErrors.find((error) => error.field === 'name');
   const otherErrors = saveErrors.filter((error) => error.field !== 'name');
+  // The state of the document: its words are read by the name «Состояние», its tone is the color.
+  const state =
+    !check.checked && !check.failed
+      ? { key: 'checking', words: 'проверяю…', tone: 'text-warn' }
+      : check.failed
+        ? { key: 'failed', words: 'проверка не удалась', tone: 'text-err' }
+        : dirty
+          ? { key: 'dirty', words: 'не сохранено', tone: 'text-warn' }
+          : { key: 'saved', words: 'сохранено', tone: 'text-muted' };
 
   return (
     <>
       <GraphEditor
         title={
           <>
-            <Link to={type.section} className="text-zinc-400 hover:text-zinc-100">
-              ← {type.sectionTitle}
-            </Link>
-            <span className="font-mono font-semibold">{saved?.name ?? type.newTitle}</span>
-            {saved && version !== undefined && (
-              <span className="text-xs text-zinc-400">версия {version}</span>
-            )}
-            <input
-              aria-label="Описание"
-              className={`${fieldClass} w-64 font-sans`}
-              placeholder="описание"
-              value={content.description}
-              onChange={(event) => setContent({ ...content, description: event.target.value })}
-            />
-            <span role="status" aria-label="Состояние" className="text-xs text-zinc-400">
-              {!check.checked && !check.failed
-                ? 'проверяю…'
-                : check.failed
-                  ? 'проверка не удалась'
-                  : dirty
-                    ? 'не сохранено'
-                    : 'сохранено'}
+            <SectionLink to={type.section} title={type.sectionTitle} />
+            <BarDivider />
+            <span className="shrink-0 font-mono font-semibold">{saved?.name ?? type.newTitle}</span>
+            {saved && version !== undefined && <VersionBadge version={version} />}
+            <BarDivider />
+            <label className="flex min-w-0 items-center gap-2">
+              <input
+                aria-label="Описание"
+                className="w-64 min-w-0 bg-transparent text-muted outline-none placeholder:text-faint focus:text-text"
+                placeholder="описание"
+                value={content.description}
+                onChange={(event) => setContent({ ...content, description: event.target.value })}
+              />
+              <span aria-hidden="true" className="text-faint">
+                ✎
+              </span>
+            </label>
+            <BarDivider />
+            <span
+              role="status"
+              aria-label="Состояние"
+              data-state={state.key}
+              className={`flex shrink-0 items-center gap-1.5 text-xs ${state.tone}`}
+            >
+              <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
+              {state.words}
             </span>
           </>
         }
@@ -278,9 +297,8 @@ export function DocumentEditor({
         actions={
           <>
             {file !== null && (
-              <button
-                type="button"
-                className={buttonClass}
+              <Button
+                variant="plain"
                 disabled={!dirty}
                 onClick={() => {
                   setContent(file);
@@ -288,19 +306,18 @@ export function DocumentEditor({
                 }}
               >
                 Отбросить
-              </button>
+              </Button>
             )}
-            <button
-              type="button"
-              className={`${buttonClass} border-amber-500`}
+            <Button
+              variant="primary"
               disabled={!canSave}
               onClick={() => (saved ? void save() : setNaming(true))}
             >
               {saving ? 'Сохраняю…' : 'Сохранить'}
-            </button>
+            </Button>
             {actions}
             {otherErrors.length > 0 && (
-              <span className="text-xs text-red-300">
+              <span role="alert" className="max-w-64 truncate px-1.5 text-xs text-err">
                 {otherErrors.map((error) => error.reason).join('; ')}
               </span>
             )}
@@ -309,6 +326,7 @@ export function DocumentEditor({
         bottom={bottom?.({
           graph: content.document.graph,
           canRun: check.checked && check.errors.length === 0,
+          hasErrors: check.checked && check.errors.length > 0,
           rememberAs: saved?.name ?? `new:${draftId}`,
         })}
       />
@@ -327,45 +345,38 @@ export function DocumentEditor({
         />
       )}
       {naming && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
+        <Dialog label={type.nameLabel} title={type.nameLabel} onClose={() => setNaming(false)}>
           <form
-            role="dialog"
-            aria-label={type.nameLabel}
-            className="flex w-96 flex-col gap-3 rounded-lg border border-zinc-700 bg-zinc-900 p-4 text-sm"
+            className="flex flex-col gap-4"
             onSubmit={async (event) => {
               event.preventDefault();
               await save(name);
             }}
           >
-            <label className="flex flex-col gap-1">
-              {type.nameLabel}
-              <input
+            <label className="flex flex-col gap-1.5 text-xs text-muted">
+              <TextField
                 aria-label="Имя"
-                className={fieldClass}
+                mono
                 placeholder={type.namePlaceholder}
                 value={name}
                 autoFocus
                 onChange={(event) => setName(event.target.value.trim())}
               />
-              <span className="text-xs text-zinc-500">
-                Строчные латинские буквы и цифры через дефис.
-              </span>
+              <span className="text-faint">Строчные латинские буквы и цифры через дефис.</span>
             </label>
-            {nameError && <p className="text-xs text-red-300">{nameError.reason}</p>}
+            {nameError && (
+              <p role="alert" className="rounded-md bg-err-bg px-3 py-2 text-xs text-err">
+                {nameError.reason}
+              </p>
+            )}
             <span className="flex justify-end gap-2">
-              <button type="button" className={buttonClass} onClick={() => setNaming(false)}>
-                Отмена
-              </button>
-              <button
-                type="submit"
-                className={`${buttonClass} border-amber-500`}
-                disabled={name === '' || saving}
-              >
+              <Button onClick={() => setNaming(false)}>Отмена</Button>
+              <Button type="submit" variant="primary" disabled={name === '' || saving}>
                 Сохранить
-              </button>
+              </Button>
             </span>
           </form>
-        </div>
+        </Dialog>
       )}
     </>
   );
@@ -401,11 +412,25 @@ export function Problem({
   readonly section: { readonly to: '/signals' | '/strategies'; readonly title: string };
 }) {
   return (
-    <main className="flex min-h-screen flex-col items-start gap-3 bg-zinc-950 p-6 text-sm text-zinc-100">
-      <Link to={section.to} className="text-zinc-400 hover:text-zinc-100">
-        ← {section.title}
-      </Link>
-      <p className={quiet ? 'text-zinc-400' : 'text-red-300'}>{text}</p>
+    <main className="flex min-h-screen flex-col items-start gap-3 bg-canvas p-6">
+      <SectionLink to={section.to} title={section.title} />
+      <p className={quiet ? 'text-muted' : 'text-err'}>{text}</p>
     </main>
+  );
+}
+
+/** The way from an editor back to its section: the editors have no header. */
+export function SectionLink({
+  to,
+  title,
+}: {
+  readonly to: '/signals' | '/strategies';
+  readonly title: string;
+}) {
+  return (
+    <Link to={to} className="flex shrink-0 items-center gap-1.5 text-muted hover:text-text">
+      <span aria-hidden="true">←</span>
+      {title}
+    </Link>
   );
 }

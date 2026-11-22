@@ -4,6 +4,7 @@ using Npgsql;
 
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.ValueObjects.Hypotheses;
 using ProfitFox.Domain.ValueObjects.Ledger;
 using ProfitFox.Domain.ValueObjects.Runs;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger.Contracts;
@@ -29,6 +30,18 @@ internal sealed class LedgerRepository(NpgsqlDataSource database) : ILedgerRepos
     {
         await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
         IEnumerable<FinishedRunDb> rows = await connection.QueryAsync<FinishedRunDb>(LedgerRepositoryQueries.Recent(limit, cancellationToken));
+        return [.. rows.Select(FinishedRunDbConverter.ToDomain)];
+    }
+
+    public async Task<IReadOnlyList<FinishedRun>> LastAsync(IReadOnlyCollection<HypothesisVersion> versions, CancellationToken cancellationToken)
+    {
+        if (versions.Count == 0)
+        {
+            return [];
+        }
+
+        await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        IEnumerable<FinishedRunDb> rows = await connection.QueryAsync<FinishedRunDb>(LedgerRepositoryQueries.Last(versions, cancellationToken));
         return [.. rows.Select(FinishedRunDbConverter.ToDomain)];
     }
 

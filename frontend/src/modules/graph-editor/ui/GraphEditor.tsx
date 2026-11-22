@@ -2,22 +2,27 @@ import type { ReactFlowInstance } from '@xyflow/react';
 import { type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
 
 import type { RequestError } from '@/api/client';
+import { Badge } from '@/shared/ui/Badge';
+import { Button } from '@/shared/ui/Button';
+import { TextField } from '@/shared/ui/TextField';
 
 import type { DocumentRules } from '../document';
 import type { GraphFlowEdge, GraphFlowNode } from '../model/flow';
 import { issuesOf } from '../model/issues';
 import { addNode, relayout } from '../model/operations';
-import { addSignalNode, type SignalEntry } from '../model/signals';
-import type { Graph, GraphDocument, NodeKind } from '../model/types';
-import { buttonClass } from './Card';
+import { kindOf } from '../model/pins';
+import { addSignalNode, type SignalEntry, signalInfo } from '../model/signals';
+import type { Graph, GraphDocument, GraphNode, NodeKind } from '../model/types';
 import { ErrorsCard } from './ErrorsCard';
-import { GraphCanvas } from './GraphCanvas';
+import { BarDivider, FloatingBar } from './FloatingBar';
+import { fitOptions, GraphCanvas } from './GraphCanvas';
 import { JsonCard } from './JsonCard';
 import { NodeCard } from './NodeCard';
 import { Palette } from './Palette';
 import { ParametersCard } from './ParametersCard';
 
 type Sheet = 'errors' | 'parameters' | 'json';
+type Tool = 'palette' | 'find';
 
 /**
  * What the editor of a strategy adds for its signal nodes: the saved signals of the palette, and the update of a node
@@ -29,9 +34,10 @@ export interface SignalTools {
 }
 
 /**
- * The editor of a graph on a full-screen canvas with floating bars, as in profit-fox-v2: top left the title, top right
- * the errors, parameters, JSON, «Разложить» and the actions of the page, left the palette, on the right one card at a
- * time, and the bottom panel under the canvas.
+ * The editor of a graph on a full-screen canvas with floating bars, as in profit-fox-v2 (change redesign-bench-ui,
+ * design.md, decision 8): top left the document and its state, top right the errors, parameters, JSON and the actions
+ * of the page, under the left bar the column of tools with the palette and the search of a node, on the right one card
+ * at a time, at the bottom of the canvas the legend of types and the scale, and the bottom panel under the canvas.
  */
 export function GraphEditor({
   title,
@@ -61,6 +67,7 @@ export function GraphEditor({
 }) {
   const [selected, setSelected] = useState<string>();
   const [sheet, setSheet] = useState<Sheet>();
+  const [tool, setTool] = useState<Tool>();
   const issues = useMemo(() => issuesOf(errors), [errors]);
   const flow = useRef<ReactFlowInstance<GraphFlowNode, GraphFlowEdge>>(null);
 
@@ -74,6 +81,7 @@ export function GraphEditor({
     setSelected(undefined);
     setSheet((current) => (current === next ? undefined : next));
   };
+  const toggleTool = (next: Tool) => setTool((current) => (current === next ? undefined : next));
 
   const center = () =>
     flow.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 3 }) ?? {
@@ -81,20 +89,45 @@ export function GraphEditor({
       y: 0,
     };
 
+  // A node added from the palette stands in the middle of the view, and the palette closes.
   const add = (kind: NodeKind) => {
     const added = addNode(document, catalog, kind, center());
     onChange(added.document);
     select(added.id);
+    setTool(undefined);
   };
 
   const addSignal = (signal: SignalEntry) => {
     const added = addSignalNode(document, catalog, signal, center());
     onChange(added.document, true);
     select(added.id);
+    setTool(undefined);
+  };
+
+  /** The title of a node as the canvas shows it: of its kind, or the name of the signal of a signal node. */
+  const titleOf = (node: GraphNode): string =>
+    (node.kind === 'signal' ? signalInfo(node, catalog)?.name : undefined) ??
+    kindOf(node, catalog)?.title ??
+    node.kind;
+
+  /** Selects the first node whose title or id holds the text and brings it into view; false when there is none. */
+  const find = (text: string): boolean => {
+    const wanted = text.trim().toLowerCase();
+    const found = document.graph.nodes.find(
+      (node) =>
+        node.id.toLowerCase().includes(wanted) || titleOf(node).toLowerCase().includes(wanted),
+    );
+    if (wanted === '' || found === undefined) {
+      return false;
+    }
+
+    select(found.id);
+    void flow.current?.fitView({ nodes: [{ id: found.id }], maxZoom: 1, padding: 1.5 });
+    return true;
   };
 
   return (
-    <div className="flex h-screen flex-col bg-zinc-950 text-zinc-100">
+    <div className="flex h-screen flex-col bg-canvas text-text">
       <div className="relative min-h-0 flex-1">
         <GraphCanvas
           document={document}
@@ -109,59 +142,95 @@ export function GraphEditor({
             flow.current = instance;
           }}
         />
-        <div className="pointer-events-none absolute inset-0 flex flex-col gap-3 p-3">
+        {/* The bottom is left to the legend and the scale, which belong to the canvas. */}
+        <div className="pointer-events-none absolute inset-0 flex flex-col gap-3 p-4 pb-[76px]">
           <div className="flex items-start justify-between gap-3">
-            <div className="pointer-events-auto flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/90 px-3 py-2 text-sm">
-              {title}
-            </div>
-            <div className="pointer-events-auto flex flex-wrap items-center justify-end gap-2 rounded-lg border border-zinc-800 bg-zinc-900/90 px-2 py-1.5">
-              <button
-                type="button"
-                className={`${buttonClass} ${errors.length > 0 ? 'border-red-700 text-red-300' : ''}`}
+            <FloatingBar className="min-w-0">{title}</FloatingBar>
+            <FloatingBar role="toolbar" aria-label="Действия" className="shrink-0 gap-1 px-1.5">
+              <Button
+                variant="plain"
+                className={errors.length > 0 ? 'bg-err-bg/70' : 'aria-pressed:bg-panel-2'}
                 aria-pressed={sheet === 'errors'}
                 onClick={() => toggle('errors')}
               >
-                Ошибки {errors.length}
-              </button>
-              <button
-                type="button"
-                className={buttonClass}
+                Ошибки{' '}
+                <Badge tone={errors.length > 0 ? 'err' : 'ok'} mono>
+                  {errors.length}
+                </Badge>
+              </Button>
+              <Button
+                variant="plain"
+                className="aria-pressed:bg-panel-2"
                 aria-pressed={sheet === 'parameters'}
                 onClick={() => toggle('parameters')}
               >
                 Параметры
-              </button>
-              <button
-                type="button"
-                className={buttonClass}
+              </Button>
+              <Button
+                variant="plain"
+                className="aria-pressed:bg-panel-2"
                 aria-pressed={sheet === 'json'}
                 onClick={() => toggle('json')}
               >
                 JSON
-              </button>
-              {!readOnly && (
-                <button
-                  type="button"
-                  className={buttonClass}
-                  onClick={() => onChange(relayout(document))}
-                >
-                  Разложить
-                </button>
+              </Button>
+              {actions !== undefined && (
+                <>
+                  <BarDivider />
+                  {actions}
+                </>
               )}
-              {actions}
-            </div>
+            </FloatingBar>
           </div>
           <div className="flex min-h-0 flex-1 items-start justify-between gap-3">
-            {readOnly ? (
-              <span />
-            ) : (
-              <Palette
-                kinds={rules.palette(catalog)}
-                signals={signals?.palette}
-                onAdd={add}
-                onAddSignal={addSignal}
-              />
-            )}
+            {/* A height of its own, not only a limit: the palette's `max-h-full` counts from it, so a long palette
+                scrolls inside the canvas instead of running under the preview panel. */}
+            <div className="flex h-full min-h-0 items-start gap-2">
+              <div
+                role="toolbar"
+                aria-label="Инструменты"
+                aria-orientation="vertical"
+                className="pointer-events-auto flex w-11 flex-col items-center gap-1 rounded-[10px] border border-line bg-panel/95 py-1.5 shadow-xl"
+              >
+                {!readOnly && (
+                  <ToolButton
+                    label="Палитра узлов"
+                    hint="Добавить узел"
+                    expanded={tool === 'palette'}
+                    onClick={() => toggleTool('palette')}
+                  >
+                    +
+                  </ToolButton>
+                )}
+                <ToolButton
+                  label="Найти узел на холсте"
+                  expanded={tool === 'find'}
+                  onClick={() => toggleTool('find')}
+                >
+                  ⌕
+                </ToolButton>
+                <ToolButton
+                  label="Вписать в экран"
+                  onClick={() => void flow.current?.fitView(fitOptions)}
+                >
+                  ⤢
+                </ToolButton>
+                {!readOnly && (
+                  <ToolButton label="Выстроить" onClick={() => onChange(relayout(document))}>
+                    ⇶
+                  </ToolButton>
+                )}
+              </div>
+              {tool === 'palette' && !readOnly && (
+                <Palette
+                  kinds={rules.palette(catalog)}
+                  signals={signals?.palette}
+                  onAdd={add}
+                  onAddSignal={addSignal}
+                />
+              )}
+              {tool === 'find' && <NodeSearch onFind={find} />}
+            </div>
             {selected !== undefined && (
               <NodeCard
                 key={selected}
@@ -180,6 +249,10 @@ export function GraphEditor({
               <ErrorsCard
                 issues={issues}
                 failed={checkFailed}
+                titleOf={(id) => {
+                  const node = document.graph.nodes.find((candidate) => candidate.id === id);
+                  return node ? titleOf(node) : id;
+                }}
                 onSelect={select}
                 onClose={() => setSheet(undefined)}
               />
@@ -205,5 +278,71 @@ export function GraphEditor({
       </div>
       {bottom}
     </div>
+  );
+}
+
+/** A tool of the column on the left: a square button with a sign; an open one is of the accent color. */
+function ToolButton({
+  label,
+  hint,
+  expanded,
+  onClick,
+  children,
+}: {
+  readonly label: string;
+  readonly hint?: string;
+  readonly expanded?: boolean;
+  readonly onClick: () => void;
+  readonly children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-expanded={expanded}
+      title={hint ?? label}
+      className="grid size-8 cursor-pointer place-items-center rounded-md text-base leading-none text-muted hover:bg-panel-2 hover:text-text aria-expanded:bg-accent aria-expanded:text-on-accent"
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * The search of a node on the canvas (spec signal-constructor «Поиск узла на холсте»): Enter selects the first node
+ * whose title or id holds the text and shows it; without such a node the field says so and nothing changes.
+ */
+function NodeSearch({ onFind }: { readonly onFind: (text: string) => boolean }) {
+  const [text, setText] = useState('');
+  const [missed, setMissed] = useState(false);
+  return (
+    <form
+      role="search"
+      aria-label="Поиск узла"
+      className="pointer-events-auto flex w-60 flex-col gap-2 rounded-[10px] border border-line bg-panel/95 p-2.5 shadow-2xl"
+      onSubmit={(event) => {
+        event.preventDefault();
+        setMissed(!onFind(text));
+      }}
+    >
+      <TextField
+        aria-label="Название или id узла"
+        type="search"
+        sign="⌕"
+        placeholder="Название или id, Enter"
+        autoFocus
+        value={text}
+        onChange={(event) => {
+          setText(event.target.value);
+          setMissed(false);
+        }}
+      />
+      {missed && (
+        <p role="status" className="px-1 text-xs text-err">
+          Узел не найден
+        </p>
+      )}
+    </form>
   );
 }

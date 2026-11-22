@@ -60,7 +60,7 @@ internal sealed class SignalRequests
 
     public Task<IReadOnlyList<SignalEntryInternal>> List(CancellationToken cancellationToken)
     {
-        return new GetSignalsQueryHandler(_signals).Handle(new GetSignalsQuery(), cancellationToken);
+        return new GetSignalsQueryHandler(_signals, _strategies).Handle(new GetSignalsQuery(), cancellationToken);
     }
 
     public static JsonNode H0001GraphNode()

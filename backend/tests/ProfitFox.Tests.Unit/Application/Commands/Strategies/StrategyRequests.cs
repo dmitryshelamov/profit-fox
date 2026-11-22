@@ -67,7 +67,7 @@ internal sealed class StrategyRequests
 
     public Task<IReadOnlyList<StrategyEntryInternal>> List(CancellationToken cancellationToken)
     {
-        return new GetStrategiesQueryHandler(Store).Handle(new GetStrategiesQuery(), cancellationToken);
+        return new GetStrategiesQueryHandler(Store, SignalStore).Handle(new GetStrategiesQuery(), cancellationToken);
     }
 
     public Task<StrategyCheckInternal> Check(JsonElement graph, CancellationToken cancellationToken)

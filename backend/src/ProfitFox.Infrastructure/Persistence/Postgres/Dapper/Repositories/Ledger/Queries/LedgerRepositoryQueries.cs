@@ -2,6 +2,7 @@ using System.Data;
 
 using Dapper;
 
+using ProfitFox.Domain.ValueObjects.Hypotheses;
 using ProfitFox.Domain.ValueObjects.Ledger;
 using ProfitFox.Domain.ValueObjects.Runs;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ledger.Converters;
@@ -50,6 +51,21 @@ internal static class LedgerRepositoryQueries
         LIMIT @Limit
         """;
 
+    private const string LastSql =
+        """
+        SELECT DISTINCT ON (l.hypothesis_id, l.version)
+               l.run_id AS "RunId", l.time AS "Time", l.hypothesis_id AS "Hypothesis", l.hash AS "Hash", l.version AS "Version",
+               l.engine_version AS "EngineVersion", l.period AS "Period", l.status AS "Status",
+               l.data_hash AS "DataHash", l.attempts AS "Attempts", l.reason AS "Reason", l.required_t AS "RequiredT", l.power AS "Power",
+               l.blocks AS "Blocks", l.events AS "Events", l.t AS "T", l.mean AS "Mean", l.first_half_mean AS "FirstHalfMean",
+               l.second_half_mean AS "SecondHalfMean", l.read_seconds AS "ReadSeconds", l.corrects AS "Corrects",
+               r.kind = 'parity' AS "Parity"
+        FROM unnest(@Hypotheses::text[], @Versions::integer[]) AS w (hypothesis_id, version)
+        JOIN ledger l ON l.hypothesis_id = w.hypothesis_id AND l.version = w.version
+        JOIN runs r ON r.id = l.run_id
+        ORDER BY l.hypothesis_id, l.version, l.time DESC, l.seq DESC
+        """;
+
     private const string InsertSql =
         """
         INSERT INTO ledger (run_id, time, hypothesis_id, hash, version, engine_version, period, status, data_hash, attempts,
@@ -80,6 +96,17 @@ internal static class LedgerRepositoryQueries
     public static CommandDefinition Recent(int limit, CancellationToken cancellationToken)
     {
         return new CommandDefinition(RecentSql, new { Limit = limit }, cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    ///     The line with the latest time of each of <paramref name="versions" />, with the kind of its run.
+    /// </summary>
+    public static CommandDefinition Last(IReadOnlyCollection<HypothesisVersion> versions, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(
+            LastSql,
+            new { Hypotheses = versions.Select(version => version.Id).ToArray(), Versions = versions.Select(version => version.Version).ToArray() },
+            cancellationToken: cancellationToken);
     }
 
     public static CommandDefinition Find(string runId, CancellationToken cancellationToken)

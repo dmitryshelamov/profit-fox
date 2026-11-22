@@ -9,7 +9,10 @@ using ProfitFox.Domain.Repositories;
 
 namespace ProfitFox.Application.Queries.Signals;
 
-internal sealed class GetSignalsQueryHandler(ISignalRepository signals) : IRequestHandler<GetSignalsQuery, IReadOnlyList<SignalEntryInternal>>
+/// <summary>
+///     The strategies of the signals are read once for the whole list.
+/// </summary>
+internal sealed class GetSignalsQueryHandler(ISignalRepository signals, IStrategyRepository strategies) : IRequestHandler<GetSignalsQuery, IReadOnlyList<SignalEntryInternal>>
 {
     public async Task<IReadOnlyList<SignalEntryInternal>> Handle(GetSignalsQuery request, CancellationToken cancellationToken)
     {
@@ -19,7 +22,13 @@ internal sealed class GetSignalsQueryHandler(ISignalRepository signals) : IReque
             entries.Add(await Entry(name, cancellationToken));
         }
 
-        return entries;
+        if (entries.Count == 0)
+        {
+            return entries;
+        }
+
+        IReadOnlyDictionary<Guid, IReadOnlyList<string>> used = await strategies.UsingSignalsAsync(cancellationToken);
+        return [.. entries.Select(entry => entry.Id is { } id && used.TryGetValue(id, out IReadOnlyList<string>? names) ? entry with { Strategies = names } : entry)];
     }
 
     private async Task<SignalEntryInternal> Entry(string name, CancellationToken cancellationToken)

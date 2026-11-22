@@ -215,6 +215,23 @@ public sealed class SignalsTests
         Assert.That((await _api.Http.DeleteAsync("/api/signals/funding-high")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent), "deleting the strategy lifts the refusal");
     }
 
+    [Test]
+    public async Task The_list_names_the_strategies_of_each_signal()
+    {
+        SignalResponse used = (await (await Create("funding-high", Signal())).Content.ReadFromJsonAsync<SignalResponse>(Json))!;
+        await Create("candle-drop", Signal());
+        await CreateStrategy("zeta", used.Id);
+        await CreateStrategy("alpha", used.Id);
+
+        SignalListItem[] list = (await _api.Http.GetFromJsonAsync<SignalListItem[]>("/api/signals", Json))!;
+        JsonArray raw = JsonNode.Parse(await _api.Http.GetStringAsync("/api/signals"))!.AsArray();
+
+        Assert.That(list.Select(item => item.Name), Is.EqualTo(new[] { "candle-drop", "funding-high" }));
+        Assert.That(list[0].Strategies, Is.Empty);
+        Assert.That(list[1].Strategies, Is.EqualTo(new[] { "alpha", "zeta" }));
+        Assert.That(raw[0]!["strategies"]!.GetValueKind(), Is.EqualTo(JsonValueKind.Array), "always an array, also when it is empty");
+    }
+
     private async Task CreateStrategy(string name, Guid signal)
     {
         HttpResponseMessage created = await _api.Http.PostAsJsonAsync(

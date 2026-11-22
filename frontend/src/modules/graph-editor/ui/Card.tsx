@@ -1,12 +1,20 @@
 import type { ReactNode } from 'react';
 
-/** A floating card over the right of the canvas: one at a time, closed by its cross. */
+/**
+ * A floating card over the right of the canvas, under the bar of actions: one at a time, 300 px wide, closed by its
+ * cross. `title` is its accessible name; `heading` is what its header shows when that is more than the name.
+ */
 export function Card({
   title,
+  heading,
+  tone = 'plain',
   onClose,
   children,
 }: {
   readonly title: string;
+  readonly heading?: ReactNode;
+  /** The card of errors has the border of an error. */
+  readonly tone?: 'plain' | 'error';
   readonly onClose: () => void;
   readonly children: ReactNode;
 }) {
@@ -14,25 +22,33 @@ export function Card({
     <section
       role="region"
       aria-label={title}
-      className="pointer-events-auto flex max-h-full w-80 flex-col overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900/95 shadow-2xl"
+      className={`pointer-events-auto flex max-h-full w-[300px] shrink-0 flex-col overflow-hidden rounded-[10px] border bg-panel shadow-2xl ${
+        tone === 'error' ? 'border-err-bg' : 'border-line'
+      }`}
     >
-      <header className="flex items-center justify-between border-b border-zinc-800 px-3 py-2">
-        <h2 className="text-sm font-semibold">{title}</h2>
+      <header className="flex items-center justify-between gap-2 px-4 pt-3.5 pb-2">
+        <h2 className="flex min-w-0 items-center gap-2 text-sm font-bold">{heading ?? title}</h2>
         <button
           type="button"
           aria-label="Закрыть"
-          className="text-zinc-400 hover:text-zinc-100"
+          className="cursor-pointer text-muted hover:text-text"
           onClick={onClose}
         >
           ✕
         </button>
       </header>
-      <div className="flex flex-col gap-3 overflow-y-auto p-3 text-sm">{children}</div>
+      <div className="flex flex-col gap-3.5 overflow-y-auto px-4 pt-1 pb-4 text-[13px]">
+        {children}
+      </div>
     </section>
   );
 }
 
-export const fieldClass =
-  'rounded border border-zinc-700 bg-zinc-800 px-2 py-1 font-mono text-xs text-zinc-100';
-export const buttonClass =
-  'rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-100 hover:bg-zinc-700 disabled:opacity-40';
+/** The name of a field of a card: 11 px, semibold, capitals, with what stands next to it. */
+export function FieldLabel({ children }: { readonly children: ReactNode }) {
+  return (
+    <span className="flex items-center gap-2 text-[11px] font-semibold tracking-wide text-muted uppercase">
+      {children}
+    </span>
+  );
+}

@@ -1,20 +1,27 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
+import { useEffect, useRef } from 'react';
 
-import { api, unwrap } from '@/api/client';
+import { api, type Hypothesis, unwrap } from '@/api/client';
 import { listSignals, type SignalListItem, written } from '@/api/signals';
 import { draftKey } from '@/modules/graph-editor/drafts/drafts';
-import { buttonClass } from '@/modules/graph-editor/ui/Card';
-import { DocumentRow, type ListType } from '@/pages/documents/DocumentRow';
+import { DocumentTable, type ListType } from '@/pages/documents/DocumentTable';
 import { openStrategyOfSignal } from '@/pages/strategies/fromSignal';
+import { Badge } from '@/shared/ui/Badge';
+import { Button } from '@/shared/ui/Button';
+import { Page, SectionTitle } from '@/shared/ui/Page';
+import { RunStatusBadge, statusOfRun } from '@/shared/ui/RunStatusBadge';
+import { Table, Td, Th } from '@/shared/ui/Table';
+import { VersionBadge } from '@/shared/ui/VersionBadge';
 
-import { SectionNav } from '../runs/SectionNav';
-import { RunControls } from './RunControls';
+import { kindLabel, periodLabel, shortUtc } from '../runs/labels';
+import { useActiveRuns } from '../runs/useActiveRuns';
+import { RunControls, RunNotes, useRunLaunch } from './RunControls';
 
 /**
  * The section «Сигналы» (spec signal-constructor «Список сигналов», «Создание, переименование, копирование и
- * удаление»): the saved signals in the order of their name, a file that does not read with its error, and the
- * hypotheses of the bench, whose signals open read only.
+ * удаление», «Стратегии сигнала в списке»): the saved signals in the order of their name with the strategies that point
+ * at each, a file that does not read with its error, and the hypotheses of the bench, whose signals open read only.
  */
 export function SignalListPage() {
   const navigate = useNavigate();
@@ -24,84 +31,175 @@ export function SignalListPage() {
     queryFn: async () => unwrap(await api.GET('/api/hypotheses')),
   });
 
+  // The last run of a hypothesis follows the queue the header already asks for: a run that was queued, taken by a
+  // Worker or ended changes it, and the reasons a period is closed with it.
+  const active = useActiveRuns();
+  const queue = active.data?.map((run) => `${run.id}:${run.state}`).join(',');
+  const seenQueue = useRef<string | undefined>(undefined);
+  const refetchHypotheses = hypotheses.refetch;
+  useEffect(() => {
+    if (queue === undefined) {
+      return;
+    }
+
+    if (seenQueue.current !== undefined && seenQueue.current !== queue) {
+      void refetchHypotheses();
+    }
+
+    seenQueue.current = queue;
+  }, [queue, refetchHypotheses]);
+
   return (
-    <main className="mx-auto flex max-w-4xl flex-col gap-6 p-6 text-sm">
-      <header className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Сигналы</h1>
-        <SectionNav />
-        <button
-          type="button"
-          className={`${buttonClass} border-amber-500 px-3 py-1.5 text-sm`}
-          onClick={() =>
-            navigate({ to: '/signals/new/$draftId', params: { draftId: crypto.randomUUID() } })
-          }
-        >
-          Новый сигнал
-        </button>
-      </header>
+    <Page>
+      <DocumentTable
+        type={signalList}
+        title="Сигналы"
+        hint="Условие входа как часть графа. Стратегия ссылается на версию сигнала."
+        label="Сохранённые сигналы"
+        lines={signals.data}
+        pending={signals.isPending}
+        problem={signals.error?.message ?? null}
+        action={
+          <Button
+            variant="primary"
+            onClick={() =>
+              navigate({ to: '/signals/new/$draftId', params: { draftId: crypto.randomUUID() } })
+            }
+          >
+            <span aria-hidden="true">+</span> Новый сигнал
+          </Button>
+        }
+        empty={<p className="text-muted">Сигналов нет.</p>}
+      />
 
-      <section aria-label="Сохранённые сигналы" className="flex flex-col gap-2">
-        {signals.isPending && <p className="text-zinc-400">Загрузка…</p>}
-        {signals.error && <p className="text-red-300">{signals.error.message}</p>}
-        {signals.data?.length === 0 && <p className="text-zinc-400">Сигналов нет.</p>}
-        <ul className="flex flex-col divide-y divide-zinc-800 rounded border border-zinc-800">
-          {signals.data?.map((signal) => (
-            <SignalRow key={signal.name} signal={signal} />
-          ))}
-        </ul>
+      <section aria-label="Гипотезы" className="flex flex-col gap-3">
+        <SectionTitle
+          title="Гипотезы стенда"
+          hint="Сигнал гипотезы открывается только для чтения. Его можно скопировать в свой сигнал."
+        />
+        {hypotheses.error && <p className="text-err">{hypotheses.error.message}</p>}
+        {hypotheses.data && hypotheses.data.length > 0 && (
+          <Table>
+            <thead>
+              <tr>
+                <Th className="w-[80px]">ID</Th>
+                <Th>Имя</Th>
+                <Th className="w-[60px]">ТФ</Th>
+                <Th className="w-[80px]">Версия</Th>
+                <Th>Последний прогон</Th>
+                <Th className="w-px">Запуск</Th>
+              </tr>
+            </thead>
+            {hypotheses.data.map((hypothesis) => (
+              <HypothesisRows key={hypothesis.id} hypothesis={hypothesis} />
+            ))}
+          </Table>
+        )}
       </section>
-
-      <section aria-label="Гипотезы" className="flex flex-col gap-2">
-        <h2 className="font-semibold">Гипотезы стенда</h2>
-        <p className="text-xs text-zinc-400">
-          Сигнал гипотезы открывается только для чтения; его можно скопировать в новый сигнал.
-        </p>
-        {hypotheses.error && <p className="text-red-300">{hypotheses.error.message}</p>}
-        <ul className="flex flex-col divide-y divide-zinc-800 rounded border border-zinc-800">
-          {hypotheses.data?.map((hypothesis) => (
-            <li
-              key={hypothesis.id}
-              aria-label={`Гипотеза ${hypothesis.id}`}
-              className="flex items-start gap-3 px-3 py-2"
-            >
-              {hypothesis.signal ? (
-                <Link
-                  to="/hypotheses/$id"
-                  params={{ id: hypothesis.id }}
-                  className="font-mono hover:text-amber-300"
-                >
-                  {hypothesis.id} {hypothesis.name}
-                </Link>
-              ) : (
-                <span className="font-mono text-zinc-500">
-                  {hypothesis.id} {hypothesis.name}
-                </span>
-              )}
-              {hypothesis.timeframe && (
-                <span className="text-zinc-500">{hypothesis.timeframe}</span>
-              )}
-              <span className="text-zinc-500">версия {String(hypothesis.version)}</span>
-              {hypothesis.error && <span className="text-xs text-red-300">{hypothesis.error}</span>}
-              <RunControls hypothesis={hypothesis} />
-            </li>
-          ))}
-        </ul>
-      </section>
-    </main>
+    </Page>
   );
 }
 
-/** The row of a saved signal: its words and the requests of `/api/signals`. */
-const signalList: ListType = {
+/**
+ * A hypothesis of the bench: its row with the last run of its version (spec bench-run-queue «Последний прогон
+ * гипотезы») and the buttons of a run, and under it the line that says why a period is closed.
+ */
+function HypothesisRows({ hypothesis }: { readonly hypothesis: Hypothesis }) {
+  const launch = useRunLaunch(hypothesis);
+  const last = hypothesis.lastRun ?? null;
+  const notes = hypothesis.error || launch.reasons.length > 0 || launch.refusal !== null;
+
+  return (
+    <tbody aria-label={`Гипотеза ${hypothesis.id}`} className="border-t border-line">
+      <tr className="h-14">
+        <Td>
+          {hypothesis.signal ? (
+            <Link
+              to="/hypotheses/$id"
+              params={{ id: hypothesis.id }}
+              aria-label={`${hypothesis.id} ${hypothesis.name}`}
+              className="font-mono font-medium text-accent hover:underline"
+            >
+              {hypothesis.id}
+            </Link>
+          ) : (
+            <span className="font-mono text-faint">{hypothesis.id}</span>
+          )}
+        </Td>
+        <Td className={`font-mono font-medium ${hypothesis.signal ? '' : 'text-muted'}`}>
+          {hypothesis.name}
+        </Td>
+        <Td className="font-mono text-muted">{hypothesis.timeframe ?? '—'}</Td>
+        <Td>
+          <VersionBadge version={hypothesis.version} />
+        </Td>
+        <Td>
+          {last ? (
+            <Link
+              to="/runs/$id"
+              params={{ id: last.id }}
+              className="group inline-flex items-center gap-2.5"
+            >
+              <RunStatusBadge status={statusOfRun(last)} />
+              <span className="text-xs text-muted group-hover:text-text">
+                {periodLabel(last.period)} · {kindLabel(last.kind)}
+                {last.finishedAt ? ` · ${shortUtc(last.finishedAt)}` : ''}
+              </span>
+            </Link>
+          ) : (
+            <span className="text-xs text-faint">не запускалась</span>
+          )}
+        </Td>
+        <Td>
+          <RunControls hypothesis={hypothesis} launch={launch} />
+        </Td>
+      </tr>
+      {notes && (
+        <tr>
+          <td />
+          <td colSpan={5} className="pr-5 pb-4 pl-5">
+            {hypothesis.error && <p className="mb-1.5 text-xs text-err">{hypothesis.error}</p>}
+            <RunNotes hypothesis={hypothesis} launch={launch} />
+          </td>
+        </tr>
+      )}
+    </tbody>
+  );
+}
+
+/** The table of the saved signals: its words, its column and the requests of `/api/signals`. */
+const signalList: ListType<SignalListItem> = {
   label: 'Сигнал',
+  object: 'сигнал',
   queryKey: 'signal',
   listKey: 'signals',
   draftKey,
-  link: (name) => (
-    <Link to="/signals/$name" params={{ name }} className="font-mono hover:text-amber-300">
+  link: (name, className) => (
+    <Link to="/signals/$name" params={{ name }} className={className}>
       {name}
     </Link>
   ),
+  // The strategies any version of which points at the signal (spec signal-constructor «Стратегии сигнала в списке»).
+  columns: [
+    {
+      title: 'Где используется',
+      cell: (signal) =>
+        (signal.strategies ?? []).length === 0 ? (
+          <span className="text-faint">—</span>
+        ) : (
+          <span className="flex flex-wrap gap-1.5">
+            {signal.strategies.map((strategy) => (
+              <Link key={strategy} to="/strategies/$name" params={{ name: strategy }}>
+                <Badge tone="accent" mono className="hover:brightness-125">
+                  {strategy}
+                </Badge>
+              </Link>
+            ))}
+          </span>
+        ),
+    },
+  ],
+  actions: (signal) => <CreateStrategy signal={signal} />,
   rename: async (name, to) =>
     written(
       await api.POST('/api/signals/{name}/rename', { params: { path: { name } }, body: { to } }),
@@ -133,33 +231,30 @@ const signalList: ListType = {
 
     return [];
   },
-  deleteQuestion: (name) => `Удалить сигнал ${name}? Незакоммиченный файл не вернуть.`,
+  deleteQuestion: (name) => `Удалить сигнал ${name} со всеми версиями?`,
 };
 
-function SignalRow({ signal }: { readonly signal: SignalListItem }) {
+/** «Создать стратегию» of a saved signal that reads: a new strategy with the signal as its node. */
+function CreateStrategy({ signal }: { readonly signal: SignalListItem }) {
   const navigate = useNavigate();
+  const id = signal.id;
+  if (!id) {
+    return null;
+  }
+
   return (
-    <DocumentRow
-      type={signalList}
-      line={signal}
-      actions={
-        !signal.error &&
-        signal.id && (
-          <button
-            type="button"
-            className={buttonClass}
-            onClick={() =>
-              void openStrategyOfSignal(navigate, {
-                id: signal.id!,
-                name: signal.name,
-                version: Number(signal.version),
-              })
-            }
-          >
-            Создать стратегию
-          </button>
-        )
+    <Button
+      variant="plain"
+      className="text-muted! hover:text-text!"
+      onClick={() =>
+        void openStrategyOfSignal(navigate, {
+          id,
+          name: signal.name,
+          version: Number(signal.version),
+        })
       }
-    />
+    >
+      Создать стратегию
+    </Button>
   );
 }

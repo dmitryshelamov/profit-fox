@@ -1,8 +1,10 @@
 import { useState } from 'react';
 
+import { Button } from '@/shared/ui/Button';
+
 import { asGraph, graphText } from '../model/graph';
 import type { Graph } from '../model/types';
-import { buttonClass, Card, fieldClass } from './Card';
+import { Card } from './Card';
 
 /**
  * The graph as JSON in the format of spec strategy-graph, without positions (spec signal-constructor «Карточка
@@ -45,28 +47,27 @@ export function JsonCard({
     <Card title="JSON" onClose={onClose}>
       <textarea
         aria-label="Граф JSON"
-        className={`${fieldClass} h-96`}
+        className="h-96 resize-none rounded-md border border-line bg-panel-2 p-2.5 font-mono text-xs text-text outline-none focus:border-accent"
         spellCheck={false}
         value={text}
         readOnly={readOnly}
         onChange={(event) => setText(event.target.value)}
       />
-      {problem && <p className="text-xs text-red-300">{problem}</p>}
+      {problem && <p className="text-xs text-err">{problem}</p>}
       <span className="flex gap-2">
-        <button
-          type="button"
-          className={buttonClass}
+        <Button
+          size="sm"
           onClick={() => {
             setText(graphText(graph));
             setProblem(null);
           }}
         >
           Показать текущий
-        </button>
+        </Button>
         {!readOnly && (
-          <button type="button" className={buttonClass} onClick={replace}>
+          <Button size="sm" onClick={replace}>
             Заменить граф
-          </button>
+          </Button>
         )}
       </span>
     </Card>

@@ -1,5 +1,6 @@
 import type { PreviewOrder } from '@/api/client';
 
+import { ListHead, ListRow, MomentButton } from './lists';
 import { formatUtc } from './preview';
 import { outcomeOf } from './strategyPreview';
 
@@ -10,39 +11,39 @@ import { outcomeOf } from './strategyPreview';
  */
 export function OrderList({
   orders,
+  selected,
+  markClicks,
   onPick,
 }: {
   readonly orders: readonly PreviewOrder[];
+  /** The moment of the selected order. */
+  readonly selected: number | null;
+  /** How many times a mark of the chart was clicked: each click brings the selected row into view. */
+  readonly markClicks: number;
   readonly onPick: (order: PreviewOrder) => void;
 }) {
   if (orders.length === 0) {
-    return <p className="text-sm text-zinc-400">Заявок нет.</p>;
+    return <p className="p-4 text-muted">Заявок нет.</p>;
   }
 
   return (
-    <table aria-label="Заявки" className="w-full text-sm">
-      <thead className="text-left text-zinc-400">
-        <tr>
-          <th className="py-1 font-normal">Момент, UTC</th>
-          <th className="py-1 font-normal">Сторона</th>
-          <th className="py-1 font-normal">Исход</th>
-        </tr>
-      </thead>
-      <tbody className="font-mono">
+    <table aria-label="Заявки" className="w-full border-collapse text-[13px]">
+      <ListHead columns={[['Момент, UTC'], ['Сторона'], ['Исход']]} />
+      <tbody>
         {orders.map((order) => (
-          <tr
+          <ListRow
             key={order.moment}
-            aria-label={`Заявка ${formatUtc(order.moment)}`}
-            className={`border-t border-zinc-800 ${order.outcome === 'opened' ? '' : 'text-zinc-500'}`}
+            label={`Заявка ${formatUtc(order.moment)}`}
+            selected={Number(order.moment) === selected}
+            markClicks={markClicks}
+            dim={order.outcome !== 'opened'}
           >
-            <td className="py-1">
-              <button type="button" className="hover:text-amber-300" onClick={() => onPick(order)}>
-                {formatUtc(order.moment)}
-              </button>
+            <td className="px-4">
+              <MomentButton moment={formatUtc(order.moment)} onClick={() => onPick(order)} />
             </td>
-            <td className="py-1">{order.side === 'short' ? 'шорт' : 'лонг'}</td>
-            <td className="py-1 font-sans">{outcomeOf(order)}</td>
-          </tr>
+            <td className="px-4">{order.side === 'short' ? 'шорт' : 'лонг'}</td>
+            <td className="px-4 text-xs">{outcomeOf(order)}</td>
+          </ListRow>
         ))}
       </tbody>
     </table>

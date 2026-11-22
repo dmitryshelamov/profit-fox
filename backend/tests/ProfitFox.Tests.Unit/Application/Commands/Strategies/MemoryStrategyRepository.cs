@@ -15,6 +15,20 @@ public sealed class MemoryStrategyRepository : IStrategyRepository
 {
     private readonly Dictionary<string, StrategyDocument> _strategies = [];
     private readonly Dictionary<Guid, List<GraphDefinition>> _graphs = [];
+    private readonly Dictionary<string, string> _broken = [];
+
+    /// <summary>
+    ///     How many times the strategies of all the signals were read.
+    /// </summary>
+    public int UsageReads { get; private set; }
+
+    /// <summary>
+    ///     Makes the saved strategy <paramref name="name" /> one that does not read, with <paramref name="error" />.
+    /// </summary>
+    public void Break(string name, string error)
+    {
+        _broken[name] = error;
+    }
 
     public Task<IReadOnlyList<string>> NamesAsync(CancellationToken cancellationToken)
     {
@@ -28,6 +42,11 @@ public sealed class MemoryStrategyRepository : IStrategyRepository
 
     public Task<StrategyRead?> ReadAsync(string name, CancellationToken cancellationToken)
     {
+        if (_broken.TryGetValue(name, out string? error))
+        {
+            return Task.FromResult<StrategyRead?>(new StrategyRead(Strategy: null, [error]));
+        }
+
         return Task.FromResult(_strategies.TryGetValue(name, out StrategyDocument? strategy) ? new StrategyRead(strategy, []) : null);
     }
 
@@ -76,5 +95,16 @@ public sealed class MemoryStrategyRepository : IStrategyRepository
                 .Order(StringComparer.Ordinal)
         ];
         return Task.FromResult<IReadOnlyList<string>>(names);
+    }
+
+    public Task<IReadOnlyDictionary<Guid, IReadOnlyList<string>>> UsingSignalsAsync(CancellationToken cancellationToken)
+    {
+        UsageReads++;
+        var used = _strategies.Values
+            .SelectMany(strategy => _graphs[strategy.Id].SelectMany(SignalNodes.References).Select(reference => (reference.Signal, strategy.Name)))
+            .Distinct()
+            .GroupBy(pair => pair.Signal, pair => pair.Name)
+            .ToDictionary(group => group.Key, IReadOnlyList<string> (group) => [.. group.Order(StringComparer.Ordinal)]);
+        return Task.FromResult<IReadOnlyDictionary<Guid, IReadOnlyList<string>>>(used);
     }
 }

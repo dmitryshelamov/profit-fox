@@ -160,6 +160,48 @@ public sealed class HypothesesTests
         Assert.That(refused.StatusCode, Is.EqualTo(HttpStatusCode.UnsupportedMediaType));
     }
 
+    [Test]
+    public async Task A_hypothesis_without_runs_has_no_last_run()
+    {
+        await Post(BenchRepository.H0001Text());
+
+        JsonObject raw = JsonNode.Parse(await _api.Http.GetStringAsync("/api/hypotheses"))!.AsArray().Single()!.AsObject();
+
+        Assert.That((await List()).Single().LastRun, Is.Null);
+        Assert.That(raw.ContainsKey("lastRun"), Is.False);
+    }
+
+    [Test]
+    public async Task The_last_run_is_the_finished_one_without_its_report_and_a_queued_one_comes_before_it()
+    {
+        await Post(BenchRepository.H0001Text());
+        LedgerEntry line = await LedgerLines.Write("H0001", 1, HashOf(BenchRepository.H0001Text()), "exploration", RunStatus.InsufficientData);
+
+        RunResponse finished = (await List()).Single().LastRun!;
+        JsonObject raw = JsonNode.Parse(await _api.Http.GetStringAsync("/api/hypotheses"))!.AsArray().Single()!["lastRun"]!.AsObject();
+
+        Assert.That((finished.Id, finished.State, finished.Period, finished.Kind, finished.Result?.Status), Is.EqualTo((line.RunId, "finished", "exploration", "verdict", RunStatus.InsufficientData)));
+        Assert.That(raw["result"]!.AsObject().ContainsKey("report"), Is.False, "the list carries no report");
+        Assert.That((await _api.Http.GetFromJsonAsync<RunResponse>($"/api/runs/{line.RunId}", Json))!.Result!.Report, Is.EqualTo("# report"), "the run itself has it");
+
+        RunResponse queued = (await (await _api.Http.PostAsJsonAsync("/api/runs", new CreateRunRequest("H0001", Version: null, "exploration", "parity"), Json)).Content.ReadFromJsonAsync<RunResponse>(Json))!;
+
+        RunResponse last = (await List()).Single().LastRun!;
+        Assert.That((last.Id, last.State, last.Kind, last.Result), Is.EqualTo((queued.Id, "queued", "parity", (RunResultResponse?)null)));
+    }
+
+    [Test]
+    public async Task A_new_version_has_no_last_run_while_only_the_earlier_one_was_run()
+    {
+        await Post(BenchRepository.H0001Text());
+        await LedgerLines.Write("H0001", 1, HashOf(BenchRepository.H0001Text()), "exploration", RunStatus.Rejected);
+        await Post(Changed(name => name + "-b"));
+
+        HypothesisResponse latest = (await List()).Single();
+
+        Assert.That((latest.Version, latest.LastRun), Is.EqualTo((2, (RunResponse?)null)));
+    }
+
     private async Task<HypothesisResponse[]> List()
     {
         return (await _api.Http.GetFromJsonAsync<HypothesisResponse[]>("/api/hypotheses", Json))!;

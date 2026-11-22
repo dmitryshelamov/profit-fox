@@ -7,6 +7,7 @@ import {
   type RouterHistory,
 } from '@tanstack/react-router';
 
+import { AppShell } from '@/app/AppShell';
 import { HypothesisPage } from '@/pages/hypotheses/HypothesisPage';
 import { RunPage } from '@/pages/runs/RunPage';
 import { RunsPage } from '@/pages/runs/RunsPage';
@@ -17,7 +18,7 @@ import { StrategyListPage } from '@/pages/strategies/StrategyListPage';
 
 const rootRoute = createRootRoute({
   component: Outlet,
-  notFoundComponent: () => <p className="p-6 text-sm text-zinc-300">Такой страницы нет.</p>,
+  notFoundComponent: () => <p className="p-6 text-muted">Такой страницы нет.</p>,
 });
 
 const indexRoute = createRoute({
@@ -28,8 +29,15 @@ const indexRoute = createRoute({
   },
 });
 
-const signalsRoute = createRoute({
+/** The pages under the header: the lists, «Прогоны» and the page of a run. The editors stay children of the root. */
+const shellRoute = createRoute({
   getParentRoute: () => rootRoute,
+  id: 'shell',
+  component: AppShell,
+});
+
+const signalsRoute = createRoute({
+  getParentRoute: () => shellRoute,
   path: '/signals',
   component: SignalListPage,
 });
@@ -53,7 +61,7 @@ const signalRoute = createRoute({
 });
 
 const strategiesRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: '/strategies',
   component: StrategyListPage,
 });
@@ -86,13 +94,13 @@ const hypothesisRoute = createRoute({
 });
 
 const runsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: '/runs',
   component: RunsPage,
 });
 
 const runRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: '/runs/$id',
   component: function RunRoute() {
     const { id } = runRoute.useParams();
@@ -102,15 +110,12 @@ const runRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
-  signalsRoute,
+  shellRoute.addChildren([signalsRoute, strategiesRoute, runsRoute, runRoute]),
   newSignalRoute,
   signalRoute,
-  strategiesRoute,
   newStrategyRoute,
   strategyRoute,
   hypothesisRoute,
-  runsRoute,
-  runRoute,
 ]);
 
 /** The routes of the constructor; a test passes a memory history. */

@@ -33,7 +33,15 @@ public class StrategiesController(ISender sender) : ControllerBase
     [ProducesResponseType<StrategyListItem[]>(StatusCodes.Status200OK)]
     public async Task<ActionResult<StrategyListItem[]>> List(CancellationToken cancellation)
     {
-        return (await sender.Send(new GetStrategiesQuery(), cancellation)).Select(entry => new StrategyListItem(entry.Name, entry.Description, entry.Version, entry.Error)).ToArray();
+        return (await sender.Send(new GetStrategiesQuery(), cancellation))
+            .Select(entry => new StrategyListItem(
+                entry.Name,
+                entry.Description,
+                entry.Version,
+                entry.Error,
+                [.. entry.Signals.Select(signal => new StrategySignalItem(signal.Name, signal.Version, signal.LatestVersion))],
+                entry.Exits))
+            .ToArray();
     }
 
     [HttpGet("{name}", Name = "GetStrategy")]

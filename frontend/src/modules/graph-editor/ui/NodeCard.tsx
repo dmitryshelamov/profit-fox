@@ -1,6 +1,11 @@
 import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
 
+import { Button } from '@/shared/ui/Button';
+import { Segmented } from '@/shared/ui/Segmented';
+import { SelectField } from '@/shared/ui/SelectField';
+import { TextField } from '@/shared/ui/TextField';
+
 import type { DocumentRules } from '../document';
 import { findNode, wireInto } from '../model/graph';
 import type { Issue } from '../model/issues';
@@ -17,7 +22,8 @@ import { referenceOf, signalInfo } from '../model/signals';
 import type { Catalog, GraphDocument, Pin } from '../model/types';
 import { formatValue, parseValue } from '../model/values';
 import { canConnect } from '../model/wires';
-import { buttonClass, Card, fieldClass } from './Card';
+import { Card, FieldLabel } from './Card';
+import { groupFill, groupOf, pinLooks } from './looks';
 
 /**
  * The card of the selected node: its id, its settings from the catalog and, for each input, where its value comes
@@ -61,20 +67,32 @@ export function NodeCard({
   const own = issues.filter((issue) => issue.node === id);
 
   return (
-    <Card title={`Узел: ${title} ${id}`} onClose={() => onSelect(undefined)}>
-      <label className="flex flex-col gap-1">
-        Id
+    <Card
+      title={`Узел: ${title} ${id}`}
+      heading={
+        <>
+          <span
+            aria-hidden="true"
+            className={`size-2.5 shrink-0 rounded-[3px] ${groupFill(groupOf(node.kind, kind?.group))}`}
+          />
+          <span className="truncate">{title}</span>
+          {kind?.group && <span className="text-xs font-normal text-muted">{kind.group}</span>}
+        </>
+      }
+      onClose={() => onSelect(undefined)}
+    >
+      <label className="flex flex-col gap-1.5">
+        <FieldLabel>Id узла</FieldLabel>
         <span className="flex gap-2">
-          <input
+          <TextField
             aria-label="Id узла"
-            className={`${fieldClass} flex-1`}
+            mono
+            className="min-w-0 flex-1"
             value={name}
             readOnly={readOnly}
             onChange={(event) => setName(event.target.value.trim())}
           />
-          <button
-            type="button"
-            className={buttonClass}
+          <Button
             disabled={readOnly || name === id || name === '' || taken}
             onClick={() => {
               onChange(renameNode(document, catalog, id, name));
@@ -82,9 +100,9 @@ export function NodeCard({
             }}
           >
             Переименовать
-          </button>
+          </Button>
         </span>
-        {taken && <span className="text-xs text-red-400">Id {name} уже занят.</span>}
+        {taken && <span className="text-xs text-err">Id {name} уже занят.</span>}
       </label>
 
       {node.kind === 'signal' && (
@@ -100,25 +118,38 @@ export function NodeCard({
       {kind?.settings
         .filter((setting) => setting.values.length > 0)
         .map((setting) => (
-          <label key={setting.name} className="flex flex-col gap-1">
-            {setting.name}
-            <select
-              aria-label={`Настройка ${setting.name}`}
-              className={fieldClass}
-              value={node.settings?.[setting.name] ?? ''}
-              disabled={readOnly}
-              onChange={(event) =>
-                onChange(setSetting(document, id, setting.name, event.target.value))
-              }
-            >
-              {node.settings?.[setting.name] === undefined && <option value="">—</option>}
-              {setting.values.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div key={setting.name} className="flex flex-col gap-1.5">
+            <FieldLabel>{setting.name}</FieldLabel>
+            {/* A choice of two is in sight as segments; a longer one is a list. */}
+            {setting.values.length === 2 ? (
+              <Segmented
+                label={`Настройка ${setting.name}`}
+                className="w-full"
+                value={node.settings?.[setting.name]}
+                options={setting.values.map((value) => ({ value, label: value }))}
+                disabled={readOnly}
+                onChange={(value) => onChange(setSetting(document, id, setting.name, value))}
+              />
+            ) : (
+              <SelectField
+                aria-label={`Настройка ${setting.name}`}
+                mono
+                className="w-full"
+                value={node.settings?.[setting.name] ?? ''}
+                disabled={readOnly}
+                onChange={(event) =>
+                  onChange(setSetting(document, id, setting.name, event.target.value))
+                }
+              >
+                {node.settings?.[setting.name] === undefined && <option value="">—</option>}
+                {setting.values.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </SelectField>
+            )}
+          </div>
         ))}
 
       {pins.inputs.map((pin) => (
@@ -134,7 +165,10 @@ export function NodeCard({
       ))}
 
       {own.length > 0 && (
-        <ul aria-label="Ошибки узла" className="space-y-1 text-xs text-red-300">
+        <ul
+          aria-label="Ошибки узла"
+          className="flex flex-col gap-1 rounded-md bg-err-bg px-3 py-2 text-xs text-err"
+        >
           {own.map((issue, index) => (
             <li key={index}>
               {issue.place}: {issue.reason}
@@ -144,16 +178,20 @@ export function NodeCard({
       )}
 
       {!readOnly && rules.canRemove(node) && (
-        <button
-          type="button"
-          className={buttonClass}
-          onClick={() => {
-            onChange(removeNode(document, catalog, id));
-            onSelect(undefined);
-          }}
-        >
-          Удалить узел
-        </button>
+        <div className="-mx-4 mt-1 -mb-4 flex items-center justify-between border-t border-line px-2.5 py-2">
+          <Button
+            variant="danger"
+            onClick={() => {
+              onChange(removeNode(document, catalog, id));
+              onSelect(undefined);
+            }}
+          >
+            Удалить узел
+          </Button>
+          <span aria-hidden="true" className="pr-1.5 font-mono text-[11px] text-faint">
+            Delete
+          </span>
+        </div>
       )}
     </Card>
   );
@@ -178,26 +216,29 @@ function SignalOfNode({
 }) {
   const latest = info?.latestVersion ?? null;
   return (
-    <section aria-label="Сигнал узла" className="flex flex-col gap-1">
-      <span>
-        Сигнал <span className="font-mono">{info?.name ?? (info ? 'не найден' : 'загрузка')}</span>
+    <section aria-label="Сигнал узла" className="flex flex-col gap-1.5">
+      <FieldLabel>Сигнал</FieldLabel>
+      <span className="flex items-baseline justify-between gap-2">
+        <span className="truncate font-mono">
+          {info?.name ?? (info ? 'не найден' : 'загрузка')}
+        </span>
+        <span className="shrink-0 text-xs text-muted">версия {reference?.version ?? '—'}</span>
       </span>
-      <span className="text-xs text-zinc-400">версия {reference?.version ?? '—'}</span>
       {reference && latest !== null && latest > reference.version && (
-        <button
-          type="button"
-          className={buttonClass}
+        <Button
+          size="sm"
+          className="self-start border-warn text-warn"
           disabled={readOnly || onUpdate === undefined}
           onClick={() => onUpdate?.(node)}
         >
           Обновить до версии {latest}
-        </button>
+        </Button>
       )}
       {info?.name && (
         <Link
           to="/signals/$name"
           params={{ name: info.name }}
-          className="text-xs text-amber-300 hover:text-amber-200"
+          className="self-start text-xs font-semibold text-accent hover:underline"
         >
           Открыть сигнал
         </Link>
@@ -232,13 +273,23 @@ function InputSource({
   const value = findNode(document.graph, node)?.inputs?.[pin.name];
 
   return (
-    <fieldset className="flex flex-col gap-1">
-      <legend>
-        {pin.name} <span className="text-xs text-zinc-500">{pin.type}</span>
+    <fieldset className="flex min-w-0 flex-col gap-1.5">
+      <legend className="mb-1.5">
+        <FieldLabel>
+          {pin.name}
+          <span className="flex items-center gap-1.5 font-normal tracking-normal text-faint normal-case">
+            <span
+              aria-hidden="true"
+              className={`size-1.5 rounded-full ${pinLooks[pin.type].dot}`}
+            />
+            {pinLooks[pin.type].word}
+          </span>
+        </FieldLabel>
       </legend>
-      <select
+      <SelectField
         aria-label={`Источник ${pin.name}`}
-        className={fieldClass}
+        mono
+        className="w-full"
         value={wire?.from ?? ''}
         disabled={readOnly}
         onChange={(event) => {
@@ -253,11 +304,11 @@ function InputSource({
             {from}
           </option>
         ))}
-      </select>
+      </SelectField>
       {!wire && pin.type !== 'event' && (
-        <input
+        <TextField
           aria-label={`Значение ${pin.name}`}
-          className={fieldClass}
+          mono
           defaultValue={formatValue(value)}
           key={formatValue(value)}
           placeholder={pin.fallback === undefined ? undefined : formatValue(pin.fallback)}

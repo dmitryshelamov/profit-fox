@@ -55,6 +55,14 @@ internal static class StrategyRepositoryQueries
         ORDER BY s.name
         """;
 
+    private const string UsingSignalsSql =
+        """
+        SELECT DISTINCT x.signal_id AS "Signal", s.name AS "Name"
+        FROM strategy_signals x
+        JOIN strategies s ON s.id = x.strategy_id
+        ORDER BY s.name
+        """;
+
     public static CommandDefinition Names(CancellationToken cancellationToken)
     {
         return new CommandDefinition(NamesSql, cancellationToken: cancellationToken);
@@ -135,5 +143,13 @@ internal static class StrategyRepositoryQueries
     public static CommandDefinition UsingSignal(Guid signal, CancellationToken cancellationToken)
     {
         return new CommandDefinition(UsingSignalSql, new { Signal = signal }, cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    ///     Every signal a version of a strategy points at, with the name of the strategy, in name order.
+    /// </summary>
+    public static CommandDefinition UsingSignals(CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(UsingSignalsSql, cancellationToken: cancellationToken);
     }
 }
