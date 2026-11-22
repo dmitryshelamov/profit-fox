@@ -52,11 +52,36 @@ const edgeTypes = { back: BackWire };
  * the order on the right to the orders of the position on the left, not a curve through them.
  */
 function BackWire({ id, sourceX, sourceY, targetX, targetY, style, markerEnd }: EdgeProps) {
-  const lift =
-    Math.max(80, Math.abs(sourceX - targetX) / 3) + Math.max(0, Math.abs(sourceY - targetY) / 2);
-  const top = Math.min(sourceY, targetY) - lift;
-  const path = `M ${sourceX},${sourceY} C ${sourceX + 120},${top} ${targetX - 120},${top} ${targetX},${targetY}`;
-  return <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />;
+  return (
+    <BaseEdge
+      id={id}
+      path={backWirePath(sourceX, sourceY, targetX, targetY)}
+      style={style}
+      markerEnd={markerEnd}
+    />
+  );
+}
+
+/**
+ * How far over the higher of its two ends the arc of a wire back rises, in px of the canvas. The height does not grow
+ * with the distance between the ends: an arc that did went above the canvas and under the bars of the header once the
+ * graph was fit into view, which counts the nodes and not the wires.
+ */
+export const backArcRise = 60;
+
+/**
+ * The path of a wire back: it leaves its output to the right, rises over the nodes and comes to its input from the
+ * left. Both control points of the curve are at one height, and a curve between level ends reaches three quarters of
+ * the way to them; with one end lower it rises less.
+ */
+export function backWirePath(
+  sourceX: number,
+  sourceY: number,
+  targetX: number,
+  targetY: number,
+): string {
+  const top = Math.min(sourceY, targetY) - backArcRise / 0.75;
+  return `M ${sourceX},${sourceY} C ${sourceX + 120},${top} ${targetX - 120},${top} ${targetX},${targetY}`;
 }
 
 /** The whole graph in view, never larger than its real size: a small graph opens at 100 %. */

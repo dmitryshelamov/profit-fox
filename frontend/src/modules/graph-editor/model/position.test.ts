@@ -3,7 +3,7 @@ import ladderFile from '@/test/ladder.fixture.json';
 import { fundingShort, strategyCatalog } from '@/test/strategies';
 
 import { strategyRules } from '../document';
-import { coloredWires } from '../ui/GraphCanvas';
+import { backArcRise, backWirePath, coloredWires } from '../ui/GraphCanvas';
 import { legendTypes, pinLooks } from '../ui/looks';
 import { backWires, toFlow } from './flow';
 import { layoutGraph } from './layout';
@@ -177,6 +177,47 @@ describe('a wire back into the position', () => {
     );
     expect(places.position!.x).toBe(0);
     expect(places.sell!.x).toBeGreaterThan(places['sell-price']!.x);
+  });
+});
+
+/** How far the arc of a path `M x,y C x,y x,y x,y` rises above the higher of its two ends, in px. */
+function riseOf(path: string): number {
+  const [from, first, second, to] = [...path.matchAll(/(-?[\d.]+),(-?[\d.]+)/g)].map((point) =>
+    Number(point[2]),
+  ) as [number, number, number, number];
+  let top = Infinity;
+  for (let step = 0; step <= 1000; step += 1) {
+    const t = step / 1000;
+    const y =
+      (1 - t) ** 3 * from +
+      3 * (1 - t) ** 2 * t * first +
+      3 * (1 - t) * t ** 2 * second +
+      t ** 3 * to;
+    top = Math.min(top, y);
+  }
+
+  return Math.min(from, to) - top;
+}
+
+// Change add-position-node, task 12.5: an arc that grew with the distance went above the canvas after «Вписать».
+describe('the arc of a wire back', () => {
+  it('rises 60 px over its ends when they are near', () => {
+    expect(backArcRise).toBe(60);
+    expect(riseOf(backWirePath(500, 100, 200, 100))).toBeCloseTo(60);
+  });
+
+  it('rises no higher when its ends are far apart', () => {
+    const long = riseOf(backWirePath(2600, 100, 200, 100));
+
+    expect(long).toBeGreaterThan(30);
+    expect(long).toBeLessThanOrEqual(60);
+  });
+
+  it('rises no higher over the higher end when the other is far below', () => {
+    for (const path of [backWirePath(2600, 900, 200, 100), backWirePath(900, 100, 200, 900)]) {
+      expect(riseOf(path)).toBeGreaterThan(20);
+      expect(riseOf(path)).toBeLessThanOrEqual(60);
+    }
   });
 });
 
