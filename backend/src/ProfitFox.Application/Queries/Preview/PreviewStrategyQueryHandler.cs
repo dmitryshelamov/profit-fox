@@ -31,6 +31,7 @@ internal sealed class PreviewStrategyQueryHandler(IHistorySource source, IInstru
     : IRequestHandler<PreviewStrategyQuery, StrategyPreviewOutcomeInternal>
 {
     /// <exception cref="HistoryUnavailableException">The market-data service did not give the pairs or the history.</exception>
+    /// <exception cref="OperationCanceledException">The request was cancelled; the cycles stop being counted.</exception>
     public async Task<StrategyPreviewOutcomeInternal> Handle(PreviewStrategyQuery query, CancellationToken cancellationToken)
     {
         List<PreviewErrorInternal> errors = [];
@@ -144,7 +145,8 @@ internal sealed class PreviewStrategyQueryHandler(IHistorySource source, IInstru
             MinutePaths.Build(from, to, minutes, history.Funding),
             from,
             to,
-            costs);
+            costs,
+            cancellationToken);
         return (result.Orders, result.Cycles, from);
     }
 

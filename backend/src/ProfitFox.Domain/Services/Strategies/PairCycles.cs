@@ -29,8 +29,10 @@ public static class PairCycles
 
     /// <summary>
     ///     The run of the strategy on the candles of its timeframe, the funding of the pair and the minute path of the window
-    ///     that starts at <paramref name="from" />, finished at <paramref name="end" />.
+    ///     that starts at <paramref name="from" />, finished at <paramref name="end" />. A cancelled
+    ///     <paramref name="cancellationToken" /> stops the calculation: the request of the preview was given up.
     /// </summary>
+    /// <exception cref="OperationCanceledException">The token was cancelled.</exception>
     public static PositionResult Of(
         TradingStrategy strategy,
         TimeSpan timeframe,
@@ -39,9 +41,10 @@ public static class PairCycles
         MinutePath path,
         DateTimeOffset from,
         DateTimeOffset end,
-        TradeCosts costs)
+        TradeCosts costs,
+        CancellationToken cancellationToken = default)
     {
-        var run = new PositionRun(strategy, path, costs, from, end);
+        var run = new PositionRun(strategy, path, costs, from, end, cancellationToken);
         foreach ((ClosedCandle candle, FundingPayment? lastFunding) in PairCandles.Closed(timeframe, candles, funding))
         {
             if (candle.CloseTime > end)
@@ -49,6 +52,7 @@ public static class PairCycles
                 break;
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             run.Step(candle, lastFunding);
         }
 

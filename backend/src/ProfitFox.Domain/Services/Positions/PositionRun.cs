@@ -18,6 +18,7 @@ namespace ProfitFox.Domain.Services.Positions;
 ///     again after every fill, the orders of its nodes, their fills minute by minute, and the cycles of the position, whose
 ///     fills and result <see cref="CycleRun" /> keeps. The graph runs on every candle from the first; orders are taken from
 ///     <c>from</c> on, where the position is closed, and nothing is known after <c>end</c>, where the computed history ends.
+///     A cancelled token stops the run at its next minute or fill.
 ///     <list type="number">
 ///         <item>An order placed at a close takes part from the minute of the close; one placed after a fill, from the next.</item>
 ///         <item>
@@ -65,6 +66,7 @@ public sealed class PositionRun
     private readonly List<OrderOutcome> _orders = [];
     private readonly long _from;
     private readonly DateTimeOffset _end;
+    private readonly CancellationToken _cancellation;
     private CycleRun? _cycle;
     private long _minute;
     private double _lastClose = double.NaN;
@@ -74,8 +76,9 @@ public sealed class PositionRun
     private bool _limitDecrease;
     private DateTimeOffset _close;
 
-    public PositionRun(TradingStrategy strategy, MinutePath path, TradeCosts costs, DateTimeOffset from, DateTimeOffset? end = null)
+    public PositionRun(TradingStrategy strategy, MinutePath path, TradeCosts costs, DateTimeOffset from, DateTimeOffset? end = null, CancellationToken cancellationToken = default)
     {
+        _cancellation = cancellationToken;
         _path = path;
         _end = end ?? path.Start + TimeSpan.FromMinutes(path.Minutes);
         _costs = costs;
@@ -118,11 +121,13 @@ public sealed class PositionRun
     /// <summary>
     ///     Walks the minutes before <paramref name="until" />.
     /// </summary>
+    /// <exception cref="OperationCanceledException">The token of the run was cancelled.</exception>
     public void Advance(DateTimeOffset until)
     {
         long end = _path.MinuteIndex(until);
         for (; _minute < end; _minute++)
         {
+            _cancellation.ThrowIfCancellationRequested();
             Minute(_minute);
         }
     }
@@ -194,6 +199,7 @@ public sealed class PositionRun
         _limitDecrease = false;
         for (int fills = 0; Fill(minute, time, open, high, low); fills++)
         {
+            _cancellation.ThrowIfCancellationRequested();
             if (fills >= MaxFillsInMinute)
             {
                 throw new InvalidOperationException($"The strategy fills orders without end in the minute {time:O}.");

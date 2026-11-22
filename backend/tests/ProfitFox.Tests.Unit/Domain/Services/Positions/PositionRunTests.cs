@@ -1,4 +1,5 @@
 using ProfitFox.Domain.Services.Positions;
+using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
 using ProfitFox.Domain.ValueObjects.Positions;
 using ProfitFox.Domain.ValueObjects.Strategies;
@@ -658,6 +659,41 @@ public sealed class PositionRunTests
         Assert.That(result.Cycles[1].Fills.Select(fill => (fill.Moment, fill.Node)), Is.EqualTo(new[] { (Paths.At(6), "entry") }), "the order of the first cycle does not close the second");
         Assert.That(result.Cycles[1].Open, Is.True);
         Assert.That(result.Orders.Where(order => order.Node == "out"), Is.Empty);
+    }
+
+    [Test]
+    public void A_cycle_of_twenty_thousand_fills_is_counted_within_two_seconds()
+    {
+        // Task 11.6: the quantity and the money put in are running sums, so the state of the position after each fill does
+        // not cost a pass over all the entries. A market buy in every minute of 20 000.
+        string json = WithPosition(
+            """{ "id": "always", "kind": "market-order", "settings": { "side": "buy", "sizeIn": "amount" }, "inputs": { "when": true, "size": 100 } }""",
+            Into("always"));
+        MinutePath path = new Paths().Flat(100, 20_000).Build(withFunding: false);
+        TradingStrategy strategy = Strategy(json);
+
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var run = new PositionRun(strategy, path, Free, Paths.Start);
+        run.Step(Hour(0), lastFunding: null);
+        PositionResult result = run.Finish(Paths.At(20_000));
+        watch.Stop();
+
+        CycleOutcome cycle = result.Cycles.Single();
+        Assert.That((cycle.Entries, cycle.MaxInvested), Is.EqualTo((20_000, 2_000_000.0)));
+        Assert.That(watch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(2)));
+    }
+
+    [Test]
+    public void A_cancelled_run_stops_at_its_next_minute()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var run = new PositionRun(Strategy(Graphs.Ladder), new Paths().Flat(100, 120).Build(withFunding: false), Free, Paths.Start, cancellationToken: cancellation.Token);
+        run.Step(Hour(0), lastFunding: null);
+        run.Advance(Paths.At(30));
+
+        cancellation.Cancel();
+
+        Assert.That(() => run.Advance(Paths.At(60)), Throws.InstanceOf<OperationCanceledException>());
     }
 
     // Buys 100 USDT by the market while there is no position; the cycle closes by its time.

@@ -33,6 +33,11 @@ public sealed class CycleRun
     private readonly List<CycleFill> _fills = [];
     private CycleExit _reason = CycleExit.None;
 
+    // The quantity held and the money put in, kept as running sums: the graph reads them after every fill, and a cycle
+    // may have thousands of entries. A cycle of one entry has exactly the quantity and the amount of its fill.
+    private double _quantity;
+    private double _invested;
+
     public EntrySide Side { get; }
 
     /// <summary>
@@ -56,9 +61,9 @@ public sealed class CycleRun
 
     public int Entries => _lots.Count;
 
-    public double Quantity => Closed ? 0 : Sum(_lots.Select(lot => lot.Quantity * lot.Remaining));
+    public double Quantity => Closed ? 0 : _quantity;
 
-    public double Invested => Closed ? 0 : Sum(_lots.Select(lot => lot.Amount * lot.Remaining));
+    public double Invested => Closed ? 0 : _invested;
 
     /// <summary>
     ///     The money put in over the quantity; a cycle of one entry has the price of its fill, which a decrease keeps.
@@ -149,6 +154,9 @@ public sealed class CycleRun
             _lots[index] = lot with { Remaining = whole ? 0 : lot.Remaining - part };
         }
 
+        // The money put in falls in the share the quantity does.
+        _quantity = whole ? 0 : held - sold;
+        _invested = whole ? 0 : _invested - _invested * share;
         Closed = whole;
         if (whole)
         {
@@ -375,6 +383,8 @@ public sealed class CycleRun
     {
         double quantity = amount / fill;
         _lots.Add(new Lot(moment, raw, fill, amount, quantity, Remaining: 1, maker));
+        _quantity = _lots.Count == 1 ? quantity : _quantity + quantity;
+        _invested = _lots.Count == 1 ? amount : _invested + amount;
         MaxInvested = Math.Max(MaxInvested, Invested);
         _fills.Add(new CycleFill(moment, action, IsLong ? FillSide.Buy : FillSide.Sell, fill, quantity, amount, node));
     }
