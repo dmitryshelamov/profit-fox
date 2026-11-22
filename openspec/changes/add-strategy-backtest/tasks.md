@@ -14,7 +14,7 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 ## 1. База
 
-- [ ] 1.1 Ветка `feat/add-strategy-backtest` срезана с `release/0.1.0` (`4bd9c6a`). Снять и записать в раздел «База»:
+- [x] 1.1 Ветка `feat/add-strategy-backtest` срезана с `release/0.1.0` (`4bd9c6a`). Снять и записать в раздел «База»:
   число unit- и интеграционных тестов бэкенда и тестов фронтенда, число предупреждений сборки `Release`, SHA-256
   документа `/openapi/v1.json`, `schema.d.ts` и `EngineVersions.json`. Проверить: раздел «База» заполнен, `openspec
   validate add-strategy-backtest --strict` проходит.
@@ -169,7 +169,29 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 Сюда записывается всё, что при применении разошлось с design.md.
 
+- **1.1, проверка OpenSpec.** CLI `openspec` 2.1.1 (последний в npm на день применения) в режиме `--strict` не
+  пропускает изменение: предупреждение «Requirement text is very long (>500 characters)» у требования «Создание,
+  переименование, копирование и удаление стратегии» в дельте `strategy-constructor` (текст требования 520 знаков, а
+  `--strict` считает предупреждение ошибкой). На CLI 2.0.0 и 2.1.0 проверка проходит без замечаний. Текст требования —
+  артефакт владельца, при применении он не правился; проверки этого изменения идут на CLI 2.1.0. Предложение: разбить
+  требование на два («Создание стратегии» и «Переименование, копирование и удаление») либо закрепить версию CLI.
+
 ## База
+
+Снято в облачной сессии применения на `acee454` (ветка `feat/add-strategy-backtest`, срезана с `release/0.1.0` на
+`4bd9c6a`), .NET SDK 10.0.115, Node 22.
+
+- Тесты бэкенда: unit 471, интеграционные 215 (Postgres в Docker, `TESTCONTAINERS_RYUK_DISABLED=true`), все зелёные.
+- Тесты фронтенда: 257 в 20 файлах, все зелёные.
+- Сборка `dotnet build ProfitFox.slnx --configuration Release`: 0 предупреждений, 0 ошибок.
+- SHA-256 `/openapi/v1.json` (API в `Development` на `http://localhost:5240`):
+  `27da8b2e20552ff1886f00b8cc3b3bbf26e6917a5f8d033a4da90b09c3ede960`.
+- SHA-256 `frontend/src/api/generated/schema.d.ts`: `a77596e64078d8f6aa3f3ead75e28c0e90a8ef12ffdf96f5bf8558518e8bf647`
+  (пересборка `npm run generate:api` из запущенного API даёт тот же файл).
+- SHA-256 `Tests.Integration/Fixtures/EngineVersions.json`:
+  `f94ec0a7a01577bf6151c1db94412b6e5371f3b5f9bbec4ef49165facef954b9`.
+- `openspec validate add-strategy-backtest --strict` проходит на CLI 2.0.0 и 2.1.0; на CLI 2.1.1 — нет, см. «Открыто
+  после применения», запись «1.1, проверка OpenSpec».
 
 ## Замеры
 
