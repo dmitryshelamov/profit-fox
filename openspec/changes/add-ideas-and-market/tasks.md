@@ -14,10 +14,10 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 ## 1. База
 
-- [ ] 1.1 Снять базу до правок: `dotnet build ProfitFox.slnx --configuration Release`, тесты бэкенда и фронтенда,
+- [x] 1.1 Снять базу до правок: `dotnet build ProfitFox.slnx --configuration Release`, тесты бэкенда и фронтенда,
   SHA-256 `Fixtures/EngineVersions.json` и `/openapi/v1.json`. Проверить: числа тестов, предупреждений и оба хэша
   записаны в разделе «База».
-- [ ] 1.2 Если `feat/add-strategy-backtest` уже влита в `release/0.1.0`, а `add-strategy-backtest` заархивировано —
+- [x] 1.2 Если `feat/add-strategy-backtest` уже влита в `release/0.1.0`, а `add-strategy-backtest` заархивировано —
   перенести ветку на `release/0.1.0`. Проверить: `openspec validate add-ideas-and-market --strict` проходит без строки
   `INFO` про `strategy-backtest`; иначе записать в «Открыто после применения», что проверка шла на несинхронных спеках.
 
@@ -245,7 +245,25 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 Сюда записывается всё, что при применении разошлось с design.md.
 
+- **1.2, несинхронные спеки.** На 2026-11-22 `origin/release/0.1.0` (`ba00e19`, слияние `feat/add-strategy-backtest`)
+  не содержит `openspec/changes/archive/*-add-strategy-backtest`: изменение `add-strategy-backtest` не заархивировано.
+  Ветка не переносилась. `openspec validate add-ideas-and-market --strict` (CLI 2.1.0) проходит, но печатает `INFO`:
+  `strategy-backtest/spec.md: Archive would refuse this delta: ... target spec does not exist`. Проверка шла на
+  несинхронных спеках; перед архивом её повторить после архива `add-strategy-backtest`.
+
 ## База
+
+Снято в облачной сессии применения на `61b0584` (ветка `feat/add-ideas-and-market`), .NET SDK 10.0.115, Node 22,
+OpenSpec CLI 2.1.0.
+
+- Тесты бэкенда: unit 487, интеграционные 197 (Postgres в Docker), все зелёные.
+- Тесты фронтенда: 268 в 18 файлах, все зелёные; `typecheck`, `lint`, `format:check` и `build` зелёные.
+- Сборка `dotnet build ProfitFox.slnx --configuration Release`: 0 предупреждений, 0 ошибок.
+- SHA-256 `Tests.Integration/Fixtures/EngineVersions.json`:
+  `1f7ae3ab13b0f59f7d325c6b91e455781cb9a396e15a8e18a5889f4616335884`; `EngineVersion.Number = 3`.
+- SHA-256 `/openapi/v1.json` (API в `Development` на `http://localhost:5240`):
+  `ff59cbf7c1ed3f5f97358570273569b4b6443a11ea9d6247a78ee8b55454e4c7`; SHA-256
+  `frontend/src/api/generated/schema.d.ts`: `bd5a5e0b05a89d53c781bd0be71028b082e191476379c952669482aaae6f4c0a`.
 
 ## Замеры
 
