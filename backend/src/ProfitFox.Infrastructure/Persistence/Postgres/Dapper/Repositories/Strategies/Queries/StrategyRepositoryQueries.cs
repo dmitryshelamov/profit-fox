@@ -29,12 +29,14 @@ internal static class StrategyRepositoryQueries
         WHERE s.name = @Name
         """;
 
+    // A strategy without a written kind has the kind of its latest version (task 12.7): its graph comes too.
     private const string ReadVersionSql =
         """
         SELECT s.id AS "Id", s.name AS "Name", s.description AS "Description", s.layout::text AS "Layout", v.version AS "Version", v.graph::text AS "Graph",
-               s.kind AS "Kind"
+               s.kind AS "Kind", CASE WHEN s.kind IS NULL THEN l.graph::text END AS "LatestGraph"
         FROM strategies s
         JOIN strategy_versions v ON v.strategy_id = s.id AND v.version = @Version
+        JOIN strategy_versions l ON l.strategy_id = s.id AND l.version = s.version
         WHERE s.name = @Name
         """;
 

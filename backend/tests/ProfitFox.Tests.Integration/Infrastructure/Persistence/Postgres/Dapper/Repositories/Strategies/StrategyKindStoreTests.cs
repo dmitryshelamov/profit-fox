@@ -63,6 +63,28 @@ public sealed class StrategyKindStoreTests
         Assert.That(list.Single().Kind, Is.EqualTo(StrategyKind.Bot));
     }
 
+    /// <summary>
+    ///     Task 12.7: a version by its number of a strategy without a written kind has the kind of the latest version, as the
+    ///     list and the editor show it (design.md, decision 1), not the kind of its own graph.
+    /// </summary>
+    [Test]
+    public async Task A_former_version_of_a_strategy_without_a_kind_has_the_kind_of_the_latest_version()
+    {
+        await _strategies.CreateAsync(StrategyDocumentGenerator.Generate(Guid.Empty, name: "mixed", graph: StrategyDocumentGenerator.GenerateGraph(signal: null)), _none);
+        await _strategies.ReplaceAsync(StrategyDocumentGenerator.Generate(Guid.Empty, name: "mixed", graph: Ladder(), kind: StrategyKind.Idea), _none);
+        await using (NpgsqlConnection connection = await BenchDatabase.DataSource.OpenConnectionAsync())
+        {
+            await connection.ExecuteAsync("UPDATE strategies SET kind = NULL WHERE name = 'mixed'");
+        }
+
+        StrategyDocument latest = (await _strategies.ReadAsync("mixed", _none))!.Strategy!;
+        StrategyDocument first = (await _strategies.ReadVersionAsync("mixed", 1, _none))!.Strategy!;
+
+        Assert.That(latest.Kind, Is.EqualTo(StrategyKind.Bot), "the latest version is the ladder");
+        Assert.That(first.Kind, Is.EqualTo(StrategyKind.Bot), "version 1 is a strategy by plan, but the strategy is one for a bot");
+        Assert.That(first.Version, Is.EqualTo(1));
+    }
+
     [Test]
     public async Task The_first_save_of_a_former_strategy_writes_its_kind()
     {
