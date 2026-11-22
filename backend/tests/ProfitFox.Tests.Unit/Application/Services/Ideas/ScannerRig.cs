@@ -28,10 +28,11 @@ internal sealed class ScannerRig
 
     public static readonly Instrument[] Pairs = [new Instrument("btc", "BTCUSDT"), new Instrument("eth", "ETHUSDT"), new Instrument("sol", "SOLUSDT")];
 
-    public ScannerRig()
+    public ScannerRig(Instrument[]? pairs = null)
     {
+        Instruments = pairs ?? Pairs;
         Time = new FakeTimeProvider(Ten.AddSeconds(5));
-        foreach (Instrument pair in Pairs)
+        foreach (Instrument pair in Instruments)
         {
             History.Candles[pair.Id] = (interval, before) => Warmup(interval, before, "99");
         }
@@ -48,6 +49,19 @@ internal sealed class ScannerRig
     }
 
     public FakeTimeProvider Time { get; }
+
+    /// <summary>
+    ///     The pairs of the set of this rig.
+    /// </summary>
+    public Instrument[] Instruments { get; }
+
+    /// <summary>
+    ///     <paramref name="count" /> pairs <c>P01USDT</c>, <c>P02USDT</c>… with the ids <c>p01</c>, <c>p02</c>…
+    /// </summary>
+    public static Instrument[] Many(int count)
+    {
+        return [.. Enumerable.Range(1, count).Select(index => new Instrument($"p{index:D2}", $"P{index:D2}USDT"))];
+    }
 
     public MemoryStrategyRepository Strategies { get; } = new MemoryStrategyRepository();
 
@@ -84,9 +98,9 @@ internal sealed class ScannerRig
     /// <summary>
     ///     Saves <c>close-up</c> as <paramref name="name" /> in <paramref name="version" /> and enables it on the timeframes.
     /// </summary>
-    public async Task<Guid> Enable(string name, string after, int version = 4, Guid? id = null, params TimeSpan[] timeframes)
+    public async Task<Guid> Enable(string name, string after, int version = 4, Guid? id = null, string side = "long", string operation = "gt", decimal level = 100, params TimeSpan[] timeframes)
     {
-        using var document = JsonDocument.Parse(CloseUp(after));
+        using var document = JsonDocument.Parse(CloseUp(after, side, operation, level));
         var strategy = StrategyDocument.Restore(id ?? Guid.NewGuid(), name, null, StrategyGraph.ReadForm(document.RootElement).Value!, new Dictionary<string, ProfitFox.Domain.ValueObjects.Signals.NodePosition>(), version, kind: StrategyKind.Idea);
         await Strategies.DeleteAsync(name, CancellationToken.None);
         await Strategies.CreateAsync(strategy, CancellationToken.None);
@@ -100,7 +114,7 @@ internal sealed class ScannerRig
     public async Task Start()
     {
         await Scanner.StartAsync(CancellationToken.None);
-        await Scanner.ApplyAsync(new MarketPairs(Pairs), CancellationToken.None);
+        await Scanner.ApplyAsync(new MarketPairs(Instruments), CancellationToken.None);
         await Warm();
     }
 
@@ -137,16 +151,65 @@ internal sealed class ScannerRig
         await Scanner.TickAsync(CancellationToken.None);
     }
 
-    private static string CloseUp(string after)
+    /// <summary>
+    ///     Saves the signal <paramref name="name" /> in <paramref name="version" /> with <paramref name="graph" /> and puts its
+    ///     label <paramref name="text" /> on <paramref name="timeframe" />.
+    /// </summary>
+    public async Task<Guid> Label(string name, string text, TimeSpan timeframe, string graph, int version = 1, Guid? id = null)
+    {
+        using var document = JsonDocument.Parse(graph);
+        var signal = ProfitFox.Domain.Entities.Signals.SignalDocument.Restore(
+            id ?? Guid.NewGuid(),
+            name,
+            null,
+            StrategyGraph.ReadForm(document.RootElement).Value!,
+            new Dictionary<string, ProfitFox.Domain.ValueObjects.Signals.NodePosition>(),
+            version);
+        if (await Signals.ExistsAsync(name, CancellationToken.None))
+        {
+            await Signals.DeleteAsync(name, CancellationToken.None);
+        }
+
+        await Signals.CreateAsync(signal, CancellationToken.None);
+        await Labels.SetAsync(new SignalLabel(signal.Id, true, text, timeframe), CancellationToken.None);
+        return signal.Id;
+    }
+
+    /// <summary>
+    ///     A signal on the close of BTCUSDT against <paramref name="level" />: a state (<paramref name="state" />) true while
+    ///     the close is below, or the event of the first time it is.
+    /// </summary>
+    public static string BtcBelow(decimal level, bool state = true)
+    {
+        string output = state ? "boolean" : "event";
+        string nodes = state ? "" : """, { "id": "first", "kind": "first-time" }""";
+        string wires = state
+            ? """{ "from": "low.result", "to": "out.down" }"""
+            : """{ "from": "low.result", "to": "first.value" }, { "from": "first.event", "to": "out.down" }""";
+        return $$"""
+                 {
+                   "formatVersion": 1,
+                   "outputs": [{ "name": "down", "type": "{{output}}" }],
+                   "nodes": [
+                     { "id": "btc", "kind": "pair-candle", "settings": { "symbol": "BTCUSDT" } },
+                     { "id": "low", "kind": "compare", "settings": { "operation": "lt" }, "inputs": { "b": {{level}} } },
+                     { "id": "out", "kind": "outputs" }{{nodes}}
+                   ],
+                   "wires": [{ "from": "btc.close", "to": "low.a" }, {{wires}}]
+                 }
+                 """;
+    }
+
+    private static string CloseUp(string after, string side, string operation, decimal level)
     {
         return $$"""
                  {
                    "formatVersion": 1,
                    "nodes": [
                      { "id": "c", "kind": "candle" },
-                     { "id": "up", "kind": "compare", "settings": { "operation": "gt" }, "inputs": { "b": 100 } },
+                     { "id": "up", "kind": "compare", "settings": { "operation": "{{operation}}" }, "inputs": { "b": {{level}} } },
                      { "id": "first", "kind": "first-time" },
-                     { "id": "enter", "kind": "enter", "settings": { "side": "long" }, "inputs": { "size": 100 } },
+                     { "id": "enter", "kind": "enter", "settings": { "side": "{{side}}" }, "inputs": { "size": 100 } },
                      { "id": "position", "kind": "position" },
                      { "id": "close-after", "kind": "close-after", "inputs": { "after": "{{after}}" } }
                    ],
