@@ -1,4 +1,5 @@
 using ProfitFox.Domain.Entities.Ideas;
+using ProfitFox.Domain.ValueObjects.Lists;
 
 namespace ProfitFox.Domain.Repositories;
 
@@ -28,4 +29,21 @@ public interface IIdeaRepository
     Task<IReadOnlyList<Idea>> OpenAsync(CancellationToken cancellationToken);
 
     Task<Idea?> FindAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     A page of the ideas that match the query, sorted by a field of <see cref="Services.Lists.ListFields.Ideas" />, a
+    ///     missing value last.
+    /// </summary>
+    Task<ListPage<Idea>> ListAsync(IdeaListQuery query, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     A page of the summary of the closed ideas that match the query, by strategy, version and timeframe, sorted by a
+    ///     field of <see cref="Services.Lists.ListFields.Summary" />; excluded ideas do not count.
+    /// </summary>
+    Task<ListPage<IdeaSummary>> SummaryAsync(IdeaListQuery query, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     How many open and how many closed ideas there are.
+    /// </summary>
+    Task<(int Open, int Closed)> CountsAsync(CancellationToken cancellationToken);
 }

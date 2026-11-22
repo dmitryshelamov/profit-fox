@@ -3,6 +3,7 @@ using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.Ideas;
+using ProfitFox.Domain.ValueObjects.Lists;
 using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
@@ -44,6 +45,21 @@ public sealed class MemoryIdeaRepository : IIdeaRepository
     {
         return Task.FromResult(Ideas.FirstOrDefault(idea => idea.Id == id));
     }
+
+    public Task<ListPage<Idea>> ListAsync(IdeaListQuery query, CancellationToken cancellationToken)
+    {
+        throw new NotSupportedException("The lists of ideas are those of the database.");
+    }
+
+    public Task<ListPage<IdeaSummary>> SummaryAsync(IdeaListQuery query, CancellationToken cancellationToken)
+    {
+        throw new NotSupportedException("The summary is that of the database.");
+    }
+
+    public Task<(int Open, int Closed)> CountsAsync(CancellationToken cancellationToken)
+    {
+        return Task.FromResult((Ideas.Count(idea => idea.State == IdeaState.Open), Ideas.Count(idea => idea.State == IdeaState.Closed)));
+    }
 }
 
 /// <summary>
@@ -60,6 +76,21 @@ public sealed class MemoryMarketPairRepository : IMarketPairRepository
         Pairs = pairs;
         Writes++;
         return Task.CompletedTask;
+    }
+
+    public Task<ListPage<MarketPairRow>> ListAsync(MarketListQuery query, CancellationToken cancellationToken)
+    {
+        throw new NotSupportedException("The list of the market is that of the database.");
+    }
+
+    public Task<MarketPairRow?> FindAsync(string symbol, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(Pairs.FirstOrDefault(pair => pair.Symbol == symbol) is { } pair ? new MarketPairRow(pair, []) : null);
+    }
+
+    public Task<FilterCount> CountAsync(IReadOnlyList<FilterCondition> conditions, CancellationToken cancellationToken)
+    {
+        throw new NotSupportedException("The count is that of the database.");
     }
 }
 
