@@ -30,8 +30,12 @@ export function RunPage({ id }: { readonly id: string }) {
   const run = useQuery({
     queryKey: ['run', id],
     queryFn: () => getRun(id),
+    // After an error, such as a run removed by a cancel in another tab, the data are of the past and asking stops
+    // (task 12.5).
     refetchInterval: (query) =>
-      query.state.data && !ended(query.state.data.state) ? pollMs : false,
+      query.state.status !== 'error' && query.state.data && !ended(query.state.data.state)
+        ? pollMs
+        : false,
   });
 
   return (
@@ -46,7 +50,7 @@ export function RunPage({ id }: { readonly id: string }) {
         </Link>
         {run.isPending && <p className="text-muted">Загрузка…</p>}
         {run.error && <p className="text-err">{run.error.message}</p>}
-        {run.data && <Details run={run.data} />}
+        {run.data && !run.error && <Details run={run.data} />}
       </div>
     </Page>
   );

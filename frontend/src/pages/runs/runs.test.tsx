@@ -390,6 +390,29 @@ describe('the page of a run', () => {
     expect(screen.queryByText(/Invalid time value/)).toBeNull();
   });
 
+  // Task 12.5: a waiting run cancelled in another tab is removed; the page stops asking for it and does not say it waits.
+  it('stops asking for a run that is gone and does not say it waits', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let gone = false;
+    const requests = routes({
+      'GET /api/backtests/r6': () =>
+        gone ? json({ title: 'Not Found' }, 404) : json(backtest({ id: 'r6' })),
+    });
+    renderApp('/runs/r6');
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Прогон ждёт своей очереди.');
+    gone = true;
+    await act(() => vi.advanceTimersByTimeAsync(3100 * 3));
+
+    expect(await screen.findByText('Прогона r6 нет.')).toBeInTheDocument();
+    expect(screen.queryByText('Прогон ждёт своей очереди.')).toBeNull();
+    const asked = requests.filter((request) => request.url.endsWith('/api/backtests/r6')).length;
+    await act(() => vi.advanceTimersByTimeAsync(3100 * 3));
+    expect(requests.filter((request) => request.url.endsWith('/api/backtests/r6'))).toHaveLength(
+      asked,
+    );
+  });
+
   it('says that a run waits, and leads from a run of the rest of history to its source', async () => {
     routes({
       'GET /api/backtests/r5': () =>
