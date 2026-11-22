@@ -212,6 +212,7 @@ function RunForm({ strategy }: { readonly strategy: StrategyResponse }) {
                 <input
                   type="checkbox"
                   className="accent-accent"
+                  value={timeframe}
                   checked={checked.includes(timeframe)}
                   onChange={(event) =>
                     setChecked(

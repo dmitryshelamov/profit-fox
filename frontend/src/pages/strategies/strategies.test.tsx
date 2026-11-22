@@ -815,8 +815,11 @@ describe('the runs of a strategy', () => {
     renderApp(newStrategy('idea'));
     await findNode('Вход', 'enter');
 
+    // Task 12.10: the name stays «Прогнать», the reason is its description.
     const run = screen.getByRole('button', { name: 'Прогнать' });
     expect(run).toBeDisabled();
+    expect(run).toHaveAccessibleName('Прогнать');
+    expect(run).toHaveAccessibleDescription('сначала сохраните стратегию');
     expect(run).toHaveAttribute('title', 'сначала сохраните стратегию');
   });
 

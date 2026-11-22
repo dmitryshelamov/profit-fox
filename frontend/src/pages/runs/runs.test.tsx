@@ -280,6 +280,19 @@ describe('the page of a run', () => {
     expect(screen.getByLabelText('Предупреждение')).toHaveTextContent('Выжившие пары');
   });
 
+  // Task 12.10: a time under a minute is written once, a longer one with its minutes.
+  it('writes a time under a minute once and a longer one with its minutes', async () => {
+    routes({
+      'GET /api/backtests/r1': () => json({ ...doneSix, readSeconds: 14, computeSeconds: 754 }),
+    });
+    renderApp('/runs/r1');
+
+    const details = within(await screen.findByRole('region', { name: 'Детали' }));
+    expect(details.getByText('14 с')).toBeInTheDocument();
+    expect(details.queryByText('14 с (14 с)')).toBeNull();
+    expect(details.getByText('754 с (12 мин 34 с)')).toBeInTheDocument();
+  });
+
   // Scenario «Копирование хэша данных».
   it('shows the hash of the data by its ends and copies it whole', async () => {
     const writeText = vi.fn(() => Promise.resolve());
@@ -654,6 +667,19 @@ describe('the form of a run', () => {
 
     expect(form().getByRole('list', { name: 'Пары прогона' })).toHaveTextContent('BTCUSDT');
     expect(run).toBeEnabled();
+  });
+
+  // Task 12.10: the checkboxes of the timeframes are named and valued by their timeframes, not «on».
+  it('names the checkboxes of the timeframes by their timeframes', async () => {
+    routes({ 'GET /api/strategies/funding-short/versions/3': () => json(strategyVersion()) });
+    renderApp('/strategies/funding-short/run?version=3');
+
+    const group = within(await screen.findByRole('group', { name: 'Таймфреймы' }));
+    const boxes = group.getAllByRole('checkbox');
+    expect(boxes.map((box) => box.getAttribute('value'))).toEqual(['1h', '4h', '1d']);
+    for (const timeframe of ['1h', '4h', '1d']) {
+      expect(group.getByRole('checkbox', { name: timeframe })).toHaveAttribute('value', timeframe);
+    }
   });
 
   // Task 12.2: a fee written with a comma is read as with a point.

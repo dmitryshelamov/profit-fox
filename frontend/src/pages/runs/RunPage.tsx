@@ -205,10 +205,14 @@ function Details({ run }: { readonly run: Run }) {
   );
 }
 
+/** A time in seconds; from a minute on with its minutes and hours too, «754 с (12 мин 34 с)» (task 12.10). */
 function seconds(value: number | string | null | undefined): string {
-  return value === null || value === undefined
-    ? '—'
-    : `${fixed(value, 0)} с (${span(Number(value))})`;
+  if (value === null || value === undefined) {
+    return '—';
+  }
+
+  const whole = fixed(value, 0);
+  return Math.round(Number(value)) < 60 ? `${whole} с` : `${whole} с (${span(Number(value))})`;
 }
 
 /** Why a run has no result: it waits, goes, was cancelled or failed with its whole reason. */
