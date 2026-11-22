@@ -1,13 +1,11 @@
 # The image of the bench API with the page of the bench. Build context: the repository root, because the image needs
-# frontend/ and bench/ (the fixtures of the frontend tests) besides backend/. It listens where ASPNETCORE_URLS or the Kestrel section says; docker-compose.prod.yml
+# frontend/ besides backend/. It listens where ASPNETCORE_URLS or the Kestrel section says; docker-compose.prod.yml
 # opens it on 5240.
 FROM node:22 AS frontend
 WORKDIR /source/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
-# The type check of the build reads the test fixtures from bench/hypotheses.
-COPY bench/ /source/bench/
 RUN npm run build
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build

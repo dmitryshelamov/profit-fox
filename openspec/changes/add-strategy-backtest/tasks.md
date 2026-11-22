@@ -152,7 +152,7 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 - [x] 11.1 Сборка `Release` без предупреждений; все тесты бэкенда и фронтенда зелёные; `typecheck`, `lint`,
   `format:check` и `build` зелёные; проверка однострочных `<summary>` из `ci.yml` пуста; `openspec validate
   add-strategy-backtest --strict` проходит. Итог и числа тестов записать в «Замеры».
-- [ ] 11.2 Образ: `docker build` по `backend/src/ProfitFox.Presentation/Dockerfile` из корня проходит.
+- [x] 11.2 Образ: `docker build` по `backend/src/ProfitFox.Presentation/Dockerfile` из корня проходит.
 - [ ] 11.3 Вживую на dev-запуске (`bench-db`, `bench-api`, `bench-worker`, `frontend`) в окне 1440×900 — у основной
   сессии: создать стратегии обоих видов; открыть `funding-short` и `ladder`, сохранённые без вида; добавить
   `funding-short` параметр `threshold`, подключённый ко входу узла сигнала, и сохранить; прогнать её на `4h` по
@@ -266,16 +266,13 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   красным до коммита группы 10: прежние страницы прогонов и гипотез читали удалённые типы. Коммит группы 9 сам по себе
   не собирается — маршрут формы и страницы прогонов приходят в группе 10.
 
-- **11.2, образ — не отмечена.** `docker build` по `backend/src/ProfitFox.Presentation/Dockerfile` из корня не проходит:
-  строка `COPY bench/ /source/bench/` копирует папку `bench/`, которую удалила задача 8.3, и сборка падает с
-  `"/bench": not found`. Dockerfile репозитория по условию применения не правился, поэтому задача остаётся открытой.
-  Проверено на временных копиях Dockerfile вне репозитория, где добавлено только доверие к сертификату прокси сессии и
-  apt по HTTPS (прокси сессии не пропускает HTTP): с этой строкой сборка падает там же, без неё проходит целиком —
-  `npm ci`, сборка фронтенда с проверкой типов, `dotnet publish` без предупреждений, слой с `curl`. Предложение: убрать
-  из Dockerfile строку `COPY bench/` с её комментарием (фикстуры тестов фронтенда теперь в `frontend/src/test`) и
-  поправить устаревшие слова о `bench/` в шапке Dockerfile, в `.github/workflows/deploy.yml` («the API image needs
-  frontend/ and bench/») и в `docker-compose.prod.yml` («imports bench/ of git»: импорта при старте больше нет).
-
+- **11.2, образ.** Dockerfile API копировал папку `bench/`, которую удалила задача 8.3, и сборка падала с `"/bench":
+  not found`. По слову владельца строка `COPY bench/` с её комментарием убрана, а в шапке Dockerfile образу нужен
+  только `frontend/` кроме `backend/`. Сборка проверена на временной копии Dockerfile вне репозитория, где добавлено
+  только доверие к сертификату прокси сессии и apt по HTTPS (прокси сессии не пропускает HTTP): проходит целиком —
+  `npm ci`, сборка фронтенда с проверкой типов, `dotnet publish` без предупреждений, слой с `curl`. Устаревшие слова о
+  `bench/` остались в `.github/workflows/deploy.yml` («the API image needs frontend/ and bench/») и в
+  `docker-compose.prod.yml` («imports bench/ of git»: импорта при старте больше нет); их правка вне задачи.
 - **11.3–11.4, живая проверка и замер.** Не делались: задачи у основной сессии на dev-стенде, в облачной сессии
   применения их не было по условию. Снимков в `screens/` и чисел замера нет.
 
