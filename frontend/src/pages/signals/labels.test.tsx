@@ -141,8 +141,9 @@ describe('the labels in the lists of ideas', () => {
       'GET /api/filters/fields': () => json([]),
     });
 
-  // Scenarios «Три метки» and «Идея без меток».
-  it('shows two badges and «+1» with the whole list in the hint, and a dash without labels', async () => {
+  // Scenarios «Три метки» and «Идея без меток»: in the tables of «Идеи» one badge and «+2» (task 21.3); the table of the
+  // ideas of a pair keeps two badges (pair.test.tsx).
+  it('shows one badge and «+2» with the whole list in the hint, and a dash without labels', async () => {
     ideasRoutes([
       idea({ id: 'a', symbol: 'XRPUSDT', labels: ['↑ funding', '⚡ всплеск', '↓ BTC'] }),
       idea({ id: 'b', symbol: 'SOLUSDT', labels: [] }),
@@ -152,9 +153,9 @@ describe('the labels in the lists of ideas', () => {
     const xrp = await screen.findByRole('row', { name: 'XRPUSDT breakout-long 1h' });
     const labels = within(xrp).getAllByRole('cell')[4]!;
     expect(within(labels).getByText('↑ funding')).toBeInTheDocument();
-    expect(within(labels).getByText('⚡ всплеск')).toBeInTheDocument();
+    expect(within(labels).queryByText('⚡ всплеск')).toBeNull();
     expect(within(labels).queryByText('↓ BTC')).toBeNull();
-    expect(within(labels).getByText('+1')).toBeInTheDocument();
+    expect(within(labels).getByText('+2')).toBeInTheDocument();
     expect(labels.firstElementChild).toHaveAttribute('title', '↑ funding, ⚡ всплеск, ↓ BTC');
     const sol = screen.getByRole('row', { name: 'SOLUSDT breakout-long 1h' });
     expect(within(sol).getAllByRole('cell')[4]).toHaveTextContent('—');

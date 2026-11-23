@@ -1155,9 +1155,9 @@ describe('the ideas of a pair', () => {
     }
   });
 
-  // Task 21.3: the table of the ideas of a pair has room for the name and keeps two labels and «+N».
+  // Task 21.3 and scenario «Три метки»: the table of the ideas of a pair has room for the name and keeps two labels and «+N».
   it('shows two labels and «+N» in the table of the ideas of a pair', async () => {
-    routes([idea({ id: 'long-1', labels: ['⚡ всплеск', '↓ BTC', '↓ пара', 'фандинг'] })]);
+    routes([idea({ id: 'long-1', labels: ['⚡ всплеск', '↓ BTC', '↓ пара'] })]);
     renderApp('/market/SOLUSDT');
 
     const table = within(await screen.findByRole('table', { name: 'Идеи пары' }));
@@ -1167,7 +1167,8 @@ describe('the ideas of a pair', () => {
 
     expect(labels.getByText('⚡ всплеск')).toBeInTheDocument();
     expect(labels.getByText('↓ BTC')).toBeInTheDocument();
-    expect(labels.getByText('+2')).toBeInTheDocument();
+    expect(labels.queryByText('↓ пара')).toBeNull();
+    expect(labels.getByText('+1')).toBeInTheDocument();
     expect(cells[heads.findIndex((head) => head?.startsWith('Стратегия'))]).not.toHaveClass(
       'font-mono',
     );
