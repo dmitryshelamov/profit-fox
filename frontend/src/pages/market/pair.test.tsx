@@ -223,6 +223,44 @@ describe('the chart while the history loads or fails', () => {
     }
   });
 
+  // Task 19.12: while an early page waits for its repeat, scrolling asks nothing; one timer, taken off with the page.
+  it('asks a loading early page again once in 5 seconds, not on every scroll, and stops with the page', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const requests = routes([], {
+        'GET /api/market/pairs/SOLUSDT/chart': (request) =>
+          new URL(request.url).searchParams.has('before')
+            ? loadingChart(request)
+            : chartRoute()(request),
+      });
+      const early = () => chartQueries(requests).filter((query) => query.has('before')).length;
+      const { unmount } = renderApp('/market/SOLUSDT?timeframe=1h');
+      await waitFor(() => expect(drawn.candles).toHaveLength(500));
+
+      drawn.logicalRange = { from: 3, to: 120 };
+      act(() => drawn.rangeChange?.({ from: 3, to: 120 }));
+      await waitFor(() => expect(early()).toBe(1));
+      expect(await screen.findByText('Сервис данных догружает историю пары…')).toBeInTheDocument();
+      for (let scroll = 0; scroll < 5; scroll++) {
+        act(() => drawn.rangeChange?.({ from: 2, to: 119 }));
+        await act(() => vi.advanceTimersByTimeAsync(500));
+      }
+      expect(early()).toBe(1);
+
+      await act(() => vi.advanceTimersByTimeAsync(2_700));
+      await waitFor(() => expect(early()).toBe(2));
+      act(() => drawn.rangeChange?.({ from: 1, to: 118 }));
+      await act(() => vi.advanceTimersByTimeAsync(5_100));
+      await waitFor(() => expect(early()).toBe(3));
+
+      unmount();
+      await act(() => vi.advanceTimersByTimeAsync(20_000));
+      expect(early()).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('shows a failed early page and asks it again by the button, not by every scroll', async () => {
     let fail = true;
     const requests = routes([], {

@@ -236,14 +236,18 @@ function ChartSection({
   const [earlyError, setEarlyError] = useState<string | null>(null);
   const [earlyLoading, setEarlyLoading] = useState(false);
   const retry = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
+  // The timer of the repeat goes with the page, and an answer that comes after the page went sets none (task 19.12).
+  const gone = useRef(false);
+  useEffect(() => {
+    gone.current = false;
+    return () => {
+      gone.current = true;
       if (retry.current !== null) {
         clearTimeout(retry.current);
+        retry.current = null;
       }
-    },
-    [],
-  );
+    };
+  }, []);
   // A first page read again — after a break of the stream — moved right: what the former first page had and the new one
   // does not stays with the earlier pages, so no hole opens between them (task 19.11).
   const formerFirst = useRef(first.data);
@@ -330,10 +334,11 @@ function ChartSection({
 
   const loadEarlier = (asked = false) => {
     const oldest = candles[0];
+    // While an early page waits for its repeat, a scroll asks nothing (task 19.12): the timer asks it.
     if (
       loading.current ||
       earlier.done ||
-      (earlyError !== null && !asked) ||
+      ((earlyError !== null || retry.current !== null) && !asked) ||
       oldest === undefined ||
       (first.data?.candles.length ?? 0) < 500
     ) {
@@ -345,8 +350,16 @@ function ChartSection({
     void getPairChart(symbol, timeframe, Number(oldest.openTime))
       .then((chart) => {
         if (chart.loading) {
-          // Still loading: not the end of the history; asked again in 5 seconds.
+          // Still loading: not the end of the history; asked again in 5 seconds, by one timer.
           setEarlyLoading(true);
+          if (gone.current) {
+            return;
+          }
+
+          if (retry.current !== null) {
+            clearTimeout(retry.current);
+          }
+
           retry.current = setTimeout(() => {
             retry.current = null;
             loadEarlierRef.current(true);
