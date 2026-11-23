@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import { type IdeaChoices, listPairIdeas } from '@/api/ideas';
 import { type ChartCandle, type ChartPoint, getMarketPair, getPairChart } from '@/api/market';
@@ -13,6 +13,7 @@ import { PagedTable } from '@/shared/ui/PagedTable';
 import { Pager } from '@/shared/ui/Pager';
 import { Segmented } from '@/shared/ui/Segmented';
 import { pageSearch, useListSettings } from '@/shared/ui/useListSettings';
+import { useNow } from '@/shared/ui/useNow';
 
 import { amountText, changeText, clockText, priceWords, rateText, signTone } from './format';
 import { marketRefreshMs } from './MarketPage';
@@ -56,15 +57,6 @@ export function untilPayment(next: number | null | undefined, now: number): stri
   const left = Math.max(0, Math.floor((next - now) / 1000));
   const parts = [Math.floor(left / 3600), Math.floor((left % 3600) / 60), left % 60];
   return parts.map((part) => String(part).padStart(2, '0')).join(':');
-}
-
-function useNow(): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-  return now;
 }
 
 /**

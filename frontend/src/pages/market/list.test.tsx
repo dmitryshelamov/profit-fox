@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { fakeApi, json } from '@/test/fakeApi';
@@ -205,6 +205,24 @@ describe('the section «Рынок»', () => {
     expect(warning).toHaveTextContent(
       `Данные устарели: снимок не обновлялся с ${new Date(updated).toISOString().slice(11, 19)} UTC`,
     );
+  });
+
+  // Task 18.19: the warning comes on an open page once the snapshot gets old, without a new answer of the server.
+  it('warns on an open page once the snapshot gets older than three minutes', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const updated = Date.now() - 2 * 60_000;
+      fakeApi({ ...routes(), 'GET /api/market/pairs': page([pair('SOLUSDT')], updated) });
+      renderApp('/market');
+      await screen.findByRole('row', { name: 'SOLUSDT' });
+      expect(screen.queryByRole('alert', { name: 'Снимок устарел' })).toBeNull();
+
+      await act(() => vi.advanceTimersByTimeAsync(70_000));
+
+      expect(await screen.findByRole('alert', { name: 'Снимок устарел' })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('does not warn about a fresh snapshot and shows when it was taken', async () => {

@@ -14,6 +14,7 @@ import { Pager } from '@/shared/ui/Pager';
 import { SelectField } from '@/shared/ui/SelectField';
 import { TextField } from '@/shared/ui/TextField';
 import { useListSettings } from '@/shared/ui/useListSettings';
+import { useNow } from '@/shared/ui/useNow';
 
 import { amountText, changeText, clockText, priceWords, rateText, signTone } from './format';
 import { IdeaBadges } from './IdeaBadges';
@@ -23,6 +24,9 @@ export const marketRefreshMs = 15_000;
 
 /** A snapshot older than this is stale (spec market-overview «Снимок устарел»). */
 export const staleMs = 3 * 60_000;
+
+/** How often an open page looks at the age of the snapshot. */
+const staleCheckMs = 10_000;
 
 /** A rate of funding at or above this share, by its size, is lit. */
 export const highRate = 0.0003;
@@ -94,6 +98,8 @@ export function MarketPage({
   const choices = { search, strategy, timeframe, ideasOnly };
   const filter = useChosenFilter('market');
   const chosen = filter.chosen ?? undefined;
+  // The age of the snapshot is looked at by the clock too: a scanner that stopped sends no new answer (task 18.19).
+  const now = useNow(staleCheckMs);
   const pairs = useQuery({
     queryKey: ['market', list.sort, page, list.pageSize, choices, chosen],
     queryFn: () =>
@@ -184,7 +190,7 @@ export function MarketPage({
             onPage(1);
           }}
         />
-        {pairs.data?.updatedAt != null && Date.now() - Number(pairs.data.updatedAt) > staleMs && (
+        {pairs.data?.updatedAt != null && now - Number(pairs.data.updatedAt) > staleMs && (
           <p
             role="alert"
             aria-label="Снимок устарел"
