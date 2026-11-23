@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { RequestError } from '@/api/client';
 import {
@@ -107,7 +107,25 @@ export function FilterEditor({
   // A save or a delete that does not reach the bench, or that the bench fails, keeps the panel open with the reason
   // (task 18.28); a refusal of a field stays at its field.
   const [failure, setFailure] = useState<string | null>(null);
+  // «Сохранить» is taken from the click to the end of the save and of the reading of the lists (task 19.13): a second
+  // click would save a second filter.
+  const [saving, setSaving] = useState(false);
+  const busy = useRef(false);
   const save = async () => {
+    if (busy.current) {
+      return;
+    }
+
+    busy.current = true;
+    setSaving(true);
+    try {
+      await saveOnce();
+    } finally {
+      busy.current = false;
+      setSaving(false);
+    }
+  };
+  const saveOnce = async () => {
     setFailure(null);
     let result: Awaited<ReturnType<typeof saveFilter>>;
     try {
@@ -336,7 +354,7 @@ export function FilterEditor({
         )}
         <span className="ml-auto flex gap-3">
           <Button onClick={onClose}>Отмена</Button>
-          <Button variant="primary" onClick={() => void save()}>
+          <Button variant="primary" disabled={saving} onClick={() => void save()}>
             Сохранить
           </Button>
         </span>

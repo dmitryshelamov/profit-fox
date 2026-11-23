@@ -11,6 +11,26 @@ export function pagesOf(total: number, pageSize: number): number {
 }
 
 /**
+ * A page past the last one — the address, or a list that got shorter — is brought to the last one (task 18.27); a list
+ * that hides its pager calls this itself (task 19.13).
+ */
+export function useLastPage(
+  total: number | undefined,
+  page: number,
+  pageSize: number,
+  onPage: (page: number) => void,
+): void {
+  const latest = useRef(onPage);
+  latest.current = onPage;
+  const pages = total === undefined ? null : pagesOf(total, pageSize);
+  useEffect(() => {
+    if (pages !== null && page > pages) {
+      latest.current(pages);
+    }
+  }, [page, pages]);
+}
+
+/**
  * The pages of a list (spec bench-ui «Страницы списка»): the range of the rows shown of all, the previous and the next
  * page around «2 из 17», and the size of a page.
  */
@@ -28,15 +48,8 @@ export function Pager({
   readonly onPageSize: (size: number) => void;
 }) {
   const pages = pagesOf(total, pageSize);
-  // A page past the last one — the address, or a list that got shorter — is brought to the last one (task 18.27).
   const shown = Math.min(Math.max(1, page), pages);
-  const latest = useRef(onPage);
-  latest.current = onPage;
-  useEffect(() => {
-    if (page > pages) {
-      latest.current(pages);
-    }
-  }, [page, pages]);
+  useLastPage(total, page, pageSize, onPage);
   const from = total === 0 ? 0 : (shown - 1) * pageSize + 1;
   const to = Math.min(total, shown * pageSize);
   const step =

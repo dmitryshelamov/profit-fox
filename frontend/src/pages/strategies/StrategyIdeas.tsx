@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import type { RequestError } from '@/api/client';
 import { setStrategyIdeas } from '@/api/ideas';
@@ -95,22 +95,39 @@ function IdeasWindow({
   const [enabled, setEnabled] = useState(strategy.ideas?.enabled === true);
   const [chosen, setChosen] = useState<readonly string[]>(strategy.ideas?.timeframes ?? []);
   const [errors, setErrors] = useState<readonly RequestError[]>(refused);
+  // What the server keeps, as it last answered: a refused change goes back to it (task 18.28), not to the set the window
+  // showed before the change, which an earlier change still going may not leave on the server (task 19.13).
+  const kept = useRef({
+    enabled: strategy.ideas?.enabled === true,
+    timeframes: strategy.ideas?.timeframes ?? [],
+  });
+  // The changes go one after the other, in the order they were made; once none is left to go, the window shows what the
+  // server keeps.
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  const waiting = useRef(0);
 
-  const send = async (on: boolean, next: readonly string[]) => {
+  const send = (on: boolean, next: readonly string[]) => {
     const ordered = timeframes.filter((timeframe) => next.includes(timeframe));
-    const before = chosen;
     setChosen(ordered);
-    const result = await setStrategyIdeas(strategy.name, on, ordered);
-    if (result.ok) {
-      setEnabled(result.value.enabled);
-      setErrors([]);
-    } else {
-      // A refused change goes back: the window shows what the bench keeps (task 18.28).
-      setChosen(before);
-      setErrors(result.errors);
-    }
+    waiting.current += 1;
+    queue.current = queue.current.then(async () => {
+      const result = await setStrategyIdeas(strategy.name, on, ordered);
+      waiting.current -= 1;
+      if (result.ok) {
+        kept.current = { enabled: result.value.enabled, timeframes: result.value.timeframes };
+        setErrors([]);
+      } else {
+        setErrors(result.errors);
+      }
 
-    await queries.invalidateQueries({ queryKey: ['strategies'] });
+      if (waiting.current === 0 || !result.ok) {
+        setChosen(kept.current.timeframes);
+        setEnabled(kept.current.enabled);
+      }
+
+      await queries.invalidateQueries({ queryKey: ['strategies'] });
+    });
+    return queue.current;
   };
 
   return (

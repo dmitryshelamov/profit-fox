@@ -15,7 +15,7 @@ import { useChosenFilter } from '@/modules/filters/useChosenFilter';
 import { buttonLook } from '@/shared/ui/Button';
 import { Page, PageTitle } from '@/shared/ui/Page';
 import { PagedTable } from '@/shared/ui/PagedTable';
-import { Pager } from '@/shared/ui/Pager';
+import { Pager, useLastPage } from '@/shared/ui/Pager';
 import { Tabs } from '@/shared/ui/Tabs';
 import { useListSettings } from '@/shared/ui/useListSettings';
 
@@ -272,6 +272,13 @@ function Journal({ filter, onGone, choices, page, onChoices, onPage, onOpen }: L
   });
   const problem = ideas.error ?? summary.error;
   useGoneFilter(ideas.data?.filterGone === true, filter, onGone);
+  // The pager of the summary is hidden while its rows fit one page; its page is brought back without it (task 19.13).
+  useLastPage(
+    summary.isPlaceholderData ? undefined : summary.data && Number(summary.data.total),
+    summaryPage,
+    summaryList.pageSize,
+    setSummaryPage,
+  );
 
   return (
     <>

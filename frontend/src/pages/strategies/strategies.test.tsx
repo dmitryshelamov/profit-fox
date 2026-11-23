@@ -1035,6 +1035,51 @@ describe('the ideas of a strategy in the list', () => {
     expect(window.getByRole('switch', { name: 'Идеи включены' })).not.toBeChecked();
   });
 
+  // Task 19.13: two quick changes go one after the other, and a refused one goes back to what the server keeps.
+  it('sends two quick changes in turn and takes a refused one back to what the server keeps', async () => {
+    let stored = { enabled: true, timeframes: ['1h'] };
+    let calls = 0;
+    let going = 0;
+    let together = false;
+    routes({
+      'GET /api/strategies': () => json([fundingShort(stored)]),
+      'PUT /api/strategies/funding-short/ideas': async (request) => {
+        const body = (await request.json()) as typeof stored;
+        calls += 1;
+        going += 1;
+        together ||= going > 1;
+        const call = calls;
+        await new Promise((resolve) => setTimeout(resolve, call === 1 ? 300 : 10));
+        going -= 1;
+        if (call === 1) {
+          return json({ errors: [{ code: 'NoTimeframes', reason: 'отказ первой правки' }] }, 422);
+        }
+
+        stored = body;
+        return json(stored);
+      },
+    });
+    renderApp('/strategies');
+    const row = within(await screen.findByRole('row', { name: 'Стратегия funding-short' }));
+    await userEvent.click(row.getByRole('button', { name: 'Таймфреймы идей funding-short' }));
+    const window = within(screen.getByRole('dialog', { name: 'Идеи funding-short' }));
+
+    await userEvent.click(window.getByRole('button', { name: '4h' }));
+    await userEvent.click(window.getByRole('button', { name: '15m' }));
+
+    await waitFor(() => expect(calls).toBe(2));
+    await waitFor(() => expect(going).toBe(0));
+    expect(together).toBe(false);
+    await waitFor(() =>
+      expect(
+        ['5m', '15m', '1h', '4h', '1d'].filter(
+          (timeframe) =>
+            window.getByRole('button', { name: timeframe }).getAttribute('aria-pressed') === 'true',
+        ),
+      ).toEqual(stored.timeframes),
+    );
+  });
+
   // Task 18.28, scenario «Отказ в окне»: a refused timeframe goes back to what it was.
   it('takes a refused timeframe back in the window', async () => {
     routes({

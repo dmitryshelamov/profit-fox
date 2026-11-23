@@ -370,6 +370,86 @@ describe('the lists after a change of their filter', () => {
     await waitFor(() => expect(lists(requests)).toBeGreaterThanOrEqual(before + 2));
   });
 
+  // Task 19.13: rows fewer than a page hide the pager of the summary; its page is brought to the last one without it.
+  it('brings the summary back from a page past its last one when its pager is hidden', async () => {
+    let total = 60;
+    const summaries = Array.from({ length: 60 }, (_, index) => ({
+      strategyId: `s-${index}`,
+      strategy: `s-${index}`,
+      version: 1,
+      timeframe: '1h',
+      ideas: 1,
+      wins: 1,
+      mean: 0.001,
+      sum: 0.1,
+    }));
+    const saved = [shorts];
+    const requests = ideaRoutes(saved, {
+      'GET /api/ideas/summary': (request) => {
+        const page = Number(new URL(request.url).searchParams.get('page') ?? 1);
+        return json({
+          items: summaries.slice(0, total).slice((page - 1) * 50, page * 50),
+          total,
+          page,
+          pageSize: 50,
+          filterGone: false,
+        });
+      },
+      'PUT /api/filters/f-shorts': async (request) => {
+        const body = (await request.json()) as Omit<SavedFilter, 'id'>;
+        saved[0] = { ...shorts, ...body };
+        return json(saved[0]);
+      },
+    });
+    renderApp('/ideas?tab=journal');
+    await userEvent.click(await (await row()).findByRole('button', { name: 'Шорты' }));
+    const summary = within(await screen.findByRole('table', { name: 'Сводка журнала' }));
+    await summary.findByRole('row', { name: 's-0 v1 1h' });
+    const pagers = await screen.findAllByRole('navigation', { name: 'Страницы' });
+    await userEvent.click(within(pagers[0]!).getByRole('button', { name: 'Следующая страница' }));
+    await summary.findByRole('row', { name: 's-55 v1 1h' });
+
+    total = 40;
+    await userEvent.click(screen.getByRole('button', { name: 'Изменить' }));
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Фильтр' })).getByRole('button', {
+        name: 'Сохранить',
+      }),
+    );
+
+    expect(await summary.findByRole('row', { name: 's-0 v1 1h' })).toBeInTheDocument();
+    const last = requests
+      .map((request) => new URL(request.url))
+      .filter((url) => url.pathname === '/api/ideas/summary')
+      .at(-1)!;
+    expect(last.searchParams.get('page')).toBe('1');
+  });
+
+  // Task 19.13: «Сохранить» is taken until the save and the reading of the lists end: one click, one filter.
+  it('keeps «Сохранить» taken until the save ends, so a second click saves nothing more', async () => {
+    const saved = [shorts];
+    const requests = ideaRoutes(saved, {
+      'PUT /api/filters/f-shorts': async (request) => {
+        const body = (await request.json()) as Omit<SavedFilter, 'id'>;
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        saved[0] = { ...shorts, ...body };
+        return json(saved[0]);
+      },
+    });
+    renderApp('/ideas?tab=journal');
+    await userEvent.click(await (await row()).findByRole('button', { name: 'Шорты' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Изменить' }));
+    const panel = within(screen.getByRole('dialog', { name: 'Фильтр' }));
+    const save = panel.getByRole('button', { name: 'Сохранить' });
+
+    await userEvent.click(save);
+    expect(save).toBeDisabled();
+    await userEvent.click(save);
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Фильтр' })).toBeNull());
+    expect(await bodiesOf(requests, 'PUT', '/api/filters/f-shorts')).toHaveLength(1);
+  });
+
   it('reads the market again after the chosen filter is deleted', async () => {
     const saved = [highFunding];
     const requests = routes(saved, {
