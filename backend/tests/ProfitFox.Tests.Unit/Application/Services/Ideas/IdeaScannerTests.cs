@@ -113,6 +113,58 @@ public sealed class IdeaScannerTests
     }
 
     /// <summary>
+    ///     Task 20.5, confirmed: a catch-up told one pair at a time — the minutes of BTCUSDT up to 10:09 first, those of
+    ///     ETHUSDT after them — closes the boundary of 10:00 for the book before the minutes of ETHUSDT come. Joined on the book
+    ///     alone, ETHUSDT was warm without the candle of 9:00 at the join, and its close above 100 at 10:00 was a first time at
+    ///     11:00. Before the feed is live the pair waits for its own minute of the boundary.
+    /// </summary>
+    [Test]
+    public async Task A_catch_up_one_pair_at_a_time_joins_the_warmup_with_the_minutes_of_its_own_pair()
+    {
+        var rig = new ScannerRig();
+        rig.History.Candles["eth"] = (interval, before) => Warmup(interval, before - interval, "99");
+        await rig.Enable("close-up", "8h");
+        await rig.Scanner.StartAsync(CancellationToken.None);
+        await rig.Scanner.ApplyAsync(new MarketPairs(Pairs), CancellationToken.None);
+        await rig.Minutes("BTCUSDT", Ten.AddHours(-1), 70, close: 99);
+        rig.Time.SetUtcNow(Ten.AddMinutes(10).AddSeconds(20));
+        await rig.Warm();
+        Assert.That(rig.Scanner.Progress, Is.EqualTo((2, 3)), "the minutes of ETHUSDT at the join are still to come");
+
+        await rig.Minutes("ETHUSDT", Ten.AddHours(-1), 70, close: 101);
+        await rig.At(Ten.AddMinutes(10).AddSeconds(30), quiet: false);
+        Assert.That(rig.Scanner.Progress, Is.EqualTo((3, 3)));
+
+        await rig.Minutes("BTCUSDT", Ten.AddMinutes(10), 50, close: 99);
+        await rig.Minutes("ETHUSDT", Ten.AddMinutes(10), 50, close: 101);
+        await rig.At(Eleven.AddSeconds(15));
+        Assert.That(rig.Ideas.Ideas.Select(idea => idea.Symbol), Is.Empty, "ETHUSDT closed above 100 at 9:00 already");
+    }
+
+    /// <summary>
+    ///     Task 20.5: a quiet pair — no minute since long before the boundary — does not wait for ever: once the feed is live,
+    ///     the pair without minutes is joined.
+    /// </summary>
+    [Test]
+    public async Task A_quiet_pair_is_joined_once_the_feed_is_live()
+    {
+        var rig = new ScannerRig();
+        rig.History.Candles["sol"] = (interval, before) => Warmup(interval, before - interval, "99");
+        await rig.Enable("close-up", "8h");
+        await rig.Scanner.StartAsync(CancellationToken.None);
+        await rig.Scanner.ApplyAsync(new MarketPairs(Pairs), CancellationToken.None);
+        await rig.Minutes("BTCUSDT", Ten.AddHours(-1), 70, close: 99);
+        await rig.Minutes("SOLUSDT", Ten.AddHours(-1), 10, close: 99);
+        rig.Time.SetUtcNow(Ten.AddMinutes(10).AddSeconds(20));
+        await rig.Warm();
+        Assert.That(rig.Scanner.Progress, Is.EqualTo((2, 3)), "SOLUSDT may still have minutes to come");
+
+        await rig.At(Ten.AddMinutes(10).AddSeconds(40));
+        Assert.That(rig.Scanner.Progress, Is.EqualTo((3, 3)), "the feed is live and SOLUSDT had no trades since 9:09");
+        Assert.That(rig.Scanner.Failures.Failed, Is.Zero);
+    }
+
+    /// <summary>
     ///     Task 20.4: a hole told after the read leaves the book without the minutes of the candle at the join; once the book
     ///     closed the boundary the pair does not wait for it: the warm-up failed with its reason, and the pair is read from the
     ///     REST again after the pause.

@@ -515,7 +515,8 @@ public sealed class IdeaScanner
 
     // Whether the book holds the candles between the last one of the REST and the boundary the pair is filled up to: only a
     // candle the book closed and has every minute of is taken from it (task 19.3). The pair waits while the book has not
-    // closed the boundary yet; once it has, a candle at the join it does not hold is missed for good (task 20.4).
+    // closed the boundary yet, or while the catch-up has not told the minutes of the pair up to it (task 20.5); once the book
+    // closed it, a candle at the join it does not hold is missed for good (task 20.4).
     // <paramref name="at" /> is the open of the candle at the join.
     private Join JoinOf(Warmup warmup, out DateTimeOffset at)
     {
@@ -528,12 +529,25 @@ public sealed class IdeaScanner
         TimeSpan timeframe = warmup.Run.Timeframe;
         DateTimeOffset until = FilledUntil(timeframe);
         at = warmup.Candles[^1].OpenTime + timeframe;
-        if (at >= until || (Book.Holds(timeframe, at) && Book.Closed(until)))
+        if (at >= until)
         {
             return Join.Joined;
         }
 
-        return Book.Closed(until) ? Join.Missed : Join.Waiting;
+        if (!Book.Closed(until))
+        {
+            return Join.Waiting;
+        }
+
+        if (!Book.Holds(timeframe, at))
+        {
+            return Join.Missed;
+        }
+
+        // The book closed the boundary for every pair, but a catch-up told one pair at a time may not have told this one yet
+        // (task 20.5): until the feed is live the pair waits for its own minute of the boundary; once it is live, a pair
+        // without that minute had no trades then, and a quiet pair does not wait for ever.
+        return _live || (Book.LastMinuteOf(warmup.Symbol) is { } last && last + OneMinute >= until) ? Join.Joined : Join.Waiting;
     }
 
     private DateTimeOffset FilledUntil(TimeSpan timeframe)
