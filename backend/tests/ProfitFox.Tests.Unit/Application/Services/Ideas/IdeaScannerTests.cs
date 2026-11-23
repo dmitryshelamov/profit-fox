@@ -168,6 +168,41 @@ public sealed class IdeaScannerTests
     }
 
     /// <summary>
+    ///     Task 19.9, confirmed: a catch-up told in batches by pair — the minutes of BTCUSDT up to 10:40 first, those of ETHUSDT
+    ///     after them — does not put the time of an idea of ETHUSDT before its minutes: while the feed catches up, the time and
+    ///     the payments wait for the minutes of the pair, and the stop in its minute 10:29 is the exit, as in a backtest. The
+    ///     rule of two minutes is left to the live feed: a pair without a trade then gets its time once the feed went quiet.
+    /// </summary>
+    [Test]
+    public async Task A_catch_up_in_batches_by_pair_puts_neither_the_time_nor_a_payment_before_the_minutes_of_the_pair()
+    {
+        var rig = new ScannerRig();
+        Idea idea = ProfitFox.Tests.Shared.Generators.Domain.Entities.Ideas.IdeaGenerator.Generate(
+            symbol: "ETHUSDT", side: ProfitFox.Domain.ValueObjects.Graph.Enums.EntrySide.Long, moment: Ten, after: TimeSpan.FromMinutes(30), stop: 0.02, close: 100m, timeframe: TimeSpan.FromHours(1));
+        Idea quiet = ProfitFox.Tests.Shared.Generators.Domain.Entities.Ideas.IdeaGenerator.Generate(
+            symbol: "SOLUSDT", side: ProfitFox.Domain.ValueObjects.Graph.Enums.EntrySide.Long, moment: Ten, after: TimeSpan.FromMinutes(30), close: 100m, timeframe: TimeSpan.FromHours(1));
+        rig.Ideas.Ideas.Add(idea);
+        rig.Ideas.Ideas.Add(quiet);
+        await rig.Start();
+        await rig.Minutes("SOLUSDT", Ten, 1, close: 100);
+
+        await rig.Minutes("BTCUSDT", Ten, 41, close: 100);
+        await rig.Scanner.ApplyAsync(new LivePoint(LivePointKind.FundingPayment, "ETHUSDT", Ten.AddMinutes(20), 0.001m), CancellationToken.None);
+        await rig.At(Ten.AddMinutes(40).AddSeconds(20), quiet: false);
+        Assert.That((idea.State, idea.ExitTime, idea.FundingPaid), Is.EqualTo((IdeaState.Open, (DateTimeOffset?)null, 0d)), "the minutes of ETHUSDT are still to come: not «нет сделок»");
+
+        await rig.Minutes("ETHUSDT", Ten, 29, close: 101);
+        await rig.Scanner.ApplyAsync(new LiveMinute("ETHUSDT", Ten.AddMinutes(29), 101, 101, 97, 98, 1, 98), CancellationToken.None);
+        await rig.At(Ten.AddMinutes(40).AddSeconds(30), quiet: false);
+        Assert.That(quiet.ExitTime, Is.Null, "SOLUSDT had no trade, and the feed still catches up");
+
+        await rig.At(Ten.AddMinutes(42).AddSeconds(30));
+        Assert.That((idea.State, idea.ExitReason, idea.ExitTime), Is.EqualTo((IdeaState.Closed, ExitReason.Stop, (DateTimeOffset?)Ten.AddMinutes(29))));
+        Assert.That(idea.FundingPaid, Is.EqualTo(0.001 * 101).Within(1e-12), "priced at the close of ETHUSDT before 10:20");
+        Assert.That((quiet.ExitReason, quiet.ExitTime), Is.EqualTo(((ExitReason?)ExitReason.Time, (DateTimeOffset?)Ten.AddMinutes(30))), "the live feed went quiet: the rule of two minutes");
+    }
+
+    /// <summary>
     ///     Task 18.9: a usual start asks the feed for the whole day it holds, counted when the feed subscribes, so no hole is
     ///     told; an open idea counted only up to before that day asks from its minute, and the hole is told.
     /// </summary>

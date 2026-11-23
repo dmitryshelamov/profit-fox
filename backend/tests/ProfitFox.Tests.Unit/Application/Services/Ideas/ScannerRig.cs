@@ -151,11 +151,17 @@ internal sealed class ScannerRig
     }
 
     /// <summary>
-    ///     The clock moved to <paramref name="now" /> and a pass.
+    ///     The clock moved to <paramref name="now" /> and a pass; <paramref name="quiet" /> — the feed told nothing for a while
+    ///     before it, as a live feed between its minutes, not one that catches up (task 19.9).
     /// </summary>
-    public async Task At(DateTimeOffset now)
+    public async Task At(DateTimeOffset now, bool quiet = true)
     {
         Time.SetUtcNow(now);
+        if (quiet)
+        {
+            Scanner.Quiet();
+        }
+
         await Scanner.TickAsync(CancellationToken.None);
     }
 

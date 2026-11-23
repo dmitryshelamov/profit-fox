@@ -56,6 +56,12 @@ internal sealed class RunScannerCommandHandler(
                 await Task.WhenAny(waiting, Task.Delay(settings.TickInterval, time, cancellationToken));
                 try
                 {
+                    // Nothing came for a tick: the feed is not catching up (task 19.9).
+                    if (!waiting.IsCompleted)
+                    {
+                        scanner.Quiet();
+                    }
+
                     while (queue.Reader.TryRead(out MarketEvent? item))
                     {
                         await scanner.ApplyAsync(item, cancellationToken);

@@ -38,8 +38,9 @@ public sealed class IdeaScanner
     // after the start.
     private static readonly TimeSpan CatchUpMargin = TimeSpan.FromMinutes(5);
 
-    // How far the feed has to be past a moment for a pair with no minute up to it to count as having had no trades then
-    // (task 18.10): a minute of another pair may come before the last one of this pair.
+    // How far the live feed has to be past a moment for a pair with no minute up to it to count as having had no trades
+    // then (task 18.10): a minute of another pair may come before the last one of this pair. Not while the feed catches
+    // up (task 19.9): a catch-up told in batches by pair is far past the moment before the minutes of the pair come.
     private static readonly TimeSpan PairWait = TimeSpan.FromMinutes(2);
 
     // How many reasons of failed warm-ups the scanner remembers having told within the minute (task 19.4).
@@ -72,6 +73,9 @@ public sealed class IdeaScanner
     private DateTimeOffset? _reconciled;
     private DateTimeOffset? _snapshotMinute;
     private bool _gap;
+
+    // Whether the feed is live: it went quiet with its newest minute recent, so its catch-up is over (task 19.9).
+    private bool _live;
 
     public IdeaScanner(
         MarketBook book,
@@ -193,6 +197,7 @@ public sealed class IdeaScanner
                 break;
             case FeedGap gap:
                 _gap = true;
+                _live = false;
                 LiveSince = null;
                 foreach (Idea idea in _open.Where(idea => idea.State == IdeaState.Open))
                 {
@@ -236,6 +241,19 @@ public sealed class IdeaScanner
         if (LiveSince is null && Book.LastMinute is { } last && last + OneMinute >= now - TimeSpan.FromMinutes(2))
         {
             LiveSince = _gap ? now : _started;
+        }
+    }
+
+    /// <summary>
+    ///     The feed told nothing for a while before this pass (task 19.9): with its newest minute recent, its catch-up is over
+    ///     and it is live, so a pair with no minute up to a moment had no trades then once the feed is two minutes past it.
+    ///     Until then, and again after a hole, the time and the payments of an idea wait for the minutes of its pair.
+    /// </summary>
+    public void Quiet()
+    {
+        if (Book.LastMinute is { } last && last + OneMinute >= _time.GetUtcNow() - PairWait)
+        {
+            _live = true;
         }
     }
 
@@ -781,11 +799,11 @@ public sealed class IdeaScanner
         }
     }
 
-    // Whether the minutes of the pair reached the moment: its minute before the moment came, or the feed is far enough past
-    // the moment that the pair had no trades then.
+    // Whether the minutes of the pair reached the moment: its minute before the moment came, or the live feed is far enough
+    // past the moment that the pair had no trades then (task 19.9: not while the feed catches up).
     private bool Reached(string symbol, DateTimeOffset moment, DateTimeOffset last)
     {
-        return (Book.LastMinuteOf(symbol) is { } pair && pair + OneMinute >= moment) || last >= moment + PairWait;
+        return (Book.LastMinuteOf(symbol) is { } pair && pair + OneMinute >= moment) || (_live && last >= moment + PairWait);
     }
 
     private async Task SnapshotAsync(CancellationToken cancellationToken)
