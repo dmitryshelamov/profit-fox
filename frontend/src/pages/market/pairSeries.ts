@@ -193,8 +193,10 @@ const labelWidth = (text: string) => text.length * 7 + 12;
 
 /**
  * The room to the right of the last candle (task 19.14): the lines of the open ideas end at their term, but no further
- * than a third of the bars in view from the last candle; to the right of the end there is room for their labels, and a
- * little room for the marks of the last candles without lines. `offset` is in bars past the last point of the time scale.
+ * than a third of the bars in view from the last candle. The time scale counts bars, not time, so the bars up to the end
+ * are `slots`: empty points of the time scale after the last candle, one a candle of the timeframe, for the end of the
+ * lines to stand on the slot of its term (task 20.2). `offset` is the room for the labels past the last point of the
+ * time scale — the end of the lines, or the last candle without lines, where a little room is left for its marks.
  */
 export function rightRoom(
   lines: readonly IdeaLine[],
@@ -202,7 +204,7 @@ export function rightRoom(
   timeframe: string,
   barsInView: number,
   barSpacing: number,
-): { lines: IdeaLine[]; offset: number } {
+): { lines: IdeaLine[]; offset: number; slots: number[] } {
   const length = lengthOf(timeframe);
   const most = Math.max(1, Math.floor(barsInView / 3));
   const until = lastOpen === undefined ? Number.POSITIVE_INFINITY : lastOpen + most * length;
@@ -216,7 +218,11 @@ export function rightRoom(
     labels.length === 0
       ? Math.ceil(60 / barSpacing)
       : Math.ceil(Math.max(...labels.map((label) => labelWidth(label.text))) / barSpacing);
-  return { lines: drawn, offset: Math.max(0, Math.min(room, most - ahead)) };
+  const slots =
+    lastOpen === undefined
+      ? []
+      : Array.from({ length: ahead }, (_, index) => lastOpen + (index + 1) * length);
+  return { lines: drawn, offset: room, slots };
 }
 
 /** The candles of two pages joined by their open time, each once, the later page's candle kept. */

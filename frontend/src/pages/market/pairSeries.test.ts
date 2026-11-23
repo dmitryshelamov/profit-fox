@@ -80,13 +80,16 @@ describe('the chart of a pair as the mockup draws it', () => {
   });
 
   it('leaves room to the right of the last candle up to the term and for the labels, no more than a third', () => {
+    const labels = Math.ceil((11 * 7 + 12) / 6);
     const near = rightRoom(lines(), thirteen, '1h', 150, 6);
     expect(near.lines.map((line) => line.to)).toEqual([
       thirteen + 4 * hour,
       thirteen + 4 * hour,
       thirteen + 4 * hour,
     ]);
-    expect(near.offset).toBe(Math.ceil((11 * 7 + 12) / 6));
+    // Task 20.2: the slots up to the term are empty points of the time scale; the offset is past the term, for labels.
+    expect(near.slots).toEqual([1, 2, 3, 4].map((bars) => thirteen + bars * hour));
+    expect(near.offset).toBe(labels);
 
     const far = rightRoom(lines(thirteen + 200 * hour), thirteen, '1h', 150, 6);
     expect(far.lines.map((line) => line.to)).toEqual([
@@ -94,8 +97,12 @@ describe('the chart of a pair as the mockup draws it', () => {
       thirteen + 50 * hour,
       thirteen + 50 * hour,
     ]);
-    expect(far.offset).toBe(0);
+    expect(far.slots).toHaveLength(50);
+    expect(far.slots.at(-1)).toBe(thirteen + 50 * hour);
+    // Task 20.2: a term past the third still leaves the labels room to the right of the end of the lines.
+    expect(far.offset).toBe(labels);
 
     expect(rightRoom([], thirteen, '1h', 150, 6).offset).toBe(10);
+    expect(rightRoom([], thirteen, '1h', 150, 6).slots).toEqual([]);
   });
 });

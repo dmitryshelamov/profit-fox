@@ -551,6 +551,27 @@ describe('the ideas, the open interest and the funding on the chart', () => {
       ]),
     );
     expect(drawn.lines).toEqual([]);
+    // Task 20.2: the slots after the last candle of 13:00 up to the term are empty points of the time scale.
+    expect(drawn.slots).toEqual(
+      [14, 15, 16, 17].map((at) => ({ time: Date.UTC(2026, 10, 22, at) / 1000 })),
+    );
+  });
+
+  // Task 20.2: a term past a third of the bars in view ends the lines on the slot of the third, the labels kept in room.
+  it('ends the lines of an idea with a far term on the slot a third of the bars in view away', async () => {
+    routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour })]);
+    renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.segments).toHaveLength(3));
+
+    const end = Date.UTC(2026, 10, 22, 13) + 50 * hour;
+    expect(drawn.slots).toHaveLength(50);
+    expect(drawn.slots.at(-1)).toEqual({ time: end / 1000 });
+    expect(drawn.segments.map((line) => (line.data.at(-1) as { time: number }).time)).toEqual([
+      end / 1000,
+      end / 1000,
+      end / 1000,
+    ]);
+    expect(drawn.rightOffset).toBeGreaterThan(0);
   });
 
   // Task 19.14: the chart against the mockup 09-pair.

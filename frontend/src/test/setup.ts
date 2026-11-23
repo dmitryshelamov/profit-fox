@@ -138,8 +138,22 @@ vi.mock('lightweight-charts', async () => {
         addSeries: vi.fn(
           (
             type: string,
-            options?: { title?: string; color?: string; crosshairMarkerVisible?: boolean },
+            options?: {
+              title?: string;
+              color?: string;
+              crosshairMarkerVisible?: boolean;
+              visible?: boolean;
+            },
           ) => {
+            // A series not shown holds the empty points of the time scale after the last candle (task 20.2).
+            if (options?.visible === false) {
+              return {
+                setData: vi.fn((data: { time: number }[]) => {
+                  drawn.slots = data;
+                }),
+              };
+            }
+
             // A line without the marker of the crosshair is a line of an open idea: kept apart from the series of the panels;
             // its title is that of the labels written at its end (task 19.14).
             const segment =

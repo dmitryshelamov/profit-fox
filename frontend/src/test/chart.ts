@@ -41,6 +41,8 @@ export const drawn = {
   rightOffset: null as number | null,
   /** The margins of the price scales of the series by their type. */
   scaleMargins: {} as Record<string, unknown>,
+  /** The empty points of the time scale after the last candle, up to the term of the open ideas (task 20.2). */
+  slots: [] as { time: number }[],
 };
 
 /** Forgets what the fake chart was given: the state of one test does not reach the next. */
@@ -64,6 +66,7 @@ export function resetDrawn(): void {
     paneFactors: [],
     rightOffset: null,
     scaleMargins: {},
+    slots: [],
   });
 }
 

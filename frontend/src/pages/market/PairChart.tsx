@@ -54,7 +54,16 @@ interface Drawn {
   readonly candles: ISeriesApi<'Candlestick'>;
   readonly interest: ISeriesApi<'Line'>;
   readonly funding: ISeriesApi<'Histogram'>;
+  /** The empty points of the time scale after the last candle up to the term of the open ideas (task 20.2). */
+  readonly slots: ISeriesApi<'Line'>;
   readonly markers: ISeriesMarkersPluginApi<Time>;
+}
+
+/** The lines of the open ideas drawn on a chart, and what they were drawn from. */
+interface Made {
+  readonly chart: IChartApi;
+  readonly key: string;
+  readonly series: readonly ISeriesApi<'Line'>[];
 }
 
 const seconds = (ms: number | string) => (Number(ms) / 1000) as UTCTimestamp;
@@ -97,6 +106,9 @@ export function PairChart({
   const shown = useRef<{ first: number | null; count: number }>({ first: null, count: 0 });
   // The room to the right of the last candle the time scale was last given (task 20.1).
   const offset = useRef<number | null>(null);
+  // The lines drawn and the slots given: drawn again only when they change, not on every candle (task 20.2).
+  const made = useRef<Made | null>(null);
+  const slotsGiven = useRef<{ chart: IChartApi; key: string } | null>(null);
 
   useEffect(() => {
     if (container.current === null) {
@@ -142,6 +154,12 @@ export function PairChart({
       .forEach((pane, index) =>
         pane.setStretchFactor(index === 0 ? paneStretch.candles : paneStretch.panel),
       );
+    // Nothing to draw: only the empty points of the time scale the lines of the open ideas end on (task 20.2).
+    const slotsSeries = chart.addSeries(LineSeries, {
+      visible: false,
+      lastValueVisible: false,
+      priceLineVisible: false,
+    });
     interestSeries.priceScale().applyOptions({ scaleMargins: panelMargins });
     fundingSeries.priceScale().applyOptions({ scaleMargins: panelMargins });
 
@@ -165,6 +183,7 @@ export function PairChart({
       candles: series,
       interest: interestSeries,
       funding: fundingSeries,
+      slots: slotsSeries,
       markers: createSeriesMarkers(series, []),
     };
 
@@ -279,7 +298,9 @@ export function PairChart({
 
   // The lines of the open ideas (task 18.26): the entry, the stop and the target, each a line from the candle of the entry
   // to the candle of the term, no further than a third of the bars in view, with their labels to the right of their ends
-  // and room for them to the right of the last candle (task 19.14).
+  // and room for them to the right of the last candle (task 19.14). The end of the lines stands on the empty slot of its
+  // term after the last candle (task 20.2). Lines and slots that did not change are not given again: every series taken
+  // off or added moves the last point of the time scale, and the range in view with it.
   useEffect(() => {
     const current = drawn.current;
     if (current === null) {
@@ -296,6 +317,26 @@ export function PairChart({
       view === null ? 150 : view.to - view.from,
       scale.options().barSpacing,
     );
+
+    const slotsKey = room.slots.join(',');
+    if (slotsGiven.current?.chart !== current.chart || slotsGiven.current.key !== slotsKey) {
+      current.slots.setData(room.slots.map((time) => ({ time: seconds(time) })));
+      slotsGiven.current = { chart: current.chart, key: slotsKey };
+    }
+
+    const linesKey = JSON.stringify(room.lines);
+    if (made.current?.chart !== current.chart || made.current.key !== linesKey) {
+      if (made.current?.chart === current.chart) {
+        made.current.series.forEach((series) => current.chart.removeSeries(series));
+      }
+
+      made.current = {
+        chart: current.chart,
+        key: linesKey,
+        series: drawLines(current.chart, room.lines),
+      };
+    }
+
     // The library scrolls to the right edge on every `rightOffset` it is given (task 20.1): it is given one only when the
     // room changed and the chart stands at the right edge — a page loaded before or a closed candle leaves it in place.
     const applied = offset.current;
@@ -306,48 +347,46 @@ export function PairChart({
       scale.applyOptions({ rightOffset: room.offset });
       offset.current = room.offset;
     }
-
-    const labels = lineLabels(room.lines);
-    const made: ISeriesApi<'Line'>[] = [];
-    for (const line of room.lines) {
-      const series = current.chart.addSeries(LineSeries, {
-        color: lineColors[line.kind],
-        lineWidth: 1,
-        lineStyle: LineStyle.Dashed,
-        lastValueVisible: false,
-        priceLineVisible: false,
-        crosshairMarkerVisible: false,
-      });
-      const points = [{ time: seconds(line.from), value: line.price }];
-      if (line.to > line.from) {
-        points.push({ time: seconds(line.to), value: line.price });
-      }
-
-      series.setData(points);
-      series.attachPrimitive(
-        new LineLabels(
-          line.title,
-          labels.filter(
-            (label) =>
-              label.id === line.id &&
-              (label.kind === line.kind || (label.kind === 'term' && line.kind === 'entry')),
-          ),
-          line.kind === 'entry' ? chartColors.text : lineColors[line.kind],
-        ),
-      );
-      made.push(series);
-    }
-
-    // On unmount the chart is removed first, by the cleanup above, with its series; the library throws on a call to a
-    // removed chart (task 19.1), so only a chart still drawn has its lines taken off.
-    return () => {
-      if (drawn.current === current) {
-        made.forEach((series) => current.chart.removeSeries(series));
-      }
-    };
   }, [lines, candles, timeframe]);
 
   return (
     <div ref={container} className="w-full" style={{ height: chartHeight }} data-testid="chart" />
   );
+}
+
+/**
+ * The lines of the open ideas on the chart, each with the labels at its end: their places are laid out over the labels of
+ * all the lines, so those of close levels move apart (task 20.2). The chart removed takes its lines with it (task 19.1).
+ */
+function drawLines(chart: IChartApi, lines: readonly IdeaLine[]): ISeriesApi<'Line'>[] {
+  const labels = lineLabels(lines);
+  return lines.map((line) => {
+    const series = chart.addSeries(LineSeries, {
+      color: lineColors[line.kind],
+      lineWidth: 1,
+      lineStyle: LineStyle.Dashed,
+      lastValueVisible: false,
+      priceLineVisible: false,
+      crosshairMarkerVisible: false,
+    });
+    const points = [{ time: seconds(line.from), value: line.price }];
+    if (line.to > line.from) {
+      points.push({ time: seconds(line.to), value: line.price });
+    }
+
+    series.setData(points);
+    series.attachPrimitive(
+      new LineLabels(
+        line.title,
+        labels.filter(
+          (label) =>
+            label.id === line.id &&
+            (label.kind === line.kind || (label.kind === 'term' && line.kind === 'entry')),
+        ),
+        line.kind === 'entry' ? chartColors.text : lineColors[line.kind],
+        labels,
+      ),
+    );
+    return series;
+  });
 }
