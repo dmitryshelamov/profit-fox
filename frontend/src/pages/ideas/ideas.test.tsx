@@ -212,6 +212,24 @@ describe('the section «Идеи»', () => {
   });
 });
 
+// Task 19.15: the name of a strategy stays on one line: a long one is cut with an ellipsis and has the whole as a hint.
+describe('the name of a strategy in the lists of ideas', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('keeps the name on one line, cut with an ellipsis, with the whole name as a hint', async () => {
+    const name = 'pump-long-on-the-close-of-a-very-long-candle';
+    routes({ 'GET /api/ideas': ideaPage([idea({ strategy: name })]) });
+    renderApp('/ideas');
+
+    const row = await screen.findByRole('row', { name: `SOLUSDT ${name} 1h` });
+    const shown = within(row).getByTitle(name);
+    expect(shown).toHaveTextContent(name);
+    expect(shown).toHaveClass('truncate');
+    expect(shown.className).toMatch(/max-w-/);
+    expect(within(row).getByText('v7')).toHaveClass('shrink-0');
+  });
+});
+
 // Task 18.27: the summary goes back to its first page when a filter is chosen.
 describe('the page of the summary', () => {
   it('goes back to the first page when a filter is chosen', async () => {

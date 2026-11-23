@@ -29,10 +29,14 @@ export function SideBadge({ side }: { readonly side: string }) {
   return <Badge tone={side === 'short' ? 'err' : 'ok'}>{side === 'short' ? 'шорт' : 'лонг'}</Badge>;
 }
 
+// The name stays on one line (task 19.15): a long one is cut with an ellipsis and has the whole name as a hint; the
+// version beside it is never cut.
 function Strategy({ name, version }: { readonly name: string; readonly version: number | string }) {
   return (
-    <span className="flex items-center gap-2 font-mono">
-      {name}
+    <span className="flex min-w-0 items-center gap-2 font-mono">
+      <span title={name} className="max-w-[200px] min-w-0 truncate">
+        {name}
+      </span>
       <Badge mono>v{String(version)}</Badge>
     </span>
   );
