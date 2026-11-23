@@ -30,6 +30,7 @@ public static class InfrastructureRegistrar
         services.AddSingleton(new IdeasSettings());
         services.AddTransient<IdeaLibrary>();
         services.AddSingleton<LiveCandleHub>();
+        services.AddSingleton<ChartPairs>();
 
         MarketDataRegistrar.Configure(configuration, services);
 

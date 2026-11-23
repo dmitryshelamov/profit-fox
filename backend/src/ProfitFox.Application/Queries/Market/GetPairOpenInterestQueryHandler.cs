@@ -3,15 +3,16 @@ using MediatR;
 using ProfitFox.Application.Contracts.Preview;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.MarketData;
+using ProfitFox.Application.Services.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Application.Queries.Market;
 
 /// <summary>
 ///     The open interest of the window of a page of the chart: <see cref="GetPairChartQueryHandler.Page" /> intervals before
-///     the end of the page, one point a candle.
+///     the end of the page, one point a candle. The pair is found in the list of instruments kept for a minute (task 21.5).
 /// </summary>
-internal sealed class GetPairOpenInterestQueryHandler(IInstrumentCatalog catalog, IRecentHistory history, TimeProvider time) : IRequestHandler<GetPairOpenInterestQuery, PairOpenInterestInternal?>
+internal sealed class GetPairOpenInterestQueryHandler(ChartPairs pairs, IRecentHistory history, TimeProvider time) : IRequestHandler<GetPairOpenInterestQuery, PairOpenInterestInternal?>
 {
     /// <exception cref="IdeasRequestException">The timeframe is not one of the five.</exception>
     /// <exception cref="HistoryUnavailableException">The service did not answer.</exception>
@@ -22,7 +23,7 @@ internal sealed class GetPairOpenInterestQueryHandler(IInstrumentCatalog catalog
             throw new IdeasRequestException([new PreviewErrorInternal("InvalidTimeframe", $"таймфрейм — один из {Timeframes.Listed}") { Field = "timeframe" }]);
         }
 
-        if ((await catalog.LinearUsdtPerpetuals(cancellationToken)).FirstOrDefault(pair => pair.Symbol == request.Symbol) is not { } pair)
+        if (await pairs.Find(request.Symbol, cancellationToken) is not { } pair)
         {
             return null;
         }

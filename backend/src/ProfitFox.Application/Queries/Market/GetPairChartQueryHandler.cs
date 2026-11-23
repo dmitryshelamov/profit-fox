@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using ProfitFox.Application.Contracts.Preview;
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.MarketData;
+using ProfitFox.Application.Services.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
 
 namespace ProfitFox.Application.Queries.Market;
@@ -12,10 +13,11 @@ namespace ProfitFox.Application.Queries.Market;
 /// <summary>
 ///     Pages of 500 candles back from the REST of the market-data service, the current day included, with the payments of
 ///     funding of that time read together with them; the open interest of the page is <see cref="GetPairOpenInterestQuery" />
-///     (task 19.7). The journal tells how long the catalog, the candles and the payments took (task 20.9).
+///     (task 19.7). The journal tells how long the catalog, the candles and the payments took (task 20.9); the pair is found in
+///     the list of instruments kept for a minute (task 21.5).
 /// </summary>
 internal sealed class GetPairChartQueryHandler(
-    IInstrumentCatalog catalog,
+    ChartPairs pairs,
     IRecentHistory history,
     TimeProvider time,
     ILogger<GetPairChartQueryHandler>? logger = null) : IRequestHandler<GetPairChartQuery, PairChartInternal?>
@@ -32,7 +34,7 @@ internal sealed class GetPairChartQueryHandler(
         }
 
         long started = time.GetTimestamp();
-        if ((await catalog.LinearUsdtPerpetuals(cancellationToken)).FirstOrDefault(pair => pair.Symbol == request.Symbol) is not { } pair)
+        if (await pairs.Find(request.Symbol, cancellationToken) is not { } pair)
         {
             return null;
         }

@@ -3,9 +3,11 @@ using Microsoft.Extensions.Time.Testing;
 
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.Queries.Market;
+using ProfitFox.Application.Services.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Tests.Shared.Logging;
 using ProfitFox.Tests.Unit.Application.Commands.Signals;
+using ProfitFox.Tests.Unit.Application.Services.Market;
 
 namespace ProfitFox.Tests.Unit.Application.Queries.Market;
 
@@ -70,9 +72,47 @@ public sealed class GetPairChartQueryHandlerTests
         Assert.That(line, Does.Contain("BTCUSDT").And.Contain("1d").And.Contain("catalog").And.Contain("candles").And.Contain("funding").And.Contain("ms"));
     }
 
+    /// <summary>
+    ///     Task 21.5: the requests of the chart find the pair in the list of instruments kept for a minute — two pages of the
+    ///     chart and the open interest read the catalog once.
+    /// </summary>
+    [Test]
+    public async Task Two_requests_of_the_chart_in_a_row_and_its_open_interest_read_the_catalog_once()
+    {
+        var catalog = new ChartPairsTests.CountedCatalog("BTCUSDT", "ETHUSDT");
+        var clock = new FakeTimeProvider(Now);
+        var pairs = new ChartPairs(catalog, clock);
+
+        PairChartInternal? first = await new GetPairChartQueryHandler(pairs, new GatedHistory(), clock).Handle(new GetPairChartQuery("BTCUSDT", "1d", null), CancellationToken.None);
+        PairChartInternal? second = await new GetPairChartQueryHandler(pairs, new GatedHistory(), clock).Handle(new GetPairChartQuery("ETHUSDT", "1h", null), CancellationToken.None);
+        PairOpenInterestInternal? interest = await new GetPairOpenInterestQueryHandler(pairs, new GatedHistory(), clock).Handle(new GetPairOpenInterestQuery("BTCUSDT", "1d", null), CancellationToken.None);
+
+        Assert.That(new object?[] { first, second, interest }, Has.None.Null);
+        Assert.That(catalog.Reads, Is.EqualTo(1));
+    }
+
+    /// <summary>
+    ///     Task 21.5: a pair the list kept does not have reads the catalog again, and is not found when it is not there.
+    /// </summary>
+    [Test]
+    public async Task A_pair_not_in_the_list_kept_reads_the_catalog_again_and_is_not_found()
+    {
+        var catalog = new ChartPairsTests.CountedCatalog("BTCUSDT");
+        var clock = new FakeTimeProvider(Now);
+        var pairs = new ChartPairs(catalog, clock);
+        await new GetPairChartQueryHandler(pairs, new GatedHistory(), clock).Handle(new GetPairChartQuery("BTCUSDT", "1d", null), CancellationToken.None);
+
+        PairChartInternal? chart = await new GetPairChartQueryHandler(pairs, new GatedHistory(), clock).Handle(new GetPairChartQuery("NOSUCHUSDT", "1d", null), CancellationToken.None);
+        PairOpenInterestInternal? interest = await new GetPairOpenInterestQueryHandler(pairs, new GatedHistory(), clock).Handle(new GetPairOpenInterestQuery("NOSUCHUSDT", "1d", null), CancellationToken.None);
+
+        Assert.That(new object?[] { chart, interest }, Has.All.Null);
+        Assert.That(catalog.Reads, Is.EqualTo(3));
+    }
+
     private static GetPairChartQueryHandler Handler(IRecentHistory history, ListLogger log)
     {
-        return new GetPairChartQueryHandler(new ListedPairs(), history, new FakeTimeProvider(Now), new Typed(log));
+        var clock = new FakeTimeProvider(Now);
+        return new GetPairChartQueryHandler(new ChartPairs(new ListedPairs(), clock), history, clock, new Typed(log));
     }
 
     // The journal of the handler, kept by a list.
