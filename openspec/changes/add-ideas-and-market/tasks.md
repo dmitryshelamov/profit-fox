@@ -409,7 +409,7 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   окном), страница рисует свечи и выплаты сразу, OI — когда придёт, а его ошибка графика не роняет; отказ `History` на
   окно — запасной путь через REST. Проверить тестами контроллера и страницы; основная сессия замерит на настоящем
   сервисе: свечи `1d` — до секунды.
-- [ ] 19.8 Бэкенд, очередь ленты: `MarketFeedSettings` регистрируется как `new MarketFeedSettings()`, и `QueueCapacity`
+- [x] 19.8 Бэкенд, очередь ленты: `MarketFeedSettings` регистрируется как `new MarketFeedSettings()`, и `QueueCapacity`
   ленты настройкой не задаётся. Сделать: читать из `Scanner:QueueCapacity` (одна настройка на обе очереди) и сказать это
   в README. Проверить тестом регистрации.
 - [ ] 19.9 Бэкенд, сначала подтвердить: правило «2 минуты» из 18.10 верно, пока догон отдаёт минуты всех пар вперемешку
@@ -960,6 +960,12 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   `http://localhost:5240`): `334e52e9544e5ea78d6237b7db17c9f9788d38e7b3b66edc98b3aeefe230b18f`; SHA-256
   `frontend/src/api/generated/schema.d.ts`: `816887d84051ab628c7a04d701a7417d84e96e60391d98cc329f3e0dafe59ae8`. Замер
   «свечи `1d` — до секунды» — у основной сессии на настоящем сервисе.
+
+- **19.8, очередь ленты.** `MarketDataRegistrar` берёт `MarketFeedSettings.QueueCapacity` из `Scanner:QueueCapacity` —
+  одна настройка на очередь чтения лент и очередь сканера (у API она задаёт очередь ленты живой свечи); без настройки —
+  20 000. README, «Настройки», называет `Scanner:QueueCapacity`. Тест
+  `InfrastructureRegistrarTests.The_queue_of_the_live_feeds_takes_the_capacity_of_the_scanner`: без правки `1234` даёт
+  20 000.
 
 ## База
 
