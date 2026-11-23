@@ -389,4 +389,29 @@ describe('the lists after a change of their filter', () => {
 
     await waitFor(() => expect(marketQueries(requests).length).toBeGreaterThan(before));
   });
+
+  // Task 18.27: in «Идеи» a filter the list says is gone is taken off once, and the page does not go round while the
+  // list without it is on its way.
+  it('takes a gone filter off «Идеи» once', async () => {
+    localStorage.setItem('profit-fox.filter.ideas', JSON.stringify('f-gone'));
+    const write = vi.spyOn(Storage.prototype, 'setItem');
+    ideaRoutes([], {
+      'GET /api/ideas': async (request) => {
+        const filtered = new URL(request.url).searchParams.get('filter') !== null;
+        if (!filtered) {
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        }
+
+        return json({ items: [], total: 0, page: 1, pageSize: 50, filterGone: filtered });
+      },
+    });
+    renderApp('/ideas?tab=journal');
+
+    await waitFor(() => expect(localStorage.getItem('profit-fox.filter.ideas')).toBe('null'));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    const taken = write.mock.calls.filter(([key]) => key === 'profit-fox.filter.ideas');
+    write.mockRestore();
+    expect(taken).toHaveLength(1);
+  });
 });

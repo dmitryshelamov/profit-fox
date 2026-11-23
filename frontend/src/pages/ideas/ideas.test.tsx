@@ -212,6 +212,75 @@ describe('the section «Идеи»', () => {
   });
 });
 
+// Task 18.27: the summary goes back to its first page when a filter is chosen.
+describe('the page of the summary', () => {
+  it('goes back to the first page when a filter is chosen', async () => {
+    const summaries = Array.from({ length: 60 }, (_, index) => ({
+      strategyId: `s-${index}`,
+      strategy: `s-${index}`,
+      version: 1,
+      timeframe: '1h',
+      ideas: 1,
+      wins: 1,
+      mean: 0.001,
+      sum: 0.1,
+    }));
+    const requests = routes({
+      'GET /api/ideas/summary': (request) => {
+        const page = Number(new URL(request.url).searchParams.get('page') ?? 1);
+        return json({
+          items: summaries.slice((page - 1) * 50, page * 50),
+          total: 60,
+          page,
+          pageSize: 50,
+          filterGone: false,
+        });
+      },
+      'GET /api/filters': () =>
+        json([
+          {
+            id: 'f-shorts',
+            name: 'Шорты',
+            place: 'ideas',
+            conditions: [{ field: 'side', operator: 'eq', value: 'short', to: null }],
+          },
+        ]),
+      'GET /api/filters/fields': () => json([]),
+    });
+    renderApp('/ideas?tab=journal');
+    const summary = await screen.findByRole('table', { name: 'Сводка журнала' });
+    const pagers = await screen.findAllByRole('navigation', { name: 'Страницы' });
+    await userEvent.click(within(pagers[0]!).getByRole('button', { name: 'Следующая страница' }));
+    await waitFor(() =>
+      expect(within(summary).getByRole('row', { name: 's-55 v1 1h' })).toBeInTheDocument(),
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Шорты' }));
+
+    const asked = requests
+      .map((request) => new URL(request.url))
+      .filter((url) => url.pathname === '/api/ideas/summary')
+      .at(-1)!.searchParams;
+    await waitFor(() =>
+      expect(
+        requests
+          .map((request) => new URL(request.url))
+          .filter((url) => url.pathname === '/api/ideas/summary')
+          .at(-1)!
+          .searchParams.get('filter'),
+      ).toBe('f-shorts'),
+    );
+    expect(
+      requests
+        .map((request) => new URL(request.url))
+        .filter((url) => url.pathname === '/api/ideas/summary')
+        .at(-1)!
+        .searchParams.get('page'),
+    ).toBe('1');
+    expect(asked).toBeDefined();
+  });
+});
+
 // Spec strategy-ideas «Состояние сканера в разделе «Идеи»» (task 13.2).
 describe('the state of the scanner in «Идеи»', () => {
   afterEach(() => vi.unstubAllGlobals());

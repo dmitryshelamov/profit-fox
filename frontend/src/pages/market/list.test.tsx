@@ -235,4 +235,16 @@ describe('the section «Рынок»', () => {
     expect(await screen.findByText('обновлено 14:32:05 UTC')).toBeInTheDocument();
     expect(screen.queryByRole('alert', { name: 'Снимок устарел' })).toBeNull();
   });
+
+  // Task 18.27: a page past the last one is brought to the last one.
+  it('brings a page past the last one to the last one', async () => {
+    const requests = fakeApi({ ...routes(), 'GET /api/market/pairs': marketList(831) });
+    const { history } = renderApp('/market?page=99');
+
+    const pager = await screen.findByRole('navigation', { name: 'Страницы' });
+    await waitFor(() => expect(history.location.search).toContain('page=17'));
+    await waitFor(() => expect(pager).toHaveTextContent('801–831 из 831'));
+    expect(pager).toHaveTextContent('17 из 17');
+    expect(marketQueries(requests).at(-1)!.get('page')).toBe('17');
+  });
 });

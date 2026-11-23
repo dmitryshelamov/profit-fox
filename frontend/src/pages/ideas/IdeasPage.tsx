@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   getScannerState,
@@ -52,13 +52,12 @@ export function IdeasPage({
   const [openChoices, setOpenChoices] = useState<IdeaChoices>({});
   const [closedChoices, setClosedChoices] = useState<IdeaChoices>({ period: 7 });
   const filter = useChosenFilter('ideas');
-  const [gone, setGone] = useState(false);
-  useEffect(() => {
-    if (gone) {
+  // A filter the list says is gone is taken off once (task 18.27): the list asks again without it.
+  const takeOff = (id: string) => {
+    if (filter.chosen === id) {
       filter.choose(null);
-      setGone(false);
     }
-  }, [gone, filter]);
+  };
   const open = Number(state.data?.open ?? 0);
   const closed = Number(state.data?.closed ?? 0);
   const enabled = (strategies.data ?? []).some((strategy) => strategy.ideas?.enabled === true);
@@ -115,7 +114,7 @@ export function IdeasPage({
           {tab === 'open' ? (
             <OpenIdeas
               filter={filter.chosen}
-              onGone={() => setGone(true)}
+              onGone={takeOff}
               choices={openChoices}
               page={page}
               onChoices={(choices) => {
@@ -128,7 +127,7 @@ export function IdeasPage({
           ) : (
             <Journal
               filter={filter.chosen}
-              onGone={() => setGone(true)}
+              onGone={takeOff}
               choices={closedChoices}
               page={page}
               onChoices={(choices) => {
@@ -145,9 +144,23 @@ export function IdeasPage({
   );
 }
 
+// Tells once for a filter that the list says it is gone: the answer kept on the screen until the list without the filter
+// comes says so again on every render (task 18.27).
+function useGoneFilter(gone: boolean, filter: string | null, onGone: (filter: string) => void) {
+  const told = useRef<string | null>(null);
+  const latest = useRef(onGone);
+  latest.current = onGone;
+  useEffect(() => {
+    if (gone && filter !== null && told.current !== filter) {
+      told.current = filter;
+      latest.current(filter);
+    }
+  }, [gone, filter]);
+}
+
 interface ListProps {
   readonly filter: string | null;
-  readonly onGone: () => void;
+  readonly onGone: (filter: string) => void;
   readonly choices: IdeaChoices;
   readonly page: number;
   readonly onChoices: (choices: IdeaChoices) => void;
@@ -169,12 +182,7 @@ function OpenIdeas({ filter, onGone, choices, page, onChoices, onPage, onOpen }:
     refetchInterval: ideasRefreshMs,
   });
 
-  const gone = ideas.data?.filterGone === true;
-  useEffect(() => {
-    if (gone) {
-      onGone();
-    }
-  }, [gone, onGone]);
+  useGoneFilter(ideas.data?.filterGone === true, filter, onGone);
 
   return (
     <>
@@ -223,7 +231,13 @@ function OpenIdeas({ filter, onGone, choices, page, onChoices, onPage, onOpen }:
 function Journal({ filter, onGone, choices, page, onChoices, onPage, onOpen }: ListProps) {
   const list = useListSettings('ideas-journal', { field: 'exitTime', descending: true });
   const summaryList = useListSettings('ideas-summary', { field: 'ideas', descending: true });
-  const [summaryPage, setSummaryPage] = useState(1);
+  // The page of the summary belongs to its filter: another filter starts it on the first page (task 18.27).
+  const [summaryAt, setSummaryAt] = useState<{ filter: string | null; page: number }>({
+    filter,
+    page: 1,
+  });
+  const summaryPage = summaryAt.filter === filter ? summaryAt.page : 1;
+  const setSummaryPage = (next: number) => setSummaryAt({ filter, page: next });
   const ideas = useQuery({
     queryKey: ['ideas', 'closed', list.sort, page, list.pageSize, choices, filter],
     queryFn: () =>
@@ -257,12 +271,7 @@ function Journal({ filter, onGone, choices, page, onChoices, onPage, onOpen }: L
     placeholderData: keepPreviousData,
   });
   const problem = ideas.error ?? summary.error;
-  const gone = ideas.data?.filterGone === true;
-  useEffect(() => {
-    if (gone) {
-      onGone();
-    }
-  }, [gone, onGone]);
+  useGoneFilter(ideas.data?.filterGone === true, filter, onGone);
 
   return (
     <>

@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react';
+
 import { SelectField } from './SelectField';
 
 /** The sizes of a page of a list. */
@@ -26,8 +28,17 @@ export function Pager({
   readonly onPageSize: (size: number) => void;
 }) {
   const pages = pagesOf(total, pageSize);
-  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const to = Math.min(total, page * pageSize);
+  // A page past the last one — the address, or a list that got shorter — is brought to the last one (task 18.27).
+  const shown = Math.min(Math.max(1, page), pages);
+  const latest = useRef(onPage);
+  latest.current = onPage;
+  useEffect(() => {
+    if (page > pages) {
+      latest.current(pages);
+    }
+  }, [page, pages]);
+  const from = total === 0 ? 0 : (shown - 1) * pageSize + 1;
+  const to = Math.min(total, shown * pageSize);
   const step =
     'grid size-7 cursor-pointer place-items-center rounded-md border border-line text-muted hover:text-text disabled:cursor-not-allowed disabled:opacity-45';
 
@@ -41,20 +52,20 @@ export function Pager({
           type="button"
           aria-label="Предыдущая страница"
           className={step}
-          disabled={page <= 1}
-          onClick={() => onPage(page - 1)}
+          disabled={shown <= 1}
+          onClick={() => onPage(shown - 1)}
         >
           ‹
         </button>
         <span className="font-mono text-[13px] text-text">
-          {page} из {pages}
+          {shown} из {pages}
         </span>
         <button
           type="button"
           aria-label="Следующая страница"
           className={step}
-          disabled={page >= pages}
-          onClick={() => onPage(page + 1)}
+          disabled={shown >= pages}
+          onClick={() => onPage(shown + 1)}
         >
           ›
         </button>
