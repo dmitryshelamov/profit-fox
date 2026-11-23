@@ -7,6 +7,8 @@ using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Grpc.Net.Client;
 
+using Microsoft.Extensions.Logging;
+
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.ValueObjects.MarketData;
@@ -32,17 +34,22 @@ namespace ProfitFox.Infrastructure.Clients.MarketData;
 ///     of the pair. With a gRPC channel, the open interest of the days before the start of the current UTC day comes from
 ///     one call of <c>OpenInterestFeed.History</c>, which refuses a window that ends after it (task 18.2), and only the
 ///     current day from the REST; when History refuses or fails, it is asked again with the end a day earlier and the REST
-///     reads the tail, and when it refuses again the REST reads the last two days of the window (tasks 19.7, 20.7).
+///     reads the tail (tasks 19.7, 20.7), and when it refuses again the answer is that the history loads, without points
+///     and without the REST: the page asks again by its own timer (task 21.2).
 /// </summary>
-public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = null, TimeProvider? time = null) : IRecentHistory
+public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = null, TimeProvider? time = null, ILogger? logger = null) : IRecentHistory
 {
     /// <summary>
     ///     The most candles or points one answer gives.
     /// </summary>
     public const int MaxLimit = 1000;
 
-    // What the REST reads of the window when History refused it twice (task 20.7).
-    private static readonly TimeSpan TailDays = TimeSpan.FromDays(2);
+    // How often the journal tells that History refused the open interest twice, for each reason (task 21.2).
+    private static readonly TimeSpan WarningEvery = TimeSpan.FromMinutes(1);
+
+    // When the journal last told each reason of two refusals of History.
+    private readonly Dictionary<string, DateTimeOffset> _warned = new(StringComparer.Ordinal);
+    private readonly Lock _warnedLock = new();
 
     public async Task<RecentRead<HistoryCandle>> Candles(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation)
     {
@@ -82,24 +89,29 @@ public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = nu
             {
                 // History refused the window — near midnight the clock of the bench may be ahead of that of the service, whose
                 // day has not begun yet (task 19.7) — so it is asked again with the end a day earlier, and the REST reads the
-                // tail after it; refused again, the REST reads the last two days of the window, not the whole window page by
-                // page: a thousand days of 1d are 288 000 points (task 20.7).
+                // tail after it (task 20.7); a window no longer than a day after the refusal is read by the REST whole. Refused
+                // again, the window is not read from the REST at all — a thousand days of 1d are 288 000 points, and a part
+                // of the window given as the whole would hide the rest from the page — and the answer is that it loads: the
+                // page asks again by its own timer (task 21.2).
                 DateTimeOffset end = to < today ? to : today;
                 DateTimeOffset earlier = end - TimeSpan.FromDays(1);
-                if (await TryStoredPoints(instrumentId, from, end, cancellation) is { } stored)
+                Stored first = await TryStoredPoints(instrumentId, from, end, cancellation);
+                if (first.Points is { } stored)
                 {
                     points.AddRange(stored);
                     rest = end;
                 }
-                else if (earlier > from && await TryStoredPoints(instrumentId, from, earlier, cancellation) is { } older)
+                else if (earlier > from)
                 {
+                    Stored second = await TryStoredPoints(instrumentId, from, earlier, cancellation);
+                    if (second.Points is not { } older)
+                    {
+                        WarnRefusedTwice(instrumentId, from, earlier, second.Reason!);
+                        return new RecentRead<OpenInterestPoint>(Loading: true, []);
+                    }
+
                     points.AddRange(older);
                     rest = earlier;
-                }
-                else
-                {
-                    DateTimeOffset tail = to - TailDays;
-                    rest = tail > from ? tail : from;
                 }
             }
         }
@@ -118,18 +130,49 @@ public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = nu
         return new RecentRead<OpenInterestPoint>(Loading: false, PerInterval(points, interval));
     }
 
-    // The stored points of [from, to), or null when History refused or failed.
-    private async Task<IReadOnlyList<OpenInterestPoint>?> TryStoredPoints(string instrumentId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellation)
+    // The stored points of [from, to), or the reason History refused or failed.
+    private async Task<Stored> TryStoredPoints(string instrumentId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellation)
     {
         try
         {
-            return await StoredPoints(instrumentId, from, to, cancellation);
+            return new Stored(await StoredPoints(instrumentId, from, to, cancellation), null);
         }
-        catch (HistoryUnavailableException)
+        catch (HistoryUnavailableException exception)
         {
-            return null;
+            return new Stored(null, exception.Reason);
         }
     }
+
+    // Two refusals of History go to the journal no more than once a minute for each reason (task 21.2): every page of every
+    // pair asks again in 5 seconds while History refuses.
+    private void WarnRefusedTwice(string instrumentId, DateTimeOffset from, DateTimeOffset to, string reason)
+    {
+        if (logger is null)
+        {
+            return;
+        }
+
+        DateTimeOffset now = (time ?? TimeProvider.System).GetUtcNow();
+        lock (_warnedLock)
+        {
+            if (_warned.TryGetValue(reason, out DateTimeOffset last) && now - last < WarningEvery)
+            {
+                return;
+            }
+
+            _warned[reason] = now;
+        }
+
+        logger.LogWarning(
+            "History refused the open interest of {Instrument} twice, the second time for [{From:O}, {To:O}): {Reason}. The page is answered that it loads and asks again; the same reason is not written again for a minute.",
+            instrumentId,
+            from,
+            to,
+            reason);
+    }
+
+    // The points History gave, or the reason it refused.
+    private sealed record Stored(IReadOnlyList<OpenInterestPoint>? Points, string? Reason);
 
     /// <summary>
     ///     The stored points of open interest of past days at times in [<paramref name="from" />, <paramref name="to" />)

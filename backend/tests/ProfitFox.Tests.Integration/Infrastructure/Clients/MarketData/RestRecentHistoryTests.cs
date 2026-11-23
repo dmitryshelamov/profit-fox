@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 
 using ProfitFox.Application.Exceptions;
@@ -10,6 +11,7 @@ using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Clients.MarketData;
 using ProfitFox.Tests.Integration.MarketData;
+using ProfitFox.Tests.Shared.Logging;
 
 namespace ProfitFox.Tests.Integration.Infrastructure.Clients.MarketData;
 
@@ -204,10 +206,12 @@ public sealed class RestRecentHistoryTests
     }
 
     /// <summary>
-    ///     Task 20.7: History fails twice — the REST reads the last two days of the window, not its 500 days page by page.
+    ///     Task 21.2, the rule of task 20.7 for two refusals changed: History fails twice — the answer says the history loads,
+    ///     without points and without a request to the REST, and the page asks again by its own timer (task 20.6); the last
+    ///     two days given as the whole window hid the rest of it from the page.
     /// </summary>
     [Test]
-    public async Task A_History_that_fails_twice_reads_only_the_last_two_days_from_the_REST()
+    public async Task A_History_that_fails_twice_answers_that_the_open_interest_loads_without_reading_the_REST()
     {
         await using MarketDataServer server = await MarketDataServer.Start();
         var clock = new FakeTimeProvider(Midnight.AddHours(12).AddMinutes(34));
@@ -218,9 +222,45 @@ public sealed class RestRecentHistoryTests
         RecentRead<OpenInterestPoint> interest = await history.OpenInterest("btc", TimeSpan.FromDays(1), clock.GetUtcNow(), 500, CancellationToken.None);
 
         Assert.That(server.Data.InterestRequests, Has.Count.EqualTo(2));
-        Assert.That(server.Data.RestRequests.Count(request => request.StartsWith("open-interest", StringComparison.Ordinal)), Is.LessThanOrEqualTo(1));
-        Assert.That(DateTimeOffset.Parse(Query(server.Data.RestQueries.Single())["from"]), Is.EqualTo(Midnight.AddDays(-2)));
-        Assert.That(interest.Items.Select(point => point.Time), Is.EqualTo(new[] { Midnight.AddDays(-2), Midnight.AddDays(-1) }), "the last two days of the window, which ends at the start of today");
+        Assert.That(server.Data.RestRequests.Count(request => request.StartsWith("open-interest", StringComparison.Ordinal)), Is.Zero);
+        Assert.That((interest.Loading, interest.Items.Count), Is.EqualTo((true, 0)));
+    }
+
+    /// <summary>
+    ///     Task 21.2: two refusals of History are a line of the journal of level <c>Warning</c>, no more than once a minute for
+    ///     each reason.
+    /// </summary>
+    [Test]
+    public async Task Two_refusals_of_History_are_written_to_the_journal_once_a_minute_for_each_reason()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var clock = new FakeTimeProvider(Midnight.AddHours(12).AddMinutes(34));
+        server.Data.Time = clock;
+        server.Data.Failure = Grpc.Core.StatusCode.Unavailable;
+        var log = new ListLogger();
+        var history = new RestRecentHistory(server.Http, server.Channel, clock, log);
+        List<string> Warnings()
+        {
+            return log.Entries.Where(entry => entry.Level == LogLevel.Warning).Select(entry => entry.Message).ToList();
+        }
+
+        await history.OpenInterest("btc", TimeSpan.FromDays(1), clock.GetUtcNow(), 500, CancellationToken.None);
+        await history.OpenInterest("eth", TimeSpan.FromDays(1), clock.GetUtcNow(), 500, CancellationToken.None);
+        Assert.That(Warnings(), Has.Count.EqualTo(1), "the same reason within a minute");
+        Assert.That(Warnings()[0], Does.Contain("btc").And.Contain("Unavailable"));
+
+        server.Data.Failure = Grpc.Core.StatusCode.Internal;
+        await history.OpenInterest("btc", TimeSpan.FromDays(1), clock.GetUtcNow(), 500, CancellationToken.None);
+        Assert.That(Warnings(), Has.Count.EqualTo(2), "another reason");
+
+        clock.Advance(TimeSpan.FromSeconds(59));
+        server.Data.Failure = Grpc.Core.StatusCode.Unavailable;
+        await history.OpenInterest("btc", TimeSpan.FromDays(1), clock.GetUtcNow(), 500, CancellationToken.None);
+        Assert.That(Warnings(), Has.Count.EqualTo(2));
+
+        clock.Advance(TimeSpan.FromSeconds(1));
+        await history.OpenInterest("btc", TimeSpan.FromDays(1), clock.GetUtcNow(), 500, CancellationToken.None);
+        Assert.That(Warnings(), Has.Count.EqualTo(3), "a minute later");
     }
 
     [Test]

@@ -29,7 +29,8 @@ internal static class MarketDataRegistrar
         services.AddSingleton<IRecentHistory>(provider => new RestRecentHistory(
             new HttpClient { BaseAddress = rest, Timeout = TimeSpan.FromMinutes(1) },
             provider.GetRequiredService<GrpcChannel>(),
-            provider.GetService<TimeProvider>() ?? TimeProvider.System));
+            provider.GetService<TimeProvider>() ?? TimeProvider.System,
+            provider.GetService<ILoggerFactory>()?.CreateLogger<RestRecentHistory>()));
         // One setting for both queues between the feed and the scanner (task 19.8): Scanner:QueueCapacity.
         var feed = new MarketFeedSettings();
         if (int.TryParse(configuration["Scanner:QueueCapacity"], NumberStyles.Integer, CultureInfo.InvariantCulture, out int capacity))
