@@ -390,6 +390,114 @@ describe('the live candle', () => {
     expect(candlesInView()).toEqual(shown);
   });
 
+  // Task 21.1: the lines of an idea with a far term end a third of the bars in view past the last candle, so a closed
+  // candle moves their end; the series of the lines are kept and the range in view stays.
+  it('keeps the candles in view when a candle closes with the lines of a far term cut, the chart scrolled back', async () => {
+    routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour })]);
+    renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.segments).toHaveLength(3));
+    drawn.logicalRange = { from: 200, to: 317 };
+    act(() => drawn.rangeChange?.({ from: 200, to: 317 }));
+    const shown = candlesInView();
+
+    act(() => FakeEventSource.last().send('candle', live(fourteen, 238.42, true)));
+    act(() => FakeEventSource.last().send('candle', live(fourteen + hour, 238.5)));
+
+    await waitFor(() => expect(drawn.candles).toHaveLength(501));
+    const end = (fourteen + 39 * hour) / 1000;
+    await waitFor(() =>
+      expect(drawn.segments.map((line) => (line.data.at(-1) as { time: number }).time)).toEqual([
+        end,
+        end,
+        end,
+      ]),
+    );
+    expect(drawn.logicalRange).toEqual({ from: 200, to: 317 });
+    expect(candlesInView()).toEqual(shown);
+  });
+
+  // Task 21.1: zoomed in to three bars, the lines of a far term end one bar past the last candle at the next closed
+  // candle instead of fifty; the range in view stays.
+  it('keeps the candles in view when a candle closes after the chart was zoomed in with the lines of an idea', async () => {
+    routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour })]);
+    renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.segments).toHaveLength(3));
+    drawn.logicalRange = { from: 300, to: 303 };
+    act(() => drawn.rangeChange?.({ from: 300, to: 303 }));
+    const shown = candlesInView();
+
+    act(() => FakeEventSource.last().send('candle', live(fourteen, 238.42, true)));
+    act(() => FakeEventSource.last().send('candle', live(fourteen + hour, 238.5)));
+
+    await waitFor(() => expect(drawn.candles).toHaveLength(501));
+    const end = (fourteen + hour) / 1000;
+    await waitFor(() =>
+      expect(drawn.segments.map((line) => (line.data.at(-1) as { time: number }).time)).toEqual([
+        end,
+        end,
+        end,
+      ]),
+    );
+    expect(drawn.logicalRange).toEqual({ from: 300, to: 303 });
+    expect(candlesInView()).toEqual(shown);
+  });
+
+  // Task 21.1, seen with the library in Chromium: zoomed in on the last candles, which stay in view, the lines shorten
+  // from fifty bars to one at the closed candle, and the last bar of the time scale moves left; the range in view stays.
+  it('keeps the candles in view when a candle closes after the chart was zoomed in on the last candles', async () => {
+    routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour })]);
+    renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.segments).toHaveLength(3));
+    drawn.logicalRange = { from: 497.5, to: 500.5 };
+    act(() => drawn.rangeChange?.({ from: 497.5, to: 500.5 }));
+
+    act(() => FakeEventSource.last().send('candle', live(fourteen, 238.42, true)));
+    act(() => FakeEventSource.last().send('candle', live(fourteen + hour, 238.5)));
+
+    await waitFor(() => expect(drawn.candles).toHaveLength(501));
+    await waitFor(() =>
+      expect((drawn.segments[0]!.data.at(-1) as { time: number }).time).toBe(
+        (fourteen + hour) / 1000,
+      ),
+    );
+    expect(drawn.logicalRange).toEqual({ from: 497.5, to: 500.5 });
+  });
+
+  // Task 21.1: the open idea closed while the chart is scrolled back: its lines go, the range in view stays.
+  it('keeps the candles in view when the open idea closes while the chart is scrolled back', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const open = idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour });
+      let items: Idea[] = [open];
+      routes([], {
+        'GET /api/market/pairs/SOLUSDT/ideas': () =>
+          json({ items, total: items.length, page: 1, pageSize: 50, filterGone: false }),
+      });
+      renderApp('/market/SOLUSDT?timeframe=1h');
+      await waitFor(() => expect(drawn.segments).toHaveLength(3));
+      drawn.logicalRange = { from: 200, to: 317 };
+      act(() => drawn.rangeChange?.({ from: 200, to: 317 }));
+      const shown = candlesInView();
+
+      items = [
+        {
+          ...open,
+          state: 'closed',
+          exitTime: Date.UTC(2026, 10, 22, 13, 30),
+          exitReason: 'stop',
+          result: -0.02,
+        },
+      ];
+      await act(() => vi.advanceTimersByTimeAsync(15_100));
+
+      await waitFor(() => expect(drawn.segments).toHaveLength(0));
+      expect(drawn.logicalRange).toEqual({ from: 200, to: 317 });
+      expect(candlesInView()).toEqual(shown);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // Scenario «Поток оборвался».
   it('says the updates stopped and connects again', async () => {
     routes();

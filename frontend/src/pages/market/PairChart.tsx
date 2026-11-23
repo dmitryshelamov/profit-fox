@@ -23,6 +23,7 @@ import {
   chartHeight,
   type IdeaLine,
   type IdeaMark,
+  type LineLabel,
   lineLabels,
   minMoveOf,
   panelMargins,
@@ -59,11 +60,21 @@ interface Drawn {
   readonly markers: ISeriesMarkersPluginApi<Time>;
 }
 
-/** The lines of the open ideas drawn on a chart, and what they were drawn from. */
+/** A line of an open idea on the chart: its series and the labels written at its end. */
+interface MadeLine {
+  readonly series: ISeriesApi<'Line'>;
+  labels: LineLabels;
+}
+
+/**
+ * The lines of the open ideas drawn on a chart: which lines they are (`set`, the idea and the kind of each), their points
+ * and labels as last given (`key`), and their series (task 21.1).
+ */
 interface Made {
   readonly chart: IChartApi;
-  readonly key: string;
-  readonly series: readonly ISeriesApi<'Line'>[];
+  readonly set: string;
+  key: string;
+  readonly lines: readonly MadeLine[];
 }
 
 const seconds = (ms: number | string) => (Number(ms) / 1000) as UTCTimestamp;
@@ -300,7 +311,11 @@ export function PairChart({
   // to the candle of the term, no further than a third of the bars in view, with their labels to the right of their ends
   // and room for them to the right of the last candle (task 19.14). The end of the lines stands on the empty slot of its
   // term after the last candle (task 20.2). Lines and slots that did not change are not given again: every series taken
-  // off or added moves the last point of the time scale, and the range in view with it.
+  // off or added moves the last point of the time scale, and the range in view with it. The series of the same lines are
+  // kept and given their new points (task 21.1): the end of a line cut by a third of the bars in view moves with every
+  // closed candle and every change of the zoom. The library keeps the range in view when the last bar moves right, not
+  // when it moves left (a line made shorter, a line taken off), so the range in view before the change is given back
+  // after it.
   useEffect(() => {
     const current = drawn.current;
     if (current === null) {
@@ -318,33 +333,45 @@ export function PairChart({
       scale.options().barSpacing,
     );
 
+    let changed = false;
     const slotsKey = room.slots.join(',');
     if (slotsGiven.current?.chart !== current.chart || slotsGiven.current.key !== slotsKey) {
       current.slots.setData(room.slots.map((time) => ({ time: seconds(time) })));
       slotsGiven.current = { chart: current.chart, key: slotsKey };
+      changed = true;
     }
 
     const linesKey = JSON.stringify(room.lines);
-    if (made.current?.chart !== current.chart || made.current.key !== linesKey) {
-      if (made.current?.chart === current.chart) {
-        made.current.series.forEach((series) => current.chart.removeSeries(series));
-      }
-
+    const linesSet = room.lines.map((line) => `${line.id}:${line.kind}`).join(',');
+    const before = made.current?.chart === current.chart ? made.current : null;
+    const setChanged = before === null || before.set !== linesSet;
+    if (setChanged) {
+      before?.lines.forEach((line) => current.chart.removeSeries(line.series));
       made.current = {
         chart: current.chart,
+        set: linesSet,
         key: linesKey,
-        series: drawLines(current.chart, room.lines),
+        lines: drawLines(current.chart, room.lines),
       };
+      changed = true;
+    } else if (before.key !== linesKey) {
+      redrawLines(before.lines, room.lines);
+      before.key = linesKey;
+      changed = true;
+    }
+
+    if (changed && view !== null) {
+      scale.setVisibleLogicalRange(view);
     }
 
     // The library scrolls to the right edge on every `rightOffset` it is given (task 20.1): a chart gets one when it has its
-    // first candles, and later only when the room changed and the last candle is in view — a page loaded before or a
-    // closed candle leaves the range where it is. The last candle in view, not the offset from the last bar: lines and
-    // slots added after the candles move the last bar of the time scale while the range stays (task 20.2). The chart is
-    // compared too: under `StrictMode` it is drawn again with the refs kept.
+    // first candles, and later only when the lines came or went, the room changed and the last candle is in view — a page
+    // loaded before, a closed candle or a change of the zoom leaves the range where it is (task 21.1). The last candle in
+    // view, not the offset from the last bar: lines and slots added after the candles move the last bar of the time scale
+    // while the range stays (task 20.2). The chart is compared too: under `StrictMode` it is drawn again with the refs kept.
     const given = offset.current?.chart === current.chart ? offset.current.value : null;
     const lastTime = candles.at(-1)?.openTime;
-    if (lastTime !== undefined && room.offset !== given) {
+    if (lastTime !== undefined && room.offset !== given && (given === null || setChanged)) {
       const last = scale.timeToIndex(seconds(lastTime), true);
       const range = scale.getVisibleLogicalRange();
       if (given === null || last === null || range === null || range.to >= last) {
@@ -359,11 +386,35 @@ export function PairChart({
   );
 }
 
+/** The points of a line: from the candle of the entry to the slot of its end, one point when they are the same. */
+function pointsOf(line: IdeaLine): { time: UTCTimestamp; value: number }[] {
+  const points = [{ time: seconds(line.from), value: line.price }];
+  if (line.to > line.from) {
+    points.push({ time: seconds(line.to), value: line.price });
+  }
+
+  return points;
+}
+
+/** The labels a line writes at its end, of the labels of all the lines: its own, and the term at the end of the entry. */
+function labelsOf(line: IdeaLine, labels: readonly LineLabel[]): LineLabels {
+  return new LineLabels(
+    line.title,
+    labels.filter(
+      (label) =>
+        label.id === line.id &&
+        (label.kind === line.kind || (label.kind === 'term' && line.kind === 'entry')),
+    ),
+    line.kind === 'entry' ? chartColors.text : lineColors[line.kind],
+    labels,
+  );
+}
+
 /**
  * The lines of the open ideas on the chart, each with the labels at its end: their places are laid out over the labels of
  * all the lines, so those of close levels move apart (task 20.2). The chart removed takes its lines with it (task 19.1).
  */
-function drawLines(chart: IChartApi, lines: readonly IdeaLine[]): ISeriesApi<'Line'>[] {
+function drawLines(chart: IChartApi, lines: readonly IdeaLine[]): MadeLine[] {
   const labels = lineLabels(lines);
   return lines.map((line) => {
     const series = chart.addSeries(LineSeries, {
@@ -374,24 +425,25 @@ function drawLines(chart: IChartApi, lines: readonly IdeaLine[]): ISeriesApi<'Li
       priceLineVisible: false,
       crosshairMarkerVisible: false,
     });
-    const points = [{ time: seconds(line.from), value: line.price }];
-    if (line.to > line.from) {
-      points.push({ time: seconds(line.to), value: line.price });
-    }
+    series.setData(pointsOf(line));
+    const written = labelsOf(line, labels);
+    series.attachPrimitive(written);
+    return { series, labels: written };
+  });
+}
 
-    series.setData(points);
-    series.attachPrimitive(
-      new LineLabels(
-        line.title,
-        labels.filter(
-          (label) =>
-            label.id === line.id &&
-            (label.kind === line.kind || (label.kind === 'term' && line.kind === 'entry')),
-        ),
-        line.kind === 'entry' ? chartColors.text : lineColors[line.kind],
-        labels,
-      ),
-    );
-    return series;
+/**
+ * The same lines given their new points and labels (task 21.1): `made` and `lines` are of the same ideas and kinds in
+ * the same order. The series stay on the chart; only their data and the labels at their ends change.
+ */
+function redrawLines(made: readonly MadeLine[], lines: readonly IdeaLine[]): void {
+  const labels = lineLabels(lines);
+  made.forEach((drawnLine, index) => {
+    const line = lines[index]!;
+    drawnLine.series.setData(pointsOf(line));
+    const written = labelsOf(line, labels);
+    drawnLine.series.detachPrimitive(drawnLine.labels);
+    drawnLine.series.attachPrimitive(written);
+    drawnLine.labels = written;
   });
 }
