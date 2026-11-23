@@ -6,7 +6,8 @@ export const idleWarningSeconds = 60;
 
 /**
  * The state of the live data above the ideas (spec strategy-ideas «Состояние сканера в разделе «Идеи»»): the warm-up
- * while it goes, a warning when nobody keeps the live data longer than a minute, the moment ideas count without a break.
+ * while it goes — or, when the reads of the warm-up fail, how many pairs fail and the last reason (task 18.3) —, a
+ * warning when nobody keeps the live data longer than a minute, the moment ideas count without a break.
  */
 export function ScannerBanner({ state }: { readonly state: ScannerState }) {
   const idle = state.live ? 0 : Number(state.idleSeconds ?? Number.POSITIVE_INFINITY);
@@ -25,6 +26,19 @@ export function ScannerBanner({ state }: { readonly state: ScannerState }) {
 
   const pairs = Number(state.pairs);
   const warmed = Number(state.warmed);
+  const failed = Number(state.failed);
+  if (failed > 0 && warmed < pairs) {
+    return (
+      <p
+        role="status"
+        aria-label="Живые данные"
+        className="rounded-md border border-warn/40 bg-warn-bg px-4 py-2.5 text-warn"
+      >
+        прогрев не идёт у {failed} из {pairs} пар: {state.failure ?? 'сервис данных не ответил'}
+      </p>
+    );
+  }
+
   if (pairs > 0 && warmed < pairs) {
     return (
       <p

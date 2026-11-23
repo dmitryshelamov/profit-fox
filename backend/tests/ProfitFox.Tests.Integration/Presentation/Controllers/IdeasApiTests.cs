@@ -143,12 +143,13 @@ public sealed class IdeasApiTests
 
         ScannerStateResponse idle = (await _api.Http.GetFromJsonAsync<ScannerStateResponse>("/api/ideas/state", Json))!;
         await BenchServices.Get<IScannerLeaseRepository>().TakeAsync("worker-a", TimeSpan.FromMinutes(1), CancellationToken.None);
-        await BenchServices.Get<IScannerLeaseRepository>().ReportAsync("worker-a", Now, 310, 831, CancellationToken.None);
+        await BenchServices.Get<IScannerLeaseRepository>().ReportAsync("worker-a", Now, 310, 831, CancellationToken.None, failed: 521, failure: "answered 400");
         ScannerStateResponse live = (await _api.Http.GetFromJsonAsync<ScannerStateResponse>("/api/ideas/state", Json))!;
 
         Assert.That((idle.Worker, idle.Live, idle.Open, idle.Closed), Is.EqualTo(((string?)null, false, 1, 0)));
         Assert.That((live.Worker, live.Live, live.Warmed, live.Pairs, live.LiveSince), Is.EqualTo(("worker-a", true, 310, 831, (long?)Now.ToUnixTimeMilliseconds())));
         Assert.That(live.Burst.Keys, Is.SupersetOf(new[] { "1h" }));
+        Assert.That((idle.Failed, idle.Failure, live.Failed, live.Failure), Is.EqualTo((0, (string?)null, 521, "answered 400")), "task 18.3");
     }
 
     /// <summary>

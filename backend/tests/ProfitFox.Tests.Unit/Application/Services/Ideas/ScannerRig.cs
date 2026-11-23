@@ -28,8 +28,9 @@ internal sealed class ScannerRig
 
     public static readonly Instrument[] Pairs = [new Instrument("btc", "BTCUSDT"), new Instrument("eth", "ETHUSDT"), new Instrument("sol", "SOLUSDT")];
 
-    public ScannerRig(Instrument[]? pairs = null)
+    public ScannerRig(Instrument[]? pairs = null, ListLogger? log = null)
     {
+        Log = log ?? new ListLogger();
         Instruments = pairs ?? Pairs;
         Time = new FakeTimeProvider(Ten.AddSeconds(5));
         foreach (Instrument pair in Instruments)
@@ -45,8 +46,14 @@ internal sealed class ScannerRig
             new IdeaLibrary(Strategies, Signals, Enabled, Labels),
             Time,
             new ScannerSettings(),
-            Burst);
+            Burst,
+            Log);
     }
+
+    /// <summary>
+    ///     The journal of the scanner.
+    /// </summary>
+    public ListLogger Log { get; }
 
     public FakeTimeProvider Time { get; }
 

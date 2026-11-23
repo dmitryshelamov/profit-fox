@@ -33,7 +33,7 @@ internal sealed class RunScannerCommandHandler(
 
     public async Task<bool> Handle(RunScannerCommand request, CancellationToken cancellationToken)
     {
-        var scanner = new IdeaScanner(new MarketBook(time, settings.CloseDelay), history, ideas, market, library, time, settings, ideasSettings);
+        var scanner = new IdeaScanner(new MarketBook(time, settings.CloseDelay), history, ideas, market, library, time, settings, ideasSettings, logger);
         await scanner.StartAsync(cancellationToken);
         logger.LogInformation("The scanner of ideas starts on {Worker} from {Since:O}.", request.Worker, scanner.CatchUpFrom);
         var queue = Channel.CreateUnbounded<MarketEvent>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
@@ -57,7 +57,8 @@ internal sealed class RunScannerCommandHandler(
                     if (time.GetUtcNow() - reported >= ReportInterval)
                     {
                         (int warmed, int pairs) = scanner.Progress;
-                        await lease.ReportAsync(request.Worker, scanner.LiveSince, warmed, pairs, cancellationToken);
+                        (int failed, string? failure) = scanner.Failures;
+                        await lease.ReportAsync(request.Worker, scanner.LiveSince, warmed, pairs, cancellationToken, failed, failure);
                         reported = time.GetUtcNow();
                     }
                 }

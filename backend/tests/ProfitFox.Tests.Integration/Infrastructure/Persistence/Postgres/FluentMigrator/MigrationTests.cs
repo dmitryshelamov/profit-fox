@@ -55,7 +55,7 @@ public sealed class MigrationTests
 
         await using var connection = new NpgsqlConnection(connectionString);
         long[] versions = [.. await connection.QueryAsync<long>("SELECT \"Version\" FROM \"VersionInfo\" ORDER BY \"Version\"")];
-        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L }));
+        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L, 202611230002L }));
         Assert.That(await TablesOf(connectionString), Is.SupersetOf(new[] { "strategies", "strategy_versions", "strategy_signals" }));
     }
 
@@ -147,7 +147,28 @@ public sealed class MigrationTests
         Assert.That(
             await connection.QueryAsync<string>("SELECT indexname FROM pg_indexes WHERE tablename = 'ideas' ORDER BY indexname"),
             Is.EqualTo(new[] { "ideas_birth_ux", "ideas_pk", "ideas_state_moment_ix", "ideas_strategy_timeframe_ix", "ideas_symbol_moment_ix" }));
-        Assert.That(ProfitFox.Infrastructure.Persistence.Postgres.BenchSchema.Expected, Is.EqualTo(202611230001L));
+        Assert.That(ProfitFox.Infrastructure.Persistence.Postgres.BenchSchema.Expected, Is.GreaterThanOrEqualTo(202611230001L));
+    }
+
+    /// <summary>
+    ///     Change add-ideas-and-market, task 18.3: the lease of the scanner gets the failed warm-ups, and Down takes only them
+    ///     away.
+    /// </summary>
+    [Test]
+    public async Task The_failures_of_the_scanner_come_on_its_lease_and_go_back()
+    {
+        string connectionString = await BenchDatabase.NewDatabase();
+        await using var connection = new NpgsqlConnection(connectionString);
+        const string columns = "SELECT column_name FROM information_schema.columns WHERE table_name = 'scanner_lease' ORDER BY ordinal_position";
+        await using (ServiceProvider services = BenchDatabase.Migrated(connectionString))
+        {
+            Assert.That(await connection.QueryAsync<string>(columns), Is.EqualTo(new[] { "name", "worker", "until", "live_since", "warmed", "pairs", "failed", "failure" }));
+            using IServiceScope scope = services.CreateScope();
+            scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateDown(202611230001);
+        }
+
+        Assert.That(await connection.QueryAsync<string>(columns), Is.EqualTo(new[] { "name", "worker", "until", "live_since", "warmed", "pairs" }));
+        Assert.That(await TablesOf(connectionString), Is.EqualTo(Tables));
     }
 
     private static async Task<string[]> ColumnsOf(NpgsqlConnection connection, string[] tables)

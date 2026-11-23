@@ -77,7 +77,9 @@ public static class IdeaResponses
             state.Pairs,
             state.Open,
             state.Closed,
-            state.Burst);
+            state.Burst,
+            state.Failed,
+            state.Failure);
     }
 
     private static IdeaSummaryResponse Of(IdeaSummary row)

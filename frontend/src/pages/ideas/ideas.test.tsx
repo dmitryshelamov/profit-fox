@@ -226,6 +226,28 @@ describe('the state of the scanner in «Идеи»', () => {
     );
   });
 
+  // Task 18.3: a refused warm-up is shown instead of the warm-up.
+  it('shows the reason the warm-up fails instead of the warm-up', async () => {
+    routes({
+      'GET /api/ideas/state': () =>
+        json(
+          scannerState({
+            warmed: 0,
+            pairs: 831,
+            failed: 831,
+            failure: 'The REST of the market-data service answered 400 to candles',
+          }),
+        ),
+    });
+    renderApp('/ideas');
+
+    const banner = await screen.findByRole('status', { name: 'Живые данные' });
+    expect(banner).toHaveTextContent(
+      'прогрев не идёт у 831 из 831 пар: The REST of the market-data service answered 400 to candles',
+    );
+    expect(banner).not.toHaveTextContent('идёт прогрев');
+  });
+
   // Scenario «Сканер не работает».
   it('warns that new ideas do not come when nobody keeps the live data for two minutes', async () => {
     routes({ 'GET /api/ideas/state': () => json(scannerState({ live: false, idleSeconds: 120 })) });

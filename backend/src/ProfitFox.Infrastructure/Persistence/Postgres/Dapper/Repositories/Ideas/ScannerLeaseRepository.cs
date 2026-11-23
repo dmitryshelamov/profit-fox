@@ -30,12 +30,12 @@ internal sealed class ScannerLeaseRepository(NpgsqlDataSource database) : IScann
         await connection.ExecuteAsync(new CommandDefinition(ScannerLeaseRepositoryQueries.Release, new { ScannerLeaseRepositoryQueries.Name, Worker = worker }, cancellationToken: cancellationToken));
     }
 
-    public async Task ReportAsync(string worker, DateTimeOffset? liveSince, int warmed, int pairs, CancellationToken cancellationToken)
+    public async Task ReportAsync(string worker, DateTimeOffset? liveSince, int warmed, int pairs, CancellationToken cancellationToken, int failed = 0, string? failure = null)
     {
         await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
         await connection.ExecuteAsync(new CommandDefinition(
             ScannerLeaseRepositoryQueries.Report,
-            new { ScannerLeaseRepositoryQueries.Name, Worker = worker, LiveSince = liveSince, Warmed = warmed, Pairs = pairs },
+            new { ScannerLeaseRepositoryQueries.Name, Worker = worker, LiveSince = liveSince, Warmed = warmed, Pairs = pairs, Failed = failed, Failure = failure },
             cancellationToken: cancellationToken));
     }
 
@@ -43,7 +43,7 @@ internal sealed class ScannerLeaseRepository(NpgsqlDataSource database) : IScann
     {
         await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
         Row? row = await connection.QuerySingleOrDefaultAsync<Row>(new CommandDefinition(ScannerLeaseRepositoryQueries.State, new { ScannerLeaseRepositoryQueries.Name }, cancellationToken: cancellationToken));
-        return row is null ? null : (new ScannerState(row.Worker, row.Until, row.LiveSince, row.Warmed, row.Pairs), row.Now);
+        return row is null ? null : (new ScannerState(row.Worker, row.Until, row.LiveSince, row.Warmed, row.Pairs, row.Failed, row.Failure), row.Now);
     }
 
     private sealed class Row
@@ -57,6 +57,10 @@ internal sealed class ScannerLeaseRepository(NpgsqlDataSource database) : IScann
         public int Warmed { get; init; }
 
         public int Pairs { get; init; }
+
+        public int Failed { get; init; }
+
+        public string? Failure { get; init; }
 
         public DateTimeOffset Now { get; init; }
     }

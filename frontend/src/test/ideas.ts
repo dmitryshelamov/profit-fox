@@ -46,6 +46,8 @@ export function scannerState(overrides: Partial<ScannerState> = {}): ScannerStat
     open: 1,
     closed: 0,
     burst: { '1h': 8 },
+    failed: 0,
+    failure: null,
     ...overrides,
   };
 }

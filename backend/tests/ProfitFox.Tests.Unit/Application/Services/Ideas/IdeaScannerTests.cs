@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+
 using ProfitFox.Application.Ports.MarketData.Feed;
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
@@ -53,6 +55,39 @@ public sealed class IdeaScannerTests
         Assert.That(rig.Ideas.Ideas, Is.Empty);
         await rig.At(Eleven.AddSeconds(15));
         Assert.That(rig.Ideas.Ideas, Has.Count.EqualTo(1));
+    }
+
+    /// <summary>
+    ///     Task 18.3: a refused warm-up is written to the journal no more than once a minute for a reason, the state counts
+    ///     the pairs it refused and tells the last reason, and a pair that warms up later leaves the count.
+    /// </summary>
+    [Test]
+    public async Task A_refused_warmup_is_written_to_the_journal_and_counted()
+    {
+        var rig = new ScannerRig();
+        const string refusal = "The REST of the market-data service answered 400 to candles: from is required";
+        rig.History.Failing["eth"] = refusal;
+        rig.History.Failing["sol"] = refusal;
+        await rig.Enable("close-up", "8h");
+        await rig.Start();
+
+        Assert.That(rig.Scanner.Progress, Is.EqualTo((1, 3)));
+        Assert.That(rig.Scanner.Failures, Is.EqualTo((2, refusal)));
+        Assert.That(rig.Log.Entries.Where(entry => entry.Message.Contains(refusal)).Select(entry => entry.Level), Is.EqualTo(new[] { LogLevel.Warning }), "one line for the reason");
+
+        await rig.At(Ten.AddSeconds(50));
+        Assert.That(rig.Log.Entries.Count(entry => entry.Message.Contains(refusal)), Is.EqualTo(1), "not again within the minute");
+
+        rig.History.Failing.Remove("eth");
+        rig.Time.SetUtcNow(Ten.AddMinutes(1).AddSeconds(10));
+        await rig.Warm();
+        Assert.That(rig.Scanner.Failures, Is.EqualTo((1, refusal)), "ETHUSDT warmed up");
+        Assert.That(rig.Log.Entries.Count(entry => entry.Message.Contains(refusal)), Is.EqualTo(2), "a minute later the reason is written again");
+
+        rig.History.Failing.Clear();
+        rig.Time.SetUtcNow(Ten.AddMinutes(2).AddSeconds(20));
+        await rig.Warm();
+        Assert.That(rig.Scanner.Failures, Is.EqualTo((0, (string?)null)));
     }
 
     /// <summary>

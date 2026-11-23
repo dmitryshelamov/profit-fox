@@ -223,7 +223,11 @@ public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = nu
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new HistoryUnavailableException($"The REST of the market-data service answered {(int)response.StatusCode} to {request}.");
+                // The message names what was asked, not the pair: the scanner tells one reason once for all pairs.
+                string body = await response.Content.ReadAsStringAsync(cancellation);
+                string what = request[..request.IndexOf('?')].Split('/')[^1];
+                throw new HistoryUnavailableException(
+                    $"The REST of the market-data service answered {(int)response.StatusCode} to {what}: {(body.Length > 200 ? body[..200] : body)}");
             }
 
             using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellation));

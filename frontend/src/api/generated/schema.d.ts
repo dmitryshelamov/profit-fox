@@ -1055,6 +1055,9 @@ export interface components {
             burst: {
                 [key: string]: number | string;
             };
+            /** Format: int32 */
+            failed: number | string;
+            failure: null | string;
         };
         SetNumbersResponse: {
             /** Format: int32 */

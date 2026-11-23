@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 
+using Microsoft.Extensions.Logging;
+
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.Ports.MarketData.Feed;
 using ProfitFox.Application.Services.Market;
@@ -45,6 +47,9 @@ public sealed class IdeaScanner
     private readonly Dictionary<string, Slot> _slots = new Dictionary<string, Slot>(StringComparer.Ordinal);
     private readonly Dictionary<TimeSpan, DateTimeOffset> _boundaries = [];
     private readonly HashSet<Idea> _dirty = [];
+    private readonly ILogger? _logger;
+    private readonly Dictionary<string, DateTimeOffset> _logged = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
+    private string? _lastFailure;
     private Dictionary<string, string> _pairs = new Dictionary<string, string>(StringComparer.Ordinal);
     private List<Idea> _open = [];
     private DateTimeOffset _started;
@@ -60,8 +65,10 @@ public sealed class IdeaScanner
         IdeaLibrary library,
         TimeProvider time,
         ScannerSettings settings,
-        IdeasSettings burst)
+        IdeasSettings burst,
+        ILogger? logger = null)
     {
+        _logger = logger;
         Book = book;
         _history = history;
         _ideas = ideas;
@@ -91,6 +98,20 @@ public sealed class IdeaScanner
             Run[] runs = [.. _slots.Values.Select(slot => slot.Current)];
             int warmed = _pairs.Keys.Count(symbol => runs.All(run => run.Pairs.TryGetValue(symbol, out PairState? state) && state.State == WarmState.Warm));
             return (warmed, _pairs.Count);
+        }
+    }
+
+    /// <summary>
+    ///     How many pairs of the set the last warm-up read of some enabled strategy or label failed on, and the last reason
+    ///     (task 18.3); null while none failed.
+    /// </summary>
+    public (int Failed, string? Reason) Failures
+    {
+        get
+        {
+            Run[] runs = [.. _slots.Values.Select(slot => slot.Current)];
+            int failed = _pairs.Keys.Count(symbol => runs.Any(run => run.Pairs.TryGetValue(symbol, out PairState? state) && state.Failure is not null));
+            return (failed, failed > 0 ? _lastFailure : null);
         }
     }
 
@@ -315,8 +336,8 @@ public sealed class IdeaScanner
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            // The service did not answer: the pair is read again later.
-            _warmed.Enqueue(new Warmup(run, symbol, Loading: true, [], [], null));
+            // The service did not answer or refused: the pair is read again later, and the reason is told.
+            _warmed.Enqueue(new Warmup(run, symbol, Loading: true, [], [], null) { Failure = exception.Message });
         }
         finally
         {
@@ -332,6 +353,12 @@ public sealed class IdeaScanner
             if (!warmup.Run.Pairs.TryGetValue(warmup.Symbol, out PairState? state))
             {
                 continue;
+            }
+
+            state.Failure = warmup.Failure;
+            if (warmup.Failure is { } failure)
+            {
+                Failed(warmup.Symbol, failure, now);
             }
 
             if (warmup.Loading)
@@ -353,6 +380,19 @@ public sealed class IdeaScanner
 
             state.State = WarmState.Warm;
         }
+    }
+
+    // A failed warm-up goes to the journal no more than once a minute for one reason: 831 pairs refused alike give one line.
+    private void Failed(string symbol, string failure, DateTimeOffset now)
+    {
+        _lastFailure = failure;
+        if (_logged.TryGetValue(failure, out DateTimeOffset logged) && now - logged < OneMinute)
+        {
+            return;
+        }
+
+        _logged[failure] = now;
+        _logger?.LogWarning("The warm-up of {Symbol} failed and is read again in {Retry}: {Failure}", symbol, _settings.WarmupRetry, failure);
     }
 
     // A strategy is stepped for its order; a label keeps the value of its signal at the close.
@@ -587,6 +627,9 @@ public sealed class IdeaScanner
         public DateTimeOffset WarmedUntil { get; set; } = DateTimeOffset.MinValue;
 
         public DateTimeOffset RetryAt { get; set; } = DateTimeOffset.MinValue;
+
+        // Why the last warm-up read failed; null when it did not.
+        public string? Failure { get; set; }
     }
 
     // A strategy on one timeframe or a label, with its executor and the state of each pair.
@@ -625,5 +668,8 @@ public sealed class IdeaScanner
         bool Loading,
         IReadOnlyList<HistoryCandle> Candles,
         IReadOnlyList<HistoryPayment> Funding,
-        IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>? Named);
+        IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>? Named)
+    {
+        public string? Failure { get; init; }
+    }
 }

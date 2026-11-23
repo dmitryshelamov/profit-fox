@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Time.Testing;
 
+using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Clients.MarketData;
@@ -164,6 +165,18 @@ public sealed class RestRecentHistoryTests
     }
 
     [Test]
+    public async Task A_refusal_tells_what_was_asked_and_the_answer_of_the_service_but_not_the_pair()
+    {
+        var service = new PagedService("""{ "error": "from is required" }""") { Status = HttpStatusCode.BadRequest };
+        var history = new RestRecentHistory(new HttpClient(service) { BaseAddress = new Uri("http://market-data/") });
+
+        HistoryUnavailableException? refused = Assert.ThrowsAsync<HistoryUnavailableException>(
+            () => history.Candles("btc-id", TimeSpan.FromHours(1), Midnight, 200, CancellationToken.None));
+
+        Assert.That(refused!.Message, Is.EqualTo("""The REST of the market-data service answered 400 to candles: { "error": "from is required" }"""));
+    }
+
+    [Test]
     public async Task A_pair_whose_history_is_loading_is_still_loading()
     {
         await using MarketDataServer server = await MarketDataServer.Start();
@@ -186,10 +199,12 @@ public sealed class RestRecentHistoryTests
     {
         public List<string> Requests { get; } = [];
 
+        public HttpStatusCode Status { get; init; } = HttpStatusCode.OK;
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Requests.Add(request.RequestUri!.PathAndQuery);
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(pages[Requests.Count - 1], Encoding.UTF8, "application/json") });
+            return Task.FromResult(new HttpResponseMessage(Status) { Content = new StringContent(pages[Requests.Count - 1], Encoding.UTF8, "application/json") });
         }
     }
 }

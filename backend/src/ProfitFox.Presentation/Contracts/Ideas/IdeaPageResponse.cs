@@ -17,7 +17,8 @@ public sealed record IdeaSummaryPageResponse(IReadOnlyList<IdeaSummaryResponse> 
 /// <summary>
 ///     The state of the live data (spec strategy-ideas «Состояние сканера в разделе „Идеи“»): the Worker that keeps it and
 ///     whether its lease holds now, the seconds nobody has kept it — null when nobody ever did —, since when ideas count
-///     without a break, the warmed pairs of all, the numbers of open and closed ideas, and the thresholds of the burst.
+///     without a break, the warmed pairs of all, the numbers of open and closed ideas, the thresholds of the burst, and how
+///     many pairs the warm-up failed on with the last reason — null while none failed (task 18.3).
 /// </summary>
 public sealed record ScannerStateResponse(
     string? Worker,
@@ -28,4 +29,6 @@ public sealed record ScannerStateResponse(
     int Pairs,
     int Open,
     int Closed,
-    IReadOnlyDictionary<string, int> Burst);
+    IReadOnlyDictionary<string, int> Burst,
+    int Failed,
+    string? Failure);
