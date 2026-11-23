@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.CommandLine.Help;
+using System.Globalization;
 
 using ProfitFox.Cli.Api;
 using ProfitFox.Cli.Commands.Runs;
@@ -36,6 +37,28 @@ public static class CliApp
         HttpClient? http = null,
         TimeSpan? pollInterval = null,
         CancellationToken cancellation = default)
+    {
+        // The texts of the tool are English: the usage of System.CommandLine stays English on a machine in another culture
+        // (task 18.4), instead of a translation mixed with them.
+        CultureInfo culture = CultureInfo.CurrentUICulture;
+        CultureInfo.CurrentUICulture = CultureInfo.InvariantCulture;
+        try
+        {
+            return await RunInvariant(args, output, error, http, pollInterval, cancellation);
+        }
+        finally
+        {
+            CultureInfo.CurrentUICulture = culture;
+        }
+    }
+
+    private static async Task<int> RunInvariant(
+        string[] args,
+        TextWriter output,
+        TextWriter error,
+        HttpClient? http,
+        TimeSpan? pollInterval,
+        CancellationToken cancellation)
     {
         BenchClient? client = null;
         TimeSpan interval = pollInterval ?? DefaultPollInterval;

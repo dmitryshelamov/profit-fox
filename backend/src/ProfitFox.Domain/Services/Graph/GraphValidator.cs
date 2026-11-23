@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using ProfitFox.Domain.Services.Nodes;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
@@ -259,7 +261,7 @@ internal static class GraphValidator
                 errors.Add(
                     new GraphError(
                         GraphErrorCode.ParameterOutOfBounds,
-                        $"The value {value} is outside [{parameter.Minimum?.ToString() ?? "..."}, {parameter.Maximum?.ToString() ?? "..."}].")
+                        OutOfBounds(value, parameter.Minimum, parameter.Maximum))
                     {
                         Parameter = parameter.Name
                     });
@@ -490,7 +492,7 @@ internal static class GraphValidator
         errors.Add(
             new GraphError(
                 GraphErrorCode.ParameterOutOfBounds,
-                $"The value {value.Number} is outside [{parameter.Minimum?.ToString() ?? "..."}, {parameter.Maximum?.ToString() ?? "..."}].")
+                OutOfBounds(value.Number, parameter.Minimum, parameter.Maximum))
             {
                 Node = node.Node.Id,
                 Pin = name
@@ -689,4 +691,12 @@ internal static class GraphValidator
         IReadOnlyList<PinDeclaration>? Inputs,
         IReadOnlyList<PinDeclaration> Outputs,
         Signal? Signal);
+
+    // The numbers in invariant writing, whatever the culture of the machine (task 18.4).
+    private static string OutOfBounds(decimal value, decimal? minimum, decimal? maximum)
+    {
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"The value {value} is outside [{(minimum is { } low ? low.ToString(CultureInfo.InvariantCulture) : "...")}, {(maximum is { } high ? high.ToString(CultureInfo.InvariantCulture) : "...")}].");
+    }
 }

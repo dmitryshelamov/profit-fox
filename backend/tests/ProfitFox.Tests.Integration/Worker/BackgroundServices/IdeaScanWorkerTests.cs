@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 using Dapper;
@@ -189,7 +190,7 @@ public sealed class IdeaScanWorkerTests
         _server.Data.Closes["btc"] = "99";
         _server.Data.Closes["eth"] = "99";
         _server.Data.Closes["sol"] = "99";
-        string stopNode = stop is { } distance ? $$""", { "id": "stop-loss", "kind": "stop-loss", "inputs": { "distance": {{distance}} } }""" : "";
+        string stopNode = stop is { } distance ? $$""", { "id": "stop-loss", "kind": "stop-loss", "inputs": { "distance": {{distance.ToString(CultureInfo.InvariantCulture)}} } }""" : "";
         string stopWires = stop is null ? "" : """, { "from": "position.position", "to": "stop-loss.position" }, { "from": "stop-loss.order", "to": "position.orders" }""";
         string json = $$"""
                         {
