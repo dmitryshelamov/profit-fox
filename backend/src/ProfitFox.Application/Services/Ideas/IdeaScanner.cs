@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 
 using Microsoft.Extensions.Logging;
 
+using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.Ports.MarketData.Feed;
 using ProfitFox.Application.Services.Market;
@@ -40,6 +41,9 @@ public sealed class IdeaScanner
     // How far the feed has to be past a moment for a pair with no minute up to it to count as having had no trades then
     // (task 18.10): a minute of another pair may come before the last one of this pair.
     private static readonly TimeSpan PairWait = TimeSpan.FromMinutes(2);
+
+    // How many reasons of failed warm-ups the scanner remembers having told within the minute (task 19.4).
+    private const int LoggedReasons = 64;
 
     private readonly IRecentHistory _history;
     private readonly IIdeaRepository _ideas;
@@ -368,7 +372,11 @@ public sealed class IdeaScanner
         {
             // The service did not answer, refused or timed out — the timeout of the REST is a cancellation too, but not by the
             // stop of the scanner (task 19.2): the pair is read again later, and the reason is told.
-            _warmed.Enqueue(new Warmup(run, symbol, Loading: true, [], [], null) { Failure = exception.Message });
+            _warmed.Enqueue(new Warmup(run, symbol, Loading: true, [], [], null)
+            {
+                Failure = exception.Message,
+                Reason = exception is HistoryUnavailableException refusal ? refusal.Reason : exception.GetType().Name
+            });
         }
         finally
         {
@@ -403,7 +411,7 @@ public sealed class IdeaScanner
             state.Failure = warmup.Failure;
             if (warmup.Failure is { } failure)
             {
-                Failed(warmup.Symbol, failure, now);
+                Failed(warmup.Symbol, warmup.Reason ?? failure, failure, now);
             }
 
             if (warmup.Loading)
@@ -441,16 +449,31 @@ public sealed class IdeaScanner
         }
     }
 
-    // A failed warm-up goes to the journal no more than once a minute for one reason: 831 pairs refused alike give one line.
-    private void Failed(string symbol, string failure, DateTimeOffset now)
+    // A failed warm-up goes to the journal no more than once a minute for one reason — the code and what was asked, not the
+    // body of the answer (task 19.4): 831 pairs refused alike give one line whatever their bodies. The reasons told are kept
+    // for a minute and no more than a bounded number of them.
+    private void Failed(string symbol, string reason, string failure, DateTimeOffset now)
     {
         _lastFailure = failure;
-        if (_logged.TryGetValue(failure, out DateTimeOffset logged) && now - logged < OneMinute)
+        if (_logged.TryGetValue(reason, out DateTimeOffset logged) && now - logged < OneMinute)
         {
             return;
         }
 
-        _logged[failure] = now;
+        if (_logged.Count >= LoggedReasons)
+        {
+            foreach (string told in _logged.Where(item => now - item.Value >= OneMinute).Select(item => item.Key).ToList())
+            {
+                _logged.Remove(told);
+            }
+
+            if (_logged.Count >= LoggedReasons)
+            {
+                _logged.Clear();
+            }
+        }
+
+        _logged[reason] = now;
         _logger?.LogWarning("The warm-up of {Symbol} failed and is read again in {Retry}: {Failure}", symbol, _settings.WarmupRetry, failure);
     }
 
@@ -848,5 +871,8 @@ public sealed class IdeaScanner
         IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>? Named)
     {
         public string? Failure { get; init; }
+
+        // The failure without what changes from one read to the next: the key of the journal (task 19.4).
+        public string? Reason { get; init; }
     }
 }

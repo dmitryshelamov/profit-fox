@@ -120,7 +120,8 @@ public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = nu
         }
         catch (RpcException exception) when (exception.StatusCode is not StatusCode.Cancelled)
         {
-            throw new HistoryUnavailableException($"The market-data service answered {exception.StatusCode} to the history of open interest: {exception.Status.Detail}", exception);
+            string reason = $"The market-data service answered {exception.StatusCode} to the history of open interest";
+            throw new HistoryUnavailableException($"{reason}: {exception.Status.Detail}", exception, reason: reason);
         }
 
         return points;
@@ -226,8 +227,8 @@ public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = nu
                 // The message names what was asked, not the pair: the scanner tells one reason once for all pairs.
                 string body = await response.Content.ReadAsStringAsync(cancellation);
                 string what = request[..request.IndexOf('?')].Split('/')[^1];
-                throw new HistoryUnavailableException(
-                    $"The REST of the market-data service answered {(int)response.StatusCode} to {what}: {(body.Length > 200 ? body[..200] : body)}");
+                string reason = $"The REST of the market-data service answered {(int)response.StatusCode} to {what}";
+                throw new HistoryUnavailableException($"{reason}: {(body.Length > 200 ? body[..200] : body)}", reason: reason);
             }
 
             using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellation));

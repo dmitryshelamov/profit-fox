@@ -174,6 +174,7 @@ public sealed class RestRecentHistoryTests
             () => history.Candles("btc-id", TimeSpan.FromHours(1), Midnight, 200, CancellationToken.None));
 
         Assert.That(refused!.Message, Is.EqualTo("""The REST of the market-data service answered 400 to candles: { "error": "from is required" }"""));
+        Assert.That(refused.Reason, Is.EqualTo("The REST of the market-data service answered 400 to candles"), "task 19.4: the reason without the body");
     }
 
     [Test]

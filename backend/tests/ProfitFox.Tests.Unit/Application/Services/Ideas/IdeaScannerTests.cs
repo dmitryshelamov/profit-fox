@@ -1,10 +1,12 @@
 using Microsoft.Extensions.Logging;
 
+using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.MarketData.Feed;
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.Market;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Trades.Enums;
 
 using static ProfitFox.Tests.Unit.Application.Services.Ideas.ScannerRig;
@@ -326,6 +328,35 @@ public sealed class IdeaScannerTests
         rig.Time.SetUtcNow(Ten.AddMinutes(2).AddSeconds(20));
         await rig.Warm();
         Assert.That(rig.Scanner.Failures, Is.EqualTo((0, (string?)null)));
+    }
+
+    /// <summary>
+    ///     Task 19.4: the refusals of 831 pairs whose bodies differ (a trace id, the moments of the window) are one reason — the
+    ///     code and what was asked — and give one line a minute; the line still has a body.
+    /// </summary>
+    [Test]
+    public async Task Refusals_with_different_bodies_give_one_line_a_minute()
+    {
+        Instrument[] pairs = Many(831);
+        var rig = new ScannerRig(pairs);
+        for (int index = 0; index < pairs.Length; index++)
+        {
+            rig.History.Refusing[pairs[index].Id] = new HistoryUnavailableException(
+                $$"""The REST of the market-data service answered 400 to candles: { "traceId": "{{index}}" }""",
+                reason: "The REST of the market-data service answered 400 to candles");
+        }
+
+        await rig.Enable("close-up", "8h");
+        await rig.Start();
+
+        string[] lines = [.. rig.Log.Entries.Select(entry => entry.Message).Where(message => message.Contains("answered 400 to candles"))];
+        Assert.That(lines, Has.Length.EqualTo(1));
+        Assert.That(lines[0], Does.Contain("traceId"));
+        Assert.That(rig.Scanner.Failures.Failed, Is.EqualTo(831));
+
+        rig.Time.SetUtcNow(Ten.AddMinutes(1).AddSeconds(10));
+        await rig.Warm();
+        Assert.That(rig.Log.Entries.Count(entry => entry.Message.Contains("answered 400 to candles")), Is.EqualTo(2), "a minute later once more");
     }
 
     /// <summary>

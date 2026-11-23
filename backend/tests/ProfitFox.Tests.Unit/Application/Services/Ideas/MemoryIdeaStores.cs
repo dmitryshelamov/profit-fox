@@ -214,6 +214,11 @@ public sealed class FakeRecentHistory : IRecentHistory
     /// </summary>
     public HashSet<string> TimingOut { get; } = [];
 
+    /// <summary>
+    ///     The ids of the pairs whose candles the service refuses with this exception (task 19.4).
+    /// </summary>
+    public Dictionary<string, Exception> Refusing { get; } = [];
+
     public List<string> Asked { get; } = [];
 
     Task<RecentRead<HistoryCandle>> IRecentHistory.Candles(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation)
@@ -231,6 +236,11 @@ public sealed class FakeRecentHistory : IRecentHistory
         if (Failing.TryGetValue(instrumentId, out string? failure))
         {
             throw new HistoryUnavailableException(failure);
+        }
+
+        if (Refusing.TryGetValue(instrumentId, out Exception? refusal))
+        {
+            throw refusal;
         }
 
         if (TimingOut.Contains(instrumentId))
