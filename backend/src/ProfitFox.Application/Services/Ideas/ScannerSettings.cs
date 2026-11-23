@@ -26,4 +26,11 @@ public sealed class ScannerSettings
     ///     How often the scanner looks at its clock when the feed is quiet.
     /// </summary>
     public TimeSpan TickInterval { get; init; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    ///     How many events of the feed wait for the scanner at most (task 18.12): a full queue stops the reading of the feed
+    ///     until the scanner takes them, and the service that cuts the feed off for it is answered by a new subscription
+    ///     from the last item.
+    /// </summary>
+    public int QueueCapacity { get; init; } = 20_000;
 }

@@ -20,7 +20,8 @@ namespace ProfitFox.Infrastructure.Clients.MarketData;
 ///     The live feeds over the <c>Subscribe</c> of the four feeds of the market-data service (change add-ideas-and-market,
 ///     design.md, decision 2; spec market-live-feed). It subscribes to Bybit and keeps only the pairs of the catalog of
 ///     linear USDT perpetuals, read again every <see cref="MarketFeedSettings.CatalogRefresh" />. What comes is written to a
-///     queue of its own at once, so the service never cuts it off for a slow reader. After <c>UNAVAILABLE</c>,
+///     bounded queue of its own: a slow reader stops the reading, and a stream the service cuts off for it is subscribed
+///     again from its last item. After <c>UNAVAILABLE</c>,
 ///     <c>RESOURCE_EXHAUSTED</c> or a break it subscribes again from a little before the last item it got; a break longer
 ///     than the service catches up is told as a <see cref="FeedGap" />, once for a break. Whatever else breaks a feed — but
 ///     a cancellation — is written to the journal, and the feed subscribes again after the pause of a retry; an item it
@@ -40,7 +41,12 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
 
     public async IAsyncEnumerable<MarketEvent> Subscribe(MarketSubscription subscription, [EnumeratorCancellation] CancellationToken cancellation)
     {
-        var queue = Channel.CreateUnbounded<MarketEvent>(new UnboundedChannelOptions { SingleReader = true });
+        // A bounded queue (task 18.12): a reader that is slow stops the reading of the streams instead of piling them up.
+        var queue = Channel.CreateBounded<MarketEvent>(new BoundedChannelOptions(Math.Max(1, settings.QueueCapacity))
+        {
+            SingleReader = true,
+            FullMode = BoundedChannelFullMode.Wait
+        });
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         var pairs = new PairsView();
         await RefreshPairs(pairs, queue.Writer, stop.Token);

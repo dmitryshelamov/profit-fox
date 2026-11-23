@@ -23,4 +23,10 @@ public sealed record MarketFeedSettings
     ///     of one hour minutes apart and not in the order of their times.
     /// </summary>
     public TimeSpan PaymentOverlap { get; init; } = TimeSpan.FromHours(2);
+
+    /// <summary>
+    ///     How many items of the four feeds wait for the reader at most (task 18.12): a full queue stops the reading of the
+    ///     streams, and a stream the service cuts off for it (<c>RESOURCE_EXHAUSTED</c>) is subscribed again from its last item.
+    /// </summary>
+    public int QueueCapacity { get; init; } = 20_000;
 }

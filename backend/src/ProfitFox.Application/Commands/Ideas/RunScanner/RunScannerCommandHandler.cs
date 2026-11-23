@@ -37,7 +37,14 @@ internal sealed class RunScannerCommandHandler(
         var scanner = new IdeaScanner(new MarketBook(time, settings.CloseDelay), history, ideas, market, library, time, settings, ideasSettings, logger);
         await scanner.StartAsync(cancellationToken);
         logger.LogInformation("The scanner of ideas starts on {Worker} from {Since}.", request.Worker, scanner.CatchUpFrom?.ToString("O", CultureInfo.InvariantCulture) ?? "the whole day the feed holds");
-        var queue = Channel.CreateUnbounded<MarketEvent>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
+        // A bounded queue (task 18.12): while the scanner is slow the feed is not read on, so the catch-up of a day does not
+        // pile up in memory; nothing is dropped.
+        var queue = Channel.CreateBounded<MarketEvent>(new BoundedChannelOptions(Math.Max(1, settings.QueueCapacity))
+        {
+            SingleReader = true,
+            SingleWriter = true,
+            FullMode = BoundedChannelFullMode.Wait
+        });
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Task pump = Pump(scanner.CatchUpFrom, queue.Writer, stop.Token);
         DateTimeOffset reported = DateTimeOffset.MinValue;

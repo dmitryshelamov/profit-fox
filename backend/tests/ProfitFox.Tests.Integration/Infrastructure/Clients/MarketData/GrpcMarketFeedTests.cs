@@ -198,6 +198,32 @@ public sealed class GrpcMarketFeedTests
     }
 
     /// <summary>
+    ///     Task 18.12: a slow reader with a small queue is cut off by the service, subscribes again from its last minute and
+    ///     gets every minute.
+    /// </summary>
+    [Test]
+    public async Task A_slow_reader_loses_no_minute()
+    {
+        const int count = 600;
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var time = new FakeTimeProvider(Now.AddMinutes(count));
+        server.Data.FeedTime = time;
+        server.Data.Minutes.MaxBacklog = 50;
+        var settings = new MarketFeedSettings { RetryDelay = TimeSpan.Zero, QueueCapacity = 20 };
+        await using var reader = Reader.Start(server, time, since: Now.AddMinutes(-1), settings, slow: TimeSpan.FromMilliseconds(2));
+        await Poll.Until("the subscription of minutes", () => Task.FromResult(server.Data.Minutes.Readers == 1));
+
+        for (int minute = 0; minute < count; minute++)
+        {
+            server.Data.Minutes.Push(FakeLiveFeedTests.Minute("btc", Now.AddMinutes(minute)));
+        }
+
+        await reader.Until<LiveMinute>(minute => minute.OpenTime == Now.AddMinutes(count - 1));
+        Assert.That(reader.Minutes.Select(minute => minute.OpenTime).Distinct().Order(), Is.EqualTo(Enumerable.Range(0, count).Select(minute => Now.AddMinutes(minute))));
+        Assert.That(server.Data.Minutes.Subscriptions, Has.Count.GreaterThan(1), "the service cut the slow reader off, and it subscribed again");
+    }
+
+    /// <summary>
     ///     Task 18.7: a candle the feed cannot read is written to the journal and left out, and the feed goes on.
     /// </summary>
     [Test]
@@ -285,7 +311,7 @@ public sealed class GrpcMarketFeedTests
             }
         }
 
-        public static Reader Start(MarketDataServer server, TimeProvider time, DateTimeOffset? since = null, MarketFeedSettings? settings = null, ILogger? logger = null, bool wholeDay = false)
+        public static Reader Start(MarketDataServer server, TimeProvider time, DateTimeOffset? since = null, MarketFeedSettings? settings = null, ILogger? logger = null, bool wholeDay = false, TimeSpan? slow = null)
         {
             var feed = new GrpcMarketFeed(server.Channel, new InstrumentCatalog(server.Http), time, settings ?? new MarketFeedSettings { RetryDelay = TimeSpan.Zero }, logger);
             var reader = new Reader();
@@ -293,6 +319,11 @@ public sealed class GrpcMarketFeedTests
             {
                 await foreach (MarketEvent item in feed.Subscribe(new MarketSubscription(since, WholeDay: wholeDay), reader._stop.Token))
                 {
+                    if (slow is { } pause)
+                    {
+                        await Task.Delay(pause, reader._stop.Token);
+                    }
+
                     lock (reader._events)
                     {
                         reader._events.Add(item);

@@ -58,6 +58,12 @@ public sealed class FakeLiveFeed<T>(Func<T, DateTimeOffset> timeOf)
     }
 
     /// <summary>
+    ///     When set, a subscriber with more items waiting than this is cut off with <c>RESOURCE_EXHAUSTED</c>, as the service
+    ///     cuts off one that reads slower than they come (its queue of 15 000; task 18.12).
+    /// </summary>
+    public int? MaxBacklog { get; set; }
+
+    /// <summary>
     ///     A live item: stored, and told to every subscriber now.
     /// </summary>
     public void Push(T item)
@@ -68,6 +74,10 @@ public sealed class FakeLiveFeed<T>(Func<T, DateTimeOffset> timeOf)
             foreach (Subscriber subscriber in _subscribers)
             {
                 subscriber.Items.Writer.TryWrite(item);
+                if (MaxBacklog is { } most && subscriber.Items.Reader.Count > most)
+                {
+                    subscriber.Exhausted = true;
+                }
             }
         }
     }
@@ -170,6 +180,11 @@ public sealed class FakeLiveFeed<T>(Func<T, DateTimeOffset> timeOf)
                     case Exception end:
                         throw end;
                     default:
+                        if (subscriber.Exhausted)
+                        {
+                            throw new RpcException(new Status(StatusCode.ResourceExhausted, "the subscriber read slower than the items came"));
+                        }
+
                         await stream.WriteAsync((T)item);
                         break;
                 }
@@ -184,5 +199,8 @@ public sealed class FakeLiveFeed<T>(Func<T, DateTimeOffset> timeOf)
         }
     }
 
-    private sealed record Subscriber(Channel<object> Items, bool Forming);
+    private sealed record Subscriber(Channel<object> Items, bool Forming)
+    {
+        public volatile bool Exhausted;
+    }
 }
