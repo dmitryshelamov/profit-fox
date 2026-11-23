@@ -339,6 +339,38 @@ describe('the live candle', () => {
     await waitFor(() => expect(chartQueries(requests).length).toBeGreaterThan(asked));
   });
 
+  // Task 19.11: the first page read again moved right; the candles of the former first page it does not have stay.
+  it('keeps the row whole when the first page read again moved right past the earlier pages', async () => {
+    let now = fourteen;
+    const route = chartRoute();
+    routes([], {
+      'GET /api/market/pairs/SOLUSDT/chart': (request) => {
+        const url = new URL(request.url);
+        if (!url.searchParams.has('before')) {
+          url.searchParams.set('before', String(now));
+        }
+
+        return route(new Request(url));
+      },
+    });
+    renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.candles).toHaveLength(500));
+    drawn.logicalRange = { from: 3, to: 120 };
+    act(() => drawn.rangeChange?.({ from: 3, to: 120 }));
+    await waitFor(() => expect(drawn.candles).toHaveLength(1000));
+
+    now = fourteen + 2 * hour;
+    act(() => FakeEventSource.last().send('candle', live(fourteen + 2 * hour, 238)));
+
+    // 500 of the earlier page, 500 of the former first one and the 2 candles the new first page added.
+    await waitFor(() => expect(drawn.candles).toHaveLength(1002));
+    const times = drawn.candles.map((candle) => (candle as { time: number }).time);
+    expect(new Set(times).size).toBe(times.length);
+    expect(
+      times.every((time, index) => index === 0 || time - times[index - 1]! === hour / 1000),
+    ).toBe(true);
+  });
+
   it('reads the history of the chart again when the live candle steps over a candle', async () => {
     const requests = routes();
     renderApp('/market/SOLUSDT?timeframe=1h');

@@ -108,22 +108,29 @@ export function ideaLines(ideas: readonly Idea[], timeframe: string): IdeaLine[]
   });
 }
 
-/** The candles of two pages joined: the earlier page before the later, one candle each open time. */
+/** The candles of two pages joined by their open time, each once, the later page's candle kept. */
 export function joinPages(
   earlier: readonly ChartCandle[],
   later: readonly ChartCandle[],
 ): ChartCandle[] {
-  const first = later.length > 0 ? Number(later[0]!.openTime) : Number.POSITIVE_INFINITY;
-  return [...earlier.filter((candle) => Number(candle.openTime) < first), ...later];
+  return joinByTime(earlier, later, (candle) => Number(candle.openTime));
 }
 
-/** The points of two pages joined by their time, each time once. */
+/** The points of two pages joined by their time, each time once, the later page's point kept. */
 export function joinPoints(
   earlier: readonly ChartPoint[],
   later: readonly ChartPoint[],
 ): ChartPoint[] {
-  const first = later.length > 0 ? Number(later[0]!.time) : Number.POSITIVE_INFINITY;
-  return [...earlier.filter((point) => Number(point.time) < first), ...later];
+  return joinByTime(earlier, later, (point) => Number(point.time));
+}
+
+// Joined by time (task 19.11): every item of the later page, and those of the earlier one at times the later one does not
+// have — a first page read again moved right, and the candles of the former first page it no longer has stay.
+function joinByTime<T>(earlier: readonly T[], later: readonly T[], time: (item: T) => number): T[] {
+  const times = new Set(later.map(time));
+  return [...earlier.filter((item) => !times.has(time(item))), ...later].sort(
+    (a, b) => time(a) - time(b),
+  );
 }
 
 /**

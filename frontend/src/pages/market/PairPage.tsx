@@ -244,6 +244,32 @@ function ChartSection({
     },
     [],
   );
+  // A first page read again — after a break of the stream — moved right: what the former first page had and the new one
+  // does not stays with the earlier pages, so no hole opens between them (task 19.11).
+  const formerFirst = useRef(first.data);
+  useEffect(() => {
+    const former = formerFirst.current;
+    formerFirst.current = first.data;
+    if (former === undefined || former === first.data || former.loading) {
+      return;
+    }
+
+    setEarlier((old) => ({
+      ...old,
+      candles: joinPages(old.candles, former.candles),
+      funding: joinPoints(old.funding, former.funding),
+    }));
+  }, [first.data]);
+  const formerInterest = useRef(firstInterest.data);
+  useEffect(() => {
+    const former = formerInterest.current;
+    formerInterest.current = firstInterest.data;
+    if (former === undefined || former === firstInterest.data || former.loading) {
+      return;
+    }
+
+    setEarlier((old) => ({ ...old, interest: joinPoints(old.interest, former.openInterest) }));
+  }, [firstInterest.data]);
   const live = useLiveCandle(symbol, timeframe);
   const base = first.data?.candles;
   const candles = useMemo(() => {
