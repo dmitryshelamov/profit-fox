@@ -22,7 +22,7 @@ import { chartColors } from '@/preview/CandleChart';
 import { priceText } from '@/preview/chartFormat';
 
 import { amountText, momentText, priceWords } from './format';
-import type { IdeaMark } from './pairChart';
+import type { IdeaMark } from './pairSeries';
 
 /** A rate of funding at or above this share, by its size, is lit in the panel (spec «OI и фандинг под графиком»). */
 export const highPayment = 0.0003;

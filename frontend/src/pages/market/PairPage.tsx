@@ -17,7 +17,7 @@ import { pageSearch, useListSettings } from '@/shared/ui/useListSettings';
 import { amountText, changeText, clockText, priceWords, rateText, signTone } from './format';
 import { marketRefreshMs } from './MarketPage';
 import { PairChart } from './PairChart';
-import { ideaMarks, interestInUsdt, joinPages, joinPoints, withLive } from './pairChart';
+import { ideaMarks, interestInUsdt, joinPages, joinPoints, withLive } from './pairSeries';
 import { useLiveCandle } from './useLiveCandle';
 
 /** The address of the page of a pair: the timeframe of the chart, the chosen idea and the page of its ideas. */
