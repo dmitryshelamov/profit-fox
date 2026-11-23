@@ -77,7 +77,32 @@ interface Made {
   readonly lines: readonly MadeLine[];
 }
 
+/**
+ * The last candle the lines of the open ideas were laid out after, and where the right edge of the range in view is meant
+ * to stand (task 23.1): `distance` bars past that candle, `bars` in view. The library applies a right edge asked for on
+ * the next frame, so while one `waits` the range it shows is not the one it will show. `seen` is the distance the library
+ * itself showed after the chart was last given data or drew what it was asked: a range moved since is the user's.
+ */
+interface Laid {
+  readonly chart: IChartApi;
+  readonly last: number | string | undefined;
+  distance: number | null;
+  bars: number;
+  waits: boolean;
+  seen: number | null;
+}
+
 const seconds = (ms: number | string) => (Number(ms) / 1000) as UTCTimestamp;
+
+/** How far the right edge of the range in view stands past the last candle laid out, in bars, when it can be told. */
+function distanceOf(chart: IChartApi, laid: Laid): { distance: number; bars: number } | null {
+  const scale = chart.timeScale();
+  const view = scale.getVisibleLogicalRange();
+  const index = laid.last === undefined ? null : scale.timeToIndex(seconds(laid.last), false);
+  return view === null || index === null
+    ? null
+    : { distance: view.to - index, bars: view.to - view.from };
+}
 
 /**
  * The chart of a pair (spec market-overview «График пары», «Живая свеча», «Идеи на графике», «OI и фандинг под
@@ -120,8 +145,9 @@ export function PairChart({
   // The lines drawn and the slots given: drawn again only when they change, not on every candle (task 20.2).
   const made = useRef<Made | null>(null);
   const slotsGiven = useRef<{ chart: IChartApi; key: string } | null>(null);
-  // The last candle the lines were laid out after: the candles closed since move the range in view with them (task 22.1).
-  const laidOut = useRef<{ chart: IChartApi; last: number | string | undefined } | null>(null);
+  // The last candle the lines were laid out after and how far past it the right edge is meant to stand: the candles closed
+  // since move the range in view with them when that candle was in it (tasks 22.1, 23.1).
+  const laidOut = useRef<Laid | null>(null);
 
   useEffect(() => {
     if (container.current === null) {
@@ -207,6 +233,29 @@ export function PairChart({
       chart.remove();
     };
   }, []);
+
+  // Before this render gives the chart anything (task 23.1): a range in view moved since the library last showed one is
+  // the user's, who scrolled or zoomed, and the right edge is meant to stand where they left it. A range the library moved
+  // itself on new data is not: when candles go past the end of the lines it follows them, and the lines follow them too.
+  useEffect(() => {
+    const current = drawn.current;
+    const laid = laidOut.current;
+    if (current === null || laid === null || laid.chart !== current.chart || laid.waits) {
+      return;
+    }
+
+    const now = distanceOf(current.chart, laid);
+    if (now === null) {
+      return;
+    }
+
+    laid.distance =
+      laid.distance === null || laid.seen === null
+        ? now.distance
+        : laid.distance + now.distance - laid.seen;
+    laid.bars = now.bars;
+    laid.seen = now.distance;
+  });
 
   // A page before the shown candles keeps the part in view: the logical range moves by the candles added on the left.
   useEffect(() => {
@@ -321,7 +370,9 @@ export function PairChart({
   // by the candles closed since when it was in view, so the chart follows the live candle as it does without lines (task
   // 22.1). It is given back as the right edge, not as the range: the library applies both on the next frame, where a
   // range keeps the number of bars in view and a price scale grown or shrunk by a new price changes the spacing of the
-  // bars and moves them; the right edge keeps the spacing as the library does without lines.
+  // bars and moves them; the right edge keeps the spacing as the library does without lines. Where it stands is counted
+  // from the last candle, not read from the range (task 23.1): in a tab in the background the edge asked for at one candle
+  // still waits when the next one closes, and candles past the end of the lines have already moved the range.
   useEffect(() => {
     const current = drawn.current;
     if (current === null) {
@@ -338,13 +389,23 @@ export function PairChart({
       view === null ? 150 : view.to - view.from,
       scale.options().barSpacing,
     );
-    // The last candle in view and the candles closed since the lines were last laid out, before lines and slots change.
+    // Where the right edge is meant to stand before lines and slots change (task 23.1): past the last candle laid out by the
+    // distance it had, not by the range in view, which the library has not applied yet while a right edge asked for waits
+    // for a frame, and which it has already moved itself when the candles went past the end of the lines. The chart follows
+    // the candles when the last candle laid out was in the range meant, the right edge as far past the new last candle.
     const last = lastTime === undefined ? null : scale.timeToIndex(seconds(lastTime), true);
-    const lastInView = view !== null && last !== null && view.from <= last && last <= view.to;
-    const laid = laidOut.current?.chart === current.chart ? laidOut.current.last : undefined;
-    const laidIndex = laid === undefined ? null : scale.timeToIndex(seconds(laid), false);
-    const closed = last !== null && laidIndex !== null ? Math.max(0, last - laidIndex) : 0;
-    laidOut.current = { chart: current.chart, last: lastTime };
+    const laid = laidOut.current?.chart === current.chart ? laidOut.current : null;
+    const laidIndex =
+      laid?.last === undefined ? null : scale.timeToIndex(seconds(laid.last), false);
+    const meant =
+      laid !== null && laid.distance !== null && laidIndex !== null
+        ? { last: laidIndex, to: laidIndex + laid.distance, bars: laid.bars }
+        : view !== null && last !== null
+          ? { last, to: view.to, bars: view.to - view.from }
+          : null;
+    const follows = meant !== null && meant.to - meant.bars <= meant.last && meant.last <= meant.to;
+    let edge =
+      meant === null ? null : follows && last !== null ? last + meant.to - meant.last : meant.to;
 
     let changed = false;
     const slotsKey = room.slots.join(',');
@@ -373,11 +434,14 @@ export function PairChart({
       changed = true;
     }
 
+    // The last bar of the time scale now: the right edge less the room past it. A right edge still waiting for a frame is
+    // asked for again, data given meanwhile having moved the last bar under it.
     const now = scale.getVisibleLogicalRange();
-    if (changed && view !== null && now !== null) {
-      // The last bar of the time scale now: the right edge less the room past it.
-      const base = now.to - scale.scrollPosition();
-      scale.scrollToPosition(view.to + (lastInView ? closed : 0) - base, false);
+    const base = now === null ? null : now.to - scale.scrollPosition();
+    let asked = false;
+    if ((changed || laid?.waits === true) && edge !== null && base !== null) {
+      scale.scrollToPosition(edge - base, false);
+      asked = true;
     }
 
     // The library scrolls to the right edge on every `rightOffset` it is given (task 20.1): a chart gets one when it has its
@@ -388,12 +452,49 @@ export function PairChart({
     // shows on the next frame. The chart is compared too: under `StrictMode` it is drawn again with the refs kept.
     const given = offset.current?.chart === current.chart ? offset.current.value : null;
     if (lastTime !== undefined && room.offset !== given && (given === null || setChanged)) {
-      if (given === null || view === null || last === null || view.to >= last) {
+      if (given === null || meant === null || follows) {
         scale.applyOptions({ rightOffset: room.offset });
         offset.current = { chart: current.chart, value: room.offset };
+        edge = base === null ? null : base + room.offset;
+        asked = true;
       }
     }
+
+    const record: Laid = {
+      chart: current.chart,
+      last: lastTime,
+      distance: edge === null || last === null ? null : edge - last,
+      bars: meant?.bars ?? (view === null ? 0 : view.to - view.from),
+      waits: asked,
+      seen: null,
+    };
+    laidOut.current = record;
+    if (asked) {
+      // Registered after the library's own frame, so it runs once the library drew what it was asked.
+      requestAnimationFrame(() => {
+        record.waits = false;
+        const shown =
+          drawn.current?.chart === record.chart ? distanceOf(record.chart, record) : null;
+        record.seen = shown?.distance ?? null;
+      });
+    }
   }, [lines, candles, timeframe]);
+
+  // After this render gave the chart its data (task 23.1): where the library itself shows the right edge, so a range moved
+  // before the next render is told from one the library moved on the data given.
+  useEffect(() => {
+    const current = drawn.current;
+    const laid = laidOut.current;
+    if (current === null || laid === null || laid.chart !== current.chart || laid.waits) {
+      return;
+    }
+
+    const now = distanceOf(current.chart, laid);
+    laid.seen = now?.distance ?? null;
+    if (now !== null) {
+      laid.bars = now.bars;
+    }
+  });
 
   return (
     <div ref={container} className="w-full" style={{ height: chartHeight }} data-testid="chart" />

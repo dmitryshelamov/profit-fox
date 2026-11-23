@@ -94,6 +94,39 @@ function candlesInView(): [number | undefined, number | undefined] {
   return [at(range.from), at(range.to)];
 }
 
+/**
+ * The logical index of the end of the lines of an open idea on the fake chart: the hourly slots after the last candle
+ * stand on the time scale one after another.
+ */
+function lineEnd(): number {
+  const last = (drawn.candles.at(-1) as { time: number }).time;
+  const end = (drawn.segments[0]!.data.at(-1) as { time: number }).time;
+  return drawn.candles.length - 1 + (end - last) / 3600;
+}
+
+/**
+ * Holds the animation frames as a tab in the background does (task 23.1): what the chart and the page ask for on a frame
+ * waits. Returns what lets them go: the frames held run, and the next one after them.
+ */
+function pauseFrames(): () => Promise<void> {
+  const request = globalThis.requestAnimationFrame;
+  const cancel = globalThis.cancelAnimationFrame;
+  const held = new Map<number, FrameRequestCallback>();
+  let next = 0;
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    next += 1;
+    held.set(next, callback);
+    return next;
+  });
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => held.delete(id));
+  return async () => {
+    vi.stubGlobal('requestAnimationFrame', request);
+    vi.stubGlobal('cancelAnimationFrame', cancel);
+    act(() => [...held.values()].forEach((callback) => callback(performance.now())));
+    await nextFrame();
+  };
+}
+
 const chartQueries = (requests: readonly Request[]) =>
   requests
     .map((request) => new URL(request.url))
@@ -500,6 +533,88 @@ describe('the live candle', () => {
     expect(drawn.logicalRange).toEqual({ from: start.from + 3, to: start.to + 3 });
     expect(drawn.logicalRange!.to - last).toBe(start.to - 499);
     expect(drawn.logicalRange!.to - end()).toBe(room);
+  });
+
+  // Task 23.1 (a): in a tab in the background no frame comes while the stream and the effects go on, so the right edge
+  // asked for at one closed candle still waits when the next one closes; the range in view the library shows then is not
+  // the one it will show. Three candles closed with no frame between them move the right edge by three.
+  it('follows the candles closed with no frame between them at the right edge with the lines of a far term', async () => {
+    routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour })]);
+    renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.segments).toHaveLength(3));
+    await nextFrame();
+    const start = drawn.logicalRange!;
+    const room = drawn.rightOffset!;
+
+    const resume = pauseFrames();
+    for (let candle = 0; candle < 3; candle += 1) {
+      act(() =>
+        FakeEventSource.last().send('candle', live(fourteen + candle * hour, 238.42, true)),
+      );
+      act(() => FakeEventSource.last().send('candle', live(fourteen + (candle + 1) * hour, 238.5)));
+      await waitFor(() => expect(drawn.candles).toHaveLength(501 + candle));
+    }
+    await resume();
+
+    expect(drawn.logicalRange).toEqual({ from: start.from + 3, to: start.to + 3 });
+    expect(drawn.logicalRange!.to - lineEnd()).toBe(room);
+  });
+
+  // Task 23.1 (b): the history read again after the stream broke brings sixty candles at once, more than the fifty of a
+  // third of the bars in view. The new candles go past the end of the lines, so the library moves the range by ten
+  // itself; the right edge stays as far from the last candle as it was, with no empty slots past the room for labels.
+  it('follows sixty candles at once at the right edge with the lines of a far term', async () => {
+    let now = fourteen;
+    const route = chartRoute();
+    routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour })], {
+      'GET /api/market/pairs/SOLUSDT/chart': (request) => {
+        const url = new URL(request.url);
+        if (!url.searchParams.has('before')) {
+          url.searchParams.set('before', String(now));
+        }
+
+        return route(new Request(url));
+      },
+    });
+    renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.segments).toHaveLength(3));
+    await nextFrame();
+    const start = drawn.logicalRange!;
+    const room = drawn.rightOffset!;
+    expect(start.to - start.from).toBe(150);
+
+    now = fourteen + 60 * hour;
+    act(() => FakeEventSource.last().fail());
+    await waitFor(() => expect(FakeEventSource.opened).toHaveLength(2), { timeout: 4000 });
+    act(() => FakeEventSource.last().send('candle', live(now, 238.5)));
+    await waitFor(() => expect(drawn.candles).toHaveLength(560));
+    await waitFor(() =>
+      expect((drawn.segments[0]!.data.at(-1) as { time: number }).time).toBe(
+        (now - hour) / 1000 + 50 * 3600,
+      ),
+    );
+    await nextFrame();
+
+    // The last candle opens at 13:00 sixty hours later (index 559).
+    expect(drawn.logicalRange!.to - 559).toBe(start.to - 499);
+    expect(drawn.logicalRange!.to - lineEnd()).toBe(room);
+  });
+
+  // Task 23.1 (c): the right edge between the last candle and the one that closes; the last candle was in view, so the
+  // chart follows the closed candle as it does without the lines.
+  it('follows the closed candle when the right edge stands between it and the candle before', async () => {
+    routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour })]);
+    renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.segments).toHaveLength(3));
+    await scrollChart({ from: 380, to: 499.5 });
+    act(() => drawn.rangeChange?.({ from: 380, to: 499.5 }));
+
+    act(() => FakeEventSource.last().send('candle', live(fourteen, 238.42, true)));
+    act(() => FakeEventSource.last().send('candle', live(fourteen + hour, 238.5)));
+    await waitFor(() => expect(drawn.candles).toHaveLength(501));
+    await nextFrame();
+
+    expect(drawn.logicalRange).toEqual({ from: 381, to: 500.5 });
   });
 
   // Task 22.1, seen in Chromium: zoomed in to three bars, a new price narrows the price scale on the frame the range in
