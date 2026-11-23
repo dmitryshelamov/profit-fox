@@ -117,6 +117,12 @@ public static class FilterRules
                 return $"значение поля {field.Title} — число";
             }
 
+            // A value that does not fit once in the unit of the store (task 18.17): 7.9e22 million is more than a decimal holds.
+            if (!Fits(field, condition.Value) || (condition.Operator == "between" && !Fits(field, condition.To)))
+            {
+                return $"значение поля {field.Title} слишком велико";
+            }
+
             return null;
         }
 
@@ -133,6 +139,19 @@ public static class FilterRules
         return field.Values is { } values && !values.Contains(condition.Value, StringComparer.Ordinal)
             ? $"значение поля {field.Title} — одно из {string.Join(", ", values)}"
             : null;
+    }
+
+    private static bool Fits(ListField field, string? text)
+    {
+        try
+        {
+            _ = Number(text)!.Value * field.Scale;
+            return true;
+        }
+        catch (OverflowException)
+        {
+            return false;
+        }
     }
 
     // A number as written: a point or a comma before the fraction.

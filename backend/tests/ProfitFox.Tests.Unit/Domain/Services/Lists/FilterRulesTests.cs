@@ -58,6 +58,23 @@ public sealed class FilterRulesTests
         }));
     }
 
+    /// <summary>
+    ///     Task 18.17: a value in millions too large to keep is an error of its condition, not an overflow.
+    /// </summary>
+    [Test]
+    public void A_value_too_large_for_its_unit_is_an_error_of_its_condition()
+    {
+        List<FilterProblem> problems = FilterRules.CheckConditions(
+        [
+            new FilterCondition("turnover24h", "gt", "100"),
+            new FilterCondition("turnover24h", "gt", "8e22"),
+            new FilterCondition("openInterest", "between", "1", "1e23")
+        ]);
+
+        Assert.That(problems.Select(problem => (problem.Code, problem.Condition)), Is.EqualTo(new[] { ("InvalidCondition", (int?)1), ("InvalidCondition", 2) }));
+        Assert.That(problems[0].Reason, Does.Contain("слишком велико"));
+    }
+
     [Test]
     public void The_funding_is_in_percent_and_the_turnover_in_millions()
     {
