@@ -183,6 +183,46 @@ public sealed class RestRecentHistoryTests
         Assert.That(DateTimeOffset.Parse(Query(server.Data.RestQueries.Single())["from"]), Is.EqualTo(Midnight.AddHours(-6)));
     }
 
+    /// <summary>
+    ///     Task 20.7: a refusal of History for a long window — 500 days of 1d — asks History again with the end a day earlier,
+    ///     and the REST reads only the tail after it: no hole, and a page or two of the REST, not the whole window.
+    /// </summary>
+    [Test]
+    public async Task A_refused_History_of_a_long_window_is_asked_again_a_day_earlier_and_the_REST_reads_the_tail()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        server.Data.Time = new FakeTimeProvider(Midnight.AddSeconds(-30));
+        var bench = new FakeTimeProvider(Midnight.AddSeconds(30));
+        var history = new RestRecentHistory(server.Http, server.Channel, bench);
+
+        RecentRead<OpenInterestPoint> interest = await history.OpenInterest("btc", TimeSpan.FromDays(1), bench.GetUtcNow(), 500, CancellationToken.None);
+
+        Assert.That(server.Data.InterestRequests.Select(request => request.To.ToDateTimeOffset()), Is.EqualTo(new[] { Midnight, Midnight.AddDays(-1) }));
+        Assert.That(server.Data.RestRequests.Count(request => request.StartsWith("open-interest", StringComparison.Ordinal)), Is.LessThanOrEqualTo(2));
+        Assert.That(DateTimeOffset.Parse(Query(server.Data.RestQueries.First())["from"]), Is.EqualTo(Midnight.AddDays(-1)));
+        Assert.That(interest.Items.Select(point => point.Time), Is.EqualTo(Enumerable.Range(0, (int)(Midnight - FakeMarketData.CoveredFrom).TotalDays).Select(day => FakeMarketData.CoveredFrom.AddDays(day))));
+    }
+
+    /// <summary>
+    ///     Task 20.7: History fails twice — the REST reads the last two days of the window, not its 500 days page by page.
+    /// </summary>
+    [Test]
+    public async Task A_History_that_fails_twice_reads_only_the_last_two_days_from_the_REST()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var clock = new FakeTimeProvider(Midnight.AddHours(12).AddMinutes(34));
+        server.Data.Time = clock;
+        server.Data.Failure = Grpc.Core.StatusCode.Unavailable;
+        var history = new RestRecentHistory(server.Http, server.Channel, clock);
+
+        RecentRead<OpenInterestPoint> interest = await history.OpenInterest("btc", TimeSpan.FromDays(1), clock.GetUtcNow(), 500, CancellationToken.None);
+
+        Assert.That(server.Data.InterestRequests, Has.Count.EqualTo(2));
+        Assert.That(server.Data.RestRequests.Count(request => request.StartsWith("open-interest", StringComparison.Ordinal)), Is.LessThanOrEqualTo(1));
+        Assert.That(DateTimeOffset.Parse(Query(server.Data.RestQueries.Single())["from"]), Is.EqualTo(Midnight.AddDays(-2)));
+        Assert.That(interest.Items.Select(point => point.Time), Is.EqualTo(new[] { Midnight.AddDays(-2), Midnight.AddDays(-1) }), "the last two days of the window, which ends at the start of today");
+    }
+
     [Test]
     public async Task A_refusal_tells_what_was_asked_and_the_answer_of_the_service_but_not_the_pair()
     {

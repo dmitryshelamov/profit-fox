@@ -31,7 +31,8 @@ namespace ProfitFox.Infrastructure.Clients.MarketData;
 ///     strings are read too. An answer <c>202</c> or <c>"loading": true</c> says the service is still loading the history
 ///     of the pair. With a gRPC channel, the open interest of the days before the start of the current UTC day comes from
 ///     one call of <c>OpenInterestFeed.History</c>, which refuses a window that ends after it (task 18.2), and only the
-///     current day from the REST; when History refuses or fails, the whole window comes from the REST (task 19.7).
+///     current day from the REST; when History refuses or fails, it is asked again with the end a day earlier and the REST
+///     reads the tail, and when it refuses again the REST reads the last two days of the window (tasks 19.7, 20.7).
 /// </summary>
 public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = null, TimeProvider? time = null) : IRecentHistory
 {
@@ -39,6 +40,9 @@ public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = nu
     ///     The most candles or points one answer gives.
     /// </summary>
     public const int MaxLimit = 1000;
+
+    // What the REST reads of the window when History refused it twice (task 20.7).
+    private static readonly TimeSpan TailDays = TimeSpan.FromDays(2);
 
     public async Task<RecentRead<HistoryCandle>> Candles(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation)
     {
@@ -76,17 +80,26 @@ public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = nu
             DateTimeOffset today = Floor((time ?? TimeProvider.System).GetUtcNow(), TimeSpan.FromDays(1));
             if (from < today)
             {
+                // History refused the window — near midnight the clock of the bench may be ahead of that of the service, whose
+                // day has not begun yet (task 19.7) — so it is asked again with the end a day earlier, and the REST reads the
+                // tail after it; refused again, the REST reads the last two days of the window, not the whole window page by
+                // page: a thousand days of 1d are 288 000 points (task 20.7).
                 DateTimeOffset end = to < today ? to : today;
-                try
+                DateTimeOffset earlier = end - TimeSpan.FromDays(1);
+                if (await TryStoredPoints(instrumentId, from, end, cancellation) is { } stored)
                 {
-                    points.AddRange(await StoredPoints(instrumentId, from, end, cancellation));
+                    points.AddRange(stored);
                     rest = end;
                 }
-                catch (HistoryUnavailableException)
+                else if (earlier > from && await TryStoredPoints(instrumentId, from, earlier, cancellation) is { } older)
                 {
-                    // History refused the window — near midnight the clock of the bench may be ahead of that of the service,
-                    // whose day has not begun yet — so the whole window comes from the REST (task 19.7).
-                    points.Clear();
+                    points.AddRange(older);
+                    rest = earlier;
+                }
+                else
+                {
+                    DateTimeOffset tail = to - TailDays;
+                    rest = tail > from ? tail : from;
                 }
             }
         }
@@ -103,6 +116,19 @@ public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = nu
         }
 
         return new RecentRead<OpenInterestPoint>(Loading: false, PerInterval(points, interval));
+    }
+
+    // The stored points of [from, to), or null when History refused or failed.
+    private async Task<IReadOnlyList<OpenInterestPoint>?> TryStoredPoints(string instrumentId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellation)
+    {
+        try
+        {
+            return await StoredPoints(instrumentId, from, to, cancellation);
+        }
+        catch (HistoryUnavailableException)
+        {
+            return null;
+        }
     }
 
     /// <summary>
