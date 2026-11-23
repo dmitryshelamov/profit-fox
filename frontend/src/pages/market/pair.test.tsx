@@ -562,6 +562,52 @@ describe('the ideas, the open interest and the funding on the chart', () => {
     ).toBe(true);
   });
 
+  // Task 19.10: the page of the idea comes from the answer to the new request, not from the page shown before it.
+  it('opens the page of an idea of the first page chosen by its mark while the table shows the third', async () => {
+    const third = idea({ id: 'third-1', moment: Date.UTC(2026, 10, 20, 9), state: 'closed' });
+    routes([], {
+      'GET /api/market/pairs/SOLUSDT/ideas': async (request) => {
+        const query = new URL(request.url).searchParams;
+        if (query.has('from')) {
+          return json({
+            items: [longOpen, shortClosed],
+            total: 2,
+            page: 1,
+            pageSize: 200,
+            filterGone: false,
+          });
+        }
+
+        if (query.get('idea') === 'long-1') {
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          return json({ items: [longOpen], total: 150, page: 1, pageSize: 50, filterGone: false });
+        }
+
+        const page = Number(query.get('page') ?? 1);
+        return json({
+          items: page === 3 ? [third] : [longOpen],
+          total: 150,
+          page,
+          pageSize: 50,
+          filterGone: false,
+        });
+      },
+    });
+    const { history } = renderApp('/market/SOLUSDT?timeframe=1h&page=3');
+    const table = within(await screen.findByRole('table', { name: 'Идеи пары' }));
+    await table.findByRole('row', { name: /third-1$/ });
+    await waitFor(() => expect(drawn.markers).toHaveLength(3));
+
+    act(() => drawn.click?.({ time: Date.UTC(2026, 10, 22, 13) / 1000 }));
+
+    expect(await table.findByRole('row', { name: /long-1$/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(history.location.search).toContain('idea=long-1');
+    expect(history.location.search).not.toContain('page=3');
+  });
+
   // Scenarios «Панели под графиком» and «Отрицательная выплата».
   it('draws the open interest in USDT and the payments, a negative one red and downwards', async () => {
     routes();

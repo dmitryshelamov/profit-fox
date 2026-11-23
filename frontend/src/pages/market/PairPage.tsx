@@ -365,11 +365,19 @@ function ChartSection({
     refetchInterval: marketRefreshMs,
   });
   const shownPage = page ?? Number(ideas.data?.page ?? 1);
+  // Only the answer to the request with the idea tells its page (task 19.10): the page shown before it, kept on the screen
+  // while that request goes, is not that of the idea.
+  const placeholder = ideas.isPlaceholderData;
   useEffect(() => {
-    if (around !== undefined && ideas.data !== undefined && Number(ideas.data.page) > 1) {
+    if (
+      around !== undefined &&
+      !placeholder &&
+      ideas.data !== undefined &&
+      Number(ideas.data.page) > 1
+    ) {
       onSearch({ page: Number(ideas.data.page) });
     }
-  }, [around, ideas.data, onSearch]);
+  }, [around, placeholder, ideas.data, onSearch]);
   const rows = ideas.data?.items ?? [];
   // The chart asks the ideas of its own window, without the choices of the table (task 18.22).
   const from = candles[0] === undefined ? undefined : Number(candles[0].openTime);
