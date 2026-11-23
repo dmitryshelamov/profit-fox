@@ -15,6 +15,10 @@ export const drawn = {
   updates: [] as unknown[],
   /** The price lines on the series now. */
   lines: [] as { price: number; title?: string }[],
+  /** The series of lines with a title on the chart now — the lines of open ideas (task 18.26) — with their data. */
+  segments: [] as { title: string; color?: string; data: unknown[] }[],
+  /** The marks of the series of those lines: the term of an idea. */
+  segmentMarkers: [] as unknown[],
   /** The listener of the visible logical range of the time scale. */
   rangeChange: null as ((range: { from: number; to: number } | null) => void) | null,
   /** The logical range the chart was last told to show. */
@@ -33,6 +37,8 @@ export function resetDrawn(): void {
     series: {},
     updates: [],
     lines: [],
+    segments: [],
+    segmentMarkers: [],
     rangeChange: null,
     logicalRange: null,
   });

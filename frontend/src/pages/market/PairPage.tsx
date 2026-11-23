@@ -21,6 +21,7 @@ import { marketRefreshMs } from './MarketPage';
 import { PairChart } from './PairChart';
 import {
   fundingOnCandles,
+  ideaLines,
   ideaMarks,
   interestInUsdt,
   joinPages,
@@ -355,7 +356,14 @@ function ChartSection({
   });
   const drawnIdeas = useMemo(() => chartIdeas.data?.items ?? [], [chartIdeas.data]);
   const marks = useMemo(() => ideaMarks(drawnIdeas, timeframe), [drawnIdeas, timeframe]);
-  const open = useMemo(() => drawnIdeas.filter((item) => item.state === 'open'), [drawnIdeas]);
+  const lines = useMemo(
+    () =>
+      ideaLines(
+        drawnIdeas.filter((item) => item.state === 'open'),
+        timeframe,
+      ),
+    [drawnIdeas, timeframe],
+  );
   const nothing =
     ideas.data !== undefined &&
     Number(ideas.data.total) === 0 &&
@@ -415,7 +423,7 @@ function ChartSection({
             funding={fundingBars}
             marks={marks}
             selected={idea}
-            lines={open}
+            lines={lines}
             onEdge={() => loadEarlier()}
             onPick={(id) => onSearch({ idea: id, page: undefined })}
           />

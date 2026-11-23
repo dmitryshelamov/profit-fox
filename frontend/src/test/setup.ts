@@ -70,25 +70,48 @@ vi.mock('lightweight-charts', async () => {
     LineStyle: { Solid: 0, Dotted: 1, Dashed: 2, LargeDashed: 3, SparseDotted: 4 },
     TickMarkType: { Year: 0, Month: 1, DayOfMonth: 2, Time: 3, TimeWithSeconds: 4 },
     createChart: vi.fn(() => ({
-      addSeries: vi.fn((type: string) => ({
-        setData: vi.fn((data: unknown[]) => {
-          drawn.series[type] = data;
-          if (type === 'Candlestick') {
-            drawn.candles = data;
-            drawn.setData += 1;
-          }
-        }),
-        update: vi.fn((bar: unknown) => {
-          drawn.updates.push(bar);
-        }),
-        createPriceLine: vi.fn((line: { price: number; title?: string }) => {
-          drawn.lines.push(line);
-          return line;
-        }),
-        removePriceLine: vi.fn((line: unknown) => {
-          drawn.lines = drawn.lines.filter((candidate) => candidate !== line);
-        }),
-      })),
+      addSeries: vi.fn((type: string, options?: { title?: string; color?: string }) => {
+        // A series of a line with a title is a line of an open idea: kept apart from the series of the panels.
+        const segment =
+          options?.title !== undefined
+            ? { title: options.title, color: options.color, data: [] as unknown[] }
+            : null;
+        if (segment !== null) {
+          drawn.segments.push(segment);
+        }
+
+        return {
+          segment,
+          setData: vi.fn((data: unknown[]) => {
+            if (segment !== null) {
+              segment.data = data;
+              return;
+            }
+
+            drawn.series[type] = data;
+            if (type === 'Candlestick') {
+              drawn.candles = data;
+              drawn.setData += 1;
+            }
+          }),
+          update: vi.fn((bar: unknown) => {
+            drawn.updates.push(bar);
+          }),
+          createPriceLine: vi.fn((line: { price: number; title?: string }) => {
+            drawn.lines.push(line);
+            return line;
+          }),
+          removePriceLine: vi.fn((line: unknown) => {
+            drawn.lines = drawn.lines.filter((candidate) => candidate !== line);
+          }),
+        };
+      }),
+      removeSeries: vi.fn((series: { segment: unknown }) => {
+        drawn.segments = drawn.segments.filter((candidate) => candidate !== series.segment);
+        if (drawn.segments.length === 0) {
+          drawn.segmentMarkers = [];
+        }
+      }),
       panes: () => [{ setHeight: vi.fn() }, { setHeight: vi.fn() }, { setHeight: vi.fn() }],
       remove: vi.fn(),
       subscribeClick: vi.fn((handler: (param: { time?: number }) => void) => {
@@ -119,10 +142,22 @@ vi.mock('lightweight-charts', async () => {
         }),
       }),
     })),
-    createSeriesMarkers: vi.fn(() => ({
-      setMarkers: vi.fn((markers: unknown[]) => {
-        drawn.markers = markers;
-      }),
-    })),
+    createSeriesMarkers: vi.fn((series: { segment?: unknown }, initial: unknown[] = []) => {
+      const onSegment = series.segment !== null && series.segment !== undefined;
+      if (onSegment) {
+        drawn.segmentMarkers = [...drawn.segmentMarkers, ...initial];
+      }
+
+      return {
+        setMarkers: vi.fn((markers: unknown[]) => {
+          if (onSegment) {
+            drawn.segmentMarkers = markers;
+            return;
+          }
+
+          drawn.markers = markers;
+        }),
+      };
+    }),
   };
 });

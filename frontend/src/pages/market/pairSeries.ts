@@ -2,7 +2,7 @@ import type { Idea } from '@/api/ideas';
 import type { ChartCandle, ChartPoint, LiveCandle } from '@/api/market';
 import { lengthOf } from '@/preview/preview';
 
-import { changeText } from './format';
+import { changeText, momentText, priceWords } from './format';
 
 /** The words of the reason an idea closed, as its mark on the chart says it. */
 const exitMarkWords: Record<string, string> = {
@@ -56,6 +56,54 @@ export function ideaMarks(ideas: readonly Idea[], timeframe: string): IdeaMark[]
           ' ',
         ),
       },
+    ];
+  });
+}
+
+/** A line of an open idea: its entry, stop or target at its price from the candle of its entry to that of its term. */
+export interface IdeaLine {
+  readonly id: string;
+  readonly kind: 'entry' | 'stop' | 'target';
+  readonly price: number;
+  readonly title: string;
+  readonly from: number;
+  readonly to: number;
+  /** The mark of the term at the end of the line of the entry: «срок 17:00». */
+  readonly term?: string;
+}
+
+/**
+ * The lines of the open ideas (spec market-overview «Открытая идея», task 18.26): the entry, the stop and the target
+ * with their prices, each from the candle the moment of the idea falls in to the candle its term falls in, and the term
+ * marked at the end of the line of the entry.
+ */
+export function ideaLines(ideas: readonly Idea[], timeframe: string): IdeaLine[] {
+  return ideas.flatMap((idea) => {
+    const from = candleOf(Number(idea.moment), timeframe);
+    const to = Math.max(from, candleOf(Number(idea.until), timeframe));
+    const term = `срок ${momentText(idea.until).slice(6)}`;
+    const line = (
+      kind: IdeaLine['kind'],
+      price: number | string | null | undefined,
+      title: string,
+    ) =>
+      price === null || price === undefined
+        ? []
+        : [
+            {
+              id: idea.id,
+              kind,
+              price: Number(price),
+              title,
+              from,
+              to,
+              ...(kind === 'entry' ? { term } : {}),
+            },
+          ];
+    return [
+      ...line('entry', idea.entry, `вход ${priceWords(idea.entry)}`),
+      ...line('stop', idea.stop, `стоп ${priceWords(idea.stop)}`),
+      ...line('target', idea.target, `цель ${priceWords(idea.target)}`),
     ];
   });
 }

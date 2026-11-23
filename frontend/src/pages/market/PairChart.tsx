@@ -5,7 +5,6 @@ import {
   createSeriesMarkers,
   HistogramSeries,
   type IChartApi,
-  type IPriceLine,
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
   LineSeries,
@@ -16,16 +15,22 @@ import {
 } from 'lightweight-charts';
 import { useEffect, useRef } from 'react';
 
-import type { Idea } from '@/api/ideas';
 import type { ChartCandle, ChartPoint, LiveCandle } from '@/api/market';
 import { chartColors } from '@/preview/CandleChart';
 import { priceText } from '@/preview/chartFormat';
 
-import { amountText, momentText, priceWords } from './format';
-import type { IdeaMark } from './pairSeries';
+import { amountText } from './format';
+import type { IdeaLine, IdeaMark } from './pairSeries';
 
 /** A rate of funding at or above this share, by its size, is lit in the panel (spec «OI и фандинг под графиком»). */
 export const highPayment = 0.0003;
+
+/** The colors of the lines of an open idea: the entry, the stop and the target. */
+const lineColors: Record<IdeaLine['kind'], string> = {
+  entry: chartColors.text,
+  stop: chartColors.down,
+  target: chartColors.up,
+};
 
 /** The color of the open interest: the token `run` of the theme. */
 const interestColor = '#7AA7FF';
@@ -66,8 +71,8 @@ export function PairChart({
   readonly funding: readonly ChartPoint[];
   readonly marks: readonly IdeaMark[];
   readonly selected: string | null;
-  /** The open ideas whose lines are drawn: entry, stop and target. */
-  readonly lines: readonly Idea[];
+  /** The lines of the open ideas: entry, stop and target from the candle of the entry to that of the term. */
+  readonly lines: readonly IdeaLine[];
   readonly onEdge: () => void;
   readonly onPick: (id: string) => void;
 }) {
@@ -246,39 +251,47 @@ export function PairChart({
     );
   }, [marks, selected, candles]);
 
-  // The lines of the open ideas: its entry, stop and target with their prices, and its term in the title.
+  // The lines of the open ideas (task 18.26): the entry, the stop and the target, each a line from the candle of the entry
+  // to the candle of the term, and the term marked at the end of the line of the entry.
   useEffect(() => {
     const current = drawn.current;
     if (current === null) {
       return;
     }
 
-    const made: IPriceLine[] = [];
-    const add = (price: number | string | null | undefined, title: string, color: string) => {
-      if (price !== null && price !== undefined) {
-        made.push(
-          current.candles.createPriceLine({
-            price: Number(price),
-            color,
-            lineWidth: 1,
-            lineStyle: LineStyle.Dashed,
-            axisLabelVisible: true,
-            title,
-          }),
-        );
+    const made: ISeriesApi<'Line'>[] = [];
+    for (const line of lines) {
+      const series = current.chart.addSeries(LineSeries, {
+        title: line.title,
+        color: lineColors[line.kind],
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        lastValueVisible: true,
+        priceLineVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      const points = [{ time: seconds(line.from), value: line.price }];
+      if (line.to > line.from) {
+        points.push({ time: seconds(line.to), value: line.price });
       }
-    };
-    for (const idea of lines) {
-      add(
-        idea.entry,
-        `вход ${priceWords(idea.entry)} · срок ${momentText(idea.until).slice(6)}`,
-        chartColors.text,
-      );
-      add(idea.stop, `стоп ${priceWords(idea.stop)}`, chartColors.down);
-      add(idea.target, `цель ${priceWords(idea.target)}`, chartColors.up);
+
+      series.setData(points);
+      if (line.term !== undefined) {
+        createSeriesMarkers(series, [
+          {
+            time: seconds(line.to),
+            position: 'inBar',
+            shape: 'square',
+            color: chartColors.text,
+            text: line.term,
+          },
+        ]);
+      }
+
+      made.push(series);
     }
 
-    return () => made.forEach((line) => current.candles.removePriceLine(line));
+    return () => made.forEach((series) => current.chart.removeSeries(series));
   }, [lines, candles]);
 
   return <div ref={container} className="h-[600px] w-full" data-testid="chart" />;

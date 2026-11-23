@@ -388,11 +388,37 @@ describe('the ideas, the open interest and the funding on the chart', () => {
         ]),
       ),
     );
-    expect(drawn.lines.map((line) => [line.title, line.price])).toEqual([
-      ['вход 236.10 · срок 17:00', 236.1],
-      ['стоп 231.38', 231.38],
-      ['цель 245.54', 245.54],
+    // Task 18.26: from the candle of the entry to the candle of the term, the term marked.
+    expect(drawn.segments.map((line) => [line.title, line.data])).toEqual([
+      [
+        'вход 236.10',
+        [
+          { time: 13 * 3600 + Date.UTC(2026, 10, 22) / 1000, value: 236.1 },
+          { time: 17 * 3600 + Date.UTC(2026, 10, 22) / 1000, value: 236.1 },
+        ],
+      ],
+      [
+        'стоп 231.38',
+        [
+          { time: 13 * 3600 + Date.UTC(2026, 10, 22) / 1000, value: 231.38 },
+          { time: 17 * 3600 + Date.UTC(2026, 10, 22) / 1000, value: 231.38 },
+        ],
+      ],
+      [
+        'цель 245.54',
+        [
+          { time: 13 * 3600 + Date.UTC(2026, 10, 22) / 1000, value: 245.54 },
+          { time: 17 * 3600 + Date.UTC(2026, 10, 22) / 1000, value: 245.54 },
+        ],
+      ],
     ]);
+    expect(drawn.segmentMarkers).toEqual([
+      expect.objectContaining({
+        time: 17 * 3600 + Date.UTC(2026, 10, 22) / 1000,
+        text: 'срок 17:00',
+      }),
+    ]);
+    expect(drawn.lines).toEqual([]);
   });
 
   // Scenario «Идея другого таймфрейма».
@@ -446,7 +472,7 @@ describe('the ideas, the open interest and the funding on the chart', () => {
       },
     });
     renderApp('/market/SOLUSDT?timeframe=1h');
-    await waitFor(() => expect(drawn.lines).toHaveLength(3));
+    await waitFor(() => expect(drawn.segments).toHaveLength(3));
 
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Статус' }), 'closed');
     await waitFor(() =>
@@ -455,7 +481,7 @@ describe('the ideas, the open interest and the funding on the chart', () => {
       ).toHaveLength(2),
     );
 
-    expect(drawn.lines).toHaveLength(3);
+    expect(drawn.segments).toHaveLength(3);
     const chart = requests
       .map((request) => new URL(request.url))
       .filter(
