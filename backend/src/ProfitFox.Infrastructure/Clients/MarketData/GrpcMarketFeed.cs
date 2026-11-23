@@ -25,7 +25,9 @@ namespace ProfitFox.Infrastructure.Clients.MarketData;
 ///     <c>RESOURCE_EXHAUSTED</c> or a break it subscribes again from a little before the last item it got; a break longer
 ///     than the service catches up is told as a <see cref="FeedGap" />, once for a break. Whatever else breaks a feed — but
 ///     a cancellation — is written to the journal, and the feed subscribes again after the pause of a retry; an item it
-///     cannot read is written to the journal and left out (task 18.7).
+///     cannot read is written to the journal and left out (task 18.7). A stream of minutes that tells nothing for longer than
+///     <see cref="MarketFeedSettings.FeedSilence" /> while the feed waits for it is broken off with a warning and subscribed
+///     again as after a break (task 24.1).
 /// </summary>
 public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catalog, TimeProvider time, MarketFeedSettings settings, ILogger? logger = null) : IMarketFeed
 {
@@ -57,6 +59,7 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
                 Minutes,
                 subscription,
                 settings.Overlap,
+                settings.FeedSilence > TimeSpan.Zero ? settings.FeedSilence : null,
                 (since, token) => _candles.Subscribe(
                     new SubscribeRequest { Exchanges = { Exchange.Bybit }, Since = Stamp(since), Forming = subscription.Forming },
                     cancellationToken: token),
@@ -71,6 +74,7 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
                 Payments,
                 subscription,
                 settings.PaymentOverlap,
+                silence: null,
                 (since, token) => _payments.Subscribe(new SubscribeFundingPaymentRequest { Since = Stamp(since) }, cancellationToken: token),
                 payment => payment.Time.ToDateTimeOffset(),
                 payment => Point(pairs, LivePointKind.FundingPayment, payment.InstrumentId, payment.Time, payment.FundingRate),
@@ -80,6 +84,7 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
                 Rates,
                 subscription,
                 settings.Overlap,
+                silence: null,
                 (since, token) => _rates.Subscribe(new SubscribeFundingRateRequest { Since = Stamp(since) }, cancellationToken: token),
                 rate => rate.Time.ToDateTimeOffset(),
                 rate => Point(pairs, LivePointKind.FundingRate, rate.InstrumentId, rate.Time, rate.FundingRate),
@@ -89,6 +94,7 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
                 OpenInterest,
                 subscription,
                 settings.Overlap,
+                silence: null,
                 (since, token) => _openInterest.Subscribe(new SubscribeOpenInterestRequest { Since = Stamp(since) }, cancellationToken: token),
                 point => point.Time.ToDateTimeOffset(),
                 point => Point(pairs, LivePointKind.OpenInterest, point.InstrumentId, point.Time, point.OpenInterest),
@@ -122,11 +128,13 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
 
     // One feed: subscribed again after every break and the pause of a retry, from a little before the last item, or from
     // the limit of the catch-up with a hole told when the break was longer — one hole for a break, however many tries it
-    // takes.
+    // takes. With a <paramref name="silence" />, a call that waits for its next item longer than that is broken off as a
+    // break (task 24.1); the time it waits for the reader is not counted.
     private async Task Feed<T>(
         string name,
         MarketSubscription subscription,
         TimeSpan overlap,
+        TimeSpan? silence,
         Func<DateTimeOffset?, CancellationToken, AsyncServerStreamingCall<T>> open,
         Func<T, DateTimeOffset?> timeOf,
         Func<T, MarketEvent?> map,
@@ -159,11 +167,14 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
                 asked = limit;
             }
 
+            using Watchdog? watchdog = silence is { } most ? new Watchdog(time, most, cancellation) : null;
             try
             {
-                using AsyncServerStreamingCall<T> call = open(asked, cancellation);
-                await foreach (T item in call.ResponseStream.ReadAllAsync(cancellation))
+                CancellationToken token = watchdog?.Token ?? cancellation;
+                using AsyncServerStreamingCall<T> call = open(asked, token);
+                while (await Next(call.ResponseStream, watchdog, token))
                 {
+                    T item = call.ResponseStream.Current;
                     if (timeOf(item) is { } at && (last is null || at > last))
                     {
                         last = at;
@@ -175,6 +186,17 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
                         await queue.WriteAsync(mapped, cancellation);
                     }
                 }
+            }
+            catch (Exception) when (watchdog is { Silent: { } silent } && !cancellation.IsCancellationRequested)
+            {
+                // The stream told nothing for longer than the limit, without an error: a half-open connection or a service
+                // that hangs. It is broken off and subscribed again below, as after a break.
+                DateTimeOffset? again = last is { } newest ? newest - overlap : asked;
+                logger?.LogWarning(
+                    "The feed {Feed} told nothing for {Silence}; it is broken off and subscribes again from {Since}.",
+                    name,
+                    silent.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture),
+                    again?.ToString("O", CultureInfo.InvariantCulture) ?? "now");
             }
             catch (RpcException exception) when (exception.StatusCode == StatusCode.InvalidArgument && asked is not null && !cancellation.IsCancellationRequested)
             {
@@ -210,6 +232,27 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
 
             start = last is { } got ? got - overlap : asked;
             await Pause(cancellation);
+        }
+    }
+
+    // The next item of a stream. Only a wait for the stream is watched: an item it had already given is no silence, and
+    // neither is the time the feed waits for its reader between the items.
+    private static async Task<bool> Next<T>(IAsyncStreamReader<T> stream, Watchdog? watchdog, CancellationToken cancellation)
+    {
+        Task<bool> next = stream.MoveNext(cancellation);
+        if (watchdog is null || next.IsCompleted)
+        {
+            return await next;
+        }
+
+        watchdog.Waiting();
+        try
+        {
+            return await next;
+        }
+        finally
+        {
+            watchdog.Heard();
         }
     }
 
@@ -295,6 +338,77 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
     private static decimal Parse(string text)
     {
         return decimal.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture);
+    }
+
+    // The watchdog of one call (task 24.1): once the call waited for its next item longer than the limit, its token is
+    // cancelled and <see cref="Silent" /> tells how long it waited. One timer for the call, set when a wait starts.
+    private sealed class Watchdog : IDisposable
+    {
+        private const long NotWaiting = long.MaxValue;
+        private readonly TimeProvider _time;
+        private readonly TimeSpan _limit;
+        private readonly CancellationTokenSource _stop;
+        private readonly ITimer _timer;
+        private long _since = NotWaiting;
+        private long _silent = -1;
+
+        public Watchdog(TimeProvider time, TimeSpan limit, CancellationToken cancellation)
+        {
+            _time = time;
+            _limit = limit;
+            _stop = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+            _timer = time.CreateTimer(_ => Check(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        }
+
+        public CancellationToken Token => _stop.Token;
+
+        // How long the call waited when it was broken off; null while it was not.
+        public TimeSpan? Silent => Interlocked.Read(ref _silent) is >= 0 and var ticks ? TimeSpan.FromTicks(ticks) : null;
+
+        public void Waiting()
+        {
+            Interlocked.Exchange(ref _since, _time.GetUtcNow().UtcTicks);
+            _timer.Change(_limit, Timeout.InfiniteTimeSpan);
+        }
+
+        public void Heard()
+        {
+            Interlocked.Exchange(ref _since, NotWaiting);
+            _timer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        }
+
+        public void Dispose()
+        {
+            _timer.Dispose();
+            _stop.Dispose();
+        }
+
+        // The timer of a former wait may come late: the wait of now is measured from its own start.
+        private void Check()
+        {
+            long since = Interlocked.Read(ref _since);
+            if (since == NotWaiting)
+            {
+                return;
+            }
+
+            TimeSpan waited = _time.GetUtcNow() - new DateTimeOffset(since, TimeSpan.Zero);
+            if (waited < _limit)
+            {
+                _timer.Change(_limit - waited, Timeout.InfiniteTimeSpan);
+                return;
+            }
+
+            Interlocked.Exchange(ref _silent, waited.Ticks);
+            try
+            {
+                _stop.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // The call ended meanwhile.
+            }
+        }
     }
 
     // The pairs by the id of the catalog, read by the feeds while the catalog task replaces them. A pair left out of one

@@ -78,6 +78,9 @@ public sealed class IdeaScanner
     // Whether the feed is live: it went quiet with its newest minute recent, so its catch-up is over (task 19.9).
     private bool _live;
 
+    // Whether the feed has been silent for longer than the limit since ideas last counted without a break (task 24.1).
+    private bool _silent;
+
     public IdeaScanner(
         MarketBook book,
         IRecentHistory history,
@@ -105,7 +108,8 @@ public sealed class IdeaScanner
 
     /// <summary>
     ///     Since when ideas are counted without a break: the start of the scanner once the feed caught up, or the end of
-    ///     the last hole; null while the feed catches up.
+    ///     the last hole or silence; null while the feed catches up, and while it has told no minute for longer than
+    ///     <see cref="ScannerSettings.FeedSilence" /> (task 24.1).
     /// </summary>
     public DateTimeOffset? LiveSince { get; private set; }
 
@@ -239,9 +243,33 @@ public sealed class IdeaScanner
         Walk(now);
         await Guarded("the snapshot of the market", SnapshotAsync, cancellationToken);
         await Guarded("the open ideas", SaveAsync, cancellationToken);
-        if (LiveSince is null && Book.LastMinute is { } last && last + OneMinute >= now - TimeSpan.FromMinutes(2))
+        if (Book.LastMinute is not { } last)
+        {
+            return;
+        }
+
+        if (LiveSince is null && last + OneMinute >= now - TimeSpan.FromMinutes(2))
         {
             LiveSince = _gap ? now : _started;
+            if (_silent)
+            {
+                _silent = false;
+                _logger?.LogInformation("The feed told the minutes again up to {Last:O}; ideas count without a break since {Since:O}.", last, now);
+            }
+        }
+        else if (LiveSince is not null && now - (last + OneMinute) > _settings.FeedSilence)
+        {
+            // The feed told no minute for longer than the limit (task 24.1): no candle closes, and ideas are not counted
+            // without a break. The minutes it catches up when it is back come as a catch-up: the pairs wait for their own
+            // minutes until it is live again, and ideas count without a break since then.
+            LiveSince = null;
+            _live = false;
+            _gap = true;
+            _silent = true;
+            _logger?.LogWarning(
+                "The feed told no minute after {Last:O} for {Silence}; ideas are not counted until it comes back.",
+                last,
+                (now - (last + OneMinute)).ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture));
         }
     }
 

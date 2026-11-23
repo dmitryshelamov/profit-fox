@@ -19,6 +19,8 @@ public sealed class GrpcMarketFeedTests
 {
     private static readonly DateTimeOffset Now = new DateTimeOffset(2026, 11, 22, 10, 0, 0, TimeSpan.Zero);
 
+    private static readonly MarketFeedSettings Unwatched = new MarketFeedSettings { RetryDelay = TimeSpan.Zero, FeedSilence = TimeSpan.Zero };
+
     private const string WithXrp =
         """
         [
@@ -53,7 +55,8 @@ public sealed class GrpcMarketFeedTests
     {
         await using MarketDataServer server = await MarketDataServer.Start();
         var time = new FakeTimeProvider(Now);
-        await using var reader = Reader.Start(server, time);
+        // The clock leaps by hours with no minute told: the watchdog of the minutes (task 24.1, tested below) is off.
+        await using var reader = Reader.Start(server, time, settings: Unwatched);
         await reader.Until<MarketPairs>(_ => true);
         await Poll.Until("the subscription of minutes", () => Task.FromResult(server.Data.Minutes.Readers == 1));
 
@@ -272,6 +275,133 @@ public sealed class GrpcMarketFeedTests
         Assert.That(reader.Gaps.Count(gap => gap.Feed == GrpcMarketFeed.Minutes), Is.EqualTo(1), "one hole for the break");
     }
 
+    /// <summary>
+    ///     Task 24.1, confirmed: a stream of minutes that stops telling without an error — a half-open connection, a service
+    ///     that hangs — was read for ever, and the scanner got no minute and no break. Silent for longer than the limit, it is
+    ///     broken off with one warning and subscribed again from a little before its last minute, as after a break.
+    /// </summary>
+    [Test]
+    public async Task A_silent_stream_of_minutes_is_broken_off_and_subscribed_again_from_its_last_minute()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var time = new FakeTimeProvider(Now);
+        server.Data.FeedTime = time;
+        var log = new ListLogger();
+        await using var reader = Reader.Start(server, time, since: Now.AddMinutes(-10), logger: log);
+        server.Data.Minutes.Push(FakeLiveFeedTests.Minute("btc", Now.AddMinutes(-1)));
+        await reader.Until<LiveMinute>(_ => true);
+
+        time.Advance(TimeSpan.FromMinutes(2));
+        await Task.Delay(200);
+        Assert.That(server.Data.Minutes.Subscriptions, Has.Count.EqualTo(1), "two minutes of silence are within the limit");
+
+        time.Advance(TimeSpan.FromSeconds(61));
+        await Poll.Until("the subscription after the silence", () => Task.FromResult(server.Data.Minutes.Subscriptions.Count == 2 && server.Data.Minutes.Readers == 1));
+        Assert.That(server.Data.Minutes.Subscriptions[1], Is.EqualTo(Now.AddMinutes(-6)), "again from five minutes before the last minute");
+        server.Data.Minutes.Push(FakeLiveFeedTests.Minute("btc", Now.AddMinutes(3)));
+        await reader.Until<LiveMinute>(minute => minute.OpenTime == Now.AddMinutes(3));
+
+        (LogLevel Level, string Message)[] warnings = [.. Entries(log).Where(entry => entry.Level == LogLevel.Warning)];
+        Assert.That(warnings, Has.Length.EqualTo(1), "one warning for the silence");
+        Assert.That(warnings[0].Message, Does.Contain(GrpcMarketFeed.Minutes).And.Contain("00:03"));
+        Assert.That(reader.Gaps, Is.Empty, "a silence within the day the service catches up is no hole");
+    }
+
+    /// <summary>
+    ///     Task 24.1: a quiet night — a minute of one pair every minute, the other pairs without trades — is no silence.
+    /// </summary>
+    [Test]
+    public async Task A_quiet_night_does_not_wake_the_watchdog()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var time = new FakeTimeProvider(Now);
+        server.Data.FeedTime = time;
+        var log = new ListLogger();
+        await using var reader = Reader.Start(server, time, since: Now.AddMinutes(-1), logger: log);
+        await Poll.Until("the subscription of minutes", () => Task.FromResult(server.Data.Minutes.Readers == 1));
+
+        for (int minute = 0; minute < 10; minute++)
+        {
+            time.Advance(TimeSpan.FromMinutes(1));
+            server.Data.Minutes.Push(FakeLiveFeedTests.Minute("btc", Now.AddMinutes(minute)));
+            int expected = minute;
+            await reader.Until<LiveMinute>(item => item.OpenTime == Now.AddMinutes(expected));
+        }
+
+        Assert.That(server.Data.Minutes.Subscriptions, Has.Count.EqualTo(1));
+        Assert.That(Entries(log).Where(entry => entry.Level == LogLevel.Warning), Is.Empty);
+    }
+
+    /// <summary>
+    ///     Task 24.1: the payments come once in hours, the rates every few minutes and a step of open interest may be missed
+    ///     live: those feeds are quiet by their nature, and no silence of theirs subscribes them again.
+    /// </summary>
+    [Test]
+    public async Task The_quiet_feeds_of_funding_and_open_interest_are_not_subscribed_again()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var time = new FakeTimeProvider(Now);
+        server.Data.FeedTime = time;
+        await using var reader = Reader.Start(server, time, since: Now.AddMinutes(-1), logger: new ListLogger());
+        await Poll.Until("the subscriptions", () => Task.FromResult(
+            server.Data.Minutes.Readers == 1 && server.Data.Payments.Readers == 1 && server.Data.Rates.Readers == 1 && server.Data.OpenInterest.Readers == 1));
+
+        for (int minute = 0; minute < 120; minute += 2)
+        {
+            time.Advance(TimeSpan.FromMinutes(2));
+            server.Data.Minutes.Push(FakeLiveFeedTests.Minute("btc", Now.AddMinutes(minute)));
+            int expected = minute;
+            await reader.Until<LiveMinute>(item => item.OpenTime == Now.AddMinutes(expected));
+        }
+
+        Assert.That(
+            (server.Data.Minutes.Subscriptions.Count, server.Data.Payments.Subscriptions.Count, server.Data.Rates.Subscriptions.Count, server.Data.OpenInterest.Subscriptions.Count),
+            Is.EqualTo((1, 1, 1, 1)),
+            "two hours without a payment, a rate or a point of open interest");
+    }
+
+    /// <summary>
+    ///     Task 24.1: while the reader is slow — the catch-up of a day at the start — the bounded queue holds the feed back.
+    ///     The stream is not silent then, the reader is: however long the feed waits for the reader, it is not subscribed
+    ///     again, and every minute comes.
+    /// </summary>
+    [Test]
+    public async Task A_feed_held_back_by_a_slow_reader_is_not_taken_for_a_silent_one()
+    {
+        const int count = 50;
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var time = new FakeTimeProvider(Now.AddMinutes(count));
+        server.Data.FeedTime = time;
+        for (int minute = 0; minute < count; minute++)
+        {
+            server.Data.Minutes.Store(FakeLiveFeedTests.Minute("btc", Now.AddMinutes(minute)));
+        }
+
+        var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var log = new ListLogger();
+        var settings = new MarketFeedSettings { RetryDelay = TimeSpan.Zero, QueueCapacity = 5 };
+        await using var reader = Reader.Start(server, time, since: Now, settings, log, hold: hold.Task);
+        await Poll.Until("the subscription of minutes", () => Task.FromResult(server.Data.Minutes.Readers == 1));
+        await Task.Delay(300);
+
+        time.Advance(TimeSpan.FromMinutes(10));
+        await Task.Delay(300);
+        hold.TrySetResult();
+        await reader.Until<LiveMinute>(minute => minute.OpenTime == Now.AddMinutes(count - 1));
+
+        Assert.That(server.Data.Minutes.Subscriptions, Has.Count.EqualTo(1), "the feed waited for the reader, not for the stream");
+        Assert.That(reader.Minutes.Select(minute => minute.OpenTime), Is.EqualTo(Enumerable.Range(0, count).Select(minute => Now.AddMinutes(minute))));
+        Assert.That(Entries(log).Where(entry => entry.Level == LogLevel.Warning), Is.Empty);
+    }
+
+    private static (LogLevel Level, string Message)[] Entries(ListLogger log)
+    {
+        lock (log.Entries)
+        {
+            return [.. log.Entries];
+        }
+    }
+
     private sealed class Reader : IAsyncDisposable
     {
         private readonly CancellationTokenSource _stop = new CancellationTokenSource();
@@ -311,7 +441,16 @@ public sealed class GrpcMarketFeedTests
             }
         }
 
-        public static Reader Start(MarketDataServer server, TimeProvider time, DateTimeOffset? since = null, MarketFeedSettings? settings = null, ILogger? logger = null, bool wholeDay = false, TimeSpan? slow = null)
+        // <paramref name="hold" />: the reader takes nothing until it completes.
+        public static Reader Start(
+            MarketDataServer server,
+            TimeProvider time,
+            DateTimeOffset? since = null,
+            MarketFeedSettings? settings = null,
+            ILogger? logger = null,
+            bool wholeDay = false,
+            TimeSpan? slow = null,
+            Task? hold = null)
         {
             var feed = new GrpcMarketFeed(server.Channel, new InstrumentCatalog(server.Http), time, settings ?? new MarketFeedSettings { RetryDelay = TimeSpan.Zero }, logger);
             var reader = new Reader();
@@ -319,6 +458,11 @@ public sealed class GrpcMarketFeedTests
             {
                 await foreach (MarketEvent item in feed.Subscribe(new MarketSubscription(since, WholeDay: wholeDay), reader._stop.Token))
                 {
+                    if (hold is not null)
+                    {
+                        await hold.WaitAsync(reader._stop.Token);
+                    }
+
                     if (slow is { } pause)
                     {
                         await Task.Delay(pause, reader._stop.Token);

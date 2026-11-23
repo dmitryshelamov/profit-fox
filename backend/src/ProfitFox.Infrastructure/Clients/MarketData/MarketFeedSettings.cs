@@ -29,4 +29,12 @@ public sealed record MarketFeedSettings
     ///     streams, and a stream the service cuts off for it (<c>RESOURCE_EXHAUSTED</c>) is subscribed again from its last item.
     /// </summary>
     public int QueueCapacity { get; init; } = 20_000;
+
+    /// <summary>
+    ///     How long the stream of minutes may tell nothing (task 24.1): silent for longer, it is broken off and subscribed
+    ///     again from a little before its last minute, as after a break. The minutes of the whole market come every minute; the
+    ///     time the feed waits for its reader is not silence. The payments, the rates and the open interest are quiet by their
+    ///     nature and are not watched. Zero or less — not watched.
+    /// </summary>
+    public TimeSpan FeedSilence { get; init; } = TimeSpan.FromMinutes(3);
 }

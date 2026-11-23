@@ -33,4 +33,11 @@ public sealed class ScannerSettings
     ///     from the last item.
     /// </summary>
     public int QueueCapacity { get; init; } = 20_000;
+
+    /// <summary>
+    ///     How long the feed may tell no closed minute before ideas no longer count without a break (task 24.1): the newest
+    ///     minute of the book older than this beyond its close clears <see cref="IdeaScanner.LiveSince" />. The same setting
+    ///     breaks a silent stream of minutes off.
+    /// </summary>
+    public TimeSpan FeedSilence { get; init; } = TimeSpan.FromMinutes(3);
 }

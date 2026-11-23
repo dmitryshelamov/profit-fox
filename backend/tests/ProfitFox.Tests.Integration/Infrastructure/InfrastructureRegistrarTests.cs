@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
+using ProfitFox.Application.Services.Ideas;
 using ProfitFox.Infrastructure;
 using ProfitFox.Infrastructure.Clients.MarketData;
 
@@ -45,5 +46,43 @@ public sealed class InfrastructureRegistrarTests
         using ServiceProvider provider = services.BuildServiceProvider();
 
         Assert.That(provider.GetRequiredService<MarketFeedSettings>().QueueCapacity, Is.EqualTo(expected));
+    }
+
+    /// <summary>
+    ///     Task 24.1: how long the stream of minutes may be silent is <c>Scanner:FeedSilence</c> — one setting for the watchdog
+    ///     of the feed and the state of the scanner — and three minutes without it.
+    /// </summary>
+    [TestCase("00:05:00", 5)]
+    [TestCase(null, 3)]
+    public void The_silence_of_the_feed_takes_the_setting_of_the_scanner(string? silence, int minutes)
+    {
+        IConfiguration settings = new ConfigurationBuilder()
+            .AddConfiguration(BenchDatabase.Settings(BenchDatabase.ConnectionString))
+            .AddInMemoryCollection(silence is null ? [] : new Dictionary<string, string?> { ["Scanner:FeedSilence"] = silence })
+            .Build();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddInfrastructure(settings);
+        using ServiceProvider provider = services.BuildServiceProvider();
+
+        Assert.That(provider.GetRequiredService<MarketFeedSettings>().FeedSilence, Is.EqualTo(TimeSpan.FromMinutes(minutes)));
+        ScannerSettings scanner = settings.GetSection("Scanner").Get<ScannerSettings>() ?? new ScannerSettings();
+        Assert.That(scanner.FeedSilence, Is.EqualTo(TimeSpan.FromMinutes(minutes)), "the scanner of the Worker reads the same key");
+    }
+
+    /// <summary>
+    ///     Task 24.1 (б): the channel to the market-data service pings its connection every 30 seconds, also with no call
+    ///     open, and drops it when no answer came in 10 seconds: a half-open connection fails by itself. Several HTTP/2
+    ///     connections stay allowed, as <c>GrpcChannel</c> sets its own handler.
+    /// </summary>
+    [Test]
+    public void The_channel_to_the_market_data_service_checks_its_connection()
+    {
+        using SocketsHttpHandler handler = MarketDataRegistrar.Handler();
+
+        Assert.That(handler.KeepAlivePingDelay, Is.EqualTo(TimeSpan.FromSeconds(30)));
+        Assert.That(handler.KeepAlivePingTimeout, Is.EqualTo(TimeSpan.FromSeconds(10)));
+        Assert.That(handler.KeepAlivePingPolicy, Is.EqualTo(HttpKeepAlivePingPolicy.Always));
+        Assert.That(handler.EnableMultipleHttp2Connections, Is.True);
     }
 }

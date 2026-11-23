@@ -7,7 +7,8 @@ export const idleWarningSeconds = 60;
 /**
  * The state of the live data above the ideas (spec strategy-ideas «Состояние сканера в разделе «Идеи»»): the warm-up
  * while it goes — or, when the reads of the warm-up fail, how many pairs fail and the last reason (task 18.3) —, a
- * warning when nobody keeps the live data longer than a minute, the moment ideas count without a break.
+ * warning when nobody keeps the live data longer than a minute, a warning while the feed catches up or is silent
+ * (task 24.1), the moment ideas count without a break.
  */
 export function ScannerBanner({ state }: { readonly state: ScannerState }) {
   const idle = state.live ? 0 : Number(state.idleSeconds ?? Number.POSITIVE_INFINITY);
@@ -55,11 +56,22 @@ export function ScannerBanner({ state }: { readonly state: ScannerState }) {
     );
   }
 
+  // The lease holds, but the feed catches up or has told no minute for longer than its limit (task 24.1).
+  if (state.liveSince == null) {
+    return (
+      <p
+        role="status"
+        aria-label="Живые данные"
+        className="rounded-md border border-warn/40 bg-warn-bg px-4 py-2.5 text-warn"
+      >
+        лента рынка догоняет или молчит: новые идеи появятся, когда она дойдёт до текущей минуты
+      </p>
+    );
+  }
+
   return (
     <p role="status" aria-label="Живые данные" className="text-[12px] text-muted">
-      {state.liveSince != null
-        ? `идеи считаются без перерыва с ${momentText(state.liveSince)} UTC`
-        : 'живые данные ведутся'}
+      идеи считаются без перерыва с {momentText(state.liveSince)} UTC
     </p>
   );
 }

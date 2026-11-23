@@ -427,6 +427,18 @@ describe('the state of the scanner in «Идеи»', () => {
     );
   });
 
+  // Task 24.1, scenario «Лента молчит»: the lease holds, but the feed tells no minute — ideas do not count without a break.
+  it('says the feed catches up or is silent while ideas do not count without a break', async () => {
+    routes({ 'GET /api/ideas/state': () => json(scannerState({ liveSince: null })) });
+    renderApp('/ideas');
+
+    const banner = await screen.findByRole('status', { name: 'Живые данные' });
+    expect(banner).toHaveTextContent(
+      'лента рынка догоняет или молчит: новые идеи появятся, когда она дойдёт до текущей минуты',
+    );
+    expect(banner).not.toHaveTextContent('без перерыва');
+  });
+
   // Scenario «Обычная работа».
   it('shows since when ideas count without a break', async () => {
     routes();

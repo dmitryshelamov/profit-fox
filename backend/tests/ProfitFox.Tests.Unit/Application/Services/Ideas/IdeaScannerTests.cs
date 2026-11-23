@@ -742,6 +742,62 @@ public sealed class IdeaScannerTests
     }
 
     /// <summary>
+    ///     Task 24.1, confirmed: with no new minute the candles do not close and no idea is born — but the state went on saying
+    ///     that ideas count without a break since the start. A feed silent for longer than the limit clears it; once the feed
+    ///     comes back, the candles that closed in the silence are computed from its catch-up, and ideas count without a break
+    ///     again since the feed came back.
+    /// </summary>
+    [Test]
+    public async Task A_feed_silent_for_longer_than_the_limit_is_no_live_state_and_its_candles_are_computed_once_it_comes_back()
+    {
+        var rig = new ScannerRig();
+        Guid id = await rig.Enable("close-up", "8h");
+        await rig.Start();
+        await rig.Minutes("BTCUSDT", Ten, 3, close: 99);
+        await rig.At(Ten.AddMinutes(3).AddSeconds(5));
+        Assert.That(rig.Scanner.LiveSince, Is.EqualTo(Ten.AddSeconds(5)), "since the start");
+
+        await rig.At(Ten.AddMinutes(6));
+        Assert.That(rig.Scanner.LiveSince, Is.EqualTo(Ten.AddSeconds(5)), "three minutes after the last minute is within the limit");
+        await rig.At(Ten.AddMinutes(6).AddSeconds(1));
+        Assert.That(rig.Scanner.LiveSince, Is.Null, "the feed has told no minute for longer than the limit");
+        Assert.That(rig.Log.Entries.Count(entry => entry.Level == LogLevel.Warning), Is.EqualTo(1));
+
+        await rig.At(Eleven.AddSeconds(15));
+        Assert.That(rig.Ideas.Ideas, Is.Empty, "without minutes the candle of 10:00 does not close");
+        Assert.That(rig.Scanner.LiveSince, Is.Null);
+
+        await rig.Minutes("BTCUSDT", Ten.AddMinutes(3), 57, close: 101);
+        await rig.Minutes("ETHUSDT", Ten, 60, close: 101);
+        await rig.Minutes("BTCUSDT", Eleven, 1, close: 101);
+        await rig.At(Eleven.AddMinutes(1).AddSeconds(5), quiet: false);
+        Assert.That(rig.Ideas.Ideas.Select(idea => (idea.Symbol, idea.Moment, idea.StrategyId)).OrderBy(idea => idea.Symbol, StringComparer.Ordinal), Is.EqualTo(new[]
+        {
+            ("BTCUSDT", Eleven, id), ("ETHUSDT", Eleven, id)
+        }), "the candle that closed in the silence is computed from the catch-up");
+        Assert.That(rig.Scanner.LiveSince, Is.EqualTo(Eleven.AddMinutes(1).AddSeconds(5)), "without a break since the feed came back");
+        Assert.That(rig.Log.Entries.Count(entry => entry.Level == LogLevel.Warning), Is.EqualTo(1), "one warning for the silence");
+    }
+
+    /// <summary>
+    ///     Task 24.1: a quiet night — the minutes of one pair come, the others have no trades — keeps the live state.
+    /// </summary>
+    [Test]
+    public async Task A_quiet_night_keeps_the_live_state()
+    {
+        var rig = new ScannerRig();
+        await rig.Start();
+        for (int minute = 0; minute < 20; minute++)
+        {
+            await rig.Minutes("BTCUSDT", Ten.AddMinutes(minute), 1, close: 100);
+            await rig.At(Ten.AddMinutes(minute + 1).AddSeconds(5));
+        }
+
+        Assert.That(rig.Scanner.LiveSince, Is.EqualTo(Ten.AddSeconds(5)));
+        Assert.That(rig.Log.Entries.Where(entry => entry.Level == LogLevel.Warning), Is.Empty);
+    }
+
+    /// <summary>
     ///     Spec strategy-ideas «Исключённая идея»: a hole in the minutes of an open idea or a pair that left the set exclude it.
     /// </summary>
     [Test]
