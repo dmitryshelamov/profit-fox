@@ -2,6 +2,7 @@ using Grpc.Net.Client;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 using ProfitFox.Application.Ports.MarketData;
 
@@ -31,6 +32,7 @@ internal static class MarketDataRegistrar
             provider.GetRequiredService<GrpcChannel>(),
             provider.GetRequiredService<IInstrumentCatalog>(),
             provider.GetService<TimeProvider>() ?? TimeProvider.System,
-            provider.GetRequiredService<MarketFeedSettings>()));
+            provider.GetRequiredService<MarketFeedSettings>(),
+            provider.GetService<ILoggerFactory>()?.CreateLogger<GrpcMarketFeed>()));
     }
 }

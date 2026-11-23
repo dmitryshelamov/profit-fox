@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Logging;
-
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.Entities.Ideas;
@@ -221,32 +219,5 @@ public sealed class FakeRecentHistory : IRecentHistory
     public Task<RecentRead<OpenInterestPoint>> OpenInterest(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation)
     {
         return Task.FromResult(new RecentRead<OpenInterestPoint>(false, []));
-    }
-}
-
-/// <summary>
-///     A logger that keeps what was written, for the tests that look at the journal (task 18.3).
-/// </summary>
-public sealed class ListLogger : ILogger
-{
-    public List<(LogLevel Level, string Message)> Entries { get; } = [];
-
-    public IDisposable? BeginScope<TState>(TState state)
-        where TState : notnull
-    {
-        return null;
-    }
-
-    public bool IsEnabled(LogLevel logLevel)
-    {
-        return true;
-    }
-
-    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-    {
-        lock (Entries)
-        {
-            Entries.Add((logLevel, formatter(state, exception)));
-        }
     }
 }

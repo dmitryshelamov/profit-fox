@@ -87,6 +87,12 @@ public sealed class FakeLiveFeed<T>(Func<T, DateTimeOffset> timeOf)
     }
 
     /// <summary>
+    ///     While set, every new subscription is refused at once with this status (task 18.7), as the service refuses a
+    ///     <c>since</c> it no longer catches up with <c>INVALID_ARGUMENT</c>.
+    /// </summary>
+    public StatusCode? Refuse { get; set; }
+
+    /// <summary>
     ///     Cuts every subscriber off with <paramref name="status" />: <c>UNAVAILABLE</c> when the service stops,
     ///     <c>RESOURCE_EXHAUSTED</c> for one that read too slowly.
     /// </summary>
@@ -125,6 +131,11 @@ public sealed class FakeLiveFeed<T>(Func<T, DateTimeOffset> timeOf)
         lock (_lock)
         {
             Subscriptions.Add(since);
+        }
+
+        if (Refuse is { } refusal)
+        {
+            throw new RpcException(new Status(refusal, $"the fake feed refuses with {refusal}"));
         }
 
         if (since is { } from && from < now - CatchUp)

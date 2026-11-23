@@ -11,6 +11,7 @@ using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies.Enums;
+using ProfitFox.Tests.Shared.Logging;
 using ProfitFox.Tests.Unit.Application.Commands.Signals;
 using ProfitFox.Tests.Unit.Application.Commands.Strategies;
 

@@ -1,9 +1,12 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 
 using ProfitFox.Application.Ports.MarketData.Feed;
 using ProfitFox.Application.Services.Market;
 using ProfitFox.Infrastructure.Clients.MarketData;
+using ProfitFox.Infrastructure.Clients.MarketData.Protos;
 using ProfitFox.Tests.Integration.MarketData;
+using ProfitFox.Tests.Shared.Logging;
 using ProfitFox.Tests.Integration.Worker;
 
 namespace ProfitFox.Tests.Integration.Infrastructure.Clients.MarketData;
@@ -142,11 +145,71 @@ public sealed class GrpcMarketFeedTests
     /// <summary>
     ///     Reads a subscription of the client into a list in the background.
     /// </summary>
+    /// <summary>
+    ///     Task 18.7: a candle the feed cannot read is written to the journal and left out, and the feed goes on.
+    /// </summary>
+    [Test]
+    public async Task A_broken_candle_is_written_to_the_journal_and_the_feed_goes_on()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var log = new ListLogger();
+        await using var reader = Reader.Start(server, new FakeTimeProvider(Now), logger: log);
+        await reader.Until<MarketPairs>(_ => true);
+        await Poll.Until("the subscription of minutes", () => Task.FromResult(server.Data.Minutes.Readers == 1));
+
+        CandleUpdate broken = FakeLiveFeedTests.Minute("btc", Now);
+        broken.Close = "not a number";
+        server.Data.Minutes.Push(broken);
+        server.Data.Minutes.Push(FakeLiveFeedTests.Minute("btc", Now.AddMinutes(1)));
+
+        await reader.Until<LiveMinute>(minute => minute.OpenTime == Now.AddMinutes(1));
+        Assert.That(reader.Minutes.Select(minute => minute.OpenTime), Is.EqualTo(new[] { Now.AddMinutes(1) }));
+        Assert.That(log.Entries.Any(entry => entry.Level == LogLevel.Warning && entry.Message.Contains(GrpcMarketFeed.Minutes)), Is.True, "the broken candle is in the journal");
+    }
+
+    /// <summary>
+    ///     Task 18.7: a feed the service refuses with <c>INVALID_ARGUMENT</c> again and again subscribes again after the pause
+    ///     of a retry each time and tells one hole for the break.
+    /// </summary>
+    [Test]
+    public async Task A_feed_refused_again_and_again_waits_between_the_tries_and_tells_one_hole()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var time = new FakeTimeProvider(Now);
+        server.Data.FeedTime = time;
+        server.Data.Minutes.Refuse = Grpc.Core.StatusCode.InvalidArgument;
+        var settings = new MarketFeedSettings { RetryDelay = TimeSpan.FromSeconds(1) };
+        await using var reader = Reader.Start(server, time, since: Now.AddMinutes(-10), settings, new ListLogger());
+        await Poll.Until("the first try", () => Task.FromResult(server.Data.Minutes.Subscriptions.Count == 1));
+
+        await Task.Delay(200);
+        Assert.That(server.Data.Minutes.Subscriptions, Has.Count.EqualTo(1), "no try again before the pause");
+        for (int retry = 2; retry <= 4; retry++)
+        {
+            time.Advance(TimeSpan.FromMinutes(1));
+            int expected = retry;
+            await Poll.Until($"try {retry}", () => Task.FromResult(server.Data.Minutes.Subscriptions.Count == expected));
+        }
+
+        Assert.That(reader.Gaps.Count(gap => gap.Feed == GrpcMarketFeed.Minutes), Is.EqualTo(1), "one hole for the break");
+    }
+
     private sealed class Reader : IAsyncDisposable
     {
         private readonly CancellationTokenSource _stop = new CancellationTokenSource();
         private readonly List<MarketEvent> _events = [];
         private Task _reading = Task.CompletedTask;
+
+        public IReadOnlyList<FeedGap> Gaps
+        {
+            get
+            {
+                lock (_events)
+                {
+                    return [.. _events.OfType<FeedGap>()];
+                }
+            }
+        }
 
         public IReadOnlyList<LiveMinute> Minutes
         {
@@ -159,9 +222,9 @@ public sealed class GrpcMarketFeedTests
             }
         }
 
-        public static Reader Start(MarketDataServer server, TimeProvider time, DateTimeOffset? since = null)
+        public static Reader Start(MarketDataServer server, TimeProvider time, DateTimeOffset? since = null, MarketFeedSettings? settings = null, ILogger? logger = null)
         {
-            var feed = new GrpcMarketFeed(server.Channel, new InstrumentCatalog(server.Http), time, new MarketFeedSettings { RetryDelay = TimeSpan.Zero });
+            var feed = new GrpcMarketFeed(server.Channel, new InstrumentCatalog(server.Http), time, settings ?? new MarketFeedSettings { RetryDelay = TimeSpan.Zero }, logger);
             var reader = new Reader();
             reader._reading = Task.Run(async () =>
             {

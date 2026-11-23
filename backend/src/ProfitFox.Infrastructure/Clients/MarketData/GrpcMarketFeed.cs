@@ -7,6 +7,8 @@ using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Grpc.Net.Client;
 
+using Microsoft.Extensions.Logging;
+
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.Ports.MarketData.Feed;
 using ProfitFox.Domain.ValueObjects.MarketData;
@@ -20,9 +22,11 @@ namespace ProfitFox.Infrastructure.Clients.MarketData;
 ///     linear USDT perpetuals, read again every <see cref="MarketFeedSettings.CatalogRefresh" />. What comes is written to a
 ///     queue of its own at once, so the service never cuts it off for a slow reader. After <c>UNAVAILABLE</c>,
 ///     <c>RESOURCE_EXHAUSTED</c> or a break it subscribes again from a little before the last item it got; a break longer
-///     than the service catches up is told as a <see cref="FeedGap" />.
+///     than the service catches up is told as a <see cref="FeedGap" />, once for a break. Whatever else breaks a feed — but
+///     a cancellation — is written to the journal, and the feed subscribes again after the pause of a retry; an item it
+///     cannot read is written to the journal and left out (task 18.7).
 /// </summary>
-public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catalog, TimeProvider time, MarketFeedSettings settings) : IMarketFeed
+public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catalog, TimeProvider time, MarketFeedSettings settings, ILogger? logger = null) : IMarketFeed
 {
     public const string Minutes = "minutes";
     public const string Payments = "funding-payments";
@@ -110,8 +114,9 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
         }
     }
 
-    // One feed: subscribed again after every break, from a little before the last item, or from the limit of the
-    // catch-up with a hole told when the break was longer.
+    // One feed: subscribed again after every break and the pause of a retry, from a little before the last item, or from
+    // the limit of the catch-up with a hole told when the break was longer — one hole for a break, however many tries it
+    // takes.
     private async Task Feed<T>(
         string name,
         DateTimeOffset? since,
@@ -124,13 +129,19 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
     {
         DateTimeOffset? start = since;
         DateTimeOffset? last = null;
+        bool holeTold = false;
         while (!cancellation.IsCancellationRequested)
         {
             DateTimeOffset? asked = start;
             DateTimeOffset limit = time.GetUtcNow() - settings.CatchUp + TimeSpan.FromMinutes(1);
             if (asked is { } from && from < limit)
             {
-                await queue.WriteAsync(new FeedGap(name, from, limit), cancellation);
+                if (!holeTold)
+                {
+                    await queue.WriteAsync(new FeedGap(name, from, limit), cancellation);
+                    holeTold = true;
+                }
+
                 asked = limit;
             }
 
@@ -144,7 +155,8 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
                         last = at;
                     }
 
-                    if (map(item) is { } mapped)
+                    holeTold = false;
+                    if (Map(name, map, item) is { } mapped)
                     {
                         await queue.WriteAsync(mapped, cancellation);
                     }
@@ -152,31 +164,60 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
             }
             catch (RpcException exception) when (exception.StatusCode == StatusCode.InvalidArgument && asked is not null && !cancellation.IsCancellationRequested)
             {
-                // The clock of the service runs ahead of ours: catch up from where it still holds.
+                // The clock of the service runs ahead of ours: catch up from where it still holds, after the pause.
                 DateTimeOffset holds = time.GetUtcNow() - settings.CatchUp + TimeSpan.FromMinutes(5);
-                if (asked < holds)
+                if (asked < holds && !holeTold)
                 {
                     await queue.WriteAsync(new FeedGap(name, asked.Value, holds), cancellation);
+                    holeTold = true;
                 }
 
+                logger?.LogWarning("The feed {Feed} refused since {Since:O}: {Detail}; it subscribes again from {Holds:O}.", name, asked, exception.Status.Detail, holds);
                 start = holds;
+                await Pause(cancellation);
                 continue;
             }
-            catch (Exception exception) when (exception is RpcException or IOException or HttpRequestException)
+            catch (Exception exception) when (!cancellation.IsCancellationRequested)
             {
-                if (cancellation.IsCancellationRequested)
+                // UNAVAILABLE, RESOURCE_EXHAUSTED, a break or anything else: written down, and subscribed again below.
+                if (exception is not (RpcException or IOException or HttpRequestException))
                 {
-                    return;
+                    logger?.LogError(exception, "The feed {Feed} failed; it subscribes again.", name);
                 }
-
-                // UNAVAILABLE, RESOURCE_EXHAUSTED or a break: subscribe again below.
+                else
+                {
+                    logger?.LogInformation("The feed {Feed} broke off ({Reason}); it subscribes again.", name, exception.Message);
+                }
+            }
+            catch (Exception) when (cancellation.IsCancellationRequested)
+            {
+                return;
             }
 
             start = last is { } got ? got - overlap : asked;
-            if (settings.RetryDelay > TimeSpan.Zero)
-            {
-                await Task.Delay(settings.RetryDelay, time, cancellation);
-            }
+            await Pause(cancellation);
+        }
+    }
+
+    // An item the feed cannot read is left out, and the journal says so.
+    private MarketEvent? Map<T>(string name, Func<T, MarketEvent?> map, T item)
+    {
+        try
+        {
+            return map(item);
+        }
+        catch (Exception exception) when (exception is FormatException or OverflowException or ArgumentException)
+        {
+            logger?.LogWarning(exception, "The feed {Feed} sent an item it cannot read, and it is left out: {Item}", name, item);
+            return null;
+        }
+    }
+
+    private async Task Pause(CancellationToken cancellation)
+    {
+        if (settings.RetryDelay > TimeSpan.Zero)
+        {
+            await Task.Delay(settings.RetryDelay, time, cancellation);
         }
     }
 
