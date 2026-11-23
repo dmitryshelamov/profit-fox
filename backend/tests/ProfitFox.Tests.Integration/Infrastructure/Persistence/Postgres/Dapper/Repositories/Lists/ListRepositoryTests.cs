@@ -221,9 +221,41 @@ public sealed class ListRepositoryTests
 
         Assert.That(seen, Has.Count.EqualTo(60));
         Assert.That(seen.Distinct().Count(), Is.EqualTo(60), "no group twice, none lost");
+    }
+
+    /// <summary>
+    ///     Task 19.6: the index of the journal is in the order of the journal — the time of exit descending with the missing
+    ///     last, then its tie-break — so on 10 000 closed ideas the page of the journal is read from the index without a sort.
+    /// </summary>
+    [Test]
+    public async Task The_journal_is_read_in_the_order_of_its_index_without_a_sort()
+    {
+        Idea first = await Add(IdeaGenerator.Generate(symbol: "SOLUSDT", moment: Now.AddDays(-30)), closed: 0.001);
+        await using NpgsqlConnection connection = await BenchDatabase.DataSource.OpenConnectionAsync();
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO ideas
+            SELECT (jsonb_populate_record(NULL::ideas, to_jsonb(i) || jsonb_build_object(
+                'id', gen_random_uuid(),
+                'moment', i.moment + make_interval(mins => g),
+                'exit_time', CASE WHEN g % 10 = 0 THEN NULL ELSE now() - make_interval(mins => g) END))).*
+            FROM ideas i, generate_series(1, 9999) g
+            WHERE i.id = @Id
+            """,
+            new { first.Id });
+        await connection.ExecuteAsync("ANALYZE ideas");
+
+        string[] plan = [.. await connection.QueryAsync<string>(
+            """
+            EXPLAIN SELECT i.* FROM ideas i LEFT JOIN strategies s ON s.id = i.strategy_id LEFT JOIN market_pairs m ON m.symbol = i.symbol
+            WHERE i.state = 'closed' AND i.exit_time >= now() - make_interval(days => 7) AND TRUE AND TRUE
+            ORDER BY i.exit_time DESC NULLS LAST, i.moment DESC, i.id LIMIT 50 OFFSET 50
+            """)];
+        Assert.That(plan, Has.Some.Contains("ideas_state_exit_time_ix"), string.Join('\n', plan));
+        Assert.That(plan, Has.None.Contains("Sort"), string.Join('\n', plan));
         Assert.That(
             await Scalar<string>("SELECT indexdef FROM pg_indexes WHERE tablename = 'ideas' AND indexname = 'ideas_state_exit_time_ix'"),
-            Does.Contain("(state, exit_time DESC)"));
+            Does.EndWith("(state, exit_time DESC NULLS LAST, moment DESC, id)"));
     }
 
     private async Task<Idea> Add(Idea idea, double? closed = null, bool excluded = false, int exitDaysAgo = 1)

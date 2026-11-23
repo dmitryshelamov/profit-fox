@@ -55,7 +55,7 @@ public sealed class MigrationTests
 
         await using var connection = new NpgsqlConnection(connectionString);
         long[] versions = [.. await connection.QueryAsync<long>("SELECT \"Version\" FROM \"VersionInfo\" ORDER BY \"Version\"")];
-        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L, 202611230002L, 202611230003L }));
+        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L, 202611230002L, 202611230003L, 202611230004L }));
         Assert.That(await TablesOf(connectionString), Is.SupersetOf(new[] { "strategies", "strategy_versions", "strategy_signals" }));
     }
 
@@ -170,6 +170,26 @@ public sealed class MigrationTests
         Assert.That(await connection.QueryAsync<string>(columns), Is.EqualTo(new[] { "name", "worker", "until", "live_since", "warmed", "pairs" }));
         Assert.That(await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM pg_indexes WHERE indexname = 'ideas_state_exit_time_ix'"), Is.Zero, "task 18.16: Down takes the index away");
         Assert.That(await TablesOf(connectionString), Is.EqualTo(Tables));
+    }
+
+    /// <summary>
+    ///     Change add-ideas-and-market, task 19.6: the index of the journal has the missing times of exit last, as the journal
+    ///     orders them; Down gives back the index of task 18.16.
+    /// </summary>
+    [Test]
+    public async Task The_index_of_the_journal_puts_the_missing_exit_last_and_goes_back()
+    {
+        string connectionString = await BenchDatabase.NewDatabase();
+        await using var connection = new NpgsqlConnection(connectionString);
+        const string index = "SELECT indexdef FROM pg_indexes WHERE indexname = 'ideas_state_exit_time_ix'";
+        await using (ServiceProvider services = BenchDatabase.Migrated(connectionString))
+        {
+            Assert.That(await connection.ExecuteScalarAsync<string>(index), Does.EndWith("(state, exit_time DESC NULLS LAST, moment DESC, id)"));
+            using IServiceScope scope = services.CreateScope();
+            scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateDown(202611230003);
+        }
+
+        Assert.That(await connection.ExecuteScalarAsync<string>(index), Does.EndWith("(state, exit_time DESC)"));
     }
 
     private static async Task<string[]> ColumnsOf(NpgsqlConnection connection, string[] tables)
