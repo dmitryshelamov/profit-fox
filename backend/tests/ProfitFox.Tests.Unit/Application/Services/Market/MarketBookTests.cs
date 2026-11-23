@@ -89,6 +89,22 @@ public sealed class MarketBookTests
         Assert.That(book.Closed(noon), Is.True, "the feed came back and caught up");
     }
 
+    /// <summary>
+    ///     Task 25.1: the book is past a moment once the feed told a minute that opens at it or later.
+    /// </summary>
+    [Test]
+    public void The_book_is_past_a_moment_once_a_minute_opens_at_it()
+    {
+        DateTimeOffset noon = Ten.AddHours(2);
+        var book = new MarketBook(new FakeTimeProvider(noon.AddMinutes(10)), TimeSpan.FromSeconds(15));
+        Assert.That(book.Past(noon), Is.False, "no minute yet");
+
+        book.Apply(Minute("BTCUSDT", noon.AddMinutes(-1), open: 1, close: 1));
+        Assert.That((book.Closed(noon), book.Past(noon)), Is.EqualTo((true, false)), "the minute of 11:59 of one pair");
+        book.Apply(Minute("ETHUSDT", noon, open: 1, close: 1));
+        Assert.That(book.Past(noon), Is.True, "the minute of 12:00");
+    }
+
     [Test]
     public void A_late_minute_replaces_the_one_in_the_book()
     {

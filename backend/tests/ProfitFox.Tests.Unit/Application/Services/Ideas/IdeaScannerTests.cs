@@ -798,6 +798,96 @@ public sealed class IdeaScannerTests
     }
 
     /// <summary>
+    ///     Task 25.1: a catch-up told by minute and within a minute by pair, long after the close of 11:00 — a pass that falls
+    ///     between the minute 10:59 of BTCUSDT and that of ETHUSDT does not compute the candle of 10:00 of ETHUSDT without its
+    ///     last minute (the minutes close at 99, the last one at 101): until the feed is live, the boundary waits for a minute
+    ///     that opens at it, and the ideas are those of the whole batch.
+    /// </summary>
+    [Test]
+    public async Task A_pass_in_the_middle_of_the_minute_before_a_boundary_of_a_catch_up_waits_for_the_whole_batch()
+    {
+        Idea[] whole = await CatchUpAcrossTheBoundary(passInTheMiddle: false);
+        Assert.That(whole.Select(idea => (idea.Symbol, idea.Moment, idea.CandleClose)), Is.EqualTo(new[]
+        {
+            ("BTCUSDT", Eleven, 101m), ("ETHUSDT", Eleven, 101m)
+        }));
+
+        Idea[] split = await CatchUpAcrossTheBoundary(passInTheMiddle: true);
+        Assert.That(
+            split.Select(idea => (idea.Symbol, idea.Moment, idea.CandleClose, string.Join(",", idea.Labels))).ToArray(),
+            Is.EqualTo(whole.Select(idea => (idea.Symbol, idea.Moment, idea.CandleClose, string.Join(",", idea.Labels))).ToArray()),
+            "the same ideas as from the whole batch");
+    }
+
+    /// <summary>
+    ///     Task 25.1: a catch-up that ends exactly at the boundary — the minute 10:59 is the newest the service has — is not lost:
+    ///     the candle of 10:00 waits while the feed catches up and is computed once the feed is live.
+    /// </summary>
+    [Test]
+    public async Task The_boundary_at_the_end_of_a_catch_up_is_computed_once_the_feed_is_live()
+    {
+        var rig = new ScannerRig();
+        await rig.Enable("close-up", "8h");
+        await rig.Start();
+        rig.Time.SetUtcNow(Eleven.AddSeconds(30));
+
+        await CatchUp(rig, Ten, 59, close: 99);
+        await rig.Scanner.ApplyAsync(Minute("BTCUSDT", Ten.AddMinutes(59), close: 101), CancellationToken.None);
+        await rig.At(Eleven.AddSeconds(31), quiet: false);
+        Assert.That(rig.Ideas.Ideas, Is.Empty, "the minute 10:59 of ETHUSDT is still to come");
+
+        await rig.Scanner.ApplyAsync(Minute("ETHUSDT", Ten.AddMinutes(59), close: 101), CancellationToken.None);
+        await rig.At(Eleven.AddSeconds(32), quiet: false);
+        Assert.That(rig.Ideas.Ideas, Is.Empty, "the feed still catches up: the batch may not be whole");
+
+        await rig.At(Eleven.AddSeconds(33));
+        Assert.That(rig.Ideas.Ideas.Select(idea => (idea.Symbol, idea.Moment, idea.CandleClose)).OrderBy(idea => idea.Symbol, StringComparer.Ordinal), Is.EqualTo(new[]
+        {
+            ("BTCUSDT", Eleven, 101m), ("ETHUSDT", Eleven, 101m)
+        }), "the feed went quiet with its newest minute recent: it is live");
+    }
+
+    // The scanner started at 10:00:05 and the feed that catches up the hour of 10:00 at 11:10, minute by minute and within a
+    // minute BTCUSDT before ETHUSDT, then the minute 11:00 of both; with or without a pass between the two minutes 10:59.
+    private static async Task<Idea[]> CatchUpAcrossTheBoundary(bool passInTheMiddle)
+    {
+        var rig = new ScannerRig();
+        await rig.Enable("close-up", "8h");
+        await rig.Start();
+        rig.Time.SetUtcNow(Eleven.AddMinutes(10));
+
+        await CatchUp(rig, Ten, 59, close: 99);
+        await rig.Scanner.ApplyAsync(Minute("BTCUSDT", Ten.AddMinutes(59), close: 101), CancellationToken.None);
+        if (passInTheMiddle)
+        {
+            await rig.At(Eleven.AddMinutes(10).AddSeconds(1), quiet: false);
+            Assert.That(rig.Ideas.Ideas, Is.Empty, "the minute 10:59 of ETHUSDT is still to come: the candle of 10:00 is not computed");
+        }
+
+        await rig.Scanner.ApplyAsync(Minute("ETHUSDT", Ten.AddMinutes(59), close: 101), CancellationToken.None);
+        await CatchUp(rig, Eleven, 1, close: 101);
+        await rig.At(Eleven.AddMinutes(10).AddSeconds(2), quiet: false);
+        return [.. rig.Ideas.Ideas.OrderBy(idea => idea.Symbol, StringComparer.Ordinal)];
+    }
+
+    // Closed minutes of BTCUSDT and ETHUSDT from <paramref name="from" />, told by minute and within a minute by pair.
+    private static async Task CatchUp(ScannerRig rig, DateTimeOffset from, int count, decimal close)
+    {
+        for (int minute = 0; minute < count; minute++)
+        {
+            foreach (string symbol in new[] { "BTCUSDT", "ETHUSDT" })
+            {
+                await rig.Scanner.ApplyAsync(Minute(symbol, from.AddMinutes(minute), close), CancellationToken.None);
+            }
+        }
+    }
+
+    private static LiveMinute Minute(string symbol, DateTimeOffset open, decimal close)
+    {
+        return new LiveMinute(symbol, open, 100, Math.Max(100, close), Math.Min(100, close), close, 1, close);
+    }
+
+    /// <summary>
     ///     Spec strategy-ideas «Исключённая идея»: a hole in the minutes of an open idea or a pair that left the set exclude it.
     /// </summary>
     [Test]

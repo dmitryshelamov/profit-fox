@@ -664,7 +664,7 @@ public sealed class IdeaScanner
         foreach (TimeSpan timeframe in timeframes)
         {
             DateTimeOffset last = _boundaries.TryGetValue(timeframe, out DateTimeOffset seen) ? seen : Floor(_started, timeframe);
-            for (DateTimeOffset close = last + timeframe; Book.Closed(close); close += timeframe)
+            for (DateTimeOffset close = last + timeframe; BoundaryClosed(close); close += timeframe)
             {
                 if (!closes.TryGetValue(close, out List<TimeSpan>? at))
                 {
@@ -705,6 +705,17 @@ public sealed class IdeaScanner
 
             _pending.AddRange(born);
         }
+    }
+
+    // Whether the candles that close at the moment are closed for every pair. The live feed tells the minute before the close
+    // of every pair within the delay of the book. A catch-up is long past the delay already at the first pair of that minute
+    // (task 25.1): the service tells it by minute and within a minute by instrument, and a pass in the middle of the batch
+    // would compute the other pairs without their last minute for good. Until the feed is live (at the start, after a hole
+    // and after a silence) the boundary waits for a minute that opens at the close or later; a catch-up that ends with the
+    // minute before the close is computed once the feed is live.
+    private bool BoundaryClosed(DateTimeOffset close)
+    {
+        return Book.Closed(close) && (_live || Book.Past(close));
     }
 
     // The new ideas in the order they were born; one written goes to the open ones, and a failed write leaves the rest.

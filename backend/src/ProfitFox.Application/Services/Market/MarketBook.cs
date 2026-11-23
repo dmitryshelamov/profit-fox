@@ -90,6 +90,16 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
     }
 
     /// <summary>
+    ///     Whether the feed told a closed minute that opens at <paramref name="moment" /> or later (task 25.1): a feed that
+    ///     tells its minutes in the order of their open times, as a catch-up does, has then told the minute before the moment
+    ///     of every pair.
+    /// </summary>
+    public bool Past(DateTimeOffset moment)
+    {
+        return LastMinute is { } last && last >= moment;
+    }
+
+    /// <summary>
     ///     Whether the book has the whole candle of <paramref name="timeframe" /> opened at <paramref name="open" />: the candle
     ///     is <see cref="Closed" /> and the book holds its minutes from its open on (task 19.3).
     /// </summary>
