@@ -58,6 +58,28 @@ public sealed class IdeaScannerTests
     }
 
     /// <summary>
+    ///     Task 18.13: a reconciliation without a change reads no graph and keeps the warmed runs; a new version is read once.
+    /// </summary>
+    [Test]
+    public async Task A_reconciliation_without_a_change_reads_no_graph()
+    {
+        var rig = new ScannerRig();
+        Guid id = await rig.Enable("close-up", "8h");
+        await rig.Label("btc-down", "↓ BTC", TimeSpan.FromHours(1), BtcBelow(90));
+        await rig.Start();
+        (int strategies, int signals) = (rig.Strategies.Reads, rig.Signals.Reads);
+
+        await rig.At(Ten.AddSeconds(15));
+        await rig.At(Ten.AddSeconds(25));
+
+        Assert.That((rig.Strategies.Reads, rig.Signals.Reads), Is.EqualTo((strategies, signals)), "the versions did not change");
+        Assert.That(rig.Scanner.Progress, Is.EqualTo((3, 3)));
+        await rig.Enable("close-up", "8h", version: 5, id: id);
+        await rig.At(Ten.AddSeconds(35));
+        Assert.That(rig.Strategies.Reads, Is.EqualTo(strategies + 1), "the new version is read once");
+    }
+
+    /// <summary>
     ///     Task 18.10, confirmed: with the minutes of two pairs mixed, the time of an idea and a payment of its pair wait for
     ///     the minutes of its pair to reach their moment, so a stop in the last minute and the price of the payment are those
     ///     of a backtest.

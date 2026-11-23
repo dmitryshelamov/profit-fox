@@ -37,7 +37,7 @@ public sealed class RunScannerCommandHandlerTests
             rig.Ideas,
             market,
             new Lease(),
-            new IdeaLibrary(rig.Strategies, rig.Signals, rig.Enabled, rig.Labels),
+            new IdeaLibrary(rig.Strategies, rig.Signals, new MemoryIdeaSourceRepository(rig.Strategies, rig.Signals, rig.Enabled, rig.Labels)),
             TimeProvider.System,
             settings,
             new IdeasSettings(),

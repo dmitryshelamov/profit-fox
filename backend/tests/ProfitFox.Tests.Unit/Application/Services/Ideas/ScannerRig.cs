@@ -44,7 +44,7 @@ internal sealed class ScannerRig
             History,
             Ideas,
             Market,
-            new IdeaLibrary(Strategies, Signals, Enabled, Labels),
+            new IdeaLibrary(Strategies, Signals, new MemoryIdeaSourceRepository(Strategies, Signals, Enabled, Labels)),
             Time,
             new ScannerSettings(),
             Burst,

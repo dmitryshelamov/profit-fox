@@ -242,3 +242,23 @@ public sealed class FakeRecentHistory : IRecentHistory
         return Task.FromResult(new RecentRead<OpenInterestPoint>(false, []));
     }
 }
+
+/// <summary>
+///     The enabled strategies and labels with their latest versions from the stores in memory, without reading a graph
+///     (task 18.13).
+/// </summary>
+public sealed class MemoryIdeaSourceRepository(
+    ProfitFox.Tests.Unit.Application.Commands.Strategies.MemoryStrategyRepository strategies,
+    ProfitFox.Tests.Unit.Application.Commands.Signals.MemorySignalRepository signals,
+    MemoryStrategyIdeasRepository enabled,
+    MemorySignalLabelRepository labels) : IIdeaSourceRepository
+{
+    public async Task<IdeaSources> SourcesAsync(CancellationToken cancellationToken)
+    {
+        var on = (await enabled.AllAsync(cancellationToken)).Where(item => item.Enabled && item.Timeframes.Count > 0).ToDictionary(item => item.StrategyId);
+        var marked = (await labels.AllAsync(cancellationToken)).Where(label => label.Enabled).ToDictionary(label => label.SignalId);
+        return new IdeaSources(
+            [.. strategies.Documents.Where(strategy => on.ContainsKey(strategy.Id)).Select(strategy => new StrategySource(strategy.Id, strategy.Name, strategy.Version, on[strategy.Id].Timeframes))],
+            [.. signals.Documents.Where(signal => marked.ContainsKey(signal.Id)).Select(signal => new LabelSource(signal.Id, signal.Name, signal.Version, marked[signal.Id].Text, marked[signal.Id].Timeframe))]);
+    }
+}

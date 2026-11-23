@@ -57,6 +57,31 @@ public sealed class IdeaSettingsRepositoryTests
         Assert.That((await labels.AllAsync(CancellationToken.None)).Select(label => label.SignalId), Is.EqualTo(new[] { other }));
     }
 
+    /// <summary>
+    ///     Task 18.13: the enabled strategies and labels with their latest version numbers in one answer; the ones that are
+    ///     off are left out.
+    /// </summary>
+    [Test]
+    public async Task The_sources_of_the_scanner_are_the_enabled_ones_with_their_versions()
+    {
+        IStrategyRepository strategies = BenchServices.Get<IStrategyRepository>();
+        ISignalRepository signals = BenchServices.Get<ISignalRepository>();
+        Guid on = (await strategies.CreateAsync(StrategyDocumentGenerator.Generate(Guid.Empty, graph: StrategyDocumentGenerator.GenerateGraph(signal: null)), CancellationToken.None)).Id;
+        Guid off = (await strategies.CreateAsync(StrategyDocumentGenerator.Generate(Guid.Empty, name: "other", graph: StrategyDocumentGenerator.GenerateGraph(signal: null)), CancellationToken.None)).Id;
+        Guid drop = (await signals.CreateAsync(SignalDocumentGenerator.Generate("btc-drop-4h"), CancellationToken.None)).Id;
+        Guid quiet = (await signals.CreateAsync(SignalDocumentGenerator.Generate("quiet"), CancellationToken.None)).Id;
+        await BenchServices.Get<IStrategyIdeasRepository>().SetAsync(new StrategyIdeas(on, Enabled: true, Hours), CancellationToken.None);
+        await BenchServices.Get<IStrategyIdeasRepository>().SetAsync(new StrategyIdeas(off, Enabled: false, Hours), CancellationToken.None);
+        await BenchServices.Get<ISignalLabelRepository>().SetAsync(new SignalLabel(drop, Enabled: true, "↓ BTC", TimeSpan.FromHours(4)), CancellationToken.None);
+        await BenchServices.Get<ISignalLabelRepository>().SetAsync(new SignalLabel(quiet, Enabled: false, "тихо", TimeSpan.FromHours(1)), CancellationToken.None);
+
+        IdeaSources sources = await BenchServices.Get<IIdeaSourceRepository>().SourcesAsync(CancellationToken.None);
+
+        Assert.That(sources.Strategies.Select(source => (source.StrategyId, source.Name, source.Version)), Is.EqualTo(new[] { (on, "funding-short", 1) }));
+        Assert.That(sources.Strategies.Single().Timeframes, Is.EqualTo(Hours));
+        Assert.That(sources.Labels, Is.EqualTo(new[] { new LabelSource(drop, "btc-drop-4h", 1, "↓ BTC", TimeSpan.FromHours(4)) }));
+    }
+
     [Test]
     public async Task Two_holders_do_not_take_the_lease_at_once_and_a_lease_that_ran_out_is_taken()
     {

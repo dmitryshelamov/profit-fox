@@ -32,6 +32,7 @@ internal static class PostgresRegistrar
         services.AddSingleton<IStrategyRepository, StrategyRepository>();
         services.AddSingleton<IStrategyIdeasRepository, StrategyIdeasRepository>();
         services.AddSingleton<ISignalLabelRepository, SignalLabelRepository>();
+        services.AddSingleton<IIdeaSourceRepository, IdeaSourceRepository>();
         services.AddSingleton<IScannerLeaseRepository, ScannerLeaseRepository>();
         services.AddSingleton<IIdeaRepository, IdeaRepository>();
         services.AddSingleton<IMarketPairRepository, MarketPairRepository>();

@@ -259,18 +259,28 @@ public sealed class IdeaScanner
     }
 
     // The enabled strategies and labels as they are now: a new version is warmed up while the former one goes on giving
-    // ideas on the pairs the new one is not warm on yet; a strategy or a label that is off goes.
+    // ideas on the pairs the new one is not warm on yet; a strategy or a label that is off goes. Only a new slot or a new
+    // version gets a run with its executor (task 18.13): a pass without a change builds nothing.
     private async Task ReconcileAsync(CancellationToken cancellationToken)
     {
-        var wanted = new Dictionary<string, Run>(StringComparer.Ordinal);
-        foreach (StrategyRunSpec spec in await _library.StrategiesAsync(cancellationToken))
+        (IReadOnlyList<StrategyRunSpec> strategies, IReadOnlyList<LabelRunSpec> labels) = await _library.CurrentAsync(cancellationToken);
+        var wanted = new Dictionary<string, (string Key, Func<Run> Create)>(StringComparer.Ordinal);
+        foreach (StrategyRunSpec spec in strategies)
         {
-            wanted[$"s:{spec.Id}:{spec.Timeframe.Ticks}"] = new Run(spec.Key, spec.Timeframe, StrategyGraph.NamedPairs(spec.Strategy.Graph)) { Strategy = spec, Executor = new StrategyExecutor(spec.Strategy) };
+            wanted[$"s:{spec.Id}:{spec.Timeframe.Ticks}"] = (spec.Key, () => new Run(spec.Key, spec.Timeframe, StrategyGraph.NamedPairs(spec.Strategy.Graph))
+            {
+                Strategy = spec,
+                Executor = new StrategyExecutor(spec.Strategy)
+            });
         }
 
-        foreach (LabelRunSpec spec in await _library.LabelsAsync(cancellationToken))
+        foreach (LabelRunSpec spec in labels)
         {
-            wanted[$"l:{spec.SignalId}"] = new Run(spec.Key, spec.Timeframe, StrategyGraph.NamedPairs(spec.Signal.Graph)) { Label = spec, Signals = new SignalExecutor(spec.Signal) };
+            wanted[$"l:{spec.SignalId}"] = (spec.Key, () => new Run(spec.Key, spec.Timeframe, StrategyGraph.NamedPairs(spec.Signal.Graph))
+            {
+                Label = spec,
+                Signals = new SignalExecutor(spec.Signal)
+            });
         }
 
         foreach (string slot in _slots.Keys.Where(slot => !wanted.ContainsKey(slot)).ToList())
@@ -278,15 +288,15 @@ public sealed class IdeaScanner
             _slots.Remove(slot);
         }
 
-        foreach ((string key, Run run) in wanted)
+        foreach ((string key, (string runKey, Func<Run> create)) in wanted)
         {
             if (!_slots.TryGetValue(key, out Slot? slot))
             {
-                _slots[key] = new Slot(run);
+                _slots[key] = new Slot(create());
             }
-            else if (slot.Current.Key != run.Key)
+            else if (slot.Current.Key != runKey)
             {
-                _slots[key] = new Slot(run) { Previous = slot.Current.Pairs.Values.Any(pair => pair.State == WarmState.Warm) ? slot.Current : slot.Previous };
+                _slots[key] = new Slot(create()) { Previous = slot.Current.Pairs.Values.Any(pair => pair.State == WarmState.Warm) ? slot.Current : slot.Previous };
             }
             else if (slot.Previous is not null && _pairs.Keys.All(symbol => slot.Current.Pairs.TryGetValue(symbol, out PairState? state) && state.State == WarmState.Warm))
             {
