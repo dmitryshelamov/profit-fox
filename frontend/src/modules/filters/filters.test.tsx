@@ -414,4 +414,38 @@ describe('the lists after a change of their filter', () => {
     write.mockRestore();
     expect(taken).toHaveLength(1);
   });
+
+  // Task 18.28, scenario «Отказ в панели»: a failed save and a failed delete keep the panel open with the reason.
+  it('keeps the panel open with the reason when the save does not reach the bench', async () => {
+    routes([highFunding], {
+      'POST /api/filters/count': () => json({ pairs: 3, ideas: null }),
+      'PUT /api/filters/f-high': () => Promise.reject(new TypeError('Failed to fetch')),
+    });
+    renderApp('/market');
+    await userEvent.click(await (await row()).findByRole('button', { name: 'Высокий фандинг' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Изменить' }));
+    const panel = within(screen.getByRole('dialog', { name: 'Фильтр' }));
+
+    await userEvent.click(panel.getByRole('button', { name: 'Сохранить' }));
+
+    expect(await panel.findByRole('alert', { name: 'Отказ' })).toHaveTextContent('Failed to fetch');
+    expect(screen.getByRole('dialog', { name: 'Фильтр' })).toBeInTheDocument();
+  });
+
+  it('keeps the panel open with the reason when the delete fails', async () => {
+    routes([highFunding], {
+      'POST /api/filters/count': () => json({ pairs: 3, ideas: null }),
+      'DELETE /api/filters/f-high': () => json({ title: 'база не ответила' }, 500),
+    });
+    renderApp('/market');
+    await userEvent.click(await (await row()).findByRole('button', { name: 'Высокий фандинг' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Изменить' }));
+    const panel = within(screen.getByRole('dialog', { name: 'Фильтр' }));
+
+    await userEvent.click(panel.getByRole('button', { name: 'Удалить фильтр' }));
+
+    expect(await panel.findByRole('alert', { name: 'Отказ' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Фильтр' })).toBeInTheDocument();
+    expect((await row()).getByRole('button', { name: 'Высокий фандинг' })).toBeInTheDocument();
+  });
 });

@@ -21,7 +21,8 @@ export function StrategyIdeasCell({ strategy }: { readonly strategy: StrategyLis
   const queries = useQueryClient();
   const enabled = strategy.ideas?.enabled === true;
   const chosen = strategy.ideas?.timeframes ?? [];
-  const [problem, setProblem] = useState<string | null>(null);
+  // A refusal of the switch of the row opens the window with its reason (task 18.28, spec «Отказ в окне»).
+  const [refused, setRefused] = useState<readonly RequestError[]>([]);
 
   if (strategy.kind === 'bot') {
     return <span className="text-xs text-faint">не даёт идей</span>;
@@ -34,7 +35,11 @@ export function StrategyIdeasCell({ strategy }: { readonly strategy: StrategyLis
     }
 
     const result = await setStrategyIdeas(strategy.name, on, chosen);
-    setProblem(result.ok ? null : result.errors.map((error) => error.reason).join('; '));
+    if (!result.ok) {
+      setRefused(result.errors);
+      setOpen(true);
+    }
+
     await queries.invalidateQueries({ queryKey: ['strategies'] });
   };
 
@@ -61,12 +66,16 @@ export function StrategyIdeasCell({ strategy }: { readonly strategy: StrategyLis
           <span className="text-xs text-muted hover:text-text">выключена</span>
         )}
       </button>
-      {problem !== null && (
-        <span role="alert" className="text-xs text-err">
-          {problem}
-        </span>
+      {open && (
+        <IdeasWindow
+          strategy={strategy}
+          refused={refused}
+          onClose={() => {
+            setOpen(false);
+            setRefused([]);
+          }}
+        />
       )}
-      {open && <IdeasWindow strategy={strategy} onClose={() => setOpen(false)} />}
     </span>
   );
 }
@@ -74,24 +83,30 @@ export function StrategyIdeasCell({ strategy }: { readonly strategy: StrategyLis
 /** The window of the ideas of a strategy: each change is sent at once; a refusal stays in the window with its reason. */
 function IdeasWindow({
   strategy,
+  refused,
   onClose,
 }: {
   readonly strategy: StrategyListItem;
+  /** The refusal of the switch of the row that opened the window. */
+  readonly refused: readonly RequestError[];
   readonly onClose: () => void;
 }) {
   const queries = useQueryClient();
   const [enabled, setEnabled] = useState(strategy.ideas?.enabled === true);
   const [chosen, setChosen] = useState<readonly string[]>(strategy.ideas?.timeframes ?? []);
-  const [errors, setErrors] = useState<readonly RequestError[]>([]);
+  const [errors, setErrors] = useState<readonly RequestError[]>(refused);
 
   const send = async (on: boolean, next: readonly string[]) => {
     const ordered = timeframes.filter((timeframe) => next.includes(timeframe));
+    const before = chosen;
     setChosen(ordered);
     const result = await setStrategyIdeas(strategy.name, on, ordered);
     if (result.ok) {
       setEnabled(result.value.enabled);
       setErrors([]);
     } else {
+      // A refused change goes back: the window shows what the bench keeps (task 18.28).
+      setChosen(before);
       setErrors(result.errors);
     }
 

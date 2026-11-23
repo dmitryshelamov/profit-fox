@@ -1034,4 +1034,54 @@ describe('the ideas of a strategy in the list', () => {
     expect(screen.getByRole('dialog', { name: 'Идеи funding-short' })).toBeInTheDocument();
     expect(window.getByRole('switch', { name: 'Идеи включены' })).not.toBeChecked();
   });
+
+  // Task 18.28, scenario «Отказ в окне»: a refused timeframe goes back to what it was.
+  it('takes a refused timeframe back in the window', async () => {
+    routes({
+      'GET /api/strategies': () => json([fundingShort({ enabled: true, timeframes: ['1h'] })]),
+      'PUT /api/strategies/funding-short/ideas': () =>
+        json(
+          {
+            errors: [
+              { code: 'UnknownPair', reason: 'пары DOGEUSDT нет среди торгуемых', node: 'doge' },
+            ],
+          },
+          422,
+        ),
+    });
+    renderApp('/strategies');
+    const row = within(await screen.findByRole('row', { name: 'Стратегия funding-short' }));
+    await userEvent.click(row.getByRole('button', { name: 'Таймфреймы идей funding-short' }));
+    const window = within(screen.getByRole('dialog', { name: 'Идеи funding-short' }));
+
+    await userEvent.click(window.getByRole('button', { name: '4h' }));
+
+    expect(await window.findByRole('alert', { name: 'Отказ' })).toHaveTextContent('пары DOGEUSDT');
+    expect(window.getByRole('button', { name: '4h' })).toHaveAttribute('aria-pressed', 'false');
+    expect(window.getByRole('button', { name: '1h' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  // Task 18.28: the refusal of the switch of the row is shown in the window, not in the row.
+  it('opens the window with the reason when the switch of the row is refused', async () => {
+    routes({
+      'GET /api/strategies': () => json([fundingShort({ enabled: false, timeframes: ['1h'] })]),
+      'PUT /api/strategies/funding-short/ideas': () =>
+        json(
+          {
+            errors: [
+              { code: 'UnknownPair', reason: 'пары DOGEUSDT нет среди торгуемых', node: 'doge' },
+            ],
+          },
+          422,
+        ),
+    });
+    renderApp('/strategies');
+    const row = within(await screen.findByRole('row', { name: 'Стратегия funding-short' }));
+
+    await userEvent.click(row.getByRole('switch', { name: 'Идеи funding-short' }));
+
+    const window = within(await screen.findByRole('dialog', { name: 'Идеи funding-short' }));
+    expect(await window.findByRole('alert', { name: 'Отказ' })).toHaveTextContent('пары DOGEUSDT');
+    expect(screen.getAllByRole('alert')).toEqual([window.getByRole('alert', { name: 'Отказ' })]);
+  });
 });

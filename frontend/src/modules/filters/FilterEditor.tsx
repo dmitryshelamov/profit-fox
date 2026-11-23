@@ -104,8 +104,19 @@ export function FilterEditor({
     errors.filter((error) => error.field === 'conditions' && error.condition === index);
   const fieldErrors = (field: string) => errors.filter((error) => error.field === field);
 
+  // A save or a delete that does not reach the bench, or that the bench fails, keeps the panel open with the reason
+  // (task 18.28); a refusal of a field stays at its field.
+  const [failure, setFailure] = useState<string | null>(null);
   const save = async () => {
-    const result = await saveFilter(filter?.id ?? null, name, where, conditions);
+    setFailure(null);
+    let result: Awaited<ReturnType<typeof saveFilter>>;
+    try {
+      result = await saveFilter(filter?.id ?? null, name, where, conditions);
+    } catch (error) {
+      setFailure(error instanceof Error ? error.message : String(error));
+      return;
+    }
+
     if (!result.ok) {
       setErrors(result.errors);
       return;
@@ -127,7 +138,14 @@ export function FilterEditor({
       return;
     }
 
-    await deleteFilter(filter.id);
+    setFailure(null);
+    try {
+      await deleteFilter(filter.id);
+    } catch (error) {
+      setFailure(error instanceof Error ? error.message : String(error));
+      return;
+    }
+
     await queries.invalidateQueries({ queryKey: ['filters'] });
     await invalidateLists([filter.place]);
     onDeleted(filter.id);
@@ -305,6 +323,11 @@ export function FilterEditor({
               : `Подходит: ${matched}`}
         </p>
       </div>
+      {failure !== null && (
+        <p role="alert" aria-label="Отказ" className="px-6 text-[12px] text-err">
+          Стенд не сохранил фильтр: {failure}
+        </p>
+      )}
       <footer className="flex items-center gap-3 border-t border-line px-6 py-4">
         {filter !== null && (
           <Button variant="plain" className="text-err!" onClick={() => void remove()}>
