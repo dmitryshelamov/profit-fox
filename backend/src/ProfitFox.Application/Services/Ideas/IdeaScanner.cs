@@ -51,6 +51,9 @@ public sealed class IdeaScanner
     private readonly TradeCosts _costs = TradeCosts.Default;
     private readonly SemaphoreSlim _parallel;
     private readonly ConcurrentQueue<Warmup> _warmed = new ConcurrentQueue<Warmup>();
+
+    // The warm-ups read whose candles at the join the book has not closed yet (task 19.3): taken again on every pass.
+    private readonly List<Warmup> _joining = [];
     private readonly List<Task> _fetching = [];
     private readonly Dictionary<string, Slot> _slots = new Dictionary<string, Slot>(StringComparer.Ordinal);
     private readonly Dictionary<TimeSpan, DateTimeOffset> _boundaries = [];
@@ -376,10 +379,24 @@ public sealed class IdeaScanner
     // The graphs of the warmed pairs go through the history read; what they ordered there is no idea.
     private void ApplyWarmups(DateTimeOffset now)
     {
-        while (_warmed.TryDequeue(out Warmup? warmup))
+        List<Warmup> ready = [.. _joining];
+        _joining.Clear();
+        while (_warmed.TryDequeue(out Warmup? read))
         {
-            if (!warmup.Run.Pairs.TryGetValue(warmup.Symbol, out PairState? state))
+            ready.Add(read);
+        }
+
+        foreach (Warmup warmup in ready)
+        {
+            if (!warmup.Run.Pairs.TryGetValue(warmup.Symbol, out PairState? state) || state.State != WarmState.Reading)
             {
+                continue;
+            }
+
+            if (!warmup.Loading && !Joined(warmup))
+            {
+                // The book still catches up the candles after those of the REST: the pair waits for it, without a new read.
+                _joining.Add(warmup);
                 continue;
             }
 
@@ -437,12 +454,32 @@ public sealed class IdeaScanner
         _logger?.LogWarning("The warm-up of {Symbol} failed and is read again in {Retry}: {Failure}", symbol, _settings.WarmupRetry, failure);
     }
 
+    // Whether the book holds the candles between the last one of the REST and the boundary the pair is filled up to: only a
+    // candle the book closed and has every minute of is taken from it (task 19.3).
+    private bool Joined(Warmup warmup)
+    {
+        if (warmup.Candles.Count == 0)
+        {
+            return true;
+        }
+
+        TimeSpan timeframe = warmup.Run.Timeframe;
+        DateTimeOffset until = FilledUntil(timeframe);
+        DateTimeOffset from = warmup.Candles[^1].OpenTime + timeframe;
+        return from >= until || (Book.Holds(timeframe, from) && Book.Closed(until));
+    }
+
+    private DateTimeOffset FilledUntil(TimeSpan timeframe)
+    {
+        return _boundaries.TryGetValue(timeframe, out DateTimeOffset seen) ? seen : Floor(_started, timeframe);
+    }
+
     // The candles between the last one the REST gave and the last boundary the scanner computed come from the book (task
     // 18.15): the REST may not have the candle of that boundary yet, and the graph would see a hole. They are of the warm-up:
     // what the graph orders on them is no idea.
     private void FillFromBook(Run run, string symbol, PairState state)
     {
-        DateTimeOffset until = _boundaries.TryGetValue(run.Timeframe, out DateTimeOffset seen) ? seen : Floor(_started, run.Timeframe);
+        DateTimeOffset until = FilledUntil(run.Timeframe);
         DateTimeOffset from = state.WarmedUntil == DateTimeOffset.MinValue ? until : state.WarmedUntil;
         for (DateTimeOffset close = from + run.Timeframe; close <= until; close += run.Timeframe)
         {

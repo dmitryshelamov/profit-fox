@@ -80,6 +80,37 @@ public sealed class IdeaScannerTests
     }
 
     /// <summary>
+    ///     Task 19.3: while the book still catches up the day, the candle at the join of the warm-up is not taken from the part
+    ///     of its minutes the book has: the pair waits, and is warm with the whole candle once the book closed it. The minutes
+    ///     of 9:00–9:29 close at 99, those of 9:30–9:59 at 101: the candle of 9:00 closes at 101, so 11:00 is no first time.
+    /// </summary>
+    [Test]
+    public async Task The_candle_at_the_join_waits_for_the_book_to_close_it()
+    {
+        var rig = new ScannerRig();
+        rig.History.Candles["eth"] = (interval, before) => Warmup(interval, before - interval, "99");
+        await rig.Enable("close-up", "8h");
+        await rig.Scanner.StartAsync(CancellationToken.None);
+        await rig.Scanner.ApplyAsync(new MarketPairs(Pairs), CancellationToken.None);
+        await rig.Minutes("ETHUSDT", Ten.AddHours(-1), 30, close: 99);
+        rig.Time.SetUtcNow(Ten.AddSeconds(20));
+        await rig.Warm();
+
+        Assert.That(rig.Scanner.Progress, Is.EqualTo((2, 3)), "the book caught up half of the hour of 9:00");
+        int asked = rig.History.Asked.Count(item => item == "candles eth");
+
+        await rig.Minutes("ETHUSDT", Ten.AddHours(-1).AddMinutes(30), 30, close: 101);
+        await rig.At(Ten.AddSeconds(25));
+        Assert.That(rig.Scanner.Progress, Is.EqualTo((3, 3)), "the book closed the candle of 9:00");
+        Assert.That(rig.History.Asked.Count(item => item == "candles eth"), Is.EqualTo(asked), "the history read is not asked again");
+
+        await rig.Minutes("ETHUSDT", Ten, 60, close: 101);
+        await rig.Minutes("BTCUSDT", Ten, 60, close: 101);
+        await rig.At(Eleven.AddSeconds(15));
+        Assert.That(rig.Ideas.Ideas.Select(idea => idea.Symbol), Is.EqualTo(new[] { "BTCUSDT" }), "ETHUSDT closed above 100 at 10:00 already");
+    }
+
+    /// <summary>
     ///     Task 18.13: a reconciliation without a change reads no graph and keeps the warmed runs; a new version is read once.
     /// </summary>
     [Test]

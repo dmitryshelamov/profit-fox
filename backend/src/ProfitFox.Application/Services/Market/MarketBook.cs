@@ -31,6 +31,12 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
     /// </summary>
     public DateTimeOffset? LastMinute { get; private set; }
 
+    /// <summary>
+    ///     Since when the book holds every minute the feed told without a hole: the open time of its first minute, or the end
+    ///     of the last hole the feed told; null before the first minute. A candle opened earlier may lack minutes (task 19.3).
+    /// </summary>
+    public DateTimeOffset? CoveredFrom { get; private set; }
+
     public IReadOnlyList<string> Symbols => [.. _pairs.Keys.Order(StringComparer.Ordinal)];
 
     /// <summary>
@@ -48,6 +54,10 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
             case LiveMinute { Closed: true } minute:
                 PairOf(minute.Symbol).Put(minute);
                 LastMinute = LastMinute is { } last && last >= minute.OpenTime ? last : minute.OpenTime;
+                CoveredFrom = CoveredFrom is { } covered && covered <= minute.OpenTime ? covered : minute.OpenTime;
+                break;
+            case FeedGap gap:
+                CoveredFrom = CoveredFrom is { } since && since >= gap.Until ? since : gap.Until;
                 break;
             case LivePoint { Kind: LivePointKind.OpenInterest } point:
                 PairOf(point.Symbol).OpenInterest = Newer(PairOf(point.Symbol).OpenInterest, point);
@@ -77,6 +87,15 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
     public bool Closed(DateTimeOffset close)
     {
         return time.GetUtcNow() >= close + closeDelay && LastMinute is { } last && last + OneMinute >= close;
+    }
+
+    /// <summary>
+    ///     Whether the book has the whole candle of <paramref name="timeframe" /> opened at <paramref name="open" />: the candle
+    ///     is <see cref="Closed" /> and the book holds its minutes from its open on (task 19.3).
+    /// </summary>
+    public bool Holds(TimeSpan timeframe, DateTimeOffset open)
+    {
+        return CoveredFrom is { } covered && covered <= open && Closed(open + timeframe);
     }
 
     /// <summary>
