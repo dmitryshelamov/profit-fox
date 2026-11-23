@@ -113,6 +113,69 @@ public sealed class IdeaScannerTests
     }
 
     /// <summary>
+    ///     Task 20.4: a hole told after the read leaves the book without the minutes of the candle at the join; once the book
+    ///     closed the boundary the pair does not wait for it: the warm-up failed with its reason, and the pair is read from the
+    ///     REST again after the pause.
+    /// </summary>
+    [Test]
+    public async Task A_hole_after_the_read_fails_the_warmup_and_the_pair_is_read_again()
+    {
+        var rig = new ScannerRig();
+        rig.History.Candles["eth"] = (interval, before) => Warmup(interval, before - interval, "99");
+        await rig.Enable("close-up", "8h");
+        await rig.Scanner.StartAsync(CancellationToken.None);
+        await rig.Scanner.ApplyAsync(new MarketPairs(Pairs), CancellationToken.None);
+        await rig.Minutes("ETHUSDT", Ten.AddHours(-1), 30, close: 99);
+        rig.Time.SetUtcNow(Ten.AddSeconds(20));
+        await rig.Warm();
+        Assert.That(rig.Scanner.Progress, Is.EqualTo((2, 3)), "ETHUSDT waits for the book to close the candle of 9:00");
+
+        await rig.Scanner.ApplyAsync(new FeedGap("minutes", Ten.AddHours(-1).AddMinutes(30), Ten.AddMinutes(5)), CancellationToken.None);
+        await rig.Minutes("ETHUSDT", Ten.AddMinutes(5), 2, close: 99);
+        await rig.At(Ten.AddMinutes(7).AddSeconds(20));
+
+        (int failed, string? reason) = rig.Scanner.Failures;
+        Assert.That(failed, Is.EqualTo(1), "the candle at the join will not come: no endless wait");
+        Assert.That(reason, Does.Contain("09:00"));
+        Assert.That(rig.Log.Entries.Count(entry => entry.Message.Contains("ETHUSDT")), Is.EqualTo(1));
+        int asked = rig.History.Asked.Count(item => item == "candles eth");
+
+        rig.History.Candles["eth"] = (interval, before) => Warmup(interval, before, "99");
+        rig.Time.SetUtcNow(Ten.AddMinutes(8).AddSeconds(30));
+        await rig.Warm();
+        Assert.That(rig.History.Asked.Count(item => item == "candles eth"), Is.EqualTo(asked + 1), "read from the REST again after the pause");
+        Assert.That(rig.Scanner.Progress, Is.EqualTo((3, 3)));
+        Assert.That(rig.Scanner.Failures, Is.EqualTo((0, (string?)null)));
+    }
+
+    /// <summary>
+    ///     Task 20.4: the REST lags further back than the first minute of the book — the candle at the join opened before the
+    ///     book begins, so the book closing the boundary never holds it: the warm-up fails with its reason and is read again.
+    /// </summary>
+    [Test]
+    public async Task A_REST_behind_the_start_of_the_book_fails_the_warmup_and_the_pair_is_read_again()
+    {
+        var rig = new ScannerRig();
+        rig.History.Candles["eth"] = (interval, before) => Warmup(interval, before - (3 * interval), "99");
+        await rig.Enable("close-up", "8h");
+        await rig.Scanner.StartAsync(CancellationToken.None);
+        await rig.Scanner.ApplyAsync(new MarketPairs(Pairs), CancellationToken.None);
+        await rig.Minutes("ETHUSDT", Ten.AddHours(-1), 60, close: 99);
+        rig.Time.SetUtcNow(Ten.AddSeconds(20));
+        await rig.Warm();
+
+        Assert.That(rig.Scanner.Progress, Is.EqualTo((2, 3)), "the REST ends at 7:00, the book begins at 9:00");
+        Assert.That(rig.Scanner.Failures.Failed, Is.EqualTo(1));
+        int asked = rig.History.Asked.Count(item => item == "candles eth");
+
+        rig.History.Candles["eth"] = (interval, before) => Warmup(interval, before, "99");
+        rig.Time.SetUtcNow(Ten.AddMinutes(1).AddSeconds(30));
+        await rig.Warm();
+        Assert.That(rig.History.Asked.Count(item => item == "candles eth"), Is.EqualTo(asked + 1));
+        Assert.That(rig.Scanner.Progress, Is.EqualTo((3, 3)));
+    }
+
+    /// <summary>
     ///     Task 18.13: a reconciliation without a change reads no graph and keeps the warmed runs; a new version is read once.
     /// </summary>
     [Test]

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 
 using Microsoft.Extensions.Logging;
 
@@ -412,18 +413,35 @@ public sealed class IdeaScanner
             ready.Add(read);
         }
 
-        foreach (Warmup warmup in ready)
+        foreach (Warmup taken in ready)
         {
+            Warmup warmup = taken;
             if (!warmup.Run.Pairs.TryGetValue(warmup.Symbol, out PairState? state) || state.State != WarmState.Reading)
             {
                 continue;
             }
 
-            if (!warmup.Loading && !Joined(warmup))
+            if (!warmup.Loading)
             {
-                // The book still catches up the candles after those of the REST: the pair waits for it, without a new read.
-                _joining.Add(warmup);
-                continue;
+                Join join = JoinOf(warmup, out DateTimeOffset at);
+                if (join == Join.Waiting)
+                {
+                    // The book still catches up the candles after those of the REST: the pair waits for it, without a new read.
+                    _joining.Add(warmup);
+                    continue;
+                }
+
+                if (join == Join.Missed)
+                {
+                    // The book closed the boundary without the candle at the join — the REST lags behind the start of the book,
+                    // or a hole came after the read (task 20.4): it will not come, so the pair is read from the REST again.
+                    warmup = warmup with
+                    {
+                        Loading = true,
+                        Failure = $"The book does not hold the candle of {at.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)} at the join of the warm-up after the REST",
+                        Reason = "The book does not hold the candle at the join of the warm-up"
+                    };
+                }
             }
 
             state.Failure = warmup.Failure;
@@ -496,18 +514,26 @@ public sealed class IdeaScanner
     }
 
     // Whether the book holds the candles between the last one of the REST and the boundary the pair is filled up to: only a
-    // candle the book closed and has every minute of is taken from it (task 19.3).
-    private bool Joined(Warmup warmup)
+    // candle the book closed and has every minute of is taken from it (task 19.3). The pair waits while the book has not
+    // closed the boundary yet; once it has, a candle at the join it does not hold is missed for good (task 20.4).
+    // <paramref name="at" /> is the open of the candle at the join.
+    private Join JoinOf(Warmup warmup, out DateTimeOffset at)
     {
+        at = DateTimeOffset.MinValue;
         if (warmup.Candles.Count == 0)
         {
-            return true;
+            return Join.Joined;
         }
 
         TimeSpan timeframe = warmup.Run.Timeframe;
         DateTimeOffset until = FilledUntil(timeframe);
-        DateTimeOffset from = warmup.Candles[^1].OpenTime + timeframe;
-        return from >= until || (Book.Holds(timeframe, from) && Book.Closed(until));
+        at = warmup.Candles[^1].OpenTime + timeframe;
+        if (at >= until || (Book.Holds(timeframe, at) && Book.Closed(until)))
+        {
+            return Join.Joined;
+        }
+
+        return Book.Closed(until) ? Join.Missed : Join.Waiting;
     }
 
     private DateTimeOffset FilledUntil(TimeSpan timeframe)
@@ -829,6 +855,13 @@ public sealed class IdeaScanner
     private static DateTimeOffset Floor(DateTimeOffset moment, TimeSpan step)
     {
         return new DateTimeOffset(moment.UtcTicks - (moment.UtcTicks % step.Ticks), TimeSpan.Zero);
+    }
+
+    private enum Join
+    {
+        Joined,
+        Waiting,
+        Missed
     }
 
     private enum WarmState
