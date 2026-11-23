@@ -179,6 +179,25 @@ public sealed class GrpcMarketFeedTests
     ///     Reads a subscription of the client into a list in the background.
     /// </summary>
     /// <summary>
+    ///     Task 18.9: a subscription for the whole day the service holds starts at its limit when it subscribes, however late
+    ///     after the scanner started, and tells no hole.
+    /// </summary>
+    [Test]
+    public async Task A_subscription_for_the_whole_day_tells_no_hole()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var time = new FakeTimeProvider(Now.AddSeconds(30));
+        server.Data.FeedTime = time;
+        await using var reader = Reader.Start(server, time, since: null, wholeDay: true);
+        await Poll.Until("the subscriptions", () => Task.FromResult(server.Data.Minutes.Subscriptions.Count == 1 && server.Data.OpenInterest.Subscriptions.Count == 1));
+        server.Data.Minutes.Push(FakeLiveFeedTests.Minute("btc", Now));
+        await reader.Until<LiveMinute>(_ => true);
+
+        Assert.That(server.Data.Minutes.Subscriptions.Single(), Is.EqualTo(Now.AddSeconds(30) - TimeSpan.FromHours(24) + TimeSpan.FromMinutes(1)));
+        Assert.That(reader.Gaps, Is.Empty);
+    }
+
+    /// <summary>
     ///     Task 18.7: a candle the feed cannot read is written to the journal and left out, and the feed goes on.
     /// </summary>
     [Test]
@@ -266,13 +285,13 @@ public sealed class GrpcMarketFeedTests
             }
         }
 
-        public static Reader Start(MarketDataServer server, TimeProvider time, DateTimeOffset? since = null, MarketFeedSettings? settings = null, ILogger? logger = null)
+        public static Reader Start(MarketDataServer server, TimeProvider time, DateTimeOffset? since = null, MarketFeedSettings? settings = null, ILogger? logger = null, bool wholeDay = false)
         {
             var feed = new GrpcMarketFeed(server.Channel, new InstrumentCatalog(server.Http), time, settings ?? new MarketFeedSettings { RetryDelay = TimeSpan.Zero }, logger);
             var reader = new Reader();
             reader._reading = Task.Run(async () =>
             {
-                await foreach (MarketEvent item in feed.Subscribe(new MarketSubscription(since), reader._stop.Token))
+                await foreach (MarketEvent item in feed.Subscribe(new MarketSubscription(since, WholeDay: wholeDay), reader._stop.Token))
                 {
                     lock (reader._events)
                     {

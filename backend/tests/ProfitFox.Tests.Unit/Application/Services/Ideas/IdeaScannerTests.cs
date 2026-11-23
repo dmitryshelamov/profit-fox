@@ -58,6 +58,33 @@ public sealed class IdeaScannerTests
     }
 
     /// <summary>
+    ///     Task 18.9: a usual start asks the feed for the whole day it holds, counted when the feed subscribes, so no hole is
+    ///     told; an open idea counted only up to before that day asks from its minute, and the hole is told.
+    /// </summary>
+    [Test]
+    public async Task A_usual_start_asks_for_the_whole_day_and_counts_ideas_since_the_start()
+    {
+        var rig = new ScannerRig();
+        await rig.Start();
+        Assert.That(rig.Scanner.CatchUpFrom, Is.Null, "the whole day the feed holds");
+
+        await rig.Minutes("BTCUSDT", Ten, 1, close: 100);
+        await rig.At(Ten.AddMinutes(1).AddSeconds(5));
+        Assert.That(rig.Scanner.LiveSince, Is.EqualTo(Ten.AddSeconds(5)), "since the start");
+
+        var restarted = new ScannerRig();
+        Idea old = ProfitFox.Tests.Shared.Generators.Domain.Entities.Ideas.IdeaGenerator.Generate(moment: Ten.AddDays(-2), after: TimeSpan.FromDays(3));
+        old.ComputedUntil = Ten.AddDays(-2).AddHours(1);
+        Idea recent = ProfitFox.Tests.Shared.Generators.Domain.Entities.Ideas.IdeaGenerator.Generate(moment: Ten.AddHours(-3));
+        restarted.Ideas.Ideas.Add(recent);
+        await restarted.Scanner.StartAsync(CancellationToken.None);
+        Assert.That(restarted.Scanner.CatchUpFrom, Is.Null, "an idea within the day needs no more");
+        restarted.Ideas.Ideas.Add(old);
+        await restarted.Scanner.StartAsync(CancellationToken.None);
+        Assert.That(restarted.Scanner.CatchUpFrom, Is.EqualTo(Ten.AddDays(-2).AddHours(1)), "from the minute the old idea is counted to");
+    }
+
+    /// <summary>
     ///     Task 18.8 (а): a pair that left the catalog and came back is warmed up again from nothing and gives ideas.
     /// </summary>
     [Test]

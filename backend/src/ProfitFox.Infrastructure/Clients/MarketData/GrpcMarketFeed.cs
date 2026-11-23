@@ -49,7 +49,7 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
             Pairs(pairs, queue.Writer, stop.Token),
             Feed(
                 Minutes,
-                subscription.Since,
+                subscription,
                 settings.Overlap,
                 (since, token) => _candles.Subscribe(
                     new SubscribeRequest { Exchanges = { Exchange.Bybit }, Since = Stamp(since), Forming = subscription.Forming },
@@ -63,7 +63,7 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
         {
             feeds.Add(Feed(
                 Payments,
-                subscription.Since,
+                subscription,
                 settings.PaymentOverlap,
                 (since, token) => _payments.Subscribe(new SubscribeFundingPaymentRequest { Since = Stamp(since) }, cancellationToken: token),
                 payment => payment.Time.ToDateTimeOffset(),
@@ -72,7 +72,7 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
                 stop.Token));
             feeds.Add(Feed(
                 Rates,
-                subscription.Since,
+                subscription,
                 settings.Overlap,
                 (since, token) => _rates.Subscribe(new SubscribeFundingRateRequest { Since = Stamp(since) }, cancellationToken: token),
                 rate => rate.Time.ToDateTimeOffset(),
@@ -81,7 +81,7 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
                 stop.Token));
             feeds.Add(Feed(
                 OpenInterest,
-                subscription.Since,
+                subscription,
                 settings.Overlap,
                 (since, token) => _openInterest.Subscribe(new SubscribeOpenInterestRequest { Since = Stamp(since) }, cancellationToken: token),
                 point => point.Time.ToDateTimeOffset(),
@@ -119,7 +119,7 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
     // takes.
     private async Task Feed<T>(
         string name,
-        DateTimeOffset? since,
+        MarketSubscription subscription,
         TimeSpan overlap,
         Func<DateTimeOffset?, CancellationToken, AsyncServerStreamingCall<T>> open,
         Func<T, DateTimeOffset?> timeOf,
@@ -127,13 +127,21 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
         ChannelWriter<MarketEvent> queue,
         CancellationToken cancellation)
     {
-        DateTimeOffset? start = since;
+        DateTimeOffset? start = subscription.Since;
         DateTimeOffset? last = null;
         bool holeTold = false;
+        bool first = true;
         while (!cancellation.IsCancellationRequested)
         {
-            DateTimeOffset? asked = start;
             DateTimeOffset limit = time.GetUtcNow() - settings.CatchUp + TimeSpan.FromMinutes(1);
+            if (first && start is null && subscription.WholeDay)
+            {
+                // The whole day the service holds, counted now: the start has no hole to tell.
+                start = limit;
+            }
+
+            first = false;
+            DateTimeOffset? asked = start;
             if (asked is { } from && from < limit)
             {
                 if (!holeTold)

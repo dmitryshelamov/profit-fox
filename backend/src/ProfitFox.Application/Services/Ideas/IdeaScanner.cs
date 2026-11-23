@@ -33,6 +33,10 @@ public sealed class IdeaScanner
     private static readonly TimeSpan OneMinute = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan CatchUp = TimeSpan.FromHours(24);
 
+    // How much later than a day before the start the whole catch-up of the feed may begin: the feed subscribes a moment
+    // after the start.
+    private static readonly TimeSpan CatchUpMargin = TimeSpan.FromMinutes(5);
+
     private readonly IRecentHistory _history;
     private readonly IIdeaRepository _ideas;
     private readonly IMarketPairRepository _market;
@@ -122,18 +126,23 @@ public sealed class IdeaScanner
     public IReadOnlyList<Idea> Open => _open;
 
     /// <summary>
-    ///     Where the feed is to catch up from: a day back, or further when an open idea was counted only up to before that,
-    ///     so the feed tells the hole it cannot catch up.
+    ///     Where the feed is to catch up from: null for the whole day the feed holds, counted when it subscribes (task 18.9),
+    ///     or the minute an open idea was counted up to when that is further back, so the feed tells the hole it cannot catch
+    ///     up.
     /// </summary>
-    public DateTimeOffset CatchUpFrom
+    public DateTimeOffset? CatchUpFrom
     {
         get
         {
-            DateTimeOffset from = _started - CatchUp + OneMinute;
+            DateTimeOffset? from = null;
+            DateTimeOffset day = _started - CatchUp + CatchUpMargin;
             foreach (Idea idea in _open)
             {
                 DateTimeOffset progress = idea.ComputedUntil is { } until ? until : idea.Moment;
-                from = progress < from ? progress : from;
+                if (progress < day && (from is null || progress < from))
+                {
+                    from = progress;
+                }
             }
 
             return from;

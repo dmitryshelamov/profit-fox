@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Threading.Channels;
 
 using MediatR;
@@ -35,7 +36,7 @@ internal sealed class RunScannerCommandHandler(
     {
         var scanner = new IdeaScanner(new MarketBook(time, settings.CloseDelay), history, ideas, market, library, time, settings, ideasSettings, logger);
         await scanner.StartAsync(cancellationToken);
-        logger.LogInformation("The scanner of ideas starts on {Worker} from {Since:O}.", request.Worker, scanner.CatchUpFrom);
+        logger.LogInformation("The scanner of ideas starts on {Worker} from {Since}.", request.Worker, scanner.CatchUpFrom?.ToString("O", CultureInfo.InvariantCulture) ?? "the whole day the feed holds");
         var queue = Channel.CreateUnbounded<MarketEvent>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Task pump = Pump(scanner.CatchUpFrom, queue.Writer, stop.Token);
@@ -93,9 +94,9 @@ internal sealed class RunScannerCommandHandler(
         return true;
     }
 
-    private async Task Pump(DateTimeOffset since, ChannelWriter<MarketEvent> queue, CancellationToken cancellationToken)
+    private async Task Pump(DateTimeOffset? since, ChannelWriter<MarketEvent> queue, CancellationToken cancellationToken)
     {
-        await foreach (MarketEvent item in feed.Subscribe(new MarketSubscription(since), cancellationToken))
+        await foreach (MarketEvent item in feed.Subscribe(new MarketSubscription(since, WholeDay: true), cancellationToken))
         {
             await queue.WriteAsync(item, cancellationToken);
         }
