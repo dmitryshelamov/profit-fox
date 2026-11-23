@@ -241,9 +241,9 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
     private async Task RefreshPairs(PairsView pairs, ChannelWriter<MarketEvent> queue, CancellationToken cancellation)
     {
         IReadOnlyList<Instrument> listed = await catalog.LinearUsdtPerpetuals(cancellation);
-        if (pairs.Set(listed))
+        if (pairs.Set(listed) is { } kept)
         {
-            await queue.WriteAsync(new MarketPairs(listed), cancellation);
+            await queue.WriteAsync(new MarketPairs(kept), cancellation);
         }
     }
 
@@ -283,23 +283,34 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
         return decimal.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture);
     }
 
-    // The pairs by the id of the catalog, read by the feeds while the catalog task replaces them.
+    // The pairs by the id of the catalog, read by the feeds while the catalog task replaces them. A pair left out of one
+    // answer of the catalog is kept; it is dropped when the next answer leaves it out too (task 18.8): one answer without a
+    // pair does not exclude its open ideas.
     private sealed class PairsView
     {
         private volatile Dictionary<string, string> _symbols = new Dictionary<string, string>(StringComparer.Ordinal);
+        private List<Instrument> _kept = [];
+        private HashSet<string> _missedOnce = new HashSet<string>(StringComparer.Ordinal);
+        private bool _read;
 
         public string? Symbol(string instrument)
         {
             return _symbols.GetValueOrDefault(instrument);
         }
 
-        // Whether the set changed.
-        public bool Set(IReadOnlyList<Instrument> listed)
+        // The pairs kept after this answer, when they changed; null when they did not.
+        public IReadOnlyList<Instrument>? Set(IReadOnlyList<Instrument> listed)
         {
-            var symbols = listed.ToDictionary(pair => pair.Id, pair => pair.Symbol, StringComparer.Ordinal);
+            var ids = new HashSet<string>(listed.Select(pair => pair.Id), StringComparer.Ordinal);
+            List<Instrument> missed = _read ? [.. _kept.Where(pair => !ids.Contains(pair.Id) && !_missedOnce.Contains(pair.Id))] : [];
+            List<Instrument> kept = [.. listed, .. missed];
+            _missedOnce = new HashSet<string>(missed.Select(pair => pair.Id), StringComparer.Ordinal);
+            _read = true;
+            var symbols = kept.ToDictionary(pair => pair.Id, pair => pair.Symbol, StringComparer.Ordinal);
             bool changed = symbols.Count != _symbols.Count || symbols.Any(pair => _symbols.GetValueOrDefault(pair.Key) != pair.Value);
             _symbols = symbols;
-            return changed;
+            _kept = kept;
+            return changed ? kept : null;
         }
     }
 }

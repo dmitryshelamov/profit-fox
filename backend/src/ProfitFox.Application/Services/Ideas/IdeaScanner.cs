@@ -47,6 +47,7 @@ public sealed class IdeaScanner
     private readonly Dictionary<string, Slot> _slots = new Dictionary<string, Slot>(StringComparer.Ordinal);
     private readonly Dictionary<TimeSpan, DateTimeOffset> _boundaries = [];
     private readonly HashSet<Idea> _dirty = [];
+    private readonly List<Idea> _pending = [];
     private readonly ILogger? _logger;
     private readonly Dictionary<string, DateTimeOffset> _logged = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
     private string? _lastFailure;
@@ -165,7 +166,7 @@ public sealed class IdeaScanner
                 {
                     foreach (string symbol in run.Pairs.Keys.Where(symbol => !_pairs.ContainsKey(symbol)).ToList())
                     {
-                        run.Pairs.Remove(symbol);
+                        Forget(run, symbol);
                     }
                 }
 
@@ -205,10 +206,13 @@ public sealed class IdeaScanner
         WarmUp(now, cancellationToken);
         ApplyWarmups(now);
         Walk(now);
-        await BoundariesAsync(cancellationToken);
+        Boundaries(now);
+        // The writes go one by one, each on its own (task 18.8): a failed snapshot does not stop the ideas, and the ideas of
+        // a candle wait for the database rather than go.
+        await Guarded("the new ideas", WritePendingAsync, cancellationToken);
         Walk(now);
-        await SnapshotAsync(cancellationToken);
-        await SaveAsync(cancellationToken);
+        await Guarded("the snapshot of the market", SnapshotAsync, cancellationToken);
+        await Guarded("the open ideas", SaveAsync, cancellationToken);
         if (LiveSince is null && Book.LastMinute is { } last && last + OneMinute >= now - TimeSpan.FromMinutes(2))
         {
             LiveSince = _gap ? now : _started;
@@ -368,14 +372,26 @@ public sealed class IdeaScanner
                 continue;
             }
 
-            foreach ((ClosedCandle candle, FundingPayment? funding, IReadOnlyDictionary<string, ClosedCandle>? pairs) in PairCandles.WithPairs(
-                         warmup.Run.Timeframe,
-                         warmup.Candles,
-                         warmup.Funding,
-                         warmup.Named))
+            // A warm-up starts the pair from nothing: a pair that left the catalog and came back has no state of before.
+            Forget(warmup.Run, warmup.Symbol);
+            state = new PairState { State = WarmState.Reading };
+            warmup.Run.Pairs[warmup.Symbol] = state;
+            try
             {
-                Step(warmup.Run, warmup.Symbol, candle, funding, pairs);
-                state.WarmedUntil = candle.CloseTime;
+                foreach ((ClosedCandle candle, FundingPayment? funding, IReadOnlyDictionary<string, ClosedCandle>? pairs) in PairCandles.WithPairs(
+                             warmup.Run.Timeframe,
+                             warmup.Candles,
+                             warmup.Funding,
+                             warmup.Named))
+                {
+                    Step(warmup.Run, warmup.Symbol, candle, funding, pairs);
+                    state.WarmedUntil = candle.CloseTime;
+                }
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                PairFailed(warmup.Run, warmup.Symbol, exception, now);
+                continue;
             }
 
             state.State = WarmState.Warm;
@@ -395,6 +411,35 @@ public sealed class IdeaScanner
         _logger?.LogWarning("The warm-up of {Symbol} failed and is read again in {Retry}: {Failure}", symbol, _settings.WarmupRetry, failure);
     }
 
+    // The graph of a pair failed: the pair goes back to waiting, with a line in the journal, and is warmed up again later;
+    // the other pairs go on (task 18.8).
+    private void PairFailed(Run run, string symbol, Exception exception, DateTimeOffset now)
+    {
+        _logger?.LogWarning(exception, "The graph of {Run} on {Symbol} failed; the pair is warmed up again in {Retry}.", run.Key, symbol, _settings.WarmupRetry);
+        Forget(run, symbol);
+        run.Pairs[symbol] = new PairState { State = WarmState.Waiting, RetryAt = now + _settings.WarmupRetry };
+    }
+
+    private static void Forget(Run run, string symbol)
+    {
+        run.Pairs.Remove(symbol);
+        run.Values.Remove(symbol);
+        run.Executor?.Forget(symbol);
+        run.Signals?.Forget(symbol);
+    }
+
+    private async Task Guarded(string what, Func<CancellationToken, Task> write, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await write(cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _logger?.LogError(exception, "The scanner could not write {What}; it tries again on the next pass.", what);
+        }
+    }
+
     // A strategy is stepped for its order; a label keeps the value of its signal at the close.
     private static StrategyStep? Step(Run run, string symbol, ClosedCandle candle, FundingPayment? funding, IReadOnlyDictionary<string, ClosedCandle>? pairs)
     {
@@ -408,8 +453,9 @@ public sealed class IdeaScanner
     }
 
     // Every candle closed since the last pass, in the order of the closes; at one close the labels go before the strategies,
-    // and the ideas of a strategy on a candle get the labels and the burst of that close.
-    private async Task BoundariesAsync(CancellationToken cancellationToken)
+    // and the ideas of a strategy on a candle get the labels and the burst of that close. The ideas wait in the pending ones
+    // until they are written: a failed write keeps them for the next pass (task 18.8).
+    private void Boundaries(DateTimeOffset now)
     {
         TimeSpan[] timeframes = [.. _slots.Values.Select(slot => slot.Current.Timeframe).Distinct()];
         SortedDictionary<DateTimeOffset, List<TimeSpan>> closes = [];
@@ -435,13 +481,13 @@ public sealed class IdeaScanner
         {
             foreach (Slot slot in _slots.Values.Where(slot => slot.Current.Label is not null && at.Contains(slot.Current.Timeframe)))
             {
-                StepAll(slot, close);
+                StepAll(slot, close, now);
             }
 
             List<Idea> born = [];
             foreach (Slot slot in _slots.Values.Where(slot => slot.Current.Strategy is not null && at.Contains(slot.Current.Timeframe)))
             {
-                born.AddRange(StepAll(slot, close));
+                born.AddRange(StepAll(slot, close, now));
             }
 
             foreach (IGrouping<(TimeSpan, EntrySide), Idea> group in born.GroupBy(idea => (idea.Timeframe, idea.Side)))
@@ -455,19 +501,28 @@ public sealed class IdeaScanner
                 }
             }
 
-            foreach (Idea idea in born)
+            _pending.AddRange(born);
+        }
+    }
+
+    // The new ideas in the order they were born; one written goes to the open ones, and a failed write leaves the rest.
+    private async Task WritePendingAsync(CancellationToken cancellationToken)
+    {
+        while (_pending.Count > 0)
+        {
+            Idea idea = _pending[0];
+            if (await _ideas.AddAsync(idea, cancellationToken))
             {
-                if (await _ideas.AddAsync(idea, cancellationToken))
-                {
-                    _open.Add(idea);
-                }
+                _open.Add(idea);
             }
+
+            _pending.RemoveAt(0);
         }
     }
 
     // The runs of a slot on the candle of every pair that closes at <paramref name="close" />: the current run where it is
     // warm, the former version where only it is. Gives the ideas the strategy ordered.
-    private List<Idea> StepAll(Slot slot, DateTimeOffset close)
+    private List<Idea> StepAll(Slot slot, DateTimeOffset close, DateTimeOffset now)
     {
         List<Idea> born = [];
         TimeSpan timeframe = slot.Current.Timeframe;
@@ -489,11 +544,22 @@ public sealed class IdeaScanner
                 }
             }
 
-            StrategyStep? step = Step(run, symbol, candle, Book.LastPayment(symbol, close), pairs ?? (run.Named.Count > 0 ? new Dictionary<string, ClosedCandle>() : null));
+            StrategyStep? step;
+            try
+            {
+                step = Step(run, symbol, candle, Book.LastPayment(symbol, close), pairs ?? (run.Named.Count > 0 ? new Dictionary<string, ClosedCandle>() : null));
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                PairFailed(run, symbol, exception, now);
+                continue;
+            }
+
             run.Pairs[symbol].WarmedUntil = close;
-            // An open idea of the strategy on the pair and timeframe stops the order, unless its exit is by this close.
+            // An open idea of the strategy on the pair and timeframe stops the order, unless its exit is by this close; an idea
+            // still waiting for its write counts as open.
             if (step is null || run.Strategy is not { } strategy || step.Entry is null
-                || _open.Any(idea => idea.State == IdeaState.Open && idea.StrategyId == strategy.Id && idea.Symbol == symbol && idea.Timeframe == timeframe
+                || _open.Concat(_pending).Any(idea => idea.State == IdeaState.Open && idea.StrategyId == strategy.Id && idea.Symbol == symbol && idea.Timeframe == timeframe
                                      && (idea.ExitTime ?? idea.Until) > close))
             {
                 continue;

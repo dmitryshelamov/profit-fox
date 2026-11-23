@@ -43,6 +43,14 @@ public sealed class SignalExecutor
         return Advance(Run(instrument), candle, lastFunding, pairs);
     }
 
+    /// <summary>
+    ///     Forgets the run of the pair: its next candle starts a run from nothing (task 18.8).
+    /// </summary>
+    public void Forget(string instrument)
+    {
+        _runs.Remove(instrument);
+    }
+
     private PairRun Run(string instrument)
     {
         if (!_runs.TryGetValue(instrument, out PairRun? run))

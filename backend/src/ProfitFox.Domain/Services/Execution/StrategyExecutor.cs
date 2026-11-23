@@ -36,6 +36,15 @@ public sealed class StrategyExecutor
     }
 
     /// <summary>
+    ///     Forgets the run of the pair: its next candle starts a run from nothing (task 18.8), as a pair warmed up again
+    ///     needs.
+    /// </summary>
+    public void Forget(string instrument)
+    {
+        _runs.Remove(instrument);
+    }
+
+    /// <summary>
     ///     What the strategy gives at a moment before any candle of a pair: no order, and of the exit values only those
     ///     written in the graph; a value that comes by a wire is still missing.
     /// </summary>

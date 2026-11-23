@@ -58,6 +58,90 @@ public sealed class IdeaScannerTests
     }
 
     /// <summary>
+    ///     Task 18.8 (а): a pair that left the catalog and came back is warmed up again from nothing and gives ideas.
+    /// </summary>
+    [Test]
+    public async Task A_pair_that_left_the_catalog_and_came_back_is_warmed_up_again()
+    {
+        var rig = new ScannerRig();
+        await rig.Enable("close-up", "8h");
+        await rig.Start();
+        await rig.Minutes("SOLUSDT", Ten, 10, close: 99);
+
+        await rig.Scanner.ApplyAsync(new MarketPairs([.. Pairs.Where(pair => pair.Symbol != "SOLUSDT")]), CancellationToken.None);
+        await rig.At(Ten.AddSeconds(30));
+        await rig.Scanner.ApplyAsync(new MarketPairs(Pairs), CancellationToken.None);
+        rig.Time.SetUtcNow(Ten.AddSeconds(40));
+        await rig.Warm();
+
+        Assert.That(rig.Scanner.Progress, Is.EqualTo((3, 3)));
+        await rig.Minutes("SOLUSDT", Ten.AddMinutes(10), 50, close: 101);
+        await rig.At(Eleven.AddSeconds(15));
+        Assert.That(rig.Ideas.Ideas.Select(idea => idea.Symbol), Is.EqualTo(new[] { "SOLUSDT" }));
+    }
+
+    /// <summary>
+    ///     Task 18.8 (а): a pair whose graph fails goes back to waiting with a line in the journal; the other pairs go on.
+    /// </summary>
+    [Test]
+    public async Task A_pair_whose_graph_fails_waits_and_the_others_go_on()
+    {
+        var rig = new ScannerRig();
+        rig.History.Candles["eth"] = (interval, before) => [.. Warmup(interval, before, "99"), .. Warmup(interval, before, "99")];
+        await rig.Enable("close-up", "8h");
+        await rig.Start();
+
+        Assert.That(rig.Scanner.Progress, Is.EqualTo((2, 3)), "ETHUSDT got its candles twice");
+        Assert.That(rig.Log.Entries.Any(entry => entry.Level == LogLevel.Warning && entry.Message.Contains("ETHUSDT")), Is.True);
+        await rig.Minutes("BTCUSDT", Ten, 60, close: 101);
+        await rig.At(Eleven.AddSeconds(15));
+        Assert.That(rig.Ideas.Ideas.Select(idea => idea.Symbol), Is.EqualTo(new[] { "BTCUSDT" }));
+    }
+
+    /// <summary>
+    ///     Task 18.8 (б): the ideas of a candle are written once the database answers again, not lost with the failed write.
+    /// </summary>
+    [Test]
+    public async Task The_ideas_of_a_candle_are_written_after_a_failed_write()
+    {
+        var rig = new ScannerRig();
+        await rig.Enable("close-up", "8h");
+        await rig.Start();
+        await rig.Minutes("BTCUSDT", Ten, 60, close: 101);
+        await rig.Minutes("ETHUSDT", Ten, 60, close: 101);
+        rig.Ideas.FailingAdds = 1;
+
+        await rig.At(Eleven.AddSeconds(15));
+        Assert.That(rig.Ideas.Ideas, Has.Count.LessThan(2));
+        await rig.At(Eleven.AddSeconds(16));
+
+        Assert.That(rig.Ideas.Ideas.Select(idea => (idea.Symbol, idea.Moment)).Order(), Is.EqualTo(new[] { ("BTCUSDT", Eleven), ("ETHUSDT", Eleven) }));
+        Assert.That(rig.Scanner.Open, Has.Count.EqualTo(2));
+    }
+
+    /// <summary>
+    ///     Task 18.8 (в): a failed write of the snapshot of the market does not stop the ideas.
+    /// </summary>
+    [Test]
+    public async Task A_failed_snapshot_does_not_stop_the_ideas()
+    {
+        var rig = new ScannerRig();
+        await rig.Enable("close-up", "8h");
+        await rig.Start();
+        rig.Market.Failing = true;
+        await rig.Minutes("BTCUSDT", Ten, 60, close: 101);
+
+        await rig.At(Eleven.AddSeconds(15));
+
+        Assert.That(rig.Ideas.Ideas.Select(idea => idea.Symbol), Is.EqualTo(new[] { "BTCUSDT" }));
+        Assert.That(rig.Log.Entries.Any(entry => entry.Level == LogLevel.Error), Is.True, "the failed snapshot is in the journal");
+        rig.Market.Failing = false;
+        await rig.Minutes("BTCUSDT", Eleven, 1, close: 101);
+        await rig.At(Eleven.AddMinutes(1).AddSeconds(1));
+        Assert.That(rig.Market.Pairs, Is.Not.Empty, "written again on the next minute");
+    }
+
+    /// <summary>
     ///     Task 18.6: the open ideas a minute moved are written by one statement a pass, however many there are.
     /// </summary>
     [Test]

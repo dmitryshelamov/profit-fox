@@ -44,8 +44,12 @@ public sealed class GrpcMarketFeedTests
         Assert.That(reader.Minutes.Select(minute => (minute.Symbol, minute.OpenTime)), Is.EqualTo(new[] { ("BTCUSDT", Now), ("ETHUSDT", Now.AddMinutes(1)) }));
     }
 
+    /// <summary>
+    ///     Spec market-live-feed «Новая пара» and «Пара снята с торгов»; task 18.8 (г): a pair left out of two answers of the
+    ///     catalog in a row is dropped, one answer without it keeps it.
+    /// </summary>
     [Test]
-    public async Task A_new_pair_is_kept_within_an_hour_and_a_delisted_one_is_dropped()
+    public async Task A_new_pair_is_kept_within_an_hour_and_a_delisted_one_is_dropped_after_two_answers_without_it()
     {
         await using MarketDataServer server = await MarketDataServer.Start();
         var time = new FakeTimeProvider(Now);
@@ -59,10 +63,39 @@ public sealed class GrpcMarketFeedTests
         server.Data.Minutes.Push(FakeLiveFeedTests.Minute("eth", Now));
         server.Data.Minutes.Push(FakeLiveFeedTests.Minute("xrp", Now));
         server.Data.Minutes.Push(FakeLiveFeedTests.Minute("btc", Now));
-
         await reader.Until<LiveMinute>(minute => minute.Symbol == "BTCUSDT");
-        Assert.That(pairs.Pairs.Select(pair => pair.Symbol), Is.EqualTo(new[] { "BTCUSDT", "SOLUSDT", "XRPUSDT" }));
-        Assert.That(reader.Minutes.Select(minute => minute.Symbol), Is.EqualTo(new[] { "XRPUSDT", "BTCUSDT" }), "ETHUSDT left the catalog");
+        Assert.That(pairs.Pairs.Select(pair => pair.Symbol), Is.EquivalentTo(new[] { "BTCUSDT", "SOLUSDT", "XRPUSDT", "ETHUSDT" }), "ETHUSDT is left out of one answer only");
+        Assert.That(reader.Minutes.Select(minute => minute.Symbol), Is.EqualTo(new[] { "ETHUSDT", "XRPUSDT", "BTCUSDT" }));
+
+        time.Advance(TimeSpan.FromHours(1));
+        MarketPairs dropped = await reader.Until<MarketPairs>(listed => listed.Pairs.All(pair => pair.Symbol != "ETHUSDT"));
+        server.Data.Minutes.Push(FakeLiveFeedTests.Minute("eth", Now.AddMinutes(1)));
+        server.Data.Minutes.Push(FakeLiveFeedTests.Minute("btc", Now.AddMinutes(1)));
+        await reader.Until<LiveMinute>(minute => minute.Symbol == "BTCUSDT" && minute.OpenTime == Now.AddMinutes(1));
+
+        Assert.That(dropped.Pairs.Select(pair => pair.Symbol), Is.EqualTo(new[] { "BTCUSDT", "SOLUSDT", "XRPUSDT" }));
+        Assert.That(reader.Minutes.Count(minute => minute.Symbol == "ETHUSDT"), Is.EqualTo(1), "ETHUSDT left the catalog");
+    }
+
+    /// <summary>
+    ///     Task 18.8 (г): a pair left out of one answer of the catalog and back in the next is never dropped.
+    /// </summary>
+    [Test]
+    public async Task A_pair_left_out_of_one_answer_of_the_catalog_stays()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var time = new FakeTimeProvider(Now);
+        await using var reader = Reader.Start(server, time);
+        await reader.Until<MarketPairs>(_ => true);
+
+        server.Data.Catalog = WithXrp;
+        time.Advance(TimeSpan.FromHours(1));
+        await reader.Until<MarketPairs>(listed => listed.Pairs.Any(pair => pair.Symbol == "XRPUSDT"));
+        server.Data.Catalog = MarketDataServer.Catalog.Replace("\"sol\"", "\"xrp\"").Replace("SOLUSDT", "XRPUSDT");
+        time.Advance(TimeSpan.FromHours(1));
+        await reader.Until<MarketPairs>(listed => listed.Pairs.Any(pair => pair.Symbol == "ETHUSDT") && listed.Pairs.Count == 4);
+
+        Assert.That(reader.Events.OfType<MarketPairs>().All(listed => listed.Pairs.Any(pair => pair.Symbol == "ETHUSDT")), Is.True, "ETHUSDT was never dropped");
     }
 
     [Test]
@@ -199,6 +232,17 @@ public sealed class GrpcMarketFeedTests
         private readonly CancellationTokenSource _stop = new CancellationTokenSource();
         private readonly List<MarketEvent> _events = [];
         private Task _reading = Task.CompletedTask;
+
+        public IReadOnlyList<MarketEvent> Events
+        {
+            get
+            {
+                lock (_events)
+                {
+                    return [.. _events];
+                }
+            }
+        }
 
         public IReadOnlyList<FeedGap> Gaps
         {

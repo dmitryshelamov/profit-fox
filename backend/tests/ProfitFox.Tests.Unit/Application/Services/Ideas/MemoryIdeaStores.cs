@@ -20,8 +20,19 @@ public sealed class MemoryIdeaRepository : IIdeaRepository
 
     public int Saves { get; private set; }
 
+    /// <summary>
+    ///     How many of the next writes of a new idea fail, as a write to a database that is down does (task 18.8).
+    /// </summary>
+    public int FailingAdds { get; set; }
+
     public Task<bool> AddAsync(Idea idea, CancellationToken cancellationToken)
     {
+        if (FailingAdds > 0)
+        {
+            FailingAdds--;
+            throw new InvalidOperationException("the database is down");
+        }
+
         if (Ideas.Any(held => held.StrategyId == idea.StrategyId && held.Symbol == idea.Symbol && held.Timeframe == idea.Timeframe && held.Moment == idea.Moment))
         {
             return Task.FromResult(false);
@@ -89,8 +100,18 @@ public sealed class MemoryMarketPairRepository : IMarketPairRepository
 
     public int Writes { get; private set; }
 
+    /// <summary>
+    ///     Whether the write of the snapshot fails, as a write to a database that is down does (task 18.8).
+    /// </summary>
+    public bool Failing { get; set; }
+
     public Task ReplaceAsync(IReadOnlyList<MarketPair> pairs, CancellationToken cancellationToken)
     {
+        if (Failing)
+        {
+            throw new InvalidOperationException("the database is down");
+        }
+
         Pairs = pairs;
         Writes++;
         return Task.CompletedTask;
