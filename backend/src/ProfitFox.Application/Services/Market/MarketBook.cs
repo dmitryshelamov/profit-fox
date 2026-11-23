@@ -30,6 +30,14 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
 
     public IReadOnlyList<string> Symbols => [.. _pairs.Keys.Order(StringComparer.Ordinal)];
 
+    /// <summary>
+    ///     The open time of the last closed minute of the pair the feed told; null before its first.
+    /// </summary>
+    public DateTimeOffset? LastMinuteOf(string symbol)
+    {
+        return _pairs.TryGetValue(symbol, out Pair? pair) ? pair.Last?.OpenTime : null;
+    }
+
     public void Apply(MarketEvent item)
     {
         switch (item)

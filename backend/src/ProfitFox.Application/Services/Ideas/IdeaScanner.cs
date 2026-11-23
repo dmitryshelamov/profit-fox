@@ -37,6 +37,10 @@ public sealed class IdeaScanner
     // after the start.
     private static readonly TimeSpan CatchUpMargin = TimeSpan.FromMinutes(5);
 
+    // How far the feed has to be past a moment for a pair with no minute up to it to count as having had no trades then
+    // (task 18.10): a minute of another pair may come before the last one of this pair.
+    private static readonly TimeSpan PairWait = TimeSpan.FromMinutes(2);
+
     private readonly IRecentHistory _history;
     private readonly IIdeaRepository _ideas;
     private readonly IMarketPairRepository _market;
@@ -626,13 +630,14 @@ public sealed class IdeaScanner
                 }
             }
 
-            if (idea.ExitTime is null && Book.Closed(idea.Until))
+            // The time and a payment wait for the minutes of the pair to reach their moment (task 18.10).
+            if (idea.ExitTime is null && Book.Closed(idea.Until) && Reached(idea.Symbol, idea.Until, last))
             {
                 IdeaCycle.TimeUp(idea);
             }
 
             DateTimeOffset? funded = idea.FundingUntil;
-            foreach (FundingPayment payment in Book.Payments(idea.Symbol).Where(payment => payment.Time <= last + OneMinute))
+            foreach (FundingPayment payment in Book.Payments(idea.Symbol).Where(payment => payment.Time <= last + OneMinute && Reached(idea.Symbol, payment.Time, last)))
             {
                 if (Book.CloseBefore(idea.Symbol, payment.Time) is { } price)
                 {
@@ -658,6 +663,13 @@ public sealed class IdeaScanner
                 _dirty.Add(idea);
             }
         }
+    }
+
+    // Whether the minutes of the pair reached the moment: its minute before the moment came, or the feed is far enough past
+    // the moment that the pair had no trades then.
+    private bool Reached(string symbol, DateTimeOffset moment, DateTimeOffset last)
+    {
+        return (Book.LastMinuteOf(symbol) is { } pair && pair + OneMinute >= moment) || last >= moment + PairWait;
     }
 
     private async Task SnapshotAsync(CancellationToken cancellationToken)

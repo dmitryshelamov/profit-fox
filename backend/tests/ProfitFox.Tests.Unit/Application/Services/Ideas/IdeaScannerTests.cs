@@ -58,6 +58,39 @@ public sealed class IdeaScannerTests
     }
 
     /// <summary>
+    ///     Task 18.10, confirmed: with the minutes of two pairs mixed, the time of an idea and a payment of its pair wait for
+    ///     the minutes of its pair to reach their moment, so a stop in the last minute and the price of the payment are those
+    ///     of a backtest.
+    /// </summary>
+    [Test]
+    public async Task The_time_and_the_payments_of_an_idea_wait_for_the_minutes_of_its_pair()
+    {
+        var rig = new ScannerRig();
+        Idea idea = ProfitFox.Tests.Shared.Generators.Domain.Entities.Ideas.IdeaGenerator.Generate(
+            side: ProfitFox.Domain.ValueObjects.Graph.Enums.EntrySide.Long, moment: Ten, after: TimeSpan.FromHours(1), stop: 0.02, close: 100m, timeframe: TimeSpan.FromHours(1));
+        rig.Ideas.Ideas.Add(idea);
+        await rig.Start();
+
+        await rig.Minutes("BTCUSDT", Ten, 29, close: 100);
+        await rig.Minutes("ETHUSDT", Ten, 32, close: 100);
+        await rig.Scanner.ApplyAsync(new LivePoint(LivePointKind.FundingPayment, "BTCUSDT", Ten.AddMinutes(30), 0.001m), CancellationToken.None);
+        await rig.At(Ten.AddMinutes(32).AddSeconds(20));
+        Assert.That(idea.FundingPaid, Is.Zero, "the minute 10:29 of BTCUSDT has not come yet");
+
+        await rig.Minutes("BTCUSDT", Ten.AddMinutes(29), 30, close: 105);
+        await rig.Minutes("ETHUSDT", Ten.AddMinutes(32), 29, close: 100);
+        await rig.At(Eleven.AddMinutes(1).AddSeconds(20));
+
+        Assert.That(idea.FundingPaid, Is.EqualTo(0.001 * 105).Within(1e-12), "priced at the close of BTCUSDT before 10:30, not the one of 10:28");
+        Assert.That(idea.ExitTime, Is.Null, "the minute 10:59 of BTCUSDT has not come yet");
+
+        await rig.Scanner.ApplyAsync(new LiveMinute("BTCUSDT", Ten.AddMinutes(59), 105, 105, 90, 95, 1, 95), CancellationToken.None);
+        await rig.At(Eleven.AddMinutes(3));
+
+        Assert.That((idea.State, idea.ExitReason, idea.ExitTime), Is.EqualTo((IdeaState.Closed, ExitReason.Stop, (DateTimeOffset?)Ten.AddMinutes(59))));
+    }
+
+    /// <summary>
     ///     Task 18.9: a usual start asks the feed for the whole day it holds, counted when the feed subscribes, so no hole is
     ///     told; an open idea counted only up to before that day asks from its minute, and the hole is told.
     /// </summary>
