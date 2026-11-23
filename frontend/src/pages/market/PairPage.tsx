@@ -503,6 +503,7 @@ function ChartSection({
             marks={marks}
             selected={idea}
             lines={lines}
+            timeframe={timeframe}
             onEdge={() => loadEarlier()}
             onPick={(id) => onSearch({ idea: id, page: undefined })}
           />

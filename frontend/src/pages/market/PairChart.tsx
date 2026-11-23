@@ -17,10 +17,21 @@ import { useEffect, useRef } from 'react';
 
 import type { ChartCandle, ChartPoint, LiveCandle } from '@/api/market';
 import { chartColors } from '@/preview/CandleChart';
-import { priceText } from '@/preview/chartFormat';
 
-import { amountText } from './format';
-import type { IdeaLine, IdeaMark } from './pairSeries';
+import { LineLabels } from './lineLabels';
+import {
+  chartHeight,
+  type IdeaLine,
+  type IdeaMark,
+  lineLabels,
+  minMoveOf,
+  panelMargins,
+  paneStretch,
+  rightRoom,
+  scaleAmount,
+  scalePrice,
+  scaleRate,
+} from './pairSeries';
 
 /** A rate of funding at or above this share, by its size, is lit in the panel (spec «OI и фандинг под графиком»). */
 export const highPayment = 0.0003;
@@ -64,6 +75,7 @@ export function PairChart({
   lines,
   onEdge,
   onPick,
+  timeframe,
 }: {
   readonly candles: readonly ChartCandle[];
   readonly live: LiveCandle | null;
@@ -75,6 +87,8 @@ export function PairChart({
   readonly lines: readonly IdeaLine[];
   readonly onEdge: () => void;
   readonly onPick: (id: string) => void;
+  /** The timeframe of the candles: the room to the right of the last one is counted in its bars. */
+  readonly timeframe: string;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const drawn = useRef<Drawn | null>(null);
@@ -94,7 +108,8 @@ export function PairChart({
         textColor: chartColors.text,
       },
       grid: { vertLines: { color: chartColors.grid }, horzLines: { color: chartColors.grid } },
-      localization: { locale: 'ru-RU', priceFormatter: priceText },
+      // No price formatter for the whole chart: it would stand over the formats of the series (task 19.14).
+      localization: { locale: 'ru-RU' },
       timeScale: { timeVisible: true, secondsVisible: false },
     });
     const series = chart.addSeries(CandlestickSeries, {
@@ -103,29 +118,30 @@ export function PairChart({
       borderVisible: false,
       wickUpColor: chartColors.up,
       wickDownColor: chartColors.down,
+      priceFormat: { type: 'custom', formatter: scalePrice, minMove: minMoveOf(undefined) },
     });
     const interestSeries = chart.addSeries(
       LineSeries,
       {
         color: interestColor,
         lineWidth: 2,
-        priceFormat: { type: 'custom', formatter: amountText },
+        priceFormat: { type: 'custom', formatter: scaleAmount },
       },
       1,
     );
     const fundingSeries = chart.addSeries(
       HistogramSeries,
-      {
-        priceFormat: {
-          type: 'custom',
-          formatter: (rate: number) => `${(rate * 100).toFixed(4)} %`,
-        },
-      },
+      { priceFormat: { type: 'custom', formatter: scaleRate, minMove: 0.000001 } },
       2,
     );
-    const [, interestPane, fundingPane] = chart.panes();
-    interestPane?.setHeight(90);
-    fundingPane?.setHeight(80);
+    // The panels about 90 pixels each, as in the mockup, their marks off the edges they share (task 19.14).
+    chart
+      .panes()
+      .forEach((pane, index) =>
+        pane.setStretchFactor(index === 0 ? paneStretch.candles : paneStretch.panel),
+      );
+    interestSeries.priceScale().applyOptions({ scaleMargins: panelMargins });
+    fundingSeries.priceScale().applyOptions({ scaleMargins: panelMargins });
 
     const click = (param: { time?: Time }) => {
       const mark = latest.current.marks.find(
@@ -172,6 +188,14 @@ export function PairChart({
         ? candles.length - before.count
         : 0;
     const range = current.chart.timeScale().getVisibleLogicalRange();
+    const last = candles.at(-1);
+    current.candles.applyOptions({
+      priceFormat: {
+        type: 'custom',
+        formatter: scalePrice,
+        minMove: minMoveOf(last === undefined ? undefined : Number(last.close)),
+      },
+    });
     current.candles.setData(
       candles.map((candle) => ({
         time: seconds(candle.openTime),
@@ -252,21 +276,33 @@ export function PairChart({
   }, [marks, selected, candles]);
 
   // The lines of the open ideas (task 18.26): the entry, the stop and the target, each a line from the candle of the entry
-  // to the candle of the term, and the term marked at the end of the line of the entry.
+  // to the candle of the term, no further than a third of the bars in view, with their labels to the right of their ends
+  // and room for them to the right of the last candle (task 19.14).
   useEffect(() => {
     const current = drawn.current;
     if (current === null) {
       return;
     }
 
+    const scale = current.chart.timeScale();
+    const view = scale.getVisibleLogicalRange();
+    const lastOpen = candles.at(-1)?.openTime;
+    const room = rightRoom(
+      lines,
+      lastOpen === undefined ? undefined : Number(lastOpen),
+      timeframe,
+      view === null ? 150 : view.to - view.from,
+      scale.options().barSpacing,
+    );
+    scale.applyOptions({ rightOffset: room.offset });
+    const labels = lineLabels(room.lines);
     const made: ISeriesApi<'Line'>[] = [];
-    for (const line of lines) {
+    for (const line of room.lines) {
       const series = current.chart.addSeries(LineSeries, {
-        title: line.title,
         color: lineColors[line.kind],
         lineWidth: 1,
         lineStyle: LineStyle.Dashed,
-        lastValueVisible: true,
+        lastValueVisible: false,
         priceLineVisible: false,
         crosshairMarkerVisible: false,
       });
@@ -276,18 +312,17 @@ export function PairChart({
       }
 
       series.setData(points);
-      if (line.term !== undefined) {
-        createSeriesMarkers(series, [
-          {
-            time: seconds(line.to),
-            position: 'inBar',
-            shape: 'square',
-            color: chartColors.text,
-            text: line.term,
-          },
-        ]);
-      }
-
+      series.attachPrimitive(
+        new LineLabels(
+          line.title,
+          labels.filter(
+            (label) =>
+              label.id === line.id &&
+              (label.kind === line.kind || (label.kind === 'term' && line.kind === 'entry')),
+          ),
+          line.kind === 'entry' ? chartColors.text : lineColors[line.kind],
+        ),
+      );
       made.push(series);
     }
 
@@ -298,7 +333,9 @@ export function PairChart({
         made.forEach((series) => current.chart.removeSeries(series));
       }
     };
-  }, [lines, candles]);
+  }, [lines, candles, timeframe]);
 
-  return <div ref={container} className="h-[600px] w-full" data-testid="chart" />;
+  return (
+    <div ref={container} className="w-full" style={{ height: chartHeight }} data-testid="chart" />
+  );
 }

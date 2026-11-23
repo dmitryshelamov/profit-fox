@@ -90,59 +90,108 @@ vi.mock('lightweight-charts', async () => {
     ColorType: { Solid: 'solid' },
     LineStyle: { Solid: 0, Dotted: 1, Dashed: 2, LargeDashed: 3, SparseDotted: 4 },
     TickMarkType: { Year: 0, Month: 1, DayOfMonth: 2, Time: 3, TimeWithSeconds: 4 },
-    createChart: vi.fn(() => {
+    createChart: vi.fn((_container: unknown, chartOptions?: Record<string, unknown>) => {
       let removed = false;
       const isRemoved = () => removed;
+      drawn.options = chartOptions ?? {};
+      // The panes of the chart, the same on every call, with the stretch each was given (task 19.14).
+      const panes = [0, 1, 2].map((index) =>
+        guarded(
+          {
+            setHeight: vi.fn(),
+            setStretchFactor: vi.fn((factor: number) => {
+              drawn.paneFactors[index] = factor;
+            }),
+          },
+          isRemoved,
+        ),
+      );
       const chart = {
-        addSeries: vi.fn((type: string, options?: { title?: string; color?: string }) => {
-          // A series of a line with a title is a line of an open idea: kept apart from the series of the panels.
-          const segment =
-            options?.title !== undefined
-              ? { title: options.title, color: options.color, data: [] as unknown[] }
-              : null;
-          if (segment !== null) {
-            drawn.segments.push(segment);
-          }
+        addSeries: vi.fn(
+          (
+            type: string,
+            options?: { title?: string; color?: string; crosshairMarkerVisible?: boolean },
+          ) => {
+            // A line without the marker of the crosshair is a line of an open idea: kept apart from the series of the panels;
+            // its title is that of the labels written at its end (task 19.14).
+            const segment =
+              options?.title !== undefined || options?.crosshairMarkerVisible === false
+                ? {
+                    title: options.title ?? '',
+                    color: options.color,
+                    data: [] as unknown[],
+                    labels: [] as { text: string; price: number; time: number; kind: string }[],
+                  }
+                : null;
+            if (segment !== null) {
+              drawn.segments.push(segment);
+            } else {
+              drawn.seriesOptions[type] = { ...drawn.seriesOptions[type], ...options };
+            }
 
-          const series = {
-            segment,
-            // The chart of the series: marks created on it are removed with it.
-            owner: { isRemoved },
-            setData: vi.fn((data: unknown[]) => {
-              if (segment !== null) {
-                segment.data = data;
-                return;
-              }
+            const series = {
+              segment,
+              // The chart of the series: marks created on it are removed with it.
+              owner: { isRemoved },
+              setData: vi.fn((data: unknown[]) => {
+                if (segment !== null) {
+                  segment.data = data;
+                  return;
+                }
 
-              drawn.series[type] = data;
-              if (type === 'Candlestick') {
-                drawn.candles = data;
-                drawn.setData += 1;
-              }
-            }),
-            update: vi.fn((bar: unknown) => {
-              drawn.updates.push(bar);
-            }),
-            createPriceLine: vi.fn((line: { price: number; title?: string }) => {
-              drawn.lines.push(line);
-              return line;
-            }),
-            removePriceLine: vi.fn((line: unknown) => {
-              drawn.lines = drawn.lines.filter((candidate) => candidate !== line);
-            }),
-          };
-          return series;
-        }),
+                drawn.series[type] = data;
+                if (type === 'Candlestick') {
+                  drawn.candles = data;
+                  drawn.setData += 1;
+                }
+              }),
+              update: vi.fn((bar: unknown) => {
+                drawn.updates.push(bar);
+              }),
+              createPriceLine: vi.fn((line: { price: number; title?: string }) => {
+                drawn.lines.push(line);
+                return line;
+              }),
+              removePriceLine: vi.fn((line: unknown) => {
+                drawn.lines = drawn.lines.filter((candidate) => candidate !== line);
+              }),
+              priceScale: () => ({
+                applyOptions: vi.fn((next: { scaleMargins?: unknown }) => {
+                  drawn.scaleMargins[type] = next.scaleMargins;
+                }),
+              }),
+              applyOptions: vi.fn((next: Record<string, unknown>) => {
+                if (segment === null) {
+                  drawn.seriesOptions[type] = { ...drawn.seriesOptions[type], ...next };
+                }
+              }),
+              attachPrimitive: vi.fn(
+                (primitive: {
+                  title?: string;
+                  labels?: { text: string; price: number; time: number; kind: string }[];
+                }) => {
+                  if (segment !== null) {
+                    segment.title = primitive.title ?? segment.title;
+                    segment.labels = primitive.labels ?? [];
+                  }
+                },
+              ),
+              detachPrimitive: vi.fn(() => {
+                if (segment !== null) {
+                  segment.labels = [];
+                }
+              }),
+            };
+            return series;
+          },
+        ),
         removeSeries: vi.fn((series: { segment: unknown }) => {
           drawn.segments = drawn.segments.filter((candidate) => candidate !== series.segment);
           if (drawn.segments.length === 0) {
             drawn.segmentMarkers = [];
           }
         }),
-        panes: () =>
-          [{ setHeight: vi.fn() }, { setHeight: vi.fn() }, { setHeight: vi.fn() }].map((pane) =>
-            guarded(pane, isRemoved),
-          ),
+        panes: () => panes,
         remove: vi.fn(() => {
           removed = true;
         }),
@@ -153,6 +202,12 @@ vi.mock('lightweight-charts', async () => {
           drawn.click = null;
         }),
         timeScale: () => ({
+          applyOptions: vi.fn((next: { rightOffset?: number }) => {
+            if (next.rightOffset !== undefined) {
+              drawn.rightOffset = next.rightOffset;
+            }
+          }),
+          options: () => ({ barSpacing: 6 }),
           fitContent: vi.fn(() => {
             drawn.view = 'content';
           }),

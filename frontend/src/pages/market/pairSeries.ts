@@ -2,7 +2,7 @@ import type { Idea } from '@/api/ideas';
 import type { ChartCandle, ChartPoint, LiveCandle } from '@/api/market';
 import { lengthOf } from '@/preview/preview';
 
-import { changeText, momentText, priceWords } from './format';
+import { changeText, momentText, priceWords, rateText } from './format';
 
 /** The words of the reason an idea closed, as its mark on the chart says it. */
 const exitMarkWords: Record<string, string> = {
@@ -106,6 +106,117 @@ export function ideaLines(ideas: readonly Idea[], timeframe: string): IdeaLine[]
       ...line('target', idea.target, `цель ${priceWords(idea.target)}`),
     ];
   });
+}
+
+/** The height of the chart of a pair in pixels. */
+export const chartHeight = 600;
+
+/**
+ * How the height of the chart goes to its panes (task 19.14): the candles, then the open interest and the funding about 90
+ * pixels each, as in the mockup. Stretch factors, not heights: a height set before the chart is laid out is lost.
+ */
+export const paneStretch = { candles: 4.5, panel: 1 } as const;
+
+/** The margins of the scales of the panels: their marks stay inside the panel, off the edges it shares (task 19.14). */
+export const panelMargins = { top: 0.25, bottom: 0.15 } as const;
+
+/** The height in pixels a panel gets of a chart of `height` with a time scale of `timeScale` pixels. */
+export function panelHeight(height = chartHeight, timeScale = 28): number {
+  return ((height - timeScale) * paneStretch.panel) / (paneStretch.candles + 2 * paneStretch.panel);
+}
+
+/** A price on the scale of the chart, written as the bench writes prices: with a point (task 19.14). */
+export function scalePrice(price: number): string {
+  return priceWords(price);
+}
+
+/** The smallest step of the prices of the scale: five significant digits of the price, as the bench shows them. */
+export function minMoveOf(price: number | undefined): number {
+  if (price === undefined || !Number.isFinite(price) || price <= 0) {
+    return 0.01;
+  }
+
+  return Math.min(1, 10 ** (Math.floor(Math.log10(price)) - 4));
+}
+
+/** The open interest in USDT on its scale: three significant digits, in millions or billions — `1.15 млрд`. */
+export function scaleAmount(value: number): string {
+  const size = Math.abs(value);
+  const [amount, unit] =
+    size >= 1e9 ? [value / 1e9, 'млрд'] : size >= 1e6 ? [value / 1e6, 'млн'] : [value / 1e3, 'тыс'];
+  return `${Number(amount.toPrecision(3))} ${unit}`;
+}
+
+/** A payment of funding on its scale: in percent with four digits — `0.0300 %`, not the share. */
+export function scaleRate(rate: number): string {
+  return rateText(rate);
+}
+
+/** A label of an open idea, written to the right of the end of its line (task 19.14), as the mockup does. */
+export interface LineLabel {
+  readonly id: string;
+  readonly kind: IdeaLine['kind'] | 'term';
+  /** The time of the end of the line, in milliseconds. */
+  readonly time: number;
+  readonly price: number;
+  readonly text: string;
+}
+
+/**
+ * The labels of the lines of the open ideas: «вход», «стоп», «цель» at the end of their lines, and «срок» at the end
+ * halfway between the entry and the line above it — or with the entry, when no line is above it.
+ */
+export function lineLabels(lines: readonly IdeaLine[]): LineLabel[] {
+  return lines.flatMap((line) => {
+    const label: LineLabel = {
+      id: line.id,
+      kind: line.kind,
+      time: line.to,
+      price: line.price,
+      text: line.title,
+    };
+    if (line.term === undefined) {
+      return [label];
+    }
+
+    const top = Math.max(
+      ...lines.filter((other) => other.id === line.id).map((other) => other.price),
+    );
+    return top > line.price
+      ? [label, { ...label, kind: 'term' as const, price: (line.price + top) / 2, text: line.term }]
+      : [{ ...label, text: `${line.title} · ${line.term}` }];
+  });
+}
+
+/** How wide a label of a line is, in pixels, at 11 pixels of a monospace font. */
+const labelWidth = (text: string) => text.length * 7 + 12;
+
+/**
+ * The room to the right of the last candle (task 19.14): the lines of the open ideas end at their term, but no further
+ * than a third of the bars in view from the last candle; to the right of the end there is room for their labels, and a
+ * little room for the marks of the last candles without lines. `offset` is in bars past the last point of the time scale.
+ */
+export function rightRoom(
+  lines: readonly IdeaLine[],
+  lastOpen: number | undefined,
+  timeframe: string,
+  barsInView: number,
+  barSpacing: number,
+): { lines: IdeaLine[]; offset: number } {
+  const length = lengthOf(timeframe);
+  const most = Math.max(1, Math.floor(barsInView / 3));
+  const until = lastOpen === undefined ? Number.POSITIVE_INFINITY : lastOpen + most * length;
+  const drawn = lines.map((line) => (line.to > until ? { ...line, to: until } : line));
+  const ahead =
+    lastOpen === undefined
+      ? 0
+      : Math.max(0, ...drawn.map((line) => Math.round((line.to - lastOpen) / length)));
+  const labels = lineLabels(drawn);
+  const room =
+    labels.length === 0
+      ? Math.ceil(60 / barSpacing)
+      : Math.ceil(Math.max(...labels.map((label) => labelWidth(label.text))) / barSpacing);
+  return { lines: drawn, offset: Math.max(0, Math.min(room, most - ahead)) };
 }
 
 /** The candles of two pages joined by their open time, each once, the later page's candle kept. */

@@ -498,13 +498,49 @@ describe('the ideas, the open interest and the funding on the chart', () => {
         ],
       ],
     ]);
-    expect(drawn.segmentMarkers).toEqual([
-      expect.objectContaining({
-        time: 17 * 3600 + Date.UTC(2026, 10, 22) / 1000,
-        text: 'срок 17:00',
-      }),
-    ]);
+    // Task 19.14: the term is a label at the end of the lines, not a mark on the line.
+    expect(drawn.segments.flatMap((line) => line.labels)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ time: Date.UTC(2026, 10, 22, 17), text: 'срок 17:00' }),
+      ]),
+    );
     expect(drawn.lines).toEqual([]);
+  });
+
+  // Task 19.14: the chart against the mockup 09-pair.
+  it('lays the chart out as the mockup: panels of about 90 pixels, scales with a point and labels right of the lines', async () => {
+    routes([longOpen]);
+    renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.segments).toHaveLength(3));
+
+    expect(drawn.paneFactors).toEqual([4.5, 1, 1]);
+    expect(drawn.scaleMargins).toEqual({
+      Line: { top: 0.25, bottom: 0.15 },
+      Histogram: { top: 0.25, bottom: 0.15 },
+    });
+    expect(
+      (drawn.options.localization as { priceFormatter?: unknown } | undefined)?.priceFormatter,
+    ).toBeUndefined();
+    const format = (type: string) =>
+      (drawn.seriesOptions[type] as { priceFormat: { formatter: (value: number) => string } })
+        .priceFormat.formatter;
+    expect(format('Candlestick')(236.1)).toBe('236.10');
+    expect(format('Histogram')(0.0003)).toBe('0.0300 %');
+    expect(format('Line')(1.15e9)).toBe('1.15 млрд');
+    await waitFor(() =>
+      expect(drawn.segments.flatMap((line) => line.labels.map((label) => label.text))).toEqual([
+        'вход 236.10',
+        'срок 17:00',
+        'стоп 231.38',
+        'цель 245.54',
+      ]),
+    );
+    expect(drawn.segments.map((line) => line.title)).toEqual([
+      'вход 236.10',
+      'стоп 231.38',
+      'цель 245.54',
+    ]);
+    expect(drawn.rightOffset).toBeGreaterThan(0);
   });
 
   // Task 19.1: the cleanup of the lines does not touch the chart removed before it.

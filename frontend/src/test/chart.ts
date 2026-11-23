@@ -15,14 +15,32 @@ export const drawn = {
   updates: [] as unknown[],
   /** The price lines on the series now. */
   lines: [] as { price: number; title?: string }[],
-  /** The series of lines with a title on the chart now — the lines of open ideas (task 18.26) — with their data. */
-  segments: [] as { title: string; color?: string; data: unknown[] }[],
+  /**
+   * The lines of open ideas on the chart now (task 18.26), with their data and the labels written at their ends (task
+   * 19.14).
+   */
+  segments: [] as {
+    title: string;
+    color?: string;
+    data: unknown[];
+    labels: { text: string; price: number; time: number; kind: string }[];
+  }[],
   /** The marks of the series of those lines: the term of an idea. */
   segmentMarkers: [] as unknown[],
   /** The listener of the visible logical range of the time scale. */
   rangeChange: null as ((range: { from: number; to: number } | null) => void) | null,
   /** The logical range the chart was last told to show. */
   logicalRange: null as { from: number; to: number } | null,
+  /** The options the last chart was created with (task 19.14). */
+  options: {} as Record<string, unknown>,
+  /** The options of the series of the panels by their type, as given and applied after. */
+  seriesOptions: {} as Record<string, Record<string, unknown> | undefined>,
+  /** The stretch of each pane: the candles, the open interest, the funding. */
+  paneFactors: [] as number[],
+  /** The room to the right of the last point of the time scale, in bars. */
+  rightOffset: null as number | null,
+  /** The margins of the price scales of the series by their type. */
+  scaleMargins: {} as Record<string, unknown>,
 };
 
 /** Forgets what the fake chart was given: the state of one test does not reach the next. */
@@ -41,6 +59,11 @@ export function resetDrawn(): void {
     segmentMarkers: [],
     rangeChange: null,
     logicalRange: null,
+    options: {},
+    seriesOptions: {},
+    paneFactors: [],
+    rightOffset: null,
+    scaleMargins: {},
   });
 }
 
