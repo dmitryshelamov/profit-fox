@@ -207,7 +207,7 @@ const pairRoute = createRoute({
         symbol={symbol}
         timeframe={search.timeframe ?? '1h'}
         idea={search.idea}
-        page={search.page ?? 1}
+        page={search.page}
         onSearch={(change) => void navigate({ search: (old) => clean({ ...old, ...change }) })}
       />
     );

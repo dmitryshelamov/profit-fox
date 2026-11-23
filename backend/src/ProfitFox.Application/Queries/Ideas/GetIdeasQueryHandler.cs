@@ -45,6 +45,9 @@ internal sealed class GetIdeasQueryHandler(IIdeaRepository ideas, ISavedFilterRe
             request.ExitReason,
             request.PeriodDays,
             request.State,
-            conditions);
+            conditions,
+            request.From,
+            request.To,
+            request.Around);
     }
 }

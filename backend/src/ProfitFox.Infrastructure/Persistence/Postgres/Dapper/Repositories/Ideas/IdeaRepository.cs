@@ -63,9 +63,26 @@ internal sealed class IdeaRepository(NpgsqlDataSource database) : IIdeaRepositor
         parameters.Add("Offset", query.Order.Offset);
         await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
         int total = await connection.ExecuteScalarAsync<int>(new CommandDefinition($"SELECT count(*) {Joined} WHERE {where}", parameters, cancellationToken: cancellationToken));
-        string sql = $"SELECT {IdeaRepositoryQueries.Columns} {Joined} WHERE {where} {ListColumns.OrderBy(ListColumns.Ideas, query.Order, "i.moment DESC, i.id")} LIMIT @Limit OFFSET @Offset";
+        string orderBy = ListColumns.OrderBy(ListColumns.Ideas, query.Order, "i.moment DESC, i.id");
+        ListOrder order = query.Order;
+        if (query.Around is { } around)
+        {
+            // The page the idea is on in this order (task 18.22); the page asked when it is not in the list.
+            parameters.Add("Around", around);
+            long? position = await connection.ExecuteScalarAsync<long?>(new CommandDefinition(
+                $"SELECT r.position FROM (SELECT i.id, row_number() OVER ({orderBy}) AS position {Joined} WHERE {where}) r WHERE r.id = @Around",
+                parameters,
+                cancellationToken: cancellationToken));
+            if (position is { } found)
+            {
+                order = order with { Page = (int)((found - 1) / order.PageSize) + 1 };
+                parameters.Add("Offset", order.Offset);
+            }
+        }
+
+        string sql = $"SELECT {IdeaRepositoryQueries.Columns} {Joined} WHERE {where} {orderBy} LIMIT @Limit OFFSET @Offset";
         IdeaDb[] rows = [.. await connection.QueryAsync<IdeaDb>(new CommandDefinition(sql, parameters, cancellationToken: cancellationToken))];
-        return new ListPage<Idea>([.. rows.Select(IdeaDbConverter.ToDomain)], total, query.Order.Page, query.Order.PageSize);
+        return new ListPage<Idea>([.. rows.Select(IdeaDbConverter.ToDomain)], total, order.Page, order.PageSize);
     }
 
     // A row of the summary is one of a strategy, its version and a timeframe: the order ends with all three, so pages with
@@ -131,6 +148,19 @@ internal sealed class IdeaRepository(NpgsqlDataSource database) : IIdeaRepositor
         if (query.OnlyWithStop)
         {
             parts.Add("i.stop IS NOT NULL");
+        }
+
+        // The ideas that touch the window of the chart: born by its end and not gone before its start (task 18.22).
+        if (query.To is { } to)
+        {
+            parameters.Add("To", to);
+            parts.Add("i.moment <= @To");
+        }
+
+        if (query.From is { } from)
+        {
+            parameters.Add("From", from);
+            parts.Add("COALESCE(i.exit_time, i.until) >= @From");
         }
 
         if (query.PeriodDays is { } days)

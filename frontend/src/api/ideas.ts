@@ -53,12 +53,29 @@ export async function getScannerState(): Promise<ScannerState> {
   return unwrap(await api.GET('/api/ideas/state'));
 }
 
+/**
+ * What the chart and the table of a pair ask besides the page (task 18.22): the ideas that touch the window of the chart,
+ * from `from` to `to` in milliseconds, and the page the idea `idea` is on instead of the page asked.
+ */
+export interface PairIdeasNear {
+  readonly from?: number;
+  readonly to?: number;
+  readonly idea?: string;
+}
+
 export async function listPairIdeas(
   symbol: string,
   request: PageRequest,
   choices: IdeaChoices = {},
+  near: PairIdeasNear = {},
 ): Promise<IdeaPage> {
-  const query = { ...pageQuery(request), ...choicesQuery(choices) };
+  const query = {
+    ...pageQuery(request),
+    ...choicesQuery(choices),
+    ...(near.from !== undefined ? { from: near.from } : {}),
+    ...(near.to !== undefined ? { to: near.to } : {}),
+    ...(near.idea !== undefined ? { idea: near.idea } : {}),
+  };
   return pageOf(
     await api.GET('/api/market/pairs/{symbol}/ideas', { params: { path: { symbol }, query } }),
   );

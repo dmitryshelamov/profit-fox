@@ -1941,6 +1941,9 @@ export interface operations {
                 side?: string;
                 label?: string;
                 state?: string;
+                from?: number | string;
+                to?: number | string;
+                idea?: string;
             };
             header?: never;
             path: {

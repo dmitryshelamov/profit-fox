@@ -266,6 +266,33 @@ public sealed class IdeasApiTests
     }
 
     /// <summary>
+    ///     Task 18.22: the chart asks the ideas of the pair that touch its window, whatever the table chose; the table opens
+    ///     on the page of the idea it was led to.
+    /// </summary>
+    [Test]
+    public async Task The_ideas_of_the_window_of_the_chart_and_the_page_of_an_idea()
+    {
+        DateTimeOffset day = Now.AddDays(-1);
+        List<Guid> ids = [];
+        for (int hour = 0; hour < 60; hour++)
+        {
+            Idea idea = IdeaGenerator.Generate(symbol: "SOLUSDT", moment: day.AddHours(-hour), after: TimeSpan.FromHours(1));
+            await Add(idea);
+            ids.Add(idea.Id);
+        }
+
+        long from = day.AddHours(-10).ToUnixTimeMilliseconds();
+        long to = day.AddHours(-5).ToUnixTimeMilliseconds();
+        IdeaPageResponse window = (await _api.Http.GetFromJsonAsync<IdeaPageResponse>($"/api/market/pairs/SOLUSDT/ideas?from={from}&to={to}&pageSize=200", Json))!;
+        IdeaPageResponse led = (await _api.Http.GetFromJsonAsync<IdeaPageResponse>($"/api/market/pairs/SOLUSDT/ideas?idea={ids[55]}", Json))!;
+        IdeaPageResponse unknown = (await _api.Http.GetFromJsonAsync<IdeaPageResponse>($"/api/market/pairs/SOLUSDT/ideas?idea={Guid.NewGuid()}&page=1", Json))!;
+
+        Assert.That(window.Items.Select(item => item.Id), Is.EquivalentTo(ids.Skip(5).Take(7)), "born by 5 hours back and not over before 10 hours back");
+        Assert.That((led.Page, led.Items.Any(item => item.Id == ids[55])), Is.EqualTo((2, true)), "the 56th from the newest is on the second page of 50");
+        Assert.That(unknown.Page, Is.EqualTo(1));
+    }
+
+    /// <summary>
     ///     Task 18.11 (б): the live candle of a pair outside the set is 404 before any stream, so the page does not connect
     ///     again for ever.
     /// </summary>

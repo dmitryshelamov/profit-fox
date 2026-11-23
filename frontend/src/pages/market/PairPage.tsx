@@ -75,7 +75,7 @@ export function PairPage({
   readonly symbol: string;
   readonly timeframe: string;
   readonly idea?: string;
-  readonly page: number;
+  readonly page?: number;
   readonly onSearch: (change: PairSearch) => void;
 }) {
   const pair = useQuery({
@@ -173,6 +173,9 @@ function PairHeader({
   );
 }
 
+/** The most ideas the chart draws: the newest of its window. */
+const chartIdeasMost = 200;
+
 /** How often the page asks again while the service loads the history of the pair (task 18.20). */
 const historyRetryMs = 5_000;
 
@@ -186,7 +189,7 @@ function ChartSection({
   readonly symbol: string;
   readonly timeframe: string;
   readonly idea: string | null;
-  readonly page: number;
+  readonly page: number | undefined;
   readonly onSearch: (change: PairSearch) => void;
 }) {
   // While the service loads the history of the pair, the page asks again every 5 seconds (task 18.20).
@@ -281,16 +284,45 @@ function ChartSection({
 
   const list = useListSettings('pair-ideas', { field: 'moment', descending: true });
   const [choices, setChoices] = useState<IdeaChoices>({});
+  // Led to an idea without a page in the address, the table asks the page that idea is on (task 18.22).
+  const around = page === undefined && idea !== null ? idea : undefined;
   const ideas = useQuery({
-    queryKey: ['pair-ideas', symbol, list.sort, page, list.pageSize, choices],
+    queryKey: ['pair-ideas', symbol, list.sort, page ?? 1, list.pageSize, choices, around],
     queryFn: () =>
-      listPairIdeas(symbol, { sort: list.sort, page, pageSize: list.pageSize }, choices),
+      listPairIdeas(
+        symbol,
+        { sort: list.sort, page: page ?? 1, pageSize: list.pageSize },
+        choices,
+        around !== undefined ? { idea: around } : {},
+      ),
     placeholderData: keepPreviousData,
     refetchInterval: marketRefreshMs,
   });
+  const shownPage = page ?? Number(ideas.data?.page ?? 1);
+  useEffect(() => {
+    if (around !== undefined && ideas.data !== undefined && Number(ideas.data.page) > 1) {
+      onSearch({ page: Number(ideas.data.page) });
+    }
+  }, [around, ideas.data, onSearch]);
   const rows = ideas.data?.items ?? [];
-  const marks = useMemo(() => ideaMarks(rows, timeframe), [rows, timeframe]);
-  const open = useMemo(() => rows.filter((item) => item.state === 'open'), [rows]);
+  // The chart asks the ideas of its own window, without the choices of the table (task 18.22).
+  const from = candles[0] === undefined ? undefined : Number(candles[0].openTime);
+  const chartIdeas = useQuery({
+    queryKey: ['pair-ideas', 'chart', symbol, timeframe, from],
+    queryFn: () =>
+      listPairIdeas(
+        symbol,
+        { sort: { field: 'moment', descending: true }, page: 1, pageSize: chartIdeasMost },
+        {},
+        { from },
+      ),
+    enabled: from !== undefined,
+    placeholderData: keepPreviousData,
+    refetchInterval: marketRefreshMs,
+  });
+  const drawnIdeas = useMemo(() => chartIdeas.data?.items ?? [], [chartIdeas.data]);
+  const marks = useMemo(() => ideaMarks(drawnIdeas, timeframe), [drawnIdeas, timeframe]);
+  const open = useMemo(() => drawnIdeas.filter((item) => item.state === 'open'), [drawnIdeas]);
   const nothing =
     ideas.data !== undefined &&
     Number(ideas.data.total) === 0 &&
@@ -351,7 +383,7 @@ function ChartSection({
             selected={idea}
             lines={open}
             onEdge={() => loadEarlier()}
-            onPick={(id) => onSearch({ idea: id })}
+            onPick={(id) => onSearch({ idea: id, page: undefined })}
           />
         </div>
         <div className="flex gap-8 font-mono text-[12px] text-muted">
@@ -410,7 +442,7 @@ function ChartSection({
               />
               <Pager
                 total={Number(ideas.data.total)}
-                page={page}
+                page={shownPage}
                 pageSize={list.pageSize}
                 onPage={(next) => onSearch({ page: next })}
                 onPageSize={(size) => {

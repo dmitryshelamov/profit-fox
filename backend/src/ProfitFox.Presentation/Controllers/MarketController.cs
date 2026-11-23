@@ -71,7 +71,10 @@ public class MarketController(ISender sender, LiveCandleHub live) : ControllerBa
     }
 
     /// <summary>
-    ///     The ideas of the pair, open and closed, from the newest by default (spec market-overview «Идеи пары»).
+    ///     The ideas of the pair, open and closed, from the newest by default (spec market-overview «Идеи пары»). For the
+    ///     chart (task 18.22): <paramref name="from" /> and <paramref name="to" /> — milliseconds since 1970 — give the ideas
+    ///     that touch the window, and <paramref name="idea" /> gives the page that idea is on instead of
+    ///     <paramref name="page" />.
     /// </summary>
     [HttpGet("pairs/{symbol}/ideas", Name = "ListPairIdeas")]
     [ProducesResponseType<IdeaPageResponse>(StatusCodes.Status200OK)]
@@ -87,6 +90,9 @@ public class MarketController(ISender sender, LiveCandleHub live) : ControllerBa
         [FromQuery] string? side,
         [FromQuery] string? label,
         [FromQuery] string? state,
+        [FromQuery] long? from,
+        [FromQuery] long? to,
+        [FromQuery] Guid? idea,
         CancellationToken cancellation)
     {
         var query = new GetIdeasQuery(
@@ -97,7 +103,10 @@ public class MarketController(ISender sender, LiveCandleHub live) : ControllerBa
             Timeframe: timeframe,
             Side: side,
             Label: label,
-            State: state);
+            State: state,
+            From: from is { } start ? DateTimeOffset.FromUnixTimeMilliseconds(start) : null,
+            To: to is { } end ? DateTimeOffset.FromUnixTimeMilliseconds(end) : null,
+            Around: idea);
         return await Answer<IdeaPageResponse>(async () => IdeaResponses.Of(await sender.Send(query, cancellation)));
     }
 

@@ -408,6 +408,65 @@ describe('the ideas, the open interest and the funding on the chart', () => {
     ).toHaveLength(2);
   });
 
+  // Task 18.22, scenario «Идеи на графике»: the chart asks the ideas of its window, apart from the table and its choices.
+  it('keeps the lines of an open idea when the table shows the closed ones only', async () => {
+    const requests = routes([], {
+      'GET /api/market/pairs/SOLUSDT/ideas': (request) => {
+        const query = new URL(request.url).searchParams;
+        const items = query.get('state') === 'closed' ? [shortClosed] : [longOpen, shortClosed];
+        return json({ items, total: items.length, page: 1, pageSize: 50, filterGone: false });
+      },
+    });
+    renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.lines).toHaveLength(3));
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Статус' }), 'closed');
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('table', { name: 'Идеи пары' })).getAllByRole('row'),
+      ).toHaveLength(2),
+    );
+
+    expect(drawn.lines).toHaveLength(3);
+    const chart = requests
+      .map((request) => new URL(request.url))
+      .filter(
+        (url) => url.pathname === '/api/market/pairs/SOLUSDT/ideas' && url.searchParams.has('from'),
+      );
+    expect(chart.length).toBeGreaterThan(0);
+    expect(chart.every((url) => !url.searchParams.has('state'))).toBe(true);
+    expect(Number(chart.at(-1)!.searchParams.get('from'))).toBe(fourteen - 500 * hour);
+  });
+
+  // Task 18.22, scenario strategy-ideas «Клик по идее»: the table opens on the page of the idea it was led to.
+  it('opens the table on the page of the idea it was led to', async () => {
+    const requests = routes([], {
+      'GET /api/market/pairs/SOLUSDT/ideas': (request) => {
+        const query = new URL(request.url).searchParams;
+        const second = query.get('idea') === 'short-1' || query.get('page') === '2';
+        const items = second ? [shortClosed] : [longOpen];
+        return json({ items, total: 60, page: second ? 2 : 1, pageSize: 50, filterGone: false });
+      },
+    });
+    const { history } = renderApp('/market/SOLUSDT?timeframe=4h&idea=short-1');
+
+    const table = within(await screen.findByRole('table', { name: 'Идеи пары' }));
+    expect(await table.findByRole('row', { name: /short-1$/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await waitFor(() => expect(history.location.search).toContain('page=2'));
+    expect(
+      requests
+        .map((request) => new URL(request.url))
+        .some(
+          (url) =>
+            url.pathname === '/api/market/pairs/SOLUSDT/ideas' &&
+            url.searchParams.get('idea') === 'short-1',
+        ),
+    ).toBe(true);
+  });
+
   // Scenarios «Панели под графиком» and «Отрицательная выплата».
   it('draws the open interest in USDT and the payments, a negative one red and downwards', async () => {
     routes();
@@ -466,7 +525,10 @@ describe('the ideas of a pair', () => {
       expect(
         requests
           .map((request) => new URL(request.url))
-          .filter((url) => url.pathname === '/api/market/pairs/SOLUSDT/ideas')
+          .filter(
+            (url) =>
+              url.pathname === '/api/market/pairs/SOLUSDT/ideas' && !url.searchParams.has('from'),
+          )
           .at(-1)!
           .searchParams.get('state'),
       ).toBe('open'),

@@ -7,6 +7,8 @@ namespace ProfitFox.Domain.ValueObjects.Lists;
 ///     closed ideas, or every idea of the pair <see cref="Symbol" />; the page; a part of the symbol, the strategy, the
 ///     timeframe, the side and the label; for open ones only those in the plus or with a stop, for closed ones the reason of
 ///     the exit and the days back the exit is in; for those of a pair their state; and the conditions of a saved filter.
+///     For the chart of a pair (task 18.22): the window of time the ideas touch, from <see cref="From" /> to
+///     <see cref="To" />, and the idea whose page is wanted, <see cref="Around" />, instead of the page of the order.
 /// </summary>
 public sealed record IdeaListQuery(
     IdeaListKind Kind,
@@ -22,4 +24,7 @@ public sealed record IdeaListQuery(
     string? ExitReason = null,
     int? PeriodDays = null,
     string? State = null,
-    IReadOnlyList<FilterCondition>? Conditions = null);
+    IReadOnlyList<FilterCondition>? Conditions = null,
+    DateTimeOffset? From = null,
+    DateTimeOffset? To = null,
+    Guid? Around = null);
