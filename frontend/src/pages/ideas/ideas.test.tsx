@@ -257,6 +257,52 @@ describe('the widths of the tables of ideas', () => {
   });
 });
 
+// Task 21.3: in the tables of «Идеи» the name of a strategy keeps 14 characters and its version; the room comes from the
+// labels, of which a row shows one and «+N» with the whole list in the hint.
+describe('the strategy and the labels in the tables of «Идеи»', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const fourLabels = idea({
+    strategy: 'pump-long-fast',
+    labels: ['⚡ всплеск', '↓ BTC', '↓ пара', 'фандинг'],
+  });
+
+  async function cellsOf(tableName: string) {
+    const table = await screen.findByRole('table', { name: tableName });
+    await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(2));
+    const heads = within(table)
+      .getAllByRole('columnheader')
+      .map((head) => head.textContent);
+    return (title: string) =>
+      within(within(table).getAllByRole('row')[1]!).getAllByRole('cell')[
+        heads.findIndex((head) => head?.startsWith(title))
+      ]!;
+  }
+
+  for (const [where, address, tableName] of [
+    ['open ideas', '/ideas', 'Открытые идеи'],
+    ['journal', '/ideas?tab=journal', 'Закрытые идеи'],
+  ] as const) {
+    it(`keeps 14 characters of the strategy and shows one label and «+N» in the ${where}`, async () => {
+      routes({ 'GET /api/ideas': ideaPage([fourLabels]) });
+      renderApp(address);
+      const cell = await cellsOf(tableName);
+
+      expect(cell('Стратегия')).toHaveClass(
+        'w-full',
+        'max-w-0',
+        'font-mono',
+        'min-w-[calc(14ch+1.25rem+0.5rem+2.25rem)]',
+      );
+      const labels = within(cell('Метки'));
+      expect(labels.getByText('⚡ всплеск')).toBeInTheDocument();
+      expect(labels.queryByText('↓ BTC')).toBeNull();
+      expect(labels.getByText('+3')).toBeInTheDocument();
+      expect(labels.getByTitle('⚡ всплеск, ↓ BTC, ↓ пара, фандинг')).toBeInTheDocument();
+    });
+  }
+});
+
 // Task 18.27: the summary goes back to its first page when a filter is chosen.
 describe('the page of the summary', () => {
   it('goes back to the first page when a filter is chosen', async () => {

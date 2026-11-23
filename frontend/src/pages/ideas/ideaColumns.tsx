@@ -65,6 +65,17 @@ const strategy: PagedColumn<Idea> = {
   cellClassName: 'w-full max-w-0',
   cell: (idea) => <Strategy name={idea.strategy} version={idea.version} />,
 };
+/**
+ * The least width of the cells of the strategy in the tables of «Идеи» (task 21.3): its padding, 14 characters of the
+ * mono font of the name, the gap and the badge of a version of up to two digits — names with a common start differ.
+ */
+export const strategyLeast = 'font-mono min-w-[calc(14ch+1.25rem+0.5rem+2.25rem)]';
+// In the tables of «Идеи» the column of the strategy still takes what the others leave, but no less than `strategyLeast`:
+// the room comes from the labels, of which a row shows one and «+N» there (task 21.3).
+const ideasStrategy: PagedColumn<Idea> = {
+  ...strategy,
+  cellClassName: `${strategy.cellClassName} ${strategyLeast}`,
+};
 const timeframe: PagedColumn<Idea> = {
   key: 'timeframe',
   title: 'ТФ',
@@ -82,6 +93,12 @@ const labels: PagedColumn<Idea> = {
   title: 'Метки',
   text: true,
   cell: (idea) => <LabelBadges labels={idea.labels} />,
+};
+/** How many labels a row of the tables of «Идеи» shows before «+N»: the room goes to the name of the strategy (task 21.3). */
+export const shownLabelsOfIdeas = 1;
+const fewLabels: PagedColumn<Idea> = {
+  ...labels,
+  cell: (idea) => <LabelBadges labels={idea.labels} most={shownLabelsOfIdeas} />,
 };
 const price = (key: 'stop' | 'target', title: string, tone: string): PagedColumn<Idea> => ({
   key,
@@ -115,10 +132,10 @@ export function resultOf(idea: Idea) {
 /** The columns of the open ideas (spec strategy-ideas «Раздел «Идеи»»). */
 export const openColumns: readonly PagedColumn<Idea>[] = [
   symbol,
-  strategy,
+  ideasStrategy,
   timeframe,
   side,
-  labels,
+  fewLabels,
   {
     key: 'moment',
     title: 'Появилась, UTC',
@@ -140,10 +157,10 @@ export const openColumns: readonly PagedColumn<Idea>[] = [
 /** The columns of the closed ideas of the journal. */
 export const closedColumns: readonly PagedColumn<Idea>[] = [
   symbol,
-  strategy,
+  ideasStrategy,
   timeframe,
   side,
-  labels,
+  fewLabels,
   {
     key: 'moment',
     title: 'Вход, UTC',
