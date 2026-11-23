@@ -110,17 +110,28 @@ function IdeasWindow({
     const ordered = timeframes.filter((timeframe) => next.includes(timeframe));
     setChosen(ordered);
     waiting.current += 1;
+    // A step that fails (the network, a 5xx) is shown and taken back like a refusal, and the queue goes on: the step
+    // catches its own failure, so the next change is still sent and the count of the changes going still falls (task
+    // 20.3).
     queue.current = queue.current.then(async () => {
-      const result = await setStrategyIdeas(strategy.name, on, ordered);
-      waiting.current -= 1;
-      if (result.ok) {
-        kept.current = { enabled: result.value.enabled, timeframes: result.value.timeframes };
-        setErrors([]);
-      } else {
-        setErrors(result.errors);
+      let failed = false;
+      try {
+        const result = await setStrategyIdeas(strategy.name, on, ordered);
+        if (result.ok) {
+          kept.current = { enabled: result.value.enabled, timeframes: result.value.timeframes };
+          setErrors([]);
+        } else {
+          failed = true;
+          setErrors(result.errors);
+        }
+      } catch (error) {
+        failed = true;
+        setErrors([{ code: 'RequestFailed', reason: failureOf(error) }]);
+      } finally {
+        waiting.current -= 1;
       }
 
-      if (waiting.current === 0 || !result.ok) {
+      if (waiting.current === 0 || failed) {
         setChosen(kept.current.timeframes);
         setEnabled(kept.current.enabled);
       }
@@ -180,4 +191,11 @@ function IdeasWindow({
       </span>
     </Dialog>
   );
+}
+
+/** The words of a change that failed: the message of the answer, or of the network. */
+function failureOf(error: unknown): string {
+  return error instanceof Error && error.message !== ''
+    ? `Не сохранено: ${error.message}`
+    : 'Не сохранено: сервис не ответил';
 }

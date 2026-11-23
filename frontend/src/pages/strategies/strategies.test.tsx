@@ -1080,6 +1080,43 @@ describe('the ideas of a strategy in the list', () => {
     );
   });
 
+  // Task 20.3: a change that fails (5xx) is shown and taken back, and the queue goes on with the next change.
+  it('goes on sending the changes after one failed and shows the failure', async () => {
+    let stored = { enabled: true, timeframes: ['1h'] };
+    let calls = 0;
+    routes({
+      'GET /api/strategies': () => json([fundingShort(stored)]),
+      'PUT /api/strategies/funding-short/ideas': async (request) => {
+        const body = (await request.json()) as typeof stored;
+        calls += 1;
+        if (calls === 1) {
+          return json({ title: 'Сервис недоступен' }, 503);
+        }
+
+        stored = body;
+        return json(stored);
+      },
+    });
+    renderApp('/strategies');
+    const row = within(await screen.findByRole('row', { name: 'Стратегия funding-short' }));
+    await userEvent.click(row.getByRole('button', { name: 'Таймфреймы идей funding-short' }));
+    const window = within(screen.getByRole('dialog', { name: 'Идеи funding-short' }));
+
+    await userEvent.click(window.getByRole('button', { name: '4h' }));
+    expect(await window.findByRole('alert', { name: 'Отказ' })).toHaveTextContent(
+      'Сервис недоступен',
+    );
+    expect(window.getByRole('button', { name: '4h' })).toHaveAttribute('aria-pressed', 'false');
+
+    await userEvent.click(window.getByRole('button', { name: '15m' }));
+
+    await waitFor(() => expect(calls).toBe(2));
+    await waitFor(() => expect(stored.timeframes).toEqual(['15m', '1h']));
+    await waitFor(() => expect(window.queryByRole('alert', { name: 'Отказ' })).toBeNull());
+    expect(window.getByRole('button', { name: '15m' })).toHaveAttribute('aria-pressed', 'true');
+    expect(window.getByRole('button', { name: '1h' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   // Task 18.28, scenario «Отказ в окне»: a refused timeframe goes back to what it was.
   it('takes a refused timeframe back in the window', async () => {
     routes({
