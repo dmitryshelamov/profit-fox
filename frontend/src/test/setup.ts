@@ -64,6 +64,8 @@ HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
 // call after `remove()` (task 19.1).
 vi.mock('lightweight-charts', async () => {
   const { drawn } = await import('./chart');
+  /** The bars in view of a chart nobody scrolled or zoomed: about its width over the spacing of its bars. */
+  const defaultBarsInView = 150;
   /** The methods of `target` that throw once `removed()` is true; what a method returns is guarded the same way. */
   const guarded = <T extends object>(target: T, removed: () => boolean): T =>
     new Proxy(target, {
@@ -94,6 +96,32 @@ vi.mock('lightweight-charts', async () => {
       let removed = false;
       const isRemoved = () => removed;
       drawn.options = chartOptions ?? {};
+      // The time scale as the library keeps it (task 20.1): the times of the bars of the candles, and the visible logical
+      // range (`drawn.logicalRange`) by their indexes. Bars added on the left keep the same candles in view; a bar added
+      // on the right moves the range with it only when the last bar is in view; a `rightOffset` applied scrolls the range
+      // to the right edge, that many bars past the last bar.
+      let bars: number[] = [];
+      const shiftBy = (added: number) => {
+        if (drawn.logicalRange !== null && added !== 0) {
+          drawn.logicalRange = {
+            from: drawn.logicalRange.from + added,
+            to: drawn.logicalRange.to + added,
+          };
+        }
+      };
+      const lastInView = () =>
+        drawn.logicalRange !== null &&
+        drawn.logicalRange.from <= bars.length - 1 &&
+        drawn.logicalRange.to >= bars.length - 1;
+      const setBars = (next: number[]) => {
+        if (bars.length > 0 && next.length > 0) {
+          const left = next.filter((time) => time < bars[0]!).length;
+          const right = next.filter((time) => time > bars.at(-1)!).length;
+          shiftBy(left + (lastInView() ? right : 0));
+        }
+
+        bars = next;
+      };
       // The panes of the chart, the same on every call, with the stretch each was given (task 19.14).
       const panes = [0, 1, 2].map((index) =>
         guarded(
@@ -141,12 +169,16 @@ vi.mock('lightweight-charts', async () => {
 
                 drawn.series[type] = data;
                 if (type === 'Candlestick') {
+                  setBars(data.map((bar) => (bar as { time: number }).time));
                   drawn.candles = data;
                   drawn.setData += 1;
                 }
               }),
-              update: vi.fn((bar: unknown) => {
+              update: vi.fn((bar: { time: number }) => {
                 drawn.updates.push(bar);
+                if (type === 'Candlestick' && (bars.length === 0 || bar.time > bars.at(-1)!)) {
+                  setBars([...bars, bar.time]);
+                }
               }),
               createPriceLine: vi.fn((line: { price: number; title?: string }) => {
                 drawn.lines.push(line);
@@ -205,8 +237,20 @@ vi.mock('lightweight-charts', async () => {
           applyOptions: vi.fn((next: { rightOffset?: number }) => {
             if (next.rightOffset !== undefined) {
               drawn.rightOffset = next.rightOffset;
+              const width =
+                drawn.logicalRange === null
+                  ? defaultBarsInView
+                  : drawn.logicalRange.to - drawn.logicalRange.from;
+              const to = bars.length - 1 + next.rightOffset;
+              drawn.logicalRange = { from: to - width, to };
             }
           }),
+          // How far the right edge of the range is from the last bar, in bars: the offset while it stands at the edge.
+          scrollPosition: vi.fn(() =>
+            drawn.logicalRange === null
+              ? (drawn.rightOffset ?? 0)
+              : drawn.logicalRange.to - (bars.length - 1),
+          ),
           options: () => ({ barSpacing: 6 }),
           fitContent: vi.fn(() => {
             drawn.view = 'content';

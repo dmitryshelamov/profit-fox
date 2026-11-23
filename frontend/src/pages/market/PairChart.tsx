@@ -95,6 +95,8 @@ export function PairChart({
   const latest = useRef({ marks, onEdge, onPick });
   latest.current = { marks, onEdge, onPick };
   const shown = useRef<{ first: number | null; count: number }>({ first: null, count: 0 });
+  // The room to the right of the last candle the time scale was last given (task 20.1).
+  const offset = useRef<number | null>(null);
 
   useEffect(() => {
     if (container.current === null) {
@@ -294,7 +296,17 @@ export function PairChart({
       view === null ? 150 : view.to - view.from,
       scale.options().barSpacing,
     );
-    scale.applyOptions({ rightOffset: room.offset });
+    // The library scrolls to the right edge on every `rightOffset` it is given (task 20.1): it is given one only when the
+    // room changed and the chart stands at the right edge — a page loaded before or a closed candle leaves it in place.
+    const applied = offset.current;
+    if (
+      room.offset !== applied &&
+      (applied === null || Math.abs(scale.scrollPosition() - applied) < 1)
+    ) {
+      scale.applyOptions({ rightOffset: room.offset });
+      offset.current = room.offset;
+    }
+
     const labels = lineLabels(room.lines);
     const made: ISeriesApi<'Line'>[] = [];
     for (const line of room.lines) {

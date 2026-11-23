@@ -82,6 +82,18 @@ function routes(ideas: readonly Idea[] = [], extra: Record<string, FakeRoute> = 
   });
 }
 
+/** The open times of the candles at the left and the right edge of the visible logical range of the fake chart. */
+function candlesInView(): [number | undefined, number | undefined] {
+  const range = drawn.logicalRange;
+  if (range === null) {
+    throw new Error('The chart shows no range.');
+  }
+
+  const at = (index: number) =>
+    (drawn.candles[Math.round(index)] as { time: number } | undefined)?.time;
+  return [at(range.from), at(range.to)];
+}
+
 const chartQueries = (requests: readonly Request[]) =>
   requests
     .map((request) => new URL(request.url))
@@ -161,6 +173,23 @@ describe('the chart of a pair', () => {
     await waitFor(() => expect(drawn.candles).toHaveLength(1000));
     expect(chartQueries(requests).at(-1)!.get('before')).toBe(String(fourteen - 500 * hour));
     expect(drawn.logicalRange).toEqual({ from: 503, to: 620 });
+  });
+
+  // Task 20.1: the room to the right of the last candle for the lines of an open idea does not scroll the chart to the
+  // newest candles when the page before comes.
+  it('keeps the candles in view when the page before comes with the lines of an open idea drawn', async () => {
+    routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 17) })]);
+    renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.segments).toHaveLength(3));
+    expect(drawn.rightOffset).toBeGreaterThan(0);
+
+    drawn.logicalRange = { from: 3, to: 120 };
+    const shown = candlesInView();
+    act(() => drawn.rangeChange?.({ from: 3, to: 120 }));
+
+    await waitFor(() => expect(drawn.candles).toHaveLength(1000));
+    await waitFor(() => expect(drawn.segments).toHaveLength(3));
+    expect(candlesInView()).toEqual(shown);
   });
 });
 
@@ -342,6 +371,23 @@ describe('the live candle', () => {
     );
     expect(drawn.candles.at(-1)).toMatchObject({ time: fourteen / 1000, close: 238.42 });
     expect(drawn.candles).toHaveLength(501);
+  });
+
+  // Task 20.1: a closed candle while the chart is scrolled back does not move it to the newest candles.
+  it('keeps the candles in view when a candle closes while the chart is scrolled back', async () => {
+    routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 17) })]);
+    renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.segments).toHaveLength(3));
+    drawn.logicalRange = { from: 200, to: 317 };
+    act(() => drawn.rangeChange?.({ from: 200, to: 317 }));
+    const shown = candlesInView();
+
+    act(() => FakeEventSource.last().send('candle', live(fourteen, 238.42, true)));
+    act(() => FakeEventSource.last().send('candle', live(fourteen + hour, 238.5)));
+
+    await waitFor(() => expect(drawn.candles).toHaveLength(501));
+    expect(drawn.updates.at(-1)).toMatchObject({ time: (fourteen + hour) / 1000 });
+    expect(candlesInView()).toEqual(shown);
   });
 
   // Scenario «Поток оборвался».
