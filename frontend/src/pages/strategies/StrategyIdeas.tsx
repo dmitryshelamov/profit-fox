@@ -34,13 +34,20 @@ export function StrategyIdeasCell({ strategy }: { readonly strategy: StrategyLis
       return;
     }
 
-    const result = await setStrategyIdeas(strategy.name, on, chosen);
-    if (!result.ok) {
-      setRefused(result.errors);
+    // A failure (the network, a 5xx) is shown in the window like a refusal, and the switch shows what the server keeps
+    // (task 21.4, as task 20.3 did for the window).
+    try {
+      const result = await setStrategyIdeas(strategy.name, on, chosen);
+      if (!result.ok) {
+        setRefused(result.errors);
+        setOpen(true);
+      }
+    } catch (error) {
+      setRefused([{ code: 'RequestFailed', reason: failureOf(error) }]);
       setOpen(true);
+    } finally {
+      await queries.invalidateQueries({ queryKey: ['strategies'] });
     }
-
-    await queries.invalidateQueries({ queryKey: ['strategies'] });
   };
 
   return (

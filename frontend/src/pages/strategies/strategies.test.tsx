@@ -1143,6 +1143,46 @@ describe('the ideas of a strategy in the list', () => {
     expect(window.getByRole('button', { name: '1h' })).toHaveAttribute('aria-pressed', 'true');
   });
 
+  // Task 21.4: a failure (5xx) of the switch of the row is shown like a refusal, the switch stays where the server keeps
+  // it, and the next click is sent.
+  it('shows a failure of the switch of the row, keeps it off and sends the next click', async () => {
+    let stored = { enabled: false, timeframes: ['1h'] };
+    let calls = 0;
+    routes({
+      'GET /api/strategies': () => json([fundingShort(stored)]),
+      'PUT /api/strategies/funding-short/ideas': async (request) => {
+        const body = (await request.json()) as typeof stored;
+        calls += 1;
+        if (calls === 1) {
+          return json({ title: 'Сервис недоступен' }, 503);
+        }
+
+        stored = body;
+        return json(stored);
+      },
+    });
+    renderApp('/strategies');
+    const row = within(await screen.findByRole('row', { name: 'Стратегия funding-short' }));
+
+    await userEvent.click(row.getByRole('switch', { name: 'Идеи funding-short' }));
+
+    const window = within(await screen.findByRole('dialog', { name: 'Идеи funding-short' }));
+    expect(await window.findByRole('alert', { name: 'Отказ' })).toHaveTextContent(
+      'Не сохранено: Сервис недоступен',
+    );
+    expect(window.getByRole('switch', { name: 'Идеи включены' })).not.toBeChecked();
+    expect(row.getByRole('switch', { name: 'Идеи funding-short' })).not.toBeChecked();
+
+    await userEvent.click(window.getByRole('button', { name: 'Закрыть' }));
+    await userEvent.click(row.getByRole('switch', { name: 'Идеи funding-short' }));
+
+    await waitFor(() => expect(calls).toBe(2));
+    await waitFor(() =>
+      expect(row.getByRole('switch', { name: 'Идеи funding-short' })).toBeChecked(),
+    );
+    expect(stored).toEqual({ enabled: true, timeframes: ['1h'] });
+  });
+
   // Task 18.28: the refusal of the switch of the row is shown in the window, not in the row.
   it('opens the window with the reason when the switch of the row is refused', async () => {
     routes({
