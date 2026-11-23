@@ -236,6 +236,9 @@ function ChartSection({
   const [earlyError, setEarlyError] = useState<string | null>(null);
   const [earlyLoading, setEarlyLoading] = useState(false);
   const retry = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The ends of the earlier pages whose open interest failed, and the timers of those that answered «loading» (task 20.6).
+  const failedInterest = useRef(new Set<number>());
+  const interestRetries = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   // The timer of the repeat goes with the page, and an answer that comes after the page went sets none (task 19.12).
   const gone = useRef(false);
   useEffect(() => {
@@ -246,6 +249,9 @@ function ChartSection({
         clearTimeout(retry.current);
         retry.current = null;
       }
+
+      interestRetries.current.forEach(clearTimeout);
+      interestRetries.current.clear();
     };
   }, []);
   // A first page read again — after a break of the stream — moved right: what the former first page had and the new one
@@ -322,14 +328,46 @@ function ChartSection({
   );
 
   // The open interest of an earlier page, asked with the same end once its candles came; a failure is told, not the chart's.
+  // One that answers «loading» is asked again by the timer of the candles (task 19.12); one that failed is asked again by
+  // «Повторить» with the first page (task 20.6).
   const loadEarlierInterest = (before: number) => {
     void getPairOpenInterest(symbol, timeframe, before)
       .then((answer) => {
+        if (gone.current) {
+          return;
+        }
+
+        if (answer.loading) {
+          interestRetries.current.set(
+            before,
+            setTimeout(() => {
+              interestRetries.current.delete(before);
+              loadEarlierInterestRef.current(before);
+            }, historyRetryMs),
+          );
+          return;
+        }
+
+        failedInterest.current.delete(before);
         setEarlier((old) => ({ ...old, interest: joinPoints(answer.openInterest, old.interest) }));
       })
       .catch((error: unknown) => {
+        if (gone.current) {
+          return;
+        }
+
+        failedInterest.current.add(before);
         setEarlyInterestError(error instanceof Error ? error.message : String(error));
       });
+  };
+  const loadEarlierInterestRef = useRef(loadEarlierInterest);
+  loadEarlierInterestRef.current = loadEarlierInterest;
+  const retryInterest = () => {
+    setEarlyInterestError(null);
+    void refetchInterest();
+    const failed = [...failedInterest.current];
+    failedInterest.current.clear();
+    failed.forEach((before) => loadEarlierInterest(before));
   };
 
   const loadEarlier = (asked = false) => {
@@ -518,14 +556,7 @@ function ChartSection({
           {(firstInterest.isError || earlyInterestError !== null) && (
             <span role="alert" aria-label="OI графика" className="flex items-center gap-2 text-err">
               Стенд не отдал OI: {firstInterest.error?.message ?? earlyInterestError}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setEarlyInterestError(null);
-                  void refetchInterest();
-                }}
-              >
+              <Button variant="ghost" size="sm" onClick={retryInterest}>
                 Повторить
               </Button>
             </span>

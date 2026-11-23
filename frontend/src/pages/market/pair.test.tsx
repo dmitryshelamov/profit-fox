@@ -862,6 +862,62 @@ describe('the ideas, the open interest and the funding on the chart', () => {
       .map((url) => url.searchParams.get('before'));
     expect(before).toContain(String(fourteen - 500 * hour));
   });
+
+  // Task 20.6: the open interest of an earlier page that answers «loading» is asked again by the timer of the candles.
+  it('asks the open interest of an earlier page again in 5 seconds while it loads', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let early = 0;
+      routes([], {
+        'GET /api/market/pairs/SOLUSDT/chart/open-interest': (request) => {
+          if (new URL(request.url).searchParams.has('before') && early++ === 0) {
+            return json({ symbol: 'SOLUSDT', timeframe: '1h', loading: true, openInterest: [] });
+          }
+
+          return interestRoute()(request);
+        },
+      });
+      renderApp('/market/SOLUSDT?timeframe=1h');
+      await waitFor(() => expect(drawn.series.Line).toHaveLength(500));
+
+      drawn.logicalRange = { from: 3, to: 120 };
+      act(() => drawn.rangeChange?.({ from: 3, to: 120 }));
+      await waitFor(() => expect(drawn.candles).toHaveLength(1000));
+      await waitFor(() => expect(early).toBe(1));
+      expect(drawn.series.Line).toHaveLength(500);
+
+      await act(() => vi.advanceTimersByTimeAsync(5_100));
+
+      await waitFor(() => expect(drawn.series.Line).toHaveLength(1000));
+      expect(early).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Task 20.6: «Повторить» asks again the open interest of an earlier page that failed, not only of the first.
+  it('asks the open interest of an earlier page that failed again by the button', async () => {
+    let fail = true;
+    routes([], {
+      'GET /api/market/pairs/SOLUSDT/chart/open-interest': (request) =>
+        new URL(request.url).searchParams.has('before') && fail
+          ? json({ title: 'сервис данных не ответил' }, 502)
+          : interestRoute()(request),
+    });
+    renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.series.Line).toHaveLength(500));
+
+    drawn.logicalRange = { from: 3, to: 120 };
+    act(() => drawn.rangeChange?.({ from: 3, to: 120 }));
+    const alert = await screen.findByRole('alert', { name: 'OI графика' });
+    expect(drawn.candles).toHaveLength(1000);
+
+    fail = false;
+    await userEvent.click(within(alert).getByRole('button', { name: 'Повторить' }));
+
+    await waitFor(() => expect(drawn.series.Line).toHaveLength(1000));
+    expect(screen.queryByRole('alert', { name: 'OI графика' })).toBeNull();
+  });
 });
 
 // Task 18.25, confirmed in the browser: a point of a panel at a time no candle has puts an empty slot into the row of
