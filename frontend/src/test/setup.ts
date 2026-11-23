@@ -61,11 +61,14 @@ HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
 
 // jsdom has no canvas, so the chart library is replaced by a series that keeps the data it was given. Like the real
 // library (its `ensureDefined`), the fake chart and everything it gave — series, panes, time scale, marks — throw on any
-// call after `remove()` (task 19.1).
+// call after `remove()` (task 19.1). Like the library (task 22.1), a range, a `rightOffset` or a scroll position given
+// to the time scale is applied on the next animation frame, while new data moves the time scale at once.
 vi.mock('lightweight-charts', async () => {
   const { drawn } = await import('./chart');
   /** The bars in view of a chart nobody scrolled or zoomed: about its width over the spacing of its bars. */
   const defaultBarsInView = 150;
+  /** The width of the time scale in pixels: the bars in view of a new chart at the spacing of 6 pixels. */
+  const defaultWidth = 900;
   /** The methods of `target` that throw once `removed()` is true; what a method returns is guarded the same way. */
   const guarded = <T extends object>(target: T, removed: () => boolean): T =>
     new Proxy(target, {
@@ -103,8 +106,68 @@ vi.mock('lightweight-charts', async () => {
       // the range moves with it only when the last bar was in view and points were added; otherwise the library shifts the
       // offset back so the range stays (points added on the left, or a value put on a point that was there empty). A base
       // that moves left takes the range with it. A `rightOffset` applied puts the right edge that many bars past the base.
+      // The time scale is `drawn.width` pixels wide, its bars `width / (to - from)` apart. What the time scale is told to
+      // show waits for the next frame as the library's invalidation mask does (task 22.1): a range replaces what waits and
+      // keeps the number of bars in view, so the spacing follows a width changed meanwhile; a `rightOffset` or a scroll
+      // position is added to what waits and puts the right edge that many bars past the base, keeping the spacing.
       drawn.logicalRange = null;
       drawn.rightOffset = null;
+      drawn.width = defaultWidth;
+      type Waiting = { range: { from: number; to: number } } | { offset: number };
+      let waiting: Waiting[] = [];
+      let widthOnFrame: number | null = null;
+      let frame: number | null = null;
+      const spacing = () =>
+        drawn.logicalRange === null
+          ? defaultWidth / defaultBarsInView
+          : drawn.width / (drawn.logicalRange.to - drawn.logicalRange.from);
+      // The width of the time scale on a frame: the spacing of the bars and the right edge stay.
+      const resize = (width: number) => {
+        const before = spacing();
+        drawn.width = width;
+        if (drawn.logicalRange !== null) {
+          drawn.logicalRange = {
+            from: drawn.logicalRange.to - width / before,
+            to: drawn.logicalRange.to,
+          };
+        }
+      };
+      const applyWaiting = () => {
+        frame = null;
+        const applied = waiting;
+        waiting = [];
+        if (removed) {
+          return;
+        }
+
+        if (widthOnFrame !== null) {
+          resize(widthOnFrame);
+          widthOnFrame = null;
+        }
+
+        applied.forEach((item) => {
+          if ('range' in item) {
+            drawn.logicalRange = item.range;
+            return;
+          }
+
+          const base = baseOf(points());
+          if (base !== null) {
+            const to = base + item.offset;
+            drawn.logicalRange = { from: to - drawn.width / spacing(), to };
+          }
+        });
+      };
+      const wait = (item: Waiting) => {
+        waiting = 'range' in item ? [item] : [...waiting, item];
+        frame ??= requestAnimationFrame(applyWaiting);
+      };
+      // A new price grows or shrinks the price scale: the library lays the chart out again on the next frame, before it
+      // applies what waits, and the time scale gets the width left.
+      drawn.resize = (width: number) => {
+        widthOnFrame = width;
+        frame ??= requestAnimationFrame(applyWaiting);
+      };
       const rows = new Map<object, { time: number; empty: boolean }[]>();
       const points = () =>
         [...new Set([...rows.values()].flat().map((point) => point.time))].sort((a, b) => a - b);
@@ -204,6 +267,8 @@ vi.mock('lightweight-charts', async () => {
             }
 
             const series = {
+              // The series itself, not the guarded proxy the chart gives: what the time scale keeps its points by.
+              self: null as object | null,
               segment,
               // The chart of the series: marks created on it are removed with it.
               owner: { isRemoved },
@@ -264,11 +329,13 @@ vi.mock('lightweight-charts', async () => {
                 }
               }),
             };
+            series.self = series;
             return series;
           },
         ),
-        removeSeries: vi.fn((series: { segment: unknown }) => {
-          change(() => rows.delete(series));
+        // The series given is the guarded proxy: its points are kept by the series itself (task 22.1).
+        removeSeries: vi.fn((series: { self?: object | null; segment: unknown }) => {
+          change(() => rows.delete(series.self ?? series));
           drawn.segments = drawn.segments.filter((candidate) => candidate !== series.segment);
           if (drawn.segments.length === 0) {
             drawn.segmentMarkers = [];
@@ -277,6 +344,9 @@ vi.mock('lightweight-charts', async () => {
         panes: () => panes,
         remove: vi.fn(() => {
           removed = true;
+          if (frame !== null) {
+            cancelAnimationFrame(frame);
+          }
         }),
         subscribeClick: vi.fn((handler: (param: { time?: number }) => void) => {
           drawn.click = handler;
@@ -288,16 +358,11 @@ vi.mock('lightweight-charts', async () => {
           applyOptions: vi.fn((next: { rightOffset?: number }) => {
             if (next.rightOffset !== undefined) {
               drawn.rightOffset = next.rightOffset;
-              const base = baseOf(points());
-              if (base !== null) {
-                const width =
-                  drawn.logicalRange === null
-                    ? defaultBarsInView
-                    : drawn.logicalRange.to - drawn.logicalRange.from;
-                const to = base + next.rightOffset;
-                drawn.logicalRange = { from: to - width, to };
-              }
+              wait({ offset: next.rightOffset });
             }
+          }),
+          scrollToPosition: vi.fn((position: number) => {
+            wait({ offset: position });
           }),
           // How far the right edge of the range is from the base, in bars: the offset while it stands at the edge.
           scrollPosition: vi.fn(() => {
@@ -316,7 +381,7 @@ vi.mock('lightweight-charts', async () => {
             const after = at.findIndex((point) => point > time);
             return after < 0 ? at.length - 1 : after;
           }),
-          options: () => ({ barSpacing: 6 }),
+          options: () => ({ barSpacing: spacing() }),
           fitContent: vi.fn(() => {
             drawn.view = 'content';
           }),
@@ -326,7 +391,7 @@ vi.mock('lightweight-charts', async () => {
           }),
           getVisibleLogicalRange: vi.fn(() => drawn.logicalRange),
           setVisibleLogicalRange: vi.fn((range: { from: number; to: number }) => {
-            drawn.logicalRange = range;
+            wait({ range });
           }),
           subscribeVisibleLogicalRangeChange: vi.fn(
             (handler: (range: { from: number; to: number } | null) => void) => {

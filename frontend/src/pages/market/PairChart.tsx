@@ -120,6 +120,8 @@ export function PairChart({
   // The lines drawn and the slots given: drawn again only when they change, not on every candle (task 20.2).
   const made = useRef<Made | null>(null);
   const slotsGiven = useRef<{ chart: IChartApi; key: string } | null>(null);
+  // The last candle the lines were laid out after: the candles closed since move the range in view with them (task 22.1).
+  const laidOut = useRef<{ chart: IChartApi; last: number | string | undefined } | null>(null);
 
   useEffect(() => {
     if (container.current === null) {
@@ -313,9 +315,13 @@ export function PairChart({
   // term after the last candle (task 20.2). Lines and slots that did not change are not given again: every series taken
   // off or added moves the last point of the time scale, and the range in view with it. The series of the same lines are
   // kept and given their new points (task 21.1): the end of a line cut by a third of the bars in view moves with every
-  // closed candle and every change of the zoom. The library keeps the range in view when the last bar moves right, not
-  // when it moves left (a line made shorter, a line taken off), so the range in view before the change is given back
-  // after it.
+  // closed candle and every change of the zoom. The library keeps the range in view when the last bar moves right onto a
+  // slot that was there, and when it moves left (a line made shorter, a line taken off) it takes the range with it, so
+  // the range in view before the change is given back after it: where it was when the last candle was out of view, moved
+  // by the candles closed since when it was in view, so the chart follows the live candle as it does without lines (task
+  // 22.1). It is given back as the right edge, not as the range: the library applies both on the next frame, where a
+  // range keeps the number of bars in view and a price scale grown or shrunk by a new price changes the spacing of the
+  // bars and moves them; the right edge keeps the spacing as the library does without lines.
   useEffect(() => {
     const current = drawn.current;
     if (current === null) {
@@ -324,14 +330,21 @@ export function PairChart({
 
     const scale = current.chart.timeScale();
     const view = scale.getVisibleLogicalRange();
-    const lastOpen = candles.at(-1)?.openTime;
+    const lastTime = candles.at(-1)?.openTime;
     const room = rightRoom(
       lines,
-      lastOpen === undefined ? undefined : Number(lastOpen),
+      lastTime === undefined ? undefined : Number(lastTime),
       timeframe,
       view === null ? 150 : view.to - view.from,
       scale.options().barSpacing,
     );
+    // The last candle in view and the candles closed since the lines were last laid out, before lines and slots change.
+    const last = lastTime === undefined ? null : scale.timeToIndex(seconds(lastTime), true);
+    const lastInView = view !== null && last !== null && view.from <= last && last <= view.to;
+    const laid = laidOut.current?.chart === current.chart ? laidOut.current.last : undefined;
+    const laidIndex = laid === undefined ? null : scale.timeToIndex(seconds(laid), false);
+    const closed = last !== null && laidIndex !== null ? Math.max(0, last - laidIndex) : 0;
+    laidOut.current = { chart: current.chart, last: lastTime };
 
     let changed = false;
     const slotsKey = room.slots.join(',');
@@ -360,21 +373,22 @@ export function PairChart({
       changed = true;
     }
 
-    if (changed && view !== null) {
-      scale.setVisibleLogicalRange(view);
+    const now = scale.getVisibleLogicalRange();
+    if (changed && view !== null && now !== null) {
+      // The last bar of the time scale now: the right edge less the room past it.
+      const base = now.to - scale.scrollPosition();
+      scale.scrollToPosition(view.to + (lastInView ? closed : 0) - base, false);
     }
 
     // The library scrolls to the right edge on every `rightOffset` it is given (task 20.1): a chart gets one when it has its
-    // first candles, and later only when the lines came or went, the room changed and the last candle is in view — a page
+    // first candles, and later only when the lines came or went, the room changed and the last candle was in view — a page
     // loaded before, a closed candle or a change of the zoom leaves the range where it is (task 21.1). The last candle in
-    // view, not the offset from the last bar: lines and slots added after the candles move the last bar of the time scale
-    // while the range stays (task 20.2). The chart is compared too: under `StrictMode` it is drawn again with the refs kept.
+    // view before lines and slots changed, not the offset from the last bar: lines and slots added after the candles move
+    // the last bar of the time scale (task 20.2), and the range the library shows right after a change is not the one it
+    // shows on the next frame. The chart is compared too: under `StrictMode` it is drawn again with the refs kept.
     const given = offset.current?.chart === current.chart ? offset.current.value : null;
-    const lastTime = candles.at(-1)?.openTime;
     if (lastTime !== undefined && room.offset !== given && (given === null || setChanged)) {
-      const last = scale.timeToIndex(seconds(lastTime), true);
-      const range = scale.getVisibleLogicalRange();
-      if (given === null || last === null || range === null || range.to >= last) {
+      if (given === null || view === null || last === null || view.to >= last) {
         scale.applyOptions({ rightOffset: room.offset });
         offset.current = { chart: current.chart, value: room.offset };
       }

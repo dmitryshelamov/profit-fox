@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react';
 import { StrictMode } from 'react';
 
-import { drawn, resetDrawn } from '@/test/chart';
+import { drawn, nextFrame, resetDrawn } from '@/test/chart';
 
 import { PairChart } from './PairChart';
 
@@ -21,7 +21,7 @@ beforeEach(() => resetDrawn());
 // Task 20.2, seen in development in Chromium: under `StrictMode` the chart is drawn, removed and drawn again; the room to
 // the right of the last candle goes to the chart that stays, not only to the one removed.
 describe('the chart of a pair under StrictMode', () => {
-  it('gives the room to the right of the last candle to the chart drawn again', () => {
+  it('gives the room to the right of the last candle to the chart drawn again', async () => {
     render(
       <StrictMode>
         <PairChart
@@ -38,6 +38,7 @@ describe('the chart of a pair under StrictMode', () => {
         />
       </StrictMode>,
     );
+    await nextFrame();
 
     expect(drawn.rightOffset).toBe(10);
     expect(drawn.logicalRange?.to).toBe(99 + 10);

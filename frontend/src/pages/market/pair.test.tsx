@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 
 import type { Idea } from '@/api/ideas';
 import type { ChartCandle } from '@/api/market';
-import { drawn, resetDrawn } from '@/test/chart';
+import { drawn, nextFrame, resetDrawn, scrollChart } from '@/test/chart';
 import { FakeEventSource } from '@/test/eventSource';
 import { fakeApi, type FakeRoute, json } from '@/test/fakeApi';
 import { idea } from '@/test/ideas';
@@ -167,11 +167,13 @@ describe('the chart of a pair', () => {
     await waitFor(() => expect(drawn.candles).toHaveLength(500));
     expect((drawn.candles.at(-1) as { time: number }).time).toBe((fourteen - hour) / 1000);
 
-    drawn.logicalRange = { from: 3, to: 120 };
+    await scrollChart({ from: 3, to: 120 });
     act(() => drawn.rangeChange?.({ from: 3, to: 120 }));
 
     await waitFor(() => expect(drawn.candles).toHaveLength(1000));
     expect(chartQueries(requests).at(-1)!.get('before')).toBe(String(fourteen - 500 * hour));
+    await nextFrame();
+
     expect(drawn.logicalRange).toEqual({ from: 503, to: 620 });
   });
 
@@ -183,7 +185,7 @@ describe('the chart of a pair', () => {
     await waitFor(() => expect(drawn.segments).toHaveLength(3));
     expect(drawn.rightOffset).toBeGreaterThan(0);
 
-    drawn.logicalRange = { from: 3, to: 120 };
+    await scrollChart({ from: 3, to: 120 });
     const shown = candlesInView();
     act(() => drawn.rangeChange?.({ from: 3, to: 120 }));
 
@@ -241,7 +243,7 @@ describe('the chart while the history loads or fails', () => {
       renderApp('/market/SOLUSDT?timeframe=1h');
       await waitFor(() => expect(drawn.candles).toHaveLength(500));
 
-      drawn.logicalRange = { from: 3, to: 120 };
+      await scrollChart({ from: 3, to: 120 });
       act(() => drawn.rangeChange?.({ from: 3, to: 120 }));
       await waitFor(() => expect(early).toBe(1));
       await act(() => vi.advanceTimersByTimeAsync(5_100));
@@ -266,7 +268,7 @@ describe('the chart while the history loads or fails', () => {
       const { unmount } = renderApp('/market/SOLUSDT?timeframe=1h');
       await waitFor(() => expect(drawn.candles).toHaveLength(500));
 
-      drawn.logicalRange = { from: 3, to: 120 };
+      await scrollChart({ from: 3, to: 120 });
       act(() => drawn.rangeChange?.({ from: 3, to: 120 }));
       await waitFor(() => expect(early()).toBe(1));
       expect(await screen.findByText('Сервис данных догружает историю пары…')).toBeInTheDocument();
@@ -301,7 +303,7 @@ describe('the chart while the history loads or fails', () => {
     renderApp('/market/SOLUSDT?timeframe=1h');
     await waitFor(() => expect(drawn.candles).toHaveLength(500));
 
-    drawn.logicalRange = { from: 3, to: 120 };
+    await scrollChart({ from: 3, to: 120 });
     act(() => drawn.rangeChange?.({ from: 3, to: 120 }));
     expect(await screen.findByRole('alert', { name: 'Ранние свечи' })).toBeInTheDocument();
     const asked = chartQueries(requests).length;
@@ -378,7 +380,7 @@ describe('the live candle', () => {
     routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 17) })]);
     renderApp('/market/SOLUSDT?timeframe=1h');
     await waitFor(() => expect(drawn.segments).toHaveLength(3));
-    drawn.logicalRange = { from: 200, to: 317 };
+    await scrollChart({ from: 200, to: 317 });
     act(() => drawn.rangeChange?.({ from: 200, to: 317 }));
     const shown = candlesInView();
 
@@ -396,7 +398,7 @@ describe('the live candle', () => {
     routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour })]);
     renderApp('/market/SOLUSDT?timeframe=1h');
     await waitFor(() => expect(drawn.segments).toHaveLength(3));
-    drawn.logicalRange = { from: 200, to: 317 };
+    await scrollChart({ from: 200, to: 317 });
     act(() => drawn.rangeChange?.({ from: 200, to: 317 }));
     const shown = candlesInView();
 
@@ -412,6 +414,8 @@ describe('the live candle', () => {
         end,
       ]),
     );
+    await nextFrame();
+
     expect(drawn.logicalRange).toEqual({ from: 200, to: 317 });
     expect(candlesInView()).toEqual(shown);
   });
@@ -422,7 +426,7 @@ describe('the live candle', () => {
     routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour })]);
     renderApp('/market/SOLUSDT?timeframe=1h');
     await waitFor(() => expect(drawn.segments).toHaveLength(3));
-    drawn.logicalRange = { from: 300, to: 303 };
+    await scrollChart({ from: 300, to: 303 });
     act(() => drawn.rangeChange?.({ from: 300, to: 303 }));
     const shown = candlesInView();
 
@@ -438,17 +442,20 @@ describe('the live candle', () => {
         end,
       ]),
     );
+    await nextFrame();
+
     expect(drawn.logicalRange).toEqual({ from: 300, to: 303 });
     expect(candlesInView()).toEqual(shown);
   });
 
   // Task 21.1, seen with the library in Chromium: zoomed in on the last candles, which stay in view, the lines shorten
-  // from fifty bars to one at the closed candle, and the last bar of the time scale moves left; the range in view stays.
-  it('keeps the candles in view when a candle closes after the chart was zoomed in on the last candles', async () => {
+  // from fifty bars to one at the closed candle, and the last bar of the time scale moves left; the chart does not go
+  // back. Task 22.1: the last candle in view, the range moves by the candle closed, as without the lines.
+  it('follows the closed candle after the chart was zoomed in on the last candles', async () => {
     routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour })]);
     renderApp('/market/SOLUSDT?timeframe=1h');
     await waitFor(() => expect(drawn.segments).toHaveLength(3));
-    drawn.logicalRange = { from: 497.5, to: 500.5 };
+    await scrollChart({ from: 497.5, to: 500.5 });
     act(() => drawn.rangeChange?.({ from: 497.5, to: 500.5 }));
 
     act(() => FakeEventSource.last().send('candle', live(fourteen, 238.42, true)));
@@ -460,7 +467,60 @@ describe('the live candle', () => {
         (fourteen + hour) / 1000,
       ),
     );
-    expect(drawn.logicalRange).toEqual({ from: 497.5, to: 500.5 });
+    await nextFrame();
+    expect(drawn.logicalRange).toEqual({ from: 498.5, to: 501.5 });
+  });
+
+  // Task 22.1, seen live: the lines of a far term cut a third of the bars in view past the last candle, the chart at the
+  // right edge; a closed candle lands on a slot that was there, so the library keeps the range, and the chart has to
+  // follow the live candle itself: the last candle stays where it was on the screen and the labels stay in the chart.
+  it('follows the closed candles at the right edge with the lines of a far term cut', async () => {
+    routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour })]);
+    renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.segments).toHaveLength(3));
+    await nextFrame();
+    const start = drawn.logicalRange!;
+    const room = drawn.rightOffset!;
+    // The last candle opens at 13:00 (index 499); the lines end a third of the bars in view past it.
+    const end = () =>
+      499 +
+      ((drawn.segments[0]!.data.at(-1) as { time: number }).time - (fourteen - hour) / 1000) / 3600;
+    expect(start.to - end()).toBe(room);
+
+    for (let candle = 0; candle < 3; candle += 1) {
+      act(() =>
+        FakeEventSource.last().send('candle', live(fourteen + candle * hour, 238.42, true)),
+      );
+      act(() => FakeEventSource.last().send('candle', live(fourteen + (candle + 1) * hour, 238.5)));
+      await waitFor(() => expect(drawn.candles).toHaveLength(501 + candle));
+      await nextFrame();
+    }
+
+    const last = 502;
+    expect(drawn.logicalRange).toEqual({ from: start.from + 3, to: start.to + 3 });
+    expect(drawn.logicalRange!.to - last).toBe(start.to - 499);
+    expect(drawn.logicalRange!.to - end()).toBe(room);
+  });
+
+  // Task 22.1, seen in Chromium: zoomed in to three bars, a new price narrows the price scale on the frame the range in
+  // view is given back on. Given back as a range, it keeps three bars on a wider time scale and the bars move apart (437
+  // to 433 pixels live); given back as the right edge, the spacing stays as without the lines.
+  it('keeps the spacing of the bars when a closed candle changes the width of the price scale', async () => {
+    routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour })]);
+    renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.segments).toHaveLength(3));
+    await scrollChart({ from: 300, to: 303 });
+    act(() => drawn.rangeChange?.({ from: 300, to: 303 }));
+    const spacing = drawn.width / 3;
+
+    act(() => FakeEventSource.last().send('candle', live(fourteen, 238.42, true)));
+    act(() => FakeEventSource.last().send('candle', live(fourteen + hour, 238.5)));
+    drawn.resize(drawn.width + 10);
+    await nextFrame();
+
+    expect(drawn.candles).toHaveLength(501);
+    expect(drawn.logicalRange!.to).toBe(303);
+    expect(drawn.width / (drawn.logicalRange!.to - drawn.logicalRange!.from)).toBeCloseTo(spacing);
   });
 
   // Task 21.1: the open idea closed while the chart is scrolled back: its lines go, the range in view stays.
@@ -475,7 +535,7 @@ describe('the live candle', () => {
       });
       renderApp('/market/SOLUSDT?timeframe=1h');
       await waitFor(() => expect(drawn.segments).toHaveLength(3));
-      drawn.logicalRange = { from: 200, to: 317 };
+      await scrollChart({ from: 200, to: 317 });
       act(() => drawn.rangeChange?.({ from: 200, to: 317 }));
       const shown = candlesInView();
 
@@ -491,8 +551,47 @@ describe('the live candle', () => {
       await act(() => vi.advanceTimersByTimeAsync(15_100));
 
       await waitFor(() => expect(drawn.segments).toHaveLength(0));
+      await nextFrame();
+
       expect(drawn.logicalRange).toEqual({ from: 200, to: 317 });
       expect(candlesInView()).toEqual(shown);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Task 22.1: the open idea closed while the last candle is in view and the right edge stands among the slots of its
+  // lines. The library applies the range given back on the next frame, so whether the last candle is in view is told by
+  // the range before the lines go: the chart goes to the right edge with the room for no labels (task 21.1).
+  it('goes to the right edge when the open idea closes with the last candle in view', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const open = idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour });
+      let items: Idea[] = [open];
+      routes([], {
+        'GET /api/market/pairs/SOLUSDT/ideas': () =>
+          json({ items, total: items.length, page: 1, pageSize: 50, filterGone: false }),
+      });
+      renderApp('/market/SOLUSDT?timeframe=1h');
+      await waitFor(() => expect(drawn.segments).toHaveLength(3));
+      await scrollChart({ from: 400, to: 520 });
+      act(() => drawn.rangeChange?.({ from: 400, to: 520 }));
+
+      items = [
+        {
+          ...open,
+          state: 'closed',
+          exitTime: Date.UTC(2026, 10, 22, 13, 30),
+          exitReason: 'stop',
+          result: -0.02,
+        },
+      ];
+      await act(() => vi.advanceTimersByTimeAsync(15_100));
+      await waitFor(() => expect(drawn.segments).toHaveLength(0));
+      await nextFrame();
+
+      // The last candle opens at 13:00 (index 499); the room for no labels is 60 pixels at the spacing of 7.5.
+      expect(drawn.logicalRange).toEqual({ from: 387, to: 499 + 8 });
     } finally {
       vi.useRealTimers();
     }
@@ -547,7 +646,7 @@ describe('the live candle', () => {
     });
     renderApp('/market/SOLUSDT?timeframe=1h');
     await waitFor(() => expect(drawn.candles).toHaveLength(500));
-    drawn.logicalRange = { from: 3, to: 120 };
+    await scrollChart({ from: 3, to: 120 });
     act(() => drawn.rangeChange?.({ from: 3, to: 120 }));
     await waitFor(() => expect(drawn.candles).toHaveLength(1000));
 
@@ -991,7 +1090,7 @@ describe('the ideas, the open interest and the funding on the chart', () => {
     renderApp('/market/SOLUSDT?timeframe=1h');
     await waitFor(() => expect(drawn.series.Line).toHaveLength(500));
 
-    drawn.logicalRange = { from: 3, to: 120 };
+    await scrollChart({ from: 3, to: 120 });
     act(() => drawn.rangeChange?.({ from: 3, to: 120 }));
 
     await waitFor(() => expect(drawn.series.Line).toHaveLength(1000));
@@ -1019,7 +1118,7 @@ describe('the ideas, the open interest and the funding on the chart', () => {
       renderApp('/market/SOLUSDT?timeframe=1h');
       await waitFor(() => expect(drawn.series.Line).toHaveLength(500));
 
-      drawn.logicalRange = { from: 3, to: 120 };
+      await scrollChart({ from: 3, to: 120 });
       act(() => drawn.rangeChange?.({ from: 3, to: 120 }));
       await waitFor(() => expect(drawn.candles).toHaveLength(1000));
       await waitFor(() => expect(early).toBe(1));
@@ -1046,7 +1145,7 @@ describe('the ideas, the open interest and the funding on the chart', () => {
     renderApp('/market/SOLUSDT?timeframe=1h');
     await waitFor(() => expect(drawn.series.Line).toHaveLength(500));
 
-    drawn.logicalRange = { from: 3, to: 120 };
+    await scrollChart({ from: 3, to: 120 });
     act(() => drawn.rangeChange?.({ from: 3, to: 120 }));
     const alert = await screen.findByRole('alert', { name: 'OI графика' });
     expect(drawn.candles).toHaveLength(1000);

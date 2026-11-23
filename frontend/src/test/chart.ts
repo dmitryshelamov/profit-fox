@@ -1,3 +1,5 @@
+import { act } from '@testing-library/react';
+
 /**
  * What the fake chart of the tests was given last: the candles, the marks, the shown range, how it was last told what
  * to show — all of its content or a range — and how many times candles were set.
@@ -43,6 +45,13 @@ export const drawn = {
   scaleMargins: {} as Record<string, unknown>,
   /** The empty points of the time scale after the last candle, up to the term of the open ideas (task 20.2). */
   slots: [] as { time: number }[],
+  /** The width of the time scale of the last chart in pixels (task 22.1). */
+  width: 900,
+  /**
+   * Changes the width of the time scale of the last chart on the next frame, before what waits for it, as a price scale
+   * grown or shrunk by a new price does.
+   */
+  resize: (() => undefined) as (width: number) => void,
 };
 
 /** Forgets what the fake chart was given: the state of one test does not reach the next. */
@@ -67,7 +76,23 @@ export function resetDrawn(): void {
     rightOffset: null,
     scaleMargins: {},
     slots: [],
+    width: 900,
+    resize: () => undefined,
   });
+}
+
+/**
+ * Shows `range` as a user who scrolled or zoomed the chart does: once the chart drew what it was given, on a frame after
+ * it (task 22.1).
+ */
+export async function scrollChart(range: { from: number; to: number }): Promise<void> {
+  await nextFrame();
+  drawn.logicalRange = range;
+}
+
+/** Waits for the next animation frame: the fake chart applies the range and the scroll position it was given then. */
+export async function nextFrame(): Promise<void> {
+  await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
 }
 
 /** A click on the fake chart at the candle that opens at `time`, in seconds as the chart counts time. */
