@@ -246,6 +246,9 @@ public sealed class IdeasApiTests
         await using Stream body = await response.Content.ReadAsStreamAsync();
         using var reader = new StreamReader(body);
         await Until(() => _market.Data.Minutes.Readers == 1);
+        // Task 19.5: right after subscribing the page gets the candle of the minutes read, before a minute of the feed.
+        LiveCandleResponse seed = await NextCandle(reader);
+        Assert.That((seed.Volume, seed.Closed), Is.EqualTo((32 * 12.5, false)), "the 32 minutes read from the REST");
 
         CandleUpdate forming = FakeCandleFeed.Minute("sol", new DateTimeOffset(2026, 11, 22, 14, 32, 0, TimeSpan.Zero));
         forming.High = "102";

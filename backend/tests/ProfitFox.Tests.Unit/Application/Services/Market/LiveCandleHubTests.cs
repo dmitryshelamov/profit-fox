@@ -74,13 +74,13 @@ public sealed class LiveCandleHubTests
     {
         using var stop = new CancellationTokenSource();
         await using IAsyncEnumerator<LiveCandle> candles = _hub.Listen("SOLUSDT", Hour, stop.Token).GetAsyncEnumerator(stop.Token);
-        Task<bool> next = candles.MoveNextAsync().AsTask();
+        await Seed(candles);
         await Until(() => _feed.Active == 1 && _hub.Listeners == 1);
 
         _feed.Push(Minute(32, high: 102, close: 101.5m));
-        Assert.That(await next, Is.True);
-        LiveCandle first = candles.Current;
+        LiveCandle first = await Advance(candles.MoveNextAsync().AsTask(), candles);
         _feed.Push(Minute(32, high: 102, close: 101.7m, low: 99.5m));
+        Task<bool> next;
         next = candles.MoveNextAsync().AsTask();
         await Task.Delay(100);
         Assert.That(next.IsCompleted, Is.False, "a second change within the same second waits");
@@ -122,8 +122,9 @@ public sealed class LiveCandleHubTests
         await using IAsyncEnumerator<LiveCandle> candles = _hub.Listen("SOLUSDT", Hour, stop.Token).GetAsyncEnumerator(stop.Token);
         Task<bool> next = candles.MoveNextAsync().AsTask();
         await Until(() => _feed.Active == 1);
+        Assert.That(await next, Is.True, "the candle of the seed");
         _feed.Push(Minute(32, high: 102, close: 101.5m));
-        Assert.That(await next, Is.True);
+        Assert.That((await Advance(candles.MoveNextAsync().AsTask(), candles)).Close, Is.EqualTo(101.5m));
 
         _time.SetUtcNow(Fourteen + Hour + TimeSpan.FromSeconds(1));
         LiveCandle closed = await Advance(candles.MoveNextAsync().AsTask(), candles);
@@ -141,6 +142,7 @@ public sealed class LiveCandleHubTests
     {
         using var stop = new CancellationTokenSource();
         await using IAsyncEnumerator<LiveCandle> candles = _hub.Listen("SOLUSDT", Hour, stop.Token).GetAsyncEnumerator(stop.Token);
+        await Seed(candles);
         Task<bool> next = candles.MoveNextAsync().AsTask();
         await Until(() => _feed.Active == 1 && _hub.Listeners == 1);
 
@@ -155,6 +157,73 @@ public sealed class LiveCandleHubTests
         Assert.That(_feed.Subscriptions, Has.Count.EqualTo(2), "a new subscription for the next page");
         await again.CancelAsync();
         await listening;
+    }
+
+    /// <summary>
+    ///     Task 19.5: a quiet pair — the feed tells no minute — gets the candle of the window from the seed right after it
+    ///     subscribed, without waiting for a minute or a second of the clock.
+    /// </summary>
+    [Test]
+    public async Task A_quiet_pair_gets_the_candle_of_the_seed_right_away()
+    {
+        using var stop = new CancellationTokenSource();
+        await using IAsyncEnumerator<LiveCandle> candles = _hub.Listen("SOLUSDT", Hour, stop.Token).GetAsyncEnumerator(stop.Token);
+
+        Task<bool> next = candles.MoveNextAsync().AsTask();
+        Assert.That(await Task.WhenAny(next, Task.Delay(TimeSpan.FromSeconds(5))), Is.SameAs(next), "no minute of the feed, the clock stands");
+
+        LiveCandle seed = candles.Current;
+        Assert.That((seed.OpenTime, seed.Open, seed.High, seed.Low, seed.Close, seed.Volume, seed.Closed), Is.EqualTo((Fourteen, 100.5m, 101m, 100m, 100.25m, 32 * 12.5m, false)));
+        await stop.CancelAsync();
+    }
+
+    /// <summary>
+    ///     Task 19.5: a window without a trade yet — the hour just began — gives a flat candle at the last close before it.
+    /// </summary>
+    [Test]
+    public async Task A_window_without_a_trade_gives_a_flat_candle_at_the_last_close()
+    {
+        _history.Candles["sol"] = (interval, before) =>
+            [new HistoryCandle(Fourteen.AddMinutes(-1), "100.5", "101", "100", "100.25", "12.5", Turnover: null, BuyVolume: null)];
+        var hub = new LiveCandleHub(_feed, _history, new ListedPairs(), new FakeTimeProvider(Fourteen.AddSeconds(20)));
+        using var stop = new CancellationTokenSource();
+        await using IAsyncEnumerator<LiveCandle> candles = hub.Listen("SOLUSDT", TimeSpan.FromMinutes(5), stop.Token).GetAsyncEnumerator(stop.Token);
+
+        Task<bool> next = candles.MoveNextAsync().AsTask();
+        Assert.That(await Task.WhenAny(next, Task.Delay(TimeSpan.FromSeconds(5))), Is.SameAs(next));
+
+        LiveCandle flat = candles.Current;
+        Assert.That((flat.OpenTime, flat.Open, flat.High, flat.Low, flat.Close, flat.Volume, flat.Closed), Is.EqualTo((Fourteen, 100.25m, 100.25m, 100.25m, 100.25m, 0m, false)));
+        await stop.CancelAsync();
+    }
+
+    /// <summary>
+    ///     Task 19.5: a former subscription that ends after a new one began — its stream of gRPC ended a moment after the last
+    ///     page left — touches neither the pages of the new one nor the new subscription.
+    /// </summary>
+    [Test]
+    public async Task A_former_subscription_that_fails_late_leaves_the_new_one_alone()
+    {
+        _feed.Lingers = true;
+        using var first = new CancellationTokenSource();
+        Task one = Drain(_hub.Listen("SOLUSDT", Hour, first.Token));
+        await Until(() => _feed.Active == 1 && _hub.Listeners == 1);
+        await first.CancelAsync();
+        await one;
+        _feed.Lingers = false;
+
+        using var stop = new CancellationTokenSource();
+        await using IAsyncEnumerator<LiveCandle> candles = _hub.Listen("SOLUSDT", Hour, stop.Token).GetAsyncEnumerator(stop.Token);
+        await Seed(candles);
+        await Until(() => _feed.Active == 2);
+        _feed.FailOldest(new InvalidOperationException("the former stream broke"));
+        await Until(() => _feed.Active == 1);
+
+        _feed.Push(Minute(32, high: 102, close: 101.5m));
+        LiveCandle live = await Advance(candles.MoveNextAsync().AsTask(), candles);
+        Assert.That(live.Close, Is.EqualTo(101.5m), "the page of the new subscription goes on");
+        await candles.DisposeAsync();
+        await Until(() => _feed.Active == 0);
     }
 
     /// <summary>
@@ -180,17 +249,21 @@ public sealed class LiveCandleHubTests
             [.. Enumerable.Range(0, 18 * 60).Select(minute => new HistoryCandle(midnight.AddMinutes(minute), minute == 0 ? "50" : "100.5", minute == 1 ? "200" : "101", "100", "100.25", "12.5", Turnover: null, BuyVolume: null))];
         using var stop = new CancellationTokenSource();
         await using IAsyncEnumerator<LiveCandle> candles = _hub.Listen("SOLUSDT", TimeSpan.FromDays(1), stop.Token).GetAsyncEnumerator(stop.Token);
-        Task<bool> next = candles.MoveNextAsync().AsTask();
-        await Until(() => _feed.Active == 1);
-
-        _feed.Push(new LiveMinute("SOLUSDT", midnight.AddHours(18), 100.5m, 101m, 100m, 100.5m, 12.5m, 12.5m * 100.5m, Closed: false));
-        Assert.That(await next, Is.True);
+        await Seed(candles);
 
         LiveCandle day = candles.Current;
         Assert.That((day.OpenTime, day.Open, day.High), Is.EqualTo((midnight, 50m, 200m)), "the minutes of 00:00 and 00:01 are in");
-        Assert.That(day.Volume, Is.EqualTo((18 * 60 + 1) * 12.5m));
+        Assert.That(day.Volume, Is.EqualTo(18 * 60 * 12.5m));
         Assert.That(_history.Asked, Is.EqualTo(new[] { "candles sol", "candles sol" }), "two windows of at most 1000 minutes");
         await stop.CancelAsync();
+    }
+
+    // The candle of the seed comes right after the page subscribed, on a clock that stands (task 19.5).
+    private static async Task Seed(IAsyncEnumerator<LiveCandle> candles)
+    {
+        Task<bool> next = candles.MoveNextAsync().AsTask();
+        Assert.That(await Task.WhenAny(next, Task.Delay(TimeSpan.FromSeconds(5))), Is.SameAs(next), "the candle of the seed comes without a minute of the feed");
+        Assert.That(await next, Is.True);
     }
 
     // The clock moves a second at a time until the candle comes: the hub waits for its second on the clock it was given.
@@ -218,12 +291,17 @@ public sealed class LiveCandleHubTests
         }
     }
 
-    private static async Task Until(Func<bool> condition)
+    private static async Task Until(Func<bool> condition, [CallerArgumentExpression(nameof(condition))] string? what = null)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         while (!condition())
         {
-            await Task.Delay(10, timeout.Token);
+            if (timeout.IsCancellationRequested)
+            {
+                Assert.Fail($"Not in time: {what}");
+            }
+
+            await Task.Delay(10, CancellationToken.None);
         }
     }
 
@@ -234,6 +312,23 @@ public sealed class LiveCandleHubTests
         private readonly List<Channel<MarketEvent>> _readers = [];
 
         public List<MarketSubscription> Subscriptions { get; } = [];
+
+        /// <summary>
+        ///     Whether a new subscription goes on after its cancellation until it is failed: a stream of gRPC that ends a moment
+        ///     after the last page left (task 19.5).
+        /// </summary>
+        public bool Lingers { get; set; }
+
+        /// <summary>
+        ///     Ends the oldest subscription with <paramref name="exception" />.
+        /// </summary>
+        public void FailOldest(Exception exception)
+        {
+            lock (_lock)
+            {
+                _readers[0].Writer.TryComplete(exception);
+            }
+        }
 
         public int Active
         {
@@ -277,9 +372,10 @@ public sealed class LiveCandleHubTests
                 _readers.Add(channel);
             }
 
+            CancellationToken reading = Lingers ? CancellationToken.None : cancellation;
             try
             {
-                await foreach (MarketEvent item in channel.Reader.ReadAllAsync(cancellation))
+                await foreach (MarketEvent item in channel.Reader.ReadAllAsync(reading))
                 {
                     yield return item;
                 }

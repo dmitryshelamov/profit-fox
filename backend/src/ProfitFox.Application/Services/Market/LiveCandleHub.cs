@@ -67,18 +67,40 @@ public sealed class LiveCandleHub(IMarketFeed feed, IRecentHistory history, IIns
             // Every closed minute of the window, in windows of at most a read each (task 18.11): a day after 16:40 has more
             // than 1000.
             DateTimeOffset end = Floor(now, OneMinute);
+            // The close of the last minute read, with trades or without: the price of a window without a trade yet.
+            decimal? price = null;
             for (DateTimeOffset from = window; from < end; from += SeedWindow)
             {
                 DateTimeOffset to = from + SeedWindow < end ? from + SeedWindow : end;
                 RecentRead<HistoryCandle> seed = await history.Candles(pair.Id, OneMinute, to, (int)((to - from) / OneMinute), cancellation);
-                foreach (HistoryCandle candle in seed.Items.Where(candle => candle.OpenTime >= from && candle.OpenTime < to && candle.HasTrades))
+                foreach (HistoryCandle candle in seed.Items.Where(candle => candle.OpenTime >= from && candle.OpenTime < to))
                 {
-                    held[candle.OpenTime] = Minute(symbol, candle);
+                    price = candle.ToClosedCandle(OneMinute).Close;
+                    if (candle.HasTrades)
+                    {
+                        held[candle.OpenTime] = Minute(symbol, candle);
+                    }
                 }
             }
 
+            if (held.Count == 0 && price is null)
+            {
+                // The window has no closed minute yet: the price is the close of the minute before it.
+                RecentRead<HistoryCandle> before = await history.Candles(pair.Id, OneMinute, window, 1, cancellation);
+                price = before.Items.Where(candle => candle.OpenTime < window).Select(candle => (decimal?)candle.ToClosedCandle(OneMinute).Close).LastOrDefault();
+            }
+
+            // Right after the page subscribed it gets the candle of the seed (task 19.5): a quiet pair may tell no minute for a
+            // while. A window without a trade yet is a flat candle at the last close, as the service tells a minute without one.
+            // The seed is no update of the feed: the first minute of the feed goes without waiting for the second.
+            if ((Candle(window, held, closed: false) ?? Flat(window, price)) is { } first)
+            {
+                yield return first;
+            }
+
             DateTimeOffset sent = DateTimeOffset.MinValue;
-            bool changed = held.Count > 0;
+
+            bool changed = false;
             Task<bool>? waiting = null;
             while (!cancellation.IsCancellationRequested)
             {
@@ -158,7 +180,7 @@ public sealed class LiveCandleHub(IMarketFeed feed, IRecentHistory history, IIns
             if (_subscription is null)
             {
                 _subscription = new CancellationTokenSource();
-                _pump = Pump(_subscription.Token);
+                _pump = Pump(_subscription);
             }
         }
 
@@ -188,8 +210,9 @@ public sealed class LiveCandleHub(IMarketFeed feed, IRecentHistory history, IIns
     }
 
     // The one subscription of the minutes, the one that goes on included, while pages listen.
-    private async Task Pump(CancellationToken cancellation)
+    private async Task Pump(CancellationTokenSource source)
     {
+        CancellationToken cancellation = source.Token;
         try
         {
             await foreach (MarketEvent item in feed.Subscribe(new MarketSubscription(Since: null, Forming: true, MinutesOnly: true), cancellation))
@@ -218,18 +241,25 @@ public sealed class LiveCandleHub(IMarketFeed feed, IRecentHistory history, IIns
         }
         catch (Exception exception)
         {
-            Fail(exception);
+            Fail(source, exception);
             return;
         }
 
-        Fail(new InvalidOperationException("The live feed of the market-data service ended."));
+        Fail(source, new InvalidOperationException("The live feed of the market-data service ended."));
     }
 
-    // The subscription is gone: every page gets the failure, and the next page subscribes again (task 18.11).
-    private void Fail(Exception exception)
+    // The subscription is gone: every page gets the failure, and the next page subscribes again (task 18.11). Only the
+    // current subscription fails its pages (task 19.5): a former one, cancelled when its last page left, may end after a new
+    // one began, and must not end the pages of the new one or leave its stream with no one to cancel it.
+    private void Fail(CancellationTokenSource source, Exception exception)
     {
         lock (_lock)
         {
+            if (!ReferenceEquals(_subscription, source))
+            {
+                return;
+            }
+
             foreach (Channel<LiveMinute> channel in _listeners.Values.SelectMany(list => list))
             {
                 channel.Writer.TryComplete(exception);
@@ -257,6 +287,11 @@ public sealed class LiveCandleHub(IMarketFeed feed, IRecentHistory history, IIns
             minutes.Sum(minute => minute.Volume),
             closed,
             time.GetUtcNow());
+    }
+
+    private LiveCandle? Flat(DateTimeOffset window, decimal? price)
+    {
+        return price is { } close ? new LiveCandle(window, close, close, close, close, 0, false, time.GetUtcNow()) : null;
     }
 
     private static LiveMinute Minute(string symbol, HistoryCandle candle)
