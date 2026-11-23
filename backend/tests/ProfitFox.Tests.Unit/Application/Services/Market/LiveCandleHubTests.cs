@@ -78,7 +78,9 @@ public sealed class LiveCandleHubTests
         await Until(() => _feed.Active == 1 && _hub.Listeners == 1);
 
         _feed.Push(Minute(32, high: 102, close: 101.5m));
-        LiveCandle first = await Advance(candles.MoveNextAsync().AsTask(), candles);
+        // The first minute of the feed goes at once, on the clock that stands: the seed is not counted in the second.
+        await Seed(candles);
+        LiveCandle first = candles.Current;
         _feed.Push(Minute(32, high: 102, close: 101.7m, low: 99.5m));
         Task<bool> next;
         next = candles.MoveNextAsync().AsTask();
@@ -99,10 +101,11 @@ public sealed class LiveCandleHubTests
     {
         using var stop = new CancellationTokenSource();
         await using IAsyncEnumerator<LiveCandle> candles = _hub.Listen("SOLUSDT", Hour, stop.Token).GetAsyncEnumerator(stop.Token);
-        Task<bool> next = candles.MoveNextAsync().AsTask();
+        await Seed(candles);
         await Until(() => _feed.Active == 1);
         _feed.Push(Minute(32, high: 102, close: 101.5m));
-        Assert.That(await next, Is.True);
+        await Seed(candles);
+        Assert.That(candles.Current.Close, Is.EqualTo(101.5m));
 
         _feed.Push(Minute(59, high: 103, close: 102.5m));
         _feed.Push(Minute(60, high: 101, close: 100.75m));
@@ -124,7 +127,8 @@ public sealed class LiveCandleHubTests
         await Until(() => _feed.Active == 1);
         Assert.That(await next, Is.True, "the candle of the seed");
         _feed.Push(Minute(32, high: 102, close: 101.5m));
-        Assert.That((await Advance(candles.MoveNextAsync().AsTask(), candles)).Close, Is.EqualTo(101.5m));
+        await Seed(candles);
+        Assert.That(candles.Current.Close, Is.EqualTo(101.5m));
 
         _time.SetUtcNow(Fourteen + Hour + TimeSpan.FromSeconds(1));
         LiveCandle closed = await Advance(candles.MoveNextAsync().AsTask(), candles);
@@ -258,11 +262,12 @@ public sealed class LiveCandleHubTests
         await stop.CancelAsync();
     }
 
-    // The candle of the seed comes right after the page subscribed, on a clock that stands (task 19.5).
+    // The next candle comes on a clock that stands (task 19.5): the candle of the seed right after the page subscribed, and
+    // the first minute of the feed after it.
     private static async Task Seed(IAsyncEnumerator<LiveCandle> candles)
     {
         Task<bool> next = candles.MoveNextAsync().AsTask();
-        Assert.That(await Task.WhenAny(next, Task.Delay(TimeSpan.FromSeconds(5))), Is.SameAs(next), "the candle of the seed comes without a minute of the feed");
+        Assert.That(await Task.WhenAny(next, Task.Delay(TimeSpan.FromSeconds(5))), Is.SameAs(next), "the candle comes without the clock moving");
         Assert.That(await next, Is.True);
     }
 
