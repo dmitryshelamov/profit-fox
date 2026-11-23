@@ -58,6 +58,28 @@ public sealed class IdeaScannerTests
     }
 
     /// <summary>
+    ///     Task 18.15: when the REST is one candle behind at the warm-up, the candle between its last one and the boundary is
+    ///     taken from the book, so <c>first-time</c> sees no hole: the close above 100 of 10:00 is not a first time at 11:00.
+    /// </summary>
+    [Test]
+    public async Task The_candle_the_REST_has_not_yet_comes_from_the_book()
+    {
+        var rig = new ScannerRig();
+        rig.History.Candles["eth"] = (interval, before) => Warmup(interval, before - interval, "99");
+        await rig.Enable("close-up", "8h");
+        await rig.Scanner.StartAsync(CancellationToken.None);
+        await rig.Scanner.ApplyAsync(new MarketPairs(Pairs), CancellationToken.None);
+        await rig.Minutes("ETHUSDT", Ten.AddHours(-1), 60, close: 101);
+        await rig.Warm();
+
+        await rig.Minutes("ETHUSDT", Ten, 60, close: 101);
+        await rig.Minutes("BTCUSDT", Ten, 60, close: 101);
+        await rig.At(Eleven.AddSeconds(15));
+
+        Assert.That(rig.Ideas.Ideas.Select(idea => idea.Symbol), Is.EqualTo(new[] { "BTCUSDT" }), "ETHUSDT closed above 100 at 10:00 already");
+    }
+
+    /// <summary>
     ///     Task 18.13: a reconciliation without a change reads no graph and keeps the warmed runs; a new version is read once.
     /// </summary>
     [Test]

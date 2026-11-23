@@ -410,6 +410,8 @@ public sealed class IdeaScanner
                     Step(warmup.Run, warmup.Symbol, candle, funding, pairs);
                     state.WarmedUntil = candle.CloseTime;
                 }
+
+                FillFromBook(warmup.Run, warmup.Symbol, state);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
@@ -432,6 +434,35 @@ public sealed class IdeaScanner
 
         _logged[failure] = now;
         _logger?.LogWarning("The warm-up of {Symbol} failed and is read again in {Retry}: {Failure}", symbol, _settings.WarmupRetry, failure);
+    }
+
+    // The candles between the last one the REST gave and the last boundary the scanner computed come from the book (task
+    // 18.15): the REST may not have the candle of that boundary yet, and the graph would see a hole. They are of the warm-up:
+    // what the graph orders on them is no idea.
+    private void FillFromBook(Run run, string symbol, PairState state)
+    {
+        DateTimeOffset until = _boundaries.TryGetValue(run.Timeframe, out DateTimeOffset seen) ? seen : Floor(_started, run.Timeframe);
+        DateTimeOffset from = state.WarmedUntil == DateTimeOffset.MinValue ? until : state.WarmedUntil;
+        for (DateTimeOffset close = from + run.Timeframe; close <= until; close += run.Timeframe)
+        {
+            if (Book.Candle(symbol, run.Timeframe, close - run.Timeframe) is not { } candle)
+            {
+                continue;
+            }
+
+            Dictionary<string, ClosedCandle>? pairs = null;
+            foreach (string named in run.Named)
+            {
+                if (Book.Candle(named, run.Timeframe, close - run.Timeframe) is { } other)
+                {
+                    pairs ??= new Dictionary<string, ClosedCandle>(StringComparer.Ordinal);
+                    pairs[named] = other;
+                }
+            }
+
+            Step(run, symbol, candle, Book.LastPayment(symbol, close), pairs ?? (run.Named.Count > 0 ? new Dictionary<string, ClosedCandle>() : null));
+            state.WarmedUntil = close;
+        }
     }
 
     // The graph of a pair failed: the pair goes back to waiting, with a line in the journal, and is warmed up again later;
