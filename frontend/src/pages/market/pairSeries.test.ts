@@ -57,19 +57,35 @@ describe('the chart of a pair as the mockup draws it', () => {
 
   it('writes «вход», «стоп», «цель» at the ends of the lines and «срок» between the entry and the line above', () => {
     expect(lineLabels(lines())).toEqual([
-      { id: 'long-1', kind: 'entry', time: thirteen + 4 * hour, price: 236.1, text: 'вход 236.10' },
+      {
+        id: 'long-1',
+        kind: 'entry',
+        time: thirteen + 4 * hour,
+        from: thirteen,
+        price: 236.1,
+        text: 'вход 236.10',
+      },
       {
         id: 'long-1',
         kind: 'term',
         time: thirteen + 4 * hour,
+        from: thirteen,
         price: (236.1 + 245.54) / 2,
         text: 'срок 17:00',
       },
-      { id: 'long-1', kind: 'stop', time: thirteen + 4 * hour, price: 231.38, text: 'стоп 231.38' },
+      {
+        id: 'long-1',
+        kind: 'stop',
+        time: thirteen + 4 * hour,
+        from: thirteen,
+        price: 231.38,
+        text: 'стоп 231.38',
+      },
       {
         id: 'long-1',
         kind: 'target',
         time: thirteen + 4 * hour,
+        from: thirteen,
         price: 245.54,
         text: 'цель 245.54',
       },

@@ -574,7 +574,38 @@ describe('the ideas, the open interest and the funding on the chart', () => {
     expect(drawn.rightOffset).toBeGreaterThan(0);
   });
 
-  // Task 19.14: the chart against the mockup 09-pair.
+  // Task 20.2, seen with the library in Chromium: lines that come after the candles move the last bar of the time scale to
+  // the slot of their term; the right edge goes past it by the room for the labels.
+  it('leaves room for the labels past the term when the lines come after the candles', async () => {
+    let answer: (response: Response) => void = () => undefined;
+    routes([], {
+      'GET /api/market/pairs/SOLUSDT/ideas': () =>
+        new Promise<Response>((resolve) => {
+          answer = resolve;
+        }),
+    });
+    renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.candles).toHaveLength(500));
+    await waitFor(() => expect(drawn.logicalRange).not.toBeNull());
+
+    answer(
+      json({
+        items: [longOpen],
+        total: 1,
+        page: 1,
+        pageSize: 50,
+        filterGone: false,
+      }),
+    );
+    await waitFor(() => expect(drawn.segments).toHaveLength(3));
+
+    // The last candle opens at 13:00 (index 499); the slot of the term of 17:00 is four bars after it.
+    await waitFor(() =>
+      expect(drawn.logicalRange!.to - (499 + 4)).toBe(Math.ceil((11 * 7 + 12) / 6)),
+    );
+  });
+
+  // Task 19.14: the chart against the mockup 09-pair.  // Task 19.14: the chart against the mockup 09-pair.
   it('lays the chart out as the mockup: panels of about 90 pixels, scales with a point and labels right of the lines', async () => {
     routes([longOpen]);
     renderApp('/market/SOLUSDT?timeframe=1h');

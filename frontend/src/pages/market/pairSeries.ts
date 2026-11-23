@@ -158,6 +158,8 @@ export interface LineLabel {
   readonly kind: IdeaLine['kind'] | 'term';
   /** The time of the end of the line, in milliseconds. */
   readonly time: number;
+  /** The time of the start of the line, in milliseconds: a line wholly out of view has no label (task 20.2). */
+  readonly from: number;
   readonly price: number;
   readonly text: string;
 }
@@ -172,6 +174,7 @@ export function lineLabels(lines: readonly IdeaLine[]): LineLabel[] {
       id: line.id,
       kind: line.kind,
       time: line.to,
+      from: line.from,
       price: line.price,
       text: line.title,
     };

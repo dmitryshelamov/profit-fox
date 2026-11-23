@@ -28,7 +28,7 @@ describe('the labels of the lines of an open idea', () => {
       measure,
     );
 
-    const ys = placed.map((label) => label.y).sort((a, b) => a - b);
+    const ys = placed.map((label) => label!.y).sort((a, b) => a - b);
     expect(ys[1]! - ys[0]!).toBeGreaterThanOrEqual(labelHeight);
     expect(ys[2]! - ys[1]!).toBeGreaterThanOrEqual(labelHeight);
     expect(placed[0]).toEqual({ x: 306, y: 120 });
@@ -44,6 +44,21 @@ describe('the labels of the lines of an open idea', () => {
       measure,
     );
 
-    expect(placed.map((label) => label.y)).toEqual([120, 122]);
+    expect(placed.map((label) => label?.y)).toEqual([120, 122]);
+  });
+
+  // Seen with the library in Chromium: scrolled back, the labels of lines to the right of the view stood at its edge.
+  it('writes no label of a line wholly out of the area of the chart', () => {
+    expect(
+      layoutLabels(
+        [
+          { text: 'вход 236.10', x: 1300, y: 120, start: 1100 },
+          { text: 'стоп 231.38', x: -40, y: 160, start: -90 },
+          { text: 'цель 245.54', x: 1300, y: 80, start: 700 },
+        ],
+        800,
+        measure,
+      ),
+    ).toEqual([null, null, { x: 800 - measure('цель 245.54') - 4, y: 80 }]);
   });
 });

@@ -96,32 +96,62 @@ vi.mock('lightweight-charts', async () => {
       let removed = false;
       const isRemoved = () => removed;
       drawn.options = chartOptions ?? {};
-      // The time scale as the library keeps it (task 20.1): the times of the bars of the candles, and the visible logical
-      // range (`drawn.logicalRange`) by their indexes. Bars added on the left keep the same candles in view; a bar added
-      // on the right moves the range with it only when the last bar is in view; a `rightOffset` applied scrolls the range
-      // to the right edge, that many bars past the last bar.
-      let bars: number[] = [];
-      const shiftBy = (added: number) => {
-        if (drawn.logicalRange !== null && added !== 0) {
-          drawn.logicalRange = {
-            from: drawn.logicalRange.from + added,
-            to: drawn.logicalRange.to + added,
-          };
-        }
+      // The time scale as the library keeps it (tasks 20.1, 20.2): the points of time of the data of every series, empty
+      // ones (whitespace) included; its last bar (the base) is the last point with a value of any series; the visible
+      // logical range (`drawn.logicalRange`) is by the indexes of the points, and the library keeps its right edge as an
+      // offset from the base. A new chart has no range and no offset given. When the base moves right with new points,
+      // the range moves with it only when the last bar was in view and points were added; otherwise the library shifts the
+      // offset back so the range stays (points added on the left, or a value put on a point that was there empty). A base
+      // that moves left takes the range with it. A `rightOffset` applied puts the right edge that many bars past the base.
+      drawn.logicalRange = null;
+      drawn.rightOffset = null;
+      const rows = new Map<object, { time: number; empty: boolean }[]>();
+      const points = () =>
+        [...new Set([...rows.values()].flat().map((point) => point.time))].sort((a, b) => a - b);
+      const baseOf = (at: readonly number[]) => {
+        const filled = [...rows.values()].flat().filter((point) => !point.empty);
+        return filled.length === 0
+          ? null
+          : at.indexOf(Math.max(...filled.map((point) => point.time)));
       };
-      const lastInView = () =>
-        drawn.logicalRange !== null &&
-        drawn.logicalRange.from <= bars.length - 1 &&
-        drawn.logicalRange.to >= bars.length - 1;
-      const setBars = (next: number[]) => {
-        if (bars.length > 0 && next.length > 0) {
-          const left = next.filter((time) => time < bars[0]!).length;
-          const right = next.filter((time) => time > bars.at(-1)!).length;
-          shiftBy(left + (lastInView() ? right : 0));
+      const change = (apply: () => void) => {
+        const before = points();
+        const oldBase = baseOf(before);
+        apply();
+        const after = points();
+        const newBase = baseOf(after);
+        const range = drawn.logicalRange;
+        if (newBase === null) {
+          return;
         }
 
-        bars = next;
+        if (range === null || oldBase === null) {
+          const to = newBase + (drawn.rightOffset ?? 0);
+          drawn.logicalRange = range ?? { from: to - defaultBarsInView, to };
+          return;
+        }
+
+        let offset = range.to - oldBase;
+        const leftShift = before.length > 0 && after[0]! < before[0]!;
+        const added = after.length !== before.length;
+        const lastInView = range.from <= oldBase && oldBase <= range.to;
+        if (newBase > oldBase && !leftShift && (!lastInView || !added)) {
+          offset -= newBase - oldBase;
+        }
+
+        drawn.logicalRange = {
+          from: newBase + offset - (range.to - range.from),
+          to: newBase + offset,
+        };
       };
+      const rowOf = (data: readonly unknown[]) =>
+        data.map((item) => {
+          const point = item as { time: number; value?: number; close?: number };
+          return {
+            time: point.time,
+            empty: point.value === undefined && point.close === undefined,
+          };
+        });
       // The panes of the chart, the same on every call, with the stretch each was given (task 19.14).
       const panes = [0, 1, 2].map((index) =>
         guarded(
@@ -147,11 +177,13 @@ vi.mock('lightweight-charts', async () => {
           ) => {
             // A series not shown holds the empty points of the time scale after the last candle (task 20.2).
             if (options?.visible === false) {
-              return {
+              const slots = {
                 setData: vi.fn((data: { time: number }[]) => {
+                  change(() => rows.set(slots, rowOf(data)));
                   drawn.slots = data;
                 }),
               };
+              return slots;
             }
 
             // A line without the marker of the crosshair is a line of an open idea: kept apart from the series of the panels;
@@ -176,6 +208,7 @@ vi.mock('lightweight-charts', async () => {
               // The chart of the series: marks created on it are removed with it.
               owner: { isRemoved },
               setData: vi.fn((data: unknown[]) => {
+                change(() => rows.set(series, rowOf(data)));
                 if (segment !== null) {
                   segment.data = data;
                   return;
@@ -183,16 +216,19 @@ vi.mock('lightweight-charts', async () => {
 
                 drawn.series[type] = data;
                 if (type === 'Candlestick') {
-                  setBars(data.map((bar) => (bar as { time: number }).time));
                   drawn.candles = data;
                   drawn.setData += 1;
                 }
               }),
               update: vi.fn((bar: { time: number }) => {
                 drawn.updates.push(bar);
-                if (type === 'Candlestick' && (bars.length === 0 || bar.time > bars.at(-1)!)) {
-                  setBars([...bars, bar.time]);
-                }
+                change(() => {
+                  const row = rows.get(series) ?? [];
+                  rows.set(series, [
+                    ...row.filter((point) => point.time !== bar.time),
+                    ...rowOf([bar]),
+                  ]);
+                });
               }),
               createPriceLine: vi.fn((line: { price: number; title?: string }) => {
                 drawn.lines.push(line);
@@ -232,6 +268,7 @@ vi.mock('lightweight-charts', async () => {
           },
         ),
         removeSeries: vi.fn((series: { segment: unknown }) => {
+          change(() => rows.delete(series));
           drawn.segments = drawn.segments.filter((candidate) => candidate !== series.segment);
           if (drawn.segments.length === 0) {
             drawn.segmentMarkers = [];
@@ -251,20 +288,34 @@ vi.mock('lightweight-charts', async () => {
           applyOptions: vi.fn((next: { rightOffset?: number }) => {
             if (next.rightOffset !== undefined) {
               drawn.rightOffset = next.rightOffset;
-              const width =
-                drawn.logicalRange === null
-                  ? defaultBarsInView
-                  : drawn.logicalRange.to - drawn.logicalRange.from;
-              const to = bars.length - 1 + next.rightOffset;
-              drawn.logicalRange = { from: to - width, to };
+              const base = baseOf(points());
+              if (base !== null) {
+                const width =
+                  drawn.logicalRange === null
+                    ? defaultBarsInView
+                    : drawn.logicalRange.to - drawn.logicalRange.from;
+                const to = base + next.rightOffset;
+                drawn.logicalRange = { from: to - width, to };
+              }
             }
           }),
-          // How far the right edge of the range is from the last bar, in bars: the offset while it stands at the edge.
-          scrollPosition: vi.fn(() =>
-            drawn.logicalRange === null
+          // How far the right edge of the range is from the base, in bars: the offset while it stands at the edge.
+          scrollPosition: vi.fn(() => {
+            const base = baseOf(points());
+            return drawn.logicalRange === null || base === null
               ? (drawn.rightOffset ?? 0)
-              : drawn.logicalRange.to - (bars.length - 1),
-          ),
+              : drawn.logicalRange.to - base;
+          }),
+          timeToIndex: vi.fn((time: number, findNearest?: boolean) => {
+            const at = points();
+            const index = at.indexOf(time);
+            if (index >= 0 || findNearest !== true || at.length === 0) {
+              return index >= 0 ? index : null;
+            }
+
+            const after = at.findIndex((point) => point > time);
+            return after < 0 ? at.length - 1 : after;
+          }),
           options: () => ({ barSpacing: 6 }),
           fitContent: vi.fn(() => {
             drawn.view = 'content';

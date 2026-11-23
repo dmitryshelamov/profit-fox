@@ -104,8 +104,8 @@ export function PairChart({
   const latest = useRef({ marks, onEdge, onPick });
   latest.current = { marks, onEdge, onPick };
   const shown = useRef<{ first: number | null; count: number }>({ first: null, count: 0 });
-  // The room to the right of the last candle the time scale was last given (task 20.1).
-  const offset = useRef<number | null>(null);
+  // The room to the right of the last candle the time scale of the chart was last given (task 20.1).
+  const offset = useRef<{ chart: IChartApi; value: number } | null>(null);
   // The lines drawn and the slots given: drawn again only when they change, not on every candle (task 20.2).
   const made = useRef<Made | null>(null);
   const slotsGiven = useRef<{ chart: IChartApi; key: string } | null>(null);
@@ -337,15 +337,20 @@ export function PairChart({
       };
     }
 
-    // The library scrolls to the right edge on every `rightOffset` it is given (task 20.1): it is given one only when the
-    // room changed and the chart stands at the right edge — a page loaded before or a closed candle leaves it in place.
-    const applied = offset.current;
-    if (
-      room.offset !== applied &&
-      (applied === null || Math.abs(scale.scrollPosition() - applied) < 1)
-    ) {
-      scale.applyOptions({ rightOffset: room.offset });
-      offset.current = room.offset;
+    // The library scrolls to the right edge on every `rightOffset` it is given (task 20.1): a chart gets one when it has its
+    // first candles, and later only when the room changed and the last candle is in view — a page loaded before or a
+    // closed candle leaves the range where it is. The last candle in view, not the offset from the last bar: lines and
+    // slots added after the candles move the last bar of the time scale while the range stays (task 20.2). The chart is
+    // compared too: under `StrictMode` it is drawn again with the refs kept.
+    const given = offset.current?.chart === current.chart ? offset.current.value : null;
+    const lastTime = candles.at(-1)?.openTime;
+    if (lastTime !== undefined && room.offset !== given) {
+      const last = scale.timeToIndex(seconds(lastTime), true);
+      const range = scale.getVisibleLogicalRange();
+      if (given === null || last === null || range === null || range.to >= last) {
+        scale.applyOptions({ rightOffset: room.offset });
+        offset.current = { chart: current.chart, value: room.offset };
+      }
     }
   }, [lines, candles, timeframe]);
 

@@ -23,26 +23,33 @@ export interface LabelAt {
   readonly text: string;
   readonly x: number;
   readonly y: number;
+  /** Where its line starts: a line wholly out of the area of the chart has no label. */
+  readonly start?: number;
 }
 
 /**
  * Where the labels are written (task 20.2): to the right of the end of the line, but not past the right edge of the area
  * of the chart; a label that would meet one above it — closer than `labelHeight` and across the same pixels — goes down
- * under it. The places are in the order of `labels`.
+ * under it. A line that starts past the right edge or ends before the left one has no label (`null`). The places are in
+ * the order of `labels`.
  */
 export function layoutLabels(
   labels: readonly LabelAt[],
   width: number,
   measure: (text: string) => number,
-): { x: number; y: number }[] {
+): ({ x: number; y: number } | null)[] {
   const boxes = labels.map((label) => {
+    if ((label.start ?? label.x) > width || label.x < 0) {
+      return null;
+    }
+
     const size = measure(label.text);
     const x = Math.max(0, Math.min(label.x + gap, width - size - edge));
     return { x, right: x + size, y: label.y };
   });
   const placed: { x: number; right: number; y: number }[] = [];
-  for (const index of boxes.map((_, at) => at).sort((a, b) => boxes[a]!.y - boxes[b]!.y)) {
-    const box = boxes[index]!;
+  const order = boxes.flatMap((box) => (box === null ? [] : [box])).sort((a, b) => a.y - b.y);
+  for (const box of order) {
     for (const other of placed) {
       if (other.x < box.right && box.x < other.right && box.y - other.y < labelHeight) {
         box.y = other.y + labelHeight;
@@ -53,7 +60,7 @@ export function layoutLabels(
     placed.sort((a, b) => a.y - b.y);
   }
 
-  return boxes.map((box) => ({ x: box.x, y: box.y }));
+  return boxes.map((box) => (box === null ? null : { x: box.x, y: box.y }));
 }
 
 /**
@@ -101,8 +108,13 @@ export class LineLabels implements ISeriesPrimitive<Time> {
             const x = attached.chart
               .timeScale()
               .timeToCoordinate((label.time / 1000) as UTCTimestamp);
+            const start = attached.chart
+              .timeScale()
+              .timeToCoordinate((label.from / 1000) as UTCTimestamp);
             const y = attached.series.priceToCoordinate(label.price);
-            return x === null || y === null ? [] : [{ label, text: label.text, x, y }];
+            return x === null || y === null
+              ? []
+              : [{ label, text: label.text, x, y, start: start ?? undefined }];
           });
           const places = layoutLabels(
             shown,
@@ -110,8 +122,8 @@ export class LineLabels implements ISeriesPrimitive<Time> {
             (text) => context.measureText(text).width,
           );
           shown.forEach((item, index) => {
-            if (this.labels.includes(item.label)) {
-              const place = places[index]!;
+            const place = places[index];
+            if (place && this.labels.includes(item.label)) {
               context.fillText(item.text, place.x, place.y);
             }
           });
