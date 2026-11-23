@@ -147,6 +147,93 @@ describe('the chart of a pair', () => {
   });
 });
 
+// Task 18.20: «история загружается» and a failed page of the chart.
+describe('the chart while the history loads or fails', () => {
+  const loadingChart: FakeRoute = (request) =>
+    json({
+      symbol: 'SOLUSDT',
+      timeframe: new URL(request.url).searchParams.get('timeframe'),
+      loading: true,
+      candles: [],
+      openInterest: [],
+      funding: [],
+    });
+
+  it('asks again every 5 seconds while the history loads', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let loading = true;
+      const requests = routes([], {
+        'GET /api/market/pairs/SOLUSDT/chart': (request) =>
+          loading ? loadingChart(request) : chartRoute()(request),
+      });
+      renderApp('/market/SOLUSDT?timeframe=1h');
+      expect(await screen.findByText('Сервис данных догружает историю пары…')).toBeInTheDocument();
+
+      loading = false;
+      await act(() => vi.advanceTimersByTimeAsync(5_100));
+
+      await waitFor(() => expect(drawn.candles).toHaveLength(500));
+      expect(chartQueries(requests).length).toBeGreaterThanOrEqual(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('goes on loading earlier pages after an early page answered that the history loads', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let early = 0;
+      routes([], {
+        'GET /api/market/pairs/SOLUSDT/chart': (request) => {
+          if (new URL(request.url).searchParams.has('before') && early++ === 0) {
+            return loadingChart(request);
+          }
+
+          return chartRoute()(request);
+        },
+      });
+      renderApp('/market/SOLUSDT?timeframe=1h');
+      await waitFor(() => expect(drawn.candles).toHaveLength(500));
+
+      drawn.logicalRange = { from: 3, to: 120 };
+      act(() => drawn.rangeChange?.({ from: 3, to: 120 }));
+      await waitFor(() => expect(early).toBe(1));
+      await act(() => vi.advanceTimersByTimeAsync(5_100));
+
+      await waitFor(() => expect(drawn.candles).toHaveLength(1000));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows a failed early page and asks it again by the button, not by every scroll', async () => {
+    let fail = true;
+    const requests = routes([], {
+      'GET /api/market/pairs/SOLUSDT/chart': (request) =>
+        new URL(request.url).searchParams.has('before') && fail
+          ? json({ title: 'сервис данных не ответил' }, 502)
+          : chartRoute()(request),
+    });
+    renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.candles).toHaveLength(500));
+
+    drawn.logicalRange = { from: 3, to: 120 };
+    act(() => drawn.rangeChange?.({ from: 3, to: 120 }));
+    expect(await screen.findByRole('alert', { name: 'Ранние свечи' })).toBeInTheDocument();
+    const asked = chartQueries(requests).length;
+    act(() => drawn.rangeChange?.({ from: 2, to: 119 }));
+    act(() => drawn.rangeChange?.({ from: 1, to: 118 }));
+    expect(chartQueries(requests)).toHaveLength(asked);
+
+    fail = false;
+    await userEvent.click(screen.getByRole('button', { name: 'Повторить' }));
+
+    await waitFor(() => expect(drawn.candles).toHaveLength(1000));
+    expect(screen.queryByRole('alert', { name: 'Ранние свечи' })).toBeNull();
+  });
+});
+
 // Spec market-overview «Живая свеча» (task 14.3).
 describe('the live candle', () => {
   const live = (

@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { type IdeaChoices, listPairIdeas } from '@/api/ideas';
 import { type ChartCandle, type ChartPoint, getMarketPair, getPairChart } from '@/api/market';
@@ -8,6 +8,7 @@ import { IdeaChoiceRow } from '@/pages/ideas/IdeaChoices';
 import { pairColumns } from '@/pages/ideas/ideaColumns';
 import { timeframes } from '@/preview/preview';
 import { Badge } from '@/shared/ui/Badge';
+import { Button } from '@/shared/ui/Button';
 import { Page, SectionTitle } from '@/shared/ui/Page';
 import { PagedTable } from '@/shared/ui/PagedTable';
 import { Pager } from '@/shared/ui/Pager';
@@ -172,6 +173,9 @@ function PairHeader({
   );
 }
 
+/** How often the page asks again while the service loads the history of the pair (task 18.20). */
+const historyRetryMs = 5_000;
+
 function ChartSection({
   symbol,
   timeframe,
@@ -185,9 +189,11 @@ function ChartSection({
   readonly page: number;
   readonly onSearch: (change: PairSearch) => void;
 }) {
+  // While the service loads the history of the pair, the page asks again every 5 seconds (task 18.20).
   const first = useQuery({
     queryKey: ['pair-chart', symbol, timeframe],
     queryFn: () => getPairChart(symbol, timeframe),
+    refetchInterval: (query) => (query.state.data?.loading === true ? historyRetryMs : false),
   });
   const [earlier, setEarlier] = useState<{
     candles: ChartCandle[];
@@ -201,6 +207,18 @@ function ChartSection({
     done: false,
   });
   const loading = useRef(false);
+  // A failed early page is shown and asked again by its button only; one that is still loading is asked again later.
+  const [earlyError, setEarlyError] = useState<string | null>(null);
+  const [earlyLoading, setEarlyLoading] = useState(false);
+  const retry = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (retry.current !== null) {
+        clearTimeout(retry.current);
+      }
+    },
+    [],
+  );
   const live = useLiveCandle(symbol, timeframe);
   const base = first.data?.candles;
   const candles = useMemo(() => {
@@ -216,11 +234,12 @@ function ChartSection({
     [earlier.funding, first.data?.funding],
   );
 
-  const loadEarlier = () => {
+  const loadEarlier = (asked = false) => {
     const oldest = candles[0];
     if (
       loading.current ||
       earlier.done ||
+      (earlyError !== null && !asked) ||
       oldest === undefined ||
       (first.data?.candles.length ?? 0) < 500
     ) {
@@ -228,19 +247,37 @@ function ChartSection({
     }
 
     loading.current = true;
+    setEarlyError(null);
     void getPairChart(symbol, timeframe, Number(oldest.openTime))
-      .then((chart) =>
+      .then((chart) => {
+        if (chart.loading) {
+          // Still loading: not the end of the history; asked again in 5 seconds.
+          setEarlyLoading(true);
+          retry.current = setTimeout(() => {
+            retry.current = null;
+            loadEarlierRef.current(true);
+          }, historyRetryMs);
+          return;
+        }
+
+        setEarlyLoading(false);
         setEarlier((old) => ({
           candles: joinPages(chart.candles, old.candles),
           interest: joinPoints(chart.openInterest, old.interest),
           funding: joinPoints(chart.funding, old.funding),
           done: chart.candles.length < 500,
-        })),
-      )
+        }));
+      })
+      .catch((error: unknown) => {
+        setEarlyLoading(false);
+        setEarlyError(error instanceof Error ? error.message : String(error));
+      })
       .finally(() => {
         loading.current = false;
       });
   };
+  const loadEarlierRef = useRef(loadEarlier);
+  loadEarlierRef.current = loadEarlier;
 
   const list = useListSettings('pair-ideas', { field: 'moment', descending: true });
   const [choices, setChoices] = useState<IdeaChoices>({});
@@ -293,8 +330,16 @@ function ChartSection({
             Стенд не отдал свечи: {first.error.message}
           </p>
         )}
-        {first.data?.loading === true && (
+        {(first.data?.loading === true || earlyLoading) && (
           <p className="text-muted">Сервис данных догружает историю пары…</p>
+        )}
+        {earlyError !== null && (
+          <p role="alert" aria-label="Ранние свечи" className="flex items-center gap-3 text-err">
+            Стенд не отдал ранние свечи: {earlyError}
+            <Button variant="ghost" size="sm" onClick={() => loadEarlier(true)}>
+              Повторить
+            </Button>
+          </p>
         )}
         <div className="overflow-hidden rounded-[10px] border border-line">
           <PairChart
@@ -305,7 +350,7 @@ function ChartSection({
             marks={marks}
             selected={idea}
             lines={open}
-            onEdge={loadEarlier}
+            onEdge={() => loadEarlier()}
             onPick={(id) => onSearch({ idea: id })}
           />
         </div>
