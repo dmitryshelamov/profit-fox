@@ -178,20 +178,23 @@ public static class IdeaCycle
     }
 
     // The cycle of one entry counted by CycleRun. The funding the idea summed goes to it on a path of its own: one payment
-    // at the exit, of the sum, priced at 1 the minute before.
+    // at the exit, of the sum, priced at 1 the minute before. The cycle reads nothing else of the path, so the path holds
+    // only that minute and the minute of the exit (task 18.6): the same numbers in a time that does not grow with the
+    // minutes since the entry.
     private static CycleOutcome Outcome(Idea idea, DateTimeOffset exit, double exitRaw, double exitFill, ExitReason reason, TradeCosts costs)
     {
         DateTimeOffset entry = idea.EntryTime!.Value;
-        int minutes = (int)((exit - entry).Ticks / TimeSpan.TicksPerMinute);
-        int length = minutes + 1;
+        bool later = exit - entry >= OneMinute;
+        DateTimeOffset start = later ? exit - OneMinute : entry;
+        int length = later ? 2 : 1;
         double[] none = [.. Enumerable.Repeat(double.NaN, length)];
         double[] close = [.. none];
-        if (minutes >= 1)
+        if (later)
         {
-            close[minutes - 1] = 1;
+            close[0] = 1;
         }
 
-        var path = new MinutePath(entry, none, none, none, close, new bool[length], [(exit, idea.FundingPaid)], entry, exit + OneMinute);
+        var path = new MinutePath(start, none, none, none, close, new bool[length], [(exit, idea.FundingPaid)], entry, exit + OneMinute);
         var cycle = CycleRun.Open(
             path,
             costs,

@@ -599,11 +599,8 @@ public sealed class IdeaScanner
 
     private async Task SaveAsync(CancellationToken cancellationToken)
     {
-        foreach (Idea idea in _dirty)
-        {
-            await _ideas.SaveAsync(idea, cancellationToken);
-        }
-
+        // One statement a pass for every idea that changed (task 18.6).
+        await _ideas.SaveAllAsync([.. _dirty], cancellationToken);
         _dirty.Clear();
         _open.RemoveAll(idea => idea.State != IdeaState.Open);
     }

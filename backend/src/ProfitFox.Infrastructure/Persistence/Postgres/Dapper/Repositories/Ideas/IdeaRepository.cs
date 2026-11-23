@@ -31,6 +31,17 @@ internal sealed class IdeaRepository(NpgsqlDataSource database) : IIdeaRepositor
         await connection.ExecuteAsync(new CommandDefinition(IdeaRepositoryQueries.Save, IdeaDbConverter.Parameters(idea), cancellationToken: cancellationToken));
     }
 
+    public async Task SaveAllAsync(IReadOnlyCollection<Idea> ideas, CancellationToken cancellationToken)
+    {
+        if (ideas.Count == 0)
+        {
+            return;
+        }
+
+        await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(IdeaRepositoryQueries.SaveAll, IdeaDbConverter.Batch(ideas), cancellationToken: cancellationToken));
+    }
+
     public async Task<IReadOnlyList<Idea>> OpenAsync(CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);

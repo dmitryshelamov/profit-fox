@@ -92,18 +92,54 @@ internal static class IdeaDbConverter
             NowResult = idea.Now,
             idea.NowAt,
             idea.ExitTime,
-            ExitReason = idea.ExitReason switch
-            {
-                ExitReason.Stop => "stop",
-                ExitReason.Target => "target",
-                ExitReason.Time => "time",
-                _ => null
-            },
+            ExitReason = Reason(idea.ExitReason),
             idea.Ambiguous,
             ExitPrice = idea.ExitRaw,
             idea.Result,
             idea.ResultUsdt,
             idea.Excluded
+        };
+    }
+
+    /// <summary>
+    ///     What changed in many ideas as arrays of one parameter each, in the order of the ideas, for one statement over
+    ///     <c>unnest</c> (task 18.6).
+    /// </summary>
+    public static object Batch(IReadOnlyCollection<Idea> ideas)
+    {
+        return new
+        {
+            Ids = ideas.Select(idea => idea.Id).ToArray(),
+            States = ideas.Select(idea => State(idea.State)).ToArray(),
+            EntryRaws = ideas.Select(idea => idea.EntryRaw).ToArray(),
+            EntryPrices = ideas.Select(idea => idea.EntryPrice).ToArray(),
+            EntryTimes = ideas.Select(idea => idea.EntryTime).ToArray(),
+            StopPrices = ideas.Select(idea => idea.StopPrice).ToArray(),
+            TargetPrices = ideas.Select(idea => idea.TargetPrice).ToArray(),
+            FundingPaids = ideas.Select(idea => idea.FundingPaid).ToArray(),
+            FundingUntils = ideas.Select(idea => idea.FundingUntil).ToArray(),
+            LastCloses = ideas.Select(idea => idea.LastClose).ToArray(),
+            ComputedUntils = ideas.Select(idea => idea.ComputedUntil).ToArray(),
+            NowResults = ideas.Select(idea => idea.Now).ToArray(),
+            NowAts = ideas.Select(idea => idea.NowAt).ToArray(),
+            ExitTimes = ideas.Select(idea => idea.ExitTime).ToArray(),
+            ExitReasons = ideas.Select(idea => Reason(idea.ExitReason)).ToArray(),
+            Ambiguous = ideas.Select(idea => idea.Ambiguous).ToArray(),
+            ExitPrices = ideas.Select(idea => idea.ExitRaw).ToArray(),
+            Results = ideas.Select(idea => idea.Result).ToArray(),
+            ResultUsdts = ideas.Select(idea => idea.ResultUsdt).ToArray(),
+            Excludeds = ideas.Select(idea => idea.Excluded).ToArray()
+        };
+    }
+
+    private static string? Reason(ExitReason reason)
+    {
+        return reason switch
+        {
+            ExitReason.Stop => "stop",
+            ExitReason.Target => "target",
+            ExitReason.Time => "time",
+            _ => null
         };
     }
 

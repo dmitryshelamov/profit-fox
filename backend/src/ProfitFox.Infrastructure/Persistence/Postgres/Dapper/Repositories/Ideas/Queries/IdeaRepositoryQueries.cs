@@ -37,6 +37,27 @@ internal static class IdeaRepositoryQueries
         WHERE id = @Id
         """;
 
+    // What changed in many ideas in one statement: one array a column, in the order of the ideas (task 18.6).
+    public const string SaveAll =
+        """
+        UPDATE ideas AS i SET state = v.state, entry_raw = v.entry_raw, entry_price = v.entry_price, entry_time = v.entry_time,
+                              stop_price = v.stop_price, target_price = v.target_price, funding_paid = v.funding_paid,
+                              funding_until = v.funding_until, last_close = v.last_close, computed_until = v.computed_until,
+                              now_result = v.now_result, now_at = v.now_at, exit_time = v.exit_time, exit_reason = v.exit_reason,
+                              ambiguous = v.ambiguous, exit_price = v.exit_price, result = v.result, result_usdt = v.result_usdt,
+                              excluded = v.excluded
+        FROM unnest(
+            @Ids::uuid[], @States::text[], @EntryRaws::double precision[], @EntryPrices::double precision[],
+            @EntryTimes::timestamp with time zone[], @StopPrices::double precision[], @TargetPrices::double precision[],
+            @FundingPaids::double precision[], @FundingUntils::timestamp with time zone[], @LastCloses::double precision[],
+            @ComputedUntils::timestamp with time zone[], @NowResults::double precision[], @NowAts::timestamp with time zone[],
+            @ExitTimes::timestamp with time zone[], @ExitReasons::text[], @Ambiguous::boolean[], @ExitPrices::double precision[],
+            @Results::double precision[], @ResultUsdts::double precision[], @Excludeds::text[])
+            AS v(id, state, entry_raw, entry_price, entry_time, stop_price, target_price, funding_paid, funding_until, last_close,
+                 computed_until, now_result, now_at, exit_time, exit_reason, ambiguous, exit_price, result, result_usdt, excluded)
+        WHERE i.id = v.id
+        """;
+
     public const string Open = $"SELECT {Columns} {From} WHERE i.state = 'open' ORDER BY i.moment, i.id";
 
     public const string Find = $"SELECT {Columns} {From} WHERE i.id = @Id";

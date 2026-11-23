@@ -33,9 +33,26 @@ public sealed class MemoryIdeaRepository : IIdeaRepository
         return Task.FromResult(true);
     }
 
+    /// <summary>
+    ///     How many statements of writing changes went to the store: one a call with ideas (task 18.6).
+    /// </summary>
+    public List<int> Writes { get; } = [];
+
     public Task SaveAsync(Idea idea, CancellationToken cancellationToken)
     {
         Saves++;
+        Writes.Add(1);
+        return Task.CompletedTask;
+    }
+
+    public Task SaveAllAsync(IReadOnlyCollection<Idea> ideas, CancellationToken cancellationToken)
+    {
+        Saves += ideas.Count;
+        if (ideas.Count > 0)
+        {
+            Writes.Add(ideas.Count);
+        }
+
         return Task.CompletedTask;
     }
 

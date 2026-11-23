@@ -24,6 +24,12 @@ public interface IIdeaRepository
     Task SaveAsync(Idea idea, CancellationToken cancellationToken);
 
     /// <summary>
+    ///     Writes what changed in every idea of <paramref name="ideas" /> in one statement (task 18.6): the scanner writes the
+    ///     open ideas it walked once a pass.
+    /// </summary>
+    Task SaveAllAsync(IReadOnlyCollection<Idea> ideas, CancellationToken cancellationToken);
+
+    /// <summary>
     ///     Every open idea.
     /// </summary>
     Task<IReadOnlyList<Idea>> OpenAsync(CancellationToken cancellationToken);

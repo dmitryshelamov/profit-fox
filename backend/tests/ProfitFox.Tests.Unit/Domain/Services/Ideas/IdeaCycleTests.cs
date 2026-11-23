@@ -111,6 +111,60 @@ public sealed class IdeaCycleTests
         Assert.That(paid.Result - unpaid.Result, Is.EqualTo(0.1 / (100 * (1 - 0.0005))).Within(1e-12), "a short receives the payment of the longs");
     }
 
+    /// <summary>
+    ///     Task 18.6: the result now is counted from the state of the cycle the idea keeps, in a time that does not grow with
+    ///     the minutes since the entry, and gives the numbers the path of every minute from the entry gave.
+    /// </summary>
+    [TestCase(0, 0.0)]
+    [TestCase(1, 0.0)]
+    [TestCase(40, 0.0)]
+    [TestCase(1440, 0.5)]
+    [TestCase(1440 * 3, -1.25)]
+    public void The_result_now_is_the_one_of_the_path_of_every_minute(int minutes, double funding)
+    {
+        foreach (EntrySide side in new[] { EntrySide.Short, EntrySide.Long })
+        {
+            Idea idea = IdeaGenerator.Generate(side: side, stop: 0.02, target: 0.04, close: 96180m, after: TimeSpan.FromDays(4));
+            IdeaCycle.Minute(idea, Minute(Noon, 96180, 96200, 96150, 96190), Costs);
+            idea.FundingPaid = funding;
+            DateTimeOffset at = Noon.AddMinutes(minutes);
+
+            Assert.That(IdeaCycle.Now(idea, 96412.5, at, Costs), Is.EqualTo(ReferenceNow(idea, 96412.5, at)), $"{side}, {minutes} minutes");
+        }
+    }
+
+    [Test]
+    public void The_result_now_of_an_idea_entered_long_ago_takes_no_path_of_its_minutes()
+    {
+        Idea idea = IdeaGenerator.Generate(close: 96180m, after: TimeSpan.FromDays(400_000));
+        IdeaCycle.Minute(idea, Minute(Noon, 96180, 96200, 96150, 96190), Costs);
+
+        Assert.That(IdeaCycle.Now(idea, 96412.5, Noon.AddDays(365_000), Costs), Is.LessThan(0), "a thousand years of minutes would not fit in memory");
+    }
+
+    // The result now as it was counted before task 18.6: a cycle on a path of every minute from the entry to the moment.
+    private static double? ReferenceNow(Idea idea, double close, DateTimeOffset at)
+    {
+        DateTimeOffset entry = idea.EntryTime!.Value;
+        DateTimeOffset exit = at > entry ? at : entry;
+        double fill = close * (1 - (idea.Side == EntrySide.Long ? 1 : -1) * Costs.Slippage);
+        int minutes = (int)((exit - entry).Ticks / TimeSpan.TicksPerMinute);
+        int length = minutes + 1;
+        double[] none = [.. Enumerable.Repeat(double.NaN, length)];
+        double[] closes = [.. none];
+        if (minutes >= 1)
+        {
+            closes[minutes - 1] = 1;
+        }
+
+        var path = new MinutePath(entry, none, none, none, closes, new bool[length], [(exit, idea.FundingPaid)], entry, exit + TimeSpan.FromMinutes(1));
+        var cycle = ProfitFox.Domain.Services.Positions.CycleRun.Open(
+            path, Costs, idea.Side, entry, idea.EntryRaw!.Value, idea.EntryPrice!.Value, (double)idea.Size, node: null, idea.Stop, idea.Target, idea.Until);
+        cycle.Ambiguous = idea.Ambiguous;
+        cycle.Close(exit, close, fill, ProfitFox.Domain.ValueObjects.Positions.CycleExit.Time);
+        return cycle.Outcome().Net;
+    }
+
     [Test]
     public void A_short_in_the_red_has_a_result_now_below_zero()
     {

@@ -58,6 +58,25 @@ public sealed class IdeaScannerTests
     }
 
     /// <summary>
+    ///     Task 18.6: the open ideas a minute moved are written by one statement a pass, however many there are.
+    /// </summary>
+    [Test]
+    public async Task Ten_thousand_open_ideas_are_written_by_one_statement_a_minute()
+    {
+        var rig = new ScannerRig();
+        rig.Ideas.Ideas.AddRange(Enumerable.Range(0, 10_000).Select(_ => ProfitFox.Tests.Shared.Generators.Domain.Entities.Ideas.IdeaGenerator.Generate(moment: Ten, timeframe: TimeSpan.FromHours(1))));
+        await rig.Start();
+        rig.Ideas.Writes.Clear();
+
+        await rig.Minutes("BTCUSDT", Ten, 1, close: 101);
+        await rig.At(Ten.AddMinutes(1).AddSeconds(15));
+
+        Assert.That(rig.Ideas.Writes, Is.EqualTo(new[] { 10_000 }), "one statement for the 10 000 ideas of the minute");
+        Assert.That(rig.Scanner.Open.Select(idea => idea.Now).Distinct().Count(), Is.EqualTo(1));
+        Assert.That(rig.Scanner.Open[0].Now, Is.Not.Null);
+    }
+
+    /// <summary>
     ///     Task 18.3: a refused warm-up is written to the journal no more than once a minute for a reason, the state counts
     ///     the pairs it refused and tells the last reason, and a pair that warms up later leaves the count.
     /// </summary>

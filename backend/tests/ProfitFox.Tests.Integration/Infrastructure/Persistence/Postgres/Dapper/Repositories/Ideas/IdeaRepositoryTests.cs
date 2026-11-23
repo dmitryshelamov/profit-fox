@@ -23,6 +23,58 @@ public sealed class IdeaRepositoryTests
         _ideas = BenchServices.Get<IIdeaRepository>();
     }
 
+    /// <summary>
+    ///     Task 18.6: what changed in many ideas goes in one statement, the empty values with it.
+    /// </summary>
+    [Test]
+    public async Task Many_ideas_are_written_by_one_statement()
+    {
+        Idea moved = IdeaGenerator.Generate(stop: 0.02);
+        Idea closed = IdeaGenerator.Generate(symbol: "ETHUSDT");
+        Idea excluded = IdeaGenerator.Generate(symbol: "SOLUSDT");
+        Idea untouched = IdeaGenerator.Generate(symbol: "XRPUSDT");
+        foreach (Idea idea in new[] { moved, closed, excluded, untouched })
+        {
+            await _ideas.AddAsync(idea, CancellationToken.None);
+        }
+
+        moved.EntryRaw = 96200;
+        moved.EntryPrice = 96151.9;
+        moved.EntryTime = moved.Moment;
+        moved.FundingPaid = 0.5;
+        moved.FundingUntil = moved.Moment.AddHours(1);
+        moved.ComputedUntil = moved.Moment.AddMinutes(30);
+        moved.Now = -0.003;
+        moved.NowAt = moved.Moment.AddMinutes(31);
+        closed.EntryRaw = 3000;
+        closed.EntryPrice = 2998.5;
+        closed.EntryTime = closed.Moment;
+        closed.State = IdeaState.Closed;
+        closed.ExitTime = closed.Moment.AddHours(4);
+        closed.ExitReason = ExitReason.Time;
+        closed.Ambiguous = true;
+        closed.ExitRaw = 2990;
+        closed.Result = 0.0041;
+        closed.ResultUsdt = 0.41;
+        excluded.State = IdeaState.Excluded;
+        excluded.Excluded = "нет данных";
+
+        await _ideas.SaveAllAsync([moved, closed, excluded], CancellationToken.None);
+        await _ideas.SaveAllAsync([], CancellationToken.None);
+
+        Idea readMoved = (await _ideas.FindAsync(moved.Id, CancellationToken.None))!;
+        Idea readClosed = (await _ideas.FindAsync(closed.Id, CancellationToken.None))!;
+        Idea readExcluded = (await _ideas.FindAsync(excluded.Id, CancellationToken.None))!;
+        Assert.That(
+            (readMoved.EntryRaw, readMoved.EntryPrice, readMoved.EntryTime, readMoved.StopPrice, readMoved.FundingPaid, readMoved.FundingUntil, readMoved.ComputedUntil, readMoved.Now, readMoved.NowAt, readMoved.State),
+            Is.EqualTo((moved.EntryRaw, moved.EntryPrice, moved.EntryTime, moved.StopPrice, moved.FundingPaid, moved.FundingUntil, moved.ComputedUntil, moved.Now, moved.NowAt, IdeaState.Open)));
+        Assert.That(
+            (readClosed.State, readClosed.ExitTime, readClosed.ExitReason, readClosed.Ambiguous, readClosed.ExitRaw, readClosed.Result, readClosed.ResultUsdt),
+            Is.EqualTo((IdeaState.Closed, closed.ExitTime, ExitReason.Time, true, (double?)2990, (double?)0.0041, (double?)0.41)));
+        Assert.That((readExcluded.State, readExcluded.Excluded, readExcluded.EntryPrice), Is.EqualTo((IdeaState.Excluded, "нет данных", (double?)null)));
+        Assert.That((await _ideas.FindAsync(untouched.Id, CancellationToken.None))!.State, Is.EqualTo(IdeaState.Open));
+    }
+
     [Test]
     public async Task An_idea_is_written_moved_on_and_closed()
     {
