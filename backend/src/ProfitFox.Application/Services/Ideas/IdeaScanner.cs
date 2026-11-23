@@ -361,9 +361,10 @@ public sealed class IdeaScanner
 
             _warmed.Enqueue(new Warmup(run, symbol, funding.Loading, candles.Items, funding.Items, named));
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
-            // The service did not answer or refused: the pair is read again later, and the reason is told.
+            // The service did not answer, refused or timed out — the timeout of the REST is a cancellation too, but not by the
+            // stop of the scanner (task 19.2): the pair is read again later, and the reason is told.
             _warmed.Enqueue(new Warmup(run, symbol, Loading: true, [], [], null) { Failure = exception.Message });
         }
         finally

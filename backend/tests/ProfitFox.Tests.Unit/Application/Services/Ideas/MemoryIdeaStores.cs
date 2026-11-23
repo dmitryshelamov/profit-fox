@@ -208,6 +208,12 @@ public sealed class FakeRecentHistory : IRecentHistory
     /// </summary>
     public Dictionary<string, string> Failing { get; } = [];
 
+    /// <summary>
+    ///     The ids of the pairs whose candles do not come in time: the read ends as the timeout of <c>HttpClient</c> ends it,
+    ///     by a <see cref="TaskCanceledException" /> while the token of the caller is alive (task 19.2).
+    /// </summary>
+    public HashSet<string> TimingOut { get; } = [];
+
     public List<string> Asked { get; } = [];
 
     Task<RecentRead<HistoryCandle>> IRecentHistory.Candles(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation)
@@ -225,6 +231,13 @@ public sealed class FakeRecentHistory : IRecentHistory
         if (Failing.TryGetValue(instrumentId, out string? failure))
         {
             throw new HistoryUnavailableException(failure);
+        }
+
+        if (TimingOut.Contains(instrumentId))
+        {
+            throw new TaskCanceledException(
+                "The request was canceled due to the configured HttpClient.Timeout of 60 seconds elapsing.",
+                new TimeoutException("The operation was canceled."));
         }
 
         IReadOnlyList<HistoryCandle> candles = Candles.TryGetValue(instrumentId, out Func<TimeSpan, DateTimeOffset, IReadOnlyList<HistoryCandle>>? of) ? of(interval, before) : [];

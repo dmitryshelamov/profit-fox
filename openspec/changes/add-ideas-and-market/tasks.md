@@ -379,7 +379,7 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   `15m`. Подделка `removeSeries` в `src/test/setup.ts` не бросает, поэтому тесты молчали. Сделать: очистка линий не
   трогает снятый график; подделка графика бросает на любом вызове после `remove()`. Проверить тестом: график с линиями
   идеи размонтируется без исключения, смена таймфрейма с открытой идеей рисует новый график.
-- [ ] 19.2 Бэкенд, прогрев: таймаут REST (`HttpClient`, 1 мин) даёт `TaskCanceledException`; фильтр `when (exception is
+- [x] 19.2 Бэкенд, прогрев: таймаут REST (`HttpClient`, 1 мин) даёт `TaskCanceledException`; фильтр `when (exception is
   not OperationCanceledException)` в `IdeaScanner.ReadWarmupAsync` его пропускает, задача падает молча, пара навсегда
   остаётся «читается», в `failed` не входит и в журнале её нет. Сделать: отмену отличать по токену остановки
   (`cancellationToken.IsCancellationRequested`), таймаут — отказ прогрева с причиной, пара возвращается в ожидание.
@@ -905,6 +905,12 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   `remove()`. Без правки краснели 8 тестов `pair.test.tsx` (каждый, где на графике были линии, — на размонтировании в
   конце теста) и два новых: смена таймфрейма с открытой идеей рисует новый график с её линиями, размонтирование графика
   с линиями без исключения.
+
+- **19.2, таймаут прогрева.** `IdeaScanner.ReadWarmupAsync` отличает остановку сканера по его токену
+  (`cancellationToken.IsCancellationRequested`), а не по типу исключения: таймаут `HttpClient` (`TaskCanceledException`
+  при живом токене) — отказ прогрева с текстом исключения в причине, строка `Warning` в журнале, пара ждёт
+  `Scanner:WarmupRetry` и прогревается со следующей попытки. Поддельная история unit-тестов получила `TimingOut`; тест
+  `A_warmup_read_that_timed_out_…` без правки красный: пара не входила в `failed`.
 
 ## База
 

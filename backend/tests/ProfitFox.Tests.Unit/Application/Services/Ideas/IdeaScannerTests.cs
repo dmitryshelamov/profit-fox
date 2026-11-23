@@ -298,6 +298,31 @@ public sealed class IdeaScannerTests
     }
 
     /// <summary>
+    ///     Task 19.2: the timeout of the REST cancels the read while the scanner is not stopped — a failed warm-up with its
+    ///     reason, not a stop: the pair is counted as failed, written to the journal and warmed up on the next try.
+    /// </summary>
+    [Test]
+    public async Task A_warmup_read_that_timed_out_fails_and_is_warmed_up_on_the_next_try()
+    {
+        var rig = new ScannerRig();
+        rig.History.TimingOut.Add("sol");
+        await rig.Enable("close-up", "8h");
+        await rig.Start();
+
+        Assert.That(rig.Scanner.Progress, Is.EqualTo((2, 3)));
+        (int failed, string? reason) = rig.Scanner.Failures;
+        Assert.That(failed, Is.EqualTo(1));
+        Assert.That(reason, Does.Contain("HttpClient.Timeout"));
+        Assert.That(rig.Log.Entries.Where(entry => entry.Message.Contains("SOLUSDT")).Select(entry => entry.Level), Is.EqualTo(new[] { LogLevel.Warning }));
+
+        rig.History.TimingOut.Clear();
+        rig.Time.SetUtcNow(Ten.AddMinutes(1).AddSeconds(10));
+        await rig.Warm();
+        Assert.That(rig.Scanner.Progress, Is.EqualTo((3, 3)));
+        Assert.That(rig.Scanner.Failures, Is.EqualTo((0, (string?)null)));
+    }
+
+    /// <summary>
     ///     Spec strategy-ideas «Пара не прогрета»: a pair whose history is loading gives no ideas, and is asked again later.
     /// </summary>
     [Test]
