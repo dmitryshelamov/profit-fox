@@ -291,7 +291,13 @@ export function PairChart({
       made.push(series);
     }
 
-    return () => made.forEach((series) => current.chart.removeSeries(series));
+    // On unmount the chart is removed first, by the cleanup above, with its series; the library throws on a call to a
+    // removed chart (task 19.1), so only a chart still drawn has its lines taken off.
+    return () => {
+      if (drawn.current === current) {
+        made.forEach((series) => current.chart.removeSeries(series));
+      }
+    };
   }, [lines, candles]);
 
   return <div ref={container} className="h-[600px] w-full" data-testid="chart" />;

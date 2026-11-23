@@ -421,6 +421,31 @@ describe('the ideas, the open interest and the funding on the chart', () => {
     expect(drawn.lines).toEqual([]);
   });
 
+  // Task 19.1: the cleanup of the lines does not touch the chart removed before it.
+  it('draws a new chart when the timeframe changes while the lines of an open idea are drawn', async () => {
+    const requests = routes([longOpen]);
+    const { history } = renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.segments).toHaveLength(3));
+    const charts = chartQueries(requests).length;
+
+    await userEvent.click(screen.getByRole('radio', { name: '15m' }));
+
+    await waitFor(() => expect(chartQueries(requests).length).toBeGreaterThan(charts));
+    expect(history.location.search).toContain('timeframe=15m');
+    await waitFor(() => expect(drawn.candles).toHaveLength(500));
+    expect(screen.getByTestId('chart')).toBeInTheDocument();
+    expect(screen.queryByText(/Something went wrong/)).toBeNull();
+    await waitFor(() => expect(drawn.segments.map((line) => line.title)).toContain('вход 236.10'));
+  });
+
+  it('unmounts a chart with the lines of an open idea without an error', async () => {
+    routes([longOpen]);
+    const { unmount } = renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.segments).toHaveLength(3));
+
+    expect(() => unmount()).not.toThrow();
+  });
+
   // Scenario «Идея другого таймфрейма».
   it('puts the mark of an idea of 15m on the candle of 1h that its moment falls in', async () => {
     routes([
