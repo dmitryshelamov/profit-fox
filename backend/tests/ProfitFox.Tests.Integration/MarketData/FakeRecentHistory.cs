@@ -5,89 +5,172 @@ using Microsoft.AspNetCore.Http;
 namespace ProfitFox.Tests.Integration.MarketData;
 
 /// <summary>
-///     The REST of recent history of the fake market-data service (change add-ideas-and-market, task 5.4): candles of any
-///     interval with the prices of the fake from <see cref="FakeMarketData.CoveredFrom" />, the current day included, the
-///     payments of <see cref="FakeMarketData.RateAt" /> and a point of open interest of 24 000 coins per interval. A pair of
-///     <see cref="FakeMarketData.Loading" /> is still loading: it answers <c>202</c>.
+///     The REST of recent history of the fake market-data service, as the real service answers it (change
+///     add-ideas-and-market, task 18.1):
+///     <list type="bullet">
+///         <item>
+///             <c>GET api/instruments/{id}/candles?interval=&amp;from=&amp;to=</c> — both moments required, the window
+///             <c>[from, to)</c> on the boundaries of the interval in UTC, at most 1000 candles, no <c>limit</c>; a
+///             <c>to</c> in the future is allowed and gives the closed candles only. The answer
+///             <c>{ "loading": false, "candles": [...], "covered": [...] }</c> carries the numbers as JSON numbers.
+///         </item>
+///         <item>
+///             <c>GET api/instruments/{id}/funding-payments?from=&amp;to=</c> and <c>GET api/instruments/{id}/open-interest?from=&amp;to=</c>
+///             — <c>{ "points": [...], "coveredFrom", "coveredUntil", "continueFrom" }</c>, at most 1000 points an answer,
+///             <c>continueFrom</c> where to read on; the open interest is a point every 5 minutes, without <c>interval</c>.
+///         </item>
+///         <item>A pair of <see cref="FakeMarketData.Loading" /> is still loading: <c>202</c> with <c>"loading": true</c> and an empty list.</item>
+///         <item>A request without <c>from</c> or <c>to</c>, with a window off the boundaries or with more than 1000 candles: <c>400</c>.</item>
+///     </list>
+///     The prices are those of the fake from <see cref="FakeMarketData.CoveredFrom" />, the current day included, the payments
+///     those of <see cref="FakeMarketData.RateAt" />, the open interest 24 000 coins.
 /// </summary>
 internal static class FakeRecentHistory
 {
-    public static IResult Candles(FakeMarketData data, string id, string interval, DateTimeOffset to, int limit)
+    /// <summary>
+    ///     The most candles or points one answer gives.
+    /// </summary>
+    public const int MaxItems = 1000;
+
+    private static readonly TimeSpan InterestStep = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan FundingStep = TimeSpan.FromHours(8);
+
+    public static IResult Candles(FakeMarketData data, HttpRequest request, string id)
     {
-        if (Record(data, $"candles {id} {interval}") is { } loading)
+        string? interval = request.Query["interval"];
+        Record(data, request, $"candles {id} {interval}");
+        if (Step(interval) is not { } step)
         {
-            return loading;
+            return BadRequest($"interval must be one of 1m, 5m, 15m, 1h, 4h, 1d, not '{interval}'");
         }
 
-        TimeSpan step = Step(interval);
-        DateTimeOffset last = Floor(to, step) - step;
-        List<object> candles = [];
-        for (DateTimeOffset open = last; candles.Count < limit && open >= FakeMarketData.CoveredFrom; open -= step)
+        if (Window(request) is not ({ } from, { } to))
         {
-            string close = data.Closes.GetValueOrDefault(id, "100.25");
+            return BadRequest("from and to are required");
+        }
+
+        if (from >= to)
+        {
+            return BadRequest("from must be before to");
+        }
+
+        if (Floor(from, step) != from || Floor(to, step) != to)
+        {
+            return BadRequest($"from and to must be on the boundaries of {interval}");
+        }
+
+        if ((to - from) / step > MaxItems)
+        {
+            return BadRequest($"at most {MaxItems} candles a request");
+        }
+
+        if (data.Loading.Contains(id))
+        {
+            return Results.Json(new { loading = true, candles = Array.Empty<object>(), covered = Array.Empty<object>() }, statusCode: StatusCodes.Status202Accepted);
+        }
+
+        DateTimeOffset now = data.Time.GetUtcNow();
+        decimal close = decimal.Parse(data.Closes.GetValueOrDefault(id, "100.25"), CultureInfo.InvariantCulture);
+        List<object> candles = [];
+        for (DateTimeOffset open = Max(from, FakeMarketData.CoveredFrom); open < to && open + step <= now; open += step)
+        {
             decimal volume = step == TimeSpan.FromMinutes(1) ? (open.Hour == 8 ? 0 : 12.5m) : 12.5m * (decimal)step.TotalMinutes;
-            candles.Insert(0, new
+            candles.Add(new
             {
                 openTime = Text(open),
-                open = "100.5",
-                high = "101",
-                low = "100",
+                open = 100.5m,
+                high = 101m,
+                low = 100m,
                 close,
-                volume = volume.ToString(CultureInfo.InvariantCulture),
-                turnover = (string?)null,
-                buyVolume = "6"
+                volume,
+                turnover = volume * close,
+                buyVolume = (decimal?)null
             });
         }
 
-        return Results.Json(new { loading = false, candles });
+        object[] covered = candles.Count > 0 ? [new { from = Text(Max(from, FakeMarketData.CoveredFrom)), to = Text(Min(to, Floor(now, step))) }] : [];
+        return Results.Json(new { loading = false, candles, covered });
     }
 
-    public static IResult Funding(FakeMarketData data, string id, DateTimeOffset from, DateTimeOffset to)
+    public static IResult Funding(FakeMarketData data, HttpRequest request, string id)
     {
-        if (Record(data, $"funding {id}") is { } loading)
-        {
-            return loading;
-        }
-
-        List<object> payments = [];
-        DateTimeOffset first = from > FakeMarketData.CoveredFrom ? Ceiling(from, TimeSpan.FromHours(8)) : FakeMarketData.CoveredFrom;
-        for (DateTimeOffset time = first; time < to; time += TimeSpan.FromHours(8))
-        {
-            payments.Add(new { time = Text(time), fundingRate = FakeMarketData.RateAt(time) });
-        }
-
-        return Results.Json(new { loading = false, payments });
+        Record(data, request, $"funding {id}");
+        return Points(
+            data,
+            request,
+            id,
+            FundingStep,
+            time => new { time = Text(time), fundingRate = decimal.Parse(FakeMarketData.RateAt(time), CultureInfo.InvariantCulture) });
     }
 
-    public static IResult OpenInterest(FakeMarketData data, string id, string interval, DateTimeOffset to, int limit)
+    public static IResult OpenInterest(FakeMarketData data, HttpRequest request, string id)
     {
-        if (Record(data, $"open-interest {id} {interval}") is { } loading)
+        Record(data, request, $"open-interest {id}");
+        return Points(data, request, id, InterestStep, time => new { time = Text(time), openInterest = 24_000m });
+    }
+
+    // A page of points every step from the coverage, with where to read on when more than a page is in the window.
+    private static IResult Points(FakeMarketData data, HttpRequest request, string id, TimeSpan step, Func<DateTimeOffset, object> point)
+    {
+        if (Window(request) is not ({ } from, { } to))
         {
-            return loading;
+            return BadRequest("from and to are required");
         }
 
-        TimeSpan step = Step(interval);
+        if (from >= to)
+        {
+            return BadRequest("from must be before to");
+        }
+
+        if (data.Loading.Contains(id))
+        {
+            return Results.Json(new { loading = true, points = Array.Empty<object>() }, statusCode: StatusCodes.Status202Accepted);
+        }
+
+        DateTimeOffset now = data.Time.GetUtcNow();
+        DateTimeOffset until = Min(to, now);
         List<object> points = [];
-        for (DateTimeOffset time = Floor(to, step) - step; points.Count < limit && time >= FakeMarketData.CoveredFrom; time -= step)
+        DateTimeOffset time = Ceiling(Max(from, FakeMarketData.CoveredFrom), step);
+        for (; time < until && points.Count < MaxItems; time += step)
         {
-            points.Insert(0, new { time = Text(time), openInterest = "24000" });
+            points.Add(point(time));
         }
 
-        return Results.Json(new { loading = false, points });
+        string? continueFrom = time < until ? Text(time) : null;
+        return Results.Json(new
+        {
+            points,
+            coveredFrom = Text(FakeMarketData.CoveredFrom),
+            coveredUntil = Text(Floor(now, step)),
+            continueFrom
+        });
     }
 
-    private static IResult? Record(FakeMarketData data, string request)
+    private static void Record(FakeMarketData data, HttpRequest request, string name)
     {
         lock (data.RestRequests)
         {
-            data.RestRequests.Add(request);
+            data.RestRequests.Add(name);
+            data.RestQueries.Add($"{request.Path}{request.QueryString}");
         }
-
-        string id = request.Split(' ')[1];
-        return data.Loading.Contains(id) ? Results.Json(new { loading = true }, statusCode: StatusCodes.Status202Accepted) : null;
     }
 
-    private static TimeSpan Step(string interval)
+    private static (DateTimeOffset? From, DateTimeOffset? To) Window(HttpRequest request)
+    {
+        return (Moment(request.Query["from"]), Moment(request.Query["to"]));
+    }
+
+    private static DateTimeOffset? Moment(string? text)
+    {
+        return DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out DateTimeOffset moment) ? moment : null;
+    }
+
+    private static IResult BadRequest(string message)
+    {
+        return Results.Json(new { error = message }, statusCode: StatusCodes.Status400BadRequest);
+    }
+
+    private static TimeSpan? Step(string? interval)
     {
         return interval switch
         {
@@ -97,7 +180,7 @@ internal static class FakeRecentHistory
             "1h" => TimeSpan.FromHours(1),
             "4h" => TimeSpan.FromHours(4),
             "1d" => TimeSpan.FromDays(1),
-            _ => throw new BadHttpRequestException($"no interval {interval}")
+            _ => null
         };
     }
 
@@ -112,8 +195,18 @@ internal static class FakeRecentHistory
         return floor == moment ? floor : floor + step;
     }
 
+    private static DateTimeOffset Max(DateTimeOffset left, DateTimeOffset right)
+    {
+        return left > right ? left : right;
+    }
+
+    private static DateTimeOffset Min(DateTimeOffset left, DateTimeOffset right)
+    {
+        return left < right ? left : right;
+    }
+
     private static string Text(DateTimeOffset moment)
     {
-        return moment.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
+        return moment.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss+00:00", CultureInfo.InvariantCulture);
     }
 }

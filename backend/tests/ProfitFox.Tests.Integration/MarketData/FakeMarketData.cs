@@ -44,7 +44,13 @@ public sealed class FakeMarketData
     public List<string> RestRequests { get; } = [];
 
     /// <summary>
-    ///     The ids of the instruments whose history the service is still loading: its REST answers <c>202</c> for them.
+    ///     The path and query of every request to the REST of recent history, as sent (task 18.1).
+    /// </summary>
+    public List<string> RestQueries { get; } = [];
+
+    /// <summary>
+    ///     The ids of the instruments whose history the service is still loading: its REST answers <c>202</c> with
+    ///     <c>"loading": true</c> and an empty list for them.
     /// </summary>
     public HashSet<string> Loading { get; } = [];
 

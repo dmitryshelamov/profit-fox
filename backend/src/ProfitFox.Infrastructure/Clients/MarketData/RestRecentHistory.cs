@@ -9,10 +9,21 @@ using ProfitFox.Domain.ValueObjects.MarketData;
 namespace ProfitFox.Infrastructure.Clients.MarketData;
 
 /// <summary>
-///     Recent history over the REST of the market-data service (change add-ideas-and-market, design.md, decision 4):
-///     <c>GET api/instruments/{id}/candles</c>, <c>GET api/instruments/{id}/funding-payments</c> and
-///     <c>GET api/instruments/{id}/open-interest</c>. An answer <c>202</c> says the service is still loading the history of
-///     the pair.
+///     Recent history over the REST of the market-data service (change add-ideas-and-market, design.md, decision 4; the
+///     contract of task 18.1):
+///     <list type="bullet">
+///         <item>
+///             <c>GET api/instruments/{id}/candles?interval=&amp;from=&amp;to=</c> — the window <c>[from, to)</c> on the
+///             boundaries of the interval in UTC, both moments required, at most 1000 candles, no <c>limit</c>;
+///         </item>
+///         <item>
+///             <c>GET api/instruments/{id}/funding-payments?from=&amp;to=</c> and <c>GET api/instruments/{id}/open-interest?from=&amp;to=</c>
+///             — at most 1000 points an answer, read on from <c>continueFrom</c>; the open interest is a point every 5 minutes.
+///         </item>
+///     </list>
+///     The client turns «the newest N candles before a moment» into the aligned window itself. Numbers come as JSON numbers;
+///     strings are read too. An answer <c>202</c> or <c>"loading": true</c> says the service is still loading the history
+///     of the pair.
 /// </summary>
 public sealed class RestRecentHistory(HttpClient http) : IRecentHistory
 {
@@ -23,32 +34,78 @@ public sealed class RestRecentHistory(HttpClient http) : IRecentHistory
 
     public async Task<RecentRead<HistoryCandle>> Candles(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation)
     {
-        string path = $"api/instruments/{Uri.EscapeDataString(instrumentId)}/candles?interval={Interval(interval)}&to={Stamp(before)}&limit={Limit(limit)}";
-        return await Read(path, "candles", item => new HistoryCandle(
+        (DateTimeOffset from, DateTimeOffset to) = Window(interval, before, limit);
+        string path = $"api/instruments/{Uri.EscapeDataString(instrumentId)}/candles?interval={Interval(interval)}";
+        return await Read(path, "candles", from, to, item => new HistoryCandle(
             Time(item, "openTime"),
-            Text(item, "open")!,
-            Text(item, "high")!,
-            Text(item, "low")!,
-            Text(item, "close")!,
-            Text(item, "volume")!,
-            Text(item, "turnover"),
-            Text(item, "buyVolume")), cancellation);
+            Number(item, "open")!,
+            Number(item, "high")!,
+            Number(item, "low")!,
+            Number(item, "close")!,
+            Number(item, "volume")!,
+            Number(item, "turnover"),
+            Number(item, "buyVolume")), cancellation);
     }
 
     public async Task<RecentRead<HistoryPayment>> Funding(string instrumentId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellation)
     {
-        string path = $"api/instruments/{Uri.EscapeDataString(instrumentId)}/funding-payments?from={Stamp(from)}&to={Stamp(to)}";
-        return await Read(path, "payments", item => new HistoryPayment(Time(item, "time"), Text(item, "fundingRate")!), cancellation);
+        string path = $"api/instruments/{Uri.EscapeDataString(instrumentId)}/funding-payments";
+        return await Read(path, "points", from, to, item => new HistoryPayment(Time(item, "time"), Number(item, "fundingRate")!), cancellation);
     }
 
+    /// <summary>
+    ///     The points of 5 minutes of the window of <paramref name="limit" /> intervals before <paramref name="before" />,
+    ///     reduced to one per interval: the last point of the interval, at the open of the interval.
+    /// </summary>
     public async Task<RecentRead<OpenInterestPoint>> OpenInterest(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation)
     {
-        string path = $"api/instruments/{Uri.EscapeDataString(instrumentId)}/open-interest?interval={Interval(interval)}&to={Stamp(before)}&limit={Limit(limit)}";
+        (DateTimeOffset from, DateTimeOffset to) = Window(interval, before, limit);
+        RecentRead<OpenInterestPoint> points = await Points(instrumentId, from, to, cancellation);
+        return points.Loading ? points : new RecentRead<OpenInterestPoint>(Loading: false, PerInterval(points.Items, interval));
+    }
+
+    /// <summary>
+    ///     The points of open interest at times in [<paramref name="from" />, <paramref name="to" />), oldest first, as the
+    ///     service keeps them: one every 5 minutes.
+    /// </summary>
+    public async Task<RecentRead<OpenInterestPoint>> Points(string instrumentId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellation)
+    {
+        string path = $"api/instruments/{Uri.EscapeDataString(instrumentId)}/open-interest";
         return await Read(
             path,
             "points",
-            item => new OpenInterestPoint(Time(item, "time"), decimal.Parse(Text(item, "openInterest")!, NumberStyles.Float, CultureInfo.InvariantCulture)),
+            from,
+            to,
+            item => new OpenInterestPoint(Time(item, "time"), decimal.Parse(Number(item, "openInterest")!, NumberStyles.Float, CultureInfo.InvariantCulture)),
             cancellation);
+    }
+
+    /// <summary>
+    ///     The last point of each interval, at the open of the interval, oldest first.
+    /// </summary>
+    public static IReadOnlyList<OpenInterestPoint> PerInterval(IEnumerable<OpenInterestPoint> points, TimeSpan interval)
+    {
+        var last = new SortedDictionary<DateTimeOffset, OpenInterestPoint>();
+        foreach (OpenInterestPoint point in points)
+        {
+            DateTimeOffset open = Floor(point.Time, interval);
+            if (!last.TryGetValue(open, out OpenInterestPoint? held) || held.Time <= point.Time)
+            {
+                last[open] = point;
+            }
+        }
+
+        return [.. last.Select(pair => pair.Value with { Time = pair.Key })];
+    }
+
+    /// <summary>
+    ///     The window of the newest <paramref name="limit" /> (1 to 1000) intervals before <paramref name="before" />: it ends
+    ///     at the boundary of the interval not later than <paramref name="before" />.
+    /// </summary>
+    public static (DateTimeOffset From, DateTimeOffset To) Window(TimeSpan interval, DateTimeOffset before, int limit)
+    {
+        DateTimeOffset to = Floor(before, interval);
+        return (to - (interval * Math.Clamp(limit, 1, MaxLimit)), to);
     }
 
     /// <summary>
@@ -60,12 +117,35 @@ public sealed class RestRecentHistory(HttpClient http) : IRecentHistory
         return interval == TimeSpan.FromMinutes(1) ? "1m" : Timeframes.Name(interval);
     }
 
-    private async Task<RecentRead<T>> Read<T>(string path, string property, Func<JsonElement, T> item, CancellationToken cancellation)
+    // The pages of the window, each from where the one before said to read on.
+    private async Task<RecentRead<T>> Read<T>(string path, string property, DateTimeOffset from, DateTimeOffset to, Func<JsonElement, T> item, CancellationToken cancellation)
+    {
+        List<T> items = [];
+        DateTimeOffset start = from;
+        while (true)
+        {
+            string request = $"{path}{(path.Contains('?') ? '&' : '?')}from={Stamp(start)}&to={Stamp(to)}";
+            (bool loading, DateTimeOffset? next) = await Page(request, property, items, item, cancellation);
+            if (loading)
+            {
+                return RecentRead<T>.StillLoading;
+            }
+
+            if (next is not { } continueFrom || continueFrom >= to || continueFrom <= start)
+            {
+                return new RecentRead<T>(Loading: false, items);
+            }
+
+            start = continueFrom;
+        }
+    }
+
+    private async Task<(bool Loading, DateTimeOffset? ContinueFrom)> Page<T>(string request, string property, List<T> items, Func<JsonElement, T> item, CancellationToken cancellation)
     {
         HttpResponseMessage response;
         try
         {
-            response = await http.GetAsync(path, cancellation);
+            response = await http.GetAsync(request, cancellation);
         }
         catch (HttpRequestException exception)
         {
@@ -76,27 +156,29 @@ public sealed class RestRecentHistory(HttpClient http) : IRecentHistory
         {
             if (response.StatusCode == HttpStatusCode.Accepted)
             {
-                return RecentRead<T>.StillLoading;
+                return (true, null);
             }
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new HistoryUnavailableException($"The REST of the market-data service answered {(int)response.StatusCode} to {path}.");
+                throw new HistoryUnavailableException($"The REST of the market-data service answered {(int)response.StatusCode} to {request}.");
             }
 
             using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellation));
-            if (document.RootElement.TryGetProperty("loading", out JsonElement loading) && loading.ValueKind == JsonValueKind.True)
+            JsonElement root = document.RootElement;
+            if (root.TryGetProperty("loading", out JsonElement loading) && loading.ValueKind == JsonValueKind.True)
             {
-                return RecentRead<T>.StillLoading;
+                return (true, null);
             }
 
-            return new RecentRead<T>(Loading: false, [.. document.RootElement.GetProperty(property).EnumerateArray().Select(item)]);
+            items.AddRange(root.GetProperty(property).EnumerateArray().Select(item));
+            return (false, root.TryGetProperty("continueFrom", out JsonElement next) && next.ValueKind == JsonValueKind.String ? Moment(next.GetString()!) : null);
         }
     }
 
-    private static int Limit(int limit)
+    private static DateTimeOffset Floor(DateTimeOffset moment, TimeSpan interval)
     {
-        return Math.Clamp(limit, 1, MaxLimit);
+        return new DateTimeOffset(moment.UtcTicks - (moment.UtcTicks % interval.Ticks), TimeSpan.Zero);
     }
 
     private static string Stamp(DateTimeOffset moment)
@@ -106,11 +188,27 @@ public sealed class RestRecentHistory(HttpClient http) : IRecentHistory
 
     private static DateTimeOffset Time(JsonElement item, string name)
     {
-        return DateTimeOffset.Parse(item.GetProperty(name).GetString()!, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+        return Moment(item.GetProperty(name).GetString()!);
     }
 
-    private static string? Text(JsonElement item, string name)
+    private static DateTimeOffset Moment(string text)
     {
-        return item.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+        return DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+    }
+
+    // A number as the decimal text the service wrote: a JSON number as it stands, a string as it is, null as nothing.
+    private static string? Number(JsonElement item, string name)
+    {
+        if (!item.TryGetProperty(name, out JsonElement value))
+        {
+            return null;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.Number => value.GetRawText(),
+            JsonValueKind.String => value.GetString(),
+            _ => null
+        };
     }
 }
