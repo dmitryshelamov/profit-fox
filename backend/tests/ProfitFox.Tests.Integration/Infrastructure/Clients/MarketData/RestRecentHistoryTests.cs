@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Extensions.Time.Testing;
 
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.ValueObjects.MarketData;
@@ -129,6 +130,37 @@ public sealed class RestRecentHistoryTests
 
         Assert.That(read.Items.Select(payment => payment.Rate), Is.EqualTo(new[] { "-0.00003097", "0.0001" }));
         Assert.That(DateTimeOffset.Parse(Query(service.Requests[1])["from"]), Is.EqualTo(Midnight.AddHours(-16)), "the second page starts at continueFrom");
+    }
+
+    [Test]
+    public async Task A_page_of_500_days_reads_its_open_interest_with_one_History_call()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var clock = new FakeTimeProvider(Midnight.AddHours(12).AddMinutes(34));
+        server.Data.Time = clock;
+        var history = new RestRecentHistory(server.Http, server.Channel, clock);
+
+        RecentRead<OpenInterestPoint> interest = await history.OpenInterest("btc", TimeSpan.FromDays(1), clock.GetUtcNow(), 500, CancellationToken.None);
+
+        Assert.That(server.Data.InterestRequests, Has.Count.EqualTo(1), "the days before today in one call of History");
+        Assert.That(server.Data.RestRequests, Has.Count.LessThanOrEqualTo(2));
+        Assert.That(interest.Items.Select(point => point.Time), Is.EqualTo(Enumerable.Range(0, 15).Select(day => FakeMarketData.CoveredFrom.AddDays(day))));
+        Assert.That(interest.Items.Select(point => point.Value), Is.All.EqualTo(24_000m));
+    }
+
+    [Test]
+    public async Task The_open_interest_of_today_comes_from_the_REST_and_the_days_before_from_History()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var clock = new FakeTimeProvider(Midnight.AddHours(3).AddMinutes(12));
+        server.Data.Time = clock;
+        var history = new RestRecentHistory(server.Http, server.Channel, clock);
+
+        RecentRead<OpenInterestPoint> interest = await history.OpenInterest("btc", TimeSpan.FromHours(1), clock.GetUtcNow(), 6, CancellationToken.None);
+
+        Assert.That(interest.Items.Select(point => point.Time), Is.EqualTo(Enumerable.Range(-3, 6).Select(hour => Midnight.AddHours(hour))), "no hole at midnight");
+        Assert.That(server.Data.InterestRequests.Select(request => (request.From.ToDateTimeOffset(), request.To.ToDateTimeOffset())), Is.EqualTo(new[] { (Midnight.AddHours(-3), Midnight) }));
+        Assert.That(DateTimeOffset.Parse(Query(server.Data.RestQueries.Single())["from"]), Is.EqualTo(Midnight));
     }
 
     [Test]

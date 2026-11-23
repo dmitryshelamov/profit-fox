@@ -47,7 +47,7 @@ internal static class BenchServices
         {
             services.AddSingleton<IHistorySource>(new GrpcHistorySource(market.Channel));
             services.AddSingleton<IInstrumentCatalog>(new InstrumentCatalog(market.Http));
-            services.AddSingleton<IRecentHistory>(new RestRecentHistory(market.Http));
+            services.AddSingleton<IRecentHistory>(provider => new RestRecentHistory(market.Http, market.Channel, provider.GetService<TimeProvider>() ?? TimeProvider.System));
             services.AddSingleton<IMarketFeed>(provider => new GrpcMarketFeed(market.Channel, new InstrumentCatalog(market.Http), provider.GetService<TimeProvider>() ?? TimeProvider.System, new MarketFeedSettings { RetryDelay = TimeSpan.FromMilliseconds(50) }));
         }
 

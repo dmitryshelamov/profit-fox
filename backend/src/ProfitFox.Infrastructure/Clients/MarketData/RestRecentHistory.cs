@@ -2,9 +2,15 @@ using System.Globalization;
 using System.Net;
 using System.Text.Json;
 
+using Google.Protobuf.WellKnownTypes;
+
+using Grpc.Core;
+using Grpc.Net.Client;
+
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Infrastructure.Clients.MarketData.Protos;
 
 namespace ProfitFox.Infrastructure.Clients.MarketData;
 
@@ -23,9 +29,11 @@ namespace ProfitFox.Infrastructure.Clients.MarketData;
 ///     </list>
 ///     The client turns «the newest N candles before a moment» into the aligned window itself. Numbers come as JSON numbers;
 ///     strings are read too. An answer <c>202</c> or <c>"loading": true</c> says the service is still loading the history
-///     of the pair.
+///     of the pair. With a gRPC channel, the open interest of the days before the start of the current UTC day comes from
+///     one call of <c>OpenInterestFeed.History</c>, which refuses a window that ends after it (task 18.2), and only the
+///     current day from the REST.
 /// </summary>
-public sealed class RestRecentHistory(HttpClient http) : IRecentHistory
+public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = null, TimeProvider? time = null) : IRecentHistory
 {
     /// <summary>
     ///     The most candles or points one answer gives.
@@ -55,13 +63,67 @@ public sealed class RestRecentHistory(HttpClient http) : IRecentHistory
 
     /// <summary>
     ///     The points of 5 minutes of the window of <paramref name="limit" /> intervals before <paramref name="before" />,
-    ///     reduced to one per interval: the last point of the interval, at the open of the interval.
+    ///     reduced to one per interval: the last point of the interval, at the open of the interval. The days before the
+    ///     current UTC day come from <c>OpenInterestFeed.History</c> when there is a channel, the current day from the REST.
     /// </summary>
     public async Task<RecentRead<OpenInterestPoint>> OpenInterest(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation)
     {
         (DateTimeOffset from, DateTimeOffset to) = Window(interval, before, limit);
-        RecentRead<OpenInterestPoint> points = await Points(instrumentId, from, to, cancellation);
-        return points.Loading ? points : new RecentRead<OpenInterestPoint>(Loading: false, PerInterval(points.Items, interval));
+        List<OpenInterestPoint> points = [];
+        DateTimeOffset rest = from;
+        if (channel is not null)
+        {
+            DateTimeOffset today = Floor((time ?? TimeProvider.System).GetUtcNow(), TimeSpan.FromDays(1));
+            if (from < today)
+            {
+                DateTimeOffset end = to < today ? to : today;
+                points.AddRange(await StoredPoints(instrumentId, from, end, cancellation));
+                rest = end;
+            }
+        }
+
+        if (rest < to)
+        {
+            RecentRead<OpenInterestPoint> current = await Points(instrumentId, rest, to, cancellation);
+            if (current.Loading)
+            {
+                return current;
+            }
+
+            points.AddRange(current.Items);
+        }
+
+        return new RecentRead<OpenInterestPoint>(Loading: false, PerInterval(points, interval));
+    }
+
+    /// <summary>
+    ///     The stored points of open interest of past days at times in [<paramref name="from" />, <paramref name="to" />)
+    ///     from one call of <c>OpenInterestFeed.History</c>, oldest first.
+    /// </summary>
+    /// <exception cref="HistoryUnavailableException">The service did not answer or refused the window.</exception>
+    private async Task<IReadOnlyList<OpenInterestPoint>> StoredPoints(string instrumentId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellation)
+    {
+        var client = new OpenInterestFeed.OpenInterestFeedClient(channel);
+        var request = new OpenInterestHistoryRequest { From = Timestamp.FromDateTimeOffset(from), To = Timestamp.FromDateTimeOffset(to) };
+        request.InstrumentIds.Add(instrumentId);
+        List<OpenInterestPoint> points = [];
+        try
+        {
+            using AsyncServerStreamingCall<OpenInterestHistoryItem> call = client.History(request, cancellationToken: cancellation);
+            await foreach (OpenInterestHistoryItem item in call.ResponseStream.ReadAllAsync(cancellation))
+            {
+                if (item.ItemCase == OpenInterestHistoryItem.ItemOneofCase.Point && item.Point.InstrumentId == instrumentId)
+                {
+                    points.Add(new OpenInterestPoint(item.Point.Time.ToDateTimeOffset(), decimal.Parse(item.Point.OpenInterest, NumberStyles.Float, CultureInfo.InvariantCulture)));
+                }
+            }
+        }
+        catch (RpcException exception) when (exception.StatusCode is not StatusCode.Cancelled)
+        {
+            throw new HistoryUnavailableException($"The market-data service answered {exception.StatusCode} to the history of open interest: {exception.Status.Detail}", exception);
+        }
+
+        return points;
     }
 
     /// <summary>

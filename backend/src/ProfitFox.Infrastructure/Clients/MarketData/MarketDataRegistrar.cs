@@ -22,7 +22,10 @@ internal static class MarketDataRegistrar
         services.AddSingleton(_ => GrpcChannel.ForAddress(grpc, new GrpcChannelOptions { MaxReceiveMessageSize = 64 * 1024 * 1024 }));
         services.AddSingleton<IHistorySource>(provider => new GrpcHistorySource(provider.GetRequiredService<GrpcChannel>()));
         services.AddSingleton<IInstrumentCatalog>(_ => new InstrumentCatalog(new HttpClient { BaseAddress = rest, Timeout = TimeSpan.FromMinutes(1) }));
-        services.AddSingleton<IRecentHistory>(_ => new RestRecentHistory(new HttpClient { BaseAddress = rest, Timeout = TimeSpan.FromMinutes(1) }));
+        services.AddSingleton<IRecentHistory>(provider => new RestRecentHistory(
+            new HttpClient { BaseAddress = rest, Timeout = TimeSpan.FromMinutes(1) },
+            provider.GetRequiredService<GrpcChannel>(),
+            provider.GetService<TimeProvider>() ?? TimeProvider.System));
         services.AddSingleton(new MarketFeedSettings());
         services.AddSingleton<IMarketFeed>(provider => new GrpcMarketFeed(
             provider.GetRequiredService<GrpcChannel>(),

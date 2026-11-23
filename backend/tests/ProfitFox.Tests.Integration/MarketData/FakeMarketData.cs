@@ -19,6 +19,11 @@ public sealed class FakeMarketData
 
     public List<FundingPaymentHistoryRequest> FundingRequests { get; } = [];
 
+    /// <summary>
+    ///     The calls of <c>OpenInterestFeed.History</c> (task 18.2).
+    /// </summary>
+    public List<OpenInterestHistoryRequest> InterestRequests { get; } = [];
+
     public StatusCode? Failure { get; set; }
 
     /// <summary>
