@@ -309,6 +309,34 @@ describe('the live candle', () => {
     );
   });
 
+  // Task 18.24: a closed candle missed while the stream was broken comes from the history read again.
+  it('reads the history of the chart again after the stream connected again', async () => {
+    const requests = routes();
+    renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.candles).toHaveLength(500));
+    const asked = chartQueries(requests).length;
+
+    act(() => FakeEventSource.last().fail());
+    await waitFor(() => expect(FakeEventSource.opened).toHaveLength(2), { timeout: 4000 });
+    act(() => FakeEventSource.last().send('candle', live(fourteen, 238)));
+
+    await waitFor(() => expect(chartQueries(requests).length).toBeGreaterThan(asked));
+  });
+
+  it('reads the history of the chart again when the live candle steps over a candle', async () => {
+    const requests = routes();
+    renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.candles).toHaveLength(500));
+    act(() => FakeEventSource.last().send('candle', live(fourteen, 238)));
+    const asked = chartQueries(requests).length;
+
+    act(() => FakeEventSource.last().send('candle', live(fourteen + hour, 238.5)));
+    expect(chartQueries(requests)).toHaveLength(asked);
+    act(() => FakeEventSource.last().send('candle', live(fourteen + 3 * hour, 239)));
+
+    await waitFor(() => expect(chartQueries(requests).length).toBeGreaterThan(asked));
+  });
+
   // Scenario «Страницу закрыли».
   it('closes the stream with the page', async () => {
     routes();

@@ -10,6 +10,8 @@ export interface LiveState {
   readonly candle: LiveCandle | null;
   readonly closed: readonly LiveCandle[];
   readonly state: 'connecting' | 'live' | 'stopped';
+  /** How many times the stream came back after a break: the chart reads its history again then (task 18.24). */
+  readonly reconnects: number;
 }
 
 /**
@@ -18,10 +20,15 @@ export interface LiveState {
  * {@link reconnectMs}. The stream is closed with the page: the API then stops taking the forming candles.
  */
 export function useLiveCandle(symbol: string, timeframe: string): LiveState {
-  const [live, setLive] = useState<LiveState>({ candle: null, closed: [], state: 'connecting' });
+  const [live, setLive] = useState<LiveState>({
+    candle: null,
+    closed: [],
+    state: 'connecting',
+    reconnects: 0,
+  });
 
   useEffect(() => {
-    setLive({ candle: null, closed: [], state: 'connecting' });
+    setLive({ candle: null, closed: [], state: 'connecting', reconnects: 0 });
     if (typeof EventSource === 'undefined') {
       return;
     }
@@ -39,6 +46,7 @@ export function useLiveCandle(symbol: string, timeframe: string): LiveState {
             ? [...old.closed.filter((item) => item.openTime !== candle.openTime), candle]
             : old.closed,
           state: 'live',
+          reconnects: old.state === 'stopped' ? old.reconnects + 1 : old.reconnects,
         }));
       });
       source.addEventListener('error', () => {

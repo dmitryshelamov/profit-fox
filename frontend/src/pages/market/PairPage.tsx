@@ -6,7 +6,7 @@ import { type IdeaChoices, listPairIdeas } from '@/api/ideas';
 import { type ChartCandle, type ChartPoint, getMarketPair, getPairChart } from '@/api/market';
 import { IdeaChoiceRow } from '@/pages/ideas/IdeaChoices';
 import { pairColumns } from '@/pages/ideas/ideaColumns';
-import { timeframes } from '@/preview/preview';
+import { lengthOf, timeframes } from '@/preview/preview';
 import { Badge } from '@/shared/ui/Badge';
 import { Button } from '@/shared/ui/Button';
 import { Page, SectionTitle } from '@/shared/ui/Page';
@@ -228,6 +228,32 @@ function ChartSection({
     const joined = joinPages(earlier.candles, base ?? []);
     return live.closed.reduce((all, candle) => withLive(all, candle), joined);
   }, [earlier.candles, base, live.closed]);
+  // A closed candle missed while the stream was broken is in the history read again: after the stream came back, and when
+  // the live candle steps over a candle (task 18.24).
+  const refetchHistory = first.refetch;
+  useEffect(() => {
+    if (live.reconnects > 0) {
+      void refetchHistory();
+    }
+  }, [live.reconnects, refetchHistory]);
+  const newest = useRef<number | null>(null);
+  const liveOpen = live.candle === null ? null : Number(live.candle.openTime);
+  const lastOfHistory = base?.at(-1)?.openTime;
+  useEffect(() => {
+    if (liveOpen === null) {
+      return;
+    }
+
+    const known = Math.max(
+      newest.current ?? Number.NEGATIVE_INFINITY,
+      Number(lastOfHistory ?? Number.NEGATIVE_INFINITY),
+    );
+    if (Number.isFinite(known) && liveOpen > known + lengthOf(timeframe)) {
+      void refetchHistory();
+    }
+
+    newest.current = Math.max(newest.current ?? liveOpen, liveOpen);
+  }, [liveOpen, lastOfHistory, timeframe, refetchHistory]);
   const interest = useMemo(
     () => interestInUsdt(joinPoints(earlier.interest, first.data?.openInterest ?? []), candles),
     [earlier.interest, first.data?.openInterest, candles],
