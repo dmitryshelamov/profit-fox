@@ -31,7 +31,7 @@ namespace ProfitFox.Infrastructure.Clients.MarketData;
 ///     strings are read too. An answer <c>202</c> or <c>"loading": true</c> says the service is still loading the history
 ///     of the pair. With a gRPC channel, the open interest of the days before the start of the current UTC day comes from
 ///     one call of <c>OpenInterestFeed.History</c>, which refuses a window that ends after it (task 18.2), and only the
-///     current day from the REST.
+///     current day from the REST; when History refuses or fails, the whole window comes from the REST (task 19.7).
 /// </summary>
 public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = null, TimeProvider? time = null) : IRecentHistory
 {
@@ -77,8 +77,17 @@ public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = nu
             if (from < today)
             {
                 DateTimeOffset end = to < today ? to : today;
-                points.AddRange(await StoredPoints(instrumentId, from, end, cancellation));
-                rest = end;
+                try
+                {
+                    points.AddRange(await StoredPoints(instrumentId, from, end, cancellation));
+                    rest = end;
+                }
+                catch (HistoryUnavailableException)
+                {
+                    // History refused the window — near midnight the clock of the bench may be ahead of that of the service,
+                    // whose day has not begun yet — so the whole window comes from the REST (task 19.7).
+                    points.Clear();
+                }
             }
         }
 

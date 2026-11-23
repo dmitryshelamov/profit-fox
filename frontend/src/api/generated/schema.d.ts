@@ -276,6 +276,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/market/pairs/{symbol}/chart/open-interest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetPairOpenInterest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/market/pairs/{symbol}/live": {
         parameters: {
             query?: never;
@@ -871,8 +887,13 @@ export interface components {
             timeframe: string;
             loading: boolean;
             candles: components["schemas"]["ChartCandle"][];
-            openInterest: components["schemas"]["ChartPoint"][];
             funding: components["schemas"]["ChartPoint"][];
+        };
+        PairOpenInterestResponse: {
+            symbol: string;
+            timeframe: string;
+            loading: boolean;
+            openInterest: components["schemas"]["ChartPoint"][];
         };
         ParameterValueResponse: {
             name: string;
@@ -2000,6 +2021,66 @@ export interface operations {
                     "text/plain": components["schemas"]["PairChartResponse"];
                     "application/json": components["schemas"]["PairChartResponse"];
                     "text/json": components["schemas"]["PairChartResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetPairOpenInterest: {
+        parameters: {
+            query?: {
+                timeframe?: string;
+                before?: number | string;
+            };
+            header?: never;
+            path: {
+                symbol: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["PairOpenInterestResponse"];
+                    "application/json": components["schemas"]["PairOpenInterestResponse"];
+                    "text/json": components["schemas"]["PairOpenInterestResponse"];
                 };
             };
             /** @description Not Found */

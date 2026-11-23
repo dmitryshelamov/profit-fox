@@ -52,8 +52,16 @@ public static class MarketResponses
                     (double)candle.Close,
                     (double)candle.Volume))
             ],
-            [.. chart.OpenInterest.Select(point => new ChartPoint(point.Time.ToUnixTimeMilliseconds(), (double)point.Value))],
             [.. chart.Funding.Select(payment => payment.ToFundingPayment()).Select(payment => new ChartPoint(payment.Time.ToUnixTimeMilliseconds(), (double)payment.Rate))]);
+    }
+
+    public static PairOpenInterestResponse Of(string symbol, PairOpenInterestInternal interest)
+    {
+        return new PairOpenInterestResponse(
+            symbol,
+            Timeframes.Name(interest.Timeframe),
+            interest.Loading,
+            [.. interest.OpenInterest.Select(point => new ChartPoint(point.Time.ToUnixTimeMilliseconds(), (double)point.Value))]);
     }
 
     public static LiveCandleResponse Of(LiveCandle candle)

@@ -164,6 +164,25 @@ public sealed class RestRecentHistoryTests
         Assert.That(DateTimeOffset.Parse(Query(server.Data.RestQueries.Single())["from"]), Is.EqualTo(Midnight));
     }
 
+    /// <summary>
+    ///     Task 19.7: just after midnight by the clock of the bench, which is ahead of the clock of the service, History refuses
+    ///     a window that ends at the start of the day of the bench — the points come from the REST instead.
+    /// </summary>
+    [Test]
+    public async Task A_refusal_of_History_reads_the_open_interest_from_the_REST()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        server.Data.Time = new FakeTimeProvider(Midnight.AddSeconds(-30));
+        var bench = new FakeTimeProvider(Midnight.AddSeconds(30));
+        var history = new RestRecentHistory(server.Http, server.Channel, bench);
+
+        RecentRead<OpenInterestPoint> interest = await history.OpenInterest("btc", TimeSpan.FromHours(1), bench.GetUtcNow(), 6, CancellationToken.None);
+
+        Assert.That(server.Data.InterestRequests, Has.Count.EqualTo(1), "History was asked and refused");
+        Assert.That(interest.Items.Select(point => point.Time), Is.EqualTo(Enumerable.Range(-6, 6).Select(hour => Midnight.AddHours(hour))));
+        Assert.That(DateTimeOffset.Parse(Query(server.Data.RestQueries.Single())["from"]), Is.EqualTo(Midnight.AddHours(-6)));
+    }
+
     [Test]
     public async Task A_refusal_tells_what_was_asked_and_the_answer_of_the_service_but_not_the_pair()
     {

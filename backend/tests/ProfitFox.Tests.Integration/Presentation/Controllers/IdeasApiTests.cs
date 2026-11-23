@@ -224,13 +224,33 @@ public sealed class IdeasApiTests
         Assert.That((first.Timeframe, first.Loading, first.Candles.Count), Is.EqualTo(("1h", false, 500)));
         Assert.That(DateTimeOffset.FromUnixTimeMilliseconds(first.Candles[^1].OpenTime), Is.EqualTo(new DateTimeOffset(2026, 11, 22, 13, 0, 0, TimeSpan.Zero)), "the candle closed at 14:00 of the current day");
         Assert.That(earlier.Candles[^1].OpenTime, Is.EqualTo(first.Candles[0].OpenTime - (long)TimeSpan.FromHours(1).TotalMilliseconds), "the page before, without a gap or an overlap");
-        Assert.That(first.OpenInterest.Count, Is.EqualTo(500));
         Assert.That(first.Funding.Select(point => point.Time), Is.All.InRange(first.Candles[0].OpenTime, Now.ToUnixTimeMilliseconds()));
         Assert.That(first.Funding, Has.Count.InRange(62, 63), "a payment every 8 hours over 500 hours");
         Assert.That(fifteen.Candles[1].OpenTime - fifteen.Candles[0].OpenTime, Is.EqualTo((long)TimeSpan.FromMinutes(15).TotalMilliseconds));
         Assert.That(await Errors(minute), Is.EqualTo(new[] { ("InvalidTimeframe", (string?)"timeframe") }));
         Assert.That(none.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
         Assert.That((loading.Loading, loading.Candles), Is.EqualTo((true, Array.Empty<ChartCandle>())).Using<(bool, IReadOnlyList<ChartCandle>)>((a, b) => a.Item1 == b.Item1 && a.Item2.Count == b.Item2.Count));
+    }
+
+    /// <summary>
+    ///     Task 19.7: the open interest of the chart comes by its own request over the window of the page of candles — one point
+    ///     a candle — so the candles and the payments do not wait for it.
+    /// </summary>
+    [Test]
+    public async Task The_open_interest_of_the_chart_comes_by_its_own_request_over_the_window_of_the_page()
+    {
+        PairChartResponse first = (await _api.Http.GetFromJsonAsync<PairChartResponse>("/api/market/pairs/SOLUSDT/chart?timeframe=1h", Json))!;
+        PairOpenInterestResponse interest = (await _api.Http.GetFromJsonAsync<PairOpenInterestResponse>("/api/market/pairs/SOLUSDT/chart/open-interest?timeframe=1h", Json))!;
+        PairOpenInterestResponse earlier = (await _api.Http.GetFromJsonAsync<PairOpenInterestResponse>($"/api/market/pairs/SOLUSDT/chart/open-interest?timeframe=1h&before={first.Candles[0].OpenTime}", Json))!;
+        HttpResponseMessage minute = await _api.Http.GetAsync("/api/market/pairs/SOLUSDT/chart/open-interest?timeframe=1m");
+        HttpResponseMessage none = await _api.Http.GetAsync("/api/market/pairs/NOSUCHUSDT/chart/open-interest?timeframe=1h");
+
+        Assert.That((interest.Symbol, interest.Timeframe, interest.Loading), Is.EqualTo(("SOLUSDT", "1h", false)));
+        Assert.That(interest.OpenInterest.Select(point => point.Time), Is.EqualTo(first.Candles.Select(candle => candle.OpenTime)), "a point on every candle of the page");
+        Assert.That(earlier.OpenInterest[^1].Time, Is.EqualTo(first.Candles[0].OpenTime - (long)TimeSpan.FromHours(1).TotalMilliseconds), "the window of the page before");
+        Assert.That(await Errors(minute), Is.EqualTo(new[] { ("InvalidTimeframe", (string?)"timeframe") }));
+        Assert.That(none.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        Assert.That(_market.Data.RestRequests.Count(request => request.StartsWith("open-interest", StringComparison.Ordinal)), Is.Not.Zero);
     }
 
     /// <summary>

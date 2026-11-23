@@ -112,7 +112,8 @@ public class MarketController(ISender sender, LiveCandleHub live) : ControllerBa
 
     /// <summary>
     ///     A page of 500 closed candles of the timeframe before <paramref name="before" /> — up to now when not given — with the
-    ///     open interest and the funding payments of that time (spec market-overview «График пары»).
+    ///     funding payments of that time (spec market-overview «График пары»); the open interest of the page comes by
+    ///     <c>GetPairOpenInterest</c> (task 19.7).
     /// </summary>
     /// <param name="symbol">The pair.</param>
     /// <param name="timeframe">One of <c>5m</c>, <c>15m</c>, <c>1h</c>, <c>4h</c>, <c>1d</c>.</param>
@@ -128,6 +129,28 @@ public class MarketController(ISender sender, LiveCandleHub live) : ControllerBa
         DateTimeOffset? end = before is { } milliseconds ? DateTimeOffset.FromUnixTimeMilliseconds(milliseconds) : null;
         return await Answer<PairChartResponse>(async () => await sender.Send(new GetPairChartQuery(symbol, timeframe, end), cancellation) is { } chart
             ? MarketResponses.Of(symbol, chart)
+            : NotFound(symbol));
+    }
+
+    /// <summary>
+    ///     The open interest of the page of the chart with the same <paramref name="before" /> (task 19.7; spec market-overview
+    ///     «OI и фандинг под графиком»): in coins, the last point of each candle of the window. Its own request: the page draws
+    ///     the candles and the payments without waiting for it, and its error does not take the chart down.
+    /// </summary>
+    /// <param name="symbol">The pair.</param>
+    /// <param name="timeframe">One of <c>5m</c>, <c>15m</c>, <c>1h</c>, <c>4h</c>, <c>1d</c>.</param>
+    /// <param name="before">Milliseconds since 1970: the page ends there.</param>
+    /// <param name="cancellation">The request was given up.</param>
+    [HttpGet("pairs/{symbol}/chart/open-interest", Name = "GetPairOpenInterest")]
+    [ProducesResponseType<PairOpenInterestResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult<PairOpenInterestResponse>> ChartOpenInterest(string symbol, [FromQuery] string? timeframe, [FromQuery] long? before, CancellationToken cancellation)
+    {
+        DateTimeOffset? end = before is { } milliseconds ? DateTimeOffset.FromUnixTimeMilliseconds(milliseconds) : null;
+        return await Answer<PairOpenInterestResponse>(async () => await sender.Send(new GetPairOpenInterestQuery(symbol, timeframe, end), cancellation) is { } interest
+            ? MarketResponses.Of(symbol, interest)
             : NotFound(symbol));
     }
 

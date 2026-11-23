@@ -5,6 +5,7 @@ export type MarketPair = Schemas['MarketPairResponse'];
 export type MarketPage = Schemas['MarketPageResponse'];
 export type IdeaBadge = Schemas['IdeaBadgeResponse'];
 export type PairChart = Schemas['PairChartResponse'];
+export type PairOpenInterest = Schemas['PairOpenInterestResponse'];
 export type ChartCandle = Schemas['ChartCandle'];
 export type ChartPoint = Schemas['ChartPoint'];
 export type LiveCandle = Schemas['LiveCandleResponse'];
@@ -37,7 +38,7 @@ export async function getMarketPair(symbol: string): Promise<MarketPair | null> 
   return result.response.status === 404 ? null : unwrap(result);
 }
 
-/** A page of 500 closed candles before `before`, with the open interest and the payments of that time. */
+/** A page of 500 closed candles before `before`, with the payments of that time. */
 export async function getPairChart(
   symbol: string,
   timeframe: string,
@@ -46,6 +47,23 @@ export async function getPairChart(
   const query = before === undefined ? { timeframe } : { timeframe, before };
   return pageOf(
     await api.GET('/api/market/pairs/{symbol}/chart', { params: { path: { symbol }, query } }),
+  );
+}
+
+/**
+ * The open interest of the page of the chart with the same `before`, one point a candle (task 19.7): its own request, so
+ * the candles and the payments do not wait for it.
+ */
+export async function getPairOpenInterest(
+  symbol: string,
+  timeframe: string,
+  before?: number,
+): Promise<PairOpenInterest> {
+  const query = before === undefined ? { timeframe } : { timeframe, before };
+  return pageOf(
+    await api.GET('/api/market/pairs/{symbol}/chart/open-interest', {
+      params: { path: { symbol }, query },
+    }),
   );
 }
 

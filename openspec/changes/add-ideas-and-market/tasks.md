@@ -402,7 +402,7 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   а порядок журнала пишет `exit_time DESC NULLS LAST`, поэтому сортировку индекс не снимает. Сделать новой миграцией:
   индекс с `NULLS LAST`. Проверить тестом миграций и планом запроса журнала на 10 000 идей (без сортировки поверх
   индекса).
-- [ ] 19.7 Бэкенд, время графика пары. На настоящем сервисе: `5m` — 0,45 с, `1h` — 0,6 с, `4h` — 1,3 с, `1d` — от 1,5 с
+- [x] 19.7 Бэкенд, время графика пары. На настоящем сервисе: `5m` — 0,45 с, `1h` — 0,6 с, `4h` — 1,3 с, `1d` — от 1,5 с
   (`SOXSUSDT`) до 6–10 с (`BTCUSDT`): OI за 500 суток читается одним `History` — около 144 тысяч точек ради 500. Около
   полуночи UTC окно `History` считается по часам стенда: если они впереди часов сервиса, он отказывает и график отдаёт
   ошибку. Сделать: OI графика приходит отдельным запросом (`GET /api/market/pairs/{symbol}/chart/open-interest` с тем же
@@ -945,6 +945,21 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   Scan` и `Sort`, с правкой `Index Scan using ideas_state_exit_time_ix` без `Sort`. Ожидания `MigrationTests` (перечень
   миграций, не защищённый) дополнены новой миграцией; новый тест миграций проверяет определение индекса и `Down`. API не
   менялся.
+
+- **19.7, OI графика отдельно.** `GET /api/market/pairs/{symbol}/chart/open-interest?timeframe&before`
+  (`GetPairOpenInterest`, `PairOpenInterestResponse`: `symbol`, `timeframe`, `loading`, `openInterest`) отдаёт OI окна
+  страницы графика с тем же `before` — по точке на свечу; `GET …/chart` больше не несёт `openInterest` и OI не читает.
+  Страница рисует свечи и выплаты сразу, OI первой страницы — своим запросом (`useQuery`, повтор раз в 5 секунд, пока
+  `loading`, перечитывается вместе с историей после разрыва потока), OI ранней страницы — тем же `before` после её
+  свечей. Ошибка OI графика не роняет: под графиком «Стенд не отдал OI: …» (`role="alert"`, «OI графика») с кнопкой
+  «Повторить». `RestRecentHistory.OpenInterest`: отказ или сбой `OpenInterestFeed.History` — всё окно через REST.
+  Тесты: `RestRecentHistoryTests.A_refusal_of_History_…` (часы стенда 00:00:30, сервиса 23:59:30 — без правки
+  `HistoryUnavailableException`), `IdeasApiTests.The_open_interest_of_the_chart_…`, три теста `pair.test.tsx` (свечи до
+  OI, ошибка OI с повтором, OI ранней страницы). Ожидание `IdeasApiTests.The_chart_goes_back_…` (не защищённый) больше
+  не смотрит OI в ответе графика. `design.md`, решение 9, дополнено. SHA-256 `/openapi/v1.json` (API в `Development` на
+  `http://localhost:5240`): `334e52e9544e5ea78d6237b7db17c9f9788d38e7b3b66edc98b3aeefe230b18f`; SHA-256
+  `frontend/src/api/generated/schema.d.ts`: `816887d84051ab628c7a04d701a7417d84e96e60391d98cc329f3e0dafe59ae8`. Замер
+  «свечи `1d` — до секунды» — у основной сессии на настоящем сервисе.
 
 ## База
 

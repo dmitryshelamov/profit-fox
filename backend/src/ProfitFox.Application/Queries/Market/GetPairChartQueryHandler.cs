@@ -8,8 +8,8 @@ using ProfitFox.Domain.ValueObjects.MarketData;
 namespace ProfitFox.Application.Queries.Market;
 
 /// <summary>
-///     Pages of 500 candles back from the REST of the market-data service, the current day included; the open interest is
-///     the last point of each candle.
+///     Pages of 500 candles back from the REST of the market-data service, the current day included, with the payments of
+///     funding of that time; the open interest of the page is <see cref="GetPairOpenInterestQuery" /> (task 19.7).
 /// </summary>
 internal sealed class GetPairChartQueryHandler(IInstrumentCatalog catalog, IRecentHistory history, TimeProvider time) : IRequestHandler<GetPairChartQuery, PairChartInternal?>
 {
@@ -33,12 +33,11 @@ internal sealed class GetPairChartQueryHandler(IInstrumentCatalog catalog, IRece
         RecentRead<HistoryCandle> candles = await history.Candles(pair.Id, timeframe, before, Page, cancellationToken);
         if (candles.Loading)
         {
-            return new PairChartInternal(timeframe, Loading: true, [], [], []);
+            return new PairChartInternal(timeframe, Loading: true, [], []);
         }
 
         DateTimeOffset from = candles.Items.Count > 0 ? candles.Items[0].OpenTime : before - (timeframe * Page);
-        RecentRead<OpenInterestPoint> interest = await history.OpenInterest(pair.Id, timeframe, before, Page, cancellationToken);
         RecentRead<HistoryPayment> funding = await history.Funding(pair.Id, from, before, cancellationToken);
-        return new PairChartInternal(timeframe, interest.Loading || funding.Loading, candles.Items, interest.Items, funding.Items);
+        return new PairChartInternal(timeframe, funding.Loading, candles.Items, funding.Items);
     }
 }

@@ -36,11 +36,27 @@ function chartRoute(step = hour): FakeRoute {
       timeframe: query.get('timeframe'),
       loading: false,
       candles,
-      openInterest: candles.map((candle) => ({ time: candle.openTime, value: 24_000 })),
       funding: [
         { time: before - 16 * hour, value: 0.0001 },
         { time: before - 8 * hour, value: -0.00004 },
       ],
+    });
+  };
+}
+
+/** The open interest of the window of a page of the chart (task 19.7): a point of 24 000 coins on every candle. */
+function interestRoute(step = hour): FakeRoute {
+  return (request) => {
+    const query = new URL(request.url).searchParams;
+    const before = Number(query.get('before') ?? fourteen);
+    return json({
+      symbol: 'SOLUSDT',
+      timeframe: query.get('timeframe'),
+      loading: false,
+      openInterest: candlesBefore(before, step, 500).map((candle) => ({
+        time: candle.openTime,
+        value: 24_000,
+      })),
     });
   };
 }
@@ -59,6 +75,7 @@ function routes(ideas: readonly Idea[] = [], extra: Record<string, FakeRoute> = 
         }),
       ),
     'GET /api/market/pairs/SOLUSDT/chart': chartRoute(),
+    'GET /api/market/pairs/SOLUSDT/chart/open-interest': interestRoute(),
     'GET /api/market/pairs/SOLUSDT/ideas': () =>
       json({ items: ideas, total: ideas.length, page: 1, pageSize: 50, filterGone: false }),
     ...extra,
@@ -155,7 +172,6 @@ describe('the chart while the history loads or fails', () => {
       timeframe: new URL(request.url).searchParams.get('timeframe'),
       loading: true,
       candles: [],
-      openInterest: [],
       funding: [],
     });
 
@@ -563,6 +579,70 @@ describe('the ideas, the open interest and the funding on the chart', () => {
     expect(screen.getByLabelText('OI под графиком')).toHaveTextContent('OI 6 млн');
     expect(screen.getByLabelText('Фандинг под графиком')).toHaveTextContent('Фандинг -0.0040 %');
   });
+
+  // Task 19.7: the open interest comes by its own request; the candles and the payments do not wait for it.
+  it('draws the candles and the payments before the open interest comes', async () => {
+    let answer: (response: Response) => void = () => undefined;
+    routes([], {
+      'GET /api/market/pairs/SOLUSDT/chart/open-interest': (request) =>
+        new Promise<Response>((resolve) => {
+          answer = (response) => resolve(response);
+          void request;
+        }),
+    });
+    renderApp('/market/SOLUSDT?timeframe=1h');
+
+    await waitFor(() => expect(drawn.candles).toHaveLength(500));
+    expect(drawn.series.Histogram).toHaveLength(2);
+    expect(drawn.series.Line ?? []).toHaveLength(0);
+
+    answer(interestRoute()(new Request('http://x/?timeframe=1h')) as Response);
+    await waitFor(() => expect(drawn.series.Line).toHaveLength(500));
+  });
+
+  it('keeps the chart when the open interest fails, says so and asks it again by the button', async () => {
+    let fail = true;
+    const requests = routes([], {
+      'GET /api/market/pairs/SOLUSDT/chart/open-interest': (request) =>
+        fail ? json({ title: 'сервис данных не ответил' }, 502) : interestRoute()(request),
+    });
+    renderApp('/market/SOLUSDT?timeframe=1h');
+
+    // The query is asked once more before it fails (`retry: 1`).
+    expect(
+      await screen.findByRole('alert', { name: 'OI графика' }, { timeout: 3_000 }),
+    ).toHaveTextContent('Стенд не отдал OI');
+    expect(drawn.candles).toHaveLength(500);
+    expect(screen.queryByText(/Стенд не отдал свечи/)).toBeNull();
+
+    fail = false;
+    await userEvent.click(
+      within(screen.getByRole('alert', { name: 'OI графика' })).getByRole('button', {
+        name: 'Повторить',
+      }),
+    );
+    await waitFor(() => expect(drawn.series.Line).toHaveLength(500));
+    expect(screen.queryByRole('alert', { name: 'OI графика' })).toBeNull();
+    expect(
+      requests.filter((request) => new URL(request.url).pathname.endsWith('/open-interest')).length,
+    ).toBeGreaterThanOrEqual(2);
+  });
+
+  it('asks the open interest of an earlier page with the same end', async () => {
+    const requests = routes();
+    renderApp('/market/SOLUSDT?timeframe=1h');
+    await waitFor(() => expect(drawn.series.Line).toHaveLength(500));
+
+    drawn.logicalRange = { from: 3, to: 120 };
+    act(() => drawn.rangeChange?.({ from: 3, to: 120 }));
+
+    await waitFor(() => expect(drawn.series.Line).toHaveLength(1000));
+    const before = requests
+      .map((request) => new URL(request.url))
+      .filter((url) => url.pathname.endsWith('/open-interest'))
+      .map((url) => url.searchParams.get('before'));
+    expect(before).toContain(String(fourteen - 500 * hour));
+  });
 });
 
 // Task 18.25, confirmed in the browser: a point of a panel at a time no candle has puts an empty slot into the row of
@@ -573,6 +653,16 @@ describe('the rows of the panels under the chart', () => {
 
   it('puts the payments of a day on its candle of 1d, summed, and every point on the time of a candle', async () => {
     routes([], {
+      'GET /api/market/pairs/SOLUSDT/chart/open-interest': () =>
+        json({
+          symbol: 'SOLUSDT',
+          timeframe: '1d',
+          loading: false,
+          openInterest: candlesBefore(midnight, day, 3).map((candle) => ({
+            time: candle.openTime,
+            value: 24_000,
+          })),
+        }),
       'GET /api/market/pairs/SOLUSDT/chart': () => {
         const candles = candlesBefore(midnight, day, 3);
         return json({
@@ -580,7 +670,6 @@ describe('the rows of the panels under the chart', () => {
           timeframe: '1d',
           loading: false,
           candles,
-          openInterest: candles.map((candle) => ({ time: candle.openTime, value: 24_000 })),
           funding: [
             { time: midnight - 2 * day + 8 * hour, value: 0.0001 },
             { time: midnight - 2 * day + 16 * hour, value: 0.0002 },

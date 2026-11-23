@@ -1,9 +1,15 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { type IdeaChoices, listPairIdeas } from '@/api/ideas';
-import { type ChartCandle, type ChartPoint, getMarketPair, getPairChart } from '@/api/market';
+import {
+  type ChartCandle,
+  type ChartPoint,
+  getMarketPair,
+  getPairChart,
+  getPairOpenInterest,
+} from '@/api/market';
 import { IdeaChoiceRow } from '@/pages/ideas/IdeaChoices';
 import { pairColumns } from '@/pages/ideas/ideaColumns';
 import { lengthOf, timeframes } from '@/preview/preview';
@@ -206,6 +212,14 @@ function ChartSection({
     queryFn: () => getPairChart(symbol, timeframe),
     refetchInterval: (query) => (query.state.data?.loading === true ? historyRetryMs : false),
   });
+  // The open interest of the first page comes by its own request (task 19.7): the candles and the payments are drawn
+  // without it, and its error leaves the chart as it is.
+  const firstInterest = useQuery({
+    queryKey: ['pair-chart-interest', symbol, timeframe],
+    queryFn: () => getPairOpenInterest(symbol, timeframe),
+    refetchInterval: (query) => (query.state.data?.loading === true ? historyRetryMs : false),
+  });
+  const [earlyInterestError, setEarlyInterestError] = useState<string | null>(null);
   const [earlier, setEarlier] = useState<{
     candles: ChartCandle[];
     interest: ChartPoint[];
@@ -238,10 +252,15 @@ function ChartSection({
   }, [earlier.candles, base, live.closed]);
   // A closed candle missed while the stream was broken is in the history read again: after the stream came back, and when
   // the live candle steps over a candle (task 18.24).
-  const refetchHistory = first.refetch;
+  const refetchCandles = first.refetch;
+  const refetchInterest = firstInterest.refetch;
+  const refetchHistory = useCallback(() => {
+    void refetchCandles();
+    void refetchInterest();
+  }, [refetchCandles, refetchInterest]);
   useEffect(() => {
     if (live.reconnects > 0) {
-      void refetchHistory();
+      refetchHistory();
     }
   }, [live.reconnects, refetchHistory]);
   const newest = useRef<number | null>(null);
@@ -257,19 +276,31 @@ function ChartSection({
       Number(lastOfHistory ?? Number.NEGATIVE_INFINITY),
     );
     if (Number.isFinite(known) && liveOpen > known + lengthOf(timeframe)) {
-      void refetchHistory();
+      refetchHistory();
     }
 
     newest.current = Math.max(newest.current ?? liveOpen, liveOpen);
   }, [liveOpen, lastOfHistory, timeframe, refetchHistory]);
   const interest = useMemo(
-    () => interestInUsdt(joinPoints(earlier.interest, first.data?.openInterest ?? []), candles),
-    [earlier.interest, first.data?.openInterest, candles],
+    () =>
+      interestInUsdt(joinPoints(earlier.interest, firstInterest.data?.openInterest ?? []), candles),
+    [earlier.interest, firstInterest.data?.openInterest, candles],
   );
   const funding = useMemo(
     () => joinPoints(earlier.funding, first.data?.funding ?? []),
     [earlier.funding, first.data?.funding],
   );
+
+  // The open interest of an earlier page, asked with the same end once its candles came; a failure is told, not the chart's.
+  const loadEarlierInterest = (before: number) => {
+    void getPairOpenInterest(symbol, timeframe, before)
+      .then((answer) => {
+        setEarlier((old) => ({ ...old, interest: joinPoints(answer.openInterest, old.interest) }));
+      })
+      .catch((error: unknown) => {
+        setEarlyInterestError(error instanceof Error ? error.message : String(error));
+      });
+  };
 
   const loadEarlier = (asked = false) => {
     const oldest = candles[0];
@@ -300,10 +331,11 @@ function ChartSection({
         setEarlyLoading(false);
         setEarlier((old) => ({
           candles: joinPages(chart.candles, old.candles),
-          interest: joinPoints(chart.openInterest, old.interest),
+          interest: old.interest,
           funding: joinPoints(chart.funding, old.funding),
           done: chart.candles.length < 500,
         }));
+        loadEarlierInterest(Number(oldest.openTime));
       })
       .catch((error: unknown) => {
         setEarlyLoading(false);
@@ -428,13 +460,28 @@ function ChartSection({
             onPick={(id) => onSearch({ idea: id, page: undefined })}
           />
         </div>
-        <div className="flex gap-8 font-mono text-[12px] text-muted">
+        <div className="flex flex-wrap items-center gap-8 font-mono text-[12px] text-muted">
           <span aria-label="OI под графиком">
             OI {lastInterest ? amountText(lastInterest.value) : '—'}
           </span>
           <span aria-label="Фандинг под графиком">
             Фандинг {lastPayment ? rateText(lastPayment.value) : '—'}
           </span>
+          {(firstInterest.isError || earlyInterestError !== null) && (
+            <span role="alert" aria-label="OI графика" className="flex items-center gap-2 text-err">
+              Стенд не отдал OI: {firstInterest.error?.message ?? earlyInterestError}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setEarlyInterestError(null);
+                  void refetchInterest();
+                }}
+              >
+                Повторить
+              </Button>
+            </span>
+          )}
         </div>
       </section>
       <section aria-label="Идеи пары" className="flex flex-col gap-4">
