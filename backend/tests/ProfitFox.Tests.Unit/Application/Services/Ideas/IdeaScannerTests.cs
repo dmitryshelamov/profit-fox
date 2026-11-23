@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.MarketData.Feed;
+using ProfitFox.Application.Services.Ideas;
 using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Entities.Ideas.Enums;
 using ProfitFox.Domain.ValueObjects.Ideas;
@@ -795,6 +796,28 @@ public sealed class IdeaScannerTests
 
         Assert.That(rig.Scanner.LiveSince, Is.EqualTo(Ten.AddSeconds(5)));
         Assert.That(rig.Log.Entries.Where(entry => entry.Level == LogLevel.Warning), Is.Empty);
+    }
+
+    /// <summary>
+    ///     Task 25.2: <c>Scanner:FeedSilence</c> of zero switches the watchdog off for the scanner too — ten minutes without a
+    ///     minute, a pass every second, keep the live state and write nothing to the journal.
+    /// </summary>
+    [Test]
+    public async Task A_feed_silence_of_zero_does_not_watch_the_silence()
+    {
+        var rig = new ScannerRig(settings: new ScannerSettings { FeedSilence = TimeSpan.Zero });
+        await rig.Start();
+        await rig.Minutes("BTCUSDT", Ten, 1, close: 100);
+        await rig.At(Ten.AddMinutes(1).AddSeconds(5));
+        Assert.That(rig.Scanner.LiveSince, Is.EqualTo(Ten.AddSeconds(5)), "since the start");
+
+        for (int second = 1; second <= 600; second++)
+        {
+            await rig.At(Ten.AddMinutes(1).AddSeconds(5 + second));
+            Assert.That(rig.Scanner.LiveSince, Is.EqualTo(Ten.AddSeconds(5)), $"{second} s without a minute");
+        }
+
+        Assert.That(rig.Log.Entries, Is.Empty);
     }
 
     /// <summary>

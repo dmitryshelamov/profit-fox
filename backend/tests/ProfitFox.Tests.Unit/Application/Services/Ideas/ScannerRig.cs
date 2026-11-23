@@ -29,7 +29,7 @@ internal sealed class ScannerRig
 
     public static readonly Instrument[] Pairs = [new Instrument("btc", "BTCUSDT"), new Instrument("eth", "ETHUSDT"), new Instrument("sol", "SOLUSDT")];
 
-    public ScannerRig(Instrument[]? pairs = null, ListLogger? log = null)
+    public ScannerRig(Instrument[]? pairs = null, ListLogger? log = null, ScannerSettings? settings = null)
     {
         Log = log ?? new ListLogger();
         Instruments = pairs ?? Pairs;
@@ -46,7 +46,7 @@ internal sealed class ScannerRig
             Market,
             new IdeaLibrary(Strategies, Signals, new MemoryIdeaSourceRepository(Strategies, Signals, Enabled, Labels)),
             Time,
-            new ScannerSettings(),
+            settings ?? new ScannerSettings(),
             Burst,
             Log);
     }

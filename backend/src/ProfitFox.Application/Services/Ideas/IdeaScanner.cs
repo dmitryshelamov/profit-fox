@@ -257,11 +257,12 @@ public sealed class IdeaScanner
                 _logger?.LogInformation("The feed told the minutes again up to {Last:O}; ideas count without a break since {Since:O}.", last, now);
             }
         }
-        else if (LiveSince is not null && now - (last + OneMinute) > _settings.FeedSilence)
+        else if (_settings.FeedSilence > TimeSpan.Zero && LiveSince is not null && now - (last + OneMinute) > _settings.FeedSilence)
         {
             // The feed told no minute for longer than the limit (task 24.1): no candle closes, and ideas are not counted
             // without a break. The minutes it catches up when it is back come as a catch-up: the pairs wait for their own
-            // minutes until it is live again, and ideas count without a break since then.
+            // minutes until it is live again, and ideas count without a break since then. A limit of zero or less switches
+            // the watch off, as it does for the feed (task 25.2).
             LiveSince = null;
             _live = false;
             _gap = true;
