@@ -230,6 +230,33 @@ describe('the name of a strategy in the lists of ideas', () => {
   });
 });
 
+// Task 20.8: the tables of ideas fit their frame: the column of the strategy gives way, a time and a number with its
+// percent stay on one line.
+describe('the widths of the tables of ideas', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('lets the strategy give way and keeps the times and the numbers of the open ideas on one line', async () => {
+    routes();
+    renderApp('/ideas');
+
+    const table = await screen.findByRole('table', { name: 'Открытые идеи' });
+    await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(2));
+    const heads = within(table)
+      .getAllByRole('columnheader')
+      .map((head) => head.textContent);
+    const cell = (title: string) =>
+      within(within(table).getAllByRole('row')[1]!).getAllByRole('cell')[
+        heads.findIndex((head) => head?.startsWith(title))
+      ]!;
+
+    expect(cell('Стратегия')).toHaveClass('w-full', 'max-w-0');
+    expect(within(cell('Пара')).getByTitle('SOLUSDT')).toHaveClass('truncate');
+    for (const title of ['Появилась, UTC', 'Вход', 'Стоп', 'Цель', 'Осталось', 'Сейчас']) {
+      expect(cell(title)).toHaveClass('whitespace-nowrap');
+    }
+  });
+});
+
 // Task 18.27: the summary goes back to its first page when a filter is chosen.
 describe('the page of the summary', () => {
   it('goes back to the first page when a filter is chosen', async () => {

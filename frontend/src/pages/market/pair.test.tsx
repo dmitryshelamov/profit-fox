@@ -1000,6 +1000,22 @@ describe('the ideas of a pair', () => {
     expect(screen.getByRole('heading', { name: /Идеи пары/ })).toHaveTextContent('4');
   });
 
+  // Task 20.8: «Вход, UTC», «Выход» and «Итог» stay on one line; the strategy gives way.
+  it('keeps the times and the results of the ideas of a pair on one line', async () => {
+    routes([longOpen()]);
+    renderApp('/market/SOLUSDT');
+
+    const table = within(await screen.findByRole('table', { name: 'Идеи пары' }));
+    const heads = table.getAllByRole('columnheader').map((head) => head.textContent);
+    const cells = within(table.getByRole('row', { name: /long-1$/ })).getAllByRole('cell');
+    const cell = (title: string) => cells[heads.findIndex((head) => head?.startsWith(title))]!;
+
+    expect(cell('Стратегия')).toHaveClass('w-full', 'max-w-0');
+    for (const title of ['Вход, UTC', 'Выход', 'Итог']) {
+      expect(cell(title)).toHaveClass('whitespace-nowrap');
+    }
+  });
+
   // Scenario «Состояние».
   it('asks only the open ideas of the pair when «открытые» is chosen', async () => {
     const requests = routes([longOpen()]);

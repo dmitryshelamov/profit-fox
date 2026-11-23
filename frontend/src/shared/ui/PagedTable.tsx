@@ -8,7 +8,7 @@ export interface ListSort {
   readonly descending: boolean;
 }
 
-/** A column of a list sorted on the server. */
+/** A column of a list sorted on the server. A number, a time or a result stays on one line (task 20.8). */
 export interface PagedColumn<Row> {
   readonly key: string;
   readonly title: string;
@@ -19,6 +19,8 @@ export interface PagedColumn<Row> {
   /** A column without a sort has a plain head. */
   readonly unsorted?: boolean;
   readonly className?: string;
+  /** The classes of the cells of the body only, not of the head. */
+  readonly cellClassName?: string;
   readonly cell: (row: Row) => ReactNode;
 }
 
@@ -122,7 +124,7 @@ export function PagedTable<Row>({
             {columns.map((column) => (
               <Td
                 key={column.key}
-                className={`${column.numeric ? 'pr-0 text-right font-mono' : ''} ${column.className ?? ''}`}
+                className={`${column.numeric ? 'pr-0 text-right font-mono whitespace-nowrap' : ''} ${column.className ?? ''} ${column.cellClassName ?? ''}`}
               >
                 {column.cell(row)}
               </Td>

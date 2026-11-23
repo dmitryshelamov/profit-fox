@@ -42,17 +42,27 @@ function Strategy({ name, version }: { readonly name: string; readonly version: 
   );
 }
 
+// The longest symbols («1000000BABYDOGEUSDT») are cut with an ellipsis and have the whole as a hint: with them the table of
+// the open ideas is wider than its frame even with the column of the strategy as narrow as its head (task 20.8).
 const symbol: PagedColumn<Idea> = {
   key: 'symbol',
   title: 'Пара',
   text: true,
   className: 'font-mono font-semibold',
-  cell: (idea) => idea.symbol,
+  cell: (idea) => (
+    <span title={idea.symbol} className="block max-w-[120px] truncate">
+      {idea.symbol}
+    </span>
+  ),
 };
+// The column of the strategy gives way when the table is wider than its frame (task 20.8): its cells take what the other
+// columns leave and count for nothing in the width of the table, the name cut with its ellipsis; the head keeps it no
+// narrower than its title.
 const strategy: PagedColumn<Idea> = {
   key: 'strategy',
   title: 'Стратегия',
   text: true,
+  cellClassName: 'w-full max-w-0',
   cell: (idea) => <Strategy name={idea.strategy} version={idea.version} />,
 };
 const timeframe: PagedColumn<Idea> = {
