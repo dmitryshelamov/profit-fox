@@ -480,7 +480,8 @@ public sealed class IdeaScanner
     // until they are written: a failed write keeps them for the next pass (task 18.8).
     private void Boundaries(DateTimeOffset now)
     {
-        TimeSpan[] timeframes = [.. _slots.Values.Select(slot => slot.Current.Timeframe).Distinct()];
+        // The former run of a label may be on another timeframe while the new one warms up (task 18.14).
+        TimeSpan[] timeframes = [.. _slots.Values.SelectMany(slot => slot.Previous is { } previous ? [slot.Current.Timeframe, previous.Timeframe] : new[] { slot.Current.Timeframe }).Distinct()];
         SortedDictionary<DateTimeOffset, List<TimeSpan>> closes = [];
         foreach (TimeSpan timeframe in timeframes)
         {
@@ -502,15 +503,15 @@ public sealed class IdeaScanner
 
         foreach ((DateTimeOffset close, List<TimeSpan> at) in closes)
         {
-            foreach (Slot slot in _slots.Values.Where(slot => slot.Current.Label is not null && at.Contains(slot.Current.Timeframe)))
+            foreach (Slot slot in _slots.Values.Where(slot => slot.Current.Label is not null && Closes(slot, at)))
             {
-                StepAll(slot, close, now);
+                StepAll(slot, close, at, now);
             }
 
             List<Idea> born = [];
-            foreach (Slot slot in _slots.Values.Where(slot => slot.Current.Strategy is not null && at.Contains(slot.Current.Timeframe)))
+            foreach (Slot slot in _slots.Values.Where(slot => slot.Current.Strategy is not null && Closes(slot, at)))
             {
-                born.AddRange(StepAll(slot, close, now));
+                born.AddRange(StepAll(slot, close, at, now));
             }
 
             foreach (IGrouping<(TimeSpan, EntrySide), Idea> group in born.GroupBy(idea => (idea.Timeframe, idea.Side)))
@@ -545,13 +546,15 @@ public sealed class IdeaScanner
 
     // The runs of a slot on the candle of every pair that closes at <paramref name="close" />: the current run where it is
     // warm, the former version where only it is. Gives the ideas the strategy ordered.
-    private List<Idea> StepAll(Slot slot, DateTimeOffset close, DateTimeOffset now)
+    private List<Idea> StepAll(Slot slot, DateTimeOffset close, List<TimeSpan> at, DateTimeOffset now)
     {
         List<Idea> born = [];
-        TimeSpan timeframe = slot.Current.Timeframe;
         foreach (string symbol in _pairs.Keys)
         {
-            Run? run = Ready(slot.Current, symbol, close) ?? (slot.Previous is { } previous ? Ready(previous, symbol, close) : null);
+            // The current run where it is ready, else the former one; each on the closes of its own timeframe.
+            Run? run = (at.Contains(slot.Current.Timeframe) ? Ready(slot.Current, symbol, close) : null)
+                       ?? (slot.Previous is { } previous && at.Contains(previous.Timeframe) ? Ready(previous, symbol, close) : null);
+            TimeSpan timeframe = run?.Timeframe ?? slot.Current.Timeframe;
             if (run is null || Book.Candle(symbol, timeframe, close - timeframe) is not { } candle)
             {
                 continue;
@@ -597,6 +600,16 @@ public sealed class IdeaScanner
         return born;
     }
 
+    private static bool Closes(Slot slot, List<TimeSpan> at)
+    {
+        return at.Contains(slot.Current.Timeframe) || (slot.Previous is { } previous && at.Contains(previous.Timeframe));
+    }
+
+    private static bool Warm(Run run, string symbol)
+    {
+        return run.Pairs.TryGetValue(symbol, out PairState? state) && state.State == WarmState.Warm;
+    }
+
     private static Run? Ready(Run run, string symbol, DateTimeOffset close)
     {
         return run.Pairs.TryGetValue(symbol, out PairState? state) && state.State == WarmState.Warm && close > state.WarmedUntil ? run : null;
@@ -608,7 +621,8 @@ public sealed class IdeaScanner
         List<string> texts = [];
         foreach (Slot slot in _slots.Values.Where(slot => slot.Current.Label is not null).OrderBy(slot => slot.Current.Label!.Text, StringComparer.Ordinal))
         {
-            Run run = slot.Current;
+            // The former label while the new one is not warm on the pair (task 18.14).
+            Run run = !Warm(slot.Current, symbol) && slot.Previous is { } previous ? previous : slot.Current;
             if (run.Values.TryGetValue(symbol, out (DateTimeOffset Close, bool? Value) value) && value.Close == Floor(moment, run.Timeframe) && value.Value == true)
             {
                 texts.Add(run.Label!.Text);

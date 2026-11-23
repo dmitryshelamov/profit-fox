@@ -128,6 +128,34 @@ public sealed class IdeaLabelScannerTests
     }
 
     /// <summary>
+    ///     Task 18.14: while a new version of the signal of a label, or its new timeframe, is not warm on a pair, the former
+    ///     label goes on being put there, as a former version of a strategy goes on giving ideas.
+    /// </summary>
+    [TestCase(1)]
+    [TestCase(4)]
+    public async Task The_former_label_is_put_while_the_new_one_warms_up(int hours)
+    {
+        var rig = new ScannerRig();
+        Guid signal = await rig.Label("btc-drop", "↓ BTC", Hour, BtcBelow(100));
+        await rig.Enable("close-up", "8h");
+        await rig.Start();
+
+        await rig.Label("btc-drop", "↓ BTC", TimeSpan.FromHours(hours), BtcBelow(100), version: 2, id: signal);
+        foreach (ProfitFox.Domain.ValueObjects.MarketData.Instrument pair in Pairs)
+        {
+            rig.History.Loading.Add(pair.Id);
+        }
+
+        rig.Time.SetUtcNow(Ten.AddSeconds(30));
+        await rig.Warm();
+        await rig.Minutes("BTCUSDT", Ten, 60, close: 99);
+        await rig.Minutes("ETHUSDT", Ten, 60, close: 101);
+        await rig.At(Eleven.AddSeconds(15));
+
+        Assert.That(rig.Ideas.Ideas.Single().Labels, Is.EqualTo(new[] { "↓ BTC" }), "version 2 is not warm yet: version 1 puts the label");
+    }
+
+    /// <summary>
     ///     «Девять шортов на 1h» and «Семь шортов».
     /// </summary>
     [TestCase(9, true)]
