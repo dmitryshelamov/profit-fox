@@ -55,7 +55,7 @@ public sealed class MigrationTests
 
         await using var connection = new NpgsqlConnection(connectionString);
         long[] versions = [.. await connection.QueryAsync<long>("SELECT \"Version\" FROM \"VersionInfo\" ORDER BY \"Version\"")];
-        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L, 202611230002L }));
+        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L, 202611230002L, 202611230003L }));
         Assert.That(await TablesOf(connectionString), Is.SupersetOf(new[] { "strategies", "strategy_versions", "strategy_signals" }));
     }
 
@@ -146,7 +146,7 @@ public sealed class MigrationTests
         Assert.That(await ColumnsOf(connection, BacktestTables), Is.EqualTo(before));
         Assert.That(
             await connection.QueryAsync<string>("SELECT indexname FROM pg_indexes WHERE tablename = 'ideas' ORDER BY indexname"),
-            Is.EqualTo(new[] { "ideas_birth_ux", "ideas_pk", "ideas_state_moment_ix", "ideas_strategy_timeframe_ix", "ideas_symbol_moment_ix" }));
+            Is.EqualTo(new[] { "ideas_birth_ux", "ideas_pk", "ideas_state_exit_time_ix", "ideas_state_moment_ix", "ideas_strategy_timeframe_ix", "ideas_symbol_moment_ix" }));
         Assert.That(ProfitFox.Infrastructure.Persistence.Postgres.BenchSchema.Expected, Is.GreaterThanOrEqualTo(202611230001L));
     }
 
@@ -168,6 +168,7 @@ public sealed class MigrationTests
         }
 
         Assert.That(await connection.QueryAsync<string>(columns), Is.EqualTo(new[] { "name", "worker", "until", "live_since", "warmed", "pairs" }));
+        Assert.That(await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM pg_indexes WHERE indexname = 'ideas_state_exit_time_ix'"), Is.Zero, "task 18.16: Down takes the index away");
         Assert.That(await TablesOf(connectionString), Is.EqualTo(Tables));
     }
 

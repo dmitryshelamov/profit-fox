@@ -194,6 +194,38 @@ public sealed class ListRepositoryTests
         Assert.That(await _ideas.CountsAsync(CancellationToken.None), Is.EqualTo((3, 4)));
     }
 
+    /// <summary>
+    ///     Task 18.16: pages of the summary with equal values of the sort neither repeat nor lose a row — the groups of one
+    ///     name and version on several timeframes and of strategies of the same name — and the journal has an index of its
+    ///     state and time of exit.
+    /// </summary>
+    [Test]
+    public async Task Pages_with_equal_values_of_the_sort_neither_repeat_nor_lose_a_row()
+    {
+        TimeSpan[] timeframes = [TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(15), TimeSpan.FromHours(1), TimeSpan.FromHours(4), TimeSpan.FromDays(1)];
+        for (int strategy = 0; strategy < 12; strategy++)
+        {
+            var id = Guid.NewGuid();
+            foreach (TimeSpan timeframe in timeframes)
+            {
+                await Add(IdeaGenerator.Generate(strategy: id, name: "same-name", timeframe: timeframe), closed: 0.001);
+            }
+        }
+
+        List<(Guid, int, string)> seen = [];
+        for (int page = 1; page <= 9; page++)
+        {
+            ListPage<IdeaSummary> rows = await _ideas.SummaryAsync(new IdeaListQuery(IdeaListKind.Closed, new ListOrder("ideas", true, page, 7)), CancellationToken.None);
+            seen.AddRange(rows.Items.Select(row => (row.StrategyId, row.Version, row.Timeframe)));
+        }
+
+        Assert.That(seen, Has.Count.EqualTo(60));
+        Assert.That(seen.Distinct().Count(), Is.EqualTo(60), "no group twice, none lost");
+        Assert.That(
+            await Scalar<string>("SELECT indexdef FROM pg_indexes WHERE tablename = 'ideas' AND indexname = 'ideas_state_exit_time_ix'"),
+            Does.Contain("(state, exit_time DESC)"));
+    }
+
     private async Task<Idea> Add(Idea idea, double? closed = null, bool excluded = false, int exitDaysAgo = 1)
     {
         await _ideas.AddAsync(idea, CancellationToken.None);

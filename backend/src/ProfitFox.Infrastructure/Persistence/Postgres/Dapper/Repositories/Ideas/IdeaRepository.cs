@@ -68,6 +68,10 @@ internal sealed class IdeaRepository(NpgsqlDataSource database) : IIdeaRepositor
         return new ListPage<Idea>([.. rows.Select(IdeaDbConverter.ToDomain)], total, query.Order.Page, query.Order.PageSize);
     }
 
+    // A row of the summary is one of a strategy, its version and a timeframe: the order ends with all three, so pages with
+    // equal values of the sort neither repeat nor lose a row (task 18.16).
+    private const string SummaryTieBreak = "\"Strategy\", \"Version\", \"Timeframe\", \"StrategyId\"";
+
     public async Task<ListPage<IdeaSummary>> SummaryAsync(IdeaListQuery query, CancellationToken cancellationToken)
     {
         var parameters = new DynamicParameters();
@@ -84,7 +88,7 @@ internal sealed class IdeaRepository(NpgsqlDataSource database) : IIdeaRepositor
              """;
         await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
         int total = await connection.ExecuteScalarAsync<int>(new CommandDefinition($"SELECT count(*) FROM ({groups}) g", parameters, cancellationToken: cancellationToken));
-        string sql = $"SELECT * FROM ({groups}) g {ListColumns.OrderBy(ListColumns.Summary, query.Order, "\"Strategy\", \"Version\"")} LIMIT @Limit OFFSET @Offset";
+        string sql = $"SELECT * FROM ({groups}) g {ListColumns.OrderBy(ListColumns.Summary, query.Order, SummaryTieBreak)} LIMIT @Limit OFFSET @Offset";
         IdeaSummary[] rows = [.. await connection.QueryAsync<IdeaSummary>(new CommandDefinition(sql, parameters, cancellationToken: cancellationToken))];
         return new ListPage<IdeaSummary>(rows, total, query.Order.Page, query.Order.PageSize);
     }
