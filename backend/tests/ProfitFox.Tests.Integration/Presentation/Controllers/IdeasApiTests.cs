@@ -266,6 +266,19 @@ public sealed class IdeasApiTests
     }
 
     /// <summary>
+    ///     Task 18.11 (б): the live candle of a pair outside the set is 404 before any stream, so the page does not connect
+    ///     again for ever.
+    /// </summary>
+    [Test]
+    public async Task The_live_candle_of_a_pair_outside_the_set_is_not_found()
+    {
+        using HttpResponseMessage response = await _api.Http.GetAsync("/api/market/pairs/NOSUCHUSDT/live?timeframe=1h", HttpCompletionOption.ResponseHeadersRead);
+
+        Assert.That(response.StatusCode, Is.EqualTo(System.Net.HttpStatusCode.NotFound));
+        Assert.That(response.Content.Headers.ContentType?.MediaType, Is.Not.EqualTo("text/event-stream"));
+    }
+
+    /// <summary>
     ///     Task 11.6: spec saved-filters — the filters through the API, the errors at the name or the number of the condition.
     /// </summary>
     [Test]

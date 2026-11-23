@@ -2056,6 +2056,16 @@ export interface operations {
                     "text/event-stream": components["schemas"]["LiveCandleResponse"];
                 };
             };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "text/event-stream": unknown;
+                };
+            };
             /** @description Unprocessable Entity */
             422: {
                 headers: {

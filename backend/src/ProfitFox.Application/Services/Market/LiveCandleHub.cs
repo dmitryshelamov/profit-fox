@@ -18,6 +18,7 @@ public sealed class LiveCandleHub(IMarketFeed feed, IRecentHistory history, IIns
 {
     private static readonly TimeSpan OneMinute = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan Throttle = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan SeedWindow = TimeSpan.FromMinutes(1000);
 
     private readonly Lock _lock = new Lock();
     private readonly Dictionary<string, List<Channel<LiveMinute>>> _listeners = new Dictionary<string, List<Channel<LiveMinute>>>(StringComparer.Ordinal);
@@ -39,8 +40,16 @@ public sealed class LiveCandleHub(IMarketFeed feed, IRecentHistory history, IIns
     }
 
     /// <summary>
+    ///     Whether the pair is in the set: the page of a pair outside it gets 404 before any stream (task 18.11).
+    /// </summary>
+    public async Task<bool> IsListed(string symbol, CancellationToken cancellation)
+    {
+        return (await catalog.LinearUsdtPerpetuals(cancellation)).Any(pair => pair.Symbol == symbol);
+    }
+
+    /// <summary>
     ///     The live candles of <paramref name="symbol" /> on <paramref name="timeframe" /> until the page stops listening;
-    ///     nothing for a pair outside the set.
+    ///     nothing for a pair outside the set. A failure of the feed ends the candles with its exception.
     /// </summary>
     public async IAsyncEnumerable<LiveCandle> Listen(string symbol, TimeSpan timeframe, [EnumeratorCancellation] CancellationToken cancellation)
     {
@@ -55,11 +64,14 @@ public sealed class LiveCandleHub(IMarketFeed feed, IRecentHistory history, IIns
             DateTimeOffset now = time.GetUtcNow();
             DateTimeOffset window = Floor(now, timeframe);
             var held = new SortedDictionary<DateTimeOffset, LiveMinute>();
-            int elapsed = (int)Math.Ceiling((now - window) / OneMinute);
-            if (elapsed > 0)
+            // Every closed minute of the window, in windows of at most a read each (task 18.11): a day after 16:40 has more
+            // than 1000.
+            DateTimeOffset end = Floor(now, OneMinute);
+            for (DateTimeOffset from = window; from < end; from += SeedWindow)
             {
-                RecentRead<HistoryCandle> seed = await history.Candles(pair.Id, OneMinute, now, Math.Min(elapsed, 1000), cancellation);
-                foreach (HistoryCandle candle in seed.Items.Where(candle => candle.OpenTime >= window && candle.HasTrades))
+                DateTimeOffset to = from + SeedWindow < end ? from + SeedWindow : end;
+                RecentRead<HistoryCandle> seed = await history.Candles(pair.Id, OneMinute, to, (int)((to - from) / OneMinute), cancellation);
+                foreach (HistoryCandle candle in seed.Items.Where(candle => candle.OpenTime >= from && candle.OpenTime < to && candle.HasTrades))
                 {
                     held[candle.OpenTime] = Minute(symbol, candle);
                 }
@@ -73,6 +85,17 @@ public sealed class LiveCandleHub(IMarketFeed feed, IRecentHistory history, IIns
                 // One wait for the channel at a time: a reader of one consumer takes no second one while the first waits.
                 waiting = waiting is { IsCompleted: false } ? waiting : minutes.Reader.WaitToReadAsync(cancellation).AsTask();
                 await Task.WhenAny(waiting, Task.Delay(Throttle, time, cancellation));
+                // The feed failed or ended: the page gets the error and connects again (task 18.11).
+                if (waiting.IsFaulted)
+                {
+                    await waiting;
+                }
+
+                if (waiting.IsCompletedSuccessfully && !waiting.Result)
+                {
+                    throw new InvalidOperationException("The live feed of the market-data service ended.");
+                }
+
                 while (minutes.Reader.TryRead(out LiveMinute? minute))
                 {
                     if (minute.OpenTime >= window + timeframe)
@@ -188,9 +211,32 @@ public sealed class LiveCandleHub(IMarketFeed feed, IRecentHistory history, IIns
                 }
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
             // The last page stopped listening.
+            return;
+        }
+        catch (Exception exception)
+        {
+            Fail(exception);
+            return;
+        }
+
+        Fail(new InvalidOperationException("The live feed of the market-data service ended."));
+    }
+
+    // The subscription is gone: every page gets the failure, and the next page subscribes again (task 18.11).
+    private void Fail(Exception exception)
+    {
+        lock (_lock)
+        {
+            foreach (Channel<LiveMinute> channel in _listeners.Values.SelectMany(list => list))
+            {
+                channel.Writer.TryComplete(exception);
+            }
+
+            _subscription?.Dispose();
+            _subscription = null;
         }
     }
 

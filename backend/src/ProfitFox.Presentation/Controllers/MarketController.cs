@@ -125,11 +125,13 @@ public class MarketController(ISender sender, LiveCandleHub live) : ControllerBa
     /// <summary>
     ///     The live candle of the pair on the timeframe as <c>text/event-stream</c> (spec market-overview «Живая свеча»): an
     ///     event <c>candle</c> with <see cref="LiveCandleResponse" /> no more than once a second and the closed candle at the
-    ///     end of its window, until the page goes.
+    ///     end of its window, until the page goes. A pair outside the set is 404 before the stream; a failure of the feed ends
+    ///     the stream with an event <c>error</c>, and the page connects again (task 18.11).
     /// </summary>
     [HttpGet("pairs/{symbol}/live", Name = "StreamLiveCandle")]
     [Produces("text/event-stream")]
     [ProducesResponseType<LiveCandleResponse>(StatusCodes.Status200OK, "text/event-stream")]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json")]
     [ProducesResponseType<ErrorResponse>(StatusCodes.Status422UnprocessableEntity)]
     public async Task Live(string symbol, [FromQuery] string? timeframe, CancellationToken cancellation)
     {
@@ -137,6 +139,12 @@ public class MarketController(ISender sender, LiveCandleHub live) : ControllerBa
         {
             Response.StatusCode = StatusCodes.Status422UnprocessableEntity;
             await Response.WriteAsJsonAsync(new ErrorResponse([new RequestError("InvalidTimeframe", $"таймфрейм — один из {Timeframes.Listed}") { Field = "timeframe" }]), cancellation);
+            return;
+        }
+
+        if (!await live.IsListed(symbol, cancellation))
+        {
+            await Results.Problem($"{symbol} нет среди торгуемых бессрочных USDT-пар.", statusCode: StatusCodes.Status404NotFound).ExecuteAsync(HttpContext);
             return;
         }
 
@@ -155,6 +163,12 @@ public class MarketController(ISender sender, LiveCandleHub live) : ControllerBa
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
             // The page went.
+        }
+        catch (Exception exception) when (!cancellation.IsCancellationRequested)
+        {
+            // The feed failed: the page is told, the stream ends, and the page connects again.
+            await Response.WriteAsync($"event: error\ndata: {JsonSerializer.Serialize(new { message = exception.Message }, Json)}\n\n", cancellation);
+            await Response.Body.FlushAsync(cancellation);
         }
     }
 

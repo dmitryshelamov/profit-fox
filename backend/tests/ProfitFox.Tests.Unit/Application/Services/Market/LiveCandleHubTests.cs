@@ -132,6 +132,67 @@ public sealed class LiveCandleHubTests
         await stop.CancelAsync();
     }
 
+    /// <summary>
+    ///     Task 18.11 (а): a failure of the feed ends the subscription and comes to every page as an error; the next page
+    ///     subscribes again.
+    /// </summary>
+    [Test]
+    public async Task A_failure_of_the_feed_comes_to_the_pages_as_an_error_and_the_next_page_subscribes_again()
+    {
+        using var stop = new CancellationTokenSource();
+        await using IAsyncEnumerator<LiveCandle> candles = _hub.Listen("SOLUSDT", Hour, stop.Token).GetAsyncEnumerator(stop.Token);
+        Task<bool> next = candles.MoveNextAsync().AsTask();
+        await Until(() => _feed.Active == 1 && _hub.Listeners == 1);
+
+        _feed.Fail(new InvalidOperationException("the catalog did not answer"));
+
+        Exception? failure = Assert.CatchAsync(async () => await next);
+        Assert.That(failure!.Message, Does.Contain("the catalog did not answer"));
+        await Until(() => _hub.Listeners == 0);
+        using var again = new CancellationTokenSource();
+        Task listening = Drain(_hub.Listen("SOLUSDT", Hour, again.Token));
+        await Until(() => _feed.Active == 1);
+        Assert.That(_feed.Subscriptions, Has.Count.EqualTo(2), "a new subscription for the next page");
+        await again.CancelAsync();
+        await listening;
+    }
+
+    /// <summary>
+    ///     Task 18.11 (б): the hub tells whether a pair is in the set, so the page of a pair outside it gets 404 before any
+    ///     stream.
+    /// </summary>
+    [Test]
+    public async Task The_hub_tells_whether_a_pair_is_in_the_set()
+    {
+        Assert.That((await _hub.IsListed("SOLUSDT", CancellationToken.None), await _hub.IsListed("NOSUCHUSDT", CancellationToken.None)), Is.EqualTo((true, false)));
+    }
+
+    /// <summary>
+    ///     Task 18.11 (в): after 16:40 a day has more than 1000 minutes, and the candle of the day is built from all of them,
+    ///     read in two windows.
+    /// </summary>
+    [Test]
+    public async Task The_candle_of_the_day_is_built_from_every_minute_of_the_day()
+    {
+        DateTimeOffset midnight = Fourteen.AddHours(-14);
+        _time.SetUtcNow(midnight.AddHours(18).AddSeconds(5));
+        _history.Candles["sol"] = (interval, before) =>
+            [.. Enumerable.Range(0, 18 * 60).Select(minute => new HistoryCandle(midnight.AddMinutes(minute), minute == 0 ? "50" : "100.5", minute == 1 ? "200" : "101", "100", "100.25", "12.5", Turnover: null, BuyVolume: null))];
+        using var stop = new CancellationTokenSource();
+        await using IAsyncEnumerator<LiveCandle> candles = _hub.Listen("SOLUSDT", TimeSpan.FromDays(1), stop.Token).GetAsyncEnumerator(stop.Token);
+        Task<bool> next = candles.MoveNextAsync().AsTask();
+        await Until(() => _feed.Active == 1);
+
+        _feed.Push(new LiveMinute("SOLUSDT", midnight.AddHours(18), 100.5m, 101m, 100m, 100.5m, 12.5m, 12.5m * 100.5m, Closed: false));
+        Assert.That(await next, Is.True);
+
+        LiveCandle day = candles.Current;
+        Assert.That((day.OpenTime, day.Open, day.High), Is.EqualTo((midnight, 50m, 200m)), "the minutes of 00:00 and 00:01 are in");
+        Assert.That(day.Volume, Is.EqualTo((18 * 60 + 1) * 12.5m));
+        Assert.That(_history.Asked, Is.EqualTo(new[] { "candles sol", "candles sol" }), "two windows of at most 1000 minutes");
+        await stop.CancelAsync();
+    }
+
     // The clock moves a second at a time until the candle comes: the hub waits for its second on the clock it was given.
     private async Task<LiveCandle> Advance(Task<bool> next, IAsyncEnumerator<LiveCandle> candles)
     {
@@ -181,6 +242,17 @@ public sealed class LiveCandleHubTests
                 lock (_lock)
                 {
                     return _readers.Count;
+                }
+            }
+        }
+
+        public void Fail(Exception exception)
+        {
+            lock (_lock)
+            {
+                foreach (Channel<MarketEvent> reader in _readers)
+                {
+                    reader.Writer.TryComplete(exception);
                 }
             }
         }
