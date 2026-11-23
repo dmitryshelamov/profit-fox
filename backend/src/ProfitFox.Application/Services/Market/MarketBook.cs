@@ -19,6 +19,9 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
     /// </summary>
     public static readonly TimeSpan Kept = TimeSpan.FromHours(25);
 
+    // How late after the moment a window ago the book of a pair may begin to count the window from its first minute.
+    private static readonly TimeSpan BookStartGrace = TimeSpan.FromMinutes(5);
+
     private static readonly TimeSpan PaymentsKept = TimeSpan.FromHours(48);
     private static readonly TimeSpan OneMinute = TimeSpan.FromMinutes(1);
     private readonly Dictionary<string, Pair> _pairs = new Dictionary<string, Pair>(StringComparer.Ordinal);
@@ -147,9 +150,13 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
             return null;
         }
 
+        // The minute at or before the moment the window ago, or — when the book of the pair begins no later than five minutes
+        // after it, as right after the start (task 18.18) — its first minute.
         decimal? Change(TimeSpan window)
         {
-            return pair.AtOrBefore(last.OpenTime - window) is { Close: > 0 } before ? last.Close / before.Close - 1 : null;
+            DateTimeOffset moment = last.OpenTime - window;
+            LiveMinute? before = pair.AtOrBefore(moment) ?? pair.FirstAfter(moment, BookStartGrace);
+            return before is { Close: > 0 } ? last.Close / before.Close - 1 : null;
         }
 
         decimal? day = Change(TimeSpan.FromHours(24));
@@ -247,6 +254,20 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
                     yield return minute;
                 }
             }
+        }
+
+        // The first minute opened after the moment and no later than the grace after it, among those kept.
+        public LiveMinute? FirstAfter(DateTimeOffset moment, TimeSpan grace)
+        {
+            for (DateTimeOffset open = Floor(moment) + OneMinute; open <= moment + grace; open += OneMinute)
+            {
+                if (_ring[Slot(open)] is { } minute && minute.OpenTime == open)
+                {
+                    return minute;
+                }
+            }
+
+            return null;
         }
 
         // The last minute opened at or before the moment, among those kept.

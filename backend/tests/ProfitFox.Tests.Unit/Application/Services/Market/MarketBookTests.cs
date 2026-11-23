@@ -139,6 +139,25 @@ public sealed class MarketBookTests
         Assert.That((pair.Change24h, pair.Turnover24h), Is.EqualTo(((decimal?)null, (decimal?)null)));
     }
 
+    /// <summary>
+    ///     Task 18.18: right after the start the book begins a minute or two after a day back; a book that begins no later
+    ///     than five minutes after the moment gives the change and turnover of 24 hours from its first minute.
+    /// </summary>
+    [TestCase(2, true)]
+    [TestCase(5, true)]
+    [TestCase(6, false)]
+    public void Right_after_the_start_the_day_is_counted_from_the_first_minute_of_the_book(int late, bool counted)
+    {
+        DateTimeOffset last = Ten.AddMinutes(-1);
+        MarketBook book = Book(Ten.AddMinutes(1));
+        book.Apply(Minute("BTCUSDT", last.AddDays(-1).AddMinutes(late), open: 100, close: 100, volume: 1));
+        book.Apply(Minute("BTCUSDT", last, open: 100, close: 110, volume: 1));
+
+        MarketPair pair = book.Snapshot("BTCUSDT")!;
+
+        Assert.That((pair.Change24h, pair.Turnover24h), Is.EqualTo(counted ? ((decimal?)0.1m, (decimal?)210m) : ((decimal?)null, (decimal?)null)));
+    }
+
     [Test]
     public void The_turnover_of_24h_sums_the_turnover_of_the_minutes_of_the_day()
     {
