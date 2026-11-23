@@ -19,7 +19,14 @@ import { useNow } from '@/shared/ui/useNow';
 import { amountText, changeText, clockText, priceWords, rateText, signTone } from './format';
 import { marketRefreshMs } from './MarketPage';
 import { PairChart } from './PairChart';
-import { ideaMarks, interestInUsdt, joinPages, joinPoints, withLive } from './pairSeries';
+import {
+  fundingOnCandles,
+  ideaMarks,
+  interestInUsdt,
+  joinPages,
+  joinPoints,
+  withLive,
+} from './pairSeries';
 import { useLiveCandle } from './useLiveCandle';
 
 /** The address of the page of a pair: the timeframe of the chart, the chosen idea and the page of its ideas. */
@@ -353,6 +360,7 @@ function ChartSection({
     ideas.data !== undefined &&
     Number(ideas.data.total) === 0 &&
     Object.values(choices).every((value) => !value);
+  const fundingBars = useMemo(() => fundingOnCandles(funding, timeframe), [funding, timeframe]);
   const lastInterest = interest.at(-1);
   const lastPayment = funding.at(-1);
 
@@ -404,7 +412,7 @@ function ChartSection({
             candles={candles}
             live={live.candle}
             interest={interest}
-            funding={funding}
+            funding={fundingBars}
             marks={marks}
             selected={idea}
             lines={open}

@@ -514,6 +514,50 @@ describe('the ideas, the open interest and the funding on the chart', () => {
   });
 });
 
+// Task 18.25, confirmed in the browser: a point of a panel at a time no candle has puts an empty slot into the row of
+// candles of the common time scale; the payments and the points of OI stand on the time of their candle.
+describe('the rows of the panels under the chart', () => {
+  const day = 24 * hour;
+  const midnight = Date.UTC(2026, 10, 22);
+
+  it('puts the payments of a day on its candle of 1d, summed, and every point on the time of a candle', async () => {
+    routes([], {
+      'GET /api/market/pairs/SOLUSDT/chart': () => {
+        const candles = candlesBefore(midnight, day, 3);
+        return json({
+          symbol: 'SOLUSDT',
+          timeframe: '1d',
+          loading: false,
+          candles,
+          openInterest: candles.map((candle) => ({ time: candle.openTime, value: 24_000 })),
+          funding: [
+            { time: midnight - 2 * day + 8 * hour, value: 0.0001 },
+            { time: midnight - 2 * day + 16 * hour, value: 0.0002 },
+            { time: midnight - day, value: -0.0001 },
+            { time: midnight - day + 8 * hour, value: 0.00005 },
+          ],
+        });
+      },
+    });
+    renderApp('/market/SOLUSDT?timeframe=1d');
+
+    await waitFor(() => expect(drawn.series.Histogram).toHaveLength(2));
+    const candleTimes = new Set(drawn.candles.map((candle) => (candle as { time: number }).time));
+    const histogram = drawn.series.Histogram as { time: number; value: number }[];
+    expect(histogram.map((bar) => bar.time)).toEqual([
+      (midnight - 2 * day) / 1000,
+      (midnight - day) / 1000,
+    ]);
+    expect(histogram[0]!.value).toBeCloseTo(0.0003, 12);
+    expect(histogram[1]!.value).toBeCloseTo(-0.00005, 12);
+    expect(histogram.every((bar) => candleTimes.has(bar.time))).toBe(true);
+    expect(
+      (drawn.series.Line as { time: number }[]).every((point) => candleTimes.has(point.time)),
+    ).toBe(true);
+    expect(screen.getByLabelText('Фандинг под графиком')).toHaveTextContent('Фандинг 0.0050 %');
+  });
+});
+
 // Spec market-overview «Идеи пары» (task 14.5).
 describe('the ideas of a pair', () => {
   // Scenario «Открытая и закрытые».

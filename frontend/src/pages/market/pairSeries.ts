@@ -93,6 +93,21 @@ export function interestInUsdt(
   });
 }
 
+/**
+ * The payments of funding on the candles of the timeframe (task 18.25): each on the open time of the candle it falls in,
+ * those of one candle summed. A point at a time no candle has would put an empty slot into the row of candles of the
+ * common time scale — a day of 1d holds three payments, an hour of funding is not a candle of 4h.
+ */
+export function fundingOnCandles(points: readonly ChartPoint[], timeframe: string): ChartPoint[] {
+  const sums = new Map<number, number>();
+  for (const point of points) {
+    const time = candleOf(Number(point.time), timeframe);
+    sums.set(time, (sums.get(time) ?? 0) + Number(point.value));
+  }
+
+  return [...sums.entries()].sort(([a], [b]) => a - b).map(([time, value]) => ({ time, value }));
+}
+
 /** The candles with the live one in place: a candle of the same open time replaced, a new one added at the end. */
 export function withLive(candles: readonly ChartCandle[], live: LiveCandle | null): ChartCandle[] {
   if (live === null) {
