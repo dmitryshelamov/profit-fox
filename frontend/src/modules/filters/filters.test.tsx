@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import type { SavedFilter } from '@/api/filters';
 import { bodiesOf, fakeApi, type FakeRoute, json } from '@/test/fakeApi';
 import { filterRoutes, highFunding, shorts } from '@/test/filters';
+import { ideaPage, scannerState } from '@/test/ideas';
 import { marketList, marketQueries } from '@/test/market';
 import { renderApp } from '@/test/renderApp';
 import { baseRoutes } from '@/test/routes';
@@ -323,5 +324,69 @@ describe('the editor of a filter', () => {
       expect(filters.queryByRole('button', { name: 'Высокий фандинг' })).toBeNull(),
     );
     await waitFor(() => expect(last(requests).get('filter')).toBeNull());
+  });
+});
+
+// Task 18.21: saving and deleting the chosen filter read the lists of its places again.
+describe('the lists after a change of their filter', () => {
+  const ideaRoutes = (saved: SavedFilter[], extra: Record<string, FakeRoute> = {}) =>
+    fakeApi({
+      ...baseRoutes(),
+      'GET /api/strategies': () => json([]),
+      'GET /api/ideas/state': () => json(scannerState()),
+      'GET /api/ideas': ideaPage([]),
+      'GET /api/ideas/summary': () =>
+        json({ items: [], total: 0, page: 1, pageSize: 50, filterGone: false }),
+      'POST /api/filters/count': () => json({ pairs: 3, ideas: 5 }),
+      ...filterRoutes(saved),
+      ...extra,
+    });
+  const lists = (requests: readonly Request[]) =>
+    requests.filter((request) => {
+      const path = new URL(request.url).pathname;
+      return request.method === 'GET' && (path === '/api/ideas' || path === '/api/ideas/summary');
+    }).length;
+
+  it('reads the journal again after «Изменить» → «Сохранить» of the chosen filter', async () => {
+    const saved = [shorts];
+    const requests = ideaRoutes(saved, {
+      'PUT /api/filters/f-shorts': async (request) => {
+        const body = (await request.json()) as Omit<SavedFilter, 'id'>;
+        saved[0] = { ...shorts, ...body };
+        return json(saved[0]);
+      },
+    });
+    renderApp('/ideas?tab=journal');
+    await userEvent.click(await (await row()).findByRole('button', { name: 'Шорты' }));
+    await waitFor(() => expect(lists(requests)).toBeGreaterThan(0));
+    await userEvent.click(screen.getByRole('button', { name: 'Изменить' }));
+    const panel = within(screen.getByRole('dialog', { name: 'Фильтр' }));
+    await userEvent.clear(panel.getByLabelText('Название'));
+    await userEvent.type(panel.getByLabelText('Название'), 'Шорты v2');
+    const before = lists(requests);
+
+    await userEvent.click(panel.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => expect(lists(requests)).toBeGreaterThanOrEqual(before + 2));
+  });
+
+  it('reads the market again after the chosen filter is deleted', async () => {
+    const saved = [highFunding];
+    const requests = routes(saved, {
+      'POST /api/filters/count': () => json({ pairs: 3, ideas: null }),
+      'DELETE /api/filters/f-high': () => {
+        saved.length = 0;
+        return new Response(null, { status: 204 });
+      },
+    });
+    renderApp('/market');
+    await userEvent.click(await (await row()).findByRole('button', { name: 'Высокий фандинг' }));
+    await waitFor(() => expect(last(requests).get('filter')).toBe('f-high'));
+    await userEvent.click(screen.getByRole('button', { name: 'Изменить' }));
+    const before = marketQueries(requests).length;
+
+    await userEvent.click(screen.getByRole('button', { name: 'Удалить фильтр' }));
+
+    await waitFor(() => expect(marketQueries(requests).length).toBeGreaterThan(before));
   });
 });

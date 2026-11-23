@@ -22,6 +22,13 @@ import { operatorSigns, operatorsOf, valueWord } from './words';
 /** How long the editor waits after a change before it counts the rows again. */
 export const countDelayMs = 300;
 
+/** The first parts of the keys of the lists a filter of a place picks rows of: «Рынок» and the three of «Идеи». */
+const listKeys: Readonly<Record<string, readonly string[]>> = {
+  market: ['market'],
+  ideas: ['ideas'],
+  both: ['market', 'ideas'],
+};
+
 const places: readonly { value: FilterPlace; label: string }[] = [
   { value: 'market', label: 'Рынок' },
   { value: 'ideas', label: 'Идеи' },
@@ -105,7 +112,14 @@ export function FilterEditor({
     }
 
     await queries.invalidateQueries({ queryKey: ['filters'] });
+    await invalidateLists([where, filter?.place ?? where]);
     onSaved(result.value);
+  };
+
+  // The lists of the places of the filter are read again: the same filter now picks other rows (task 18.21).
+  const invalidateLists = async (places: readonly string[]) => {
+    const keys = new Set(places.flatMap((place) => listKeys[place] ?? []));
+    await Promise.all([...keys].map((key) => queries.invalidateQueries({ queryKey: [key] })));
   };
 
   const remove = async () => {
@@ -115,6 +129,7 @@ export function FilterEditor({
 
     await deleteFilter(filter.id);
     await queries.invalidateQueries({ queryKey: ['filters'] });
+    await invalidateLists([filter.place]);
     onDeleted(filter.id);
   };
 
