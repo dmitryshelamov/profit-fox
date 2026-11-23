@@ -59,10 +59,22 @@ export function PagedTable<Row>({
   readonly selected?: string | null;
 }) {
   const body = useRef<HTMLTableSectionElement>(null);
+  // Scrolled once for a choice, when its row is there: new answers of the server leave the page where it is (task 18.23).
+  const scrolled = useRef<string | null>(null);
   useEffect(() => {
-    if (selected) {
-      const row = body.current?.querySelector<HTMLElement>(`[data-key="${CSS.escape(selected)}"]`);
-      row?.scrollIntoView?.({ block: 'nearest' });
+    if (!selected) {
+      scrolled.current = null;
+      return;
+    }
+
+    if (scrolled.current === selected) {
+      return;
+    }
+
+    const row = body.current?.querySelector<HTMLElement>(`[data-key="${CSS.escape(selected)}"]`);
+    if (row) {
+      row.scrollIntoView?.({ block: 'nearest' });
+      scrolled.current = selected;
     }
   }, [selected, rows]);
 
