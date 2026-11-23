@@ -14,13 +14,15 @@ namespace ProfitFox.Application.Queries.Market;
 ///     Pages of 500 candles back from the REST of the market-data service, the current day included, with the payments of
 ///     funding of that time read together with them; the open interest of the page is <see cref="GetPairOpenInterestQuery" />
 ///     (task 19.7). The journal tells how long the catalog, the candles and the payments took (task 20.9); the pair is found in
-///     the list of instruments kept for a minute (task 21.5).
+///     the list of instruments kept for a minute (task 21.5). The candles and the payments are read under the limit of the
+///     page (task 23.2): a read out of time answers that the chart loads, and the page asks again by its own timer.
 /// </summary>
 internal sealed class GetPairChartQueryHandler(
     ChartPairs pairs,
     IRecentHistory history,
     TimeProvider time,
-    ILogger<GetPairChartQueryHandler>? logger = null) : IRequestHandler<GetPairChartQuery, PairChartInternal?>
+    ILogger<GetPairChartQueryHandler>? logger = null,
+    PageReads? reads = null) : IRequestHandler<GetPairChartQuery, PairChartInternal?>
 {
     public const int Page = 500;
 
@@ -46,8 +48,9 @@ internal sealed class GetPairChartQueryHandler(
         DateTimeOffset before = request.Before ?? time.GetUtcNow();
         var end = new DateTimeOffset(before.UtcTicks - (before.UtcTicks % timeframe.Ticks), TimeSpan.Zero);
         long reading = time.GetTimestamp();
-        Task<(RecentRead<HistoryCandle> Read, TimeSpan Took)> candlesRead = Timed(history.Candles(pair.Id, timeframe, before, Page, cancellationToken));
-        Task<(RecentRead<HistoryPayment> Read, TimeSpan Took)> fundingRead = Timed(history.Funding(pair.Id, end - (timeframe * Page), before, cancellationToken));
+        IReadSteps steps = (reads ?? new PageReads(time)).Of(request.Symbol);
+        Task<(RecentRead<HistoryCandle> Read, TimeSpan Took)> candlesRead = Timed(Within(steps, "candles", token => history.Candles(pair.Id, timeframe, before, Page, token), cancellationToken));
+        Task<(RecentRead<HistoryPayment> Read, TimeSpan Took)> fundingRead = Timed(Within(steps, "funding", token => history.Funding(pair.Id, end - (timeframe * Page), before, token), cancellationToken));
         try
         {
             await Task.WhenAll(candlesRead, fundingRead);
@@ -79,6 +82,19 @@ internal sealed class GetPairChartQueryHandler(
             ? [.. funding.Items.Where(payment => payment.Time >= candles.Items[0].OpenTime)]
             : funding.Items;
         return new PairChartInternal(timeframe, funding.Loading, candles.Items, payments);
+    }
+
+    // A read under the limit of the page: out of time, it is still loading (task 23.2).
+    private static async Task<RecentRead<T>> Within<T>(IReadSteps steps, string step, Func<CancellationToken, Task<RecentRead<T>>> read, CancellationToken cancellation)
+    {
+        try
+        {
+            return await steps.Run(step, read, cancellation);
+        }
+        catch (ReadTimedOutException)
+        {
+            return RecentRead<T>.StillLoading;
+        }
     }
 
     // A read and how long it took, counted by the clock of the handler.

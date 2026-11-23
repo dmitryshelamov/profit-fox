@@ -137,6 +137,56 @@ public sealed class ChartPairsTests
         Assert.That(catalog.Reads, Is.EqualTo(1));
     }
 
+    /// <summary>
+    ///     Task 23.2: a catalog that does not answer within the limit of the page is a refusal (502), not a request held for
+    ///     the minute of the timeout of its client; the refusal reaches all who wait and is remembered as any other.
+    /// </summary>
+    [Test]
+    public async Task A_catalog_that_does_not_answer_within_ten_seconds_is_a_refusal_for_all_who_wait()
+    {
+        var catalog = new CountedCatalog("BTCUSDT") { Gate = new TaskCompletionSource() };
+        var clock = new FakeTimeProvider(Now);
+        var pairs = new ChartPairs(catalog, clock);
+
+        Task<Instrument?>[] finds = [.. Enumerable.Range(0, 3).Select(_ => pairs.Find("BTCUSDT", CancellationToken.None))];
+        await WaitFor(() => catalog.Reads == 1);
+        await Task.Delay(50);
+        clock.Advance(PageReads.Limit);
+        Exception?[] refusals = await Task.WhenAll(finds.Select(find => Refusal(find.WaitAsync(TimeSpan.FromSeconds(5)))));
+
+        Assert.That(refusals, Has.All.TypeOf<HistoryUnavailableException>());
+        Assert.That(refusals[0]!.Message, Does.Contain("10"));
+        Assert.That(catalog.Reads, Is.EqualTo(1));
+    }
+
+    /// <summary>
+    ///     Task 23.2, from the review: the timeout of the client of the catalog comes as a <see cref="TaskCanceledException" />
+    ///     while no request was cancelled; it is a refusal (502), not an error of the API (500).
+    /// </summary>
+    [Test]
+    public async Task The_timeout_of_the_client_of_the_catalog_is_a_refusal()
+    {
+        var catalog = new CountedCatalog("BTCUSDT")
+        {
+            Failure = new TaskCanceledException(
+                "The request was canceled due to the configured HttpClient.Timeout of 60 seconds elapsing.",
+                new TimeoutException("The operation was canceled.")),
+        };
+        var pairs = new ChartPairs(catalog, new FakeTimeProvider(Now));
+
+        Exception? refusal = await Refusal(pairs.Find("BTCUSDT", CancellationToken.None));
+
+        Assert.That(refusal, Is.TypeOf<HistoryUnavailableException>());
+    }
+
+    private static async Task WaitFor(Func<bool> condition)
+    {
+        for (int attempt = 0; attempt < 500 && !condition(); attempt++)
+        {
+            await Task.Delay(10);
+        }
+    }
+
     private static async Task<Exception?> Refusal(Task<Instrument?> find)
     {
         try

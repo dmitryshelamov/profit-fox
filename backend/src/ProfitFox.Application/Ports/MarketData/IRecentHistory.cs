@@ -25,8 +25,10 @@ public interface IRecentHistory
 
     /// <summary>
     ///     At most <paramref name="limit" /> points of open interest, one per <paramref name="interval" />, before
-    ///     <paramref name="before" />, oldest first.
+    ///     <paramref name="before" />, oldest first. With <paramref name="steps" />, each attempt of the read runs under the
+    ///     limit of the page of a pair (task 23.2).
     /// </summary>
     /// <exception cref="Exceptions.HistoryUnavailableException">The service did not answer.</exception>
-    Task<RecentRead<OpenInterestPoint>> OpenInterest(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation);
+    /// <exception cref="Exceptions.ReadTimedOutException">An attempt did not end within the limit of <paramref name="steps" />.</exception>
+    Task<RecentRead<OpenInterestPoint>> OpenInterest(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation, IReadSteps? steps = null);
 }

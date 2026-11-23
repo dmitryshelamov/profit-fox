@@ -30,6 +30,8 @@ public static class InfrastructureRegistrar
         services.AddSingleton(new IdeasSettings());
         services.AddTransient<IdeaLibrary>();
         services.AddSingleton<LiveCandleHub>();
+        // The limit of the reads of the page of a pair, one for the process: the journal tells of each step once a minute.
+        services.AddSingleton<PageReads>();
         services.AddSingleton<ChartPairs>();
 
         MarketDataRegistrar.Configure(configuration, services);

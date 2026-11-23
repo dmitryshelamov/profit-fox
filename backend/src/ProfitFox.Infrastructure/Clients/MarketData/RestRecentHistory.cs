@@ -35,7 +35,8 @@ namespace ProfitFox.Infrastructure.Clients.MarketData;
 ///     one call of <c>OpenInterestFeed.History</c>, which refuses a window that ends after it (task 18.2), and only the
 ///     current day from the REST; when History refuses or fails, it is asked again with the end a day earlier and the REST
 ///     reads the tail (tasks 19.7, 20.7), and when it refuses again the answer is that the history loads, without points
-///     and without the REST: the page asks again by its own timer (task 21.2).
+///     and without the REST: the page asks again by its own timer (task 21.2). The page of a pair gives its steps: each call
+///     of History and the read of the REST run under its limit, and one out of time ends the read (task 23.2).
 /// </summary>
 public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = null, TimeProvider? time = null, ILogger? logger = null) : IRecentHistory
 {
@@ -77,7 +78,7 @@ public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = nu
     ///     reduced to one per interval: the last point of the interval, at the open of the interval. The days before the
     ///     current UTC day come from <c>OpenInterestFeed.History</c> when there is a channel, the current day from the REST.
     /// </summary>
-    public async Task<RecentRead<OpenInterestPoint>> OpenInterest(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation)
+    public async Task<RecentRead<OpenInterestPoint>> OpenInterest(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation, IReadSteps? steps = null)
     {
         (DateTimeOffset from, DateTimeOffset to) = Window(interval, before, limit);
         List<OpenInterestPoint> points = [];
@@ -95,7 +96,7 @@ public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = nu
                 // page asks again by its own timer (task 21.2).
                 DateTimeOffset end = to < today ? to : today;
                 DateTimeOffset earlier = end - TimeSpan.FromDays(1);
-                Stored first = await TryStoredPoints(instrumentId, from, end, cancellation);
+                Stored first = await TryStoredPoints(instrumentId, from, end, steps, cancellation);
                 if (first.Points is { } stored)
                 {
                     points.AddRange(stored);
@@ -103,7 +104,7 @@ public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = nu
                 }
                 else if (earlier > from)
                 {
-                    Stored second = await TryStoredPoints(instrumentId, from, earlier, cancellation);
+                    Stored second = await TryStoredPoints(instrumentId, from, earlier, steps, cancellation);
                     if (second.Points is not { } older)
                     {
                         WarnRefusedTwice(instrumentId, from, earlier, second.Reason!);
@@ -118,7 +119,9 @@ public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = nu
 
         if (rest < to)
         {
-            RecentRead<OpenInterestPoint> current = await Points(instrumentId, rest, to, cancellation);
+            RecentRead<OpenInterestPoint> current = steps is null
+                ? await Points(instrumentId, rest, to, cancellation)
+                : await steps.Run("oi-rest", token => Points(instrumentId, rest, to, token), cancellation);
             if (current.Loading)
             {
                 return current;
@@ -130,12 +133,16 @@ public sealed class RestRecentHistory(HttpClient http, GrpcChannel? channel = nu
         return new RecentRead<OpenInterestPoint>(Loading: false, PerInterval(points, interval));
     }
 
-    // The stored points of [from, to), or the reason History refused or failed.
-    private async Task<Stored> TryStoredPoints(string instrumentId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellation)
+    // The stored points of [from, to), or the reason History refused or failed. An attempt out of the time of the page is
+    // not a refusal (task 23.2): it goes up, and the page is answered that the open interest loads.
+    private async Task<Stored> TryStoredPoints(string instrumentId, DateTimeOffset from, DateTimeOffset to, IReadSteps? steps, CancellationToken cancellation)
     {
         try
         {
-            return new Stored(await StoredPoints(instrumentId, from, to, cancellation), null);
+            IReadOnlyList<OpenInterestPoint> points = steps is null
+                ? await StoredPoints(instrumentId, from, to, cancellation)
+                : await steps.Run("oi-history", token => StoredPoints(instrumentId, from, to, token), cancellation);
+            return new Stored(points, null);
         }
         catch (HistoryUnavailableException exception)
         {

@@ -109,14 +109,103 @@ public sealed class GetPairChartQueryHandlerTests
         Assert.That(catalog.Reads, Is.EqualTo(3));
     }
 
+    /// <summary>
+    ///     Task 23.2: candles that do not come within the limit of the page answer that the chart loads — the page asks again
+    ///     by its own timer — and the journal says which step, of which pair, did not end in time.
+    /// </summary>
+    [Test]
+    public async Task Candles_that_do_not_come_within_ten_seconds_answer_that_the_chart_loads()
+    {
+        var log = new ListLogger();
+        var clock = new FakeTimeProvider(Now);
+        var history = new GatedHistory { CandlesHang = true };
+        GetPairChartQueryHandler handler = Handler(history, clock, log);
+
+        Task<PairChartInternal?> chart = handler.Handle(new GetPairChartQuery("BTCUSDT", "5m", null), CancellationToken.None);
+        await history.CandlesAsked.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        clock.Advance(PageReads.Limit);
+        PairChartInternal? answer = await chart.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.That(PageReads.Limit, Is.EqualTo(TimeSpan.FromSeconds(10)));
+        Assert.That((answer!.Loading, answer.Candles.Count), Is.EqualTo((true, 0)));
+        string warning = log.Entries.Single(entry => entry.Level == LogLevel.Warning).Message;
+        Assert.That(warning, Does.Contain("candles").And.Contain("BTCUSDT").And.Contain("10"));
+    }
+
+    /// <summary>
+    ///     Task 23.2: payments that do not come within the limit answer that the chart loads, as payments still loading do.
+    /// </summary>
+    [Test]
+    public async Task Payments_that_do_not_come_within_ten_seconds_answer_that_the_chart_loads()
+    {
+        var log = new ListLogger();
+        var clock = new FakeTimeProvider(Now);
+        var history = new GatedHistory { FundingHangs = true };
+        GetPairChartQueryHandler handler = Handler(history, clock, log);
+
+        Task<PairChartInternal?> chart = handler.Handle(new GetPairChartQuery("BTCUSDT", "1d", null), CancellationToken.None);
+        await history.FundingAsked.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        clock.Advance(PageReads.Limit);
+        PairChartInternal? answer = await chart.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.That(answer!.Loading, Is.True);
+        Assert.That(log.Entries.Where(entry => entry.Level == LogLevel.Warning).Select(entry => entry.Message), Has.One.Contains("funding").And.Contains("BTCUSDT"));
+    }
+
+    /// <summary>
+    ///     Task 23.2: the open interest read under the limit of the page; an attempt that does not end in time answers that it
+    ///     loads.
+    /// </summary>
+    [Test]
+    public async Task Open_interest_that_does_not_come_within_ten_seconds_answers_that_it_loads()
+    {
+        var log = new ListLogger();
+        var clock = new FakeTimeProvider(Now);
+        var history = new GatedHistory { InterestHangs = true };
+        var handler = new GetPairOpenInterestQueryHandler(new ChartPairs(new ListedPairs(), clock), history, clock, new PageReads(clock, new Typed<PageReads>(log)));
+
+        Task<PairOpenInterestInternal?> interest = handler.Handle(new GetPairOpenInterestQuery("BTCUSDT", "5m", null), CancellationToken.None);
+        await history.InterestAsked.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        clock.Advance(PageReads.Limit);
+        PairOpenInterestInternal? answer = await interest.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.That((answer!.Loading, answer.OpenInterest.Count), Is.EqualTo((true, 0)));
+        Assert.That(log.Entries.Where(entry => entry.Level == LogLevel.Warning).Select(entry => entry.Message), Has.One.Contains("oi-history").And.Contains("BTCUSDT"));
+    }
+
+    /// <summary>
+    ///     Task 23.2: a request the page dropped is cancelled, not out of time: it is not answered that it loads and not written.
+    /// </summary>
+    [Test]
+    public async Task A_request_the_page_dropped_is_not_a_limit_that_expired()
+    {
+        var log = new ListLogger();
+        var clock = new FakeTimeProvider(Now);
+        var history = new GatedHistory { CandlesHang = true };
+        GetPairChartQueryHandler handler = Handler(history, clock, log);
+        using var gone = new CancellationTokenSource();
+
+        Task<PairChartInternal?> chart = handler.Handle(new GetPairChartQuery("BTCUSDT", "5m", null), gone.Token);
+        await history.CandlesAsked.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await gone.CancelAsync();
+
+        Assert.That(async () => await chart.WaitAsync(TimeSpan.FromSeconds(5)), Throws.InstanceOf<OperationCanceledException>());
+        Assert.That(log.Entries.Where(entry => entry.Level == LogLevel.Warning), Is.Empty);
+    }
+
+    private static GetPairChartQueryHandler Handler(IRecentHistory history, FakeTimeProvider clock, ListLogger log)
+    {
+        return new GetPairChartQueryHandler(new ChartPairs(new ListedPairs(), clock), history, clock, new Typed<GetPairChartQueryHandler>(log), new PageReads(clock, new Typed<PageReads>(log)));
+    }
+
     private static GetPairChartQueryHandler Handler(IRecentHistory history, ListLogger log)
     {
         var clock = new FakeTimeProvider(Now);
-        return new GetPairChartQueryHandler(new ChartPairs(new ListedPairs(), clock), history, clock, new Typed(log));
+        return new GetPairChartQueryHandler(new ChartPairs(new ListedPairs(), clock), history, clock, new Typed<GetPairChartQueryHandler>(log));
     }
 
-    // The journal of the handler, kept by a list.
-    private sealed class Typed(ListLogger inner) : ILogger<GetPairChartQueryHandler>
+    // The journal of a type, kept by a list.
+    private sealed class Typed<T>(ListLogger inner) : ILogger<T>
     {
         public IDisposable? BeginScope<TState>(TState state)
             where TState : notnull
@@ -149,10 +238,29 @@ public sealed class GetPairChartQueryHandlerTests
 
         public DateTimeOffset? FirstCandle { get; init; }
 
+        // Task 23.2: reads that never end, whatever their token says, as a service that hangs.
+        public bool CandlesHang { get; init; }
+
+        public bool FundingHangs { get; init; }
+
+        public bool InterestHangs { get; init; }
+
+        public TaskCompletionSource CandlesAsked { get; } = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource FundingAsked { get; } = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource InterestAsked { get; } = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public (DateTimeOffset From, DateTimeOffset To)? FundingWindow { get; private set; }
 
         public async Task<RecentRead<HistoryCandle>> Candles(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation)
         {
+            CandlesAsked.TrySetResult();
+            if (CandlesHang)
+            {
+                await new TaskCompletionSource().Task;
+            }
+
             if (CandlesWaitForFunding)
             {
                 await _fundingAsked.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellation);
@@ -178,7 +286,13 @@ public sealed class GetPairChartQueryHandlerTests
         {
             FundingWindow = (from, to);
             _fundingAsked.TrySetResult();
+            FundingAsked.TrySetResult();
             await Task.Yield();
+            if (FundingHangs)
+            {
+                await new TaskCompletionSource().Task;
+            }
+
             if (FundingFails)
             {
                 throw new ProfitFox.Application.Exceptions.HistoryUnavailableException("The REST of the market-data service did not answer.");
@@ -196,9 +310,15 @@ public sealed class GetPairChartQueryHandlerTests
             return new RecentRead<HistoryPayment>(Loading: false, payments);
         }
 
-        public Task<RecentRead<OpenInterestPoint>> OpenInterest(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation)
+        public async Task<RecentRead<OpenInterestPoint>> OpenInterest(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation, IReadSteps? steps = null)
         {
-            return Task.FromResult(new RecentRead<OpenInterestPoint>(Loading: false, []));
+            InterestAsked.TrySetResult();
+            if (InterestHangs && steps is not null)
+            {
+                return await steps.Run("oi-history", _ => new TaskCompletionSource<RecentRead<OpenInterestPoint>>().Task, cancellation);
+            }
+
+            return new RecentRead<OpenInterestPoint>(Loading: false, []);
         }
     }
 }

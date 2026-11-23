@@ -8,6 +8,7 @@ using Microsoft.Extensions.Time.Testing;
 
 using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Ports.MarketData;
+using ProfitFox.Application.Services.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Clients.MarketData;
 using ProfitFox.Tests.Integration.MarketData;
@@ -263,6 +264,59 @@ public sealed class RestRecentHistoryTests
         Assert.That(Warnings(), Has.Count.EqualTo(3), "a minute later");
     }
 
+    /// <summary>
+    ///     Task 23.2: a History of open interest that hangs ends at the limit of the page — the answer is that it loads, the
+    ///     second attempt of task 20.7 and the REST are not asked — and the journal says which step of which pair.
+    /// </summary>
+    [Test]
+    public async Task A_History_of_open_interest_that_hangs_answers_that_it_loads_at_the_limit_of_the_page()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var clock = new FakeTimeProvider(Midnight.AddHours(12).AddMinutes(34));
+        server.Data.Time = clock;
+        var asked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.Data.BeforeInterest = async (_, cancellation) =>
+        {
+            asked.TrySetResult();
+            await Task.Delay(Timeout.Infinite, cancellation);
+        };
+        var log = new ListLogger();
+        var reads = new PageReads(clock, new TypedLogger<PageReads>(log));
+        var history = new RestRecentHistory(server.Http, server.Channel, clock);
+
+        Task<RecentRead<OpenInterestPoint>> read = history.OpenInterest("btc", TimeSpan.FromDays(1), clock.GetUtcNow(), 500, CancellationToken.None, reads.Of("BTCUSDT"));
+        await asked.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        clock.Advance(PageReads.Limit);
+        ReadTimedOutException? outOfTime = Assert.ThrowsAsync<ReadTimedOutException>(async () => await read.WaitAsync(TimeSpan.FromSeconds(10)));
+
+        Assert.That(outOfTime!.Step, Is.EqualTo("oi-history"));
+        Assert.That(server.Data.InterestRequests, Has.Count.EqualTo(1), "out of time is not a refusal to ask again a day earlier");
+        Assert.That(server.Data.RestRequests, Is.Empty);
+        Assert.That(log.Entries.Where(entry => entry.Level == LogLevel.Warning).Select(entry => entry.Message), Has.One.Contains("oi-history").And.Contains("BTCUSDT"));
+    }
+
+    /// <summary>
+    ///     Task 23.2: the REST of open interest that hangs ends at the limit of the page as well.
+    /// </summary>
+    [Test]
+    public async Task A_REST_of_open_interest_that_hangs_ends_at_the_limit_of_the_page()
+    {
+        var clock = new FakeTimeProvider(Midnight.AddHours(12).AddMinutes(34));
+        var service = new HangingService();
+        var log = new ListLogger();
+        var reads = new PageReads(clock, new TypedLogger<PageReads>(log));
+        var history = new RestRecentHistory(new HttpClient(service) { BaseAddress = new Uri("http://market-data/") }, time: clock);
+
+        Task<RecentRead<OpenInterestPoint>> read = history.OpenInterest("btc", TimeSpan.FromHours(1), clock.GetUtcNow(), 6, CancellationToken.None, reads.Of("BTCUSDT"));
+        await service.Asked.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        clock.Advance(PageReads.Limit);
+        ReadTimedOutException? outOfTime = Assert.ThrowsAsync<ReadTimedOutException>(async () => await read.WaitAsync(TimeSpan.FromSeconds(10)));
+
+        Assert.That(outOfTime!.Step, Is.EqualTo("oi-rest"));
+        Assert.That(async () => await service.Dropped.Task.WaitAsync(TimeSpan.FromSeconds(10)), Throws.Nothing, "the request to the service is dropped");
+        Assert.That(log.Entries.Where(entry => entry.Level == LogLevel.Warning).Select(entry => entry.Message), Has.One.Contains("oi-rest").And.Contains("BTCUSDT"));
+    }
+
     [Test]
     public async Task A_refusal_tells_what_was_asked_and_the_answer_of_the_service_but_not_the_pair()
     {
@@ -295,6 +349,51 @@ public sealed class RestRecentHistoryTests
     }
 
     // A REST that answers its pages in turn and records the requests.
+    // A service that takes the request and never answers, until the request is dropped.
+    private sealed class HangingService : HttpMessageHandler
+    {
+        public TaskCompletionSource Asked { get; } = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // The answer comes by the limit; the request is dropped as its token is cancelled, maybe a moment after.
+        public TaskCompletionSource Dropped { get; } = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Asked.TrySetResult();
+            try
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                Dropped.TrySetResult();
+                throw;
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }
+    }
+
+    // The journal of a type, kept by a list.
+    private sealed class TypedLogger<T>(ListLogger inner) : ILogger<T>
+    {
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull
+        {
+            return inner.BeginScope(state);
+        }
+
+        public bool IsEnabled(LogLevel logLevel)
+        {
+            return inner.IsEnabled(logLevel);
+        }
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            inner.Log(logLevel, eventId, state, exception, formatter);
+        }
+    }
+
     private sealed class PagedService(params string[] pages) : HttpMessageHandler
     {
         public List<string> Requests { get; } = [];

@@ -15,11 +15,14 @@ namespace ProfitFox.Application.Services.Market;
 /// </summary>
 /// <remarks>
 ///     Task 22.2: the read is shared and runs without the cancellation of the request that started it — a request cancelled
-///     stops waiting, the read goes on for the others, and the client of the catalog bounds it with its own timeout. A failed
+///     stops waiting, the read goes on for the others, and the limit of the page bounds it (task 23.2). A failed
 ///     read refuses all who wait for it at once and is remembered for <see cref="Remember" />: the requests in that time get
 ///     the same refusal without a new read, so a catalog that hangs does not hold the requests one after another.
+///     Task 23.2: the read has the limit of the reads of the page (<see cref="PageReads.Limit" />), not the minute of the
+///     timeout of the client; a read out of time and the timeout of the client — a <see cref="TaskCanceledException" /> while
+///     no request was cancelled — are a refusal, <see cref="HistoryUnavailableException" />, which the page gets as 502.
 /// </remarks>
-public sealed class ChartPairs(IInstrumentCatalog catalog, TimeProvider time)
+public sealed class ChartPairs(IInstrumentCatalog catalog, TimeProvider time, PageReads? reads = null)
 {
     /// <summary>
     ///     How long the list read is kept.
@@ -34,6 +37,7 @@ public sealed class ChartPairs(IInstrumentCatalog catalog, TimeProvider time)
     private readonly Lock _gate = new();
     private Failed? _failed;
     private volatile Listed? _listed;
+    private readonly PageReads _reads = reads ?? new PageReads(time);
     private Task<Listed>? _reading;
 
     /// <summary>
@@ -48,12 +52,13 @@ public sealed class ChartPairs(IInstrumentCatalog catalog, TimeProvider time)
             return pair;
         }
 
-        Listed listed = await ReadAfter(kept).WaitAsync(cancellation);
+        Listed listed = await ReadAfter(kept, symbol).WaitAsync(cancellation);
         return listed.Pairs.GetValueOrDefault(symbol);
     }
 
-    // The list read after `seen`: the one read since, the read under way, a new read — or the failure remembered.
-    private Task<Listed> ReadAfter(Listed? seen)
+    // The list read after `seen`: the one read since, the read under way, a new read — or the failure remembered. The
+    // symbol is that of the request that starts a read, for the journal.
+    private Task<Listed> ReadAfter(Listed? seen, string symbol)
     {
         lock (_gate)
         {
@@ -72,19 +77,19 @@ public sealed class ChartPairs(IInstrumentCatalog catalog, TimeProvider time)
                 return Task.FromException<Listed>(failed.Error.SourceException);
             }
 
-            _reading = Read();
+            _reading = Read(symbol);
             return _reading;
         }
     }
 
     // One read of the list for all who wait for it; it ends by clearing itself and keeping the list or the failure.
-    private async Task<Listed> Read()
+    private async Task<Listed> Read(string symbol)
     {
         await Task.Yield();
         DateTimeOffset read = time.GetUtcNow();
         try
         {
-            IReadOnlyList<Instrument> instruments = await catalog.LinearUsdtPerpetuals(CancellationToken.None);
+            IReadOnlyList<Instrument> instruments = await Instruments(symbol);
             var listed = new Listed(read, instruments.GroupBy(pair => pair.Symbol, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal));
             lock (_gate)
             {
@@ -104,6 +109,24 @@ public sealed class ChartPairs(IInstrumentCatalog catalog, TimeProvider time)
             }
 
             throw;
+        }
+    }
+
+    // The instruments under the limit of the page; out of time or cut by the timeout of the client, the catalog did not
+    // answer — the read has no request to cancel it.
+    private async Task<IReadOnlyList<Instrument>> Instruments(string symbol)
+    {
+        try
+        {
+            return await _reads.Run("catalog", symbol, catalog.LinearUsdtPerpetuals, CancellationToken.None);
+        }
+        catch (ReadTimedOutException exception)
+        {
+            throw new HistoryUnavailableException($"The instrument catalog of the market-data service did not answer in {(long)PageReads.Limit.TotalSeconds} s.", exception, dropped: true);
+        }
+        catch (OperationCanceledException exception)
+        {
+            throw new HistoryUnavailableException("The instrument catalog of the market-data service did not answer in the time of its client.", exception, dropped: true);
         }
     }
 

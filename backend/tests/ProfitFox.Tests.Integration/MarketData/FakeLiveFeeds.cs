@@ -39,6 +39,11 @@ public sealed class FakeOpenInterestFeed(FakeMarketData data) : OpenInterestFeed
             data.InterestRequests.Add(request);
         }
 
+        if (data.BeforeInterest is { } before)
+        {
+            await before(request, context.CancellationToken);
+        }
+
         if (data.Failure is { } failure)
         {
             throw new RpcException(new Status(failure, "the fake service is stopping"));

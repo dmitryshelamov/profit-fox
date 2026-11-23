@@ -8,7 +8,7 @@ namespace ProfitFox.Tests.Integration.MarketData;
 
 /// <summary>
 ///     What the fake market-data service answers: a coverage of the whole window from <see cref="CoveredFrom" />, 4h or 1m
-///     candles in it, a payment every 8 hours, an error when <see cref="Failure" /> is set, a broken stream while <see cref="Drops" /> lasts, or a hold when <see cref="BeforeCandles" /> is set. It records the requests.
+///     candles in it, a payment every 8 hours, an error when <see cref="Failure" /> is set, a broken stream while <see cref="Drops" /> lasts, or a hold when <see cref="BeforeCandles" /> or <see cref="BeforeInterest" /> is set. It records the requests.
 ///     As the real service, it holds past days only and refuses a window that ends after the start of the current UTC day of <see cref="Time" />.
 /// </summary>
 public sealed class FakeMarketData
@@ -101,6 +101,12 @@ public sealed class FakeMarketData
     ///     holds a run on a pair with it, and the hold ends when the run drops the call.
     /// </summary>
     public Func<CandleHistoryRequest, CancellationToken, Task>? BeforeCandles { get; set; }
+
+    /// <summary>
+    ///     Awaited by every call of <c>OpenInterestFeed.History</c> after it is recorded and before it is answered, with the
+    ///     token of the call: a test holds the history of open interest with it (task 23.2).
+    /// </summary>
+    public Func<OpenInterestHistoryRequest, CancellationToken, Task>? BeforeInterest { get; set; }
 
     /// <summary>
     ///     Where the history ends, if anywhere: a shorter history keeps the tests fast.

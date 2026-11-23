@@ -260,7 +260,7 @@ public sealed class FakeRecentHistory : IRecentHistory
         return Task.FromResult(new RecentRead<HistoryPayment>(false, [.. payments.Where(payment => payment.Time >= from && payment.Time < to)]));
     }
 
-    public Task<RecentRead<OpenInterestPoint>> OpenInterest(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation)
+    public Task<RecentRead<OpenInterestPoint>> OpenInterest(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation, IReadSteps? steps = null)
     {
         return Task.FromResult(new RecentRead<OpenInterestPoint>(false, []));
     }
