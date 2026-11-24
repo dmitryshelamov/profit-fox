@@ -28,6 +28,12 @@ public sealed class NodeKind
     /// </summary>
     internal Func<string, string, string?> CheckFreeSetting { get; init; } = (_, _) => null;
 
+    /// <summary>
+    ///     Why a value written on an input of the node is wrong although of the right type, or null when it is right: the
+    ///     input <c>length</c> of a window (change add-setup-strategies, design.md, decision 3).
+    /// </summary>
+    internal Func<string, GraphValue, string?> CheckValue { get; init; } = (_, _) => null;
+
     internal NodeKind(
         string name,
         Func<NodeDefinition?, GraphDefinition, SignalSet, IReadOnlyList<PinDeclaration>> inputs,

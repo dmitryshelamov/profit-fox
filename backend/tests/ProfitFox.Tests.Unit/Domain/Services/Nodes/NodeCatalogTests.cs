@@ -6,7 +6,8 @@ using ProfitFox.Domain.ValueObjects.Nodes;
 namespace ProfitFox.Tests.Unit.Domain.Services.Nodes;
 
 /// <summary>
-///     The list of kinds: the thirteen a signal is built from, with the arithmetic of change add-position-node (task 2.2),
+///     The list of kinds: the thirteen a signal is built from, with the arithmetic of change add-position-node (task 2.2) and
+///     the numbers, windows, indicators and candles of change add-setup-strategies (task 2.1),
 ///     the position nodes of a strategy (change add-strategy-graph, task 1.1; change add-position-node, task 2.2) and the
 ///     <c>signal</c> node of a strategy (change add-strategy-constructor, task 2.1).
 /// </summary>
@@ -15,7 +16,10 @@ public sealed class NodeCatalogTests
     private static readonly GraphDefinition Empty = new GraphDefinition([], [], [], []);
 
     private static readonly string[] SignalKinds =
-        ["parameters", "candle", "funding-rate", "pair-candle", "compare", "previous", "and", "or", "not", "first-time", "add", "subtract", "multiply", "outputs"];
+        [
+            "parameters", "candle", "funding-rate", "pair-candle", "compare", "previous", "and", "or", "not", "first-time", "add", "subtract", "multiply",
+            "divide", "min", "max", "select", "window", "percentile", "hold", "atr", "rsi", "zones", "candles", "outputs"
+        ];
 
     private static readonly string[] PositionKinds =
         ["position", "enter", "market-order", "limit-order", "close-position", "stop-loss", "take-profit", "close-after"];
@@ -120,6 +124,17 @@ public sealed class NodeCatalogTests
             "add: a:number b:number -> result:number",
             "subtract: a:number b:number -> result:number",
             "multiply: a:number b:number -> result:number",
+            "divide: a:number b:number -> result:number",
+            "min: a:number b:number -> result:number",
+            "max: a:number b:number -> result:number",
+            "select: when:boolean a:number b:number -> result:number",
+            "window: value:number length:number -> result:number",
+            "percentile: value:number length:number rank:number -> result:number",
+            "hold: when:boolean value:number length:number -> result:number",
+            "atr: length:number -> result:number",
+            "rsi: value:number length:number -> result:number",
+            "zones: atr:number price:number length:number merge:number strength:number -> above:number below:number",
+            "candles: count:number -> duration:duration",
             "outputs: entry:event ->",
             "position: orders:order* -> position:position open:boolean quantity:number averagePrice:number lastEntryPrice:number invested:number sinceLastEntry:duration",
             "enter: when:event size:number -> order:order",
