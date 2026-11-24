@@ -5,8 +5,9 @@ namespace ProfitFox.Tests.Integration.Application.Commands.Strategies;
 /// <summary>
 ///     Change add-setup-strategies, tasks 4.2–4.7: the conditions of the setups as the signals of <c>Fixtures/Setups</c>
 ///     compute them on a closed candle (spec setup-strategies). The value at the last candle of each history is the one a
-///     scenario tells of; a condition that cannot hold for want of a zone or of a quiet candle is missing rather than false,
-///     and gives no order either way («Событие сетапа»).
+///     scenario tells of. A condition with a zone is false when there is no zone on its side: its comparisons with the edge
+///     go through <c>is-true</c> (task 8.3; design.md, decision 11). A condition that cannot hold for want of a quiet candle
+///     is missing rather than false, and gives no order either way («Событие сетапа»).
 /// </summary>
 public sealed class SetupSignalTests
 {
@@ -123,7 +124,26 @@ public sealed class SetupSignalTests
         SetupTape tape = ZoneOf100().Add(100.4m, 100.5m, 99.7m, 99.8m, 1600);
 
         Assert.That(States("breakout-down", tape.Candles)[^1], Is.True);
-        Assert.That(States("breakout-up", tape.Candles)[^1], Is.Null, "no zone is above the open of 100.4: the long side is unknown");
+    }
+
+    // «Зоны над открытием нет» (task 8.3): no zone is above the open of 100.4, and the long side is false, not unknown.
+    [Test]
+    public void Without_a_zone_above_the_open_the_breakout_up_is_false()
+    {
+        SetupTape tape = ZoneOf100().Add(100.4m, 100.5m, 99.7m, 99.8m, 1600);
+
+        Assert.That(EdgesAfter(ZoneOf100(), 100.4m).Above, Is.Null, "the only zone near is the one of 100.0–100.3");
+        Assert.That(States("breakout-up", tape.Candles)[^1], Is.False);
+    }
+
+    // The mirror: no zone is below the open of 98.0, and the short side is false.
+    [Test]
+    public void Without_a_zone_below_the_open_the_breakout_down_is_false()
+    {
+        SetupTape tape = ZoneOf100().Add(98.0m, 98.2m, 97.7m, 97.8m, 1600);
+
+        Assert.That(EdgesAfter(ZoneOf100(), 98.0m).Below, Is.Null);
+        Assert.That(States("breakout-down", tape.Candles)[^1], Is.False);
     }
 
     [Test]
@@ -170,6 +190,18 @@ public sealed class SetupSignalTests
         SetupTape tape = ZoneOf100().Add(99.8m, 100.6m, 99.7m, 100.0m);
 
         Assert.That(States("false-breakout-short", tape.Candles)[^1], Is.True);
+    }
+
+    // «Шорт без зоны снизу» (task 8.3): the zone of 100.0–100.3 is the only one, and none has its bottom under the body.
+    [Test]
+    public void Without_a_zone_below_the_body_the_false_breakout_long_is_false_and_the_short_holds()
+    {
+        SetupTape tape = OnlyZoneOf100().Add(99.9m, 100.6m, 99.7m, 99.8m);
+
+        Assert.That(EdgesAfter(OnlyZoneOf100(), 99.8m), Is.EqualTo(((decimal?)100.3m, (decimal?)null)), "the zone of 100.0–100.3 and nothing below");
+        Assert.That(Atr(OnlyZoneOf100().Candles), Is.EqualTo(1m));
+        Assert.That(States("false-breakout-short", tape.Candles)[^1], Is.True);
+        Assert.That(States("false-breakout-long", tape.Candles)[^1], Is.False);
     }
 
     // «Покупают, а цена стоит»: a squeeze, 9000 of rising volume against 5000, the price up 0.3 ATR in 20 candles.

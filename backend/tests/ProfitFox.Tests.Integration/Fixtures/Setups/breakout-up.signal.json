@@ -1,6 +1,6 @@
 {
   "name": "breakout-up",
-  "description": "Пробой вверх: объём не меньше breakoutVolume медиан, close не ниже верхнего края ближайшей зоны над open плюс breakoutMargin ATR. Зоны — по 200 свечам до текущей, слияние 0.5 ATR, от двух касаний.",
+  "description": "Пробой вверх: объём не меньше breakoutVolume медиан, close не ниже верхнего края ближайшей зоны над open плюс breakoutMargin ATR. Зоны — по 200 свечам до текущей, слияние 0.5 ATR, от двух касаний. Без зоны над open условие ложно: сравнение с краем зоны идёт через is-true.",
   "graph": {
     "formatVersion": 1,
     "parameters": [
@@ -91,6 +91,10 @@
         }
       },
       {
+        "id": "close-ok-known",
+        "kind": "is-true"
+      },
+      {
         "id": "state",
         "kind": "and"
       },
@@ -166,6 +170,10 @@
       },
       {
         "from": "close-ok.result",
+        "to": "close-ok-known.value"
+      },
+      {
+        "from": "close-ok-known.result",
         "to": "state.b"
       },
       {

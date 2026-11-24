@@ -53,6 +53,44 @@ internal static class SetupTapes
     }
 
     /// <summary>
+    ///     A history with the zone from 100.0 to 100.3 and no other (spec setup-strategies «Шорт без зоны снизу»): steady
+    ///     candles at 99.1 with a range of 1 and two tops, at 100.0 and at 100.3, whose candles keep every true range at 1 —
+    ///     the ATR is 1. The lows stay at 98.6 around the first top and go up only after one more candle at 98.6 before the
+    ///     second, so they give a single touch at 98.6 and no zone below. The volume is 1000.
+    /// </summary>
+    public static SetupTape OnlyZoneOf100()
+    {
+        var tape = new SetupTape();
+        tape.Steady(210, 99.1m, 1).Add(99.5m, 100.0m, 99.0m, 99.5m);
+        tape.Steady(3, 99.1m, 1).Add(99.1m, 99.6m, 98.6m, 99.3m).Add(99.3m, 100.3m, 99.3m, 99.8m).Add(99.8m, 99.9m, 98.9m, 99.4m);
+        return tape.Steady(4, 99.1m, 1);
+    }
+
+    /// <summary>
+    ///     The edges <c>above</c> and <c>below</c> of the zones of the setups — 200 candles, a merge of 0.5 ATR of the
+    ///     previous candle, two touches — about <paramref name="price" /> at the candle after the last of the tape.
+    /// </summary>
+    public static (decimal? Above, decimal? Below) EdgesAfter(SetupTape tape, decimal price)
+    {
+        List<ClosedCandle> candles = [.. tape.Candles, NextCandle(tape, price)];
+        const string nodes = """
+                             { "id": "atr", "kind": "atr", "inputs": { "length": 14 } }, { "id": "atr-prev", "kind": "previous" },
+                             { "id": "zones", "kind": "zones", "inputs": { "length": 200, "merge": 0.5, "strength": 2 } }
+                             """;
+        const string wires = """
+                             { "from": "atr.result", "to": "atr-prev.value" }, { "from": "atr-prev.result", "to": "zones.atr" },
+                             { "from": "c.open", "to": "zones.price" }
+                             """;
+        return (Numbers(nodes, "zones.above", candles, wires)[^1], Numbers(nodes, "zones.below", candles, wires)[^1]);
+    }
+
+    private static ClosedCandle NextCandle(SetupTape tape, decimal open)
+    {
+        DateTimeOffset openTime = tape.Last.CloseTime;
+        return new ClosedCandle(openTime, openTime + tape.Timeframe, open, open, open, open, 1000);
+    }
+
+    /// <summary>
     ///     Candles with the highs given, a range of 1 under each and the open and the close in the middle.
     /// </summary>
     public static void Tops(SetupTape tape, params decimal[] highs)

@@ -129,6 +129,48 @@ public sealed class SetupPlanTests
         Assert.That((order.Entry, order.Stop.Value), Is.EqualTo(((EntrySide?)EntrySide.Long, (decimal?)((100.5m - 99.7m + 1.5m) / 100.5m))));
     }
 
+    // «Пробой после свечи без зоны» (task 8.3): the candle that opened above the zone left the long side false, not
+    // unknown, so the breakout on the next candle is an event.
+    [Test]
+    public async Task A_breakout_after_a_candle_without_a_zone_above_gives_a_long()
+    {
+        SetupTape tape = ZoneOf100().Add(100.4m, 100.5m, 99.8m, 99.9m).Add(99.9m, 100.6m, 99.8m, 100.5m, 1800);
+        SavedSetup breakout = await Save("breakout");
+
+        StrategyStep order = breakout.Orders(tape.Candles).Single();
+
+        Assert.That((order.Entry, order.Node), Is.EqualTo(((EntrySide?)EntrySide.Long, "enter-long")));
+        Assert.That(order.Moment, Is.EqualTo(tape.Last.CloseTime));
+        Assert.That(order.Stop.Value, Is.EqualTo((100.5m - 99.8m + (1.5m * Atr(tape.Candles.SkipLast(1)))) / 100.5m));
+    }
+
+    // The same with the volume of 1.6 medians on the candle without a zone: the volume no longer makes that candle false,
+    // the missing edge alone did. Without is-true the candle was unknown and first-time gave no event on the breakout.
+    [Test]
+    public async Task A_breakout_after_a_candle_with_volume_and_without_a_zone_above_gives_a_long()
+    {
+        SetupTape tape = ZoneOf100().Add(100.4m, 100.5m, 99.8m, 100.0m, 1600).Add(100.0m, 100.6m, 99.8m, 100.5m, 1800);
+        SavedSetup breakout = await Save("breakout");
+
+        List<StrategyStep> orders = breakout.Orders(tape.Candles);
+
+        Assert.That(orders.Select(order => (order.Moment, order.Entry)), Is.EqualTo(new[] { (tape.Last.CloseTime, (EntrySide?)EntrySide.Long) }));
+    }
+
+    // «Шорт без зоны снизу» (task 8.3): with no zone under the body the long side is false, so the stop is the one of the
+    // short, from the high of 100.6.
+    [Test]
+    public async Task A_false_breakout_short_without_a_zone_below_takes_its_stop_from_the_high()
+    {
+        SetupTape tape = OnlyZoneOf100().Add(99.9m, 100.6m, 99.7m, 99.8m);
+        SavedSetup falseBreakout = await Save("false-breakout");
+
+        StrategyStep order = falseBreakout.Orders(tape.Candles).Single();
+
+        Assert.That((order.Entry, order.Node), Is.EqualTo(((EntrySide?)EntrySide.Short, "enter-short")));
+        Assert.That(order.Stop.Value, Is.EqualTo((100.6m - 99.8m + 1.5m) / 99.8m));
+    }
+
     // «Снятие стопов под зоной»: the long of false-breakout takes its stop from the low of 99.7.
     [Test]
     public async Task A_false_breakout_long_takes_its_stop_from_the_low_of_the_sweep()

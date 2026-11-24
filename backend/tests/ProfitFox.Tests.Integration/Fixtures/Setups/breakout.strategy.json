@@ -1,6 +1,6 @@
 {
   "name": "breakout",
-  "description": "Пробой зоны в обе стороны (сигналы breakout-up и breakout-down); окно сетапа — текущая свеча, сторону стопа выбирает направление свечи. Вход по рынку на событии сетапа, стоп — расстояние от close до экстремума окна сетапа против входа плюс stopBuffer ATR 14 прошлой свечи, долей close; цель — targetR стопов; срок — lifeCandles свечей таймфрейма.",
+  "description": "Пробой зоны в обе стороны (сигналы breakout-up и breakout-down); окно сетапа — текущая свеча, сторону стопа выбирает состояние breakout-up. Вход по рынку на событии сетапа, стоп — расстояние от close до экстремума окна сетапа против входа плюс stopBuffer ATR 14 прошлой свечи, долей close; цель — targetR стопов; срок — lifeCandles свечей таймфрейма.",
   "kind": "idea",
   "graph": {
     "formatVersion": 1,
@@ -126,13 +126,6 @@
       {
         "id": "stop-short",
         "kind": "divide"
-      },
-      {
-        "id": "candle-up",
-        "kind": "compare",
-        "settings": {
-          "operation": "gt"
-        }
       },
       {
         "id": "stop",
@@ -269,15 +262,7 @@
         "to": "stop-short.b"
       },
       {
-        "from": "c.close",
-        "to": "candle-up.a"
-      },
-      {
-        "from": "c.open",
-        "to": "candle-up.b"
-      },
-      {
-        "from": "candle-up.result",
+        "from": "breakout-up.value",
         "to": "stop.when"
       },
       {

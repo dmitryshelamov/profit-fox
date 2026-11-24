@@ -1,6 +1,6 @@
 {
   "name": "false-breakout-short",
-  "description": "Ложный пробой вверх, вход в шорт: high не ниже верхнего края ближайшей зоны над большим из open и close плюс sweepMargin ATR, а close ниже этого края.",
+  "description": "Ложный пробой вверх, вход в шорт: high не ниже верхнего края ближайшей зоны над большим из open и close плюс sweepMargin ATR, а close ниже этого края. Без такой зоны условие ложно: сравнения с краем зоны идут через is-true.",
   "graph": {
     "formatVersion": 1,
     "parameters": [
@@ -73,11 +73,19 @@
         }
       },
       {
+        "id": "swept-known",
+        "kind": "is-true"
+      },
+      {
         "id": "back",
         "kind": "compare",
         "settings": {
           "operation": "lt"
         }
+      },
+      {
+        "id": "back-known",
+        "kind": "is-true"
       },
       {
         "id": "state",
@@ -159,10 +167,18 @@
       },
       {
         "from": "swept.result",
+        "to": "swept-known.value"
+      },
+      {
+        "from": "swept-known.result",
         "to": "state.a"
       },
       {
         "from": "back.result",
+        "to": "back-known.value"
+      },
+      {
+        "from": "back-known.result",
         "to": "state.b"
       },
       {

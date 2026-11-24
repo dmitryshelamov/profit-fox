@@ -1,6 +1,6 @@
 {
   "name": "breakout-down",
-  "description": "Пробой вниз: зеркально breakout-up — close не выше нижнего края ближайшей зоны под open минус breakoutMargin ATR.",
+  "description": "Пробой вниз: зеркально breakout-up — close не выше нижнего края ближайшей зоны под open минус breakoutMargin ATR. Без зоны под open условие ложно: сравнение с краем зоны идёт через is-true.",
   "graph": {
     "formatVersion": 1,
     "parameters": [
@@ -91,6 +91,10 @@
         }
       },
       {
+        "id": "close-ok-known",
+        "kind": "is-true"
+      },
+      {
         "id": "state",
         "kind": "and"
       },
@@ -166,6 +170,10 @@
       },
       {
         "from": "close-ok.result",
+        "to": "close-ok-known.value"
+      },
+      {
+        "from": "close-ok-known.result",
         "to": "state.b"
       },
       {
