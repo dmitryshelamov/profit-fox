@@ -40,6 +40,11 @@ internal sealed class EnqueueBacktestCommandHandler(
         StrategyGraphCheck check = await StrategyChecks.CheckAsync(signals, graph.RootElement, strategy.Kind, cancellationToken);
         List<BacktestError> errors = [.. check.Errors.Select(error => BacktestError.Of(error) with { Field = error.Field ?? "graph" })];
         string[] listed = [.. (await instruments.LinearUsdtPerpetuals(cancellationToken)).Select(pair => pair.Symbol)];
+        if (check.Strategy is { } checkedStrategy)
+        {
+            errors.AddRange(StrategyGraph.CheckNamedPairs(checkedStrategy.Graph, listed).Select(error => BacktestError.Of(error) with { Field = error.Field ?? "graph" }));
+        }
+
         BacktestCheck settings = BacktestRules.Check(request.Request, strategy.Graph, strategy.Kind, listed, time.GetUtcNow());
         errors.AddRange(settings.Errors);
         if (errors.Count > 0 || check.Strategy is null || settings.Settings is null)

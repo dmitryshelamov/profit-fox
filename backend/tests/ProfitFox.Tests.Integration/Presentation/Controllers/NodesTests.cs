@@ -46,7 +46,7 @@ public sealed class NodesTests
         NodeKindResponse[] kinds = await Catalog();
 
         Assert.That(kinds.Select(kind => kind.Kind), Has.None.AnyOf("enter", "position", "market-order", "limit-order", "close-position", "stop-loss", "take-profit", "close-after"));
-        Assert.That(kinds, Has.Length.EqualTo(13));
+        Assert.That(kinds, Has.Length.EqualTo(14));
     }
 
     [Test]
@@ -147,7 +147,21 @@ public sealed class NodesTests
         Assert.That(kinds.Select(kind => kind.Kind), Has.None.AnyOf("enter", "position", "market-order", "limit-order", "close-position", "stop-loss", "take-profit", "close-after", "signal"));
         Assert.That(
             kinds.Select(kind => kind.Kind),
-            Is.EqualTo(new[] { "parameters", "candle", "funding-rate", "compare", "previous", "and", "or", "not", "first-time", "add", "subtract", "multiply", "outputs" }));
+            Is.EqualTo(new[] { "parameters", "candle", "funding-rate", "pair-candle", "compare", "previous", "and", "or", "not", "first-time", "add", "subtract", "multiply", "outputs" }));
+    }
+
+    /// <summary>
+    ///     Change add-ideas-and-market, task 4.1: the node «свеча другой пары» in the group «Данные» with its setting.
+    /// </summary>
+    [Test]
+    public async Task The_candle_of_another_pair_is_a_node_of_the_data_with_the_setting_symbol()
+    {
+        NodeKindResponse[] kinds = await Catalog();
+
+        NodeKindResponse pair = kinds.Single(kind => kind.Kind == "pair-candle");
+        Assert.That((pair.Title, pair.Group), Is.EqualTo(("Свеча пары", "Данные")));
+        Assert.That(pair.Settings.Select(setting => setting.Name), Is.EqualTo(new[] { "symbol" }));
+        Assert.That(pair.Outputs.Select(pin => pin.Name), Is.EqualTo(new[] { "open", "high", "low", "close", "volume" }));
     }
 
     private static async Task<NodeKindResponse[]> Catalog(string path = "/api/nodes")

@@ -2,8 +2,11 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 
+import { timeframes } from '@/preview/preview';
+
 import { Dialog } from './Dialog';
 import { Menu } from './Menu';
+import { PagedTable } from './PagedTable';
 import { RunStatusBadge } from './RunStatusBadge';
 import { Segmented } from './Segmented';
 import { Tabs } from './Tabs';
@@ -169,7 +172,7 @@ describe('Segmented', () => {
       <Segmented
         label="Таймфрейм"
         value={value}
-        options={['1h', '4h', '1d'].map((item) => ({ value: item, label: item }))}
+        options={timeframes.map((item) => ({ value: item, label: item }))}
         onChange={setValue}
       />
     );
@@ -198,7 +201,7 @@ describe('Segmented', () => {
     expect(checked()).toEqual(['1d']);
     expect(screen.getByRole('radio', { name: '1d' })).toHaveFocus();
     await userEvent.keyboard('{ArrowRight}');
-    expect(checked()).toEqual(['1h']);
+    expect(checked()).toEqual(['5m']);
     await userEvent.keyboard('{ArrowLeft}');
     expect(checked()).toEqual(['1d']);
   });
@@ -270,5 +273,45 @@ describe('RunStatusBadge', () => {
 
     expect(screen.getByText('Упал')).toHaveAttribute('data-tone', 'err');
     expect(screen.getByText('Готов')).toHaveAttribute('data-tone', 'ok');
+  });
+});
+
+// Task 18.23: the table scrolls to the chosen row when the choice changes, not on every answer of the server.
+describe('the scroll of a paged table', () => {
+  const columns = [{ key: 'name', title: 'Имя', cell: (row: { id: string }) => row.id }];
+  const table = (rows: readonly { id: string }[], selected: string | null) => (
+    <PagedTable
+      label="Строки"
+      columns={columns}
+      rows={rows}
+      sort={{ field: 'name', descending: false }}
+      rowKey={(row) => row.id}
+      onSort={() => undefined}
+      selected={selected}
+    />
+  );
+
+  it('scrolls once for a choice, again for another choice, and not for new rows', () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const { rerender } = render(table([{ id: 'a' }, { id: 'b' }], 'b'));
+    expect(scroll).toHaveBeenCalledTimes(1);
+
+    rerender(table([{ id: 'a' }, { id: 'b' }], 'b'));
+    rerender(table([{ id: 'a' }, { id: 'b' }, { id: 'c' }], 'b'));
+    expect(scroll).toHaveBeenCalledTimes(1);
+
+    rerender(table([{ id: 'a' }, { id: 'b' }, { id: 'c' }], 'a'));
+    expect(scroll).toHaveBeenCalledTimes(2);
+  });
+
+  it('scrolls to a chosen row once it comes', () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const { rerender } = render(table([], 'b'));
+    expect(scroll).not.toHaveBeenCalled();
+
+    rerender(table([{ id: 'a' }, { id: 'b' }], 'b'));
+    expect(scroll).toHaveBeenCalledTimes(1);
   });
 });

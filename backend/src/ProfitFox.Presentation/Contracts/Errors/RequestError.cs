@@ -18,6 +18,11 @@ public sealed record RequestError(string Code, string Reason)
 
     public string? Node { get; init; }
 
+    /// <summary>
+    ///     The number of the condition of a filter the problem is with, from 0 (change add-ideas-and-market).
+    /// </summary>
+    public int? Condition { get; init; }
+
     public string? Pin { get; init; }
 
     public string? Setting { get; init; }

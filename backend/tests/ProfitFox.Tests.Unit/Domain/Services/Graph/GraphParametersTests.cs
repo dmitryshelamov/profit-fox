@@ -55,6 +55,7 @@ public sealed class GraphParametersTests
         Assert.That(errors, Is.Empty, "the text is a number");
         GraphError error = GraphParameters.Check(changed).Single();
         Assert.That((error.Code, error.Parameter), Is.EqualTo((GraphErrorCode.ParameterOutOfBounds, (string?)"threshold")));
+        Assert.That(error.Reason, Does.StartWith("The value 0.02 is outside ["), "task 18.4: the number in invariant writing on a machine in ru-RU");
         Assert.That(StrategyGraph.ReadStrategy(StrategyGraph.Write(changed)).Errors.Select(item => item.Code), Is.EqualTo(new[] { GraphErrorCode.ParameterOutOfBounds }));
     }
 

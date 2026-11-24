@@ -8,7 +8,7 @@ namespace ProfitFox.Tests.Integration.MarketData;
 
 /// <summary>
 ///     What the fake market-data service answers: a coverage of the whole window from <see cref="CoveredFrom" />, 4h or 1m
-///     candles in it, a payment every 8 hours, an error when <see cref="Failure" /> is set, a broken stream while <see cref="Drops" /> lasts, or a hold when <see cref="BeforeCandles" /> is set. It records the requests.
+///     candles in it, a payment every 8 hours, an error when <see cref="Failure" /> is set, a broken stream while <see cref="Drops" /> lasts, or a hold when <see cref="BeforeCandles" /> or <see cref="BeforeInterest" /> is set. It records the requests.
 ///     As the real service, it holds past days only and refuses a window that ends after the start of the current UTC day of <see cref="Time" />.
 /// </summary>
 public sealed class FakeMarketData
@@ -19,7 +19,65 @@ public sealed class FakeMarketData
 
     public List<FundingPaymentHistoryRequest> FundingRequests { get; } = [];
 
+    /// <summary>
+    ///     The calls of <c>OpenInterestFeed.History</c> (task 18.2).
+    /// </summary>
+    public List<OpenInterestHistoryRequest> InterestRequests { get; } = [];
+
     public StatusCode? Failure { get; set; }
+
+    /// <summary>
+    ///     The live feeds (change add-ideas-and-market, task 5.2): minute candles, funding payments, funding rates and open
+    ///     interest, each with its stored items and its subscribers.
+    /// </summary>
+    public FakeLiveFeed<CandleUpdate> Minutes { get; } = new FakeLiveFeed<CandleUpdate>(candle => candle.OpenTime.ToDateTimeOffset());
+
+    public FakeLiveFeed<FundingPaymentUpdate> Payments { get; } = new FakeLiveFeed<FundingPaymentUpdate>(payment => payment.Time.ToDateTimeOffset());
+
+    public FakeLiveFeed<FundingRateUpdate> Rates { get; } = new FakeLiveFeed<FundingRateUpdate>(rate => rate.Time.ToDateTimeOffset());
+
+    public FakeLiveFeed<OpenInterestUpdate> OpenInterest { get; } = new FakeLiveFeed<OpenInterestUpdate>(point => point.Time.ToDateTimeOffset());
+
+    /// <summary>
+    ///     The catalog the service lists now: <see cref="MarketDataServer.Catalog" /> unless a test changes it.
+    /// </summary>
+    public string Catalog { get; set; } = MarketDataServer.Catalog;
+
+    /// <summary>
+    ///     The requests to the REST of recent history, as «candles btc 1h», «funding btc», «open-interest btc 1h».
+    /// </summary>
+    public List<string> RestRequests { get; } = [];
+
+    /// <summary>
+    ///     The path and query of every request to the REST of recent history, as sent (task 18.1).
+    /// </summary>
+    public List<string> RestQueries { get; } = [];
+
+    /// <summary>
+    ///     The ids of the instruments whose history the service is still loading: its REST answers <c>202</c> with
+    ///     <c>"loading": true</c> and an empty list for them.
+    /// </summary>
+    public HashSet<string> Loading { get; } = [];
+
+    /// <summary>
+    ///     The clock of the live feeds, set on all four at once.
+    /// </summary>
+    public TimeProvider FeedTime
+    {
+        set
+        {
+            Minutes.Time = value;
+            Payments.Time = value;
+            Rates.Time = value;
+            OpenInterest.Time = value;
+        }
+    }
+
+    /// <summary>
+    ///     The close of every candle of an instrument by its id, when it is not the usual one (change add-ideas-and-market):
+    ///     a test changes the history of a pair with it.
+    /// </summary>
+    public Dictionary<string, string> Closes { get; } = [];
 
     private int _drops;
 
@@ -43,6 +101,12 @@ public sealed class FakeMarketData
     ///     holds a run on a pair with it, and the hold ends when the run drops the call.
     /// </summary>
     public Func<CandleHistoryRequest, CancellationToken, Task>? BeforeCandles { get; set; }
+
+    /// <summary>
+    ///     Awaited by every call of <c>OpenInterestFeed.History</c> after it is recorded and before it is answered, with the
+    ///     token of the call: a test holds the history of open interest with it (task 23.2).
+    /// </summary>
+    public Func<OpenInterestHistoryRequest, CancellationToken, Task>? BeforeInterest { get; set; }
 
     /// <summary>
     ///     Where the history ends, if anywhere: a shorter history keeps the tests fast.

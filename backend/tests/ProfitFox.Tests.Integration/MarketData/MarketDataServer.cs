@@ -60,7 +60,12 @@ public sealed class MarketDataServer : IAsyncDisposable
                     {
                         endpoints.MapGrpcService<FakeCandleFeed>();
                         endpoints.MapGrpcService<FakeFundingFeed>();
-                        endpoints.MapGet("/api/instruments/bybit", () => Results.Text(Catalog, "application/json"));
+                        endpoints.MapGrpcService<FakeFundingRateFeed>();
+                        endpoints.MapGrpcService<FakeOpenInterestFeed>();
+                        endpoints.MapGet("/api/instruments/bybit", () => Results.Text(data.Catalog, "application/json"));
+                        endpoints.MapGet("/api/instruments/{id}/candles", (HttpRequest request, string id) => FakeRecentHistory.Candles(data, request, id));
+                        endpoints.MapGet("/api/instruments/{id}/funding-payments", (HttpRequest request, string id) => FakeRecentHistory.Funding(data, request, id));
+                        endpoints.MapGet("/api/instruments/{id}/open-interest", (HttpRequest request, string id) => FakeRecentHistory.OpenInterest(data, request, id));
                     });
                 }))
             .StartAsync();

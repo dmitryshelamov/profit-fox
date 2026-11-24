@@ -39,7 +39,18 @@ export interface TestSignal {
   readonly name: string;
   readonly latest: number;
   readonly versions: Record<number, readonly { name: string; type: string; value: unknown }[]>;
+  /** The type of the output: `event` unless said; `boolean` for a signal-state (change add-ideas-and-market). */
+  readonly output?: 'event' | 'boolean';
 }
+
+/** `btc-drop-4h`, a signal-state of one version without parameters (spec strategy-constructor «Стратегия из btc-drop-4h»). */
+export const btcDrop: TestSignal = {
+  id: 'c0ffee00-0000-4000-8000-000000000001',
+  name: 'btc-drop-4h',
+  latest: 1,
+  versions: { 1: [] },
+  output: 'boolean',
+};
 
 /** `funding-high` with the graph of H0001: version 1 with the threshold 0.0005, version 2 with 0.001. */
 export const fundingHigh: TestSignal = {
@@ -72,6 +83,7 @@ export function usesOf(nodes: readonly Node[], signals: readonly TestSignal[]) {
         name: signal?.name ?? null,
         version,
         latestVersion: signal?.latest ?? null,
+        output: signal ? (signal.output ?? 'event') : null,
         parameters: (signal?.versions[version] ?? []).map((parameter) => ({
           ...parameter,
           minimum: null,
@@ -136,7 +148,15 @@ export function checkStrategyLikeServer(signals: readonly TestSignal[]): FakeRou
 
 /** A saved signal as `GET /api/signals/<name>` gives it, on its latest version. */
 export function signalResponse(signal: TestSignal) {
-  const graph = h0001Graph();
+  const h0001 = h0001Graph();
+  const graph =
+    signal.output === 'boolean'
+      ? {
+          ...h0001,
+          outputs: [{ name: 'entry', type: 'boolean' as const }],
+          wires: h0001.wires.filter((wire) => wire.to !== 'out.entry'),
+        }
+      : h0001;
   return {
     id: signal.id,
     name: signal.name,
@@ -167,6 +187,7 @@ export function strategyRoutes(
           version: signal.latest,
           error: null,
           id: signal.id,
+          output: signal.output ?? 'event',
         })),
       ),
     ...Object.fromEntries(

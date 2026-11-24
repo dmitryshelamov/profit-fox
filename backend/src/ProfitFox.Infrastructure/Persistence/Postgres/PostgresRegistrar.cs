@@ -7,6 +7,9 @@ using Npgsql;
 
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Backtests;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Filters;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas;
+using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Market;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Signals;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Strategies;
 
@@ -27,6 +30,13 @@ internal static class PostgresRegistrar
         services.AddSingleton<IBacktestRepository, BacktestRepository>();
         services.AddSingleton<ISignalRepository, SignalRepository>();
         services.AddSingleton<IStrategyRepository, StrategyRepository>();
+        services.AddSingleton<IStrategyIdeasRepository, StrategyIdeasRepository>();
+        services.AddSingleton<ISignalLabelRepository, SignalLabelRepository>();
+        services.AddSingleton<IIdeaSourceRepository, IdeaSourceRepository>();
+        services.AddSingleton<IScannerLeaseRepository, ScannerLeaseRepository>();
+        services.AddSingleton<IIdeaRepository, IdeaRepository>();
+        services.AddSingleton<IMarketPairRepository, MarketPairRepository>();
+        services.AddSingleton<ISavedFilterRepository, SavedFilterRepository>();
         services
             .AddFluentMigratorCore()
             .ConfigureRunner(runner => runner

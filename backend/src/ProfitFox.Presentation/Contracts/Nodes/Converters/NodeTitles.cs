@@ -22,6 +22,7 @@ public static class NodeTitles
         [NodeCatalog.Outputs] = ("Выходы", Graph),
         [NodeCatalog.Candle] = ("Свеча", Data),
         [NodeCatalog.FundingRate] = ("Фандинг", Data),
+        [NodeCatalog.PairCandle] = ("Свеча пары", Data),
         [NodeCatalog.Previous] = ("Предыдущее", Data),
         [NodeCatalog.Compare] = ("Сравнить", Logic),
         [NodeCatalog.And] = ("И", Logic),

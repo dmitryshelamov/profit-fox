@@ -63,12 +63,32 @@ public sealed class BacktestRulesTests
     [Test]
     public void Two_errors_at_once()
     {
-        BacktestCheck check = Check(new BacktestRequest(Timeframes: ["5m"], Pairs: ["FOOUSDT"]), FundingShort, StrategyKind.Idea);
+        BacktestCheck check = Check(new BacktestRequest(Timeframes: ["2m"], Pairs: ["FOOUSDT"]), FundingShort, StrategyKind.Idea);
 
         Assert.That(check.Settings, Is.Null);
         Assert.That(
             check.Errors.Select(error => (error.Code, error.Field, error.Pair)),
             Is.EqualTo(new[] { (BacktestError.InvalidTimeframe, (string?)"timeframes", (string?)null), (BacktestError.UnknownInstrument, "pairs", "FOOUSDT") }));
+    }
+
+    /// <summary>
+    ///     Change add-ideas-and-market, task 2.1: spec strategy-backtest «Прогон на 15m».
+    /// </summary>
+    [Test]
+    public void A_backtest_on_15m_and_1h_has_both_timeframes()
+    {
+        BacktestCheck check = Check(new BacktestRequest(Timeframes: ["15m", "1h"]), FundingShort, StrategyKind.Idea);
+
+        Assert.That(check.Errors, Is.Empty);
+        Assert.That(check.Settings!.Timeframes, Is.EqualTo(new[] { TimeSpan.FromMinutes(15), TimeSpan.FromHours(1) }));
+    }
+
+    [Test]
+    public void An_unknown_timeframe_names_the_five()
+    {
+        BacktestError error = Check(new BacktestRequest(Timeframes: ["2m"]), FundingShort, StrategyKind.Idea).Errors.Single();
+
+        Assert.That(error.Reason, Does.Contain("2m").And.Contain("5m, 15m, 1h, 4h, 1d"));
     }
 
     [Test]

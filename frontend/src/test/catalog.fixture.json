@@ -51,6 +51,40 @@
     "settings": []
   },
   {
+    "kind": "pair-candle",
+    "title": "Свеча пары",
+    "group": "Данные",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "open",
+        "type": "number"
+      },
+      {
+        "name": "high",
+        "type": "number"
+      },
+      {
+        "name": "low",
+        "type": "number"
+      },
+      {
+        "name": "close",
+        "type": "number"
+      },
+      {
+        "name": "volume",
+        "type": "number"
+      }
+    ],
+    "settings": [
+      {
+        "name": "symbol",
+        "values": []
+      }
+    ]
+  },
+  {
     "kind": "compare",
     "title": "Сравнить",
     "group": "Логика",

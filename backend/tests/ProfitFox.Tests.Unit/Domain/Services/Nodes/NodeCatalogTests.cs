@@ -15,7 +15,7 @@ public sealed class NodeCatalogTests
     private static readonly GraphDefinition Empty = new GraphDefinition([], [], [], []);
 
     private static readonly string[] SignalKinds =
-        ["parameters", "candle", "funding-rate", "compare", "previous", "and", "or", "not", "first-time", "add", "subtract", "multiply", "outputs"];
+        ["parameters", "candle", "funding-rate", "pair-candle", "compare", "previous", "and", "or", "not", "first-time", "add", "subtract", "multiply", "outputs"];
 
     private static readonly string[] PositionKinds =
         ["position", "enter", "market-order", "limit-order", "close-position", "stop-loss", "take-profit", "close-after"];
@@ -88,7 +88,7 @@ public sealed class NodeCatalogTests
     [Test]
     public void The_settings_of_every_kind_but_signal_are_not_free()
     {
-        Assert.That(NodeCatalog.All.Where(kind => kind.Name != "signal").SelectMany(kind => kind.Settings).Select(setting => setting.Free), Has.All.False);
+        Assert.That(NodeCatalog.All.Where(kind => kind.Name is not ("signal" or "pair-candle")).SelectMany(kind => kind.Settings).Select(setting => setting.Free), Has.All.False);
     }
 
     /// <summary>
@@ -110,6 +110,7 @@ public sealed class NodeCatalogTests
             "parameters: -> threshold:number",
             "candle: -> open:number high:number low:number close:number volume:number",
             "funding-rate: -> value:number",
+            "pair-candle: -> open:number high:number low:number close:number volume:number",
             "compare: a:number b:number -> result:boolean",
             "previous: value:number -> result:number",
             "and: a:boolean b:boolean -> result:boolean",

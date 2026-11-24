@@ -1,0 +1,38 @@
+// Written in profit-fox after the shape of candle_feed.proto and funding_payment_feed.proto and change
+// add-ideas-and-market, design.md, decision 2: the service's own file was not at hand. Compare it with
+// profit-fox-market-data backend/src/ProfitFox.MarketData.Presentation/Protos/funding_rate_feed.proto and replace it by a
+// copy, where only csharp_namespace differs; never edit the messages here.
+syntax = "proto3";
+
+package profitfox.marketdata.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "ProfitFox.Infrastructure.Clients.MarketData.Protos";
+
+// The rates of the coming funding payments of the catalog as the exchange tells them.
+service FundingRateFeed {
+  // Tells the current funding rate of every instrument as the service reads it, every few minutes, until the caller
+  // ends the call. With `since`, the stored ones of a time at or after it come first, oldest first, and the live ones
+  // follow. One may come twice: the caller takes them as one, by instrument and time.
+  //
+  // INVALID_ARGUMENT: `since` is further back than the service catches up.
+  // RESOURCE_EXHAUSTED: the caller read slower than they came and is cut off; it subscribes again with `since`.
+  // UNAVAILABLE: the service is stopping; the caller subscribes again with `since` once it is back.
+  rpc Subscribe (SubscribeFundingRateRequest) returns (stream FundingRateUpdate);
+}
+
+message SubscribeFundingRateRequest {
+  // Where to catch up from; absent means live ones only.
+  google.protobuf.Timestamp since = 1;
+}
+
+// The funding rate of an instrument at a time. The rate is a decimal number as text, exactly as stored.
+message FundingRateUpdate {
+  // The id of the instrument in the catalog, as GET api/instruments gives it.
+  string instrument_id = 1;
+  google.protobuf.Timestamp time = 2;
+
+  // The rate the next payment would be settled at now, a fraction, not a percent.
+  string funding_rate = 3;
+}

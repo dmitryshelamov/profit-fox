@@ -11,6 +11,7 @@ using ProfitFox.Domain.Entities.Backtests;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.Services.Backtests;
+using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.Services.MarketData;
 using ProfitFox.Domain.ValueObjects.Backtests;
 using ProfitFox.Domain.ValueObjects.MarketData;
@@ -59,14 +60,16 @@ internal sealed class ExecuteBacktestCommandHandler(
         using var hash = new HistoryHash();
         var history = new MarketHistory(timed, settings.End, hash, time);
         IReadOnlyList<BacktestPlan> plans = BacktestPlans.Of(backtest.Graph, backtest.Kind, settings, [.. backtest.Sets.Select(set => set.Set)]);
-        Instrument[] pairs = [.. Pairs(await instruments.LinearUsdtPerpetuals(cancellationToken), settings.Pairs)];
+        IReadOnlyList<Instrument> listed = await instruments.LinearUsdtPerpetuals(cancellationToken);
+        Instrument[] pairs = [.. Pairs(listed, settings.Pairs)];
+        IReadOnlyDictionary<TimeSpan, IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>>? named = await PairBacktestRun.NamedAsync(history, StrategyGraph.NamedPairs(backtest.Graph), listed, plans, cancellationToken);
         SetNumbers[] totals = [.. plans.Select(_ => SetNumbers.Zero)];
         List<(string Pair, SetNumbers Numbers)>[] byPair = [.. plans.Select(_ => new List<(string, SetNumbers)>())];
         request.Progress?.Begin(pairs.Length);
         foreach (Instrument pair in pairs)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            IReadOnlyList<PairSetResult> results = await PairBacktestRun.RunAsync(history, pair, backtest.Kind, plans, cancellationToken);
+            IReadOnlyList<PairSetResult> results = await PairBacktestRun.RunAsync(history, pair, backtest.Kind, plans, cancellationToken, named);
             for (int index = 0; index < results.Count; index++)
             {
                 totals[index] += results[index].Numbers;

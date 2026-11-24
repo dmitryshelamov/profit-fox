@@ -161,11 +161,12 @@ public sealed class ExecuteBacktestTests
     [Test]
     public async Task A_backtest_up_to_today_reads_no_funding_of_today_and_leaves_the_trade_that_ends_there_out_on_funding()
     {
-        // The strategy enters at 08:00 every day for 16 hours: its trade of the last day ends exactly at the end of history.
-        Backtest later = await Execute(Generate(after: "16h"), new FixedTime(End.AddDays(1).AddHours(9)));
+        // The strategy enters at 16:00 every day for 8 hours: its trade of the last day ends exactly at the end of history.
+        // The payment of 08:00 belongs to the candle closed after it (task 27.3), and the 4h candle of 08:00 has no trades.
+        Backtest later = await Execute(Generate(after: "8h"), new FixedTime(End.AddDays(1).AddHours(9)));
         _server.Data.FundingRequests.Clear();
 
-        Backtest today = await Execute(Generate(after: "16h"), new FixedTime(End.AddHours(9)));
+        Backtest today = await Execute(Generate(after: "8h"), new FixedTime(End.AddHours(9)));
 
         Assert.That(today.Status, Is.EqualTo(BacktestState.Done), today.Reason);
         Assert.That(_server.Data.FundingRequests.Select(request => request.To.ToDateTimeOffset()), Has.All.LessThanOrEqualTo(End));
@@ -184,7 +185,7 @@ public sealed class ExecuteBacktestTests
     [Test]
     public async Task A_backtest_up_to_today_that_runs_across_midnight_treats_every_pair_as_before_midnight()
     {
-        Backtest before = await Execute(Generate(after: "16h"), new FixedTime(End.AddHours(23).AddMinutes(59)));
+        Backtest before = await Execute(Generate(after: "8h"), new FixedTime(End.AddHours(23).AddMinutes(59)));
         var clock = new MidnightClock(End.AddHours(23).AddMinutes(59), End.AddDays(1).AddMinutes(1));
         _server.Data.BeforeCandles = (request, _) =>
         {
@@ -196,7 +197,7 @@ public sealed class ExecuteBacktestTests
             return Task.CompletedTask;
         };
 
-        Backtest across = await Execute(Generate(after: "16h"), clock);
+        Backtest across = await Execute(Generate(after: "8h"), clock);
 
         Assert.That(clock.Passed, Is.True, "the clock passed midnight between the pairs");
         Assert.That(across.Status, Is.EqualTo(BacktestState.Done), across.Reason);
@@ -206,6 +207,54 @@ public sealed class ExecuteBacktestTests
     }
 
     // A clock before midnight until it is passed, after midnight since.
+    /// <summary>
+    ///     Change add-ideas-and-market, task 4.3: spec market-history «Свечи названной пары» — «Одно чтение на прогон» and
+    ///     «Хэш данных».
+    /// </summary>
+    [Test]
+    public async Task The_candles_of_a_named_pair_are_read_once_a_backtest_and_go_into_its_hash()
+    {
+        BacktestOutcome first = await Run(Named(["ETHUSDT", "SOLUSDT"]));
+
+        CandleHistoryRequest[] btc = [.. _server.Data.CandleRequests.Where(request => request.InstrumentIds.Single() == "btc")];
+        Assert.That(btc.Select(request => request.Interval), Is.EqualTo(new[] { CandleInterval.FourHours }), "once for the run, not for each of the two pairs");
+        Assert.That(first.Sets.Single().Numbers.Trades, Is.GreaterThan(0), "the node gives the candles of BTCUSDT");
+
+        _server.Data.Closes["btc"] = "100.75";
+        BacktestOutcome second = await Run(Named(["ETHUSDT", "SOLUSDT"]));
+
+        Assert.That(second.DataHash, Is.Not.EqualTo(first.DataHash), "the history of BTCUSDT changed");
+        Assert.That(Numbers(second), Is.EqualTo(Numbers(first)), "the close is still above zero");
+    }
+
+    // funding-short whose entry also asks the close of BTCUSDT to be above zero, on the given pairs.
+    private static Backtest Named(IReadOnlyList<string> pairs)
+    {
+        Backtest backtest = Generate();
+        string json = BacktestGenerator.FundingShort
+            .Replace(
+                """{ "id": "first", "kind": "first-time" },""",
+                """{ "id": "first", "kind": "first-time" }, { "id": "btc", "kind": "pair-candle", "settings": { "symbol": "BTCUSDT" } }, { "id": "up", "kind": "compare", "settings": { "operation": "gt" }, "inputs": { "b": 0 } }, { "id": "both", "kind": "and" },""",
+                StringComparison.Ordinal)
+            .Replace(
+                """{ "from": "high.result", "to": "first.value" },""",
+                """{ "from": "high.result", "to": "both.a" }, { "from": "btc.close", "to": "up.a" }, { "from": "up.result", "to": "both.b" }, { "from": "both.result", "to": "first.value" },""",
+                StringComparison.Ordinal);
+        using var document = JsonDocument.Parse(json);
+        return new Backtest
+        {
+            Id = backtest.Id,
+            StrategyId = backtest.StrategyId,
+            StrategyName = backtest.StrategyName,
+            StrategyVersion = backtest.StrategyVersion,
+            Kind = backtest.Kind,
+            Graph = StrategyGraph.ReadForm(document.RootElement).Value!,
+            Settings = backtest.Settings with { Pairs = pairs },
+            Sets = backtest.Sets,
+            SetCount = backtest.SetCount
+        };
+    }
+
     private sealed class MidnightClock(DateTimeOffset before, DateTimeOffset after) : TimeProvider
     {
         private int _passed;

@@ -84,6 +84,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/filters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListFilters"];
+        put?: never;
+        post: operations["CreateFilter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/filters/fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListFilterFields"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/filters/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["ReplaceFilter"];
+        post?: never;
+        delete: operations["DeleteFilter"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/filters/count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CountFilter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ideas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListIdeas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ideas/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["SummarizeIdeas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ideas/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetScannerState"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/instruments": {
         parameters: {
             query?: never;
@@ -92,6 +204,102 @@ export interface paths {
             cookie?: never;
         };
         get: operations["ListInstruments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/pairs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListMarketPairs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/pairs/{symbol}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetMarketPair"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/pairs/{symbol}/ideas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListPairIdeas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/pairs/{symbol}/chart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetPairChart"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/pairs/{symbol}/chart/open-interest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetPairOpenInterest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/pairs/{symbol}/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["StreamLiveCandle"];
         put?: never;
         post?: never;
         delete?: never;
@@ -228,6 +436,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/signals/{name}/label": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["SetSignalLabel"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/strategies": {
         parameters: {
             query?: never;
@@ -238,6 +462,22 @@ export interface paths {
         get: operations["ListStrategies"];
         put?: never;
         post: operations["CreateStrategy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/strategies/{name}/ideas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["SetStrategyIdeas"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -383,6 +623,26 @@ export interface components {
             version: number | string;
             kind: string;
         };
+        ChartCandle: {
+            /** Format: int64 */
+            openTime: number | string;
+            /** Format: double */
+            open: number | string;
+            /** Format: double */
+            high: number | string;
+            /** Format: double */
+            low: number | string;
+            /** Format: double */
+            close: number | string;
+            /** Format: double */
+            volume: number | string;
+        };
+        ChartPoint: {
+            /** Format: int64 */
+            time: number | string;
+            /** Format: double */
+            value: number | string;
+        };
         CreateBacktestRequest: {
             strategy: null | string;
             /** Format: int32 */
@@ -431,11 +691,182 @@ export interface components {
             /** Format: int32 */
             period: number | string;
         };
+        FilterConditionDto: {
+            field: string;
+            operator: string;
+            value: null | string;
+            to?: null | string;
+        };
+        FilterCountRequest: {
+            conditions: null | components["schemas"]["FilterConditionDto"][];
+        };
+        FilterCountResponse: {
+            /** Format: int32 */
+            pairs: number | string;
+            /** Format: int32 */
+            allPairs: number | string;
+            /** Format: int32 */
+            ideas: number | string;
+            /** Format: int32 */
+            allIdeas: number | string;
+        };
+        FilterFieldResponse: {
+            name: string;
+            title: string;
+            type: string;
+            place: string;
+            unit: null | string;
+            values: null | string[];
+        };
+        FilterResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            place: string;
+            conditions: components["schemas"]["FilterConditionDto"][];
+        };
+        IdeaBadgeResponse: {
+            strategy: string;
+            timeframe: string;
+            side: string;
+        };
+        IdeaPageResponse: {
+            items: components["schemas"]["IdeaResponse"][];
+            /** Format: int32 */
+            total: number | string;
+            /** Format: int32 */
+            page: number | string;
+            /** Format: int32 */
+            pageSize: number | string;
+            filterGone: boolean;
+        };
+        IdeaResponse: {
+            /** Format: uuid */
+            id: string;
+            symbol: string;
+            /** Format: uuid */
+            strategyId: string;
+            strategy: string;
+            /** Format: int32 */
+            version: number | string;
+            timeframe: string;
+            side: string;
+            labels: string[];
+            /** Format: int64 */
+            moment: number | string;
+            /** Format: int64 */
+            until: number | string;
+            /** Format: double */
+            size: number | string;
+            /** Format: double */
+            entry: number | string;
+            /** Format: int64 */
+            entryTime: null | number | string;
+            /** Format: double */
+            stopFraction: null | number | string;
+            /** Format: double */
+            targetFraction: null | number | string;
+            /** Format: double */
+            stop: null | number | string;
+            /** Format: double */
+            target: null | number | string;
+            /** Format: double */
+            now: null | number | string;
+            state: string;
+            /** Format: int64 */
+            exitTime: null | number | string;
+            exitReason: null | string;
+            ambiguous: boolean;
+            /** Format: double */
+            result: null | number | string;
+            /** Format: double */
+            resultUsdt: null | number | string;
+            excluded: null | string;
+        };
+        IdeaSummaryPageResponse: {
+            items: components["schemas"]["IdeaSummaryResponse"][];
+            /** Format: int32 */
+            total: number | string;
+            /** Format: int32 */
+            page: number | string;
+            /** Format: int32 */
+            pageSize: number | string;
+            filterGone: boolean;
+        };
+        IdeaSummaryResponse: {
+            /** Format: uuid */
+            strategyId: string;
+            strategy: string;
+            /** Format: int32 */
+            version: number | string;
+            timeframe: string;
+            /** Format: int32 */
+            ideas: number | string;
+            /** Format: double */
+            wins: number | string;
+            /** Format: double */
+            mean: number | string;
+            /** Format: double */
+            sum: number | string;
+        };
         InstrumentResponse: {
             id: string;
             symbol: string;
         };
         JsonElement: unknown;
+        LiveCandleResponse: {
+            /** Format: int64 */
+            openTime: number | string;
+            /** Format: double */
+            open: number | string;
+            /** Format: double */
+            high: number | string;
+            /** Format: double */
+            low: number | string;
+            /** Format: double */
+            close: number | string;
+            /** Format: double */
+            volume: number | string;
+            closed: boolean;
+            /** Format: int64 */
+            updatedAt: number | string;
+        };
+        MarketPageResponse: {
+            items: components["schemas"]["MarketPairResponse"][];
+            /** Format: int32 */
+            total: number | string;
+            /** Format: int32 */
+            page: number | string;
+            /** Format: int32 */
+            pageSize: number | string;
+            filterGone: boolean;
+            /** Format: int64 */
+            updatedAt: null | number | string;
+        };
+        MarketPairResponse: {
+            symbol: string;
+            /** Format: double */
+            price: null | number | string;
+            /** Format: double */
+            change1h: null | number | string;
+            /** Format: double */
+            change4h: null | number | string;
+            /** Format: double */
+            change24h: null | number | string;
+            /** Format: double */
+            turnover24h: null | number | string;
+            /** Format: double */
+            openInterest: null | number | string;
+            /** Format: double */
+            openInterestUsdt: null | number | string;
+            /** Format: double */
+            fundingRate: null | number | string;
+            /** Format: int64 */
+            nextFunding: null | number | string;
+            /** Format: int64 */
+            updatedAt: null | number | string;
+            ideas: components["schemas"]["IdeaBadgeResponse"][];
+        };
         NodeKindResponse: {
             kind: string;
             title: string;
@@ -450,6 +881,19 @@ export interface components {
             x: number | string;
             /** Format: double */
             y: number | string;
+        };
+        PairChartResponse: {
+            symbol: string;
+            timeframe: string;
+            loading: boolean;
+            candles: components["schemas"]["ChartCandle"][];
+            funding: components["schemas"]["ChartPoint"][];
+        };
+        PairOpenInterestResponse: {
+            symbol: string;
+            timeframe: string;
+            loading: boolean;
+            openInterest: components["schemas"]["ChartPoint"][];
         };
         ParameterValueResponse: {
             name: string;
@@ -598,6 +1042,8 @@ export interface components {
             parameter?: null | string;
             pair?: null | string;
             node?: null | string;
+            /** Format: int32 */
+            condition?: null | number | string;
             pin?: null | string;
             setting?: null | string;
             wire?: null | components["schemas"]["RequestWire"];
@@ -606,6 +1052,33 @@ export interface components {
         RequestWire: {
             from: string;
             to: string;
+        };
+        SaveFilterRequest: {
+            name: null | string;
+            place: null | string;
+            conditions: null | components["schemas"]["FilterConditionDto"][];
+        };
+        ScannerStateResponse: {
+            worker: null | string;
+            live: boolean;
+            /** Format: double */
+            idleSeconds: null | number | string;
+            /** Format: int64 */
+            liveSince: null | number | string;
+            /** Format: int32 */
+            warmed: number | string;
+            /** Format: int32 */
+            pairs: number | string;
+            /** Format: int32 */
+            open: number | string;
+            /** Format: int32 */
+            closed: number | string;
+            burst: {
+                [key: string]: number | string;
+            };
+            /** Format: int32 */
+            failed: number | string;
+            failure: null | string;
         };
         SetNumbersResponse: {
             /** Format: int32 */
@@ -638,6 +1111,16 @@ export interface components {
             errors: components["schemas"]["RequestError"][];
             strategies: string[];
         };
+        SignalLabelRequest: {
+            enabled: boolean;
+            text: null | string;
+            timeframe: null | string;
+        };
+        SignalLabelResponse: {
+            enabled: boolean;
+            text: string;
+            timeframe: string;
+        };
         SignalListItem: {
             name: string;
             description: null | string;
@@ -647,6 +1130,8 @@ export interface components {
             /** Format: uuid */
             id: null | string;
             strategies: string[];
+            output: null | string;
+            label?: null | components["schemas"]["SignalLabelResponse"];
         };
         SignalParameterResponse: {
             name: string;
@@ -679,6 +1164,15 @@ export interface components {
             /** Format: int32 */
             latestVersion: null | number | string;
             parameters: components["schemas"]["SignalParameterResponse"][];
+            output: null | string;
+        };
+        StrategyIdeasRequest: {
+            enabled: boolean;
+            timeframes: null | string[];
+        };
+        StrategyIdeasResponse: {
+            enabled: boolean;
+            timeframes: string[];
         };
         StrategyLastRunResponse: {
             id: string;
@@ -696,6 +1190,7 @@ export interface components {
             exits: string[];
             kind?: null | string;
             lastRun?: null | components["schemas"]["StrategyLastRunResponse"];
+            ideas?: null | components["schemas"]["StrategyIdeasResponse"];
         };
         StrategyPreviewResponse: {
             instrument: string;
@@ -1011,6 +1506,328 @@ export interface operations {
             };
         };
     };
+    ListFilters: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["FilterResponse"][];
+                    "application/json": components["schemas"]["FilterResponse"][];
+                    "text/json": components["schemas"]["FilterResponse"][];
+                };
+            };
+        };
+    };
+    CreateFilter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveFilterRequest"];
+                "text/json": components["schemas"]["SaveFilterRequest"];
+                "application/*+json": components["schemas"]["SaveFilterRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["FilterResponse"];
+                    "application/json": components["schemas"]["FilterResponse"];
+                    "text/json": components["schemas"]["FilterResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    ListFilterFields: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["FilterFieldResponse"][];
+                    "application/json": components["schemas"]["FilterFieldResponse"][];
+                    "text/json": components["schemas"]["FilterFieldResponse"][];
+                };
+            };
+        };
+    };
+    ReplaceFilter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveFilterRequest"];
+                "text/json": components["schemas"]["SaveFilterRequest"];
+                "application/*+json": components["schemas"]["SaveFilterRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["FilterResponse"];
+                    "application/json": components["schemas"]["FilterResponse"];
+                    "text/json": components["schemas"]["FilterResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    DeleteFilter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CountFilter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FilterCountRequest"];
+                "text/json": components["schemas"]["FilterCountRequest"];
+                "application/*+json": components["schemas"]["FilterCountRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["FilterCountResponse"];
+                    "application/json": components["schemas"]["FilterCountResponse"];
+                    "text/json": components["schemas"]["FilterCountResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    ListIdeas: {
+        parameters: {
+            query?: {
+                state?: string;
+                sort?: string;
+                direction?: string;
+                page?: number | string;
+                pageSize?: number | string;
+                search?: string;
+                strategy?: string;
+                timeframe?: string;
+                side?: string;
+                label?: string;
+                positive?: boolean;
+                withStop?: boolean;
+                exitReason?: string;
+                period?: number | string;
+                filter?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["IdeaPageResponse"];
+                    "application/json": components["schemas"]["IdeaPageResponse"];
+                    "text/json": components["schemas"]["IdeaPageResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    SummarizeIdeas: {
+        parameters: {
+            query?: {
+                sort?: string;
+                direction?: string;
+                page?: number | string;
+                pageSize?: number | string;
+                search?: string;
+                strategy?: string;
+                timeframe?: string;
+                side?: string;
+                label?: string;
+                exitReason?: string;
+                period?: number | string;
+                filter?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["IdeaSummaryPageResponse"];
+                    "application/json": components["schemas"]["IdeaSummaryPageResponse"];
+                    "text/json": components["schemas"]["IdeaSummaryPageResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    GetScannerState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ScannerStateResponse"];
+                    "application/json": components["schemas"]["ScannerStateResponse"];
+                    "text/json": components["schemas"]["ScannerStateResponse"];
+                };
+            };
+        };
+    };
     ListInstruments: {
         parameters: {
             query?: never;
@@ -1040,6 +1857,306 @@ export interface operations {
                     "text/plain": components["schemas"]["ProblemDetails"];
                     "application/json": components["schemas"]["ProblemDetails"];
                     "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListMarketPairs: {
+        parameters: {
+            query?: {
+                sort?: string;
+                direction?: string;
+                page?: number | string;
+                pageSize?: number | string;
+                search?: string;
+                ideasOnly?: boolean;
+                strategy?: string;
+                timeframe?: string;
+                filter?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["MarketPageResponse"];
+                    "application/json": components["schemas"]["MarketPageResponse"];
+                    "text/json": components["schemas"]["MarketPageResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    GetMarketPair: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                symbol: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["MarketPairResponse"];
+                    "application/json": components["schemas"]["MarketPairResponse"];
+                    "text/json": components["schemas"]["MarketPairResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListPairIdeas: {
+        parameters: {
+            query?: {
+                sort?: string;
+                direction?: string;
+                page?: number | string;
+                pageSize?: number | string;
+                strategy?: string;
+                timeframe?: string;
+                side?: string;
+                label?: string;
+                state?: string;
+                from?: number | string;
+                to?: number | string;
+                idea?: string;
+            };
+            header?: never;
+            path: {
+                symbol: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["IdeaPageResponse"];
+                    "application/json": components["schemas"]["IdeaPageResponse"];
+                    "text/json": components["schemas"]["IdeaPageResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    GetPairChart: {
+        parameters: {
+            query?: {
+                timeframe?: string;
+                before?: number | string;
+            };
+            header?: never;
+            path: {
+                symbol: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["PairChartResponse"];
+                    "application/json": components["schemas"]["PairChartResponse"];
+                    "text/json": components["schemas"]["PairChartResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetPairOpenInterest: {
+        parameters: {
+            query?: {
+                timeframe?: string;
+                before?: number | string;
+            };
+            header?: never;
+            path: {
+                symbol: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["PairOpenInterestResponse"];
+                    "application/json": components["schemas"]["PairOpenInterestResponse"];
+                    "text/json": components["schemas"]["PairOpenInterestResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StreamLiveCandle: {
+        parameters: {
+            query?: {
+                timeframe?: string;
+            };
+            header?: never;
+            path: {
+                symbol: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["LiveCandleResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -1504,6 +2621,58 @@ export interface operations {
             };
         };
     };
+    SetSignalLabel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignalLabelRequest"];
+                "text/json": components["schemas"]["SignalLabelRequest"];
+                "application/*+json": components["schemas"]["SignalLabelRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["SignalLabelResponse"];
+                    "application/json": components["schemas"]["SignalLabelResponse"];
+                    "text/json": components["schemas"]["SignalLabelResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     ListStrategies: {
         parameters: {
             query?: never;
@@ -1565,6 +2734,58 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    SetStrategyIdeas: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StrategyIdeasRequest"];
+                "text/json": components["schemas"]["StrategyIdeasRequest"];
+                "application/*+json": components["schemas"]["StrategyIdeasRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["StrategyIdeasResponse"];
+                    "application/json": components["schemas"]["StrategyIdeasResponse"];
+                    "text/json": components["schemas"]["StrategyIdeasResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ProblemDetails"];
+                    "application/json": components["schemas"]["ProblemDetails"];
+                    "text/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

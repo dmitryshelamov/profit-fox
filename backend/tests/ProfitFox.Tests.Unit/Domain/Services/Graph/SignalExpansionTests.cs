@@ -29,6 +29,20 @@ public sealed class SignalExpansionTests
         Assert.That(expanded.Outputs, Is.Empty);
     }
 
+    /// <summary>
+    ///     Change add-ideas-and-market, task 3.3: the wire from the output <c>value</c> of a signal-state starts where its
+    ///     output comes from.
+    /// </summary>
+    [Test]
+    public void The_wire_from_a_signal_state_starts_at_the_output_of_its_graph()
+    {
+        GraphDefinition expanded = StrategyGraph.ReadStrategy(SignalLibrary.StateStrategy(), SignalLibrary.Set).Value!.Graph;
+
+        Assert.That(expanded.Nodes.Select(node => node.Id), Is.EqualTo(new[] { "b/c", "b/above", "f/rate", "f/ge", "both", "first", "enter", "position", "close-after" }));
+        Assert.That(expanded.Wires.Take(2).Select(wire => $"{wire.From} -> {wire.To}"), Is.EqualTo(new[] { "b/above.result -> both.a", "f/ge.result -> both.b" }));
+        Assert.That(expanded.Nodes.Single(node => node.Id == "b/above").Inputs["b"], Is.EqualTo(GraphValue.FromNumber(100m)));
+    }
+
     [Test]
     public void A_written_value_takes_the_place_of_the_parameter()
     {

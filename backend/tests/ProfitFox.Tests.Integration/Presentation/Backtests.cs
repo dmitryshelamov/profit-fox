@@ -32,6 +32,26 @@ internal static class Backtests
         return graph;
     }
 
+    /// <summary>
+    ///     <c>funding-short</c> whose entry also asks the close of the pair <paramref name="symbol" /> to be above zero: the
+    ///     node <c>btc</c> of the kind <c>pair-candle</c> (change add-ideas-and-market).
+    /// </summary>
+    public static JsonObject FundingShortWithPair(string symbol)
+    {
+        JsonObject graph = FundingShort();
+        JsonArray nodes = graph["nodes"]!.AsArray();
+        nodes.Add(JsonNode.Parse($$"""{ "id": "btc", "kind": "pair-candle", "settings": { "symbol": "{{symbol}}" } }"""));
+        nodes.Add(JsonNode.Parse("""{ "id": "up", "kind": "compare", "settings": { "operation": "gt" }, "inputs": { "b": 0 } }"""));
+        nodes.Add(JsonNode.Parse("""{ "id": "both", "kind": "and" }"""));
+        JsonArray wires = graph["wires"]!.AsArray();
+        wires.Remove(wires.Single(wire => (string)wire!["to"]! == "first.value"));
+        wires.Add(JsonNode.Parse("""{ "from": "high.result", "to": "both.a" }"""));
+        wires.Add(JsonNode.Parse("""{ "from": "btc.close", "to": "up.a" }"""));
+        wires.Add(JsonNode.Parse("""{ "from": "up.result", "to": "both.b" }"""));
+        wires.Add(JsonNode.Parse("""{ "from": "both.result", "to": "first.value" }"""));
+        return graph;
+    }
+
     public static JsonObject Ladder()
     {
         return JsonNode.Parse(File.ReadAllText(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "ladder.json")))!.AsObject();

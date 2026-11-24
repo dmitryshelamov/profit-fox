@@ -8,6 +8,7 @@ using ProfitFox.Domain.Entities.Backtests;
 using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Domain.Exceptions;
 using ProfitFox.Domain.Repositories;
+using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.Services.Graph;
 using ProfitFox.Domain.Services.Nodes;
 using ProfitFox.Domain.ValueObjects.Graph;
@@ -18,7 +19,11 @@ namespace ProfitFox.Application.Queries.Strategies;
 ///     The names and the latest versions of the signals, and the last backtest of each strategy, are read once for all the
 ///     strategies of the list.
 /// </summary>
-internal sealed class GetStrategiesQueryHandler(IStrategyRepository strategies, ISignalRepository signals, IBacktestRepository backtests)
+internal sealed class GetStrategiesQueryHandler(
+    IStrategyRepository strategies,
+    ISignalRepository signals,
+    IBacktestRepository backtests,
+    IStrategyIdeasRepository? ideas = null)
     : IRequestHandler<GetStrategiesQuery, IReadOnlyList<StrategyEntryInternal>>
 {
     // The kinds that close a position, in the order of the list: stop, target, time, close by a condition, limit order. A
@@ -29,10 +34,11 @@ internal sealed class GetStrategiesQueryHandler(IStrategyRepository strategies, 
     public async Task<IReadOnlyList<StrategyEntryInternal>> Handle(GetStrategiesQuery request, CancellationToken cancellationToken)
     {
         IReadOnlyDictionary<Guid, Backtest> last = await backtests.LastOfStrategiesAsync(cancellationToken);
+        Dictionary<Guid, StrategyIdeas> enabled = ideas is null ? [] : (await ideas.AllAsync(cancellationToken)).ToDictionary(item => item.StrategyId);
         List<(StrategyEntryInternal Entry, GraphDefinition? Graph)> read = [];
         foreach (string name in (await strategies.NamesAsync(cancellationToken)).Order(StringComparer.Ordinal))
         {
-            read.Add(await Entry(name, last, cancellationToken));
+            read.Add(await Entry(name, last, enabled, cancellationToken));
         }
 
         SignalReference[] references = [.. read.SelectMany(item => item.Graph is null ? [] : SignalNodes.References(item.Graph)).Distinct()];
@@ -41,12 +47,16 @@ internal sealed class GetStrategiesQueryHandler(IStrategyRepository strategies, 
         return [.. read.Select(item => item.Graph is null ? item.Entry : item.Entry with { Signals = Signals(item.Graph, found), Exits = Exits(item.Graph) })];
     }
 
-    private async Task<(StrategyEntryInternal Entry, GraphDefinition? Graph)> Entry(string name, IReadOnlyDictionary<Guid, Backtest> last, CancellationToken cancellationToken)
+    private async Task<(StrategyEntryInternal Entry, GraphDefinition? Graph)> Entry(
+        string name,
+        IReadOnlyDictionary<Guid, Backtest> last,
+        Dictionary<Guid, StrategyIdeas> enabled,
+        CancellationToken cancellationToken)
     {
         try
         {
             StrategyDocument strategy = await StrategyChecks.ReadAsync(strategies, name, cancellationToken);
-            return (strategy.ToEntryInternal() with { LastRun = last.GetValueOrDefault(strategy.Id)?.ToLastInternal() }, strategy.Graph);
+            return (strategy.ToEntryInternal() with { LastRun = last.GetValueOrDefault(strategy.Id)?.ToLastInternal(), Ideas = enabled.GetValueOrDefault(strategy.Id) }, strategy.Graph);
         }
         catch (StrategyLibraryException exception)
         {

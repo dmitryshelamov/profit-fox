@@ -15,9 +15,15 @@ namespace ProfitFox.Domain.ValueObjects.Runs;
 ///             verdict, and the seed of random entries comes from the graph of the set and its timeframe. With the hash of
 ///             the hypothesis as the seed the trades of orders and random entries are those of version 2.
 ///         </item>
+///         <item>
+///             4: a funding payment at <c>T</c> belongs to the candle that closes after <c>T</c>, not to the one that closes at
+///             <c>T</c> (change add-ideas-and-market, task 27.3): what the graph of a candle reads of the funding is what was
+///             known live at its close. What a position pays or receives is not changed: the payments at
+///             <c>entry &lt; t ≤ exit</c>.
+///         </item>
 ///     </list>
 /// </summary>
 public static class EngineVersion
 {
-    public const int Number = 3;
+    public const int Number = 4;
 }

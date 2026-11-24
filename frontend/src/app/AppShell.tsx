@@ -7,11 +7,13 @@ const sections = [
   { to: '/signals', title: 'Сигналы' },
   { to: '/strategies', title: 'Стратегии' },
   { to: '/runs', title: 'Прогоны' },
+  { to: '/ideas', title: 'Идеи' },
+  { to: '/market', title: 'Рынок' },
 ] as const;
 
 /**
  * The header of the lists, of «Прогоны» and of the page of a run (spec bench-ui «Общая шапка»): the sign and the name
- * of the product, the three sections with the current one marked, and on the right the state of the run queue. The
+ * of the product, the five sections with the current one marked, and on the right the state of the run queue. The
  * editors are not under it: they take the whole screen.
  */
 export function AppShell() {

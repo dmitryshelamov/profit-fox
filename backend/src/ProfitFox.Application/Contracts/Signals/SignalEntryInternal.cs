@@ -1,3 +1,5 @@
+using ProfitFox.Domain.ValueObjects.Ideas;
+
 namespace ProfitFox.Application.Contracts.Signals;
 
 /// <summary>
@@ -10,4 +12,15 @@ public sealed record SignalEntryInternal(string Name, string? Description, int V
     public Guid? Id { get; init; }
 
     public IReadOnlyList<string> Strategies { get; init; } = [];
+
+    /// <summary>
+    ///     The type of the output of the latest version, <c>event</c> or <c>boolean</c>; null for a signal that does not read
+    ///     (change add-ideas-and-market).
+    /// </summary>
+    public string? Output { get; init; }
+
+    /// <summary>
+    ///     The label of the signal (change add-ideas-and-market); null when it never had one.
+    /// </summary>
+    public SignalLabel? Label { get; init; }
 }

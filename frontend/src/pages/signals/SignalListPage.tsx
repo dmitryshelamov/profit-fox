@@ -10,6 +10,8 @@ import { Badge } from '@/shared/ui/Badge';
 import { Button } from '@/shared/ui/Button';
 import { Page } from '@/shared/ui/Page';
 
+import { BurstRow, SignalLabelCell } from './SignalLabel';
+
 /**
  * The section «Сигналы» (spec signal-constructor «Список сигналов», «Создание, переименование, копирование и
  * удаление», «Стратегии сигнала в списке»): the saved signals in the order of their name with the strategies that point
@@ -40,6 +42,7 @@ export function SignalListPage() {
           </Button>
         }
         empty={<p className="text-muted">Сигналов нет.</p>}
+        tail={<BurstRow columns={signalList.columns.length} />}
       />
     </Page>
   );
@@ -59,6 +62,12 @@ const signalList: ListType<SignalListItem> = {
   ),
   // The strategies any version of which points at the signal (spec signal-constructor «Стратегии сигнала в списке»).
   columns: [
+    // Spec idea-labels «Метка в списке сигналов» (change add-ideas-and-market).
+    {
+      title: 'Метка на идеях',
+      className: 'w-[200px]',
+      cell: (signal) => <SignalLabelCell signal={signal} />,
+    },
     {
       title: 'Где используется',
       cell: (signal) =>
@@ -129,6 +138,7 @@ function CreateStrategy({ signal }: { readonly signal: SignalListItem }) {
           id,
           name: signal.name,
           version: Number(signal.version),
+          output: signal.output ?? null,
         })
       }
     >

@@ -90,6 +90,8 @@ export interface SignalVersionInfo {
   readonly name: string | null;
   readonly latestVersion: number | null;
   readonly parameters?: readonly SignalParameter[];
+  /** The type of the output of the version: `event`, or `boolean` for a signal-state (change add-ideas-and-market). */
+  readonly output?: string | null;
 }
 
 /**

@@ -37,6 +37,27 @@ public sealed class GrpcHistorySourceTests
         Assert.That(request.InstrumentIds, Is.EqualTo(new[] { "btc" }));
     }
 
+    /// <summary>
+    ///     Change add-ideas-and-market, task 2.2: the fake service gives any interval, built from its minutes.
+    /// </summary>
+    [TestCase(5, 288)]
+    [TestCase(15, 96)]
+    public async Task Candles_of_5m_and_15m_are_built_from_the_minutes(int minutes, int count)
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var source = new GrpcHistorySource(server.Channel);
+
+        HistoryRead<HistoryCandle> read = await source.ReadCandles("btc", TimeSpan.FromMinutes(minutes), Start, Start.AddDays(1), CancellationToken.None);
+
+        Assert.That(read.Items, Has.Count.EqualTo(count));
+        Assert.That(read.Items.Select(candle => candle.OpenTime), Is.Ordered.And.Unique);
+        Assert.That(read.Items[1].OpenTime, Is.EqualTo(Start.AddMinutes(minutes)));
+        string volume = (12.5m * minutes).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        Assert.That(read.Items[0], Is.EqualTo(new HistoryCandle(Start, "100.5", "101", "100", "100.25", volume, Turnover: null, BuyVolume: (6m * minutes).ToString(System.Globalization.CultureInfo.InvariantCulture))));
+        Assert.That(read.Items.Single(candle => candle.OpenTime == Start.AddHours(8)).HasTrades, Is.False, "the minutes of 08:00 have no trades");
+        Assert.That(server.Data.CandleRequests.Single().Interval, Is.EqualTo(minutes == 5 ? CandleInterval.FiveMinutes : CandleInterval.FifteenMinutes));
+    }
+
     [Test]
     public async Task Funding_payments_come_with_their_rate_as_text()
     {

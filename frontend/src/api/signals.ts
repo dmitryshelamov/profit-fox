@@ -10,7 +10,7 @@ export type Written<T> =
   | { readonly ok: false; readonly errors: readonly RequestError[] };
 
 /**
- * A write that the API may refuse with errors (`400`, `409`): the errors come back as a value, any other failure
+ * A write that the API may refuse with errors (`400`, `409`, `422`): the errors come back as a value, any other failure
  * throws as {@link unwrap} does.
  */
 export async function written<T>(result: {
@@ -20,7 +20,7 @@ export async function written<T>(result: {
 }): Promise<Written<T>> {
   const status = result.response.status;
   if (
-    (status === 400 || status === 409) &&
+    (status === 400 || status === 409 || status === 422) &&
     result.error &&
     typeof result.error === 'object' &&
     'errors' in result.error

@@ -91,12 +91,28 @@ public sealed class CliTests
     {
         await SaveFundingShort();
 
-        Result result = await Command("run", "funding-short", "--timeframe", "5m");
+        Result result = await Command("run", "funding-short", "--timeframe", "2m");
 
         Assert.That(result.Code, Is.EqualTo(1));
-        Assert.That(result.Error, Does.StartWith("refused: ").And.Contain("5m"));
+        Assert.That(result.Error, Does.StartWith("refused: ").And.Contain("2m"));
         Assert.That(result.Output, Is.Empty);
         Assert.That((await Command("runs")).Output, Does.Not.Contain("queued"));
+    }
+
+    /// <summary>
+    ///     Change add-ideas-and-market, task 2.4: spec bench-run-queue «Прогон на 5m».
+    /// </summary>
+    [TestCase("5m")]
+    [TestCase("15m")]
+    public async Task A_run_on_5m_prints_the_id_of_the_queued_backtest_and_exits_with_0(string timeframe)
+    {
+        await SaveFundingShort();
+
+        Result result = await Command("run", "funding-short", "--timeframe", timeframe);
+
+        Assert.That(result.Code, Is.Zero, result.Error);
+        ProfitFox.Presentation.Contracts.Backtests.BacktestResponse read = await Backtests.Read(_api.Http, QueuedId(result.Output));
+        Assert.That(read.Settings.Timeframes, Is.EqualTo(new[] { timeframe }));
     }
 
     [Test]
@@ -151,6 +167,7 @@ public sealed class CliTests
 
         Assert.That(result.Code, Is.EqualTo(0));
         Assert.That(result.Output, Does.Contain("bench run <strategy>").And.Contain("--timeframe").And.Contain("--param").And.Contain("--until"));
+        Assert.That(result.Output, Does.Contain("5m, 15m, 1h, 4h and 1d"), "task 2.4: the five timeframes in the help");
         Assert.That(result.Error, Is.Empty);
     }
 

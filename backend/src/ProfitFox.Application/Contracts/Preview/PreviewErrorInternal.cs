@@ -11,6 +11,11 @@ public sealed record PreviewErrorInternal(string Code, string Reason)
     public string? Field { get; init; }
 
     /// <summary>
+    ///     The number of the condition of a filter the problem is with, from 0 (change add-ideas-and-market).
+    /// </summary>
+    public int? Condition { get; init; }
+
+    /// <summary>
     ///     The error of the graph reader this problem is, with its place in the graph.
     /// </summary>
     public GraphError? Graph { get; init; }

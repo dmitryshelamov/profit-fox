@@ -8,6 +8,9 @@ import {
 } from '@tanstack/react-router';
 
 import { AppShell } from '@/app/AppShell';
+import { IdeasPage } from '@/pages/ideas/IdeasPage';
+import { MarketPage } from '@/pages/market/MarketPage';
+import { clean, PairPage, pairSearch } from '@/pages/market/PairPage';
 import { RunFormPage } from '@/pages/runs/RunFormPage';
 import { RunPage } from '@/pages/runs/RunPage';
 import { RunsPage } from '@/pages/runs/RunsPage';
@@ -16,6 +19,7 @@ import { NewSignalPage, SavedSignalPage } from '@/pages/signals/SignalEditorPage
 import { SignalListPage } from '@/pages/signals/SignalListPage';
 import { NewStrategyPage, SavedStrategyPage } from '@/pages/strategies/StrategyEditorPage';
 import { StrategyListPage } from '@/pages/strategies/StrategyListPage';
+import { pageSearch } from '@/shared/ui/useListSettings';
 
 const rootRoute = createRootRoute({
   component: Outlet,
@@ -144,6 +148,72 @@ const setRoute = createRoute({
   },
 });
 
+/** «Идеи», under the header (change add-ideas-and-market). */
+const ideasRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/ideas',
+  validateSearch: (search: Record<string, unknown>): { tab?: 'journal'; page?: number } => ({
+    ...(search.tab === 'journal' ? { tab: 'journal' as const } : {}),
+    ...pageSearch(search),
+  }),
+  component: function IdeasRoute() {
+    const { tab, page } = ideasRoute.useSearch();
+    const navigate = ideasRoute.useNavigate();
+    return (
+      <IdeasPage
+        tab={tab ?? 'open'}
+        page={page ?? 1}
+        onPlace={(next, number) =>
+          void navigate({
+            search: {
+              ...(next === 'journal' ? { tab: 'journal' as const } : {}),
+              ...(number > 1 ? { page: number } : {}),
+            },
+          })
+        }
+      />
+    );
+  },
+});
+
+/** «Рынок»: the page of the list stands in the address (spec bench-ui «Страницы списка»). */
+const marketRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/market',
+  validateSearch: pageSearch,
+  component: function MarketRoute() {
+    const { page } = marketRoute.useSearch();
+    const navigate = marketRoute.useNavigate();
+    return (
+      <MarketPage
+        page={page ?? 1}
+        onPage={(next) => void navigate({ search: next > 1 ? { page: next } : {} })}
+      />
+    );
+  },
+});
+
+/** The page of a pair, under the header with «Рынок» current. */
+const pairRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/market/$symbol',
+  validateSearch: pairSearch,
+  component: function PairRoute() {
+    const { symbol } = pairRoute.useParams();
+    const search = pairRoute.useSearch();
+    const navigate = pairRoute.useNavigate();
+    return (
+      <PairPage
+        symbol={symbol}
+        timeframe={search.timeframe ?? '1h'}
+        idea={search.idea}
+        page={search.page}
+        onSearch={(change) => void navigate({ search: (old) => clean({ ...old, ...change }) })}
+      />
+    );
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   shellRoute.addChildren([
@@ -154,6 +224,9 @@ const routeTree = rootRoute.addChildren([
     runsRoute,
     runRoute,
     setRoute,
+    ideasRoute,
+    marketRoute,
+    pairRoute,
   ]),
   newSignalRoute,
   signalRoute,

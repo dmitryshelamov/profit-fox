@@ -6,14 +6,19 @@ using ProfitFox.Application.Commands.Strategies.CreateStrategy;
 using ProfitFox.Application.Commands.Strategies.DeleteStrategy;
 using ProfitFox.Application.Commands.Strategies.RenameStrategy;
 using ProfitFox.Application.Commands.Strategies.ReplaceStrategy;
+using ProfitFox.Application.Commands.Strategies.SetStrategyIdeas;
 using ProfitFox.Application.Contracts.Strategies;
+using ProfitFox.Application.Exceptions;
 using ProfitFox.Application.Queries.Strategies;
 using ProfitFox.Domain.Exceptions;
+using ProfitFox.Domain.ValueObjects.Ideas;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Signals;
 using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Domain.ValueObjects.Strategies.Enums;
 using ProfitFox.Presentation.Contracts.Errors;
 using ProfitFox.Presentation.Contracts.Errors.Converters;
+using ProfitFox.Presentation.Contracts.Ideas;
 using ProfitFox.Presentation.Contracts.Strategies;
 using ProfitFox.Presentation.Contracts.Strategies.Converters;
 
@@ -43,8 +48,35 @@ public class StrategiesController(ISender sender) : ControllerBase
                 [.. entry.Signals.Select(signal => new StrategySignalItem(signal.Name, signal.Version, signal.LatestVersion))],
                 entry.Exits,
                 entry.Kind is { } kind ? StrategyKinds.Name(kind) : null,
-                entry.LastRun is { } last ? new StrategyLastRunResponse(last.Id, last.Status, last.Version) : null))
+                entry.LastRun is { } last ? new StrategyLastRunResponse(last.Id, last.Status, last.Version) : null,
+                entry.Ideas is { } ideas ? IdeasOf(ideas) : null))
             .ToArray();
+    }
+
+    /// <summary>
+    ///     Turns the ideas of a strategy of the kind «категория идей» on or off on its timeframes (change add-ideas-and-market,
+    ///     spec strategy-ideas «Включение идей у стратегии»). A strategy for a bot, a version that does not pass the checks and
+    ///     an empty set of timeframes are refused with every error.
+    /// </summary>
+    [HttpPut("{name}/ideas", Name = "SetStrategyIdeas")]
+    [ProducesResponseType<StrategyIdeasResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<StrategyIdeasResponse>> SetIdeas(string name, StrategyIdeasRequest request, CancellationToken cancellation)
+    {
+        try
+        {
+            return await Answer(async () => IdeasOf(await sender.Send(new SetStrategyIdeasCommand(name, request.Enabled, request.Timeframes), cancellation)));
+        }
+        catch (IdeasRequestException exception)
+        {
+            return UnprocessableEntity(new ErrorResponse([.. exception.Errors.Select(RequestErrors.Of)]));
+        }
+    }
+
+    private static StrategyIdeasResponse IdeasOf(StrategyIdeas ideas)
+    {
+        return new StrategyIdeasResponse(ideas.Enabled, [.. ideas.Timeframes.Select(Timeframes.Name)]);
     }
 
     [HttpGet("{name}", Name = "GetStrategy")]

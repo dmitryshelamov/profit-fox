@@ -107,6 +107,6 @@ public sealed class BenchDatabase
     public static async Task Reset()
     {
         await using NpgsqlConnection connection = await _dataSource.OpenConnectionAsync();
-        await connection.ExecuteAsync("TRUNCATE hypothesis_versions, signals, signal_versions, strategies, strategy_versions, strategy_signals, runs, ledger, reports, backtests, backtest_sets, backtest_set_pairs");
+        await connection.ExecuteAsync("TRUNCATE hypothesis_versions, signals, signal_versions, strategies, strategy_versions, strategy_signals, runs, ledger, reports, backtests, backtest_sets, backtest_set_pairs, strategy_ideas, ideas, signal_labels, market_pairs, saved_filters, scanner_lease");
     }
 }

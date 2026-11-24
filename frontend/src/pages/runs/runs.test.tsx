@@ -676,8 +676,8 @@ describe('the form of a run', () => {
 
     const group = within(await screen.findByRole('group', { name: 'Таймфреймы' }));
     const boxes = group.getAllByRole('checkbox');
-    expect(boxes.map((box) => box.getAttribute('value'))).toEqual(['1h', '4h', '1d']);
-    for (const timeframe of ['1h', '4h', '1d']) {
+    expect(boxes.map((box) => box.getAttribute('value'))).toEqual(['5m', '15m', '1h', '4h', '1d']);
+    for (const timeframe of ['5m', '15m', '1h', '4h', '1d']) {
       expect(group.getByRole('checkbox', { name: timeframe })).toHaveAttribute('value', timeframe);
     }
   });

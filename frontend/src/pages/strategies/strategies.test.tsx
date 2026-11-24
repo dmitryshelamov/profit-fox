@@ -8,6 +8,7 @@ import { renderApp } from '@/test/renderApp';
 import { baseRoutes, savedFundingHigh } from '@/test/routes';
 import { backtest } from '@/test/runs';
 import {
+  btcDrop,
   fundingHigh,
   fundingHighId,
   fundingShort,
@@ -108,8 +109,8 @@ describe('the section «Стратегии»', () => {
       screen
         .getAllByRole('columnheader')
         .map((cell) => cell.textContent)
-        .slice(0, 7),
-    ).toEqual(['Имя', 'Описание', 'Версия', 'Вид', 'Сигналы', 'Выход', 'Последний прогон']);
+        .slice(0, 8),
+    ).toEqual(['Имя', 'Описание', 'Версия', 'Вид', 'Сигналы', 'Выход', 'Идеи', 'Последний прогон']);
     // The list only shows the newer version: nothing is written.
     expect(requests.every((request) => request.method === 'GET')).toBe(true);
   });
@@ -743,6 +744,54 @@ describe('a strategy of a signal', () => {
     ).toBe(false);
   });
 
+  // Change add-ideas-and-market, task 3.5: scenario «Стратегия из btc-drop-4h».
+  it('puts first-time between a signal-state and the enter', async () => {
+    routes(strategyRoutes([fundingHigh, btcDrop]));
+    const { history } = renderApp('/signals');
+
+    const row = await screen.findByRole('row', { name: 'Сигнал btc-drop-4h' });
+    await userEvent.click(within(row).getByRole('button', { name: 'Создать стратегию' }));
+
+    await waitFor(() => expect(history.location.pathname).toMatch(/^\/strategies\/new\/.+/));
+    const node = await findNode('btc-drop-4h', 'btc-drop-4h');
+    expect(within(node).getByText('value')).toBeInTheDocument();
+    expect(within(node).queryByText('event')).toBeNull();
+    const first = await selectNode('Впервые', 'first');
+    expect(within(first).getByRole('combobox', { name: 'Источник value' })).toHaveValue(
+      'btc-drop-4h.value',
+    );
+    const enter = await selectNode('Вход', 'enter');
+    expect(within(enter).getByRole('combobox', { name: 'Источник when' })).toHaveValue(
+      'first.event',
+    );
+    expect(await findNode('Позиция', 'position')).toBeInTheDocument();
+    expect(await findNode('Закрыть через', 'close-after')).toBeInTheDocument();
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Ошибки 2/ }, { timeout: 2000 }),
+    );
+    expect(card('Ошибки').getByText('узел enter, настройка side')).toBeInTheDocument();
+    expect(card('Ошибки').getByText('close-after.after')).toBeInTheDocument();
+  });
+
+  // Change add-ideas-and-market, task 3.5: scenario «Провод от состояния к входу».
+  it('offers no wire from the value of a signal-state to the when of enter', async () => {
+    routes(strategyRoutes([fundingHigh, btcDrop]));
+    const { history } = renderApp('/signals');
+
+    const row = await screen.findByRole('row', { name: 'Сигнал btc-drop-4h' });
+    await userEvent.click(within(row).getByRole('button', { name: 'Создать стратегию' }));
+    await waitFor(() => expect(history.location.pathname).toMatch(/^\/strategies\/new\/.+/));
+    await findNode('btc-drop-4h', 'btc-drop-4h');
+
+    const enter = await selectNode('Вход', 'enter');
+    const source = within(enter).getByRole('combobox', { name: 'Источник when' });
+    const options = within(source)
+      .getAllByRole('option')
+      .map((option) => option.getAttribute('value'));
+    expect(options).toContain('first.event');
+    expect(options).not.toContain('btc-drop-4h.value');
+  });
+
   it('is offered in the row of a saved signal', async () => {
     routes({
       'GET /api/signals': () =>
@@ -891,5 +940,270 @@ describe('the runs of a strategy', () => {
     const ladder = within(screen.getByRole('row', { name: 'Стратегия ladder' }));
     expect(ladder.getByText('не запускалась')).toBeInTheDocument();
     expect(ladder.queryByRole('link', { name: /^Прогон / })).toBeNull();
+  });
+});
+
+// Spec strategy-ideas «Идеи в списке стратегий» (change add-ideas-and-market, task 13.3).
+describe('the ideas of a strategy in the list', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const fundingShort = (ideas?: { enabled: boolean; timeframes: string[] }) => ({
+    ...listItem('funding-short', 4),
+    kind: 'idea',
+    ...(ideas ? { ideas } : {}),
+  });
+
+  // Scenario «Включение из списка».
+  it('turns the ideas on in the window on 1h and 4h and shows them in the row', async () => {
+    let stored = { enabled: false, timeframes: [] as string[] };
+    const requests = routes({
+      'GET /api/strategies': () => json([fundingShort(stored)]),
+      'PUT /api/strategies/funding-short/ideas': async (request) => {
+        stored = (await request.json()) as typeof stored;
+        return json(stored);
+      },
+    });
+    renderApp('/strategies');
+    const row = within(await screen.findByRole('row', { name: 'Стратегия funding-short' }));
+
+    await userEvent.click(row.getByRole('button', { name: 'Таймфреймы идей funding-short' }));
+    const window = within(screen.getByRole('dialog', { name: 'Идеи funding-short' }));
+    await userEvent.click(window.getByRole('button', { name: '4h' }));
+    await userEvent.click(window.getByRole('button', { name: '1h' }));
+    await userEvent.click(window.getByRole('switch', { name: 'Идеи включены' }));
+    await waitFor(() =>
+      expect(window.getByRole('switch', { name: 'Идеи включены' })).toBeChecked(),
+    );
+    await userEvent.click(window.getByRole('button', { name: 'Закрыть' }));
+
+    await waitFor(() =>
+      expect(row.getByRole('switch', { name: 'Идеи funding-short' })).toBeChecked(),
+    );
+    expect(row.getByText('1h')).toBeInTheDocument();
+    expect(row.getByText('4h')).toBeInTheDocument();
+    expect(await bodiesOf(requests, 'PUT', '/api/strategies/funding-short/ideas')).toEqual([
+      { enabled: false, timeframes: ['4h'] },
+      { enabled: false, timeframes: ['1h', '4h'] },
+      { enabled: true, timeframes: ['1h', '4h'] },
+    ]);
+  });
+
+  // Scenarios «Выключенная стратегия» and «Стратегия для бота».
+  it('says «выключена» for a strategy with its ideas off and «не даёт идей» for a bot', async () => {
+    routes({
+      'GET /api/strategies': () =>
+        json([
+          fundingShort({ enabled: false, timeframes: ['1h'] }),
+          { ...listItem('ladder'), kind: 'bot' },
+        ]),
+    });
+    renderApp('/strategies');
+
+    const funding = within(await screen.findByRole('row', { name: 'Стратегия funding-short' }));
+    expect(funding.getByRole('switch', { name: 'Идеи funding-short' })).not.toBeChecked();
+    expect(funding.getByText('выключена')).toBeInTheDocument();
+    const ladder = within(screen.getByRole('row', { name: 'Стратегия ladder' }));
+    expect(ladder.getByText('не даёт идей')).toBeInTheDocument();
+    expect(ladder.queryByRole('switch')).toBeNull();
+  });
+
+  // Scenario «Отказ в окне».
+  it('keeps the window open with the reason when the server refuses', async () => {
+    routes({
+      'GET /api/strategies': () => json([fundingShort({ enabled: false, timeframes: ['1h'] })]),
+      'PUT /api/strategies/funding-short/ideas': () =>
+        json(
+          {
+            errors: [
+              { code: 'UnknownPair', reason: 'пары DOGEUSDT нет среди торгуемых', node: 'doge' },
+            ],
+          },
+          422,
+        ),
+    });
+    renderApp('/strategies');
+    const row = within(await screen.findByRole('row', { name: 'Стратегия funding-short' }));
+
+    await userEvent.click(row.getByRole('button', { name: 'Таймфреймы идей funding-short' }));
+    const window = within(screen.getByRole('dialog', { name: 'Идеи funding-short' }));
+    await userEvent.click(window.getByRole('switch', { name: 'Идеи включены' }));
+
+    expect(await window.findByRole('alert', { name: 'Отказ' })).toHaveTextContent(
+      'пары DOGEUSDT нет среди торгуемых',
+    );
+    expect(screen.getByRole('dialog', { name: 'Идеи funding-short' })).toBeInTheDocument();
+    expect(window.getByRole('switch', { name: 'Идеи включены' })).not.toBeChecked();
+  });
+
+  // Task 19.13: two quick changes go one after the other, and a refused one goes back to what the server keeps.
+  it('sends two quick changes in turn and takes a refused one back to what the server keeps', async () => {
+    let stored = { enabled: true, timeframes: ['1h'] };
+    let calls = 0;
+    let going = 0;
+    let together = false;
+    routes({
+      'GET /api/strategies': () => json([fundingShort(stored)]),
+      'PUT /api/strategies/funding-short/ideas': async (request) => {
+        const body = (await request.json()) as typeof stored;
+        calls += 1;
+        going += 1;
+        together ||= going > 1;
+        const call = calls;
+        await new Promise((resolve) => setTimeout(resolve, call === 1 ? 300 : 10));
+        going -= 1;
+        if (call === 1) {
+          return json({ errors: [{ code: 'NoTimeframes', reason: 'отказ первой правки' }] }, 422);
+        }
+
+        stored = body;
+        return json(stored);
+      },
+    });
+    renderApp('/strategies');
+    const row = within(await screen.findByRole('row', { name: 'Стратегия funding-short' }));
+    await userEvent.click(row.getByRole('button', { name: 'Таймфреймы идей funding-short' }));
+    const window = within(screen.getByRole('dialog', { name: 'Идеи funding-short' }));
+
+    await userEvent.click(window.getByRole('button', { name: '4h' }));
+    await userEvent.click(window.getByRole('button', { name: '15m' }));
+
+    await waitFor(() => expect(calls).toBe(2));
+    await waitFor(() => expect(going).toBe(0));
+    expect(together).toBe(false);
+    await waitFor(() =>
+      expect(
+        ['5m', '15m', '1h', '4h', '1d'].filter(
+          (timeframe) =>
+            window.getByRole('button', { name: timeframe }).getAttribute('aria-pressed') === 'true',
+        ),
+      ).toEqual(stored.timeframes),
+    );
+  });
+
+  // Task 20.3: a change that fails (5xx) is shown and taken back, and the queue goes on with the next change.
+  it('goes on sending the changes after one failed and shows the failure', async () => {
+    let stored = { enabled: true, timeframes: ['1h'] };
+    let calls = 0;
+    routes({
+      'GET /api/strategies': () => json([fundingShort(stored)]),
+      'PUT /api/strategies/funding-short/ideas': async (request) => {
+        const body = (await request.json()) as typeof stored;
+        calls += 1;
+        if (calls === 1) {
+          return json({ title: 'Сервис недоступен' }, 503);
+        }
+
+        stored = body;
+        return json(stored);
+      },
+    });
+    renderApp('/strategies');
+    const row = within(await screen.findByRole('row', { name: 'Стратегия funding-short' }));
+    await userEvent.click(row.getByRole('button', { name: 'Таймфреймы идей funding-short' }));
+    const window = within(screen.getByRole('dialog', { name: 'Идеи funding-short' }));
+
+    await userEvent.click(window.getByRole('button', { name: '4h' }));
+    expect(await window.findByRole('alert', { name: 'Отказ' })).toHaveTextContent(
+      'Сервис недоступен',
+    );
+    expect(window.getByRole('button', { name: '4h' })).toHaveAttribute('aria-pressed', 'false');
+
+    await userEvent.click(window.getByRole('button', { name: '15m' }));
+
+    await waitFor(() => expect(calls).toBe(2));
+    await waitFor(() => expect(stored.timeframes).toEqual(['15m', '1h']));
+    await waitFor(() => expect(window.queryByRole('alert', { name: 'Отказ' })).toBeNull());
+    expect(window.getByRole('button', { name: '15m' })).toHaveAttribute('aria-pressed', 'true');
+    expect(window.getByRole('button', { name: '1h' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  // Task 18.28, scenario «Отказ в окне»: a refused timeframe goes back to what it was.
+  it('takes a refused timeframe back in the window', async () => {
+    routes({
+      'GET /api/strategies': () => json([fundingShort({ enabled: true, timeframes: ['1h'] })]),
+      'PUT /api/strategies/funding-short/ideas': () =>
+        json(
+          {
+            errors: [
+              { code: 'UnknownPair', reason: 'пары DOGEUSDT нет среди торгуемых', node: 'doge' },
+            ],
+          },
+          422,
+        ),
+    });
+    renderApp('/strategies');
+    const row = within(await screen.findByRole('row', { name: 'Стратегия funding-short' }));
+    await userEvent.click(row.getByRole('button', { name: 'Таймфреймы идей funding-short' }));
+    const window = within(screen.getByRole('dialog', { name: 'Идеи funding-short' }));
+
+    await userEvent.click(window.getByRole('button', { name: '4h' }));
+
+    expect(await window.findByRole('alert', { name: 'Отказ' })).toHaveTextContent('пары DOGEUSDT');
+    expect(window.getByRole('button', { name: '4h' })).toHaveAttribute('aria-pressed', 'false');
+    expect(window.getByRole('button', { name: '1h' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  // Task 21.4: a failure (5xx) of the switch of the row is shown like a refusal, the switch stays where the server keeps
+  // it, and the next click is sent.
+  it('shows a failure of the switch of the row, keeps it off and sends the next click', async () => {
+    let stored = { enabled: false, timeframes: ['1h'] };
+    let calls = 0;
+    routes({
+      'GET /api/strategies': () => json([fundingShort(stored)]),
+      'PUT /api/strategies/funding-short/ideas': async (request) => {
+        const body = (await request.json()) as typeof stored;
+        calls += 1;
+        if (calls === 1) {
+          return json({ title: 'Сервис недоступен' }, 503);
+        }
+
+        stored = body;
+        return json(stored);
+      },
+    });
+    renderApp('/strategies');
+    const row = within(await screen.findByRole('row', { name: 'Стратегия funding-short' }));
+
+    await userEvent.click(row.getByRole('switch', { name: 'Идеи funding-short' }));
+
+    const window = within(await screen.findByRole('dialog', { name: 'Идеи funding-short' }));
+    expect(await window.findByRole('alert', { name: 'Отказ' })).toHaveTextContent(
+      'Не сохранено: Сервис недоступен',
+    );
+    expect(window.getByRole('switch', { name: 'Идеи включены' })).not.toBeChecked();
+    expect(row.getByRole('switch', { name: 'Идеи funding-short' })).not.toBeChecked();
+
+    await userEvent.click(window.getByRole('button', { name: 'Закрыть' }));
+    await userEvent.click(row.getByRole('switch', { name: 'Идеи funding-short' }));
+
+    await waitFor(() => expect(calls).toBe(2));
+    await waitFor(() =>
+      expect(row.getByRole('switch', { name: 'Идеи funding-short' })).toBeChecked(),
+    );
+    expect(stored).toEqual({ enabled: true, timeframes: ['1h'] });
+  });
+
+  // Task 18.28: the refusal of the switch of the row is shown in the window, not in the row.
+  it('opens the window with the reason when the switch of the row is refused', async () => {
+    routes({
+      'GET /api/strategies': () => json([fundingShort({ enabled: false, timeframes: ['1h'] })]),
+      'PUT /api/strategies/funding-short/ideas': () =>
+        json(
+          {
+            errors: [
+              { code: 'UnknownPair', reason: 'пары DOGEUSDT нет среди торгуемых', node: 'doge' },
+            ],
+          },
+          422,
+        ),
+    });
+    renderApp('/strategies');
+    const row = within(await screen.findByRole('row', { name: 'Стратегия funding-short' }));
+
+    await userEvent.click(row.getByRole('switch', { name: 'Идеи funding-short' }));
+
+    const window = within(await screen.findByRole('dialog', { name: 'Идеи funding-short' }));
+    expect(await window.findByRole('alert', { name: 'Отказ' })).toHaveTextContent('пары DOGEUSDT');
+    expect(screen.getAllByRole('alert')).toEqual([window.getByRole('alert', { name: 'Отказ' })]);
   });
 });

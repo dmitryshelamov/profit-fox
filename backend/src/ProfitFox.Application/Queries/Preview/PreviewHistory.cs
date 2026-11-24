@@ -24,4 +24,34 @@ public sealed record PreviewHistory(HistoryRead<HistoryCandle> Candles, HistoryR
         HistoryRead<HistoryPayment> funding = await history.FundingThrough(instrument, HistoryPeriod.DataStart, end, CancellationToken.None);
         return new PreviewHistory(candles, funding);
     }
+
+    /// <summary>
+    ///     The candles of the pairs a graph names on <paramref name="timeframe" /> up to <paramref name="end" />, by symbol,
+    ///     each read once through <paramref name="cache" /> (change add-ideas-and-market, spec market-history «Свечи
+    ///     названной пары»); null when the graph names none. The pairs were checked against <paramref name="listed" />.
+    /// </summary>
+    public static async Task<IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>?> NamedAsync(
+        IReadOnlyList<string> named,
+        IReadOnlyList<Instrument> listed,
+        PreviewHistoryCache cache,
+        IHistorySource source,
+        TimeSpan timeframe,
+        DateTimeOffset end,
+        TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        if (named.Count == 0)
+        {
+            return null;
+        }
+
+        var candles = new Dictionary<string, IReadOnlyList<HistoryCandle>>(StringComparer.Ordinal);
+        foreach (Instrument pair in listed.Where(pair => named.Contains(pair.Symbol, StringComparer.Ordinal)))
+        {
+            PreviewHistory history = await cache.Get(pair.Id, timeframe, end, () => ReadAsync(source, pair.Id, timeframe, end, time), cancellationToken);
+            candles[pair.Symbol] = history.Candles.Items;
+        }
+
+        return candles;
+    }
 }

@@ -250,6 +250,34 @@ export function setParameters(
   return { ...document, graph: { ...document.graph, parameters, wires } };
 }
 
+/**
+ * The type of the only output of a signal (change add-ideas-and-market, spec strategy-graph «Сигнал»): an event or a
+ * boolean, a state. A wire into the output that carried the former type goes.
+ */
+export function setSignalOutputType(
+  document: GraphDocument,
+  type: 'event' | 'boolean',
+): GraphDocument {
+  const [output, ...rest] = document.graph.outputs;
+  if (output === undefined || output.type === type) {
+    return document;
+  }
+
+  const outputsNodes = new Set(
+    document.graph.nodes.filter((node) => node.kind === 'outputs').map((node) => node.id),
+  );
+  return {
+    ...document,
+    graph: {
+      ...document.graph,
+      outputs: [{ ...output, type }, ...rest],
+      wires: document.graph.wires.filter(
+        (wire) => !(outputsNodes.has(nodeOf(wire.to)) && pinOf(wire.to) === output.name),
+      ),
+    },
+  };
+}
+
 /** The layout dropped, so every node gets the place of the layout by depth: «Выстроить». */
 export function relayout(document: GraphDocument): GraphDocument {
   return { ...document, layout: {} };

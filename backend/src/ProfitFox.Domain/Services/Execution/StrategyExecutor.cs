@@ -22,9 +22,9 @@ public sealed class StrategyExecutor
 
     /// <summary>
     ///     The step of the pair at the close of <paramref name="candle" />. Candles of one pair go in the order of their
-    ///     close; pairs may be mixed in any order.
+    ///     close; pairs may be mixed in any order. <paramref name="pairs" /> are the candles of the pairs the graph names.
     /// </summary>
-    public StrategyStep Step(string instrument, ClosedCandle candle, FundingPayment? lastFunding)
+    public StrategyStep Step(string instrument, ClosedCandle candle, FundingPayment? lastFunding, IReadOnlyDictionary<string, ClosedCandle>? pairs = null)
     {
         if (!_runs.TryGetValue(instrument, out StrategyRun? run))
         {
@@ -32,7 +32,16 @@ public sealed class StrategyExecutor
             _runs.Add(instrument, run);
         }
 
-        return run.Step(candle, lastFunding);
+        return run.Step(candle, lastFunding, pairs);
+    }
+
+    /// <summary>
+    ///     Forgets the run of the pair: its next candle starts a run from nothing (task 18.8), as a pair warmed up again
+    ///     needs.
+    /// </summary>
+    public void Forget(string instrument)
+    {
+        _runs.Remove(instrument);
     }
 
     /// <summary>

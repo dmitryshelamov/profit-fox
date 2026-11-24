@@ -24,6 +24,16 @@ public sealed class MemoryStrategyRepository : IStrategyRepository
     public int UsageReads { get; private set; }
 
     /// <summary>
+    ///     How many times a strategy was read by its name (task 18.13).
+    /// </summary>
+    public int Reads { get; private set; }
+
+    /// <summary>
+    ///     The saved strategies as they are, without reading them.
+    /// </summary>
+    public IEnumerable<StrategyDocument> Documents => _strategies.Values;
+
+    /// <summary>
     ///     Makes the saved strategy <paramref name="name" /> one that does not read, with <paramref name="error" />.
     /// </summary>
     public void Break(string name, string error)
@@ -43,6 +53,7 @@ public sealed class MemoryStrategyRepository : IStrategyRepository
 
     public Task<StrategyRead?> ReadAsync(string name, CancellationToken cancellationToken)
     {
+        Reads++;
         if (_broken.TryGetValue(name, out string? error))
         {
             return Task.FromResult<StrategyRead?>(new StrategyRead(Strategy: null, [error]));

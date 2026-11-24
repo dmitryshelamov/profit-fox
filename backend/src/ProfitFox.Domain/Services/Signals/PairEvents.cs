@@ -18,13 +18,14 @@ public static class PairEvents
         TimeSpan timeframe,
         string symbol,
         IEnumerable<HistoryCandle> candles,
-        IEnumerable<HistoryPayment> funding)
+        IEnumerable<HistoryPayment> funding,
+        IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>? named = null)
     {
         var executor = new SignalExecutor(signal);
         List<DateTimeOffset> events = [];
-        foreach ((ClosedCandle closed, FundingPayment? lastFunding) in PairCandles.Closed(timeframe, candles, funding))
+        foreach ((ClosedCandle closed, FundingPayment? lastFunding, IReadOnlyDictionary<string, ClosedCandle>? pairs) in PairCandles.WithPairs(timeframe, candles, funding, named))
         {
-            if (executor.Step(symbol, closed, lastFunding) is { } found)
+            if (executor.Step(symbol, closed, lastFunding, pairs) is { } found)
             {
                 events.Add(found.Moment);
             }

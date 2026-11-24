@@ -18,6 +18,12 @@ public static class NodeCatalog
     public const string Parameters = "parameters";
     public const string Candle = "candle";
     public const string FundingRate = "funding-rate";
+    public const string PairCandle = "pair-candle";
+
+    /// <summary>
+    ///     The setting of <c>pair-candle</c> that names the pair (change add-ideas-and-market).
+    /// </summary>
+    public const string Symbol = "symbol";
     public const string Compare = "compare";
     public const string Previous = "previous";
     public const string And = "and";
@@ -93,6 +99,11 @@ public static class NodeCatalog
     public const string Event = "event";
 
     /// <summary>
+    ///     The output of a <c>signal</c> node whose version is a signal-state (change add-ideas-and-market).
+    /// </summary>
+    public const string Value = "value";
+
+    /// <summary>
     ///     The operations of <c>compare</c>.
     /// </summary>
     public static readonly IReadOnlyList<string> CompareOperations = ["gt", "ge", "lt", "le", "eq", "ne"];
@@ -129,6 +140,15 @@ public static class NodeCatalog
                 [],
                 _ => new CandleNode()),
             new NodeKind(FundingRate, [], [new PinDeclaration("value", PinType.Number)], [], _ => new FundingRateNode()),
+            new NodeKind(
+                PairCandle,
+                [],
+                [.. new[] { "open", "high", "low", "close", "volume" }.Select(name => new PinDeclaration(name, PinType.Number))],
+                [new SettingDeclaration(Symbol, [], Default: null) { Free = true }],
+                node => new PairCandleNode(node.Settings[Symbol]))
+            {
+                CheckFreeSetting = CheckSymbol
+            },
             new NodeKind(
                 Compare,
                 [new PinDeclaration("a", PinType.Number), new PinDeclaration("b", PinType.Number)],
@@ -211,7 +231,7 @@ public static class NodeCatalog
             new NodeKind(
                 Signal,
                 (node, _, signals) => SignalInputs(node, signals),
-                (_, _, _) => [new PinDeclaration(Event, PinType.Event)],
+                (node, _, signals) => SignalOutputs(node, signals),
                 [
                     new SettingDeclaration(SignalSetting, [], Default: null) { Free = true },
                     new SettingDeclaration(VersionSetting, [], Default: null) { Free = true }
@@ -234,6 +254,27 @@ public static class NodeCatalog
     public static NodeKind? Find(string name)
     {
         return Kinds.GetValueOrDefault(name);
+    }
+
+    // A symbol of a pair: capital letters and digits, as the exchange writes it (BTCUSDT, 1000PEPEUSDT). Whether the pair
+    // trades is checked where the catalog of pairs is known.
+    private static string? CheckSymbol(string name, string value)
+    {
+        return value.Length > 0 && value.All(letter => letter is >= 'A' and <= 'Z' or >= '0' and <= '9')
+            ? null
+            : $"{name} names a pair in capital letters and digits, as BTCUSDT, not «{value}».";
+    }
+
+    // The output of the node: value of the boolean type for a version whose output is a boolean (change
+    // add-ideas-and-market, design.md, decision 7), event for any other, and for a node whose version is not found.
+    private static IReadOnlyList<PinDeclaration> SignalOutputs(NodeDefinition? node, SignalSet signals)
+    {
+        if (node is not null && SignalNodes.TryReference(node, out SignalReference reference) && signals.Find(reference).Signal is { IsState: true })
+        {
+            return [new PinDeclaration(Value, PinType.Boolean)];
+        }
+
+        return [new PinDeclaration(Event, PinType.Event)];
     }
 
     // The parameters of the version the node points at; none when there is no node, no reference or no such version.

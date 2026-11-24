@@ -145,6 +145,54 @@ public static class StrategyGraph
         return new TradingStrategy(graph, expanded);
     }
 
+    /// <summary>
+    ///     The pairs the <c>pair-candle</c> nodes of <paramref name="graph" /> name, each once, in the order of the nodes
+    ///     (change add-ideas-and-market, design.md, decision 7). For a strategy with <c>signal</c> nodes give the expanded
+    ///     graph: the nodes of its signals name pairs too.
+    /// </summary>
+    public static IReadOnlyList<string> NamedPairs(GraphDefinition graph)
+    {
+        List<string> pairs = [];
+        foreach (NodeDefinition node in graph.Nodes.Where(node => node.Kind == Nodes.NodeCatalog.PairCandle))
+        {
+            if (node.Settings.TryGetValue(Nodes.NodeCatalog.Symbol, out string? symbol) && symbol.Length > 0 && !pairs.Contains(symbol))
+            {
+                pairs.Add(symbol);
+            }
+        }
+
+        return pairs;
+    }
+
+    /// <summary>
+    ///     An error for each node <c>pair-candle</c> of <paramref name="graph" /> whose pair is not in
+    ///     <paramref name="listed" /> (spec market-history «Неизвестная пара»). A node of an expanded signal is reported on the
+    ///     <c>signal</c> node it came from: the user wrote that node.
+    /// </summary>
+    public static List<GraphError> CheckNamedPairs(GraphDefinition graph, IReadOnlyCollection<string> listed)
+    {
+        var known = new HashSet<string>(listed, StringComparer.Ordinal);
+        List<GraphError> errors = [];
+        foreach (NodeDefinition node in graph.Nodes.Where(node => node.Kind == Nodes.NodeCatalog.PairCandle))
+        {
+            if (!node.Settings.TryGetValue(Nodes.NodeCatalog.Symbol, out string? symbol) || known.Contains(symbol))
+            {
+                continue;
+            }
+
+            int slash = node.Id.IndexOf('/', StringComparison.Ordinal);
+            errors.Add(
+                slash < 0
+                    ? new GraphError(GraphErrorCode.UnknownPair, $"{symbol} нет среди торгуемых бессрочных USDT-пар.") { Node = node.Id, Setting = Nodes.NodeCatalog.Symbol }
+                    : new GraphError(GraphErrorCode.UnknownPair, $"Узел {node.Id[(slash + 1)..]} сигнала называет {symbol}, которой нет среди торгуемых бессрочных USDT-пар.")
+                    {
+                        Node = node.Id[..slash]
+                    });
+        }
+
+        return errors;
+    }
+
     public static string Write(GraphDefinition graph)
     {
         return GraphJson.Write(graph);

@@ -237,19 +237,89 @@ public sealed class GraphValidationTests
         Assert.That(StrategyGraph.Read(json).IsValid, Is.True, "two outputs are fine for a graph that is not a signal");
     }
 
+    /// <summary>
+    ///     Change add-ideas-and-market, task 3.1: spec strategy-graph «Выход сигнала не событие».
+    /// </summary>
     [Test]
-    public void The_output_of_a_signal_is_an_event()
+    public void The_output_of_a_signal_is_an_event_or_a_boolean()
     {
         string json = Graphs.Changed(graph =>
         {
-            graph["outputs"]![0]!["type"] = "boolean";
+            graph["outputs"]![0]!["type"] = "number";
             graph.RemoveWire("out.entry");
-            graph.AddWire("high.result", "out.entry");
+            graph.AddWire("rate.value", "out.entry");
         });
 
         ReadResult<Signal> result = StrategyGraph.ReadSignal(json);
 
-        Assert.That(result.Errors.Select(error => error.Code), Does.Contain(GraphErrorCode.SignalOutputNotEvent));
+        GraphError error = result.Errors.Single(error => error.Code == GraphErrorCode.SignalOutputNotEvent);
+        Assert.That(error.Reason, Is.EqualTo("The output of a signal is an event or a boolean."));
+        Assert.That(error.Pin, Is.EqualTo("entry"));
+    }
+
+    /// <summary>
+    ///     Change add-ideas-and-market, task 3.1: spec strategy-graph «Сигнал-состояние».
+    /// </summary>
+    [Test]
+    public void A_signal_with_a_boolean_output_is_a_signal_state()
+    {
+        string json = Graphs.Changed(graph =>
+        {
+            graph["outputs"] = JsonNode.Parse("""[{ "name": "holds", "type": "boolean" }]""");
+            graph.RemoveWire("out.entry");
+            graph.AddWire("high.result", "out.holds");
+        });
+
+        ReadResult<Signal> result = StrategyGraph.ReadSignal(json);
+
+        Assert.That(result.Errors, Is.Empty);
+        Assert.That((result.Value!.Output, result.Value.OutputType), Is.EqualTo(("holds", PinType.Boolean)));
+        Assert.That(result.Value.IsState, Is.True);
+        Assert.That(StrategyGraph.ReadSignal(Graphs.H0001).Value!.OutputType, Is.EqualTo(PinType.Event));
+        Assert.That(StrategyGraph.ReadSignal(Graphs.H0001).Value!.IsState, Is.False);
+    }
+
+    /// <summary>
+    ///     Change add-ideas-and-market, task 3.3: spec strategy-graph «Узел сигнала-состояния».
+    /// </summary>
+    [Test]
+    public void A_node_of_a_signal_state_has_one_output_value_of_the_boolean_type()
+    {
+        string json = SignalLibrary.StateStrategy();
+
+        ReadResult<TradingStrategy> result = StrategyGraph.ReadStrategy(json, SignalLibrary.Set);
+
+        Assert.That(result.Errors, Is.Empty);
+        NodeDefinition node = result.Value!.Source.Nodes.Single(item => item.Id == "b");
+        Assert.That(
+            NodeCatalog.Find("signal")!.Outputs(node, result.Value.Source, SignalLibrary.Set),
+            Is.EqualTo(new[] { new PinDeclaration("value", PinType.Boolean) }));
+        NodeDefinition events = StrategyGraph.ReadStrategy(SignalLibrary.Strategy(), SignalLibrary.Set).Value!.Source.Nodes.Single(item => item.Id == "s");
+        Assert.That(
+            NodeCatalog.Find("signal")!.Outputs(events, result.Value.Source, SignalLibrary.Set),
+            Is.EqualTo(new[] { new PinDeclaration("event", PinType.Event) }),
+            "a signal of an event keeps its output event");
+    }
+
+    /// <summary>
+    ///     Change add-ideas-and-market, task 3.3: spec strategy-graph «Состояние на вход события».
+    /// </summary>
+    [Test]
+    public void The_value_of_a_signal_state_into_the_input_when_of_enter_is_a_type_error()
+    {
+        string json = SignalLibrary.ChangedStrategy(graph =>
+        {
+            graph.Nodes().Add(JsonNode.Parse($$"""{ "id": "b", "kind": "signal", "settings": { "signal": "{{SignalLibrary.CloseAbove}}", "version": "1" } }"""));
+            graph.RemoveWire("enter.when");
+            graph.AddWire("b.value", "enter.when");
+            graph.RemoveNode("s");
+        });
+
+        ReadResult<TradingStrategy> result = StrategyGraph.ReadStrategy(json, SignalLibrary.Set);
+
+        GraphError error = result.Errors.Single();
+        Assert.That(error.Code, Is.EqualTo(GraphErrorCode.WireTypeMismatch));
+        Assert.That(error.Wire, Is.EqualTo(new WireDefinition(new PinReference("b", "value"), new PinReference("enter", "when"))));
     }
 
     [Test]

@@ -10,11 +10,15 @@ import type {
   SignalVersionInfo,
 } from './types';
 
-/** A saved signal a strategy may add as a node: its id, its name and its latest version. */
+/**
+ * A saved signal a strategy may add as a node: its id, its name, its latest version and the type of its output —
+ * `boolean` for a signal-state, `event` otherwise.
+ */
 export interface SignalEntry {
   readonly id: string;
   readonly name: string;
   readonly version: number;
+  readonly output?: string | null;
 }
 
 /** What a signal node of a strategy points at, as the check and the read of a strategy name it. */
@@ -24,6 +28,7 @@ export interface SignalUse {
   readonly name?: string | null;
   readonly version: number | string;
   readonly latestVersion?: number | string | null;
+  readonly output?: string | null;
   readonly parameters: readonly {
     readonly name: string;
     readonly type: string;
@@ -74,6 +79,7 @@ export function mergeUses(
     merged.set(versionKey(use.signal, use.version), {
       name: use.name ?? null,
       latestVersion: numberOrNull(use.latestVersion),
+      output: use.output ?? null,
       parameters: use.parameters.map((parameter) => ({
         name: parameter.name,
         type: parameter.type as SignalParameter['type'],
@@ -174,7 +180,9 @@ export function updateSignalVersion(
  * The draft of a new strategy from a saved signal (spec strategy-constructor «Стратегия из сигнала»): the node of the
  * signal on its latest version, an `enter` of 100 USDT whose `when` takes its event, the `position` and a
  * `close-after`, wired by the orders and the position; no side and no time. The node of the signal goes by the name of
- * the signal, or by a free id when the signal is named as one of the other nodes: `position` gives `position-1`.
+ * the signal, or by a free id when the signal is named as one of the other nodes: `position` gives `position-1`. A
+ * signal-state gets a `first-time` between its `value` and the `when` (spec strategy-constructor «Стратегия из
+ * сигнала-состояния»).
  */
 export function strategyOfSignal(signal: SignalEntry): GraphDocument {
   const rest: GraphDocument = {
@@ -196,15 +204,34 @@ export function strategyOfSignal(signal: SignalEntry): GraphDocument {
     layout: {},
   };
   const id = signalNodeId(rest, signal.name);
+  const node: GraphNode = {
+    id,
+    kind: 'signal',
+    settings: { signal: signal.id, version: String(signal.version) },
+  };
+  if (signal.output !== 'boolean') {
+    return {
+      ...rest,
+      graph: {
+        ...rest.graph,
+        nodes: [node, ...rest.graph.nodes],
+        wires: [{ from: `${id}.event`, to: 'enter.when' }, ...rest.graph.wires],
+      },
+    };
+  }
+
+  const withNode: GraphDocument = { ...rest, graph: { ...rest.graph, nodes: [node] } };
+  const first = signalNodeId(withNode, 'first');
   return {
     ...rest,
     graph: {
       ...rest.graph,
-      nodes: [
-        { id, kind: 'signal', settings: { signal: signal.id, version: String(signal.version) } },
-        ...rest.graph.nodes,
+      nodes: [node, { id: first, kind: 'first-time' }, ...rest.graph.nodes],
+      wires: [
+        { from: `${id}.value`, to: `${first}.value` },
+        { from: `${first}.event`, to: 'enter.when' },
+        ...rest.graph.wires,
       ],
-      wires: [{ from: `${id}.event`, to: 'enter.when' }, ...rest.graph.wires],
     },
   };
 }

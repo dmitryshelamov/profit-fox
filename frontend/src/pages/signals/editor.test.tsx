@@ -85,6 +85,60 @@ describe('the editor of a signal', () => {
     expect(within(await findNode('Параметры', 'p')).getByText('level')).toBeInTheDocument();
   });
 
+  // Change add-ideas-and-market, task 3.5: a signal may declare a boolean output — a state.
+  it('declares the output of the signal a boolean, and drops the wire of the event into it', async () => {
+    openFundingHigh();
+    await findNode('Выходы', 'out');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Параметры' }));
+    const type = card('Параметры').getByRole('combobox', { name: 'Тип выхода сигнала' });
+    expect(type).toHaveValue('event');
+    await userEvent.selectOptions(type, 'boolean');
+
+    await waitFor(() => expect(type).toHaveValue('boolean'));
+    await userEvent.click(screen.getByRole('button', { name: 'JSON' }));
+    const text = (card('JSON').getByRole('textbox') as HTMLTextAreaElement).value;
+    const graph = JSON.parse(text) as {
+      outputs: { name: string; type: string }[];
+      wires: { from: string; to: string }[];
+    };
+    expect(graph.outputs).toEqual([{ name: 'entry', type: 'boolean' }]);
+    expect(graph.wires.some((wire) => wire.to === 'out.entry')).toBe(false);
+  });
+
+  // Change add-ideas-and-market, task 4.4: the pair of a node «Свеча пары» is chosen from the hint of the traded pairs.
+  it('chooses the pair of a candle of another pair from the hint, and the pair goes into the graph', async () => {
+    openFundingHigh();
+    await findNode('Параметры', 'p');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Палитра узлов' }));
+    await userEvent.click(
+      within(screen.getByRole('region', { name: 'Палитра' })).getByRole('button', {
+        name: 'Свеча пары',
+      }),
+    );
+    const node = await selectNode('Свеча пары', 'pair-candle-1');
+    const symbol = within(node).getByRole('combobox', { name: 'Настройка symbol' });
+    const hint = document.getElementById(symbol.getAttribute('list')!)!;
+    await waitFor(() =>
+      expect([...hint.querySelectorAll('option')].map((option) => option.value)).toEqual([
+        'BTCUSDT',
+        'PRLUSDT',
+      ]),
+    );
+
+    await userEvent.type(symbol, 'btcusdt{Enter}');
+
+    expect(symbol).toHaveValue('BTCUSDT');
+    await userEvent.click(screen.getByRole('button', { name: 'JSON' }));
+    const graph = JSON.parse((card('JSON').getByRole('textbox') as HTMLTextAreaElement).value) as {
+      nodes: { id: string; settings?: Record<string, string> }[];
+    };
+    expect(graph.nodes.find((item) => item.id === 'pair-candle-1')!.settings).toEqual({
+      symbol: 'BTCUSDT',
+    });
+  });
+
   // Scenario «Вставка графа».
   it('replaces the graph with pasted JSON, and keeps it when the JSON does not read', async () => {
     openFundingHigh();

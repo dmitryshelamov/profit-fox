@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.CommandLine.Help;
+using System.Globalization;
 
 using ProfitFox.Cli.Api;
 using ProfitFox.Cli.Commands.Runs;
@@ -36,6 +37,28 @@ public static class CliApp
         HttpClient? http = null,
         TimeSpan? pollInterval = null,
         CancellationToken cancellation = default)
+    {
+        // The texts of the tool are English: the usage of System.CommandLine stays English on a machine in another culture
+        // (task 18.4), instead of a translation mixed with them.
+        CultureInfo culture = CultureInfo.CurrentUICulture;
+        CultureInfo.CurrentUICulture = CultureInfo.InvariantCulture;
+        try
+        {
+            return await RunInvariant(args, output, error, http, pollInterval, cancellation);
+        }
+        finally
+        {
+            CultureInfo.CurrentUICulture = culture;
+        }
+    }
+
+    private static async Task<int> RunInvariant(
+        string[] args,
+        TextWriter output,
+        TextWriter error,
+        HttpClient? http,
+        TimeSpan? pollInterval,
+        CancellationToken cancellation)
     {
         BenchClient? client = null;
         TimeSpan interval = pollInterval ?? DefaultPollInterval;
@@ -108,7 +131,7 @@ public static class CliApp
                 result.AddError("--version wants a positive number.");
             }
         });
-        var timeframe = new Option<string?>("--timeframe") { Description = "The timeframes by commas, of 1h, 4h and 1d; by default 4h", HelpName = "1h,4h" };
+        var timeframe = new Option<string?>("--timeframe") { Description = "The timeframes by commas, of 5m, 15m, 1h, 4h and 1d; by default 4h", HelpName = "1h,4h" };
         var parameter = new Option<string[]>("--param") { Description = "Values of a parameter, as name=v1,v2; once for each parameter", HelpName = "name=v1,v2" };
         parameter.Validators.Add(result =>
         {

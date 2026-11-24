@@ -4,7 +4,7 @@ import { Button } from '@/shared/ui/Button';
 import { SelectField } from '@/shared/ui/SelectField';
 import { TextField } from '@/shared/ui/TextField';
 
-import { setParameters } from '../model/operations';
+import { setParameters, setSignalOutputType } from '../model/operations';
 import type { GraphDocument, GraphParameter, PinType } from '../model/types';
 import { formatValue, parseValue } from '../model/values';
 import { Card, FieldLabel } from './Card';
@@ -22,16 +22,19 @@ const startValue: Record<PinType, GraphParameter['value']> = {
 
 /**
  * The parameters of the graph (spec signal-constructor «Параметры графа»): name, type, value, and for a number the
- * bounds. The outputs of every `parameters` node follow the list; a renamed parameter keeps its wires.
+ * bounds. The outputs of every `parameters` node follow the list; a renamed parameter keeps its wires. A signal also
+ * chooses here the type of its output: an event, or a boolean — a state (change add-ideas-and-market).
  */
 export function ParametersCard({
   document,
   readOnly,
+  signal = false,
   onChange,
   onClose,
 }: {
   readonly document: GraphDocument;
   readonly readOnly: boolean;
+  readonly signal?: boolean;
   readonly onChange: (document: GraphDocument) => void;
   readonly onClose: () => void;
 }) {
@@ -51,8 +54,30 @@ export function ParametersCard({
     );
   };
 
+  const output = signal ? document.graph.outputs[0] : undefined;
   return (
     <Card title="Параметры" onClose={onClose}>
+      {output && (
+        <label className="flex flex-col gap-1.5">
+          <FieldLabel>Выход сигнала {output.name}</FieldLabel>
+          <SelectField
+            aria-label="Тип выхода сигнала"
+            mono
+            className="w-full"
+            value={output.type}
+            disabled={readOnly}
+            onChange={(event) =>
+              onChange(setSignalOutputType(document, event.target.value as 'event' | 'boolean'))
+            }
+          >
+            <option value="event">event</option>
+            <option value="boolean">boolean</option>
+          </SelectField>
+          <span className="text-xs text-muted">
+            event — когда произошло; boolean — состояние, истинное, пока условие выполнено.
+          </span>
+        </label>
+      )}
       {parameters.length === 0 && <p className="text-muted">Параметров нет.</p>}
       {parameters.map((parameter, index) => (
         <fieldset

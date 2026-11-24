@@ -122,6 +122,7 @@ public sealed class SignalNodeTests
 
         Assert.That(error.Code, Is.EqualTo(GraphErrorCode.ParameterOutOfBounds));
         Assert.That((error.Node, error.Pin), Is.EqualTo(("s", "threshold")));
+        Assert.That(error.Reason, Does.StartWith("The value -0.1 is outside ["), "task 18.4: the number in invariant writing on a machine in ru-RU");
     }
 
     [Test]
