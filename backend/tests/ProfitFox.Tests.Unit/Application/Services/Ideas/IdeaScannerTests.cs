@@ -871,6 +871,70 @@ public sealed class IdeaScannerTests
     }
 
     /// <summary>
+    ///     Task 26.2, confirmed: a break of the stream shorter than the limit of silence — the service restarted, UNAVAILABLE —
+    ///     left the feed live, and the replay of the new subscription, by minute and within a minute by pair, was taken by the
+    ///     rule of the live feed: a pass between the minute 10:59 of BTCUSDT and that of ETHUSDT computed the candle of 10:00
+    ///     of ETHUSDT without it — the idea of BTCUSDT came, that of ETHUSDT did not. After a new subscription the feed is a
+    ///     catch-up until it goes quiet; ideas still count without a break since the start.
+    /// </summary>
+    [Test]
+    public async Task A_replay_after_a_break_of_the_stream_gives_the_ideas_of_the_feed_without_the_break()
+    {
+        (Idea[] whole, _) = await LiveHourOfTen(broken: false);
+        Assert.That(whole.Select(idea => (idea.Symbol, idea.Moment, idea.CandleClose)), Is.EqualTo(new[]
+        {
+            ("BTCUSDT", Eleven, 101m), ("ETHUSDT", Eleven, 101m)
+        }));
+
+        (Idea[] replayed, DateTimeOffset? since) = await LiveHourOfTen(broken: true);
+        Assert.That(
+            replayed.Select(idea => (idea.Symbol, idea.Moment, idea.CandleClose)).ToArray(),
+            Is.EqualTo(whole.Select(idea => (idea.Symbol, idea.Moment, idea.CandleClose)).ToArray()),
+            "the same ideas as without the break");
+        Assert.That(since, Is.EqualTo(Ten.AddSeconds(5)), "a break shorter than the limit of silence is no break of the ideas");
+    }
+
+    // The scanner started at 10:00:05 on the live feed of BTCUSDT and ETHUSDT, a minute a minute closing at 99 up to 10:58;
+    // the minutes 10:59 close at 101. Without a break they come at 11:00:01. With one the stream breaks at 10:59:30, and the
+    // feed subscribes again at 11:00:20 from 10:53 and replays the minutes by minute and within a minute by pair, with a pass
+    // between the minute 10:59 of BTCUSDT and that of ETHUSDT. Gives the ideas and since when they count without a break.
+    private static async Task<(Idea[] Ideas, DateTimeOffset? LiveSince)> LiveHourOfTen(bool broken)
+    {
+        var rig = new ScannerRig();
+        await rig.Enable("close-up", "8h");
+        await rig.Start();
+        for (int minute = 0; minute < 59; minute++)
+        {
+            await CatchUp(rig, Ten.AddMinutes(minute), 1, close: 99);
+            await rig.At(Ten.AddMinutes(minute + 1).AddSeconds(1));
+        }
+
+        if (broken)
+        {
+            await rig.At(Ten.AddMinutes(59).AddSeconds(30));
+            rig.Time.SetUtcNow(Eleven.AddSeconds(20));
+            await rig.Scanner.ApplyAsync(new FeedResubscribed("minutes", Ten.AddMinutes(53)), CancellationToken.None);
+            await CatchUp(rig, Ten.AddMinutes(53), 6, close: 99);
+            await rig.Scanner.ApplyAsync(Minute("BTCUSDT", Ten.AddMinutes(59), close: 101), CancellationToken.None);
+            await rig.At(Eleven.AddSeconds(20), quiet: false);
+            Assert.That(rig.Ideas.Ideas, Is.Empty, "the minute 10:59 of ETHUSDT is still to come");
+
+            await rig.Scanner.ApplyAsync(Minute("ETHUSDT", Ten.AddMinutes(59), close: 101), CancellationToken.None);
+            await rig.At(Eleven.AddSeconds(21), quiet: false);
+            Assert.That(rig.Ideas.Ideas, Is.Empty, "the feed still replays: the batch may not be whole");
+            await rig.At(Eleven.AddSeconds(22));
+        }
+        else
+        {
+            rig.Time.SetUtcNow(Eleven.AddSeconds(1));
+            await CatchUp(rig, Ten.AddMinutes(59), 1, close: 101);
+            await rig.At(Eleven.AddSeconds(15));
+        }
+
+        return ([.. rig.Ideas.Ideas.OrderBy(idea => idea.Symbol, StringComparer.Ordinal)], rig.Scanner.LiveSince);
+    }
+
+    /// <summary>
     ///     Task 26.1, confirmed: a catch-up of three candles — the signal at 11:00 and at 13:00, the idea of 11:00 runs to 14:00
     ///     by its time. In two passes the first walk of the second pass ran the idea through the minutes up to 14:05 and closed
     ///     it «ahead» before the boundary of 13:00 was computed, and the rule of one open idea, looking at the open ones only,

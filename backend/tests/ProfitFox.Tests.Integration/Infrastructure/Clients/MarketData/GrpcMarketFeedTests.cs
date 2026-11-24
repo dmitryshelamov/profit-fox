@@ -1,3 +1,5 @@
+using Google.Protobuf.WellKnownTypes;
+
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 
@@ -120,6 +122,40 @@ public sealed class GrpcMarketFeedTests
 
         Assert.That(server.Data.Minutes.Subscriptions, Is.EqualTo(new DateTimeOffset?[] { Now, Now.AddMinutes(-5) }), "again from five minutes before the last minute");
         Assert.That(reader.Minutes.Select(minute => minute.OpenTime).Distinct(), Is.EqualTo(Enumerable.Range(0, 11).Select(minute => Now.AddMinutes(minute))));
+    }
+
+    /// <summary>
+    ///     Task 26.2: a new subscription of minutes after a break is told before the first minute it replays, so the scanner
+    ///     takes the replay as a catch-up; the first subscription tells none, and neither does a new subscription of payments —
+    ///     the candles are built from the minutes only.
+    /// </summary>
+    [Test]
+    public async Task A_new_subscription_of_minutes_after_a_break_is_told_before_its_replay()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        server.Data.FeedTime = new FixedTime(Now.AddMinutes(20));
+        await using var reader = Reader.Start(server, new FakeTimeProvider(Now.AddMinutes(20)), since: Now);
+        server.Data.Minutes.Push(FakeLiveFeedTests.Minute("btc", Now));
+        await reader.Until<LiveMinute>(_ => true);
+        await Poll.Until("the subscription of payments", () => Task.FromResult(server.Data.Payments.Readers == 1));
+        Assert.That(reader.Events.OfType<FeedResubscribed>(), Is.Empty, "the first subscription");
+
+        server.Data.Payments.Drop();
+        await Poll.Until("the second subscription of payments", () => Task.FromResult(server.Data.Payments.Subscriptions.Count == 2 && server.Data.Payments.Readers == 1));
+        server.Data.Payments.Push(new FundingPaymentUpdate { InstrumentId = "btc", Time = Timestamp.FromDateTimeOffset(Now.AddMinutes(8)), FundingRate = "0.0001" });
+        await reader.Until<LivePoint>(point => point.Kind == LivePointKind.FundingPayment);
+        for (int minute = 1; minute <= 3; minute++)
+        {
+            server.Data.Minutes.Store(FakeLiveFeedTests.Minute("btc", Now.AddMinutes(minute)));
+        }
+
+        server.Data.Minutes.Drop();
+        await reader.Until<LiveMinute>(minute => minute.OpenTime == Now.AddMinutes(3));
+
+        MarketEvent[] events = [.. reader.Events.Where(item => item is LiveMinute or FeedResubscribed)];
+        Assert.That(reader.Events.OfType<FeedResubscribed>().Select(item => (item.Feed, item.Since)), Is.EqualTo(new[] { (GrpcMarketFeed.Minutes, (DateTimeOffset?)Now.AddMinutes(-5)) }));
+        Assert.That(events.Skip(1).First(), Is.InstanceOf<FeedResubscribed>(), "told before the first minute of the replay");
+        Assert.That(events.Skip(2).OfType<LiveMinute>().First().OpenTime, Is.EqualTo(Now), "the replay goes from five minutes before the last minute");
     }
 
     [Test]

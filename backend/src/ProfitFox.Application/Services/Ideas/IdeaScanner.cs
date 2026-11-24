@@ -204,6 +204,12 @@ public sealed class IdeaScanner
                 }
 
                 break;
+            case FeedResubscribed:
+                // A new subscription after a break (task 26.2) replays the minutes from a little before the last one, by minute
+                // and within a minute by pair: a catch-up, until the feed goes quiet again. A break shorter than the limit of
+                // silence is no break of the ideas, so since when they count is kept.
+                _live = false;
+                break;
             case FeedGap gap:
                 _gap = true;
                 _live = false;

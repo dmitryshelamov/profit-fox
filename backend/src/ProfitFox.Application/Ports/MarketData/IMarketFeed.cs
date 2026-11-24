@@ -5,7 +5,8 @@ namespace ProfitFox.Application.Ports.MarketData;
 /// <summary>
 ///     The live feeds of the market-data service (change add-ideas-and-market, design.md, decision 2): minute candles,
 ///     funding payments, funding rates and open interest of the listed linear USDT perpetuals. The feed subscribes again by
-///     itself after a break and tells a hole it cannot catch up (<see cref="FeedGap" />); it ends only when cancelled.
+///     itself after a break, tells a new subscription of minutes before its replay (<see cref="FeedResubscribed" />) and a hole
+///     it cannot catch up (<see cref="FeedGap" />); it ends only when cancelled.
 /// </summary>
 public interface IMarketFeed
 {

@@ -27,7 +27,8 @@ namespace ProfitFox.Infrastructure.Clients.MarketData;
 ///     a cancellation — is written to the journal, and the feed subscribes again after the pause of a retry; an item it
 ///     cannot read is written to the journal and left out (task 18.7). A stream of minutes that tells nothing for longer than
 ///     <see cref="MarketFeedSettings.FeedSilence" /> while the feed waits for it is broken off with a warning and subscribed
-///     again as after a break (task 24.1).
+///     again as after a break (task 24.1). A new subscription of minutes after a break is told before the first minute it
+///     replays as a <see cref="FeedResubscribed" /> (task 26.2).
 /// </summary>
 public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catalog, TimeProvider time, MarketFeedSettings settings, ILogger? logger = null) : IMarketFeed
 {
@@ -60,6 +61,7 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
                 subscription,
                 settings.Overlap,
                 settings.FeedSilence > TimeSpan.Zero ? settings.FeedSilence : null,
+                tellResubscription: true,
                 (since, token) => _candles.Subscribe(
                     new SubscribeRequest { Exchanges = { Exchange.Bybit }, Since = Stamp(since), Forming = subscription.Forming },
                     cancellationToken: token),
@@ -75,6 +77,7 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
                 subscription,
                 settings.PaymentOverlap,
                 silence: null,
+                tellResubscription: false,
                 (since, token) => _payments.Subscribe(new SubscribeFundingPaymentRequest { Since = Stamp(since) }, cancellationToken: token),
                 payment => payment.Time.ToDateTimeOffset(),
                 payment => Point(pairs, LivePointKind.FundingPayment, payment.InstrumentId, payment.Time, payment.FundingRate),
@@ -85,6 +88,7 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
                 subscription,
                 settings.Overlap,
                 silence: null,
+                tellResubscription: false,
                 (since, token) => _rates.Subscribe(new SubscribeFundingRateRequest { Since = Stamp(since) }, cancellationToken: token),
                 rate => rate.Time.ToDateTimeOffset(),
                 rate => Point(pairs, LivePointKind.FundingRate, rate.InstrumentId, rate.Time, rate.FundingRate),
@@ -95,6 +99,7 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
                 subscription,
                 settings.Overlap,
                 silence: null,
+                tellResubscription: false,
                 (since, token) => _openInterest.Subscribe(new SubscribeOpenInterestRequest { Since = Stamp(since) }, cancellationToken: token),
                 point => point.Time.ToDateTimeOffset(),
                 point => Point(pairs, LivePointKind.OpenInterest, point.InstrumentId, point.Time, point.OpenInterest),
@@ -129,12 +134,15 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
     // One feed: subscribed again after every break and the pause of a retry, from a little before the last item, or from
     // the limit of the catch-up with a hole told when the break was longer — one hole for a break, however many tries it
     // takes. With a <paramref name="silence" />, a call that waits for its next item longer than that is broken off as a
-    // break (task 24.1); the time it waits for the reader is not counted.
+    // break (task 24.1); the time it waits for the reader is not counted. With <paramref name="tellResubscription" />, a new
+    // subscription after a break is told before its first item (task 26.2): the minutes it replays are a catch-up. Only the
+    // feed of minutes tells it — the candles are built from the minutes alone.
     private async Task Feed<T>(
         string name,
         MarketSubscription subscription,
         TimeSpan overlap,
         TimeSpan? silence,
+        bool tellResubscription,
         Func<DateTimeOffset?, CancellationToken, AsyncServerStreamingCall<T>> open,
         Func<T, DateTimeOffset?> timeOf,
         Func<T, MarketEvent?> map,
@@ -145,6 +153,7 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
         DateTimeOffset? last = null;
         bool holeTold = false;
         bool first = true;
+        bool subscribed = false;
         while (!cancellation.IsCancellationRequested)
         {
             DateTimeOffset limit = time.GetUtcNow() - settings.CatchUp + TimeSpan.FromMinutes(1);
@@ -167,6 +176,8 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
                 asked = limit;
             }
 
+            bool tell = tellResubscription && subscribed;
+            subscribed = true;
             using Watchdog? watchdog = silence is { } most ? new Watchdog(time, most, cancellation) : null;
             try
             {
@@ -183,6 +194,12 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
                     holeTold = false;
                     if (Map(name, map, item) is { } mapped)
                     {
+                        if (tell)
+                        {
+                            await queue.WriteAsync(new FeedResubscribed(name, asked), cancellation);
+                            tell = false;
+                        }
+
                         await queue.WriteAsync(mapped, cancellation);
                     }
                 }
