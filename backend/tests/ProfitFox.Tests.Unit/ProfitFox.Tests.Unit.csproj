@@ -22,6 +22,8 @@
 
     <ItemGroup>
         <None Include="**\Fixtures\**\*.csv;**\Fixtures\**\*.json" Exclude="bin\**;obj\**" CopyToOutputDirectory="PreserveNewest"/>
+        <!-- The signal of the label «↑ волат.» of change add-setup-strategies, written once in the fixtures of the setups. -->
+        <None Include="..\ProfitFox.Tests.Integration\Fixtures\Setups\high-volatility.signal.json" Link="Fixtures\Setups\high-volatility.signal.json" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
 
 </Project>

@@ -1,0 +1,175 @@
+{
+  "name": "false-breakout-short",
+  "description": "Ложный пробой вверх, вход в шорт: high не ниже верхнего края ближайшей зоны над большим из open и close плюс sweepMargin ATR, а close ниже этого края.",
+  "graph": {
+    "formatVersion": 1,
+    "parameters": [
+      {
+        "name": "sweepMargin",
+        "type": "number",
+        "value": 0.2
+      }
+    ],
+    "outputs": [
+      {
+        "name": "state",
+        "type": "boolean"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "p",
+        "kind": "parameters"
+      },
+      {
+        "id": "c",
+        "kind": "candle"
+      },
+      {
+        "id": "atr",
+        "kind": "atr",
+        "inputs": {
+          "length": 14
+        }
+      },
+      {
+        "id": "atr-prev",
+        "kind": "previous"
+      },
+      {
+        "id": "body-top",
+        "kind": "max"
+      },
+      {
+        "id": "body-bottom",
+        "kind": "min"
+      },
+      {
+        "id": "body",
+        "kind": "subtract"
+      },
+      {
+        "id": "margin",
+        "kind": "multiply"
+      },
+      {
+        "id": "zones",
+        "kind": "zones",
+        "inputs": {
+          "length": 200,
+          "merge": 0.5,
+          "strength": 2
+        }
+      },
+      {
+        "id": "sweep-level",
+        "kind": "add"
+      },
+      {
+        "id": "swept",
+        "kind": "compare",
+        "settings": {
+          "operation": "ge"
+        }
+      },
+      {
+        "id": "back",
+        "kind": "compare",
+        "settings": {
+          "operation": "lt"
+        }
+      },
+      {
+        "id": "state",
+        "kind": "and"
+      },
+      {
+        "id": "out",
+        "kind": "outputs"
+      }
+    ],
+    "wires": [
+      {
+        "from": "atr.result",
+        "to": "atr-prev.value"
+      },
+      {
+        "from": "c.open",
+        "to": "body-top.a"
+      },
+      {
+        "from": "c.close",
+        "to": "body-top.b"
+      },
+      {
+        "from": "c.open",
+        "to": "body-bottom.a"
+      },
+      {
+        "from": "c.close",
+        "to": "body-bottom.b"
+      },
+      {
+        "from": "body-top.result",
+        "to": "body.a"
+      },
+      {
+        "from": "body-bottom.result",
+        "to": "body.b"
+      },
+      {
+        "from": "atr-prev.result",
+        "to": "margin.a"
+      },
+      {
+        "from": "p.sweepMargin",
+        "to": "margin.b"
+      },
+      {
+        "from": "atr-prev.result",
+        "to": "zones.atr"
+      },
+      {
+        "from": "body-top.result",
+        "to": "zones.price"
+      },
+      {
+        "from": "zones.above",
+        "to": "sweep-level.a"
+      },
+      {
+        "from": "margin.result",
+        "to": "sweep-level.b"
+      },
+      {
+        "from": "c.high",
+        "to": "swept.a"
+      },
+      {
+        "from": "sweep-level.result",
+        "to": "swept.b"
+      },
+      {
+        "from": "c.close",
+        "to": "back.a"
+      },
+      {
+        "from": "zones.above",
+        "to": "back.b"
+      },
+      {
+        "from": "swept.result",
+        "to": "state.a"
+      },
+      {
+        "from": "back.result",
+        "to": "state.b"
+      },
+      {
+        "from": "state.result",
+        "to": "out.state"
+      }
+    ]
+  },
+  "layout": {}
+}

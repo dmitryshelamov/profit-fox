@@ -1,0 +1,102 @@
+{
+  "name": "rsi-overbought-exit",
+  "description": "Выход из перекупленности: RSI 14 по close на прошлой свече не ниже overbought, на текущей ниже.",
+  "graph": {
+    "formatVersion": 1,
+    "parameters": [
+      {
+        "name": "overbought",
+        "type": "number",
+        "value": 70
+      }
+    ],
+    "outputs": [
+      {
+        "name": "state",
+        "type": "boolean"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "p",
+        "kind": "parameters"
+      },
+      {
+        "id": "c",
+        "kind": "candle"
+      },
+      {
+        "id": "rsi",
+        "kind": "rsi",
+        "inputs": {
+          "length": 14
+        }
+      },
+      {
+        "id": "rsi-prev",
+        "kind": "previous"
+      },
+      {
+        "id": "was",
+        "kind": "compare",
+        "settings": {
+          "operation": "ge"
+        }
+      },
+      {
+        "id": "now",
+        "kind": "compare",
+        "settings": {
+          "operation": "lt"
+        }
+      },
+      {
+        "id": "state",
+        "kind": "and"
+      },
+      {
+        "id": "out",
+        "kind": "outputs"
+      }
+    ],
+    "wires": [
+      {
+        "from": "c.close",
+        "to": "rsi.value"
+      },
+      {
+        "from": "rsi.result",
+        "to": "rsi-prev.value"
+      },
+      {
+        "from": "rsi-prev.result",
+        "to": "was.a"
+      },
+      {
+        "from": "p.overbought",
+        "to": "was.b"
+      },
+      {
+        "from": "rsi.result",
+        "to": "now.a"
+      },
+      {
+        "from": "p.overbought",
+        "to": "now.b"
+      },
+      {
+        "from": "was.result",
+        "to": "state.a"
+      },
+      {
+        "from": "now.result",
+        "to": "state.b"
+      },
+      {
+        "from": "state.result",
+        "to": "out.state"
+      }
+    ]
+  },
+  "layout": {}
+}

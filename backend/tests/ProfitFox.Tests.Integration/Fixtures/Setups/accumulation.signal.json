@@ -1,0 +1,334 @@
+{
+  "name": "accumulation",
+  "description": "Накопление: на свече сжатие, за 20 последних свечей объём свечей, закрывшихся выше прошлого close, больше нуля и не меньше biasRatio объёма закрывшихся ниже, а close не выше close первой из 20 свечей плюс flatMove ATR.",
+  "graph": {
+    "formatVersion": 1,
+    "parameters": [
+      {
+        "name": "biasRatio",
+        "type": "number",
+        "value": 1.5
+      },
+      {
+        "name": "flatMove",
+        "type": "number",
+        "value": 0.5
+      }
+    ],
+    "outputs": [
+      {
+        "name": "state",
+        "type": "boolean"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "p",
+        "kind": "parameters"
+      },
+      {
+        "id": "c",
+        "kind": "candle"
+      },
+      {
+        "id": "atr",
+        "kind": "atr",
+        "inputs": {
+          "length": 14
+        }
+      },
+      {
+        "id": "atr-prev",
+        "kind": "previous"
+      },
+      {
+        "id": "atr-share",
+        "kind": "divide"
+      },
+      {
+        "id": "share-p10",
+        "kind": "percentile",
+        "inputs": {
+          "length": 200,
+          "rank": 0.1
+        }
+      },
+      {
+        "id": "share-p10-prev",
+        "kind": "previous"
+      },
+      {
+        "id": "squeeze",
+        "kind": "compare",
+        "settings": {
+          "operation": "lt"
+        }
+      },
+      {
+        "id": "close-prev",
+        "kind": "previous"
+      },
+      {
+        "id": "up",
+        "kind": "compare",
+        "settings": {
+          "operation": "gt"
+        }
+      },
+      {
+        "id": "down",
+        "kind": "compare",
+        "settings": {
+          "operation": "lt"
+        }
+      },
+      {
+        "id": "up-volume",
+        "kind": "select",
+        "inputs": {
+          "b": 0
+        }
+      },
+      {
+        "id": "down-volume",
+        "kind": "select",
+        "inputs": {
+          "b": 0
+        }
+      },
+      {
+        "id": "up-sum",
+        "kind": "window",
+        "settings": {
+          "operation": "sum"
+        },
+        "inputs": {
+          "length": 20
+        }
+      },
+      {
+        "id": "down-sum",
+        "kind": "window",
+        "settings": {
+          "operation": "sum"
+        },
+        "inputs": {
+          "length": 20
+        }
+      },
+      {
+        "id": "first-close",
+        "kind": "window",
+        "settings": {
+          "operation": "first"
+        },
+        "inputs": {
+          "length": 20
+        }
+      },
+      {
+        "id": "flat",
+        "kind": "multiply"
+      },
+      {
+        "id": "some",
+        "kind": "compare",
+        "settings": {
+          "operation": "gt"
+        },
+        "inputs": {
+          "b": 0
+        }
+      },
+      {
+        "id": "bias",
+        "kind": "multiply"
+      },
+      {
+        "id": "bias-ok",
+        "kind": "compare",
+        "settings": {
+          "operation": "ge"
+        }
+      },
+      {
+        "id": "cap",
+        "kind": "add"
+      },
+      {
+        "id": "flat-ok",
+        "kind": "compare",
+        "settings": {
+          "operation": "le"
+        }
+      },
+      {
+        "id": "volume-ok",
+        "kind": "and"
+      },
+      {
+        "id": "quiet-ok",
+        "kind": "and"
+      },
+      {
+        "id": "state",
+        "kind": "and"
+      },
+      {
+        "id": "out",
+        "kind": "outputs"
+      }
+    ],
+    "wires": [
+      {
+        "from": "atr.result",
+        "to": "atr-prev.value"
+      },
+      {
+        "from": "atr-prev.result",
+        "to": "atr-share.a"
+      },
+      {
+        "from": "c.close",
+        "to": "atr-share.b"
+      },
+      {
+        "from": "atr-share.result",
+        "to": "share-p10.value"
+      },
+      {
+        "from": "share-p10.result",
+        "to": "share-p10-prev.value"
+      },
+      {
+        "from": "atr-share.result",
+        "to": "squeeze.a"
+      },
+      {
+        "from": "share-p10-prev.result",
+        "to": "squeeze.b"
+      },
+      {
+        "from": "c.close",
+        "to": "close-prev.value"
+      },
+      {
+        "from": "c.close",
+        "to": "up.a"
+      },
+      {
+        "from": "close-prev.result",
+        "to": "up.b"
+      },
+      {
+        "from": "c.close",
+        "to": "down.a"
+      },
+      {
+        "from": "close-prev.result",
+        "to": "down.b"
+      },
+      {
+        "from": "up.result",
+        "to": "up-volume.when"
+      },
+      {
+        "from": "c.volume",
+        "to": "up-volume.a"
+      },
+      {
+        "from": "down.result",
+        "to": "down-volume.when"
+      },
+      {
+        "from": "c.volume",
+        "to": "down-volume.a"
+      },
+      {
+        "from": "up-volume.result",
+        "to": "up-sum.value"
+      },
+      {
+        "from": "down-volume.result",
+        "to": "down-sum.value"
+      },
+      {
+        "from": "c.close",
+        "to": "first-close.value"
+      },
+      {
+        "from": "atr-prev.result",
+        "to": "flat.a"
+      },
+      {
+        "from": "p.flatMove",
+        "to": "flat.b"
+      },
+      {
+        "from": "up-sum.result",
+        "to": "some.a"
+      },
+      {
+        "from": "down-sum.result",
+        "to": "bias.a"
+      },
+      {
+        "from": "p.biasRatio",
+        "to": "bias.b"
+      },
+      {
+        "from": "up-sum.result",
+        "to": "bias-ok.a"
+      },
+      {
+        "from": "bias.result",
+        "to": "bias-ok.b"
+      },
+      {
+        "from": "first-close.result",
+        "to": "cap.a"
+      },
+      {
+        "from": "flat.result",
+        "to": "cap.b"
+      },
+      {
+        "from": "c.close",
+        "to": "flat-ok.a"
+      },
+      {
+        "from": "cap.result",
+        "to": "flat-ok.b"
+      },
+      {
+        "from": "some.result",
+        "to": "volume-ok.a"
+      },
+      {
+        "from": "bias-ok.result",
+        "to": "volume-ok.b"
+      },
+      {
+        "from": "volume-ok.result",
+        "to": "quiet-ok.a"
+      },
+      {
+        "from": "flat-ok.result",
+        "to": "quiet-ok.b"
+      },
+      {
+        "from": "squeeze.result",
+        "to": "state.a"
+      },
+      {
+        "from": "quiet-ok.result",
+        "to": "state.b"
+      },
+      {
+        "from": "state.result",
+        "to": "out.state"
+      }
+    ]
+  },
+  "layout": {}
+}

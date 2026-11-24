@@ -85,3 +85,232 @@ Content-Type: application/json
 }
 
 ###
+
+###
+
+# The setups of v2 (change add-setup-strategies; README, «Сетапы»): the signals first, each remembering its id,
+# then the strategies, whose bodies take the ids for their placeholders by «<@». For the JetBrains HTTP client.
+
+### Signal accumulation
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/accumulation.signal.json
+
+> {% client.global.set("signal_accumulation", response.body.id); %}
+
+### Signal breakout-down
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/breakout-down.signal.json
+
+> {% client.global.set("signal_breakout_down", response.body.id); %}
+
+### Signal breakout-up
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/breakout-up.signal.json
+
+> {% client.global.set("signal_breakout_up", response.body.id); %}
+
+### Signal distribution
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/distribution.signal.json
+
+> {% client.global.set("signal_distribution", response.body.id); %}
+
+### Signal drop
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/drop.signal.json
+
+> {% client.global.set("signal_drop", response.body.id); %}
+
+### Signal early-drop
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/early-drop.signal.json
+
+> {% client.global.set("signal_early_drop", response.body.id); %}
+
+### Signal early-impulse
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/early-impulse.signal.json
+
+> {% client.global.set("signal_early_impulse", response.body.id); %}
+
+### Signal exhaustion-bottom
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/exhaustion-bottom.signal.json
+
+> {% client.global.set("signal_exhaustion_bottom", response.body.id); %}
+
+### Signal exhaustion-top
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/exhaustion-top.signal.json
+
+> {% client.global.set("signal_exhaustion_top", response.body.id); %}
+
+### Signal false-breakout-long
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/false-breakout-long.signal.json
+
+> {% client.global.set("signal_false_breakout_long", response.body.id); %}
+
+### Signal false-breakout-short
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/false-breakout-short.signal.json
+
+> {% client.global.set("signal_false_breakout_short", response.body.id); %}
+
+### Signal high-volatility
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/high-volatility.signal.json
+
+> {% client.global.set("signal_high_volatility", response.body.id); %}
+
+### Signal impulse
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/impulse.signal.json
+
+> {% client.global.set("signal_impulse", response.body.id); %}
+
+### Signal new-high
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/new-high.signal.json
+
+> {% client.global.set("signal_new_high", response.body.id); %}
+
+### Signal new-low
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/new-low.signal.json
+
+> {% client.global.set("signal_new_low", response.body.id); %}
+
+### Signal quiet-candle
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/quiet-candle.signal.json
+
+> {% client.global.set("signal_quiet_candle", response.body.id); %}
+
+### Signal rsi-overbought-exit
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/rsi-overbought-exit.signal.json
+
+> {% client.global.set("signal_rsi_overbought_exit", response.body.id); %}
+
+### Signal rsi-oversold-exit
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/rsi-oversold-exit.signal.json
+
+> {% client.global.set("signal_rsi_oversold_exit", response.body.id); %}
+
+### Signal squeeze
+POST {{ProfitFox.Presentation_HostAddress}}/api/signals
+Content-Type: application/json
+
+< ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/squeeze.signal.json
+
+> {% client.global.set("signal_squeeze", response.body.id); %}
+
+### Strategy accumulation
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/accumulation.strategy.json
+
+### Strategy breakout
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/breakout.strategy.json
+
+### Strategy drop
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/drop.strategy.json
+
+### Strategy early-drop
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/early-drop.strategy.json
+
+### Strategy early-impulse
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/early-impulse.strategy.json
+
+### Strategy exhaustion
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/exhaustion.strategy.json
+
+### Strategy false-breakout
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/false-breakout.strategy.json
+
+### Strategy impulse
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/impulse.strategy.json
+
+### Strategy new-extreme
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/new-extreme.strategy.json
+
+### Strategy quiet-volume
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/quiet-volume.strategy.json
+
+### Strategy rsi-extreme
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/rsi-extreme.strategy.json
+
+### Strategy squeeze
+POST {{ProfitFox.Presentation_HostAddress}}/api/strategies
+Content-Type: application/json
+
+<@ ../../tests/ProfitFox.Tests.Integration/Fixtures/Setups/squeeze.strategy.json

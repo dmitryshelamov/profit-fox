@@ -1,0 +1,358 @@
+{
+  "name": "exhaustion-bottom",
+  "description": "Истощение падения, вход в лонг: условие drop истинно, объём не меньше climaxVolume медиан, нижняя тень больше нуля и не меньше wick тела.",
+  "graph": {
+    "formatVersion": 1,
+    "parameters": [
+      {
+        "name": "candles",
+        "type": "number",
+        "value": 6
+      },
+      {
+        "name": "move",
+        "type": "number",
+        "value": 3.0
+      },
+      {
+        "name": "volume",
+        "type": "number",
+        "value": 2.0
+      },
+      {
+        "name": "climaxVolume",
+        "type": "number",
+        "value": 4.0
+      },
+      {
+        "name": "wick",
+        "type": "number",
+        "value": 1.0
+      }
+    ],
+    "outputs": [
+      {
+        "name": "state",
+        "type": "boolean"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "p",
+        "kind": "parameters"
+      },
+      {
+        "id": "c",
+        "kind": "candle"
+      },
+      {
+        "id": "atr",
+        "kind": "atr",
+        "inputs": {
+          "length": 14
+        }
+      },
+      {
+        "id": "atr-prev",
+        "kind": "previous"
+      },
+      {
+        "id": "vol-median",
+        "kind": "window",
+        "settings": {
+          "operation": "median"
+        },
+        "inputs": {
+          "length": 20
+        }
+      },
+      {
+        "id": "vol-median-prev",
+        "kind": "previous"
+      },
+      {
+        "id": "first-open",
+        "kind": "window",
+        "settings": {
+          "operation": "first"
+        }
+      },
+      {
+        "id": "move",
+        "kind": "subtract"
+      },
+      {
+        "id": "move-atr",
+        "kind": "divide"
+      },
+      {
+        "id": "move-ok",
+        "kind": "compare",
+        "settings": {
+          "operation": "ge"
+        }
+      },
+      {
+        "id": "vol-average",
+        "kind": "window",
+        "settings": {
+          "operation": "average"
+        }
+      },
+      {
+        "id": "vol-average-ratio",
+        "kind": "divide"
+      },
+      {
+        "id": "vol-ok",
+        "kind": "compare",
+        "settings": {
+          "operation": "ge"
+        }
+      },
+      {
+        "id": "impulse",
+        "kind": "and"
+      },
+      {
+        "id": "vol-ratio",
+        "kind": "divide"
+      },
+      {
+        "id": "body-top",
+        "kind": "max"
+      },
+      {
+        "id": "body-bottom",
+        "kind": "min"
+      },
+      {
+        "id": "body",
+        "kind": "subtract"
+      },
+      {
+        "id": "climax-ok",
+        "kind": "compare",
+        "settings": {
+          "operation": "ge"
+        }
+      },
+      {
+        "id": "shadow",
+        "kind": "subtract"
+      },
+      {
+        "id": "shadow-some",
+        "kind": "compare",
+        "settings": {
+          "operation": "gt"
+        },
+        "inputs": {
+          "b": 0
+        }
+      },
+      {
+        "id": "shadow-need",
+        "kind": "multiply"
+      },
+      {
+        "id": "shadow-ok",
+        "kind": "compare",
+        "settings": {
+          "operation": "ge"
+        }
+      },
+      {
+        "id": "shadow-both",
+        "kind": "and"
+      },
+      {
+        "id": "climax",
+        "kind": "and"
+      },
+      {
+        "id": "state",
+        "kind": "and"
+      },
+      {
+        "id": "out",
+        "kind": "outputs"
+      }
+    ],
+    "wires": [
+      {
+        "from": "atr.result",
+        "to": "atr-prev.value"
+      },
+      {
+        "from": "c.volume",
+        "to": "vol-median.value"
+      },
+      {
+        "from": "vol-median.result",
+        "to": "vol-median-prev.value"
+      },
+      {
+        "from": "c.open",
+        "to": "first-open.value"
+      },
+      {
+        "from": "p.candles",
+        "to": "first-open.length"
+      },
+      {
+        "from": "first-open.result",
+        "to": "move.a"
+      },
+      {
+        "from": "c.close",
+        "to": "move.b"
+      },
+      {
+        "from": "move.result",
+        "to": "move-atr.a"
+      },
+      {
+        "from": "atr-prev.result",
+        "to": "move-atr.b"
+      },
+      {
+        "from": "move-atr.result",
+        "to": "move-ok.a"
+      },
+      {
+        "from": "p.move",
+        "to": "move-ok.b"
+      },
+      {
+        "from": "c.volume",
+        "to": "vol-average.value"
+      },
+      {
+        "from": "p.candles",
+        "to": "vol-average.length"
+      },
+      {
+        "from": "vol-average.result",
+        "to": "vol-average-ratio.a"
+      },
+      {
+        "from": "vol-median-prev.result",
+        "to": "vol-average-ratio.b"
+      },
+      {
+        "from": "vol-average-ratio.result",
+        "to": "vol-ok.a"
+      },
+      {
+        "from": "p.volume",
+        "to": "vol-ok.b"
+      },
+      {
+        "from": "move-ok.result",
+        "to": "impulse.a"
+      },
+      {
+        "from": "vol-ok.result",
+        "to": "impulse.b"
+      },
+      {
+        "from": "c.volume",
+        "to": "vol-ratio.a"
+      },
+      {
+        "from": "vol-median-prev.result",
+        "to": "vol-ratio.b"
+      },
+      {
+        "from": "c.open",
+        "to": "body-top.a"
+      },
+      {
+        "from": "c.close",
+        "to": "body-top.b"
+      },
+      {
+        "from": "c.open",
+        "to": "body-bottom.a"
+      },
+      {
+        "from": "c.close",
+        "to": "body-bottom.b"
+      },
+      {
+        "from": "body-top.result",
+        "to": "body.a"
+      },
+      {
+        "from": "body-bottom.result",
+        "to": "body.b"
+      },
+      {
+        "from": "vol-ratio.result",
+        "to": "climax-ok.a"
+      },
+      {
+        "from": "p.climaxVolume",
+        "to": "climax-ok.b"
+      },
+      {
+        "from": "body-bottom.result",
+        "to": "shadow.a"
+      },
+      {
+        "from": "c.low",
+        "to": "shadow.b"
+      },
+      {
+        "from": "shadow.result",
+        "to": "shadow-some.a"
+      },
+      {
+        "from": "body.result",
+        "to": "shadow-need.a"
+      },
+      {
+        "from": "p.wick",
+        "to": "shadow-need.b"
+      },
+      {
+        "from": "shadow.result",
+        "to": "shadow-ok.a"
+      },
+      {
+        "from": "shadow-need.result",
+        "to": "shadow-ok.b"
+      },
+      {
+        "from": "shadow-some.result",
+        "to": "shadow-both.a"
+      },
+      {
+        "from": "shadow-ok.result",
+        "to": "shadow-both.b"
+      },
+      {
+        "from": "climax-ok.result",
+        "to": "climax.a"
+      },
+      {
+        "from": "shadow-both.result",
+        "to": "climax.b"
+      },
+      {
+        "from": "impulse.result",
+        "to": "state.a"
+      },
+      {
+        "from": "climax.result",
+        "to": "state.b"
+      },
+      {
+        "from": "state.result",
+        "to": "out.state"
+      }
+    ]
+  },
+  "layout": {}
+}

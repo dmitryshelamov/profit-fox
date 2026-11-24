@@ -1,0 +1,178 @@
+{
+  "name": "breakout-down",
+  "description": "Пробой вниз: зеркально breakout-up — close не выше нижнего края ближайшей зоны под open минус breakoutMargin ATR.",
+  "graph": {
+    "formatVersion": 1,
+    "parameters": [
+      {
+        "name": "breakoutVolume",
+        "type": "number",
+        "value": 1.5
+      },
+      {
+        "name": "breakoutMargin",
+        "type": "number",
+        "value": 0.1
+      }
+    ],
+    "outputs": [
+      {
+        "name": "state",
+        "type": "boolean"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "p",
+        "kind": "parameters"
+      },
+      {
+        "id": "c",
+        "kind": "candle"
+      },
+      {
+        "id": "atr",
+        "kind": "atr",
+        "inputs": {
+          "length": 14
+        }
+      },
+      {
+        "id": "atr-prev",
+        "kind": "previous"
+      },
+      {
+        "id": "vol-median",
+        "kind": "window",
+        "settings": {
+          "operation": "median"
+        },
+        "inputs": {
+          "length": 20
+        }
+      },
+      {
+        "id": "vol-median-prev",
+        "kind": "previous"
+      },
+      {
+        "id": "vol-ratio",
+        "kind": "divide"
+      },
+      {
+        "id": "vol-ok",
+        "kind": "compare",
+        "settings": {
+          "operation": "ge"
+        }
+      },
+      {
+        "id": "zones",
+        "kind": "zones",
+        "inputs": {
+          "length": 200,
+          "merge": 0.5,
+          "strength": 2
+        }
+      },
+      {
+        "id": "margin",
+        "kind": "multiply"
+      },
+      {
+        "id": "level",
+        "kind": "subtract"
+      },
+      {
+        "id": "close-ok",
+        "kind": "compare",
+        "settings": {
+          "operation": "le"
+        }
+      },
+      {
+        "id": "state",
+        "kind": "and"
+      },
+      {
+        "id": "out",
+        "kind": "outputs"
+      }
+    ],
+    "wires": [
+      {
+        "from": "atr.result",
+        "to": "atr-prev.value"
+      },
+      {
+        "from": "c.volume",
+        "to": "vol-median.value"
+      },
+      {
+        "from": "vol-median.result",
+        "to": "vol-median-prev.value"
+      },
+      {
+        "from": "c.volume",
+        "to": "vol-ratio.a"
+      },
+      {
+        "from": "vol-median-prev.result",
+        "to": "vol-ratio.b"
+      },
+      {
+        "from": "vol-ratio.result",
+        "to": "vol-ok.a"
+      },
+      {
+        "from": "p.breakoutVolume",
+        "to": "vol-ok.b"
+      },
+      {
+        "from": "atr-prev.result",
+        "to": "zones.atr"
+      },
+      {
+        "from": "c.open",
+        "to": "zones.price"
+      },
+      {
+        "from": "atr-prev.result",
+        "to": "margin.a"
+      },
+      {
+        "from": "p.breakoutMargin",
+        "to": "margin.b"
+      },
+      {
+        "from": "zones.below",
+        "to": "level.a"
+      },
+      {
+        "from": "margin.result",
+        "to": "level.b"
+      },
+      {
+        "from": "c.close",
+        "to": "close-ok.a"
+      },
+      {
+        "from": "level.result",
+        "to": "close-ok.b"
+      },
+      {
+        "from": "vol-ok.result",
+        "to": "state.a"
+      },
+      {
+        "from": "close-ok.result",
+        "to": "state.b"
+      },
+      {
+        "from": "state.result",
+        "to": "out.state"
+      }
+    ]
+  },
+  "layout": {}
+}
