@@ -128,8 +128,10 @@ public sealed class GetPairChartQueryHandlerTests
 
         Assert.That(PageReads.Limit, Is.EqualTo(TimeSpan.FromSeconds(10)));
         Assert.That((answer!.Loading, answer.Candles.Count), Is.EqualTo((true, 0)));
-        string warning = log.Entries.Single(entry => entry.Level == LogLevel.Warning).Message;
-        Assert.That(warning, Does.Contain("candles").And.Contain("BTCUSDT").And.Contain("10"));
+        // The payments are read alongside the candles: when their read ends after the clock has jumped, the journal also gets
+        // the line of a slow step of the payments, so the line of the candles is looked for by its step.
+        string[] warnings = [.. log.Entries.Where(entry => entry.Level == LogLevel.Warning).Select(entry => entry.Message)];
+        Assert.That(warnings, Has.One.Contains("candles").And.Contains("BTCUSDT").And.Contains("10"));
     }
 
     /// <summary>
