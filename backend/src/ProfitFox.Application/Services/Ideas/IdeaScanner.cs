@@ -65,6 +65,10 @@ public sealed class IdeaScanner
     private readonly Dictionary<TimeSpan, DateTimeOffset> _boundaries = [];
     private readonly HashSet<Idea> _dirty = [];
     private readonly List<Idea> _pending = [];
+
+    // The ideas that closed after the last boundary of their timeframe the scanner computed (task 26.1): while the feed
+    // catches up, the minutes run ahead of the boundaries, and the rule of one open idea still has to see them there.
+    private readonly List<Idea> _ended = [];
     private readonly ILogger? _logger;
     private readonly Dictionary<string, DateTimeOffset> _logged = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
     private string? _lastFailure;
@@ -682,6 +686,7 @@ public sealed class IdeaScanner
 
         foreach ((DateTimeOffset close, List<TimeSpan> at) in closes)
         {
+            WalkPending(close);
             foreach (Slot slot in _slots.Values.Where(slot => slot.Current.Label is not null && Closes(slot, at)))
             {
                 StepAll(slot, close, at, now);
@@ -705,6 +710,24 @@ public sealed class IdeaScanner
             }
 
             _pending.AddRange(born);
+        }
+    }
+
+    // An idea born at an earlier close of this pass waits for its write and was not walked yet (task 26.1): before the next
+    // close it goes through the minutes of its pair before that close, so a stop or a target it reached ends it for the rule
+    // of one open idea there, as the trade of a backtest ends. A pass of the live feed computes one close and has none such.
+    private void WalkPending(DateTimeOffset close)
+    {
+        foreach (Idea idea in _pending.Where(idea => idea.Moment < close && idea.State == IdeaState.Open && idea.ExitTime is null))
+        {
+            DateTimeOffset from = idea.ComputedUntil is { } until ? until + OneMinute : idea.Moment;
+            foreach (LiveMinute minute in Book.Minutes(idea.Symbol, from, close < idea.Until ? close : idea.Until))
+            {
+                if (IdeaCycle.Minute(idea, Candle(minute), _costs))
+                {
+                    break;
+                }
+            }
         }
     }
 
@@ -772,11 +795,12 @@ public sealed class IdeaScanner
             }
 
             run.Pairs[symbol].WarmedUntil = close;
-            // An open idea of the strategy on the pair and timeframe stops the order, unless its exit is by this close; an idea
-            // still waiting for its write counts as open.
+            // An idea of the strategy on the pair and timeframe stops the order, unless its exit is by this close: an open one,
+            // one still waiting for its write, and one the walk already closed past this close while the feed caught up (task
+            // 26.1) — the trade of a backtest holds the position up to its exit however far the minutes ran.
             if (step is null || run.Strategy is not { } strategy || step.Entry is null
-                || _open.Concat(_pending).Any(idea => idea.State == IdeaState.Open && idea.StrategyId == strategy.Id && idea.Symbol == symbol && idea.Timeframe == timeframe
-                                     && (idea.ExitTime ?? idea.Until) > close))
+                || _open.Concat(_ended).Concat(_pending).Any(idea => idea.State is (IdeaState.Open or IdeaState.Closed) && idea.StrategyId == strategy.Id && idea.Symbol == symbol
+                                                                    && idea.Timeframe == timeframe && (idea.ExitTime ?? idea.Until) > close))
             {
                 continue;
             }
@@ -837,8 +861,7 @@ public sealed class IdeaScanner
             DateTimeOffset from = idea.ComputedUntil is { } until ? until + OneMinute : idea.Moment;
             foreach (LiveMinute minute in Book.Minutes(idea.Symbol, from, idea.Until))
             {
-                var candle = new ClosedCandle(minute.OpenTime, minute.OpenTime + OneMinute, minute.Open, minute.High, minute.Low, minute.Close, minute.Volume);
-                if (IdeaCycle.Minute(idea, candle, _costs))
+                if (IdeaCycle.Minute(idea, Candle(minute), _costs))
                 {
                     break;
                 }
@@ -903,7 +926,16 @@ public sealed class IdeaScanner
         // One statement a pass for every idea that changed (task 18.6).
         await _ideas.SaveAllAsync([.. _dirty], cancellationToken);
         _dirty.Clear();
+        // A closed idea whose exit the boundaries of its timeframe have not reached stays for the rule of one open idea (task
+        // 26.1); the live feed closes an idea after the boundaries before its exit, so there it stays for no boundary.
+        _ended.AddRange(_open.Where(idea => idea.State == IdeaState.Closed && idea.ExitTime > FilledUntil(idea.Timeframe)));
+        _ended.RemoveAll(idea => idea.ExitTime <= FilledUntil(idea.Timeframe) || (Book.LastMinute is { } last && idea.ExitTime < last - MarketBook.Kept));
         _open.RemoveAll(idea => idea.State != IdeaState.Open);
+    }
+
+    private static ClosedCandle Candle(LiveMinute minute)
+    {
+        return new ClosedCandle(minute.OpenTime, minute.OpenTime + OneMinute, minute.Open, minute.High, minute.Low, minute.Close, minute.Volume);
     }
 
     private static DateTimeOffset Floor(DateTimeOffset moment, TimeSpan step)

@@ -104,11 +104,21 @@ internal sealed class ScannerRig
     }
 
     /// <summary>
-    ///     Saves <c>close-up</c> as <paramref name="name" /> in <paramref name="version" /> and enables it on the timeframes.
+    ///     Saves <c>close-up</c> as <paramref name="name" /> in <paramref name="version" /> and enables it on the timeframes;
+    ///     with <paramref name="stop" />, a stop at that distance.
     /// </summary>
-    public async Task<Guid> Enable(string name, string after, int version = 4, Guid? id = null, string side = "long", string operation = "gt", decimal level = 100, params TimeSpan[] timeframes)
+    public async Task<Guid> Enable(
+        string name,
+        string after,
+        int version = 4,
+        Guid? id = null,
+        string side = "long",
+        string operation = "gt",
+        decimal level = 100,
+        decimal? stop = null,
+        params TimeSpan[] timeframes)
     {
-        using var document = JsonDocument.Parse(CloseUp(after, side, operation, level));
+        using var document = JsonDocument.Parse(CloseUp(after, side, operation, level, stop));
         var strategy = StrategyDocument.Restore(id ?? Guid.NewGuid(), name, null, StrategyGraph.ReadForm(document.RootElement).Value!, new Dictionary<string, ProfitFox.Domain.ValueObjects.Signals.NodePosition>(), version, kind: StrategyKind.Idea);
         await Strategies.DeleteAsync(name, CancellationToken.None);
         await Strategies.CreateAsync(strategy, CancellationToken.None);
@@ -214,8 +224,10 @@ internal sealed class ScannerRig
                  """;
     }
 
-    private static string CloseUp(string after, string side, string operation, decimal level)
+    private static string CloseUp(string after, string side, string operation, decimal level, decimal? stop)
     {
+        string stopNode = stop is { } distance ? $$""", { "id": "stop", "kind": "stop-loss", "inputs": { "distance": {{Text(distance)}} } }""" : "";
+        string stopWires = stop is null ? "" : """, { "from": "position.position", "to": "stop.position" }, { "from": "stop.order", "to": "position.orders" }""";
         return $$"""
                  {
                    "formatVersion": 1,
@@ -225,7 +237,7 @@ internal sealed class ScannerRig
                      { "id": "first", "kind": "first-time" },
                      { "id": "enter", "kind": "enter", "settings": { "side": "{{side}}" }, "inputs": { "size": 100 } },
                      { "id": "position", "kind": "position" },
-                     { "id": "close-after", "kind": "close-after", "inputs": { "after": "{{after}}" } }
+                     { "id": "close-after", "kind": "close-after", "inputs": { "after": "{{after}}" } }{{stopNode}}
                    ],
                    "wires": [
                      { "from": "c.close", "to": "up.a" },
@@ -233,7 +245,7 @@ internal sealed class ScannerRig
                      { "from": "first.event", "to": "enter.when" },
                      { "from": "enter.order", "to": "position.orders" },
                      { "from": "position.position", "to": "close-after.position" },
-                     { "from": "close-after.order", "to": "position.orders" }
+                     { "from": "close-after.order", "to": "position.orders" }{{stopWires}}
                    ]
                  }
                  """;

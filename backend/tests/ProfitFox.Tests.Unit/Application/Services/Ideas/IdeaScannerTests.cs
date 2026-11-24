@@ -870,6 +870,62 @@ public sealed class IdeaScannerTests
         }), "the feed went quiet with its newest minute recent: it is live");
     }
 
+    /// <summary>
+    ///     Task 26.1, confirmed: a catch-up of three candles — the signal at 11:00 and at 13:00, the idea of 11:00 runs to 14:00
+    ///     by its time. In two passes the first walk of the second pass ran the idea through the minutes up to 14:05 and closed
+    ///     it «ahead» before the boundary of 13:00 was computed, and the rule of one open idea, looking at the open ones only,
+    ///     let a second idea be born while the first one ran. A backtest skips that order: the position is taken.
+    /// </summary>
+    [Test]
+    public async Task A_catch_up_of_three_candles_gives_no_second_idea_while_the_first_one_runs([Values(1, 2)] int passes)
+    {
+        Idea[] ideas = await CatchUpOfThreeCandles(stop: false, passes);
+
+        Assert.That(ideas.Select(idea => (idea.Moment, idea.ExitTime)), Is.EqualTo(new[] { (Eleven, (DateTimeOffset?)Eleven.AddHours(3)) }), "the order of 13:00 comes in the time of the idea of 11:00");
+    }
+
+    /// <summary>
+    ///     Task 26.1: the idea of 11:00 reaches its stop in the minute 11:01, before the third candle, so the order of 13:00 is
+    ///     a new idea, as in a backtest. In one pass the idea of 11:00 still waits for its write when the boundary of 13:00 is
+    ///     computed, and was not walked: its time up to 14:00 stopped the order — the signal fired, the pair has no open idea,
+    ///     and no idea came (the two events of 18:45 of the ninth check).
+    /// </summary>
+    [Test]
+    public async Task A_catch_up_of_three_candles_with_a_stop_before_the_third_gives_two_ideas_as_a_backtest([Values(1, 2)] int passes)
+    {
+        Idea[] ideas = await CatchUpOfThreeCandles(stop: true, passes);
+
+        Assert.That(ideas.Select(idea => (idea.Moment, idea.ExitReason, idea.ExitTime)).First(), Is.EqualTo((Eleven, (ExitReason?)ExitReason.Stop, (DateTimeOffset?)Eleven.AddMinutes(1))));
+        Assert.That(ideas.Select(idea => idea.Moment), Is.EqualTo(new[] { Eleven, Eleven.AddHours(2) }), "the idea of 11:00 ended at 11:01");
+    }
+
+    // The scanner started at 10:00:05 with close-up for 3h (with a stop of 2% when asked), and the feed that catches up at
+    // 14:30 the minutes of BTCUSDT from 10:00 to 14:05: the candles of 10:00–13:00 close at 101, 99, 101 and 99 — the
+    // signal at 11:00 and at 13:00 — and the minute 11:01 goes down to 97. In two passes: one after the minute 11:00, one
+    // after the minute 14:05; in one pass: after the minute 14:05.
+    private static async Task<Idea[]> CatchUpOfThreeCandles(bool stop, int passes)
+    {
+        var rig = new ScannerRig();
+        await rig.Enable("close-up", "3h", stop: stop ? 0.02m : null);
+        await rig.Start();
+        DateTimeOffset now = Eleven.AddHours(3).AddMinutes(30);
+        rig.Time.SetUtcNow(now);
+
+        await rig.Minutes("BTCUSDT", Ten, 61, close: 101);
+        if (passes == 2)
+        {
+            await rig.At(now.AddSeconds(1), quiet: false);
+            Assert.That(rig.Ideas.Ideas.Select(idea => idea.Moment), Is.EqualTo(new[] { Eleven }));
+        }
+
+        await rig.Minutes("BTCUSDT", Eleven.AddMinutes(1), 1, close: 99, low: 97);
+        await rig.Minutes("BTCUSDT", Eleven.AddMinutes(2), 58, close: 99);
+        await rig.Minutes("BTCUSDT", Eleven.AddHours(1), 60, close: 101);
+        await rig.Minutes("BTCUSDT", Eleven.AddHours(2), 66, close: 99);
+        await rig.At(now.AddSeconds(2), quiet: false);
+        return [.. rig.Ideas.Ideas.OrderBy(idea => idea.Moment)];
+    }
+
     // The scanner started at 10:00:05 and the feed that catches up the hour of 10:00 at 11:10, minute by minute and within a
     // minute BTCUSDT before ETHUSDT, then the minute 11:00 of both; with or without a pass between the two minutes 10:59.
     private static async Task<Idea[]> CatchUpAcrossTheBoundary(bool passInTheMiddle)
