@@ -117,7 +117,7 @@ internal sealed class ScannerRig
 
     /// <summary>
     ///     Saves <c>close-up</c> as <paramref name="name" /> in <paramref name="version" /> and enables it on the timeframes;
-    ///     with <paramref name="stop" />, a stop at that distance.
+    ///     with <paramref name="stop" />, a stop at that distance, and with <paramref name="target" />, a target.
     /// </summary>
     public async Task<Guid> Enable(
         string name,
@@ -128,9 +128,10 @@ internal sealed class ScannerRig
         string operation = "gt",
         decimal level = 100,
         decimal? stop = null,
+        decimal? target = null,
         params TimeSpan[] timeframes)
     {
-        return await Save(name, CloseUp(after, side, operation, level, stop), version, id, timeframes);
+        return await Save(name, CloseUp(after, side, operation, level, stop, target), version, id, timeframes);
     }
 
     /// <summary>
@@ -173,14 +174,14 @@ internal sealed class ScannerRig
     }
 
     /// <summary>
-    ///     Closed minutes of a pair from <paramref name="from" />, <paramref name="count" /> of them, each opening at 100 and
-    ///     closing at <paramref name="close" />.
+    ///     Closed minutes of a pair from <paramref name="from" />, <paramref name="count" /> of them, each opening at
+    ///     <paramref name="open" /> and closing at <paramref name="close" />.
     /// </summary>
-    public async Task Minutes(string symbol, DateTimeOffset from, int count, decimal close, decimal? low = null, decimal? high = null)
+    public async Task Minutes(string symbol, DateTimeOffset from, int count, decimal close, decimal? low = null, decimal? high = null, decimal open = 100)
     {
         for (int minute = 0; minute < count; minute++)
         {
-            var told = new LiveMinute(symbol, from.AddMinutes(minute), 100, high ?? Math.Max(100, close), low ?? Math.Min(100, close), close, 1, close);
+            var told = new LiveMinute(symbol, from.AddMinutes(minute), open, high ?? Math.Max(open, close), low ?? Math.Min(open, close), close, 1, close);
             Told.Add(told);
             await Scanner.ApplyAsync(told, CancellationToken.None);
         }
@@ -303,10 +304,16 @@ internal sealed class ScannerRig
                  """;
     }
 
-    private static string CloseUp(string after, string side, string operation, decimal level, decimal? stop)
+    private static string CloseUp(string after, string side, string operation, decimal level, decimal? stop, decimal? target = null)
     {
         string stopNode = stop is { } distance ? $$""", { "id": "stop", "kind": "stop-loss", "inputs": { "distance": {{Text(distance)}} } }""" : "";
         string stopWires = stop is null ? "" : """, { "from": "position.position", "to": "stop.position" }, { "from": "stop.order", "to": "position.orders" }""";
+        if (target is { } reach)
+        {
+            stopNode += $$""", { "id": "target", "kind": "take-profit", "inputs": { "distance": {{Text(reach)}} } }""";
+            stopWires += """, { "from": "position.position", "to": "target.position" }, { "from": "target.order", "to": "position.orders" }""";
+        }
+
         return $$"""
                  {
                    "formatVersion": 1,

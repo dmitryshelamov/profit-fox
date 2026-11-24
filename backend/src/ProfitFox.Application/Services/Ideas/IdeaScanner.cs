@@ -70,6 +70,11 @@ public sealed class IdeaScanner
     // catches up, the minutes run ahead of the boundaries, and the rule of one open idea still has to see them there.
     private readonly List<Idea> _ended = [];
 
+    // The orders of a close at which an idea of the strategy on the pair and timeframe was still open with its minute of the
+    // close not known yet (task 27.1), each as the idea it gives and the idea that holds it: a backtest takes the order when
+    // the holding one exits in that minute.
+    private readonly List<Held> _held = [];
+
     private readonly ILogger? _logger;
     private readonly Dictionary<string, DateTimeOffset> _logged = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
     private string? _lastFailure;
@@ -247,11 +252,13 @@ public sealed class IdeaScanner
         WarmUp(now, cancellationToken);
         ApplyWarmups(now);
         Walk(now);
+        Release();
         Boundaries(now);
         // The writes go one by one, each on its own (task 18.8): a failed snapshot does not stop the ideas, and the ideas of
         // a candle wait for the database rather than go.
         await Guarded("the new ideas", WritePendingAsync, cancellationToken);
         Walk(now);
+        Release();
         await Guarded("the snapshot of the market", SnapshotAsync, cancellationToken);
         await Guarded("the open ideas", SaveAsync, cancellationToken);
         if (Book.LastMinute is not { } last)
@@ -696,6 +703,7 @@ public sealed class IdeaScanner
         foreach ((DateTimeOffset close, List<TimeSpan> at) in closes)
         {
             WalkPending(close);
+            Release(close);
             List<Idea> born = Compute(close, at, [.. _pairs.Keys], now);
             Burst(born, born);
             _pending.AddRange(born);
@@ -732,6 +740,81 @@ public sealed class IdeaScanner
                     idea.Labels = [.. idea.Labels, IdeasSettings.BurstLabel];
                 }
             }
+        }
+    }
+
+    // The held orders whose minute of the close is known now (task 27.1), before <paramref name="before" /> when given: the
+    // rule of a backtest of a strategy by plan (PairPosition.Enter) takes the order of the close C when the previous cycle
+    // exited at C or earlier, and a stop or a target in the minute [C, C+1) exits at C. The holding idea is walked through
+    // that minute here: it exited in it — the idea of C is born, with the moment and the price of that close and the labels
+    // of it; it did not, or the pair had no trades then while the feed is past it, or it was left out meanwhile — there is
+    // no idea, as the backtest skips the order. A held order still unknown at a later close of its timeframe is dropped: the
+    // minute before that close came for every pair. The ideas born late get «⚡ всплеск» by the ideas of their close the
+    // scanner still holds.
+    private void Release(DateTimeOffset? before = null)
+    {
+        if (_held.Count == 0 || Book.LastMinute is not { } last)
+        {
+            return;
+        }
+
+        List<Idea> born = [];
+        foreach (Held held in _held.ToList())
+        {
+            Idea holding = held.Holding;
+            if (holding.State == IdeaState.Open && holding.ExitTime is null && !(holding.ComputedUntil >= held.Close))
+            {
+                DateTimeOffset from = holding.ComputedUntil is { } until ? until + OneMinute : holding.Moment;
+                DateTimeOffset to = held.Close + OneMinute < holding.Until ? held.Close + OneMinute : holding.Until;
+                foreach (LiveMinute minute in Book.Minutes(holding.Symbol, from, to))
+                {
+                    if (IdeaCycle.Minute(holding, Candle(minute), _costs))
+                    {
+                        break;
+                    }
+                }
+
+                if (_open.Contains(holding))
+                {
+                    _dirty.Add(holding);
+                }
+            }
+
+            bool? taken = holding switch
+            {
+                { State: IdeaState.Excluded } => false,
+                { ExitTime: { } exit } => exit <= held.Close,
+                { ComputedUntil: { } until } when until >= held.Close => false,
+                _ when Reached(holding.Symbol, held.Close + OneMinute, last) => false,
+                _ when before is { } next && next >= held.Close + held.Idea.Timeframe => false,
+                _ => null
+            };
+            if (taken is null)
+            {
+                continue;
+            }
+
+            _held.Remove(held);
+            if (taken == true)
+            {
+                born.Add(held.Idea);
+            }
+        }
+
+        if (born.Count == 0)
+        {
+            return;
+        }
+
+        foreach (IGrouping<DateTimeOffset, Idea> close in born.GroupBy(idea => idea.Moment))
+        {
+            Burst([.. _open.Concat(_ended).Concat(_pending).Where(idea => idea.Moment == close.Key), .. close], [.. close]);
+        }
+
+        _pending.AddRange(born);
+        if (before is { } at)
+        {
+            WalkPending(at);
         }
     }
 
@@ -816,20 +899,35 @@ public sealed class IdeaScanner
             }
 
             run.Pairs[symbol].WarmedUntil = close;
-            // An idea of the strategy on the pair and timeframe stops the order, unless its exit is by this close: an open one,
-            // one still waiting for its write, and one the walk already closed past this close while the feed caught up (task
-            // 26.1) — the trade of a backtest holds the position up to its exit however far the minutes ran.
-            if (step is null || run.Strategy is not { } strategy || step.Entry is null
-                || _open.Concat(_ended).Concat(_pending).Any(idea => idea.State is (IdeaState.Open or IdeaState.Closed) && idea.StrategyId == strategy.Id && idea.Symbol == symbol
-                                                                    && idea.Timeframe == timeframe && (idea.ExitTime ?? idea.Until) > close))
+            if (step is null || run.Strategy is not { } strategy || step.Entry is null)
             {
                 continue;
             }
 
-            if (IdeaBirth.Of(step, candle, strategy.Id, strategy.Name, strategy.Version, timeframe, symbol, LabelsOf(symbol, close)) is { } idea)
+            // An idea of the strategy on the pair and timeframe stops the order, unless its exit is by this close: an open one,
+            // one still waiting for its write, and one the walk already closed past this close while the feed caught up (task
+            // 26.1) — the trade of a backtest holds the position up to its exit however far the minutes ran. A stop or a target
+            // in the minute of the close exits at the close (task 27.1): while that minute of an open idea is not known, as at a
+            // live close, the order is held until it is.
+            Idea? holding = _open.Concat(_ended).Concat(_pending).FirstOrDefault(idea => idea.State is (IdeaState.Open or IdeaState.Closed) && idea.StrategyId == strategy.Id
+                                                                                      && idea.Symbol == symbol && idea.Timeframe == timeframe && (idea.ExitTime ?? idea.Until) > close);
+            if (holding is not null && (holding.State != IdeaState.Open || holding.ExitTime is not null || holding.ComputedUntil >= close))
             {
-                born.Add(idea);
+                continue;
             }
+
+            if (IdeaBirth.Of(step, candle, strategy.Id, strategy.Name, strategy.Version, timeframe, symbol, LabelsOf(symbol, close)) is not { } idea)
+            {
+                continue;
+            }
+
+            if (holding is not null)
+            {
+                _held.Add(new Held(idea, holding, close));
+                continue;
+            }
+
+            born.Add(idea);
         }
 
         return born;
@@ -1027,6 +1125,9 @@ public sealed class IdeaScanner
 
         public Run? Previous { get; init; }
     }
+
+    // An order of a close held by an open idea (task 27.1): the idea it gives and the idea that holds it.
+    private sealed record Held(Idea Idea, Idea Holding, DateTimeOffset Close);
 
     private sealed record Warmup(
         Run Run,
