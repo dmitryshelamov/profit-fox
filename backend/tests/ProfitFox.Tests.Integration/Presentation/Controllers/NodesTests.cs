@@ -46,7 +46,7 @@ public sealed class NodesTests
         NodeKindResponse[] kinds = await Catalog();
 
         Assert.That(kinds.Select(kind => kind.Kind), Has.None.AnyOf("enter", "position", "market-order", "limit-order", "close-position", "stop-loss", "take-profit", "close-after"));
-        Assert.That(kinds, Has.Length.EqualTo(25));
+        Assert.That(kinds, Has.Length.EqualTo(26));
     }
 
     [Test]
@@ -154,7 +154,7 @@ public sealed class NodesTests
             Is.EqualTo(new[]
             {
                 "parameters", "candle", "funding-rate", "pair-candle", "compare", "previous", "and", "or", "not", "first-time", "add", "subtract", "multiply",
-                "divide", "min", "max", "select", "window", "percentile", "hold", "atr", "rsi", "zones", "candles", "outputs"
+                "divide", "min", "max", "select", "window", "percentile", "hold", "atr", "rsi", "zones", "candles", "is-true", "outputs"
             }));
     }
 
@@ -202,11 +202,25 @@ public sealed class NodesTests
     [Test]
     public async Task The_new_kinds_are_in_the_catalog_of_a_strategy_of_both_kinds()
     {
-        string[] added = ["divide", "min", "max", "select", "window", "percentile", "hold", "atr", "rsi", "zones", "candles"];
+        string[] added = ["divide", "min", "max", "select", "is-true", "window", "percentile", "hold", "atr", "rsi", "zones", "candles"];
 
         Assert.That((await Catalog("/api/nodes/strategy")).Select(kind => kind.Kind), Is.SupersetOf(added));
         Assert.That((await Catalog("/api/nodes/strategy?kind=idea")).Select(kind => kind.Kind), Is.SupersetOf(added));
         Assert.That((await Catalog("/api/nodes/strategy?kind=bot")).Select(kind => kind.Kind), Is.SupersetOf(added));
+    }
+
+    /// <summary>
+    ///     Change add-setup-strategies, task 8.1: spec signal-constructor «Известная истина в каталоге».
+    /// </summary>
+    [Test]
+    public async Task Is_true_takes_a_boolean_gives_a_boolean_and_is_in_the_group_of_logic()
+    {
+        NodeKindResponse isTrue = (await Catalog()).Single(kind => kind.Kind == "is-true");
+
+        Assert.That(isTrue.Inputs, Is.EqualTo(new[] { new PinResponse("value", "boolean") }));
+        Assert.That(isTrue.Outputs, Is.EqualTo(new[] { new PinResponse("result", "boolean") }));
+        Assert.That(isTrue.Settings, Is.Empty);
+        Assert.That((isTrue.Title, isTrue.Group), Is.EqualTo(("Истинно", "Логика")));
     }
 
     /// <summary>

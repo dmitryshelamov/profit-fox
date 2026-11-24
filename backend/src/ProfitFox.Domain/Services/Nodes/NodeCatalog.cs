@@ -53,6 +53,11 @@ public static class NodeCatalog
     public const string Rsi = "rsi";
     public const string Zones = "zones";
     public const string Candles = "candles";
+
+    /// <summary>
+    ///     The logic node of change add-setup-strategies that reads a missing condition as false (design.md, decision 11).
+    /// </summary>
+    public const string IsTrue = "is-true";
     public const string Outputs = "outputs";
     public const string Position = "position";
     public const string Enter = "enter";
@@ -225,6 +230,7 @@ public static class NodeCatalog
                 CheckValue = WindowLength.Check
             },
             new NodeKind(Candles, [new PinDeclaration("count", PinType.Number)], [new PinDeclaration("duration", PinType.Duration)], [], _ => new CandlesNode()),
+            new NodeKind(IsTrue, [new PinDeclaration("value", PinType.Boolean)], [BooleanResult], [], _ => new IsTrueNode()),
             new NodeKind(
                 Outputs,
                 graph => [.. graph.Outputs.Select(output => new PinDeclaration(output.Name, output.Type))],

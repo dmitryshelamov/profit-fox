@@ -31,6 +31,7 @@ public static class NodeTitles
         [NodeCatalog.Or] = ("Или", Logic),
         [NodeCatalog.Not] = ("Не", Logic),
         [NodeCatalog.FirstTime] = ("Впервые", Logic),
+        [NodeCatalog.IsTrue] = ("Истинно", Logic),
         [NodeCatalog.Add] = ("Сложить", Numbers),
         [NodeCatalog.Subtract] = ("Вычесть", Numbers),
         [NodeCatalog.Multiply] = ("Умножить", Numbers),

@@ -543,6 +543,24 @@
     "settings": []
   },
   {
+    "kind": "is-true",
+    "title": "Истинно",
+    "group": "Логика",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "boolean"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "boolean"
+      }
+    ],
+    "settings": []
+  },
+  {
     "kind": "outputs",
     "title": "Выходы",
     "group": "Граф",

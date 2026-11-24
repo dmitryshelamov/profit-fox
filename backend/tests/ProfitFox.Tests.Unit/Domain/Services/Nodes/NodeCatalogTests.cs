@@ -7,7 +7,7 @@ namespace ProfitFox.Tests.Unit.Domain.Services.Nodes;
 
 /// <summary>
 ///     The list of kinds: the thirteen a signal is built from, with the arithmetic of change add-position-node (task 2.2) and
-///     the numbers, windows, indicators and candles of change add-setup-strategies (task 2.1),
+///     the numbers, windows, indicators and candles of change add-setup-strategies (task 2.1) and its <c>is-true</c> (task 8.1),
 ///     the position nodes of a strategy (change add-strategy-graph, task 1.1; change add-position-node, task 2.2) and the
 ///     <c>signal</c> node of a strategy (change add-strategy-constructor, task 2.1).
 /// </summary>
@@ -18,7 +18,7 @@ public sealed class NodeCatalogTests
     private static readonly string[] SignalKinds =
         [
             "parameters", "candle", "funding-rate", "pair-candle", "compare", "previous", "and", "or", "not", "first-time", "add", "subtract", "multiply",
-            "divide", "min", "max", "select", "window", "percentile", "hold", "atr", "rsi", "zones", "candles", "outputs"
+            "divide", "min", "max", "select", "window", "percentile", "hold", "atr", "rsi", "zones", "candles", "is-true", "outputs"
         ];
 
     private static readonly string[] PositionKinds =
@@ -135,6 +135,7 @@ public sealed class NodeCatalogTests
             "rsi: value:number length:number -> result:number",
             "zones: atr:number price:number length:number merge:number strength:number -> above:number below:number",
             "candles: count:number -> duration:duration",
+            "is-true: value:boolean -> result:boolean",
             "outputs: entry:event ->",
             "position: orders:order* -> position:position open:boolean quantity:number averagePrice:number lastEntryPrice:number invested:number sinceLastEntry:duration",
             "enter: when:event size:number -> order:order",
