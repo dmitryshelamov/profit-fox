@@ -28,22 +28,45 @@ public sealed class PairEventsTests
         Assert.That(events, Is.EqualTo(new[] { Utc(2026, 1, 5, 12) }), "the high rate is first seen at the close of the next traded candle");
     }
 
+    /// <summary>
+    ///     Task 27.3 (engine version 4): before it the candle closed at 8:00 saw the payment of 8:00 and gave the event at 8:00.
+    /// </summary>
     [Test]
-    public void A_payment_at_the_close_is_seen_by_that_candle()
+    public void A_payment_at_the_close_is_seen_by_the_next_candle()
     {
-        HistoryCandle[] candles = [Traded(Utc(2026, 1, 5, 0)), Traded(Utc(2026, 1, 5, 4))];
+        HistoryCandle[] candles = [Traded(Utc(2026, 1, 5, 0)), Traded(Utc(2026, 1, 5, 4)), Traded(Utc(2026, 1, 5, 8))];
         HistoryPayment[] funding = [Paid(Utc(2026, 1, 5, 0), "0.0001"), Paid(Utc(2026, 1, 5, 8), "0.001")];
 
         IReadOnlyList<DateTimeOffset> events = PairEvents.Of(H0001, FourHours, "BTCUSDT", candles, funding);
 
-        Assert.That(events, Is.EqualTo(new[] { Utc(2026, 1, 5, 8) }));
+        Assert.That(events, Is.EqualTo(new[] { Utc(2026, 1, 5, 12) }));
+    }
+
+    /// <summary>
+    ///     Change add-ideas-and-market, task 27.3 (engine version 4): a payment at <c>T</c> belongs to the candle that closes
+    ///     after <c>T</c>, in a backtest as live, where the payment comes a minute or three after its time. The payment of 8:00
+    ///     gives the event of <c>funding-rate</c> on the candle of <c>5m</c> closed at 8:05 and on that of <c>1h</c> closed at
+    ///     9:00, not on the candles closed at 8:00.
+    /// </summary>
+    [Test]
+    public void A_payment_belongs_to_the_candle_that_closes_after_it()
+    {
+        HistoryPayment[] funding = [Paid(Utc(2026, 1, 5, 0), "0.0001"), Paid(Utc(2026, 1, 5, 8), "0.001")];
+        HistoryCandle[] fives = [.. Enumerable.Range(0, 4).Select(index => Traded(Utc(2026, 1, 5, 7).AddMinutes(50 + (5 * index))))];
+        HistoryCandle[] hours = [Traded(Utc(2026, 1, 5, 7)), Traded(Utc(2026, 1, 5, 8))];
+
+        IReadOnlyList<DateTimeOffset> onFive = PairEvents.Of(H0001, TimeSpan.FromMinutes(5), "BTCUSDT", fives, funding);
+        IReadOnlyList<DateTimeOffset> onHour = PairEvents.Of(H0001, TimeSpan.FromHours(1), "BTCUSDT", hours, funding);
+
+        Assert.That(onFive, Is.EqualTo(new[] { Utc(2026, 1, 5, 8).AddMinutes(5) }));
+        Assert.That(onHour, Is.EqualTo(new[] { Utc(2026, 1, 5, 9) }));
     }
 
     [Test]
     public void An_event_whose_trade_leaves_the_period_is_still_returned()
     {
         HistoryCandle[] candles = [Traded(Utc(2026, 5, 15, 16)), Traded(Utc(2026, 5, 15, 20))];
-        HistoryPayment[] funding = [Paid(Utc(2026, 5, 15, 16), "0.0001"), Paid(Utc(2026, 5, 16), "0.001")];
+        HistoryPayment[] funding = [Paid(Utc(2026, 5, 15, 16), "0.0001"), Paid(Utc(2026, 5, 15, 20), "0.001")];
 
         IReadOnlyList<DateTimeOffset> events = PairEvents.Of(H0001, FourHours, "BTCUSDT", candles, funding);
 

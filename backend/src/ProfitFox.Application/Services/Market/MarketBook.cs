@@ -145,11 +145,12 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
     }
 
     /// <summary>
-    ///     The last payment of a pair at or before <paramref name="moment" />, as a graph reads it at a close.
+    ///     The last payment of a pair before <paramref name="moment" />, as a graph reads it at a close: a payment at the close
+    ///     belongs to the next candle, as in a backtest (task 27.3, <c>PairCandles.Closed</c>).
     /// </summary>
     public FundingPayment? LastPayment(string symbol, DateTimeOffset moment)
     {
-        return _pairs.TryGetValue(symbol, out Pair? pair) ? pair.Payments.LastOrDefault(payment => payment.Time <= moment) : null;
+        return _pairs.TryGetValue(symbol, out Pair? pair) ? pair.Payments.LastOrDefault(payment => payment.Time < moment) : null;
     }
 
     /// <summary>

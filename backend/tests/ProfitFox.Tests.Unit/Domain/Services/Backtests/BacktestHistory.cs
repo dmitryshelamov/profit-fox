@@ -37,12 +37,14 @@ internal sealed class BacktestHistory
     public List<(DateTimeOffset From, DateTimeOffset To)> MinuteReads { get; } = [];
 
     /// <summary>
-    ///     A payment of a high rate at <paramref name="time" /> and of a low one at <paramref name="low" />: the funding-short
-    ///     strategy gives an order at the close of the first candle that sees the high one.
+    ///     A payment of a high rate a minute before <paramref name="time" /> and of a low one at <paramref name="low" />: the
+    ///     funding-short strategy gives an order at the close of the first candle that sees the high one, the candle closed at
+    ///     <paramref name="time" />. A payment belongs to the candle that closes after it (change add-ideas-and-market, task
+    ///     27.3); the position pays no payment before its entry either way, so the trades are those of a payment at the close.
     /// </summary>
     public BacktestHistory High(DateTimeOffset time, DateTimeOffset? low = null)
     {
-        Payments.Add((time, "0.0006"));
+        Payments.Add((time.AddMinutes(-1), "0.0006"));
         Payments.Add((low ?? time.AddHours(1), "0.0001"));
         Payments.Sort((a, b) => a.Time.CompareTo(b.Time));
         return this;

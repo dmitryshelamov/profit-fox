@@ -5,7 +5,9 @@ namespace ProfitFox.Domain.Services.Signals;
 
 /// <summary>
 ///     The candles of one pair as a graph gets them, a signal and a strategy alike (spec signal-preview): only the candles
-///     with trades, in the order given, each with the last funding payment paid by its close.
+///     with trades, in the order given, each with the last funding payment paid before its close. A payment at <c>T</c>
+///     belongs to the candle that closes after <c>T</c> (change add-ideas-and-market, task 27.3, engine version 4): live the
+///     payment comes a minute or three after its time, so the candle that closes at <c>T</c> does not know it yet.
 /// </summary>
 public static class PairCandles
 {
@@ -19,7 +21,7 @@ public static class PairCandles
         foreach (HistoryCandle candle in candles.Where(candle => candle.HasTrades))
         {
             var closed = candle.ToClosedCandle(timeframe);
-            while (paid < payments.Length && payments[paid].Time <= closed.CloseTime)
+            while (paid < payments.Length && payments[paid].Time < closed.CloseTime)
             {
                 paid++;
             }

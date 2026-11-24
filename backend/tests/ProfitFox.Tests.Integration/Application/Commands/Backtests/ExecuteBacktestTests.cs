@@ -161,11 +161,12 @@ public sealed class ExecuteBacktestTests
     [Test]
     public async Task A_backtest_up_to_today_reads_no_funding_of_today_and_leaves_the_trade_that_ends_there_out_on_funding()
     {
-        // The strategy enters at 08:00 every day for 16 hours: its trade of the last day ends exactly at the end of history.
-        Backtest later = await Execute(Generate(after: "16h"), new FixedTime(End.AddDays(1).AddHours(9)));
+        // The strategy enters at 16:00 every day for 8 hours: its trade of the last day ends exactly at the end of history.
+        // The payment of 08:00 belongs to the candle closed after it (task 27.3), and the 4h candle of 08:00 has no trades.
+        Backtest later = await Execute(Generate(after: "8h"), new FixedTime(End.AddDays(1).AddHours(9)));
         _server.Data.FundingRequests.Clear();
 
-        Backtest today = await Execute(Generate(after: "16h"), new FixedTime(End.AddHours(9)));
+        Backtest today = await Execute(Generate(after: "8h"), new FixedTime(End.AddHours(9)));
 
         Assert.That(today.Status, Is.EqualTo(BacktestState.Done), today.Reason);
         Assert.That(_server.Data.FundingRequests.Select(request => request.To.ToDateTimeOffset()), Has.All.LessThanOrEqualTo(End));
@@ -184,7 +185,7 @@ public sealed class ExecuteBacktestTests
     [Test]
     public async Task A_backtest_up_to_today_that_runs_across_midnight_treats_every_pair_as_before_midnight()
     {
-        Backtest before = await Execute(Generate(after: "16h"), new FixedTime(End.AddHours(23).AddMinutes(59)));
+        Backtest before = await Execute(Generate(after: "8h"), new FixedTime(End.AddHours(23).AddMinutes(59)));
         var clock = new MidnightClock(End.AddHours(23).AddMinutes(59), End.AddDays(1).AddMinutes(1));
         _server.Data.BeforeCandles = (request, _) =>
         {
@@ -196,7 +197,7 @@ public sealed class ExecuteBacktestTests
             return Task.CompletedTask;
         };
 
-        Backtest across = await Execute(Generate(after: "16h"), clock);
+        Backtest across = await Execute(Generate(after: "8h"), clock);
 
         Assert.That(clock.Passed, Is.True, "the clock passed midnight between the pairs");
         Assert.That(across.Status, Is.EqualTo(BacktestState.Done), across.Reason);

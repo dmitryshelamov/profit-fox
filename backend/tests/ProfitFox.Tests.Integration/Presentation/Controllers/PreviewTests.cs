@@ -62,7 +62,7 @@ public sealed class PreviewTests
         Assert.That(preview.Candles, Has.Count.GreaterThan(100));
         Assert.That(preview.Coverage.First().From, Is.EqualTo(FakeMarketData.CoveredFrom.ToUnixTimeMilliseconds()));
         Assert.That(preview.PeriodEnd, Is.EqualTo(FixedTime.ExplorationEnd.ToUnixTimeMilliseconds()));
-        Assert.That(preview.Events, Has.Count.EqualTo(28), "every day of the four weeks at 08:00");
+        Assert.That(preview.Events, Has.Count.EqualTo(28), "once a day of the four weeks");
         (IReadOnlyList<EventRow> rows, _) = await ReferenceBacktests.Run(market, "H0001");
         Assert.That(
             preview.Events.Select(item => DateTimeOffset.FromUnixTimeMilliseconds(item.Moment)),
@@ -256,20 +256,21 @@ public sealed class PreviewTests
         long step = (long)TimeSpan.FromMinutes(15).TotalMilliseconds;
         Assert.That(preview.Candles.Zip(preview.Candles.Skip(1)).Select(pair => (pair.Second.OpenTime - pair.First.OpenTime) % step), Has.All.Zero);
         Assert.That(preview.Candles.Zip(preview.Candles.Skip(1)).Any(pair => pair.Second.OpenTime - pair.First.OpenTime == step), Is.True);
-        Assert.That(preview.Events, Has.Count.EqualTo(28), "every day of the four weeks at 08:00");
+        Assert.That(preview.Events, Has.Count.EqualTo(28), "every day of the four weeks at 09:15");
         var closes = new HashSet<long>(preview.Candles.Select(candle => candle.OpenTime + step));
         Assert.That(preview.Events.Select(item => item.Moment), Has.All.Matches<long>(moment => moment % step == 0));
         Assert.That(
             preview.Events.Select(item => DateTimeOffset.FromUnixTimeMilliseconds(item.Moment).TimeOfDay),
-            Has.All.EqualTo(TimeSpan.FromHours(8)),
-            "the payment of 08:00 is known at the close of the 15m candle 07:45");
+            Has.All.EqualTo(new TimeSpan(9, 15, 0)),
+            "the payment of 08:00 belongs to the candle closed after it (task 27.3), and the candles of 08:00 to 09:00 have no trades");
         Assert.That(closes.Contains(preview.Events[0].Moment), Is.True);
         Assert.That(market.Data.CandleRequests.Select(request => request.Interval), Has.All.EqualTo(ProfitFox.Infrastructure.Clients.MarketData.Protos.CandleInterval.FifteenMinutes));
     }
 
     /// <summary>
     ///     Change add-ideas-and-market, task 3.4: spec signal-preview «Предпросмотр сигнала-состояния» — the state of a high
-    ///     rate holds from the payment of 08:00 to the next one, eight candles of 1h, and gives one event at 08:00 a day.
+    ///     rate holds from the payment of 08:00 to the next one, eight candles of 1h, and gives one event a day: at 10:00, the
+    ///     close of the first candle with trades after the payment (task 27.3; the minutes of 08:00 to 09:00 have no trades).
     /// </summary>
     [Test]
     public async Task A_signal_state_gives_an_event_where_it_turns_true()
@@ -282,7 +283,7 @@ public sealed class PreviewTests
         Assert.That(preview.Events, Has.Count.EqualTo(28), "one a day, not one a candle");
         Assert.That(
             preview.Events.Select(item => DateTimeOffset.FromUnixTimeMilliseconds(item.Moment).TimeOfDay),
-            Has.All.EqualTo(TimeSpan.FromHours(8)));
+            Has.All.EqualTo(TimeSpan.FromHours(10)));
     }
 
     /// <summary>
@@ -302,7 +303,10 @@ public sealed class PreviewTests
         Assert.That(preview.Candles.Zip(preview.Candles.Skip(1)).Select(pair => (pair.Second.OpenTime - pair.First.OpenTime) % step), Has.All.Zero);
         Assert.That(preview.Orders, Has.Count.EqualTo(28));
         Assert.That(preview.Orders.Select(order => order.Moment % step), Has.All.Zero);
-        Assert.That(preview.Orders.Select(order => DateTimeOffset.FromUnixTimeMilliseconds(order.Moment).TimeOfDay), Has.All.EqualTo(TimeSpan.FromHours(8)));
+        Assert.That(
+            preview.Orders.Select(order => DateTimeOffset.FromUnixTimeMilliseconds(order.Moment).TimeOfDay),
+            Has.All.EqualTo(new TimeSpan(9, 5, 0)),
+            "the payment of 08:00 belongs to the candle closed after it (task 27.3), and the candles of 08:00 to 09:00 have no trades");
     }
 
     /// <summary>

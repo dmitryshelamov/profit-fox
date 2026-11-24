@@ -57,21 +57,33 @@ public sealed class EngineVersionTests
             $"The results of a reference strategy changed, or one has no digest: raise EngineVersion.Number and add {next} to EngineVersions.json.");
     }
 
+    /// <summary>
+    ///     With the hash of the hypothesis as the seed the strategies gave the trades of engine version 2 up to version 3.
+    ///     Version 4 (change add-ideas-and-market, task 27.3) puts a payment at the close of a candle on the candle after it:
+    ///     the orders of H0001 and H0002 come later than in version 2, and the random entries drawn for them go with them. So
+    ///     the same seed now gives the trades recorded here for version 4; <c>EngineTransition.json</c> keeps what version 2
+    ///     gave, and the orders still do not depend on the seed.
+    /// </summary>
     [Test]
-    public async Task With_the_hash_of_the_hypothesis_as_the_seed_the_strategies_give_the_trades_of_engine_version_2()
+    public async Task With_the_hash_of_the_hypothesis_as_the_seed_the_strategies_give_the_trades_recorded_for_engine_version_4()
     {
         Dictionary<string, Transition> recorded = JsonSerializer.Deserialize<Dictionary<string, Transition>>(File.ReadAllText(Path.Combine(Fixtures, "EngineTransition.json")), Json)!;
         foreach (string reference in References)
         {
             Transition version2 = recorded[reference];
+            (string orders, string randoms) = Version4[reference];
 
             (IReadOnlyList<EventRow> rows, _) = await Run(reference, version2.Seed);
             (IReadOnlyList<EventRow> own, _) = await Run(reference, seed: null);
 
-            Assert.That(EngineDigests.Orders(rows), Is.EqualTo(version2.Orders), $"the trades of the orders of {reference}");
-            Assert.That(EngineDigests.Randoms(rows), Is.EqualTo(version2.Randoms), $"the random entries of {reference} and their trades");
-            Assert.That(EngineDigests.Orders(own), Is.EqualTo(version2.Orders), "the orders do not depend on the seed");
-            Assert.That(EngineDigests.Randoms(own), Is.Not.EqualTo(version2.Randoms), "the seed of the graph draws other random entries");
+            Assert.Multiple(() =>
+            {
+                Assert.That(EngineDigests.Orders(rows), Is.EqualTo(orders), $"the trades of the orders of {reference}");
+                Assert.That(EngineDigests.Randoms(rows), Is.EqualTo(randoms), $"the random entries of {reference} and their trades");
+                Assert.That(EngineDigests.Orders(rows), Is.Not.EqualTo(version2.Orders), $"the orders of {reference} moved from those of version 2");
+                Assert.That(EngineDigests.Orders(own), Is.EqualTo(orders), "the orders do not depend on the seed");
+                Assert.That(EngineDigests.Randoms(own), Is.Not.EqualTo(randoms), "the seed of the graph draws other random entries");
+            });
         }
     }
 
@@ -96,8 +108,8 @@ public sealed class EngineVersionTests
     {
         EngineEntry[] recorded = Recorded();
 
-        Assert.That(EngineVersion.Number, Is.EqualTo(3));
-        Assert.That(recorded.Select(entry => entry.Version), Is.EqualTo(new[] { 1, 2, 3 }));
+        Assert.That(EngineVersion.Number, Is.EqualTo(4));
+        Assert.That(recorded.Select(entry => entry.Version), Is.EqualTo(new[] { 1, 2, 3, 4 }));
         Assert.That(recorded.Single(entry => entry.Version == 2).Digests["H0001"], Is.EqualTo(recorded.Single(entry => entry.Version == 1).Digests["H0001"]));
         Assert.That(recorded.Single(entry => entry.Version == 1).Digests.Keys, Is.EqualTo(new[] { "H0001" }));
     }
@@ -118,6 +130,14 @@ public sealed class EngineVersionTests
         Assert.That(numbers.Skipped, Is.Zero);
         Assert.That(numbers.Trades, Is.GreaterThan(0));
     }
+
+    // What the hash of the hypothesis as the seed gives in engine version 4 (task 27.3), by the name of the reference: the
+    // digests of the trades of the orders and of the random entries. Version 2 gave those of EngineTransition.json.
+    private static readonly Dictionary<string, (string Orders, string Randoms)> Version4 = new Dictionary<string, (string Orders, string Randoms)>(StringComparer.Ordinal)
+    {
+        ["H0001"] = ("d3d55c81204f25f0c570e55353c71692343b38ffb015e196975a2a3fd265e81d", "b1df364ef629dfcccce8d8d60a4c5c2c84c58ea01b9268b286a4fe206a978250"),
+        ["H0002"] = ("9cacfe641a799a07d29404053d92708e14f62b3a90bb9e2e77d766307a9dc3b3", "503d2c9ea6dde2c4aa04f32c6cbbef9d9d8ccbe6212c856d753cb1942da0a14b")
+    };
 
     private static async Task<(IReadOnlyList<EventRow> Rows, SetNumbers Numbers)> Run(string reference, string? seed)
     {

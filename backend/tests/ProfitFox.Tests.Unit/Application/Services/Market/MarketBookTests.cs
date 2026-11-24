@@ -213,8 +213,9 @@ public sealed class MarketBookTests
         book.Apply(new LivePoint(LivePointKind.FundingPayment, "SOLUSDT", Ten.AddHours(6), 0.0002m));
 
         Assert.That(book.Snapshot("SOLUSDT")!.NextFunding, Is.EqualTo(Ten.AddHours(14)));
-        Assert.That(book.LastPayment("SOLUSDT", Ten.AddHours(6)), Is.EqualTo(new FundingPayment(Ten.AddHours(6), 0.0002m)));
-        Assert.That(book.LastPayment("SOLUSDT", Ten.AddHours(5)), Is.EqualTo(new FundingPayment(Ten.AddHours(-2), 0.0001m)));
+        // A payment at the close belongs to the next candle (task 27.3): the close at its time does not see it.
+        Assert.That(book.LastPayment("SOLUSDT", Ten.AddHours(6).AddMinutes(5)), Is.EqualTo(new FundingPayment(Ten.AddHours(6), 0.0002m)));
+        Assert.That(book.LastPayment("SOLUSDT", Ten.AddHours(6)), Is.EqualTo(new FundingPayment(Ten.AddHours(-2), 0.0001m)));
     }
 
     [Test]

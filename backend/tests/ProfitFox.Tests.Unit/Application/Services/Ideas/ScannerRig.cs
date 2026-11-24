@@ -8,9 +8,14 @@ using ProfitFox.Application.Services.Ideas;
 using ProfitFox.Application.Services.Market;
 using ProfitFox.Domain.Entities.Strategies;
 using ProfitFox.Domain.Services.Graph;
+using ProfitFox.Domain.Services.Runs;
+using ProfitFox.Domain.Services.Strategies;
+using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Ideas;
 using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Domain.ValueObjects.Positions;
 using ProfitFox.Domain.ValueObjects.Strategies.Enums;
+using ProfitFox.Domain.ValueObjects.Trades;
 using ProfitFox.Tests.Shared.Logging;
 using ProfitFox.Tests.Unit.Application.Commands.Signals;
 using ProfitFox.Tests.Unit.Application.Commands.Strategies;
@@ -88,6 +93,13 @@ internal sealed class ScannerRig
     public IdeasSettings Burst { get; } = new IdeasSettings();
 
     public IdeaScanner Scanner { get; }
+
+    /// <summary>
+    ///     The minutes and the payments the feed told, in order: what <see cref="Backtest" /> gives a backtest.
+    /// </summary>
+    public List<LiveMinute> Told { get; } = [];
+
+    public List<(string Symbol, DateTimeOffset Time, decimal Rate)> Paid { get; } = [];
 
     /// <summary>
     ///     The candles of a warm-up: every candle of the interval from two days back with the close <paramref name="close" />.
@@ -168,10 +180,63 @@ internal sealed class ScannerRig
     {
         for (int minute = 0; minute < count; minute++)
         {
-            await Scanner.ApplyAsync(
-                new LiveMinute(symbol, from.AddMinutes(minute), 100, high ?? Math.Max(100, close), low ?? Math.Min(100, close), close, 1, close),
-                CancellationToken.None);
+            var told = new LiveMinute(symbol, from.AddMinutes(minute), 100, high ?? Math.Max(100, close), low ?? Math.Min(100, close), close, 1, close);
+            Told.Add(told);
+            await Scanner.ApplyAsync(told, CancellationToken.None);
         }
+    }
+
+    /// <summary>
+    ///     The feed of payments tells the payment of the pair at <paramref name="time" />.
+    /// </summary>
+    public Task Pay(string symbol, DateTimeOffset time, decimal rate)
+    {
+        Paid.Add((symbol, time, rate));
+        return Scanner.ApplyAsync(new LivePoint(LivePointKind.FundingPayment, symbol, time, rate), CancellationToken.None);
+    }
+
+    /// <summary>
+    ///     What a backtest of the strategy <paramref name="name" /> gives on the pair over [10:00, <paramref name="end" />]
+    ///     (task 17.4): the candles of the warm-up up to 10:00 and then those of the minutes told, the payments of the history
+    ///     and of the feed, the minutes told as the path, the costs of an idea. Each order that opened a cycle, with it.
+    /// </summary>
+    public IReadOnlyList<(DateTimeOffset Moment, CycleOutcome Cycle)> Backtest(string name, TimeSpan timeframe, string symbol, DateTimeOffset end)
+    {
+        TradingStrategy strategy = StrategyGraph.ReadStrategy(Strategies.Documents.Single(document => document.Name == name).Graph, StrategyKind.Idea).Value!;
+        string id = Instruments.Single(pair => pair.Symbol == symbol).Id;
+        HistoryCandle[] minutes =
+        [
+            .. Told.Where(minute => minute.Symbol == symbol).GroupBy(minute => minute.OpenTime).Select(same => same.Last()).OrderBy(minute => minute.OpenTime)
+                .Select(minute => new HistoryCandle(minute.OpenTime, Text(minute.Open), Text(minute.High), Text(minute.Low), Text(minute.Close), Text(minute.Volume), Turnover: null, BuyVolume: null))
+        ];
+        List<HistoryCandle> candles = [.. History.Candles[id](timeframe, Ten)];
+        for (DateTimeOffset open = Ten; open + timeframe <= end; open += timeframe)
+        {
+            HistoryCandle[] inside = [.. minutes.Where(minute => minute.OpenTime >= open && minute.OpenTime < open + timeframe)];
+            if (inside.Length > 0)
+            {
+                decimal high = inside.Max(minute => decimal.Parse(minute.High, CultureInfo.InvariantCulture));
+                decimal low = inside.Min(minute => decimal.Parse(minute.Low, CultureInfo.InvariantCulture));
+                candles.Add(new HistoryCandle(open, inside[0].Open, Text(high), Text(low), inside[^1].Close, Text(inside.Length), Turnover: null, BuyVolume: null));
+            }
+        }
+
+        HistoryPayment[] payments =
+        [
+            .. (History.Payments.TryGetValue(id, out List<HistoryPayment>? history) ? history : []).Concat(Paid.Where(paid => paid.Symbol == symbol).Select(paid => new HistoryPayment(paid.Time, Text(paid.Rate))))
+                .GroupBy(payment => payment.Time).Select(same => same.First()).OrderBy(payment => payment.Time)
+        ];
+        var funding = new HistoryRead<HistoryPayment>([new TimeRange(Ten.AddDays(-2), end.AddSeconds(1))], payments);
+        var orders = new PairOrders(PairSteps.Of(strategy, timeframe, symbol, candles, payments), Ten, end, TradeCosts.Default);
+        foreach (long week in orders.Weeks)
+        {
+            (DateTimeOffset from, DateTimeOffset to) = orders.Span(week);
+            var read = new HistoryRead<HistoryCandle>([new TimeRange(from, to)], [.. minutes.Where(minute => minute.OpenTime >= from && minute.OpenTime < to)]);
+            orders.Evaluate(week, MinutePaths.Build(from, to, read, funding));
+        }
+
+        IReadOnlyList<CycleOutcome> cycles = orders.Cycles();
+        return [.. orders.Outcomes().Where(order => order.Cycle is not null).Select(order => (order.Moment, cycles[order.Cycle!.Value]))];
     }
 
     /// <summary>
