@@ -110,6 +110,15 @@ internal sealed class IdeaRepository(NpgsqlDataSource database) : IIdeaRepositor
         return new ListPage<IdeaSummary>(rows, total, query.Order.Page, query.Order.PageSize);
     }
 
+    public async Task<IReadOnlyList<IdeaStrategyCount>> StrategyCountsAsync(IdeaListQuery query, CancellationToken cancellationToken)
+    {
+        var parameters = new DynamicParameters();
+        string where = Where(query with { Strategy = null }, parameters);
+        string sql = $"SELECT {ListColumns.StrategyName} AS \"Strategy\", count(*)::int AS \"Ideas\" {Joined} WHERE {where} GROUP BY 1";
+        await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        return [.. await connection.QueryAsync<IdeaStrategyCount>(new CommandDefinition(sql, parameters, cancellationToken: cancellationToken))];
+    }
+
     public async Task<(int Open, int Closed)> CountsAsync(CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);

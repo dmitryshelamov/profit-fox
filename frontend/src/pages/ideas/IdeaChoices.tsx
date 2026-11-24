@@ -29,9 +29,10 @@ export function useLabelChoices(): string[] {
 }
 
 /**
- * The choices above a table of ideas: part of the symbol, strategy, timeframe, side and label; the open ideas add «только
- * в плюсе» and «только со стопом», the journal the reason of the exit and the period; the ideas of a pair have no search
- * and add the state.
+ * The choices above a table of ideas: part of the symbol, timeframe, side and label; the open ideas add «только в плюсе»
+ * and «только со стопом», the journal the reason of the exit and the period; the ideas of a pair have no search and add
+ * the strategy and the state. «Открытые» and «Журнал» choose the strategy by the row of strategies (change
+ * add-setup-strategies).
  */
 export function IdeaChoiceRow({
   kind,
@@ -60,21 +61,23 @@ export function IdeaChoiceRow({
           onChange={(event) => set({ search: event.target.value })}
         />
       )}
-      <SelectField
-        aria-label="Стратегия"
-        className="w-[170px]"
-        value={choices.strategy ?? ''}
-        onChange={(event) => set({ strategy: event.target.value })}
-      >
-        <option value="">Стратегия: все</option>
-        {(strategies.data ?? [])
-          .filter((strategy) => strategy.kind !== 'bot')
-          .map((strategy) => (
-            <option key={strategy.name} value={strategy.name}>
-              {strategy.name}
-            </option>
-          ))}
-      </SelectField>
+      {kind === 'pair' && (
+        <SelectField
+          aria-label="Стратегия"
+          className="w-[170px]"
+          value={choices.strategy ?? ''}
+          onChange={(event) => set({ strategy: event.target.value })}
+        >
+          <option value="">Стратегия: все</option>
+          {(strategies.data ?? [])
+            .filter((strategy) => strategy.kind !== 'bot')
+            .map((strategy) => (
+              <option key={strategy.name} value={strategy.name}>
+                {strategy.name}
+              </option>
+            ))}
+        </SelectField>
+      )}
       <SelectField
         aria-label="Таймфрейм"
         className="w-[100px]"

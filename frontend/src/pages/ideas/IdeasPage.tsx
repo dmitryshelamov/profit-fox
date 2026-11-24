@@ -22,6 +22,7 @@ import { useListSettings } from '@/shared/ui/useListSettings';
 import { IdeaChoiceRow } from './IdeaChoices';
 import { closedColumns, openColumns, summaryColumns } from './ideaColumns';
 import { ScannerBanner } from './ScannerBanner';
+import { StrategyChips } from './StrategyChips';
 
 /** How often the open ideas and the state of the scanner are read again (spec «Раздел «Идеи»»: at least every 15 s). */
 export const ideasRefreshMs = 15_000;
@@ -192,6 +193,13 @@ function OpenIdeas({ filter, onGone, choices, page, onChoices, onPage, onOpen }:
         count={ideas.data ? `${Number(ideas.data.total)} идей` : undefined}
         onChange={onChoices}
       />
+      <StrategyChips
+        state="open"
+        choices={choices}
+        filter={filter}
+        refetchInterval={ideasRefreshMs}
+        onChoose={(strategy) => onChoices({ ...choices, strategy })}
+      />
       {ideas.isError && (
         <p role="alert" className="text-err">
           {ideas.error.message}
@@ -289,6 +297,15 @@ function Journal({ filter, onGone, choices, page, onChoices, onPage, onOpen }: L
         onChange={(next) => {
           setSummaryPage(1);
           onChoices(next);
+        }}
+      />
+      <StrategyChips
+        state="closed"
+        choices={choices}
+        filter={filter}
+        onChoose={(strategy) => {
+          setSummaryPage(1);
+          onChoices({ ...choices, strategy });
         }}
       />
       {problem && (

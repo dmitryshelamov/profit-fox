@@ -89,6 +89,11 @@ public sealed class MemoryIdeaRepository : IIdeaRepository
     {
         return Task.FromResult((Ideas.Count(idea => idea.State == IdeaState.Open), Ideas.Count(idea => idea.State == IdeaState.Closed)));
     }
+
+    public Task<IReadOnlyList<IdeaStrategyCount>> StrategyCountsAsync(IdeaListQuery query, CancellationToken cancellationToken)
+    {
+        throw new NotSupportedException("The counts by strategy are those of the database.");
+    }
 }
 
 /// <summary>

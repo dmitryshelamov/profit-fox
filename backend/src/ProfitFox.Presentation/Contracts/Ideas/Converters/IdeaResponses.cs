@@ -66,6 +66,11 @@ public static class IdeaResponses
         return new IdeaSummaryPageResponse([.. result.Page.Items.Select(Of)], result.Page.Total, result.Page.Page, result.Page.PageSize, result.FilterGone);
     }
 
+    public static IdeaStrategyCountsResponse Of(IdeaStrategiesResult result)
+    {
+        return new IdeaStrategyCountsResponse(result.Total, [.. result.Strategies.Select(row => new IdeaStrategyCountResponse(row.Strategy, row.Ideas))], result.FilterGone);
+    }
+
     public static ScannerStateResponse Of(ScannerStateInternal state)
     {
         return new ScannerStateResponse(

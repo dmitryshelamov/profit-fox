@@ -9,6 +9,7 @@ export type IdeaSummaryPage = Schemas['IdeaSummaryPageResponse'];
 export type ScannerState = Schemas['ScannerStateResponse'];
 export type StrategyIdeas = Schemas['StrategyIdeasResponse'];
 export type SignalLabel = Schemas['SignalLabelResponse'];
+export type IdeaStrategyCounts = Schemas['IdeaStrategyCountsResponse'];
 
 /** The choices above a table of ideas. */
 export interface IdeaChoices {
@@ -47,6 +48,23 @@ export async function summarizeIdeas(
 ): Promise<IdeaSummaryPage> {
   const query = { ...pageQuery(request), ...choicesQuery(choices) };
   return pageOf(await api.GET('/api/ideas/summary', { params: { query } }));
+}
+
+/**
+ * How many open or closed ideas each strategy has with the choices of the list (spec strategy-ideas «Число идей по
+ * стратегиям»): the strategy of the choices does not narrow the count, so it is not sent.
+ */
+export async function countIdeasByStrategy(
+  state: 'open' | 'closed',
+  choices: IdeaChoices = {},
+  filter?: string,
+): Promise<IdeaStrategyCounts> {
+  const query = {
+    ...choicesQuery({ ...choices, strategy: undefined }),
+    state,
+    ...(filter === undefined ? {} : { filter }),
+  };
+  return unwrap(await api.GET('/api/ideas/strategies', { params: { query } }));
 }
 
 export async function getScannerState(): Promise<ScannerState> {

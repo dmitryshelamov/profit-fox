@@ -49,6 +49,13 @@ public interface IIdeaRepository
     Task<ListPage<IdeaSummary>> SummaryAsync(IdeaListQuery query, CancellationToken cancellationToken);
 
     /// <summary>
+    ///     How many ideas that match the query each strategy has, by its name, in no particular order; the strategy of the
+    ///     query is not a condition (spec strategy-ideas «Число идей по стратегиям»). A strategy without such ideas has no
+    ///     row.
+    /// </summary>
+    Task<IReadOnlyList<IdeaStrategyCount>> StrategyCountsAsync(IdeaListQuery query, CancellationToken cancellationToken);
+
+    /// <summary>
     ///     How many open and how many closed ideas there are.
     /// </summary>
     Task<(int Open, int Closed)> CountsAsync(CancellationToken cancellationToken);

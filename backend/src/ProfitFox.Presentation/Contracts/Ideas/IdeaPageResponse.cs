@@ -32,3 +32,15 @@ public sealed record ScannerStateResponse(
     IReadOnlyDictionary<string, int> Burst,
     int Failed,
     string? Failure);
+
+/// <summary>
+///     How many ideas a strategy has among those counted (change add-setup-strategies, spec strategy-ideas «Число идей по
+///     стратегиям»).
+/// </summary>
+public sealed record IdeaStrategyCountResponse(string Strategy, int Ideas);
+
+/// <summary>
+///     The number of all the ideas counted, a row for every strategy of a category of ideas and for every strategy of the
+///     ideas counted, by name, and whether the saved filter asked for is gone.
+/// </summary>
+public sealed record IdeaStrategyCountsResponse(int Total, IReadOnlyList<IdeaStrategyCountResponse> Strategies, bool FilterGone);
