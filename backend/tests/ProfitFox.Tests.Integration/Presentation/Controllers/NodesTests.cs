@@ -46,7 +46,7 @@ public sealed class NodesTests
         NodeKindResponse[] kinds = await Catalog();
 
         Assert.That(kinds.Select(kind => kind.Kind), Has.None.AnyOf("enter", "position", "market-order", "limit-order", "close-position", "stop-loss", "take-profit", "close-after"));
-        Assert.That(kinds, Has.Length.EqualTo(14));
+        Assert.That(kinds, Has.Length.EqualTo(25));
     }
 
     [Test]
@@ -75,7 +75,11 @@ public sealed class NodesTests
         Assert.That((multiply.Title, multiply.Group), Is.EqualTo(("Умножить", "Числа")));
         Assert.That(
             kinds.Where(kind => kind.Group == "Числа").Select(kind => (kind.Kind, kind.Title)),
-            Is.EqualTo(new[] { ("add", "Сложить"), ("subtract", "Вычесть"), ("multiply", "Умножить") }));
+            Is.EqualTo(new[]
+            {
+                ("add", "Сложить"), ("subtract", "Вычесть"), ("multiply", "Умножить"),
+                ("divide", "Разделить"), ("min", "Меньшее"), ("max", "Большее"), ("select", "Выбрать")
+            }));
     }
 
     [Test]
@@ -147,7 +151,62 @@ public sealed class NodesTests
         Assert.That(kinds.Select(kind => kind.Kind), Has.None.AnyOf("enter", "position", "market-order", "limit-order", "close-position", "stop-loss", "take-profit", "close-after", "signal"));
         Assert.That(
             kinds.Select(kind => kind.Kind),
-            Is.EqualTo(new[] { "parameters", "candle", "funding-rate", "pair-candle", "compare", "previous", "and", "or", "not", "first-time", "add", "subtract", "multiply", "outputs" }));
+            Is.EqualTo(new[]
+            {
+                "parameters", "candle", "funding-rate", "pair-candle", "compare", "previous", "and", "or", "not", "first-time", "add", "subtract", "multiply",
+                "divide", "min", "max", "select", "window", "percentile", "hold", "atr", "rsi", "zones", "candles", "outputs"
+            }));
+    }
+
+    /// <summary>
+    ///     Change add-setup-strategies, task 3.1: spec signal-constructor «Окно в каталоге».
+    /// </summary>
+    [Test]
+    public async Task The_window_has_its_pins_its_operations_and_the_group_of_windows()
+    {
+        NodeKindResponse window = (await Catalog()).Single(kind => kind.Kind == "window");
+
+        Assert.That(window.Inputs, Is.EqualTo(new[] { new PinResponse("value", "number"), new PinResponse("length", "number") }));
+        Assert.That(window.Outputs, Is.EqualTo(new[] { new PinResponse("result", "number") }));
+        Assert.That(window.Settings.Single().Name, Is.EqualTo("operation"));
+        Assert.That(window.Settings.Single().Values, Is.EqualTo(new[] { "max", "min", "sum", "average", "median", "first" }));
+        Assert.That((window.Title, window.Group), Is.EqualTo(("Окно", "Окна")));
+    }
+
+    /// <summary>
+    ///     Change add-setup-strategies, task 3.1: spec signal-constructor «Зоны в каталоге», and the words of the other new
+    ///     kinds.
+    /// </summary>
+    [Test]
+    public async Task The_zones_have_their_pins_and_the_group_of_indicators()
+    {
+        NodeKindResponse[] kinds = await Catalog();
+
+        NodeKindResponse zones = kinds.Single(kind => kind.Kind == "zones");
+        Assert.That(zones.Inputs.Select(pin => (pin.Name, pin.Type)), Is.EqualTo(new[] { ("atr", "number"), ("price", "number"), ("length", "number"), ("merge", "number"), ("strength", "number") }));
+        Assert.That(zones.Outputs.Select(pin => (pin.Name, pin.Type)), Is.EqualTo(new[] { ("above", "number"), ("below", "number") }));
+        Assert.That((zones.Title, zones.Group), Is.EqualTo(("Зоны", "Индикаторы")));
+        Assert.That(
+            kinds.Where(kind => kind.Group is "Окна" or "Индикаторы" || kind.Kind == "candles").Select(kind => (kind.Kind, kind.Title, kind.Group)),
+            Is.EqualTo(new[]
+            {
+                ("window", "Окно", "Окна"), ("percentile", "Перцентиль", "Окна"), ("hold", "Запомнить", "Окна"),
+                ("atr", "ATR", "Индикаторы"), ("rsi", "RSI", "Индикаторы"), ("zones", "Зоны", "Индикаторы"), ("candles", "Срок в свечах", "Данные")
+            }));
+        Assert.That(kinds.Single(kind => kind.Kind == "candles").Outputs, Is.EqualTo(new[] { new PinResponse("duration", "duration") }));
+    }
+
+    /// <summary>
+    ///     Change add-setup-strategies, task 3.1: spec signal-constructor «Те же узлы в стратегии».
+    /// </summary>
+    [Test]
+    public async Task The_new_kinds_are_in_the_catalog_of_a_strategy_of_both_kinds()
+    {
+        string[] added = ["divide", "min", "max", "select", "window", "percentile", "hold", "atr", "rsi", "zones", "candles"];
+
+        Assert.That((await Catalog("/api/nodes/strategy")).Select(kind => kind.Kind), Is.SupersetOf(added));
+        Assert.That((await Catalog("/api/nodes/strategy?kind=idea")).Select(kind => kind.Kind), Is.SupersetOf(added));
+        Assert.That((await Catalog("/api/nodes/strategy?kind=bot")).Select(kind => kind.Kind), Is.SupersetOf(added));
     }
 
     /// <summary>
