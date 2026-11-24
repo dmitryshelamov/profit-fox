@@ -1009,7 +1009,7 @@ public sealed class IdeaScanner
                 }
             }
 
-            if (idea.ExitTime is { } exit && idea.State == IdeaState.Open && now >= exit + _settings.ExitWait && last + OneMinute >= exit)
+            if (idea.ExitTime is { } exit && idea.State == IdeaState.Open && now >= exit + _settings.ExitWait && last + OneMinute >= exit && !WaitsForPayment(idea, exit, now))
             {
                 IdeaCycle.Close(idea, _costs);
             }
@@ -1027,6 +1027,46 @@ public sealed class IdeaScanner
                 _dirty.Add(idea);
             }
         }
+    }
+
+    // Whether an idea whose exit is known waits on for the payment of its pair at the moment of the exit (task 27.2): a
+    // backtest counts the payments at entry < t <= exit, and the data service gives a payment a minute or three after its
+    // time, later than the usual wait. The time of the payment is the last one before the exit and the interval between the
+    // last two, as the next funding of «Рынок» (spec market-overview); a pair with fewer than two payments in the book does
+    // not wait. The idea waits until the payment is in the book and counted, or until Scanner:ExitPaymentWait after the
+    // exit: then it is closed without it, with a line in the journal.
+    private bool WaitsForPayment(Idea idea, DateTimeOffset exit, DateTimeOffset now)
+    {
+        IReadOnlyList<FundingPayment> payments = Book.Payments(idea.Symbol);
+        if (payments.Any(payment => payment.Time == exit))
+        {
+            return idea.FundingUntil != exit && idea.EntryTime < exit && now < exit + _settings.ExitPaymentWait;
+        }
+
+        int last = payments.Count - 1;
+        while (last >= 0 && payments[last].Time > exit)
+        {
+            last--;
+        }
+
+        if (last < 1 || payments[last].Time + (payments[last].Time - payments[last - 1].Time) != exit || !(idea.EntryTime < exit))
+        {
+            return false;
+        }
+
+        if (now < exit + _settings.ExitPaymentWait)
+        {
+            return true;
+        }
+
+        _logger?.LogWarning(
+            "No payment of {Symbol} for {Payment:O} came within {Wait} of the exit of the idea of {Strategy} of {Moment:O}; the idea is closed without it.",
+            idea.Symbol,
+            exit,
+            _settings.ExitPaymentWait,
+            idea.StrategyName,
+            idea.Moment);
+        return false;
     }
 
     // Whether the minutes of the pair reached the moment: its minute before the moment came, or the live feed is far enough

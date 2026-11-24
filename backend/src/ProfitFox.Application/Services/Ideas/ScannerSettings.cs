@@ -23,6 +23,13 @@ public sealed class ScannerSettings
     public TimeSpan ExitWait { get; init; } = TimeSpan.FromSeconds(90);
 
     /// <summary>
+    ///     How long after its exit an idea whose exit is at the time of a payment of its pair waits for that payment at most
+    ///     (task 27.2): a backtest counts it, and the data service gives it a minute or three after its time. Past the limit
+    ///     the idea is closed without the payment and the journal says so.
+    /// </summary>
+    public TimeSpan ExitPaymentWait { get; init; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>
     ///     How often the scanner looks at its clock when the feed is quiet.
     /// </summary>
     public TimeSpan TickInterval { get; init; } = TimeSpan.FromSeconds(1);
