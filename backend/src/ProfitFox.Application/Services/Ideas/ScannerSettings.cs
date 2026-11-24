@@ -12,7 +12,12 @@ public sealed class ScannerSettings
 
     public TimeSpan CloseDelay { get; init; } = TimeSpan.FromSeconds(15);
 
-    public int WarmupCandles { get; init; } = 200;
+    /// <summary>
+    ///     How many closed candles of its timeframe warm a graph up (spec strategy-ideas «Глубина прогрева»; change
+    ///     add-setup-strategies, design.md, decision 8): the windows of the setups take 200 candles and the smoothing of ATR
+    ///     and RSI the rest. A window deeper than this has no value until it fills with live candles.
+    /// </summary>
+    public int WarmupCandles { get; init; } = 500;
 
     public int WarmupParallelism { get; init; } = 4;
 

@@ -149,7 +149,7 @@ API (`backend/src/ProfitFox.Presentation/appsettings.json`) и Worker
 - `Worker:Name`, `Worker:LeaseDuration` (30 с), `Worker:LeaseRenewal` (10 с), `Worker:PollInterval` (1 с) — Worker;
   аренда сканера берёт те же длительность и продление;
 - `Scanner:Enabled` (`true`) — может ли Worker вести живые данные; `Scanner:CloseDelay` (15 с) — сколько после конца
-  свечи ждать её последних минут; `Scanner:WarmupCandles` (200) — свечей истории на прогрев графа;
+  свечи ждать её последних минут; `Scanner:WarmupCandles` (500) — свечей истории на прогрев графа;
   `Scanner:WarmupParallelism` (4) — пар прогревается сразу; `Scanner:WarmupRetry` (1 мин) — когда снова спросить пару,
   которую сервис данных ещё догружает; `Scanner:ReconcileInterval` (5 с) — как часто перечитывать включённые стратегии и
   метки; `Scanner:ExitWait` (90 с) — сколько закрытая идея ждёт выплату в момент выхода; `Scanner:ExitPaymentWait`
@@ -330,7 +330,8 @@ dotnet run --project backend/src/ProfitFox.Cli -- --bench http://192.168.8.213:5
 | `squeeze` | `squeeze` |
 
 Сигнал `high-volatility` — не стратегия, а метка «↑ волат.»: его включают меткой на одном таймфрейме (в эталоне `1h`),
-и она ставится идеям любого таймфрейма. Метке и сетапам нужен прогрев сканера в 500 свечей (`Scanner:WarmupCandles`).
+и она ставится идеям любого таймфрейма. Метке и сетапам нужен прогрев сканера в 500 свечей (`Scanner:WarmupCandles`, так
+и стоит по умолчанию).
 
 Создать всё на стенде — запросы раздела «setups» в `backend/src/ProfitFox.Presentation/ProfitFox.Presentation.http`
 (HTTP-клиент JetBrains: сигнал запоминает свой `id` в переменной `signal_<имя>`, стратегия берёт тело через `<@` с

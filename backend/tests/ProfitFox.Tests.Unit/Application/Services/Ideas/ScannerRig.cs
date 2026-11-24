@@ -143,6 +143,15 @@ internal sealed class ScannerRig
         return Save(name, FundingShort(after, level), version: 1, id, timeframes);
     }
 
+    /// <summary>
+    ///     Saves the strategy of a category of ideas <paramref name="name" /> with <paramref name="graph" /> in version 1 and
+    ///     enables it on the timeframes (change add-setup-strategies).
+    /// </summary>
+    public Task<Guid> EnableGraph(string name, string graph, params TimeSpan[] timeframes)
+    {
+        return Save(name, graph, version: 1, id: null, timeframes);
+    }
+
     private async Task<Guid> Save(string name, string graph, int version, Guid? id, TimeSpan[] timeframes)
     {
         using var document = JsonDocument.Parse(graph);
