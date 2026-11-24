@@ -35,13 +35,18 @@ public sealed class IndicatorNodeTests
     }
 
     /// <summary>
-    ///     The package counts an ATR from a length of 2; the spec allows 1 («Открыто после применения»), and the node gives no
-    ///     value rather than a failed run.
+    ///     The package counts an ATR from a length of 2 (design.md, decision 3). A written 1 is an error of the graph (task 8.2,
+    ///     «ATR с длиной один в графе»); a 1 from a parameter gives no value at any candle rather than a failed run («ATR с
+    ///     длиной один из параметра»).
     /// </summary>
     [Test]
-    public void Atr_with_a_length_of_one_has_no_value()
+    public void Atr_with_a_length_of_one_from_a_parameter_has_no_value()
     {
-        Assert.That(Atr(1, (100, 99, 100), (104, 103, 103.5m), (105.5m, 103.5m, 104)), Has.All.Null);
+        string json = NumberNodeTests.Lengthed("atr", length: null, """{ "name": "len", "type": "number", "value": 1 }""");
+        ClosedCandle[] candles = [.. RandomCandles(new Random(1), 30)];
+
+        Assert.That(NodeGraphs.Numbers(json, candles), Has.All.Null);
+        Assert.That(NodeGraphs.Numbers(json.Replace("\"value\": 1 }", "\"value\": 2 }", StringComparison.Ordinal), candles).Last(), Is.Not.Null, "a length of 2 counts");
     }
 
     [Test]

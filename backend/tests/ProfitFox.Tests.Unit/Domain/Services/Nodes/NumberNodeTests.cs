@@ -101,8 +101,23 @@ public sealed class NumberNodeTests
             Assert.That((error.Code, error.Node, error.Pin), Is.EqualTo((GraphErrorCode.ParameterOutOfBounds, "n", "length")), $"{kind} {length}");
         }
 
-        Assert.That(Errors(Lengthed(kind, "1")), Is.Empty);
+        // The shortest length of atr is 2 (task 8.2, «ATR с длиной один в графе»), of the other five 1.
+        Assert.That(Errors(Lengthed(kind, kind == "atr" ? "2" : "1")), Is.Empty);
         Assert.That(Errors(Lengthed(kind, "1000")), Is.Empty);
+    }
+
+    /// <summary>
+    ///     Task 8.2: «ATR с длиной один в графе» — the package does not count an ATR of one candle (design.md, decision 3), so
+    ///     a written 1 is an error of the graph on the input, while the other five kinds take it.
+    /// </summary>
+    [Test]
+    public void A_length_of_one_written_on_atr_is_an_error_on_the_input_and_the_other_kinds_take_it()
+    {
+        GraphError error = Errors(Lengthed("atr", "1")).Single();
+
+        Assert.That((error.Code, error.Node, error.Pin), Is.EqualTo((GraphErrorCode.ParameterOutOfBounds, "n", "length")));
+        Assert.That(error.Reason, Does.Contain("2").And.Contain("1000"));
+        Assert.That(WindowKinds.Where(kind => kind != "atr").Select(kind => Errors(Lengthed(kind, "1"))), Has.All.Empty);
     }
 
     [Test]

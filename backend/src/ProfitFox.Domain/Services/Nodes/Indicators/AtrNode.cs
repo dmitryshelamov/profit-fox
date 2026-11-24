@@ -11,13 +11,14 @@ namespace ProfitFox.Domain.Services.Nodes.Indicators;
 ///     package one candle at a close (spec strategy-execution «Средний истинный диапазон»; change add-setup-strategies,
 ///     design.md, decision 1). No result until the pair has <c>length + 1</c> candles. The value depends on the candle the
 ///     count started at and converges («Сходимость ATR и RSI»). A computation again after a fill adds nothing and gives
-///     what the last close gave. A new length starts the list again on the candles kept. A length of 1 gives no value: the
-///     package does not count it.
+///     what the last close gave. A new length starts the list again on the candles kept. The length is from 2 to 1000: the
+///     package does not count an ATR of one candle, so a written 1 is an error of the graph and a 1 from a wire gives no
+///     value (task 8.2; design.md, decision 3).
 /// </summary>
 internal sealed class AtrNode : Node
 {
     /// <summary>
-    ///     The shortest length <see cref="AtrList" /> takes: it refuses 1, which the spec allows («Открыто после применения»).
+    ///     The shortest length <see cref="AtrList" /> takes: it refuses 1.
     /// </summary>
     public const int MinimumLength = 2;
 
@@ -33,7 +34,7 @@ internal sealed class AtrNode : Node
             var bar = new Bar(candle.OpenTime.UtcDateTime, candle.Open, candle.High, candle.Low, candle.Close, candle.Volume);
             _candles.Add(bar);
             // The package counts an ATR from a length of 2 (task 2.6); a length of 1 gives no value.
-            int? length = WindowLength.Of(inputs[0].Number) is { } read && read >= MinimumLength ? read : null;
+            int? length = WindowLength.Of(inputs[0].Number, MinimumLength);
             if (length is { } periods && _list?.LookbackPeriods != periods)
             {
                 _list = Start(periods);

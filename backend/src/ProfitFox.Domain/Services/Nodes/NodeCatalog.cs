@@ -218,7 +218,7 @@ public static class NodeCatalog
                 CheckValue = WindowLength.Check
             },
             new NodeKind(Hold, [Condition, NumberValue, Length], [NumberResult], [], _ => new HoldNode()) { CheckValue = WindowLength.Check },
-            new NodeKind(Atr, [Length], [NumberResult], [], _ => new AtrNode()) { CheckValue = WindowLength.Check },
+            new NodeKind(Atr, [Length], [NumberResult], [], _ => new AtrNode()) { CheckValue = WindowLength.From(AtrNode.MinimumLength) },
             new NodeKind(Rsi, [NumberValue, Length], [NumberResult], [], _ => new RsiNode()) { CheckValue = WindowLength.Check },
             new NodeKind(
                 Zones,
