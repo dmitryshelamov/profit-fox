@@ -165,6 +165,15 @@ public static class StrategyGraph
     }
 
     /// <summary>
+    ///     Whether <paramref name="graph" /> reads the last funding payment — has a node <c>funding-rate</c> (change
+    ///     add-ideas-and-market, task 25.3). For a strategy with <c>signal</c> nodes give the expanded graph.
+    /// </summary>
+    public static bool ReadsFunding(GraphDefinition graph)
+    {
+        return graph.Nodes.Any(node => node.Kind == Nodes.NodeCatalog.FundingRate);
+    }
+
+    /// <summary>
     ///     An error for each node <c>pair-candle</c> of <paramref name="graph" /> whose pair is not in
     ///     <paramref name="listed" /> (spec market-history «Неизвестная пара»). A node of an expanded signal is reported on the
     ///     <c>signal</c> node it came from: the user wrote that node.

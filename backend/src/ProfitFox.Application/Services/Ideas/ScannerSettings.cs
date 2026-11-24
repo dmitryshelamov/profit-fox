@@ -40,4 +40,12 @@ public sealed class ScannerSettings
     ///     breaks a silent stream of minutes off. Zero or less switches the watch off for both (task 25.2).
     /// </summary>
     public TimeSpan FeedSilence { get; init; } = TimeSpan.FromMinutes(3);
+
+    /// <summary>
+    ///     How long the live close of a candle at the time of a payment of a pair waits for that payment (task 25.3): the
+    ///     warm-up and a backtest put a payment on the candle that closes at its time, and the live feed brings it after the
+    ///     close. Only the pair waits, and only for a graph that reads the funding; past the limit its candle is computed
+    ///     without the payment and the journal says so.
+    /// </summary>
+    public TimeSpan PaymentWait { get; init; } = TimeSpan.FromSeconds(60);
 }

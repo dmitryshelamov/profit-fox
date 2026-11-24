@@ -118,7 +118,21 @@ internal sealed class ScannerRig
         decimal? stop = null,
         params TimeSpan[] timeframes)
     {
-        using var document = JsonDocument.Parse(CloseUp(after, side, operation, level, stop));
+        return await Save(name, CloseUp(after, side, operation, level, stop), version, id, timeframes);
+    }
+
+    /// <summary>
+    ///     Saves <c>funding-short</c> as <paramref name="name" /> and enables it on the timeframes: it enters short for
+    ///     <paramref name="after" /> the first time the rate of the last payment is above <paramref name="level" />.
+    /// </summary>
+    public Task<Guid> EnableFunding(string name, string after, decimal level = 0.0005m, Guid? id = null, params TimeSpan[] timeframes)
+    {
+        return Save(name, FundingShort(after, level), version: 1, id, timeframes);
+    }
+
+    private async Task<Guid> Save(string name, string graph, int version, Guid? id, TimeSpan[] timeframes)
+    {
+        using var document = JsonDocument.Parse(graph);
         var strategy = StrategyDocument.Restore(id ?? Guid.NewGuid(), name, null, StrategyGraph.ReadForm(document.RootElement).Value!, new Dictionary<string, ProfitFox.Domain.ValueObjects.Signals.NodePosition>(), version, kind: StrategyKind.Idea);
         await Strategies.DeleteAsync(name, CancellationToken.None);
         await Strategies.CreateAsync(strategy, CancellationToken.None);
@@ -246,6 +260,31 @@ internal sealed class ScannerRig
                      { "from": "enter.order", "to": "position.orders" },
                      { "from": "position.position", "to": "close-after.position" },
                      { "from": "close-after.order", "to": "position.orders" }{{stopWires}}
+                   ]
+                 }
+                 """;
+    }
+
+    private static string FundingShort(string after, decimal level)
+    {
+        return $$"""
+                 {
+                   "formatVersion": 1,
+                   "nodes": [
+                     { "id": "f", "kind": "funding-rate" },
+                     { "id": "up", "kind": "compare", "settings": { "operation": "gt" }, "inputs": { "b": {{Text(level)}} } },
+                     { "id": "first", "kind": "first-time" },
+                     { "id": "enter", "kind": "enter", "settings": { "side": "short" }, "inputs": { "size": 100 } },
+                     { "id": "position", "kind": "position" },
+                     { "id": "close-after", "kind": "close-after", "inputs": { "after": "{{after}}" } }
+                   ],
+                   "wires": [
+                     { "from": "f.value", "to": "up.a" },
+                     { "from": "up.result", "to": "first.value" },
+                     { "from": "first.event", "to": "enter.when" },
+                     { "from": "enter.order", "to": "position.orders" },
+                     { "from": "position.position", "to": "close-after.position" },
+                     { "from": "close-after.order", "to": "position.orders" }
                    ]
                  }
                  """;

@@ -69,6 +69,12 @@ public sealed class IdeaScanner
     // The ideas that closed after the last boundary of their timeframe the scanner computed (task 26.1): while the feed
     // catches up, the minutes run ahead of the boundaries, and the rule of one open idea still has to see them there.
     private readonly List<Idea> _ended = [];
+
+    // The pairs whose candles wait for a payment of theirs (task 25.3), each with the closes it holds back in their order,
+    // and the closes some pair still waits at, with the ideas born there: those of the pairs that waited are held until
+    // no pair waits at the close, so «⚡ всплеск» counts the pairs of the whole candle.
+    private readonly Dictionary<string, PaymentWait> _waits = new Dictionary<string, PaymentWait>(StringComparer.Ordinal);
+    private readonly SortedDictionary<DateTimeOffset, HeldClose> _held = [];
     private readonly ILogger? _logger;
     private readonly Dictionary<string, DateTimeOffset> _logged = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
     private string? _lastFailure;
@@ -334,6 +340,7 @@ public sealed class IdeaScanner
         {
             wanted[$"s:{spec.Id}:{spec.Timeframe.Ticks}"] = (spec.Key, () => new Run(spec.Key, spec.Timeframe, StrategyGraph.NamedPairs(spec.Strategy.Graph))
             {
+                Funding = StrategyGraph.ReadsFunding(spec.Strategy.Graph),
                 Strategy = spec,
                 Executor = new StrategyExecutor(spec.Strategy)
             });
@@ -343,6 +350,7 @@ public sealed class IdeaScanner
         {
             wanted[$"l:{spec.SignalId}"] = (spec.Key, () => new Run(spec.Key, spec.Timeframe, StrategyGraph.NamedPairs(spec.Signal.Graph))
             {
+                Funding = StrategyGraph.ReadsFunding(spec.Signal.Graph),
                 Label = spec,
                 Signals = new SignalExecutor(spec.Signal)
             });
@@ -690,32 +698,159 @@ public sealed class IdeaScanner
             _boundaries[timeframe] = last;
         }
 
+        Release(now);
         foreach ((DateTimeOffset close, List<TimeSpan> at) in closes)
         {
             WalkPending(close);
-            foreach (Slot slot in _slots.Values.Where(slot => slot.Current.Label is not null && Closes(slot, at)))
+            List<string> symbols = [];
+            foreach (string symbol in _pairs.Keys)
             {
-                StepAll(slot, close, at, now);
-            }
-
-            List<Idea> born = [];
-            foreach (Slot slot in _slots.Values.Where(slot => slot.Current.Strategy is not null && Closes(slot, at)))
-            {
-                born.AddRange(StepAll(slot, close, at, now));
-            }
-
-            foreach (IGrouping<(TimeSpan, EntrySide), Idea> group in born.GroupBy(idea => (idea.Timeframe, idea.Side)))
-            {
-                if (group.Select(idea => idea.Symbol).Distinct().Count() >= _burst.BurstOf(group.Key.Item1))
+                if (_waits.TryGetValue(symbol, out PaymentWait? waiting))
                 {
-                    foreach (Idea idea in group)
-                    {
-                        idea.Labels = [.. idea.Labels, IdeasSettings.BurstLabel];
-                    }
+                    // A pair that waits for its payment at an earlier close (a catch-up): its candles go in their order.
+                    waiting.Closes.Add((close, at));
+                }
+                else if (Due(symbol, close, at) is { } wait)
+                {
+                    _waits[symbol] = wait with { Deadline = now + _settings.PaymentWait };
+                }
+                else
+                {
+                    symbols.Add(symbol);
                 }
             }
 
+            List<Idea> born = Compute(close, at, symbols, now);
+            Burst(born, born);
+            if (_waits.Values.Any(wait => wait.Closes.Any(item => item.Close == close)))
+            {
+                _held[close] = new HeldClose(born);
+            }
+
             _pending.AddRange(born);
+        }
+    }
+
+    // The labels, then the strategies, on the candles of the pairs that close at <paramref name="close" />. Gives the ideas.
+    private List<Idea> Compute(DateTimeOffset close, List<TimeSpan> at, IReadOnlyCollection<string> symbols, DateTimeOffset now)
+    {
+        foreach (Slot slot in _slots.Values.Where(slot => slot.Current.Label is not null && Closes(slot, at)))
+        {
+            StepAll(slot, close, at, now, symbols);
+        }
+
+        List<Idea> born = [];
+        foreach (Slot slot in _slots.Values.Where(slot => slot.Current.Strategy is not null && Closes(slot, at)))
+        {
+            born.AddRange(StepAll(slot, close, at, now, symbols));
+        }
+
+        return born;
+    }
+
+    // «⚡ всплеск» on the ideas of <paramref name="labelled" /> whose side and timeframe have at least the threshold of pairs
+    // among the ideas of the candle, <paramref name="candle" />.
+    private void Burst(IReadOnlyCollection<Idea> candle, IReadOnlyCollection<Idea> labelled)
+    {
+        foreach (IGrouping<(TimeSpan, EntrySide), Idea> group in candle.GroupBy(idea => (idea.Timeframe, idea.Side)))
+        {
+            if (group.Select(idea => idea.Symbol).Distinct().Count() >= _burst.BurstOf(group.Key.Item1))
+            {
+                foreach (Idea idea in group.Where(idea => labelled.Contains(idea) && !idea.Labels.Contains(IdeasSettings.BurstLabel)))
+                {
+                    idea.Labels = [.. idea.Labels, IdeasSettings.BurstLabel];
+                }
+            }
+        }
+    }
+
+    // The wait of a pair for its payment at the close (task 25.3), when one of its graphs ready there reads the funding and
+    // the payment of the pair falls in the candle but is not in the book yet. The warm-up and a backtest put a payment on
+    // the candle that closes at its time; the live feed brings it after the close. The time of the next payment is the last
+    // one and the interval between the last two — the time of the next funding of «Рынок» (spec market-overview). A pair
+    // with fewer than two payments in the book, or a graph without the funding, does not wait.
+    private PaymentWait? Due(string symbol, DateTimeOffset close, List<TimeSpan> at)
+    {
+        if (!_slots.Values.Any(slot => RunAt(slot, symbol, close, at) is { Funding: true }))
+        {
+            return null;
+        }
+
+        IReadOnlyList<FundingPayment> payments = Book.Payments(symbol);
+        int last = payments.Count - 1;
+        while (last >= 0 && payments[last].Time > close)
+        {
+            last--;
+        }
+
+        if (last < 1 || payments[last].Time - payments[last - 1].Time is not { Ticks: > 0 } interval)
+        {
+            return null;
+        }
+
+        DateTimeOffset due = payments[last].Time + interval;
+        return at.Any(timeframe => due > close - timeframe && due <= close) ? new PaymentWait(due, payments[last].Time, DateTimeOffset.MaxValue) { Closes = { (close, at) } } : null;
+    }
+
+    // The pairs whose payment came, or whose wait ran out, are computed on the closes they held back, in their order; a
+    // later close that is a payment of its own waits again. Then the ideas of the closes no pair waits at any more go to the
+    // pending ones, with the burst of the whole candle.
+    private void Release(DateTimeOffset now)
+    {
+        foreach (string symbol in _waits.Keys.Order(StringComparer.Ordinal).ToList())
+        {
+            PaymentWait wait = _waits[symbol];
+            if (!_pairs.ContainsKey(symbol))
+            {
+                _waits.Remove(symbol);
+                continue;
+            }
+
+            DateTimeOffset first = wait.Closes[0].Close;
+            bool paid = Book.Payments(symbol).Any(payment => payment.Time > wait.After && payment.Time <= first);
+            if (!paid && now < wait.Deadline)
+            {
+                continue;
+            }
+
+            if (!paid)
+            {
+                _logger?.LogWarning(
+                    "The payment of {Symbol} at {Payment:O} did not come within {Wait} of the close; the candle of {Close:O} is computed without it.",
+                    symbol,
+                    wait.Due,
+                    _settings.PaymentWait,
+                    first);
+            }
+
+            _waits.Remove(symbol);
+            for (int index = 0; index < wait.Closes.Count; index++)
+            {
+                (DateTimeOffset close, List<TimeSpan> at) = wait.Closes[index];
+                if (index > 0 && Due(symbol, close, at) is { } again)
+                {
+                    _waits[symbol] = again with { Deadline = now + _settings.PaymentWait, Closes = [.. wait.Closes.Skip(index)] };
+                    break;
+                }
+
+                WalkPending(close);
+                List<Idea> born = Compute(close, at, [symbol], now);
+                if (_held.TryGetValue(close, out HeldClose? held))
+                {
+                    held.Late.AddRange(born);
+                }
+                else
+                {
+                    _pending.AddRange(born);
+                }
+            }
+        }
+
+        foreach ((DateTimeOffset close, HeldClose held) in _held.Where(item => !_waits.Values.Any(wait => wait.Closes.Any(waiting => waiting.Close == item.Key))).ToList())
+        {
+            Burst([.. held.Born, .. held.Late], held.Late);
+            _pending.AddRange(held.Late);
+            _held.Remove(close);
         }
     }
 
@@ -724,7 +859,7 @@ public sealed class IdeaScanner
     // of one open idea there, as the trade of a backtest ends. A pass of the live feed computes one close and has none such.
     private void WalkPending(DateTimeOffset close)
     {
-        foreach (Idea idea in _pending.Where(idea => idea.Moment < close && idea.State == IdeaState.Open && idea.ExitTime is null))
+        foreach (Idea idea in Unwritten().Where(idea => idea.Moment < close && idea.State == IdeaState.Open && idea.ExitTime is null))
         {
             DateTimeOffset from = idea.ComputedUntil is { } until ? until + OneMinute : idea.Moment;
             foreach (LiveMinute minute in Book.Minutes(idea.Symbol, from, close < idea.Until ? close : idea.Until))
@@ -735,6 +870,12 @@ public sealed class IdeaScanner
                 }
             }
         }
+    }
+
+    // The ideas born that wait for their write: the pending ones and those held at a close a pair waits at (task 25.3).
+    private IEnumerable<Idea> Unwritten()
+    {
+        return _pending.Concat(_held.Values.SelectMany(held => held.Late));
     }
 
     // Whether the candles that close at the moment are closed for every pair. The live feed tells the minute before the close
@@ -764,15 +905,14 @@ public sealed class IdeaScanner
     }
 
     // The runs of a slot on the candle of every pair that closes at <paramref name="close" />: the current run where it is
-    // warm, the former version where only it is. Gives the ideas the strategy ordered.
-    private List<Idea> StepAll(Slot slot, DateTimeOffset close, List<TimeSpan> at, DateTimeOffset now)
+    // warm, the former version where only it is, on the pairs of <paramref name="symbols" />. Gives the ideas the strategy
+    // ordered.
+    private List<Idea> StepAll(Slot slot, DateTimeOffset close, List<TimeSpan> at, DateTimeOffset now, IReadOnlyCollection<string> symbols)
     {
         List<Idea> born = [];
-        foreach (string symbol in _pairs.Keys)
+        foreach (string symbol in symbols)
         {
-            // The current run where it is ready, else the former one; each on the closes of its own timeframe.
-            Run? run = (at.Contains(slot.Current.Timeframe) ? Ready(slot.Current, symbol, close) : null)
-                       ?? (slot.Previous is { } previous && at.Contains(previous.Timeframe) ? Ready(previous, symbol, close) : null);
+            Run? run = RunAt(slot, symbol, close, at);
             TimeSpan timeframe = run?.Timeframe ?? slot.Current.Timeframe;
             if (run is null || Book.Candle(symbol, timeframe, close - timeframe) is not { } candle)
             {
@@ -805,7 +945,7 @@ public sealed class IdeaScanner
             // one still waiting for its write, and one the walk already closed past this close while the feed caught up (task
             // 26.1) — the trade of a backtest holds the position up to its exit however far the minutes ran.
             if (step is null || run.Strategy is not { } strategy || step.Entry is null
-                || _open.Concat(_ended).Concat(_pending).Any(idea => idea.State is (IdeaState.Open or IdeaState.Closed) && idea.StrategyId == strategy.Id && idea.Symbol == symbol
+                || _open.Concat(_ended).Concat(Unwritten()).Any(idea => idea.State is (IdeaState.Open or IdeaState.Closed) && idea.StrategyId == strategy.Id && idea.Symbol == symbol
                                                                     && idea.Timeframe == timeframe && (idea.ExitTime ?? idea.Until) > close))
             {
                 continue;
@@ -818,6 +958,14 @@ public sealed class IdeaScanner
         }
 
         return born;
+    }
+
+    // The run of a slot that computes the pair at the close: the current one where it is ready, else the former one; each on
+    // the closes of its own timeframe.
+    private static Run? RunAt(Slot slot, string symbol, DateTimeOffset close, List<TimeSpan> at)
+    {
+        return (at.Contains(slot.Current.Timeframe) ? Ready(slot.Current, symbol, close) : null)
+               ?? (slot.Previous is { } previous && at.Contains(previous.Timeframe) ? Ready(previous, symbol, close) : null);
     }
 
     private static bool Closes(Slot slot, List<TimeSpan> at)
@@ -984,6 +1132,9 @@ public sealed class IdeaScanner
 
         public IReadOnlyList<string> Named { get; } = named;
 
+        // Whether the graph reads the last payment (task 25.3).
+        public bool Funding { get; init; }
+
         public StrategyRunSpec? Strategy { get; init; }
 
         public LabelRunSpec? Label { get; init; }
@@ -1003,6 +1154,21 @@ public sealed class IdeaScanner
         public Run Current { get; } = current;
 
         public Run? Previous { get; init; }
+    }
+
+    // A pair that waits for its payment due at <paramref name="Due" />, the last one in the book at <paramref name="After" />,
+    // until <paramref name="Deadline" />; the closes it holds back, in their order.
+    private sealed record PaymentWait(DateTimeOffset Due, DateTimeOffset After, DateTimeOffset Deadline)
+    {
+        public List<(DateTimeOffset Close, List<TimeSpan> At)> Closes { get; init; } = [];
+    }
+
+    // A close some pair waits at: the ideas born there on time, and those of the pairs that waited, held.
+    private sealed class HeldClose(List<Idea> born)
+    {
+        public List<Idea> Born { get; } = born;
+
+        public List<Idea> Late { get; } = [];
     }
 
     private sealed record Warmup(
