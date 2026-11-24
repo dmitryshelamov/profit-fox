@@ -1,15 +1,26 @@
+/// <reference types="node" />
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { toFlow } from '@/modules/graph-editor/model/flow';
+import type { GraphDocument } from '@/modules/graph-editor/model/types';
 import { coloredWires } from '@/modules/graph-editor/ui/GraphCanvas';
-import { pinLooks } from '@/modules/graph-editor/ui/looks';
+import { groupFill, pinLooks } from '@/modules/graph-editor/ui/looks';
 import { checked, findNode, openFundingHigh, selectNode } from '@/test/editor';
 import { fakeApi, json } from '@/test/fakeApi';
 import { catalog, h0001Graph } from '@/test/fixtures';
 import { renderApp } from '@/test/renderApp';
 import { baseRoutes, savedFundingHigh } from '@/test/routes';
-import { fundingHighId, fundingShort, savedFundingShort, strategyRoutes } from '@/test/strategies';
+import {
+  fundingHighId,
+  fundingShort,
+  savedFundingShort,
+  strategyCatalog,
+  strategyRoutes,
+} from '@/test/strategies';
 
 /** The handle of a pin of a node on the canvas. */
 function pinOf(node: HTMLElement, pin: string): HTMLElement {
@@ -268,8 +279,9 @@ describe('the search in the palette', () => {
     const region = await palette();
     const field = within(region).getByRole('searchbox', { name: 'Найти узел' });
     expect(field).toHaveFocus();
-    // The numbers are in the palette of a signal (spec signal-constructor «Арифметические узлы в каталоге сигнала»).
-    expect(groupsOf(region)).toEqual(['Граф', 'Данные', 'Логика', 'Числа']);
+    // The numbers are in the palette of a signal (spec signal-constructor «Арифметические узлы в каталоге сигнала»),
+    // the windows and the indicators too (change add-setup-strategies).
+    expect(groupsOf(region)).toEqual(['Граф', 'Данные', 'Логика', 'Числа', 'Окна', 'Индикаторы']);
 
     await userEvent.type(field, 'срав');
 
@@ -282,7 +294,7 @@ describe('the search in the palette', () => {
     expect(within(region).getByRole('button', { name: 'Сравнить' })).toBeInTheDocument();
 
     await userEvent.clear(field);
-    expect(groupsOf(region)).toEqual(['Граф', 'Данные', 'Логика', 'Числа']);
+    expect(groupsOf(region)).toEqual(['Граф', 'Данные', 'Логика', 'Числа', 'Окна', 'Индикаторы']);
   });
 
   it('finds a kind by its kind as the graph writes it', async () => {
@@ -400,5 +412,104 @@ describe('the cards of the editor', () => {
     await userEvent.click(errors.getByRole('button', { name: 'Показать на холсте' }));
 
     expect(screen.getByRole('region', { name: 'Узел: Сравнить high' })).toBeInTheDocument();
+  });
+});
+
+// Change add-setup-strategies, task 3.2: spec signal-constructor «Цвета групп „Окна“ и „Индикаторы“» and «Узлы чисел,
+// окон и индикаторов в каталоге сигнала».
+describe('the nodes of the setups on the canvas', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  // Vitest gives an empty text for an imported style sheet, so the theme is read from the disk.
+  const theme = readFileSync(join(process.cwd(), 'src', 'index.css'), 'utf8');
+
+  /** The color of a token of a group in the theme. */
+  const tokenOf = (group: string) =>
+    new RegExp(`--color-group-${group}:\\s*(#[0-9a-f]{6});`).exec(theme)?.[1];
+
+  // Scenario «Узел ATR на холсте».
+  it('gives a node atr added from the palette the color of the indicators', async () => {
+    openFundingHigh();
+    await findNode('Параметры', 'p');
+    await userEvent.click(screen.getByRole('button', { name: 'Палитра узлов' }));
+    const region = screen.getByRole('region', { name: 'Палитра' });
+
+    await userEvent.click(within(region).getByRole('button', { name: 'ATR' }));
+
+    const atr = await screen.findByRole('group', { name: /^ATR / });
+    expect(groupOfNode(atr)).toBe('indicator');
+    expect(atr.querySelector('[data-group]')?.className).toContain(groupFill('indicator'));
+    const others = ['data', 'logic', 'math', 'window'] as const;
+    expect(others.map((group) => groupFill(group))).not.toContain(groupFill('indicator'));
+    expect(tokenOf('indicator')).toBeDefined();
+    expect(others.map(tokenOf)).not.toContain(tokenOf('indicator'));
+    expect(
+      new Set(
+        ['graph', 'data', 'logic', 'math', 'window', 'indicator', 'position', 'signal'].map(
+          tokenOf,
+        ),
+      ).size,
+    ).toBe(8);
+  });
+
+  it('gives a window the color of the windows and a time in candles that of the data', async () => {
+    openFundingHigh();
+    await findNode('Параметры', 'p');
+    await userEvent.click(screen.getByRole('button', { name: 'Палитра узлов' }));
+
+    await userEvent.click(
+      within(screen.getByRole('region', { name: 'Палитра' })).getByRole('button', { name: 'Окно' }),
+    );
+
+    expect(groupOfNode(await screen.findByRole('group', { name: /^Окно / }))).toBe('window');
+  });
+
+  // Scenario «Срок в свечах на холсте».
+  it('draws a wire from the duration of candles into after of close-after in the color of a duration', async () => {
+    const graph = fundingShort();
+    const withCandles = {
+      ...graph,
+      nodes: [...graph.nodes, { id: 'life', kind: 'candles', inputs: { count: 24 } }],
+    };
+    fakeApi({
+      ...baseRoutes(),
+      ...strategyRoutes(),
+      'GET /api/strategies/funding-short': () => json(savedFundingShort(1, withCandles)),
+    });
+    renderApp('/strategies/funding-short');
+    expect(groupOfNode(await findNode('Срок в свечах', 'life'))).toBe('data');
+    const card = await selectNode('Закрыть через', 'close-after');
+    const source = within(card).getByRole('combobox', { name: 'Источник after' });
+    expect(within(source).getByRole('option', { name: 'life.duration' })).toBeInTheDocument();
+
+    await userEvent.selectOptions(source, 'life.duration');
+
+    const after = (await findNode('Закрыть через', 'close-after')).querySelector<HTMLElement>(
+      '[data-handleid="after"]',
+    )!;
+    await waitFor(() => expect(after).toHaveAttribute('data-connected', 'true'));
+    expect(after).toHaveAttribute('data-type', 'duration');
+    const duration = (await findNode('Срок в свечах', 'life')).querySelector(
+      '[data-handleid="duration"]',
+    );
+    expect(duration).toHaveAttribute('data-connected', 'true');
+    const document: GraphDocument = {
+      graph: {
+        formatVersion: 1,
+        parameters: [],
+        outputs: [],
+        nodes: withCandles.nodes as GraphDocument['graph']['nodes'],
+        wires: [...withCandles.wires, { from: 'life.duration', to: 'close-after.after' }],
+      },
+      layout: {},
+    };
+    const wire = coloredWires(
+      toFlow(document, strategyCatalog).edges,
+      document,
+      strategyCatalog,
+      [],
+    ).find((edge) => edge.id === 'life.duration->close-after.after')!;
+    expect(wire.data).toEqual({ type: 'duration', bad: false });
+    expect(wire.style?.stroke).toBe(pinLooks.duration.stroke);
   });
 });

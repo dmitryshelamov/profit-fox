@@ -42,6 +42,9 @@ const tokens: Record<string, string> = {
   'group-position': '#2F8F6B',
   'group-signal': '#B0591A',
   'group-math': '#8C6B2E',
+  // Change add-setup-strategies, task 3.2: the groups «Окна» and «Индикаторы».
+  'group-window': '#8A3F6E',
+  'group-indicator': '#6A7D1F',
 };
 
 describe('the theme', () => {
@@ -52,7 +55,7 @@ describe('the theme', () => {
   it('switches the palette of Tailwind off, so only the tokens give a color', () => {
     expect(theme).toContain('--color-*: initial;');
     expect(theme.match(/--color-[a-z0-9-]+:/g)).toHaveLength(Object.keys(tokens).length);
-    expect(Object.keys(tokens)).toHaveLength(33);
+    expect(Object.keys(tokens)).toHaveLength(35);
   });
 
   // Change add-position-node, task 8.2: no color outside the theme. The table of the chart, which draws on a canvas and

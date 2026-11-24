@@ -87,13 +87,17 @@ export function legendTypes(catalog: readonly NodeKind[]): PinType[] {
 export const wireStrokes = { bad: 'var(--color-err)', unknown: 'var(--color-faint)' };
 
 /** The groups of the catalog the theme has a color for. */
-export type GroupKey = 'graph' | 'data' | 'logic' | 'math' | 'position' | 'signal';
+export type GroupKey =
+  'graph' | 'data' | 'logic' | 'math' | 'window' | 'indicator' | 'position' | 'signal';
 
 const groupKeys: Record<string, GroupKey> = {
   Граф: 'graph',
   Данные: 'data',
   Логика: 'logic',
   Числа: 'math',
+  // Change add-setup-strategies: the windows over the last candles and the indicators.
+  Окна: 'window',
+  Индикаторы: 'indicator',
   Позиция: 'position',
   Сигналы: 'signal',
 };
@@ -103,6 +107,8 @@ const groupFills: Record<GroupKey, string> = {
   data: 'bg-group-data',
   logic: 'bg-group-logic',
   math: 'bg-group-math',
+  window: 'bg-group-window',
+  indicator: 'bg-group-indicator',
   position: 'bg-group-position',
   signal: 'bg-group-signal',
 };
