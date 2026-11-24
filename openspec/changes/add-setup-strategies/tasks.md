@@ -12,7 +12,7 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 ## 1. База
 
-- [ ] 1.1 Снять базу до правок: `dotnet build ProfitFox.slnx --configuration Release`, тесты бэкенда и фронтенда,
+- [x] 1.1 Снять базу до правок: `dotnet build ProfitFox.slnx --configuration Release`, тесты бэкенда и фронтенда,
   SHA-256 `Fixtures/EngineVersions.json` и `/openapi/v1.json`. Проверить: числа тестов, предупреждений и оба хэша
   записаны в разделе «База» в конце этого файла.
 
@@ -120,6 +120,27 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 - Заархивировать изменение после слияния в `release/0.1.0`.
 
 ## База
+
+Снята в облачной сессии 2026-11-24 на `5fb9563` (ветка `feat/add-setup-strategies`), до правок кода. .NET SDK 10.0.115
+(пакет Ubuntu `dotnet-sdk-10.0`, рантайм 10.0.15), Node 22.23.5, Postgres 17 в Docker. OpenSpec CLI 1.15.0 — версия,
+которой сгенерированы навыки `.claude/skills` (`generatedBy`); 2.1.1 в режиме `--strict` отклоняет это изменение
+предупреждением о длине требования «Итог идеи» (см. «Открыто после применения»).
+
+- Сборка `dotnet build ProfitFox.slnx --configuration Release`: 0 предупреждений, 0 ошибок.
+- Тесты бэкенда: unit 686, интеграционные 297 (Postgres в Docker через Testcontainers). Интеграционные зелёные все.
+  Из unit на базе падал один — `GetPairChartQueryHandlerTests.Open_interest_that_does_not_come_within_ten_seconds_answers_that_it_loads`
+  (`TimeoutException` в каждом полном прогоне, зелёный при запуске одного): подделка `GatedHistory` сообщала «спросили»
+  до того, как `PageReads.Run` заводит таймер предела, и тест успевал сдвинуть часы раньше. Поправлена подделка — сигнал
+  теперь подаётся внутри попытки, после таймера; ожидания теста не менялись. Отдельный коммит
+  `test(backend): signal the hung open-interest read after its limit is set`; после него unit 686 из 686 зелёные два
+  прогона подряд.
+- Тесты фронтенда: 407 в 27 файлах, все зелёные; `typecheck`, `lint`, `format:check`, `build` зелёные.
+- SHA-256 `Tests.Integration/Fixtures/EngineVersions.json`:
+  `8531a12c149c44158e22d664c7feb4c7592ada433df3a5981c6274b8d72f8fe2`; `EngineVersion.Number = 4`.
+- SHA-256 `/openapi/v1.json` (API в `Development` на `http://localhost:5240`, база стенда в Docker):
+  `334e52e9544e5ea78d6237b7db17c9f9788d38e7b3b66edc98b3aeefe230b18f`; `npm run generate:api` по нему даёт
+  `frontend/src/api/generated/schema.d.ts` без изменений (SHA-256
+  `816887d84051ab628c7a04d701a7417d84e96e60391d98cc329f3e0dafe59ae8`).
 
 ## Замеры
 
