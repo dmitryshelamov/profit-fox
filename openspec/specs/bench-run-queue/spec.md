@@ -122,13 +122,18 @@ CLI `bench` SHALL быть клиентом API своего стенда и д�
 
 #### Scenario: Отказ при постановке
 
-- **WHEN** запускают `bench run funding-short --timeframe 5m`
+- **WHEN** запускают `bench run funding-short --timeframe 2m`
 - **THEN** команда печатает причину отказа и выходит с ненулевым кодом
 
 #### Scenario: Прогон упал
 
 - **WHEN** прогон, запущенный `bench run funding-short --wait`, закончился `failed` или `cancelled`
 - **THEN** команда печатает состояние и причину и выходит с ненулевым кодом
+
+#### Scenario: Прогон на 5m
+
+- **WHEN** запускают `bench run funding-short --timeframe 5m`
+- **THEN** команда печатает id поставленного прогона и выходит с кодом 0
 
 ### Requirement: Страница «Прогоны»
 
