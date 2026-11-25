@@ -71,8 +71,8 @@ Bybit меняется без нас (появились `ETF`, `forex`); пра
 ### 4. Параметр `kind` в API
 
 `kind` — необязательный параметр запроса `GET /api/market/pairs`, `GET /api/ideas`, `GET /api/ideas/summary` и
-`GET /api/ideas/strategies` со значениями `crypto` и `stock`; другое значение → `400` с ошибкой у поля `kind`, как у
-неизвестной стороны. `GET /api/market/pairs/{symbol}/ideas` параметра не получает (решение владельца о странице пары).
+`GET /api/ideas/strategies` со значениями `crypto` и `stock`; другое значение → `422` с ошибкой `InvalidChoice` у поля
+`kind`, как у неизвестной стороны. `GET /api/market/pairs/{symbol}/ideas` параметра не получает (решение владельца о странице пары).
 `MarketPairResponse` и строки списка пар получают `kind`. Имена значений — латиницей, как `long`/`short` у стороны;
 слова «крипта» и «акции» — только на экране.
 
