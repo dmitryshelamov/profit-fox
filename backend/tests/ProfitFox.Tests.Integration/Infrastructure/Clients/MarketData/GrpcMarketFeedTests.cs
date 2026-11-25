@@ -5,6 +5,7 @@ using Microsoft.Extensions.Time.Testing;
 
 using ProfitFox.Application.Ports.MarketData.Feed;
 using ProfitFox.Application.Services.Market;
+using ProfitFox.Domain.ValueObjects.MarketData.Enums;
 using ProfitFox.Infrastructure.Clients.MarketData;
 using ProfitFox.Infrastructure.Clients.MarketData.Protos;
 using ProfitFox.Tests.Integration.MarketData;
@@ -101,6 +102,26 @@ public sealed class GrpcMarketFeedTests
         await reader.Until<MarketPairs>(listed => listed.Pairs.Any(pair => pair.Symbol == "ETHUSDT") && listed.Pairs.Count == 4);
 
         Assert.That(reader.Events.OfType<MarketPairs>().All(listed => listed.Pairs.Any(pair => pair.Symbol == "ETHUSDT")), Is.True, "ETHUSDT was never dropped");
+    }
+
+    /// <summary>
+    ///     Change add-instrument-kind-filter, task 2.2: spec market-overview «Вид пары», scenario «Тип сменился» — the same
+    ///     pairs with a new Bybit type are told again, with the new kind.
+    /// </summary>
+    [Test]
+    public async Task A_pair_whose_type_changed_is_told_again_with_its_new_kind()
+    {
+        await using MarketDataServer server = await MarketDataServer.Start();
+        var time = new FakeTimeProvider(Now);
+        await using var reader = Reader.Start(server, time, settings: Unwatched);
+        MarketPairs first = await reader.Until<MarketPairs>(_ => true);
+
+        server.Data.Catalog = MarketDataServer.Catalog.Replace("\"symbol\": \"SOLUSDT\",", "\"symbol\": \"SOLUSDT\", \"symbolType\": \"Stock\",");
+        time.Advance(TimeSpan.FromHours(1));
+        MarketPairs second = await reader.Until<MarketPairs>(listed => listed.Pairs.Any(pair => pair is { Symbol: "SOLUSDT", Kind: InstrumentKind.Stock }));
+
+        Assert.That(first.Pairs.Single(pair => pair.Symbol == "SOLUSDT").Kind, Is.EqualTo(InstrumentKind.Crypto));
+        Assert.That(second.Pairs.Select(pair => pair.Symbol), Is.EquivalentTo(first.Pairs.Select(pair => pair.Symbol)), "the set of pairs is the same");
     }
 
     [Test]

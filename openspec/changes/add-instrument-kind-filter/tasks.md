@@ -19,10 +19,10 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 ## 2. Вид пары
 
-- [ ] 2.1 `InstrumentKind` и правило `InstrumentKinds.Of` в домене (решение 1). Проверить юнит-тестами сценарии
+- [x] 2.1 `InstrumentKind` и правило `InstrumentKinds.Of` в домене (решение 1). Проверить юнит-тестами сценарии
   «Контракт на акцию», «Фонд, сырьё и валюта», «Монета зоны инноваций», «Типа нет» спеки `market-overview` «Вид пары»;
   отдельно — `ETF` и `Etf` дают одно, незнакомая строка даёт `Crypto`.
-- [ ] 2.2 `Instrument` с полем `Kind` по умолчанию `Crypto`; `InstrumentCatalog.Parse` читает `listing.symbolType`
+- [x] 2.2 `Instrument` с полем `Kind` по умолчанию `Crypto`; `InstrumentCatalog.Parse` читает `listing.symbolType`
   (решение 2). Проверить тестом разбора на ответе каталога с `Stock`, `Etf`, `Innovation`, `null` и без поля: виды
   верны, отбор пар прежний (прежние тесты `Parse` зелёные без правок).
 
@@ -87,3 +87,11 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   `9069e05ec5cf6c483caf0b53660810b679c0d8b514eb6a2c38349d031b380da3`; `npm run generate:api` по нему даёт
   `frontend/src/api/generated/schema.d.ts` без изменений (SHA-256
   `666637b723e4290c4fdc2562df982a90b24a34aabffec018898ed433db82d114`).
+
+## Замеры
+
+- **Группа 2, вид пары** (облачная сессия, 2026-11-25). Сборка `Release`: 0 предупреждений. Тесты бэкенда: unit 822
+  (+17, `InstrumentKindsTests`), интеграционные 404 (+2: разбор каталога с видами и «Тип сменился» в ленте). Лента
+  `GrpcMarketFeed` сообщала новый `MarketPairs` только при смене символов, и смена типа Bybit до снимка не дошла бы
+  (сценарий «Тип сменился»); теперь смена вида пары — тоже смена набора, тест
+  `GrpcMarketFeedTests.A_pair_whose_type_changed_is_told_again_with_its_new_kind`.

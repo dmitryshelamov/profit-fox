@@ -12,6 +12,7 @@ using Microsoft.Extensions.Logging;
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.Ports.MarketData.Feed;
 using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Domain.ValueObjects.MarketData.Enums;
 using ProfitFox.Infrastructure.Clients.MarketData.Protos;
 
 namespace ProfitFox.Infrastructure.Clients.MarketData;
@@ -443,7 +444,8 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
             return _symbols.GetValueOrDefault(instrument);
         }
 
-        // The pairs kept after this answer, when they changed; null when they did not.
+        // The pairs kept after this answer, when they changed; null when they did not. A pair whose kind changed is a change
+        // too (change add-instrument-kind-filter, spec market-overview «Вид пары», scenario «Тип сменился»).
         public IReadOnlyList<Instrument>? Set(IReadOnlyList<Instrument> listed)
         {
             var ids = new HashSet<string>(listed.Select(pair => pair.Id), StringComparer.Ordinal);
@@ -452,7 +454,10 @@ public sealed class GrpcMarketFeed(GrpcChannel channel, IInstrumentCatalog catal
             _missedOnce = new HashSet<string>(missed.Select(pair => pair.Id), StringComparer.Ordinal);
             _read = true;
             var symbols = kept.ToDictionary(pair => pair.Id, pair => pair.Symbol, StringComparer.Ordinal);
-            bool changed = symbols.Count != _symbols.Count || symbols.Any(pair => _symbols.GetValueOrDefault(pair.Key) != pair.Value);
+            var kinds = _kept.ToDictionary(pair => pair.Id, pair => pair.Kind, StringComparer.Ordinal);
+            bool changed = symbols.Count != _symbols.Count
+                || symbols.Any(pair => _symbols.GetValueOrDefault(pair.Key) != pair.Value)
+                || kept.Any(pair => kinds.TryGetValue(pair.Id, out InstrumentKind kind) && kind != pair.Kind);
             _symbols = symbols;
             _kept = kept;
             return changed ? kept : null;
