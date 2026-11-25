@@ -83,7 +83,7 @@ main() {
 
   compose pull --quiet
   # An image pushed under an existing number from another commit does not run.
-  for name in profit-fox profit-fox-worker; do
+  for name in profit-fox profit-fox-bench-worker; do
     image="ghcr.io/dmitryshelamov/$name:$version"
     revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image")"
     [[ "$revision" == "$commit" ]] || fail "$image is built from '$revision', not from $commit"
