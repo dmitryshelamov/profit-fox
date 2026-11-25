@@ -192,7 +192,7 @@ public sealed class FileHistoryMonthStoreTests
     public async Task A_cache_grown_past_its_limit_removes_the_month_read_least_recently()
     {
         (HistoryMonth a, HistoryMonth b, HistoryMonth c) = Months();
-        FileHistoryMonthStore store = Store(10 * Megabyte);
+        FileHistoryMonthStore store = Store(await LimitOfTwoMonths());
         await Save(store, a, b);
         _time.Advance(TimeSpan.FromHours(2));
 
@@ -207,7 +207,7 @@ public sealed class FileHistoryMonthStoreTests
     public async Task A_read_lengthens_the_life_of_a_month()
     {
         (HistoryMonth a, HistoryMonth b, HistoryMonth c) = Months();
-        FileHistoryMonthStore store = Store(10 * Megabyte);
+        FileHistoryMonthStore store = Store(await LimitOfTwoMonths());
         await Save(store, a, b);
         _time.Advance(TimeSpan.FromHours(2));
         await store.ReadCandles(a, CancellationToken.None);
@@ -224,7 +224,7 @@ public sealed class FileHistoryMonthStoreTests
     public async Task A_month_removed_by_the_limit_is_saved_again_as_a_new_one()
     {
         (HistoryMonth a, HistoryMonth b, HistoryMonth c) = Months();
-        FileHistoryMonthStore store = Store(10 * Megabyte);
+        FileHistoryMonthStore store = Store(await LimitOfTwoMonths());
         await Save(store, a, b);
         _time.Advance(TimeSpan.FromHours(2));
         await store.SaveCandles(c, Noise(c, 4, seed: 3), CancellationToken.None);
@@ -235,7 +235,7 @@ public sealed class FileHistoryMonthStoreTests
 
         Assert.That((await store.ReadCandles(a, CancellationToken.None))!.Items.SequenceEqual(Noise(a, 4, seed: 1).Items), Is.True, "the same answer as before");
         Assert.That(await store.ReadCandles(b, CancellationToken.None), Is.Null, "B is the oldest now");
-        Assert.That(_folder.Months.Sum(path => new FileInfo(path).Length), Is.LessThanOrEqualTo(9 * Megabyte));
+        Assert.That(_folder.Months.Sum(path => new FileInfo(path).Length), Is.LessThanOrEqualTo(await LimitOfTwoMonths()));
     }
 
     // Task 3.4.
@@ -296,10 +296,11 @@ public sealed class FileHistoryMonthStoreTests
     public async Task The_limit_counts_the_files_another_store_of_the_folder_wrote()
     {
         (HistoryMonth a, HistoryMonth b, HistoryMonth c) = Months();
-        await Save(Store(10 * Megabyte), a, b);
+        long limit = await LimitOfTwoMonths();
+        await Save(Store(limit), a, b);
         _time.Advance(TimeSpan.FromHours(2));
 
-        await Store(10 * Megabyte).SaveCandles(c, Noise(c, 4, seed: 3), CancellationToken.None);
+        await Store(limit).SaveCandles(c, Noise(c, 4, seed: 3), CancellationToken.None);
 
         Assert.That(await Store().ReadCandles(a, CancellationToken.None), Is.Null, "A of the other store is gone");
         Assert.That(_folder.Months, Has.Length.EqualTo(2));
@@ -375,7 +376,25 @@ public sealed class FileHistoryMonthStoreTests
         await store.SaveCandles(a, Noise(a, 4, seed: 1), CancellationToken.None);
         _time.Advance(TimeSpan.FromHours(2));
         await store.SaveCandles(b, Noise(b, 4, seed: 2), CancellationToken.None);
-        Assert.That(_folder.Months.Select(path => new FileInfo(path).Length), Has.All.InRange(3.6 * Megabyte, 4.4 * Megabyte), "months of about 4 MB");
+        long[] sizes = [.. _folder.Months.Select(path => new FileInfo(path).Length)];
+        Assert.That(sizes, Has.All.InRange(0.9 * sizes.Max(), sizes.Max()), "months of about the same size");
+    }
+
+    // Room for two months of Noise and not for three. GZip makes random text smaller by a ratio that depends on the zlib of
+    // the platform (about 4 MB on macOS, 5.4 MB on the Linux of CI), so the size of one month is measured, not assumed.
+    private async Task<long> LimitOfTwoMonths()
+    {
+        DirectoryInfo scratch = Directory.CreateTempSubdirectory("profit-fox-cache-size-");
+        try
+        {
+            var store = new FileHistoryMonthStore(scratch.FullName, Unlimited, _time);
+            await store.SaveCandles(March, Noise(March, 4, seed: 1), CancellationToken.None);
+            return (long)(new FileInfo(store.PathOf(March)).Length * 2.5);
+        }
+        finally
+        {
+            scratch.Delete(recursive: true);
+        }
     }
 
     private FileHistoryMonthStore Store(long maxBytes = Unlimited)
