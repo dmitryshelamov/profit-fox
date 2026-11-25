@@ -241,6 +241,76 @@ public sealed class MarketBookTests
         Assert.That(book.Minutes("BTCUSDT", Ten.AddDays(-2), Ten).Count(), Is.EqualTo(1));
     }
 
+    /// <summary>
+    ///     Change add-setup-strategies, task 9.1 (design.md, decision 12): spec market-live-feed «Минута с нулевым объёмом».
+    ///     The minute of 10:02 is told with volume 0 and a high and a low no minute with trades has: the candle and the minutes
+    ///     of an idea do not see it.
+    /// </summary>
+    [Test]
+    public void A_minute_with_a_volume_of_zero_is_not_in_the_candle()
+    {
+        MarketBook book = Book(Ten.AddMinutes(6));
+        foreach (int minute in new[] { 0, 1, 3, 4 })
+        {
+            book.Apply(Minute("BTCUSDT", Ten.AddMinutes(minute), open: 100, close: 100, volume: 3));
+        }
+
+        book.Apply(new LiveMinute("BTCUSDT", Ten.AddMinutes(2), 100, 150, 50, 100, 0, 0));
+
+        Assert.That(book.Candle("BTCUSDT", FiveMinutes, Ten), Is.EqualTo(new ClosedCandle(Ten, Ten.AddMinutes(5), 100, 101, 99, 100, 12)), "four minutes with trades");
+        Assert.That(book.Minutes("BTCUSDT", Ten, Ten.AddMinutes(5)).Select(minute => minute.OpenTime.Minute), Is.EqualTo(new[] { 0, 1, 3, 4 }));
+    }
+
+    /// <summary>
+    ///     Task 9.1: spec market-live-feed «Окно из минут с нулевым объёмом». The pair has no candle there, while the clock of
+    ///     the feed counts its minutes.
+    /// </summary>
+    [Test]
+    public void A_window_of_minutes_with_a_volume_of_zero_has_no_candle()
+    {
+        MarketBook book = Book(Ten.AddMinutes(6));
+        for (int minute = 0; minute < 5; minute++)
+        {
+            book.Apply(Minute("BTCUSDT", Ten.AddMinutes(minute), open: 100, close: 100, volume: 0));
+        }
+
+        Assert.That(book.Candle("BTCUSDT", FiveMinutes, Ten), Is.Null);
+        Assert.That(book.Minutes("BTCUSDT", Ten, Ten.AddMinutes(5)), Is.Empty);
+        Assert.That((book.LastMinute, book.LastMinuteOf("BTCUSDT"), book.CoveredFrom), Is.EqualTo(((DateTimeOffset?)Ten.AddMinutes(4), (DateTimeOffset?)Ten.AddMinutes(4), (DateTimeOffset?)Ten)));
+        Assert.That(book.Holds(FiveMinutes, Ten), Is.True, "the book holds the window: it has no trades");
+    }
+
+    /// <summary>
+    ///     Task 9.1: spec market-live-feed «Нулевая минута закрывает свечу». For «Момент закрытия свечи» and «Закрытие свечи при
+    ///     догоне» a minute with a volume of zero is a minute of the feed.
+    /// </summary>
+    [Test]
+    public void A_minute_with_a_volume_of_zero_closes_the_candle()
+    {
+        DateTimeOffset noon = Ten.AddHours(2);
+        var book = new MarketBook(new FakeTimeProvider(noon.AddSeconds(15)), TimeSpan.FromSeconds(15));
+        book.Apply(Minute("BTCUSDT", noon.AddMinutes(-1), open: 1, close: 1, volume: 0));
+
+        Assert.That(book.Closed(noon), Is.True, "12:00:15 with the minute of 11:59 without trades");
+        Assert.That(book.Past(noon), Is.False, "the minute of 12:00 has not come");
+        book.Apply(Minute("ETHUSDT", noon, open: 1, close: 1, volume: 0));
+        Assert.That(book.Past(noon), Is.True, "the minute of 12:00 without trades");
+    }
+
+    /// <summary>
+    ///     Task 9.1: a payment and the now of an idea are priced at the close of the last minute with trades, as the minute path
+    ///     of a backtest prices them; a minute with a volume of zero is none.
+    /// </summary>
+    [Test]
+    public void The_close_before_a_moment_is_of_the_last_minute_with_trades()
+    {
+        MarketBook book = Book(Ten.AddMinutes(6));
+        book.Apply(Minute("BTCUSDT", Ten, open: 100, close: 101));
+        book.Apply(Minute("BTCUSDT", Ten.AddMinutes(1), open: 101, close: 90, volume: 0));
+
+        Assert.That(book.CloseBefore("BTCUSDT", Ten.AddMinutes(2)), Is.EqualTo(101m));
+    }
+
     private static MarketBook Book(DateTimeOffset now)
     {
         return new MarketBook(new FakeTimeProvider(now), TimeSpan.FromSeconds(15));
