@@ -4,7 +4,7 @@
 
 Стенд — это служба: одна база Postgres, API `ProfitFox.Presentation` для фронтенда и CLI, и от одного до N
 процессов `ProfitFox.Worker`, которые считают прогоны стратегий из очереди в базе. Стенды на разных машинах (Мак,
-soyo-02) никак не связаны: у каждого своя база и свои Worker'ы. Спецификации — `openspec/specs/strategy-backtest`,
+firebat-01) никак не связаны: у каждого своя база и свои Worker'ы. Спецификации — `openspec/specs/strategy-backtest`,
 `bench-run-queue`, `strategy-constructor`, `signal-constructor`, `signal-preview`, `strategy-preview`, а для идей и
 рынка — `strategy-ideas`, `idea-labels`, `market-live-feed`, `market-overview`, `saved-filters`.
 
@@ -193,21 +193,23 @@ API (`backend/src/ProfitFox.Presentation/appsettings.json`) и Worker
 npm --prefix frontend run generate:api
 ```
 
-## Production (soyo-02)
+## Production (firebat-01)
 
-На soyo-02 (`192.168.8.213`) работает свой стенд, не связанный со стендом на Маке: свои база и Worker'ы. Описание —
-`docker-compose.prod.yml`, проект `profit-fox` в `~/profit-fox`:
+На firebat-01 (`192.168.8.163`, пользователь `firebat`) работает свой стенд, не связанный со стендом на Маке: свои база
+и Worker'ы. Описание — `docker-compose.prod.yml`, проект `profit-fox` в `~/profit-fox`:
 
 - `db` — Postgres 17 (том `profit-fox-db`, порт наружу не открыт, 1 ГБ);
 - `api` — API со страницей, образ `ghcr.io/dmitryshelamov/profit-fox:<N>`, порт `5240`, 512 МБ. При старте
   мигрирует базу; новая база пуста;
-- `worker-1`, `worker-2` — образ `ghcr.io/dmitryshelamov/profit-fox-worker:<N>`, имена `soyo-02-1` и `soyo-02-2`, по 1 ГБ.
-  Берут данные у сервиса данных на этой же машине (`5237`, `5236`). Сканер идей идёт в одном из них — в том, что взял
-  аренду; второй берёт её, если первый остановился. Новых служб для идей нет.
+- `worker-1`, `worker-2` — образ `ghcr.io/dmitryshelamov/profit-fox-bench-worker:<N>` (не `profit-fox-worker`: это имя с
+  номерами 1–50 занято старым проектом), имена `firebat-01-1` и `firebat-01-2`, по 6 ГБ: сканер держит минуты всех пар
+  за сутки и графы всех включённых стратегий. Берут данные у сервиса данных на soyo-02 (`192.168.8.213`, порты `5237`,
+  `5236`). Сканер идей идёт в одном из них — в том, что взял аренду; второй берёт её, если первый остановился. Новых
+  служб для идей нет.
 - Том `profit-fox-history-cache` — кэш истории (`MarketData__HistoryCache__Path=/var/cache/profit-fox/history`), один на
   `api`, `worker-1` и `worker-2`: месяц, сохранённый одним Worker'ом, читают второй и предпросмотр. Предел — 40 ГБ. Том
   переживает деплой и откат; первый прогон после выкладки заполняет его. Размер — `docker system df -v`. Очистить кэш
-  (например, если сервис данных исправил уже покрытую историю) — на soyo-02 убрать контейнеры, которые держат том, удалить
+  (например, если сервис данных исправил уже покрытую историю) — на firebat-01 убрать контейнеры, которые держат том, удалить
   том и поднять те же службы снова; база не трогается:
 
   ```bash
@@ -224,7 +226,7 @@ npm --prefix frontend run generate:api
 
   Выключить кэш без отката — пустая `MarketData__HistoryCache__Path`.
 
-Страница — `http://192.168.8.213:5240/`. Без авторизации, как остальные службы в локальной сети.
+Страница — `http://192.168.8.163:5240/`. Без авторизации, как остальные службы в локальной сети.
 
 ### Как идёт деплой
 
@@ -232,8 +234,8 @@ npm --prefix frontend run generate:api
    и тест `deploy/deploy.sh`).
 2. После зелёного CI `.github/workflows/deploy.yml` даёт коммиту следующий номер `N` (тег `vN`), собирает на GitHub оба образа
    и кладёт их в GHCR как `:N` с меткой коммита.
-3. Задача `deploy` ждёт Approve владельца в окружении `production`, затем раннер на soyo-03 по SSH вызывает на soyo-02
-   `deploy <N> 1`.
+3. Задача `deploy` ждёт Approve владельца в окружении `production`, затем раннер на soyo-03 по SSH вызывает на
+   firebat-01 `deploy <N> 1`.
 4. Ключ может запустить только `deploy.sh`. Тот берёт коммит тега `vN` на GitHub, принимает его лишь из `release/0.1.0`,
    проверяет метку коммита у обоих образов и поднимает: `db` (ждёт готовности), `api` (ждёт `/health` до 120 с), затем
    `worker-1` и `worker-2`. В конце пишет `~/profit-fox/current` и чистит старые образы. Том базы никогда не удаляется.
@@ -242,7 +244,7 @@ npm --prefix frontend run generate:api
 
 Тот же деплой прежнего номера: в GitHub, Actions, Deploy, «Run workflow» на ветке `release/0.1.0`, поле `version` — прежнее
 `N`; затем Approve. Миграции идут только вперёд: до первой новой версии схемы откат кода безопасен, после неё откат —
-отдельное решение. Текущая версия — `~/profit-fox/current` на soyo-02.
+отдельное решение. Текущая версия — `~/profit-fox/current` на firebat-01.
 
 ### Разовые шаги владельца
 
@@ -256,17 +258,19 @@ npm --prefix frontend run generate:api
    ssh-keygen -t ed25519 -N '' -f ~/.ssh/profit-fox-deploy
    ```
 
-   и адрес soyo-02 в `~/.ssh/known_hosts`. На soyo-02 в `~/.ssh/authorized_keys` одной строкой, где `<ключ>` — содержимое
-   `profit-fox-deploy.pub`:
+   и адрес firebat-01 в `~/.ssh/known_hosts`. На firebat-01 в `~/.ssh/authorized_keys` одной строкой, где `<ключ>` —
+   содержимое `profit-fox-deploy.pub`:
 
    ```text
    command="~/profit-fox/deploy.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty,from="192.168.8.142" <ключ>
    ```
 
-4. На soyo-02: `~/profit-fox/.env.prod` с правами `600` и одной строкой `PROFIT_FOX_DB_PASSWORD=<hex>` (например,
-   `openssl rand -hex 24`); `deploy/deploy.sh` из репозитория скопировать как `~/profit-fox/deploy.sh` с правом
-   исполнения. Нужны `curl`, `jq` и `docker`.
-5. Пакеты `profit-fox` и `profit-fox-worker` в GHCR сделать публичными после первой публикации: сервер тянет их
+4. На firebat-01: Docker из официального репозитория (журналы контейнеров по 10 МБ × 3, `live-restore`), пользователь
+   `firebat` в группе `docker`, сон запрещён (`systemctl mask sleep.target suspend.target hibernate.target
+   hybrid-sleep.target`) — машина с рабочим столом. `~/profit-fox/.env.prod` с правами `600` и одной строкой
+   `PROFIT_FOX_DB_PASSWORD=<hex>` (например, `openssl rand -hex 24`); `deploy/deploy.sh` из репозитория скопировать как
+   `~/profit-fox/deploy.sh` с правом исполнения. Нужны `curl`, `jq` и `docker`.
+5. Пакеты `profit-fox` и `profit-fox-bench-worker` в GHCR сделать публичными после первой публикации: сервер тянет их
    без входа.
 6. В `~/profit-fox-market-data/config/market-data.json` на soyo-02 задать `HistoryRead:MaxConcurrentReads` = 3: два Worker'а и
    предпросмотр стенда делят чтения истории сервиса данных.
@@ -274,7 +278,7 @@ npm --prefix frontend run generate:api
 Проверка первого деплоя: страница открывается, сохранённая стратегия `funding-short` ставится в очередь с Мака
 
 ```bash
-dotnet run --project backend/src/ProfitFox.Cli -- --bench http://192.168.8.213:5240 run funding-short --timeframe 4h --wait
+dotnet run --project backend/src/ProfitFox.Cli -- --bench http://192.168.8.163:5240 run funding-short --timeframe 4h --wait
 ```
 
 и прогон заканчивается таблицей наборов.

@@ -102,7 +102,7 @@ jobs:
       - name: Build
         run: npm run build
 
-  # The deploy key of soyo-02 passes its command to deploy.sh, so the script is linted and its parsing tested.
+  # The deploy key of firebat-01 passes its command to deploy.sh, so the script is linted and its parsing tested.
   deploy-script:
     name: Deploy script
     runs-on: ubuntu-latest

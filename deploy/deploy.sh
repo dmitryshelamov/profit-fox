@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Deploys version N of the profit-fox bench on soyo-02; deploying an earlier N rolls back. A copy of deploy/deploy.sh of
-# profit-fox-market-data for the two images of this service (the API with the page, and the Worker).
+# Deploys version N of the profit-fox bench on firebat-01; deploying an earlier N rolls back. A copy of deploy/deploy.sh
+# of profit-fox-market-data for the two images of this service (the API with the page, and the Worker).
 # The deploy key in ~/.ssh/authorized_keys runs only this script (a forced command), so the request comes in
 # SSH_ORIGINAL_COMMAND as "deploy <N> <protocol>". The script trusts nothing else the caller sends: it takes the commit
 # of tag vN from GitHub, accepts it only from release/0.1.0 and runs only images built from that commit.
-# Installed by hand as ~/profit-fox/deploy.sh (README, "Production (soyo-02)"); it needs curl, jq and docker.
+# Installed by hand as ~/profit-fox/deploy.sh (README, "Production (firebat-01)"); it needs curl, jq and docker.
 # It never runs `docker compose down -v`: the volume of the database is the only store of the bench.
 
 # Raised when the command changes; deploy.yml passes the same number, so an outdated copy on the server refuses.
@@ -83,7 +83,7 @@ main() {
 
   compose pull --quiet
   # An image pushed under an existing number from another commit does not run.
-  for name in profit-fox profit-fox-worker; do
+  for name in profit-fox profit-fox-bench-worker; do
     image="ghcr.io/dmitryshelamov/$name:$version"
     revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image")"
     [[ "$revision" == "$commit" ]] || fail "$image is built from '$revision', not from $commit"
