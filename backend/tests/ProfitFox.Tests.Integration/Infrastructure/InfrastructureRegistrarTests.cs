@@ -150,6 +150,41 @@ public sealed class InfrastructureRegistrarTests
             Throws.InvalidOperationException.With.Message.Contains("MarketData:HistoryCache:MaxSizeGb"));
     }
 
+    /// <summary>
+    ///     Change add-backtest-history-cache, task 5.3: the settings files of the API and of the Worker — no folder of the cache
+    ///     and a limit of 40 GB in <c>appsettings.json</c>, one folder in the home folder for both processes of the Mac in
+    ///     <c>appsettings.Development.json</c>.
+    /// </summary>
+    [TestCase("ProfitFox.Presentation")]
+    [TestCase("ProfitFox.Worker")]
+    public void The_settings_files_give_no_cache_by_default_and_one_folder_of_the_home_folder_on_the_Mac(string project)
+    {
+        string folder = Path.Combine(Root(), "backend", "src", project);
+        IConfiguration production = new ConfigurationBuilder().AddJsonFile(Path.Combine(folder, "appsettings.json")).Build();
+        IConfiguration development = new ConfigurationBuilder()
+            .AddJsonFile(Path.Combine(folder, "appsettings.json"))
+            .AddJsonFile(Path.Combine(folder, "appsettings.Development.json"))
+            .Build();
+
+        Assert.That(production["MarketData:HistoryCache:Path"], Is.Empty);
+        Assert.That(production["MarketData:HistoryCache:MaxSizeGb"], Is.EqualTo("40"));
+        Assert.That(MarketDataRegistrar.HistoryCache(production), Is.Null);
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        Assert.That(MarketDataRegistrar.HistoryCache(development), Is.EqualTo(new HistoryCacheSettings(Path.Combine(home, ".cache", "profit-fox", "history"), 40L * 1024 * 1024 * 1024)));
+    }
+
+    // The root of the repository: the nearest folder up from the test binaries that has .git.
+    private static string Root()
+    {
+        var folder = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
+        while (folder is not null && !Path.Exists(Path.Combine(folder.FullName, ".git")))
+        {
+            folder = folder.Parent;
+        }
+
+        return folder?.FullName ?? throw new InvalidOperationException("The tests do not run inside the repository.");
+    }
+
     private static IConfiguration Settings(Dictionary<string, string?> values)
     {
         return new ConfigurationBuilder()

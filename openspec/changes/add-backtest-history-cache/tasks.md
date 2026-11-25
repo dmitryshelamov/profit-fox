@@ -82,18 +82,18 @@
 
 ## 5. Выкладка и документы
 
-- [ ] 5.1 `Dockerfile` API и Worker'а: папка `/var/cache/profit-fox/history` с владельцем `$APP_UID` (решение 10).
+- [x] 5.1 `Dockerfile` API и Worker'а: папка `/var/cache/profit-fox/history` с владельцем `$APP_UID` (решение 10).
   Проверить: оба образа собираются, и в контейнере Worker'а с пустым именованным томом на этой папке `touch` файла от
   пользователя образа проходит; команда и её вывод записаны в «Замеры». Нет Docker в сессии — записать в «Открыто
   после применения» как проверку основной сессии.
-- [ ] 5.2 `docker-compose.prod.yml`: том `profit-fox-history-cache` у `api`, `worker-1` и `worker-2` и переменная
+- [x] 5.2 `docker-compose.prod.yml`: том `profit-fox-history-cache` у `api`, `worker-1` и `worker-2` и переменная
   `MarketData__HistoryCache__Path`. Проверить: `docker compose -f docker-compose.prod.yml config` с подставленными
   `PROFIT_FOX_VERSION` и `PROFIT_FOX_DB_PASSWORD` проходит и называет том у трёх служб; `deploy/deploy.test.sh`
   зелёный.
-- [ ] 5.3 `appsettings.json` API и Worker'а: пустой путь и предел 40; `appsettings.Development.json` обоих —
+- [x] 5.3 `appsettings.json` API и Worker'а: пустой путь и предел 40; `appsettings.Development.json` обоих —
   `~/.cache/profit-fox/history`. Проверить тестом, что настройки по умолчанию читаются в ожидаемые значения, и что
   интеграционные тесты не пишут в домашнюю папку: после полного прогона тестов `~/.cache/profit-fox` не появилась.
-- [ ] 5.4 README: «Настройки» — две новые настройки; «Как считается прогон» — закрытая история берётся из кэша, первый
+- [x] 5.4 README: «Настройки» — две новые настройки; «Как считается прогон» — закрытая история берётся из кэша, первый
   прогон его заполняет; «Production» — том кэша и как его очистить. Проверить: README называет
   `MarketData:HistoryCache:Path`, `MarketData:HistoryCache:MaxSizeGb`, том `profit-fox-history-cache` и команду его
   удаления, и ни одна его фраза не говорит, что история читается у сервиса данных при каждом прогоне.
@@ -166,6 +166,31 @@ OpenSpec CLI 2.2.0.
   `PreviewHistoryCacheTests` 3, `HistoryCacheWarmupTests` 1), все зелёные. Те же тесты с регистрацией, которая
   пропускает папку кэша: из 9 тестов прогона падают 8 (зелёным остаётся «Неделя без событий», она проверяет и путь без
   кэша), из 4 тестов предпросмотра и прогрева — 3 (прогрев зелёный и без кэша, как и должен).
+- Группа 5 (выкладка и документы): сборка Release — 0 предупреждений; тесты бэкенда: unit 879, интеграционные 458 (+2:
+  `The_settings_files_give_no_cache_by_default_and_one_folder_of_the_home_folder_on_the_Mac` для API и Worker'а; без
+  правок `appsettings*.json` оба падают), все зелёные. После полного прогона тестов `~/.cache/profit-fox` нет, во временной
+  папке тестов (`/tmp/profit-fox-tests/history-cache`) ничего не осталось.
+- Задача 5.1. Образы собраны в облаке из вариантов `Dockerfile`, сгенерированных из файлов репозитория с двумя вставками
+  только для этой машины: сертификат прокси сессии в стадиях сборки (без него `dotnet restore` в `docker build` падает с
+  `NU1301 … UntrustedRoot`) и `node:22` с зеркала `mirror.gcr.io` (Docker Hub отвечал `429`); стадия запуска — строка в
+  строку из репозитория. Оба образа собрались (`profit-fox-worker:cache-test`, `profit-fox:cache-test`). Проверка на пустом
+  именованном томе:
+
+  ```text
+  $ docker volume create profit-fox-history-cache-test
+  $ docker run --rm --entrypoint sh -v profit-fox-history-cache-test:/var/cache/profit-fox/history profit-fox-worker:cache-test -c 'id -u; touch /var/cache/profit-fox/history/probe && ls -ln /var/cache/profit-fox/history && stat -c "%u %a %n" /var/cache/profit-fox/history'
+  1654
+  total 0
+  -rw-r--r-- 1 1654 1654 0 Nov 25 11:48 probe
+  1654 755 /var/cache/profit-fox/history
+  ```
+
+  У образа API на новом пустом томе — тот же вывод. Для сравнения: тот же том на папке, которой в образе нет
+  (`/var/cache/elsewhere`), достаётся root (`0 755`), и `touch` от `1654` даёт `Permission denied`.
+- Задача 5.2: `PROFIT_FOX_VERSION=1 PROFIT_FOX_DB_PASSWORD=00ff docker compose -f docker-compose.prod.yml config` — код
+  выхода 0, том `history-cache` (`name: profit-fox-history-cache`) с `target: /var/cache/profit-fox/history` у `api`,
+  `worker-1` и `worker-2`, `MarketData__HistoryCache__Path: /var/cache/profit-fox/history` у тех же трёх;
+  `bash deploy/deploy.test.sh` — `all passed`. `shellcheck` в сессии нет; `deploy/*.sh` не менялись.
 
 ## Открыто после применения
 
@@ -177,3 +202,11 @@ OpenSpec CLI 2.2.0.
   и своим окном. Каждое окно по-прежнему запрошено один раз на шесть наборов. Расхождение формулировки сценария с решением 4
   — на решение основной сессии: уточнить сценарий («не больше одного раза в месяцах, покрытых целиком») или держать в памяти
   ответ неполного месяца, чего design.md не предусматривает.
+
+- **Задача 5.1, сборка образов из файлов репозитория без правок** — в облаке не проверена (см. «Замеры»: сертификат прокси
+  и зеркало `node:22`); её сделает CI-сборка образов `deploy.yml` на GitHub при выкладке. Права папки в стадии запуска
+  проверены на собранных образах.
+- **Тестовые хосты и `appsettings.Development.json`.** design.md (решение 10) говорит, что тестовые хосты работают в
+  окружении `Development`. На деле API в тестах — `Testing` (`BenchTestApplication`), Worker в тестах — окружение
+  по умолчанию (`Production`), остальные — `BenchServices` с настройками в памяти; папку из `appsettings.Development.json`
+  не видит ни один. Тесты кэша задают свою временную папку явно; после полного прогона `~/.cache/profit-fox` нет.
