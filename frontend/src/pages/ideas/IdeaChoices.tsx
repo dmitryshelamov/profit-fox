@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { IdeaChoices } from '@/api/ideas';
 import { listSignals } from '@/api/signals';
 import { listStrategies } from '@/api/strategies';
+import { KindChoice } from '@/modules/instrument-kind/KindChoice';
 import { timeframes } from '@/preview/preview';
 import { SelectField } from '@/shared/ui/SelectField';
 import { TextField } from '@/shared/ui/TextField';
@@ -29,7 +30,8 @@ export function useLabelChoices(): string[] {
 }
 
 /**
- * The choices above a table of ideas: part of the symbol, timeframe, side and label; the open ideas add «только в плюсе»
+ * The choices above a table of ideas: part of the symbol, timeframe, side, the kind of the pair (not for the ideas of a
+ * pair: change add-instrument-kind-filter) and label; the open ideas add «только в плюсе»
  * and «только со стопом», the journal the reason of the exit and the period; the ideas of a pair have no search and add
  * the strategy and the state. «Открытые» and «Журнал» choose the strategy by the row of strategies (change
  * add-setup-strategies).
@@ -101,6 +103,9 @@ export function IdeaChoiceRow({
         <option value="long">лонг</option>
         <option value="short">шорт</option>
       </SelectField>
+      {kind !== 'pair' && (
+        <KindChoice kind={choices.kind} onChange={(chosen) => set({ kind: chosen })} />
+      )}
       <SelectField
         aria-label="Метка"
         className="w-[130px]"

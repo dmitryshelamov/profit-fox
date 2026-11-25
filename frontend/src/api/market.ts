@@ -10,12 +10,17 @@ export type ChartCandle = Schemas['ChartCandle'];
 export type ChartPoint = Schemas['ChartPoint'];
 export type LiveCandle = Schemas['LiveCandleResponse'];
 
+/** The kind of a pair as the API names it (change add-instrument-kind-filter): crypto, or a contract on a share. */
+export type InstrumentKind = 'crypto' | 'stock';
+
 /** The choices above the table of «Рынок». */
 export interface MarketChoices {
   readonly search?: string;
   readonly ideasOnly?: boolean;
   readonly strategy?: string;
   readonly timeframe?: string;
+  /** The kind of the pair; every kind when not given. */
+  readonly kind?: InstrumentKind;
 }
 
 export async function listMarketPairs(
@@ -28,6 +33,7 @@ export async function listMarketPairs(
     ...(choices.ideasOnly ? { ideasOnly: true } : {}),
     ...(choices.strategy ? { strategy: choices.strategy } : {}),
     ...(choices.timeframe ? { timeframe: choices.timeframe } : {}),
+    ...(choices.kind ? { kind: choices.kind } : {}),
   };
   return pageOf(await api.GET('/api/market/pairs', { params: { query } }));
 }

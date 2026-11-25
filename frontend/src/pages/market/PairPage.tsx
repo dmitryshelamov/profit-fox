@@ -10,6 +10,7 @@ import {
   getPairChart,
   getPairOpenInterest,
 } from '@/api/market';
+import { isInstrumentKind, kindWords } from '@/modules/instrument-kind/useInstrumentKind';
 import { IdeaChoiceRow } from '@/pages/ideas/IdeaChoices';
 import { pairColumns } from '@/pages/ideas/ideaColumns';
 import { lengthOf, timeframes } from '@/preview/preview';
@@ -155,6 +156,12 @@ function PairHeader({
         </Link>
         <span className="flex items-center gap-3">
           <h1 className="font-mono text-[22px] font-bold">{symbol}</h1>
+          {pair && isInstrumentKind(pair.kind) && (
+            // The kind of the pair, a quiet word as the captions of the figures (change add-instrument-kind-filter).
+            <span aria-label="Вид пары" className="text-[12px] text-muted">
+              {kindWords[pair.kind].one}
+            </span>
+          )}
           <Badge tone="muted">бессрочный · Bybit</Badge>
         </span>
       </div>

@@ -7,6 +7,8 @@ import { listMarketPairs, type MarketPair } from '@/api/market';
 import { listStrategies } from '@/api/strategies';
 import { FilterRow } from '@/modules/filters/FilterRow';
 import { useChosenFilter } from '@/modules/filters/useChosenFilter';
+import { KindChoice } from '@/modules/instrument-kind/KindChoice';
+import { useInstrumentKind } from '@/modules/instrument-kind/useInstrumentKind';
 import { timeframes } from '@/preview/preview';
 import { Page, PageTitle } from '@/shared/ui/Page';
 import { type PagedColumn, PagedTable } from '@/shared/ui/PagedTable';
@@ -95,7 +97,10 @@ export function MarketPage({
   const [strategy, setStrategy] = useState('');
   const [timeframe, setTimeframe] = useState('');
   const [ideasOnly, setIdeasOnly] = useState(false);
-  const choices = { search, strategy, timeframe, ideasOnly };
+  // One kind for «Рынок» and «Идеи», kept in the browser (change add-instrument-kind-filter).
+  const instrumentKind = useInstrumentKind();
+  const kind = instrumentKind.kind;
+  const choices = { search, strategy, timeframe, ideasOnly, kind };
   const filter = useChosenFilter('market');
   const chosen = filter.chosen ?? undefined;
   // The age of the snapshot is looked at by the clock too: a scanner that stopped sends no new answer (task 18.19).
@@ -141,6 +146,7 @@ export function MarketPage({
             value={search}
             onChange={(event) => choose(setSearch)(event.target.value)}
           />
+          <KindChoice kind={kind} onChange={choose(instrumentKind.choose)} />
           <SelectField
             aria-label="Стратегия идеи"
             className="w-[200px]"

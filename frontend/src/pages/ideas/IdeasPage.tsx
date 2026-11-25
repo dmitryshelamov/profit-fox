@@ -12,6 +12,7 @@ import {
 import { listStrategies } from '@/api/strategies';
 import { FilterRow } from '@/modules/filters/FilterRow';
 import { useChosenFilter } from '@/modules/filters/useChosenFilter';
+import { useInstrumentKind } from '@/modules/instrument-kind/useInstrumentKind';
 import { buttonLook } from '@/shared/ui/Button';
 import { Page, PageTitle } from '@/shared/ui/Page';
 import { PagedTable } from '@/shared/ui/PagedTable';
@@ -53,6 +54,19 @@ export function IdeasPage({
   const [openChoices, setOpenChoices] = useState<IdeaChoices>({});
   const [closedChoices, setClosedChoices] = useState<IdeaChoices>({ period: 7 });
   const filter = useChosenFilter('ideas');
+  // The kind of the pair is one for both tabs and «Рынок», kept in the browser (change add-instrument-kind-filter).
+  const instrumentKind = useInstrumentKind();
+  const withKind = (choices: IdeaChoices): IdeaChoices => ({
+    ...choices,
+    kind: instrumentKind.kind,
+  });
+  const takeKind = ({ kind, ...choices }: IdeaChoices): IdeaChoices => {
+    if (kind !== instrumentKind.kind) {
+      instrumentKind.choose(kind);
+    }
+
+    return choices;
+  };
   // A filter the list says is gone is taken off once (task 18.27): the list asks again without it.
   const takeOff = (id: string) => {
     if (filter.chosen === id) {
@@ -116,10 +130,10 @@ export function IdeasPage({
             <OpenIdeas
               filter={filter.chosen}
               onGone={takeOff}
-              choices={openChoices}
+              choices={withKind(openChoices)}
               page={page}
               onChoices={(choices) => {
-                setOpenChoices(choices);
+                setOpenChoices(takeKind(choices));
                 onPlace('open', 1);
               }}
               onPage={(next) => onPlace('open', next)}
@@ -129,10 +143,10 @@ export function IdeasPage({
             <Journal
               filter={filter.chosen}
               onGone={takeOff}
-              choices={closedChoices}
+              choices={withKind(closedChoices)}
               page={page}
               onChoices={(choices) => {
-                setClosedChoices(choices);
+                setClosedChoices(takeKind(choices));
                 onPlace('journal', 1);
               }}
               onPage={(next) => onPlace('journal', next)}
