@@ -5,9 +5,10 @@ using ProfitFox.Domain.ValueObjects.Nodes;
 namespace ProfitFox.Domain.Services.Nodes.Numbers;
 
 /// <summary>
-///     <c>add</c>, <c>subtract</c> and <c>multiply</c>: an operation on <c>a</c> and <c>b</c> in decimals (spec
-///     strategy-execution «Арифметические узлы»); missing when either is missing, and when the result does not fit a
-///     decimal: a graph may multiply anything, and a number past <c>7.9e28</c> is no value rather than a failed run.
+///     <c>add</c>, <c>subtract</c>, <c>multiply</c>, <c>divide</c>, <c>min</c> and <c>max</c>: an operation on <c>a</c>
+///     and <c>b</c> in decimals (spec strategy-execution «Арифметические узлы», «Деление», «Меньшее и большее»); missing
+///     when either is missing, when <c>b</c> of a division is zero, and when the result does not fit a decimal: a graph may
+///     multiply anything, and a number past <c>7.9e28</c> is no value rather than a failed run.
 /// </summary>
 internal sealed class ArithmeticNode(Func<decimal, decimal, decimal> operation) : Node
 {
@@ -24,7 +25,7 @@ internal sealed class ArithmeticNode(Func<decimal, decimal, decimal> operation) 
         {
             return operation(left, right);
         }
-        catch (OverflowException)
+        catch (Exception exception) when (exception is OverflowException or DivideByZeroException)
         {
             return null;
         }

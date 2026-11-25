@@ -310,6 +310,50 @@ public sealed class PreviewTests
     }
 
     /// <summary>
+    ///     Change add-setup-strategies, task 2.8: spec strategy-execution «Срок в свечах», «Дробное число свечей» — a time of
+    ///     1.5 candles is missing and every entry is refused with <c>plan</c>.
+    /// </summary>
+    [Test]
+    public async Task A_fractional_time_in_candles_refuses_every_entry_with_plan()
+    {
+        StrategyPreviewResponse preview = await PreviewInCandles("1.5");
+
+        Assert.That(preview.Orders, Has.Count.EqualTo(28));
+        Assert.That(preview.Orders.Select(order => (order.Outcome, order.Reason)), Has.All.EqualTo(("excluded", (string?)"plan")));
+    }
+
+    /// <summary>
+    ///     Change add-setup-strategies, task 2.8: 2 candles of 4h close each trade 8 hours after its order; the last order of
+    ///     the four weeks waits for a payment the fake service does not have.
+    /// </summary>
+    [Test]
+    public async Task Two_candles_of_four_hours_close_a_trade_after_eight_hours()
+    {
+        StrategyPreviewResponse preview = await PreviewInCandles("2");
+
+        PreviewOrder[] filled = [.. preview.Orders.Where(order => order.Outcome == "filled")];
+        Assert.That(filled, Has.Length.EqualTo(27));
+        Assert.That(
+            filled.Select(order => preview.Cycles[order.Cycle!.Value].Fills[^1].Moment - order.Moment),
+            Has.All.EqualTo((long)TimeSpan.FromHours(8).TotalMilliseconds));
+    }
+
+    // The strategy of H0001 whose close-after takes its time from a node candles.
+    private static async Task<StrategyPreviewResponse> PreviewInCandles(string count)
+    {
+        await using MarketDataServer market = await MarketDataServer.Start();
+        await using var api = new BenchTestApplication(market, time: FixedTime.Exploration);
+        Guid signal = await SaveSignal(api);
+        JsonObject strategy = StrategiesTests.Strategy(signal);
+        JsonArray nodes = strategy["nodes"]!.AsArray();
+        nodes.Add(JsonNode.Parse($$"""{ "id": "life", "kind": "candles", "inputs": { "count": {{count}} } }"""));
+        nodes.First(node => (string?)node!["id"] == "close-after")!["inputs"]!.AsObject().Remove("after");
+        strategy["wires"]!.AsArray().Add(JsonNode.Parse("""{ "from": "life.duration", "to": "close-after.after" }"""));
+
+        return await OkStrategy(await PreviewStrategy(api, "BTCUSDT", "4h", strategy));
+    }
+
+    /// <summary>
     ///     Spec strategy-preview «Те же сделки, что у стенда» (change add-strategy-constructor, task 5.3).
     /// </summary>
     [Test]

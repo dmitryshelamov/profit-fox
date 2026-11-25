@@ -276,6 +276,291 @@
     "settings": []
   },
   {
+    "kind": "divide",
+    "title": "Разделить",
+    "group": "Числа",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "min",
+    "title": "Меньшее",
+    "group": "Числа",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "max",
+    "title": "Большее",
+    "group": "Числа",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "select",
+    "title": "Выбрать",
+    "group": "Числа",
+    "inputs": [
+      {
+        "name": "when",
+        "type": "boolean"
+      },
+      {
+        "name": "a",
+        "type": "number"
+      },
+      {
+        "name": "b",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "window",
+    "title": "Окно",
+    "group": "Окна",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "number"
+      },
+      {
+        "name": "length",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": [
+      {
+        "name": "operation",
+        "values": ["max", "min", "sum", "average", "median", "first"]
+      }
+    ]
+  },
+  {
+    "kind": "percentile",
+    "title": "Перцентиль",
+    "group": "Окна",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "number"
+      },
+      {
+        "name": "length",
+        "type": "number"
+      },
+      {
+        "name": "rank",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "hold",
+    "title": "Запомнить",
+    "group": "Окна",
+    "inputs": [
+      {
+        "name": "when",
+        "type": "boolean"
+      },
+      {
+        "name": "value",
+        "type": "number"
+      },
+      {
+        "name": "length",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "atr",
+    "title": "ATR",
+    "group": "Индикаторы",
+    "inputs": [
+      {
+        "name": "length",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "rsi",
+    "title": "RSI",
+    "group": "Индикаторы",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "number"
+      },
+      {
+        "name": "length",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "zones",
+    "title": "Зоны",
+    "group": "Индикаторы",
+    "inputs": [
+      {
+        "name": "atr",
+        "type": "number"
+      },
+      {
+        "name": "price",
+        "type": "number"
+      },
+      {
+        "name": "length",
+        "type": "number"
+      },
+      {
+        "name": "merge",
+        "type": "number"
+      },
+      {
+        "name": "strength",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "above",
+        "type": "number"
+      },
+      {
+        "name": "below",
+        "type": "number"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "candles",
+    "title": "Срок в свечах",
+    "group": "Данные",
+    "inputs": [
+      {
+        "name": "count",
+        "type": "number"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "duration",
+        "type": "duration"
+      }
+    ],
+    "settings": []
+  },
+  {
+    "kind": "is-true",
+    "title": "Истинно",
+    "group": "Логика",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "boolean"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "boolean"
+      }
+    ],
+    "settings": []
+  },
+  {
     "kind": "position",
     "title": "Позиция",
     "group": "Позиция",

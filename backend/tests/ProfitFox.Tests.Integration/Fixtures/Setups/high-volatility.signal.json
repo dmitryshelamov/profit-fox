@@ -1,0 +1,97 @@
+{
+  "name": "high-volatility",
+  "description": "Высокая волатильность — сигнал метки «↑ волат.», не стратегии: отношение ATR сетапа к close выше 90-го перцентиля этого отношения за 200 свечей до текущей.",
+  "graph": {
+    "formatVersion": 1,
+    "parameters": [],
+    "outputs": [
+      {
+        "name": "state",
+        "type": "boolean"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "p",
+        "kind": "parameters"
+      },
+      {
+        "id": "c",
+        "kind": "candle"
+      },
+      {
+        "id": "atr",
+        "kind": "atr",
+        "inputs": {
+          "length": 14
+        }
+      },
+      {
+        "id": "atr-prev",
+        "kind": "previous"
+      },
+      {
+        "id": "atr-share",
+        "kind": "divide"
+      },
+      {
+        "id": "share-p90",
+        "kind": "percentile",
+        "inputs": {
+          "length": 200,
+          "rank": 0.9
+        }
+      },
+      {
+        "id": "share-p90-prev",
+        "kind": "previous"
+      },
+      {
+        "id": "state",
+        "kind": "compare",
+        "settings": {
+          "operation": "gt"
+        }
+      },
+      {
+        "id": "out",
+        "kind": "outputs"
+      }
+    ],
+    "wires": [
+      {
+        "from": "atr.result",
+        "to": "atr-prev.value"
+      },
+      {
+        "from": "atr-prev.result",
+        "to": "atr-share.a"
+      },
+      {
+        "from": "c.close",
+        "to": "atr-share.b"
+      },
+      {
+        "from": "atr-share.result",
+        "to": "share-p90.value"
+      },
+      {
+        "from": "share-p90.result",
+        "to": "share-p90-prev.value"
+      },
+      {
+        "from": "atr-share.result",
+        "to": "state.a"
+      },
+      {
+        "from": "share-p90-prev.result",
+        "to": "state.b"
+      },
+      {
+        "from": "state.result",
+        "to": "out.state"
+      }
+    ]
+  },
+  "layout": {}
+}

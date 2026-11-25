@@ -149,7 +149,7 @@ API (`backend/src/ProfitFox.Presentation/appsettings.json`) и Worker
 - `Worker:Name`, `Worker:LeaseDuration` (30 с), `Worker:LeaseRenewal` (10 с), `Worker:PollInterval` (1 с) — Worker;
   аренда сканера берёт те же длительность и продление;
 - `Scanner:Enabled` (`true`) — может ли Worker вести живые данные; `Scanner:CloseDelay` (15 с) — сколько после конца
-  свечи ждать её последних минут; `Scanner:WarmupCandles` (200) — свечей истории на прогрев графа;
+  свечи ждать её последних минут; `Scanner:WarmupCandles` (500) — свечей истории на прогрев графа;
   `Scanner:WarmupParallelism` (4) — пар прогревается сразу; `Scanner:WarmupRetry` (1 мин) — когда снова спросить пару,
   которую сервис данных ещё догружает; `Scanner:ReconcileInterval` (5 с) — как часто перечитывать включённые стратегии и
   метки; `Scanner:ExitWait` (90 с) — сколько закрытая идея ждёт выплату в момент выхода; `Scanner:ExitPaymentWait`
@@ -296,6 +296,60 @@ dotnet run --project backend/src/ProfitFox.Cli -- --bench http://192.168.8.213:5
 
 Новую стратегию можно собрать и с нуля: «Новая стратегия» спрашивает вид; «категория идей» начинается с узлов «Вход» и
 «Закрыть через», «для бота» — с узла «Позиция», а сохранённые сигналы лежат в палитре (кнопка «+») в группе «Сигналы».
+
+## Сетапы
+
+Сетапы v2 перенесены как 12 стратегий вида «категория идей» и одна метка (изменение `add-setup-strategies`, спецификация
+`setup-strategies`). В базу они не засеваются: их создают руками на стенде, который назовёт владелец. Тела запросов
+лежат эталоном тестов в `backend/tests/ProfitFox.Tests.Integration/Fixtures/Setups`:
+
+- `<имя>.signal.json` — 19 сигналов-состояний: тело `POST /api/signals` (`name`, `description`, `graph`, `layout`);
+- `<имя>.strategy.json` — 12 стратегий: тело `POST /api/strategies` с `"kind": "idea"`. Узел сигнала стратегии ссылается
+  на сигнал местозаполнителем `{{signal_<имя сигнала через _>}}`, например `{{signal_breakout_up}}`: перед отправкой
+  его заменяют на `id` созданного сигнала, версия — `1`;
+- `H0001/` — сигнал `funding-high` и стратегия `funding-short` в том же виде, для проверки помощника тестов.
+
+Пороги сетапа и плана — параметры графа со значениями v2: у стратегии они же подаются на входы её сигналов, поэтому
+прогон может перебирать, например, `move` стратегии `impulse`. План у всех общий: вход по рынку на событии сетапа, стоп —
+от `close` до экстремума окна сетапа против входа плюс `stopBuffer` = 1.5 ATR 14 прошлой свечи, долей `close`; цель —
+`targetR` = 2 стопа; срок — `lifeCandles` = 24 свечи таймфрейма (узел «Срок в свечах»); размер — `size` = 100 USDT.
+
+Условие с зоной (`breakout-up`, `breakout-down`, `false-breakout-long`, `false-breakout-short`) ложно, а не неизвестно,
+когда зоны с нужной стороны нет: сравнения с краем зоны идут через логический узел `is-true` «Истинно» (ложь при ложном
+и при отсутствующем входе). Поэтому событие пробоя приходит и сразу после свечи без зоны, а у двусторонних стратегий
+`breakout` и `false-breakout` сторону стопа выбирает состояние лонговой стороны. Пока окно зон в 200 свечей не набрано
+или нет ATR, от которого считается край, условие с зоной тоже ложно; часть условия про объём остаётся трёхзначной.
+
+| Стратегия | Сигналы |
+| --- | --- |
+| `accumulation` | `accumulation`, `distribution` |
+| `breakout` | `breakout-up`, `breakout-down` |
+| `drop` | `drop` |
+| `early-drop` | `early-drop` |
+| `early-impulse` | `early-impulse` |
+| `exhaustion` | `exhaustion-bottom`, `exhaustion-top` |
+| `false-breakout` | `false-breakout-long`, `false-breakout-short` |
+| `impulse` | `impulse` |
+| `new-extreme` | `new-high`, `new-low` |
+| `quiet-volume` | `quiet-candle` |
+| `rsi-extreme` | `rsi-oversold-exit`, `rsi-overbought-exit` |
+| `squeeze` | `squeeze` |
+
+Сигнал `high-volatility` — не стратегия, а метка «↑ волат.»: его включают меткой на одном таймфрейме (в эталоне `1h`),
+и она ставится идеям любого таймфрейма. Метке и сетапам нужен прогрев сканера в 500 свечей (`Scanner:WarmupCandles`, так
+и стоит по умолчанию).
+
+Создать всё на стенде — запросы раздела «setups» в `backend/src/ProfitFox.Presentation/ProfitFox.Presentation.http`
+(HTTP-клиент JetBrains: сигнал запоминает свой `id` в переменной `signal_<имя>`, стратегия берёт тело через `<@` с
+подстановкой переменных; сначала все сигналы, потом стратегии). То же из терминала, с `curl` и `jq`, из корня репозитория:
+
+```bash
+bench=http://localhost:5240; ids=(); cd backend/tests/ProfitFox.Tests.Integration/Fixtures/Setups && for file in *.signal.json; do name=${file%.signal.json}; id=$(curl -sSf -H 'Content-Type: application/json' --data-binary @"$file" "$bench/api/signals" | jq -r .id) || break; ids+=(-e "s/{{signal_${name//-/_}}}/$id/g"); done; for file in *.strategy.json; do sed "${ids[@]}" "$file" | curl -sSf -H 'Content-Type: application/json' --data-binary @- "$bench/api/strategies" | jq -r '.name + " v" + (.version | tostring)'; done; cd -
+```
+
+Проверка на стенде: в разделе «Стратегии» открыть `impulse` и в панели предпросмотра выбрать `BTCUSDT` и `1h` —
+предпросмотр отвечает без ошибок (заявок может не быть). Перед включением идей каждую стратегию прогоняют с перебором
+порогов. Таймфреймы включения и таймфрейм метки выбирает владелец.
 
 ## Слои
 

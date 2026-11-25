@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 
 import { fakeApi, type FakeRoute, json } from '@/test/fakeApi';
 import { idea, ideaPage, scannerState } from '@/test/ideas';
+import { pair } from '@/test/market';
 import { renderApp } from '@/test/renderApp';
 import { baseRoutes } from '@/test/routes';
 
@@ -447,5 +448,185 @@ describe('the state of the scanner in «Идеи»', () => {
     expect(await screen.findByRole('status', { name: 'Живые данные' })).toHaveTextContent(
       'идеи считаются без перерыва с 22.11 09:15 UTC',
     );
+  });
+});
+
+// Change add-setup-strategies, task 5.2: spec strategy-ideas «Ряд стратегий в разделе „Идеи“».
+describe('the row of strategies in «Идеи»', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** The answer of the numbers by strategy: 17 of breakout, 35 of false-breakout and none of accumulation, or as given. */
+  function counts(rows: readonly (readonly [string, number])[]) {
+    return json({
+      total: rows.reduce((sum, [, ideas]) => sum + ideas, 0),
+      strategies: rows.map(([strategy, ideas]) => ({ strategy, ideas })),
+      filterGone: false,
+    });
+  }
+
+  const three = [
+    ['accumulation', 0],
+    ['breakout', 17],
+    ['false-breakout', 35],
+  ] as const;
+
+  const queriesOf = (requests: readonly Request[], path: string) =>
+    requests
+      .map((request) => new URL(request.url))
+      .filter((url) => url.pathname === path)
+      .map((url) => url.searchParams);
+
+  const chips = () =>
+    within(screen.getByRole('group', { name: 'Стратегии' }))
+      .getAllByRole('button')
+      .map((chip) => [chip.textContent, chip.getAttribute('aria-pressed')]);
+
+  // Scenario «Ряд над открытыми».
+  it('puts «Все» and a chip of each strategy with its number over the open ideas, «Все» chosen', async () => {
+    const requests = routes({ 'GET /api/ideas/strategies': () => counts(three) });
+    renderApp('/ideas');
+
+    await screen.findByRole('button', { name: 'breakout 17' });
+
+    expect(chips()).toEqual([
+      ['Все 52', 'true'],
+      ['accumulation 0', 'false'],
+      ['breakout 17', 'false'],
+      ['false-breakout 35', 'false'],
+    ]);
+    expect(screen.queryByRole('combobox', { name: 'Стратегия' })).toBeNull();
+    expect(queriesOf(requests, '/api/ideas/strategies').at(-1)!.get('state')).toBe('open');
+    const group = screen.getByRole('group', { name: 'Стратегии' });
+    const table = screen.getByRole('table', { name: 'Открытые идеи' });
+    expect(group.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(group).toHaveClass('flex-wrap');
+  });
+
+  // Scenario «Выбор стратегии».
+  it('chooses the ideas of a strategy from the first page and leaves the numbers as they were', async () => {
+    const requests = routes({ 'GET /api/ideas/strategies': () => counts(three) });
+    renderApp('/ideas?page=3');
+    await screen.findByRole('button', { name: 'breakout 17' });
+    const asked = queriesOf(requests, '/api/ideas/strategies').length;
+
+    await userEvent.click(screen.getByRole('button', { name: 'breakout 17' }));
+
+    await waitFor(() => {
+      const query = queriesOf(requests, '/api/ideas').at(-1)!;
+      expect([query.get('strategy'), query.get('page')]).toEqual(['breakout', '1']);
+    });
+    expect(screen.getByRole('button', { name: 'breakout 17' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Все 52' })).toHaveAttribute('aria-pressed', 'false');
+    expect(chips().map(([words]) => words)).toEqual([
+      'Все 52',
+      'accumulation 0',
+      'breakout 17',
+      'false-breakout 35',
+    ]);
+    expect(queriesOf(requests, '/api/ideas/strategies')).toHaveLength(asked);
+    expect(
+      queriesOf(requests, '/api/ideas/strategies').every((query) => !query.has('strategy')),
+    ).toBe(true);
+  });
+
+  // Scenario «Снятие выбора».
+  it('takes the choice off on the chosen chip again and on «Все»', async () => {
+    const requests = routes({ 'GET /api/ideas/strategies': () => counts(three) });
+    renderApp('/ideas');
+    const breakout = await screen.findByRole('button', { name: 'breakout 17' });
+
+    await userEvent.click(breakout);
+    await userEvent.click(screen.getByRole('button', { name: 'breakout 17' }));
+
+    await waitFor(() =>
+      expect(queriesOf(requests, '/api/ideas').at(-1)!.has('strategy')).toBe(false),
+    );
+    expect(screen.getByRole('button', { name: 'Все 52' })).toHaveAttribute('aria-pressed', 'true');
+
+    await userEvent.click(screen.getByRole('button', { name: 'false-breakout 35' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Все 52' }));
+
+    await waitFor(() =>
+      expect(queriesOf(requests, '/api/ideas').at(-1)!.has('strategy')).toBe(false),
+    );
+    expect(screen.getByRole('button', { name: 'false-breakout 35' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  // Scenario «Другой выбор меняет числа».
+  it('counts with the other choices: the short side gives the numbers of the shorts', async () => {
+    const requests = routes({
+      'GET /api/ideas/strategies': (request) =>
+        new URL(request.url).searchParams.get('side') === 'short'
+          ? counts([
+              ['accumulation', 0],
+              ['breakout', 4],
+              ['false-breakout', 9],
+            ])
+          : counts(three),
+    });
+    renderApp('/ideas');
+    await screen.findByRole('button', { name: 'breakout 17' });
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Сторона' }), 'short');
+
+    expect(await screen.findByRole('button', { name: 'breakout 4' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Все 13' })).toBeInTheDocument();
+    expect(queriesOf(requests, '/api/ideas/strategies').at(-1)!.get('side')).toBe('short');
+  });
+
+  // Scenario «Журнал».
+  it('chooses the strategy of the summary and of the closed ideas of the journal over its period', async () => {
+    const requests = routes({
+      'GET /api/ideas/state': () => json(scannerState({ closed: 52 })),
+      'GET /api/ideas/strategies': () => counts(three),
+    });
+    renderApp('/ideas?tab=journal');
+    await screen.findByRole('button', { name: 'breakout 17' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'breakout 17' }));
+
+    await waitFor(() => {
+      for (const path of ['/api/ideas', '/api/ideas/summary']) {
+        const query = queriesOf(requests, path).at(-1)!;
+        expect([path, query.get('strategy'), query.get('period')]).toEqual([path, 'breakout', '7']);
+      }
+    });
+    const query = queriesOf(requests, '/api/ideas/strategies').at(-1)!;
+    expect([query.get('state'), query.get('period'), query.has('strategy')]).toEqual([
+      'closed',
+      '7',
+      false,
+    ]);
+    const group = screen.getByRole('group', { name: 'Стратегии' });
+    for (const name of ['Сводка журнала', 'Закрытые идеи']) {
+      const table = screen.getByRole('table', { name });
+      expect(group.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+
+  // Scenario «Страница пары».
+  it('keeps the list «Стратегия: все» over the ideas of a pair and no row of strategies', async () => {
+    const requests = routes({
+      'GET /api/ideas/strategies': () => counts(three),
+      'GET /api/market/pairs/SOLUSDT': () => json(pair('SOLUSDT')),
+      'GET /api/market/pairs/SOLUSDT/chart': () =>
+        json({ symbol: 'SOLUSDT', timeframe: '1h', loading: false, candles: [], funding: [] }),
+      'GET /api/market/pairs/SOLUSDT/chart/open-interest': () =>
+        json({ symbol: 'SOLUSDT', timeframe: '1h', loading: false, openInterest: [] }),
+      'GET /api/market/pairs/SOLUSDT/ideas': () =>
+        json({ items: [], total: 0, page: 1, pageSize: 50, filterGone: false }),
+    });
+    renderApp('/market/SOLUSDT');
+
+    const strategy = await screen.findByRole('combobox', { name: 'Стратегия' });
+    expect(within(strategy).getByRole('option', { name: 'Стратегия: все' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Стратегии' })).toBeNull();
+    expect(queriesOf(requests, '/api/ideas/strategies')).toHaveLength(0);
   });
 });

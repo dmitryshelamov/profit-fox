@@ -314,12 +314,20 @@ public sealed class GetPairChartQueryHandlerTests
 
         public async Task<RecentRead<OpenInterestPoint>> OpenInterest(string instrumentId, TimeSpan interval, DateTimeOffset before, int limit, CancellationToken cancellation, IReadSteps? steps = null)
         {
-            InterestAsked.TrySetResult();
             if (InterestHangs && steps is not null)
             {
-                return await steps.Run("oi-history", _ => new TaskCompletionSource<RecentRead<OpenInterestPoint>>().Task, cancellation);
+                // Told inside the attempt: the limit of the step is set by then, so the clock the test moves reaches it.
+                return await steps.Run(
+                    "oi-history",
+                    _ =>
+                    {
+                        InterestAsked.TrySetResult();
+                        return new TaskCompletionSource<RecentRead<OpenInterestPoint>>().Task;
+                    },
+                    cancellation);
             }
 
+            InterestAsked.TrySetResult();
             return new RecentRead<OpenInterestPoint>(Loading: false, []);
         }
     }

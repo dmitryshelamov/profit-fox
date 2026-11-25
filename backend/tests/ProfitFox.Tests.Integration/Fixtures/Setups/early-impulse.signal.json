@@ -1,0 +1,304 @@
+{
+  "name": "early-impulse",
+  "description": "Ранний импульс: текущая свеча прошла вверх не меньше earlyMove ATR с объёмом не меньше earlyVolume медиан, а условие impulse (candles, move, volume) на ней не истинно.",
+  "graph": {
+    "formatVersion": 1,
+    "parameters": [
+      {
+        "name": "earlyMove",
+        "type": "number",
+        "value": 1.5
+      },
+      {
+        "name": "earlyVolume",
+        "type": "number",
+        "value": 3.0
+      },
+      {
+        "name": "candles",
+        "type": "number",
+        "value": 6
+      },
+      {
+        "name": "move",
+        "type": "number",
+        "value": 3.0
+      },
+      {
+        "name": "volume",
+        "type": "number",
+        "value": 2.0
+      }
+    ],
+    "outputs": [
+      {
+        "name": "state",
+        "type": "boolean"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "p",
+        "kind": "parameters"
+      },
+      {
+        "id": "c",
+        "kind": "candle"
+      },
+      {
+        "id": "atr",
+        "kind": "atr",
+        "inputs": {
+          "length": 14
+        }
+      },
+      {
+        "id": "atr-prev",
+        "kind": "previous"
+      },
+      {
+        "id": "vol-median",
+        "kind": "window",
+        "settings": {
+          "operation": "median"
+        },
+        "inputs": {
+          "length": 20
+        }
+      },
+      {
+        "id": "vol-median-prev",
+        "kind": "previous"
+      },
+      {
+        "id": "vol-ratio",
+        "kind": "divide"
+      },
+      {
+        "id": "early-move",
+        "kind": "subtract"
+      },
+      {
+        "id": "early-move-atr",
+        "kind": "divide"
+      },
+      {
+        "id": "early-move-ok",
+        "kind": "compare",
+        "settings": {
+          "operation": "ge"
+        }
+      },
+      {
+        "id": "early-vol-ok",
+        "kind": "compare",
+        "settings": {
+          "operation": "ge"
+        }
+      },
+      {
+        "id": "early",
+        "kind": "and"
+      },
+      {
+        "id": "first-open",
+        "kind": "window",
+        "settings": {
+          "operation": "first"
+        }
+      },
+      {
+        "id": "move",
+        "kind": "subtract"
+      },
+      {
+        "id": "move-atr",
+        "kind": "divide"
+      },
+      {
+        "id": "move-ok",
+        "kind": "compare",
+        "settings": {
+          "operation": "ge"
+        }
+      },
+      {
+        "id": "vol-average",
+        "kind": "window",
+        "settings": {
+          "operation": "average"
+        }
+      },
+      {
+        "id": "vol-average-ratio",
+        "kind": "divide"
+      },
+      {
+        "id": "vol-ok",
+        "kind": "compare",
+        "settings": {
+          "operation": "ge"
+        }
+      },
+      {
+        "id": "impulse",
+        "kind": "and"
+      },
+      {
+        "id": "not-impulse",
+        "kind": "not"
+      },
+      {
+        "id": "state",
+        "kind": "and"
+      },
+      {
+        "id": "out",
+        "kind": "outputs"
+      }
+    ],
+    "wires": [
+      {
+        "from": "atr.result",
+        "to": "atr-prev.value"
+      },
+      {
+        "from": "c.volume",
+        "to": "vol-median.value"
+      },
+      {
+        "from": "vol-median.result",
+        "to": "vol-median-prev.value"
+      },
+      {
+        "from": "c.volume",
+        "to": "vol-ratio.a"
+      },
+      {
+        "from": "vol-median-prev.result",
+        "to": "vol-ratio.b"
+      },
+      {
+        "from": "c.close",
+        "to": "early-move.a"
+      },
+      {
+        "from": "c.open",
+        "to": "early-move.b"
+      },
+      {
+        "from": "early-move.result",
+        "to": "early-move-atr.a"
+      },
+      {
+        "from": "atr-prev.result",
+        "to": "early-move-atr.b"
+      },
+      {
+        "from": "early-move-atr.result",
+        "to": "early-move-ok.a"
+      },
+      {
+        "from": "p.earlyMove",
+        "to": "early-move-ok.b"
+      },
+      {
+        "from": "vol-ratio.result",
+        "to": "early-vol-ok.a"
+      },
+      {
+        "from": "p.earlyVolume",
+        "to": "early-vol-ok.b"
+      },
+      {
+        "from": "early-move-ok.result",
+        "to": "early.a"
+      },
+      {
+        "from": "early-vol-ok.result",
+        "to": "early.b"
+      },
+      {
+        "from": "c.open",
+        "to": "first-open.value"
+      },
+      {
+        "from": "p.candles",
+        "to": "first-open.length"
+      },
+      {
+        "from": "c.close",
+        "to": "move.a"
+      },
+      {
+        "from": "first-open.result",
+        "to": "move.b"
+      },
+      {
+        "from": "move.result",
+        "to": "move-atr.a"
+      },
+      {
+        "from": "atr-prev.result",
+        "to": "move-atr.b"
+      },
+      {
+        "from": "move-atr.result",
+        "to": "move-ok.a"
+      },
+      {
+        "from": "p.move",
+        "to": "move-ok.b"
+      },
+      {
+        "from": "c.volume",
+        "to": "vol-average.value"
+      },
+      {
+        "from": "p.candles",
+        "to": "vol-average.length"
+      },
+      {
+        "from": "vol-average.result",
+        "to": "vol-average-ratio.a"
+      },
+      {
+        "from": "vol-median-prev.result",
+        "to": "vol-average-ratio.b"
+      },
+      {
+        "from": "vol-average-ratio.result",
+        "to": "vol-ok.a"
+      },
+      {
+        "from": "p.volume",
+        "to": "vol-ok.b"
+      },
+      {
+        "from": "move-ok.result",
+        "to": "impulse.a"
+      },
+      {
+        "from": "vol-ok.result",
+        "to": "impulse.b"
+      },
+      {
+        "from": "impulse.result",
+        "to": "not-impulse.value"
+      },
+      {
+        "from": "early.result",
+        "to": "state.a"
+      },
+      {
+        "from": "not-impulse.result",
+        "to": "state.b"
+      },
+      {
+        "from": "state.result",
+        "to": "out.state"
+      }
+    ]
+  },
+  "layout": {}
+}

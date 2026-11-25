@@ -90,6 +90,45 @@ public class IdeasController(ISender sender) : ControllerBase
     }
 
     /// <summary>
+    ///     How many open or closed ideas each strategy has (change add-setup-strategies, spec strategy-ideas «Число идей по
+    ///     стратегиям»): with the choices, the period and the saved filter of the list, but not its strategy — the row of
+    ///     strategies above the table counts each one with the others chosen. A choice outside its list answers 422.
+    /// </summary>
+    /// <param name="state"><c>open</c> (by default) or <c>closed</c>.</param>
+    /// <param name="search">A part of the symbol.</param>
+    /// <param name="strategy">The strategy of the list; it does not narrow the count.</param>
+    /// <param name="timeframe">A timeframe.</param>
+    /// <param name="side"><c>long</c> or <c>short</c>.</param>
+    /// <param name="label">The text of a label.</param>
+    /// <param name="positive">Only open ideas in the plus now.</param>
+    /// <param name="withStop">Only open ideas with a stop.</param>
+    /// <param name="exitReason">Closed ideas closed by <c>stop</c>, <c>target</c> or <c>time</c>.</param>
+    /// <param name="period">Closed ideas with the exit in the last days.</param>
+    /// <param name="filter">A saved filter of «Идеи».</param>
+    /// <param name="cancellation">The request was given up.</param>
+    [HttpGet("strategies", Name = "CountIdeasByStrategy")]
+    [ProducesResponseType<IdeaStrategyCountsResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<IdeaStrategyCountsResponse>> Strategies(
+        [FromQuery] string? state,
+        [FromQuery] string? search,
+        [FromQuery] string? strategy,
+        [FromQuery] string? timeframe,
+        [FromQuery] string? side,
+        [FromQuery] string? label,
+        [FromQuery] bool? positive,
+        [FromQuery] bool? withStop,
+        [FromQuery] string? exitReason,
+        [FromQuery] int? period,
+        [FromQuery] Guid? filter,
+        CancellationToken cancellation)
+    {
+        _ = strategy;
+        var query = new GetIdeaStrategiesQuery(state, search, timeframe, side, label, positive == true, withStop == true, exitReason, period, filter);
+        return await Answer(async () => IdeaResponses.Of(await sender.Send(query, cancellation)));
+    }
+
+    /// <summary>
     ///     The state of the live data: who keeps it, since when ideas count without a break and how many pairs are warmed.
     /// </summary>
     [HttpGet("state", Name = "GetScannerState")]

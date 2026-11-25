@@ -180,6 +180,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ideas/strategies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["CountIdeasByStrategy"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ideas/state": {
         parameters: {
             query?: never;
@@ -782,6 +798,17 @@ export interface components {
             /** Format: double */
             resultUsdt: null | number | string;
             excluded: null | string;
+        };
+        IdeaStrategyCountResponse: {
+            strategy: string;
+            /** Format: int32 */
+            ideas: number | string;
+        };
+        IdeaStrategyCountsResponse: {
+            /** Format: int32 */
+            total: number | string;
+            strategies: components["schemas"]["IdeaStrategyCountResponse"][];
+            filterGone: boolean;
         };
         IdeaSummaryPageResponse: {
             items: components["schemas"]["IdeaSummaryResponse"][];
@@ -1791,6 +1818,51 @@ export interface operations {
                     "text/plain": components["schemas"]["IdeaSummaryPageResponse"];
                     "application/json": components["schemas"]["IdeaSummaryPageResponse"];
                     "text/json": components["schemas"]["IdeaSummaryPageResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                    "text/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    CountIdeasByStrategy: {
+        parameters: {
+            query?: {
+                state?: string;
+                search?: string;
+                strategy?: string;
+                timeframe?: string;
+                side?: string;
+                label?: string;
+                positive?: boolean;
+                withStop?: boolean;
+                exitReason?: string;
+                period?: number | string;
+                filter?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": components["schemas"]["IdeaStrategyCountsResponse"];
+                    "application/json": components["schemas"]["IdeaStrategyCountsResponse"];
+                    "text/json": components["schemas"]["IdeaStrategyCountsResponse"];
                 };
             };
             /** @description Unprocessable Entity */

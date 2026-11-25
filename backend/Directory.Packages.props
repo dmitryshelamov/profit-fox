@@ -11,6 +11,12 @@
         <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13"/>
     </ItemGroup>
 
+    <ItemGroup Label="Domain">
+        <!-- ATR and RSI of the nodes atr and rsi, computed a candle at a time (change add-setup-strategies, design.md,
+             decision 1). The version is pinned: a new one that changes a number fails IndicatorFixtureTests. -->
+        <PackageVersion Include="FacioQuo.Stock.Indicators" Version="3.1.0"/>
+    </ItemGroup>
+
     <ItemGroup Label="ASP.NET Core">
         <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.13"/>
     </ItemGroup>

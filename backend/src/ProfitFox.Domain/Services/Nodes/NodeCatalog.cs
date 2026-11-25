@@ -1,8 +1,11 @@
 using ProfitFox.Domain.Services.Graph;
+using ProfitFox.Domain.Services.Nodes.Base;
 using ProfitFox.Domain.Services.Nodes.Data;
+using ProfitFox.Domain.Services.Nodes.Indicators;
 using ProfitFox.Domain.Services.Nodes.Logic;
 using ProfitFox.Domain.Services.Nodes.Numbers;
 using ProfitFox.Domain.Services.Nodes.Position;
+using ProfitFox.Domain.Services.Nodes.Windows;
 using ProfitFox.Domain.ValueObjects.Graph;
 using ProfitFox.Domain.ValueObjects.Graph.Enums;
 using ProfitFox.Domain.ValueObjects.Nodes;
@@ -33,6 +36,28 @@ public static class NodeCatalog
     public const string Add = "add";
     public const string Subtract = "subtract";
     public const string Multiply = "multiply";
+
+    /// <summary>
+    ///     The kinds of change add-setup-strategies: numbers, windows over the last candles, indicators and a duration in
+    ///     candles.
+    /// </summary>
+    public const string Divide = "divide";
+
+    public const string Min = "min";
+    public const string Max = "max";
+    public const string Select = "select";
+    public const string Window = "window";
+    public const string Percentile = "percentile";
+    public const string Hold = "hold";
+    public const string Atr = "atr";
+    public const string Rsi = "rsi";
+    public const string Zones = "zones";
+    public const string Candles = "candles";
+
+    /// <summary>
+    ///     The logic node of change add-setup-strategies that reads a missing condition as false (design.md, decision 11).
+    /// </summary>
+    public const string IsTrue = "is-true";
     public const string Outputs = "outputs";
     public const string Position = "position";
     public const string Enter = "enter";
@@ -118,6 +143,8 @@ public static class NodeCatalog
     private static readonly PinDeclaration PositionInput = new PinDeclaration(PositionPin, PinType.Position);
     private static readonly PinDeclaration SizeInput = new PinDeclaration(Size, PinType.Number);
     private static readonly PinDeclaration Condition = new PinDeclaration(When, PinType.Boolean);
+    private static readonly PinDeclaration NumberValue = new PinDeclaration(Value, PinType.Number);
+    private static readonly PinDeclaration Length = new PinDeclaration(WindowLength.Pin, PinType.Number);
 
     private static readonly SettingDeclaration[] OrderSettings =
     [
@@ -173,6 +200,37 @@ public static class NodeCatalog
             new NodeKind(Add, [NumberA, NumberB], [NumberResult], [], _ => new ArithmeticNode((a, b) => a + b)),
             new NodeKind(Subtract, [NumberA, NumberB], [NumberResult], [], _ => new ArithmeticNode((a, b) => a - b)),
             new NodeKind(Multiply, [NumberA, NumberB], [NumberResult], [], _ => new ArithmeticNode((a, b) => a * b)),
+            new NodeKind(Divide, [NumberA, NumberB], [NumberResult], [], _ => new ArithmeticNode((a, b) => a / b)),
+            new NodeKind(Min, [NumberA, NumberB], [NumberResult], [], _ => new ArithmeticNode(Math.Min)),
+            new NodeKind(Max, [NumberA, NumberB], [NumberResult], [], _ => new ArithmeticNode(Math.Max)),
+            new NodeKind(Select, [Condition, NumberA, NumberB], [NumberResult], [], _ => new SelectNode()),
+            new NodeKind(
+                Window,
+                [NumberValue, Length],
+                [NumberResult],
+                [new SettingDeclaration(WindowNode.Operation, WindowNode.Operations, Default: null)],
+                node => new WindowNode(node.Settings[WindowNode.Operation]))
+            {
+                CheckValue = WindowLength.Check
+            },
+            new NodeKind(Percentile, [NumberValue, Length, new PinDeclaration("rank", PinType.Number)], [NumberResult], [], _ => new PercentileNode())
+            {
+                CheckValue = WindowLength.Check
+            },
+            new NodeKind(Hold, [Condition, NumberValue, Length], [NumberResult], [], _ => new HoldNode()) { CheckValue = WindowLength.Check },
+            new NodeKind(Atr, [Length], [NumberResult], [], _ => new AtrNode()) { CheckValue = WindowLength.From(AtrNode.MinimumLength) },
+            new NodeKind(Rsi, [NumberValue, Length], [NumberResult], [], _ => new RsiNode()) { CheckValue = WindowLength.Check },
+            new NodeKind(
+                Zones,
+                [.. new[] { "atr", Price, WindowLength.Pin, "merge", "strength" }.Select(name => new PinDeclaration(name, PinType.Number))],
+                [new PinDeclaration("above", PinType.Number), new PinDeclaration("below", PinType.Number)],
+                [],
+                _ => new ZonesNode())
+            {
+                CheckValue = WindowLength.Check
+            },
+            new NodeKind(Candles, [new PinDeclaration("count", PinType.Number)], [new PinDeclaration("duration", PinType.Duration)], [], _ => new CandlesNode()),
+            new NodeKind(IsTrue, [new PinDeclaration("value", PinType.Boolean)], [BooleanResult], [], _ => new IsTrueNode()),
             new NodeKind(
                 Outputs,
                 graph => [.. graph.Outputs.Select(output => new PinDeclaration(output.Name, output.Type))],

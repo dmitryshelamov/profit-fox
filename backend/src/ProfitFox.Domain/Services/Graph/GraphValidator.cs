@@ -470,6 +470,10 @@ internal static class GraphValidator
                         Pin = name
                     });
             }
+            else if (node.Kind.CheckValue(name, value) is { } reason)
+            {
+                errors.Add(new GraphError(GraphErrorCode.ParameterOutOfBounds, reason) { Node = node.Node.Id, Pin = name });
+            }
             else if (node.Signal is not null)
             {
                 CheckBounds(node, name, value, errors);
