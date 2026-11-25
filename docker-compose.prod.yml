@@ -3,7 +3,9 @@
 # The API with the page and both Workers run the images of version N, built from a commit of release/0.1.0. The only secret
 # comes from .env.prod on the server (mode 600, never committed): PROFIT_FOX_DB_PASSWORD (hex, so it needs no escaping in the
 # connection string). Every other setting is the one of appsettings.json. The bench of firebat-01 is its own: its
-# database, its Workers and its ledger are not shared with the Mac. The market-data service stays on soyo-02.
+# database, its Workers and its ledger are not shared with the Mac. The market-data service stays on soyo-02. The API
+# and both Workers share one folder of the cache of history, the volume profit-fox-history-cache: it outlives a deploy,
+# and removing it only makes the next reads ask the market-data service.
 name: profit-fox
 
 services:
@@ -39,6 +41,9 @@ services:
       ConnectionStrings__Bench: Host=db;Port=5432;Database=profitfox;Username=profitfox;Password=${PROFIT_FOX_DB_PASSWORD:?}
       MarketData__GrpcUrl: http://192.168.8.213:5237
       MarketData__RestUrl: http://192.168.8.213:5236/
+      MarketData__HistoryCache__Path: /var/cache/profit-fox/history
+    volumes:
+      - history-cache:/var/cache/profit-fox/history
     ports:
       - "5240:5240"
     # Unhealthy while the database does not answer; the start period covers the migrations.
@@ -53,7 +58,7 @@ services:
   worker-1:
     image: ghcr.io/dmitryshelamov/profit-fox-bench-worker:${PROFIT_FOX_VERSION:?}
     restart: unless-stopped
-    mem_limit: 3g
+    mem_limit: 6g
     depends_on:
       api:
         condition: service_healthy
@@ -62,12 +67,15 @@ services:
       ConnectionStrings__Bench: Host=db;Port=5432;Database=profitfox;Username=profitfox;Password=${PROFIT_FOX_DB_PASSWORD:?}
       MarketData__GrpcUrl: http://192.168.8.213:5237
       MarketData__RestUrl: http://192.168.8.213:5236/
+      MarketData__HistoryCache__Path: /var/cache/profit-fox/history
       Worker__Name: firebat-01-1
+    volumes:
+      - history-cache:/var/cache/profit-fox/history
 
   worker-2:
     image: ghcr.io/dmitryshelamov/profit-fox-bench-worker:${PROFIT_FOX_VERSION:?}
     restart: unless-stopped
-    mem_limit: 3g
+    mem_limit: 6g
     depends_on:
       api:
         condition: service_healthy
@@ -76,8 +84,13 @@ services:
       ConnectionStrings__Bench: Host=db;Port=5432;Database=profitfox;Username=profitfox;Password=${PROFIT_FOX_DB_PASSWORD:?}
       MarketData__GrpcUrl: http://192.168.8.213:5237
       MarketData__RestUrl: http://192.168.8.213:5236/
+      MarketData__HistoryCache__Path: /var/cache/profit-fox/history
       Worker__Name: firebat-01-2
+    volumes:
+      - history-cache:/var/cache/profit-fox/history
 
 volumes:
   db:
     name: profit-fox-db
+  history-cache:
+    name: profit-fox-history-cache

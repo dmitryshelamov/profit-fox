@@ -25,13 +25,16 @@ namespace ProfitFox.Application.Commands.Backtests.ExecuteBacktest;
 ///     the hash of the backtest. A read the market-data service dropped is repeated after the pauses of
 ///     <see cref="HistoryRepeats" /> (task 12.12); the time of reading counts the pauses too. Only the numbers of the sets and of the pairs stay in memory. The backtest ends as done with
 ///     them in one step, or as failed with the error when the calculation fails; a cancelled backtest or one whose Worker
-///     lost the lease writes nothing here.
+///     lost the lease writes nothing here. The line of the journal on its end tells what the cache of history did for it
+///     (change add-backtest-history-cache, decision 9): the Worker computes one backtest at a time and the scanner does not
+///     read through the cache, so the difference of the counters is that of the backtest.
 /// </summary>
 internal sealed class ExecuteBacktestCommandHandler(
     IHistorySource source,
     IInstrumentCatalog instruments,
     IBacktestRepository backtests,
     HistoryRepeats repeats,
+    IHistoryCacheCounters cache,
     TimeProvider time,
     ILogger<ExecuteBacktestCommandHandler> logger) : IRequestHandler<ExecuteBacktestCommand, ExecuteBacktestResult>
 {
@@ -56,6 +59,7 @@ internal sealed class ExecuteBacktestCommandHandler(
         Backtest backtest = request.Backtest;
         BacktestSettings settings = backtest.Settings;
         var clock = Stopwatch.StartNew();
+        HistoryCacheCounts before = cache.Counts;
         var timed = new TimedHistorySource(new RepeatingHistorySource(source, repeats, time, logger));
         using var hash = new HistoryHash();
         var history = new MarketHistory(timed, settings.End, hash, time);
@@ -94,7 +98,11 @@ internal sealed class ExecuteBacktestCommandHandler(
             compute > TimeSpan.Zero ? compute.TotalSeconds : 0,
             pairs.Length);
         await backtests.FinishAsync(request.Assignment, outcome, cancellationToken);
-        logger.LogInformation("{Line}", $"Backtest {backtest.Id}: {pairs.Length} pairs, {plans.Count} sets, read {read.TotalSeconds:F1} s, computed {compute.TotalSeconds:F1} s");
+        HistoryCacheCounts cached = cache.Counts - before;
+        string ofCache = cached == HistoryCacheCounts.Zero
+            ? ""
+            : $", cache: {cached.FromCache} months from the cache, {cached.Saved} saved, {cached.Requests} requests to the service";
+        logger.LogInformation("{Line}", $"Backtest {backtest.Id}: {pairs.Length} pairs, {plans.Count} sets, read {read.TotalSeconds:F1} s, computed {compute.TotalSeconds:F1} s{ofCache}");
         return new ExecuteBacktestResult(outcome);
     }
 
