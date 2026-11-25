@@ -5,6 +5,23 @@ import { momentText } from '@/pages/market/format';
 export const idleWarningSeconds = 60;
 
 /**
+ * How long the warm-up has still to go, in whole minutes rounded up: «осталось ≈ 9 мин», «осталось ≈ 1 ч 05 мин», or
+ * «осталось меньше минуты».
+ */
+export function timeLeft(seconds: number): string {
+  if (seconds < 60) {
+    return 'осталось меньше минуты';
+  }
+
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes < 60) {
+    return `осталось ≈ ${minutes} мин`;
+  }
+
+  return `осталось ≈ ${Math.floor(minutes / 60)} ч ${String(minutes % 60).padStart(2, '0')} мин`;
+}
+
+/**
  * The state of the live data above the ideas (spec strategy-ideas «Состояние сканера в разделе «Идеи»»): the warm-up
  * while it goes — or, when the reads of the warm-up fail, how many pairs fail and the last reason (task 18.3) —, a
  * warning when nobody keeps the live data longer than a minute, a warning while the feed catches up or is silent
@@ -52,6 +69,7 @@ export function ScannerBanner({ state }: { readonly state: ScannerState }) {
           aria-hidden="true"
         />
         идёт прогрев: {warmed} из {pairs} пар
+        {state.warmupLeftSeconds == null ? '' : ` · ${timeLeft(Number(state.warmupLeftSeconds))}`}
       </p>
     );
   }

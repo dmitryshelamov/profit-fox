@@ -30,12 +30,21 @@ internal sealed class ScannerLeaseRepository(NpgsqlDataSource database) : IScann
         await connection.ExecuteAsync(new CommandDefinition(ScannerLeaseRepositoryQueries.Release, new { ScannerLeaseRepositoryQueries.Name, Worker = worker }, cancellationToken: cancellationToken));
     }
 
-    public async Task ReportAsync(string worker, DateTimeOffset? liveSince, int warmed, int pairs, CancellationToken cancellationToken, int failed = 0, string? failure = null)
+    public async Task ReportAsync(
+        string worker,
+        DateTimeOffset? liveSince,
+        int warmed,
+        int pairs,
+        CancellationToken cancellationToken,
+        int failed = 0,
+        string? failure = null,
+        TimeSpan? warmupLeft = null)
     {
         await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        int? left = warmupLeft is { } time ? (int)Math.Min(Math.Ceiling(time.TotalSeconds), int.MaxValue) : null;
         await connection.ExecuteAsync(new CommandDefinition(
             ScannerLeaseRepositoryQueries.Report,
-            new { ScannerLeaseRepositoryQueries.Name, Worker = worker, LiveSince = liveSince, Warmed = warmed, Pairs = pairs, Failed = failed, Failure = failure },
+            new { ScannerLeaseRepositoryQueries.Name, Worker = worker, LiveSince = liveSince, Warmed = warmed, Pairs = pairs, Failed = failed, Failure = failure, WarmupLeft = left },
             cancellationToken: cancellationToken));
     }
 
@@ -43,7 +52,17 @@ internal sealed class ScannerLeaseRepository(NpgsqlDataSource database) : IScann
     {
         await using NpgsqlConnection connection = await database.OpenConnectionAsync(cancellationToken);
         Row? row = await connection.QuerySingleOrDefaultAsync<Row>(new CommandDefinition(ScannerLeaseRepositoryQueries.State, new { ScannerLeaseRepositoryQueries.Name }, cancellationToken: cancellationToken));
-        return row is null ? null : (new ScannerState(row.Worker, row.Until, row.LiveSince, row.Warmed, row.Pairs, row.Failed, row.Failure), row.Now);
+        return row is null ? null : (
+            new ScannerState(
+                row.Worker,
+                row.Until,
+                row.LiveSince,
+                row.Warmed,
+                row.Pairs,
+                row.Failed,
+                row.Failure,
+                row.WarmupLeft is { } left ? TimeSpan.FromSeconds(left) : null),
+            row.Now);
     }
 
     private sealed class Row
@@ -61,6 +80,8 @@ internal sealed class ScannerLeaseRepository(NpgsqlDataSource database) : IScann
         public int Failed { get; init; }
 
         public string? Failure { get; init; }
+
+        public int? WarmupLeft { get; init; }
 
         public DateTimeOffset Now { get; init; }
     }

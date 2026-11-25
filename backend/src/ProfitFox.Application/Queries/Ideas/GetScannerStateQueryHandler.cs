@@ -32,6 +32,7 @@ internal sealed class GetScannerStateQueryHandler(IScannerLeaseRepository lease,
             closed,
             settings.Burst,
             live ? state.Failed : 0,
-            live ? state.Failure : null);
+            live ? state.Failure : null,
+            live ? state.WarmupLeft : null);
     }
 }

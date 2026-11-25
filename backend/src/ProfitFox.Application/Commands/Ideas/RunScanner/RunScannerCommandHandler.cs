@@ -70,9 +70,9 @@ internal sealed class RunScannerCommandHandler(
                     await scanner.TickAsync(cancellationToken);
                     if (time.GetUtcNow() - reported >= ReportInterval)
                     {
-                        (int warmed, int pairs) = scanner.Progress;
+                        (int warmed, int pairs, TimeSpan? left) = scanner.WarmupProgress();
                         (int failed, string? failure) = scanner.Failures;
-                        await lease.ReportAsync(request.Worker, scanner.LiveSince, warmed, pairs, cancellationToken, failed, failure);
+                        await lease.ReportAsync(request.Worker, scanner.LiveSince, warmed, pairs, cancellationToken, failed, failure, left);
                         reported = time.GetUtcNow();
                     }
                 }

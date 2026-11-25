@@ -91,6 +91,10 @@ public sealed class IdeaScanner
     // Whether the feed has been silent for longer than the limit since ideas last counted without a break (task 24.1).
     private bool _silent;
 
+    // Since when the pairs warm up and how many of them were warm then; null while every pair is warm.
+    private DateTimeOffset? _warmingSince;
+    private int _warmedThen;
+
     public IdeaScanner(
         MarketBook book,
         IRecentHistory history,
@@ -134,6 +138,34 @@ public sealed class IdeaScanner
             int warmed = _pairs.Keys.Count(symbol => runs.All(run => run.Pairs.TryGetValue(symbol, out PairState? state) && state.State == WarmState.Warm));
             return (warmed, _pairs.Count);
         }
+    }
+
+    /// <summary>
+    ///     The warm-up as <see cref="Progress" /> counts it, and how long it has still to go at the speed it went since it
+    ///     began: the pairs left by the pairs warmed per unit of time. Null while no pair warmed since it began, and when every
+    ///     pair is warm. A warm-up begins at the start of the scanner, and again when the warmed pairs drop — a new strategy
+    ///     or version — or come short of all after they were all warm.
+    /// </summary>
+    public (int Warmed, int Pairs, TimeSpan? Left) WarmupProgress()
+    {
+        (int warmed, int pairs) = Progress;
+        DateTimeOffset now = _time.GetUtcNow();
+        if (pairs == 0 || warmed >= pairs)
+        {
+            _warmingSince = null;
+            return (warmed, pairs, null);
+        }
+
+        if (_warmingSince is not { } since || warmed < _warmedThen)
+        {
+            _warmingSince = now;
+            _warmedThen = warmed;
+            return (warmed, pairs, null);
+        }
+
+        int done = warmed - _warmedThen;
+        TimeSpan spent = now - since;
+        return done > 0 && spent > TimeSpan.Zero ? (warmed, pairs, spent * ((double)(pairs - warmed) / done)) : (warmed, pairs, null);
     }
 
     /// <summary>
@@ -185,6 +217,8 @@ public sealed class IdeaScanner
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         _started = _time.GetUtcNow();
+        _warmingSince = _started;
+        _warmedThen = 0;
         _open = [.. await _ideas.OpenAsync(cancellationToken)];
     }
 
@@ -379,25 +413,28 @@ public sealed class IdeaScanner
         }
     }
 
-    // Starts the reading of the history of every pair a run is not warm on yet.
+    // Starts the reading of the history of every pair a run is not warm on yet, pair after pair: all the runs of a pair are
+    // read before the next pair, so the pairs warm up one by one and the progress counts them evenly. The runs of a pair on
+    // one timeframe share one read of its candles, payments and named pairs: the strategies of a timeframe ask the same.
     private void WarmUp(DateTimeOffset now, CancellationToken cancellationToken)
     {
-        foreach (Run run in _slots.Values.Select(slot => slot.Current))
+        Run[] runs = [.. _slots.Values.Select(slot => slot.Current)];
+        foreach ((string symbol, string instrument) in _pairs)
         {
-            foreach ((string symbol, string instrument) in _pairs)
+            foreach (IGrouping<TimeSpan, Run> timeframe in runs.Where(run => ToRead(run, symbol, now)).GroupBy(run => run.Timeframe))
             {
-                if (run.Pairs.TryGetValue(symbol, out PairState? state) && (state.State != WarmState.Waiting || state.RetryAt > now))
+                Run[] reading = [.. timeframe];
+                foreach (Run run in reading)
                 {
-                    continue;
+                    PairState state = run.Pairs.TryGetValue(symbol, out PairState? known) ? known : new PairState();
+                    run.Pairs[symbol] = state;
+                    state.State = WarmState.Reading;
                 }
 
-                state ??= new PairState();
-                run.Pairs[symbol] = state;
-                state.State = WarmState.Reading;
-                Task reading = ReadWarmupAsync(run, symbol, instrument, now, cancellationToken);
+                Task read = ReadWarmupAsync(reading, timeframe.Key, symbol, instrument, now, cancellationToken);
                 lock (_fetching)
                 {
-                    _fetching.Add(reading);
+                    _fetching.Add(read);
                 }
             }
         }
@@ -408,41 +445,63 @@ public sealed class IdeaScanner
         }
     }
 
-    private async Task ReadWarmupAsync(Run run, string symbol, string instrument, DateTimeOffset now, CancellationToken cancellationToken)
+    // Whether the pair is to be read for the run now: it has no state yet, or it waits and its retry is due.
+    private static bool ToRead(Run run, string symbol, DateTimeOffset now)
+    {
+        return !run.Pairs.TryGetValue(symbol, out PairState? state) || (state.State == WarmState.Waiting && state.RetryAt <= now);
+    }
+
+    private async Task ReadWarmupAsync(IReadOnlyList<Run> runs, TimeSpan timeframe, string symbol, string instrument, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await _parallel.WaitAsync(cancellationToken);
         try
         {
-            RecentRead<HistoryCandle> candles = await _history.Candles(instrument, run.Timeframe, now, _settings.WarmupCandles, cancellationToken);
+            RecentRead<HistoryCandle> candles = await _history.Candles(instrument, timeframe, now, _settings.WarmupCandles, cancellationToken);
             if (candles.Loading)
             {
-                _warmed.Enqueue(new Warmup(run, symbol, Loading: true, [], [], null));
+                foreach (Run run in runs)
+                {
+                    _warmed.Enqueue(new Warmup(run, symbol, Loading: true, [], [], null));
+                }
+
                 return;
             }
 
             DateTimeOffset from = candles.Items.Count > 0 ? candles.Items[0].OpenTime - TimeSpan.FromDays(1) : now - TimeSpan.FromDays(2);
             RecentRead<HistoryPayment> funding = await _history.Funding(instrument, from, now, cancellationToken);
-            Dictionary<string, IReadOnlyList<HistoryCandle>>? named = null;
-            foreach (string pair in run.Named)
+            var named = new Dictionary<string, IReadOnlyList<HistoryCandle>>(StringComparer.Ordinal);
+            foreach (string pair in runs.SelectMany(run => run.Named).Distinct(StringComparer.Ordinal))
             {
-                if (_pairs.TryGetValue(pair, out string? id) && await _history.Candles(id, run.Timeframe, now, _settings.WarmupCandles, cancellationToken) is { Loading: false } read)
+                if (_pairs.TryGetValue(pair, out string? id) && await _history.Candles(id, timeframe, now, _settings.WarmupCandles, cancellationToken) is { Loading: false } read)
                 {
-                    named ??= new Dictionary<string, IReadOnlyList<HistoryCandle>>(StringComparer.Ordinal);
                     named[pair] = read.Items;
                 }
             }
 
-            _warmed.Enqueue(new Warmup(run, symbol, funding.Loading, candles.Items, funding.Items, named));
+            foreach (Run run in runs)
+            {
+                Dictionary<string, IReadOnlyList<HistoryCandle>>? own = null;
+                foreach (string pair in run.Named.Where(named.ContainsKey))
+                {
+                    own ??= new Dictionary<string, IReadOnlyList<HistoryCandle>>(StringComparer.Ordinal);
+                    own[pair] = named[pair];
+                }
+
+                _warmed.Enqueue(new Warmup(run, symbol, funding.Loading, candles.Items, funding.Items, own));
+            }
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
             // The service did not answer, refused or timed out — the timeout of the REST is a cancellation too, but not by the
             // stop of the scanner (task 19.2): the pair is read again later, and the reason is told.
-            _warmed.Enqueue(new Warmup(run, symbol, Loading: true, [], [], null)
+            foreach (Run run in runs)
             {
-                Failure = exception.Message,
-                Reason = exception is HistoryUnavailableException refusal ? refusal.Reason : exception.GetType().Name
-            });
+                _warmed.Enqueue(new Warmup(run, symbol, Loading: true, [], [], null)
+                {
+                    Failure = exception.Message,
+                    Reason = exception is HistoryUnavailableException refusal ? refusal.Reason : exception.GetType().Name
+                });
+            }
         }
         finally
         {

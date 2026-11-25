@@ -18,7 +18,8 @@ internal static class ScannerLeaseRepositoryQueries
             live_since = CASE WHEN scanner_lease.worker = EXCLUDED.worker THEN scanner_lease.live_since END,
             warmed = CASE WHEN scanner_lease.worker = EXCLUDED.worker THEN scanner_lease.warmed ELSE 0 END,
             failed = CASE WHEN scanner_lease.worker = EXCLUDED.worker THEN scanner_lease.failed ELSE 0 END,
-            failure = CASE WHEN scanner_lease.worker = EXCLUDED.worker THEN scanner_lease.failure END
+            failure = CASE WHEN scanner_lease.worker = EXCLUDED.worker THEN scanner_lease.failure END,
+            warmup_left_seconds = CASE WHEN scanner_lease.worker = EXCLUDED.worker THEN scanner_lease.warmup_left_seconds END
         WHERE scanner_lease.worker = EXCLUDED.worker OR scanner_lease.until < now()
         RETURNING worker
         """;
@@ -27,13 +28,15 @@ internal static class ScannerLeaseRepositoryQueries
 
     public const string Report =
         """
-        UPDATE scanner_lease SET live_since = @LiveSince, warmed = @Warmed, pairs = @Pairs, failed = @Failed, failure = @Failure
+        UPDATE scanner_lease
+        SET live_since = @LiveSince, warmed = @Warmed, pairs = @Pairs, failed = @Failed, failure = @Failure, warmup_left_seconds = @WarmupLeft
         WHERE name = @Name AND worker = @Worker
         """;
 
     public const string State =
         """
-        SELECT worker AS "Worker", until AS "Until", live_since AS "LiveSince", warmed AS "Warmed", pairs AS "Pairs", failed AS "Failed", failure AS "Failure", now() AS "Now"
+        SELECT worker AS "Worker", until AS "Until", live_since AS "LiveSince", warmed AS "Warmed", pairs AS "Pairs", failed AS "Failed", failure AS "Failure",
+               warmup_left_seconds AS "WarmupLeft", now() AS "Now"
         FROM scanner_lease WHERE name = @Name
         """;
 }
