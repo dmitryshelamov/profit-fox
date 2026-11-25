@@ -22,9 +22,22 @@ internal sealed class AtrNode : Node
     /// </summary>
     public const int MinimumLength = 2;
 
-    private readonly Tail<Bar> _candles = new Tail<Bar>(Indicator.KeptCandles);
+    // The candles to start a list again on when the length changes: the length read when it is fixed, 1000 otherwise.
+    private readonly Tail<Bar> _candles = new Tail<Bar>(WindowLength.Maximum);
     private AtrList? _list;
     private decimal? _output;
+
+    /// <param name="fixedLength">
+    ///     Whether the length is the same at every candle (<see cref="WindowLength.Fixed" />): only then does the node keep
+    ///     no more than the length read; otherwise it keeps <see cref="WindowLength.Maximum" /> to start a list again on.
+    /// </param>
+    public AtrNode(bool fixedLength)
+    {
+        if (!fixedLength)
+        {
+            _candles.Reserve(WindowLength.Maximum);
+        }
+    }
 
     public override void Compute(in NodeContext context, ReadOnlySpan<PinValue> inputs, Span<PinValue> outputs)
     {
@@ -32,9 +45,14 @@ internal sealed class AtrNode : Node
         {
             ClosedCandle candle = context.Candle;
             var bar = new Bar(candle.OpenTime.UtcDateTime, candle.Open, candle.High, candle.Low, candle.Close, candle.Volume);
-            _candles.Add(bar);
             // The package counts an ATR from a length of 2 (task 2.6); a length of 1 gives no value.
             int? length = WindowLength.Of(inputs[0].Number, MinimumLength);
+            if (length is { } kept)
+            {
+                _candles.Reserve(kept);
+            }
+
+            _candles.Add(bar);
             if (length is { } periods && _list?.LookbackPeriods != periods)
             {
                 _list = Start(periods);

@@ -105,6 +105,58 @@ public sealed class WindowMemoryTests
         Assert.That(withFills.Count(value => value is not null), Is.GreaterThan(5), "the node gives values to compare");
     }
 
+    /// <summary>
+    ///     A node whose length is written or comes from a parameter keeps no more than its window (design.md, decision 3): a
+    ///     ring of the longest window for each node of each pair did not fit the scanner in 6 GB. A length from another node
+    ///     may grow, so that node keeps the longest window from the start.
+    /// </summary>
+    [TestCase("window")]
+    [TestCase("percentile")]
+    [TestCase("atr")]
+    [TestCase("rsi")]
+    [TestCase("zones")]
+    public void A_fixed_length_keeps_no_ring_of_the_longest_window(string kind)
+    {
+        ClosedCandle[] candles = [.. IndicatorNodeTests.RandomCandles(new Random(3), 30)];
+        string written = NumberNodeTests.Lengthed(kind, "20");
+        string parameter = NumberNodeTests.Lengthed(kind, length: null, """{ "name": "len", "type": "number", "value": 20 }""");
+        string wired = Wired(kind);
+        // A run of the graph keeps about 11 KB besides the node; the ring of the longest window alone was 8 to 32 KB.
+        Assert.That(Kept(written, candles), Is.LessThan(16 * 1024), "a written length keeps the window of 20");
+        Assert.That(Kept(parameter, candles), Is.LessThan(16 * 1024), "a length from a parameter keeps the window of 20");
+        Assert.That(NodeGraphs.Numbers(wired, candles), Is.EqualTo(NodeGraphs.Numbers(written, candles)), "a length from a node gives the same numbers");
+    }
+
+    // What a run of the graph stepped over the candles keeps, on average over many runs.
+    private static long Kept(string json, ClosedCandle[] candles)
+    {
+        const int Runs = 200;
+        var runs = new GraphRun[Runs];
+        GC.Collect();
+        long before = GC.GetTotalMemory(forceFullCollection: true);
+        for (int index = 0; index < Runs; index++)
+        {
+            runs[index] = NodeGraphs.Run(json);
+            foreach (ClosedCandle candle in candles)
+            {
+                runs[index].Step(candle, lastFunding: null);
+            }
+        }
+
+        long after = GC.GetTotalMemory(forceFullCollection: true);
+        GC.KeepAlive(runs);
+        return (after - before) / Runs;
+    }
+
+    // The graph of Lengthed with its length of 20 coming from a node: the larger of 20 and 1, which may change.
+    private static string Wired(string kind)
+    {
+        string json = NumberNodeTests.Lengthed(kind, length: null, """{ "name": "len", "type": "number", "value": 20 }""");
+        return json
+            .Replace("""{ "from": "p.len", "to": "n.length" }""", """{ "from": "p.len", "to": "m.a" }, { "from": "m.result", "to": "n.length" }""", StringComparison.Ordinal)
+            .Replace("""{ "id": "c", "kind": "candle" }""", """{ "id": "c", "kind": "candle" }, { "id": "m", "kind": "max", "inputs": { "b": 1 } }""", StringComparison.Ordinal);
+    }
+
     // The value at the last candle from a history of 3000 candles and from its last 500.
     private static (decimal Full, decimal Tail) FullAndTail(string kind, int length)
     {

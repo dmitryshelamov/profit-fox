@@ -68,6 +68,16 @@ public sealed class NodeKind
     {
     }
 
+    internal NodeKind(
+        string name,
+        IReadOnlyList<PinDeclaration> inputs,
+        IReadOnlyList<PinDeclaration> outputs,
+        IReadOnlyList<SettingDeclaration> settings,
+        Func<NodeDefinition, GraphDefinition, Node> create)
+        : this(name, _ => inputs, _ => outputs, settings, create)
+    {
+    }
+
     /// <summary>
     ///     The inputs of a node of this kind seen apart from any node and any saved signal: what the catalog shows.
     /// </summary>

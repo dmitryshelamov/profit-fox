@@ -10,17 +10,18 @@ namespace ProfitFox.Domain.Services.Nodes.Windows;
 ///     «Перцентиль»). <c>rank</c> is above 0 and at most 1. The window fills as that of <c>window</c> does, with a sorted
 ///     list (change add-setup-strategies, design.md, decision 2).
 /// </summary>
-internal sealed class PercentileNode : Node
+internal sealed class PercentileNode(bool fixedLength) : Node
 {
-    private readonly WindowValues _values = new WindowValues(WindowOrder.Sorted);
+    private readonly WindowValues _values = new WindowValues(WindowOrder.Sorted, fixedLength);
     private decimal? _output;
 
     public override void Compute(in NodeContext context, ReadOnlySpan<PinValue> inputs, Span<PinValue> outputs)
     {
         if (context.Commit)
         {
-            _values.Add(inputs[0].Number);
-            _output = WindowLength.Of(inputs[1].Number) is { } length && _values.Full(length) ? Result(length, inputs[2].Number) : null;
+            int? length = WindowLength.Of(inputs[1].Number);
+            _values.Add(inputs[0].Number, length);
+            _output = length is { } window && _values.Full(window) ? Result(window, inputs[2].Number) : null;
         }
 
         outputs[0] = PinValue.FromNumber(_output);
