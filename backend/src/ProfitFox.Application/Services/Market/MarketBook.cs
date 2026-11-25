@@ -9,8 +9,11 @@ namespace ProfitFox.Application.Services.Market;
 ///     The market in the memory of the scanner (change add-ideas-and-market, design.md, decision 3): for each pair its closed
 ///     minutes of the last day and an hour, the last point of open interest, the last funding rate and the payments of 48
 ///     hours. The candles of a timeframe, the windows of «Рынок» and the minutes of the outcome of an idea come from here.
-///     A minute that comes again replaces the one the book has by pair and open time. Not thread-safe: one reader applies
-///     the feed and asks.
+///     A minute that comes again replaces the one the book has by pair and open time. A closed minute with a volume of 0 is a
+///     minute of the feed without trades (change add-setup-strategies, design.md, decision 12): it moves the clock of the feed
+///     — <see cref="LastMinute" />, <see cref="CoveredFrom" />, <see cref="LastMinuteOf" /> — but takes no part in a candle, in
+///     the minutes of an idea or in the price of a payment, as a backtest drops such a candle from history. Not thread-safe:
+///     one reader applies the feed and asks.
 /// </summary>
 public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
 {
@@ -87,7 +90,8 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
     /// <summary>
     ///     Whether the candles with the close <paramref name="close" /> are closed for every pair (spec market-live-feed
     ///     «Момент закрытия свечи»): the clock passed the close and the delay, and the feed told a closed minute that ends at
-    ///     the close or later. A minute without trades does not come, so the last minute of each pair is not awaited.
+    ///     the close or later — one with a volume of 0 too. A minute without trades may not come at all, so the last minute
+    ///     of each pair is not awaited.
     /// </summary>
     public bool Closed(DateTimeOffset close)
     {
@@ -115,7 +119,8 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
 
     /// <summary>
     ///     The candle of <paramref name="timeframe" /> opened at <paramref name="open" />, built from the closed minutes of its
-    ///     window as the service builds it; null when the pair has none there.
+    ///     window as the service builds it; a minute with a volume of 0 is not among them. Null when the pair has no minute with
+    ///     trades there.
     /// </summary>
     public ClosedCandle? Candle(string symbol, TimeSpan timeframe, DateTimeOffset open)
     {
@@ -129,7 +134,7 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
         decimal low = 0;
         decimal close = 0;
         decimal volume = 0;
-        foreach (LiveMinute minute in pair.Between(open, open + timeframe))
+        foreach (LiveMinute minute in pair.Between(open, open + timeframe).Where(Traded))
         {
             first ??= minute;
             high = minute == first ? minute.High : Math.Max(high, minute.High);
@@ -142,11 +147,12 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
     }
 
     /// <summary>
-    ///     The closed minutes of a pair opened in [<paramref name="from" />, <paramref name="to" />), oldest first.
+    ///     The closed minutes with trades of a pair opened in [<paramref name="from" />, <paramref name="to" />), oldest first:
+    ///     an open idea walks the minutes the minute path of a backtest has, and a minute with a volume of 0 is not one of them.
     /// </summary>
     public IEnumerable<LiveMinute> Minutes(string symbol, DateTimeOffset from, DateTimeOffset to)
     {
-        return _pairs.TryGetValue(symbol, out Pair? pair) ? pair.Between(from, to) : [];
+        return _pairs.TryGetValue(symbol, out Pair? pair) ? pair.Between(from, to).Where(Traded) : [];
     }
 
     /// <summary>
@@ -164,7 +170,7 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
     /// </summary>
     public decimal? CloseBefore(string symbol, DateTimeOffset time)
     {
-        return _pairs.TryGetValue(symbol, out Pair? pair) ? pair.AtOrBefore(time - OneMinute)?.Close : null;
+        return _pairs.TryGetValue(symbol, out Pair? pair) ? pair.AtOrBefore(time - OneMinute, traded: true)?.Close : null;
     }
 
     /// <summary>
@@ -222,6 +228,12 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
         }
 
         return pair;
+    }
+
+    // A minute with trades: the service tells a minute without them with a volume of 0, as history does (HistoryCandle.HasTrades).
+    private static bool Traded(LiveMinute minute)
+    {
+        return minute.Volume > 0;
     }
 
     private static LivePoint Newer(LivePoint? held, LivePoint point)
@@ -306,8 +318,9 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
             return null;
         }
 
-        // The last minute opened at or before the moment, among those kept.
-        public LiveMinute? AtOrBefore(DateTimeOffset moment)
+        // The last minute opened at or before the moment, among those kept; with traded, the last such minute with trades.
+        // The snapshot reads a minute without trades too: its close is the last price the service tells.
+        public LiveMinute? AtOrBefore(DateTimeOffset moment, bool traded = false)
         {
             if (Last is not { } last)
             {
@@ -316,7 +329,7 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
 
             for (DateTimeOffset open = Floor(moment); open > last.OpenTime - Kept; open -= OneMinute)
             {
-                if (_ring[Slot(open)] is { } minute && minute.OpenTime == open)
+                if (_ring[Slot(open)] is { } minute && minute.OpenTime == open && (!traded || Traded(minute)))
                 {
                     return minute;
                 }
