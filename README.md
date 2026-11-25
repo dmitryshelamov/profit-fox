@@ -193,38 +193,48 @@ API (`backend/src/ProfitFox.Presentation/appsettings.json`) и Worker
 npm --prefix frontend run generate:api
 ```
 
-## Production (firebat-01)
+## Production (firebat-01 и firebat-02)
 
-На firebat-01 (`192.168.8.163`, пользователь `firebat`) работает свой стенд, не связанный со стендом на Маке: свои база
-и Worker'ы. Описание — `docker-compose.prod.yml`, проект `profit-fox` в `~/profit-fox`:
+Прод стенда — две машины, не связанные со стендом на Маке: своя база и свои Worker'ы. Проект `profit-fox` в
+`~/profit-fox` на обеих, роль машины — в файле `~/profit-fox/role` (`main` или `workers`, без файла — `main`).
 
-- `db` — Postgres 17 (том `profit-fox-db`, порт наружу не открыт, 1 ГБ);
+**firebat-01** (`192.168.8.163`, пользователь `firebat`, роль `main`) — `docker-compose.prod.yml`:
+
+- `db` — Postgres 17 (том `profit-fox-db`, 1 ГБ). Порт `5432` открыт только на адресе `192.168.8.163`: к базе ходят
+  Worker'ы firebat-02, с паролем из `.env.prod`;
 - `api` — API со страницей, образ `ghcr.io/dmitryshelamov/profit-fox:<N>`, порт `5240`, 512 МБ. При старте
-  мигрирует базу; новая база пуста;
+  мигрирует базу; новая база пуста. Держит кэш истории для предпросмотров (том `profit-fox-history-cache`);
 - `worker-1`, `worker-2` — образ `ghcr.io/dmitryshelamov/profit-fox-bench-worker:<N>` (не `profit-fox-worker`: это имя с
-  номерами 1–50 занято старым проектом), имена `firebat-01-1` и `firebat-01-2`, по 6 ГБ: сканер держит минуты всех пар
-  за сутки и графы всех включённых стратегий. Берут данные у сервиса данных на soyo-02 (`192.168.8.213`, порты `5237`,
-  `5236`). Сканер идей идёт в одном из них — в том, что взял аренду; второй берёт её, если первый остановился. Новых
-  служб для идей нет.
-- Том `profit-fox-history-cache` — кэш истории (`MarketData__HistoryCache__Path=/var/cache/profit-fox/history`), один на
-  `api`, `worker-1` и `worker-2`: месяц, сохранённый одним Worker'ом, читают второй и предпросмотр. Предел — 40 ГБ. Том
-  переживает деплой и откат; первый прогон после выкладки заполняет его. Размер — `docker system df -v`. Очистить кэш
-  (например, если сервис данных исправил уже покрытую историю) — на firebat-01 убрать контейнеры, которые держат том, удалить
-  том и поднять те же службы снова; база не трогается:
+  номерами 1–50 занято старым проектом), имена `firebat-01-1` и `firebat-01-2`, по 8 ГБ, `Worker__TakeRuns=false` —
+  только сканер идей: прогон и сканер в один процесс не помещаются. Сканер держит минуты всех пар за сутки и графы всех
+  включённых стратегий — около 4,5 ГБ на 14 стратегиях. Идёт в том Worker'е, что взял аренду; второй берёт её, если
+  первый остановился.
 
-  ```bash
-  cd ~/profit-fox && N="$(cat current)" && PROFIT_FOX_VERSION="$N" docker compose --file "releases/$N/docker-compose.prod.yml" --env-file .env.prod rm --stop --force api worker-1 worker-2
-  ```
+**firebat-02** (`192.168.8.181`, пользователь `firebat`, роль `workers`) — `docker-compose.workers.yml`:
 
-  ```bash
-  docker volume rm profit-fox-history-cache
-  ```
+- `worker-1`, `worker-2` — тот же образ, имена `firebat-02-1` и `firebat-02-2`, по 5 ГБ, `Scanner__Enabled=false` —
+  только прогоны. База — на firebat-01 (`192.168.8.163:5432`), пароль тот же, что в `.env.prod` firebat-01.
+- Том `profit-fox-history-cache` — кэш истории прогонов, один на оба Worker'а: месяц, сохранённый одним, читает второй.
+  Предел — 40 ГБ. Том переживает деплой и откат.
 
-  ```bash
-  cd ~/profit-fox && N="$(cat current)" && PROFIT_FOX_VERSION="$N" docker compose --file "releases/$N/docker-compose.prod.yml" --env-file .env.prod up --detach api worker-1 worker-2
-  ```
+Оба Worker'а обеих машин берут данные у сервиса данных на soyo-02 (`192.168.8.213`, порты `5237`, `5236`). Очистить кэш
+(например, если сервис данных исправил уже покрытую историю) — на нужной машине убрать контейнеры, которые держат том,
+удалить том и поднять те же службы снова; база не трогается. На firebat-02:
 
-  Выключить кэш без отката — пустая `MarketData__HistoryCache__Path`.
+```bash
+cd ~/profit-fox && N="$(cat current)" && PROFIT_FOX_VERSION="$N" docker compose --file "releases/$N/docker-compose.workers.yml" --env-file .env.prod rm --stop --force worker-1 worker-2
+```
+
+```bash
+docker volume rm profit-fox-history-cache
+```
+
+```bash
+cd ~/profit-fox && N="$(cat current)" && PROFIT_FOX_VERSION="$N" docker compose --file "releases/$N/docker-compose.workers.yml" --env-file .env.prod up --detach worker-1 worker-2
+```
+
+На firebat-01 — те же команды с `docker-compose.prod.yml` и службой `api`. Выключить кэш без отката — пустая
+`MarketData__HistoryCache__Path`.
 
 Страница — `http://192.168.8.163:5240/`. Без авторизации, как остальные службы в локальной сети.
 
@@ -235,7 +245,7 @@ npm --prefix frontend run generate:api
 2. После зелёного CI `.github/workflows/deploy.yml` даёт коммиту следующий номер `N` (тег `vN`), собирает на GitHub оба образа
    и кладёт их в GHCR как `:N` с меткой коммита.
 3. Задача `deploy` ждёт Approve владельца в окружении `production`, затем раннер на soyo-03 по SSH вызывает на
-   firebat-01 `deploy <N> 1`.
+   firebat-01, затем на firebat-02 `deploy <N> 1`.
 4. Ключ может запустить только `deploy.sh`. Тот берёт коммит тега `vN` на GitHub, принимает его лишь из `release/0.1.0`,
    проверяет метку коммита у обоих образов и поднимает: `db` (ждёт готовности), `api` (ждёт `/health` до 120 с), затем
    `worker-1` и `worker-2`. В конце пишет `~/profit-fox/current` и чистит старые образы. Том базы никогда не удаляется.
@@ -244,7 +254,7 @@ npm --prefix frontend run generate:api
 
 Тот же деплой прежнего номера: в GitHub, Actions, Deploy, «Run workflow» на ветке `release/0.1.0`, поле `version` — прежнее
 `N`; затем Approve. Миграции идут только вперёд: до первой новой версии схемы откат кода безопасен, после неё откат —
-отдельное решение. Текущая версия — `~/profit-fox/current` на firebat-01.
+отдельное решение. Текущая версия — `~/profit-fox/current` на каждой машине.
 
 ### Разовые шаги владельца
 
@@ -258,18 +268,19 @@ npm --prefix frontend run generate:api
    ssh-keygen -t ed25519 -N '' -f ~/.ssh/profit-fox-deploy
    ```
 
-   и адрес firebat-01 в `~/.ssh/known_hosts`. На firebat-01 в `~/.ssh/authorized_keys` одной строкой, где `<ключ>` —
-   содержимое `profit-fox-deploy.pub`:
+   и адреса firebat-01 и firebat-02 в `~/.ssh/known_hosts`. На обеих машинах в `~/.ssh/authorized_keys` одной строкой,
+   где `<ключ>` — содержимое `profit-fox-deploy.pub`:
 
    ```text
    command="~/profit-fox/deploy.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty,from="192.168.8.142" <ключ>
    ```
 
-4. На firebat-01: Docker из официального репозитория (журналы контейнеров по 10 МБ × 3, `live-restore`), пользователь
-   `firebat` в группе `docker`, сон запрещён (`systemctl mask sleep.target suspend.target hibernate.target
-   hybrid-sleep.target`) — машина с рабочим столом. `~/profit-fox/.env.prod` с правами `600` и одной строкой
-   `PROFIT_FOX_DB_PASSWORD=<hex>` (например, `openssl rand -hex 24`); `deploy/deploy.sh` из репозитория скопировать как
-   `~/profit-fox/deploy.sh` с правом исполнения. Нужны `curl`, `jq` и `docker`.
+4. На firebat-01 и firebat-02: Docker из официального репозитория (журналы контейнеров по 10 МБ × 3, `live-restore`),
+   пользователь `firebat` в группе `docker`, сон запрещён (`systemctl mask sleep.target suspend.target hibernate.target
+   hybrid-sleep.target`) — машины с рабочим столом. `~/profit-fox/.env.prod` с правами `600` и одной строкой
+   `PROFIT_FOX_DB_PASSWORD=<hex>` (например, `openssl rand -hex 24`), на firebat-02 — тот же пароль, что на firebat-01;
+   `~/profit-fox/role` с одним словом `main` на firebat-01 и `workers` на firebat-02; `deploy/deploy.sh` из репозитория
+   скопировать как `~/profit-fox/deploy.sh` с правом исполнения. Нужны `curl`, `jq` и `docker`.
 5. Пакеты `profit-fox` и `profit-fox-bench-worker` в GHCR сделать публичными после первой публикации: сервер тянет их
    без входа.
 6. В `~/profit-fox-market-data/config/market-data.json` на soyo-02 задать `HistoryRead:MaxConcurrentReads` = 3: два Worker'а и

@@ -2,8 +2,8 @@ name: Deploy
 
 # The pipeline of the profit-fox bench for its two images (the API with the page, and the Worker): a commit of release/0.1.0
 # whose CI passed gets the next version number N (tag vN), the images are built on a GitHub-hosted runner and pushed to GHCR
-# as :N, and the runner on soyo-03 deploys them to firebat-01 once the owner approves the production environment.
-# Nothing is built in Russia: from there some nuget.org addresses fail at TLS.
+# as :N, and the runner on soyo-03 deploys them to firebat-01 and firebat-02 once the owner approves the production
+# environment. Nothing is built in Russia: from there some nuget.org addresses fail at TLS.
 # Run by hand with a version number to deploy that version again or roll back to it; that run builds nothing.
 # Never runs for pull requests: workflow_run runs this file from the default branch, and only for a push to release/0.1.0 of
 # this repository.
@@ -136,8 +136,13 @@ jobs:
     env:
       VERSION: ${{ needs.image.outputs.version }}
     steps:
-      # The key can only run deploy.sh on firebat-01; the key and known_hosts live in the runner's home, not in GitHub.
-      - name: Deploy
+      # The key can only run deploy.sh on firebat-01 and firebat-02; the key and known_hosts live in the runner's home,
+      # not in GitHub. firebat-01 goes first: its API migrates the database the Workers of firebat-02 use.
+      - name: Deploy firebat-01
         run: >-
           ssh -i ~/.ssh/profit-fox-deploy -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes
           firebat@192.168.8.163 deploy "$VERSION" "$DEPLOY_PROTOCOL"
+      - name: Deploy firebat-02
+        run: >-
+          ssh -i ~/.ssh/profit-fox-deploy -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes
+          firebat@192.168.8.181 deploy "$VERSION" "$DEPLOY_PROTOCOL"

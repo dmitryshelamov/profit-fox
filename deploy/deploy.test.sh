@@ -59,6 +59,27 @@ rejects "deploy 7 $((protocol + 1))"
 rejects "deploy 7 0$protocol"
 rejects "deploy 7 x"
 
+role_file="$(mktemp)"
+role_is() {
+  local content="$1" expected="$2" actual
+  if [[ "$content" == "<none>" ]]; then rm -f "$role_file"; else printf '%s' "$content" >"$role_file"; fi
+  if actual="$(read_role "$role_file" 2>/dev/null)"; then :; else actual="<refused>"; fi
+  if [[ "$actual" == "$expected" ]]; then
+    echo "ok: role '$content' gives $expected"
+  else
+    echo "FAIL: role '$content' should give $expected, got '$actual'"
+    failures=$((failures + 1))
+  fi
+}
+role_is "<none>" main
+role_is "main" main
+role_is "workers" workers
+role_is "workers"$'\n' workers
+role_is "Workers" "<refused>"
+role_is "workers; id" "<refused>"
+role_is "" "<refused>"
+rm -f "$role_file"
+
 # Another protocol means deploy.sh on the server and deploy.yml come from different commits: the error says what to do.
 error="$(parse_command "deploy 7 $((protocol + 1))" 2>&1 >/dev/null)"
 if [[ "$error" == *"copy deploy/deploy.sh"* ]]; then

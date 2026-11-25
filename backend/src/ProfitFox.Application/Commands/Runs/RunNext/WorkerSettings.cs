@@ -27,6 +27,12 @@ public sealed class WorkerSettings
     public TimeSpan LeaseRenewal { get; init; } = TimeSpan.FromSeconds(10);
 
     /// <summary>
+    ///     Whether the Worker takes runs of the queue. False keeps a Worker for the scanner alone (production: the
+    ///     scanner on firebat-01, the runs on firebat-02), so a run never shares its memory with the scanner.
+    /// </summary>
+    public bool TakeRuns { get; init; } = true;
+
+    /// <summary>
     ///     How often a Worker looks whether the database has its schema yet.
     /// </summary>
     public TimeSpan SchemaPollInterval { get; init; } = TimeSpan.FromSeconds(5);

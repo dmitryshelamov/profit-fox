@@ -39,10 +39,11 @@ internal sealed class WorkerHost : IAsyncDisposable
     ///     Whether the Worker may keep the live data (change add-ideas-and-market): off unless a test of the scanner asks.
     /// </param>
     /// <param name="time">The clock of the Worker; that of the system when null.</param>
+    /// <param name="runs">Whether the Worker takes runs of the queue (<c>Worker:TakeRuns</c>).</param>
     /// <param name="cache">
     ///     The folder of the cache of history of the Worker (change add-backtest-history-cache); none when null.
     /// </param>
-    public static async Task<WorkerHost> Start(MarketDataServer server, string name, string? connectionString = null, bool scanner = false, TimeProvider? time = null, string? cache = null)
+    public static async Task<WorkerHost> Start(MarketDataServer server, string name, string? connectionString = null, bool scanner = false, TimeProvider? time = null, string? cache = null, bool runs = true)
     {
         HostApplicationBuilder builder = Host.CreateApplicationBuilder();
         builder.Logging.ClearProviders();
@@ -56,6 +57,7 @@ internal sealed class WorkerHost : IAsyncDisposable
             ["Worker:LeaseRenewal"] = Renewal.ToString(),
             ["Worker:PollInterval"] = "00:00:00.1",
             ["Worker:SchemaPollInterval"] = "00:00:00.2",
+            ["Worker:TakeRuns"] = runs ? "true" : "false",
             ["Scanner:Enabled"] = scanner ? "true" : "false",
             ["Scanner:TickInterval"] = "00:00:00.05",
             ["Scanner:ReconcileInterval"] = "00:00:00.2",
