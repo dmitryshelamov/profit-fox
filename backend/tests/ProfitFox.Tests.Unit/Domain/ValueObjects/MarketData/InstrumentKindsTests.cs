@@ -66,4 +66,30 @@ public sealed class InstrumentKindsTests
     {
         Assert.That(InstrumentKinds.Of(symbolType), Is.EqualTo(InstrumentKind.Crypto));
     }
+
+    [TestCase(InstrumentKind.Crypto, "crypto")]
+    [TestCase(InstrumentKind.Stock, "stock")]
+    public void A_kind_reads_and_writes_back_by_its_name(InstrumentKind kind, string name)
+    {
+        // Decision 4: the names of the kinds in the API and in the database.
+        Assert.That(InstrumentKinds.Name(kind), Is.EqualTo(name));
+        Assert.That(InstrumentKinds.TryParse(name, out InstrumentKind parsed), Is.True);
+        Assert.That(parsed, Is.EqualTo(kind));
+    }
+
+    [TestCase("spot")]
+    [TestCase("linear")]
+    [TestCase("Crypto")]
+    [TestCase("")]
+    [TestCase(null)]
+    public void Another_name_is_not_a_kind(string? name)
+    {
+        Assert.That(InstrumentKinds.TryParse(name, out _), Is.False);
+    }
+
+    [Test]
+    public void The_names_are_listed_for_a_refusal()
+    {
+        Assert.That(InstrumentKinds.Listed, Is.EqualTo("crypto, stock"));
+    }
 }

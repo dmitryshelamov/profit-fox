@@ -8,6 +8,8 @@ using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.Lists;
 using ProfitFox.Domain.ValueObjects.Lists.Enums;
 using ProfitFox.Domain.ValueObjects.Market;
+using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Domain.ValueObjects.MarketData.Enums;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Lists;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Market.Queries;
 
@@ -34,6 +36,7 @@ internal sealed class MarketPairRepository(NpgsqlDataSource database) : IMarketP
         command.Parameters.Add(Array("FundingRate", NpgsqlDbType.Numeric, pairs.Select(pair => (object?)pair.FundingRate)));
         command.Parameters.Add(Array("NextFunding", NpgsqlDbType.TimestampTz, pairs.Select(pair => (object?)pair.NextFunding)));
         command.Parameters.Add(Array("UpdatedAt", NpgsqlDbType.TimestampTz, pairs.Select(pair => (object?)pair.UpdatedAt)));
+        command.Parameters.Add(Array("Kind", NpgsqlDbType.Text, pairs.Select(pair => (object?)InstrumentKinds.Name(pair.Kind))));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -128,9 +131,12 @@ internal sealed class MarketPairRepository(NpgsqlDataSource database) : IMarketP
 
         public DateTimeOffset UpdatedAt { get; init; }
 
+        public string Kind { get; init; } = "crypto";
+
         public MarketPair ToDomain()
         {
-            return new MarketPair(Symbol, Price, Change1h, Change4h, Change24h, Turnover24h, OpenInterest, OpenInterestUsdt, FundingRate, NextFunding, UpdatedAt);
+            InstrumentKind kind = InstrumentKinds.TryParse(Kind, out InstrumentKind known) ? known : InstrumentKind.Crypto;
+            return new MarketPair(Symbol, Price, Change1h, Change4h, Change24h, Turnover24h, OpenInterest, OpenInterestUsdt, FundingRate, NextFunding, UpdatedAt, kind);
         }
     }
 

@@ -1,6 +1,7 @@
 using ProfitFox.Application.Ports.MarketData.Feed;
 using ProfitFox.Domain.ValueObjects.Execution;
 using ProfitFox.Domain.ValueObjects.Market;
+using ProfitFox.Domain.ValueObjects.MarketData.Enums;
 
 namespace ProfitFox.Application.Services.Market;
 
@@ -25,6 +26,9 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
     private static readonly TimeSpan PaymentsKept = TimeSpan.FromHours(48);
     private static readonly TimeSpan OneMinute = TimeSpan.FromMinutes(1);
     private readonly Dictionary<string, Pair> _pairs = new Dictionary<string, Pair>(StringComparer.Ordinal);
+
+    // The kind of each pair of the last set of pairs (change add-instrument-kind-filter, decision 3).
+    private Dictionary<string, InstrumentKind> _kinds = new Dictionary<string, InstrumentKind>(StringComparer.Ordinal);
 
     /// <summary>
     ///     The open time of the newest closed minute the feed told of any pair; null before the first.
@@ -70,6 +74,7 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
                 break;
             case MarketPairs listed:
                 var keep = new HashSet<string>(listed.Pairs.Select(pair => pair.Symbol), StringComparer.Ordinal);
+                _kinds = listed.Pairs.DistinctBy(pair => pair.Symbol, StringComparer.Ordinal).ToDictionary(pair => pair.Symbol, pair => pair.Kind, StringComparer.Ordinal);
                 foreach (string symbol in _pairs.Keys.Where(symbol => !keep.Contains(symbol)).ToList())
                 {
                     _pairs.Remove(symbol);
@@ -204,7 +209,8 @@ public sealed class MarketBook(TimeProvider time, TimeSpan closeDelay)
             pair.OpenInterest is { } interest ? interest.Value * last.Close : null,
             pair.Rate?.Value,
             next,
-            time.GetUtcNow());
+            time.GetUtcNow(),
+            _kinds.GetValueOrDefault(symbol, InstrumentKind.Crypto));
     }
 
     private Pair PairOf(string symbol)

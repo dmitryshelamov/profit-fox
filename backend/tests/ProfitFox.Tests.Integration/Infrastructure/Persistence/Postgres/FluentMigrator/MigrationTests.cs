@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 using Npgsql;
 
+using ProfitFox.Infrastructure.Persistence.Postgres;
 using ProfitFox.Infrastructure.Persistence.Postgres.FluentMigrator;
 
 namespace ProfitFox.Tests.Integration.Infrastructure.Persistence.Postgres.FluentMigrator;
@@ -55,7 +56,7 @@ public sealed class MigrationTests
 
         await using var connection = new NpgsqlConnection(connectionString);
         long[] versions = [.. await connection.QueryAsync<long>("SELECT \"Version\" FROM \"VersionInfo\" ORDER BY \"Version\"")];
-        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L, 202611230002L, 202611230003L, 202611230004L }));
+        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L, 202611230002L, 202611230003L, 202611230004L, 202611250001L }));
         Assert.That(await TablesOf(connectionString), Is.SupersetOf(new[] { "strategies", "strategy_versions", "strategy_signals" }));
     }
 
@@ -190,6 +191,40 @@ public sealed class MigrationTests
         }
 
         Assert.That(await connection.ExecuteScalarAsync<string>(index), Does.EndWith("(state, exit_time DESC)"));
+    }
+
+    /// <summary>
+    ///     Change add-instrument-kind-filter, task 3.1: the kind of a pair of the snapshot comes on the rows already there as
+    ///     crypto, a kind out of the list is refused, and Down takes only the column away.
+    /// </summary>
+    [Test]
+    public async Task The_kind_of_a_pair_comes_on_the_snapshot_as_crypto_refuses_another_value_and_goes_back()
+    {
+        string connectionString = await BenchDatabase.NewDatabase();
+        await using var connection = new NpgsqlConnection(connectionString);
+        const string columns = "SELECT column_name FROM information_schema.columns WHERE table_name = 'market_pairs' ORDER BY ordinal_position";
+        var registrations = new ServiceCollection();
+        PostgresRegistrar.Configure(BenchDatabase.Settings(connectionString), registrations);
+        await using ServiceProvider services = registrations.BuildServiceProvider();
+        using IServiceScope scope = services.CreateScope();
+        IMigrationRunner runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
+        runner.MigrateUp(202611230004);
+        await connection.ExecuteAsync("INSERT INTO market_pairs (symbol, price, updated_at) VALUES ('BTCUSDT', 97000, now()), ('TSLAUSDT', 412.5, now())");
+
+        runner.MigrateUp(202611250001);
+
+        Assert.That(await connection.QueryAsync<(string, string)>("SELECT symbol, kind FROM market_pairs ORDER BY symbol"),
+            Is.EqualTo(new[] { ("BTCUSDT", "crypto"), ("TSLAUSDT", "crypto") }));
+        await connection.ExecuteAsync("UPDATE market_pairs SET kind = 'stock' WHERE symbol = 'TSLAUSDT'");
+        Assert.That(await connection.ExecuteScalarAsync<string>("SELECT kind FROM market_pairs WHERE symbol = 'TSLAUSDT'"), Is.EqualTo("stock"));
+        PostgresException? refused = Assert.ThrowsAsync<PostgresException>(() => connection.ExecuteAsync("UPDATE market_pairs SET kind = 'spot' WHERE symbol = 'BTCUSDT'"));
+        Assert.That(refused!.SqlState, Is.EqualTo(PostgresErrorCodes.CheckViolation));
+        Assert.ThrowsAsync<PostgresException>(() => connection.ExecuteAsync("INSERT INTO market_pairs (symbol, price, updated_at, kind) VALUES ('ETHUSDT', 3500, now(), NULL)"));
+
+        runner.MigrateDown(202611230004);
+
+        Assert.That(await connection.QueryAsync<string>(columns), Does.Not.Contain("kind"));
+        Assert.That(await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM market_pairs"), Is.EqualTo(2));
     }
 
     private static async Task<string[]> ColumnsOf(NpgsqlConnection connection, string[] tables)

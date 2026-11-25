@@ -10,7 +10,7 @@ internal static class MarketListQueries
         """
         m.symbol AS "Symbol", m.price AS "Price", m.change_1h AS "Change1h", m.change_4h AS "Change4h", m.change_24h AS "Change24h",
         m.turnover_24h AS "Turnover24h", m.open_interest AS "OpenInterest", m.open_interest_usdt AS "OpenInterestUsdt", m.funding_rate AS "FundingRate",
-        m.next_funding AS "NextFunding", m.updated_at AS "UpdatedAt"
+        m.next_funding AS "NextFunding", m.updated_at AS "UpdatedAt", m.kind AS "Kind"
         """;
 
     // A part of the symbol, whatever the case; the text is a value, not a pattern.

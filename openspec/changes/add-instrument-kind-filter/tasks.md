@@ -28,10 +28,10 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 ## 3. Снимок рынка
 
-- [ ] 3.1 Миграция: `market_pairs.kind text NOT NULL DEFAULT 'crypto'` с проверкой `IN ('crypto', 'stock')`
+- [x] 3.1 Миграция: `market_pairs.kind text NOT NULL DEFAULT 'crypto'` с проверкой `IN ('crypto', 'stock')`
   (решение 3). Проверить интеграционным тестом миграции на базе со строками снимка: строки получили `crypto`,
   значение вне перечня отклоняется.
-- [ ] 3.2 `MarketBook` помнит вид из последнего `MarketPairs`, `MarketPair` несёт `Kind`, `MarketPairRepository`
+- [x] 3.2 `MarketBook` помнит вид из последнего `MarketPairs`, `MarketPair` несёт `Kind`, `MarketPairRepository`
   пишет и читает его. Проверить юнит-тестом сценарий «Тип сменился» (второй `MarketPairs` с другим видом меняет вид
   снимка) и интеграционным тестом записи и чтения снимка.
 
@@ -95,3 +95,7 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   `GrpcMarketFeed` сообщала новый `MarketPairs` только при смене символов, и смена типа Bybit до снимка не дошла бы
   (сценарий «Тип сменился»); теперь смена вида пары — тоже смена набора, тест
   `GrpcMarketFeedTests.A_pair_whose_type_changed_is_told_again_with_its_new_kind`.
+- **Группа 3, снимок рынка** (облачная сессия, 2026-11-25). Сборка `Release`: 0 предупреждений. Тесты бэкенда: unit 831
+  (+9: вид в `MarketBook`, имена видов `crypto`/`stock`), интеграционные 406 (+2: миграция `202611250001` на базе со
+  строками снимка, запись и чтение вида). В `MigrationTests.After_the_start_..._has_every_migration` в перечень версий
+  добавлена новая `202611250001` — это перечень миграций, не ожидание списков идей и рынка.
