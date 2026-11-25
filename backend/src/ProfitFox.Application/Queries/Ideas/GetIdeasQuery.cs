@@ -8,7 +8,8 @@ namespace ProfitFox.Application.Queries.Ideas;
 /// <summary>
 ///     A page of open or closed ideas, or of the ideas of the pair <see cref="Symbol" /> (spec strategy-ideas «Список идей»,
 ///     spec market-overview «Идеи пары»), with the choices above the table; for a pair also the window of time its ideas
-///     touch and the idea whose page is wanted (task 18.22).
+///     touch and the idea whose page is wanted (task 18.22). <see cref="PairKind" />: the kind of the pair, <c>crypto</c> or
+///     <c>stock</c> (change add-instrument-kind-filter, decision 4); the ideas of a pair take none.
 /// </summary>
 public sealed record GetIdeasQuery(
     IdeaListKind Kind,
@@ -26,7 +27,8 @@ public sealed record GetIdeasQuery(
     string? State = null,
     DateTimeOffset? From = null,
     DateTimeOffset? To = null,
-    Guid? Around = null) : IRequest<IdeaListResult>;
+    Guid? Around = null,
+    string? PairKind = null) : IRequest<IdeaListResult>;
 
 /// <summary>
 ///     A page of the summary of the journal with the choices of the closed ideas (spec strategy-ideas «Сводка журнала»).

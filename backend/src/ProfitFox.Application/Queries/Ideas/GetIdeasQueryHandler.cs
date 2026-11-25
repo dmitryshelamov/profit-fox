@@ -48,6 +48,7 @@ internal sealed class GetIdeasQueryHandler(IIdeaRepository ideas, ISavedFilterRe
             conditions,
             request.From,
             request.To,
-            request.Around);
+            request.Around,
+            request.Kind == IdeaListKind.Pair ? null : FilterResolver.Kind(request.PairKind));
     }
 }

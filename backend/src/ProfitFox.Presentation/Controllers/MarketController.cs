@@ -39,6 +39,7 @@ public class MarketController(ISender sender, LiveCandleHub live) : ControllerBa
     /// <param name="strategy">The strategy of an open idea.</param>
     /// <param name="timeframe">The timeframe of an open idea.</param>
     /// <param name="filter">A saved filter of «Рынок».</param>
+    /// <param name="kind">The kind of the pair: <c>crypto</c> or <c>stock</c>; every kind when not given.</param>
     /// <param name="cancellation">The request was given up.</param>
     [HttpGet("pairs", Name = "ListMarketPairs")]
     [ProducesResponseType<MarketPageResponse>(StatusCodes.Status200OK)]
@@ -53,9 +54,10 @@ public class MarketController(ISender sender, LiveCandleHub live) : ControllerBa
         [FromQuery] string? strategy,
         [FromQuery] string? timeframe,
         [FromQuery] Guid? filter,
+        [FromQuery] string? kind,
         CancellationToken cancellation)
     {
-        var query = new GetMarketPairsQuery(new ListRequest(sort, direction, page, pageSize, filter), search, ideasOnly == true, strategy, timeframe);
+        var query = new GetMarketPairsQuery(new ListRequest(sort, direction, page, pageSize, filter), search, ideasOnly == true, strategy, timeframe, kind);
         return await Answer<MarketPageResponse>(async () => MarketResponses.Of(await sender.Send(query, cancellation)));
     }
 

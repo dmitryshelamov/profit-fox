@@ -1,5 +1,6 @@
 import { api, type Schemas, unwrap } from './client';
 import { pageOf, pageQuery, type PageRequest } from './lists';
+import type { InstrumentKind } from './market';
 import { type Written, written } from './signals';
 
 export type Idea = Schemas['IdeaResponse'];
@@ -23,6 +24,8 @@ export interface IdeaChoices {
   readonly exitReason?: string;
   readonly period?: number;
   readonly state?: string;
+  /** The kind of the pair of the idea (change add-instrument-kind-filter); every kind when not given. */
+  readonly kind?: InstrumentKind;
 }
 
 function choicesQuery(choices: IdeaChoices) {

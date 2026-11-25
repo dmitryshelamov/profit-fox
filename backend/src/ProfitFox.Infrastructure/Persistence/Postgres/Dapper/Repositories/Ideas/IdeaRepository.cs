@@ -6,6 +6,7 @@ using ProfitFox.Domain.Entities.Ideas;
 using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.Lists;
 using ProfitFox.Domain.ValueObjects.Lists.Enums;
+using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Lists;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas.Contracts;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Ideas.Converters;
@@ -149,6 +150,8 @@ internal sealed class IdeaRepository(NpgsqlDataSource database) : IIdeaRepositor
         Add(parts, parameters, "Label", query.Label, "@Label = ANY(i.labels)");
         Add(parts, parameters, "ExitReason", query.ExitReason, "i.exit_reason = @ExitReason");
         Add(parts, parameters, "State", query.State, "i.state = @State");
+        // The kind of the pair in the snapshot: an idea of a pair out of it has no row there and is of no kind (decision 3).
+        Add(parts, parameters, "PairKind", query.PairKind is { } kind ? InstrumentKinds.Name(kind) : null, "m.kind = @PairKind");
         if (query.OnlyPositive)
         {
             parts.Add("i.now_result > 0");

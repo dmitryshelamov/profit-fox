@@ -37,6 +37,7 @@ public class IdeasController(ISender sender) : ControllerBase
     /// <param name="exitReason">Closed ideas closed by <c>stop</c>, <c>target</c> or <c>time</c>.</param>
     /// <param name="period">Closed ideas with the exit in the last days.</param>
     /// <param name="filter">A saved filter of «Идеи».</param>
+    /// <param name="kind">The kind of the pair of the idea: <c>crypto</c> or <c>stock</c>; every kind when not given.</param>
     /// <param name="cancellation">The request was given up.</param>
     [HttpGet(Name = "ListIdeas")]
     [ProducesResponseType<IdeaPageResponse>(StatusCodes.Status200OK)]
@@ -57,9 +58,10 @@ public class IdeasController(ISender sender) : ControllerBase
         [FromQuery] string? exitReason,
         [FromQuery] int? period,
         [FromQuery] Guid? filter,
+        [FromQuery] string? kind,
         CancellationToken cancellation)
     {
-        GetIdeasQuery query = Query(state, sort, direction, page, pageSize, search, strategy, timeframe, side, label, positive, withStop, exitReason, period, filter);
+        GetIdeasQuery query = Query(state, sort, direction, page, pageSize, search, strategy, timeframe, side, label, positive, withStop, exitReason, period, filter, kind);
         return await Answer(async () => IdeaResponses.Of(await sender.Send(query, cancellation)));
     }
 
@@ -83,9 +85,10 @@ public class IdeasController(ISender sender) : ControllerBase
         [FromQuery] string? exitReason,
         [FromQuery] int? period,
         [FromQuery] Guid? filter,
+        [FromQuery] string? kind,
         CancellationToken cancellation)
     {
-        GetIdeasQuery query = Query("closed", sort, direction, page, pageSize, search, strategy, timeframe, side, label, null, null, exitReason, period, filter);
+        GetIdeasQuery query = Query("closed", sort, direction, page, pageSize, search, strategy, timeframe, side, label, null, null, exitReason, period, filter, kind);
         return await Answer(async () => IdeaResponses.Of(await sender.Send(new GetIdeaSummaryQuery(query), cancellation)));
     }
 
@@ -105,6 +108,7 @@ public class IdeasController(ISender sender) : ControllerBase
     /// <param name="exitReason">Closed ideas closed by <c>stop</c>, <c>target</c> or <c>time</c>.</param>
     /// <param name="period">Closed ideas with the exit in the last days.</param>
     /// <param name="filter">A saved filter of «Идеи».</param>
+    /// <param name="kind">The kind of the pair of the idea: <c>crypto</c> or <c>stock</c>; every kind when not given.</param>
     /// <param name="cancellation">The request was given up.</param>
     [HttpGet("strategies", Name = "CountIdeasByStrategy")]
     [ProducesResponseType<IdeaStrategyCountsResponse>(StatusCodes.Status200OK)]
@@ -121,10 +125,11 @@ public class IdeasController(ISender sender) : ControllerBase
         [FromQuery] string? exitReason,
         [FromQuery] int? period,
         [FromQuery] Guid? filter,
+        [FromQuery] string? kind,
         CancellationToken cancellation)
     {
         _ = strategy;
-        var query = new GetIdeaStrategiesQuery(state, search, timeframe, side, label, positive == true, withStop == true, exitReason, period, filter);
+        var query = new GetIdeaStrategiesQuery(state, search, timeframe, side, label, positive == true, withStop == true, exitReason, period, filter, kind);
         return await Answer(async () => IdeaResponses.Of(await sender.Send(query, cancellation)));
     }
 
@@ -153,7 +158,8 @@ public class IdeasController(ISender sender) : ControllerBase
         bool? withStop,
         string? exitReason,
         int? period,
-        Guid? filter)
+        Guid? filter,
+        string? kind)
     {
         return new GetIdeasQuery(
             state == "closed" ? IdeaListKind.Closed : IdeaListKind.Open,
@@ -166,7 +172,8 @@ public class IdeasController(ISender sender) : ControllerBase
             OnlyPositive: positive == true,
             OnlyWithStop: withStop == true,
             ExitReason: exitReason,
-            PeriodDays: period);
+            PeriodDays: period,
+            PairKind: kind);
     }
 
     private async Task<ActionResult<T>> Answer<T>(Func<Task<T>> act)

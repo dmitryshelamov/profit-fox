@@ -872,6 +872,7 @@ export interface components {
         };
         MarketPairResponse: {
             symbol: string;
+            kind: string;
             /** Format: double */
             price: null | number | string;
             /** Format: double */
@@ -1756,6 +1757,7 @@ export interface operations {
                 exitReason?: string;
                 period?: number | string;
                 filter?: string;
+                kind?: string;
             };
             header?: never;
             path?: never;
@@ -1802,6 +1804,7 @@ export interface operations {
                 exitReason?: string;
                 period?: number | string;
                 filter?: string;
+                kind?: string;
             };
             header?: never;
             path?: never;
@@ -1847,6 +1850,7 @@ export interface operations {
                 exitReason?: string;
                 period?: number | string;
                 filter?: string;
+                kind?: string;
             };
             header?: never;
             path?: never;
@@ -1945,6 +1949,7 @@ export interface operations {
                 strategy?: string;
                 timeframe?: string;
                 filter?: string;
+                kind?: string;
             };
             header?: never;
             path?: never;

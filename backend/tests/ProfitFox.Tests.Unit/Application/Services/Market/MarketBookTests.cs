@@ -5,6 +5,7 @@ using ProfitFox.Application.Services.Market;
 using ProfitFox.Domain.ValueObjects.Execution;
 using ProfitFox.Domain.ValueObjects.Market;
 using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Domain.ValueObjects.MarketData.Enums;
 
 namespace ProfitFox.Tests.Unit.Application.Services.Market;
 
@@ -229,6 +230,27 @@ public sealed class MarketBookTests
 
         Assert.That(book.Symbols, Is.EqualTo(new[] { "BTCUSDT" }));
         Assert.That(book.Snapshot("ETHUSDT"), Is.Null);
+    }
+
+    /// <summary>
+    ///     Change add-instrument-kind-filter, task 3.2: spec market-overview «Вид пары» — the snapshot has the kind of the last
+    ///     set of pairs (scenario «Тип сменился»), and a pair the feed has not listed yet is crypto.
+    /// </summary>
+    [Test]
+    public void The_snapshot_has_the_kind_of_the_last_set_of_pairs()
+    {
+        MarketBook book = Book(Ten.AddMinutes(1));
+        book.Apply(Minute("BTCUSDT", Ten.AddMinutes(-1), open: 1, close: 1));
+        book.Apply(Minute("NEWUSDT", Ten.AddMinutes(-1), open: 1, close: 1));
+        Assert.That(book.Snapshot("NEWUSDT")!.Kind, Is.EqualTo(InstrumentKind.Crypto), "before the first set of pairs");
+
+        book.Apply(new MarketPairs([new Instrument("btc", "BTCUSDT"), new Instrument("new", "NEWUSDT", InstrumentKind.Crypto)]));
+        Assert.That(book.Snapshot("NEWUSDT")!.Kind, Is.EqualTo(InstrumentKind.Crypto));
+
+        book.Apply(new MarketPairs([new Instrument("btc", "BTCUSDT"), new Instrument("new", "NEWUSDT", InstrumentKind.Stock)]));
+
+        Assert.That(book.Snapshot("NEWUSDT")!.Kind, Is.EqualTo(InstrumentKind.Stock));
+        Assert.That(book.Snapshot("BTCUSDT")!.Kind, Is.EqualTo(InstrumentKind.Crypto));
     }
 
     [Test]

@@ -29,7 +29,8 @@ public sealed class InstrumentCatalog(HttpClient http) : IInstrumentCatalog
     }
 
     /// <summary>
-    ///     The bench pairs of a catalog answer, ordered by symbol.
+    ///     The bench pairs of a catalog answer, ordered by symbol, each with the kind of its Bybit type <c>listing.symbolType</c>
+    ///     (change add-instrument-kind-filter, design.md, decision 2); without the field a pair is crypto.
     /// </summary>
     public static IReadOnlyList<Instrument> Parse(string json)
     {
@@ -45,7 +46,7 @@ public sealed class InstrumentCatalog(HttpClient http) : IInstrumentCatalog
                 && Text(listing, "quoteAsset") == "USDT"
                 && Text(listing, "status") == "Trading")
             {
-                instruments.Add(new Instrument(item.GetProperty("id").GetString()!, Text(listing, "symbol")!));
+                instruments.Add(new Instrument(item.GetProperty("id").GetString()!, Text(listing, "symbol")!, InstrumentKinds.Of(Text(listing, "symbolType"))));
             }
         }
 

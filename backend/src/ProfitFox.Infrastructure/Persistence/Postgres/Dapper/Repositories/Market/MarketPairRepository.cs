@@ -8,6 +8,8 @@ using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.ValueObjects.Lists;
 using ProfitFox.Domain.ValueObjects.Lists.Enums;
 using ProfitFox.Domain.ValueObjects.Market;
+using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Domain.ValueObjects.MarketData.Enums;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Lists;
 using ProfitFox.Infrastructure.Persistence.Postgres.Dapper.Repositories.Market.Queries;
 
@@ -34,6 +36,7 @@ internal sealed class MarketPairRepository(NpgsqlDataSource database) : IMarketP
         command.Parameters.Add(Array("FundingRate", NpgsqlDbType.Numeric, pairs.Select(pair => (object?)pair.FundingRate)));
         command.Parameters.Add(Array("NextFunding", NpgsqlDbType.TimestampTz, pairs.Select(pair => (object?)pair.NextFunding)));
         command.Parameters.Add(Array("UpdatedAt", NpgsqlDbType.TimestampTz, pairs.Select(pair => (object?)pair.UpdatedAt)));
+        command.Parameters.Add(Array("Kind", NpgsqlDbType.Text, pairs.Select(pair => (object?)InstrumentKinds.Name(pair.Kind))));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -79,16 +82,23 @@ internal sealed class MarketPairRepository(NpgsqlDataSource database) : IMarketP
         return await connection.QuerySingleAsync<FilterCount>(new CommandDefinition(sql, parameters, cancellationToken: cancellationToken));
     }
 
-    // The search, the choices of an idea and the conditions of a filter, each value a parameter.
+    // The search, the kind, the choices of an idea and the conditions of a filter, each value a parameter.
     private static string Where(MarketListQuery query, DynamicParameters parameters)
     {
+        string kind = "TRUE";
+        if (query.Kind is { } chosen)
+        {
+            parameters.Add("Kind", InstrumentKinds.Name(chosen));
+            kind = "m.kind = @Kind";
+        }
+
         parameters.Add("Search", string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim(), System.Data.DbType.String);
         parameters.Add("Strategy", string.IsNullOrEmpty(query.Strategy) ? null : query.Strategy, System.Data.DbType.String);
         parameters.Add("Timeframe", string.IsNullOrEmpty(query.Timeframe) ? null : query.Timeframe, System.Data.DbType.String);
         string market = ListColumns.Conditions(query.Conditions, FieldPlace.Market, parameters, "c");
         string idea = ListColumns.Conditions(query.Conditions, FieldPlace.Idea, parameters, "c");
         bool ofIdea = query.IdeasOnly || !string.IsNullOrEmpty(query.Strategy) || !string.IsNullOrEmpty(query.Timeframe) || ListColumns.Has(query.Conditions, FieldPlace.Idea);
-        return ofIdea ? $"{MarketListQueries.Search} AND {market} AND {MarketListQueries.OpenIdea(idea)}" : $"{MarketListQueries.Search} AND {market}";
+        return ofIdea ? $"{MarketListQueries.Search} AND {kind} AND {market} AND {MarketListQueries.OpenIdea(idea)}" : $"{MarketListQueries.Search} AND {kind} AND {market}";
     }
 
     private static async Task<IReadOnlyList<MarketPairRow>> WithIdeas(NpgsqlConnection connection, Row[] rows, CancellationToken cancellationToken)
@@ -128,9 +138,12 @@ internal sealed class MarketPairRepository(NpgsqlDataSource database) : IMarketP
 
         public DateTimeOffset UpdatedAt { get; init; }
 
+        public string Kind { get; init; } = "crypto";
+
         public MarketPair ToDomain()
         {
-            return new MarketPair(Symbol, Price, Change1h, Change4h, Change24h, Turnover24h, OpenInterest, OpenInterestUsdt, FundingRate, NextFunding, UpdatedAt);
+            InstrumentKind kind = InstrumentKinds.TryParse(Kind, out InstrumentKind known) ? known : InstrumentKind.Crypto;
+            return new MarketPair(Symbol, Price, Change1h, Change4h, Change24h, Turnover24h, OpenInterest, OpenInterestUsdt, FundingRate, NextFunding, UpdatedAt, kind);
         }
     }
 
