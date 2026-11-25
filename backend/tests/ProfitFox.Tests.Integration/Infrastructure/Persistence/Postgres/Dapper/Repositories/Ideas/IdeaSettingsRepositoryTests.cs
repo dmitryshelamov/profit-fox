@@ -90,14 +90,20 @@ public sealed class IdeaSettingsRepositoryTests
         Assert.That(await lease.TakeAsync("w-1", TimeSpan.FromSeconds(30), CancellationToken.None), Is.True);
         Assert.That(await lease.TakeAsync("w-2", TimeSpan.FromSeconds(30), CancellationToken.None), Is.False, "w-1 holds it");
         Assert.That(await lease.TakeAsync("w-1", TimeSpan.FromMilliseconds(1), CancellationToken.None), Is.True, "renewed by its holder");
-        await lease.ReportAsync("w-1", IdeaGeneratorNoon, 310, 831, CancellationToken.None, failed: 12, failure: "answered 400");
+        await lease.ReportAsync("w-1", IdeaGeneratorNoon, 310, 831, CancellationToken.None, failed: 12, failure: "answered 400", warmupLeft: TimeSpan.FromSeconds(511.2));
         (ScannerState held, _) = (await lease.StateAsync(CancellationToken.None))!.Value;
-        Assert.That(held, Is.EqualTo(new ScannerState("w-1", held.Until, IdeaGeneratorNoon, 310, 831, Failed: 12, Failure: "answered 400")));
+        Assert.That(
+            held,
+            Is.EqualTo(new ScannerState("w-1", held.Until, IdeaGeneratorNoon, 310, 831, Failed: 12, Failure: "answered 400", WarmupLeft: TimeSpan.FromSeconds(512))),
+            "the time left in whole seconds rounded up");
         await Task.Delay(50);
 
         Assert.That(await lease.TakeAsync("w-2", TimeSpan.FromSeconds(30), CancellationToken.None), Is.True, "the lease of w-1 ran out");
         (ScannerState taken, DateTimeOffset now) = (await lease.StateAsync(CancellationToken.None))!.Value;
-        Assert.That((taken.Worker, taken.LiveSince, taken.Warmed, taken.Failed, taken.Failure), Is.EqualTo(("w-2", (DateTimeOffset?)null, 0, 0, (string?)null)), "a new holder starts over");
+        Assert.That(
+            (taken.Worker, taken.LiveSince, taken.Warmed, taken.Failed, taken.Failure, taken.WarmupLeft),
+            Is.EqualTo(("w-2", (DateTimeOffset?)null, 0, 0, (string?)null, (TimeSpan?)null)),
+            "a new holder starts over");
         Assert.That(taken.Until, Is.GreaterThan(now));
         await lease.ReleaseAsync("w-2", CancellationToken.None);
         Assert.That(await lease.TakeAsync("w-1", TimeSpan.FromSeconds(30), CancellationToken.None), Is.True, "given up");

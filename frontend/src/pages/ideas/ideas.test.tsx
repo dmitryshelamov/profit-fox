@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+import { timeLeft } from '@/pages/ideas/ScannerBanner';
 import { fakeApi, type FakeRoute, json } from '@/test/fakeApi';
 import { idea, ideaPage, scannerState } from '@/test/ideas';
 import { pair } from '@/test/market';
@@ -384,6 +385,25 @@ describe('the state of the scanner in «Идеи»', () => {
 
     expect(await screen.findByRole('status', { name: 'Живые данные' })).toHaveTextContent(
       'идёт прогрев: 310 из 831 пар',
+    );
+  });
+
+  it('counts the time left in whole minutes rounded up', () => {
+    expect(timeLeft(42)).toBe('осталось меньше минуты');
+    expect(timeLeft(60)).toBe('осталось ≈ 1 мин');
+    expect(timeLeft(61)).toBe('осталось ≈ 2 мин');
+    expect(timeLeft(3900)).toBe('осталось ≈ 1 ч 05 мин');
+  });
+
+  it('shows how long the warm-up has still to go', async () => {
+    routes({
+      'GET /api/ideas/state': () =>
+        json(scannerState({ warmed: 310, pairs: 831, warmupLeftSeconds: 512.4 })),
+    });
+    renderApp('/ideas');
+
+    expect(await screen.findByRole('status', { name: 'Живые данные' })).toHaveTextContent(
+      'идёт прогрев: 310 из 831 пар · осталось ≈ 9 мин',
     );
   });
 
