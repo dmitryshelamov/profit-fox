@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Infrastructure.Clients.MarketData;
+using ProfitFox.Infrastructure.Persistence.Files.HistoryCache;
 using ProfitFox.Presentation;
 using ProfitFox.Tests.Integration.MarketData;
 
@@ -14,9 +15,10 @@ namespace ProfitFox.Tests.Integration.Presentation;
 ///     The bench API in memory for a test, as <see cref="Program" /> starts it: the Testing environment, the database of
 ///     <paramref name="start" /> (the migrated test database by default), which it migrates at start, and history read from the
 ///     fake market-data service <paramref name="market" />, so no request reaches the real one; with <paramref name="time" />
-///     the clock of the API and of the fake service is that one.
+///     the clock of the API and of the fake service is that one; with <paramref name="cache" /> history goes through the cache
+///     of history in that folder (change add-backtest-history-cache).
 /// </summary>
-internal sealed class BenchTestApplication(MarketDataServer market, BenchStart? start = null, TimeProvider? time = null) : WebApplicationFactory<Program>
+internal sealed class BenchTestApplication(MarketDataServer market, BenchStart? start = null, TimeProvider? time = null, string? cache = null) : WebApplicationFactory<Program>
 {
     private const string TestingEnvironment = "Testing";
 
@@ -39,7 +41,7 @@ internal sealed class BenchTestApplication(MarketDataServer market, BenchStart? 
 
         builder.ConfigureTestServices(services =>
         {
-            services.AddSingleton<IHistorySource>(new GrpcHistorySource(market.Channel));
+            MarketDataRegistrar.History(services, cache is null ? null : new HistoryCacheSettings(cache, 1L << 40), _ => new GrpcHistorySource(market.Channel));
             services.AddSingleton<IInstrumentCatalog>(new InstrumentCatalog(market.Http));
             services.AddSingleton<IRecentHistory>(provider => new RestRecentHistory(market.Http, market.Channel, provider.GetService<TimeProvider>() ?? TimeProvider.System));
             services.AddSingleton<IMarketFeed>(provider => new GrpcMarketFeed(market.Channel, new InstrumentCatalog(market.Http), provider.GetService<TimeProvider>() ?? TimeProvider.System, new MarketFeedSettings { RetryDelay = TimeSpan.FromMilliseconds(50) }));

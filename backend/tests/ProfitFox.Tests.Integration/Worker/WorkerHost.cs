@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 
 using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Infrastructure.Clients.MarketData;
+using ProfitFox.Infrastructure.Persistence.Files.HistoryCache;
 using ProfitFox.Tests.Integration.MarketData;
 
 namespace ProfitFox.Tests.Integration.Worker;
@@ -38,7 +39,10 @@ internal sealed class WorkerHost : IAsyncDisposable
     ///     Whether the Worker may keep the live data (change add-ideas-and-market): off unless a test of the scanner asks.
     /// </param>
     /// <param name="time">The clock of the Worker; that of the system when null.</param>
-    public static async Task<WorkerHost> Start(MarketDataServer server, string name, string? connectionString = null, bool scanner = false, TimeProvider? time = null)
+    /// <param name="cache">
+    ///     The folder of the cache of history of the Worker (change add-backtest-history-cache); none when null.
+    /// </param>
+    public static async Task<WorkerHost> Start(MarketDataServer server, string name, string? connectionString = null, bool scanner = false, TimeProvider? time = null, string? cache = null)
     {
         HostApplicationBuilder builder = Host.CreateApplicationBuilder();
         builder.Logging.ClearProviders();
@@ -58,7 +62,7 @@ internal sealed class WorkerHost : IAsyncDisposable
             ["Scanner:WarmupRetry"] = "00:00:00.2"
         });
         ProfitFox.Worker.Program.Configure(builder);
-        builder.Services.AddSingleton<IHistorySource>(new GrpcHistorySource(server.Channel));
+        MarketDataRegistrar.History(builder.Services, cache is null ? null : new HistoryCacheSettings(cache, 1L << 40), _ => new GrpcHistorySource(server.Channel));
         builder.Services.AddSingleton(Repeats.WithoutPauses);
         builder.Services.AddSingleton<IInstrumentCatalog>(new InstrumentCatalog(server.Http));
         builder.Services.AddSingleton<IRecentHistory>(new RestRecentHistory(server.Http));

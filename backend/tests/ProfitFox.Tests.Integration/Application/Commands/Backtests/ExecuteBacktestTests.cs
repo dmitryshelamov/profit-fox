@@ -21,8 +21,9 @@ namespace ProfitFox.Tests.Integration.Application.Commands.Backtests;
 
 /// <summary>
 ///     Change add-strategy-backtest, task 7.2: a backtest of the queue on the fake market-data service — spec market-history
-///     «Источник истории», «Граница периода», «Чтение без копии», «Минутные свечи в окнах сделок» («Шесть наборов на одной
-///     истории») and spec strategy-backtest «История прогона» («История после конца»).
+///     «Источник истории», «Граница периода», «Чтение через кэш» («Повторный прогон без кэша»: these services have no folder
+///     of the cache), «Минутные свечи в окнах сделок» («Шесть наборов на одной истории») and spec strategy-backtest «История
+///     прогона» («История после конца»).
 /// </summary>
 [NonParallelizable]
 public sealed class ExecuteBacktestTests

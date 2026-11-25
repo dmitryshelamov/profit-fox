@@ -3,9 +3,12 @@ using MediatR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
+using ProfitFox.Application.Ports.MarketData;
 using ProfitFox.Application.Services.Ideas;
+using ProfitFox.Application.Services.MarketData;
 using ProfitFox.Infrastructure;
 using ProfitFox.Infrastructure.Clients.MarketData;
+using ProfitFox.Infrastructure.Persistence.Files.HistoryCache;
 
 namespace ProfitFox.Tests.Integration.Infrastructure;
 
@@ -84,5 +87,82 @@ public sealed class InfrastructureRegistrarTests
         Assert.That(handler.KeepAlivePingTimeout, Is.EqualTo(TimeSpan.FromSeconds(10)));
         Assert.That(handler.KeepAlivePingPolicy, Is.EqualTo(HttpKeepAlivePingPolicy.Always));
         Assert.That(handler.EnableMultipleHttp2Connections, Is.True);
+    }
+    /// <summary>
+    ///     Change add-backtest-history-cache, task 4.1: spec market-history-cache «Папка не задана» — without a folder of the
+    ///     cache history is read from the market-data service, and the counters of the cache are zero.
+    /// </summary>
+    [TestCase(null)]
+    [TestCase("")]
+    public void Without_a_folder_of_the_cache_history_comes_from_the_service(string? path)
+    {
+        using ServiceProvider provider = Provider(new Dictionary<string, string?> { ["MarketData:HistoryCache:Path"] = path });
+
+        Assert.That(provider.GetRequiredService<IHistorySource>(), Is.InstanceOf<GrpcHistorySource>());
+        Assert.That(provider.GetRequiredService<IHistoryCacheCounters>().Counts, Is.EqualTo(HistoryCacheCounts.Zero));
+        Assert.That(MarketDataRegistrar.HistoryCache(Settings(new Dictionary<string, string?> { ["MarketData:HistoryCache:Path"] = path })), Is.Null);
+    }
+
+    /// <summary>
+    ///     Task 4.1: with a folder history is read through the cache, which also gives the counters, with a limit of 40 GB by
+    ///     default.
+    /// </summary>
+    [Test]
+    public void With_a_folder_history_is_read_through_the_cache()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "profit-fox-tests", "history-cache", Guid.NewGuid().ToString("N"));
+        using ServiceProvider provider = Provider(new Dictionary<string, string?> { ["MarketData:HistoryCache:Path"] = folder });
+
+        Assert.That(provider.GetRequiredService<IHistorySource>(), Is.InstanceOf<CachingHistorySource>());
+        Assert.That(provider.GetRequiredService<IHistoryCacheCounters>(), Is.SameAs(provider.GetRequiredService<IHistorySource>()));
+        Assert.That(
+            MarketDataRegistrar.HistoryCache(Settings(new Dictionary<string, string?> { ["MarketData:HistoryCache:Path"] = folder })),
+            Is.EqualTo(new HistoryCacheSettings(folder, 40L * 1024 * 1024 * 1024)));
+        Assert.That(Directory.Exists(folder), Is.False, "nothing is made before the first month is saved");
+    }
+
+    /// <summary>
+    ///     Task 4.1: a folder that starts with <c>~/</c> is in the home folder of the user, and the limit is in gigabytes.
+    /// </summary>
+    [Test]
+    public void A_folder_that_starts_with_a_tilde_is_in_the_home_folder()
+    {
+        HistoryCacheSettings? settings = MarketDataRegistrar.HistoryCache(Settings(new Dictionary<string, string?>
+        {
+            ["MarketData:HistoryCache:Path"] = "~/.cache/profit-fox/history",
+            ["MarketData:HistoryCache:MaxSizeGb"] = "0.5"
+        }));
+
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        Assert.That(settings, Is.EqualTo(new HistoryCacheSettings(Path.Combine(home, ".cache", "profit-fox", "history"), 512L * 1024 * 1024)));
+    }
+
+    /// <summary>
+    ///     Task 4.1: a limit of the cache that is not above zero, or not a number, stops the start.
+    /// </summary>
+    [TestCase("0")]
+    [TestCase("-1")]
+    [TestCase("lots")]
+    public void A_limit_of_the_cache_not_above_zero_stops_the_start(string limit)
+    {
+        Assert.That(
+            () => Provider(new Dictionary<string, string?> { ["MarketData:HistoryCache:Path"] = "/tmp/history", ["MarketData:HistoryCache:MaxSizeGb"] = limit }).Dispose(),
+            Throws.InvalidOperationException.With.Message.Contains("MarketData:HistoryCache:MaxSizeGb"));
+    }
+
+    private static IConfiguration Settings(Dictionary<string, string?> values)
+    {
+        return new ConfigurationBuilder()
+            .AddConfiguration(BenchDatabase.Settings(BenchDatabase.ConnectionString))
+            .AddInMemoryCollection(values)
+            .Build();
+    }
+
+    private static ServiceProvider Provider(Dictionary<string, string?> values)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddInfrastructure(Settings(values));
+        return services.BuildServiceProvider();
     }
 }
