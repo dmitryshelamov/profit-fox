@@ -100,7 +100,7 @@
 
 ## 6. Сквозная проверка
 
-- [ ] 6.1 Полный прогон: `dotnet build ProfitFox.slnx --configuration Release` без предупреждений, все тесты бэкенда,
+- [x] 6.1 Полный прогон: `dotnet build ProfitFox.slnx --configuration Release` без предупреждений, все тесты бэкенда,
   проверка однострочных `<summary>` из `ci.yml`, `openspec validate add-backtest-history-cache --strict`. Проверить:
   SHA-256 `EngineVersions.json` и `/openapi/v1.json` равны записанным в «Базе», числа тестов записаны в «Замеры».
 
@@ -191,6 +191,14 @@ OpenSpec CLI 2.2.0.
   выхода 0, том `history-cache` (`name: profit-fox-history-cache`) с `target: /var/cache/profit-fox/history` у `api`,
   `worker-1` и `worker-2`, `MarketData__HistoryCache__Path: /var/cache/profit-fox/history` у тех же трёх;
   `bash deploy/deploy.test.sh` — `all passed`. `shellcheck` в сессии нет; `deploy/*.sh` не менялись.
+- Задача 6.1, сквозная проверка на `ea88b0d` с чистым рабочим деревом: `dotnet build ProfitFox.slnx --configuration
+  Release` — 0 предупреждений, 0 ошибок; проверка однострочных `<summary>` из `ci.yml` — чисто; тесты бэкенда — unit 879
+  (было 835, +44), интеграционные 458 (было 420, +38), все зелёные; `openspec validate add-backtest-history-cache --strict`
+  — `Change 'add-backtest-history-cache' is valid`. SHA-256 `Fixtures/EngineVersions.json` —
+  `8531a12c149c44158e22d664c7feb4c7592ada433df3a5981c6274b8d72f8fe2`, `/openapi/v1.json` (API в `Development`, как в
+  «Базе», с `MarketData__HistoryCache__Path=`) — `1ea06cdcf86ccf09c447701d4e95bb975090ddb0520d2bcf4838926ec6d94b60`: оба
+  равны «Базе»; `npm run generate:api` по нему оставляет `schema.d.ts` без изменений. `EngineVersion.Number` — 4.
+  Фронтенд (не менялся): 435 тестов в 31 файле зелёные, `typecheck`, `lint`, `format:check`, `build` зелёные.
 
 ## Открыто после применения
 
@@ -210,3 +218,10 @@ OpenSpec CLI 2.2.0.
   окружении `Development`. На деле API в тестах — `Testing` (`BenchTestApplication`), Worker в тестах — окружение
   по умолчанию (`Production`), остальные — `BenchServices` с настройками в памяти; папку из `appsettings.Development.json`
   не видит ни один. Тесты кэша задают свою временную папку явно; после полного прогона `~/.cache/profit-fox` нет.
+- **Группа 7 (задачи 7.1–7.5)** не начата: ей нужны стенд Мака (`http://localhost:5240`, база `bench_ideas`) и настоящий
+  сервис данных на soyo-02, которых из облака не видно. Это замеры основной сессии. Предположения о сервисе, на которых
+  стоит кэш (записи идут по времени, покрытие не зависит от окна запроса, свеча принадлежит окну по времени открытия,
+  закрытый месяц фандинга бывает покрыт целиком), проверены только на поддельном сервисе; задача 7.1 проверяет их на
+  настоящих данных.
+- **Решения 3 и 7 design.md** (запрос к сервису за концом истории прогона; одна папка на машину) design.md просит
+  подтвердить у владельца; применение сделано по ним как по принятым.
