@@ -14,11 +14,6 @@ internal static class Indicator
     public const int KeptResults = 2;
 
     /// <summary>
-    ///     The candles kept to start a list again when the length changes within a history.
-    /// </summary>
-    public const int KeptCandles = 1000;
-
-    /// <summary>
     ///     The value of the package as a decimal, or null when it has none or it is not a finite number a decimal holds.
     /// </summary>
     public static decimal? ToDecimal(double? value)

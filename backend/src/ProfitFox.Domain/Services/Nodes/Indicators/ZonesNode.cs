@@ -18,10 +18,10 @@ namespace ProfitFox.Domain.Services.Nodes.Indicators;
 ///     otherwise it starts a new one. A zone with fewer than <c>strength</c> touches does not count. The current candle is
 ///     not in the window, so a candle that breaks a zone sees the zone as it was before it.
 /// </remarks>
-internal sealed class ZonesNode : Node
+internal sealed class ZonesNode(bool fixedLength) : Node
 {
-    // One more than the longest window: the candles of the window and the current one, which is added after the count.
-    private readonly Tail<(decimal High, decimal Low)> _candles = new Tail<(decimal High, decimal Low)>(WindowLength.Maximum + 1);
+    // The candles a touch is found on: the latest five. The window counts the candles by their number alone.
+    private readonly Tail<(decimal High, decimal Low)> _candles = NewCandles();
 
     // The touches of the last candles kept, oldest first: the candle of the touch and its price.
     private readonly Queue<(long Candle, decimal Price)> _touches = new Queue<(long Candle, decimal Price)>();
@@ -30,6 +30,10 @@ internal sealed class ZonesNode : Node
     private readonly Queue<(long Candle, decimal Price)> _window = new Queue<(long Candle, decimal Price)>();
     private readonly List<decimal> _sorted = [];
     private int _length;
+
+    // The longest length the touches are kept for (design.md, decision 3): the longest read so far when the length is
+    // fixed (WindowLength.Fixed), the longest there is when it may change.
+    private int _longest = fixedLength ? 0 : WindowLength.Maximum;
     private decimal? _above;
     private decimal? _below;
 
@@ -53,6 +57,7 @@ internal sealed class ZonesNode : Node
             return (null, null);
         }
 
+        _longest = Math.Max(_longest, window);
         Window(window);
         if (_candles.Count < window || atr is not { } range || price is not { } level || merge is not { } share || strength is not { } least)
         {
@@ -145,8 +150,8 @@ internal sealed class ZonesNode : Node
     {
         _candles.Add((candle.High, candle.Low));
 
-        // A touch is kept while a window of the longest length at a later candle may hold it.
-        while (_touches.Count > 0 && _touches.Peek().Candle < _candles.Count - WindowLength.Maximum + 2)
+        // A touch is kept while a window of the longest length read at a later candle may hold it.
+        while (_touches.Count > 0 && _touches.Peek().Candle < _candles.Count - _longest + 2)
         {
             _touches.Dequeue();
         }
@@ -181,6 +186,13 @@ internal sealed class ZonesNode : Node
             _window.Enqueue(touch);
             Insert(touch.Price);
         }
+    }
+
+    private static Tail<(decimal High, decimal Low)> NewCandles()
+    {
+        var candles = new Tail<(decimal High, decimal Low)>(5);
+        candles.Reserve(5);
+        return candles;
     }
 
     private void Insert(decimal price)

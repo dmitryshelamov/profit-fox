@@ -209,23 +209,34 @@ public static class NodeCatalog
                 [NumberValue, Length],
                 [NumberResult],
                 [new SettingDeclaration(WindowNode.Operation, WindowNode.Operations, Default: null)],
-                node => new WindowNode(node.Settings[WindowNode.Operation]))
+                (node, graph) => new WindowNode(node.Settings[WindowNode.Operation], WindowLength.Fixed(node, graph)))
             {
                 CheckValue = WindowLength.Check
             },
-            new NodeKind(Percentile, [NumberValue, Length, new PinDeclaration("rank", PinType.Number)], [NumberResult], [], _ => new PercentileNode())
+            new NodeKind(
+                Percentile,
+                [NumberValue, Length, new PinDeclaration("rank", PinType.Number)],
+                [NumberResult],
+                [],
+                (node, graph) => new PercentileNode(WindowLength.Fixed(node, graph)))
             {
                 CheckValue = WindowLength.Check
             },
             new NodeKind(Hold, [Condition, NumberValue, Length], [NumberResult], [], _ => new HoldNode()) { CheckValue = WindowLength.Check },
-            new NodeKind(Atr, [Length], [NumberResult], [], _ => new AtrNode()) { CheckValue = WindowLength.From(AtrNode.MinimumLength) },
-            new NodeKind(Rsi, [NumberValue, Length], [NumberResult], [], _ => new RsiNode()) { CheckValue = WindowLength.Check },
+            new NodeKind(Atr, [Length], [NumberResult], [], (node, graph) => new AtrNode(WindowLength.Fixed(node, graph)))
+            {
+                CheckValue = WindowLength.From(AtrNode.MinimumLength)
+            },
+            new NodeKind(Rsi, [NumberValue, Length], [NumberResult], [], (node, graph) => new RsiNode(WindowLength.Fixed(node, graph)))
+            {
+                CheckValue = WindowLength.Check
+            },
             new NodeKind(
                 Zones,
                 [.. new[] { "atr", Price, WindowLength.Pin, "merge", "strength" }.Select(name => new PinDeclaration(name, PinType.Number))],
                 [new PinDeclaration("above", PinType.Number), new PinDeclaration("below", PinType.Number)],
                 [],
-                _ => new ZonesNode())
+                (node, graph) => new ZonesNode(WindowLength.Fixed(node, graph)))
             {
                 CheckValue = WindowLength.Check
             },

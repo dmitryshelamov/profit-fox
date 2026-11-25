@@ -16,9 +16,22 @@ namespace ProfitFox.Domain.Services.Nodes.Indicators;
 /// </summary>
 internal sealed class RsiNode : Node
 {
-    private readonly Tail<(DateTime Time, double Value)> _values = new Tail<(DateTime Time, double Value)>(Indicator.KeptCandles);
+    // The values to start a list again on when the length changes: the length read when it is fixed, 1000 otherwise.
+    private readonly Tail<(DateTime Time, double Value)> _values = new Tail<(DateTime Time, double Value)>(WindowLength.Maximum);
     private RsiList? _list;
     private decimal? _output;
+
+    /// <param name="fixedLength">
+    ///     Whether the length is the same at every candle (<see cref="WindowLength.Fixed" />): only then does the node keep
+    ///     no more than the length read; otherwise it keeps <see cref="WindowLength.Maximum" /> to start a list again on.
+    /// </param>
+    public RsiNode(bool fixedLength)
+    {
+        if (!fixedLength)
+        {
+            _values.Reserve(WindowLength.Maximum);
+        }
+    }
 
     public override void Compute(in NodeContext context, ReadOnlySpan<PinValue> inputs, Span<PinValue> outputs)
     {
@@ -38,6 +51,11 @@ internal sealed class RsiNode : Node
         }
 
         (DateTime Time, double Value) point = (time, (double)number);
+        if (length is { } kept)
+        {
+            _values.Reserve(kept);
+        }
+
         _values.Add(point);
         if (length is { } periods && _list?.LookbackPeriods != periods)
         {
