@@ -12,7 +12,7 @@
 
 ## 1. База
 
-- [ ] 1.1 Снять базу до правок: `dotnet build ProfitFox.slnx --configuration Release`, тесты бэкенда, SHA-256
+- [x] 1.1 Снять базу до правок: `dotnet build ProfitFox.slnx --configuration Release`, тесты бэкенда, SHA-256
   `Fixtures/EngineVersions.json` и `/openapi/v1.json`. Проверить: числа тестов, предупреждений и оба хэша записаны в
   разделе «База» в конце этого файла.
 
@@ -132,6 +132,21 @@
 - Заархивировать изменение после слияния в `release/0.1.0`.
 
 ## База
+
+Снята в облачной сессии 2026-11-25 на `351a0ba` (ветка `feat/add-backtest-history-cache`), до правок кода. .NET SDK
+10.0.115 (пакет Ubuntu `dotnet-sdk-10.0`), Node 22.23.5, Postgres 17 в Docker (образ `postgres:17`), Testcontainers.
+OpenSpec CLI 2.2.0.
+
+- Сборка `dotnet build ProfitFox.slnx --configuration Release`: 0 предупреждений, 0 ошибок.
+- Тесты бэкенда: unit 835, интеграционные 420, все зелёные.
+- Тесты фронтенда: 435 в 31 файле, все зелёные.
+- SHA-256 `Tests.Integration/Fixtures/EngineVersions.json`:
+  `8531a12c149c44158e22d664c7feb4c7592ada433df3a5981c6274b8d72f8fe2`.
+- SHA-256 `/openapi/v1.json` (API этой ветки в `Development` на `http://localhost:5299`, своя база в Docker на
+  `127.0.0.1:5436`, адреса сервиса данных — `localhost`, которому никто не отвечает):
+  `1ea06cdcf86ccf09c447701d4e95bb975090ddb0520d2bcf4838926ec6d94b60`; `npm run generate:api` по нему даёт
+  `frontend/src/api/generated/schema.d.ts` без изменений (SHA-256
+  `9bbeb46eba525ca558571b87a1f949fd99f936364b1174578c71cd6e6773d720`).
 
 ## Замеры
 
