@@ -13,7 +13,7 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 ## 1. База
 
-- [ ] 1.1 Снять базу до правок: `dotnet build ProfitFox.slnx --configuration Release`, тесты бэкенда и фронтенда,
+- [x] 1.1 Снять базу до правок: `dotnet build ProfitFox.slnx --configuration Release`, тесты бэкенда и фронтенда,
   SHA-256 `Fixtures/EngineVersions.json` и `/openapi/v1.json`. Проверить: числа тестов, предупреждений и оба хэша
   записаны в разделе «База» в конце этого файла.
 
@@ -72,3 +72,18 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 ## Открыто после применения
 
 ## База
+
+Снята в облачной сессии 2026-11-25 на `445c705` (ветка `feat/add-instrument-kind-filter`), до правок кода. .NET SDK
+10.0.115 (пакет Ubuntu `dotnet-sdk-10.0`), Node 22.23.5, Postgres 17 в Docker (образ `postgres:17` с зеркала
+`mirror.gcr.io`: Docker Hub отвечал `429`), Testcontainers с `TESTCONTAINERS_RYUK_DISABLED=true`. OpenSpec CLI 1.15.0.
+
+- Сборка `dotnet build ProfitFox.slnx --configuration Release`: 0 предупреждений, 0 ошибок.
+- Тесты бэкенда: unit 805, интеграционные 402, все зелёные.
+- Тесты фронтенда: 418 в 27 файлах, все зелёные; `typecheck`, `lint`, `format:check`, `build` зелёные.
+- SHA-256 `Tests.Integration/Fixtures/EngineVersions.json`:
+  `8531a12c149c44158e22d664c7feb4c7592ada433df3a5981c6274b8d72f8fe2`.
+- SHA-256 `/openapi/v1.json` (API этой ветки в `Development` на `http://localhost:5299`, своя база в Docker на
+  `127.0.0.1:5436`, адреса сервиса данных — `localhost`, которому никто не отвечает):
+  `9069e05ec5cf6c483caf0b53660810b679c0d8b514eb6a2c38349d031b380da3`; `npm run generate:api` по нему даёт
+  `frontend/src/api/generated/schema.d.ts` без изменений (SHA-256
+  `666637b723e4290c4fdc2562df982a90b24a34aabffec018898ed433db82d114`).
