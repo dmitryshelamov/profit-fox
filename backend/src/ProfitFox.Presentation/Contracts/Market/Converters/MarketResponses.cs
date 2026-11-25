@@ -14,6 +14,7 @@ public static class MarketResponses
     {
         return new MarketPairResponse(
             row.Pair.Symbol,
+            InstrumentKinds.Name(row.Pair.Kind),
             (double)row.Pair.Price,
             (double?)row.Pair.Change1h,
             (double?)row.Pair.Change4h,
@@ -29,7 +30,11 @@ public static class MarketResponses
 
     public static MarketPairResponse Of(MarketPairInternal pair)
     {
-        return pair.Row is { } row ? Of(row) : new MarketPairResponse(pair.Pair.Symbol, null, null, null, null, null, null, null, null, null, null, []);
+        // The kind of the pair page is the one of the catalog now, with a snapshot and before one.
+        string kind = InstrumentKinds.Name(pair.Pair.Kind);
+        return pair.Row is { } row
+            ? Of(row) with { Kind = kind }
+            : new MarketPairResponse(pair.Pair.Symbol, kind, null, null, null, null, null, null, null, null, null, null, []);
     }
 
     public static MarketPageResponse Of(MarketPairsResult result)

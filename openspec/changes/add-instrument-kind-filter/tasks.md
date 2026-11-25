@@ -37,16 +37,16 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
 
 ## 4. Выбор вида в API
 
-- [ ] 4.1 `kind` в `MarketListQuery` и условие в `MarketPairRepository.Where`; параметр `kind` у
+- [x] 4.1 `kind` в `MarketListQuery` и условие в `MarketPairRepository.Where`; параметр `kind` у
   `GET /api/market/pairs`; `kind` в строке пары и в `GET /api/market/pairs/{symbol}` (решение 4). Проверить
   интеграционными тестами сценарии «Только акции», «Вид и сохранённый фильтр», «Неизвестный вид» требования «Список
   пар рынка».
-- [ ] 4.2 `kind` в `IdeaListQuery` и условие `m.kind = @Kind` в `IdeaRepository.Where`; параметр `kind` у
+- [x] 4.2 `kind` в `IdeaListQuery` и условие `m.kind = @Kind` в `IdeaRepository.Where`; параметр `kind` у
   `GET /api/ideas`, `GET /api/ideas/summary` и `GET /api/ideas/strategies`, проверка значения как у стороны.
   Проверить интеграционными тестами сценарии «Только крипта», «Пары больше нет в наборе», «Вид в числах»,
   «Неизвестный вид» требования «Список идей»; отдельно — `GET /api/market/pairs/{symbol}/ideas` параметра `kind` не
   принимает и отдаёт все идеи пары.
-- [ ] 4.3 Обновить OpenAPI и сгенерированную схему фронтенда: `npm run generate:api` с `PROFITFOX_OPENAPI_URL` на API
+- [x] 4.3 Обновить OpenAPI и сгенерированную схему фронтенда: `npm run generate:api` с `PROFITFOX_OPENAPI_URL` на API
   этой ветки (порт 5240 по умолчанию — dev-стенд владельца из другой ветки, его не трогать).
   Проверить: в схеме `kind` у четырёх запросов и в `MarketPairResponse`, других различий в `/openapi/v1.json` нет.
 
@@ -70,6 +70,16 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   `TSLAUSDT` и `BTCUSDT`. Проверить снимком экрана каждого раздела, снимки положить в папку изменения `screens/`.
 
 ## Открыто после применения
+
+- **Код ответа на неизвестный вид — 422, а не 400.** `design.md` (решение 4) и постановка говорят «`400` с ошибкой у
+  поля `kind`, как у неизвестной стороны», но в этом API неизвестная сторона (и любой выбор вне перечня, поле сортировки,
+  страница) отклоняется `422 Unprocessable Entity` с `ErrorResponse` и ошибкой у поля — так `GET /api/ideas/strategies?side=up`.
+  Сделано «как у стороны»: `kind=spot` / `kind=linear` → `422`, ошибка `InvalidChoice` у поля `kind`, на всех четырёх
+  маршрутах (тесты `InstrumentKindApiTests`). Если владельцу нужен именно `400` — поправить `design.md` или
+  обработку отказа; ожидания прежних тестов не трогались.
+- **Имя поля в запросах идей — `PairKind`.** У `IdeaListQuery` и `GetIdeasQuery` уже есть `Kind` (открытые / закрытые /
+  пары), поэтому вид пары там назван `PairKind`; в `MarketListQuery` и `GetMarketPairsQuery` — `Kind`. Параметр API
+  везде `kind`.
 
 ## База
 
@@ -99,3 +109,14 @@ typecheck`, `npm run lint`, `npm run format:check`, `npm run build`. Кажда�
   (+9: вид в `MarketBook`, имена видов `crypto`/`stock`), интеграционные 406 (+2: миграция `202611250001` на базе со
   строками снимка, запись и чтение вида). В `MigrationTests.After_the_start_..._has_every_migration` в перечень версий
   добавлена новая `202611250001` — это перечень миграций, не ожидание списков идей и рынка.
+- **Группа 4, выбор вида в API** (облачная сессия, 2026-11-25). Сборка `Release`: 0 предупреждений. Тесты бэкенда: unit
+  831, интеграционные 418 (+12, `InstrumentKindApiTests`: «Только акции» на 516 + 318 парах, «Вид и сохранённый
+  фильтр», «Неизвестный вид» рынка и четырёх маршрутов идей, вид на странице пары, «Только крипта», «Пары больше нет в
+  наборе», «Вид в числах», идеи пары без `kind`). Вид страницы пары берётся из каталога — он есть и до первого снимка.
+  `/openapi/v1.json` (API ветки на `http://localhost:5299`, своя база в Docker): SHA-256
+  `1ea06cdcf86ccf09c447701d4e95bb975090ddb0520d2bcf4838926ec6d94b60`; от базы отличается только `kind` в параметрах
+  `ListMarketPairs`, `ListIdeas`, `SummarizeIdeas`, `CountIdeasByStrategy` и в `MarketPairResponse` (обязательное поле).
+  `npm run generate:api` по нему: `schema.d.ts` +5 строк, SHA-256
+  `9bbeb46eba525ca558571b87a1f949fd99f936364b1174578c71cd6e6773d720`. Конструктор строки рынка в тестах
+  `frontend/src/test/market.ts` получил `kind: 'crypto'` по умолчанию (данные, не ожидание); фронтенд 418 тестов,
+  `typecheck`, `lint`, `format:check`, `build` зелёные.

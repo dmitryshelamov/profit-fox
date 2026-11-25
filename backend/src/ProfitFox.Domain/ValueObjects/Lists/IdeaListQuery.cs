@@ -1,4 +1,5 @@
 using ProfitFox.Domain.ValueObjects.Lists.Enums;
+using ProfitFox.Domain.ValueObjects.MarketData.Enums;
 
 namespace ProfitFox.Domain.ValueObjects.Lists;
 
@@ -9,6 +10,8 @@ namespace ProfitFox.Domain.ValueObjects.Lists;
 ///     the exit and the days back the exit is in; for those of a pair their state; and the conditions of a saved filter.
 ///     For the chart of a pair (task 18.22): the window of time the ideas touch, from <see cref="From" /> to
 ///     <see cref="To" />, and the idea whose page is wanted, <see cref="Around" />, instead of the page of the order.
+///     <see cref="PairKind" />: the kind of the pair of the idea in the snapshot of the market, every idea when null; an idea
+///     of a pair out of the snapshot is of no kind (change add-instrument-kind-filter, decision 3).
 /// </summary>
 public sealed record IdeaListQuery(
     IdeaListKind Kind,
@@ -27,4 +30,5 @@ public sealed record IdeaListQuery(
     IReadOnlyList<FilterCondition>? Conditions = null,
     DateTimeOffset? From = null,
     DateTimeOffset? To = null,
-    Guid? Around = null);
+    Guid? Around = null,
+    InstrumentKind? PairKind = null);

@@ -5,6 +5,8 @@ using ProfitFox.Domain.Repositories;
 using ProfitFox.Domain.Services.Lists;
 using ProfitFox.Domain.ValueObjects.Lists;
 using ProfitFox.Domain.ValueObjects.Lists.Enums;
+using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Domain.ValueObjects.MarketData.Enums;
 
 namespace ProfitFox.Application.Queries.Filters;
 
@@ -48,6 +50,35 @@ internal static class FilterResolver
         }
 
         return (filter.Conditions, false);
+    }
+
+    /// <summary>
+    ///     The kind of a pair a list is asked for (change add-instrument-kind-filter, decision 4): <c>crypto</c>, <c>stock</c>,
+    ///     or every kind when not given; another value refuses the request at the field <c>kind</c>, as a side does.
+    /// </summary>
+    public static InstrumentKind? Kind(string? name)
+    {
+        return KindError(name, out InstrumentKind? kind) is { } error ? throw new IdeasRequestException([error]) : kind;
+    }
+
+    /// <summary>
+    ///     The error of the kind <paramref name="name" />, null for a kind or none, for a request that gathers its errors.
+    /// </summary>
+    public static PreviewErrorInternal? KindError(string? name, out InstrumentKind? kind)
+    {
+        kind = null;
+        if (string.IsNullOrEmpty(name))
+        {
+            return null;
+        }
+
+        if (InstrumentKinds.TryParse(name, out InstrumentKind known))
+        {
+            kind = known;
+            return null;
+        }
+
+        return new PreviewErrorInternal("InvalidChoice", $"kind — одно из {InstrumentKinds.Listed}") { Field = "kind" };
     }
 
     public static IdeasRequestException Refused(IEnumerable<FilterProblem> problems)

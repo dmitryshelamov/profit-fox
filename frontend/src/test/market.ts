@@ -6,6 +6,7 @@ import { type FakeRoute, json } from './fakeApi';
 export function pair(symbol: string, overrides: Partial<MarketPair> = {}): MarketPair {
   return {
     symbol,
+    kind: 'crypto',
     price: 100,
     change1h: 0.001,
     change4h: 0.002,

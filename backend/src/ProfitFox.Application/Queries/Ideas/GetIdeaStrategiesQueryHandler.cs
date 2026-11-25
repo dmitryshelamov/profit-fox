@@ -11,6 +11,7 @@ using ProfitFox.Domain.Services.Lists;
 using ProfitFox.Domain.ValueObjects.Lists;
 using ProfitFox.Domain.ValueObjects.Lists.Enums;
 using ProfitFox.Domain.ValueObjects.MarketData;
+using ProfitFox.Domain.ValueObjects.MarketData.Enums;
 using ProfitFox.Domain.ValueObjects.Strategies.Enums;
 
 namespace ProfitFox.Application.Queries.Ideas;
@@ -30,7 +31,7 @@ internal sealed class GetIdeaStrategiesQueryHandler(IIdeaRepository ideas, ISave
 
     public async Task<IdeaStrategiesResult> Handle(GetIdeaStrategiesQuery request, CancellationToken cancellationToken)
     {
-        Check(request);
+        InstrumentKind? pairKind = Check(request);
         (IReadOnlyList<FilterCondition> conditions, bool gone) = await FilterResolver.ConditionsAsync(filters, request.Filter, FilterPlace.Ideas, cancellationToken);
         IdeaListKind kind = request.State == "closed" ? IdeaListKind.Closed : IdeaListKind.Open;
         ListOrder order = FilterResolver.Order(ListFields.Ideas, kind == IdeaListKind.Closed ? "exitTime" : "moment", new ListRequest(null, null, null, null, request.Filter));
@@ -45,7 +46,8 @@ internal sealed class GetIdeaStrategiesQueryHandler(IIdeaRepository ideas, ISave
             OnlyWithStop: request.OnlyWithStop,
             ExitReason: request.ExitReason,
             PeriodDays: request.PeriodDays,
-            Conditions: conditions);
+            Conditions: conditions,
+            PairKind: pairKind);
         var counts = (await ideas.StrategyCountsAsync(query, cancellationToken)).ToDictionary(row => row.Strategy, row => row.Ideas, StringComparer.Ordinal);
         foreach (string name in await IdeaStrategiesAsync(cancellationToken))
         {
@@ -56,8 +58,8 @@ internal sealed class GetIdeaStrategiesQueryHandler(IIdeaRepository ideas, ISave
         return new IdeaStrategiesResult(rows.Sum(row => row.Ideas), rows, gone);
     }
 
-    // The choices of a list of values; a value outside the list is an error at its field.
-    private static void Check(GetIdeaStrategiesQuery request)
+    // The choices of a list of values; a value outside the list is an error at its field. The kind of the pair asked for.
+    private static InstrumentKind? Check(GetIdeaStrategiesQuery request)
     {
         List<PreviewErrorInternal> errors = [];
         Choice(errors, "state", request.State, States);
@@ -66,6 +68,11 @@ internal sealed class GetIdeaStrategiesQueryHandler(IIdeaRepository ideas, ISave
         if (request.Timeframe is { Length: > 0 } timeframe && !Timeframes.TryParse(timeframe, out _))
         {
             errors.Add(new PreviewErrorInternal("InvalidTimeframe", $"таймфрейм — один из {Timeframes.Listed}") { Field = "timeframe" });
+        }
+
+        if (FilterResolver.KindError(request.PairKind, out InstrumentKind? pairKind) is { } kindError)
+        {
+            errors.Add(kindError);
         }
 
         if (request.PeriodDays is < 1)
@@ -77,6 +84,8 @@ internal sealed class GetIdeaStrategiesQueryHandler(IIdeaRepository ideas, ISave
         {
             throw new IdeasRequestException(errors);
         }
+
+        return pairKind;
     }
 
     private static void Choice(List<PreviewErrorInternal> errors, string field, string? value, string[] values)

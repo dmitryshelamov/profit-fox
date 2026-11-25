@@ -82,16 +82,23 @@ internal sealed class MarketPairRepository(NpgsqlDataSource database) : IMarketP
         return await connection.QuerySingleAsync<FilterCount>(new CommandDefinition(sql, parameters, cancellationToken: cancellationToken));
     }
 
-    // The search, the choices of an idea and the conditions of a filter, each value a parameter.
+    // The search, the kind, the choices of an idea and the conditions of a filter, each value a parameter.
     private static string Where(MarketListQuery query, DynamicParameters parameters)
     {
+        string kind = "TRUE";
+        if (query.Kind is { } chosen)
+        {
+            parameters.Add("Kind", InstrumentKinds.Name(chosen));
+            kind = "m.kind = @Kind";
+        }
+
         parameters.Add("Search", string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim(), System.Data.DbType.String);
         parameters.Add("Strategy", string.IsNullOrEmpty(query.Strategy) ? null : query.Strategy, System.Data.DbType.String);
         parameters.Add("Timeframe", string.IsNullOrEmpty(query.Timeframe) ? null : query.Timeframe, System.Data.DbType.String);
         string market = ListColumns.Conditions(query.Conditions, FieldPlace.Market, parameters, "c");
         string idea = ListColumns.Conditions(query.Conditions, FieldPlace.Idea, parameters, "c");
         bool ofIdea = query.IdeasOnly || !string.IsNullOrEmpty(query.Strategy) || !string.IsNullOrEmpty(query.Timeframe) || ListColumns.Has(query.Conditions, FieldPlace.Idea);
-        return ofIdea ? $"{MarketListQueries.Search} AND {market} AND {MarketListQueries.OpenIdea(idea)}" : $"{MarketListQueries.Search} AND {market}";
+        return ofIdea ? $"{MarketListQueries.Search} AND {kind} AND {market} AND {MarketListQueries.OpenIdea(idea)}" : $"{MarketListQueries.Search} AND {kind} AND {market}";
     }
 
     private static async Task<IReadOnlyList<MarketPairRow>> WithIdeas(NpgsqlConnection connection, Row[] rows, CancellationToken cancellationToken)
