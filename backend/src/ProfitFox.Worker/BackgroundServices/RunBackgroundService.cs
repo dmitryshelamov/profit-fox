@@ -19,6 +19,12 @@ internal sealed class RunBackgroundService(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (!settings.TakeRuns)
+        {
+            logger.LogInformation("Worker {Name} starts and takes no runs.", settings.Name);
+            return;
+        }
+
         try
         {
             logger.LogInformation("Worker {Name} starts.", settings.Name);
