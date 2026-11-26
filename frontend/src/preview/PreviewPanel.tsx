@@ -56,7 +56,7 @@ type ListTab = 'trades' | 'orders';
 /**
  * The preview panel at the bottom of the editor (spec signal-constructor «Панель предпросмотра», «Устаревший
  * предпросмотр»): a pair found by part of its name, a timeframe and «Показать» or Ctrl+Enter. The chart shows the
- * candles of exploration with a mark on each event, the list shows their moments in UTC. After a preview the header
+ * candles of exploration with a mark on each event, the list shows their moments in the zone of the browser. After a preview the header
  * shows its numbers: the events of a signal («Число событий в шапке панели предпросмотра»), or the orders, the trades
  * and the sum of their results of a strategy (spec strategy-constructor «Сумма результатов предпросмотра стратегии»).
  * After an edit the panel says the graph changed and keeps the old marks and numbers until the next run. The pair and

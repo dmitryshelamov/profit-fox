@@ -89,7 +89,7 @@ export function ScannerBanner({ state }: { readonly state: ScannerState }) {
 
   return (
     <p role="status" aria-label="Живые данные" className="text-[12px] text-muted">
-      идеи считаются без перерыва с {momentText(state.liveSince)} UTC
+      идеи считаются без перерыва с {momentText(state.liveSince)}
     </p>
   );
 }

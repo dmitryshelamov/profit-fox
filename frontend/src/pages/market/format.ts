@@ -1,7 +1,9 @@
 /**
  * The words of the numbers of «Рынок», «Идеи» and the page of a pair (change add-ideas-and-market): the API gives shares,
- * the page shows percents; amounts of USDT go in millions and billions; times are UTC.
+ * the page shows percents; amounts of USDT go in millions and billions; moments are in the zone of the browser.
  */
+
+import { localClockSeconds, localMoment } from '@/shared/time';
 
 type Value = number | string | null | undefined;
 
@@ -54,19 +56,14 @@ export function priceWords(value: Value): string {
   return `${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}${fraction === undefined ? '' : `.${fraction}`}`;
 }
 
-/** A moment in milliseconds as «22.11 14:30», UTC. */
+/** A moment in milliseconds as «22.11 14:30», in the zone of the browser. */
 export function momentText(ms: Value): string {
-  if (none(ms)) {
-    return '—';
-  }
-
-  const iso = new Date(Number(ms)).toISOString();
-  return `${iso.slice(8, 10)}.${iso.slice(5, 7)} ${iso.slice(11, 16)}`;
+  return none(ms) ? '—' : localMoment(Number(ms));
 }
 
-/** A moment in milliseconds as «14:32:05 UTC». */
+/** A moment in milliseconds as «14:32:05», in the zone of the browser. */
 export function clockText(ms: Value): string {
-  return none(ms) ? '—' : `${new Date(Number(ms)).toISOString().slice(11, 19)} UTC`;
+  return none(ms) ? '—' : localClockSeconds(Number(ms));
 }
 
 /** A length of time in milliseconds as «1 ч 58 мин» or «43 мин». */

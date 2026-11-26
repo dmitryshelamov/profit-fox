@@ -1,12 +1,13 @@
+import { zoneLabel } from '@/shared/time';
 import { Badge } from '@/shared/ui/Badge';
 
 import { ListHead, ListRow, MomentButton, tightCell } from './lists';
-import { formatUtc } from './preview';
+import { formatMoment } from './preview';
 import { exitOf, percent, type ShownCycle, usdt } from './strategyPreview';
 
 /**
  * The cycles of a strategy (spec strategy-constructor «Вкладки предпросмотра стратегии»): each with the moment of its
- * entry in UTC, its side, the number of its entries, the largest money put in, how it ended — or that it is open — and
+ * entry in the zone of the browser, its side, the number of its entries, the largest money put in, how it ended — or that it is open — and
  * its result after costs as a percent and in USDT in the color of its sign. A click on a moment shows the cycle on the
  * chart.
  *
@@ -36,7 +37,7 @@ export function TradeList({
       <ListHead
         tight
         columns={[
-          ['Вход, UTC'],
+          [`Вход, ${zoneLabel()}`],
           ['Сторона'],
           ['Вх.', 'text-right', 'Входов'],
           ['Вложено', 'text-right'],
@@ -53,12 +54,12 @@ export function TradeList({
           return (
             <ListRow
               key={key}
-              label={`Сделка ${formatUtc(key)}`}
+              label={`Сделка ${formatMoment(key)}`}
               selected={key === selected}
               markClicks={markClicks}
             >
               <td className={`${tightCell} text-xs whitespace-nowrap`}>
-                <MomentButton moment={formatUtc(key)} onClick={() => onPick(shown)} />
+                <MomentButton moment={formatMoment(key)} onClick={() => onPick(shown)} />
               </td>
               <td className={tightCell}>
                 <Badge tone={cycle.side === 'short' ? 'err' : 'ok'}>

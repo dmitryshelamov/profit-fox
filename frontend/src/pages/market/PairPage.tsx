@@ -479,15 +479,22 @@ function ChartSection({
     refetchInterval: marketRefreshMs,
   });
   const drawnIdeas = useMemo(() => chartIdeas.data?.items ?? [], [chartIdeas.data]);
-  const marks = useMemo(() => ideaMarks(drawnIdeas, timeframe), [drawnIdeas, timeframe]);
-  const lines = useMemo(
+  // The chosen idea is drawn alone (spec market-overview «Идеи на графике»): from the ideas of the window of the chart, or
+  // from the rows of the table when it is older than the newest ideas the chart asks — the table holds its page.
+  const chosen = useMemo(
     () =>
-      ideaLines(
-        drawnIdeas.filter((item) => item.state === 'open'),
-        timeframe,
-      ),
-    [drawnIdeas, timeframe],
+      idea === null
+        ? null
+        : (drawnIdeas.find((item) => item.id === idea) ??
+          rows.find((item) => item.id === idea) ??
+          null),
+    [idea, drawnIdeas, rows],
   );
+  const marks = useMemo(
+    () => ideaMarks(drawnIdeas, timeframe, chosen),
+    [drawnIdeas, timeframe, chosen],
+  );
+  const lines = useMemo(() => ideaLines(chosen, timeframe), [chosen, timeframe]);
   const nothing =
     ideas.data !== undefined &&
     Number(ideas.data.total) === 0 &&
@@ -550,7 +557,8 @@ function ChartSection({
             lines={lines}
             timeframe={timeframe}
             onEdge={() => loadEarlier()}
-            onPick={(id) => onSearch({ idea: id, page: undefined })}
+            // The mark of the chosen idea clicked again takes the choice off (task 2.3).
+            onPick={(id) => onSearch({ idea: id === idea ? undefined : id, page: undefined })}
           />
         </div>
         <div className="flex flex-wrap items-center gap-8 font-mono text-[12px] text-muted">
@@ -613,7 +621,8 @@ function ChartSection({
                   list.setSort(sort);
                   onSearch({ page: 1 });
                 }}
-                onOpen={(item) => onSearch({ idea: item.id })}
+                // The chosen row clicked again takes the choice off (task 2.3).
+                onOpen={(item) => onSearch({ idea: item.id === idea ? undefined : item.id })}
               />
               <Pager
                 total={Number(ideas.data.total)}

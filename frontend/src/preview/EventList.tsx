@@ -1,10 +1,11 @@
 import type { PreviewCandle } from '@/api/client';
+import { zoneLabel } from '@/shared/time';
 
 import { ListHead, ListRow, MomentButton } from './lists';
-import { closeAt, type EventMark, formatUtc } from './preview';
+import { closeAt, type EventMark, formatMoment } from './preview';
 
 /**
- * The events of the preview in time order: the moment in UTC and the close of the candle it happened on. A moment is a
+ * The events of the preview in time order: the moment in the zone of the browser and the close of the candle it happened on. A moment is a
  * button that shows its event on the chart; the row of the selected event is marked (spec signal-constructor «Метка
  * события выбирает строку»).
  */
@@ -31,17 +32,17 @@ export function EventList({
 
   return (
     <table aria-label="События" className="w-full border-collapse text-[13px]">
-      <ListHead columns={[['Момент, UTC'], ['Закрытие свечи', 'text-right']]} />
+      <ListHead columns={[[`Момент, ${zoneLabel()}`], ['Закрытие свечи', 'text-right']]} />
       <tbody>
         {marks.map((mark) => (
           <ListRow
             key={mark.moment}
-            label={`Событие ${formatUtc(mark.moment)}`}
+            label={`Событие ${formatMoment(mark.moment)}`}
             selected={mark.moment === selected}
             markClicks={markClicks}
           >
             <td className="px-4">
-              <MomentButton moment={formatUtc(mark.moment)} onClick={() => onPick(mark)} />
+              <MomentButton moment={formatMoment(mark.moment)} onClick={() => onPick(mark)} />
             </td>
             <td className="px-4 text-right font-mono">
               {closeAt(candles, mark.moment, timeframe) ?? '—'}

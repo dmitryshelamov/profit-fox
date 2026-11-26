@@ -214,7 +214,7 @@ describe('the chart of a pair', () => {
   // newest candles when the page before comes.
   it('keeps the candles in view when the page before comes with the lines of an open idea drawn', async () => {
     routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 17) })]);
-    renderApp('/market/SOLUSDT?timeframe=1h');
+    renderApp('/market/SOLUSDT?timeframe=1h&idea=long-1');
     await waitFor(() => expect(drawn.segments).toHaveLength(3));
     expect(drawn.rightOffset).toBeGreaterThan(0);
 
@@ -387,7 +387,7 @@ describe('the live candle', () => {
       }),
     );
     expect(screen.getByRole('status', { name: 'Живая свеча' })).toHaveTextContent(
-      'Живая свеча · 14:32:05 UTC',
+      'Живая свеча · 17:32:05',
     );
     expect(drawn.setData).toBe(loads);
   });
@@ -411,7 +411,7 @@ describe('the live candle', () => {
   // Task 20.1: a closed candle while the chart is scrolled back does not move it to the newest candles.
   it('keeps the candles in view when a candle closes while the chart is scrolled back', async () => {
     routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 17) })]);
-    renderApp('/market/SOLUSDT?timeframe=1h');
+    renderApp('/market/SOLUSDT?timeframe=1h&idea=long-1');
     await waitFor(() => expect(drawn.segments).toHaveLength(3));
     await scrollChart({ from: 200, to: 317 });
     act(() => drawn.rangeChange?.({ from: 200, to: 317 }));
@@ -429,7 +429,7 @@ describe('the live candle', () => {
   // candle moves their end; the series of the lines are kept and the range in view stays.
   it('keeps the candles in view when a candle closes with the lines of a far term cut, the chart scrolled back', async () => {
     routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour })]);
-    renderApp('/market/SOLUSDT?timeframe=1h');
+    renderApp('/market/SOLUSDT?timeframe=1h&idea=long-1');
     await waitFor(() => expect(drawn.segments).toHaveLength(3));
     await scrollChart({ from: 200, to: 317 });
     act(() => drawn.rangeChange?.({ from: 200, to: 317 }));
@@ -457,7 +457,7 @@ describe('the live candle', () => {
   // candle instead of fifty; the range in view stays.
   it('keeps the candles in view when a candle closes after the chart was zoomed in with the lines of an idea', async () => {
     routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour })]);
-    renderApp('/market/SOLUSDT?timeframe=1h');
+    renderApp('/market/SOLUSDT?timeframe=1h&idea=long-1');
     await waitFor(() => expect(drawn.segments).toHaveLength(3));
     await scrollChart({ from: 300, to: 303 });
     act(() => drawn.rangeChange?.({ from: 300, to: 303 }));
@@ -486,7 +486,7 @@ describe('the live candle', () => {
   // back. Task 22.1: the last candle in view, the range moves by the candle closed, as without the lines.
   it('follows the closed candle after the chart was zoomed in on the last candles', async () => {
     routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour })]);
-    renderApp('/market/SOLUSDT?timeframe=1h');
+    renderApp('/market/SOLUSDT?timeframe=1h&idea=long-1');
     await waitFor(() => expect(drawn.segments).toHaveLength(3));
     await scrollChart({ from: 497.5, to: 500.5 });
     act(() => drawn.rangeChange?.({ from: 497.5, to: 500.5 }));
@@ -509,7 +509,7 @@ describe('the live candle', () => {
   // follow the live candle itself: the last candle stays where it was on the screen and the labels stay in the chart.
   it('follows the closed candles at the right edge with the lines of a far term cut', async () => {
     routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour })]);
-    renderApp('/market/SOLUSDT?timeframe=1h');
+    renderApp('/market/SOLUSDT?timeframe=1h&idea=long-1');
     await waitFor(() => expect(drawn.segments).toHaveLength(3));
     await nextFrame();
     const start = drawn.logicalRange!;
@@ -540,7 +540,7 @@ describe('the live candle', () => {
   // the one it will show. Three candles closed with no frame between them move the right edge by three.
   it('follows the candles closed with no frame between them at the right edge with the lines of a far term', async () => {
     routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour })]);
-    renderApp('/market/SOLUSDT?timeframe=1h');
+    renderApp('/market/SOLUSDT?timeframe=1h&idea=long-1');
     await waitFor(() => expect(drawn.segments).toHaveLength(3));
     await nextFrame();
     const start = drawn.logicalRange!;
@@ -576,7 +576,7 @@ describe('the live candle', () => {
         return route(new Request(url));
       },
     });
-    renderApp('/market/SOLUSDT?timeframe=1h');
+    renderApp('/market/SOLUSDT?timeframe=1h&idea=long-1');
     await waitFor(() => expect(drawn.segments).toHaveLength(3));
     await nextFrame();
     const start = drawn.logicalRange!;
@@ -604,7 +604,7 @@ describe('the live candle', () => {
   // chart follows the closed candle as it does without the lines.
   it('follows the closed candle when the right edge stands between it and the candle before', async () => {
     routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour })]);
-    renderApp('/market/SOLUSDT?timeframe=1h');
+    renderApp('/market/SOLUSDT?timeframe=1h&idea=long-1');
     await waitFor(() => expect(drawn.segments).toHaveLength(3));
     await scrollChart({ from: 380, to: 499.5 });
     act(() => drawn.rangeChange?.({ from: 380, to: 499.5 }));
@@ -622,7 +622,7 @@ describe('the live candle', () => {
   // to 433 pixels live); given back as the right edge, the spacing stays as without the lines.
   it('keeps the spacing of the bars when a closed candle changes the width of the price scale', async () => {
     routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour })]);
-    renderApp('/market/SOLUSDT?timeframe=1h');
+    renderApp('/market/SOLUSDT?timeframe=1h&idea=long-1');
     await waitFor(() => expect(drawn.segments).toHaveLength(3));
     await scrollChart({ from: 300, to: 303 });
     act(() => drawn.rangeChange?.({ from: 300, to: 303 }));
@@ -648,7 +648,7 @@ describe('the live candle', () => {
         'GET /api/market/pairs/SOLUSDT/ideas': () =>
           json({ items, total: items.length, page: 1, pageSize: 50, filterGone: false }),
       });
-      renderApp('/market/SOLUSDT?timeframe=1h');
+      renderApp('/market/SOLUSDT?timeframe=1h&idea=long-1');
       await waitFor(() => expect(drawn.segments).toHaveLength(3));
       await scrollChart({ from: 200, to: 317 });
       act(() => drawn.rangeChange?.({ from: 200, to: 317 }));
@@ -687,7 +687,7 @@ describe('the live candle', () => {
         'GET /api/market/pairs/SOLUSDT/ideas': () =>
           json({ items, total: items.length, page: 1, pageSize: 50, filterGone: false }),
       });
-      renderApp('/market/SOLUSDT?timeframe=1h');
+      renderApp('/market/SOLUSDT?timeframe=1h&idea=long-1');
       await waitFor(() => expect(drawn.segments).toHaveLength(3));
       await scrollChart({ from: 400, to: 520 });
       act(() => drawn.rangeChange?.({ from: 400, to: 520 }));
@@ -727,7 +727,7 @@ describe('the live candle', () => {
     await waitFor(() => expect(FakeEventSource.opened).toHaveLength(2), { timeout: 4000 });
     act(() => FakeEventSource.last().send('candle', live(fourteen, 238)));
     expect(screen.getByRole('status', { name: 'Живая свеча' })).toHaveTextContent(
-      'Живая свеча · 14:32:05 UTC',
+      'Живая свеча · 17:32:05',
     );
   });
 
@@ -819,10 +819,10 @@ describe('the ideas, the open interest and the funding on the chart', () => {
   });
   const longOpen = idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 17) });
 
-  // Scenarios «Закрытая идея» and «Открытая идея».
-  it('marks the entry and the exit of a closed idea and draws the lines of an open one', async () => {
+  // Scenario «Закрытая идея»: the chosen closed idea alone (change fix-pair-chart-and-local-time).
+  it('marks the entry and the exit of the chosen closed idea', async () => {
     routes([longOpen, shortClosed]);
-    renderApp('/market/SOLUSDT?timeframe=1h');
+    renderApp('/market/SOLUSDT?timeframe=1h&idea=short-1');
 
     await waitFor(() =>
       expect(drawn.markers).toEqual(
@@ -835,6 +835,19 @@ describe('the ideas, the open interest and the funding on the chart', () => {
             time: Date.UTC(2026, 10, 21, 12) / 1000,
             text: 'выход по сроку +0.41 %',
           }),
+        ]),
+      ),
+    );
+  });
+
+  // Scenario «Открытая идея»: the chosen open idea alone (change fix-pair-chart-and-local-time).
+  it('marks the entry of the chosen open idea and draws its lines', async () => {
+    routes([longOpen, shortClosed]);
+    renderApp('/market/SOLUSDT?timeframe=1h&idea=long-1');
+
+    await waitFor(() =>
+      expect(drawn.markers).toEqual(
+        expect.arrayContaining([
           expect.objectContaining({
             time: Date.UTC(2026, 10, 22, 13) / 1000,
             text: '▲ лонг · breakout-long',
@@ -869,7 +882,7 @@ describe('the ideas, the open interest and the funding on the chart', () => {
     // Task 19.14: the term is a label at the end of the lines, not a mark on the line.
     expect(drawn.segments.flatMap((line) => line.labels)).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ time: Date.UTC(2026, 10, 22, 17), text: 'срок 17:00' }),
+        expect.objectContaining({ time: Date.UTC(2026, 10, 22, 17), text: 'срок 20:00' }),
       ]),
     );
     expect(drawn.lines).toEqual([]);
@@ -882,7 +895,7 @@ describe('the ideas, the open interest and the funding on the chart', () => {
   // Task 20.2: a term past a third of the bars in view ends the lines on the slot of the third, the labels kept in room.
   it('ends the lines of an idea with a far term on the slot a third of the bars in view away', async () => {
     routes([idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 13) + 200 * hour })]);
-    renderApp('/market/SOLUSDT?timeframe=1h');
+    renderApp('/market/SOLUSDT?timeframe=1h&idea=long-1');
     await waitFor(() => expect(drawn.segments).toHaveLength(3));
 
     const end = Date.UTC(2026, 10, 22, 13) + 50 * hour;
@@ -906,7 +919,7 @@ describe('the ideas, the open interest and the funding on the chart', () => {
           answer = resolve;
         }),
     });
-    renderApp('/market/SOLUSDT?timeframe=1h');
+    renderApp('/market/SOLUSDT?timeframe=1h&idea=long-1');
     await waitFor(() => expect(drawn.candles).toHaveLength(500));
     await waitFor(() => expect(drawn.logicalRange).not.toBeNull());
 
@@ -930,7 +943,7 @@ describe('the ideas, the open interest and the funding on the chart', () => {
   // Task 19.14: the chart against the mockup 09-pair.  // Task 19.14: the chart against the mockup 09-pair.
   it('lays the chart out as the mockup: panels of about 90 pixels, scales with a point and labels right of the lines', async () => {
     routes([longOpen]);
-    renderApp('/market/SOLUSDT?timeframe=1h');
+    renderApp('/market/SOLUSDT?timeframe=1h&idea=long-1');
     await waitFor(() => expect(drawn.segments).toHaveLength(3));
 
     expect(drawn.paneFactors).toEqual([4.5, 1, 1]);
@@ -950,7 +963,7 @@ describe('the ideas, the open interest and the funding on the chart', () => {
     await waitFor(() =>
       expect(drawn.segments.flatMap((line) => line.labels.map((label) => label.text))).toEqual([
         'вход 236.10',
-        'срок 17:00',
+        'срок 20:00',
         'стоп 231.38',
         'цель 245.54',
       ]),
@@ -966,7 +979,7 @@ describe('the ideas, the open interest and the funding on the chart', () => {
   // Task 19.1: the cleanup of the lines does not touch the chart removed before it.
   it('draws a new chart when the timeframe changes while the lines of an open idea are drawn', async () => {
     const requests = routes([longOpen]);
-    const { history } = renderApp('/market/SOLUSDT?timeframe=1h');
+    const { history } = renderApp('/market/SOLUSDT?timeframe=1h&idea=long-1');
     await waitFor(() => expect(drawn.segments).toHaveLength(3));
     const charts = chartQueries(requests).length;
 
@@ -982,7 +995,7 @@ describe('the ideas, the open interest and the funding on the chart', () => {
 
   it('unmounts a chart with the lines of an open idea without an error', async () => {
     routes([longOpen]);
-    const { unmount } = renderApp('/market/SOLUSDT?timeframe=1h');
+    const { unmount } = renderApp('/market/SOLUSDT?timeframe=1h&idea=long-1');
     await waitFor(() => expect(drawn.segments).toHaveLength(3));
 
     expect(() => unmount()).not.toThrow();
@@ -1001,7 +1014,7 @@ describe('the ideas, the open interest and the funding on the chart', () => {
         result: 0.01,
       }),
     ]);
-    renderApp('/market/SOLUSDT?timeframe=1h');
+    renderApp('/market/SOLUSDT?timeframe=1h&idea=squeeze');
 
     await waitFor(() =>
       expect(drawn.markers).toEqual(
@@ -1016,9 +1029,9 @@ describe('the ideas, the open interest and the funding on the chart', () => {
   it('chooses the row of the idea whose mark is clicked', async () => {
     routes([longOpen, shortClosed]);
     const { history } = renderApp('/market/SOLUSDT?timeframe=1h');
-    await waitFor(() => expect(drawn.markers).toHaveLength(3));
+    await waitFor(() => expect(drawn.markers).toHaveLength(2));
 
-    act(() => drawn.click?.({ time: Date.UTC(2026, 10, 21, 12) / 1000 }));
+    act(() => drawn.click?.({ time: Date.UTC(2026, 10, 21, 8) / 1000 }));
 
     await waitFor(() => expect(history.location.search).toContain('idea=short-1'));
     const table = within(screen.getByRole('table', { name: 'Идеи пары' }));
@@ -1038,7 +1051,7 @@ describe('the ideas, the open interest and the funding on the chart', () => {
         return json({ items, total: items.length, page: 1, pageSize: 50, filterGone: false });
       },
     });
-    renderApp('/market/SOLUSDT?timeframe=1h');
+    renderApp('/market/SOLUSDT?timeframe=1h&idea=long-1');
     await waitFor(() => expect(drawn.segments).toHaveLength(3));
 
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Статус' }), 'closed');
@@ -1122,7 +1135,7 @@ describe('the ideas, the open interest and the funding on the chart', () => {
     const { history } = renderApp('/market/SOLUSDT?timeframe=1h&page=3');
     const table = within(await screen.findByRole('table', { name: 'Идеи пары' }));
     await table.findByRole('row', { name: /third-1$/ });
-    await waitFor(() => expect(drawn.markers).toHaveLength(3));
+    await waitFor(() => expect(drawn.markers).toHaveLength(2));
 
     act(() => drawn.click?.({ time: Date.UTC(2026, 10, 22, 13) / 1000 }));
 
@@ -1132,6 +1145,81 @@ describe('the ideas, the open interest and the funding on the chart', () => {
     );
     expect(history.location.search).toContain('idea=long-1');
     expect(history.location.search).not.toContain('page=3');
+  });
+
+  // Change fix-pair-chart-and-local-time, task 2.2: an idea chosen past the newest ideas of the window of the chart is
+  // drawn from the rows of the table.
+  it('draws the chosen idea from the table when it is not among the ideas of the window of the chart', async () => {
+    const old = idea({
+      id: 'old-1',
+      strategy: 'old-breakout',
+      state: 'closed',
+      moment: Date.UTC(2026, 10, 10, 9),
+      exitTime: Date.UTC(2026, 10, 10, 11),
+      exitReason: 'stop',
+      result: -0.02,
+    });
+    const newest = Array.from({ length: 200 }, (_, index) =>
+      idea({ id: `new-${index}`, moment: Date.UTC(2026, 10, 22, 13) - index * hour }),
+    );
+    routes([], {
+      'GET /api/market/pairs/SOLUSDT/ideas': (request) => {
+        const query = new URL(request.url).searchParams;
+        const items = query.has('from') ? newest : [old];
+        return json({ items, total: items.length, page: 1, pageSize: 50, filterGone: false });
+      },
+    });
+    renderApp('/market/SOLUSDT?timeframe=1h&idea=old-1');
+
+    await waitFor(() =>
+      expect(drawn.markers).toEqual([
+        expect.objectContaining({
+          time: Date.UTC(2026, 10, 10, 9) / 1000,
+          text: '▲ лонг · old-breakout',
+        }),
+        expect.objectContaining({
+          time: Date.UTC(2026, 10, 10, 11) / 1000,
+          text: 'выход по стопу -2.00 %',
+        }),
+      ]),
+    );
+  });
+
+  // Scenario «Снять выбор» (task 2.3).
+  it('takes the choice off when the chosen row is clicked again, and draws the arrows of all ideas', async () => {
+    routes([longOpen, shortClosed]);
+    const { history } = renderApp('/market/SOLUSDT?timeframe=1h&idea=short-1');
+    const table = within(await screen.findByRole('table', { name: 'Идеи пары' }));
+    await waitFor(() => expect(drawn.markers).toHaveLength(2));
+
+    await userEvent.click(table.getByRole('row', { name: /short-1$/ }));
+
+    await waitFor(() => expect(history.location.search).not.toContain('idea='));
+    expect(table.getByRole('row', { name: /short-1$/ })).not.toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await waitFor(() =>
+      expect(drawn.markers.map((mark) => (mark as { text: string }).text)).toEqual(['', '']),
+    );
+    expect(drawn.segments).toHaveLength(0);
+  });
+
+  // Scenario «Снять выбор» by the mark (task 2.3); a click on a candle without a mark keeps the choice.
+  it('takes the choice off by a click on the mark of the chosen idea, not by a click on a candle', async () => {
+    routes([longOpen, shortClosed]);
+    const { history } = renderApp('/market/SOLUSDT?timeframe=1h&idea=short-1');
+    await waitFor(() => expect(drawn.markers).toHaveLength(2));
+
+    act(() => drawn.click?.({ time: Date.UTC(2026, 10, 22, 9) / 1000 }));
+    await nextFrame();
+    expect(history.location.search).toContain('idea=short-1');
+
+    act(() => drawn.click?.({ time: Date.UTC(2026, 10, 21, 12) / 1000 }));
+
+    await waitFor(() => expect(history.location.search).not.toContain('idea='));
+    await waitFor(() => expect(drawn.markers).toHaveLength(2));
+    expect(drawn.markers.map((mark) => (mark as { text: string }).text)).toEqual(['', '']);
   });
 
   // Scenarios «Панели под графиком» and «Отрицательная выплата».
@@ -1353,7 +1441,7 @@ describe('the ideas of a pair', () => {
     expect(screen.getByRole('heading', { name: /Идеи пары/ })).toHaveTextContent('4');
   });
 
-  // Task 20.8: «Вход, UTC», «Выход» and «Итог» stay on one line; the strategy gives way.
+  // Task 20.8: «Вход, UTC+3», «Выход» and «Итог» stay on one line; the strategy gives way.
   it('keeps the times and the results of the ideas of a pair on one line', async () => {
     routes([longOpen()]);
     renderApp('/market/SOLUSDT');
@@ -1364,7 +1452,7 @@ describe('the ideas of a pair', () => {
     const cell = (title: string) => cells[heads.findIndex((head) => head?.startsWith(title))]!;
 
     expect(cell('Стратегия')).toHaveClass('w-full', 'max-w-0');
-    for (const title of ['Вход, UTC', 'Выход', 'Итог']) {
+    for (const title of ['Вход, UTC+3', 'Выход', 'Итог']) {
       expect(cell(title)).toHaveClass('whitespace-nowrap');
     }
   });

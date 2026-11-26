@@ -1,7 +1,8 @@
 import type { PreviewCycle, PreviewOrder } from '@/api/client';
+import { zoneLabel } from '@/shared/time';
 
 import { ListHead, ListRow, MomentButton } from './lists';
-import { formatUtc } from './preview';
+import { formatMoment } from './preview';
 import { openersOf, outcomeOf, priceText } from './strategyPreview';
 
 const sides: Record<string, string> = {
@@ -13,7 +14,7 @@ const sides: Record<string, string> = {
 
 /**
  * The orders of a strategy in time order (spec strategy-constructor «Панель предпросмотра стратегии»): the moment in
- * UTC, the node, the side, the price of a fill and the outcome — how its cycle ended and its result, a fill, skipped,
+ * the zone of the browser, the node, the side, the price of a fill and the outcome — how its cycle ended and its result, a fill, skipped,
  * without a trade and why, or not computed. A click on a moment shows the order on the chart.
  */
 export function OrderList({
@@ -39,19 +40,25 @@ export function OrderList({
   return (
     <table aria-label="Заявки" className="w-full border-collapse text-[13px]">
       <ListHead
-        columns={[['Момент, UTC'], ['Узел'], ['Сторона'], ['Цена', 'text-right'], ['Исход']]}
+        columns={[
+          [`Момент, ${zoneLabel()}`],
+          ['Узел'],
+          ['Сторона'],
+          ['Цена', 'text-right'],
+          ['Исход'],
+        ]}
       />
       <tbody>
         {orders.map((order, index) => (
           <ListRow
             key={`${order.moment}-${order.node ?? ''}-${index}`}
-            label={`Заявка ${formatUtc(order.moment)}`}
+            label={`Заявка ${formatMoment(order.moment)}`}
             selected={Number(order.moment) === selected}
             markClicks={markClicks}
             dim={order.outcome !== 'filled'}
           >
             <td className="px-4">
-              <MomentButton moment={formatUtc(order.moment)} onClick={() => onPick(order)} />
+              <MomentButton moment={formatMoment(order.moment)} onClick={() => onPick(order)} />
             </td>
             <td className="px-4 font-mono text-xs">{order.node ?? '—'}</td>
             <td className="px-4">{sides[order.side] ?? order.side}</td>

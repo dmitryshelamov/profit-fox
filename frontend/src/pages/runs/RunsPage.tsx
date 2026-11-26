@@ -10,7 +10,7 @@ import { Page, PageTitle, SectionTitle } from '@/shared/ui/Page';
 import { RunStatusBadge } from '@/shared/ui/RunStatusBadge';
 import { Table, Td, Th } from '@/shared/ui/Table';
 
-import { clockUtc, fixed, historyWords, pairsWords, shortUtc, signedUsdt, span } from './labels';
+import { clock, fixed, historyWords, pairsWords, shortMoment, signedUsdt, span } from './labels';
 import { useActiveRuns } from './useActiveRuns';
 
 /**
@@ -101,7 +101,7 @@ export function RunsPage() {
                     </span>
                     <span className="text-xs text-muted">
                       {run.worker ?? '?'}
-                      {run.startedAt ? ` · с ${clockUtc(run.startedAt)} UTC` : ''}
+                      {run.startedAt ? ` · с ${clock(run.startedAt)}` : ''}
                     </span>
                   </div>
                 ) : (
@@ -233,7 +233,7 @@ function FinishedRow({ run }: { readonly run: Run }) {
           : `${fixed(run.computeSeconds, 0)} с`}
       </Td>
       <Td className="text-right font-mono text-xs text-muted">
-        {run.finishedAt ? shortUtc(run.finishedAt) : '—'}
+        {run.finishedAt ? shortMoment(run.finishedAt) : '—'}
       </Td>
       <Td className="text-faint">
         <span aria-hidden="true">›</span>

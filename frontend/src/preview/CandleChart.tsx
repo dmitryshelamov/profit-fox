@@ -6,7 +6,6 @@ import {
   type IChartApi,
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
-  TickMarkType,
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts';
@@ -14,7 +13,7 @@ import { useEffect, useRef } from 'react';
 
 import type { PreviewCandle } from '@/api/client';
 
-import { monthTick, priceText } from './chartFormat';
+import { crosshairTime, priceText, timeTick } from './chartFormat';
 import { type EventMark, keyOf } from './preview';
 
 /**
@@ -95,15 +94,15 @@ export function CandleChart({
         textColor: chartColors.text,
       },
       grid: { vertLines: { color: chartColors.grid }, horzLines: { color: chartColors.grid } },
-      localization: { locale: 'ru-RU', priceFormatter: priceText },
+      localization: { locale: 'ru-RU', priceFormatter: priceText, timeFormatter: crosshairTime },
       timeScale: {
         timeVisible: true,
         secondsVisible: false,
         // The whole history of a pair fits the panel, so every mark of a preview is in view at once: three years of
         // hourly candles are 26 thousand bars on a thousand pixels.
         minBarSpacing: 0.02,
-        tickMarkFormatter: (time: Time, type: TickMarkType) =>
-          type === TickMarkType.Month ? monthTick(Number(time)) : null,
+        // The scale in the zone of the browser (task 3.4): the data stay in seconds of UTC.
+        tickMarkFormatter: timeTick,
       },
     });
     const series = chart.addSeries(CandlestickSeries, {
