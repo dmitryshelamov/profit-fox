@@ -90,8 +90,8 @@ public sealed class SetNumbersTests
     [Test]
     public void Two_orders_in_one_week_average_into_its_mean()
     {
-        SetNumbers btc = PairNumbers.Of([Counted(Week, 0.004)], skipped: 0, pastEnd: 0);
-        SetNumbers eth = PairNumbers.Of([Counted(Week, -0.002)], skipped: 0, pastEnd: 0);
+        SetNumbers btc = Counted(("BTCUSDT", Week, 0.004));
+        SetNumbers eth = Counted(("ETHUSDT", Week, -0.002));
 
         SetNumbers set = btc + eth;
 
@@ -100,18 +100,9 @@ public sealed class SetNumbersTests
     }
 
     [Test]
-    public void An_order_with_one_random_entry_does_not_count()
-    {
-        EventRow one = Counted(Week, 0.004) with { RandomValid = 1 };
-
-        Assert.That(PairNumbers.Of([one], skipped: 0, pastEnd: 0).Difference(), Is.Null);
-        Assert.That(PairNumbers.Of([one], skipped: 0, pastEnd: 0).Trades, Is.EqualTo(1), "its trade is a trade all the same");
-    }
-
-    [Test]
     public void One_week_gives_a_difference_without_t()
     {
-        RandomDifference difference = PairNumbers.Of([Counted(Week, 0.004), Counted(Week, 0.002)], skipped: 0, pastEnd: 0).Difference()!;
+        RandomDifference difference = Counted(("BTCUSDT", Week, 0.004), ("BTCUSDT", Week, 0.002)).Difference()!;
 
         Assert.That((difference.Weeks, difference.T), Is.EqualTo((1, (double?)null)));
         Assert.That(difference.Mean, Is.EqualTo(0.003).Within(1e-15));
@@ -120,7 +111,7 @@ public sealed class SetNumbersTests
     [Test]
     public void The_t_is_the_mean_over_its_error_by_weeks()
     {
-        RandomDifference difference = PairNumbers.Of([Counted(Week, 0.001), Counted(Week + 1, 0.003), Counted(Week + 2, 0.005)], skipped: 0, pastEnd: 0).Difference()!;
+        RandomDifference difference = Counted(("BTCUSDT", Week, 0.001), ("BTCUSDT", Week + 1, 0.003), ("BTCUSDT", Week + 2, 0.005)).Difference()!;
 
         // The mean 0.003, the spread 0.002, three weeks: t = 0.003 / (0.002 / √3).
         Assert.That(difference.Weeks, Is.EqualTo(3));
@@ -131,27 +122,40 @@ public sealed class SetNumbersTests
     // A closed trade of 100 USDT with the result net.
     private static EventRow Trade(double net)
     {
-        return Row(Monday.AddHours(4), TradeStatus.Ok, net, randoms: 0) with { NetAmount = net * 100 };
+        return Row(Monday.AddHours(4), TradeStatus.Ok, net) with { NetAmount = net * 100 };
     }
 
-    // A trade with two valid random entries whose difference is the given one.
-    private static EventRow Counted(long week, double difference)
+    // The numbers of a pair whose orders, each at its own moment, have the given differences: each has two valid random
+    // entries with a mean of 0.001.
+    private static SetNumbers Counted(params (string Pair, long Week, double Difference)[] orders)
     {
-        EventRow row = Row(Blocks.Start(week, TimeBlock.Week).AddHours(4), TradeStatus.Ok, 0.001 + difference, randoms: 2) with { NetAmount = 0.1 };
-        return row;
+        var cells = new ControlCells();
+        List<EventRow> rows = [];
+        foreach (((string pair, long week, double difference), int index) in orders.Select((order, index) => (order, index)))
+        {
+            DateTimeOffset moment = Blocks.Start(week, TimeBlock.Week).AddHours(4 * (index + 1));
+            rows.Add(Row(moment, TradeStatus.Ok, 0.001 + difference) with { Instrument = pair, NetAmount = 0.1 });
+            cells.Add([Random("XRPUSDT", moment, 0.0005), Random("ADAUSDT", moment, 0.0015)]);
+        }
+
+        return PairNumbers.Of(rows, skipped: 0, pastEnd: 0) with { Differences = cells.Differences([.. rows.Select(OrderTrade.Of).OfType<OrderTrade>()]) };
+    }
+
+    private static RandomTrade Random(string pair, DateTimeOffset moment, double net)
+    {
+        var outcome = new TradeOutcome(TradeStatus.Ok, ExitReason.Time, Ambiguous: false, moment, moment.AddHours(4), 100, 100, net, 0, 0, 0, net, R: null);
+        return new RandomTrade(pair, moment, EntrySide.Long, outcome);
     }
 
     private static EventRow Left(TradeStatus status)
     {
-        return new EventRow("BTCUSDT", Monday, Week, status, TradeOutcome.Excluded(status), Event: null, [], 0, RandomMean: null);
+        return new EventRow("BTCUSDT", Monday, EntrySide.Long, Week, status, TradeOutcome.Excluded(status), Event: null);
     }
 
-    private static EventRow Row(DateTimeOffset moment, TradeStatus status, double net, int randoms)
+    private static EventRow Row(DateTimeOffset moment, TradeStatus status, double net)
     {
         var outcome = new TradeOutcome(status, ExitReason.Time, Ambiguous: false, moment, moment.AddHours(4), 100, 100, net, 0, 0, 0, net, R: null);
-        var fields = TradeFields.Of(outcome);
-        TradeFields mean = fields with { Y = 0.001 };
-        return new EventRow("BTCUSDT", moment, Blocks.Of(moment, TimeBlock.Week), status, outcome, fields, [], randoms, randoms > 0 ? mean : null);
+        return new EventRow("BTCUSDT", moment, EntrySide.Long, Blocks.Of(moment, TimeBlock.Week), status, outcome, TradeFields.Of(outcome));
     }
 
     private static CycleOutcome Cycle(double net, double amount, bool open = false)

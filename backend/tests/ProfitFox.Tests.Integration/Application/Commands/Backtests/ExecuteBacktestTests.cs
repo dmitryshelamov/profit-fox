@@ -61,17 +61,22 @@ public sealed class ExecuteBacktestTests
         Assert.That(_server.Data.CandleRequests, Is.Not.Empty);
     }
 
+    /// <summary>
+    ///     «Шесть наборов на одной истории» (change fix-backtest-random-control, task 4.2): the candles of the timeframe and
+    ///     the funding are read twice, when the orders are found and when the trades are computed; the minutes of each week
+    ///     once, and none of a week without orders and without random entries.
+    /// </summary>
     [Test]
-    public async Task Six_sets_on_one_timeframe_read_the_candles_and_the_minutes_of_each_week_of_a_pair_once()
+    public async Task Six_sets_on_one_timeframe_read_the_candles_twice_and_the_minutes_of_each_week_of_a_pair_once()
     {
         await Run(Generate(thresholds: ["0.0003", "0.0004", "0.0005", "0.00055", "0.0006", "0.001"]));
 
         CandleHistoryRequest[] btc = [.. _server.Data.CandleRequests.Where(request => request.InstrumentIds.Single() == "btc")];
-        Assert.That(btc.Count(request => request.Interval == CandleInterval.FourHours), Is.EqualTo(1));
+        Assert.That(btc.Count(request => request.Interval == CandleInterval.FourHours), Is.EqualTo(2));
         CandleHistoryRequest[] minutes = [.. btc.Where(request => request.Interval != CandleInterval.FourHours)];
         Assert.That(minutes.Select(request => request.From), Is.Unique, "each week once for the six sets");
         Assert.That(minutes, Has.Length.EqualTo(2), "two weeks of history have orders");
-        Assert.That(_server.Data.FundingRequests.Count(request => request.InstrumentIds.Single() == "btc"), Is.EqualTo(1));
+        Assert.That(_server.Data.FundingRequests.Count(request => request.InstrumentIds.Single() == "btc"), Is.EqualTo(2));
     }
 
     [Test]

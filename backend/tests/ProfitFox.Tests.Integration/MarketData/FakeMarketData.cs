@@ -114,6 +114,23 @@ public sealed class FakeMarketData
     public static DateTimeOffset? CoveredUntil { get; set; }
 
     /// <summary>
+    ///     Which payment of every three is the high one, by instrument (change fix-backtest-random-control): the second, as
+    ///     <see cref="RateAt" /> gives it, for an instrument that is not here. Another one moves the orders of a strategy on
+    ///     the funding of that pair to other moments than those of the other pairs, so they take random entries on them.
+    /// </summary>
+    public Dictionary<string, int> HighPayments { get; } = [];
+
+    /// <summary>
+    ///     The rate of the payment of <paramref name="instrument" /> at <paramref name="time" />: that of
+    ///     <see cref="RateAt" />, with the high payment where <see cref="HighPayments" /> puts it.
+    /// </summary>
+    public string RateOf(string instrument, DateTimeOffset time)
+    {
+        long payment = (long)((time - CoveredFrom).TotalHours / 8);
+        return payment % 3 == HighPayments.GetValueOrDefault(instrument, 1) ? "0.0006" : "0.0001";
+    }
+
+    /// <summary>
     ///     The rate of the payment at <paramref name="time" />: 0.0006 for every third payment, 0.0001 otherwise, so the
     ///     rate crosses 0.05 % once a day.
     /// </summary>

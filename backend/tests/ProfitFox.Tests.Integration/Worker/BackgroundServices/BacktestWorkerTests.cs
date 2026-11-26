@@ -101,15 +101,19 @@ public sealed class BacktestWorkerTests
         Assert.That(((await Ended(first.Id)).Status, (await Ended(second.Id)).Status), Is.EqualTo((BacktestState.Done, BacktestState.Done)));
     }
 
+    /// <summary>
+    ///     A pair counts as half passed after each pass (change fix-backtest-random-control, design.md, decision 6): held at
+    ///     the second read of ETHUSDT, the backtest has passed its three pairs once and BTCUSDT twice, two pairs of three.
+    /// </summary>
     [Test]
     public async Task A_backtest_in_the_middle_shows_the_pairs_it_has_passed_and_its_Worker()
     {
-        (Task reached, Action release) = Hold("eth");
+        (Task reached, Action release) = Hold("eth", skip: 1);
         await StartWorker("w-mid");
         Backtest backtest = await Enqueue();
         await reached;
 
-        await Poll.Until("the progress of the backtest", async () => (await Read(backtest.Id)) is { PairsDone: 1, PairsTotal: 3 });
+        await Poll.Until("the progress of the backtest", async () => (await Read(backtest.Id)) is { PairsDone: 2, PairsTotal: 3 });
 
         Backtest middle = await Read(backtest.Id);
         Assert.That((middle.Status, middle.LeaseOwner, middle.StartedAt is not null), Is.EqualTo((BacktestState.Running, (string?)"w-mid", true)));
@@ -153,6 +157,28 @@ public sealed class BacktestWorkerTests
         Assert.That(cancelled.Sets.Single().Numbers, Is.Null);
         _server.Data.BeforeCandles = null;
         Assert.That((await Ended((await Enqueue()).Id)).Status, Is.EqualTo(BacktestState.Done));
+    }
+
+    /// <summary>
+    ///     Change fix-backtest-random-control, task 4.3: held at the first read of the second pass, the backtest has passed
+    ///     its three pairs once, one pair of three; cancelled there it writes no numbers.
+    /// </summary>
+    [Test]
+    public async Task A_backtest_cancelled_between_its_passes_writes_nothing()
+    {
+        (Task reached, Action _) = Hold("btc", skip: 1);
+        await StartWorker("w-1");
+        Backtest backtest = await Enqueue();
+        await reached;
+        await Poll.Until("the first pass", async () => (await Read(backtest.Id)) is { PairsDone: 1, PairsTotal: 3 });
+
+        await _backtests.CancelAsync(backtest.Id, CancellationToken.None);
+        await Poll.Until("the cancelled backtest", async () => (await Read(backtest.Id)).Status == BacktestState.Cancelled);
+
+        Backtest cancelled = await Read(backtest.Id);
+        Assert.That(cancelled.Sets.Single().Numbers, Is.Null);
+        Assert.That(cancelled.DataHash, Is.Null);
+        _server.Data.BeforeCandles = null;
     }
 
     [Test]
@@ -205,13 +231,15 @@ public sealed class BacktestWorkerTests
     }
 
     // The backtest holds on the first candle request of a pair, until it is released or the Worker drops the call.
-    private (Task Reached, Action Release) Hold(string instrument)
+    // Holds every read of candles of the instrument after the first «skip» of them until released.
+    private (Task Reached, Action Release) Hold(string instrument, int skip = 0)
     {
         TaskCompletionSource reached = new(TaskCreationOptions.RunContinuationsAsynchronously);
         TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int reads = 0;
         _server.Data.BeforeCandles = async (request, ct) =>
         {
-            if (request.InstrumentIds.Single() == instrument)
+            if (request.InstrumentIds.Single() == instrument && Interlocked.Increment(ref reads) > skip)
             {
                 reached.TrySetResult();
                 await release.Task.WaitAsync(ct);

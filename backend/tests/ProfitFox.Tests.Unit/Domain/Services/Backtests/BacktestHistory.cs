@@ -95,6 +95,27 @@ internal sealed class BacktestHistory
         return PairBacktest.RunAsync("BTCUSDT", kind, plans, Candles(timeframes), Funding(), Minutes, CancellationToken.None);
     }
 
+    /// <summary>
+    ///     A backtest of a category of ideas over the pairs by their symbols, in the order of the symbols, in its two passes
+    ///     (change fix-backtest-random-control, design.md, decision 4); <paramref name="computed" /> gets the results of each
+    ///     pair of the second pass.
+    /// </summary>
+    public static Task<IReadOnlyList<SetTotals>> Run(
+        IReadOnlyDictionary<string, BacktestHistory> pairs,
+        IReadOnlyList<BacktestPlan> plans,
+        Action<string, IReadOnlyList<PairSetResult>>? computed = null)
+    {
+        TimeSpan[] timeframes = [.. plans.Select(plan => plan.Design.Timeframe).Distinct()];
+        Instrument[] instruments = [.. pairs.Keys.Order(StringComparer.Ordinal).Select(symbol => new Instrument(symbol, symbol))];
+        return BacktestPasses.RunAsync(
+            instruments,
+            StrategyKind.Idea,
+            plans,
+            (pair, _, _) => Task.FromResult(new PairHistory(pairs[pair.Symbol].Candles(timeframes), pairs[pair.Symbol].Funding(), pairs[pair.Symbol].Minutes)),
+            CancellationToken.None,
+            computed: computed);
+    }
+
     private IEnumerable<HistoryCandle> CandlesOf(TimeSpan timeframe)
     {
         for (DateTimeOffset open = Monday; open + timeframe <= End; open += timeframe)

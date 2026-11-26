@@ -9,35 +9,41 @@ using ProfitFox.Domain.ValueObjects.Trades;
 namespace ProfitFox.Tests.Integration.Application.Commands.Backtests;
 
 /// <summary>
-///     The digests of the results of a reference strategy (change add-strategy-backtest, design.md, decision 7, step 3):
-///     the rows of the orders with their trades, the random entries with theirs, the weekly means and the numbers of the
-///     set; and apart, the trades of the orders alone and of the random entries alone, which the transition from engine
-///     version 2 keeps.
+///     The digests of the results of a reference strategy (change add-strategy-backtest, design.md, decision 7, step 3;
+///     change fix-backtest-random-control, design.md, decision 7): the rows of the orders with their trades, the random
+///     entries with theirs (pair, moment, side, outcome), the cells of control, the weekly means and the numbers of the set;
+///     and apart, the trades of the orders alone, which engine version 5 keeps from version 4.
 /// </summary>
 internal static class EngineDigests
 {
-    public static string Of(IReadOnlyList<EventRow> rows, SetNumbers numbers)
+    public static string Of(ReferenceRun run)
     {
         var text = new StringBuilder();
-        foreach (EventRow row in rows)
+        foreach (EventRow row in run.Rows)
         {
-            Line(text, "order", row.Instrument, row.Moment.ToUnixTimeMilliseconds(), row.Block, row.Status, row.RandomValid, row.NetAmount);
+            Line(text, "order", row.Instrument, row.Moment.ToUnixTimeMilliseconds(), row.Side, row.Block, row.Status, row.NetAmount);
             Fields(text, "order-fields", row.Event);
-            Fields(text, "random-mean", row.RandomMean);
             Outcome(text, "order-outcome", row.Outcome);
-            foreach (RandomTrade random in row.Randoms)
-            {
-                Line(text, "random", random.Entry.ToUnixTimeMilliseconds());
-                Outcome(text, "random-outcome", random.Outcome);
-            }
         }
 
-        foreach ((long week, double mean, int orders) in numbers.WeekMeans())
+        foreach (RandomTrade random in run.Randoms)
+        {
+            Line(text, "random", random.Instrument, random.Entry.ToUnixTimeMilliseconds(), random.Side);
+            Outcome(text, "random-outcome", random.Outcome);
+        }
+
+        foreach ((PairOrder order, TradeFields mean, int valid) in run.Cells.All)
+        {
+            Line(text, "cell", order.Moment.ToUnixTimeMilliseconds(), order.Side, valid);
+            Fields(text, "cell-mean", mean);
+        }
+
+        foreach ((long week, double mean, int orders) in run.Numbers.WeekMeans())
         {
             Line(text, "week", week, mean, orders);
         }
 
-        var set = SetSummary.Of(numbers);
+        var set = SetSummary.Of(run.Numbers);
         Line(text, "set", set.Orders, set.Trades, set.PairsWithTrades, set.Mean, set.Amount, set.WinShare, set.Skipped, set.OpenCycles, set.OpenAmount);
         Line(text, "excluded", set.Excluded.Plan, set.Excluded.Coverage, set.Excluded.Funding, set.Excluded.NoTrade, set.Excluded.Period);
         Line(text, "difference", set.Difference?.Mean, set.Difference?.Weeks, set.Difference?.T);
@@ -54,24 +60,6 @@ internal static class EngineDigests
         {
             Line(text, "order", row.Instrument, row.Moment.ToUnixTimeMilliseconds(), row.Status);
             Outcome(text, "order-outcome", row.Outcome);
-        }
-
-        return Hash(text);
-    }
-
-    /// <summary>
-    ///     The random entries of the orders with their trades.
-    /// </summary>
-    public static string Randoms(IReadOnlyList<EventRow> rows)
-    {
-        var text = new StringBuilder();
-        foreach (EventRow row in rows)
-        {
-            foreach (RandomTrade random in row.Randoms)
-            {
-                Line(text, "random", row.Instrument, random.Entry.ToUnixTimeMilliseconds());
-                Outcome(text, "random-outcome", random.Outcome);
-            }
         }
 
         return Hash(text);

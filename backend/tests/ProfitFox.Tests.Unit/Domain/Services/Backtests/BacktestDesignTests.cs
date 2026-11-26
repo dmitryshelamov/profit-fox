@@ -10,7 +10,7 @@ namespace ProfitFox.Tests.Unit.Domain.Services.Backtests;
 
 /// <summary>
 ///     Change add-strategy-backtest, task 4.1 (design.md, decision 4): the time of an order is that of its step, not of a
-///     plan, and the seed of the draw is an input of the calculation.
+///     plan; a random entry takes the time of the step of its own pair (change fix-backtest-random-control).
 /// </summary>
 public sealed class BacktestDesignTests
 {
@@ -35,32 +35,26 @@ public sealed class BacktestDesignTests
     }
 
     [Test]
-    public void A_random_entry_is_a_close_whose_candle_has_a_time_that_ends_by_the_end()
+    public void A_random_entry_is_taken_when_the_time_of_the_step_of_its_pair_ends_by_the_end()
     {
         BacktestDesign design = Design(end: Monday.AddDays(2));
-        // The candles of Monday give 4h, those of Tuesday 2d: none of Tuesday fits before Wednesday 00:00.
-        Func<DateTimeOffset, TimeSpan?> after = moment => moment < Monday.AddDays(1) ? FourHours : TimeSpan.FromDays(2);
+        // The steps of ETHUSDT give 4h on Monday and 2d from Tuesday: an entry on Tuesday does not end before Wednesday 00:00.
+        PairSteps steps = Steps((Monday, FourHours, null), (Monday.AddDays(1), TimeSpan.FromDays(2), null));
+        var orders = new SetOrders(
+            new Dictionary<string, IReadOnlyList<PairOrder>> { ["SOLUSDT"] = [new PairOrder(Monday.AddHours(12), EntrySide.Short), new PairOrder(Monday.AddDays(1).AddHours(4), EntrySide.Short)] },
+            TimeBlock.Week);
+        var groups = new ControlGroups(new Dictionary<string, DateTimeOffset> { ["ETHUSDT"] = Monday }, TimeBlock.Week, size: 20);
 
-        IReadOnlyList<DateTimeOffset> candidates = new RandomEntries("BTCUSDT", [Monday.AddHours(12)], design, after).Candidates(Week);
+        var evaluation = new PairEvaluation("ETHUSDT", steps, design, new SetControl(orders, groups));
 
-        Assert.That(candidates, Has.All.LessThan(Monday.AddDays(1)));
-        Assert.That(candidates, Has.Count.EqualTo(5), "00:00 to 20:00 of Monday but the order at 12:00");
-        Assert.That(candidates, Has.None.EqualTo(Monday.AddHours(12)));
-    }
+        (DateTimeOffset from, DateTimeOffset to) = evaluation.Span(Week);
+        int length = (int)(to - from).TotalMinutes;
+        double[] prices = [.. Enumerable.Repeat(100.0, length)];
+        var path = new MinutePath(from, prices, prices, prices, prices, [.. Enumerable.Repeat(true, length)], [], from, to.AddDays(1));
 
-    [Test]
-    public void The_draw_follows_the_seed()
-    {
-        BacktestDesign design = Design(end: Monday.AddDays(7));
-        IReadOnlyList<DateTimeOffset> candidates = new RandomEntries("BTCUSDT", [], design, _ => FourHours).Candidates(Week);
-
-        DateTimeOffset[] first = new RandomEntries("BTCUSDT", [], design, _ => FourHours).Draw(candidates);
-        DateTimeOffset[] again = new RandomEntries("BTCUSDT", [], design, _ => FourHours).Draw(candidates);
-        DateTimeOffset[] other = new RandomEntries("BTCUSDT", [], design with { Seed = "another" }, _ => FourHours).Draw(candidates);
-
-        Assert.That(again, Is.EqualTo(first));
-        Assert.That(other, Is.Not.EqualTo(first));
-        Assert.That(first, Has.Length.EqualTo(20));
+        Assert.That(evaluation.Blocks, Is.EqualTo(new[] { Week }));
+        Assert.That(to, Is.EqualTo(Monday.AddDays(2)), "never past the end");
+        Assert.That(evaluation.Evaluate(Week, path).Randoms.Select(random => random.Entry), Is.EqualTo(new[] { Monday.AddHours(12) }));
     }
 
     [Test]
@@ -77,7 +71,7 @@ public sealed class BacktestDesignTests
 
     private static BacktestDesign Design(DateTimeOffset end)
     {
-        return new BacktestDesign(Monday, end, FourHours, "seed", TradeCosts.Default);
+        return new BacktestDesign(Monday, end, FourHours, TradeCosts.Default);
     }
 
     // Steps with the given times, some of them orders; the rest of the week has no step.

@@ -32,7 +32,8 @@ public sealed class Backtest : AggregateRoot
     public const int BotWeeks = 26;
 
     /// <summary>
-    ///     The random entries of each order of a category of ideas.
+    ///     The most pairs of the control group of a week of a category of ideas (change fix-backtest-random-control,
+    ///     design.md, decision 3): an order has at most this many random entries, one on each pair of the group.
     /// </summary>
     public const int Randoms = 20;
 

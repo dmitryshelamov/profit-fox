@@ -20,10 +20,13 @@ using ProfitFox.Domain.ValueObjects.Runs;
 namespace ProfitFox.Application.Commands.Backtests.ExecuteBacktest;
 
 /// <summary>
-///     A backtest of the queue (change add-strategy-backtest, design.md, decision 4): pair by pair in the order of their
-///     symbols, every set on the history of the pair read once, never after the end of history and with every read added to
-///     the hash of the backtest. A read the market-data service dropped is repeated after the pauses of
-///     <see cref="HistoryRepeats" /> (task 12.12); the time of reading counts the pauses too. Only the numbers of the sets and of the pairs stay in memory. The backtest ends as done with
+///     A backtest of the queue (change add-strategy-backtest, design.md, decision 4; change fix-backtest-random-control,
+///     design.md, decisions 4 and 6): pair by pair in the order of their symbols, every set on the history of the pair, in two
+///     passes for a category of ideas (<see cref="BacktestPasses" />), never after the end of history and with every first
+///     read added to the hash of the backtest. A pair counts as half passed after each pass of a category of ideas: the
+///     progress is half the sum of the pairs of both passes, rounded down. A read the market-data service dropped is repeated after the pauses of
+///     <see cref="HistoryRepeats" /> (task 12.12); the time of reading counts the pauses too. Only the orders between the passes, and the numbers of the sets and of the pairs and what is kept of the orders with a
+///     trade to the end, stay in memory. The backtest ends as done with
 ///     them in one step, or as failed with the error when the calculation fails; a cancelled backtest or one whose Worker
 ///     lost the lease writes nothing here. The line of the journal on its end tells what the cache of history did for it
 ///     (change add-backtest-history-cache, decision 9): the Worker computes one backtest at a time and the scanner does not
@@ -67,21 +70,9 @@ internal sealed class ExecuteBacktestCommandHandler(
         IReadOnlyList<Instrument> listed = await instruments.LinearUsdtPerpetuals(cancellationToken);
         Instrument[] pairs = [.. Pairs(listed, settings.Pairs)];
         IReadOnlyDictionary<TimeSpan, IReadOnlyDictionary<string, IReadOnlyList<HistoryCandle>>>? named = await PairBacktestRun.NamedAsync(history, StrategyGraph.NamedPairs(backtest.Graph), listed, plans, cancellationToken);
-        SetNumbers[] totals = [.. plans.Select(_ => SetNumbers.Zero)];
-        List<(string Pair, SetNumbers Numbers)>[] byPair = [.. plans.Select(_ => new List<(string, SetNumbers)>())];
         request.Progress?.Begin(pairs.Length);
-        foreach (Instrument pair in pairs)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            IReadOnlyList<PairSetResult> results = await PairBacktestRun.RunAsync(history, pair, backtest.Kind, plans, cancellationToken, named);
-            for (int index = 0; index < results.Count; index++)
-            {
-                totals[index] += results[index].Numbers;
-                byPair[index].Add((pair.Symbol, results[index].Numbers));
-            }
-
-            request.Progress?.Advance();
-        }
+        var halves = new PairHalves(request.Progress);
+        IReadOnlyList<SetTotals> totals = await PairBacktestRun.RunAsync(history, pairs, backtest.Kind, plans, cancellationToken, named, halves.Passed);
 
         TimeSpan read = timed.Elapsed;
         TimeSpan compute = clock.Elapsed - read;
@@ -89,8 +80,8 @@ internal sealed class ExecuteBacktestCommandHandler(
             [
                 .. plans.Select((plan, index) => (
                     plan.Set,
-                    SetSummary.Of(totals[index]),
-                    (IReadOnlyList<PairSummary>)[.. PairNumbers.Ordered(byPair[index]).Select(pair => new PairSummary(pair.Pair, SetSummary.Of(pair.Numbers)))]))
+                    SetSummary.Of(totals[index].Numbers),
+                    (IReadOnlyList<PairSummary>)[.. PairNumbers.Ordered(totals[index].Pairs).Select(pair => new PairSummary(pair.Pair, SetSummary.Of(pair.Numbers)))]))
             ],
             EngineVersion.Number,
             hash.Result(),

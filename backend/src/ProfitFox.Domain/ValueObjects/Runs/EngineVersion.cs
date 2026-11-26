@@ -21,9 +21,14 @@ namespace ProfitFox.Domain.ValueObjects.Runs;
 ///             known live at its close. What a position pays or receives is not changed: the payments at
 ///             <c>entry &lt; t ≤ exit</c>.
 ///         </item>
+///         <item>
+///             5: a random entry of an order is another pair of the control group of its week at the moment of the order, on
+///             its side (change fix-backtest-random-control), instead of a random close of the same week on the same pair; no
+///             seed. The trades of the orders are those of version 4: only the random entries and the difference change.
+///         </item>
 ///     </list>
 /// </summary>
 public static class EngineVersion
 {
-    public const int Number = 4;
+    public const int Number = 5;
 }

@@ -23,14 +23,9 @@ internal static class Designs
     /// </summary>
     public static readonly TradingStrategy H0001 = Read(File.ReadAllText(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "H0001.strategy.json")));
 
-    /// <summary>
-    ///     The hash of the text of the hypothesis H0001, the seed the tests of random entries were written with.
-    /// </summary>
-    public const string H0001Seed = "5591d11ad4f58bd94c74f86b8af3ae9be5cb1a28086039687c8d385d4fa2a84f";
-
     public static BacktestDesign Exploration(int randoms = 20)
     {
-        return new BacktestDesign(HistoryPeriod.DataStart, ExplorationEnd, TimeSpan.FromHours(4), H0001Seed, TradeCosts.Default) { Randoms = randoms };
+        return new BacktestDesign(HistoryPeriod.DataStart, ExplorationEnd, TimeSpan.FromHours(4), TradeCosts.Default) { Randoms = randoms };
     }
 
     /// <summary>

@@ -134,7 +134,8 @@ public sealed class ExecuteBacktestHistoryCacheTests
         await Run(Cached(), Generate(Day(2026, 3, 16), thresholds: ["0.0003", "0.0004", "0.0005", "0.00055", "0.0006", "0.001"]));
 
         CandleHistoryRequest[] btc = [.. _server.Data.CandleRequests.Where(request => request.InstrumentIds.Single() == "btc")];
-        Assert.That(btc.Count(request => request.Interval == CandleInterval.FourHours), Is.EqualTo(1));
+        // The second pass reads the 4h candles from the cache but January, the month of the listing, which it does not keep.
+        Assert.That(btc.Where(request => request.Interval == CandleInterval.FourHours).Select(request => request.To.ToDateTimeOffset()), Is.EqualTo(new[] { Day(2026, 4, 1), February }));
         (DateTimeOffset From, DateTimeOffset To)[] minutes = [.. btc.Where(request => request.Interval != CandleInterval.FourHours).Select(request => (request.From.ToDateTimeOffset(), request.To.ToDateTimeOffset())).OrderBy(window => window.Item1)];
         Assert.That(minutes, Is.Not.Empty);
         Assert.That(minutes, Is.Unique, "each window once for the six sets");
@@ -142,7 +143,7 @@ public sealed class ExecuteBacktestHistoryCacheTests
         // listing, is asked whole by its first week and by the window of each week after (decision 4).
         (DateTimeOffset From, DateTimeOffset To)[] kept = [.. minutes.Where(window => window.To > February)];
         Assert.That(kept.Zip(kept.Skip(1)).Select(pair => pair.First.To <= pair.Second.From), Has.All.True, "no minute of a whole month is asked twice");
-        Assert.That(_server.Data.FundingRequests.Count(request => request.InstrumentIds.Single() == "btc"), Is.EqualTo(1));
+        Assert.That(_server.Data.FundingRequests.Count(request => request.InstrumentIds.Single() == "btc"), Is.EqualTo(2), "the funding of January again");
     }
 
     /// <summary>
@@ -178,7 +179,10 @@ public sealed class ExecuteBacktestHistoryCacheTests
 
         BacktestOutcome cached = await Run(Cached(), Generate(end));
 
-        Assert.That(_server.Data.CandleRequests.Where(request => request.Interval == CandleInterval.FourHours).Select(request => request.To.ToDateTimeOffset()), Has.All.EqualTo(Day(2026, 6, 1)));
+        // The first pass reads up to the end of May; the second reads from the cache but January, the month of the listing.
+        Assert.That(
+            _server.Data.CandleRequests.Where(request => request.Interval == CandleInterval.FourHours).Select(request => request.To.ToDateTimeOffset()),
+            Is.EqualTo(new[] { Day(2026, 6, 1), Day(2026, 6, 1), Day(2026, 6, 1), February, February, February }));
         Assert.That(File.Exists(Path.Combine(_folder.Path, "btc", "candles-4h", "2026-05.gz")), Is.True);
         Assert.That(cached.DataHash, Is.EqualTo(plain.DataHash));
         Assert.That(Numbers(cached), Is.EqualTo(Numbers(plain)));

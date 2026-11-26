@@ -232,6 +232,9 @@ public sealed class BacktestsTests
     [Test]
     public async Task A_set_and_its_pairs()
     {
+        // The orders of the three pairs at their own moments, so that each takes random entries on the other two.
+        _market.Data.HighPayments["eth"] = 2;
+        _market.Data.HighPayments["sol"] = 0;
         await SaveStrategy(Http, "funding-short", FundingShort(), "idea");
         _worker = await WorkerHost.Start(_market, "w-1");
         BacktestResponse done = await Ended(Http, (await Queued(Http, new JsonObject

@@ -16,7 +16,7 @@ public sealed class MarketHistory
 {
     private readonly IHistorySource _source;
     private readonly DateTimeOffset _readUntil;
-    private readonly HistoryHash _hash;
+    private readonly HistoryHash? _hash;
     private readonly DateTimeOffset _today;
 
     /// <param name="source">Where the history is read from.</param>
@@ -29,6 +29,24 @@ public sealed class MarketHistory
         _readUntil = readUntil;
         _hash = hash;
         _today = HistoryPeriod.Today(time.GetUtcNow());
+    }
+
+    private MarketHistory(MarketHistory history)
+    {
+        _source = history._source;
+        _readUntil = history._readUntil;
+        _hash = null;
+        _today = history._today;
+    }
+
+    /// <summary>
+    ///     The same history, with the same current day, whose reads are not added to the hash: what a run reads a second time
+    ///     (change fix-backtest-random-control, design.md, decision 6). The covered history does not change (spec
+    ///     market-history), so the second read is the first one.
+    /// </summary>
+    public MarketHistory Again()
+    {
+        return new MarketHistory(this);
     }
 
     /// <summary>
@@ -45,7 +63,7 @@ public sealed class MarketHistory
         CheckWindow(from, to);
         HistoryRead<HistoryCandle> read = await _source.ReadCandles(instrumentId, interval, from, to, cancellation);
         read = read with { Coverage = Coverage.Trim(read.Coverage, from, to) };
-        _hash.Add(instrumentId, interval, read);
+        _hash?.Add(instrumentId, interval, read);
         return read;
     }
 
@@ -71,7 +89,7 @@ public sealed class MarketHistory
         CheckWindow(from, to);
         HistoryRead<HistoryPayment> read = await _source.ReadFunding(instrumentId, from, to, cancellation);
         read = read with { Coverage = Coverage.Trim(read.Coverage, from, to) };
-        _hash.Add(instrumentId, read);
+        _hash?.Add(instrumentId, read);
         return read;
     }
 
@@ -92,7 +110,7 @@ public sealed class MarketHistory
         DateTimeOffset to = through < _today ? through + TimeSpan.FromSeconds(1) : through;
         HistoryRead<HistoryPayment> read = await _source.ReadFunding(instrumentId, from, to, cancellation);
         read = read with { Coverage = Coverage.Trim(read.Coverage, from, to) };
-        _hash.Add(instrumentId, read);
+        _hash?.Add(instrumentId, read);
         return read;
     }
 

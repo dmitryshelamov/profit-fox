@@ -8,7 +8,7 @@ namespace ProfitFox.Domain.Services.Backtests;
 /// <summary>
 ///     The sets of a backtest as its pairs compute them (change add-strategy-backtest, design.md, decisions 3 and 4): for
 ///     each set the expanded graph of the version with the values of the set, the strategy it is, and its design — the
-///     history and the costs of the settings, the timeframe of the set and the seed of its graph and timeframe.
+///     history and the costs of the settings and the timeframe of the set.
 /// </summary>
 public static class BacktestPlans
 {
@@ -26,7 +26,7 @@ public static class BacktestPlans
                 throw new InvalidOperationException($"Set {set.Number} does not read as a strategy: {string.Join("; ", read.Errors)}");
             }
 
-            var design = new BacktestDesign(settings.Start, settings.End, set.Timeframe, BacktestSeed.Of(changed, set.Timeframe), settings.Costs);
+            var design = new BacktestDesign(settings.Start, settings.End, set.Timeframe, settings.Costs);
             plans.Add(new BacktestPlan(set.Number, strategy, design));
         }
 
