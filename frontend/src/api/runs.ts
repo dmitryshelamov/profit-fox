@@ -4,6 +4,10 @@ import { api, ApiError, type RequestError, type Schemas, unwrap } from './client
 export type Run = Schemas['BacktestResponse'];
 export type RunSet = Schemas['BacktestSetResponse'];
 export type SetNumbers = Schemas['SetNumbersResponse'];
+/** The numbers of a set of ideas by weeks (spec strategy-backtest «Числа набора по неделям»). */
+export type WeeklyNumbers = Schemas['WeeklyNumbersResponse'];
+/** The mark of a set of ideas of engine version 5 and later, with its five conditions (spec strategy-backtest «Отметка набора»). */
+export type SetMark = Schemas['SetMarkResponse'];
 export type SetPairs = Schemas['BacktestSetPairsResponse'];
 export type RunRequest = Schemas['CreateBacktestRequest'];
 

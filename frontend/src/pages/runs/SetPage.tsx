@@ -3,21 +3,29 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { type ReactNode, useState } from 'react';
 
 import type { RequestError } from '@/api/client';
-import { enqueueRest, getRun, getRunSet, type Run, type SetNumbers } from '@/api/runs';
+import {
+  enqueueRest,
+  getRun,
+  getRunSet,
+  type Run,
+  type SetMark,
+  type SetNumbers,
+} from '@/api/runs';
 import { strategyKindOf } from '@/modules/graph-editor/document';
 import { ErrorList } from '@/preview/ErrorList';
 import { Button } from '@/shared/ui/Button';
 import { Page, SectionTitle } from '@/shared/ui/Page';
 
-import { grouped, signedPercent, signedUsdt } from './labels';
-import { numberColumns } from './numbers';
+import { fixed, grouped, signedPercent, signedUsdt } from './labels';
+import { MarkBadge, numberColumns, weeksUp } from './numbers';
 import { todayUtc } from './RunFormPage';
 import { RunHead } from './RunPage';
 import { SortedTable } from './SortedTable';
 
 /**
  * One set of a run, `/runs/<id>/sets/<n>` (spec bench-run-queue «Набор прогона на странице»): its values, its numbers,
- * the numbers of each pair with orders and «Прогнать на остатке истории».
+ * for a set of ideas its numbers by weeks and the five conditions of its mark, the numbers of each pair with orders and
+ * «Прогнать на остатке истории».
  */
 export function SetPage({ id, number }: { readonly id: string; readonly number: number }) {
   const run = useQuery({ queryKey: ['run', id], queryFn: () => getRun(id) });
@@ -122,6 +130,8 @@ export function SetResult({ run, number }: { readonly run: Run; readonly number:
       {set.isPending && run.state === 'done' && <p className="text-muted">Загрузка…</p>}
       {set.error && <p className="text-err">{set.error.message}</p>}
       {numbers && <Summary numbers={numbers} idea={idea} />}
+      {numbers && idea && <Weekly numbers={numbers} />}
+      {numbers && idea && shown?.mark && <Mark mark={shown.mark} numbers={numbers} />}
       {set.data && (
         <>
           <SectionTitle title="Пары" count={set.data.pairs.length} />
@@ -222,6 +232,103 @@ function Summary({ numbers, idea }: { readonly numbers: SetNumbers; readonly ide
         {String(excluded.period)} · пропущено {String(numbers.skipped)}
       </p>
     </div>
+  );
+}
+
+/** The numbers of a set of ideas by weeks as tiles (spec strategy-backtest «Числа набора по неделям»). */
+function Weekly({ numbers }: { readonly numbers: SetNumbers }) {
+  const weekly = numbers.weekly;
+  return (
+    <div className="grid grid-cols-3 gap-3.5">
+      <Tile name="По неделям">{signedPercent(weekly?.mean)}</Tile>
+      <Tile name="Недель в плюсе">{weeksUp(weekly)}</Tile>
+      <Tile name="Без лучших недель">
+        {signedUsdt(weekly?.withoutBest)}
+        {weekly && (
+          <span className="ml-2 text-xs text-muted">без {String(weekly.bestWeeks)} лучших</span>
+        )}
+      </Tile>
+    </div>
+  );
+}
+
+/** The hint of a candidate: the rule was met on the period of the grid only. */
+const candidateHint =
+  'Набор выполнил правило на периоде подбора. Проверьте его на остатке истории.';
+
+/**
+ * The mark of a set and its five conditions, each with its number and whether it is met (spec strategy-backtest «Условия
+ * отметки набора», «Отметка набора»): the list is there for a set without a mark too, so it tells what was missing.
+ */
+function Mark({ mark, numbers }: { readonly mark: SetMark; readonly numbers: SetNumbers }) {
+  const weekly = numbers.weekly;
+  const difference = numbers.difference;
+  const conditions: readonly {
+    readonly text: string;
+    readonly value: string;
+    readonly met: boolean;
+  }[] = [
+    {
+      text: 'Сделки не меньше чем в 20 неделях',
+      value: weekly ? `недель со сделками: ${String(weekly.weeks)}` : '—',
+      met: mark.conditions.weeks,
+    },
+    {
+      text: 'Среднее по неделям выше нуля',
+      value: signedPercent(weekly?.mean),
+      met: mark.conditions.weeklyMean,
+    },
+    {
+      text: 'В плюсе не меньше половины недель',
+      value: weeksUp(weekly),
+      met: mark.conditions.weeksUp,
+    },
+    {
+      text: 'Сумма без лучших недель выше нуля',
+      value:
+        weekly?.withoutBest === null || weekly?.withoutBest === undefined
+          ? '—'
+          : `${signedUsdt(weekly.withoutBest)} USDT`,
+      met: mark.conditions.withoutBest,
+    },
+    {
+      text: 'Разница выше нуля при t не меньше 2',
+      value: difference ? `${signedPercent(difference.mean)} · t ${fixed(difference.t, 2)}` : '—',
+      met: mark.conditions.difference,
+    },
+  ];
+
+  return (
+    <section
+      aria-label="Отметка"
+      className="flex flex-col gap-3 rounded-[10px] border border-line bg-panel px-5 py-4"
+    >
+      <div aria-label="Отметка набора" className="flex flex-wrap items-center gap-3 text-sm">
+        <span className="font-bold">Отметка</span>
+        {mark.value === null || mark.value === undefined ? (
+          <span className="text-muted">отметки нет</span>
+        ) : (
+          <MarkBadge value={mark.value} />
+        )}
+      </div>
+      {mark.value === 'candidate' && <p className="text-xs text-muted">{candidateHint}</p>}
+      <ul aria-label="Условия отметки" className="flex flex-col gap-1.5 text-xs">
+        {conditions.map((condition) => (
+          <li
+            key={condition.text}
+            data-met={String(condition.met)}
+            className="flex items-center gap-2"
+          >
+            <span aria-hidden="true" className={condition.met ? 'text-ok' : 'text-err'}>
+              {condition.met ? '✓' : '✕'}
+            </span>
+            <span>{condition.text}</span>
+            <span className="font-mono text-muted">{condition.value}</span>
+            <span className="sr-only">{condition.met ? 'выполнено' : 'не выполнено'}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

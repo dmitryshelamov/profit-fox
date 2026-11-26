@@ -342,6 +342,8 @@ describe('the page of a run', () => {
     expect(at('Прибыльных')).toBe('—');
     expect(at('Разница')).toBe('—');
     expect(at('t')).toBe('—');
+    expect(at('По неделям')).toBe('—');
+    expect(at('Недель в плюсе')).toBe('—');
   });
 
   // Scenario «Лесенка без разницы».
@@ -358,6 +360,9 @@ describe('the page of a run', () => {
     expect(heads).toContain('Сумма, USDT↓');
     expect(heads.some((head) => head?.startsWith('Разница'))).toBe(false);
     expect(heads.some((head) => head === 't')).toBe(false);
+    expect(heads.some((head) => head?.startsWith('По неделям'))).toBe(false);
+    expect(heads.some((head) => head?.startsWith('Недель в плюсе'))).toBe(false);
+    expect(heads.some((head) => head?.startsWith('Отметка'))).toBe(false);
   });
 
   // Scenario «Двести наборов».
@@ -475,6 +480,301 @@ const pairsOfFour = {
 };
 
 // Spec bench-run-queue «Набор прогона на странице».
+/** The numbers by weeks of a set: weeks with trades, their mean, the weeks up and the sum without the best weeks. */
+function weekly(weeks: number, mean: number, weeksUp: number, withoutBest: number | null = null) {
+  return { weeks, mean, weeksUp, bestWeeks: Math.max(3, Math.ceil(weeks / 10)), withoutBest };
+}
+
+/** A mark of a set with the conditions met. */
+function mark(value: string | null, met: readonly boolean[]) {
+  const [weeks, weeklyMean, weeksUp, withoutBest, difference] = met;
+  return {
+    value,
+    conditions: {
+      weeks: weeks!,
+      weeklyMean: weeklyMean!,
+      weeksUp: weeksUp!,
+      withoutBest: withoutBest!,
+      difference: difference!,
+    },
+  };
+}
+
+/** The cells of a row of the table of sets by the titles of the columns. */
+function cellsOf(name: string): (title: string) => string | null | undefined {
+  const row = within(screen.getByRole('row', { name }));
+  const cells = row.getAllByRole('cell').map((cell) => cell.textContent);
+  const heads = within(screen.getByRole('table', { name: 'Наборы прогона' }))
+    .getAllByRole('columnheader')
+    .map((cell) => cell.textContent!.replace(/[↓↑]/, '').trim());
+  return (title: string) => cells[heads.indexOf(title)];
+}
+
+/** A run of version 5 of the engine with sets of the numbers and marks given. */
+function version5(sets: readonly RunSet[], extra: Partial<Run> = {}): Run {
+  return { ...doneSix, engineVersion: 5, setCount: sets.length, sets: [...sets], ...extra };
+}
+
+// Spec bench-run-queue «Пометка разницы старой версии движка».
+describe('the note on the difference of an older engine', () => {
+  // Scenario «Прогон версии 4».
+  it('stands over the table of sets of a run of ideas of version 4', async () => {
+    routes({ 'GET /api/backtests/r1': () => json({ ...doneSix, engineVersion: 4 }) });
+    renderApp('/runs/r1');
+
+    const note = await screen.findByRole('note', { name: 'Разница старой версии' });
+    expect(note).toHaveTextContent(
+      'Разница этого прогона посчитана старым способом — со случайными моментами той же недели на той же паре — и с разницей новых прогонов не сравнима',
+    );
+    const table = screen.getByRole('table', { name: 'Наборы прогона' });
+    expect(note.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  // Scenario «Прогон версии 5».
+  it('is not on a run of version 5', async () => {
+    routes({ 'GET /api/backtests/r1': () => json(version5(six)) });
+    renderApp('/runs/r1');
+
+    await screen.findByRole('table', { name: 'Наборы прогона' });
+    expect(screen.queryByRole('note', { name: 'Разница старой версии' })).toBeNull();
+  });
+
+  // Scenario «Лесенка версии 4».
+  it('is not on a run of a strategy of a bot of version 4', async () => {
+    const ladder = {
+      ...doneSix,
+      engineVersion: 4,
+      strategy: { ...doneSix.strategy, name: 'ladder', kind: 'bot' },
+    };
+    routes({ 'GET /api/backtests/r1': () => json(ladder) });
+    renderApp('/runs/r1');
+
+    await screen.findByRole('table', { name: 'Наборы прогона' });
+    expect(screen.queryByRole('note', { name: 'Разница старой версии' })).toBeNull();
+  });
+});
+
+// Spec bench-run-queue «Таблица наборов прогона»: the numbers by weeks and the mark.
+describe('the numbers by weeks and the mark in the table of sets', () => {
+  // Scenario «Недели в плюсе».
+  it('shows the mean by weeks and the weeks up of all the weeks', async () => {
+    const sets = [
+      set(1, '0.0005', '4h', {
+        trades: 4265,
+        mean: 0.0024,
+        amount: 1023.6,
+        weekly: weekly(28, -0.0014, 10, -1460),
+      }),
+    ];
+    routes({ 'GET /api/backtests/r1': () => json(version5(sets)) });
+    renderApp('/runs/r1');
+
+    await screen.findByRole('table', { name: 'Наборы прогона' });
+    const at = cellsOf('Набор 1');
+    expect(at('По неделям')).toBe('-0.14 %');
+    expect(at('Недель в плюсе')).toBe('10 из 28');
+  });
+
+  // Scenario «Отметка на остатке».
+  it('shows «не прошёл» of a set of a run on the rest of history', async () => {
+    const sets = [
+      {
+        ...set(1, '0.0005', '4h', { trades: 40, weekly: weekly(28, -0.0014, 10, -1460) }),
+        mark: mark('failed', [true, false, false, false, false]),
+      },
+    ];
+    routes({
+      'GET /api/backtests/r1': () => json(version5(sets, { source: { backtest: 'r0', set: 22 } })),
+    });
+    renderApp('/runs/r1');
+
+    await screen.findByRole('table', { name: 'Наборы прогона' });
+    expect(cellsOf('Набор 1')('Отметка')).toBe('не прошёл');
+  });
+
+  // Scenario «Подбор с кандидатами».
+  it('shows «кандидат» at the two candidates of a grid and a dash at the others', async () => {
+    const candidate = mark('candidate', [true, true, true, true, true]);
+    const none = mark(null, [true, true, true, true, false]);
+    const sets = Array.from({ length: 27 }, (_, index) => ({
+      ...set(index + 1, String(index), '4h', { trades: 10 + index, amount: index }),
+      mark: index === 3 || index === 20 ? candidate : none,
+    }));
+    routes({ 'GET /api/backtests/r1': () => json(version5(sets)) });
+    renderApp('/runs/r1');
+
+    await screen.findByRole('table', { name: 'Наборы прогона' });
+    const marks = sets.map((item) => cellsOf(`Набор ${String(item.number)}`)('Отметка'));
+    expect(marks.filter((text) => text === 'кандидат')).toHaveLength(2);
+    expect(marks.filter((text) => text === '—')).toHaveLength(25);
+    expect(cellsOf('Набор 4')('Отметка')).toBe('кандидат');
+    expect(cellsOf('Набор 21')('Отметка')).toBe('кандидат');
+  });
+
+  it('sorts by the mark: «прошёл», «кандидат», «не доказан», «не прошёл», then the sets without one', async () => {
+    const sets = [
+      {
+        ...set(1, 'a', '4h', { trades: 1 }),
+        mark: mark('failed', [false, false, false, false, false]),
+      },
+      {
+        ...set(2, 'b', '4h', { trades: 1 }),
+        mark: mark(null, [false, false, false, false, false]),
+      },
+      { ...set(3, 'c', '4h', { trades: 1 }), mark: mark('passed', [true, true, true, true, true]) },
+      {
+        ...set(4, 'd', '4h', { trades: 1 }),
+        mark: mark('unproven', [true, true, true, false, true]),
+      },
+      {
+        ...set(5, 'e', '4h', { trades: 1 }),
+        mark: mark('candidate', [true, true, true, true, true]),
+      },
+    ];
+    routes({ 'GET /api/backtests/r1': () => json(version5(sets)) });
+    renderApp('/runs/r1');
+    await screen.findByRole('table', { name: 'Наборы прогона' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Отметка' }));
+    expect(setOrder()).toEqual(['3', '5', '4', '1', '2']);
+    await userEvent.click(screen.getByRole('button', { name: /Отметка/ }));
+    expect(setOrder()).toEqual(['1', '4', '5', '3', '2']);
+  });
+
+  it('has no columns by weeks and no mark in the table of the pairs of a set', async () => {
+    const one = version5([
+      {
+        ...set(4, '0.0005', '4h', { trades: 18, weekly: weekly(28, 0.001, 15, 10) }),
+        mark: mark(null, [true, true, true, true, false]),
+      },
+    ]);
+    routes({
+      'GET /api/backtests/r1': () => json(one),
+      'GET /api/backtests/r1/sets/4': () => json({ ...pairsOfFour, set: one.sets[0] }),
+    });
+    renderApp('/runs/r1/sets/4');
+
+    const table = within(await screen.findByRole('table', { name: 'Пары набора' }));
+    const heads = table.getAllByRole('columnheader').map((cell) => cell.textContent);
+    expect(heads.some((head) => head?.startsWith('По неделям'))).toBe(false);
+    expect(heads.some((head) => head?.startsWith('Недель в плюсе'))).toBe(false);
+    expect(heads.some((head) => head?.startsWith('Отметка'))).toBe(false);
+  });
+});
+
+// Spec bench-run-queue «Набор прогона на странице»: the numbers by weeks and the five conditions.
+describe('the numbers by weeks and the conditions on the page of a set', () => {
+  // Scenario «Условия отметки».
+  it('shows «не прошёл» and the five conditions with their numbers, the first met and the others not', async () => {
+    const failed = {
+      ...set(4, '0.0005', '4h', {
+        trades: 4265,
+        mean: 0.0024,
+        amount: 1023.6,
+        difference: { mean: 0.0002, weeks: 28, t: 0.1 },
+        weekly: weekly(28, -0.0014, 10, -1460),
+      }),
+      mark: mark('failed', [true, false, false, false, false]),
+    };
+    const rest = version5([failed], { source: { backtest: 'r0', set: 22 } });
+    routes({
+      'GET /api/backtests/r1': () => json(rest),
+      'GET /api/backtests/r1/sets/4': () => json({ ...pairsOfFour, set: failed }),
+    });
+    renderApp('/runs/r1/sets/4');
+
+    expect(await screen.findByRole('group', { name: 'По неделям' })).toHaveTextContent('-0.14 %');
+    expect(screen.getByRole('group', { name: 'Недель в плюсе' })).toHaveTextContent('10 из 28');
+    expect(screen.getByRole('group', { name: 'Без лучших недель' })).toHaveTextContent('-1460.00');
+    expect(screen.getByLabelText('Отметка набора')).toHaveTextContent('не прошёл');
+    const conditions = within(screen.getByRole('list', { name: 'Условия отметки' })).getAllByRole(
+      'listitem',
+    );
+    expect(conditions).toHaveLength(5);
+    expect(conditions.map((item) => item.getAttribute('data-met'))).toEqual([
+      'true',
+      'false',
+      'false',
+      'false',
+      'false',
+    ]);
+    expect(conditions[0]).toHaveTextContent('28');
+    expect(conditions[1]).toHaveTextContent('-0.14 %');
+    expect(conditions[2]).toHaveTextContent('10 из 28');
+    expect(conditions[3]).toHaveTextContent('-1460.00');
+    expect(conditions[4]).toHaveTextContent('+0.02 %');
+    expect(conditions[4]).toHaveTextContent('t 0.10');
+  });
+
+  // Scenario «Набор без отметки».
+  it('shows no mark of a set of a grid with four conditions of five, and the five conditions', async () => {
+    const four = {
+      ...set(4, '0.0005', '4h', {
+        trades: 900,
+        difference: { mean: 0.003, weeks: 141, t: 1.4 },
+        weekly: weekly(141, 0.004, 80, 900),
+      }),
+      mark: mark(null, [true, true, true, true, false]),
+    };
+    routes({
+      'GET /api/backtests/r1': () => json(version5([four])),
+      'GET /api/backtests/r1/sets/4': () => json({ ...pairsOfFour, set: four }),
+    });
+    renderApp('/runs/r1/sets/4');
+
+    expect(await screen.findByLabelText('Отметка набора')).toHaveTextContent('отметки нет');
+    const conditions = within(screen.getByRole('list', { name: 'Условия отметки' })).getAllByRole(
+      'listitem',
+    );
+    expect(conditions.map((item) => item.getAttribute('data-met'))).toEqual([
+      'true',
+      'true',
+      'true',
+      'true',
+      'false',
+    ]);
+  });
+
+  it('gives a candidate its hint to check it on the rest of history', async () => {
+    const candidate = {
+      ...set(4, '0.0005', '4h', {
+        trades: 900,
+        difference: { mean: 0.005, weeks: 141, t: 2.6 },
+        weekly: weekly(141, 0.004, 80, 900),
+      }),
+      mark: mark('candidate', [true, true, true, true, true]),
+    };
+    routes({
+      'GET /api/backtests/r1': () => json(version5([candidate])),
+      'GET /api/backtests/r1/sets/4': () => json({ ...pairsOfFour, set: candidate }),
+    });
+    renderApp('/runs/r1/sets/4');
+
+    expect(await screen.findByLabelText('Отметка набора')).toHaveTextContent('кандидат');
+    expect(
+      screen.getByText(
+        'Набор выполнил правило на периоде подбора. Проверьте его на остатке истории.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('has no tiles by weeks and no conditions for a set of a strategy of a bot', async () => {
+    const ladder = version5([six[3]!], {
+      strategy: { ...doneSix.strategy, name: 'ladder', kind: 'bot' },
+    });
+    routes({
+      'GET /api/backtests/r1': () => json(ladder),
+      'GET /api/backtests/r1/sets/4': () => json(pairsOfFour),
+    });
+    renderApp('/runs/r1/sets/4');
+
+    await screen.findByRole('table', { name: 'Пары набора' });
+    expect(screen.queryByRole('group', { name: 'По неделям' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Без лучших недель' })).toBeNull();
+    expect(screen.queryByRole('list', { name: 'Условия отметки' })).toBeNull();
+  });
+});
+
 describe('the set of a run', () => {
   afterEach(() => vi.unstubAllGlobals());
 

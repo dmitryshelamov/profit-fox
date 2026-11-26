@@ -199,7 +199,9 @@ describe('the section «Стратегии»', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Новая стратегия' }));
     const dialog = screen.getByRole('dialog', { name: 'Вид новой стратегии' });
-    expect(within(dialog).getByText(/случайным входом/)).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/Прогон сравнивает её с входом в тот же момент на других парах/),
+    ).toBeInTheDocument();
     expect(within(dialog).getByText(/лесенки/)).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: /категория идей/ }));
 

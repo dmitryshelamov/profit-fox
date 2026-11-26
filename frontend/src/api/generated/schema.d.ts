@@ -614,6 +614,7 @@ export interface components {
             timeframe: string;
             values: components["schemas"]["ParameterValueResponse"][];
             numbers: null | components["schemas"]["SetNumbersResponse"];
+            mark?: null | components["schemas"]["SetMarkResponse"];
         };
         BacktestSettingsResponse: {
             values: components["schemas"]["ParameterValuesResponse"][];
@@ -857,6 +858,13 @@ export interface components {
             closed: boolean;
             /** Format: int64 */
             updatedAt: number | string;
+        };
+        MarkConditionsResponse: {
+            weeks: boolean;
+            weeklyMean: boolean;
+            weeksUp: boolean;
+            withoutBest: boolean;
+            difference: boolean;
         };
         MarketPageResponse: {
             items: components["schemas"]["MarketPairResponse"][];
@@ -1110,6 +1118,10 @@ export interface components {
             /** Format: double */
             warmupLeftSeconds: null | number | string;
         };
+        SetMarkResponse: {
+            value: null | string;
+            conditions: components["schemas"]["MarkConditionsResponse"];
+        };
         SetNumbersResponse: {
             /** Format: int32 */
             orders: number | string;
@@ -1131,6 +1143,7 @@ export interface components {
             /** Format: double */
             openAmount: number | string;
             difference: null | components["schemas"]["RandomDifferenceResponse"];
+            weekly?: null | components["schemas"]["WeeklyNumbersResponse"];
         };
         SettingResponse: {
             name: string;
@@ -1269,6 +1282,18 @@ export interface components {
         };
         ValidationResponse: {
             errors: components["schemas"]["RequestError"][];
+        };
+        WeeklyNumbersResponse: {
+            /** Format: int32 */
+            weeks: number | string;
+            /** Format: double */
+            mean: number | string;
+            /** Format: int32 */
+            weeksUp: number | string;
+            /** Format: int32 */
+            bestWeeks: number | string;
+            /** Format: double */
+            withoutBest: null | number | string;
         };
     };
     responses: never;

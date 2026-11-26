@@ -12,9 +12,12 @@ import { RunStatusBadge } from '@/shared/ui/RunStatusBadge';
 import { VersionBadge } from '@/shared/ui/VersionBadge';
 
 import { fixed, historyWords, pollMs, runProgress, shortened, span, zonedMoment } from './labels';
-import { numberColumns } from './numbers';
+import { markColumn, numberColumns } from './numbers';
 import { SetResult } from './SetPage';
 import { SortedTable } from './SortedTable';
+
+/** The first engine version whose difference compares the pair of an order with other pairs at its moment. */
+export const markedEngine = 5;
 
 /** A run that has not ended is asked again; one that has, not. */
 export const ended = (state: string) =>
@@ -24,7 +27,9 @@ export const ended = (state: string) =>
  * One run (spec bench-run-queue «Страница прогона», «Таблица наборов прогона», «Хэши прогона копируются»): its settings,
  * the version of the engine, the hash of the data, the times of reading and computing, the warning about the pairs that
  * survived and the table of its sets; a run without a result shows why: it waits, goes, was cancelled or failed. A run
- * of one set shows the result of its pairs at once, a run of the rest of history leads to its source.
+ * of one set shows the result of its pairs at once, a run of the rest of history leads to its source. A run of ideas of
+ * an engine version before 5 says that its difference is not comparable with that of newer runs (spec bench-run-queue
+ * «Пометка разницы старой версии движка»).
  */
 export function RunPage({ id }: { readonly id: string }) {
   const run = useQuery({
@@ -75,6 +80,11 @@ function Details({ run }: { readonly run: Run }) {
   const idea = strategyKindOf(run.strategy.kind) === 'idea';
   const names = run.settings.values.map((parameter) => parameter.name);
   const done = run.state === 'done';
+  const old =
+    idea &&
+    run.engineVersion !== null &&
+    run.engineVersion !== undefined &&
+    Number(run.engineVersion) < markedEngine;
 
   return (
     <>
@@ -164,6 +174,16 @@ function Details({ run }: { readonly run: Run }) {
             count={run.sets.length}
             hint="Строка открывает результат набора по парам."
           />
+          {old && (
+            <p
+              role="note"
+              aria-label="Разница старой версии"
+              className="rounded-[10px] border border-warn/40 bg-warn-bg px-5 py-3 text-xs text-warn"
+            >
+              Разница этого прогона посчитана старым способом — со случайными моментами той же
+              недели на той же паре — и с разницей новых прогонов не сравнима.
+            </p>
+          )}
           <SortedTable<RunSet>
             label="Наборы прогона"
             rows={run.sets}
@@ -195,7 +215,12 @@ function Details({ run }: { readonly run: Run }) {
                 value: (set) => set.timeframe,
                 cell: (set) => set.timeframe,
               },
-              ...numberColumns<RunSet>((set) => set.numbers, { pairs: true, difference: idea }),
+              ...numberColumns<RunSet>((set) => set.numbers, {
+                pairs: true,
+                difference: idea,
+                weekly: idea,
+              }),
+              ...(idea ? [markColumn<RunSet>((set) => set.mark)] : []),
             ]}
           />
           {run.sets.length === 1 && <SetResult run={run} number={Number(run.sets[0]!.number)} />}
