@@ -21,9 +21,18 @@ public interface IScannerLeaseRepository
 
     /// <summary>
     ///     Writes what the holder tells of its work: since when it counts ideas without a break, its warmed and all pairs, and
-    ///     how many pairs the warm-up failed on with the last reason.
+    ///     how many pairs the warm-up failed on with the last reason, and how long the warm-up has still to go — null when it is
+    ///     not known or over.
     /// </summary>
-    Task ReportAsync(string worker, DateTimeOffset? liveSince, int warmed, int pairs, CancellationToken cancellationToken, int failed = 0, string? failure = null);
+    Task ReportAsync(
+        string worker,
+        DateTimeOffset? liveSince,
+        int warmed,
+        int pairs,
+        CancellationToken cancellationToken,
+        int failed = 0,
+        string? failure = null,
+        TimeSpan? warmupLeft = null);
 
     /// <summary>
     ///     The lease as it is, with the time of the database; null before anyone took it.

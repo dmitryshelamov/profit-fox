@@ -4,13 +4,16 @@ namespace ProfitFox.Domain.Services.Nodes.Windows;
 
 /// <summary>
 ///     The values of an input on the last closed candles of a pair, with what a window of the length read at the candle
-///     needs kept up to date (change add-setup-strategies, design.md, decisions 2 and 3): the last
-///     <see cref="WindowLength.Maximum" /> values and one more in a ring, and the state of the window for one length — a monotonic queue
-///     for the largest and the smallest, a running sum, a sorted list for the median and the percentile. A new length
-///     builds the state again from the ring; the length a graph reads stays the same within a run, so that happens once.
+///     needs kept up to date (change add-setup-strategies, design.md, decisions 2 and 3): the last values in a ring —
+///     <see cref="WindowLength.Maximum" /> and one when the length may change, one more than the length when it may not —
+///     and the state of the window for one length: a monotonic queue for the largest and the smallest, a running sum, a
+///     sorted list for the median and the percentile. A new length builds the state again from the ring; the length a
+///     graph reads stays the same within a run, so that happens once.
 /// </summary>
-internal sealed class WindowValues(WindowOrder order)
+internal sealed class WindowValues
 {
+    private readonly WindowOrder _order;
+
     // One more than the longest window: the value that leaves a window of the longest length is still there to leave.
     private readonly Tail<decimal?> _values = new Tail<decimal?>(WindowLength.Maximum + 1);
     private readonly LinkedList<(long Index, decimal Value)> _queue = [];
@@ -20,11 +23,32 @@ internal sealed class WindowValues(WindowOrder order)
     private int _missing;
     private int _length;
 
-    /// <summary>
-    ///     Adds the value of the closed candle; a missing value counts as a gap in the windows it is in.
-    /// </summary>
-    public void Add(decimal? value)
+    /// <param name="order">What the state of the window keeps.</param>
+    /// <param name="fixedLength">
+    ///     Whether the length is the same at every candle (<see cref="WindowLength.Fixed" />): the ring then grows to the
+    ///     length read, otherwise it holds the longest window from the start.
+    /// </param>
+    public WindowValues(WindowOrder order, bool fixedLength)
     {
+        _order = order;
+        if (!fixedLength)
+        {
+            _values.Reserve(WindowLength.Maximum + 1);
+        }
+    }
+
+    /// <summary>
+    ///     Adds the value of the closed candle; a missing value counts as a gap in the windows it is in. The length read at the
+    ///     candle, when there is one, makes room for its window first; a fixed length is the same at every candle, so the
+    ///     ring holds its window from the first candle on.
+    /// </summary>
+    public void Add(decimal? value, int? length)
+    {
+        if (length is { } window)
+        {
+            _values.Reserve(window + 1);
+        }
+
         _values.Add(value);
         if (_length == 0)
         {
@@ -32,7 +56,7 @@ internal sealed class WindowValues(WindowOrder order)
         }
 
         Enter(_values.Count - 1, value);
-        if (_values.Count > _length)
+        if (_values.Kept > _length)
         {
             Leave(_values.Count - 1 - _length, _values[_length]);
         }
@@ -49,7 +73,7 @@ internal sealed class WindowValues(WindowOrder order)
             Build(length);
         }
 
-        return _values.Count >= length && _missing == 0;
+        return _values.Kept >= length && _missing == 0;
     }
 
     /// <summary>
@@ -124,10 +148,10 @@ internal sealed class WindowValues(WindowOrder order)
             return;
         }
 
-        switch (order)
+        switch (_order)
         {
             case WindowOrder.Largest or WindowOrder.Smallest:
-                while (_queue.Last is { } last && (order == WindowOrder.Largest ? last.Value.Value <= number : last.Value.Value >= number))
+                while (_queue.Last is { } last && (_order == WindowOrder.Largest ? last.Value.Value <= number : last.Value.Value >= number))
                 {
                     _queue.RemoveLast();
                 }
@@ -160,7 +184,7 @@ internal sealed class WindowValues(WindowOrder order)
             return;
         }
 
-        switch (order)
+        switch (_order)
         {
             case WindowOrder.Largest or WindowOrder.Smallest:
                 if (_queue.First is { } first && first.Value.Index == index)

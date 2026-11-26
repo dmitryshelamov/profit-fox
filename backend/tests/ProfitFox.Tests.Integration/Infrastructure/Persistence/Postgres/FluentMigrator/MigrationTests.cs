@@ -56,7 +56,7 @@ public sealed class MigrationTests
 
         await using var connection = new NpgsqlConnection(connectionString);
         long[] versions = [.. await connection.QueryAsync<long>("SELECT \"Version\" FROM \"VersionInfo\" ORDER BY \"Version\"")];
-        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L, 202611230002L, 202611230003L, 202611230004L, 202611250001L }));
+        Assert.That(versions, Is.EqualTo(new[] { 202611200001L, 202611210001L, 202611220001L, 202611220002L, 202611230001L, 202611230002L, 202611230003L, 202611230004L, 202611250001L, 202611250002L }));
         Assert.That(await TablesOf(connectionString), Is.SupersetOf(new[] { "strategies", "strategy_versions", "strategy_signals" }));
     }
 
@@ -163,7 +163,9 @@ public sealed class MigrationTests
         const string columns = "SELECT column_name FROM information_schema.columns WHERE table_name = 'scanner_lease' ORDER BY ordinal_position";
         await using (ServiceProvider services = BenchDatabase.Migrated(connectionString))
         {
-            Assert.That(await connection.QueryAsync<string>(columns), Is.EqualTo(new[] { "name", "worker", "until", "live_since", "warmed", "pairs", "failed", "failure" }));
+            Assert.That(
+                await connection.QueryAsync<string>(columns),
+                Is.EqualTo(new[] { "name", "worker", "until", "live_since", "warmed", "pairs", "failed", "failure", "warmup_left_seconds" }));
             using IServiceScope scope = services.CreateScope();
             scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateDown(202611230001);
         }

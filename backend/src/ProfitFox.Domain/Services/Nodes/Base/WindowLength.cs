@@ -18,6 +18,18 @@ internal static class WindowLength
     public const int Maximum = 1000;
 
     /// <summary>
+    ///     Whether the length of <paramref name="node" /> is the same at every candle of a run: written in its inputs, or
+    ///     wired from the parameters of the graph, which do not change within a run. A node with such a length keeps no more
+    ///     values than it reads; one whose length comes from another node keeps <see cref="Maximum" /> of them, so any length
+    ///     read later has its window (design.md, decision 3).
+    /// </summary>
+    public static bool Fixed(NodeDefinition node, GraphDefinition graph)
+    {
+        WireDefinition? wire = graph.Wires.FirstOrDefault(wire => wire.To.Node == node.Id && wire.To.Pin == Pin);
+        return wire is null || graph.Nodes.Any(source => source.Id == wire.From.Node && source.Kind == NodeCatalog.Parameters);
+    }
+
+    /// <summary>
     ///     The length a value on the pin gives, or null when it is not a whole number from 1 to <see cref="Maximum" />.
     /// </summary>
     public static int? Of(decimal? value)

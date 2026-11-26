@@ -6,6 +6,9 @@
 # of tag vN from GitHub, accepts it only from release/0.1.0 and runs only images built from that commit.
 # Installed by hand as ~/profit-fox/deploy.sh (README, "Production (firebat-01)"); it needs curl, jq and docker.
 # It never runs `docker compose down -v`: the volume of the database is the only store of the bench.
+# The role of the machine lies in ~/profit-fox/role, written by hand: "main" (firebat-01: the database, the API with the
+# page and the Workers of the scanner, docker-compose.prod.yml) or "workers" (firebat-02: the Workers of the runs,
+# docker-compose.workers.yml). Without the file the machine is "main".
 
 # Raised when the command changes; deploy.yml passes the same number, so an outdated copy on the server refuses.
 DEPLOY_PROTOCOL=1
@@ -24,6 +27,21 @@ parse_command() {
     return 1
   fi
   echo "${BASH_REMATCH[1]}"
+}
+
+# The role of this machine: "main" or "workers", from the file the owner wrote; anything else is refused.
+read_role() {
+  local role="main"
+  if [[ -e "$1" ]]; then
+    role="$(<"$1")"
+  fi
+  case "$role" in
+    main | workers) echo "$role" ;;
+    *)
+      echo "deploy: the role in $1 is '$role', not 'main' or 'workers'" >&2
+      return 1
+      ;;
+  esac
 }
 
 fail() {
@@ -63,35 +81,46 @@ wait_for_health() {
 main() {
   set -euo pipefail
 
-  local version commit release image revision
+  local version commit release image revision role file images
   version="$(parse_command "${SSH_ORIGINAL_COMMAND:-}")" || exit 1
+  role="$(read_role "$ROOT/role")" || exit 1
+  if [[ "$role" == main ]]; then
+    file=docker-compose.prod.yml
+    images=(profit-fox profit-fox-bench-worker)
+  else
+    file=docker-compose.workers.yml
+    images=(profit-fox-bench-worker)
+  fi
 
   # Nothing on the server changes until the version is known to be a commit of the branch.
   commit="$(tag_commit "$version")"
   in_branch "$commit" || fail "the commit $commit of tag v$version is not in $BRANCH"
-  echo "deploy: version $version is commit $commit"
+  echo "deploy: version $version is commit $commit, role $role"
 
   release="$ROOT/releases/$version"
   mkdir -p "$release"
-  curl --fail --silent --show-error --max-time 30 --output "$release/docker-compose.prod.yml" \
-    "https://raw.githubusercontent.com/$REPOSITORY/$commit/docker-compose.prod.yml"
+  curl --fail --silent --show-error --max-time 30 --output "$release/$file" \
+    "https://raw.githubusercontent.com/$REPOSITORY/$commit/$file"
 
   compose() {
-    PROFIT_FOX_VERSION="$version" docker compose --file "$release/docker-compose.prod.yml" \
+    PROFIT_FOX_VERSION="$version" docker compose --file "$release/$file" \
       --env-file "$ROOT/.env.prod" "$@"
   }
 
   compose pull --quiet
   # An image pushed under an existing number from another commit does not run.
-  for name in profit-fox profit-fox-bench-worker; do
+  for name in "${images[@]}"; do
     image="ghcr.io/dmitryshelamov/$name:$version"
     revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image")"
     [[ "$revision" == "$commit" ]] || fail "$image is built from '$revision', not from $commit"
   done
 
-  compose up --detach --wait db
-  compose up --detach --no-deps api
-  wait_for_health || fail "version $version did not answer /health in 120 s"
+  if [[ "$role" == main ]]; then
+    compose up --detach --wait db
+    compose up --detach --no-deps api
+    wait_for_health || fail "version $version did not answer /health in 120 s"
+  fi
+  # The Workers of firebat-02 wait for the schema of the database themselves, so they start after the main machine.
   compose up --detach --no-deps worker-1 worker-2
 
   echo "$version" >"$ROOT/current"

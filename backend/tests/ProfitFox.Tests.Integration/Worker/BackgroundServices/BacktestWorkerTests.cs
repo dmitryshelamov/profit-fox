@@ -56,6 +56,25 @@ public sealed class BacktestWorkerTests
         Assert.That(done.Sets.Single().Numbers!.Trades, Is.GreaterThan(0));
     }
 
+    /// <summary>
+    ///     A Worker with <c>Worker:TakeRuns</c> = <c>false</c> keeps only the scanner (production: the scanner on
+    ///     firebat-01, the runs on firebat-02): it leaves a queued backtest to a Worker that takes runs.
+    /// </summary>
+    [Test]
+    public async Task A_Worker_that_takes_no_runs_leaves_a_queued_backtest_to_another_Worker()
+    {
+        _workers.Add(await WorkerHost.Start(_server, "scanner-only", runs: false));
+        Backtest backtest = await Enqueue();
+
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        Backtest waiting = await Read(backtest.Id);
+        await StartWorker("w-1");
+        Backtest done = await Ended(backtest.Id);
+
+        Assert.That((waiting.Status, waiting.LeaseOwner), Is.EqualTo((BacktestState.Queued, (string?)null)));
+        Assert.That((done.Status, done.LeaseOwner), Is.EqualTo((BacktestState.Done, "w-1")));
+    }
+
     [Test]
     public async Task Two_Workers_go_two_backtests_at_the_same_time_each_its_own()
     {

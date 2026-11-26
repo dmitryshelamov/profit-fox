@@ -1107,6 +1107,8 @@ export interface components {
             /** Format: int32 */
             failed: number | string;
             failure: null | string;
+            /** Format: double */
+            warmupLeftSeconds: null | number | string;
         };
         SetNumbersResponse: {
             /** Format: int32 */

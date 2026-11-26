@@ -140,7 +140,15 @@ public sealed class RunScannerCommandHandlerTests
             return Task.CompletedTask;
         }
 
-        public Task ReportAsync(string worker, DateTimeOffset? liveSince, int warmed, int pairs, CancellationToken cancellationToken, int failed = 0, string? failure = null)
+        public Task ReportAsync(
+            string worker,
+            DateTimeOffset? liveSince,
+            int warmed,
+            int pairs,
+            CancellationToken cancellationToken,
+            int failed = 0,
+            string? failure = null,
+            TimeSpan? warmupLeft = null)
         {
             return Task.CompletedTask;
         }

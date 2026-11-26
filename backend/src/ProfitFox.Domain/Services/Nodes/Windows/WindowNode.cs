@@ -24,7 +24,7 @@ internal sealed class WindowNode : Node
     private readonly WindowValues _values;
     private decimal? _output;
 
-    public WindowNode(string operation)
+    public WindowNode(string operation, bool fixedLength)
     {
         _operation = operation;
         _values = new WindowValues(operation switch
@@ -35,15 +35,16 @@ internal sealed class WindowNode : Node
             "median" => WindowOrder.Sorted,
             "first" => WindowOrder.None,
             _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, "The graph checks the operation of a window.")
-        });
+        }, fixedLength);
     }
 
     public override void Compute(in NodeContext context, ReadOnlySpan<PinValue> inputs, Span<PinValue> outputs)
     {
         if (context.Commit)
         {
-            _values.Add(inputs[0].Number);
-            _output = WindowLength.Of(inputs[1].Number) is { } length && _values.Full(length) ? Result(length) : null;
+            int? length = WindowLength.Of(inputs[1].Number);
+            _values.Add(inputs[0].Number, length);
+            _output = length is { } window && _values.Full(window) ? Result(window) : null;
         }
 
         outputs[0] = PinValue.FromNumber(_output);

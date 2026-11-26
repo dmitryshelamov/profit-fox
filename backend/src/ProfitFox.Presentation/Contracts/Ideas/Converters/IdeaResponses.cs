@@ -84,7 +84,8 @@ public static class IdeaResponses
             state.Closed,
             state.Burst,
             state.Failed,
-            state.Failure);
+            state.Failure,
+            state.WarmupLeft?.TotalSeconds);
     }
 
     private static IdeaSummaryResponse Of(IdeaSummary row)
