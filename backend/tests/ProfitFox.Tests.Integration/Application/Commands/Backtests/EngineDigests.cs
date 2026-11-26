@@ -11,8 +11,9 @@ namespace ProfitFox.Tests.Integration.Application.Commands.Backtests;
 /// <summary>
 ///     The digests of the results of a reference strategy (change add-strategy-backtest, design.md, decision 7, step 3;
 ///     change fix-backtest-random-control, design.md, decision 7): the rows of the orders with their trades, the random
-///     entries with theirs (pair, moment, side, outcome), the cells of control, the weekly means and the numbers of the set;
-///     and apart, the trades of the orders alone, which engine version 5 keeps from version 4.
+///     entries with theirs (pair, moment, side, outcome), the cells of control, the weekly means and the numbers of the set
+///     with its numbers by weeks and the conditions of its mark; and apart, the trades of the orders alone, which engine
+///     version 5 keeps from version 4.
 /// </summary>
 internal static class EngineDigests
 {
@@ -43,10 +44,13 @@ internal static class EngineDigests
             Line(text, "week", week, mean, orders);
         }
 
-        var set = SetSummary.Of(run.Numbers);
+        var set = SetSummary.OfSet(run.Numbers);
         Line(text, "set", set.Orders, set.Trades, set.PairsWithTrades, set.Mean, set.Amount, set.WinShare, set.Skipped, set.OpenCycles, set.OpenAmount);
         Line(text, "excluded", set.Excluded.Plan, set.Excluded.Coverage, set.Excluded.Funding, set.Excluded.NoTrade, set.Excluded.Period);
         Line(text, "difference", set.Difference?.Mean, set.Difference?.Weeks, set.Difference?.T);
+        Line(text, "weekly", set.Weekly?.Weeks, set.Weekly?.Mean, set.Weekly?.WeeksUp, set.Weekly?.BestWeeks, set.Weekly?.WithoutBest);
+        var conditions = MarkConditions.Of(set);
+        Line(text, "conditions", conditions.Weeks, conditions.WeeklyMean, conditions.WeeksUp, conditions.WithoutBest, conditions.Difference);
         return Hash(text);
     }
 
