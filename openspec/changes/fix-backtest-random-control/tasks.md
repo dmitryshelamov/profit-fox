@@ -13,7 +13,7 @@
 
 ## 1. База
 
-- [ ] 1.1 Снять базу до правок: `dotnet build ProfitFox.slnx --configuration Release`, тесты бэкенда и фронтенда,
+- [x] 1.1 Снять базу до правок: `dotnet build ProfitFox.slnx --configuration Release`, тесты бэкенда и фронтенда,
   отпечатки `EngineDigests.Orders` стратегий H0001 и H0002 версии 4 (константы `Version4` в `EngineVersionTests`),
   SHA-256 `/openapi/v1.json`. Проверить: числа тестов и предупреждений, оба отпечатка и хэш записаны в разделе «База» в
   конце этого файла.
@@ -171,7 +171,21 @@
 
 ## База
 
-Заполняется задачей 1.1.
+Снято 2026-11-26 на `c9e2881` (ветка `feat/fix-backtest-random-control`) в облачном контейнере: .NET SDK 10.0.115, Node
+22.23.5, Postgres `postgres:17` в Docker для интеграционных тестов.
+
+- `dotnet build ProfitFox.slnx --configuration Release`: 0 предупреждений, 0 ошибок.
+- Тесты бэкенда (`dotnet test ProfitFox.slnx --configuration Release`): `ProfitFox.Tests.Unit` — 887 из 887,
+  `ProfitFox.Tests.Integration` — 459 из 459.
+- Фронтенд: `npm run typecheck`, `npm run lint`, `npm run format:check` чистые; `npm run test` — 453 теста в 35 файлах,
+  все зелёные.
+- Отпечатки `EngineDigests.Orders` версии 4 (константы `Version4` в `EngineVersionTests`; тест «the orders do not depend
+  on the seed» подтверждает, что их же даёт семя графа):
+  - H0001 — `d3d55c81204f25f0c570e55353c71692343b38ffb015e196975a2a3fd265e81d`;
+  - H0002 — `9cacfe641a799a07d29404053d92708e14f62b3a90bb9e2e77d766307a9dc3b3`.
+- SHA-256 `/openapi/v1.json` (API в Development на пустой базе):
+  `036a18e0657dabd3bdcc428e1bca8835eac8283d76907bc143c14004e9ca7a5c`; `npm run generate:api` по нему даёт
+  `src/api/generated/schema.d.ts` без изменений.
 
 ## Открыто после применения
 
