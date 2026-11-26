@@ -1,8 +1,9 @@
 import type { Idea } from '@/api/ideas';
 import type { ChartCandle, ChartPoint, LiveCandle } from '@/api/market';
 import { lengthOf } from '@/preview/preview';
+import { localClock } from '@/shared/time';
 
-import { changeText, momentText, priceWords, rateText } from './format';
+import { changeText, priceWords, rateText } from './format';
 
 /** The words of the reason an idea closed, as its mark on the chart says it. */
 const exitMarkWords: Record<string, string> = {
@@ -27,37 +28,50 @@ export interface IdeaMark {
 }
 
 /**
- * The marks of the ideas of a pair (spec market-overview «Идеи на графике»): the entry with its side and strategy on the
- * candle of the moment of the idea, and the exit with its reason and outcome on the candle of the exit — on the
- * candle of the shown timeframe each moment falls in, whatever the timeframe of the idea.
+ * The marks of the ideas of a pair (spec market-overview «Идеи на графике»): with no idea chosen only an arrow of the
+ * entry of each idea, without text; with one chosen only its marks — the entry with its side and strategy on the candle
+ * of the moment of the idea, and the exit with its reason and outcome on the candle of the exit. Each on the candle of
+ * the shown timeframe its moment falls in, whatever the timeframe of the idea.
  */
-export function ideaMarks(ideas: readonly Idea[], timeframe: string): IdeaMark[] {
-  return ideas.flatMap((idea) => {
-    const entry: IdeaMark = {
+export function ideaMarks(
+  ideas: readonly Idea[],
+  timeframe: string,
+  selected: Idea | null,
+): IdeaMark[] {
+  if (selected === null) {
+    return ideas.map((idea) => ({
       id: idea.id,
       time: candleOf(Number(idea.moment), timeframe),
       kind: 'entry',
       side: idea.side,
-      text: `${idea.side === 'short' ? '▼ шорт' : '▲ лонг'} · ${idea.strategy}`,
-    };
-    if (idea.state !== 'closed' || idea.exitTime == null) {
-      return [entry];
-    }
+      text: '',
+    }));
+  }
 
-    return [
-      entry,
-      {
-        id: idea.id,
-        time: candleOf(Number(idea.exitTime), timeframe),
-        kind: 'exit',
-        side: idea.side,
-        text: `выход ${exitMarkWords[idea.exitReason ?? ''] ?? ''} ${changeText(idea.result)}`.replace(
-          /\s+/g,
-          ' ',
-        ),
-      },
-    ];
-  });
+  const entry: IdeaMark = {
+    id: selected.id,
+    time: candleOf(Number(selected.moment), timeframe),
+    kind: 'entry',
+    side: selected.side,
+    text: `${selected.side === 'short' ? '▼ шорт' : '▲ лонг'} · ${selected.strategy}`,
+  };
+  if (selected.state !== 'closed' || selected.exitTime == null) {
+    return [entry];
+  }
+
+  return [
+    entry,
+    {
+      id: selected.id,
+      time: candleOf(Number(selected.exitTime), timeframe),
+      kind: 'exit',
+      side: selected.side,
+      text: `выход ${exitMarkWords[selected.exitReason ?? ''] ?? ''} ${changeText(selected.result)}`.replace(
+        /\s+/g,
+        ' ',
+      ),
+    },
+  ];
 }
 
 /** A line of an open idea: its entry, stop or target at its price from the candle of its entry to that of its term. */
@@ -73,15 +87,16 @@ export interface IdeaLine {
 }
 
 /**
- * The lines of the open ideas (spec market-overview «Открытая идея», task 18.26): the entry, the stop and the target
- * with their prices, each from the candle the moment of the idea falls in to the candle its term falls in, and the term
- * marked at the end of the line of the entry.
+ * The lines of the chosen idea when it is open (spec market-overview «Открытая идея», task 18.26): the entry, the stop
+ * and the target with their prices, each from the candle the moment of the idea falls in to the candle its term falls
+ * in, and the term marked at the end of the line of the entry. No idea chosen, or a closed one, has no lines.
  */
-export function ideaLines(ideas: readonly Idea[], timeframe: string): IdeaLine[] {
-  return ideas.flatMap((idea) => {
+export function ideaLines(selected: Idea | null, timeframe: string): IdeaLine[] {
+  const open = selected !== null && selected.state === 'open' ? [selected] : [];
+  return open.flatMap((idea) => {
     const from = candleOf(Number(idea.moment), timeframe);
     const to = Math.max(from, candleOf(Number(idea.until), timeframe));
-    const term = `срок ${momentText(idea.until).slice(6)}`;
+    const term = `срок ${localClock(Number(idea.until))}`;
     const line = (
       kind: IdeaLine['kind'],
       price: number | string | null | undefined,

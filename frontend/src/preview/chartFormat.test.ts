@@ -1,12 +1,30 @@
-import { monthTick, priceText } from './chartFormat';
+import { TickMarkType, type UTCTimestamp } from 'lightweight-charts';
+
+import { crosshairTime, monthTick, priceText, timeTick } from './chartFormat';
 
 describe('the scales of the chart', () => {
-  it('names a month in three Russian letters, by UTC', () => {
+  // Change fix-pair-chart-and-local-time, task 3.4: by the month of the zone of the browser (Europe/Moscow in the tests).
+  it('names a month in three Russian letters, by the zone of the browser', () => {
     expect(monthTick(Date.UTC(2025, 7, 1) / 1000)).toBe('авг');
-    expect(monthTick(Date.UTC(2025, 8, 30, 23) / 1000)).toBe('сен');
+    // 23:00 of 30 September in UTC is already 02:00 of 1 October in Moscow.
+    expect(monthTick(Date.UTC(2025, 8, 30, 23) / 1000)).toBe('окт');
     expect(monthTick(Date.UTC(2026, 4, 1) / 1000)).toBe('май');
-    // The first hour of January in UTC is still January to the west of Greenwich.
     expect(monthTick(Date.UTC(2026, 0, 1) / 1000)).toBe('янв');
+  });
+
+  // Scenario «Шкала графика» (task 3.4): the data stay in seconds of UTC, the scale and the crosshair write local time.
+  it('writes the time scale and the crosshair in the zone of the browser', () => {
+    const at = (ms: number) => (ms / 1000) as UTCTimestamp;
+    const seven = at(Date.UTC(2026, 10, 26, 7));
+    expect(timeTick(seven, TickMarkType.Time)).toBe('10:00');
+    expect(timeTick(at(Date.UTC(2026, 10, 26, 7, 0, 5)), TickMarkType.TimeWithSeconds)).toBe(
+      '10:00:05',
+    );
+    expect(timeTick(seven, TickMarkType.DayOfMonth)).toBe('26');
+    expect(timeTick(at(Date.UTC(2026, 10, 30, 22)), TickMarkType.DayOfMonth)).toBe('1');
+    expect(timeTick(at(Date.UTC(2026, 10, 30, 22)), TickMarkType.Month)).toBe('дек');
+    expect(timeTick(at(Date.UTC(2026, 11, 31, 22)), TickMarkType.Year)).toBe('2027');
+    expect(crosshairTime(seven)).toBe('2026-11-26 10:00');
   });
 
   it('writes a price with the digits its size needs', () => {

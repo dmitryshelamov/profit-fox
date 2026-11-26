@@ -1,5 +1,9 @@
+import { idea } from '@/test/ideas';
+
 import {
   type IdeaLine,
+  ideaLines,
+  ideaMarks,
   lineLabels,
   minMoveOf,
   panelHeight,
@@ -120,5 +124,112 @@ describe('the chart of a pair as the mockup draws it', () => {
 
     expect(rightRoom([], thirteen, '1h', 150, 6).offset).toBe(10);
     expect(rightRoom([], thirteen, '1h', 150, 6).slots).toEqual([]);
+  });
+});
+
+// Spec market-overview «Идеи на графике» (change fix-pair-chart-and-local-time, task 2.1): without a chosen idea only the
+// arrows of the entries, with one only it, whole.
+describe('the ideas a chart of a pair draws', () => {
+  const shortClosed = idea({
+    id: 'short-1',
+    strategy: 'funding-short',
+    timeframe: '4h',
+    side: 'short',
+    state: 'closed',
+    moment: Date.UTC(2026, 10, 21, 8),
+    exitTime: Date.UTC(2026, 10, 21, 12),
+    exitReason: 'time',
+    result: 0.0041,
+  });
+  const longOpen = idea({ id: 'long-1', until: Date.UTC(2026, 10, 22, 17) });
+  const forty = Array.from({ length: 40 }, (_, index) =>
+    index < 3
+      ? idea({ id: `open-${index}`, moment: thirteen - index * hour })
+      : idea({
+          id: `closed-${index}`,
+          side: index % 2 === 0 ? 'short' : 'long',
+          state: 'closed',
+          moment: thirteen - index * hour,
+          exitTime: thirteen - index * hour + 30 * 60_000,
+          exitReason: 'stop',
+          result: -0.02,
+        }),
+  );
+
+  // Scenario «Без выбора».
+  it('draws only an arrow of the entry of every idea, without text, exits and lines, when none is chosen', () => {
+    const marks = ideaMarks(forty, '1h', null);
+    expect(marks).toHaveLength(40);
+    expect(marks.every((mark) => mark.kind === 'entry' && mark.text === '')).toBe(true);
+    expect(marks.map((mark) => mark.side)).toEqual(forty.map((item) => item.side));
+    expect(ideaLines(null, '1h')).toEqual([]);
+  });
+
+  // Scenarios «Только выбранная» and «Закрытая идея».
+  it('draws only the entry and the exit of the chosen closed idea, with their text, and no lines', () => {
+    expect(ideaMarks([...forty, shortClosed], '1h', shortClosed)).toEqual([
+      {
+        id: 'short-1',
+        time: Date.UTC(2026, 10, 21, 8),
+        kind: 'entry',
+        side: 'short',
+        text: '▼ шорт · funding-short',
+      },
+      {
+        id: 'short-1',
+        time: Date.UTC(2026, 10, 21, 12),
+        kind: 'exit',
+        side: 'short',
+        text: 'выход по сроку +0.41 %',
+      },
+    ]);
+    expect(ideaLines(shortClosed, '1h')).toEqual([]);
+  });
+
+  // Scenario «Открытая идея».
+  it('draws the entry of the chosen open idea and its lines of the entry, the stop and the target to its term', () => {
+    expect(ideaMarks([...forty, longOpen], '1h', longOpen)).toEqual([
+      {
+        id: 'long-1',
+        time: thirteen,
+        kind: 'entry',
+        side: 'long',
+        text: '▲ лонг · breakout-long',
+      },
+    ]);
+    const to = Date.UTC(2026, 10, 22, 17);
+    expect(ideaLines(longOpen, '1h')).toEqual([
+      {
+        id: 'long-1',
+        kind: 'entry',
+        price: 236.1,
+        title: 'вход 236.10',
+        from: thirteen,
+        to,
+        term: expect.stringMatching(/^срок \d\d:\d\d$/) as unknown as string,
+      },
+      { id: 'long-1', kind: 'stop', price: 231.38, title: 'стоп 231.38', from: thirteen, to },
+      { id: 'long-1', kind: 'target', price: 245.54, title: 'цель 245.54', from: thirteen, to },
+    ]);
+  });
+
+  // Scenario «Идея другого таймфрейма».
+  it('puts the marks of an idea of 15m on the candle of 1h its moments fall in, chosen or not', () => {
+    const squeeze = idea({
+      id: 'squeeze',
+      timeframe: '15m',
+      moment: Date.UTC(2026, 10, 22, 14, 15),
+      state: 'closed',
+      exitTime: Date.UTC(2026, 10, 22, 15, 30),
+      exitReason: 'target',
+      result: 0.01,
+    });
+    expect(ideaMarks([squeeze], '1h', null).map((mark) => mark.time)).toEqual([
+      Date.UTC(2026, 10, 22, 14),
+    ]);
+    expect(ideaMarks([squeeze], '1h', squeeze).map((mark) => mark.time)).toEqual([
+      Date.UTC(2026, 10, 22, 14),
+      Date.UTC(2026, 10, 22, 15),
+    ]);
   });
 });

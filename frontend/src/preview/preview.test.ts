@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   closeAt,
-  formatUtc,
+  formatMoment,
+  formatUtcDay,
   historyStart,
   lengthOf,
   marksOf,
@@ -27,8 +28,11 @@ describe('the helpers of the preview', () => {
     ]);
   });
 
-  it('writes moments in UTC whatever the zone of the machine', () => {
-    expect(formatUtc(utc('2026-04-16T04:00'))).toBe('2026-04-16 04:00');
+  // Change fix-pair-chart-and-local-time, task 3.2: a moment in the zone of the browser (Europe/Moscow in the tests), a
+  // day of UTC as it was.
+  it('writes moments in the zone of the browser and days in UTC', () => {
+    expect(formatMoment(utc('2026-04-16T04:00'))).toBe('2026-04-16 07:00');
+    expect(formatUtcDay(utc('2026-05-15T23:00'))).toBe('2026-05-15');
   });
 
   it('takes the start of history from the first candle, not from the covered window', () => {

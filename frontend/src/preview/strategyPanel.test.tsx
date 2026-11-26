@@ -184,7 +184,7 @@ describe('the preview panel of a strategy', () => {
     await show();
 
     const orders = await ordersTable();
-    const opened = within(orders).getByRole('row', { name: 'Заявка 2026-04-16 04:00' });
+    const opened = within(orders).getByRole('row', { name: 'Заявка 2026-04-16 07:00' });
     expect(within(opened).getByText('шорт')).toBeInTheDocument();
     expect(within(opened).getByText('срок, -0.21 %')).toBeInTheDocument();
     expect(drawn.markers).toEqual([
@@ -206,7 +206,7 @@ describe('the preview panel of a strategy', () => {
       'close-after',
     ]);
 
-    await userEvent.click(within(opened).getByRole('button', { name: '2026-04-16 04:00' }));
+    await userEvent.click(within(opened).getByRole('button', { name: '2026-04-16 07:00' }));
     expect(drawn.range!.from).toBeLessThan(first / 1000);
     expect(drawn.range!.to).toBeGreaterThan(first / 1000);
   });
@@ -219,10 +219,10 @@ describe('the preview panel of a strategy', () => {
     await show();
 
     const orders = await ordersTable();
-    expect(within(orders).getByRole('row', { name: 'Заявка 2026-04-16 06:00' })).toHaveTextContent(
+    expect(within(orders).getByRole('row', { name: 'Заявка 2026-04-16 09:00' })).toHaveTextContent(
       'пропущена: позиция открыта',
     );
-    expect(within(orders).getByRole('row', { name: 'Заявка 2026-04-16 12:00' })).toHaveTextContent(
+    expect(within(orders).getByRole('row', { name: 'Заявка 2026-04-16 15:00' })).toHaveTextContent(
       'без сделки: срок за концом разведки',
     );
     expect(drawn.markers).toHaveLength(2);
@@ -368,11 +368,11 @@ describe('the tabs of the preview of a strategy', () => {
       within(table)
         .getAllByRole('columnheader')
         .map((cell) => cell.textContent),
-    ).toEqual(['Вход, UTC', 'Сторона', 'Вх.', 'Вложено', 'Выход', 'Результат']);
+    ).toEqual(['Вход, UTC+3', 'Сторона', 'Вх.', 'Вложено', 'Выход', 'Результат']);
     const rows = within(table).getAllByRole('row', { name: /^Сделка / });
     expect(rows.map((row) => row.getAttribute('aria-label'))).toEqual([
-      'Сделка 2025-10-05 08:00',
-      'Сделка 2025-10-06 08:00',
+      'Сделка 2025-10-05 11:00',
+      'Сделка 2025-10-06 11:00',
     ]);
     expect(within(rows[0]!).getByText('шорт')).toHaveAttribute('data-tone', 'err');
     expect(rows[0]).toHaveTextContent('по сроку · 4h');
@@ -387,7 +387,9 @@ describe('the tabs of the preview of a strategy', () => {
     expect(orders).toHaveAttribute('aria-selected', 'true');
     const list = screen.getByRole('table', { name: 'Заявки' });
     expect(within(list).getAllByRole('row', { name: /^Заявка / })).toHaveLength(3);
-    expect(within(list).getByRole('row', { name: 'Заявка 2025-10-05 09:00' })).toHaveTextContent(
+    // Change fix-pair-chart-and-local-time, task 3.3: the column of the moments names the zone of the browser.
+    expect(within(list).getAllByRole('columnheader')[0]).toHaveTextContent('Момент, UTC+3');
+    expect(within(list).getByRole('row', { name: 'Заявка 2025-10-05 12:00' })).toHaveTextContent(
       'пропущена: позиция открыта',
     );
     // The choice of a tab does not run the preview again.
@@ -400,7 +402,7 @@ describe('the tabs of the preview of a strategy', () => {
     await previewOrders([order(october, -0.0098)]);
 
     const table = screen.getByRole('table', { name: 'Сделки' });
-    const row = within(table).getByRole('row', { name: 'Сделка 2025-10-05 08:00' });
+    const row = within(table).getByRole('row', { name: 'Сделка 2025-10-05 11:00' });
     const cells = within(row).getAllByRole('cell');
     for (const cell of [...within(table).getAllByRole('columnheader'), ...cells]) {
       expect(cell).toHaveClass('px-1');
@@ -431,10 +433,10 @@ describe('the tabs of the preview of a strategy', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Заявки 2' }));
 
     const list = screen.getByRole('table', { name: 'Заявки' });
-    expect(within(list).getByRole('row', { name: 'Заявка 2025-10-05 08:00' })).toHaveTextContent(
+    expect(within(list).getByRole('row', { name: 'Заявка 2025-10-05 11:00' })).toHaveTextContent(
       'пропущена: позиция открыта',
     );
-    expect(within(list).getByRole('row', { name: 'Заявка 2025-10-06 08:00' })).toHaveTextContent(
+    expect(within(list).getByRole('row', { name: 'Заявка 2025-10-06 11:00' })).toHaveTextContent(
       'без сделки: нет минутной истории',
     );
   });
@@ -466,7 +468,7 @@ describe('the tabs of the preview of a strategy', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Заявки 1' }));
 
     const row = within(screen.getByRole('table', { name: 'Заявки' })).getByRole('row', {
-      name: 'Заявка 2025-10-05 08:00',
+      name: 'Заявка 2025-10-05 11:00',
     });
     expect(row).toHaveTextContent('исполнена, нет минутной истории');
     expect(row).not.toHaveTextContent('цикл открыт');
@@ -560,8 +562,8 @@ describe('the mark of a trade on the chart', () => {
 
     expect(screen.getByRole('tab', { name: 'Сделки 2' })).toHaveAttribute('aria-selected', 'true');
     const table = screen.getByRole('table', { name: 'Сделки' });
-    expect(selectedRows(table)).toEqual(['Сделка 2025-10-05 08:00']);
-    await waitFor(() => expect(scrolled).toHaveBeenLastCalledWith('Сделка 2025-10-05 08:00'));
+    expect(selectedRows(table)).toEqual(['Сделка 2025-10-05 11:00']);
+    await waitFor(() => expect(scrolled).toHaveBeenLastCalledWith('Сделка 2025-10-05 11:00'));
     // The marks of the chosen trade are drawn in the color of the choice, the others keep theirs.
     const colors = (drawn.markers as { time: number; color: string }[]).map((mark) => mark.color);
     expect(colors.slice(0, 2)).toEqual([chartColors.selected, chartColors.selected]);
@@ -573,13 +575,13 @@ describe('the mark of a trade on the chart', () => {
 
     act(() => clickChart((october - hour4) / 1000));
     const table = screen.getByRole('table', { name: 'Сделки' });
-    expect(selectedRows(table)).toEqual(['Сделка 2025-10-05 08:00']);
+    expect(selectedRows(table)).toEqual(['Сделка 2025-10-05 11:00']);
 
     act(() => clickChart((october + day - hour4) / 1000));
-    expect(selectedRows(table)).toEqual(['Сделка 2025-10-06 08:00']);
+    expect(selectedRows(table)).toEqual(['Сделка 2025-10-06 11:00']);
 
     act(() => clickChart((october + 3 * hour4) / 1000));
-    expect(selectedRows(table)).toEqual(['Сделка 2025-10-06 08:00']);
+    expect(selectedRows(table)).toEqual(['Сделка 2025-10-06 11:00']);
   });
 
   it('chooses the trade of the entry when an entry and an exit of two trades are on one candle', async () => {
@@ -589,7 +591,7 @@ describe('the mark of a trade on the chart', () => {
     act(() => clickChart(october / 1000));
 
     expect(selectedRows(screen.getByRole('table', { name: 'Сделки' }))).toEqual([
-      'Сделка 2025-10-05 12:00',
+      'Сделка 2025-10-05 15:00',
     ]);
   });
 
@@ -597,9 +599,9 @@ describe('the mark of a trade on the chart', () => {
     await previewOrders([order(october, -0.0098), order(october + day, -0.0056)]);
     const table = screen.getByRole('table', { name: 'Сделки' });
 
-    await userEvent.click(within(table).getByRole('button', { name: '2025-10-06 08:00' }));
+    await userEvent.click(within(table).getByRole('button', { name: '2025-10-06 11:00' }));
 
-    expect(selectedRows(table)).toEqual(['Сделка 2025-10-06 08:00']);
+    expect(selectedRows(table)).toEqual(['Сделка 2025-10-06 11:00']);
     const entry = (october + day - hour4) / 1000;
     expect(drawn.range!.from).toBeLessThan(entry);
     expect(drawn.range!.to).toBeGreaterThan(entry);
@@ -734,13 +736,13 @@ describe('the cycles of a ladder in the preview', () => {
     await previewOrders([], ladderAnswer());
 
     const table = screen.getByRole('table', { name: 'Сделки' });
-    const row = within(table).getByRole('row', { name: 'Сделка 2025-10-05 08:00' });
+    const row = within(table).getByRole('row', { name: 'Сделка 2025-10-05 11:00' });
     expect(row).toHaveTextContent('300.00');
     expect(within(row).getAllByRole('cell')[2]).toHaveTextContent('3');
     expect(row).toHaveTextContent('лимиткой · 9h');
     expect(row).toHaveTextContent('+1.50 %');
     expect(row).toHaveTextContent('+4.50 USDT');
-    expect(within(table).getByRole('row', { name: 'Сделка 2025-10-05 17:01' })).toHaveTextContent(
+    expect(within(table).getByRole('row', { name: 'Сделка 2025-10-05 20:01' })).toHaveTextContent(
       'открыт',
     );
   });
@@ -759,12 +761,12 @@ describe('the cycles of a ladder in the preview', () => {
 
     await userEvent.click(screen.getByRole('tab', { name: 'Заявки 5' }));
     const list = screen.getByRole('table', { name: 'Заявки' });
-    const buy = within(list).getByRole('row', { name: 'Заявка 2025-10-05 10:00' });
+    const buy = within(list).getByRole('row', { name: 'Заявка 2025-10-05 13:00' });
     expect(buy).toHaveTextContent('buy');
     expect(buy).toHaveTextContent('покупка');
     expect(buy).toHaveTextContent('99');
     expect(buy).toHaveTextContent('исполнена, цикл 1');
-    expect(within(list).getByRole('row', { name: 'Заявка 2025-10-05 08:00' })).toHaveTextContent(
+    expect(within(list).getByRole('row', { name: 'Заявка 2025-10-05 11:00' })).toHaveTextContent(
       'лимитка, +1.50 %',
     );
   });
@@ -851,7 +853,7 @@ describe('an answer of the preview without its empty fields', () => {
     expect(drawn.markers).toHaveLength(2);
 
     const orders = await ordersTable();
-    const skipped = within(orders).getByRole('row', { name: 'Заявка 2025-10-05 09:00' });
+    const skipped = within(orders).getByRole('row', { name: 'Заявка 2025-10-05 12:00' });
     expect(skipped).toHaveTextContent('пропущена: позиция открыта');
     expect(skipped).not.toHaveTextContent('NaN');
   });
@@ -860,10 +862,10 @@ describe('an answer of the preview without its empty fields', () => {
     await previewOrders([], asWritten(ladderAnswer()));
 
     const table = screen.getByRole('table', { name: 'Сделки' });
-    expect(within(table).getByRole('row', { name: 'Сделка 2025-10-05 08:00' })).toHaveTextContent(
+    expect(within(table).getByRole('row', { name: 'Сделка 2025-10-05 11:00' })).toHaveTextContent(
       '+4.50 USDT',
     );
-    const open = within(table).getByRole('row', { name: 'Сделка 2025-10-05 17:01' });
+    const open = within(table).getByRole('row', { name: 'Сделка 2025-10-05 20:01' });
     expect(open).toHaveTextContent('открыт');
     expect(open).not.toHaveTextContent('NaN');
     expect(

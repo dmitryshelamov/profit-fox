@@ -11,7 +11,7 @@ import { Page, SectionTitle } from '@/shared/ui/Page';
 import { RunStatusBadge } from '@/shared/ui/RunStatusBadge';
 import { VersionBadge } from '@/shared/ui/VersionBadge';
 
-import { fixed, historyWords, pollMs, runProgress, shortened, span, utc } from './labels';
+import { fixed, historyWords, pollMs, runProgress, shortened, span, zonedMoment } from './labels';
 import { numberColumns } from './numbers';
 import { SetResult } from './SetPage';
 import { SortedTable } from './SortedTable';
@@ -138,8 +138,8 @@ function Details({ run }: { readonly run: Run }) {
         >
           <h2 className="px-5 pt-4 pb-3 text-base font-bold">Детали</h2>
           <dl className="text-xs">
-            <Fact name="Поставлен">{utc(run.queuedAt)}</Fact>
-            <Fact name="Закончен">{utc(run.finishedAt)}</Fact>
+            <Fact name="Поставлен">{zonedMoment(run.queuedAt)}</Fact>
+            <Fact name="Закончен">{zonedMoment(run.finishedAt)}</Fact>
             <Fact name="Версия движка">
               {run.engineVersion === null || run.engineVersion === undefined
                 ? '—'

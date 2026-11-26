@@ -1,4 +1,5 @@
 import type { PreviewCandle, PreviewEvent, RequestError } from '@/api/client';
+import { localDateTime } from '@/shared/time';
 
 /** The timeframes of a graph, as the API writes them, from the shortest. */
 export const timeframes = ['5m', '15m', '1h', '4h', '1d'] as const;
@@ -21,9 +22,9 @@ export function lengthOf(timeframe: string): number {
   return length;
 }
 
-/** A moment of the bench as UTC, `2026-06-01 20:00`: the pages and the specs write time this way. */
-export function formatUtc(ms: number | string): string {
-  return new Date(Number(ms)).toISOString().slice(0, 16).replace('T', ' ');
+/** A moment of the bench in the zone of the browser, `2026-06-01 20:00`: the pages write time this way. */
+export function formatMoment(ms: number | string): string {
+  return localDateTime(Number(ms));
 }
 
 /** A day of the bench as UTC, `2026-06-01`. */

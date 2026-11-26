@@ -41,7 +41,7 @@ describe('the preview panel', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   // Scenarios «Правка порога» and «Граница разведки в панели».
-  it('runs the graph of the editor and shows its events in UTC and the bounds of exploration', async () => {
+  it('runs the graph of the editor and shows its events in the zone of the browser and the bounds of exploration', async () => {
     const { requests } = openFundingHigh({
       'POST /api/preview': () => json(previewOf([first + hour4])),
     });
@@ -55,7 +55,20 @@ describe('the preview panel', () => {
     await show();
 
     const panel = within(screen.getByRole('region', { name: 'Предпросмотр' }));
-    expect(await panel.findByRole('button', { name: '2026-04-16 04:00' })).toBeInTheDocument();
+    expect(await panel.findByRole('button', { name: '2026-04-16 07:00' })).toBeInTheDocument();
+    // Change fix-pair-chart-and-local-time, task 3.3: the column of the moments names the zone of the browser.
+    expect(
+      within(panel.getByRole('table', { name: 'События' }))
+        .getAllByRole('columnheader')
+        .map((cell) => cell.textContent),
+    ).toEqual(['Момент, UTC+3', 'Закрытие свечи']);
+    // Task 3.4, scenario «Шкала графика»: the chart writes its scale and crosshair in the zone of the browser.
+    const options = drawn.options as {
+      localization?: { timeFormatter?: (time: number) => string };
+      timeScale?: { tickMarkFormatter?: (time: number, type: number) => string | null };
+    };
+    expect(options.timeScale?.tickMarkFormatter?.(first / 1000 + 7 * 3600, 3)).toBe('10:00');
+    expect(options.localization?.timeFormatter?.(first / 1000 + 7 * 3600)).toBe('2026-04-16 10:00');
     expect(panel.getByText(/История до 2026-11-21 включительно/)).toHaveTextContent(
       'история пары с 2026-04-16',
     );
@@ -75,7 +88,7 @@ describe('the preview panel', () => {
     await findNode('Параметры', 'p');
     await show();
 
-    await userEvent.click(await screen.findByRole('button', { name: '2026-04-16 04:00' }));
+    await userEvent.click(await screen.findByRole('button', { name: '2026-04-16 07:00' }));
 
     const mark = first / 1000;
     expect(drawn.range!.from).toBeLessThan(mark);
@@ -87,7 +100,7 @@ describe('the preview panel', () => {
     openFundingHigh({ 'POST /api/preview': () => json(previewOf([first + hour4])) });
     await findNode('Параметры', 'p');
     await show();
-    await screen.findByRole('button', { name: '2026-04-16 04:00' });
+    await screen.findByRole('button', { name: '2026-04-16 07:00' });
     expect(screen.queryByText('Граф изменён, нажмите Показать')).toBeNull();
 
     await userEvent.click(screen.getByRole('button', { name: 'Палитра узлов' }));
@@ -98,7 +111,7 @@ describe('the preview panel', () => {
     );
 
     expect(await screen.findByText('Граф изменён, нажмите Показать')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '2026-04-16 04:00' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '2026-04-16 07:00' })).toBeInTheDocument();
   });
 
   it('does not run a graph with errors', async () => {
@@ -282,8 +295,8 @@ describe('the mark of an event on the chart', () => {
     // The event of 08:00 closed the candle that opens at 04:00.
     act(() => clickChart((october - hour4) / 1000));
 
-    expect(selected(table)).toEqual(['Событие 2025-10-05 08:00']);
-    await waitFor(() => expect(scrolled).toHaveBeenLastCalledWith('Событие 2025-10-05 08:00'));
+    expect(selected(table)).toEqual(['Событие 2025-10-05 11:00']);
+    await waitFor(() => expect(scrolled).toHaveBeenLastCalledWith('Событие 2025-10-05 11:00'));
     const colors = (drawn.markers as { color: string }[]).map((mark) => mark.color);
     expect(colors.filter((color) => color === chartColors.selected)).toHaveLength(1);
     expect(colors[30]).toBe(chartColors.selected);
@@ -295,16 +308,16 @@ describe('the mark of an event on the chart', () => {
     act(() => clickChart((october - hour4) / 1000));
 
     act(() => clickChart(october / 1000));
-    expect(selected(table)).toEqual(['Событие 2025-10-05 12:00']);
+    expect(selected(table)).toEqual(['Событие 2025-10-05 15:00']);
 
-    await userEvent.click(within(table).getByRole('button', { name: '2025-10-05 08:00' }));
-    expect(selected(table)).toEqual(['Событие 2025-10-05 08:00']);
+    await userEvent.click(within(table).getByRole('button', { name: '2025-10-05 11:00' }));
+    expect(selected(table)).toEqual(['Событие 2025-10-05 11:00']);
     expect(drawn.range!.from).toBeLessThan((october - hour4) / 1000);
     expect(drawn.range!.to).toBeGreaterThan((october - hour4) / 1000);
 
     // A candle a year earlier has no event.
     act(() => clickChart((october - 365 * 24 * 3_600_000) / 1000));
-    expect(selected(table)).toEqual(['Событие 2025-10-05 08:00']);
+    expect(selected(table)).toEqual(['Событие 2025-10-05 11:00']);
   });
 
   it('brings the row into view again by a second click on the same mark', async () => {
@@ -316,6 +329,6 @@ describe('the mark of an event on the chart', () => {
     act(() => clickChart((october - hour4) / 1000));
 
     await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(2));
-    expect(scrolled).toHaveBeenLastCalledWith('Событие 2025-10-05 08:00');
+    expect(scrolled).toHaveBeenLastCalledWith('Событие 2025-10-05 11:00');
   });
 });

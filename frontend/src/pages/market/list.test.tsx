@@ -203,7 +203,7 @@ describe('the section «Рынок»', () => {
 
     const warning = await screen.findByRole('alert', { name: 'Снимок устарел' });
     expect(warning).toHaveTextContent(
-      `Данные устарели: снимок не обновлялся с ${new Date(updated).toISOString().slice(11, 19)} UTC`,
+      `Данные устарели: снимок не обновлялся с ${new Date(updated + 3 * 3_600_000).toISOString().slice(11, 19)}`,
     );
   });
 
@@ -232,7 +232,7 @@ describe('the section «Рынок»', () => {
     });
     renderApp('/market');
 
-    expect(await screen.findByText('обновлено 14:32:05 UTC')).toBeInTheDocument();
+    expect(await screen.findByText('обновлено 17:32:05')).toBeInTheDocument();
     expect(screen.queryByRole('alert', { name: 'Снимок устарел' })).toBeNull();
   });
 

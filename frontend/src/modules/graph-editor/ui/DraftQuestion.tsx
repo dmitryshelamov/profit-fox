@@ -1,3 +1,4 @@
+import { localDateTime } from '@/shared/time';
 import { Button } from '@/shared/ui/Button';
 import { Dialog } from '@/shared/ui/Dialog';
 
@@ -21,7 +22,7 @@ export function DraftQuestion({
   return (
     <Dialog label="Черновик" title="Есть несохранённый черновик">
       <p className="text-muted">
-        Черновик от {savedAt.slice(0, 16).replace('T', ' ')} UTC отличается от файла: узлов {nodes},
+        Черновик от {localDateTime(Date.parse(savedAt))} отличается от файла: узлов {nodes},
         проводов {wires}
         {nodes === 0 && wires === 0 ? ', расположение или описание' : ''}.
       </p>

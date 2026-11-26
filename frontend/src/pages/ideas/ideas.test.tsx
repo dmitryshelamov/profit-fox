@@ -52,7 +52,7 @@ describe('the section «Идеи»', () => {
       '1h',
       'лонг',
       '—',
-      '22.11 13:00',
+      '22.11 16:00',
       '236.10',
       '231.38',
       '245.54',
@@ -141,6 +141,15 @@ describe('the section «Идеи»', () => {
       '+0.78',
     ]);
     const closed = within(screen.getByRole('table', { name: 'Закрытые идеи' }));
+    // Change fix-pair-chart-and-local-time, task 3.3: the columns of moments name the zone of the browser.
+    expect(
+      closed.getAllByRole('columnheader').map((cell) => cell.textContent?.replace(/[↕↑↓]$/, '')),
+    ).toEqual(expect.arrayContaining(['Вход, UTC+3', 'Выход, UTC+3']));
+    expect(
+      cells(closed.getByRole('row', { name: 'AVAXUSDT breakout-long 1h' })).filter((text) =>
+        /^\d\d\.\d\d \d\d:\d\d$/.test(text ?? ''),
+      ),
+    ).toEqual(['22.11 16:01', '22.11 15:02']);
     expect(
       within(closed.getByRole('row', { name: 'AVAXUSDT breakout-long 1h' })).getByText('по цели'),
     ).toBeInTheDocument();
@@ -252,7 +261,7 @@ describe('the widths of the tables of ideas', () => {
 
     expect(cell('Стратегия')).toHaveClass('w-full', 'max-w-0');
     expect(within(cell('Пара')).getByTitle('SOLUSDT')).toHaveClass('truncate');
-    for (const title of ['Появилась, UTC', 'Вход', 'Стоп', 'Цель', 'Осталось', 'Сейчас']) {
+    for (const title of ['Появилась, UTC+3', 'Вход', 'Стоп', 'Цель', 'Осталось', 'Сейчас']) {
       expect(cell(title)).toHaveClass('whitespace-nowrap');
     }
   });
@@ -446,7 +455,7 @@ describe('the state of the scanner in «Идеи»', () => {
     renderApp('/ideas');
 
     expect(await screen.findByRole('status', { name: 'Живые данные' })).toHaveTextContent(
-      'идеи считаются без перерыва с 22.11 09:15 UTC',
+      'идеи считаются без перерыва с 22.11 12:15',
     );
   });
 });
