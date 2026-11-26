@@ -7,6 +7,7 @@ import {
   signedAmount,
   signTone,
 } from '@/pages/market/format';
+import { zoneLabel } from '@/shared/time';
 import { Badge } from '@/shared/ui/Badge';
 import type { PagedColumn } from '@/shared/ui/PagedTable';
 
@@ -138,7 +139,7 @@ export const openColumns: readonly PagedColumn<Idea>[] = [
   fewLabels,
   {
     key: 'moment',
-    title: 'Появилась, UTC',
+    title: `Появилась, ${zoneLabel()}`,
     numeric: true,
     cell: (idea) => momentText(idea.moment),
   },
@@ -163,13 +164,13 @@ export const closedColumns: readonly PagedColumn<Idea>[] = [
   fewLabels,
   {
     key: 'moment',
-    title: 'Вход, UTC',
+    title: `Вход, ${zoneLabel()}`,
     numeric: true,
     cell: (idea) => momentText(idea.entryTime ?? idea.moment),
   },
   {
     key: 'exitTime',
-    title: 'Выход, UTC',
+    title: `Выход, ${zoneLabel()}`,
     numeric: true,
     cell: (idea) => momentText(idea.exitTime),
   },
@@ -195,7 +196,7 @@ export const pairColumns: readonly PagedColumn<Idea>[] = [
   labels,
   {
     key: 'moment',
-    title: 'Вход, UTC',
+    title: `Вход, ${zoneLabel()}`,
     numeric: true,
     cell: (idea) => momentText(idea.entryTime ?? idea.moment),
   },

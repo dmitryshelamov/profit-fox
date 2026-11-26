@@ -6,7 +6,8 @@ import { defineConfig } from 'vite';
 // The bench API configures no CORS: in development requests go through the Vite proxy.
 const api = process.env.PROFITFOX_BENCH_API ?? 'http://localhost:5240';
 
-// Unit tests run in a zone other than UTC, so every expectation proves the page shows UTC as the bench reports do.
+// Unit tests run in a zone other than UTC (UTC+3), so every expectation proves the page writes moments in the zone of the
+// browser, not in UTC, and days of UTC stay days of UTC.
 if (process.env.VITEST) {
   process.env.TZ = 'Europe/Moscow';
 }

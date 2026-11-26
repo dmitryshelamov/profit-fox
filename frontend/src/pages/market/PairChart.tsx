@@ -17,6 +17,7 @@ import { useEffect, useRef } from 'react';
 
 import type { ChartCandle, ChartPoint, LiveCandle } from '@/api/market';
 import { chartColors } from '@/preview/CandleChart';
+import { crosshairTime, timeTick } from '@/preview/chartFormat';
 
 import { LineLabels } from './lineLabels';
 import {
@@ -162,8 +163,9 @@ export function PairChart({
       },
       grid: { vertLines: { color: chartColors.grid }, horzLines: { color: chartColors.grid } },
       // No price formatter for the whole chart: it would stand over the formats of the series (task 19.14).
-      localization: { locale: 'ru-RU' },
-      timeScale: { timeVisible: true, secondsVisible: false },
+      // The scale and the crosshair in the zone of the browser (task 3.4): the data stay in seconds of UTC.
+      localization: { locale: 'ru-RU', timeFormatter: crosshairTime },
+      timeScale: { timeVisible: true, secondsVisible: false, tickMarkFormatter: timeTick },
     });
     const series = chart.addSeries(CandlestickSeries, {
       upColor: chartColors.up,

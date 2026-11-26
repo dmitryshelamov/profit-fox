@@ -1,4 +1,5 @@
 import type { Run } from '@/api/runs';
+import { localClock, localDateTime, localMoment, zoneLabel } from '@/shared/time';
 
 /** How often a page asks again while a run waits or goes. */
 export const pollMs = 3000;
@@ -22,19 +23,19 @@ export function fixed(value: number | string | null | undefined, digits: number)
 }
 
 /**
- * A moment of the API as «2026-11-20 08:07 UTC»; the app shows UTC everywhere. The API leaves out a field without a
- * value, so a moment a run has not reached yet comes as nothing at all.
+ * A moment of the API as «2026-11-20 15:07 UTC+7», in the zone of the browser with the zone named: a fact of a run has no
+ * column to name it. The API leaves out a field without a value, so a moment a run has not reached yet comes as nothing
+ * at all.
  */
-export function utc(moment: string | null | undefined): string {
+export function zonedMoment(moment: string | null | undefined): string {
   return moment === null || moment === undefined
     ? '—'
-    : `${new Date(moment).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+    : `${localDateTime(Date.parse(moment))} ${zoneLabel()}`;
 }
 
-/** A moment of the API as «21.11 00:01», day and time in UTC: the short form of a table. */
-export function shortUtc(moment: string): string {
-  const iso = new Date(moment).toISOString();
-  return `${iso.slice(8, 10)}.${iso.slice(5, 7)} ${iso.slice(11, 16)}`;
+/** A moment of the API as «21.11 00:01», day and time in the zone of the browser: the short form of a table. */
+export function shortMoment(moment: string): string {
+  return localMoment(Date.parse(moment));
 }
 
 /** Where a run is: waiting, or going at a Worker with the pairs it has passed. */
@@ -65,9 +66,9 @@ export function span(seconds: number): string {
       : `${whole} с`;
 }
 
-/** The time of day of a moment of the API in UTC, «00:14». */
-export function clockUtc(moment: string): string {
-  return new Date(moment).toISOString().slice(11, 16);
+/** The time of day of a moment of the API in the zone of the browser, «00:14». */
+export function clock(moment: string): string {
+  return localClock(Date.parse(moment));
 }
 
 /** A long id or hash by its first and last 8 signs, `8c33b686…c4bab201`; a short one whole. */

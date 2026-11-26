@@ -176,7 +176,8 @@ describe('the section «Прогоны»', () => {
     const bar = run.getByRole('progressbar', { name: 'Ход прогона' });
     expect(bar).toHaveAttribute('aria-valuenow', '50');
     expect(run.getByText('Идёт')).toHaveAttribute('data-tone', 'run');
-    expect(run.getByText(/soyo-02 · с 08:01 UTC/)).toBeInTheDocument();
+    expect(run.getByText(/soyo-02 · с 11:01/)).toBeInTheDocument();
+    expect(run.queryByText(/UTC/)).toBeNull();
     const next = within(screen.getByRole('listitem', { name: 'Прогон funding-short r2' }));
     expect(next.queryByRole('progressbar')).toBeNull();
     expect(next.getByText('ждёт, начнётся после текущего')).toBeInTheDocument();
@@ -228,7 +229,7 @@ describe('the row of a finished run', () => {
       'Расчёт',
       'Закончен',
     ]);
-    expect(done).toHaveTextContent('21.11 00:01');
+    expect(done).toHaveTextContent('21.11 03:01');
   });
 
   // Scenario «Открытие с клавиатуры».
@@ -399,6 +400,8 @@ describe('the page of a run', () => {
     renderApp('/runs/r6');
 
     expect(await screen.findByText('Поставлен')).toBeInTheDocument();
+    // Change fix-pair-chart-and-local-time, task 3.2: in the zone of the browser, the zone named.
+    expect(screen.getByText('Поставлен').parentElement).toHaveTextContent('2026-11-21 03:10 UTC+3');
     expect(screen.getByText('Закончен').parentElement).toHaveTextContent('—');
     expect(screen.queryByText(/Invalid time value/)).toBeNull();
   });
