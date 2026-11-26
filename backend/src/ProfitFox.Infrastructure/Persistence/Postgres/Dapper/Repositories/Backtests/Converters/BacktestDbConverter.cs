@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 using ProfitFox.Domain.Entities.Backtests;
 using ProfitFox.Domain.Services.Graph;
@@ -55,7 +56,10 @@ internal static class BacktestDbConverter
             numbers.Skipped,
             numbers.OpenCycles,
             numbers.OpenAmount,
-            numbers.Difference is { } difference ? new DifferenceJson(difference.Mean, difference.Weeks, difference.T) : null);
+            numbers.Difference is { } difference ? new DifferenceJson(difference.Mean, difference.Weeks, difference.T) : null)
+        {
+            Weekly = numbers.Weekly is { } weekly ? new WeeklyJson(weekly.Weeks, weekly.Mean, weekly.WeeksUp, weekly.BestWeeks, weekly.WithoutBest) : null
+        };
         return JsonSerializer.Serialize(stored, Json);
     }
 
@@ -73,7 +77,10 @@ internal static class BacktestDbConverter
             stored.Skipped,
             stored.OpenCycles,
             stored.OpenAmount,
-            stored.Difference is { } difference ? new RandomDifference(difference.Mean, difference.Weeks, difference.T) : null);
+            stored.Difference is { } difference ? new RandomDifference(difference.Mean, difference.Weeks, difference.T) : null)
+        {
+            Weekly = stored.Weekly is { } weekly ? new WeeklyNumbers(weekly.Weeks, weekly.Mean, weekly.WeeksUp, weekly.BestWeeks, weekly.WithoutBest) : null
+        };
     }
 
     /// <summary>
@@ -174,7 +181,17 @@ internal static class BacktestDbConverter
         int Skipped,
         int OpenCycles,
         double OpenAmount,
-        DifferenceJson? Difference);
+        DifferenceJson? Difference)
+    {
+        /// <summary>
+        ///     The numbers by weeks of a set (change fix-backtest-random-control, design.md, decision 13): not written for a
+        ///     pair or a set without them, and missing in the numbers written before the change.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public WeeklyJson? Weekly { get; init; }
+    }
+
+    private sealed record WeeklyJson(int Weeks, double Mean, int WeeksUp, int BestWeeks, double? WithoutBest);
 
     private sealed record ExclusionsJson(int Plan, int Coverage, int Funding, int NoTrade, int Period);
 

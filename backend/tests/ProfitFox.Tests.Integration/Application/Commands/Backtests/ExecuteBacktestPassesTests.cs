@@ -201,14 +201,20 @@ public sealed class ExecuteBacktestPassesTests
         return JsonSerializer.Serialize(outcome.Sets.Select(set => new { set.Set, set.Numbers, set.Pairs }));
     }
 
-    // The numbers of the sets and of their pairs but the difference, as text.
+    // The numbers of the sets and of their pairs but the difference, as text; the numbers by weeks, new in engine version 5,
+    // are left out as the text of version 4 has none.
     private static string[] Trades(BacktestOutcome outcome)
     {
         return
         [
             .. outcome.Sets.Select(set =>
-                $"{set.Set}: {JsonSerializer.Serialize(set.Numbers with { Difference = null })} {JsonSerializer.Serialize(set.Pairs.Select(pair => new { pair.Pair, Numbers = pair.Numbers with { Difference = null } }))}")
+                $"{set.Set}: {Text(set.Numbers)} [{string.Join(',', set.Pairs.Select(pair => $"{{\"Pair\":{JsonSerializer.Serialize(pair.Pair)},\"Numbers\":{Text(pair.Numbers)}}}"))}]")
         ];
+    }
+
+    private static string Text(SetSummary numbers)
+    {
+        return JsonSerializer.Serialize(numbers with { Difference = null, Weekly = null }).Replace(",\"Weekly\":null", "", StringComparison.Ordinal);
     }
 
     // What engine version 4 gave, set by set, for one set and for six, as Trades gives it.

@@ -2,6 +2,7 @@ using System.Globalization;
 
 using ProfitFox.Application.Contracts.Backtests;
 using ProfitFox.Domain.ValueObjects.Backtests;
+using ProfitFox.Domain.ValueObjects.Backtests.Enums;
 using ProfitFox.Domain.ValueObjects.MarketData;
 using ProfitFox.Domain.ValueObjects.Strategies;
 using ProfitFox.Presentation.Contracts.Errors;
@@ -27,7 +28,7 @@ public static class BacktestResponses
             backtest.PairsDone,
             backtest.PairsTotal,
             backtest.SetCount,
-            [.. backtest.Sets.Select(Of)],
+            [.. backtest.Sets.Select(set => Of(set, backtest))],
             backtest.Warning,
             backtest.EngineVersion,
             backtest.DataHash,
@@ -38,13 +39,19 @@ public static class BacktestResponses
             backtest.Source is { } source ? new BacktestSourceResponse(source.Backtest, source.Set) : null);
     }
 
-    public static BacktestSetResponse Of(BacktestSetOutcome set)
+    /// <summary>
+    ///     A set of the backtest, with its numbers by weeks and its mark (change fix-backtest-random-control, design.md,
+    ///     decisions 10 and 13): the mark is made from the numbers of the set, the kind of the strategy, the engine version of
+    ///     the backtest and whether it is on the rest of history.
+    /// </summary>
+    public static BacktestSetResponse Of(BacktestSetOutcome set, BacktestInternal backtest)
     {
         return new BacktestSetResponse(
             set.Set.Number,
             Timeframes.Name(set.Set.Timeframe),
             [.. set.Set.Values.Select(value => new ParameterValueResponse(value.Key, value.Value))],
-            set.Numbers is { } numbers ? Of(numbers) : null);
+            set.Numbers is { } numbers ? Of(numbers) : null,
+            set.Numbers is { } summary && SetMark.Of(summary, backtest.Kind, backtest.EngineVersion, backtest.Source is not null) is { } mark ? Of(mark) : null);
     }
 
     public static BacktestPairResponse Of(PairSummary pair)
@@ -65,7 +72,23 @@ public static class BacktestResponses
             numbers.Skipped,
             numbers.OpenCycles,
             numbers.OpenAmount,
-            numbers.Difference is { } difference ? new RandomDifferenceResponse(difference.Mean, difference.Weeks, difference.T) : null);
+            numbers.Difference is { } difference ? new RandomDifferenceResponse(difference.Mean, difference.Weeks, difference.T) : null,
+            numbers.Weekly is { } weekly ? new WeeklyNumbersResponse(weekly.Weeks, weekly.Mean, weekly.WeeksUp, weekly.BestWeeks, weekly.WithoutBest) : null);
+    }
+
+    public static SetMarkResponse Of(SetMark mark)
+    {
+        MarkConditions conditions = mark.Conditions;
+        return new SetMarkResponse(
+            mark.Verdict switch
+            {
+                SetVerdict.Candidate => "candidate",
+                SetVerdict.Passed => "passed",
+                SetVerdict.Failed => "failed",
+                SetVerdict.Unproven => "unproven",
+                _ => null
+            },
+            new MarkConditionsResponse(conditions.Weeks, conditions.WeeklyMean, conditions.WeeksUp, conditions.WithoutBest, conditions.Difference));
     }
 
     public static RequestError Of(BacktestError error)

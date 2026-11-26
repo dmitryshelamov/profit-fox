@@ -15,8 +15,9 @@ public static class PairNumbers
 {
     /// <summary>
     ///     A category of ideas: a trade is the cycle of an order that opened one; an order that opened none is counted by its
-    ///     reason. The differences are not here: they need the cells of control of every pair (change
-    ///     fix-backtest-random-control, design.md, decision 5), and the backtest adds them at its end.
+    ///     reason; the trades are summed by the week of their orders (change fix-backtest-random-control, design.md, decision
+    ///     9). The differences are not here: they need the cells of control of every pair (decision 5), and the backtest adds
+    ///     them at its end.
     /// </summary>
     public static SetNumbers Of(IReadOnlyList<EventRow> rows, int skipped, int pastEnd)
     {
@@ -35,7 +36,14 @@ public static class PairNumbers
                 rows.Count(row => row.Status == TradeStatus.Funding),
                 rows.Count(row => row.Status == TradeStatus.NoTrade),
                 pastEnd),
-            Skipped = skipped
+            Skipped = skipped,
+            Weeks =
+            [
+                .. trades
+                    .GroupBy(row => row.Block)
+                    .OrderBy(week => week.Key)
+                    .Select(week => new WeekTrades(week.Key, week.Sum(row => row.Outcome!.Net!.Value), week.Count(), week.Sum(row => row.NetAmount!.Value)))
+            ]
         };
     }
 

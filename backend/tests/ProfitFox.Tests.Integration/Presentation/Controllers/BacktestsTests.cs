@@ -227,6 +227,37 @@ public sealed class BacktestsTests
         Assert.That(first.Warning, Does.Contain("снятые с торгов"));
         Assert.That((await Http.GetFromJsonAsync<BacktestResponse[]>("/api/backtests?active=false", Json))!.Select(item => item.Id), Is.EquivalentTo(new[] { first.Id, second.Id }));
         Assert.That((first.EngineVersion, first.ComputeSeconds is >= 0, first.ReadSeconds is > 0), Is.EqualTo(((int?)ProfitFox.Domain.ValueObjects.Runs.EngineVersion.Number, true, true)));
+        Assert.That(first.Sets.Single().Mark, Is.Not.Null, "«Повтор прогона»: the set of the first has its mark, and the second is computed all the same");
+    }
+
+    /// <summary>
+    ///     Spec strategy-backtest «Отметка не ограничивает прогоны», «Набор без отметки на остатке» (change
+    ///     fix-backtest-random-control, task 5.6): a set of a grid that is not «кандидат» is put on the rest of history and
+    ///     computed like any other.
+    /// </summary>
+    [Test]
+    public async Task A_set_without_a_mark_is_put_on_the_rest_of_history_and_computed()
+    {
+        _market.Data.HighPayments["eth"] = 2;
+        await SaveStrategy(Http, "funding-short", FundingShort(), "idea");
+        _worker = await WorkerHost.Start(_market, "w-1");
+        BacktestResponse done = await Ended(Http, (await Queued(Http, new JsonObject
+        {
+            ["strategy"] = "funding-short",
+            ["values"] = new JsonObject { ["threshold"] = new JsonArray("0.0005", "0.001") },
+            ["end"] = "2026-01-19",
+            ["pairs"] = new JsonArray("BTCUSDT", "ETHUSDT")
+        })).Id);
+        BacktestSetResponse set = done.Sets[0];
+        Assert.That(set.Mark!.Value, Is.Null, "two weeks are too few for «кандидат»");
+        Assert.That(set.Mark.Conditions.Weeks, Is.False);
+
+        HttpResponseMessage created = await Http.PostAsync($"/api/backtests/{done.Id}/sets/{set.Number}/rest", content: null);
+
+        Assert.That(created.StatusCode, Is.EqualTo(HttpStatusCode.Created), await created.Content.ReadAsStringAsync());
+        BacktestResponse rest = await Ended(Http, (await created.Content.ReadFromJsonAsync<BacktestResponse>(Json))!.Id);
+        Assert.That(rest.State, Is.EqualTo("done"));
+        Assert.That(rest.Sets.Single().Mark!.Value, Is.AnyOf("passed", "failed", "unproven"), "a set on the rest of history has a mark of the rest");
     }
 
     [Test]

@@ -98,7 +98,7 @@ public class BacktestsController(ISender sender) : ControllerBase
             return Problem($"The backtest {id} has no set {number}.", statusCode: StatusCodes.Status404NotFound);
         }
 
-        return new BacktestSetPairsResponse(BacktestResponses.Of(set), [.. pairs.Select(BacktestResponses.Of)]);
+        return new BacktestSetPairsResponse(BacktestResponses.Of(set, backtest), [.. pairs.Select(BacktestResponses.Of)]);
     }
 
     /// <summary>

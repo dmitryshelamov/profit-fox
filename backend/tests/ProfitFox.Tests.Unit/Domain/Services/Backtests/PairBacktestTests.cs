@@ -236,6 +236,6 @@ public sealed class PairBacktestTests
 
     private static bool Same(SetNumbers a, SetNumbers b)
     {
-        return a with { Differences = [] } == b with { Differences = [] } && a.Differences.SequenceEqual(b.Differences);
+        return a with { Differences = [], Weeks = [] } == b with { Differences = [], Weeks = [] } && a.Differences.SequenceEqual(b.Differences) && a.Weeks.SequenceEqual(b.Weeks);
     }
 }

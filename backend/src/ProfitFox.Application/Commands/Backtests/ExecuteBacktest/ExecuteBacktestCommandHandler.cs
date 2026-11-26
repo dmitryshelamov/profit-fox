@@ -80,7 +80,7 @@ internal sealed class ExecuteBacktestCommandHandler(
             [
                 .. plans.Select((plan, index) => (
                     plan.Set,
-                    SetSummary.Of(totals[index].Numbers),
+                    SetSummary.OfSet(totals[index].Numbers),
                     (IReadOnlyList<PairSummary>)[.. PairNumbers.Ordered(totals[index].Pairs).Select(pair => new PairSummary(pair.Pair, SetSummary.Of(pair.Numbers)))]))
             ],
             EngineVersion.Number,

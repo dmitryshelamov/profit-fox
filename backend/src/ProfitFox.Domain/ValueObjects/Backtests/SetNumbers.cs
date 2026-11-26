@@ -5,7 +5,9 @@ namespace ProfitFox.Domain.ValueObjects.Backtests;
 ///     change add-strategy-backtest, design.md, decision 5). The numbers of a set are the sum of those of its pairs, so
 ///     they are kept as sums, and the means and shares are made from them. A trade is a closed cycle: an open one is
 ///     counted apart, and its estimate is not in the sum. <see cref="Differences" /> are the differences of the orders that
-///     count, in the order the pairs and their orders came: the weekly means are made from them.
+///     count, in the order the pairs and their orders came: the weekly means are made from them. <see cref="Weeks" /> are the
+///     sums of the trades of a category of ideas by week (change fix-backtest-random-control, design.md, decision 9): the
+///     sums of one week of two pairs add up, so the numbers by weeks of a set are those of the sum of its pairs.
 /// </summary>
 public sealed record SetNumbers
 {
@@ -44,6 +46,11 @@ public sealed record SetNumbers
     public double OpenAmount { get; init; }
 
     public IReadOnlyList<WeekDifference> Differences { get; init; } = [];
+
+    /// <summary>
+    ///     The sums of the trades by week, in the order of the weeks; none for a strategy for a bot.
+    /// </summary>
+    public IReadOnlyList<WeekTrades> Weeks { get; init; } = [];
 
     /// <summary>
     ///     The mean result of a trade after costs; none without trades.
@@ -100,7 +107,35 @@ public sealed record SetNumbers
             Skipped = a.Skipped + b.Skipped,
             OpenCycles = a.OpenCycles + b.OpenCycles,
             OpenAmount = a.OpenAmount + b.OpenAmount,
-            Differences = b.Differences.Count == 0 ? a.Differences : a.Differences.Count == 0 ? b.Differences : [.. a.Differences, .. b.Differences]
+            Differences = b.Differences.Count == 0 ? a.Differences : a.Differences.Count == 0 ? b.Differences : [.. a.Differences, .. b.Differences],
+            Weeks = b.Weeks.Count == 0 ? a.Weeks : a.Weeks.Count == 0 ? b.Weeks : Add(a.Weeks, b.Weeks)
         };
+    }
+
+    // The sums of the weeks of both, those of one week added, in the order of the weeks.
+    private static WeekTrades[] Add(IReadOnlyList<WeekTrades> a, IReadOnlyList<WeekTrades> b)
+    {
+        List<WeekTrades> weeks = [];
+        int i = 0;
+        int j = 0;
+        while (i < a.Count || j < b.Count)
+        {
+            if (j == b.Count || (i < a.Count && a[i].Week < b[j].Week))
+            {
+                weeks.Add(a[i++]);
+            }
+            else if (i == a.Count || b[j].Week < a[i].Week)
+            {
+                weeks.Add(b[j++]);
+            }
+            else
+            {
+                weeks.Add(new WeekTrades(a[i].Week, a[i].NetSum + b[j].NetSum, a[i].Trades + b[j].Trades, a[i].Amount + b[j].Amount));
+                i++;
+                j++;
+            }
+        }
+
+        return [.. weeks];
     }
 }

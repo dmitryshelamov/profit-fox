@@ -88,6 +88,52 @@ public sealed class SetNumbersTests
     }
 
     [Test]
+    public void The_trades_of_a_pair_are_summed_by_the_week_of_their_orders()
+    {
+        SetNumbers numbers = PairNumbers.Of([Trade(0.02), Trade(-0.01), Trade(0.005) with { Moment = Monday.AddDays(7), Block = Week + 1 }, Left(TradeStatus.Coverage)], skipped: 1, pastEnd: 0);
+
+        Assert.That(numbers.Weeks.Select(week => (week.Week, week.Trades)), Is.EqualTo(new[] { (Week, 2), (Week + 1, 1) }));
+        Assert.That(numbers.Weeks[0].NetSum, Is.EqualTo(0.01).Within(1e-15));
+        Assert.That(numbers.Weeks[0].Amount, Is.EqualTo(1.0).Within(1e-12));
+    }
+
+    [Test]
+    public void The_sum_of_two_pairs_with_a_common_week_has_that_week_once_with_the_trades_of_both()
+    {
+        SetNumbers btc = PairNumbers.Of([Trade(0.02), Trade(0.01) with { Moment = Monday.AddDays(7), Block = Week + 1 }], skipped: 0, pastEnd: 0);
+        SetNumbers eth = PairNumbers.Of([Trade(-0.01), Trade(0.03) with { Moment = Monday.AddDays(14), Block = Week + 2 }], skipped: 0, pastEnd: 0);
+
+        SetNumbers set = btc + eth;
+
+        Assert.That(set.Weeks.Select(week => (week.Week, week.Trades)), Is.EqualTo(new[] { (Week, 2), (Week + 1, 1), (Week + 2, 1) }));
+        Assert.That(set.Weeks[0].NetSum, Is.EqualTo(0.01).Within(1e-15));
+        Assert.That(set.Weeks[0].Amount, Is.EqualTo(1.0).Within(1e-12));
+    }
+
+    [Test]
+    public void The_order_in_which_pairs_are_added_does_not_change_the_numbers()
+    {
+        SetNumbers btc = PairNumbers.Of([Trade(0.02), Trade(0.01) with { Moment = Monday.AddDays(7), Block = Week + 1 }], skipped: 0, pastEnd: 0);
+        SetNumbers eth = PairNumbers.Of([Trade(-0.01)], skipped: 0, pastEnd: 0);
+
+        SetNumbers forward = btc + eth;
+        SetNumbers backward = eth + btc;
+
+        Assert.That(backward.Weeks, Is.EqualTo(forward.Weeks));
+        Assert.That(backward with { Weeks = [] }, Is.EqualTo(forward with { Weeks = [] }));
+        Assert.That(SetSummary.OfSet(backward), Is.EqualTo(SetSummary.OfSet(forward)));
+    }
+
+    [Test]
+    public void The_numbers_of_a_bot_have_no_weeks()
+    {
+        SetNumbers numbers = PairNumbers.Of(new PositionResult([Cycle(0.01, 1.0)], [Filled()]));
+
+        Assert.That(numbers.Weeks, Is.Empty);
+        Assert.That(SetSummary.OfSet(numbers).Weekly, Is.Null, "«Лесенка без чисел по неделям»");
+    }
+
+    [Test]
     public void Two_orders_in_one_week_average_into_its_mean()
     {
         SetNumbers btc = Counted(("BTCUSDT", Week, 0.004));

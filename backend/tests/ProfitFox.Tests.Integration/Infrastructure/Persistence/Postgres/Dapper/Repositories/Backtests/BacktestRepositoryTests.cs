@@ -172,6 +172,43 @@ public sealed class BacktestRepositoryTests
         Assert.That((finished.Id, finished.BestAmount, finished.SetCount), Is.EqualTo((backtest.Id, (double?)6.0, 6)));
     }
 
+    /// <summary>
+    ///     Change fix-backtest-random-control, task 5.4: the numbers by weeks of a set are kept in the JSON of its numbers, and
+    ///     not in those of its pairs.
+    /// </summary>
+    [Test]
+    public async Task A_set_with_numbers_by_weeks_is_read_with_the_same_numbers_and_its_pairs_without_them()
+    {
+        Backtest backtest = await _backtests.EnqueueAsync(BacktestGenerator.Generate(), _none);
+        await _backtests.ClaimAsync("mac-1", Lease, _none);
+        SetSummary numbers = Numbers(4) with { Weekly = new WeeklyNumbers(28, -0.0014, 10, 3, -1460.5) };
+        var outcome = new BacktestOutcome([(1, numbers, [new PairSummary("BTCUSDT", Numbers(4))])], EngineVersion: 5, DataHash: "hash", ReadSeconds: 1, ComputeSeconds: 1, Pairs: 3);
+
+        await _backtests.FinishAsync(new RunAssignment(backtest.Id, "mac-1"), outcome, _none);
+
+        Backtest done = (await _backtests.FindAsync(backtest.Id, _none))!;
+        Assert.That(done.Sets.Single().Numbers, Is.EqualTo(numbers));
+        Assert.That((await _backtests.PairsAsync(backtest.Id, 1, _none))!.Single().Numbers.Weekly, Is.Null);
+        await using NpgsqlConnection connection = await BenchDatabase.DataSource.OpenConnectionAsync();
+        Assert.That(await connection.ExecuteScalarAsync<string>("SELECT numbers::text FROM backtest_set_pairs WHERE backtest_id = @Id", new { backtest.Id }), Does.Not.Contain("weekly"));
+        Assert.That(await connection.ExecuteScalarAsync<string>("SELECT numbers::text FROM backtest_sets WHERE backtest_id = @Id", new { backtest.Id }), Does.Contain("weekly"));
+    }
+
+    [Test]
+    public async Task The_numbers_of_a_set_written_before_the_numbers_by_weeks_are_read_without_them()
+    {
+        Backtest backtest = await _backtests.EnqueueAsync(BacktestGenerator.Generate(), _none);
+        await _backtests.ClaimAsync("mac-1", Lease, _none);
+        await _backtests.FinishAsync(new RunAssignment(backtest.Id, "mac-1"), Outcome(1), _none);
+        await using NpgsqlConnection connection = await BenchDatabase.DataSource.OpenConnectionAsync();
+        await connection.ExecuteAsync("UPDATE backtest_sets SET numbers = @Numbers::jsonb WHERE backtest_id = @Id", new { backtest.Id, Numbers = Version4Numbers });
+
+        SetSummary read = (await _backtests.FindAsync(backtest.Id, _none))!.Sets.Single().Numbers!;
+
+        Assert.That(read.Weekly, Is.Null);
+        Assert.That((read.Orders, read.Trades, read.Amount, read.Difference), Is.EqualTo((42, 42, 1.6395539934151864, new RandomDifference(0.0001, 2, T: 1.5))));
+    }
+
     [Test]
     public async Task The_last_backtest_of_a_strategy_is_the_first_waiting_one_or_the_last_ended()
     {
@@ -196,6 +233,14 @@ public sealed class BacktestRepositoryTests
         last = await _backtests.LastOfStrategiesAsync(_none);
         Assert.That((last[fundingShort].Id, last[fundingShort].Status), Is.EqualTo(("4", BacktestState.Queued)), "a waiting backtest comes before an ended one");
     }
+
+    // The JSON of the numbers of a set as engine version 4 wrote it.
+    private const string Version4Numbers =
+        """
+        {"orders":42,"trades":42,"pairsWithTrades":3,"mean":0.0003903699984321873,"amount":1.6395539934151864,"winShare":1,
+         "excluded":{"plan":0,"coverage":0,"funding":0,"noTrade":0,"period":0},"skipped":0,"openCycles":0,"openAmount":0,
+         "difference":{"mean":0.0001,"weeks":2,"t":1.5}}
+        """;
 
     private static BacktestOutcome Outcome(int sets)
     {
